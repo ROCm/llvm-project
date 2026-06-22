@@ -2,12 +2,12 @@
 ; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vcc_hi_carryout_kernel 2>&1 | %FileCheck %s
 ;
-; A V_CMP may name vcc_hi / exec_hi as a destination, but the wave32 mask/carry
-; rules forbid them as a carry-out destination. Such an encoding must be refused
-; loudly, not folded into the real VCC.
+; On wave32, vcc_hi / exec_hi are scratch scalars; the ISA does not allow them
+; as a carry-out destination. Such an encoding must be refused loudly, not
+; folded into the real VCC.
 
 ; CHECK: kernel 'vcc_hi_carryout_kernel'
-; CHECK-SAME: vcc_hi / exec_hi scratch as a carry-out destination is forbidden
+; CHECK-SAME: carry-out destination is wave32 vcc_hi/exec_hi scratch
 
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6

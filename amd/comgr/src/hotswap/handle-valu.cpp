@@ -262,8 +262,8 @@ Value *readCarryInI1(RaiseContext &Ctx, const DecodedInst &Di,
 //     a following V_CNDMASK_B32 or V_ADD_CO_CI_U32) can look it up
 //     without the lossy extract round-trip. Mirrors the V_CMP_*_e64
 //     SGPR-write path in `handle-valu-vcmp.cpp`.
-//   * `vcc_hi` / `exec_hi` scratch -> refused: the wave32 mask/carry
-//     rules forbid these as a carry-out destination (see the switch).
+//   * `vcc_hi` / `exec_hi` scratch -> refused: the ISA does not allow
+//     them as a carry-out destination on wave32 (see the switch).
 //   * NOREG (null sdst) -> discard the carry-out (hardware semantics
 //     for null scalar destination).
 //
@@ -293,16 +293,14 @@ void writeCarryOutI1(RaiseContext &Ctx, const DecodedInst &Di,
       return;
     case ParsedReg::VCC_HI_SCRATCH:
     case ParsedReg::EXEC_HI_SCRATCH:
-      // On a wave32 source vcc_hi / exec_hi are free scratch scalars, and the
-      // wave32 mask/carry rules forbid them as the destination of a
-      // mask/carry/borrow operation. Unlike a V_CMP destination (a general
-      // wave-mask scalar), such an encoding cannot be a legitimate carry-out,
-      // so refuse it rather than falling through to storeVCC and silently
-      // clobbering the real VCC.
+      // On a wave32 source vcc_hi / exec_hi are general-purpose scratch
+      // scalars, and the ISA does not allow them as a carry-out destination
+      // (wave32 carry operations may not target VCC_HI / EXEC_HI). Refuse
+      // rather than route a per-lane carry through a scalar slot that cannot
+      // represent it.
       Ctx.recordReadFailure(RaiseFailure::unsupportedInstructionForm(
           Di, "VALU",
-          "vcc_hi / exec_hi scratch as a carry-out destination is forbidden "
-          "by the wave32 mask/carry rules"));
+          "carry-out destination is wave32 vcc_hi/exec_hi scratch"));
       return;
     case ParsedReg::NOREG:
       return;
@@ -311,6 +309,27 @@ void writeCarryOutI1(RaiseContext &Ctx, const DecodedInst &Di,
     }
   }
   Ctx.Regs.storeVCC(Ctx.B, CarryI1);
+}
+
+// v_div_scale_{f32,f64} write their boolean flag to an explicit SDST
+// (operand 1). On a wave32 source vcc_hi / exec_hi are general-purpose
+// scratch scalars, and -- exactly as for a carry-out destination (see
+// `writeCarryOutI1`) -- the ISA does not allow them as the div-scale flag
+// destination. Classify the SDST so both div_scale arms can refuse before
+// emitting the intrinsic or touching the register file; returns true with
+// `Hr.Failure` set when the encoding must be refused.
+bool refuseDivScaleScratchFlagDest(const DecodedInst &Di, OpResolver &Op,
+                                   HandlerResult &Hr) {
+  if (Di.NumDefs < 2 || !Di.isReg(1))
+    return false;
+  ParsedReg FlagDst = Op.dst(1);
+  if (FlagDst.RegKind != ParsedReg::VCC_HI_SCRATCH &&
+      FlagDst.RegKind != ParsedReg::EXEC_HI_SCRATCH)
+    return false;
+  Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      Di, "VALU",
+      "v_div_scale flag destination is wave32 vcc_hi/exec_hi scratch");
+  return true;
 }
 
 // Emit the cross-target (gfx1250 -> gfx94x) dequantisation expansion
@@ -1507,6 +1526,10 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
 
   // ---- Division helpers (VOP3) ----
   if (Sop == CanonicalOp::V_DIV_SCALE_F32) {
+    // Refuse a wave32 vcc_hi/exec_hi scratch flag destination up front,
+    // before any IR is emitted or the register file is touched.
+    if (refuseDivScaleScratchFlagDest(Di, Op, Hr))
+      return Hr;
     // `v_div_scale_f32 dst, vcc, src0, src1, src2` scales one operand
     // of a numerator/denominator pair for a subsequent IEEE-conformant
     // divide (rcp + Newton + div_fixup).  The hardware encodes the
@@ -1670,6 +1693,8 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     // Write the boolean flag to the actual SDST destination (operand 1):
     // vcc_lo, sN, or null. The kernel saves flags to SGPRs and later
     // restores them to VCC via s_mov_b32 before each v_div_fmas_f32.
+    // (A wave32 vcc_hi/exec_hi scratch destination was already refused
+    // at the top of this handler.)
     // Route the carry-out (i1 per lane) through the shared helper so
     // a downstream `s_mov_b32 vcc_lo, sN` restore finds a proper
     // source-width wave mask in the SGPR alloca, and same-BB consumers
@@ -1733,6 +1758,10 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
   // routing through writeCarryOutI1 are all width-independent. See the
   // V_DIV_SCALE_F32 handler above for the full rationale.
   if (Sop == CanonicalOp::V_DIV_SCALE_F64) {
+    // Refuse a wave32 vcc_hi/exec_hi scratch flag destination up front,
+    // before any IR is emitted or the register file is touched.
+    if (refuseDivScaleScratchFlagDest(Di, Op, Hr))
+      return Hr;
     if (!requireDefaultVOP3FpValuOutputMods(Di, Hr, "v_div_scale_f64"))
       return Hr;
     auto *F64Ty = Type::getDoubleTy(Ctx.C);
@@ -1785,6 +1814,8 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Ctx.writeReg64(
         Op.dst(0),
         Ctx.B.CreateBitCast(Ctx.B.CreateExtractValue(R, 0), Ctx.I64Ty));
+    // A wave32 vcc_hi/exec_hi scratch flag destination was already refused
+    // at the top of this handler.
     writeCarryOutI1(Ctx, Di, Op, Ctx.B.CreateExtractValue(R, 1));
     Hr.Handled = true;
     return Hr;
