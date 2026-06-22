@@ -90,18 +90,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
-          fetch-depth: 0
-
-      - name: Cherry-Pick Tip of Source Branch
-        run: |
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
-          git fetch origin users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026
-          git merge origin/users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026 \
-          --no-edit \
-          -m "Merge changes from merge-main-into-compiler-amd-staging-06-18-2026"
-          git log --oneline -5
+          ref: 'users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026'
 
       - name: Install Python requirements
         run: pip install -r requirements.txt

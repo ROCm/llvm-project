@@ -96,19 +96,8 @@ jobs:
         with:
           # We need the parent commit to do a diff
           repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
-          #fetch-depth: 2
-          fetch-depth: 0
-
-      - name: Cherry-Pick Tip of Source Branch
-        run: |
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
-          git fetch origin users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026
-          git merge origin/users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026 \
-          --no-edit \
-          -m "Merge changes from merge-main-into-compiler-amd-staging-06-18-2026"
-          git log --oneline -5
+          ref: 'users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026'
+          fetch-depth: 2
 
       - name: SHA of TheRock
         run: |
