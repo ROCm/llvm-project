@@ -91,6 +91,7 @@ jobs:
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
+          fetch-depth: 0
 
       - name: Cherry-Pick Tip of Source Branch
         run: |

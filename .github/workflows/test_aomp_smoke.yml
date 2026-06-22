@@ -106,12 +106,11 @@ jobs:
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
-          fetch-depth: 1
+          #fetch-depth: 1
+          fetch-depth: 0
 
       - name: Cherry-Pick Tip of Source Branch
         run: |
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
           git fetch origin users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026
