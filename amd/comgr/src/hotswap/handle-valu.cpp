@@ -1146,6 +1146,21 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  if (Sop == CanonicalOp::V_MAXIMUM_F64) {
+    if (!requireDefaultVOP3FpValuOutputMods(Di, Hr, "v_maximum_f64"))
+      return Hr;
+    auto *F64Ty = Type::getDoubleTy(Ctx.C);
+    Value *S0 = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), F64Ty));
+    Value *S1 = Op.applyMods(1, Ctx.B.CreateBitCast(Op.src64(1), F64Ty));
+    Function *MaxFn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::maximum, {F64Ty});
+    Ctx.writeReg64(
+        Op.dst(),
+        Ctx.B.CreateBitCast(Ctx.B.CreateCall(MaxFn, {S0, S1}, "fmaximum_f64"),
+                            Ctx.I64Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
   // v_rcp_f64: VOP1 transcendental, single F64 source -> F64 result.
   // The hardware op is a ~26-bit accurate reciprocal approximation
   // (TRANS-class, WriteTrans64). Lift to `llvm.amdgcn.rcp.f64` so

@@ -627,6 +627,7 @@ enum class CanonicalOp : uint16_t {
   // gfx12/gfx1250. Semantics prefer a numeric operand over NaN, matching
   // LLVM's `maxnum` / `minnum` intrinsic contract.
   V_MAX_NUM_F64, V_MIN_NUM_F64,
+  V_MAXIMUM_F64,
   // VOP1 FP64. v_rcp_f64 is a TRANS-class transcendental (see
   // VOP1Instructions.td: `let TRANS = 1, SchedRW = [WriteTrans64]`),
   // not a true reciprocal -- hardware returns a ~26-bit accurate
