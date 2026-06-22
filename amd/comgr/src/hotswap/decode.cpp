@@ -317,6 +317,41 @@ void decodeScaleOffset(DecodedInst &Di) {
   Di.HasScaleOffset = (Cpol & AMDGPU::CPol::SCAL) != 0;
 }
 
+// SMEM SGPR_IMM forms carry two offset operands: a dynamic SGPR `soffset` and
+// a static byte `offset:` immediate. Decode only that shape here so ordinary
+// immediate-only SMEM forms keep using the normal logical source operand.
+void decodeStaticSmemOffset(DecodedInst &Di) {
+  if ((Di.TsFlags & SIInstrFlags::SMRD) == 0)
+    return;
+
+  const MCInst &Inst = Di.Inst;
+  unsigned Opc = Inst.getOpcode();
+  int SOffsetIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::soffset);
+  int OffsetIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::offset);
+  // Absence of either named operand means this is not the SGPR_IMM shape that
+  // carries both dynamic and static offsets.
+  if (SOffsetIdx < 0 || OffsetIdx < 0)
+    return;
+
+  auto InRange = [&](int Idx) {
+    return static_cast<unsigned>(Idx) < Inst.getNumOperands();
+  };
+  if (!InRange(SOffsetIdx) || !InRange(OffsetIdx) ||
+      !Inst.getOperand(static_cast<unsigned>(SOffsetIdx)).isReg() ||
+      !Inst.getOperand(static_cast<unsigned>(OffsetIdx)).isImm()) {
+    std::string Msg;
+    raw_string_ostream Os(Msg);
+    Os << "decodeStaticSmemOffset: SMRD opcode '" << Di.RawMnemonic
+       << "' (opcode=" << Opc
+       << ") has both OpName::soffset and OpName::offset but the decoded "
+          "operands are not a register soffset plus immediate offset";
+    StringRef Reason = Os.str();
+    report_fatal_error(Reason);
+  }
+
+  Di.StaticOffset = Inst.getOperand(static_cast<unsigned>(OffsetIdx)).getImm();
+}
+
 // Decode DPP16 modifier operands (dpp_ctrl / row_mask / bank_mask /
 // bound_ctrl) so the raiser can lift DPP-modified VALU ops through
 // `llvm.amdgcn.update.dpp`. Sets `di.hasDpp = true` only when every
@@ -846,6 +881,7 @@ DecodeResult decodeKernel(const MCState &Mc,
     Di.FirstSrcIdx = Desc.getNumDefs();
 
     decodeScaleOffset(Di);
+    decodeStaticSmemOffset(Di);
     decodeDppModifiers(Di);
     decodeDsSwizzleImm(Di);
     decodeVopd(Di, *Mc.InstrInfo, *Mc.RegInfo, OpcMap);

@@ -68,6 +68,10 @@ struct DecodedInst {
   // `AMDGPU::CPol::SCAL` at disassembly time so handlers can branch
   // on a decoded bit instead of scanning `fullText`.
   bool HasScaleOffset = false;
+  // Static byte offset from an SMEM `offset:` named operand, when present
+  // alongside a separate SGPR `soffset` operand. SMEM SGPR_IMM forms add both
+  // pieces during address calculation.
+  std::optional<int64_t> StaticOffset;
 
   // ── DPP modifier state (Class 2 DppCrossLane; see
   //    hotswap/docs/wave-size-translation.md §6) ──
