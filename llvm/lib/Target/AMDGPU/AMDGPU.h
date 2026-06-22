@@ -599,8 +599,15 @@ FunctionPass *createAMDGPUWaveTransformPass();
 void initializeAMDGPUWaveTransformPass(PassRegistry &);
 
 FunctionPass *createAMDGPUPreWaveTransformPass();
-void initializeAMDGPUPreWaveTransformPass(PassRegistry &);
+void initializeAMDGPUPreWaveTransformLegacyPass(PassRegistry &);
 extern char &AMDGPUPreWaveTransformID;
+
+class AMDGPUPreWaveTransformPass
+    : public OptionalPassInfoMixin<AMDGPUPreWaveTransformPass> {
+public:
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+};
 
 FunctionPass *createAMDGPUFinalizeISelWaveTransformPass();
 void initializeAMDGPUFinalizeISelWaveTransformPass(PassRegistry &);
