@@ -14,48 +14,14 @@
 #include "AMDGPU.h"
 #include "GCNSubtarget.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/InitializePasses.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "amdgpu-pre-wave-transform"
 
-namespace {
-
-class AMDGPUPreWaveTransform : public MachineFunctionPass {
-public:
-  static char ID;
-
-public:
-  AMDGPUPreWaveTransform() : MachineFunctionPass(ID) {
-    initializeAMDGPUPreWaveTransformPass(*PassRegistry::getPassRegistry());
-  }
-
-  bool runOnMachineFunction(MachineFunction &MF) override;
-
-  StringRef getPassName() const override {
-    return "AMDGPU Pre Wave Transform";
-  }
-
-  void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.setPreservesCFG();
-    MachineFunctionPass::getAnalysisUsage(AU);
-  }
-};
-
-} // End anonymous namespace.
-
-INITIALIZE_PASS(AMDGPUPreWaveTransform, DEBUG_TYPE,
-                "AMDGPU Pre Wave Transform", false, false)
-
-char AMDGPUPreWaveTransform::ID = 0;
-char &llvm::AMDGPUPreWaveTransformID = AMDGPUPreWaveTransform::ID;
-
-FunctionPass *llvm::createAMDGPUPreWaveTransformPass() {
-  return new AMDGPUPreWaveTransform();
-}
-
-bool AMDGPUPreWaveTransform::runOnMachineFunction(MachineFunction &MF) {
+static bool preWaveTransform(MachineFunction &MF) {
   const SIInstrInfo *TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
   bool Changed = false;
 
@@ -69,4 +35,51 @@ bool AMDGPUPreWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   }
 
   return Changed;
+}
+
+namespace {
+
+class AMDGPUPreWaveTransformLegacy : public MachineFunctionPass {
+public:
+  static char ID;
+
+  AMDGPUPreWaveTransformLegacy() : MachineFunctionPass(ID) {
+    initializeAMDGPUPreWaveTransformLegacyPass(*PassRegistry::getPassRegistry());
+  }
+
+  bool runOnMachineFunction(MachineFunction &MF) override {
+    return preWaveTransform(MF);
+  }
+
+  StringRef getPassName() const override {
+    return "AMDGPU Pre Wave Transform";
+  }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.setPreservesCFG();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+};
+
+} // End anonymous namespace.
+
+INITIALIZE_PASS(AMDGPUPreWaveTransformLegacy, DEBUG_TYPE,
+                "AMDGPU Pre Wave Transform", false, false)
+
+char AMDGPUPreWaveTransformLegacy::ID = 0;
+char &llvm::AMDGPUPreWaveTransformID = AMDGPUPreWaveTransformLegacy::ID;
+
+FunctionPass *llvm::createAMDGPUPreWaveTransformPass() {
+  return new AMDGPUPreWaveTransformLegacy();
+}
+
+PreservedAnalyses
+llvm::AMDGPUPreWaveTransformPass::run(MachineFunction &MF,
+                                      MachineFunctionAnalysisManager &MFAM) {
+  if (!preWaveTransform(MF))
+    return PreservedAnalyses::all();
+
+  auto PA = getMachineFunctionPassPreservedAnalyses();
+  PA.preserveSet<CFGAnalyses>();
+  return PA;
 }
