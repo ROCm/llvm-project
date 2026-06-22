@@ -953,15 +953,18 @@ int GCNHazardRecognizer::createsVALUHazard(const MachineInstr &MI) const {
     // (like wbinvl1)
     if (VDataIdx == -1)
       return -1;
-    // For MUBUF/MTBUF instructions this hazard only exists if the
-    // instruction is not using a register in the soffset field.
-    const MachineOperand *SOffset =
-        TII->getNamedOperand(MI, AMDGPU::OpName::soffset);
-    // If we have no soffset operand, then assume this field has been
-    // hardcoded to zero.
-    if (AMDGPU::getRegBitWidth(VDataRCID) > 64 &&
-        (!SOffset || !SOffset->isReg()))
-      return VDataIdx;
+    if (AMDGPU::getRegBitWidth(VDataRCID) > 64) {
+      // When SOFFSET-dependent wide-store windows apply, the BUFFER_STORE
+      // source-vgpr WAR hazard exists for every SOFFSET shape; the wait-state
+      // count differs by SOFFSET and is computed in checkVALUHazardsHelper.
+      // Otherwise the hazard only exists if soffset is not an SGPR.
+      if (ST.hasVDecCoExecHazard())
+        return VDataIdx;
+      const MachineOperand *SOffset =
+          TII->getNamedOperand(MI, AMDGPU::OpName::soffset);
+      if (!SOffset || !SOffset->isReg())
+        return VDataIdx;
+    }
   }
 
   // MIMG instructions create a hazard if they don't use a 256-bit T# and
@@ -987,29 +990,73 @@ int GCNHazardRecognizer::createsVALUHazard(const MachineInstr &MI) const {
   return -1;
 }
 
-int GCNHazardRecognizer::checkVALUHazardsHelper(
-    const MachineOperand &Def, const MachineRegisterInfo &MRI) const {
-  // Helper to check for the hazard where VMEM instructions that store more than
-  // 8 bytes can have there store data over written by the next instruction.
+int GCNHazardRecognizer::checkUniformWindowVALUHazardsHelper(
+    Register Reg) const {
+  // Wide stores need a single wait-state bubble before a VALU that overwrites
+  // store data. createsVALUHazard already excludes MUBUF/MTBUF stores with an
+  // SGPR SOFFSET.
   const SIRegisterInfo *TRI = ST.getRegisterInfo();
 
-  const int VALUWaitStates = ST.hasGFX940Insts() ? 2 : 1;
-  int WaitStatesNeeded = 0;
-
-  if (!TRI->isVectorRegister(MRI, Def.getReg()))
-    return WaitStatesNeeded;
-  Register Reg = Def.getReg();
-  auto IsHazardFn = [this, Reg, TRI](const MachineInstr &MI) {
+  auto IsHazard = [&](const MachineInstr &MI) {
     int DataIdx = createsVALUHazard(MI);
     return DataIdx >= 0 &&
            TRI->regsOverlap(MI.getOperand(DataIdx).getReg(), Reg);
   };
 
-  int WaitStatesNeededForDef =
-    VALUWaitStates - getWaitStatesSince(IsHazardFn, VALUWaitStates);
-  WaitStatesNeeded = std::max(WaitStatesNeeded, WaitStatesNeededForDef);
+  return std::max(0, 1 - getWaitStatesSince(IsHazard, /*Limit=*/1));
+}
+
+int GCNHazardRecognizer::checkSOFFSETWindowVALUHazardsHelper(
+    Register Reg) const {
+  // The required wait-state window depends on the producer's SOFFSET shape:
+  //   - MUBUF/MTBUF wide store with sgpr SOFFSET: 1 wait state.
+  //   - MUBUF/MTBUF wide store with literal/absent SOFFSET, and FLAT wide
+  //     store: 2 wait states.
+  // The 1-cycle sgpr-SOFFSET window was measured on gfx950.
+  const SIRegisterInfo *TRI = ST.getRegisterInfo();
+  const SIInstrInfo *TII = ST.getInstrInfo();
+
+  int WaitStatesNeeded = 0;
+
+  // Scan each wait-state window separately and take the max padding needed.
+  // getWaitStatesSince supplies the minimum distance to a producer over paths.
+  for (int Window = 1; Window <= 2; ++Window) {
+    auto IsHazard = [&](const MachineInstr &MI) {
+      int DataIdx = createsVALUHazard(MI);
+      if (DataIdx < 0 ||
+          !TRI->regsOverlap(MI.getOperand(DataIdx).getReg(), Reg))
+        return false;
+
+      // Window 1 matches every hazard producer. Window 2 excludes BUF stores
+      // with an SGPR SOFFSET, which only require a single wait state.
+      if (Window == 1 || !TII->isBUF(MI))
+        return true;
+
+      const MachineOperand *SOffset =
+          TII->getNamedOperand(MI, AMDGPU::OpName::soffset);
+      return !SOffset || !SOffset->isReg();
+    };
+    WaitStatesNeeded = std::max(WaitStatesNeeded,
+                                Window - getWaitStatesSince(IsHazard, Window));
+  }
 
   return WaitStatesNeeded;
+}
+
+int GCNHazardRecognizer::checkVALUHazardsHelper(
+    const MachineOperand &Def, const MachineRegisterInfo &MRI) const {
+  // Helper to check for the hazard where VMEM instructions that store more
+  // than 8 bytes can have their store data overwritten by the next
+  // instruction.
+  const SIRegisterInfo *TRI = ST.getRegisterInfo();
+
+  if (!TRI->isVectorRegister(MRI, Def.getReg()))
+    return 0;
+
+  if (ST.hasVDecCoExecHazard())
+    return checkSOFFSETWindowVALUHazardsHelper(Def.getReg());
+
+  return checkUniformWindowVALUHazardsHelper(Def.getReg());
 }
 
 /// Dest sel forwarding issue occurs if additional logic is needed to swizzle /
@@ -1989,7 +2036,7 @@ bool GCNHazardRecognizer::fixVALUTransUseHazard(MachineInstr *MI) {
 }
 
 bool GCNHazardRecognizer::fixVALUTransCoexecutionHazards(MachineInstr *MI) {
-  if (!ST.hasGFX1250Insts() || // Coexecution disabled.
+  if (!ST.hasTransCoexecutionHazard() || // Coexecution disabled.
       !SIInstrInfo::isVALU(*MI, /*AllowLDSDMA=*/true) ||
       SIInstrInfo::isTRANS(*MI))
     return false;
@@ -2161,7 +2208,7 @@ static unsigned getWMMAHazardInstInCategory(const MachineInstr &MI,
 }
 
 int GCNHazardRecognizer::checkWMMACoexecutionHazards(MachineInstr *MI) const {
-  if (!ST.hasGFX1250Insts())
+  if (!ST.hasWMMACoexecutionHazards())
     return 0;
 
   const SIInstrInfo *TII = ST.getInstrInfo();

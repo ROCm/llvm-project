@@ -172,9 +172,9 @@ void AMDGCN::Linker::constructLinkAndEmitSpirvCommand(
   const char *LinkedBCFilePath = HIP::getTempFile(C, LinkedBCFilePrefix, "bc");
   InputInfo LinkedBCFile(&JA, LinkedBCFilePath, Output.getBaseInput());
 
-  bool UseSPIRVBackend =
-      Args.hasFlag(options::OPT_use_spirv_backend,
-                   options::OPT_no_use_spirv_backend, /*Default=*/false);
+  bool UseSPIRVBackend = Args.hasFlag(options::OPT_use_spirv_backend,
+                                      options::OPT_no_use_spirv_backend,
+                                      /*Default=*/true);
 
   constructLLVMLinkCommand(C, JA, Inputs, LinkedBCFile, Args);
 
@@ -308,12 +308,6 @@ HIPAMDToolChain::TranslateArgs(const llvm::opt::DerivedArgList &Args,
                                Action::OffloadKind DeviceOffloadKind) const {
   llvm::opt::DerivedArgList *DAL =
       ROCMToolChain::TranslateArgs(Args, BoundArch, DeviceOffloadKind);
-
-  if (!Args.hasArg(options::OPT_flto_partitions_EQ)) {
-    const OptTable &Opts = getDriver().getOpts();
-    DAL->AddJoinedArg(nullptr, Opts.getOption(options::OPT_flto_partitions_EQ),
-                      "8");
-  }
 
   return DAL;
 }
