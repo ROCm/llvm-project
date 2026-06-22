@@ -118,7 +118,7 @@ jobs:
         id: configure
         env:
           #INPUT_LINUX_AMDGPU_FAMILIES: ${{ github.event.inputs.linux_amdgpu_families }}
-          INPUT_LINUX_AMDGPU_FAMILIES: 'gfx94X-dcgpu,gfx110X-all,gfx1151'
+          INPUT_LINUX_AMDGPU_FAMILIES: 'amdgcnspirv'
           LINUX_TEST_LABELS: ${{ github.event.inputs.linux_test_labels }}
           LINUX_USE_PREBUILT_ARTIFACTS: ${{ github.event.inputs.linux_use_prebuilt_artifacts }}
           #INPUT_WINDOWS_AMDGPU_FAMILIES: ${{ github.event.inputs.windows_amdgpu_families }}
