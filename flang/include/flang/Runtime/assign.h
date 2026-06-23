@@ -79,7 +79,8 @@ void RTDECL(AssignExplicitLengthCharacter)(Descriptor &to,
 // This variant is assignments to whole polymorphic allocatables.
 void RTDECL(AssignPolymorphic)(Descriptor &to, const Descriptor &from,
     const char *sourceFile = nullptr, int sourceLine = 0);
-// Fast path for simple intrinsic type assignments (no derived types, no finalization)
+// Fast path for simple intrinsic type assignments (no derived types, no
+// finalization)
 void RTDECL(AssignSimple)(Descriptor &to, const Descriptor &from,
     const char *sourceFile = nullptr, int sourceLine = 0);
 // Complex path with full machinery (same as Assign)

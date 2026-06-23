@@ -855,10 +855,12 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
     const char *sourceFile, int sourceLine) {
   Terminator terminator{sourceFile, sourceLine};
   // Fast path: Direct memmove for simple intrinsic types
-  // Assumes caller verified: intrinsic type, same rank, contiguous, same element bytes
+  // Assumes caller verified: intrinsic type, same rank, contiguous, same
+  // element bytes
 
   // Runtime assertions to catch misuse during development/testing
-  // TODO: Remove these assertions after thorough validation (check with user first)
+  // TODO: Remove these assertions after thorough validation (check with user
+  // first)
   RUNTIME_CHECK(terminator, to.rank() == from.rank());
   RUNTIME_CHECK(terminator, to.IsContiguous());
   RUNTIME_CHECK(terminator, from.IsContiguous());
