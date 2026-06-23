@@ -700,6 +700,11 @@ void SIWholeQuadMode::propagateBlock(MachineBasicBlock &MBB,
   // blocks handle their own WQM-to-Exact transitions instead of this block
   // inserting them at potentially incorrect locations (e.g., inside
   // wave-transform's atomic divergent branch idiom in merge blocks).
+  // TODO-WAVETRANSFORM: We should try to make the exec mask manipulation
+  // code sequences inserted at various blocks in wave-transform based flow
+  // similar to the code sequences in the early structurized flow. After that,
+  // revisit this fix and try to remove it as it generates suboptimal duplicate
+  // transitions in successors.
   if (Blocks[&MBB].Needs == 0 && (Blocks[&MBB].InNeeds & StateWQM))
     Blocks[&MBB].OutNeeds |= StateWQM;
 
