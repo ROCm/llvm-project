@@ -479,6 +479,7 @@ enum class CanonicalOp : uint16_t {
   // dst op_sel is set so the preserved half survives the
   // read-modify-write.
   V_ADD_NC_U16, V_SUB_NC_U16, V_ADD_NC_I16, V_SUB_NC_I16,
+  V_MAD_U16,
   // gfx1250 VOP3 add-then-min/max: (s/u)(min/max)((s/u)addsat(src0, src1), src2).
   V_ADD_MIN_U32,
   V_ADD_MAX_U32,
@@ -499,11 +500,8 @@ enum class CanonicalOp : uint16_t {
   // VOP3 ternary clamp `.NUM` dual:
   //   V_MAXMIN_NUM_F32: minnum(maxnum(s0, s1), s2).
   V_MAXMIN_NUM_F32,
-  // VOP3 integer 3-way max/min variants currently covered here. The .td uses
-  // AMDGPU{u,s}{max,min}3 SDAG nodes which the backend pattern-matches; lift as
-  // nested `llvm.{u,s}{min,max}` calls because no LLVM `*3` IR intrinsic exists.
-  // gfx11/gfx12 keep these (VOP3Instructions.td:1792-1798).
-  V_MAX3_U32, V_MIN3_U32, V_MAX3_I32, V_MIN3_I32,
+  // VOP3 integer 3-way max/min/median.
+  V_MAX3_U32, V_MIN3_U32, V_MAX3_I32, V_MIN3_I32, V_MAX3_I16,
   // VOP3 signed-integer median-of-three. Hardware semantic
   // (VOP3Instructions.td:1796 via AMDGPUsmed3 SDAG node):
   //   med3_i32(a, b, c) = smax(smin(a, b), smin(smax(a, b), c))
@@ -719,6 +717,8 @@ enum class CanonicalOp : uint16_t {
   // analogue to the V_PK_F32 32-bit-element family, because the
   // literal width matches the operand width here.
   //
+  // V_PK_MAD_U16:     dst = src0 * src1 + src2         (lane-wise modular
+  //                   i16 multiply-add; ternary, VOP_V2I16_V2I16_V2I16_V2I16).
   // V_PK_ADD_U16:     dst = src0 + src1                (lane-wise i16 add)
   // V_PK_LSHLREV_B16: dst = src1 << (src0 & 15)        (clshl_rev_16
   //                   SDAG: shift count is src0, value is src1, low 4
@@ -735,11 +735,16 @@ enum class CanonicalOp : uint16_t {
   //                   unsigned does not change the result -- LLVM `mul`
   //                   without nuw/nsw matches the AMDGPU modular
   //                   multiply semantics directly).
+  // V_PK_MAX_I16:     dst = smax(src0, src1)           (lane-wise signed
+  //                   i16 max).
+  // V_PK_MAX3_I16:    dst = smax(smax(src0, src1), src2)  (lane-wise signed
+  //                   i16 3-way max; ternary).
   //
   // op_sel / op_sel_hi modifiers select which i16 of each source feeds
   // each output lane (defaults: op_sel=[0,0,0], op_sel_hi=[1,1,1] --
   // natural lo->lo, hi->hi packing).
-  V_PK_ADD_U16, V_PK_LSHLREV_B16, V_PK_ASHRREV_I16, V_PK_MUL_LO_U16,
+  V_PK_MAD_U16, V_PK_ADD_U16, V_PK_LSHLREV_B16, V_PK_ASHRREV_I16,
+  V_PK_MUL_LO_U16, V_PK_MAX_I16, V_PK_MAX3_I16,
 
   V_BITOP3_B32, V_BITOP3_B16,
 

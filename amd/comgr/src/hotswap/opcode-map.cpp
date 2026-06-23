@@ -556,6 +556,8 @@ static const Entry kCanonTable[] = {
     E(V_SUB_NC_U16_e64, V_SUB_NC_U16),
     E(V_ADD_I16_e64, V_ADD_NC_I16),
     E(V_SUB_I16_e64, V_SUB_NC_I16),
+    E(V_MAD_U16_e64, V_MAD_U16),
+    E(V_MAD_U16_gfx9_e64, V_MAD_U16),
     // gfx1250 add-then-min/max VOP3. The real subtarget opcodes canonicalize
     // through this pseudo via AMDGPU::getMCOpcode-derived tables.
     E(V_ADD_MIN_U32_e64, V_ADD_MIN_U32),
@@ -587,14 +589,12 @@ static const Entry kCanonTable[] = {
     // V_MINMAX_F32_e64 so a single mapping suffices.
     E(V_MINMAX_F32_e64, V_MINMAX_NUM_F32),
     E(V_MAXMIN_F32_e64, V_MAXMIN_NUM_F32),
-    // gfx11/gfx12 VOP3 integer 3-way min/max. DPP/DPP8 modifier
-    // variants canonicalize through the same opcode-map stripping path used by
-    // the other VOP3+DPP entries, so a base e64 row is the semantic key.
     E(V_MAX3_U32_e64, V_MAX3_U32),
     E(V_MIN3_U32_e64, V_MIN3_U32),
     E(V_MAX3_I32_e64, V_MAX3_I32),
     E(V_MIN3_I32_e64, V_MIN3_I32),
     E(V_MED3_I32_e64, V_MED3_I32),
+    E(V_MAX3_I16_e64, V_MAX3_I16),
     E(V_BITOP3_B32_e64, V_BITOP3_B32),
     E(V_BITOP3_B16_e64, V_BITOP3_B16),
     E(V_FMA_MIX_F32, V_FMA_MIX_F32),
@@ -747,18 +747,14 @@ static const Entry kCanonTable[] = {
     // LLVM has no `V_PK_MAX_F32`/`V_PK_MIN_F32` pseudo (only F16 variants);
     // leave the matching CanonicalOps unmapped until one appears.
     E(V_PK_MOV_B32, V_PK_MOV_B32),
-    // Packed `<2 x i16>` int family. LLVM emits the bare TableGen pseudo
-    // (`V_PK_ADD_U16` / `V_PK_LSHLREV_B16` / `V_PK_MUL_LO_U16`); the
-    // gfx10/gfx11/gfx12/vi realtriples (`_gfx10`, `_vi`, etc.) all
-    // canonicalize back to it through the pseudo-alias step. Siblings
-    // V_PK_LSHRREV_B16 / V_PK_SUB_U16 / V_PK_MAX_{I,U}16 /
-    // V_PK_MIN_{I,U}16 share the same handler shape and are intentionally
-    // not pre-enumerated -- the no-fallback policy says we wait for a
-    // corpus producer rather than ship dead lift code.
+    // Packed `<2 x i16>` int family.
+    E(V_PK_MAD_U16, V_PK_MAD_U16),
     E(V_PK_ADD_U16, V_PK_ADD_U16),
     E(V_PK_LSHLREV_B16, V_PK_LSHLREV_B16),
     E(V_PK_ASHRREV_I16, V_PK_ASHRREV_I16),
     E(V_PK_MUL_LO_U16, V_PK_MUL_LO_U16),
+    E(V_PK_MAX_I16, V_PK_MAX_I16),
+    E(V_PK_MAX3_I16, V_PK_MAX3_I16),
 
     // ---------------------------------------------------------------------
     // 64-bit vector

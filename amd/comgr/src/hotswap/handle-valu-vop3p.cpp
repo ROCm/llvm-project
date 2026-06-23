@@ -552,30 +552,27 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   // ---- VOP3P packed-pair `<2 x i16>` int ops ----
-  // V_PK_ADD_U16 / V_PK_LSHLREV_B16 / V_PK_ASHRREV_I16 / V_PK_MUL_LO_U16.
-  // Operand profile is
-  // VOP_V2I16_V2I16_V2I16: 32-bit dst / 32-bit src0 / 32-bit src1, each
-  // bitcast to `<2 x i16>` for the lane-wise op and back to i32 for the
-  // VGPR write-back. Shared handler shape; per-CanonicalOp dispatch picks the
-  // IR opcode (`add` vs the reversed `clshl_rev_16` shape vs lane-wise
-  // modular `mul` -- see notes on each case below). Inline literals encode
-  // a packed `<2 x i16>` directly (lo i16 = bits[15:0], hi i16 = bits[31:16]);
-  // there is NO broadcast analogue to the V_PK_F32 32-bit-element family
-  // because the literal width matches the operand width here. Sibling
-  // V_PK_LSHRREV_B16 / V_PK_SUB_U16 share this exact shape -- one extra
-  // `case` + IR-opcode dispatch in the inner switch and they're done --
-  // but they're held out per the "no fallback / design what the corpus
-  // exercises" discipline.
+  // Binary forms use VOP_V2I16_V2I16_V2I16; ternary forms add a third packed
+  // source. Each 32-bit source is bitcast to `<2 x i16>` for the lane-wise op
+  // and back to i32 for the VGPR write-back.
+  case CanonicalOp::V_PK_MAD_U16:
   case CanonicalOp::V_PK_ADD_U16:
   case CanonicalOp::V_PK_LSHLREV_B16:
   case CanonicalOp::V_PK_ASHRREV_I16:
-  case CanonicalOp::V_PK_MUL_LO_U16: {
+  case CanonicalOp::V_PK_MUL_LO_U16:
+  case CanonicalOp::V_PK_MAX_I16:
+  case CanonicalOp::V_PK_MAX3_I16: {
     auto *I16Ty = Type::getInt16Ty(Ctx.C);
+    auto *V2I16 = FixedVectorType::get(I16Ty, 2);
 
     constexpr unsigned KnownPkI16Mods =
         SISrcMods::OP_SEL_0 | SISrcMods::OP_SEL_1;
     unsigned Mods[3] = {};
-    if (!readPackedSrcMods(Di, Op, 2, KnownPkI16Mods, Mods, Hr))
+    const unsigned NumSrcs = (Sop == CanonicalOp::V_PK_MAD_U16 ||
+                              Sop == CanonicalOp::V_PK_MAX3_I16)
+                                 ? 3
+                                 : 2;
+    if (!readPackedSrcMods(Di, Op, NumSrcs, KnownPkI16Mods, Mods, Hr))
       return Hr;
 
     PackedSrcOptions Opts;
@@ -585,6 +582,29 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
 
     Value *Res = nullptr;
     switch (Sop) {
+    case CanonicalOp::V_PK_MAD_U16: {
+      Value *S2 = readPacked2Src(Ctx, Op, 2, I16Ty, Mods[2], Opts);
+      int ClampIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                AMDGPU::OpName::clamp);
+      if (ClampIdx < 0 || !Di.isImm(static_cast<unsigned>(ClampIdx))) {
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+            Di, "VOP3P", "v_pk_mad_u16 missing immediate clamp operand");
+        return Hr;
+      }
+      int64_t ClampImm = Di.getImm(static_cast<unsigned>(ClampIdx));
+      if (ClampImm != 0 && ClampImm != 1) {
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+            Di, "VOP3P", "v_pk_mad_u16 clamp operand is not 0 or 1");
+        return Hr;
+      }
+      auto *V2I32 = FixedVectorType::get(Ctx.I32Ty, 2);
+      Constant *Max =
+          ConstantVector::getSplat(ElementCount::getFixed(2),
+                                   ConstantInt::get(Ctx.I32Ty, 0xFFFFu));
+      Res = emitU16Mad(Ctx, S0, S1, S2, ClampImm != 0, V2I32,
+                       Max, "pk_mad_u16");
+      break;
+    }
     case CanonicalOp::V_PK_ADD_U16:
       Res = Ctx.B.CreateAdd(S0, S1, "pk_add_u16");
       break;
@@ -594,6 +614,36 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
       // signed vs unsigned doesn't change the low half of the product.
       Res = Ctx.B.CreateMul(S0, S1, "pk_mul_lo_u16");
       break;
+    case CanonicalOp::V_PK_MAX_I16: {
+      Function *SmaxFn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::smax, {V2I16});
+      Res = Ctx.B.CreateCall(SmaxFn, {S0, S1}, "pk_max_i16");
+      break;
+    }
+    case CanonicalOp::V_PK_MAX3_I16: {
+      Value *S2 = readPacked2Src(Ctx, Op, 2, I16Ty, Mods[2], Opts);
+      int ClampIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                AMDGPU::OpName::clamp);
+      if (ClampIdx < 0 || !Di.isImm(static_cast<unsigned>(ClampIdx))) {
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+            Di, "VOP3P", "v_pk_max3_i16 missing immediate clamp operand");
+        return Hr;
+      }
+      int64_t ClampImm = Di.getImm(static_cast<unsigned>(ClampIdx));
+      if (ClampImm != 0 && ClampImm != 1) {
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+            Di, "VOP3P", "v_pk_max3_i16 clamp operand is not 0 or 1");
+        return Hr;
+      }
+      Function *SmaxFn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::smax, {V2I16});
+      Value *M01 = Ctx.B.CreateCall(SmaxFn, {S0, S1}, "pk_max3_i16_m01");
+      Res = Ctx.B.CreateCall(SmaxFn, {M01, S2}, "pk_max3_i16");
+      if (ClampImm != 0)
+        Res = Ctx.B.CreateCall(SmaxFn, {Res, Constant::getNullValue(V2I16)},
+                               "pk_max3_i16_clamp");
+      break;
+    }
     case CanonicalOp::V_PK_LSHLREV_B16: {
       // clshl_rev_16 SDAG: dst = src1 << (src0 & 15). Reversed-operand
       // convention (shift count is src0, value is src1) AND a hardware

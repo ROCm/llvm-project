@@ -11,6 +11,14 @@
 
 #include "raise-context.h"
 
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Intrinsics.h"
+
+#include <cassert>
+
 // Sub-handlers that together make up `handleVALU`. Each returns
 // `{handled=true}` when it recognised and lowered the CanonicalOp, or an
 // unhandled HandlerResult when the CanonicalOp is out of its scope (so the
@@ -45,6 +53,44 @@ HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
 // v_fma_mix_f32, and v_cndmask_b32.
 HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
                                 OpResolver &Op);
+
+// Emit unsigned i16 multiply-add for either `i16` or `<N x i16>` operands.
+// `A`, `B`, and `C` must have the same type; `WideTy` and `ClampMax` must be
+// the matching scalar/vector i32 shape used for the exact widened sum.
+inline llvm::Value *emitU16Mad(RaiseContext &Ctx, llvm::Value *A,
+                               llvm::Value *B, llvm::Value *C, bool Clamp,
+                               llvm::Type *WideTy, llvm::Constant *ClampMax,
+                               llvm::StringRef Name) {
+  assert(A->getType() == B->getType() && A->getType() == C->getType() &&
+         "u16 MAD operands must have the same type");
+  assert(A->getType()->getScalarType()->isIntegerTy(16) &&
+         "u16 MAD operands must be i16 lanes");
+  assert(WideTy->getScalarType()->isIntegerTy(32) &&
+         "u16 MAD widened type must be i32 lanes");
+  assert(ClampMax->getType() == WideTy &&
+         "u16 MAD clamp constant must match the widened type");
+
+  if (!Clamp) {
+    return Ctx.B.CreateAdd(Ctx.B.CreateMul(A, B, llvm::Twine(Name) + "_mul"),
+                           C, Name);
+  }
+
+  llvm::Value *WideA =
+      Ctx.B.CreateZExt(A, WideTy, llvm::Twine(Name) + "_a_wide");
+  llvm::Value *WideB =
+      Ctx.B.CreateZExt(B, WideTy, llvm::Twine(Name) + "_b_wide");
+  llvm::Value *WideC =
+      Ctx.B.CreateZExt(C, WideTy, llvm::Twine(Name) + "_c_wide");
+  llvm::Value *Wide = Ctx.B.CreateAdd(
+      Ctx.B.CreateMul(WideA, WideB, llvm::Twine(Name) + "_mul_wide"), WideC,
+      llvm::Twine(Name) + "_wide");
+  llvm::Function *UminFn =
+      llvm::Intrinsic::getOrInsertDeclaration(&Ctx.M, llvm::Intrinsic::umin,
+                                              {WideTy});
+  llvm::Value *Sat =
+      Ctx.B.CreateCall(UminFn, {Wide, ClampMax}, llvm::Twine(Name) + "_clamp");
+  return Ctx.B.CreateTrunc(Sat, A->getType(), Name);
+}
 
 } // namespace COMGR::hotswap
 
