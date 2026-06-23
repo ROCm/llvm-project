@@ -1367,8 +1367,8 @@ void SIWholeQuadMode::processBlock(MachineBasicBlock &MBB, BlockInfo &BI,
     // Adjust needs if this is first instruction of WQM requiring shader.
     // Skip for instructions that disable WQM (e.g., IMAGE_STORE) to avoid
     // Needs being cleared to 0 by the Disabled mask later.
-    if (IsEntry && Idx == 0 && (BI.InNeeds & StateWQM) &&
-        II != IE && !TII->isDisableWQM(*II))
+    if (IsEntry && Idx == 0 && (BI.InNeeds & StateWQM) && II != IE &&
+        !TII->isDisableWQM(*II))
       Needs = StateWQM;
 
     // First, figure out the allowed states (Needs) based on the propagated
@@ -1872,8 +1872,7 @@ SIWholeQuadModePass::run(MachineFunction &MF,
   MFPropsModifier _(*this, MF);
 
   LiveIntervals *LIS = &MFAM.getResult<LiveIntervalsAnalysis>(MF);
-  MachineDominatorTree *MDT =
-      &MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
+  MachineDominatorTree *MDT = &MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
   MachinePostDominatorTree *PDT =
       &MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
   SIWholeQuadMode Impl(MF, LIS, MDT, PDT);
