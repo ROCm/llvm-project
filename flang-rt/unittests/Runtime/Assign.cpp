@@ -75,9 +75,10 @@ TEST(AssignSimple, AliasedReverseStride) {
   // Create dest descriptor: reverse view (5:1:-1) of same memory
   StaticDescriptor<1> staticDest;
   Descriptor &dest{staticDest.descriptor()};
-  dest.Establish(intType, elementBytes, &data[4], 1, extent);  // Start at last element
+  dest.Establish(
+      intType, elementBytes, &data[4], 1, extent); // Start at last element
   dest.GetDimension(0).SetLowerBound(1);
-  dest.GetDimension(0).SetByteStride(-elementBytes);  // Negative stride
+  dest.GetDimension(0).SetByteStride(-elementBytes); // Negative stride
 
   RTNAME(AssignSimple)(dest, source, __FILE__, __LINE__);
 
@@ -111,10 +112,12 @@ TEST(AssignSimple, ReallocateUnallocated) {
   EXPECT_EQ(dest.Elements(), 4);
 
   int expected[4] = {10, 20, 30, 40};
-  EXPECT_EQ(std::memcmp(dest.OffsetElement<int>(0), expected, 4 * sizeof(int)), 0);
+  EXPECT_EQ(
+      std::memcmp(dest.OffsetElement<int>(0), expected, 4 * sizeof(int)), 0);
 
   // Verify source unchanged
-  EXPECT_EQ(std::memcmp(source->OffsetElement<int>(0), expected, 4 * sizeof(int)), 0);
+  EXPECT_EQ(
+      std::memcmp(source->OffsetElement<int>(0), expected, 4 * sizeof(int)), 0);
 
   dest.Destroy();
   source->Destroy();
@@ -141,10 +144,12 @@ TEST(AssignSimple, ReallocateShapeMismatch) {
   EXPECT_EQ(dest->Elements(), 5);
 
   int expected[5] = {10, 20, 30, 40, 50};
-  EXPECT_EQ(std::memcmp(dest->OffsetElement<int>(0), expected, 5 * sizeof(int)), 0);
+  EXPECT_EQ(
+      std::memcmp(dest->OffsetElement<int>(0), expected, 5 * sizeof(int)), 0);
 
   // Verify source unchanged
-  EXPECT_EQ(std::memcmp(source->OffsetElement<int>(0), expected, 5 * sizeof(int)), 0);
+  EXPECT_EQ(
+      std::memcmp(source->OffsetElement<int>(0), expected, 5 * sizeof(int)), 0);
 
   dest->Destroy();
   source->Destroy();
@@ -153,10 +158,8 @@ TEST(AssignSimple, ReallocateShapeMismatch) {
 TEST(AssignSimple, NonContiguousToContiguous) {
   // Test non-contiguous source (strided) to contiguous destination
   // Pattern: take every other element from an 8-element array
-  auto source{MakeArray<TypeCategory::Integer, 4>(
-      std::vector<int>{8},
-      std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8},
-      sizeof(int))};
+  auto source{MakeArray<TypeCategory::Integer, 4>(std::vector<int>{8},
+      std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8}, sizeof(int))};
 
   // Make source non-contiguous: stride=2*sizeof(int), extent=4
   // This gives us elements [1, 3, 5, 7] from the backing array
@@ -172,7 +175,8 @@ TEST(AssignSimple, NonContiguousToContiguous) {
 
   // Verify dest has strided elements from source
   int expected[4] = {1, 3, 5, 7};
-  EXPECT_EQ(std::memcmp(dest->OffsetElement<int>(0), expected, 4 * sizeof(int)), 0);
+  EXPECT_EQ(
+      std::memcmp(dest->OffsetElement<int>(0), expected, 4 * sizeof(int)), 0);
   EXPECT_TRUE(dest->IsContiguous());
 
   dest->Destroy();
