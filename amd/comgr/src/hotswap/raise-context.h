@@ -88,13 +88,20 @@ struct RaiseContext {
   const SetPcAnalysis *SetpcAnalysis = nullptr;
 
   // gfx1250 s_set_vgpr_msb state: only the LOW 8 bits of the instruction's
-  // 16-bit immediate carry runtime meaning.  They encode the MSB bit pair for
-  // every operand slot of the next ALU instruction:
+  // 16-bit immediate carry runtime meaning.  They encode four 2-bit MSB
+  // fields, one per slot, that apply to subsequent instructions until the
+  // next s_set_vgpr_msb:
   //
-  //   [1:0]  src0 MSB        [3:2]  src1 MSB
-  //   [5:4]  src2 MSB        [7:6]  vdst MSB
+  //   [1:0]  slot 0 MSB       [3:2]  slot 1 MSB
+  //   [5:4]  slot 2 MSB       [7:6]  slot 3 MSB
   //
-  // Each 2-bit field adds (value * 256) to the corresponding VGPR index.
+  // Each 2-bit field adds (value * 256) to the corresponding operand's VGPR
+  // index. The slot->operand mapping is instruction-format-specific and is NOT
+  // VALU's positional src0/src1/src2/vdst order in general: VBUFFER maps slot 0
+  // to vaddr and slot 3 to vdata, VDS maps slots 0/1/2 to addr/data0/data1, and
+  // so on. `computeVGPRAdjust` resolves it via
+  // AMDGPU::getVGPRLoweringOperandTables (the same per-format tables the AMDGPU
+  // backend uses to lower VGPR encoding).
   //
   // The HIGH 8 bits of the `s_set_vgpr_msb` immediate record the PREVIOUS
   // mode value for compiler bookkeeping (see LLVM's AMDGPULowerVGPREncoding
@@ -110,7 +117,10 @@ struct RaiseContext {
   bool AssumeHipGlobalOffsetZero = false;
 
   // Per-instruction VGPR index adjustment, indexed by MCInst operand index.
-  // Computed from vgprMSBs before each instruction dispatch.
+  // Computed from vgprMSBs before each instruction dispatch. computeVGPRAdjust
+  // fails loudly if LLVM TableGen grows a VGPR-MSB-controlled operand beyond
+  // this bound; silently dropping such an adjustment would misdecode the source
+  // register bank.
   static constexpr unsigned KMaxOps = 16;
   unsigned CurrentVgprAdjust[KMaxOps] = {};
 
