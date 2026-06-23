@@ -63,7 +63,7 @@ namespace {
 static constexpr llvm::StringRef FortranAssignStr = "_FortranAAssign";
 static constexpr llvm::StringRef FortranAssignSimpleStr = "_FortranAAssignSimple";
 
-/// Check if the function name is any variant of Fortran assignment runtime call
+/// Check if the function name is any variant of Fortran assignment runtime call.
 static bool isFortranAssignCall(llvm::StringRef funcName) {
   return funcName == FortranAssignStr ||
          funcName == FortranAssignSimpleStr;
@@ -182,11 +182,9 @@ verifyTargetTeamsWorkdistribute(omp::WorkdistributeOp workdistribute) {
         // Other runtime calls are not supported in omp.workdistribute yet.
         if (isFortranAssignCall(funcName))
           continue;
-        else {
-          emitError(loc, "Runtime call " + funcName +
-                             " lowering not supported for workdistribute yet.");
-          return failure();
-        }
+        emitError(loc, "Runtime call " + funcName +
+                  " lowering not supported for workdistribute yet.");
+        return failure();
       }
     }
   }
