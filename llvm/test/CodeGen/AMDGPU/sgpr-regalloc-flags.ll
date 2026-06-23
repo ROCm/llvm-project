@@ -39,6 +39,10 @@
 ; O0-NEXT: AMDGPU Pre Wave Transform
 ; O0-NEXT: Machine Cycle Info Analysis
 ; O0-NEXT: AMDGPU Control Flow Wave Transform
+; O0-NEXT: Slot index numbering
+; O0-NEXT: Live Interval Analysis
+; O0-NEXT: MachinePostDominator Tree Construction
+; O0-NEXT: SI Whole Quad Mode
 ; O0-NEXT: Fast Register Allocator
 ; O0-NEXT: AMDGPU Reserve Allocated VGPRs
 ; O0-NEXT: Machine Cycle Info Analysis
@@ -103,8 +107,6 @@
 
 ; BASIC-BASIC: Debug Variable Analysis
 ; BASIC-BASIC-NEXT: Live Stack Slot Analysis
-; BASIC-BASIC-NEXT: Machine Natural Loop Construction
-; BASIC-BASIC-NEXT: Machine Block Frequency Analysis
 ; BASIC-BASIC-NEXT: Basic Register Allocator
 ; BASIC-BASIC-NEXT: GCN NSA Reassign
 ; BASIC-BASIC-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA

@@ -1766,10 +1766,13 @@ void GCNPassConfig::addFastRegAlloc() {
   // This must be run immediately after phi elimination and before
   // TwoAddressInstructions, otherwise the processing of the tied operand of
   // SI_ELSE will introduce a copy of the tied operand source after the else.
-  if (!LateWaveTransform)
+  // In LWT, si-wqm runs post-WaveTransform so it sees the wave-level CFG
+  // with flow blocks, matching the legacy pipeline's post-SILowerControlFlow
+  // CFG structure.
+  if (!LateWaveTransform) {
     insertPass(&PHIEliminationID, &SILowerControlFlowLegacyID);
-
-  insertPass(&TwoAddressInstructionPassID, &SIWholeQuadModeID);
+    insertPass(&TwoAddressInstructionPassID, &SIWholeQuadModeID);
+  }
 
   TargetPassConfig::addFastRegAlloc();
 }
@@ -1804,7 +1807,11 @@ void GCNPassConfig::addOptimizedRegAlloc() {
 
   // Allow the scheduler to run before SIWholeQuadMode inserts exec manipulation
   // instructions that cause scheduling barriers.
-  insertPass(&MachineSchedulerID, &SIWholeQuadModeID);
+  // In LWT, si-wqm runs post-WaveTransform so it sees the wave-level CFG
+  // with flow blocks, matching the legacy pipeline's post-SILowerControlFlow
+  // CFG structure.
+  if (!LateWaveTransform)
+    insertPass(&MachineSchedulerID, &SIWholeQuadModeID);
 
   if (!LateWaveTransform && OptExecMaskPreRA)
     insertPass(&MachineSchedulerID, &SIOptimizeExecMaskingPreRAID);
@@ -1903,6 +1910,11 @@ bool GCNPassConfig::addRegAssignAndRewriteFast() {
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
 
+    // si-wqm runs post-WaveTransform so it sees the wave-level CFG with flow
+    // blocks. This matches the legacy pipeline where si-wqm runs after
+    // SILowerControlFlow has created the structurized CFG.
+    addPass(&SIWholeQuadModeID);
+
     // Long-tem plan: we want to update the liveness of those allocated physical
     // VGPRs on the whole-wave CFG so that they have correct interferences with
     // WWM virtual VGPRs (including those used in SGPR spilling). In that way,
@@ -1974,6 +1986,11 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
 
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
+
+    // si-wqm runs post-WaveTransform so it sees the wave-level CFG with flow
+    // blocks. This matches the legacy pipeline where si-wqm runs after
+    // SILowerControlFlow has created the structurized CFG.
+    addPass(&SIWholeQuadModeID);
 
     // Long-tem plan: we want to update the liveness of those allocated physical
     // VGPRs on the whole-wave CFG so that they have correct interferences with

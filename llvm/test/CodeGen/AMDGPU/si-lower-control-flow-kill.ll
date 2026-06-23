@@ -1,8 +1,9 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}if_with_kill:
-; GCN: s_mov_b64 [[SAVEEXEC:s\[[0-9]+:[0-9]+\]]], exec
+; GCN: v_cmp_ne_u32_e32 vcc, 32, v0
 ; GCN: s_xor_b64 [[COND:s\[[0-9]+:[0-9]+\]]], vcc, exec
+; GCN: s_mov_b64 exec, [[COND]]
 define amdgpu_ps void @if_with_kill(i32 %arg) {
 .entry:
   %cmp = icmp eq i32 %arg, 32
@@ -17,8 +18,9 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}if_with_loop_kill_after:
-; GCN: s_mov_b64 [[SAVEEXEC:s\[[0-9]+:[0-9]+\]]], exec
+; GCN: v_cmp_ne_u32_e32 vcc, 32, v0
 ; GCN: s_xor_b64 [[COND:s\[[0-9]+:[0-9]+\]]], vcc, exec
+; GCN: s_mov_b64 exec, [[COND]]
 define amdgpu_ps void @if_with_loop_kill_after(i32 %arg) {
 .entry:
   %cmp = icmp eq i32 %arg, 32
@@ -43,8 +45,9 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}if_with_kill_inside_loop:
-; GCN: s_mov_b64 [[SAVEEXEC:s\[[0-9]+:[0-9]+\]]], exec
-; GCN: s_xor_b64 [[COND:s\[[0-9]+:[0-9]+\]]], {{vcc|s\[[0-9]+:[0-9]+\]}}, exec
+; GCN: v_cmp_ne_u32_e64 [[CMP:s\[[0-9]+:[0-9]+\]]], 32, v0
+; GCN: s_xor_b64 [[COND:s\[[0-9]+:[0-9]+\]]], [[CMP]], exec
+; GCN: s_mov_b64 exec, [[COND]]
 define amdgpu_ps void @if_with_kill_inside_loop(i32 %arg) {
 .entry:
   %cmp = icmp eq i32 %arg, 32

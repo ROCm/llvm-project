@@ -244,6 +244,8 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<LiveIntervalsWrapperPass>();
+    AU.addRequired<MachineDominatorTreeWrapperPass>();
+    AU.addRequired<MachinePostDominatorTreeWrapperPass>();
     AU.addPreserved<SlotIndexesWrapperPass>();
     AU.addPreserved<LiveIntervalsWrapperPass>();
     AU.addPreserved<MachineDominatorTreeWrapperPass>();
@@ -693,6 +695,19 @@ void SIWholeQuadMode::propagateInstruction(MachineInstr &MI,
 
 void SIWholeQuadMode::propagateBlock(MachineBasicBlock &MBB,
                                      std::vector<WorkItem>& Worklist) {
+  // If this block has no WQM/Exact instructions (pass-through, only control
+  // flow) but enters in WQM, propagate WQM to OutNeeds. This lets successor
+  // blocks handle their own WQM-to-Exact transitions instead of this block
+  // inserting them at potentially incorrect locations (e.g., inside
+  // wave-transform's atomic divergent branch idiom in merge blocks).
+  // TODO-WAVETRANSFORM: We should try to make the exec mask manipulation
+  // code sequences inserted at various blocks in wave-transform based flow
+  // similar to the code sequences in the early structurized flow. After that,
+  // revisit this fix and try to remove it as it generates suboptimal duplicate
+  // transitions in successors.
+  if (Blocks[&MBB].Needs == 0 && (Blocks[&MBB].InNeeds & StateWQM))
+    Blocks[&MBB].OutNeeds |= StateWQM;
+
   BlockInfo BI = Blocks[&MBB]; // Make a copy to prevent dangling references.
 
   // Propagate through instructions
@@ -1350,7 +1365,10 @@ void SIWholeQuadMode::processBlock(MachineBasicBlock &MBB, BlockInfo &BI,
       FirstStrict = II;
 
     // Adjust needs if this is first instruction of WQM requiring shader.
-    if (IsEntry && Idx == 0 && (BI.InNeeds & StateWQM))
+    // Skip for instructions that disable WQM (e.g., IMAGE_STORE) to avoid
+    // Needs being cleared to 0 by the Disabled mask later.
+    if (IsEntry && Idx == 0 && (BI.InNeeds & StateWQM) &&
+        II != IE && !TII->isDisableWQM(*II))
       Needs = StateWQM;
 
     // First, figure out the allowed states (Needs) based on the propagated
@@ -1562,8 +1580,14 @@ bool SIWholeQuadMode::lowerCopyInstrs() {
       assert(MI->getNumExplicitOperands() == 6);
 
       LiveInterval *RecomputeLI = nullptr;
-      if (MI->getOperand(4).isReg())
-        RecomputeLI = &LIS->getInterval(MI->getOperand(4).getReg());
+      Register RecomputePhysReg;
+      if (MI->getOperand(4).isReg()) {
+        Register Reg = MI->getOperand(4).getReg();
+        if (Reg.isVirtual())
+          RecomputeLI = &LIS->getInterval(Reg);
+        else
+          RecomputePhysReg = Reg;
+      }
 
       MI->removeOperand(5);
       MI->removeOperand(4);
@@ -1572,6 +1596,14 @@ bool SIWholeQuadMode::lowerCopyInstrs() {
 
       if (RecomputeLI)
         LIS->shrinkToUses(RecomputeLI);
+      else if (RecomputePhysReg) {
+        // Invalidate and immediately recompute the reg unit live ranges
+        // so that LiveIntervals remains correct at pass exit.
+        for (MCRegUnit Unit : TRI->regunits(RecomputePhysReg)) {
+          LIS->removeRegUnit(Unit);
+          LIS->getRegUnit(Unit);
+        }
+      }
     } else {
       assert(MI->getNumExplicitOperands() == 2);
     }
@@ -1826,12 +1858,10 @@ bool SIWholeQuadMode::run(MachineFunction &MF) {
 
 bool SIWholeQuadModeLegacy::runOnMachineFunction(MachineFunction &MF) {
   LiveIntervals *LIS = &getAnalysis<LiveIntervalsWrapperPass>().getLIS();
-  auto *MDTWrapper = getAnalysisIfAvailable<MachineDominatorTreeWrapperPass>();
-  MachineDominatorTree *MDT = MDTWrapper ? &MDTWrapper->getDomTree() : nullptr;
-  auto *PDTWrapper =
-      getAnalysisIfAvailable<MachinePostDominatorTreeWrapperPass>();
+  MachineDominatorTree *MDT =
+      &getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
   MachinePostDominatorTree *PDT =
-      PDTWrapper ? &PDTWrapper->getPostDomTree() : nullptr;
+      &getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   SIWholeQuadMode Impl(MF, LIS, MDT, PDT);
   return Impl.run(MF);
 }
@@ -1843,9 +1873,9 @@ SIWholeQuadModePass::run(MachineFunction &MF,
 
   LiveIntervals *LIS = &MFAM.getResult<LiveIntervalsAnalysis>(MF);
   MachineDominatorTree *MDT =
-      MFAM.getCachedResult<MachineDominatorTreeAnalysis>(MF);
+      &MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
   MachinePostDominatorTree *PDT =
-      MFAM.getCachedResult<MachinePostDominatorTreeAnalysis>(MF);
+      &MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
   SIWholeQuadMode Impl(MF, LIS, MDT, PDT);
   bool Changed = Impl.run(MF);
   if (!Changed)

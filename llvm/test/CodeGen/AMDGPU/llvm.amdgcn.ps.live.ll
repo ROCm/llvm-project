@@ -35,7 +35,9 @@ define amdgpu_ps float @test2() #0 {
 
 ; CHECK-LABEL: {{^}}test3:
 ; CHECK-SDAG: s_wqm_b64 exec, exec
-; CHECK-SDAG: s_xor_saveexec_b64
+; CHECK-SDAG: s_and_b64 [[PRIMARY:s\[[0-9]+:[0-9]+\]]], exec, s[0:1]
+; CHECK-SDAG: s_xor_b64 [[DEAD:s\[[0-9]+:[0-9]+\]]], [[PRIMARY]], exec
+; CHECK-SDAG: s_mov_b64 exec, [[DEAD]]
 ; CHECK-GISEL: s_mov_b64 [[LIVE:s\[[0-9]+:[0-9]+\]]], exec
 ; CHECK-GISEL: s_wqm_b64 exec, exec
 ; CHECK-GISEL-DAG: s_mov_b64 [[EXEC_COPY:s\[[0-9]+:[0-9]+\]]], exec
