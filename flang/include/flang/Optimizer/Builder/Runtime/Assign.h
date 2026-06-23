@@ -65,7 +65,8 @@ void genCopyOutAssign(fir::FirOpBuilder &builder, mlir::Location loc,
 
 /// Generate runtime call to AssignSimple (fast path for intrinsic types).
 /// \p destBox must be a fir.ref<fir.box<T>> and \p sourceBox a fir.box<T>.
-/// Assumes: intrinsic type, same rank, contiguous, same element size.
+/// Assumes: intrinsic type, same rank, same element size.
+/// Handles both continguous and non-contiguous arrays.
 void genAssignSimple(fir::FirOpBuilder &builder, mlir::Location loc,
                      mlir::Value destBox, mlir::Value sourceBox);
 
