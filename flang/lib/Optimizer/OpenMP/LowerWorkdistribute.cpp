@@ -61,12 +61,13 @@ namespace {
 
 /// This string is used to identify the Fortran-specific runtime FortranAAssign.
 static constexpr llvm::StringRef FortranAssignStr = "_FortranAAssign";
-static constexpr llvm::StringRef FortranAssignSimpleStr = "_FortranAAssignSimple";
+static constexpr llvm::StringRef FortranAssignSimpleStr =
+    "_FortranAAssignSimple";
 
-/// Check if the function name is any variant of Fortran assignment runtime call.
+/// Check if the function name is any variant of Fortran assignment runtime
+/// call.
 static bool isFortranAssignCall(llvm::StringRef funcName) {
-  return funcName == FortranAssignStr ||
-         funcName == FortranAssignSimpleStr;
+  return funcName == FortranAssignStr || funcName == FortranAssignSimpleStr;
 }
 
 /// The isRuntimeCall function is a utility designed to determine
@@ -183,7 +184,7 @@ verifyTargetTeamsWorkdistribute(omp::WorkdistributeOp workdistribute) {
         if (isFortranAssignCall(funcName))
           continue;
         emitError(loc, "Runtime call " + funcName +
-                  " lowering not supported for workdistribute yet.");
+                           " lowering not supported for workdistribute yet.");
         return failure();
       }
     }

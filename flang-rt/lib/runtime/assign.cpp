@@ -862,9 +862,17 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
   //   - LHS is not volatile (volatile needs memory ordering semantics)
   // See ConvertToFIR.cpp for the compile-time routing decisions.
 
-  RUNTIME_CHECK(terminator, to.rank() == from.rank());
-  RUNTIME_CHECK(terminator, to.ElementBytes() == from.ElementBytes());
-  RUNTIME_CHECK(terminator, !to.type().IsDerived());
+  if (to.rank() != from.rank()) {
+    terminator.Crash("AssignSimple: rank mimatch (to.rank=%d, from.rank=%d)",
+        to.rank(), from.rank());
+  }
+  if (to.ElementBytes() != from.ElementBytes()) {
+    terminator.Crash("AssignSimple: ElementBytes mismatch (to.ElementBytes=%d, from.ElementBytes=%d)",
+        to.ElementBytes(), from.ElementBytes());
+  }
+  if (to.type().IsDerived()) {
+    terminator.Crash("AssignSimple: Cannot assign to derived type");
+  }
 
   std::size_t elementBytes{to.ElementBytes()};
   std::size_t elements{from.Elements()};
@@ -896,7 +904,8 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
   //   a = reshape((/1, 2, 3, 4, 5, 6/), (/3, 2/))
   //   a = a(3:1:-1, 2:1:-1)  ! reverse both dimensions
   //
-  //   The element-wise loop iterates in column-major order for both LHS and RHS:
+  //   The element-wise loop iterates in column-major order for both LHS and
+  //   RHS:
   //     Iter 1: a(1,1) = a(3,2) = 6  -> overwrites a(1,1), was 1
   //     Iter 2: a(2,1) = a(2,2) = 5  -> overwrites a(2,1), was 2
   //     Iter 3: a(3,1) = a(1,2) = 4  -> overwrites a(3,1), was 3
@@ -922,7 +931,8 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
   // memory if they alias.
   //   Example: integer, allocatable :: a(:)
   //            allocate(a(5)); a = [1,2,3,4,5]
-  //            a = a(1:3)  ! shapes differ -> deallocate a -> frees a(1:3)'s data
+  //            a = a(1:3)  ! shapes differ -> deallocate a -> frees a(1:3)'s
+  //            data
   //
   // TODO: For better performance on contiguous aliased assignments that do not
   // require reallocation, we could refine the condition to only create a temp
@@ -950,7 +960,7 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
       from.GetLowerBounds(fromAt);
       char *tempAt{tempBuffer};
       for (std::size_t n{elements}; n-- > 0;
-          from.IncrementSubscripts(fromAt), tempAt += elementBytes) {
+           from.IncrementSubscripts(fromAt), tempAt += elementBytes) {
         std::memcpy(tempAt, from.Element<const char>(fromAt), elementBytes);
       }
     }
@@ -1019,7 +1029,7 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
       to.GetLowerBounds(toAt);
       const char *tempAt{tempBuffer};
       for (std::size_t n{elements}; n-- > 0;
-          to.IncrementSubscripts(toAt), tempAt += elementBytes) {
+           to.IncrementSubscripts(toAt), tempAt += elementBytes) {
         std::memcpy(to.Element<char>(toAt), tempAt, elementBytes);
       }
     }
@@ -1028,8 +1038,8 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
     // No aliasing: copy directly from RHS to LHS.
     if (to.IsContiguous() && from.IsContiguous()) {
       // Both contiguous: memmove handles any incidental overlap safely.
-      std::memmove(to.OffsetElement(), from.OffsetElement(),
-          elements * elementBytes);
+      std::memmove(
+          to.OffsetElement(), from.OffsetElement(), elements * elementBytes);
     } else {
       // At least one non-contiguous: element-wise copy.
       // This handles strided slices, transformational intrinsic results, etc.
@@ -1038,7 +1048,7 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
       SubscriptValue fromAt[maxRank];
       from.GetLowerBounds(fromAt);
       for (std::size_t n{elements}; n-- > 0;
-          to.IncrementSubscripts(toAt), from.IncrementSubscripts(fromAt)) {
+           to.IncrementSubscripts(toAt), from.IncrementSubscripts(fromAt)) {
         std::memmove(to.Element<char>(toAt), from.Element<const char>(fromAt),
             elementBytes);
       }

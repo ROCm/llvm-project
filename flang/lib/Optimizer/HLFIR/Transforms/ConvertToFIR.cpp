@@ -146,11 +146,13 @@ public:
           // type after the assignment.
           fir::runtime::genAssignPolymorphic(builder, loc, to, from);
         } else {
-          // Use simple path for allocatable with trivial types (scalars and arrays)
-          // Only use Simple path when ranks match.
-          // Only use Simple path for non-volatile - volatile needs memory ordering
-          // NOTE: For allocatables, we assume contiguity - allocatable whole-array assignments
-          //       are always contiguous. Strided sections of allocatables go through different path.
+          // Use simple path for allocatable with trivial types (scalars and
+          // arrays) Only use Simple path when ranks match. Only use Simple path
+          // for non-volatile - volatile needs memory ordering NOTE: For
+          // allocatables, we assume contiguity - allocatable whole-array
+          // assignments
+          //       are always contiguous. Strided sections of allocatables go
+          //       through different path.
           if (!lhs.isPolymorphic() &&
               fir::isa_trivial(lhs.getFortranElementType()) &&
               lhs.getRank() == rhs.getRank() &&
@@ -160,7 +162,8 @@ public:
             // non-volatile, non-polymorphic.
             fir::runtime::genAssignSimple(builder, loc, to, from);
           } else {
-            // Complex: derived types, polymorphic, rank mismatch (scalar-to-array), volatile, etc.
+            // Complex: derived types, polymorphic, rank mismatch
+            // (scalar-to-array), volatile, etc.
             fir::runtime::genAssign(builder, loc, to, from);
           }
         }
@@ -190,18 +193,22 @@ public:
         fir::runtime::genAssignTemporary(builder, loc, toMutableBox, from);
       } else {
         // Use simple path for non-allocatable arrays with trivial types
-        // CRITICAL: Only use Simple path when ranks match - scalar-to-array requires broadcasting
-        // CRITICAL: Only use Simple path for non-volatile - volatile needs memory ordering
-        // NOTE: Contiguity is now handled at runtime in AssignSimple
-        if (!lhs.isPolymorphic() && fir::isa_trivial(lhs.getFortranElementType()) &&
+        // CRITICAL: Only use Simple path when ranks match - scalar-to-array
+        // requires broadcasting CRITICAL: Only use Simple path for non-volatile
+        // - volatile needs memory ordering NOTE: Contiguity is now handled at
+        // runtime in AssignSimple
+        if (!lhs.isPolymorphic() &&
+            fir::isa_trivial(lhs.getFortranElementType()) &&
             lhs.getRank() == rhs.getRank() &&
             !fir::isa_volatile_type(lhs.getType()) &&
             !cuf::getDataAttr(lhs.getDefiningOp())) {
-          // Simple intrinsic type array with matching ranks, non-volatile, non-polymorphic.
-          // AssignSimple handles both contiguous (fast memmove) and non-contiguous (element-wise)
+          // Simple intrinsic type array with matching ranks, non-volatile,
+          // non-polymorphic. AssignSimple handles both contiguous (fast
+          // memmove) and non-contiguous (element-wise)
           fir::runtime::genAssignSimple(builder, loc, toMutableBox, from);
         } else {
-          // Complex: polymorphic, derived type, rank mismatch (scalar-to-array), volatile
+          // Complex: polymorphic, derived type, rank mismatch
+          // (scalar-to-array), volatile
           fir::runtime::genAssign(builder, loc, toMutableBox, from);
         }
       }
