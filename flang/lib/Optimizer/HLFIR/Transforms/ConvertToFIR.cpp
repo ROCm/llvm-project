@@ -146,8 +146,9 @@ public:
           // type after the assignment.
           fir::runtime::genAssignPolymorphic(builder, loc, to, from);
         } else {
-          // Phase 2.1: Use simple path for allocatable scalars with trivial types
-          // Keep arrays using the existing path for safety (Phase 2.2 will handle arrays)
+          // Phase 2.1: Use simple path for allocatable scalars with trivial
+          // types Keep arrays using the existing path for safety (Phase 2.2
+          // will handle arrays)
           if (fir::isa_trivial(lhs.getFortranElementType()) && !lhs.isArray()) {
             // Simple intrinsic type allocatable SCALAR only
             fir::runtime::genAssignSimple(builder, loc, to, from);
