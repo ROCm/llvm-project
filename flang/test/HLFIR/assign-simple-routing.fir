@@ -169,6 +169,23 @@ func.func @alloc_volatile(%arg0: !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>
 
 // ---------------------------------------------------------------------------
 
+// Allocatable scalar-to-array: rank mismatch (RHS rank 0, LHS rank 1).
+// Even though the element type is trivial (i32), the rank mismatch (scalar
+// RHS to array LHS) violates the lhs.getRank() == rhs.getRank() precondition
+// in the allocatable path, so this must route to the full _FortranAAssign
+// path to handle scalar broadcasting.
+func.func @alloc_scalar_to_array(%lhs: !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>,
+                                  %rhs: i32) {
+  hlfir.assign %rhs to %lhs realloc : i32,
+      !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>
+  return
+}
+// CHECK-LABEL: func.func @alloc_scalar_to_array(
+// CHECK:       fir.call @_FortranAAssign(
+// CHECK-NOT:   fir.call @_FortranAAssignSimple(
+
+// ---------------------------------------------------------------------------
+
 // Non-allocatable scalar-to-array: rank mismatch (RHS rank 0, LHS rank 1).
 // Broadcasting a scalar across an array requires the full _FortranAAssign path.
 func.func @nonalloc_scalar_to_array(%lhs: !fir.box<!fir.array<?xi32>>, %rhs: i32) {
