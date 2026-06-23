@@ -84,7 +84,8 @@ define amdgpu_kernel void @infinite_loop_ret(ptr addrspace(1) %out) {
 ; SI-LABEL: infinite_loop_ret:
 ; SI:       ; %bb.0: ; %entry
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v0
-; SI-NEXT:    s_xor_b64 exec, vcc, exec
+; SI-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; SI-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB2_3
 ; SI-NEXT:  .LBB2_1: ; %loop.preheader
@@ -316,7 +317,7 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; SI-NEXT:    s_mov_b64 s[6:7], -1
 ; SI-NEXT:    s_mov_b64 s[8:9], 0
-; SI-NEXT:    s_mov_b64 exec, s[0:1]
+; SI-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB6_7
 ; SI-NEXT:  .LBB6_1: ; %outer_loop.preheader
@@ -356,7 +357,6 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI-NEXT:    s_and_b64 s[10:11], s[10:11], exec
 ; SI-NEXT:    s_mov_b64 s[4:5], 0
 ; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB6_5
 ; SI-NEXT:    s_branch .LBB6_3
@@ -450,10 +450,8 @@ define amdgpu_kernel void @infinite_loop_nest_ret_callbr(ptr addrspace(1) %out) 
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; SI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; SI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; SI-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; SI-NEXT:    s_mov_b64 exec, s[4:5]
+; SI-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB7_2
 ; SI-NEXT:  .LBB7_8: ; Inline asm indirect target

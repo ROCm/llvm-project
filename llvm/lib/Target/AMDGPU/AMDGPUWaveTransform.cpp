@@ -1649,6 +1649,13 @@ private:
 
     Register PrimarySuccessorExec;
 
+    // Track saved exec from S_AND_SAVEEXEC(_TERM) opc to rejoin at secondary
+    // block.
+    Register SavedExec;
+
+    // Track Def of above register.
+    MachineInstr *SavedExecMI = nullptr;
+
     // Opcode for branches with implicit or opaque conditions:
     // S_CBRANCH_EXECZ/NZ S_CBRANCH_VCCZ/NZ S_CBRANCH_SCC0/1
     //   -- all active threads branch uniformly.
@@ -2278,14 +2285,11 @@ void ControlFlowRewriter::rewrite() {
 
       MachineBasicBlock::iterator MBBIOriginNodeEnd = OriginNode->Block->end();
 
-      // FIXME: Find a way to avoid adding MovTermOpc, instead add MovOpc. This
-      // Term operator being the first terminator, acts as an anchor point for
-      // finding the right insertion point in other parts of the Wave Transform.
-      // Since accumulator reset instructions may be added after this
-      // instruction, this move operation cannot be a terminator.
-      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
-              TII.get(LMC.MovTermOpc), LMC.ExecReg)
-          .addReg(OriginCFGNodeInfo.PrimarySuccessorExec);
+      OriginCFGNodeInfo.SavedExec = LMU.createLaneMaskReg();
+      OriginCFGNodeInfo.SavedExecMI =
+          BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
+                  TII.get(LMC.AndSaveExecTermOpc), OriginCFGNodeInfo.SavedExec)
+              .addReg(OriginCFGNodeInfo.PrimarySuccessorExec);
       BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
               TII.get(AMDGPU::SI_WAVE_CF_EDGE));
       BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
@@ -2336,32 +2340,27 @@ void ControlFlowRewriter::rewrite() {
         continue;
 
       CFGNodeInfo &PredInfo = NodeInfo.find(Pred)->second;
-      Register PrimaryExec = PredInfo.PrimarySuccessorExec;
 
-      Register Rejoin;
-      if (!Rejoin) {
-        // Try to find a previously generated XOR (or merely masked) value
-        // for reuse.
-        auto MapIt = RegMap.find(std::make_pair(Pred->Block, PrimaryExec));
-        if (MapIt != RegMap.end()) {
-          Rejoin = MapIt->second.second;
-          if (!Rejoin)
-            PrimaryExec = MapIt->second.first;
-        }
-      }
+      // The rejoin contribution is the full EXEC saved by the
+      // S_AND_SAVEEXEC emitted at this OriginBranch in Step 2.2, bookkept on
+      // the pred's CFGNodeInfo.
+      Register Rejoin = PredInfo.SavedExec;
 
-      if (!Rejoin) {
-        Rejoin = LMU.createLaneMaskReg();
-        BuildMI(*Pred->Block, Pred->Block->getFirstTerminator(), {},
-                TII.get(LMC.XorOpc), Rejoin)
-            .addReg(LMC.ExecReg)
-            .addReg(PrimaryExec);
-      }
-
-      if (HasSingleDivergentPred)
+      if (HasSingleDivergentPred) {
         DirectRejoin = Rejoin;
-      else
+      } else {
+        // The _term form of S_AND_SAVEEXEC is required while building the
+        // primary exec mask: it lets the updater machinery insert instructions
+        // at the terminator. For the secondary (rejoin) exec mask, however, the
+        // inserted instructions must land *after* the S_AND_SAVEEXEC since they
+        // consume its def. Demote the pred's terminator to its non-terminator
+        // form in place so getFirstTerminator() points past it, and subsequent
+        // rejoin-mask building iterations insert at the correct place.
+        if (PredInfo.SavedExecMI &&
+            PredInfo.SavedExecMI->getOpcode() == LMC.AndSaveExecTermOpc)
+          PredInfo.SavedExecMI->setDesc(TII.get(LMC.AndSaveExecOpc));
         Updater.addAvailable(*Pred->Block, Rejoin);
+      }
     }
 
     Register RejoinMask =
@@ -2678,6 +2677,16 @@ class ForwardPropSimplifier {
 
       const unsigned Opc = MI->getOpcode();
       const Register Dst = MI->getOperand(0).getReg();
+
+      // SavedExec = S_AND_SAVEEXEC Prim
+      //   Dst (SavedExec) = old EXEC; EXEC = EXEC & Prim; def SCC.
+      // Both the terminator and non-terminator forms appear: the non-terminator
+      // form for OriginBranches consumed by a rejoin accumulator (demoted in
+      // Step 3) and the terminator form otherwise.
+      if (Opc == LMC.AndSaveExecOpc || Opc == LMC.AndSaveExecTermOpc) {
+        Cur[Dst] = RegIntVariant{Dst};
+        continue;
+      }
 
       // ACC = MOV 0
       if (AccRegs.count(Dst) && Opc == LMC.MovOpc) {

@@ -10,8 +10,8 @@
 
 ; GCN: ; %else
 
-; GCN: v_cmp_gt_f32_e64 [[SAVE:s\[[0-9]+:[0-9]+\]]]
-; GCN: s_xor_b64 exec, [[SAVE]], exec
+; GCN: v_cmp_gt_f32_e32 vcc
+; GCN: s_xor_b64 [[SAVE:s\[[0-9]+:[0-9]+\]]], vcc, exec
 ; GCN: s_cbranch_execz [[RET_BB]]
 
 ; GCN: .LBB{{[0-9]+}}_{{[0-9]+}}: ; %unreachable.bb
@@ -59,8 +59,7 @@ ret.bb:                                          ; preds = %else, %main_body
 
 ; GCN: v_cmp_gt_f32_e32 vcc
 ; GCN: s_xor_b64 [[SAVE1:s\[[0-9]+:[0-9]+\]]], vcc, exec
-; GCN: s_mov_b64 [[SAVE2:s\[[0-9]+:[0-9]+\]]], [[SAVE1]]
-; GCN: s_mov_b64 exec, vcc
+; GCN: s_and_saveexec_b64 [[SAVE2:s\[[0-9]+:[0-9]+\]]], vcc
 ; GCN: s_cbranch_execz
 
 ; GCN: [[RET_BB2]]: ; %ret.bb
@@ -68,8 +67,7 @@ ret.bb:                                          ; preds = %else, %main_body
 ; GCN: {{buffer|flat}}_store_dword
 
 ; GCN: s_or_b64 exec, exec, [[SAVE2]]
-; GCN: s_xor_b64 [[SAVE3:s\[[0-9]+:[0-9]+\]]], exec, [[SAVE1]]
-; GCN: s_mov_b64 exec, [[SAVE1]]
+; GCN: s_and_saveexec_b64 [[SAVE1]], [[SAVE1]]
 ; GCN: s_cbranch_execz [[UNIFIED_RET:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: .LBB{{[0-9]+}}_{{[0-9]+}}: ; %unreachable.bb
@@ -77,7 +75,7 @@ ret.bb:                                          ; preds = %else, %main_body
 ; GCN: ; divergent unreachable
 
 ; GCN: [[UNIFIED_RET]]: ; %UnifiedReturnBlock
-; GCN: s_or_b64 exec, exec, [[SAVE3]]
+; GCN: s_or_b64 exec, exec, [[SAVE1]]
 ; GCN: s_waitcnt
 define amdgpu_ps <{ i32, i32, i32, i32, i32, i32, i32, i32, i32, float, float, float, float, float, float, float, float, float, float, float, float, float, float }> @uniform_br_nontrivial_ret_divergent_br_nontrivial_unreachable(ptr addrspace(4) inreg %arg, ptr addrspace(4) inreg %arg1, ptr addrspace(4) inreg %arg2, ptr addrspace(4) inreg %arg3, float inreg %arg4, i32 inreg %arg5, <2 x i32> %arg6, <2 x i32> %arg7, <2 x i32> %arg8, <3 x i32> %arg9, <2 x i32> %arg10, <2 x i32> %arg11, <2 x i32> %arg12, float %arg13, float %arg14, float %arg15, float %arg16, float %arg17, i32 inreg %arg18, i32 %arg19, float %arg20, i32 %arg21) #0 {
 main_body:

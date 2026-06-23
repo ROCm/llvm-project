@@ -64,7 +64,7 @@
 ; First divergent branch
 ; GCN: v_cmp_lt_i32_e{{32|64}}
 ; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
+; GCN: s_and_saveexec_b64
 ; GCN: ; divergent control-flow edge
 ; GCN: s_cbranch_execz
 
@@ -74,8 +74,7 @@
 
 ; Second reconverge
 ; GCN: s_or_b64 exec, exec
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
+; GCN: s_and_saveexec_b64
 ; GCN: ; divergent control-flow edge
 ; GCN: s_cbranch_execz
 
@@ -84,8 +83,7 @@
 
 ; Third reconverge
 ; GCN: s_or_b64 exec, exec
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
+; GCN: s_and_saveexec_b64
 ; GCN: ; divergent control-flow edge
 ; GCN: s_cbranch_execz
 
@@ -94,8 +92,7 @@
 
 ; Fourth reconverge
 ; GCN: s_or_b64 exec, exec
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
+; GCN: s_and_saveexec_b64
 ; GCN: ; divergent control-flow edge
 ; GCN: s_cbranch_execz
 
@@ -370,7 +367,7 @@ exit1:                                     ; preds = %LeafBlock, %LeafBlock1
 ; GCN: v_cmp_{{eq|ne}}_u32_e{{32|64}} {{vcc|s\[[0-9]+:[0-9]+\]}}, {{3|7}}, v0
 
 ; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
+; GCN: s_and_saveexec_b64
 ; GCN: ; divergent control-flow edge
 ; GCN: s_cbranch_execz
 
@@ -379,8 +376,7 @@ exit1:                                     ; preds = %LeafBlock, %LeafBlock1
 ; GCN: v_mov_b32_e32 v0, 1.0
 
 ; GCN: s_or_b64 exec, exec
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
+; GCN: s_and_saveexec_b64
 ; GCN: ; divergent control-flow edge
 ; GCN: s_cbranch_execz
 

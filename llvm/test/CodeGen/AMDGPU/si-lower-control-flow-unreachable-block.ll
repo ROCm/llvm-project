@@ -28,7 +28,7 @@ ret:
 
 ; GCN-LABEL: {{^}}lower_control_flow_unreachable_terminator_swap_block_order:
 ; GCN: v_cmp_eq_u32
-; GCN: s_xor_b64 exec
+; GCN: s_and_saveexec_b64
 ; GCN: s_cbranch_execz .LBB1_{{[0-9]+}}
 
 ; GCN: .LBB1_{{[0-9]+}}: ; %unreachable
