@@ -91,6 +91,66 @@ Value *ModuloReplicationProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   return Raw;
 }
 
+// Bit offsets of the Y/Z fields in the packed kernel-entry v0 workitem id
+// (x[0:9] | y[10:19] | z[20:29])
+static constexpr unsigned WorkitemIdYBitOffset = 10;
+static constexpr unsigned WorkitemIdZBitOffset = 20;
+
+Value *WaveProjection::packWorkitemId(IRBuilder<> &B, Value *X,
+                                      unsigned NumDims) const {
+  if (NumDims < 2)
+    return X;
+  Module *M = B.GetInsertBlock()->getModule();
+  Function *FnY =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_y);
+  Value *Y = B.CreateCall(FnY, {}, "tid_y");
+  Value *Packed =
+      B.CreateOr(X,
+                 B.CreateShl(Y, ConstantInt::get(I32Ty, WorkitemIdYBitOffset),
+                             "tid_y_shl"),
+                 "tid_xy");
+  if (NumDims < 3)
+    return Packed;
+  Function *FnZ =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_z);
+  Value *Z = B.CreateCall(FnZ, {}, "tid_z");
+  return B.CreateOr(Packed,
+                    B.CreateShl(Z,
+                                ConstantInt::get(I32Ty, WorkitemIdZBitOffset),
+                                "tid_z_shl"),
+                    "tid_xyz");
+}
+
+Value *WaveProjection::emitPackedWorkitemId(IRBuilder<> &B,
+                                            unsigned NumDims) const {
+  return packWorkitemId(B, emitWorkitemIdX(B), NumDims);
+}
+
+Value *
+ModuloReplicationProjection::emitPackedWorkitemId(IRBuilder<> &B,
+                                                  unsigned NumDims) const {
+  // 1-D: identical to the (already phantom-clamped) X-only seed.
+  if (NumDims < 2)
+    return emitWorkitemIdX(B);
+  // Build from the unclamped x so the phantom-lane clamp applies once to the
+  // whole packed id; otherwise a clamped-to-0 x OR'd with a non-zero Y/Z would
+  // leave phantom lanes with a stray id instead of replicating lane 0.
+  Value *Raw = packWorkitemId(B, WaveProjection::emitWorkitemIdX(B), NumDims);
+  if (Tgt.WaveSize > Src.WaveSize && MaxFlatWG > 0 &&
+      MaxFlatWG < Tgt.WaveSize) {
+    Value *Limit = ConstantInt::get(I32Ty, MaxFlatWG);
+    Value *FlatLaneId = emitLaneIdx(B);
+    Value *IsRealLane = B.CreateICmpULT(FlatLaneId, Limit, "tid_is_real_lane");
+    // Clamp phantom upper lanes to the literal packed 0 (local id (0, 0, 0));
+    // this copies nothing from lane 0. They stay hardware inactive and cannot
+    // commit source-visible memory, so 0 is only an in-bounds address floor for
+    // any address still computed for them.
+    Raw = B.CreateSelect(IsRealLane, Raw, ConstantInt::get(I32Ty, 0),
+                         "tid_phantom_clamp");
+  }
+  return Raw;
+}
+
 Value *WaveProjection::emitInitialExec(IRBuilder<> &B) const {
   // Default: the architectural boot state of a dispatched wave is
   // "every source lane active", i.e. all-ones in the source-width

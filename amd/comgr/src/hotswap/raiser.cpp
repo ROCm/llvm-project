@@ -58,9 +58,10 @@
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/AMDHSAKernelDescriptor.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
@@ -1110,6 +1111,17 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
     F->addParamAttr(0, Attribute::getWithByRefType(C, KernargByrefTy));
     F->addParamAttr(0, Attribute::getWithAlignment(C, Align(16)));
   }
+  // The kernel-entry v0 holds the packed workitem id, x[0:9] | y[10:19] |
+  // z[20:29]. ENABLE_VGPR_WORKITEM_ID (COMPUTE_PGM_RSRC2 bits [12:11]) records
+  // how many of x/y/z the source enabled: 0 -> X, 1 -> X+Y, 2 -> X+Y+Z. The
+  // packed v0 seed below reconstructs exactly those fields; seeding only X left
+  // every threadIdx.y / threadIdx.z read folding to 0.
+  unsigned WorkitemIdCnt =
+      (Meta.ComputePgmRsrc2 >>
+       llvm::amdhsa::COMPUTE_PGM_RSRC2_ENABLE_VGPR_WORKITEM_ID_SHIFT) &
+      ((1u << llvm::amdhsa::COMPUTE_PGM_RSRC2_ENABLE_VGPR_WORKITEM_ID_WIDTH) -
+       1u);
+  unsigned NumWorkitemDims = WorkitemIdCnt >= 2 ? 3u : WorkitemIdCnt + 1u;
   {
     // Pin the workgroup size to exactly what the source kernel declared, so
     // the backend lays out LDS / workitem IDs the same way the original
@@ -1151,8 +1163,14 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
     F->addFnAttr("amdgpu-no-multigrid-sync-arg");
     F->addFnAttr("amdgpu-no-queue-ptr");
     F->addFnAttr("amdgpu-no-workitem-id-x");
-    F->addFnAttr("amdgpu-no-workitem-id-y");
-    F->addFnAttr("amdgpu-no-workitem-id-z");
+    // Only suppress the Y/Z workitem-id fields the source did not enable. The
+    // packed v0 seed uses workitem.id.{y,z} for 2-D/3-D blocks; a stale "no"
+    // attribute would pin ENABLE_VGPR_WORKITEM_ID at 0 so the backend never
+    // loads those fields and threadIdx.y/z would read garbage.
+    if (NumWorkitemDims < 2)
+      F->addFnAttr("amdgpu-no-workitem-id-y");
+    if (NumWorkitemDims < 3)
+      F->addFnAttr("amdgpu-no-workitem-id-z");
     F->addFnAttr("uniform-work-group-size", "true");
   }
 
@@ -1329,12 +1347,15 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
       return Result;
     Regs.storeSGPR32(B, static_cast<int>(SgprIdx), Dw);
   }
-  auto SeedWorkitemX = [&](IRBuilder<> &SeedB) {
-    Regs.storeVGPR32(SeedB, 0, Projection.emitWorkitemIdX(SeedB));
+  // NumWorkitemDims (computed above) selects how many of x/y/z to fold into the
+  // packed v0 seed.
+  auto SeedWorkitemId = [&](IRBuilder<> &SeedB) {
+    Regs.storeVGPR32(SeedB, 0,
+                     Projection.emitPackedWorkitemId(SeedB, NumWorkitemDims));
   };
 
   if (!UseThreadLoop)
-    SeedWorkitemX(B);
+    SeedWorkitemId(B);
 
   // On gfx12+ the hardware command processor uses TTMP registers for
   // workgroup scheduling (RDNA4+ / CDNA-next layout):
@@ -1460,7 +1481,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
       SeedTtmp8(SeedB);
     }
 
-    SeedWorkitemX(SeedB);
+    SeedWorkitemId(SeedB);
     Regs.storeVCC(SeedB, ConstantInt::getFalse(I1Ty));
     Regs.storeSCC(SeedB, ConstantInt::getFalse(I1Ty));
     Regs.storeExec(SeedB, Projection.emitInitialExec(SeedB));

@@ -162,6 +162,15 @@ public:
   // `@llvm.amdgcn.workitem.id.x` calls.
   virtual llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const;
 
+  // Emit the full packed kernel-entry `v0` workitem id under this projection.
+  // amdgpu packs the workitem id as x[0:9] | y[10:19] | z[20:29]; `NumDims`
+  // (1..3, derived from the source descriptor's ENABLE_VGPR_WORKITEM_ID) says
+  // how many fields the source enabled, so a 1-D kernel reduces to exactly
+  // `emitWorkitemIdX` (no Y/Z math). Without this the raiser seeded only X and
+  // every `threadIdx.y` / `threadIdx.z` read folded to 0.
+  virtual llvm::Value *emitPackedWorkitemId(llvm::IRBuilder<> &B,
+                                            unsigned NumDims) const;
+
   // Given the current EXEC alloca value (source-width iN), return an i1
   // true iff the current lane is active. Concrete projections define
   // what "active" means -- modulo-replication fans each target lane onto
@@ -302,6 +311,12 @@ public:
                                const llvm::Twine &Name = "wwm") const;
 
 protected:
+  // Combine an already-projected workitem-id-x value with the native Y/Z
+  // workitem-id fields into AMDGPU's packed `v0` layout
+  // (x | y<<10 | z<<20). `NumDims` selects how many fields to fold in.
+  llvm::Value *packWorkitemId(llvm::IRBuilder<> &B, llvm::Value *X,
+                              unsigned NumDims) const;
+
   ISAProfile Src;
   ISAProfile Tgt;
   // Retained on the base so subclass overrides of `sourceWaveMaskTy()`
@@ -348,6 +363,12 @@ public:
   // a real lane's in-bounds addressing when the target wave is wider than the
   // source workgroup. Rationale: hotswap/docs/modrep-predicate-chain.md.
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
+
+  // Apply the same phantom-lane clamp as `emitWorkitemIdX`, but to the whole
+  // packed id, so undispatched upper target lanes replicate lane 0 (packed 0)
+  // rather than getting a stray non-zero Y/Z.
+  llvm::Value *emitPackedWorkitemId(llvm::IRBuilder<> &B,
+                                    unsigned NumDims) const override;
 
   // MODREP in the cross-widening direction only instantiates when
   // `raiser.cpp` routes phantom-lane kernels here as the fallback,
