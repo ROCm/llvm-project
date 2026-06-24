@@ -560,6 +560,7 @@ jobs:
         with:
           repository: ROCm/rocm-examples
           ref: amd-staging
+          path: rocm-examples
 
       - name: Download build tree artifact
         uses: actions/download-artifact@v7
