@@ -16,6 +16,13 @@ on:
         type: string
       component:
         type: string
+    secrets:
+      # Optional benchmark results database endpoints. Only required for benchmark
+      # results submission in nightly CI; other callers omit them and submission is skipped.
+      BENCHMARK_DB_URL:
+        required: false
+      BENCHMARK_DB_FALLBACK_URL:
+        required: false
 
 permissions:
   contents: read

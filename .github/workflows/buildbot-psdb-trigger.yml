@@ -5,6 +5,10 @@ on:
     branches: [amd-debug]
     types: [opened, reopened, synchronize, ready_for_review]
 
+# Least-privilege default for the automatically provided GITHUB_TOKEN. Commit
+# statuses are set via a dedicated PAT secret, so read-only access suffices.
+permissions:
+  contents: read
 
 jobs:  
   trigger-build:
