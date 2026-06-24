@@ -100,8 +100,8 @@
 ; would flow directly into the select; the invalidation correctly
 ; prevents that here because by the time of the cndmask, `s4` no
 ; longer carries the original compare's wave mask.
-; CHECK: %sgpr_mask_shadow_sel = select i1 false, i1 %mask_lane_i1{{[0-9]+}}, i1 %mask_lane_i1{{[0-9]*}}
-; CHECK-NEXT: %cndmask = select i1 %sgpr_mask_shadow_sel, i32 1065353216, i32 -1082130432
+; CHECK: %sgpr_mask_shadow_sel = select i1 false, i1 %mask_lane_i1{{[0-9]*}}, i1 %mask_lane_i1{{[0-9]*}}
+; CHECK: %cndmask = select i1 %sgpr_mask_shadow_sel, i32 1065353216, i32 -1082130432
 
 ; NEGATIVE: the fused / direct-i1 shape must NOT be taken here. The
 ; absence of `select i1 %vcmpf, ...` in the clobber kernel is the

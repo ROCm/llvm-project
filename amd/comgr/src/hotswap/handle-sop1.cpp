@@ -220,12 +220,41 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
       }
     }
     Value *Src = Op.src(0);
+
+    // Resolve the per-lane i1 wave mask carried by the SGPR, if any.
+    // Prefer the in-BB shadow (lookupSgprWaveMaskI1), then the
+    // cross-BB alloca shadow (validity bit + EXEC-width mask), then
+    // fall through to the standard writeReg32 path below.
+    Value *SrcWaveMaskI1 = nullptr;
+    if (SrcReg.RegKind == ParsedReg::SGPR && SrcReg.BaseIdx >= 0) {
+      if (Value *Fresh = Ctx.lookupSgprWaveMaskI1(SrcReg.BaseIdx)) {
+        SrcWaveMaskI1 = Fresh;
+      } else if (Value *ShadowValid =
+                     Ctx.loadSgprWaveMaskValid(SrcReg.BaseIdx)) {
+        Value *ShadowExec = Ctx.loadSgprWaveMaskExec(SrcReg.BaseIdx);
+        Value *ShadowI1 = Ctx.Projection.extractLaneBitFromWaveMask(
+            Ctx.B, ShadowExec);
+        Value *SgprMask = Ctx.Isa.isWave32()
+                              ? Ctx.Regs.loadSGPR32(Ctx.B, SrcReg.BaseIdx)
+                              : Ctx.Regs.loadSGPR64(Ctx.B, SrcReg.BaseIdx);
+        Value *Fallback =
+            Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, SgprMask);
+        SrcWaveMaskI1 = Ctx.B.CreateSelect(ShadowValid, ShadowI1, Fallback,
+                                            "sgpr_mask_shadow_sel");
+      }
+    }
+
     Ctx.Regs.writeReg32(Ctx.B, Dst, Src);
     if (Dst.RegKind == ParsedReg::SGPR && SrcReg.RegKind == ParsedReg::EXEC) {
       Value *ExecI1 = Ctx.Projection.extractLaneBitFromWaveMask(
           Ctx.B, Ctx.Regs.loadExec(Ctx.B));
       Ctx.recordSgprWaveMaskI1(Dst.BaseIdx, ExecI1, /*isPair=*/false);
     }
+    // SGPR -> SGPR mov: re-record the shadow under the destination
+    // SGPR so chained consumers (e.g. a further s_mov_b32 vcc, sM)
+    // still resolve to the original per-lane i1.
+    if (Dst.RegKind == ParsedReg::SGPR && Dst.BaseIdx >= 0 && SrcWaveMaskI1)
+      Ctx.recordSgprWaveMaskI1(Dst.BaseIdx, SrcWaveMaskI1, /*isPair=*/false);
     Hr.Handled = true;
     return Hr;
   }
