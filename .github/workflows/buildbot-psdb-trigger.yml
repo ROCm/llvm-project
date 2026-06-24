@@ -5,19 +5,24 @@ on:
     branches: [amd-debug]
     types: [opened, reopened, synchronize, ready_for_review]
 
+# Least-privilege default for the automatically provided GITHUB_TOKEN. Commit
+# statuses are set via a dedicated PAT secret, so read-only access suffices.
+permissions:
+  contents: read
 
 jobs:  
   trigger-build:
     if: github.event.pull_request.draft == false
     runs-on: 
       group: compiler-generic-runners
+    # NOTE: The CI_GITHUB_TOKEN credential is intentionally NOT defined at job
+    # scope. It is scoped to only the steps that need it (status update + polling)
+    # to limit blast radius on the self-hosted runner.
     env:  
       PR_SHA: ${{ github.event.pull_request.head.sha != '' && github.event.pull_request.head.sha || github.sha }}
       PR_NUMBER: ${{ github.event.pull_request.number != '' && github.event.pull_request.number || 0 }}
       PR_URL: ${{ github.event.pull_request.html_url != '' && github.event.pull_request.html_url || '' }}
-      PR_TITLE: ${{ github.event.pull_request.title != '' && github.event.pull_request.title || '' }}
       BASE_BRANCH: ${{ github.event.pull_request.base.ref != '' && github.event.pull_request.base.ref || '' }}
-      GITHUB_TOKEN: ${{secrets.CI_GITHUB_TOKEN}}
       
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
@@ -38,12 +43,19 @@ jobs:
         run: |
           import json
           import os
-          import shlex
-          with open('${{ github.event_path }}') as fh:
-              event = json.load(fh)         
-          escaped = event['pull_request']['title']
-          with open(os.environ['GITHUB_ENV'], 'a') as fh:
-              print(f'PR_TITLE={escaped}', file=fh)
+          import uuid
+          # Read the PR title from the event payload file (never interpolated into
+          # the shell) and write it to $GITHUB_ENV using a random here-doc
+          # delimiter. This prevents a crafted multi-line PR title from injecting
+          # additional environment variables into subsequent steps.
+          with open(os.environ["GITHUB_EVENT_PATH"]) as fh:
+              event = json.load(fh)
+          title = (event.get("pull_request") or {}).get("title", "")
+          delimiter = f"ghadelimiter_{uuid.uuid4()}"
+          if delimiter in title:
+              raise SystemExit("PR title contains the reserved here-doc delimiter")
+          with open(os.environ["GITHUB_ENV"], "a") as fh:
+              fh.write(f"PR_TITLE<<{delimiter}\n{title}\n{delimiter}\n")
         shell: python3 {0}          
         
       - name: Trigger Buildbot Build
@@ -52,6 +64,8 @@ jobs:
           docker exec -e PR_TITLE="$PR_TITLE" "${{env.CONTAINER_NAME}}" /bin/bash -c 'buildbot sendchange -W ${{ secrets.BUILDBOT_USER }}  -a ${{secrets.BUILDBOT_USER}}:${{secrets.BUILDBOT_PWD}} --master="${{ secrets.BUILDBOT_HOST }}:${{ secrets.BUILDBOT_WORKER_PORT }}" --branch=${{ env.BASE_BRANCH }} --revision=${{ env.PR_SHA }} -p PR_NUMBER:${{ env.PR_NUMBER }} -p PR_TITLE:"$PR_TITLE"  -p PR_URL:${{ env.PR_URL }}  -p SHA:${{ env.PR_SHA }}'
           
       - name: Set Initial Status to Pending
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
         run: |
           docker exec -e PR_SHA=$PR_SHA -e GITHUB_TOKEN=$GITHUB_TOKEN "${{env.CONTAINER_NAME}}" /bin/bash -c "python3 -c \"
           import os
@@ -77,6 +91,8 @@ jobs:
             \""
 
       - name: Poll Buildbot build status
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
         run: |
           python3 -c "
           import os
