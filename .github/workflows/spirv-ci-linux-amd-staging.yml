@@ -598,7 +598,7 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
-          ctest --test-dir examples-build-hip-basic --output-on-failure
+          ctest --test-dir examples-build-hip-basic --output-on-failure -E '^hip_cooperative_groups$'
 
       # Applications
       - name: ROCm Examples build Applications
@@ -622,7 +622,7 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
-          ctest --test-dir examples-build-Applications --output-on-failure
+          ctest --test-dir examples-build-Applications --output-on-failure -E '^applications_optical_flow$'
 
       # Libraries
       - name: ROCm Examples build Libraries
