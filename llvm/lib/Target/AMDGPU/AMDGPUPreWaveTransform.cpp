@@ -21,23 +21,12 @@ using namespace llvm;
 
 #define DEBUG_TYPE "amdgpu-pre-wave-transform"
 
-static bool preWaveTransform(MachineFunction &MF) {
-  const SIInstrInfo *TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
-  bool Changed = false;
-
-  for (MachineBasicBlock &MBB : MF) {
-    for (MachineInstr &MI : MBB.terminators()) {
-      if (MI.getOpcode() == AMDGPU::SI_WATERFALL_LOOP) {
-        MI.setDesc(TII->get(AMDGPU::S_CBRANCH_EXECNZ));
-        Changed = true;
-      }
-    }
-  }
-
-  return Changed;
-}
-
 namespace {
+
+class AMDGPUPreWaveTransform {
+public:
+  bool run(MachineFunction &MF);
+};
 
 class AMDGPUPreWaveTransformLegacy : public MachineFunctionPass {
 public:
@@ -48,7 +37,7 @@ public:
   }
 
   bool runOnMachineFunction(MachineFunction &MF) override {
-    return preWaveTransform(MF);
+    return AMDGPUPreWaveTransform().run(MF);
   }
 
   StringRef getPassName() const override {
@@ -73,13 +62,25 @@ FunctionPass *llvm::createAMDGPUPreWaveTransformPass() {
   return new AMDGPUPreWaveTransformLegacy();
 }
 
+bool AMDGPUPreWaveTransform::run(MachineFunction &MF) {
+  const SIInstrInfo *TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
+  bool Changed = false;
+
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : MBB.terminators()) {
+      if (MI.getOpcode() == AMDGPU::SI_WATERFALL_LOOP) {
+        MI.setDesc(TII->get(AMDGPU::S_CBRANCH_EXECNZ));
+        Changed = true;
+      }
+    }
+  }
+
+  return Changed;
+}
+
 PreservedAnalyses
 llvm::AMDGPUPreWaveTransformPass::run(MachineFunction &MF,
                                       MachineFunctionAnalysisManager &MFAM) {
-  if (!preWaveTransform(MF))
-    return PreservedAnalyses::all();
-
-  auto PA = getMachineFunctionPassPreservedAnalyses();
-  PA.preserveSet<CFGAnalyses>();
-  return PA;
+  AMDGPUPreWaveTransform().run(MF);
+  return PreservedAnalyses::all();
 }
