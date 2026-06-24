@@ -56,6 +56,7 @@ FunctionPass *createSIMemoryLegalizerPass();
 FunctionPass *createSIInsertWaitcntsPass();
 FunctionPass *createSIPreAllocateWWMRegsLegacyPass();
 FunctionPass *createSIFormMemoryClausesLegacyPass();
+FunctionPass *createAMDGPUExtendVGPRLiveRangesPass();
 
 FunctionPass *createSIPostRABundlerPass();
 FunctionPass *createAMDGPUImageIntrinsicOptimizerPass(const TargetMachine *);
@@ -173,6 +174,9 @@ struct AMDGPULowerIntrinsicsPass
 private:
   const AMDGPUTargetMachine &TM;
 };
+
+void initializeAMDGPUExtendVGPRLiveRangesPass(PassRegistry &);
+extern char &AMDGPUExtendVGPRLiveRangesID;
 
 void initializeAMDGPUPrepareAGPRAllocLegacyPass(PassRegistry &);
 extern char &AMDGPUPrepareAGPRAllocLegacyID;

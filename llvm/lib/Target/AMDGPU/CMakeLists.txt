@@ -57,6 +57,7 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUExpandFeaturePredicates.cpp
   AMDGPUExportClustering.cpp
   AMDGPUExportKernelRuntimeHandles.cpp
+  AMDGPUExtendVGPRLiveRanges.cpp
   AMDGPUFrameLowering.cpp
   AMDGPUGlobalISelDivergenceLowering.cpp
   AMDGPUGlobalISelUtils.cpp
