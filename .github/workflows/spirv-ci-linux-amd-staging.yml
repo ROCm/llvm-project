@@ -577,7 +577,6 @@ jobs:
 
       # HIP-Basic
       - name: ROCm Examples build HIP-Basic
-        continue-on-error: true
         run: |
           STAGING=$PWD/staging
           LLVM_PATH=$PWD/build
@@ -594,7 +593,6 @@ jobs:
           cmake --build examples-build-hip-basic -j
 
       - name: ROCm Examples run HIP-Basic
-        continue-on-error: true
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
@@ -602,7 +600,6 @@ jobs:
 
       # Applications
       - name: ROCm Examples build Applications
-        continue-on-error: true
         run: |
           STAGING=$PWD/staging
           LLVM_PATH=$PWD/build
@@ -618,7 +615,6 @@ jobs:
           cmake --build examples-build-Applications -j
 
       - name: ROCm Examples run Applications
-        continue-on-error: true
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
@@ -626,7 +622,6 @@ jobs:
 
       # Libraries
       - name: ROCm Examples build Libraries
-        continue-on-error: true
         run: |
           STAGING=$PWD/staging
           LLVM_PATH=$PWD/build
@@ -649,7 +644,6 @@ jobs:
           cmake --build examples-build-Libraries -j
 
       - name: ROCm Examples run Libraries
-        continue-on-error: true
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
