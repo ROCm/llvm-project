@@ -24,8 +24,11 @@ phantom_lane_workitem_clamp_kernel:
 ; not workitem.id.x, so it stays correct for multidimensional workgroups where
 ; tid.x is only the X coordinate while max_flat_workgroup_size is the flattened
 ; total. The clamped id replaces phantom lanes' tid with 0.
-; CHECK: %tid = call i32 @llvm.amdgcn.workitem.id.x()
+; The mbcnt lane-id pair is hoisted to the top of the entry block (emitted
+; once per kernel), so it precedes the workitem.id.x read it is compared
+; against in the real-lane test.
 ; CHECK: %[[LANE:[A-Za-z0-9._]+]] = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %{{[A-Za-z0-9._]+}})
+; CHECK: %tid = call i32 @llvm.amdgcn.workitem.id.x()
 ; CHECK: %tid_is_real_lane = icmp ult i32 %[[LANE]], 32
 ; CHECK: %tid_phantom_clamp = select i1 %tid_is_real_lane, i32 %tid, i32 0
 	v_lshlrev_b32 v1, 2, v0

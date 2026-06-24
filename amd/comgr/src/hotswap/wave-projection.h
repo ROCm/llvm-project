@@ -329,6 +329,8 @@ protected:
   llvm::Type *WaveMaskTy;
   // Source max_flat_workgroup_size; 0 until the raiser sets it.
   unsigned MaxFlatWG = 0;
+  // Per-kernel cache for the function-invariant lane id. See `emitLaneIdx`.
+  mutable llvm::Value *CachedLaneIdx = nullptr;
 };
 
 // ============================================================================

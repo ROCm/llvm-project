@@ -561,23 +561,8 @@ Value *RaiseContext::emitUpdateDpp(Value *OldVal, Value *Src, uint16_t Ctrl,
 }
 
 Value *RaiseContext::emitLaneIdx() {
-  // Per-BB memoisation, mirroring `emitLaneActiveBit` below -- the
-  // `mbcnt_lo` (and on wave64, `mbcnt_hi`) pair WaveProjection emits
-  // is invariant within a basic block for a given EXEC value, and
-  // the cached SSA value dominates anything emitted later in the
-  // same BB.
-  //
-  // Invalidation: shared with the lane_active cache via
-  // `resetLaneActiveCache`, which the main raiser loop fires at
-  // every source-instruction boundary. See `emitLaneActiveBit`'s
-  // comment block below for the dominance argument that keeps reuse
-  // safe across `emitUnderExec` diamonds within a single source
-  // instruction's emission.
-  if (CachedLaneIdx && B.GetInsertBlock() == CachedLaneIdxBb)
-    return CachedLaneIdx;
-  CachedLaneIdx = Projection.emitLaneIdx(B);
-  CachedLaneIdxBb = B.GetInsertBlock();
-  return CachedLaneIdx;
+  // Lane id is function-invariant; the projection emits it once and caches.
+  return Projection.emitLaneIdx(B);
 }
 
 Value *RaiseContext::emitLaneActiveBit() {

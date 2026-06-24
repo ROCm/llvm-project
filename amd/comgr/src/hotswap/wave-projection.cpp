@@ -43,18 +43,31 @@ namespace COMGR::hotswap {
 // ----------------------------------------------------------------------------
 
 Value *WaveProjection::emitLaneIdx(IRBuilder<> &B) const {
-  Module *M = B.GetInsertBlock()->getModule();
-  Type *I32Ty = B.getInt32Ty();
+  // Lane id (mbcnt vs all-ones, base 0) is EXEC-independent and
+  // function-invariant: emit it once at a point that dominates the whole
+  // function and reuse it everywhere. If nothing consumes it, DCE drops it.
+  if (CachedLaneIdx)
+    return CachedLaneIdx;
+
+  // Emit in the entry block, after any leading allocas. The allocas must stay
+  // at the top of the entry block or mem2reg/SROA may decline to promote them,
+  // so insert at the first non-alloca instruction rather than the block start.
+  BasicBlock &Entry = B.GetInsertBlock()->getParent()->getEntryBlock();
+  IRBuilder<> EB(&Entry, Entry.getFirstNonPHIOrDbgOrAlloca());
+
+  Module *M = Entry.getModule();
+  Type *I32Ty = EB.getInt32Ty();
   Function *MbcntLo = Intrinsic::getOrInsertDeclaration(
       M, Intrinsic::amdgcn_mbcnt_lo);
   Value *AllOnes = ConstantInt::getSigned(I32Ty, -1);
   Value *Zero32 = ConstantInt::get(I32Ty, 0);
-  Value *LaneId = B.CreateCall(MbcntLo, {AllOnes, Zero32}, "lane_lo");
+  Value *LaneId = EB.CreateCall(MbcntLo, {AllOnes, Zero32}, "lane_lo");
   if (WaveMaskTy != I32Ty) {
     Function *MbcntHi = Intrinsic::getOrInsertDeclaration(
         M, Intrinsic::amdgcn_mbcnt_hi);
-    LaneId = B.CreateCall(MbcntHi, {AllOnes, LaneId}, "lane_id");
+    LaneId = EB.CreateCall(MbcntHi, {AllOnes, LaneId}, "lane_id");
   }
+  CachedLaneIdx = LaneId;
   return LaneId;
 }
 

@@ -153,23 +153,7 @@ struct RaiseContext {
                               uint16_t Ctrl, uint8_t RowMask,
                               uint8_t BankMask, bool BoundCtrl);
 
-  // Materialise the target-hardware lane id (i32) at the current
-  // builder insertion point, with per-BB memoisation. Mirrors the
-  // `cachedLaneActive` pattern: handlers that need the lane id can
-  // call `ctx.emitLaneIdx()` repeatedly within an instruction's
-  // dispatch and reuse the same SSA value, avoiding redundant
-  // `mbcnt_lo` / `mbcnt_hi` chains in the raw IR.
-  //
-  // The cache is invalidated on every source-instruction boundary
-  // by the same `resetLaneActiveCache` call that resets
-  // `cachedLaneActive`, since the dominance lifecycle is identical
-  // (the cached i32 dominates the BB it was emitted in but not
-  // arbitrary later BBs).
-  //
-  // Delegates to `projection.emitLaneIdx(B)` for the actual mbcnt
-  // sequence -- `WaveProjection` remains the single source of truth
-  // for *how* lane id is computed; `RaiseContext` only handles
-  // caching.
+  // Target-hardware lane id (i32), emitted once per kernel and reused.
   llvm::Value *emitLaneIdx();
 
   // ==== SIMT Predicated Execution (SPE) helpers
@@ -197,20 +181,13 @@ struct RaiseContext {
   // unoptimised output shape.
   llvm::Value *emitLaneActiveBit();
 
-  // Invalidate the lane_active and lane_idx memoisations. Called by
-  // the main raiser loop between instructions and by `storeExec`.
-  // Handlers that know they have mutated EXEC through a lower-level
-  // path (e.g. the few places that call `regs.storeExec` directly)
-  // must also invoke this. The lane_idx cache shares the same
-  // invalidation contract: per-BB lifetime, reset at every
-  // instruction boundary so a handler that hops basic blocks (e.g.
-  // SPE diamonds) never reads a cached SSA value out of its
-  // dominance scope.
+  // Invalidate the lane_active memoisation. Called by the main raiser
+  // loop between instructions and by `storeExec`. Handlers that know
+  // they have mutated EXEC through a lower-level path (e.g. the few
+  // places that call `regs.storeExec` directly) must also invoke this.
   void resetLaneActiveCache() {
     CachedLaneActive = nullptr;
     CachedLaneActiveBb = nullptr;
-    CachedLaneIdx = nullptr;
-    CachedLaneIdxBb = nullptr;
   }
 
   // Wrap `regs.storeExec` with cache invalidation. Handlers should prefer
@@ -322,13 +299,6 @@ struct RaiseContext {
   // `resetLaneActiveCache` / `emitLaneActiveBit`.
   llvm::Value *CachedLaneActive = nullptr;
   llvm::BasicBlock *CachedLaneActiveBb = nullptr;
-
-  // Memoised lane id for this instruction's emission, mirroring the
-  // cachedLaneActive pair above. Used by `emitLaneIdx`. Same public-
-  // field rationale (aggregate brace-init); mutate only via
-  // `resetLaneActiveCache` / `emitLaneIdx`.
-  llvm::Value *CachedLaneIdx = nullptr;
-  llvm::BasicBlock *CachedLaneIdxBb = nullptr;
 
   // Per-BB cache of the per-lane i1 compare result produced by the
   // most recent V_CMP_*_e64 writer targeting a given SGPR in this

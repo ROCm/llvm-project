@@ -34,9 +34,12 @@
 ; do not loosen the pattern to `{{(63|31)}}` because the concrete
 ; mask is part of the invariant — the test deliberately pins down
 ; that the raiser's lane-id math matches the target's wave size.
+; The mbcnt lane-id pair is hoisted to the top of the entry block (emitted
+; once per kernel, after any leading allocas), so the lane-active math that
+; consumes it appears later and is not CHECK-NEXT-adjacent to the pair.
 ; CHECK:       %[[LANE_LO:[^ ]+]] = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0)
 ; CHECK-NEXT:  %[[LANE_ID:[^ ]+]] = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %[[LANE_LO]])
-; CHECK-NEXT:  %[[LANE_IDX:[^ ]+]] = zext i32 %[[LANE_ID]] to i64
+; CHECK:       %[[LANE_IDX:[^ ]+]] = zext i32 %[[LANE_ID]] to i64
 ; CHECK-NEXT:  %[[LANE_MOD:[^ ]+]] = and i64 %[[LANE_IDX]], 63
 ; CHECK-NEXT:  %[[AT_LANE:[^ ]+]] = lshr i64 -1, %[[LANE_MOD]]
 ; CHECK-NEXT:  %[[EXEC_BIT:[^ ]+]] = and i64 %[[AT_LANE]], 1
