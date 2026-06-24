@@ -52,7 +52,7 @@ concurrency:
 
 jobs:
   rockci:
-    uses: ROCm/llvm-project/.github/workflows/rockci_multi_arch_amd_staging.yml@amd-staging
+    uses: ROCm/llvm-project/.github/workflows/rockci_multi_arch_amd_staging.yml@amd/dev/kirthana14m/ci_reusability
     secrets: inherit
     with:
       linux_amdgpu_families: ${{ inputs.linux_amdgpu_families || '' }}
