@@ -1,5 +1,4 @@
 ; RUN: rm -rf %t && mkdir -p %t && cd %t
-; XFAIL: *
 ; RUN: opt < %s -passes=instrumentor -instrumentor-read-config-files=%S/rt_config.json -S
 ; RUN: diff -b default_rt.c %S/default_rt.c
 ; RUN: diff -b default_rt.h %S/default_rt.h
