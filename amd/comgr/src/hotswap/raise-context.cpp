@@ -740,6 +740,10 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
       return Regs.readVCCAsWaveMask(B, Regs.ExecTy);
     if (Pr.RegKind == ParsedReg::EXEC)
       return Regs.loadExec(B);
+    if (Pr.RegKind == ParsedReg::VCC_HI_SCRATCH ||
+        Pr.RegKind == ParsedReg::EXEC_HI_SCRATCH)
+      // Wave32 vcc_hi / exec_hi are scratch scalars, not the wave mask.
+      return WidenToExec(Regs.readReg32(B, Pr));
     if (Pr.RegKind == ParsedReg::SGPR) {
       Value *Narrow =
           (Projection.sourceWaveScopedLaneOps() && Pr.WidthInDwords >= 2)

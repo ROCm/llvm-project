@@ -607,6 +607,12 @@ void AllocaRegFile::writeRegExecWidth(IRBuilder<> &B, ParsedReg Pr, Value *V) {
       storeSGPR64(B, Pr.BaseIdx, V);
     return;
   }
+  if (Pr.RegKind == ParsedReg::VCC_HI_SCRATCH ||
+      Pr.RegKind == ParsedReg::EXEC_HI_SCRATCH) {
+    // Wave32 vcc_hi / exec_hi are scratch scalars, not the wave mask.
+    writeReg32(B, Pr, V);
+    return;
+  }
   if (Pr.RegKind == ParsedReg::VCC) {
     assert(Projection && "writeRegExecWidth(VCC) requires a WaveProjection");
     storeVCC(B, Projection->extractLaneBitFromWaveMask(B, V));
