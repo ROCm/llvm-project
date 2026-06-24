@@ -567,18 +567,16 @@ bool SIMachineFunctionInfo::removeDeadFrameIndices(
   // otherwise, it could result in an unexpected side effect and bug, in case of
   // any re-mapping of freed frame indices by later pass(es) like "stack slot
   // coloring".
-  for (auto &R : make_early_inc_range(SGPRSpillsToVirtualVGPRLanes)) {
+  for (auto &R : SGPRSpillsToVirtualVGPRLanes)
     MFI.RemoveStackObject(R.first);
-    SGPRSpillsToVirtualVGPRLanes.erase(R.first);
-  }
+  SGPRSpillsToVirtualVGPRLanes.clear();
 
   // Remove the dead frame indices of CSR SGPRs which are spilled to physical
   // VGPR lanes during SILowerSGPRSpills pass.
   if (!ResetSGPRSpillStackIDs) {
-    for (auto &R : make_early_inc_range(SGPRSpillsToPhysicalVGPRLanes)) {
+    for (auto &R : SGPRSpillsToPhysicalVGPRLanes)
       MFI.RemoveStackObject(R.first);
-      SGPRSpillsToPhysicalVGPRLanes.erase(R.first);
-    }
+    SGPRSpillsToPhysicalVGPRLanes.clear();
   }
   bool HaveSGPRToMemory = false;
 
@@ -759,7 +757,8 @@ yaml::SIMachineFunctionInfo::SIMachineFunctionInfo(
       IsWholeWaveFunction(MFI.isWholeWaveFunction()),
       DynamicVGPRBlockSize(MFI.getDynamicVGPRBlockSize()),
       ScratchReservedForDynamicVGPRs(MFI.getScratchReservedForDynamicVGPRs()),
-      NumKernargPreloadSGPRs(MFI.getNumKernargPreloadedSGPRs()) {
+      NumKernargPreloadSGPRs(MFI.getNumKernargPreloadedSGPRs()),
+      MinNumAGPRs(MFI.getMinNumAGPRs()) {
   for (Register Reg : MFI.getSGPRSpillPhysVGPRs())
     SpillPhysVGPRS.push_back(regToString(Reg, TRI));
 
@@ -807,6 +806,11 @@ bool SIMachineFunctionInfo::initializeBaseYamlFields(
   ReturnsVoid = YamlMFI.ReturnsVoid;
   IsWaveCFG = YamlMFI.IsWaveCFG;
   IsWholeWaveFunction = YamlMFI.IsWholeWaveFunction;
+  MinNumAGPRs = YamlMFI.MinNumAGPRs;
+  // This can also be set by the function attribute, MFI has higher precedence
+  // though.
+  if (YamlMFI.DynamicVGPRBlockSize != std::nullopt)
+    DynamicVGPRBlockSize = *YamlMFI.DynamicVGPRBlockSize;
 
   UserSGPRInfo.allocKernargPreloadSGPRs(YamlMFI.NumKernargPreloadSGPRs);
 

@@ -2884,6 +2884,13 @@ void AsmParser::handleMacroExit() {
 }
 
 bool AsmParser::parseAssignment(StringRef Name, AssignmentKind Kind) {
+  // If the LTO library has asked us to discard this symbol, skip the
+  // assignment without ever calling parseAssignmentExpression.
+  if (discardLTOSymbol(Name)) {
+    eatToEndOfStatement();
+    return false;
+  }
+
   MCSymbol *Sym;
   const MCExpr *Value;
   SMLoc ExprLoc = getTok().getLoc();
@@ -2899,9 +2906,6 @@ bool AsmParser::parseAssignment(StringRef Name, AssignmentKind Kind) {
     // should just return out.
     return false;
   }
-
-  if (discardLTOSymbol(Name))
-    return false;
 
   // Do the assignment.
   switch (Kind) {
@@ -3474,8 +3478,8 @@ bool AsmParser::parseDirectiveAlign(bool IsPow2, uint8_t ValueSize) {
   // Check whether we should use optimal code alignment for this .align
   // directive.
   if (MAI.useCodeAlign(*Section) && !HasFillExpr) {
-    getStreamer().emitCodeAlignment(
-        Align(Alignment), &getTargetParser().getSTI(), MaxBytesToFill);
+    getStreamer().emitCodeAlignment(Align(Alignment),
+                                    getTargetParser().getSTI(), MaxBytesToFill);
   } else {
     // FIXME: Target specific behavior about how the "extra" bytes are filled.
     getStreamer().emitValueToAlignment(Align(Alignment), FillExpr, ValueSize,
@@ -6286,7 +6290,7 @@ bool AsmParser::parseMSInlineAsm(
         OS << "]";
       break;
     case AOK_Label:
-      OS << Ctx.getAsmInfo().getPrivateLabelPrefix() << AR.Label;
+      OS << Ctx.getAsmInfo().getInternalSymbolPrefix() << AR.Label;
       break;
     case AOK_Input:
       if (AR.IntelExpRestricted)

@@ -271,6 +271,6 @@ entry:
   ret void
 }
 
-attributes #0 = { "frame-pointer"="none" noinline }
-attributes #1 = { "frame-pointer"="all" noinline }
+attributes #0 = { "frame-pointer"="none" noinline nounwind }
+attributes #1 = { "frame-pointer"="all" noinline nounwind }
 

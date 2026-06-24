@@ -59,6 +59,26 @@ bool needTimeStatistics() {
   return TimeStatistics && StringRef(TimeStatistics) != "0";
 }
 
+uint32_t getGranularityUnitsPerSecond() {
+  StringRef G = getTimeStatisticsGranularity();
+  if (G == "us")
+    return 1e6;
+  else if (G == "ns")
+    return 1e9;
+  return 1e3;
+}
+
+llvm::StringRef getTimeStatisticsGranularity() {
+  static const char *TimeStatisticsGranularity =
+      getenv("AMD_COMGR_TIME_STATISTICS_GRANULARITY");
+  if (!TimeStatisticsGranularity)
+    return "ms";
+  StringRef G(TimeStatisticsGranularity);
+  if (G == "ms" || G == "us" || G == "ns")
+    return G;
+  return "ms";
+}
+
 bool shouldEmitVerboseLogs() {
   static char *VerboseLogs = getenv("AMD_COMGR_EMIT_VERBOSE_LOGS");
   return VerboseLogs && StringRef(VerboseLogs) != "0";

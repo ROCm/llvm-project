@@ -163,7 +163,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void*)
     ({                                              \
       if (flags()->strict_init_order)               \
         StopInitOrderChecking();                    \
-      CheckNoDeepBind(filename, flag);              \
+      OnDlOpen(filename, flag);                     \
       PatchHsaRuntimeDlopenFlag(filename, flag);    \
       REAL(dlopen)(filename, flag);                 \
     })

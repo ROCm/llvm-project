@@ -23,6 +23,6 @@ MATH_MANGLE(sinpi)(double x)
     s = AS_DOUBLE(AS_LONG(s) ^ (r.i > 1 ? SIGNBIT_DP64 : 0) ^
                   (AS_LONG(x) ^ AS_LONG(ax)));
 
-    return s;
+    return s == 0.0 ? BUILTIN_COPYSIGN_F64(0.0, x) : s;
 }
 

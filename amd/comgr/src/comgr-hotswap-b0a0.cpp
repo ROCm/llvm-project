@@ -44,11 +44,15 @@ namespace hotswap {
 // layer only carries ISA identifiers and register granularity -- no
 // target-specific opcode bits should land here.
 
-static constexpr unsigned Gfx1250MaxVgprs = 256;
-// GFX12 wave32 VGPR granularity; SGPR granularity is a fixed 16 across all
-// AMDGPU generations Comgr's hotswap currently supports.
-static constexpr unsigned Gfx1250VgprGranuleSize = 8;
-static constexpr unsigned Gfx1250SgprGranuleSize = 16;
+static constexpr unsigned Gfx1250MaxVgprs = 1024;
+// GFX1250 wave32 VGPR ENCODING granularity is 16 (per
+// AMDGPUBaseInfo::getVGPREncodingGranule with Feature1024AddressableVGPRs),
+// not the 8 used by earlier GFX10/11 wave32. Used by ElfView's KD
+// decode/encode helpers (getKernelVgprCount / updateKernelDescriptor) to
+// interpret COMPUTE_PGM_RSRC1.GRANULATED_WORKITEM_VGPR_COUNT.
+// GFX12 wave32: 106 user-addressable SGPRs (s0-s105); s106-s107 are VCC.
+static constexpr unsigned Gfx1250MaxSgprs = 106;
+static constexpr unsigned Gfx1250VgprGranuleSize = 16;
 
 /// Build the default RewriteConfig used for the GFX1250 B0-to-A0 rewrite:
 /// fills in the identity source / target ISA (both gfx1250) and the
@@ -65,8 +69,8 @@ static RewriteConfig makeGfx1250B0A0Config() {
   Config.TargetIsa = "amdgcn-amd-amdhsa--gfx1250";
   Config.TargetCpu = "gfx1250";
   Config.MaxVgprs = Gfx1250MaxVgprs;
+  Config.MaxSgprs = Gfx1250MaxSgprs;
   Config.VgprGranuleSize = Gfx1250VgprGranuleSize;
-  Config.SgprGranuleSize = Gfx1250SgprGranuleSize;
   return Config;
 }
 
@@ -134,7 +138,7 @@ HotswapPatchVTable &getHotswapPatchVTable() {
 
 // -- Weak-symbol liveness stubs -----------------------------------------------
 //
-// Conservative defaults: all VGPRs reported live. ScratchAllocator will
+// Conservative defaults: all VGPRs reported live. VgprAllocator will
 // allocate above KD count (correct but suboptimal until the real liveness
 // layer lands).
 
@@ -379,6 +383,10 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
       Patched += P;
       continue;
     }
+    if (uint32_t P = runPerInstPass(VT.applyWmmaScale16Patches, Ctx, Idx)) {
+      Patched += P;
+      continue;
+    }
   }
 
   // Whole-kernel passes below run after per-instruction patches. Earlier
@@ -405,9 +413,8 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
     std::optional<unsigned> VgprsBefore =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
     if (Stats.ExtraVgprs > 0)
-      Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs, 0,
-                                 Config.VgprGranuleSize,
-                                 Config.SgprGranuleSize);
+      Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs,
+                                 Config.VgprGranuleSize);
     std::optional<unsigned> VgprsAfter =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
     log() << "hotswap: liveness: kernel " << KName

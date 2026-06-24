@@ -60,7 +60,7 @@ public:
 
 void AMDGPUAnnotateUniformValues::visitLoadInst(LoadInst &I) {
   Value *Ptr = I.getPointerOperand();
-  if (!UA->isUniformAtDef(Ptr))
+  if (UA->isDivergentAtDef(Ptr))
     return;
   Instruction *PtrI = dyn_cast<Instruction>(Ptr);
   if (PtrI)

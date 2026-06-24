@@ -116,8 +116,8 @@ OMPContext::OMPContext(bool IsDeviceCompilation, Triple TargetTriple,
     //       The discussion on the list did not seem to have come to an agreed
     //       upon solution.
 
-  // AMD should be the "OpenMP Compiler vendor" for Rocmcc Unified compiler.
-  ActiveTraits.set(unsigned(TraitProperty::implementation_vendor_amd));
+    // AMD should be the "OpenMP Compiler vendor" for Rocmcc Unified compiler.
+    ActiveTraits.set(unsigned(TraitProperty::implementation_vendor_amd));
 
     // The user condition true is accepted but not false.
     ActiveTraits.set(unsigned(TraitProperty::user_condition_true));
@@ -159,15 +159,6 @@ template <typename T> static bool isSubset(ArrayRef<T> C0, ArrayRef<T> C1) {
     ++It0;
   }
   return true;
-}
-
-/// Return true if \p C0 is a strict subset of \p C1. Note that both arrays are
-/// expected to be sorted.
-template <typename T>
-static bool isStrictSubset(ArrayRef<T> C0, ArrayRef<T> C1) {
-  if (C0.size() >= C1.size())
-    return false;
-  return isSubset<T>(C0, C1);
 }
 
 static bool isStrictSubset(const VariantMatchInfo &VMI0,

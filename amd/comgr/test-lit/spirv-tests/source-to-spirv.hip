@@ -1,5 +1,4 @@
 // REQUIRES: comgr-has-spirv-translator
-
 // COM: Validate flags for SPIR-V codegen via the translator path (no LLVM SPIR-V backend).
 
 // COM: === Setting 1: source-to-spirv -nogpuinc (link / default output) ===

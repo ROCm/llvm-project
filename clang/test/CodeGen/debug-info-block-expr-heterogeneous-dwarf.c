@@ -10,52 +10,52 @@ void noEscapeFunc(__attribute__((noescape)) BlockTy);
 // Verify that the desired DIExpression are generated for escaping (i.e, not
 // 'noescape') blocks.
 // CHECK-LABEL: define dso_local void @test_escape_func(
-// CHECK-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG5:![0-9]+]] {
+// CHECK-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG4:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[ESCAPE_VAR:%.*]] = alloca [[STRUCT___BLOCK_BYREF_ESCAPE_VAR:%.*]], align 8
 // CHECK-NEXT:    [[BLOCK:%.*]] = alloca <{ ptr, i32, i32, ptr, ptr, ptr }>, align 8
-// CHECK-NEXT:      #dbg_declare(ptr [[ESCAPE_VAR]], [[META10:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(ptr), DIOpConstant(i64 8), DIOpByteOffset(ptr), DIOpDeref(ptr), DIOpConstant(i64 24), DIOpByteOffset(i32)), [[META12:![0-9]+]])
-// CHECK-NEXT:    [[BYREF_ISA:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 0, !dbg [[META12]]
-// CHECK-NEXT:    store ptr null, ptr [[BYREF_ISA]], align 8, !dbg [[META12]]
-// CHECK-NEXT:    [[BYREF_FORWARDING:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 1, !dbg [[META12]]
-// CHECK-NEXT:    store ptr [[ESCAPE_VAR]], ptr [[BYREF_FORWARDING]], align 8, !dbg [[META12]]
-// CHECK-NEXT:    [[BYREF_FLAGS:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 2, !dbg [[META12]]
-// CHECK-NEXT:    store i32 0, ptr [[BYREF_FLAGS]], align 8, !dbg [[META12]]
-// CHECK-NEXT:    [[BYREF_SIZE:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 3, !dbg [[META12]]
-// CHECK-NEXT:    store i32 32, ptr [[BYREF_SIZE]], align 4, !dbg [[META12]]
-// CHECK-NEXT:    [[ESCAPE_VAR1:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 4, !dbg [[META12]]
-// CHECK-NEXT:    [[BLOCK_ISA:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 0, !dbg [[DBG13:![0-9]+]]
-// CHECK-NEXT:    store ptr @_NSConcreteStackBlock, ptr [[BLOCK_ISA]], align 8, !dbg [[DBG13]]
-// CHECK-NEXT:    [[BLOCK_FLAGS:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 1, !dbg [[DBG13]]
-// CHECK-NEXT:    store i32 1107296256, ptr [[BLOCK_FLAGS]], align 8, !dbg [[DBG13]]
-// CHECK-NEXT:    [[BLOCK_RESERVED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 2, !dbg [[DBG13]]
-// CHECK-NEXT:    store i32 0, ptr [[BLOCK_RESERVED]], align 4, !dbg [[DBG13]]
-// CHECK-NEXT:    [[BLOCK_INVOKE:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG13]]
-// CHECK-NEXT:    store ptr @__test_escape_func_block_invoke, ptr [[BLOCK_INVOKE]], align 8, !dbg [[DBG13]]
-// CHECK-NEXT:    [[BLOCK_DESCRIPTOR:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 4, !dbg [[DBG13]]
-// CHECK-NEXT:    store ptr @__block_descriptor_tmp, ptr [[BLOCK_DESCRIPTOR]], align 8, !dbg [[DBG13]]
-// CHECK-NEXT:    [[BLOCK_CAPTURED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 5, !dbg [[DBG13]]
-// CHECK-NEXT:    store ptr [[ESCAPE_VAR]], ptr [[BLOCK_CAPTURED]], align 8, !dbg [[DBG13]]
-// CHECK-NEXT:    call void @escapeFunc(ptr noundef [[BLOCK]]), !dbg [[DBG14:![0-9]+]]
-// CHECK-NEXT:    call void @_Block_object_dispose(ptr [[ESCAPE_VAR]], i32 8) #[[ATTR3:[0-9]+]], !dbg [[DBG15:![0-9]+]]
-// CHECK-NEXT:    ret void, !dbg [[DBG15]]
+// CHECK-NEXT:      #dbg_declare(ptr [[ESCAPE_VAR]], [[META9:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(ptr), DIOpConstant(i64 8), DIOpByteOffset(ptr), DIOpDeref(ptr), DIOpConstant(i64 24), DIOpByteOffset(i32)), [[META11:![0-9]+]])
+// CHECK-NEXT:    [[BYREF_ISA:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 0, !dbg [[META11]]
+// CHECK-NEXT:    store ptr null, ptr [[BYREF_ISA]], align 8, !dbg [[META11]]
+// CHECK-NEXT:    [[BYREF_FORWARDING:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 1, !dbg [[META11]]
+// CHECK-NEXT:    store ptr [[ESCAPE_VAR]], ptr [[BYREF_FORWARDING]], align 8, !dbg [[META11]]
+// CHECK-NEXT:    [[BYREF_FLAGS:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 2, !dbg [[META11]]
+// CHECK-NEXT:    store i32 0, ptr [[BYREF_FLAGS]], align 8, !dbg [[META11]]
+// CHECK-NEXT:    [[BYREF_SIZE:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 3, !dbg [[META11]]
+// CHECK-NEXT:    store i32 32, ptr [[BYREF_SIZE]], align 4, !dbg [[META11]]
+// CHECK-NEXT:    [[ESCAPE_VAR1:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 4, !dbg [[META11]]
+// CHECK-NEXT:    [[BLOCK_ISA:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 0, !dbg [[DBG12:![0-9]+]]
+// CHECK-NEXT:    store ptr @_NSConcreteStackBlock, ptr [[BLOCK_ISA]], align 8, !dbg [[DBG12]]
+// CHECK-NEXT:    [[BLOCK_FLAGS:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 1, !dbg [[DBG12]]
+// CHECK-NEXT:    store i32 1107296256, ptr [[BLOCK_FLAGS]], align 8, !dbg [[DBG12]]
+// CHECK-NEXT:    [[BLOCK_RESERVED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 2, !dbg [[DBG12]]
+// CHECK-NEXT:    store i32 0, ptr [[BLOCK_RESERVED]], align 4, !dbg [[DBG12]]
+// CHECK-NEXT:    [[BLOCK_INVOKE:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG12]]
+// CHECK-NEXT:    store ptr @__test_escape_func_block_invoke, ptr [[BLOCK_INVOKE]], align 8, !dbg [[DBG12]]
+// CHECK-NEXT:    [[BLOCK_DESCRIPTOR:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 4, !dbg [[DBG12]]
+// CHECK-NEXT:    store ptr @__block_descriptor_tmp, ptr [[BLOCK_DESCRIPTOR]], align 8, !dbg [[DBG12]]
+// CHECK-NEXT:    [[BLOCK_CAPTURED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 5, !dbg [[DBG12]]
+// CHECK-NEXT:    store ptr [[ESCAPE_VAR]], ptr [[BLOCK_CAPTURED]], align 8, !dbg [[DBG12]]
+// CHECK-NEXT:    call void @escapeFunc(ptr noundef [[BLOCK]]), !dbg [[DBG13:![0-9]+]]
+// CHECK-NEXT:    call void @_Block_object_dispose(ptr [[ESCAPE_VAR]], i32 8) #[[ATTR3:[0-9]+]], !dbg [[DBG14:![0-9]+]]
+// CHECK-NEXT:    ret void, !dbg [[DBG14]]
 //
 // DEADCODE-LABEL: define dso_local void @test_escape_func(
-// DEADCODE-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG5:![0-9]+]] {
+// DEADCODE-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG4:![0-9]+]] {
 // DEADCODE-NEXT:  [[ENTRY:.*:]]
 // DEADCODE-NEXT:    [[ESCAPE_VAR:%.*]] = alloca [[STRUCT___BLOCK_BYREF_ESCAPE_VAR:%.*]], align 8
-// DEADCODE-NEXT:      #dbg_declare(ptr [[ESCAPE_VAR]], [[META10:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(ptr), DIOpConstant(i64 8), DIOpByteOffset(ptr), DIOpDeref(ptr), DIOpConstant(i64 24), DIOpByteOffset(i32)), [[META12:![0-9]+]])
-// DEADCODE-NEXT:    [[BYREF_ISA:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 0, !dbg [[META12]]
-// DEADCODE-NEXT:    store ptr null, ptr [[BYREF_ISA]], align 8, !dbg [[META12]]
-// DEADCODE-NEXT:    [[BYREF_FORWARDING:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 1, !dbg [[META12]]
-// DEADCODE-NEXT:    store ptr [[ESCAPE_VAR]], ptr [[BYREF_FORWARDING]], align 8, !dbg [[META12]]
-// DEADCODE-NEXT:    [[BYREF_FLAGS:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 2, !dbg [[META12]]
-// DEADCODE-NEXT:    store i32 0, ptr [[BYREF_FLAGS]], align 8, !dbg [[META12]]
-// DEADCODE-NEXT:    [[BYREF_SIZE:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 3, !dbg [[META12]]
-// DEADCODE-NEXT:    store i32 32, ptr [[BYREF_SIZE]], align 4, !dbg [[META12]]
-// DEADCODE-NEXT:    [[ESCAPE_VAR1:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 4, !dbg [[META12]]
-// DEADCODE-NEXT:    call void @_Block_object_dispose(ptr [[ESCAPE_VAR]], i32 8) #[[ATTR3:[0-9]+]], !dbg [[DBG13:![0-9]+]]
-// DEADCODE-NEXT:    ret void, !dbg [[DBG13]]
+// DEADCODE-NEXT:      #dbg_declare(ptr [[ESCAPE_VAR]], [[META9:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(ptr), DIOpConstant(i64 8), DIOpByteOffset(ptr), DIOpDeref(ptr), DIOpConstant(i64 24), DIOpByteOffset(i32)), [[META11:![0-9]+]])
+// DEADCODE-NEXT:    [[BYREF_ISA:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 0, !dbg [[META11]]
+// DEADCODE-NEXT:    store ptr null, ptr [[BYREF_ISA]], align 8, !dbg [[META11]]
+// DEADCODE-NEXT:    [[BYREF_FORWARDING:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 1, !dbg [[META11]]
+// DEADCODE-NEXT:    store ptr [[ESCAPE_VAR]], ptr [[BYREF_FORWARDING]], align 8, !dbg [[META11]]
+// DEADCODE-NEXT:    [[BYREF_FLAGS:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 2, !dbg [[META11]]
+// DEADCODE-NEXT:    store i32 0, ptr [[BYREF_FLAGS]], align 8, !dbg [[META11]]
+// DEADCODE-NEXT:    [[BYREF_SIZE:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 3, !dbg [[META11]]
+// DEADCODE-NEXT:    store i32 32, ptr [[BYREF_SIZE]], align 4, !dbg [[META11]]
+// DEADCODE-NEXT:    [[ESCAPE_VAR1:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_ESCAPE_VAR]], ptr [[ESCAPE_VAR]], i32 0, i32 4, !dbg [[META11]]
+// DEADCODE-NEXT:    call void @_Block_object_dispose(ptr [[ESCAPE_VAR]], i32 8) #[[ATTR3:[0-9]+]], !dbg [[DBG12:![0-9]+]]
+// DEADCODE-NEXT:    ret void, !dbg [[DBG12]]
 //
 void test_escape_func() {
   __block int escape_var;
@@ -68,46 +68,46 @@ void test_escape_func() {
 
 // Verify that the desired DIExpression are generated for noescape blocks.
 // CHECK-LABEL: define dso_local void @test_noescape_func(
-// CHECK-SAME: ) #[[ATTR0]] !dbg [[DBG34:![0-9]+]] {
+// CHECK-SAME: ) #[[ATTR0]] !dbg [[DBG33:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[NOESCAPE_VAR:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    [[BLOCK:%.*]] = alloca <{ ptr, i32, i32, ptr, ptr, ptr }>, align 8
-// CHECK-NEXT:      #dbg_declare(ptr [[NOESCAPE_VAR]], [[META36:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), [[META37:![0-9]+]])
-// CHECK-NEXT:    [[BLOCK_ISA:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 0, !dbg [[DBG38:![0-9]+]]
-// CHECK-NEXT:    store ptr @_NSConcreteGlobalBlock, ptr [[BLOCK_ISA]], align 8, !dbg [[DBG38]]
-// CHECK-NEXT:    [[BLOCK_FLAGS:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 1, !dbg [[DBG38]]
-// CHECK-NEXT:    store i32 1350565888, ptr [[BLOCK_FLAGS]], align 8, !dbg [[DBG38]]
-// CHECK-NEXT:    [[BLOCK_RESERVED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 2, !dbg [[DBG38]]
-// CHECK-NEXT:    store i32 0, ptr [[BLOCK_RESERVED]], align 4, !dbg [[DBG38]]
-// CHECK-NEXT:    [[BLOCK_INVOKE:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG38]]
-// CHECK-NEXT:    store ptr @__test_noescape_func_block_invoke, ptr [[BLOCK_INVOKE]], align 8, !dbg [[DBG38]]
-// CHECK-NEXT:    [[BLOCK_DESCRIPTOR:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 4, !dbg [[DBG38]]
-// CHECK-NEXT:    store ptr @__block_descriptor_tmp.1, ptr [[BLOCK_DESCRIPTOR]], align 8, !dbg [[DBG38]]
-// CHECK-NEXT:    [[BLOCK_CAPTURED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 5, !dbg [[DBG38]]
-// CHECK-NEXT:    store ptr [[NOESCAPE_VAR]], ptr [[BLOCK_CAPTURED]], align 8, !dbg [[DBG38]]
-// CHECK-NEXT:    call void @noEscapeFunc(ptr noundef captures(none) [[BLOCK]]), !dbg [[DBG39:![0-9]+]]
-// CHECK-NEXT:    ret void, !dbg [[DBG40:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr [[NOESCAPE_VAR]], [[META35:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), [[META36:![0-9]+]])
+// CHECK-NEXT:    [[BLOCK_ISA:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 0, !dbg [[DBG37:![0-9]+]]
+// CHECK-NEXT:    store ptr @_NSConcreteGlobalBlock, ptr [[BLOCK_ISA]], align 8, !dbg [[DBG37]]
+// CHECK-NEXT:    [[BLOCK_FLAGS:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 1, !dbg [[DBG37]]
+// CHECK-NEXT:    store i32 1350565888, ptr [[BLOCK_FLAGS]], align 8, !dbg [[DBG37]]
+// CHECK-NEXT:    [[BLOCK_RESERVED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 2, !dbg [[DBG37]]
+// CHECK-NEXT:    store i32 0, ptr [[BLOCK_RESERVED]], align 4, !dbg [[DBG37]]
+// CHECK-NEXT:    [[BLOCK_INVOKE:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG37]]
+// CHECK-NEXT:    store ptr @__test_noescape_func_block_invoke, ptr [[BLOCK_INVOKE]], align 8, !dbg [[DBG37]]
+// CHECK-NEXT:    [[BLOCK_DESCRIPTOR:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 4, !dbg [[DBG37]]
+// CHECK-NEXT:    store ptr @__block_descriptor_tmp.1, ptr [[BLOCK_DESCRIPTOR]], align 8, !dbg [[DBG37]]
+// CHECK-NEXT:    [[BLOCK_CAPTURED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 5, !dbg [[DBG37]]
+// CHECK-NEXT:    store ptr [[NOESCAPE_VAR]], ptr [[BLOCK_CAPTURED]], align 8, !dbg [[DBG37]]
+// CHECK-NEXT:    call void @noEscapeFunc(ptr noundef captures(address) [[BLOCK]]), !dbg [[DBG38:![0-9]+]]
+// CHECK-NEXT:    ret void, !dbg [[DBG39:![0-9]+]]
 //
 // DEADCODE-LABEL: define dso_local void @test_noescape_func(
-// DEADCODE-SAME: ) #[[ATTR0]] !dbg [[DBG14:![0-9]+]] {
+// DEADCODE-SAME: ) #[[ATTR0]] !dbg [[DBG13:![0-9]+]] {
 // DEADCODE-NEXT:  [[ENTRY:.*:]]
 // DEADCODE-NEXT:    [[NOESCAPE_VAR:%.*]] = alloca i32, align 4
 // DEADCODE-NEXT:    [[BLOCK:%.*]] = alloca <{ ptr, i32, i32, ptr, ptr, ptr }>, align 8
-// DEADCODE-NEXT:      #dbg_declare(ptr [[NOESCAPE_VAR]], [[META16:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), [[META17:![0-9]+]])
-// DEADCODE-NEXT:    [[BLOCK_ISA:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 0, !dbg [[DBG18:![0-9]+]]
-// DEADCODE-NEXT:    store ptr @_NSConcreteGlobalBlock, ptr [[BLOCK_ISA]], align 8, !dbg [[DBG18]]
-// DEADCODE-NEXT:    [[BLOCK_FLAGS:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 1, !dbg [[DBG18]]
-// DEADCODE-NEXT:    store i32 1350565888, ptr [[BLOCK_FLAGS]], align 8, !dbg [[DBG18]]
-// DEADCODE-NEXT:    [[BLOCK_RESERVED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 2, !dbg [[DBG18]]
-// DEADCODE-NEXT:    store i32 0, ptr [[BLOCK_RESERVED]], align 4, !dbg [[DBG18]]
-// DEADCODE-NEXT:    [[BLOCK_INVOKE:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG18]]
-// DEADCODE-NEXT:    store ptr @__test_noescape_func_block_invoke, ptr [[BLOCK_INVOKE]], align 8, !dbg [[DBG18]]
-// DEADCODE-NEXT:    [[BLOCK_DESCRIPTOR:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 4, !dbg [[DBG18]]
-// DEADCODE-NEXT:    store ptr @__block_descriptor_tmp, ptr [[BLOCK_DESCRIPTOR]], align 8, !dbg [[DBG18]]
-// DEADCODE-NEXT:    [[BLOCK_CAPTURED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 5, !dbg [[DBG18]]
-// DEADCODE-NEXT:    store ptr [[NOESCAPE_VAR]], ptr [[BLOCK_CAPTURED]], align 8, !dbg [[DBG18]]
-// DEADCODE-NEXT:    call void @noEscapeFunc(ptr noundef captures(none) [[BLOCK]]), !dbg [[DBG19:![0-9]+]]
-// DEADCODE-NEXT:    ret void, !dbg [[DBG20:![0-9]+]]
+// DEADCODE-NEXT:      #dbg_declare(ptr [[NOESCAPE_VAR]], [[META15:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), [[META16:![0-9]+]])
+// DEADCODE-NEXT:    [[BLOCK_ISA:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 0, !dbg [[DBG17:![0-9]+]]
+// DEADCODE-NEXT:    store ptr @_NSConcreteGlobalBlock, ptr [[BLOCK_ISA]], align 8, !dbg [[DBG17]]
+// DEADCODE-NEXT:    [[BLOCK_FLAGS:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 1, !dbg [[DBG17]]
+// DEADCODE-NEXT:    store i32 1350565888, ptr [[BLOCK_FLAGS]], align 8, !dbg [[DBG17]]
+// DEADCODE-NEXT:    [[BLOCK_RESERVED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 2, !dbg [[DBG17]]
+// DEADCODE-NEXT:    store i32 0, ptr [[BLOCK_RESERVED]], align 4, !dbg [[DBG17]]
+// DEADCODE-NEXT:    [[BLOCK_INVOKE:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG17]]
+// DEADCODE-NEXT:    store ptr @__test_noescape_func_block_invoke, ptr [[BLOCK_INVOKE]], align 8, !dbg [[DBG17]]
+// DEADCODE-NEXT:    [[BLOCK_DESCRIPTOR:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 4, !dbg [[DBG17]]
+// DEADCODE-NEXT:    store ptr @__block_descriptor_tmp, ptr [[BLOCK_DESCRIPTOR]], align 8, !dbg [[DBG17]]
+// DEADCODE-NEXT:    [[BLOCK_CAPTURED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 5, !dbg [[DBG17]]
+// DEADCODE-NEXT:    store ptr [[NOESCAPE_VAR]], ptr [[BLOCK_CAPTURED]], align 8, !dbg [[DBG17]]
+// DEADCODE-NEXT:    call void @noEscapeFunc(ptr noundef captures(address) [[BLOCK]]), !dbg [[DBG18:![0-9]+]]
+// DEADCODE-NEXT:    ret void, !dbg [[DBG19:![0-9]+]]
 //
 void test_noescape_func() {
   __block int noescape_var;
@@ -149,37 +149,37 @@ void test_noescape_func() {
 // CHECK-NEXT:    ret void, !dbg [[DBG50]]
 //
 // DEADCODE-LABEL: define dso_local void @test_local_block(
-// DEADCODE-SAME: ) #[[ATTR0]] !dbg [[DBG28:![0-9]+]] {
+// DEADCODE-SAME: ) #[[ATTR0]] !dbg [[DBG29:![0-9]+]] {
 // DEADCODE-NEXT:  [[ENTRY:.*:]]
 // DEADCODE-NEXT:    [[BLOCK_VAR:%.*]] = alloca [[STRUCT___BLOCK_BYREF_BLOCK_VAR:%.*]], align 8
 // DEADCODE-NEXT:    [[BLOCK:%.*]] = alloca <{ ptr, i32, i32, ptr, ptr, ptr }>, align 8
-// DEADCODE-NEXT:      #dbg_declare(ptr [[BLOCK_VAR]], [[META30:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(ptr), DIOpConstant(i64 8), DIOpByteOffset(ptr), DIOpDeref(ptr), DIOpConstant(i64 24), DIOpByteOffset(i32)), [[META31:![0-9]+]])
-// DEADCODE-NEXT:    [[BYREF_ISA:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 0, !dbg [[META31]]
-// DEADCODE-NEXT:    store ptr null, ptr [[BYREF_ISA]], align 8, !dbg [[META31]]
-// DEADCODE-NEXT:    [[BYREF_FORWARDING:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 1, !dbg [[META31]]
-// DEADCODE-NEXT:    store ptr [[BLOCK_VAR]], ptr [[BYREF_FORWARDING]], align 8, !dbg [[META31]]
-// DEADCODE-NEXT:    [[BYREF_FLAGS:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 2, !dbg [[META31]]
-// DEADCODE-NEXT:    store i32 0, ptr [[BYREF_FLAGS]], align 8, !dbg [[META31]]
-// DEADCODE-NEXT:    [[BYREF_SIZE:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 3, !dbg [[META31]]
-// DEADCODE-NEXT:    store i32 32, ptr [[BYREF_SIZE]], align 4, !dbg [[META31]]
-// DEADCODE-NEXT:    [[BLOCK_VAR1:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 4, !dbg [[META31]]
-// DEADCODE-NEXT:    [[BLOCK_ISA:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 0, !dbg [[DBG32:![0-9]+]]
-// DEADCODE-NEXT:    store ptr @_NSConcreteStackBlock, ptr [[BLOCK_ISA]], align 8, !dbg [[DBG32]]
-// DEADCODE-NEXT:    [[BLOCK_FLAGS:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 1, !dbg [[DBG32]]
-// DEADCODE-NEXT:    store i32 1107296256, ptr [[BLOCK_FLAGS]], align 8, !dbg [[DBG32]]
-// DEADCODE-NEXT:    [[BLOCK_RESERVED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 2, !dbg [[DBG32]]
-// DEADCODE-NEXT:    store i32 0, ptr [[BLOCK_RESERVED]], align 4, !dbg [[DBG32]]
-// DEADCODE-NEXT:    [[BLOCK_INVOKE:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG32]]
-// DEADCODE-NEXT:    store ptr @__test_local_block_block_invoke, ptr [[BLOCK_INVOKE]], align 8, !dbg [[DBG32]]
-// DEADCODE-NEXT:    [[BLOCK_DESCRIPTOR:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 4, !dbg [[DBG32]]
-// DEADCODE-NEXT:    store ptr @__block_descriptor_tmp.1, ptr [[BLOCK_DESCRIPTOR]], align 8, !dbg [[DBG32]]
-// DEADCODE-NEXT:    [[BLOCK_CAPTURED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 5, !dbg [[DBG32]]
-// DEADCODE-NEXT:    store ptr [[BLOCK_VAR]], ptr [[BLOCK_CAPTURED]], align 8, !dbg [[DBG32]]
-// DEADCODE-NEXT:    [[TMP0:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_LITERAL_GENERIC:%.*]], ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG32]]
-// DEADCODE-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[TMP0]], align 8, !dbg [[DBG32]]
-// DEADCODE-NEXT:    call void [[TMP1]](ptr noundef [[BLOCK]]), !dbg [[DBG32]]
-// DEADCODE-NEXT:    call void @_Block_object_dispose(ptr [[BLOCK_VAR]], i32 8) #[[ATTR3]], !dbg [[DBG33:![0-9]+]]
-// DEADCODE-NEXT:    ret void, !dbg [[DBG33]]
+// DEADCODE-NEXT:      #dbg_declare(ptr [[BLOCK_VAR]], [[META31:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(ptr), DIOpConstant(i64 8), DIOpByteOffset(ptr), DIOpDeref(ptr), DIOpConstant(i64 24), DIOpByteOffset(i32)), [[META32:![0-9]+]])
+// DEADCODE-NEXT:    [[BYREF_ISA:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 0, !dbg [[META32]]
+// DEADCODE-NEXT:    store ptr null, ptr [[BYREF_ISA]], align 8, !dbg [[META32]]
+// DEADCODE-NEXT:    [[BYREF_FORWARDING:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 1, !dbg [[META32]]
+// DEADCODE-NEXT:    store ptr [[BLOCK_VAR]], ptr [[BYREF_FORWARDING]], align 8, !dbg [[META32]]
+// DEADCODE-NEXT:    [[BYREF_FLAGS:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 2, !dbg [[META32]]
+// DEADCODE-NEXT:    store i32 0, ptr [[BYREF_FLAGS]], align 8, !dbg [[META32]]
+// DEADCODE-NEXT:    [[BYREF_SIZE:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 3, !dbg [[META32]]
+// DEADCODE-NEXT:    store i32 32, ptr [[BYREF_SIZE]], align 4, !dbg [[META32]]
+// DEADCODE-NEXT:    [[BLOCK_VAR1:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_BYREF_BLOCK_VAR]], ptr [[BLOCK_VAR]], i32 0, i32 4, !dbg [[META32]]
+// DEADCODE-NEXT:    [[BLOCK_ISA:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 0, !dbg [[DBG33:![0-9]+]]
+// DEADCODE-NEXT:    store ptr @_NSConcreteStackBlock, ptr [[BLOCK_ISA]], align 8, !dbg [[DBG33]]
+// DEADCODE-NEXT:    [[BLOCK_FLAGS:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 1, !dbg [[DBG33]]
+// DEADCODE-NEXT:    store i32 1107296256, ptr [[BLOCK_FLAGS]], align 8, !dbg [[DBG33]]
+// DEADCODE-NEXT:    [[BLOCK_RESERVED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 2, !dbg [[DBG33]]
+// DEADCODE-NEXT:    store i32 0, ptr [[BLOCK_RESERVED]], align 4, !dbg [[DBG33]]
+// DEADCODE-NEXT:    [[BLOCK_INVOKE:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG33]]
+// DEADCODE-NEXT:    store ptr @__test_local_block_block_invoke, ptr [[BLOCK_INVOKE]], align 8, !dbg [[DBG33]]
+// DEADCODE-NEXT:    [[BLOCK_DESCRIPTOR:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 4, !dbg [[DBG33]]
+// DEADCODE-NEXT:    store ptr @__block_descriptor_tmp.1, ptr [[BLOCK_DESCRIPTOR]], align 8, !dbg [[DBG33]]
+// DEADCODE-NEXT:    [[BLOCK_CAPTURED:%.*]] = getelementptr inbounds nuw <{ ptr, i32, i32, ptr, ptr, ptr }>, ptr [[BLOCK]], i32 0, i32 5, !dbg [[DBG33]]
+// DEADCODE-NEXT:    store ptr [[BLOCK_VAR]], ptr [[BLOCK_CAPTURED]], align 8, !dbg [[DBG33]]
+// DEADCODE-NEXT:    [[TMP0:%.*]] = getelementptr inbounds nuw [[STRUCT___BLOCK_LITERAL_GENERIC:%.*]], ptr [[BLOCK]], i32 0, i32 3, !dbg [[DBG33]]
+// DEADCODE-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[TMP0]], align 8, !dbg [[DBG33]]
+// DEADCODE-NEXT:    call void [[TMP1]](ptr noundef [[BLOCK]]), !dbg [[DBG33]]
+// DEADCODE-NEXT:    call void @_Block_object_dispose(ptr [[BLOCK_VAR]], i32 8) #[[ATTR3]], !dbg [[DBG34:![0-9]+]]
+// DEADCODE-NEXT:    ret void, !dbg [[DBG34]]
 //
 void test_local_block() {
   __block int block_var;
@@ -220,64 +220,64 @@ void test_unused() {
 //.
 // CHECK: [[META0:![0-9]+]] = distinct !DICompileUnit(language: DW_LANG_C11, file: [[META1:![0-9]+]], producer: "{{.*}}clang version {{.*}}", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, splitDebugInlining: false, nameTableKind: None)
 // CHECK: [[META1]] = !DIFile(filename: "{{.*}}<stdin>", directory: {{.*}})
-// CHECK: [[DBG5]] = distinct !DISubprogram(name: "test_escape_func", scope: [[META6:![0-9]+]], file: [[META6]], line: 60, type: [[META7:![0-9]+]], scopeLine: 60, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META9:![0-9]+]])
-// CHECK: [[META6]] = !DIFile(filename: "{{.*}}debug-info-block-expr-heterogeneous-dwarf.c", directory: {{.*}})
-// CHECK: [[META7]] = !DISubroutineType(types: [[META8:![0-9]+]])
-// CHECK: [[META8]] = !{null}
-// CHECK: [[META9]] = !{[[META10]]}
-// CHECK: [[META10]] = !DILocalVariable(name: "escape_var", scope: [[DBG5]], file: [[META6]], line: 61, type: [[META11:![0-9]+]])
-// CHECK: [[META11]] = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
-// CHECK: [[META12]] = !DILocation(line: 61, column: 15, scope: [[DBG5]])
-// CHECK: [[DBG13]] = !DILocation(line: 66, column: 14, scope: [[DBG5]])
-// CHECK: [[DBG14]] = !DILocation(line: 66, column: 3, scope: [[DBG5]])
-// CHECK: [[DBG15]] = !DILocation(line: 67, column: 1, scope: [[DBG5]])
-// CHECK: [[DBG34]] = distinct !DISubprogram(name: "test_noescape_func", scope: [[META6]], file: [[META6]], line: 112, type: [[META7]], scopeLine: 112, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META35:![0-9]+]])
-// CHECK: [[META35]] = !{[[META36]]}
-// CHECK: [[META36]] = !DILocalVariable(name: "noescape_var", scope: [[DBG34]], file: [[META6]], line: 113, type: [[META11]])
-// CHECK: [[META37]] = !DILocation(line: 113, column: 15, scope: [[DBG34]])
-// CHECK: [[DBG38]] = !DILocation(line: 114, column: 16, scope: [[DBG34]])
-// CHECK: [[DBG39]] = !DILocation(line: 114, column: 3, scope: [[DBG34]])
-// CHECK: [[DBG40]] = !DILocation(line: 115, column: 1, scope: [[DBG34]])
-// CHECK: [[DBG45]] = distinct !DISubprogram(name: "test_local_block", scope: [[META6]], file: [[META6]], line: 184, type: [[META7]], scopeLine: 184, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META46:![0-9]+]])
+// CHECK: [[DBG4]] = distinct !DISubprogram(name: "test_escape_func", scope: [[META5:![0-9]+]], file: [[META5]], line: 60, type: [[META6:![0-9]+]], scopeLine: 60, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META8:![0-9]+]])
+// CHECK: [[META5]] = !DIFile(filename: "{{.*}}debug-info-block-expr-heterogeneous-dwarf.c", directory: {{.*}})
+// CHECK: [[META6]] = !DISubroutineType(types: [[META7:![0-9]+]])
+// CHECK: [[META7]] = !{null}
+// CHECK: [[META8]] = !{[[META9]]}
+// CHECK: [[META9]] = !DILocalVariable(name: "escape_var", scope: [[DBG4]], file: [[META5]], line: 61, type: [[META10:![0-9]+]])
+// CHECK: [[META10]] = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
+// CHECK: [[META11]] = !DILocation(line: 61, column: 15, scope: [[DBG4]])
+// CHECK: [[DBG12]] = !DILocation(line: 66, column: 14, scope: [[DBG4]])
+// CHECK: [[DBG13]] = !DILocation(line: 66, column: 3, scope: [[DBG4]])
+// CHECK: [[DBG14]] = !DILocation(line: 67, column: 1, scope: [[DBG4]])
+// CHECK: [[DBG33]] = distinct !DISubprogram(name: "test_noescape_func", scope: [[META5]], file: [[META5]], line: 112, type: [[META6]], scopeLine: 112, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META34:![0-9]+]])
+// CHECK: [[META34]] = !{[[META35]]}
+// CHECK: [[META35]] = !DILocalVariable(name: "noescape_var", scope: [[DBG33]], file: [[META5]], line: 113, type: [[META10]])
+// CHECK: [[META36]] = !DILocation(line: 113, column: 15, scope: [[DBG33]])
+// CHECK: [[DBG37]] = !DILocation(line: 114, column: 16, scope: [[DBG33]])
+// CHECK: [[DBG38]] = !DILocation(line: 114, column: 3, scope: [[DBG33]])
+// CHECK: [[DBG39]] = !DILocation(line: 115, column: 1, scope: [[DBG33]])
+// CHECK: [[DBG45]] = distinct !DISubprogram(name: "test_local_block", scope: [[META5]], file: [[META5]], line: 184, type: [[META6]], scopeLine: 184, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META46:![0-9]+]])
 // CHECK: [[META46]] = !{[[META47]]}
-// CHECK: [[META47]] = !DILocalVariable(name: "block_var", scope: [[DBG45]], file: [[META6]], line: 185, type: [[META11]])
+// CHECK: [[META47]] = !DILocalVariable(name: "block_var", scope: [[DBG45]], file: [[META5]], line: 185, type: [[META10]])
 // CHECK: [[META48]] = !DILocation(line: 185, column: 15, scope: [[DBG45]])
 // CHECK: [[DBG49]] = !DILocation(line: 188, column: 3, scope: [[DBG45]])
 // CHECK: [[DBG50]] = !DILocation(line: 189, column: 1, scope: [[DBG45]])
-// CHECK: [[DBG56]] = distinct !DISubprogram(name: "test_unused", scope: [[META6]], file: [[META6]], line: 213, type: [[META7]], scopeLine: 213, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META57:![0-9]+]])
+// CHECK: [[DBG56]] = distinct !DISubprogram(name: "test_unused", scope: [[META5]], file: [[META5]], line: 213, type: [[META6]], scopeLine: 213, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META57:![0-9]+]])
 // CHECK: [[META57]] = !{[[META58]]}
-// CHECK: [[META58]] = !DILocalVariable(name: "unused_var", scope: [[DBG56]], file: [[META6]], line: 214, type: [[META11]])
+// CHECK: [[META58]] = !DILocalVariable(name: "unused_var", scope: [[DBG56]], file: [[META5]], line: 214, type: [[META10]])
 // CHECK: [[META59]] = !DILocation(line: 214, column: 15, scope: [[DBG56]])
 // CHECK: [[DBG60]] = !DILocation(line: 216, column: 3, scope: [[DBG56]])
 // CHECK: [[DBG61]] = !DILocation(line: 217, column: 1, scope: [[DBG56]])
 //.
 // DEADCODE: [[META0:![0-9]+]] = distinct !DICompileUnit(language: DW_LANG_C11, file: [[META1:![0-9]+]], producer: "{{.*}}clang version {{.*}}", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, splitDebugInlining: false, nameTableKind: None)
 // DEADCODE: [[META1]] = !DIFile(filename: "{{.*}}<stdin>", directory: {{.*}})
-// DEADCODE: [[DBG5]] = distinct !DISubprogram(name: "test_escape_func", scope: [[META6:![0-9]+]], file: [[META6]], line: 60, type: [[META7:![0-9]+]], scopeLine: 60, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META9:![0-9]+]])
-// DEADCODE: [[META6]] = !DIFile(filename: "{{.*}}debug-info-block-expr-heterogeneous-dwarf.c", directory: {{.*}})
-// DEADCODE: [[META7]] = !DISubroutineType(types: [[META8:![0-9]+]])
-// DEADCODE: [[META8]] = !{null}
-// DEADCODE: [[META9]] = !{[[META10]]}
-// DEADCODE: [[META10]] = !DILocalVariable(name: "escape_var", scope: [[DBG5]], file: [[META6]], line: 61, type: [[META11:![0-9]+]])
-// DEADCODE: [[META11]] = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
-// DEADCODE: [[META12]] = !DILocation(line: 61, column: 15, scope: [[DBG5]])
-// DEADCODE: [[DBG13]] = !DILocation(line: 67, column: 1, scope: [[DBG5]])
-// DEADCODE: [[DBG14]] = distinct !DISubprogram(name: "test_noescape_func", scope: [[META6]], file: [[META6]], line: 112, type: [[META7]], scopeLine: 112, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META15:![0-9]+]])
-// DEADCODE: [[META15]] = !{[[META16]]}
-// DEADCODE: [[META16]] = !DILocalVariable(name: "noescape_var", scope: [[DBG14]], file: [[META6]], line: 113, type: [[META11]])
-// DEADCODE: [[META17]] = !DILocation(line: 113, column: 15, scope: [[DBG14]])
-// DEADCODE: [[DBG18]] = !DILocation(line: 114, column: 16, scope: [[DBG14]])
-// DEADCODE: [[DBG19]] = !DILocation(line: 114, column: 3, scope: [[DBG14]])
-// DEADCODE: [[DBG20]] = !DILocation(line: 115, column: 1, scope: [[DBG14]])
-// DEADCODE: [[DBG28]] = distinct !DISubprogram(name: "test_local_block", scope: [[META6]], file: [[META6]], line: 184, type: [[META7]], scopeLine: 184, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META29:![0-9]+]])
-// DEADCODE: [[META29]] = !{[[META30]]}
-// DEADCODE: [[META30]] = !DILocalVariable(name: "block_var", scope: [[DBG28]], file: [[META6]], line: 185, type: [[META11]])
-// DEADCODE: [[META31]] = !DILocation(line: 185, column: 15, scope: [[DBG28]])
-// DEADCODE: [[DBG32]] = !DILocation(line: 188, column: 3, scope: [[DBG28]])
-// DEADCODE: [[DBG33]] = !DILocation(line: 189, column: 1, scope: [[DBG28]])
-// DEADCODE: [[DBG50]] = distinct !DISubprogram(name: "test_unused", scope: [[META6]], file: [[META6]], line: 213, type: [[META7]], scopeLine: 213, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META51:![0-9]+]])
+// DEADCODE: [[DBG4]] = distinct !DISubprogram(name: "test_escape_func", scope: [[META5:![0-9]+]], file: [[META5]], line: 60, type: [[META6:![0-9]+]], scopeLine: 60, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META8:![0-9]+]])
+// DEADCODE: [[META5]] = !DIFile(filename: "{{.*}}debug-info-block-expr-heterogeneous-dwarf.c", directory: {{.*}})
+// DEADCODE: [[META6]] = !DISubroutineType(types: [[META7:![0-9]+]])
+// DEADCODE: [[META7]] = !{null}
+// DEADCODE: [[META8]] = !{[[META9]]}
+// DEADCODE: [[META9]] = !DILocalVariable(name: "escape_var", scope: [[DBG4]], file: [[META5]], line: 61, type: [[META10:![0-9]+]])
+// DEADCODE: [[META10]] = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
+// DEADCODE: [[META11]] = !DILocation(line: 61, column: 15, scope: [[DBG4]])
+// DEADCODE: [[DBG12]] = !DILocation(line: 67, column: 1, scope: [[DBG4]])
+// DEADCODE: [[DBG13]] = distinct !DISubprogram(name: "test_noescape_func", scope: [[META5]], file: [[META5]], line: 112, type: [[META6]], scopeLine: 112, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META14:![0-9]+]])
+// DEADCODE: [[META14]] = !{[[META15]]}
+// DEADCODE: [[META15]] = !DILocalVariable(name: "noescape_var", scope: [[DBG13]], file: [[META5]], line: 113, type: [[META10]])
+// DEADCODE: [[META16]] = !DILocation(line: 113, column: 15, scope: [[DBG13]])
+// DEADCODE: [[DBG17]] = !DILocation(line: 114, column: 16, scope: [[DBG13]])
+// DEADCODE: [[DBG18]] = !DILocation(line: 114, column: 3, scope: [[DBG13]])
+// DEADCODE: [[DBG19]] = !DILocation(line: 115, column: 1, scope: [[DBG13]])
+// DEADCODE: [[DBG29]] = distinct !DISubprogram(name: "test_local_block", scope: [[META5]], file: [[META5]], line: 184, type: [[META6]], scopeLine: 184, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META30:![0-9]+]])
+// DEADCODE: [[META30]] = !{[[META31]]}
+// DEADCODE: [[META31]] = !DILocalVariable(name: "block_var", scope: [[DBG29]], file: [[META5]], line: 185, type: [[META10]])
+// DEADCODE: [[META32]] = !DILocation(line: 185, column: 15, scope: [[DBG29]])
+// DEADCODE: [[DBG33]] = !DILocation(line: 188, column: 3, scope: [[DBG29]])
+// DEADCODE: [[DBG34]] = !DILocation(line: 189, column: 1, scope: [[DBG29]])
+// DEADCODE: [[DBG50]] = distinct !DISubprogram(name: "test_unused", scope: [[META5]], file: [[META5]], line: 213, type: [[META6]], scopeLine: 213, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META51:![0-9]+]])
 // DEADCODE: [[META51]] = !{[[META52]]}
-// DEADCODE: [[META52]] = !DILocalVariable(name: "unused_var", scope: [[DBG50]], file: [[META6]], line: 214, type: [[META11]])
+// DEADCODE: [[META52]] = !DILocalVariable(name: "unused_var", scope: [[DBG50]], file: [[META5]], line: 214, type: [[META10]])
 // DEADCODE: [[META53]] = !DILocation(line: 214, column: 15, scope: [[DBG50]])
 // DEADCODE: [[DBG54]] = !DILocation(line: 216, column: 3, scope: [[DBG50]])
 // DEADCODE: [[DBG55]] = !DILocation(line: 217, column: 1, scope: [[DBG50]])

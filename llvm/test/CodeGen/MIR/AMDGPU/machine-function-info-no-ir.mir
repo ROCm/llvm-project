@@ -59,6 +59,7 @@
 # FULL-NEXT: scratchReservedForDynamicVGPRs: 0
 # FULL-NEXT: numKernargPreloadSGPRs: 0
 # FULL-NEXT: isWholeWaveFunction: false
+# FULL-NEXT: minNumAGPRs: 4294967295
 # FULL-NEXT: body:
 
 # SIMPLE: machineFunctionInfo:
@@ -88,6 +89,7 @@
 # SIMPLE-NEXT: workItemIDY:     { reg: '$vgpr31', mask: 1047552 }
 # SIMPLE-NEXT: workItemIDZ:     { reg: '$vgpr31', mask: 1072693248 }
 # SIMPLE-NEXT: occupancy: 8
+# SIMPLE-NEXT: dynamicVGPRBlockSize: 0
 # SIMPLE-NEXT: body:
 name: kernel0
 machineFunctionInfo:
@@ -169,6 +171,7 @@ body:             |
 # FULL-NEXT: scratchReservedForDynamicVGPRs: 0
 # FULL-NEXT: numKernargPreloadSGPRs: 0
 # FULL-NEXT: isWholeWaveFunction: false
+# FULL-NEXT: minNumAGPRs: 4294967295
 # FULL-NEXT: body:
 
 # SIMPLE: machineFunctionInfo:
@@ -187,6 +190,7 @@ body:             |
 # SIMPLE-NEXT: workItemIDY:     { reg: '$vgpr31', mask: 1047552 }
 # SIMPLE-NEXT: workItemIDZ:     { reg: '$vgpr31', mask: 1072693248 }
 # SIMPLE-NEXT:  occupancy: 10
+# SIMPLE-NEXT: dynamicVGPRBlockSize: 0
 # SIMPLE-NEXT: body:
 
 name: no_mfi
@@ -251,6 +255,7 @@ body:             |
 # FULL-NEXT: scratchReservedForDynamicVGPRs: 0
 # FULL-NEXT: numKernargPreloadSGPRs: 0
 # FULL-NEXT: isWholeWaveFunction: false
+# FULL-NEXT: minNumAGPRs: 4294967295
 # FULL-NEXT: body:
 
 # SIMPLE: machineFunctionInfo:
@@ -269,6 +274,7 @@ body:             |
 # SIMPLE-NEXT: workItemIDY:     { reg: '$vgpr31', mask: 1047552 }
 # SIMPLE-NEXT: workItemIDZ:     { reg: '$vgpr31', mask: 1072693248 }
 # SIMPLE-NEXT:  occupancy: 10
+# SIMPLE-NEXT: dynamicVGPRBlockSize: 0
 # SIMPLE-NEXT: body:
 
 name: empty_mfi
@@ -334,6 +340,7 @@ body:             |
 # FULL-NEXT: scratchReservedForDynamicVGPRs: 0
 # FULL-NEXT: numKernargPreloadSGPRs: 0
 # FULL-NEXT: isWholeWaveFunction: false
+# FULL-NEXT: minNumAGPRs: 4294967295
 # FULL-NEXT: body:
 
 # SIMPLE: machineFunctionInfo:
@@ -353,6 +360,7 @@ body:             |
 # SIMPLE-NEXT: workItemIDY:     { reg: '$vgpr31', mask: 1047552 }
 # SIMPLE-NEXT: workItemIDZ:     { reg: '$vgpr31', mask: 1072693248 }
 # SIMPLE-NEXT: occupancy: 10
+# SIMPLE-NEXT: dynamicVGPRBlockSize: 0
 # SIMPLE-NEXT: body:
 
 name: empty_mfi_entry_func
@@ -626,6 +634,20 @@ body: |
 name: max_memory_cluster_dwords
 machineFunctionInfo:
   maxMemoryClusterDWords: 16
+body:             |
+  bb.0:
+    SI_RETURN
+
+...
+
+---
+# A non-default minNumAGPRs parsed from the YAML must round-trip.
+# ALL-LABEL: name: min_num_agprs
+# FULL: minNumAGPRs:     8
+# SIMPLE: minNumAGPRs:     8
+name: min_num_agprs
+machineFunctionInfo:
+  minNumAGPRs:     8
 body:             |
   bb.0:
     SI_RETURN

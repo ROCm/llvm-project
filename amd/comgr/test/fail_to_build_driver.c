@@ -15,11 +15,10 @@
 int main(int argc, char *argv[]) {
   char *BufSource1;
   size_t SizeSource1;
-  amd_comgr_data_t DataSource1, DataSource2, DataInclude;
+  amd_comgr_data_t DataSource1;
   amd_comgr_data_set_t DataSetIn, DataSetBc;
   amd_comgr_action_info_t DataAction;
   amd_comgr_status_t Status;
-  size_t Count;
   const char *CodeGenOptions[] = {"-this-is-a-non-existent-flag"};
   size_t CodeGenOptionsCount =
       sizeof(CodeGenOptions) / sizeof(CodeGenOptions[0]);

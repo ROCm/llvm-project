@@ -207,7 +207,7 @@ def CIR_OptInfoAttr : CIR_Attr<"OptInfo", "opt_info"> {
 
     Examples:
 
-    ```mlir
+    ```
     #cir.opt_info<level = 2, size = 0>  // -O2
     ```
   }];
@@ -538,45 +538,55 @@ def CIR_DataMemberAttr : CIR_ValueLikeAttr<"DataMember", "data_member"> {
   let parameters = (ins AttributeSelfTypeParameter<
                             "", "cir::DataMemberType">:$type,
                         OptionalParameter<
-                            "std::optional<unsigned>">:$member_index);
+                            "mlir::DenseI32ArrayAttr">:$member_path);
   let description = [{
     A data member attribute is a literal attribute that represents a constant
     pointer-to-data-member value.
 
-    The `member_index` parameter represents the index of the pointed-to member
-    within its containing record. It is an optional parameter; lack of this
-    parameter indicates a null pointer-to-data-member value.
+    The `member_path` parameter is a GEP-like sequence of field indices
+    navigating from `classTy` down to the pointed-to member.  An absent
+    `member_path` represents a null pointer-to-data-member.
 
-    Example:
+    Examples:
     ```
-    #ptr = #cir.data_member<1> : !cir.data_member<!s32i in !rec_22Point22>
+    // int Point::*p = &Point::z  (z is field 2)
+    #cir.data_member<[2]> : !cir.data_member<!s32i in !rec_Point>
 
-    #null = #cir.data_member<null> : !cir.data_member<!s32i in !rec_22Point22>
+    // int Derived::*p = &Derived::x  (Base subobject at [0], x at [0])
+    #cir.data_member<[0, 0]> : !cir.data_member<!s32i in !rec_Derived>
+
+    // null
+    #cir.data_member<null> : !cir.data_member<!s32i in !rec_Point>
     ```
   }];
 
   let builders = [
+    // Null pointer-to-data-member.
     AttrBuilderWithInferredContext<(ins "cir::DataMemberType":$type), [{
-      return $_get(type.getContext(), type, std::nullopt);
+      return $_get(type.getContext(), type, mlir::DenseI32ArrayAttr{});
     }]>,
+    // Non-null pointer-to-data-member with an explicit field-index path.
     AttrBuilderWithInferredContext<(ins "cir::DataMemberType":$type,
-                                        "unsigned":$member_index), [{
-      return $_get(type.getContext(), type, member_index);
+                                       "llvm::ArrayRef<int32_t>":$path), [{
+      return $_get(type.getContext(), type,
+                   mlir::DenseI32ArrayAttr::get(type.getContext(), path));
     }]>,
   ];
 
-  // This attribute gets lowered during CXXABILowering
+  // This attribute gets lowered during CXXABILowering.
   let hasAttrToValueLowering = 0;
 
   let genVerifyDecl = 1;
 
   let assemblyFormat = [{
-    `<` ($member_index^):(`null`)? `>`
+    `<` custom<DataMemberPath>($member_path) `>`
   }];
 
   let extraClassDeclaration = [{
-    bool isNullPtr() const {
-      return !getMemberIndex().has_value();
+    bool isNullPtr() const { return !getMemberPath(); }
+    llvm::ArrayRef<int32_t> getPath() const {
+      assert(!isNullPtr() && "getPath() called on null data member pointer");
+      return getMemberPath().asArrayRef();
     }
   }];
 }
@@ -615,6 +625,7 @@ def CIR_MethodAttr : CIR_ValueLikeAttr<"Method", "method"> {
     // Null method pointer
     %0 = cir.const #cir.method<null> :
              !cir.method<!cir.func<(!s32i)> in !rec_S>
+    ```
   }];
 
   let parameters = (ins AttributeSelfTypeParameter<
@@ -688,7 +699,7 @@ def CIR_CmpThreeWayInfoAttr : CIR_Attr<"CmpThreeWayInfo", "cmp3way_info"> {
 
     Example:
 
-    ```mlir
+    ```
     !s32i = !cir.int<s, 32>
 
     #cmpinfo_partial_ltn1eq0gt1unn127 = #cir.cmp3way_info<partial, lt = -1, eq = 0, gt = 1, unordered = -127>
@@ -841,7 +852,7 @@ def CIR_VTableAttr : CIR_ValueLikeAttr<"VTable", "vtable"> {
     multiple arrays, each of which is a vtable.
 
     Example 1 (single vtable):
-    ```mlir
+    ```
     cir.global linkonce_odr @_ZTV6Mother =
       #cir.vtable<{
         #cir.const_array<[
@@ -854,7 +865,7 @@ def CIR_VTableAttr : CIR_ValueLikeAttr<"VTable", "vtable"> {
     ```
 
     Example 2 (multiple vtables):
-    ```mlir
+    ```
     cir.global linkonce_odr @_ZTV5Child =
       #cir.vtable<{
         #cir.const_array<[
@@ -966,7 +977,7 @@ def CIR_LangAddressSpaceAttr : CIR_EnumAttr<CIR_LangAddressSpace,
     numbers.
 
     Example:
-    ```mlir
+    ```
     !cir.ptr<!s32i, lang_address_space(offload_local)>
     cir.global constant external lang_address_space(offload_constant)
     ```
@@ -995,6 +1006,11 @@ def CIR_LangAddressSpaceAttr : CIR_EnumAttr<CIR_LangAddressSpace,
   }];
 }
 
+// Used by OpenCL kernel argument metadata for the addr_space field.
+def CIR_LangAddressSpaceArrayAttr
+    : CIR_TypedArrayAttrBase<CIR_LangAddressSpaceAttr,
+                             "language address space array attribute">;
+
 //===----------------------------------------------------------------------===//
 // TargetAddressSpaceAttr
 //===----------------------------------------------------------------------===//
@@ -1013,7 +1029,7 @@ def CIR_TargetAddressSpaceAttr : CIR_Attr< "TargetAddressSpace",
     address spaces are target-specific.
 
     Example:
-    ```mlir
+    ```
     // Target-specific numeric address spaces
     !cir.ptr<!s32i, addrspace(target<1>)>
     !cir.ptr<!s32i, addrspace(target<10>)>
@@ -1039,7 +1055,7 @@ def CIR_ConstComplexAttr : CIR_ValueLikeAttr<"ConstComplex", "const_complex"> {
     The `real` and `imag` parameters must both reference the same type and must
     be either IntAttr or FPAttr.
 
-    ```mlir
+    ```
     %ci = #cir.const_complex<#cir.int<1> : !s32i, #cir.int<2> : !s32i>
         : !cir.complex<!s32i>
     %cf = #cir.const_complex<#cir.fp<1.000000e+00> : !cir.float,
@@ -1186,7 +1202,7 @@ def CIR_CXXCtorAttr : CIR_Attr<"CXXCtor", "cxx_ctor"> {
     - `move`: a move constructor
 
     Example:
-    ```mlir
+    ```
     #cir.cxx_ctor<!rec_a, copy>
     #cir.cxx_ctor<!rec_b, default, trivial>
     ```
@@ -1297,12 +1313,12 @@ def CIR_BitfieldInfoAttr : CIR_Attr<"BitfieldInfo", "bitfield_info"> {
         ```
 
       The CIR representation of the struct `S` might look like:
-      ```mlir
+      ```
         !rec_S = !cir.record<struct "S" packed padded {!u64i, !u16i,
                                                        !cir.array<!u8i x 2>}>
       ```
       And the bitfield info attribute for member `a` would be:
-      ```mlir
+      ```
         #bfi_a = #cir.bitfield_info<name = "a", storage_type = !u64i,
                                     size = 4, offset = 0, is_signed = true>
       ```
@@ -1353,7 +1369,7 @@ def CIR_AddressPointAttr : CIR_Attr<"AddressPoint", "address_point"> {
     within that vtable where the address begins.
 
     Example:
-    ```mlir
+    ```
     cir.global linkonce_odr @_ZTV1B = ...
     ...
     %3 = cir.vtable.address_point(@_ZTV1B,
@@ -1500,7 +1516,7 @@ def CIR_SideEffect : CIR_I32EnumAttr<
 
     Examples:
 
-    ```mlir
+    ```
     %2 = cir.call @add(%0, %1) : (!s32i, !s32i) -> !s32i
     %2 = cir.call @add(%0, %1) : (!s32i, !s32i) -> !s32i side_effect(pure)
     %2 = cir.call @add(%0, %1) : (!s32i, !s32i) -> !s32i side_effect(const)
@@ -1520,7 +1536,7 @@ def CIR_StaticLocalGuardAttr : CIR_Attr<"StaticLocalGuard",
     initialization.
 
     Example:
-    ```mlir
+    ```
     cir.global internal static_local_guard<"_ZGVZ3foovE1x"> @_ZZ3foovE1x = ...
     ```
   }];
@@ -1683,9 +1699,10 @@ def CIR_AnnotationAttr : CIR_Attr<"Annotation", "annotation"> {
 }
 
 def CIR_AnnotationArrayAttr
-    : TypedArrayAttrBase<CIR_AnnotationAttr,
-                         "array of cir.annotation attributes">;
+    : CIR_TypedArrayAttrBase<CIR_AnnotationAttr,
+                             "array of cir.annotation attributes">;
 
+include "clang/CIR/Dialect/IR/CIROpenCLAttrs.td"
 include "clang/CIR/Dialect/IR/CIRCUDAAttrs.td"
 
 #endif // CLANG_CIR_DIALECT_IR_CIRATTRS_TD

@@ -17,6 +17,7 @@ class PerfTimerImpl {
 protected:
   long long CounterStart;
   double PCFreq;
+  uint32_t GranularityPerSecond;
 
 public:
   PerfTimerImpl() : CounterStart(0), PCFreq(0.0) {};

@@ -5,7 +5,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck -check-prefix=GFX9 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 < %s | FileCheck -check-prefix=GFX11 %s
 
-define amdgpu_kernel void @bitcast_i8ptr_v16i8ptr(ptr addrspace(1) %out, ptr addrspace(1) %in) {
+define amdgpu_kernel void @bitcast_i8ptr_v16i8ptr(ptr addrspace(1) %out, ptr addrspace(1) %in) #0 {
 ; SI-LABEL: bitcast_i8ptr_v16i8ptr:
 ; SI:       ; %bb.0: ; %entry
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
@@ -68,3 +68,5 @@ entry:
   store <16 x i8> %0, ptr addrspace(1) %out
   ret void
 }
+
+attributes #0 = { nounwind }

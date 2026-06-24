@@ -47,7 +47,9 @@
 #include "llvm/Linker/Linker.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Mutex.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/Timer.h"
@@ -60,6 +62,10 @@ using namespace clang;
 using namespace llvm;
 
 #define DEBUG_TYPE "codegenaction"
+
+namespace {
+llvm::ManagedStatic<llvm::sys::SmartMutex<true>> TimePassesMutex;
+}
 
 namespace clang {
 class BackendConsumer;
@@ -123,8 +129,11 @@ BackendConsumer::BackendConsumer(CompilerInstance &CI, BackendAction Action,
       Gen(CreateLLVMCodeGen(CI, InFile, C, CoverageInfo)),
       LinkModules(std::move(LinkModules)), CurLinkModule(CurLinkModule) {
   TimerIsEnabled = CodeGenOpts.TimePasses;
-  llvm::TimePassesIsEnabled = CodeGenOpts.TimePasses;
-  llvm::TimePassesPerRun = CodeGenOpts.TimePassesPerRun;
+  {
+    llvm::sys::SmartScopedLock<true> Lock(*TimePassesMutex);
+    llvm::TimePassesIsEnabled = CodeGenOpts.TimePasses;
+    llvm::TimePassesPerRun = CodeGenOpts.TimePassesPerRun;
+  }
   if (CodeGenOpts.TimePasses)
     LLVMIRGeneration.init("irgen", "LLVM IR generation", CI.getTimerGroup());
 }
@@ -912,36 +921,6 @@ CodeGenAction::~CodeGenAction() {
     delete VMContext;
 }
 
-bool CodeGenAction::loadLinkModules(CompilerInstance &CI) {
-  if (!LinkModules.empty())
-    return false;
-
-  for (const CodeGenOptions::BitcodeFileToLink &F :
-       CI.getCodeGenOpts().LinkBitcodeFiles) {
-    auto BCBuf = CI.getFileManager().getBufferForFile(F.Filename);
-    if (!BCBuf) {
-      CI.getDiagnostics().Report(diag::err_cannot_open_file)
-          << F.Filename << BCBuf.getError().message();
-      LinkModules.clear();
-      return true;
-    }
-
-    Expected<std::unique_ptr<llvm::Module>> ModuleOrErr =
-        getOwningLazyBitcodeModule(std::move(*BCBuf), *VMContext);
-    if (!ModuleOrErr) {
-      handleAllErrors(ModuleOrErr.takeError(), [&](ErrorInfoBase &EIB) {
-        CI.getDiagnostics().Report(diag::err_cannot_open_file)
-            << F.Filename << EIB.message();
-      });
-      LinkModules.clear();
-      return true;
-    }
-    LinkModules.push_back({std::move(ModuleOrErr.get()), F.PropagateAttrs,
-                           F.Internalize, F.LinkFlags});
-  }
-  return false;
-}
-
 bool CodeGenAction::hasIRSupport() const { return true; }
 
 void CodeGenAction::EndSourceFileAction() {
@@ -1004,7 +983,8 @@ CodeGenAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   if (BA != Backend_EmitNothing && !OS)
     return nullptr;
 
-  if (loadLinkModules(CI))
+  // Load bitcode modules to link with, if we need to.
+  if (clang::loadLinkModules(CI, *VMContext, LinkModules))
     return nullptr;
   // Load bitcode modules to link with, if we need to.
   if (LinkModules.empty())
@@ -1154,7 +1134,7 @@ CodeGenAction::loadModule(MemoryBufferRef MBRef) {
   }
 
   // Load bitcode modules to link with, if we need to.
-  if (loadLinkModules(CI))
+  if (clang::loadLinkModules(CI, *VMContext, LinkModules))
     return nullptr;
 
   // Handle textual IR and bitcode file with one single module.

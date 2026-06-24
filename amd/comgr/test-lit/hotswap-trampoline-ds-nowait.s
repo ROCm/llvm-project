@@ -1,7 +1,8 @@
-// COM: Test bumpNextWaitDscnt control-flow guard: a DS2 instruction
-// COM: followed directly by s_endpgm with no s_wait_dscnt in the same
-// COM: basic block. The guard must stop at s_endpgm without inserting
-// COM: or corrupting any wait instruction.
+// COM: Test the DS2 split drain when there is no downstream wait: a DS2
+// COM: instruction followed directly by s_endpgm with no s_wait_dscnt in the
+// COM: same basic block. The split still emits its own s_wait_dscnt 0x0 drain
+// COM: after the two single-address ops, so both halves complete even though
+// COM: the original kernel had no wait before s_endpgm.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -13,13 +14,17 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: The DS2 is still expanded (replaced by s_branch to sled), but no
-// COM: s_wait_dscnt appears anywhere — the guard hit s_endpgm and returned.
+// COM: The DS2 is expanded (replaced by s_branch to sled); the sled holds the
+// COM: two single-address loads followed by the split's own s_wait_dscnt 0x0
+// COM: drain. No downstream wait existed, so the only wait is the split drain.
 // DISASM-LABEL: <test_ds_nowait>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
 // DISASM: s_endpgm
-// DISASM-NOT: s_wait_dscnt
+// DISASM: ds_load_b32 v0
+// DISASM: ds_load_b32 v1
+// DISASM: s_wait_dscnt 0x0
+// DISASM: s_branch
 
 // COM: Idempotency
 // RUN: hotswap-rewrite %t.out.elf \
