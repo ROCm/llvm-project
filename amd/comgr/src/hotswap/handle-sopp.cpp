@@ -129,10 +129,14 @@ HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx, Di, "s_cbranch_vcc", Hr);
     if (!FallthroughBb)
       return Hr;
-    Value *VccV = Ctx.Regs.loadVCC(Ctx.B);
+    Value *VccMask = Ctx.Regs.readVCCAsWaveMask(Ctx.B, Ctx.Regs.ExecTy);
+    Value *VccIsZero = Ctx.B.CreateICmpEQ(
+        VccMask, Constant::getNullValue(VccMask->getType()), "vcc_is_zero");
     if (Sop == CanonicalOp::S_CBRANCH_VCCZ)
-      VccV = Ctx.B.CreateNot(VccV, "not_vcc");
-    Ctx.B.CreateCondBr(VccV, TargetBb, FallthroughBb);
+      Ctx.B.CreateCondBr(VccIsZero, TargetBb, FallthroughBb);
+    else
+      Ctx.B.CreateCondBr(Ctx.B.CreateNot(VccIsZero, "vcc_nz"), TargetBb,
+                         FallthroughBb);
     Hr.Handled = true;
     return Hr;
   }
