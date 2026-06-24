@@ -603,8 +603,15 @@ void initializeAMDGPUPreWaveTransformPass(PassRegistry &);
 extern char &AMDGPUPreWaveTransformID;
 
 FunctionPass *createAMDGPUFinalizeISelWaveTransformPass();
-void initializeAMDGPUFinalizeISelWaveTransformPass(PassRegistry &);
+void initializeAMDGPUFinalizeISelWaveTransformLegacyPass(PassRegistry &);
 extern char &AMDGPUFinalizeISelWaveTransformID;
+
+class AMDGPUFinalizeISelWaveTransformPass
+    : public OptionalPassInfoMixin<AMDGPUFinalizeISelWaveTransformPass> {
+public:
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+};
 class AMDGPURewriteAGPRCopyMFMAPass
     : public OptionalPassInfoMixin<AMDGPURewriteAGPRCopyMFMAPass> {
 public:

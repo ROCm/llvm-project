@@ -15,6 +15,7 @@
 #include "SILowerI1Copies.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/InitializePasses.h"
 
@@ -88,49 +89,7 @@ public:
 Vreg1WideningHelper::Vreg1WideningHelper(MachineFunction *MF)
     : PhiLoweringHelper(MF, nullptr, nullptr) {}
 
-// When WaveTransform happens later and CFG is not structurized,
-// We need to apply a different algorithm for lowering vreg_1
-// PhiNodes. Plus maybe some other lowering work needed?
-class AMDGPUFinalizeISelWaveTransform : public MachineFunctionPass {
-public:
-  static char ID;
-
-public:
-  AMDGPUFinalizeISelWaveTransform() : MachineFunctionPass(ID) {
-    initializeAMDGPUFinalizeISelWaveTransformPass(
-        *PassRegistry::getPassRegistry());
-  }
-
-  bool runOnMachineFunction(MachineFunction &MF) override;
-
-  StringRef getPassName() const override {
-    return "AMDGPU Finalize ISel for Wave Transform";
-  }
-
-  void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.addRequired<MachineDominatorTreeWrapperPass>();
-    AU.setPreservesAll();
-    MachineFunctionPass::getAnalysisUsage(AU);
-  }
-
-private:
-};
-
 } // End anonymous namespace.
-
-INITIALIZE_PASS_BEGIN(AMDGPUFinalizeISelWaveTransform, DEBUG_TYPE,
-                      "AMDGPU Finalize ISel Wave Transform", false, false)
-INITIALIZE_PASS_DEPENDENCY(MachineDominatorTreeWrapperPass)
-INITIALIZE_PASS_END(AMDGPUFinalizeISelWaveTransform, DEBUG_TYPE,
-                    "AMDGPU Finalize ISel Wave Transform", false, false)
-
-char AMDGPUFinalizeISelWaveTransform::ID = 0;
-char &llvm::AMDGPUFinalizeISelWaveTransformID =
-    AMDGPUFinalizeISelWaveTransform::ID;
-
-FunctionPass *llvm::createAMDGPUFinalizeISelWaveTransformPass() {
-  return new AMDGPUFinalizeISelWaveTransform();
-}
 
 //===----------------------------------------------------------------------===//
 // MIR-level PHI simplification for uniform (SGPR) PHIs, analogous to
@@ -229,7 +188,7 @@ static bool simplifyMachinePHIs(MachineFunction &MF,
       if (!MRI.hasOneUse(OldReg))
         MRI.clearKillFlags(NewReg);
       MRI.replaceRegWith(OldReg, NewReg);
-      
+
       MI.eraseFromParent();
       Changed = true;
     }
@@ -365,17 +324,78 @@ bool Vreg1WideningHelper::widenVreg1s() {
   return Changed;
 }
 
-bool AMDGPUFinalizeISelWaveTransform::runOnMachineFunction(
-    MachineFunction &MF) {
+namespace {
+
+// When WaveTransform happens later and CFG is not structurized,
+// We need to apply a different algorithm for lowering vreg_1
+// PhiNodes. Plus maybe some other lowering work needed?
+class AMDGPUFinalizeISelWaveTransform {
+  MachineDominatorTree &MDT;
+
+public:
+  AMDGPUFinalizeISelWaveTransform(MachineDominatorTree &MDT) : MDT(MDT) {}
+  bool run(MachineFunction &MF);
+};
+
+class AMDGPUFinalizeISelWaveTransformLegacy : public MachineFunctionPass {
+public:
+  static char ID;
+
+  AMDGPUFinalizeISelWaveTransformLegacy() : MachineFunctionPass(ID) {
+    initializeAMDGPUFinalizeISelWaveTransformLegacyPass(
+        *PassRegistry::getPassRegistry());
+  }
+
+  bool runOnMachineFunction(MachineFunction &MF) override {
+    auto &MDT = getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
+    return AMDGPUFinalizeISelWaveTransform(MDT).run(MF);
+  }
+
+  StringRef getPassName() const override {
+    return "AMDGPU Finalize ISel for Wave Transform";
+  }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.setPreservesCFG();
+    AU.addRequired<MachineDominatorTreeWrapperPass>();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+};
+
+} // End anonymous namespace.
+
+INITIALIZE_PASS_BEGIN(AMDGPUFinalizeISelWaveTransformLegacy, DEBUG_TYPE,
+                      "AMDGPU Finalize ISel Wave Transform", false, false)
+INITIALIZE_PASS_DEPENDENCY(MachineDominatorTreeWrapperPass)
+INITIALIZE_PASS_END(AMDGPUFinalizeISelWaveTransformLegacy, DEBUG_TYPE,
+                    "AMDGPU Finalize ISel Wave Transform", false, false)
+
+char AMDGPUFinalizeISelWaveTransformLegacy::ID = 0;
+char &llvm::AMDGPUFinalizeISelWaveTransformID =
+    AMDGPUFinalizeISelWaveTransformLegacy::ID;
+
+FunctionPass *llvm::createAMDGPUFinalizeISelWaveTransformPass() {
+  return new AMDGPUFinalizeISelWaveTransformLegacy();
+}
+
+bool AMDGPUFinalizeISelWaveTransform::run(MachineFunction &MF) {
   // Only need to run this in SelectionDAG path.
   if (MF.getProperties().hasProperty(
           MachineFunctionProperties::Property::Selected))
     return false;
 
-  auto &MDT = getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
   bool Changed = simplifyMachinePHIs(MF, MDT);
 
   Vreg1WideningHelper Helper(&MF);
   Changed |= Helper.widenVreg1s();
   return Helper.cleanConstrainRegs(Changed);
+}
+
+PreservedAnalyses llvm::AMDGPUFinalizeISelWaveTransformPass::run(
+    MachineFunction &MF, MachineFunctionAnalysisManager &MFAM) {
+  MachineDominatorTree &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
+  if (!AMDGPUFinalizeISelWaveTransform(MDT).run(MF))
+    return PreservedAnalyses::all();
+
+  return getMachineFunctionPassPreservedAnalyses().preserveSet<CFGAnalyses>();
 }
