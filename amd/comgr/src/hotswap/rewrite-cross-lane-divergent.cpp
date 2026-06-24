@@ -1055,7 +1055,8 @@ std::string describeDppCtrl(unsigned Ctrl) {
 // Only called for i32-overloaded DPP.  i64 DPP sites are left to
 // the backend's native lowering (see the header's "@llvm.amdgcn.
 // update.dpp" paragraph for the i32-only scope rationale).
-void rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId) {
+void rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
+                             unsigned SourceWaveSize) {
   IRBuilder<> B(CI);
   B.SetCurrentDebugLocation(CI->getDebugLoc());
   Module *M = CI->getModule();
@@ -1086,19 +1087,15 @@ void rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId) {
                               "pre-flight missed unsupported dpp_ctrl ") +
                         describeDppCtrl(Ctrl));
 
-  // Lane-topology values -- derived once per rewrite, reused across
-  // the three selects below.  `laneId` itself is memoised at the
-  // function level by the caller (`buildTargetLaneId`), so the only
-  // duplication across DPP sites is the and/lshr chain, which
-  // instcombine folds post-pass.
-  Value *WithinRow = B.CreateAnd(LaneId, ConstantInt::get(I32Ty, 0xF),
-                                  "cwd_dpp_within_row");
-  Value *RowIdx =
-      B.CreateAnd(B.CreateLShr(LaneId, ConstantInt::get(I32Ty, 4)),
-                   ConstantInt::get(I32Ty, 3), "cwd_dpp_row");
-  Value *BankIdx =
-      B.CreateAnd(B.CreateLShr(LaneId, ConstantInt::get(I32Ty, 2)),
-                   ConstantInt::get(I32Ty, 3), "cwd_dpp_bank");
+  // Lane-topology values for the source-fetch path.  Both are
+  // derived from the target-wave physical `LaneId` because DPP
+  // source fetch is per-physical-row by ISA definition (the source
+  // selector indexes a lane within the target wave's row).  `LaneId`
+  // itself is memoised at the function level by the caller
+  // (`buildTargetLaneId`), so the only duplication across DPP sites
+  // is the and/lshr chain, which instcombine folds post-pass.
+  Value *WithinRow =
+      B.CreateAnd(LaneId, ConstantInt::get(I32Ty, 0xF), "cwd_dpp_within_row");
   Value *RowBase = B.CreateAnd(LaneId, ConstantInt::get(I32Ty, ~0xFu),
                                 "cwd_dpp_row_base");
 
@@ -1137,20 +1134,35 @@ void rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId) {
   // keeps the rewritten IR minimal for the overwhelmingly common
   // reduction-tree shape the corpus emits, and keeps lit-test
   // FileCheck patterns simple.
+  //
+  // row_mask and bank_mask gate writes by source-wave row/bank index,
+  // not by target-wave physical row/bank.  Clip the target-wave lane
+  // to the source-wave-local range (`LaneId & (SourceWaveSize - 1)`)
+  // before deriving the row/bank index so each source wave within the
+  // wider target wave is gated independently.
   Value *Result;
   if (RowMaskImm == 0xF && BankMaskImm == 0xF) {
     Result = DppVal;
   } else {
+    Value *SourceLaneMask = ConstantInt::get(I32Ty, SourceWaveSize - 1);
+    Value *SourceLane =
+        B.CreateAnd(LaneId, SourceLaneMask, "cwd_dpp_source_lane");
+    Value *SourceRow =
+        B.CreateAnd(B.CreateLShr(SourceLane, ConstantInt::get(I32Ty, 4)),
+                    ConstantInt::get(I32Ty, 3), "cwd_dpp_source_row");
+    Value *SourceBank =
+        B.CreateAnd(B.CreateLShr(SourceLane, ConstantInt::get(I32Ty, 2)),
+                    ConstantInt::get(I32Ty, 3), "cwd_dpp_source_bank");
     Value *RowMaskVal = ConstantInt::get(I32Ty, RowMaskImm);
     Value *BankMaskVal = ConstantInt::get(I32Ty, BankMaskImm);
-    Value *RowActive = B.CreateICmpNE(
-        B.CreateAnd(B.CreateLShr(RowMaskVal, RowIdx),
-                     ConstantInt::get(I32Ty, 1)),
-        ConstantInt::get(I32Ty, 0), "cwd_dpp_row_active");
-    Value *BankActive = B.CreateICmpNE(
-        B.CreateAnd(B.CreateLShr(BankMaskVal, BankIdx),
-                     ConstantInt::get(I32Ty, 1)),
-        ConstantInt::get(I32Ty, 0), "cwd_dpp_bank_active");
+    Value *RowActive =
+        B.CreateICmpNE(B.CreateAnd(B.CreateLShr(RowMaskVal, SourceRow),
+                                   ConstantInt::get(I32Ty, 1)),
+                       ConstantInt::get(I32Ty, 0), "cwd_dpp_row_active");
+    Value *BankActive =
+        B.CreateICmpNE(B.CreateAnd(B.CreateLShr(BankMaskVal, SourceBank),
+                                   ConstantInt::get(I32Ty, 1)),
+                       ConstantInt::get(I32Ty, 0), "cwd_dpp_bank_active");
     Value *LaneActive = B.CreateAnd(RowActive, BankActive,
                                      "cwd_dpp_lane_active");
     Result = B.CreateSelect(LaneActive, DppVal, OldVal, "cwd_dpp_gated");
@@ -1301,8 +1313,8 @@ CrossLaneDivergentRewriteReport rewriteCrossLaneDivergent(
          << "' has an update.dpp site with unsupported "
          << describeDppCtrl(Ctrl)
          << ". The cross-widen rewrite only covers quad_perm, "
-            "row_shl:N and row_shr:N today (all stay within a "
-            "single 16-lane row, hence wave-size-oblivious). "
+            "row_shl:N, row_shr:N and row_xmask:N today (all stay "
+            "within a single 16-lane row, hence wave-size-oblivious). "
             "Extending the supported set requires a per-ctrl "
             "correctness argument in buildDppLaneMap and a new "
             "lit fixture; refusing rather than silently miscompiling. "
@@ -1350,7 +1362,7 @@ CrossLaneDivergentRewriteReport rewriteCrossLaneDivergent(
     // half-rewrite through).  The counter increments only AFTER the
     // rewriter successfully returns; a hypothetical fatal-error (which
     // aborts the whole process) cannot leave the report lying.
-    rewriteUpdateDppI32Call(CI, GetLaneId());
+    rewriteUpdateDppI32Call(CI, GetLaneId(), SourceWaveSize);
     ++Report.DppRewritten;
   }
 
