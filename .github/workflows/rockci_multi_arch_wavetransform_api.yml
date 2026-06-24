@@ -14,8 +14,14 @@
 name: Multi Arch CI
 
 on:
-  push:
-    branches: [amd-feature/wave-transform]
+  pull_request:
+    branches:
+      - amd-feature/wave-transform
+    types:
+      - labeled
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: read
