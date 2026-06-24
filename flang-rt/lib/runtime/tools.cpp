@@ -227,6 +227,7 @@ template <typename P> struct ShallowCopyRankSpecialize<P, maxRank + 1> {
 template <typename P>
 RT_API_ATTRS void ShallowCopyRank(const Descriptor &to, const Descriptor &from,
     bool toIsContiguous, bool fromIsContiguous) {
+  INTERNAL_CHECK(to.rank() == from.rank());
   // Try to call a specialised ShallowCopy variant from rank-1 up to maxRank
   bool specialized{ShallowCopyRankSpecialize<P, 1>::execute(
       to, from, toIsContiguous, fromIsContiguous)};
