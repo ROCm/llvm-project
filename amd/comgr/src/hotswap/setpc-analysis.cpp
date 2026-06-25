@@ -513,6 +513,29 @@ SetPcAnalysis analyseSetPC(ArrayRef<DecodedInst> Insts,
 
   const MCRegisterInfo &MRI = *Mc.RegInfo;
 
+  // Offsets at which a decoded instruction actually begins. An s_set_pc
+  // fallthrough is a candidate block leader only when an instruction
+  // actually starts there: an s_set_pc that is the FINAL decoded
+  // instruction in the kernel extent has its fallthrough at the
+  // one-past-the-end boundary (== KernelEndOffset), where no instruction
+  // lives. Registering that boundary as an ExtraBlockStart makes the
+  // raiser reject the whole kernel with a spurious "target outside the
+  // selected kernel extent" boundary violation. An unconditional s_set_pc
+  // has no fallthrough control-flow edge; the fallthrough leader exists
+  // only to split the block so Phase 2 sees the s_set_pc as the last
+  // instruction of its block, which is moot for the stream's final
+  // instruction. Decode is linear, so any non-terminal fallthrough is
+  // already present here. s_swap_pc always has a live fallthrough (saved
+  // return address) so its ExtraBlockStart is always registered.
+  llvm::DenseSet<uint64_t> InstOffsets;
+  InstOffsets.reserve(Insts.size());
+  for (const DecodedInst &Di : Insts)
+    InstOffsets.insert(Di.Offset);
+  auto RegisterFallthroughLeader = [&](uint64_t Fallthrough) {
+    if (InstOffsets.count(Fallthrough))
+      Result.ExtraBlockStarts.insert(Fallthrough);
+  };
+
   // ---------------------------------------------------------------
   // Phase 1 -- pre-pass: enumerate every swap/set_pc fallthrough as a
   // block leader. This guarantees the per-block walk sees each
@@ -523,12 +546,16 @@ SetPcAnalysis analyseSetPC(ArrayRef<DecodedInst> Insts,
   llvm::DenseSet<uint64_t> MergedBlockStarts(BlockStarts.begin(),
                                              BlockStarts.end());
   for (const DecodedInst &Di : Insts) {
-    if (Di.CanonOp == CanonicalOp::S_SWAP_PC_I64 ||
-        Di.CanonOp == CanonicalOp::S_SET_PC_I64) {
-      uint64_t Fallthrough = Di.Offset + Di.Size;
-      if (MergedBlockStarts.insert(Fallthrough).second)
-        Result.ExtraBlockStarts.insert(Fallthrough);
-    }
+    if (Di.CanonOp != CanonicalOp::S_SWAP_PC_I64 &&
+        Di.CanonOp != CanonicalOp::S_SET_PC_I64)
+      continue;
+    uint64_t Fallthrough = Di.Offset + Di.Size;
+    if (!MergedBlockStarts.insert(Fallthrough).second)
+      continue;
+    if (Di.CanonOp == CanonicalOp::S_SET_PC_I64)
+      RegisterFallthroughLeader(Fallthrough);
+    else
+      Result.ExtraBlockStarts.insert(Fallthrough);
   }
 
   // ---------------------------------------------------------------
@@ -793,7 +820,7 @@ SetPcAnalysis analyseSetPC(ArrayRef<DecodedInst> Insts,
           Result.SetpcSites[Di.Offset] = std::move(Info);
           continue;
         }
-        Result.ExtraBlockStarts.insert(Di.Offset + Di.Size);
+        RegisterFallthroughLeader(Di.Offset + Di.Size);
         PcChain *Chain = State.findPc(*SrcIdx);
         if (Chain && Chain->LowAddDone) {
           // DirectA intra-block.
