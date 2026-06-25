@@ -16,9 +16,11 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/VirtualFileSystem.h"
 
@@ -84,11 +86,14 @@ void writeConfigToJSON(InstrumentationConfig &IConf, StringRef OutputFile,
 
     J.attributeBegin(InstrumentationLocation::getKindStr(Kind));
     J.objectBegin();
-    for (auto &ChoiceIt : KindChoices) {
-      J.attributeBegin(ChoiceIt.getKey());
+    for (auto &[Name, Choice] : KindChoices) {
+      J.attributeBegin(Name);
       J.objectBegin();
-      J.attribute("enabled", ChoiceIt.second->Enabled);
-      for (auto &ArgIt : ChoiceIt.second->IRTArgs) {
+      J.attribute("enabled", Choice->Enabled);
+      J.attribute("filter", Choice->Filter);
+      J.attribute("filter.description",
+                  "Static property filter to exclude instrumentation.");
+      for (auto &ArgIt : Choice->IRTArgs) {
         J.attribute(ArgIt.Name, ArgIt.Enabled);
         if ((ArgIt.Flags & IRTArg::REPLACABLE) ||
             (ArgIt.Flags & IRTArg::REPLACABLE_CUSTOM))
@@ -160,7 +165,7 @@ bool readConfigFromJSON(InstrumentationConfig &IConf, StringRef InputFile,
               BO->setString(IConf.SS.save(*V));
             } else {
               Ctx.diagnose(DiagnosticInfoInstrumentation(
-                  Twine("configuration key '") + ObjIt.first.str() +
+                  Twine("configuration key '") + StringRef(ObjIt.first) +
                       Twine("' expects a string, value ignored"),
                   DS_Warning));
             }
@@ -170,7 +175,7 @@ bool readConfigFromJSON(InstrumentationConfig &IConf, StringRef InputFile,
               BO->setBool(*V);
             else {
               Ctx.diagnose(DiagnosticInfoInstrumentation(
-                  Twine("configuration key '") + ObjIt.first.str() +
+                  Twine("configuration key '") + StringRef(ObjIt.first) +
                       Twine("' expects a boolean, value ignored"),
                   DS_Warning));
             }
@@ -178,7 +183,7 @@ bool readConfigFromJSON(InstrumentationConfig &IConf, StringRef InputFile,
           }
         } else if (!StringRef(ObjIt.first).ends_with(".description")) {
           Ctx.diagnose(DiagnosticInfoInstrumentation(
-              Twine("configuration key '") + ObjIt.first.str() +
+              Twine("configuration key '") + StringRef(ObjIt.first) +
                   Twine("' not found and ignored"),
               DS_Warning));
         }
@@ -200,20 +205,26 @@ bool readConfigFromJSON(InstrumentationConfig &IConf, StringRef InputFile,
         Ctx.diagnose(DiagnosticInfoInstrumentation(
             Twine("malformed JSON configuration, expected an object matching "
                   "an instrumentor choice, got ") +
-                ObjIt.first.str(),
+                StringRef(ObjIt.first),
             DS_Warning));
         continue;
       }
       SeenIOs.insert(IO);
       StringMap<bool> ValueMap, ReplaceMap;
+      StringRef FilterStr;
       for (auto &InnerObjIt : *InnerObj) {
         auto Name = StringRef(InnerObjIt.first);
-        if (Name.consume_back(".replace"))
+        if (Name == "filter") {
+          if (auto V = InnerObjIt.second.getAsString())
+            FilterStr = IConf.SS.save(*V);
+        } else if (Name.consume_back(".replace")) {
           ReplaceMap[Name] = InnerObjIt.second.getAsBoolean().value_or(false);
-        else
+        } else {
           ValueMap[Name] = InnerObjIt.second.getAsBoolean().value_or(false);
+        }
       }
       IO->Enabled = ValueMap["enabled"];
+      IO->Filter = FilterStr;
       for (auto &IRArg : IO->IRTArgs) {
         IRArg.Enabled = ValueMap[IRArg.Name];
         if (!ReplaceMap.lookup(IRArg.Name)) {
@@ -228,6 +239,41 @@ bool readConfigFromJSON(InstrumentationConfig &IConf, StringRef InputFile,
     for (auto &It : IChoiceMap)
       if (!SeenIOs.count(It.second))
         It.second->Enabled = false;
+
+  return true;
+}
+
+bool readConfigPathsFile(StringRef InputFile, cl::list<std::string> &Configs,
+                         LLVMContext &Ctx, vfs::FileSystem &FS) {
+  if (InputFile.empty())
+    return true;
+
+  auto BufferOrErr = setupMemoryBuffer(InputFile, FS);
+  if (Error E = BufferOrErr.takeError()) {
+    Ctx.diagnose(DiagnosticInfoInstrumentation(
+        Twine("failed to open instrumentor configuration paths file for "
+              "reading: ") +
+            toString(std::move(E)),
+        DS_Warning));
+    return false;
+  }
+
+  StringRef InputFilePath(sys::path::parent_path(InputFile));
+
+  auto Buffer = std::move(BufferOrErr.get());
+  StringRef Content = Buffer->getBuffer();
+  StringRef EOL = Content.detectEOL();
+  do {
+    auto [LHS, RHS] = Content.split(EOL);
+    std::string ConfigPath = LHS.trim().str();
+    if (!sys::path::is_absolute(ConfigPath)) {
+      SmallString<128> InputFilePathStringVec(InputFilePath);
+      sys::path::append(InputFilePathStringVec, ConfigPath);
+      ConfigPath = InputFilePathStringVec.c_str();
+    }
+    Configs.push_back(ConfigPath);
+    Content = RHS.trim();
+  } while (!Content.empty());
 
   return true;
 }

@@ -61,38 +61,7 @@ define i32 @test_tuple(<16 x i64> %0) {
 ; GFX900-NEXT:    s_waitcnt vmcnt(0)
 ; GFX900-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:60 ; 4-byte Folded Spill
 ; GFX900-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15_vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23_vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr1 killed $vgpr32 killed $exec
 ; GFX900-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:60 ; 4-byte Folded Reload
-; GFX900-NEXT:    ; kill: def $vgpr2 killed $vgpr61 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr3 killed $vgpr60 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr4 killed $vgpr59 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr5 killed $vgpr58 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr6 killed $vgpr57 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr7 killed $vgpr56 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr8 killed $vgpr47 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr9 killed $vgpr46 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr10 killed $vgpr45 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr11 killed $vgpr44 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr12 killed $vgpr43 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr13 killed $vgpr42 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr14 killed $vgpr41 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr15 killed $vgpr40 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr16 killed $vgpr55 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr17 killed $vgpr54 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr18 killed $vgpr53 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr19 killed $vgpr52 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr20 killed $vgpr51 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr21 killed $vgpr50 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr22 killed $vgpr49 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr23 killed $vgpr48 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr24 killed $vgpr39 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr25 killed $vgpr38 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr26 killed $vgpr37 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr27 killed $vgpr36 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr28 killed $vgpr35 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr29 killed $vgpr34 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr30 killed $vgpr33 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr31 killed $vgpr32 killed $exec
 ; GFX900-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX900-NEXT:    buffer_load_dword v61, off, s[0:3], s32 offset:4 ; 4-byte Folded Reload
 ; GFX900-NEXT:    buffer_load_dword v60, off, s[0:3], s32 offset:8 ; 4-byte Folded Reload
@@ -162,38 +131,7 @@ define i32 @test_tuple(<16 x i64> %0) {
 ; GFX906-NEXT:    s_waitcnt vmcnt(0)
 ; GFX906-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:60 ; 4-byte Folded Spill
 ; GFX906-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15_vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23_vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr1 killed $vgpr32 killed $exec
 ; GFX906-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:60 ; 4-byte Folded Reload
-; GFX906-NEXT:    ; kill: def $vgpr2 killed $vgpr61 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr3 killed $vgpr60 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr4 killed $vgpr59 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr5 killed $vgpr58 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr6 killed $vgpr57 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr7 killed $vgpr56 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr8 killed $vgpr47 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr9 killed $vgpr46 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr10 killed $vgpr45 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr11 killed $vgpr44 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr12 killed $vgpr43 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr13 killed $vgpr42 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr14 killed $vgpr41 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr15 killed $vgpr40 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr16 killed $vgpr55 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr17 killed $vgpr54 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr18 killed $vgpr53 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr19 killed $vgpr52 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr20 killed $vgpr51 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr21 killed $vgpr50 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr22 killed $vgpr49 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr23 killed $vgpr48 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr24 killed $vgpr39 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr25 killed $vgpr38 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr26 killed $vgpr37 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr27 killed $vgpr36 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr28 killed $vgpr35 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr29 killed $vgpr34 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr30 killed $vgpr33 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr31 killed $vgpr32 killed $exec
 ; GFX906-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX906-NEXT:    buffer_load_dword v61, off, s[0:3], s32 offset:4 ; 4-byte Folded Reload
 ; GFX906-NEXT:    buffer_load_dword v60, off, s[0:3], s32 offset:8 ; 4-byte Folded Reload
@@ -262,40 +200,9 @@ define i32 @test_tuple(<16 x i64> %0) {
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_accvgpr_write_b32 a14, v1 ; Reload Reuse
 ; GFX908-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15_vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23_vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr1 killed $vgpr32 killed $exec
 ; GFX908-NEXT:    v_accvgpr_read_b32 v32, a13 ; Reload Reuse
-; GFX908-NEXT:    ; kill: def $vgpr2 killed $vgpr32 killed $exec
 ; GFX908-NEXT:    s_nop 1
 ; GFX908-NEXT:    v_accvgpr_read_b32 v32, a14 ; Reload Reuse
-; GFX908-NEXT:    ; kill: def $vgpr3 killed $vgpr60 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr4 killed $vgpr59 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr5 killed $vgpr58 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr6 killed $vgpr57 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr7 killed $vgpr56 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr8 killed $vgpr47 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr9 killed $vgpr46 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr10 killed $vgpr45 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr11 killed $vgpr44 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr12 killed $vgpr43 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr13 killed $vgpr42 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr14 killed $vgpr41 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr15 killed $vgpr40 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr16 killed $vgpr55 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr17 killed $vgpr54 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr18 killed $vgpr53 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr19 killed $vgpr52 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr20 killed $vgpr51 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr21 killed $vgpr50 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr22 killed $vgpr49 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr23 killed $vgpr48 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr24 killed $vgpr39 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr25 killed $vgpr38 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr26 killed $vgpr37 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr27 killed $vgpr36 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr28 killed $vgpr35 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr29 killed $vgpr34 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr30 killed $vgpr33 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr31 killed $vgpr32 killed $exec
 ; GFX908-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX908-NEXT:    v_accvgpr_read_b32 v60, a12 ; Reload Reuse
 ; GFX908-NEXT:    v_accvgpr_read_b32 v59, a11 ; Reload Reuse
@@ -363,38 +270,7 @@ define i32 @test_tuple(<16 x i64> %0) {
 ; GFX90a-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90a-NEXT:    v_accvgpr_write_b32 a14, v1 ; Reload Reuse
 ; GFX90a-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15_vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23_vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr1 killed $vgpr32 killed $exec
 ; GFX90a-NEXT:    v_accvgpr_read_b32 v32, a14 ; Reload Reuse
-; GFX90a-NEXT:    ; kill: def $vgpr2 killed $vgpr61 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr3 killed $vgpr60 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr4 killed $vgpr59 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr5 killed $vgpr58 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr6 killed $vgpr57 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr7 killed $vgpr56 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr8 killed $vgpr47 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr9 killed $vgpr46 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr10 killed $vgpr45 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr11 killed $vgpr44 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr12 killed $vgpr43 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr13 killed $vgpr42 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr14 killed $vgpr41 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr15 killed $vgpr40 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr16 killed $vgpr55 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr17 killed $vgpr54 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr18 killed $vgpr53 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr19 killed $vgpr52 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr20 killed $vgpr51 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr21 killed $vgpr50 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr22 killed $vgpr49 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr23 killed $vgpr48 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr24 killed $vgpr39 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr25 killed $vgpr38 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr26 killed $vgpr37 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr27 killed $vgpr36 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr28 killed $vgpr35 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr29 killed $vgpr34 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr30 killed $vgpr33 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr31 killed $vgpr32 killed $exec
 ; GFX90a-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX90a-NEXT:    v_accvgpr_read_b32 v61, a13 ; Reload Reuse
 ; GFX90a-NEXT:    v_accvgpr_read_b32 v60, a12 ; Reload Reuse

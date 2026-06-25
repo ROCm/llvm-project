@@ -256,4 +256,4 @@ bb43:
   unreachable
 }
 
-attributes #0 = { noinline optnone }
+attributes #0 = { noinline optnone nounwind }

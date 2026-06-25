@@ -11,6 +11,10 @@
 # For push to main branch, all AMD families will built and tested from `amdgpu_family_matrix.py`.
 #
 # Note: If a test machine is not available for a specific AMD GPU family in `amdgpu_family_matrix.py`, tests will be skipped.
+#
+# Presubmit is skipped only when ALL apply: label `ci:skip` AND the PR matches the
+# automated LLVM_MAIN_REVISION bump (title starts with that phrase OR body contains
+# the automation marker). Arbitrary PRs with only `ci:skip` still run full CI.
 
 name: CI amd-staging
 
@@ -67,6 +71,19 @@ concurrency:
 
 jobs:
   setup:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request &&
+       !(
+         contains(github.event.pull_request.labels.*.name, 'ci:skip') &&
+         (
+           contains(github.event.pull_request.title, 'Update LLVM_MAIN_REVISION') ||
+           (
+             contains(github.event.pull_request.body, 'Automated update of') &&
+             contains(github.event.pull_request.body, 'LLVM_MAIN_REVISION')
+           )
+         )
+       ))
     uses: ./.github/workflows/setup.yml
     with:
       build_variant: "release"

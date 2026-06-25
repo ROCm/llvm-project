@@ -1,22 +1,22 @@
-// RUN: %clang_cc1 -triple amdgcn-unknown-unknown -target-cpu gfx950         -S -verify -o - %s
-// RUN: %clang_cc1 -triple amdgcn-unknown-unknown -target-cpu gfx9-4-generic -S -verify -o - %s
+// RUN: %clang_cc1 -cl-std=CL2.0 -triple amdgcn-unknown-unknown -target-cpu gfx950         -S -verify -o - %s
 // REQUIRES: amdgpu-registered-target
 
 typedef __attribute__((__vector_size__(4 * sizeof(unsigned int)))) unsigned int v4u32;
 typedef v4u32 __global *global_ptr_to_v4u32;
+typedef v4u32 __private *private_ptr_to_v4u32;
 
-void test_amdgcn_global_store_b128_00(v4u32 *ptr, v4u32 data, const char* scope) {
-  __builtin_amdgcn_global_store_b128(ptr, data, "");  //expected-error{{passing '__private v4u32 *__private' to parameter of type 'unsigned int __global * __attribute__((ext_vector_type(4)))' changes address space of pointer}}
+void test_amdgcn_av_store_b128_bad_ptr(private_ptr_to_v4u32 ptr, v4u32 data) {
+  __builtin_amdgcn_av_store_b128(ptr, data, __MEMORY_SCOPE_SYSTEM);  //expected-error{{builtin requires a global or generic pointer}}
 }
 
-void test_amdgcn_global_store_b128_01(global_ptr_to_v4u32 ptr, v4u32 data, const char* scope) {
-  __builtin_amdgcn_global_store_b128(ptr, data, scope);  //expected-error{{expression is not a string literal}}
+void test_amdgcn_av_store_b128_bad_scope(global_ptr_to_v4u32 ptr, v4u32 data) {
+  __builtin_amdgcn_av_store_b128(ptr, data, 42);  //expected-error{{synchronization scope argument to atomic operation is invalid}}
 }
 
-v4u32 test_amdgcn_global_load_b128_00(v4u32 *ptr, const char* scope) {
-  return __builtin_amdgcn_global_load_b128(ptr, "");  //expected-error{{passing '__private v4u32 *__private' to parameter of type 'unsigned int __global * __attribute__((ext_vector_type(4)))' changes address space of pointer}}
+v4u32 test_amdgcn_av_load_b128_bad_ptr(private_ptr_to_v4u32 ptr) {
+  return __builtin_amdgcn_av_load_b128(ptr, __MEMORY_SCOPE_SYSTEM);  //expected-error{{builtin requires a global or generic pointer}}
 }
 
-v4u32 test_amdgcn_global_load_b128_01(global_ptr_to_v4u32 ptr, const char* scope) {
-  return __builtin_amdgcn_global_load_b128(ptr, scope);  //expected-error{{expression is not a string literal}}
+v4u32 test_amdgcn_av_load_b128_bad_scope(global_ptr_to_v4u32 ptr) {
+  return __builtin_amdgcn_av_load_b128(ptr, 42);  //expected-error{{synchronization scope argument to atomic operation is invalid}}
 }

@@ -1,9 +1,7 @@
 ! Tests delayed privatization for `targets ... private(..)` for allocatables.
 
-! RUN: %flang_fc1 -emit-hlfir -fopenmp -mmlir --enable-delayed-privatization-staging \
-! RUN:   -o - %s 2>&1 | FileCheck %s
-! RUN: bbc -emit-hlfir -fopenmp --enable-delayed-privatization-staging -o - %s 2>&1 \
-! RUN:   | FileCheck %s
+! RUN: %flang_fc1 -emit-hlfir -fopenmp -o - %s 2>&1 | FileCheck %s
+! RUN: bbc -emit-hlfir -fopenmp -o - %s 2>&1 | FileCheck %s
 
 subroutine target_allocatable(lb, ub, l)
   implicit none
@@ -157,7 +155,7 @@ end subroutine target_allocatable
 ! CHECK-SAME:       %[[REAL_ARR_DESC_MAP]] -> %[[MAPPED_ARG2:[^,]+]]
 ! CHECK-SAME:       %[[CHAR_VAR_DESC_MAP2]] -> %[[MAPPED_ARG3:[^,]+]]
 ! CHECK-SAME:       %[[MAPPED_MI0]] -> %[[MAPPED_ARG0:.[^,]+]]
-! CHECK-SAME:                           !fir.ref<!fir.box<!fir.heap<i32>>>, !fir.ref<!fir.box<!fir.array<?xf32>>>, !fir.ref<!fir.boxchar<1>>, !fir.ref<i32>, !fir.ref<!fir.box<!fir.heap<i32>>>, !fir.ref<!fir.box<!fir.array<?xf32>>>, !fir.ref<!fir.boxchar<1>>, !fir.llvm_ptr<!fir.ref<i32>>, !fir.llvm_ptr<!fir.ref<!fir.array<?xf32>>>, !fir.llvm_ptr<!fir.ref<!fir.char<1,?>>>
+! CHECK-SAME:       !fir.ref<!fir.box<!fir.heap<i32>>>, !fir.ref<!fir.box<!fir.array<?xf32>>>, !fir.ref<!fir.boxchar<1>>, !fir.ref<i32>, !fir.ref<!fir.box<!fir.heap<i32>>>, !fir.ref<!fir.box<!fir.array<?xf32>>>, !fir.ref<!fir.boxchar<1>>, !fir.llvm_ptr<!fir.ref<i32>>, !fir.llvm_ptr<!fir.ref<!fir.array<?xf32>>>, !fir.llvm_ptr<!fir.ref<!fir.char<1,?>>>
 ! CHECK-SAME:     private(
 ! CHECK-SAME:       @[[ALLOC_PRIVATIZER_SYM]] %{{[^[:space:]]+}}#0 -> %[[ALLOC_ARG:[^,]+]] [map_idx=0],
 ! CHECK-SAME:       @[[REAL_PRIVATIZER_SYM]] %{{[^[:space:]]+}}#0 -> %[[REAL_ARG:[^,]+]],

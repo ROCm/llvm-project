@@ -2,7 +2,7 @@
 ; RUN: llc -mtriple=amdgcn-amdhsa -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
 ; RUN: opt -S -si-annotate-control-flow -mtriple=amdgcn-amdhsa -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=SI-OPT %s
 
-define hidden void @widget() {
+define hidden void @widget() #0 {
 ; GCN-LABEL: widget:
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -191,7 +191,7 @@ bb12:                                             ; preds = %bb9, %bb2
 declare hidden float @wibble() local_unnamed_addr
 
 
-define hidden void @blam() {
+define hidden void @blam() #0 {
 ; SI-OPT-LABEL: @blam(
 ; SI-OPT-NEXT:  bb:
 ; SI-OPT-NEXT:    [[TMP:%.*]] = load float, ptr null, align 16
@@ -522,3 +522,4 @@ declare i32 @llvm.amdgcn.workitem.id.x()
 
 declare hidden float @spam()
 
+attributes #0 = { nounwind }

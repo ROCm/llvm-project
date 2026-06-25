@@ -4,7 +4,7 @@
 @foo_a = alias void (ptr), ptr @foo
 @bar_a = alias void (ptr), ptr @foo_a
 
-define void @foo() {
+define void @foo() #0 {
 ; CHECK-LABEL: foo:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -13,7 +13,7 @@ entry:
   ret void
 }
 
-define void @bar() {
+define void @bar() #0 {
 ; CHECK-LABEL: bar:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -54,3 +54,5 @@ entry:
 ; CHECK: .set foo_a, foo
 ; CHECK: .set bar_a, foo_a
 ; UTC_ARGS: --enable
+
+attributes #0 = { nounwind }

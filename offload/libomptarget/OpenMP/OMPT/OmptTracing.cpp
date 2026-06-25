@@ -392,10 +392,9 @@ ompt_record_ompt_t *Interface::stopTargetDataAllocTrace(int64_t DeviceId,
     return nullptr;
 
   setTraceRecordCommon(DataPtr, ompt_callback_target_data_op);
-  setTraceRecordTargetDataOp(&DataPtr->record.target_data_op,
-                             ompt_target_data_alloc, HstPtrBegin,
-                             /*SrcDeviceNum=*/omp_get_initial_device(),
-                             *TgtPtrBegin, DeviceId, Size, Code);
+  setTraceRecordTargetDataOp(
+      &DataPtr->record.target_data_op, ompt_target_data_alloc, HstPtrBegin,
+      /*SrcDeviceNum=*/omp_initial_device, *TgtPtrBegin, DeviceId, Size, Code);
 
   // The trace record has been created, mark it ready for delivery to the tool
   TRM->setTRStatus(DataPtr, OmptTracingBufferMgr::TR_ready);
@@ -426,7 +425,8 @@ ompt_record_ompt_t *Interface::stopTargetDataDeleteTrace(int64_t DeviceId,
   setTraceRecordTargetDataOp(&DataPtr->record.target_data_op,
                              ompt_target_data_delete, TgtPtrBegin, DeviceId,
                              /*DstAddr=*/nullptr,
-                             /*DstDeviceNum=*/-1, /*Bytes=*/0, Code);
+                             /*DstDeviceNum=*/omp_initial_device, /*Bytes=*/0,
+                             Code);
 
   // The trace record has been created, mark it ready for delivery to the tool
   TRM->setTRStatus(DataPtr, OmptTracingBufferMgr::TR_ready);

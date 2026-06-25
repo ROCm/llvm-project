@@ -11,6 +11,8 @@
 #==============================================================================#
 # Temp files created by most text editors.
 *~
+# Emacs lock files
+.#*
 # Merge files created by git.
 *.orig
 # Reject files created by patch.
@@ -66,6 +68,14 @@ AGENTS.md
 .cursor
 .cursorignore
 .cursorindexingignore
+/.opencode/
+/.nvim/
+/.nvimlog
+/dhw-extension/
+/install*/
+/tmp/
+# Documentation artifacts
+_toc.yml
 
 #==============================================================================#
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
@@ -88,3 +98,5 @@ pythonenv*
 /clang/utils/analyzer/projects/*/RefScanBuildResults
 # automodapi puts generated documentation files here.
 /lldb/docs/python_api/
+# documentation artifacts
+/_build

@@ -142,6 +142,7 @@ define amdgpu_vs half @fmax_f16(half inreg %a, half inreg %b) {
    ret half %max
 }
 
+; TODO: Fix GISEL RB legalize rule for amdgcn_cvt_pkrtz to select s_cvt_pk_rtz_f16_f32
 define amdgpu_vs <2 x half> @s_cvt_pkrtz_v2f16_f32(float inreg %x, float inreg %y) {
 ; CHECK-LABEL: s_cvt_pkrtz_v2f16_f32:
 ; CHECK:       ; %bb.0:

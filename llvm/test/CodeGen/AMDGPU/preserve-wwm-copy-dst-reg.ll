@@ -236,9 +236,9 @@ define void @preserve_wwm_copy_dstreg(ptr %parg0, ptr %parg1, ptr %parg2) #0 {
 ; GFX906-NEXT:    v_readlane_b32 s10, v36, 4
 ; GFX906-NEXT:    v_readlane_b32 s16, v36, 22
 ; GFX906-NEXT:    v_readlane_b32 s12, v36, 3
-; GFX906-NEXT:    v_mov_b32_e32 v31, v40
 ; GFX906-NEXT:    v_readlane_b32 s13, v36, 2
 ; GFX906-NEXT:    v_readlane_b32 s14, v36, 1
+; GFX906-NEXT:    v_mov_b32_e32 v31, v40
 ; GFX906-NEXT:    v_readlane_b32 s15, v36, 0
 ; GFX906-NEXT:    v_readlane_b32 s5, v36, 11
 ; GFX906-NEXT:    v_readlane_b32 s7, v36, 9
@@ -616,9 +616,9 @@ define void @preserve_wwm_copy_dstreg(ptr %parg0, ptr %parg1, ptr %parg2) #0 {
 ; GFX908-NEXT:    v_readlane_b32 s10, v36, 4
 ; GFX908-NEXT:    v_readlane_b32 s16, v36, 22
 ; GFX908-NEXT:    v_readlane_b32 s12, v36, 3
-; GFX908-NEXT:    v_mov_b32_e32 v31, v40
 ; GFX908-NEXT:    v_readlane_b32 s13, v36, 2
 ; GFX908-NEXT:    v_readlane_b32 s14, v36, 1
+; GFX908-NEXT:    v_mov_b32_e32 v31, v40
 ; GFX908-NEXT:    v_readlane_b32 s15, v36, 0
 ; GFX908-NEXT:    v_readlane_b32 s5, v36, 11
 ; GFX908-NEXT:    v_readlane_b32 s7, v36, 9
@@ -824,5 +824,5 @@ define void @preserve_wwm_copy_dstreg(ptr %parg0, ptr %parg1, ptr %parg2) #0 {
 
 declare void @foo()
 
-attributes #0 = { "amdgpu-num-vgpr"="42" "amdgpu-num-sgpr"="40"}
+attributes #0 = { nounwind "amdgpu-num-vgpr"="42" "amdgpu-num-sgpr"="40"}
 

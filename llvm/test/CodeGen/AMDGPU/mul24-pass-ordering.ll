@@ -69,7 +69,7 @@ define void @lsr_order_mul24_1(i32 %arg, i32 %arg1, i32 %arg2, ptr addrspace(3) 
 ; GFX9-NEXT:    v_add_u32_e32 v4, v4, v0
 ; GFX9-NEXT:    v_cndmask_b32_e64 v5, 0, -1, vcc
 ; GFX9-NEXT:    v_and_b32_e32 v6, 0xffffff, v6
-; GFX9-NEXT:    v_rcp_iflag_f32_e32 v7, v7
+; GFX9-NEXT:    v_rcp_f32_e32 v7, v7
 ; GFX9-NEXT:    v_lshl_add_u32 v8, v4, 2, v3
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v9, 2, v2
 ; GFX9-NEXT:    v_add_u32_e32 v12, v17, v12
