@@ -404,18 +404,10 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
     Patched += VT.applyWmmaHazardPatch(Ctx);
   if (VT.applyVop3px2Src2Fix)
     Patched += VT.applyVop3px2Src2Fix(Ctx);
-  // The VOP3PX2 wrap pass must run after the K=128 splitter (it relies
-  // on the splitter having already eliminated 32x16x128_f4 and emitted
-  // f8f6f4 into trampolines). The wrap pass scans both Decoded[] and
-  // trampoline bodies and prepends an LD_SCALE prefix to each standalone
-  // f8f6f4 WMMA, turning it into a VOP3PX2 that the trap handler's
-  // rewind path can safely retry.
+  // Must run after per-instruction splitters so their trampoline bodies can be
+  // wrapped before trampoline branches are finalized.
   if (VT.applyVop3pxWrapPatch)
     Patched += VT.applyVop3pxWrapPatch(Ctx);
-  // sethalt-fix: defensive in-place s_sethalt -> s_nop. LLVM almost
-  // never emits s_sethalt (only via int_amdgcn_s_sethalt in debug
-  // builds), so this pass is dormant on production code; it exists to
-  // catch hand-written assembly / inline asm that ships s_sethalt.
   if (VT.applySethaltFixPatch)
     Patched += VT.applySethaltFixPatch(Ctx);
 

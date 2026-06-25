@@ -87,21 +87,6 @@ constexpr StringLiteral AlreadyWrappedScale16 =
 // garbage.
 constexpr StringLiteral F4Mnemonic = "v_wmma_f32_32x16x128_f4";
 
-// Byte-level WMMA detection (high two bytes of DWORD 0): 0xCC33.
-constexpr uint8_t WmmaOpcodeByte2 = 0x33;
-constexpr uint8_t WmmaOpcodeByte3 = 0xCC;
-// LD_SCALE prefix detection (high two bytes of DWORD 0): 0xCC35.
-constexpr uint8_t ScalePrefixByte2 = 0x35;
-constexpr uint8_t ScalePrefixByte3 = 0xCC;
-
-bool isWmmaBytes(const uint8_t *P) {
-  return P[2] == WmmaOpcodeByte2 && P[3] == WmmaOpcodeByte3;
-}
-
-bool isLdScaleBytes(const uint8_t *P) {
-  return P[2] == ScalePrefixByte2 && P[3] == ScalePrefixByte3;
-}
-
 // Per-instruction patches (e.g. the K=128 splitter) record their rewrites
 // by appending a Trampoline whose `OriginalOffset` points at the source
 // instruction. The actual text-byte overwrite (s_branch over the original)
@@ -134,15 +119,42 @@ Trampoline buildWrappedTrampoline(const uint8_t *OriginalWmmaBytes,
   T.Bytes.insert(T.Bytes.end(), OriginalWmmaBytes,
                  OriginalWmmaBytes + WmmaInstSize);
 
-  SmallVector<uint8_t> Branch =
-      LS.encodeSBranch(TrampTextOffset + T.Bytes.size(),
-                       OriginalOffset + OriginalSize);
+  SmallVector<uint8_t> Branch = LS.encodeSBranch(
+      TrampTextOffset + T.Bytes.size(), OriginalOffset + OriginalSize);
   if (Branch.empty()) {
     T.Bytes.clear();
     return T;
   }
   T.Bytes.insert(T.Bytes.end(), Branch.begin(), Branch.end());
   return T;
+}
+
+std::string getMnemonic(const LLVMState &LS, const MCInst &Inst) {
+  if (LS.MCIP) {
+    std::pair<const char *, uint64_t> Mnem = LS.MCIP->getMnemonic(Inst);
+    if (Mnem.first)
+      return StringRef(Mnem.first).rtrim().str();
+  }
+  return LS.MCII->getName(Inst.getOpcode()).str();
+}
+
+bool decodeTrampolineInstruction(const LLVMState &LS, ArrayRef<uint8_t> Body,
+                                 size_t Pos, InternalDecodedInst &DI) {
+  if (Pos >= Body.size())
+    return false;
+
+  ArrayRef<uint8_t> Bytes = Body.drop_front(Pos);
+  uint64_t InstSize = 0;
+  MCDisassembler::DecodeStatus Status =
+      LS.MCD->getInstruction(DI.Inst, InstSize, Bytes, Pos, nulls());
+  if (Status == MCDisassembler::Fail || InstSize == 0 ||
+      Pos + InstSize > Body.size())
+    return false;
+
+  DI.Offset = Pos;
+  DI.Size = static_cast<uint32_t>(InstSize);
+  DI.Mnemonic = getMnemonic(LS, DI.Inst);
+  return true;
 }
 
 // Pass 1: wrap user-written standalone WMMAs found in Decoded[] whose
@@ -155,9 +167,9 @@ uint32_t wrapDecodedInstructions(PatchContext &Ctx) {
     if (DI.Mnemonic != StandaloneWmma)
       continue;
     if (DI.Size != WmmaInstSize) {
-      log() << "hotswap: error: VOP3PX wrap: " << DI.Mnemonic
-            << " at offset 0x" << utohexstr(DI.Offset)
-            << " has unexpected size " << DI.Size << "\n";
+      log() << "hotswap: error: VOP3PX wrap: " << DI.Mnemonic << " at offset 0x"
+            << utohexstr(DI.Offset) << " has unexpected size " << DI.Size
+            << "\n";
       continue;
     }
     if (DI.Offset + DI.Size > Ctx.TextSize)
@@ -191,7 +203,7 @@ uint32_t wrapDecodedInstructions(PatchContext &Ctx) {
   return Patched;
 }
 
-// Pass 2: scan trampoline bodies for splitter-emitted standalone WMMAs
+// Pass 2: decode trampoline bodies for splitter-emitted standalone WMMAs
 // and prepend the LD_SCALE prefix in-place. Trampoline layout (per
 // buildTrampoline / buildWrappedTrampoline):
 //   [replacement bytes ... ][branch-back 4 bytes]
@@ -205,15 +217,27 @@ uint32_t wrapTrampolineInstructions(PatchContext &Ctx) {
       continue;
     size_t BodyEnd = T.Bytes.size() - MinInstSize;
     size_t Pos = 0;
-    while (Pos + WmmaInstSize <= BodyEnd) {
-      const uint8_t *P = T.Bytes.data() + Pos;
-      if (!isWmmaBytes(P)) {
+    while (Pos < BodyEnd) {
+      InternalDecodedInst DI;
+      ArrayRef<uint8_t> Body(T.Bytes.data(), BodyEnd);
+      if (!decodeTrampolineInstruction(Ctx.LS, Body, Pos, DI)) {
+        log() << "hotswap: error: VOP3PX wrap: could not decode "
+              << "trampoline body at offset 0x" << utohexstr(Pos)
+              << " for original offset 0x" << utohexstr(T.OriginalOffset)
+              << "\n";
         Pos += MinInstSize;
         continue;
       }
-      if (Pos >= LdScalePrefixSize &&
-          isLdScaleBytes(T.Bytes.data() + Pos - LdScalePrefixSize)) {
-        Pos += WmmaInstSize;
+      if (DI.Mnemonic != StandaloneWmma) {
+        Pos += DI.Size;
+        continue;
+      }
+      if (DI.Size != WmmaInstSize) {
+        log() << "hotswap: error: VOP3PX wrap: " << DI.Mnemonic
+              << " in trampoline for original offset 0x"
+              << utohexstr(T.OriginalOffset) << " has unexpected size "
+              << DI.Size << "\n";
+        Pos += DI.Size;
         continue;
       }
       T.Bytes.insert(T.Bytes.begin() + Pos, LdScalePrefix,
@@ -232,7 +256,8 @@ uint32_t wrapTrampolineInstructions(PatchContext &Ctx) {
 // exists in Decoded[] -- the K=128 splitter should have eliminated all of
 // these. A leftover would cause the trap-handler rewind to misdecode
 // garbage, since V_WMMA_SCALE_F32_32X16X128_F4 doesn't exist on A0.
-void checkNoF4Leftovers(PatchContext &Ctx) {
+bool checkNoF4Leftovers(PatchContext &Ctx) {
+  bool Found = false;
   for (const InternalDecodedInst &DI : Ctx.Decoded) {
     if (DI.Mnemonic != F4Mnemonic)
       continue;
@@ -240,14 +265,17 @@ void checkNoF4Leftovers(PatchContext &Ctx) {
       continue;
     if (offsetIsPatched(Ctx.OutTrampolines, DI.Offset))
       continue; // K=128 splitter handled it.
-    log() << "hotswap: error: VOP3PX wrap: unsplit " << F4Mnemonic
-          << " at 0x" << utohexstr(DI.Offset)
+    log() << "hotswap: error: VOP3PX wrap: unsplit " << F4Mnemonic << " at 0x"
+          << utohexstr(DI.Offset)
           << " -- K=128 splitter must run before VOP3PX wrap\n";
+    Found = true;
   }
+  return Found;
 }
 
 uint32_t applyVop3pxWrapPatchImpl(PatchContext &Ctx) {
-  checkNoF4Leftovers(Ctx);
+  if (checkNoF4Leftovers(Ctx))
+    return 0;
   uint32_t Patched = wrapDecodedInstructions(Ctx);
   Patched += wrapTrampolineInstructions(Ctx);
   return Patched;

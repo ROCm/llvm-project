@@ -62,8 +62,8 @@ constexpr StringLiteral SSethaltMnemonic = "s_sethalt";
 
 uint32_t applySethaltFixPatchImpl(PatchContext &Ctx) {
   if (Ctx.LS.SNopBytes.size() != MinInstSize) {
-    log() << "hotswap: error: sethalt-fix: LS.SNopBytes is not "
-          << MinInstSize << " bytes (got " << Ctx.LS.SNopBytes.size() << ")\n";
+    log() << "hotswap: error: sethalt-fix: LS.SNopBytes is not " << MinInstSize
+          << " bytes (got " << Ctx.LS.SNopBytes.size() << ")\n";
     return 0;
   }
 
@@ -71,15 +71,30 @@ uint32_t applySethaltFixPatchImpl(PatchContext &Ctx) {
   for (const InternalDecodedInst &DI : Ctx.Decoded) {
     if (DI.Mnemonic != SSethaltMnemonic)
       continue;
-    if (DI.Size != MinInstSize)
+    if (DI.Size != MinInstSize) {
+      log() << "hotswap: error: sethalt-fix: s_sethalt at .text offset 0x"
+            << utohexstr(DI.Offset) << " has unexpected size " << DI.Size
+            << " (expected " << MinInstSize << ")\n";
       continue;
-    if (DI.Offset + DI.Size > Ctx.TextSize)
+    }
+    // DI came from decodeTextSection over Ctx.Text, so this should only fire
+    // if a future caller supplies an inconsistent decoded stream/text pair.
+    if (DI.Offset + DI.Size > Ctx.TextSize) {
+      log() << "hotswap: error: sethalt-fix: s_sethalt at .text offset 0x"
+            << utohexstr(DI.Offset) << " extends past .text size 0x"
+            << utohexstr(Ctx.TextSize) << "\n";
       continue;
+    }
 
     std::memcpy(Ctx.Text + DI.Offset, Ctx.LS.SNopBytes.data(), MinInstSize);
 
-    log() << "hotswap: sethalt-fix: neutralized s_sethalt at offset 0x"
-          << utohexstr(DI.Offset) << "\n";
+    std::string KernelName =
+        Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
+    StringRef KernelDisplay =
+        KernelName.empty() ? StringRef("<unknown>") : StringRef(KernelName);
+    log() << "hotswap: sethalt-fix: neutralized s_sethalt in kernel '"
+          << KernelDisplay << "' at .text offset 0x" << utohexstr(DI.Offset)
+          << "\n";
     ++Patched;
   }
 
