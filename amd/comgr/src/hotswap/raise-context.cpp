@@ -681,9 +681,8 @@ void RaiseContext::emitUnderExec(llvm::function_ref<void()> Body) {
   // don't double-terminate doBB.
   if (!B.GetInsertBlock()->hasTerminator()) {
     B.CreateBr(SkipBb);
-    CurrentKernargPtrProvenance = DoProvenance == PreProvenance
-                                      ? PreProvenance
-                                      : KernargPtrProvenance::Unknown;
+    CurrentKernargPtrProvenance =
+        joinKernargPtrProvenance(PreProvenance, DoProvenance);
   } else {
     CurrentKernargPtrProvenance = PreProvenance;
   }

@@ -3,14 +3,14 @@
 ; RUN:   --emit-ir=kernarg_rebased_sload_b128 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=STRICT
 ; RUN: raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=kernarg_rebased_sload_b128 2>/dev/null \
+; RUN:   --emit-ir=kernarg_rebased_sload_b128 \
 ; RUN:   | %FileCheck %s --check-prefix=PERMISSIVE
 ;
 ; Triton may load an explicit by-value argument pointer into the physical
 ; kernarg SGPR pair, rebase it, and then issue more s_load_b128 operations
-; through that pointer. Without a dataflow proof that the new value is
-; definitely non-entry, strict mode refuses instead of treating a physical SGPR
-; write as proof that source hidden-arg handling is no longer relevant.
+; through that pointer. The initial SMEM load proves the pair is non-entry, but
+; the later ALU rebase is not yet value-tracked, so strict mode refuses instead
+; of assuming the rebased value is still non-entry.
 
 ; STRICT: implicit-arg offsets may be applied to the target runtime hidden-arg block on some CFG paths
 

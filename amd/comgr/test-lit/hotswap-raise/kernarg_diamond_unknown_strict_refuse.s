@@ -5,8 +5,9 @@
 ; RUN:   | %FileCheck %s
 ;
 ; A diamond join where one incoming path still has the entry kernarg pointer
-; and the other has clobbered the physical s[0:1] pair must converge to
-; Unknown at the join. Strict mode must then refuse source-hidden-arg synthesis.
+; and the other has an ordinary write to the physical s[0:1] pair must converge
+; to Unknown at the join. Strict mode must then refuse source-hidden-arg
+; synthesis.
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6

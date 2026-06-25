@@ -175,39 +175,64 @@ static bool isSemOpInRange(CanonicalOp Op, CanonicalOp First, CanonicalOp Last) 
 // kernarg pointer.  Once an instruction writes either half of the pair, later
 // loads through the same SGPR numbers may be normal explicit pointers
 // (rebased kernels, Triton pointer arithmetic, etc.), so strict mode must stop
-// treating source implicit-arg offsets as hidden-arg accesses.
+// treating source implicit-arg offsets as hidden-arg accesses once the full
+// pair is known not to hold the dispatch-provided entry pointer.
 //
-// The prepass below computes one conservative state per decoded basic block:
-//   * LiveEntry  - every incoming path still has the entry kernarg pointer.
-//   * Clobbered  - every incoming path has overwritten either half.
-//   * Unknown    - paths disagree, are unreachable, or cannot be classified.
-// Only LiveEntry permits hidden-arg synthesis.
+// The prepass below computes one conservative fact per kernarg-pointer lane at
+// each decoded basic block:
+//   * LiveEntry   - every incoming path still carries that entry-pointer lane.
+//   * NonEntry    - every incoming path overwrote that lane with a value loaded
+//                  from memory rather than the dispatch-provided entry SGPR
+//                  value.
+//   * Unknown     - paths disagree, are unreachable, or cannot be classified.
+// Only a full pair of LiveEntry lanes permits hidden-arg synthesis. A full pair
+// of NonEntry lanes uses ordinary memory lowering; mixed facts are ambiguous.
 //
 // Register identity comes from MC register classes and TableGen-declared defs;
 // mnemonic text and TSFlags are insufficient for overlap checks.
-// Effect of one instruction or block on the source kernarg pointer SGPR pair.
-enum class KernargPtrEffect {
-  Preserves,
-  Clobbers,
+using KernargPtrLaneProvenance = RaiseContext::KernargPtrLaneProvenance;
+using KernargPtrProvenance = RaiseContext::KernargPtrProvenance;
+
+// Per-lane effect of one instruction or block. Preserve means the instruction
+// does not define that lane and the incoming dataflow fact should pass through.
+enum class KernargPtrLaneEffectKind {
+  Preserve,
+  NonEntry,
   Unknown,
 };
 
-// Four-point lattice used internally by the fixed-point solver:
+struct KernargPtrLaneEffect {
+  KernargPtrLaneEffectKind Low = KernargPtrLaneEffectKind::Preserve;
+  KernargPtrLaneEffectKind High = KernargPtrLaneEffectKind::Preserve;
+};
+
+// Per-lane four-point lattice used internally by the fixed-point solver:
 //
-//            Unknown
-//           /       \
-//      LiveEntry  Clobbered
-//           \       /
-//           Unvisited
+//              Unknown
+//             /       \
+//    LiveEntry       NonEntry
+//             \       /
+//             Unvisited
 //
-// `Unvisited` is bottom: it represents blocks not reached by the recovered CFG.
-// When exporting final BB facts, bottom is treated as top so strict mode fails
-// closed for unreachable or unrecovered paths.
-enum class KernargPtrDataflowState {
+// `Unvisited` is bottom. When exporting final BB facts, bottom is treated as
+// Unknown so strict mode refuses unreachable or unrecovered paths.
+enum class KernargPtrLaneDataflowState {
   Unvisited,
   LiveEntry,
-  Clobbered,
+  NonEntry,
   Unknown,
+};
+
+// Solver state at a recovered block boundary. This keeps the two physical
+// kernarg pointer lanes independent until SMEM use sites combine them, so a
+// single-lane proof remains distinguishable from a full non-entry pair.
+struct KernargPtrDataflowState {
+  KernargPtrLaneDataflowState Low = KernargPtrLaneDataflowState::Unvisited;
+  KernargPtrLaneDataflowState High = KernargPtrLaneDataflowState::Unvisited;
+
+  bool operator==(KernargPtrDataflowState Other) const {
+    return Low == Other.Low && High == Other.High;
+  }
 };
 
 // Classification of one MC register definition for kernarg-pointer overlap.
@@ -231,8 +256,8 @@ struct KernargProvenanceBlock {
   unsigned LastIdx = 0;
   // False when Start is a recovered leader but no instruction decodes there.
   bool HasInsts = false;
-  // Sequential effect of this block's instructions on the kernarg SGPR pair.
-  KernargPtrEffect Effect = KernargPtrEffect::Preserves;
+  // Sequential effect of this block's instructions on the kernarg SGPR lanes.
+  KernargPtrLaneEffect Effect;
   // Indices into the Blocks vector.
   SmallVector<unsigned, 2> Successors;
 };
@@ -289,84 +314,162 @@ static unsigned kernargPrepassRegWidth32(const MCRegisterInfo &MRI,
   return W;
 }
 
+// Return the explicit-def width from the TableGen operand register class. Used
+// for SMEM dword-family loads whose decoded tuple register may not expose the
+// full lane count through MC sub-registers.
+static unsigned kernargPrepassDefRegClassWidth32(const MCInstrInfo &MII,
+                                                 const MCRegisterInfo &MRI,
+                                                 const MCSubtargetInfo &STI,
+                                                 const MCInstrDesc &Desc,
+                                                 unsigned DefIdx) {
+  ArrayRef<MCOperandInfo> Operands = Desc.operands();
+  assert(DefIdx < Operands.size() &&
+         "missing operand metadata for kernarg prepass def");
+
+  int16_t RegClassId = MII.getOpRegClassID(
+      Operands[DefIdx], STI.getHwMode(MCSubtargetInfo::HwMode_RegInfo));
+  assert(RegClassId >= 0 &&
+         "kernarg prepass def operand must have a register class");
+
+  unsigned Bits = MRI.getRegClass(RegClassId).getSizeInBits();
+  assert(Bits != 0 && Bits % 32 == 0 &&
+         "kernarg prepass def register class must have dword width");
+  return Bits / 32;
+}
+
+// Effect for an instruction whose destination metadata cannot be classified.
+// Unknown is applied to both lanes because an unclassified def may overlap
+// either half of the tracked physical pair.
+static KernargPtrLaneEffect unknownKernargPtrLaneEffect() {
+  return {KernargPtrLaneEffectKind::Unknown, KernargPtrLaneEffectKind::Unknown};
+}
+
+// Record `EffectKind` for every tracked lane overlapped by a known SGPR def.
+static void markKernargPtrLaneEffect(KernargPtrLaneEffect &Effect,
+                                     unsigned DefStart, unsigned DefWidth,
+                                     unsigned KernargPtrSgpr,
+                                     KernargPtrLaneEffectKind EffectKind) {
+  unsigned DefEnd = DefStart + DefWidth - 1;
+  if (DefStart <= KernargPtrSgpr && DefEnd >= KernargPtrSgpr)
+    Effect.Low = EffectKind;
+  if (DefStart <= KernargPtrSgpr + 1 && DefEnd >= KernargPtrSgpr + 1)
+    Effect.High = EffectKind;
+}
+
 // Summarize how one decoded instruction affects the kernarg pointer SGPR pair.
-static KernargPtrEffect
+static KernargPtrLaneEffect
 instructionKernargPtrEffect(const MCRegisterInfo &MRI, const MCInstrInfo &MII,
+                            const MCSubtargetInfo &STI,
                             const DecodedInst &Di, unsigned KernargPtrSgpr) {
   const MCInstrDesc &Desc = MII.get(Di.Inst.getOpcode());
   const unsigned NumDefs = Desc.getNumDefs();
+  KernargPtrLaneEffect Effect;
   for (unsigned I = 0; I < NumDefs; ++I) {
     if (!Di.isReg(I))
-      return KernargPtrEffect::Unknown;
+      return unknownKernargPtrLaneEffect();
     KernargPrepassDef Def = classifyKernargPrepassDef(MRI, Di.getReg(I));
     if (Def.DefKind == KernargPrepassDef::Kind::Unknown)
-      return KernargPtrEffect::Unknown;
+      return unknownKernargPtrLaneEffect();
     if (Def.DefKind == KernargPrepassDef::Kind::NotTracked)
       continue;
-    unsigned DefEnd =
-        Def.Index + kernargPrepassRegWidth32(MRI, Di.getReg(I)) - 1;
-    if (Def.Index <= KernargPtrSgpr + 1 && DefEnd >= KernargPtrSgpr)
-      return KernargPtrEffect::Clobbers;
+    bool IsDwordSmemLoad =
+        isSemOpInRange(Di.CanonOp, CanonicalOp::S_LOAD_B32,
+                       CanonicalOp::S_LOAD_B512);
+    unsigned DefWidth =
+        IsDwordSmemLoad
+            ? kernargPrepassDefRegClassWidth32(MII, MRI, STI, Desc, I)
+            : kernargPrepassRegWidth32(MRI, Di.getReg(I));
+    markKernargPtrLaneEffect(
+        Effect, Def.Index, DefWidth, KernargPtrSgpr,
+        IsDwordSmemLoad ? KernargPtrLaneEffectKind::NonEntry
+                        : KernargPtrLaneEffectKind::Unknown);
   }
-  return KernargPtrEffect::Preserves;
+  return Effect;
 }
 
-// Apply an instruction or block effect to an incoming dataflow state.
-static KernargPtrDataflowState
-applyKernargPtrEffect(KernargPtrDataflowState State, KernargPtrEffect Effect) {
-  if (State == KernargPtrDataflowState::Unvisited)
-    return KernargPtrDataflowState::Unvisited;
+// Apply an instruction or block effect to one incoming lane state. Preserve
+// effects leave the lane unchanged; concrete effects overwrite the lane fact
+// unless the block has not been reached yet.
+static KernargPtrLaneDataflowState applyKernargPtrLaneEffect(
+    KernargPtrLaneDataflowState State, KernargPtrLaneEffectKind Effect) {
+  if (State == KernargPtrLaneDataflowState::Unvisited ||
+      Effect == KernargPtrLaneEffectKind::Preserve)
+    return State;
 
   switch (Effect) {
-  case KernargPtrEffect::Preserves:
+  case KernargPtrLaneEffectKind::Preserve:
     return State;
-  case KernargPtrEffect::Clobbers:
-    return KernargPtrDataflowState::Clobbered;
-  case KernargPtrEffect::Unknown:
-    return KernargPtrDataflowState::Unknown;
+  case KernargPtrLaneEffectKind::NonEntry:
+    return KernargPtrLaneDataflowState::NonEntry;
+  case KernargPtrLaneEffectKind::Unknown:
+    return KernargPtrLaneDataflowState::Unknown;
   }
-  llvm_unreachable("unknown kernarg pointer effect");
+  llvm_unreachable("unknown kernarg pointer lane effect");
 }
 
+// Apply an instruction or block effect independently to both tracked lanes.
 static KernargPtrDataflowState
-joinKernargPtrStates(KernargPtrDataflowState Lhs,
-                     KernargPtrDataflowState Rhs) {
-  if (Lhs == KernargPtrDataflowState::Unvisited)
+applyKernargPtrEffect(KernargPtrDataflowState State,
+                      KernargPtrLaneEffect Effect) {
+  return {applyKernargPtrLaneEffect(State.Low, Effect.Low),
+          applyKernargPtrLaneEffect(State.High, Effect.High)};
+}
+
+// Join two predecessor facts for one lane. Unvisited is bottom; disagreements
+// become Unknown, which remains stable under further joins.
+static KernargPtrLaneDataflowState
+joinKernargPtrLaneStates(KernargPtrLaneDataflowState Lhs,
+                         KernargPtrLaneDataflowState Rhs) {
+  if (Lhs == KernargPtrLaneDataflowState::Unvisited)
     return Rhs;
-  if (Rhs == KernargPtrDataflowState::Unvisited)
+  if (Rhs == KernargPtrLaneDataflowState::Unvisited)
     return Lhs;
   if (Lhs == Rhs)
     return Lhs;
-  return KernargPtrDataflowState::Unknown;
+  return KernargPtrLaneDataflowState::Unknown;
 }
 
-static RaiseContext::KernargPtrProvenance
-toFinalKernargPtrProvenance(KernargPtrDataflowState State) {
-  using Provenance = RaiseContext::KernargPtrProvenance;
+// Join predecessor facts independently for both tracked lanes.
+static KernargPtrDataflowState
+joinKernargPtrStates(KernargPtrDataflowState Lhs,
+                     KernargPtrDataflowState Rhs) {
+  return {joinKernargPtrLaneStates(Lhs.Low, Rhs.Low),
+          joinKernargPtrLaneStates(Lhs.High, Rhs.High)};
+}
+
+// Export solver-only bottom as Unknown before storing facts in RaiseContext.
+static KernargPtrLaneProvenance
+toFinalKernargPtrLaneProvenance(KernargPtrLaneDataflowState State) {
   switch (State) {
-  case KernargPtrDataflowState::Unvisited:
-  case KernargPtrDataflowState::Unknown:
-    return Provenance::Unknown;
-  case KernargPtrDataflowState::LiveEntry:
-    return Provenance::LiveEntry;
-  case KernargPtrDataflowState::Clobbered:
-    return Provenance::Clobbered;
+  case KernargPtrLaneDataflowState::Unvisited:
+  case KernargPtrLaneDataflowState::Unknown:
+    return KernargPtrLaneProvenance::Unknown;
+  case KernargPtrLaneDataflowState::LiveEntry:
+    return KernargPtrLaneProvenance::LiveEntry;
+  case KernargPtrLaneDataflowState::NonEntry:
+    return KernargPtrLaneProvenance::NonEntry;
   }
-  llvm_unreachable("unknown kernarg pointer dataflow state");
+  llvm_unreachable("unknown kernarg pointer lane dataflow state");
 }
 
-// Compose instruction effects in source program order.
-static KernargPtrEffect composeKernargPtrEffect(KernargPtrEffect BlockEffect,
-                                                KernargPtrEffect InstEffect) {
-  switch (InstEffect) {
-  case KernargPtrEffect::Preserves:
-    return BlockEffect;
-  case KernargPtrEffect::Clobbers:
-    return KernargPtrEffect::Clobbers;
-  case KernargPtrEffect::Unknown:
-    return KernargPtrEffect::Unknown;
-  }
-  llvm_unreachable("unknown kernarg pointer effect");
+// Convert the solver state for one block into the RaiseContext provenance used
+// by instruction lowering.
+static KernargPtrProvenance
+toFinalKernargPtrProvenance(KernargPtrDataflowState State) {
+  return {toFinalKernargPtrLaneProvenance(State.Low),
+          toFinalKernargPtrLaneProvenance(State.High)};
+}
+
+// Compose instruction effects in source program order. A later write to a lane
+// replaces the earlier fact for that lane; preserve effects leave it untouched.
+static KernargPtrLaneEffect
+composeKernargPtrEffect(KernargPtrLaneEffect BlockEffect,
+                        KernargPtrLaneEffect InstEffect) {
+  if (InstEffect.Low != KernargPtrLaneEffectKind::Preserve)
+    BlockEffect.Low = InstEffect.Low;
+  if (InstEffect.High != KernargPtrLaneEffectKind::Preserve)
+    BlockEffect.High = InstEffect.High;
+  return BlockEffect;
 }
 
 // Build the strict-mode failure for an unsupported preloaded hidden kernarg.
@@ -450,6 +553,7 @@ computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
       static_cast<unsigned>(Ctx.Layout->KernargSegmentPtrSgpr);
   const MCRegisterInfo &MRI = *Ctx.Mc.RegInfo;
   const MCInstrInfo &MII = *Ctx.Mc.InstrInfo;
+  const MCSubtargetInfo &STI = *Ctx.Mc.SubtargetInfo;
 
   SmallVector<uint64_t> Starts(BlockStarts.begin(), BlockStarts.end());
   const unsigned NumStarts = Starts.size();
@@ -481,7 +585,8 @@ computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
       Block.LastIdx = J;
       Block.Effect = composeKernargPtrEffect(
           Block.Effect,
-          instructionKernargPtrEffect(MRI, MII, Insts[J], KernargPtrSgpr));
+          instructionKernargPtrEffect(MRI, MII, STI, Insts[J],
+                                      KernargPtrSgpr));
       if (decodedInstEndsBlock(Insts[J]))
         break;
     }
@@ -506,8 +611,7 @@ computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
     }
   }
 
-  SmallVector<KernargPtrDataflowState> State(
-      Blocks.size(), KernargPtrDataflowState::Unvisited);
+  SmallVector<KernargPtrDataflowState> State(Blocks.size());
   auto MergeInto = [&](unsigned I, KernargPtrDataflowState Incoming) {
     KernargPtrDataflowState Merged = joinKernargPtrStates(State[I], Incoming);
     if (Merged == State[I])
@@ -519,11 +623,13 @@ computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
   auto EntryIt = BlockIndexByOffset.find(KernelOffset);
   assert(EntryIt != BlockIndexByOffset.end() &&
          "decoded block starts must include kernel entry");
-  MergeInto(EntryIt->second, KernargPtrDataflowState::LiveEntry);
+  MergeInto(EntryIt->second,
+            {KernargPtrLaneDataflowState::LiveEntry,
+             KernargPtrLaneDataflowState::LiveEntry});
 
-  // Finite-height diamond lattice: facts only move upward from Unvisited to a
-  // concrete path fact and then, if paths disagree or a write is unknown, to
-  // Unknown. Unknown is absorbing under join, so backedges converge.
+  // Finite-height per-lane diamond lattice: facts only move upward from
+  // Unvisited to a concrete path fact and then, if paths disagree or a write is
+  // unknown, to Unknown. Unknown is absorbing under join, so backedges converge.
   bool Changed = true;
   while (Changed) {
     Changed = false;

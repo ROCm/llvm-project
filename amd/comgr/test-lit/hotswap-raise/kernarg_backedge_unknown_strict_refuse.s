@@ -5,8 +5,9 @@
 ; RUN:   | %FileCheck %s
 ;
 ; A loop header with the entry edge still has the kernarg pointer, but the
-; backedge has clobbered the physical s[0:1] pair. The header provenance must
-; converge to Unknown and strict mode must refuse source-hidden-arg synthesis.
+; backedge has an ordinary write to the physical s[0:1] pair. The header fact
+; must converge to Unknown and strict mode must refuse source-hidden-arg
+; synthesis.
 
 ; CHECK: source implicit-arg offsets may be applied to the target runtime hidden-arg block on some CFG paths
 
