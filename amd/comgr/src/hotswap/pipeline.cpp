@@ -14,6 +14,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/xxhash.h"
 
 #include <algorithm>
 #include <chrono>
@@ -96,22 +97,15 @@ std::string makeSafeBasename(llvm::StringRef kernelName,
   if (kernelName.size() + reservedSuffixBytes <= kMaxComponentBytes)
     return kernelName.str();
 
-  // FNV-1a 64-bit hash -- small, deterministic, no libstdc++ dep beyond cstdint.
-  uint64_t h = 0xcbf29ce484222325ull;
-  for (unsigned char c : kernelName) {
-    h ^= c;
-    h *= 0x100000001b3ull;
-  }
+  uint64_t h = llvm::xxh3_64bits(kernelName);
 
-  constexpr size_t kHashHexBytes = 16;   // "%016llx"
+  constexpr size_t kHashHexBytes = 16;   // 64-bit hash as hex
   constexpr size_t kSeparatorBytes = 1;  // '_'
   const size_t prefixBudget = kMaxComponentBytes - reservedSuffixBytes -
                               kHashHexBytes - kSeparatorBytes;
   std::string prefix = kernelName.substr(0, prefixBudget).str();
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "%016llx",
-                static_cast<unsigned long long>(h));
-  return prefix + "_" + buf;
+  std::string hex = llvm::utohexstr(h, /*LowerCase=*/true, /*Width=*/16);
+  return prefix + "_" + hex;
 }
 
 int toolTimeoutSeconds() {
