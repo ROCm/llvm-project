@@ -745,7 +745,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUUniformIntrinsicCombineLegacyPass(*PR);
   initializeAMDGPUWaveTransformPass(*PR);
   initializeAMDGPUPreWaveTransformPass(*PR);
-  initializeAMDGPUFinalizeISelWaveTransformPass(*PR);
+  initializeAMDGPUFinalizeISelWaveTransformLegacyPass(*PR);
 }
 
 static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
