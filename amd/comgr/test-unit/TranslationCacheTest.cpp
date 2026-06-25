@@ -10,7 +10,13 @@
 
 #include "hotswap/translation-cache.h"
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBufferRef.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
@@ -65,25 +71,130 @@ struct ScopedEnv {
   }
 };
 
-llvm::MemoryBufferRef bufRef(const std::vector<uint8_t> &V) {
+llvm::MemoryBufferRef bufRef(llvm::ArrayRef<uint8_t> V) {
   return llvm::MemoryBufferRef(
       llvm::StringRef(reinterpret_cast<const char *>(V.data()), V.size()), "");
 }
 
-std::vector<uint8_t> fakeAmdgpuElf() {
-  std::vector<uint8_t> Data(128, 0);
-  Data[0] = 0x7f;
-  Data[1] = 'E';
-  Data[2] = 'L';
-  Data[3] = 'F';
-  Data[4] = 2; // ELFCLASS64
-  Data[5] = 1; // little-endian
-  Data[6] = 1; // current ELF version
-  const uint16_t Machine = 224; // EM_AMDGPU
-  const uint32_t Flags = 0x49;
-  std::memcpy(Data.data() + 18, &Machine, sizeof(Machine));
-  std::memcpy(Data.data() + 48, &Flags, sizeof(Flags));
-  return Data;
+// Minimal AMDGPU MsgPack metadata: an `amdhsa.kernels` array with one
+// `.name`, which is all `listKernelNames` reads.
+std::string amdgpuMetadataBlob(llvm::StringRef KernelName) {
+  llvm::msgpack::Document Doc;
+  llvm::msgpack::MapDocNode Root = Doc.getRoot().getMap(/*Convert=*/true);
+
+  llvm::msgpack::DocNode Version = Doc.getArrayNode();
+  Version.getArray().push_back(Doc.getNode(static_cast<uint64_t>(1)));
+  Version.getArray().push_back(Doc.getNode(static_cast<uint64_t>(2)));
+  Root["amdhsa.version"] = Version;
+
+  llvm::msgpack::DocNode Kernel = Doc.getMapNode();
+  Kernel.getMap()[".name"] = Doc.getNode(KernelName, /*Copy=*/true);
+
+  llvm::msgpack::DocNode Kernels = Doc.getArrayNode();
+  Kernels.getArray().push_back(Kernel);
+  Root["amdhsa.kernels"] = Kernels;
+
+  std::string Blob;
+  Doc.writeToBlob(Blob);
+  return Blob;
+}
+
+// Offset of the source byte the cache tests flip to perturb the SHA-256
+// without disturbing any ELF structure the key builder parses. It lives in
+// the reserved gap fakeAmdgpuElf() leaves between the ELF header and the
+// metadata note.
+constexpr size_t HashPerturbOffset = 80;
+constexpr size_t NoteOffset = 128;
+static_assert(sizeof(llvm::ELF::Elf64_Ehdr) <= HashPerturbOffset &&
+                  HashPerturbOffset < NoteOffset,
+              "perturb byte must lie in the ELF header-to-note padding gap");
+
+// Build a 64-bit little-endian AMDGPU ELF carrying an NT_AMDGPU_METADATA
+// note naming one kernel, so that listKernelNames succeeds and the
+// translation-cache key builder accepts the object.
+//
+// Layout: [Elf64_Ehdr][padding to NoteOffset][note][.shstrtab][section
+// headers]. The padding gap holds HashPerturbOffset.
+llvm::SmallVector<uint8_t> fakeAmdgpuElf() {
+  using namespace llvm;
+  const std::string Blob = amdgpuMetadataBlob("cache_probe_kernel");
+
+  // ELF note: Nhdr, then name and desc each padded to 4 bytes. n_namesz
+  // counts the trailing NUL.
+  constexpr StringLiteral NoteName = "AMDGPU";
+  const uint32_t NameSz = NoteName.size() + 1;
+  const uint32_t DescSz = Blob.size();
+  const uint32_t NamePadded = alignTo(NameSz, 4);
+  const uint32_t NoteSize =
+      sizeof(ELF::Elf64_Nhdr) + NamePadded + alignTo(DescSz, 4);
+
+  // Section header string table; offsets are derived as names are appended.
+  std::string ShStr(1, '\0');
+  auto addSectionName = [&](StringRef Name) {
+    uint32_t Offset = ShStr.size();
+    ShStr.append(Name.begin(), Name.end());
+    ShStr.push_back('\0');
+    return Offset;
+  };
+  const uint32_t NoteNameOffset = addSectionName(".note");
+  const uint32_t ShStrNameOffset = addSectionName(".shstrtab");
+
+  const uint32_t ShStrOffset = NoteOffset + NoteSize;
+  const uint32_t ShdrOffset = alignTo(ShStrOffset + ShStr.size(), 8);
+  const uint32_t Total = ShdrOffset + 3 * sizeof(ELF::Elf64_Shdr);
+
+  SmallVector<uint8_t> D(Total, 0);
+  auto writeStruct = [&](size_t Offset, const auto &S) {
+    std::memcpy(D.data() + Offset, &S, sizeof(S));
+  };
+
+  ELF::Elf64_Ehdr Ehdr = {};
+  Ehdr.e_ident[ELF::EI_MAG0] = 0x7f;
+  Ehdr.e_ident[ELF::EI_MAG1] = 'E';
+  Ehdr.e_ident[ELF::EI_MAG2] = 'L';
+  Ehdr.e_ident[ELF::EI_MAG3] = 'F';
+  Ehdr.e_ident[ELF::EI_CLASS] = ELF::ELFCLASS64;
+  Ehdr.e_ident[ELF::EI_DATA] = ELF::ELFDATA2LSB;
+  Ehdr.e_ident[ELF::EI_VERSION] = ELF::EV_CURRENT;
+  Ehdr.e_ident[ELF::EI_OSABI] = ELF::ELFOSABI_AMDGPU_HSA;
+  Ehdr.e_type = ELF::ET_DYN;
+  Ehdr.e_machine = ELF::EM_AMDGPU;
+  Ehdr.e_version = ELF::EV_CURRENT;
+  Ehdr.e_flags = 0x49; // arbitrary stable EF_AMDGPU flags hashed into the key
+  Ehdr.e_ehsize = sizeof(ELF::Elf64_Ehdr);
+  Ehdr.e_shentsize = sizeof(ELF::Elf64_Shdr);
+  Ehdr.e_shnum = 3;
+  Ehdr.e_shstrndx = 2;
+  Ehdr.e_shoff = ShdrOffset;
+  writeStruct(0, Ehdr);
+
+  ELF::Elf64_Nhdr Nhdr = {};
+  Nhdr.n_namesz = NameSz;
+  Nhdr.n_descsz = DescSz;
+  Nhdr.n_type = ELF::NT_AMDGPU_METADATA;
+  writeStruct(NoteOffset, Nhdr);
+  std::memcpy(D.data() + NoteOffset + sizeof(Nhdr), NoteName.data(),
+              NoteName.size());
+  std::memcpy(D.data() + NoteOffset + sizeof(Nhdr) + NamePadded, Blob.data(),
+              DescSz);
+
+  std::memcpy(D.data() + ShStrOffset, ShStr.data(), ShStr.size());
+
+  // Section headers: [0] null, [1] .note (SHT_NOTE), [2] .shstrtab.
+  ELF::Elf64_Shdr Shdrs[3] = {};
+  Shdrs[1].sh_name = NoteNameOffset;
+  Shdrs[1].sh_type = ELF::SHT_NOTE;
+  Shdrs[1].sh_offset = NoteOffset;
+  Shdrs[1].sh_size = NoteSize;
+  Shdrs[1].sh_addralign = 4;
+  Shdrs[2].sh_name = ShStrNameOffset;
+  Shdrs[2].sh_type = ELF::SHT_STRTAB;
+  Shdrs[2].sh_offset = ShStrOffset;
+  Shdrs[2].sh_size = ShStr.size();
+  Shdrs[2].sh_addralign = 1;
+  std::memcpy(D.data() + ShdrOffset, Shdrs, sizeof(Shdrs));
+
+  return D;
 }
 
 void writeTextFile(const std::string &Path, llvm::StringRef Text) {
@@ -180,7 +291,7 @@ TEST(TranslationCache, ChangedInputHashCausesMiss) {
   ASSERT_EQ(COMGR::hotswap::writeTranslationCache(Request, makeSuccessfulResult()).Status,
             COMGR::hotswap::TranslationCacheStatus::WriteSuccess);
 
-  Source[80] ^= 0x1;
+  Source[HashPerturbOffset] ^= 0x1;
   auto Changed = makeRequest(bufRef(Source), Rules);
   auto Lookup = COMGR::hotswap::lookupTranslationCache(Changed);
   EXPECT_EQ(Lookup.Status, COMGR::hotswap::TranslationCacheStatus::Miss);
