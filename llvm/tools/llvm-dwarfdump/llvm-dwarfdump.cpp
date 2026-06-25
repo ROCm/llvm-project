@@ -716,7 +716,7 @@ static TargetCallbacks getCallbacks(ObjectFile &Obj, const Twine &Filename) {
   if (!TargetLookupError.empty()) {
     logAllUnhandledErrors(
         createStringError(inconvertibleErrorCode(), "Error in creating Target"),
-        errs(), Filename.str() + ": ");
+        errs(), Filename + ": ");
 
     return {};
   }
@@ -725,7 +725,7 @@ static TargetCallbacks getCallbacks(ObjectFile &Obj, const Twine &Filename) {
   if (!MCRI) {
     logAllUnhandledErrors(createStringError(inconvertibleErrorCode(),
                                             "Error in creating MCRegisterInfo"),
-                          errs(), Filename.str() + ": ");
+                          errs(), Filename + ": ");
     return {};
   }
   TargetCallbacks Callbacks;
