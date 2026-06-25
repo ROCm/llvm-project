@@ -2466,8 +2466,6 @@ static bool fixRegMaskClobberedPhysRegLiveness(
       Candidates.insert(Pred);
   }
 
-  SmallDenseSet<MCPhysReg, 8> RegsWithLivenessGap;
-  SmallVector<MCPhysReg, 8> SortedRegs;
   for (MachineBasicBlock *MBB : Candidates) {
     // Locate the first MI with a regmask operand in MBB via forward walk.
     // So, later during backward traversl during liveness computation, it can
@@ -2488,7 +2486,8 @@ static bool fixRegMaskClobberedPhysRegLiveness(
     if (LiveRegs.empty())
       continue;
 
-    RegsWithLivenessGap.clear();
+    SmallDenseSet<MCPhysReg, 8> RegsWithLivenessGap;
+    SmallVector<MCPhysReg, 8> SortedRegs;
     for (MachineInstr &MI : reverse(*MBB)) {
       for (const MachineOperand &MO : MI.operands()) {
         if (!MO.isRegMask())
@@ -2512,11 +2511,14 @@ static bool fixRegMaskClobberedPhysRegLiveness(
       continue;
 
     // Remove any sub-regs already covered by a super-register in the gap.
+    SmallVector<MCPhysReg, 4> SubRegsToRemove;
     for (MCPhysReg Reg : RegsWithLivenessGap) {
       if (any_of(TRI.superregs(Reg),
                  [&](MCPhysReg Super) { return RegsWithLivenessGap.contains(Super); }))
-        RegsWithLivenessGap.erase(Reg);
+        SubRegsToRemove.push_back(Reg);
     }
+    for (MCPhysReg Reg : SubRegsToRemove)
+      RegsWithLivenessGap.erase(Reg);
 
     // Insert in a deterministic (register-number) order for stable output.
     SortedRegs.assign(RegsWithLivenessGap.begin(), RegsWithLivenessGap.end());
