@@ -2300,7 +2300,7 @@ amd_comgr_status_t AMDGPUCompiler::linkToExecutable() {
 
 // TODO: Generalize this list to include all -cc1 flags and arguments that are
 //   still valid in a bitcode compilation context
-static inline const std::unordered_set<std::string_view> ValidSpirvFlags{
+static inline const llvm::StringSet<> ValidSpirvFlags{
     "-fapprox-func",
     "-fcolor-diagnostics",
     "-fconvergent-functions",

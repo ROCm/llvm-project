@@ -11,7 +11,6 @@ option(OFFLOAD_ENABLE_EMISSARY_APIS "Enable build of GPU Emissary APIs" ON)
 if(OFFLOAD_ENABLE_EMISSARY_APIS)
   add_definitions(-DOFFLOAD_ENABLE_EMISSARY_APIS)
   set(emissary_sources
-    src/EmissaryFortrt.cpp
     src/EmissaryPrint.cpp
   )
 endif()

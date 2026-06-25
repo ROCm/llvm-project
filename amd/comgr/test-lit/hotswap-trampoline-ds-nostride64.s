@@ -10,17 +10,14 @@
 // COM: applied to each per-operand index (ElemBytes vs 64 * ElemBytes), so
 // COM: the trampoline shape (s_branch forward + sled + s_branch back) and
 // COM: the s_wait_dscnt handling are shared with the stride64 path. Each
-// COM: kernel here uses s_wait_dscnt 0x0 (drain) as input and exercises
-// COM: the drain-preservation rule: the imm must stay at 0x0 after the
-// COM: split (bumping a drain to K would let K split halves escape past
-// COM: the wait).
+// COM: split emits its own s_wait_dscnt 0x0 drain after the two
+// COM: single-address ops; a pre-existing downstream drain is left in place.
 // COM:
 // COM: Companion tests:
-// COM:   hotswap-trampoline-ds-nostride64-multi.s -- drain preservation
+// COM:   hotswap-trampoline-ds-nostride64-multi.s -- drain insertion
 // COM:     under multi-DS stacking in the non-stride64 path.
-// COM:   hotswap-trampoline-ds-pipelined.s -- non-drain bump path (covers
-// COM:     the Ctx.Decoded writeback for the 0x1 -> 0x2 / 0x3 case
-// COM:     originally raised in the ROCm/llvm-project#2281 review).
+// COM:   hotswap-trampoline-ds-pipelined.s -- non-drain downstream wait
+// COM:     preserved while each split adds its own drain.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 

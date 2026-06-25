@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-hotswap-internal.h"
+#include "comgr-test-elf-utils.h"
 #include "gtest/gtest.h"
 #include <cstring>
 
@@ -55,17 +56,9 @@ TEST(ElfView, GetKernelStaticLdsSizeReturnsNulloptWhenKdMissing) {
   const char StrTab[] = "\0.text\0.shstrtab\0";
   std::memcpy(Buf + StrTabOff, StrTab, sizeof(StrTab));
 
-  Elf64_Ehdr Ehdr{};
-  Ehdr.e_ident[0] = 0x7f;
-  Ehdr.e_ident[1] = 'E';
-  Ehdr.e_ident[2] = 'L';
-  Ehdr.e_ident[3] = 'F';
-  Ehdr.e_ident[EI_CLASS] = ELFCLASS64;
-  Ehdr.e_ident[EI_DATA] = ELFDATA2LSB;
-  Ehdr.e_ident[EI_VERSION] = EV_CURRENT;
+  Elf64_Ehdr Ehdr = comgr_test::makeElf64Ehdr(EM_AMDGPU);
   Ehdr.e_ident[EI_OSABI] = ELFOSABI_AMDGPU_HSA;
   Ehdr.e_type = ET_REL;
-  Ehdr.e_machine = EM_AMDGPU;
   Ehdr.e_version = EV_CURRENT;
   Ehdr.e_shoff = ShOff;
   Ehdr.e_ehsize = sizeof(Elf64_Ehdr);
@@ -131,17 +124,9 @@ TEST(ElfView, GetKernelStaticLdsSizeReadsLdsSizeFromKernelDescriptor) {
   const char StrTab[] = "\0test_kernel.kd\0";
   std::memcpy(Buf + StrTabOff, StrTab, sizeof(StrTab));
 
-  Elf64_Ehdr Ehdr{};
-  Ehdr.e_ident[0] = 0x7f;
-  Ehdr.e_ident[1] = 'E';
-  Ehdr.e_ident[2] = 'L';
-  Ehdr.e_ident[3] = 'F';
-  Ehdr.e_ident[EI_CLASS] = ELFCLASS64;
-  Ehdr.e_ident[EI_DATA] = ELFDATA2LSB;
-  Ehdr.e_ident[EI_VERSION] = EV_CURRENT;
+  Elf64_Ehdr Ehdr = comgr_test::makeElf64Ehdr(EM_AMDGPU);
   Ehdr.e_ident[EI_OSABI] = ELFOSABI_AMDGPU_HSA;
   Ehdr.e_type = ET_REL;
-  Ehdr.e_machine = EM_AMDGPU;
   Ehdr.e_version = EV_CURRENT;
   Ehdr.e_shoff = ShOff;
   Ehdr.e_ehsize = sizeof(Elf64_Ehdr);

@@ -701,8 +701,6 @@ public:
     return SupportsHeterogeneousDebuggingExtensions;
   }
 
-  bool usesDwarfFileAndLocDirectives() const { return !IsAIX; }
-
   bool enableDwarfFileDirectoryDefault() const {
     return EnableDwarfFileDirectoryDefault;
   }

@@ -1,10 +1,9 @@
-// COM: Test HotSwap trampoline patch: non-drain s_wait_dscnt bump path.
-// COM: Inputs use s_wait_dscnt 0x1 (pipelined wait permitting one in-flight
-// COM: DS op), so each DS 2-addr split must increment the imm by 1. Inverse
-// COM: of hotswap-trampoline-ds.s, which exercises drain preservation.
-// COM:
-// COM:   Kernel 1: one DS2 split  + s_wait_dscnt 0x1 -> bumped to 0x2.
-// COM:   Kernel 2: two DS2 splits + s_wait_dscnt 0x1 -> bumped to 0x3.
+// COM: Test HotSwap trampoline patch: each ds_*_2addr_* split is followed by
+// COM: a local s_wait_dscnt 0x0 drain so both split halves complete before any
+// COM: downstream consumer. An existing non-drain wait (s_wait_dscnt 0x1) is
+// COM: left untouched -- the split's own drain provides the ordering, so the
+// COM: downstream wait must NOT be relaxed (relaxing it would let a consumer
+// COM: read a not-yet-landed half; see the patchDs2Addr rationale).
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -16,32 +15,41 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: Kernel 1 (single split, +1 bump): one DS2 -> s_branch and the wait
-// COM: incremented from 0x1 to 0x2.
+// COM: Kernel 1 (single split): one DS2 -> two single-address loads followed
+// COM: by an s_wait_dscnt 0x0 drain; the downstream s_wait_dscnt 0x1 is left
+// COM: unchanged.
 // DISASM-LABEL: <test_ds_pipelined_single>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
-// DISASM: s_wait_dscnt 0x2
+// DISASM: s_wait_dscnt 0x1
 // DISASM: ds_load_b32 v0
 // DISASM: ds_load_b32 v1
+// DISASM: s_wait_dscnt 0x0
 // DISASM: s_branch
 
-// COM: Kernel 2 (two splits, +2 bump): two DS2 sites share one wait, which
-// COM: is bumped twice from 0x1 to 0x3.
+// COM: Kernel 2 (two splits): each split lands its own s_wait_dscnt 0x0 drain;
+// COM: the shared downstream s_wait_dscnt 0x1 is left unchanged.
 // DISASM-LABEL: <test_ds_pipelined_multi>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
 // DISASM: s_branch
-// DISASM: s_wait_dscnt 0x3
+// DISASM: s_wait_dscnt 0x1
+// DISASM: ds_load_b32 v0
+// DISASM: ds_load_b32 v1
+// DISASM: s_wait_dscnt 0x0
+// DISASM: ds_load_b32 v2
+// DISASM: ds_load_b32 v3
+// DISASM: s_wait_dscnt 0x0
 
-// COM: Idempotency: a second rewrite must not bump 0x2 / 0x3 further.
+// COM: Idempotency: a second rewrite produces identical bytes (the 2-addr
+// COM: forms are gone, so there is nothing left to split).
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent \
 // RUN:   | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES
 
-// ---- Kernel 1: single split, +1 bump (0x1 -> 0x2) ---------------------------
+// ---- Kernel 1: single split + drain; downstream 0x1 wait preserved ----------
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
@@ -71,7 +79,7 @@ test_ds_pipelined_single:
 .Ltest_ds_pipelined_single_end:
 .size test_ds_pipelined_single, .Ltest_ds_pipelined_single_end-test_ds_pipelined_single
 
-// ---- Kernel 2: two splits, +2 bump (0x1 -> 0x3) -----------------------------
+// ---- Kernel 2: two splits, each + drain; downstream 0x1 wait preserved ------
 
 .globl test_ds_pipelined_multi
 .p2align 8

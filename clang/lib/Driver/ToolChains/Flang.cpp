@@ -296,6 +296,11 @@ void Flang::addLTOOptions(const ArgList &Args, ArgStringList &CmdArgs) const {
     CmdArgs.push_back("-flto=full");
   else if (LTOMode == LTOK_Thin)
     CmdArgs.push_back("-flto=thin");
+
+  if (Args.hasFlag(options::OPT_fsplit_lto_unit,
+                   options::OPT_fno_split_lto_unit, /*Default=*/false))
+    CmdArgs.push_back("-fsplit-lto-unit");
+
   Args.addAllArgs(CmdArgs, {options::OPT_ffat_lto_objects,
                             options::OPT_fno_fat_lto_objects});
 }
@@ -537,7 +542,7 @@ static void processVSRuntimeLibrary(const ToolChain &TC, const ArgList &Args,
 }
 
 void Flang::AddAMDGPUTargetArgs(const ArgList &Args, ArgStringList &CmdArgs,
-                                StringRef BoundArch,
+                                BoundArch BA,
                                 Action::OffloadKind DeviceOffloadKind) const {
   if (Arg *A = Args.getLastArg(options::OPT_mcode_object_version_EQ)) {
     StringRef Val = A->getValue();
@@ -548,11 +553,11 @@ void Flang::AddAMDGPUTargetArgs(const ArgList &Args, ArgStringList &CmdArgs,
   }
 
   const ToolChain &TC = getToolChain();
-  TC.addClangTargetOptions(Args, CmdArgs, BoundArch, DeviceOffloadKind);
+  TC.addClangTargetOptions(Args, CmdArgs, BA, DeviceOffloadKind);
 }
 
 void Flang::AddNVPTXTargetArgs(const ArgList &Args, ArgStringList &CmdArgs,
-                               StringRef BoundArch,
+                               BoundArch BA,
                                Action::OffloadKind DeviceOffloadKind) const {
   // we cannot use addClangTargetOptions, as it appends unsupported args for
   // flang: -fcuda-is-device, -fno-threadsafe-statics,
@@ -589,7 +594,7 @@ void Flang::AddNVPTXTargetArgs(const ArgList &Args, ArgStringList &CmdArgs,
 }
 
 void Flang::addTargetOptions(const ArgList &Args, ArgStringList &CmdArgs,
-                             StringRef BoundArch,
+                             BoundArch BA,
                              Action::OffloadKind DeviceOffloadKind) const {
   const ToolChain &TC = getToolChain();
   const llvm::Triple &Triple = TC.getEffectiveTriple();
@@ -616,11 +621,11 @@ void Flang::addTargetOptions(const ArgList &Args, ArgStringList &CmdArgs,
   case llvm::Triple::r600:
   case llvm::Triple::amdgcn:
     getTargetFeatures(D, Triple, Args, CmdArgs, /*ForAs*/ false);
-    AddAMDGPUTargetArgs(Args, CmdArgs, BoundArch, DeviceOffloadKind);
+    AddAMDGPUTargetArgs(Args, CmdArgs, BA, DeviceOffloadKind);
     break;
   case llvm::Triple::nvptx:
   case llvm::Triple::nvptx64:
-    AddNVPTXTargetArgs(Args, CmdArgs, BoundArch, DeviceOffloadKind);
+    AddNVPTXTargetArgs(Args, CmdArgs, BA, DeviceOffloadKind);
     break;
   case llvm::Triple::riscv64:
     getTargetFeatures(D, Triple, Args, CmdArgs, /*ForAs*/ false);
@@ -1331,7 +1336,9 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 
   bool FRecordCmdLine = false;
   bool GRecordCmdLine = false;
-  if (shouldRecordCommandLine(TC, Args, FRecordCmdLine, GRecordCmdLine)) {
+  bool DXRecordCmdLine = false;
+  if (shouldRecordCommandLine(TC, Args, FRecordCmdLine, GRecordCmdLine,
+                              DXRecordCmdLine)) {
     const char *CmdLine = renderEscapedCommandLine(TC, Args);
     if (FRecordCmdLine) {
       CmdArgs.push_back("-record-command-line");
@@ -1356,7 +1363,17 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
       Input.getInputArg().renderAsInput(Args, CmdArgs);
   }
 
-  const char *Exec = Args.MakeArgString(D.GetProgramPath("flang", TC));
+  // Handle "clang --driver-mode=flang" case
+  bool isClangDriverWithFlangMode = false;
+  std::string DriverName = D.Name;
+  if (const char *PA = D.getPrependArg())
+    DriverName = PA;
+  if (DriverName.find("clang") != std::string::npos && D.IsFlangMode())
+    isClangDriverWithFlangMode = true;
+
+  const char *Exec = isClangDriverWithFlangMode
+                         ? Args.MakeArgString(D.GetProgramPath("flang", TC))
+                         : D.getDriverProgramPath();
   C.addCommand(std::make_unique<Command>(JA, *this,
                                          ResponseFileSupport::AtFileUTF8(),
                                          Exec, CmdArgs, Inputs, Output));

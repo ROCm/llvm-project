@@ -261,6 +261,12 @@ class CombinedAllocator {
 #endif
   }
 
+#if SANITIZER_AMDGPU
+  void ResetDeviceRuntimeState() {
+    device_.ResetRuntimeUnloadedFlag();
+  }
+#endif
+
  private:
   PrimaryAllocator primary_;
   SecondaryAllocator secondary_;

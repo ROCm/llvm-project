@@ -24,9 +24,11 @@
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCFixup.h"
+#include "llvm/MC/MCRegisterInfo.h"
 
 using namespace llvm;
 
@@ -52,6 +54,27 @@ StringRef getClusterLoadReplacementAsm(StringRef Mnemonic) {
       .Case("cluster_load_async_to_lds_b128",
             "global_load_async_to_lds_b128 v0, v[0:1], off")
       .Default("");
+}
+
+/// Detect the SGPR-relative (_SADDR) form of a cluster_load.
+///
+/// The off-form cluster_load carries its global address in a 64-bit VGPR pair
+/// and encodes the saddr field as the "off" sentinel, so all of its register
+/// operands are VGPRs. The _SADDR variant shares the same display mnemonic but
+/// is a distinct MC opcode with an extra scalar saddr operand. The off-form
+/// replacement templates in getClusterLoadReplacementAsm would mis-encode that
+/// scalar operand, so the two forms must be told apart. getNamedOperandIdx() /
+/// OpName are backend-private headers, so -- mirroring the operand-kind
+/// inspection in comgr-hotswap-patch-wmma-split.cpp -- classify by operand
+/// kind: the presence of any SGPR register operand marks the _SADDR form.
+bool usesSgprBaseAddress(const MCInst &Inst, const MCRegisterInfo &MRI) {
+  for (unsigned I = 0, E = Inst.getNumOperands(); I < E; ++I) {
+    const MCOperand &Op = Inst.getOperand(I);
+    if (Op.isReg() && Op.getReg() &&
+        StringRef(MRI.getName(Op.getReg())).starts_with("SGPR"))
+      return true;
+  }
+  return false;
 }
 
 /// Resolve the MC opcode index for an assembly mnemonic by parsing a dummy
@@ -98,11 +121,26 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
 
   StringRef ReplacementAsm = getClusterLoadReplacementAsm(Mnemonic);
   if (!ReplacementAsm.empty()) {
-    std::optional<unsigned> NewOpcode = resolveOpcode(ReplacementAsm, Ctx.LS);
-    if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
-      log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << *NewOpcode
-            << " at 0x" << utohexstr(DI.Offset) << "\n";
-      return 1;
+    // The replacement templates above are all the saddr=off encoding form
+    // (global address in a 64-bit VGPR pair). The SGPR-relative (_SADDR)
+    // cluster_load shares the mnemonic but has a different operand layout, so
+    // reusing the off-form opcode would re-encode its scalar saddr and 32-bit
+    // vaddr as a 64-bit vaddr plus an inline offset -- a corrupt address that
+    // faults the GPU at runtime. Leave the _SADDR form unchanged; cluster_load
+    // with an SGPR base runs natively on A0, so pass-through is correct. A
+    // dedicated _SADDR -> global_load_*_SADDR mapping can be added later if a
+    // B0 erratum ever requires downgrading the SGPR-relative form.
+    if (usesSgprBaseAddress(DI.Inst, *Ctx.LS.MRI)) {
+      log() << "hotswap: inplace: " << Mnemonic
+            << " (SGPR-relative saddr form) left unchanged at 0x"
+            << utohexstr(DI.Offset) << "\n";
+    } else {
+      std::optional<unsigned> NewOpcode = resolveOpcode(ReplacementAsm, Ctx.LS);
+      if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
+        log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << *NewOpcode
+              << " at 0x" << utohexstr(DI.Offset) << "\n";
+        return 1;
+      }
     }
   }
 

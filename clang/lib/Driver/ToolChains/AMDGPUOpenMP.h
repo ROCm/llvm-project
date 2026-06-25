@@ -76,25 +76,11 @@ public:
     return &HostTC.getTriple();
   }
 
-  llvm::opt::DerivedArgList *
-  TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
-                Action::OffloadKind DeviceOffloadKind) const override;
-
   void
   addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                        llvm::opt::ArgStringList &CC1Args,
-                        llvm::StringRef BoundArch,
+                        llvm::opt::ArgStringList &CC1Args, BoundArch BA,
                         Action::OffloadKind DeviceOffloadKind) const override;
 
-  bool useIntegratedAs() const override { return true; }
-  bool isCrossCompiling() const override { return true; }
-  bool isPICDefault() const override { return false; }
-  bool isPIEDefault(const llvm::opt::ArgList &Args) const override { return false; }
-  bool isPICDefaultForced() const override { return false; }
-  bool SupportsProfiling() const override { return false; }
-  bool IsMathErrnoDefault() const override { return false; }
-
-  void addClangWarningOptions(llvm::opt::ArgStringList &CC1Args) const override;
   CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
   void AddClangCXXStdlibIncludeArgs(
       const llvm::opt::ArgList &Args,
@@ -108,7 +94,6 @@ public:
   AddFlangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &FlangArgs) const override;
 
-
   StringRef getAsanRTLPath() const {
     return RocmInstallation->getAsanRTLPath();
   }
@@ -117,9 +102,8 @@ public:
   computeMSVCVersion(const Driver *D,
                      const llvm::opt::ArgList &Args) const override;
 
-  unsigned GetDefaultDwarfVersion() const override { return 5; }
   llvm::SmallVector<BitCodeLibraryInfo, 12>
-  getDeviceLibs(const llvm::opt::ArgList &Args, llvm::StringRef BoundArch,
+  getDeviceLibs(const llvm::opt::ArgList &Args, BoundArch BA,
                 const Action::OffloadKind DeviceOffloadKind) const override;
 
   /// OpenMP uses LTO by default to link device bitcode.
