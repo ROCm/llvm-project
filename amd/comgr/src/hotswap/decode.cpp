@@ -32,6 +32,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <cassert>
 #include <climits>
 #include <optional>
 #include <string>
@@ -44,6 +45,7 @@ namespace COMGR::hotswap {
 namespace {
 
 constexpr unsigned KSoppBranchStrideBytes = 4;
+constexpr int64_t KAddPcI64LiteralAlignmentBytes = 4;
 
 // Build the logical-source view of an MCInst. Walks `desc.operands()` and
 // classifies each operand using TableGen-generated metadata only:
@@ -685,33 +687,42 @@ void decodeVopd(DecodedInst &Di, const MCInstrInfo &MCII,
                  OpcMap, MRI);
 }
 
+// Absolute byte target of an s_add_pc_i64: PC of the following instruction
+// (Off + InstSize) plus the signed byte displacement in operand 0, which may be
+// an immediate or a lit64 MCExpr (hence evalOperandAsConst). The displacement
+// is in bytes, with the low two bits ignored, not the dword units of
+// computeSoppBranchTarget.
+uint64_t computeAddPcI64Target(const MCInst &Inst, uint64_t Off,
+                               uint64_t InstSize) {
+  std::optional<int64_t> ConstOpt = evalOperandAsConst(Inst, 0);
+  if (!ConstOpt)
+    report_fatal_error("transpiler: s_add_pc_i64 with non-constant source "
+                       "(only immediate-literal and lit64 forms are supported)");
+  int64_t Imm = divideFloorSigned(*ConstOpt, KAddPcI64LiteralAlignmentBytes) *
+                KAddPcI64LiteralAlignmentBytes;
+  assert(InstSize <= UINT64_MAX - Off &&
+         "decoded instruction range must not overflow");
+  uint64_t Base = Off + InstSize;
+  if (Imm < 0) {
+    uint64_t Back = llvm::AbsoluteValue(Imm);
+    if (Back > Base)
+      report_fatal_error("transpiler: s_add_pc_i64 branch target underflow");
+    return Base - Back;
+  }
+  uint64_t Forward = static_cast<uint64_t>(Imm);
+  if (Forward > UINT64_MAX - Base)
+    report_fatal_error("transpiler: s_add_pc_i64 branch target overflow");
+  return Base + Forward;
+}
+
 void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
                           uint64_t InstSize, uint64_t KernelStartOffset,
                           uint64_t DecodeLimit,
                           std::set<uint64_t> &BlockStarts) {
   const MCInst &Inst = Di.Inst;
-  // s_add_pc_i64 carries a signed i64 PC-relative offset, not the SOPP form.
+  // s_add_pc_i64 carries a signed i64 PC-relative byte offset, not the SOPP form.
   if (Di.CanonOp == CanonicalOp::S_ADD_PC_I64) {
-    std::optional<int64_t> ConstOpt = evalOperandAsConst(Inst, 0);
-    if (!ConstOpt)
-      report_fatal_error("transpiler: s_add_pc_i64 with non-constant source "
-                         "(only immediate-literal and lit64 forms are supported)");
-    int64_t Imm = *ConstOpt;
-    if (InstSize > UINT64_MAX - Off)
-      report_fatal_error("transpiler: s_add_pc_i64 source offset overflow");
-    uint64_t Base = Off + InstSize;
-    uint64_t Target = 0;
-    if (Imm < 0) {
-      uint64_t Back = llvm::AbsoluteValue(Imm);
-      if (Back > Base)
-        report_fatal_error("transpiler: s_add_pc_i64 branch target underflow");
-      Target = Base - Back;
-    } else {
-      uint64_t Forward = static_cast<uint64_t>(Imm);
-      if (Forward > UINT64_MAX - Base)
-        report_fatal_error("transpiler: s_add_pc_i64 branch target overflow");
-      Target = Base + Forward;
-    }
+    uint64_t Target = computeAddPcI64Target(Inst, Off, InstSize);
     if (Target >= KernelStartOffset && Target < DecodeLimit)
       BlockStarts.insert(Target);
     return;
@@ -789,6 +800,14 @@ computeDecodedBlockSuccessors(const DecodedInst &LastInst,
     return Result;
   }
 
+  // s_add_pc_i64 is isBranch but uses a byte displacement, so the SOPP path
+  // below would mis-handle it. It is an unconditional skip: one successor.
+  if (LastInst.CanonOp == CanonicalOp::S_ADD_PC_I64) {
+    Result.push_back(
+        computeAddPcI64Target(LastInst.Inst, LastInst.Offset, LastInst.Size));
+    return Result;
+  }
+
   if (LastInst.IsBranch) {
     Result.push_back(BranchTargetFromImm(0));
     if (LastInst.IsConditionalBranch && NextBlockOffset)
@@ -810,6 +829,7 @@ bool decodedInstEndsBlock(const DecodedInst &LastInst) {
   case CanonicalOp::S_CBRANCH_VCCNZ:
   case CanonicalOp::S_CBRANCH_EXECZ:
   case CanonicalOp::S_CBRANCH_EXECNZ:
+  case CanonicalOp::S_ADD_PC_I64:
   case CanonicalOp::S_ENDPGM:
   case CanonicalOp::S_SET_PC_I64:
   case CanonicalOp::S_SWAP_PC_I64:
