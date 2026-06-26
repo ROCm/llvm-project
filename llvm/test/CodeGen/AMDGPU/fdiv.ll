@@ -5,7 +5,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=fiji < %s | FileCheck -check-prefixes=GCN,GFX678,GFX8 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1010 < %s | FileCheck -check-prefixes=GCN,GFX10 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefixes=GCN,GFX11 %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=r600 -mcpu=redwood < %s | FileCheck -check-prefix=EG %s
+; RUN: llc -mtriple=r600 -mcpu=redwood < %s | FileCheck -check-prefix=EG %s
 
 ; These tests check that fdiv is expanded correctly and also test that the
 ; scheduler is scheduling the RECIP_IEEE and MUL_IEEE instructions in separate

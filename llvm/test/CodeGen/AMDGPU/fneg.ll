@@ -3,7 +3,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -enable-var-scope -check-prefixes=GCN,VI %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -mattr=+real-true16 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX11,GFX11-TRUE16 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -mattr=-real-true16 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX11,GFX11-FAKE16 %s
-; RUN: not --crash llc -amdgpu-late-wave-transform=1 -mtriple=r600 -mcpu=redwood < %s 2>&1 | FileCheck -check-prefix=R600-ERR %s
+; RUN: not --crash llc -mtriple=r600 -mcpu=redwood < %s 2>&1 | FileCheck -check-prefix=R600-ERR %s
 
 ; R600-ERR: LLVM ERROR: unsupported library call operation
 

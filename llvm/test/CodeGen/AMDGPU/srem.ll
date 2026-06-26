@@ -2,7 +2,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck %s --check-prefixes=GCN
 ; RUN: llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck %s --check-prefixes=TAHITI
 ; RUN: llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false -mtriple=amdgcn -mcpu=tonga < %s | FileCheck %s --check-prefixes=TONGA
-; RUN: llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false -mtriple=r600 -mcpu=redwood < %s | FileCheck %s --check-prefixes=EG
+; RUN: llc -amdgpu-scalarize-global-loads=false -mtriple=r600 -mcpu=redwood < %s | FileCheck %s --check-prefixes=EG
 
 define amdgpu_kernel void @srem_i16_7(ptr addrspace(1) %out, ptr addrspace(1) %in) {
 ; GCN-LABEL: srem_i16_7:

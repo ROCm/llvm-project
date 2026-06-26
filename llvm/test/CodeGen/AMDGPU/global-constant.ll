@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal < %s | FileCheck -check-prefixes=GCN,GCN-PAL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=gfx600 < %s | FileCheck -check-prefixes=GCN,GCN-PAL %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-- -mcpu=kaveri < %s | FileCheck -check-prefixes=GCN,GCN-DEFAULT %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-mesa-mesa3d -mcpu=kaveri < %s | FileCheck -check-prefixes=GCN,GCN-MESA %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdhsa -mcpu=kaveri < %s | FileCheck -check-prefixes=GCN,GCN-DEFAULT %s
