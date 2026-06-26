@@ -1,8 +1,8 @@
-; RUN: llc -global-isel=0 -mtriple=amdgcn -mcpu=gfx900  < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=gfx900  < %s | FileCheck %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=gfx900  < %s | FileCheck %s
-; RUN: llc -global-isel=0 -mtriple=amdgcn -mcpu=gfx942  < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=gfx942  < %s | FileCheck %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=gfx942  < %s | FileCheck %s
-; RUN: llc -global-isel=0 -mtriple=amdgcn -mcpu=gfx1010 < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=gfx1010 < %s | FileCheck %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=gfx1010 < %s | FileCheck %s
 
 ; Loop body exceeds MaxAsyncMarkers on first iteration
