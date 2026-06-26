@@ -147,7 +147,14 @@ extern "C" {
  *   as a filename which logs should be appended to. Logs may be redirected
  *   irrespective of whether logging is enabled.
  * - @p AMD_COMGR_EMIT_VERBOSE_LOGS: If this is set, and is not "0", logs will
- *   include additional Comgr-specific informational messages.
+ *   include additional Comgr-specific informational messages. This is
+ *   equivalent to setting AMD_COMGR_LOG_LEVEL to "debug".
+ * - @p AMD_COMGR_LOG_LEVEL: Controls the severity threshold of the global
+ *   Comgr logger. Valid values, from least to most verbose, are "none",
+ *   "error", "warning", "info", and "debug" (case-insensitive). A message is
+ *   emitted only when its severity is at or below the configured level. If
+ *   unset, the level defaults to "debug" when AMD_COMGR_EMIT_VERBOSE_LOGS is
+ *   enabled, and to "error" otherwise.
  */
 
 /** \defgroup symbol_versions_group Symbol Versions

@@ -101,6 +101,7 @@ set(SOURCES
   src/comgr-diagnostic-handler.cpp
   src/comgr-disassembly.cpp
   src/comgr-env.cpp
+  src/comgr-logger.cpp
   src/comgr-hotswap.cpp
   src/comgr-hotswap-b0a0.cpp
   src/comgr-hotswap-entry-trampoline.cpp

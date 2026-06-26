@@ -217,7 +217,14 @@ include:
   respectively. If this is set to any other value, it is interpreted as a
   filename which logs should be appended to.
 * `AMD_COMGR_EMIT_VERBOSE_LOGS`: If this is set, and is not "0", logs will
-  include additional Comgr-specific informational messages.
+  include additional Comgr-specific informational messages. Equivalent to
+  setting `AMD_COMGR_LOG_LEVEL=debug`.
+* `AMD_COMGR_LOG_LEVEL`: Controls the severity threshold of the global Comgr
+  logger. Valid values, from least to most verbose, are "none", "error",
+  "warning", "info", and "debug" (case-insensitive). A message is emitted only
+  when its severity is at or below the configured level. If unset, the level
+  defaults to "debug" when `AMD_COMGR_EMIT_VERBOSE_LOGS` is enabled, and to
+  "error" otherwise.
 * `AMD_COMGR_TIME_STATISTICS`: If this is set, and is not "0", logs will
   include additional Comgr-specific timing information for compilation actions.
 * `AMD_COMGR_TIME_STATISTICS_GRANULARITY`: If this is set to "us" or "ns",
