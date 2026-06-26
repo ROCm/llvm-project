@@ -137,6 +137,8 @@ static bool isArtificialTerminator(MachineInstr &MI) {
   case AMDGPU::S_ANDN2_B32_term:
   case AMDGPU::S_AND_B32_term:
   case AMDGPU::S_AND_SAVEEXEC_B32_term:
+  case AMDGPU::V_CMPX_EQ_U32_nosdst_e32_term:
+  case AMDGPU::V_CMPX_EQ_U64_nosdst_e32_term:
     return true;
   default:
     return false;
