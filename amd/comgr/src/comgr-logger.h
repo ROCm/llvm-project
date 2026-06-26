@@ -28,11 +28,13 @@
 #ifndef COMGR_LOGGER_H
 #define COMGR_LOGGER_H
 
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <memory>
 #include <mutex>
+#include <string>
 
 namespace COMGR {
 
@@ -47,6 +49,14 @@ enum class LogLevel {
   Info,
   Debug,
 };
+
+/// Map a requested level string (the value of AMD_COMGR_LOG_LEVEL, which may be
+/// empty) to a LogLevel. Matching is case-insensitive over "none", "error",
+/// "warning", "info", and "debug". When @p Requested is empty or unrecognized,
+/// returns Debug if @p VerboseFallback is set (back-compat with
+/// AMD_COMGR_EMIT_VERBOSE_LOGS), otherwise Error. An explicit, recognized value
+/// always wins, including "none". Exposed for testing.
+LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
 
 /// Process-global, thread-safe logging facility. Obtain the shared instance
 /// through getLogger(); do not construct directly.
@@ -78,7 +88,24 @@ public:
   /// (stdout, stderr, or an appended file), or null when logs are not
   /// redirected. Callers that maintain their own per-action log stream can
   /// reuse this to avoid opening the redirect destination a second time.
+  /// Direct writes to the returned stream are NOT serialized against emit();
+  /// callers that tee output into the sink should go through writeToSink() so
+  /// they share the logger's mutex.
   llvm::raw_ostream *getSink() const { return Sink; }
+
+  /// Return a diagnostic describing why the redirect sink could not be opened,
+  /// or an empty string when redirection was not requested or succeeded. The
+  /// Logger is constructed before any per-action log buffer exists, so the
+  /// action layer surfaces this into the returned comgr.log when getSink() is
+  /// null despite AMD_COMGR_REDIRECT_LOGS being set.
+  llvm::StringRef getSinkError() const { return SinkError; }
+
+  /// Write @p Data verbatim to the global sink while holding the logger's mutex,
+  /// so callers that tee their own output into the sink (see TeeStream in
+  /// comgr.cpp) serialize with emit() instead of racing on the shared stream.
+  /// No prefix or newline is added and the sink is not flushed (the caller is
+  /// expected to flush once it is done). A no-op when there is no sink.
+  void writeToSink(llvm::StringRef Data);
 
   /// Emit @p Message at @p Severity, prefixed and newline-terminated. Writes to
   /// the global sink and, when one is installed on the calling thread, the
@@ -100,6 +127,10 @@ private:
   // stream is owned by SinkFile.
   llvm::raw_ostream *Sink;
   std::unique_ptr<llvm::raw_fd_ostream> SinkFile;
+
+  // Diagnostic recorded when AMD_COMGR_REDIRECT_LOGS named a file that could not
+  // be opened. Empty otherwise. Surfaced to the caller via getSinkError().
+  std::string SinkError;
 
   // Guards all writes to Sink and to the active capture stream.
   std::mutex Mutex;

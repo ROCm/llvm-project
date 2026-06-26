@@ -86,7 +86,7 @@ bool shouldEmitVerboseLogs() {
 
 StringRef getLogLevel() {
   static const char *LogLevel = getenv("AMD_COMGR_LOG_LEVEL");
-  return LogLevel;
+  return LogLevel ? StringRef(LogLevel) : StringRef();
 }
 
 llvm::StringRef getLLVMPath() {

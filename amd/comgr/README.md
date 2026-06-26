@@ -212,19 +212,28 @@ include:
 * `AMD_COMGR_SAVE_LLVM_TEMPS`: If this is set, Comgr forwards `--save-temps=obj`
   to Clang Driver invocations.
 * `AMD_COMGR_REDIRECT_LOGS`: If this is not set, or is set to "0", logs are
-  returned to the caller as normal. If this is set to "stdout"/"-" or "stderr",
-  logs are instead redirected to the standard output or error stream,
-  respectively. If this is set to any other value, it is interpreted as a
-  filename which logs should be appended to.
+  only returned to the caller (via `AMD_COMGR_DATA_KIND_LOG`) as normal. If this
+  is set to "stdout"/"-" or "stderr", logs are additionally copied to the
+  standard output or error stream, respectively. If this is set to any other
+  value, it is interpreted as a filename which logs are additionally appended
+  to. In all cases the logs are still returned to the caller as well; setting
+  this variable copies them to the extra destination, it does not move them.
+  When a filename is used, it is opened once and kept open for the lifetime of
+  the process, so the destination should not be rotated or removed while Comgr
+  is in use.
 * `AMD_COMGR_EMIT_VERBOSE_LOGS`: If this is set, and is not "0", logs will
   include additional Comgr-specific informational messages. Equivalent to
-  setting `AMD_COMGR_LOG_LEVEL=debug`.
+  setting `AMD_COMGR_LOG_LEVEL=debug`, but only when `AMD_COMGR_LOG_LEVEL` is
+  not set itself: an explicit `AMD_COMGR_LOG_LEVEL` always takes precedence (so
+  `AMD_COMGR_LOG_LEVEL=none` suppresses logs even if this is enabled).
 * `AMD_COMGR_LOG_LEVEL`: Controls the severity threshold of the global Comgr
   logger. Valid values, from least to most verbose, are "none", "error",
-  "warning", "info", and "debug" (case-insensitive). A message is emitted only
-  when its severity is at or below the configured level. If unset, the level
-  defaults to "debug" when `AMD_COMGR_EMIT_VERBOSE_LOGS` is enabled, and to
-  "error" otherwise.
+  "warning", "info", and "debug" (case-insensitive). The chosen level enables
+  that severity and every less-verbose (more severe) one; for example,
+  "warning" emits error and warning messages but suppresses info and debug.
+  "none" suppresses all messages. When set, this takes precedence over
+  `AMD_COMGR_EMIT_VERBOSE_LOGS`. If unset, the level defaults to "debug" when
+  `AMD_COMGR_EMIT_VERBOSE_LOGS` is enabled, and to "error" otherwise.
 * `AMD_COMGR_TIME_STATISTICS`: If this is set, and is not "0", logs will
   include additional Comgr-specific timing information for compilation actions.
 * `AMD_COMGR_TIME_STATISTICS_GRANULARITY`: If this is set to "us" or "ns",

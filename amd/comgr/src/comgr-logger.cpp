@@ -28,27 +28,11 @@ namespace {
 // not collect log output emitted by an unrelated API on another thread.
 thread_local raw_ostream *ThreadCaptureStream = nullptr;
 
-// Map AMD_COMGR_LOG_LEVEL (case-insensitive) to a LogLevel. When the variable
-// is unset, default to Debug if verbose logs are requested for back-compat with
-// AMD_COMGR_EMIT_VERBOSE_LOGS, otherwise to Error.
+// Resolve the configured level from the environment. Delegates the mapping to
+// the testable parseLogLevel(); kept separate so the Logger constructor reads
+// the (cached) environment exactly once.
 LogLevel resolveLevel() {
-  StringRef Requested = env::getLogLevel();
-  if (Requested.empty())
-    return env::shouldEmitVerboseLogs() ? LogLevel::Debug : LogLevel::Error;
-
-  if (Requested.equals_insensitive("none"))
-    return LogLevel::None;
-  if (Requested.equals_insensitive("error"))
-    return LogLevel::Error;
-  if (Requested.equals_insensitive("warning"))
-    return LogLevel::Warning;
-  if (Requested.equals_insensitive("info"))
-    return LogLevel::Info;
-  if (Requested.equals_insensitive("debug"))
-    return LogLevel::Debug;
-
-  // Unrecognized value: fall back to the verbose-logs back-compat default.
-  return env::shouldEmitVerboseLogs() ? LogLevel::Debug : LogLevel::Error;
+  return parseLogLevel(env::getLogLevel(), env::shouldEmitVerboseLogs());
 }
 
 StringRef severityPrefix(LogLevel Severity) {
@@ -69,6 +53,29 @@ StringRef severityPrefix(LogLevel Severity) {
 
 } // namespace
 
+LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
+  // When the variable is unset or unrecognized, default to Debug if verbose
+  // logs are requested for back-compat with AMD_COMGR_EMIT_VERBOSE_LOGS,
+  // otherwise to Error. An explicit, recognized value always wins (including
+  // "none", which silences logging even when verbose logs are requested).
+  LogLevel Fallback = VerboseFallback ? LogLevel::Debug : LogLevel::Error;
+  if (Requested.empty())
+    return Fallback;
+
+  if (Requested.equals_insensitive("none"))
+    return LogLevel::None;
+  if (Requested.equals_insensitive("error"))
+    return LogLevel::Error;
+  if (Requested.equals_insensitive("warning"))
+    return LogLevel::Warning;
+  if (Requested.equals_insensitive("info"))
+    return LogLevel::Info;
+  if (Requested.equals_insensitive("debug"))
+    return LogLevel::Debug;
+
+  return Fallback;
+}
+
 Logger::Logger() : Level(resolveLevel()), Sink(nullptr) {
   std::optional<StringRef> RedirectLogs = env::getRedirectLogs();
   if (!RedirectLogs)
@@ -85,8 +92,13 @@ Logger::Logger() : Level(resolveLevel()), Sink(nullptr) {
         RedirectLog, EC, sys::fs::OF_Text | sys::fs::OF_Append);
     if (EC) {
       SinkFile.reset();
-      errs() << "comgr: error: unable to redirect log to file '" << RedirectLog
-             << "': " << EC.message() << "\n";
+      // Record the failure rather than writing it to stderr here. The Logger is
+      // constructed before any action's log buffer exists; the action layer
+      // surfaces this message into the returned comgr.log via getSinkError(),
+      // restoring the pre-Logger behavior of reporting it to the caller.
+      SinkError = (Twine("unable to redirect log to file '") + RedirectLog +
+                   "': " + EC.message())
+                      .str();
     } else {
       Sink = SinkFile.get();
     }
@@ -94,6 +106,17 @@ Logger::Logger() : Level(resolveLevel()), Sink(nullptr) {
 }
 
 Logger::Logger(LogLevel Level, raw_ostream *Sink) : Level(Level), Sink(Sink) {}
+
+void Logger::writeToSink(StringRef Data) {
+  if (!Sink)
+    return;
+
+  // Share the same mutex as emit() so teed output and Logger messages never
+  // interleave mid-write on the shared sink. The sink is intentionally left
+  // unflushed here; the caller flushes once when the action completes.
+  std::scoped_lock<std::mutex> Lock(Mutex);
+  *Sink << Data;
+}
 
 void Logger::emit(LogLevel Severity, const Twine &Message) {
   if (!isEnabled(Severity))

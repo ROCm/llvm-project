@@ -12,6 +12,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <atomic>
+#include <cstdlib>
 #include <string>
 #include <thread>
 #include <vector>
@@ -58,6 +59,45 @@ TEST(Logger, NeverEmitsNoneSeverity) {
   Logger Log(LogLevel::Debug, nullptr);
   // None is not a real severity and must never pass the filter.
   EXPECT_FALSE(Log.isEnabled(LogLevel::None));
+}
+
+// -- parseLogLevel (AMD_COMGR_LOG_LEVEL mapping) -----------------------------
+
+TEST(Logger, ParseLogLevelRecognizedValues) {
+  EXPECT_EQ(parseLogLevel("none", false), LogLevel::None);
+  EXPECT_EQ(parseLogLevel("error", false), LogLevel::Error);
+  EXPECT_EQ(parseLogLevel("warning", false), LogLevel::Warning);
+  EXPECT_EQ(parseLogLevel("info", false), LogLevel::Info);
+  EXPECT_EQ(parseLogLevel("debug", false), LogLevel::Debug);
+}
+
+TEST(Logger, ParseLogLevelIsCaseInsensitive) {
+  EXPECT_EQ(parseLogLevel("NONE", false), LogLevel::None);
+  EXPECT_EQ(parseLogLevel("Error", false), LogLevel::Error);
+  EXPECT_EQ(parseLogLevel("WaRnInG", false), LogLevel::Warning);
+  EXPECT_EQ(parseLogLevel("INFO", false), LogLevel::Info);
+  EXPECT_EQ(parseLogLevel("Debug", false), LogLevel::Debug);
+}
+
+TEST(Logger, ParseLogLevelEmptyUsesVerboseFallback) {
+  // Unset variable: Error normally, Debug when verbose logs are requested.
+  EXPECT_EQ(parseLogLevel("", false), LogLevel::Error);
+  EXPECT_EQ(parseLogLevel("", true), LogLevel::Debug);
+}
+
+TEST(Logger, ParseLogLevelUnrecognizedUsesVerboseFallback) {
+  // A typo'd level falls back to the same default as an unset variable.
+  EXPECT_EQ(parseLogLevel("verbose", false), LogLevel::Error);
+  EXPECT_EQ(parseLogLevel("warn", false), LogLevel::Error);
+  EXPECT_EQ(parseLogLevel("trace", true), LogLevel::Debug);
+}
+
+TEST(Logger, ParseLogLevelExplicitWinsOverVerbose) {
+  // An explicit, recognized value overrides the verbose-logs fallback, even
+  // when it silences logging entirely.
+  EXPECT_EQ(parseLogLevel("none", true), LogLevel::None);
+  EXPECT_EQ(parseLogLevel("error", true), LogLevel::Error);
+  EXPECT_EQ(parseLogLevel("warning", true), LogLevel::Warning);
 }
 
 // -- Sink output and prefixes ------------------------------------------------
@@ -220,3 +260,27 @@ TEST(Logger, CaptureStreamIsThreadLocal) {
   EXPECT_EQ(SeenOnOtherThread.load(), nullptr);
   EXPECT_EQ(MainOut, "comgr: error: main-thread\n");
 }
+
+// -- Environment-configured constructor --------------------------------------
+//
+// comgr-env.cpp caches getenv() results in function-local statics, so the
+// environment is read only once per process. This must therefore be the ONLY
+// test that constructs an environment-configured Logger; a second one with
+// different values would not observe them. setenv/unsetenv are POSIX-only.
+
+#ifndef _WIN32
+TEST(Logger, RedirectOpenFailureIsRecorded) {
+  // Point the redirect at a path inside a directory that does not exist, so the
+  // sink cannot be opened. The Logger must record the failure (for the action
+  // layer to surface into comgr.log) rather than installing a sink.
+  setenv("AMD_COMGR_REDIRECT_LOGS",
+         "comgr_logger_nonexistent_dir_a1b2c3/redirect.log", /*overwrite=*/1);
+  Logger Log;
+  unsetenv("AMD_COMGR_REDIRECT_LOGS");
+
+  EXPECT_EQ(Log.getSink(), nullptr);
+  EXPECT_FALSE(Log.getSinkError().empty());
+  EXPECT_NE(Log.getSinkError().find("unable to redirect log to file"),
+            StringRef::npos);
+}
+#endif // _WIN32
