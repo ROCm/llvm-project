@@ -167,7 +167,7 @@ Expected<KernelLaunchEnvironmentTy *>
 GenericKernelTy::getKernelLaunchEnvironment(
     GenericDeviceTy &GenericDevice, const KernelArgsTy &KernelArgs,
     const DynBlockMemConfTy &DynBlockMemConf,
-    AsyncInfoWrapperTy &AsyncInfoWrapper) const {
+    AsyncInfoWrapperTy &AsyncInfoWrapper, uint32_t NumBlocks0) const {
   // Ctor/Dtor have no arguments, replaying uses the original kernel launch
   // environment. Older versions of the compiler do not generate a kernel
   // launch environment.
@@ -183,14 +183,20 @@ GenericKernelTy::getKernelLaunchEnvironment(
   if (isBigJumpLoopMode() || isNoLoopMode() || isXTeamReductionsMode())
     return reinterpret_cast<KernelLaunchEnvironmentTy *>(~0);
 
-  if ((!KernelEnvironment.Configuration.ReductionDataSize ||
-       !KernelEnvironment.Configuration.ReductionBufferLength) &&
-      KernelArgs.DynCGroupMem == 0)
+  const auto &RedCfg = KernelEnvironment.Configuration;
+  const bool NeedsReductionBuffer = RedCfg.ReductionDataSize != 0;
+  if (NeedsReductionBuffer && KernelArgs.Version < OMP_KERNEL_ARG_VERSION)
+    return Plugin::error(ErrorCode::INVALID_BINARY,
+                         "kernel was built against an older OpenMP "
+                         "kernel-launch-environment ABI (v%u); current "
+                         "runtime requires v%u for cross-team reductions",
+                         KernelArgs.Version, OMP_KERNEL_ARG_VERSION);
+  if (!NeedsReductionBuffer && !KernelArgs.DynCGroupMem)
     return reinterpret_cast<KernelLaunchEnvironmentTy *>(~0);
 
-  auto AllocOrErr = GenericDevice.dataAlloc(sizeof(KernelLaunchEnvironmentTy),
-                                            /*HostPtr=*/nullptr,
-                                            TargetAllocTy::TARGET_ALLOC_DEVICE);
+  auto AllocOrErr = GenericDevice.dataAlloc(
+      sizeof(KernelLaunchEnvironmentTy),
+      /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE, /*Alignment=*/0);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
 
@@ -207,12 +213,12 @@ GenericKernelTy::getKernelLaunchEnvironment(
   LocalKLE.DynCGroupMemFb = DynBlockMemConf.Fallback;
   LocalKLE.ReductionBuffer = nullptr;
 
-  if (KernelEnvironment.Configuration.ReductionDataSize &&
-      KernelEnvironment.Configuration.ReductionBufferLength) {
+  if (NeedsReductionBuffer) {
+    // Use number of teams many buffer elements.
     auto AllocOrErr = GenericDevice.dataAlloc(
-        KernelEnvironment.Configuration.ReductionDataSize *
-            KernelEnvironment.Configuration.ReductionBufferLength,
-        /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE);
+        uint64_t(RedCfg.ReductionDataSize) * NumBlocks0,
+        /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE,
+        /*Alignment=*/0);
     if (!AllocOrErr)
       return AllocOrErr.takeError();
     LocalKLE.ReductionBuffer = *AllocOrErr;
@@ -314,7 +320,8 @@ GenericKernelTy::prepareBlockMemory(GenericDeviceTy &GenericDevice,
       // Get global memory as fallback.
       auto AllocOrErr = GenericDevice.dataAlloc(
           NumBlocks * DynBlockMemSize,
-          /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE);
+          /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE,
+          /*Alignment=*/0);
       if (!AllocOrErr)
         return AllocOrErr.takeError();
       DynFallbackPtr = *AllocOrErr;
@@ -362,8 +369,48 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
     AsyncInfoWrapper.freeAllocationAfterSynchronization(
         DynBlockMemConf.FallbackPtr);
 
-  auto KernelLaunchEnvOrErr = getKernelLaunchEnvironment(
-      GenericDevice, KernelArgs, DynBlockMemConf, AsyncInfoWrapper);
+  // Get max occupancy for this kernel
+  computeMaxOccupancy(GenericDevice);
+  std::string KernelName = getName();
+  KernelRunRecordTy *KernelRecord = GenericDevice.getKernelRunRecords();
+  uint32_t KernelRunCounter = 0;
+
+  // Calculate or adjust the effective number of threads and blocks if needed.
+  if (KernelRecord) {
+    KernelRunCounter = KernelRecord->getRunCounterForKernel(KernelName);
+  }
+  // If Autotuning is enabled and the kernel is not launched for the first time.
+  if (GenericDevice.enableRuntimeAutotuning() && isSPMDMode() &&
+      KernelRunCounter > 0) {
+    assert(KernelRecord &&
+           "Autotuning is enabled, but KernelRunRecord is not initialized!");
+
+    auto [Teams, Threads] =
+        KernelRecord->getLaunchParamsForKernel(*this, GenericDevice);
+    EffectiveNumBlocks[0] = Teams;
+    EffectiveNumThreads[0] = Threads;
+  } else if (!KernelArgs.Flags.StrictBlocksAndThreads && !isBareMode()) {
+    EffectiveNumThreads[0] =
+        getEffectiveNumThreads(GenericDevice, EffectiveNumThreads[0]);
+
+    std::pair<bool, uint32_t> AdjustInfo = adjustNumThreadsForLowTripCount(
+        GenericDevice, EffectiveNumThreads[0], KernelArgs.Tripcount,
+        KernelArgs.UserThreadLimit);
+    if (AdjustInfo.first)
+      EffectiveNumThreads[0] = AdjustInfo.second;
+
+    EffectiveNumBlocks[0] = getEffectiveNumBlocks(
+        GenericDevice, EffectiveNumBlocks[0], KernelArgs.Tripcount,
+        EffectiveNumThreads[0], KernelArgs.UserThreadLimit[0] > 0);
+  }
+
+  // The teams reduction buffer is sized from the effective number of blocks, so
+  // the grid size must be finalized before creating the launch environment.
+  // Otherwise a kernel without an explicit num_teams clause would size the
+  // buffer with the raw user value of 0 and fail to allocate.
+  auto KernelLaunchEnvOrErr =
+      getKernelLaunchEnvironment(GenericDevice, KernelArgs, DynBlockMemConf,
+                                 AsyncInfoWrapper, EffectiveNumBlocks[0]);
   if (!KernelLaunchEnvOrErr)
     return KernelLaunchEnvOrErr.takeError();
 
@@ -403,52 +450,17 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
 
   KernelLaunchParamsTy LaunchParams;
 
-  // Kernel languages (.IsCUDA) don't use indirection, whereas dispatching with
-  // an array of kernel argument pointers (.IsPtrArgs) uses KernelArgs.ArgPtrs
-  // and KernelArgs.ArgSizes directly.
+  // Kernel languages do not use the OpenMP indirection and argument parsing.
   if (KernelArgs.Flags.IsCUDA) {
     assert(!isMultiDeviceKernel() && "Multi-device not supported");
     LaunchParams =
         *reinterpret_cast<KernelLaunchParamsTy *>(KernelArgs.ArgPtrs);
-  } else if (!KernelArgs.Flags.IsPtrArgs) {
+  } else if (KernelArgs.Flags.IsPtrArgs) {
+    LaunchParams = KernelLaunchParamsTy{KernelArgs.NumArgs, KernelArgs.ArgPtrs};
+  } else {
     LaunchParams =
         prepareArgs(GenericDevice, ArgPtrs, ArgOffsets, KernelArgs.NumArgs,
                     Args, Ptrs, *KernelLaunchEnvOrErr, KernelArgs.Version);
-  }
-
-  // Get max occupancy for this kernel
-  computeMaxOccupancy(GenericDevice);
-  std::string KernelName = getName();
-  KernelRunRecordTy *KernelRecord = GenericDevice.getKernelRunRecords();
-  uint32_t KernelRunCounter = 0;
-
-  // Calculate or adjust the effective number of threads and blocks if needed.
-  if (KernelRecord) {
-    KernelRunCounter = KernelRecord->getRunCounterForKernel(KernelName);
-  }
-  // If Autotuning is enabled and the kernel is not launched for the first time.
-  if (GenericDevice.enableRuntimeAutotuning() && isSPMDMode() &&
-      KernelRunCounter > 0) {
-    assert(KernelRecord &&
-           "Autotuning is enabled, but KernelRunRecord is not initialized!");
-
-    auto [Teams, Threads] =
-        KernelRecord->getLaunchParamsForKernel(*this, GenericDevice);
-    EffectiveNumBlocks[0] = Teams;
-    EffectiveNumThreads[0] = Threads;
-  } else if (!KernelArgs.Flags.StrictBlocksAndThreads && !isBareMode()) {
-    EffectiveNumThreads[0] =
-        getEffectiveNumThreads(GenericDevice, EffectiveNumThreads[0]);
-
-    std::pair<bool, uint32_t> AdjustInfo = adjustNumThreadsForLowTripCount(
-        GenericDevice, EffectiveNumThreads[0], KernelArgs.Tripcount,
-        KernelArgs.UserThreadLimit);
-    if (AdjustInfo.first)
-      EffectiveNumThreads[0] = AdjustInfo.second;
-
-    EffectiveNumBlocks[0] = getEffectiveNumBlocks(
-        GenericDevice, EffectiveNumBlocks[0], KernelArgs.Tripcount,
-        EffectiveNumThreads[0], KernelArgs.UserThreadLimit[0] > 0);
   }
 
   // Get achieved occupancy for this kernel.
@@ -528,7 +540,7 @@ GenericKernelTy::prepareArgs(GenericDeviceTy &GenericDevice, void **ArgPtrs,
   for (uint32_t I = 0; I < NumArgs; ++I)
     Ptrs[I] = &Args[I];
 
-  return KernelLaunchParamsTy{sizeof(void *) * NumArgs, &Args[0], &Ptrs[0]};
+  return KernelLaunchParamsTy{NumArgs, &Ptrs[0]};
 }
 
 uint32_t
@@ -751,8 +763,6 @@ Error GenericDeviceTy::init(GenericPluginTy &Plugin) {
 
 Error GenericDeviceTy::unloadBinary(DeviceImageTy *Image) {
   clear_ArgBufs();
-  if (auto Err = callGlobalDestructors(Plugin, *Image))
-    return Err;
 
   GenericGlobalHandlerTy &Handler = Plugin.getGlobalHandler();
   auto ProfOrErr = Handler.readProfilingGlobals(*this, *Image);
@@ -774,6 +784,18 @@ Error GenericDeviceTy::unloadBinary(DeviceImageTy *Image) {
 }
 
 Error GenericDeviceTy::deinit(GenericPluginTy &Plugin) {
+  // Run the global destructors first in case they required the RPC server.
+  for (auto &I : LoadedImages) {
+    if (auto Err = callGlobalDestructors(Plugin, *I))
+      return Err;
+  }
+
+  if (RPCServer) {
+    if (auto Err = RPCServer->deinitDevice(*this))
+      return Err;
+    RPCServer = nullptr;
+  }
+
   for (auto &I : LoadedImages)
     if (auto Err = unloadBinary(I))
       return Err;
@@ -791,10 +813,6 @@ Error GenericDeviceTy::deinit(GenericPluginTy &Plugin) {
     delete RecordReplay;
     RecordReplay = nullptr;
   }
-
-  if (RPCServer)
-    if (auto Err = RPCServer->deinitDevice(*this))
-      return Err;
 
   // Delete autotuning related resources if the option is on.
   if (OMPX_EnableRuntimeAutotuning) {
@@ -1123,7 +1141,8 @@ Error GenericDeviceTy::getDeviceMemorySize(uint64_t &DSize) {
 }
 
 Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
-                                            TargetAllocTy Kind) {
+                                            TargetAllocTy Kind,
+                                            size_t Alignment) {
   // Uses RAII to get timing for this operation through the DataAllocTimer
   // object
   auto DataAllocTimer =
@@ -1131,6 +1150,7 @@ Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
 
   void *Alloc = nullptr;
 
+  // TODO Check alignment.
   if (RecordReplay && RecordReplay->isRecordingOrReplaying())
     return RecordReplay->allocate(Size);
 
@@ -1138,7 +1158,7 @@ Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
   case TARGET_ALLOC_DEFAULT:
   case TARGET_ALLOC_DEVICE:
     if (MemoryManager) {
-      auto AllocOrErr = MemoryManager->allocate(Size, HostPtr);
+      auto AllocOrErr = MemoryManager->allocate(Size, HostPtr, Alignment);
       if (!AllocOrErr)
         return AllocOrErr.takeError();
       Alloc = *AllocOrErr;
@@ -1150,7 +1170,7 @@ Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
     [[fallthrough]];
   case TARGET_ALLOC_HOST:
   case TARGET_ALLOC_SHARED: {
-    auto AllocOrErr = allocate(Size, HostPtr, Kind);
+    auto AllocOrErr = allocate(Size, HostPtr, Kind, Alignment);
     if (!AllocOrErr)
       return AllocOrErr.takeError();
     Alloc = *AllocOrErr;
@@ -1860,7 +1880,8 @@ void *GenericPluginTy::data_alloc(int32_t DeviceId, int64_t Size, void *HostPtr,
   auto T = logger::log<void *>(__func__, DeviceId, Size, HostPtr, Kind);
   auto R = [&]() -> void * {
     auto &Dev = getDevice(DeviceId);
-    auto AllocOrErr = Dev.dataAlloc(Size, HostPtr, (TargetAllocTy)Kind);
+    auto AllocOrErr = Dev.dataAlloc(Size, HostPtr, (TargetAllocTy)Kind,
+                                    /*Alignment=*/0);
     if (!AllocOrErr) {
       auto Err = AllocOrErr.takeError();
       REPORT() << "Failure to allocate device memory: "
