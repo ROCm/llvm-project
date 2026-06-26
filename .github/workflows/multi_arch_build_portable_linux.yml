@@ -36,6 +36,7 @@ on:
         type: string
       expect_failure:
         type: boolean
+        default: false
       rocm_package_version:
         type: string
       prebuilt_stages:
@@ -48,6 +49,10 @@ on:
         default: ci
       test_type:
         type: string      # Temporary add until release_type is fixed
+      libhipcxx_pr_sha:
+        type: string
+        default: ""
+        description: "ROCm/libhipcxx commit SHA for math-libs/libhipcxx submodule override"
 
 permissions:
   contents: read
@@ -69,6 +74,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
       test_type: ${{ inputs.test_type }}
+      libhipcxx_pr_sha: ${{ inputs.libhipcxx_pr_sha }}
     permissions:
       contents: read
       id-token: write
@@ -122,6 +128,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
       test_type: ${{ inputs.test_type }}
+      libhipcxx_pr_sha: ${{ inputs.libhipcxx_pr_sha }}
     permissions:
       contents: read
       id-token: write
