@@ -408,8 +408,6 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
   // wrapped before trampoline branches are finalized.
   if (VT.applyVop3pxWrapPatch)
     Patched += VT.applyVop3pxWrapPatch(Ctx);
-  if (VT.applySethaltFixPatch)
-    Patched += VT.applySethaltFixPatch(Ctx);
 
   for (const llvm::StringMapEntry<KernelPatchStats> &KV : KernelStats) {
     StringRef KName = KV.first();
