@@ -15,11 +15,10 @@ define i32 @atomic_nand_i32_lds(ptr addrspace(3) %ptr) nounwind {
 ; GCN-NEXT:    ds_cmpst_rtn_b32 v1, v0, v2, v1
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, v1, v2
-; GCN-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v2
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GCN-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB0_1
 ; GCN-NEXT:  .LBB0_2: ; %atomicrmw.end
@@ -45,11 +44,10 @@ define i32 @atomic_nand_i32_global(ptr addrspace(1) %ptr) nounwind {
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    buffer_wbinvl1_vol
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GCN-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GCN-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB1_1
 ; GCN-NEXT:  .LBB1_2: ; %atomicrmw.end
@@ -75,11 +73,10 @@ define i32 @atomic_nand_i32_flat(ptr %ptr) nounwind {
 ; GCN-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    buffer_wbinvl1_vol
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GCN-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GCN-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB2_1
 ; GCN-NEXT:  .LBB2_2: ; %atomicrmw.end
