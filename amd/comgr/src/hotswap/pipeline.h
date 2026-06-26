@@ -17,9 +17,8 @@ struct PipelineTimings {
   double createTempDirSeconds = 0.0;
   double raiseSeconds = 0.0;
   double writeIrSeconds = 0.0;
+  double optSeconds = 0.0;
   double llcSeconds = 0.0;
-  double readAsmSeconds = 0.0;
-  double llvmMcSeconds = 0.0;
   double linkSeconds = 0.0;
   double readHsacoSeconds = 0.0;
   double collectMetadataSeconds = 0.0;
@@ -29,6 +28,8 @@ struct PipelineOptions {
   bool EnableWritelaneRewrite = true;
   bool EnableWaveNative = true;
   bool CollectTimings = false;
+  // Optimization level (0-3) for the in-process opt + llc codegen stages.
+  unsigned OptLevel = 0;
   // HIP launches handled by COMGR's HotSwap runtime have zero HSA grid-global
   // offset, so hidden_global_offset_{x,y,z} can be synthesized as zero.
   // Standalone callers keep this false and reject those source hidden args.
@@ -38,7 +39,6 @@ struct PipelineOptions {
 struct PipelineResult {
   std::unique_ptr<llvm::MemoryBuffer> Hsaco;
   std::string IrText;
-  std::string AsmText;
   PipelineTimings Timings;
   std::string FailMnemonic;
   std::string FailKernel;

@@ -119,6 +119,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cctype>
 #include <cstdio>
@@ -302,6 +303,11 @@ cl::opt<bool> AssumeHipGlobalOffsetZeroOpt(
     cl::desc("Assume HIP launch semantics for hidden_global_offset_{x,y,z}; "
              "generic HSA/OpenCL callers should leave this disabled."));
 
+cl::opt<unsigned> OptLevel(
+    "O", cl::Prefix, cl::init(0), cl::value_desc("level"),
+    cl::desc("Optimization level (0-3) for the in-process opt + llc codegen "
+             "stages (default 0)."));
+
 // Resolve an --enable-/--disable- toggle pair, later occurrence wins.
 bool resolveToggle(bool Default, const cl::opt<bool> &Enable,
                    const cl::opt<bool> &Disable) {
@@ -484,6 +490,7 @@ int main(int argc, char **argv) {
     pipelineOptions.EnableWritelaneRewrite = EnableWritelaneRewrite;
     pipelineOptions.EnableWaveNative = EnableWaveNative;
     pipelineOptions.AssumeHipGlobalOffsetZero = AssumeHipGlobalOffsetZeroOpt;
+    pipelineOptions.OptLevel = std::min<unsigned>(OptLevel, 3);
     auto pipe = COMGR::hotswap::runPipeline(coData, isa, effectiveTargetIsa,
                                             target, pipelineOptions);
     if (!pipe.Success) {

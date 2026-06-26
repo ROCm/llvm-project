@@ -76,7 +76,6 @@ struct HotswapComgrTimings {
   double cacheLookupKeyElfHeaderSeconds = 0.0;
   double cacheLookupKeyRulesHashSeconds = 0.0;
   double cacheLookupKeyLoadedImageIdentitySeconds = 0.0;
-  double cacheLookupKeyLlvmToolIdentitySeconds = 0.0;
   double cacheLookupKeyKernelNamesSeconds = 0.0;
   double cacheLookupKeyMaterialBuildSeconds = 0.0;
   double cacheLookupKeyHashSeconds = 0.0;
@@ -92,9 +91,8 @@ struct HotswapComgrTimings {
   double pipelineCreateTempDirSeconds = 0.0;
   double pipelineRaiseSeconds = 0.0;
   double pipelineWriteIrSeconds = 0.0;
+  double pipelineOptSeconds = 0.0;
   double pipelineLlcSeconds = 0.0;
-  double pipelineReadAsmSeconds = 0.0;
-  double pipelineLlvmMcSeconds = 0.0;
   double pipelineLinkSeconds = 0.0;
   double pipelineReadHsacoSeconds = 0.0;
   double pipelineCollectMetadataSeconds = 0.0;
@@ -104,7 +102,6 @@ struct HotswapComgrTimings {
   double cacheWriteKeyElfHeaderSeconds = 0.0;
   double cacheWriteKeyRulesHashSeconds = 0.0;
   double cacheWriteKeyLoadedImageIdentitySeconds = 0.0;
-  double cacheWriteKeyLlvmToolIdentitySeconds = 0.0;
   double cacheWriteKeyKernelNamesSeconds = 0.0;
   double cacheWriteKeyMaterialBuildSeconds = 0.0;
   double cacheWriteKeyHashSeconds = 0.0;
@@ -131,8 +128,6 @@ std::string timingJson(const HotswapComgrTimings &Timings) {
        Timings.cacheLookupKeyRulesHashSeconds},
       {"cache_lookup_key_loaded_image_identity_seconds",
        Timings.cacheLookupKeyLoadedImageIdentitySeconds},
-      {"cache_lookup_key_llvm_tool_identity_seconds",
-       Timings.cacheLookupKeyLlvmToolIdentitySeconds},
       {"cache_lookup_key_kernel_names_seconds",
        Timings.cacheLookupKeyKernelNamesSeconds},
       {"cache_lookup_key_material_build_seconds",
@@ -153,9 +148,8 @@ std::string timingJson(const HotswapComgrTimings &Timings) {
       {"pipeline_create_temp_dir_seconds", Timings.pipelineCreateTempDirSeconds},
       {"pipeline_raise_seconds", Timings.pipelineRaiseSeconds},
       {"pipeline_write_ir_seconds", Timings.pipelineWriteIrSeconds},
+      {"pipeline_opt_seconds", Timings.pipelineOptSeconds},
       {"pipeline_llc_seconds", Timings.pipelineLlcSeconds},
-      {"pipeline_read_asm_seconds", Timings.pipelineReadAsmSeconds},
-      {"pipeline_llvm_mc_seconds", Timings.pipelineLlvmMcSeconds},
       {"pipeline_link_seconds", Timings.pipelineLinkSeconds},
       {"pipeline_read_hsaco_seconds", Timings.pipelineReadHsacoSeconds},
       {"pipeline_collect_metadata_seconds",
@@ -170,8 +164,6 @@ std::string timingJson(const HotswapComgrTimings &Timings) {
        Timings.cacheWriteKeyRulesHashSeconds},
       {"cache_write_key_loaded_image_identity_seconds",
        Timings.cacheWriteKeyLoadedImageIdentitySeconds},
-      {"cache_write_key_llvm_tool_identity_seconds",
-       Timings.cacheWriteKeyLlvmToolIdentitySeconds},
       {"cache_write_key_kernel_names_seconds",
        Timings.cacheWriteKeyKernelNamesSeconds},
       {"cache_write_key_material_build_seconds",
@@ -202,8 +194,6 @@ void addLookupTimings(HotswapComgrTimings &Timings,
   Timings.cacheLookupKeyRulesHashSeconds += lookup.keyBuild.rulesHashSeconds;
   Timings.cacheLookupKeyLoadedImageIdentitySeconds +=
       lookup.keyBuild.loadedImageIdentitySeconds;
-  Timings.cacheLookupKeyLlvmToolIdentitySeconds +=
-      lookup.keyBuild.llvmToolIdentitySeconds;
   Timings.cacheLookupKeyKernelNamesSeconds +=
       lookup.keyBuild.kernelNamesSeconds;
   Timings.cacheLookupKeyMaterialBuildSeconds +=
@@ -225,9 +215,8 @@ void addPipelineTimings(HotswapComgrTimings &Timings,
   Timings.pipelineCreateTempDirSeconds += pipeline.createTempDirSeconds;
   Timings.pipelineRaiseSeconds += pipeline.raiseSeconds;
   Timings.pipelineWriteIrSeconds += pipeline.writeIrSeconds;
+  Timings.pipelineOptSeconds += pipeline.optSeconds;
   Timings.pipelineLlcSeconds += pipeline.llcSeconds;
-  Timings.pipelineReadAsmSeconds += pipeline.readAsmSeconds;
-  Timings.pipelineLlvmMcSeconds += pipeline.llvmMcSeconds;
   Timings.pipelineLinkSeconds += pipeline.linkSeconds;
   Timings.pipelineReadHsacoSeconds += pipeline.readHsacoSeconds;
   Timings.pipelineCollectMetadataSeconds += pipeline.collectMetadataSeconds;
@@ -242,8 +231,6 @@ void addWriteTimings(HotswapComgrTimings &Timings,
   Timings.cacheWriteKeyRulesHashSeconds += write.keyBuild.rulesHashSeconds;
   Timings.cacheWriteKeyLoadedImageIdentitySeconds +=
       write.keyBuild.loadedImageIdentitySeconds;
-  Timings.cacheWriteKeyLlvmToolIdentitySeconds +=
-      write.keyBuild.llvmToolIdentitySeconds;
   Timings.cacheWriteKeyKernelNamesSeconds += write.keyBuild.kernelNamesSeconds;
   Timings.cacheWriteKeyMaterialBuildSeconds +=
       write.keyBuild.materialBuildSeconds;
@@ -554,6 +541,7 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_hotswap_transpile_with_options(
     PipelineOptions.CollectTimings = CollectTimings;
     PipelineOptions.AssumeHipGlobalOffsetZero =
         CacheRequest.AssumeHipGlobalOffsetZero;
+    PipelineOptions.OptLevel = CacheRequest.OptLevel;
     Pipeline = COMGR::hotswap::runPipelineAllKernels(InputBuf,
                                                  SourceIdent.Processor.str(),
                                                  TargetIdent.Processor.str(),

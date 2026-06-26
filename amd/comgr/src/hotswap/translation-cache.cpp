@@ -25,10 +25,6 @@
 
 #define DEBUG_TYPE "translation-cache"
 
-#ifndef LLVM_TOOLS_DIR
-#define LLVM_TOOLS_DIR "/usr/bin"
-#endif
-
 namespace COMGR::hotswap {
 namespace {
 
@@ -47,7 +43,7 @@ double timingElapsed(bool CollectTimings, TimingClock::time_point start) {
   return CollectTimings ? secondsBetween(start, TimingClock::now()) : 0.0;
 }
 
-constexpr int kCacheSchemaVersion = 2;
+constexpr int kCacheSchemaVersion = 4;
 
 struct FileIdentity {
   std::string path;
@@ -66,9 +62,6 @@ struct KeyData {
   std::string rulesError;
   std::string buildIdentity;
   std::string deviceLibrariesIdentity;
-  std::string llcIdentity;
-  std::string llvmMcIdentity;
-  std::string lldIdentity;
   std::string elfMachineHex;
   std::string elfFlagsHex;
   std::vector<std::string> kernelNames;
@@ -186,24 +179,6 @@ void appendKeyField(std::string &material, llvm::StringRef name, int value) {
   appendKeyField(material, name, std::to_string(value));
 }
 
-const FileIdentity &llcIdentity() {
-  static const FileIdentity identity =
-      statIdentity(std::string(LLVM_TOOLS_DIR) + "/llc");
-  return identity;
-}
-
-const FileIdentity &llvmMcIdentity() {
-  static const FileIdentity identity =
-      statIdentity(std::string(LLVM_TOOLS_DIR) + "/llvm-mc");
-  return identity;
-}
-
-const FileIdentity &lldIdentity() {
-  static const FileIdentity identity =
-      statIdentity(std::string(LLVM_TOOLS_DIR) + "/ld.lld");
-  return identity;
-}
-
 KeyData buildKeyData(const TranslationCacheRequest &request,
                      bool CollectTimings) {
   KeyData data;
@@ -247,21 +222,6 @@ KeyData buildKeyData(const TranslationCacheRequest &request,
     }
   }
 
-  const std::string toolsDir = LLVM_TOOLS_DIR;
-  auto llvmToolIdentityStart = timingStart(CollectTimings);
-  const FileIdentity &llc = llcIdentity();
-  const FileIdentity &llvmMc = llvmMcIdentity();
-  const FileIdentity &lld = lldIdentity();
-  data.Timings.llvmToolIdentitySeconds =
-      timingElapsed(CollectTimings, llvmToolIdentityStart);
-  if (!llc.present || !llvmMc.present || !lld.present || !llc.error.empty() ||
-      !llvmMc.error.empty() || !lld.error.empty()) {
-    data.error = "LLVM tool identity is incomplete under " + toolsDir;
-    return data;
-  }
-  data.llcIdentity = identityString(llc);
-  data.llvmMcIdentity = identityString(llvmMc);
-  data.lldIdentity = identityString(lld);
   auto loadedImageIdentityStart = timingStart(CollectTimings);
   data.buildIdentity = loadedImageIdentity();
   data.Timings.loadedImageIdentitySeconds =
@@ -295,6 +255,7 @@ KeyData buildKeyData(const TranslationCacheRequest &request,
   appendKeyField(material, "elf_machine", data.elfMachineHex);
   appendKeyField(material, "elf_flags", data.elfFlagsHex);
   appendKeyField(material, "orig_mach", request.OrigMach);
+  appendKeyField(material, "opt_level", static_cast<int>(request.OptLevel));
   appendKeyField(material, "rules_path", request.HotswapRulesPath);
   appendKeyField(material, "rules_sha256", data.rulesSha256);
   appendKeyField(material, "strict", request.StrictMode);
@@ -306,9 +267,6 @@ KeyData buildKeyData(const TranslationCacheRequest &request,
   appendKeyField(material, "hotswap_build_identity", data.buildIdentity);
   appendKeyField(material, "device_libraries_identity",
                  data.deviceLibrariesIdentity);
-  appendKeyField(material, "llc_identity", data.llcIdentity);
-  appendKeyField(material, "llvm_mc_identity", data.llvmMcIdentity);
-  appendKeyField(material, "lld_identity", data.lldIdentity);
   data.Timings.materialBuildSeconds =
       timingElapsed(CollectTimings, materialBuildStart);
   auto keyHashStart = timingStart(CollectTimings);
@@ -507,6 +465,7 @@ llvm::json::Object metadataObject(const TranslationCacheRequest &request,
       {"elf_machine", keyData.elfMachineHex},
       {"elf_flags", keyData.elfFlagsHex},
       {"orig_mach", request.OrigMach},
+      {"opt_level", static_cast<int64_t>(request.OptLevel)},
       {"hotswap_rules_path", request.HotswapRulesPath},
       {"hotswap_rules_sha256", keyData.rulesSha256},
       {"strict_mode", request.StrictMode},
@@ -515,9 +474,6 @@ llvm::json::Object metadataObject(const TranslationCacheRequest &request,
       {"assume_hip_global_offset_zero", request.AssumeHipGlobalOffsetZero},
       {"hotswap_build_identity", keyData.buildIdentity},
       {"device_libraries_identity", keyData.deviceLibrariesIdentity},
-      {"llc_identity", keyData.llcIdentity},
-      {"llvm_mc_identity", keyData.llvmMcIdentity},
-      {"lld_identity", keyData.lldIdentity},
       {"kernel_count", static_cast<int64_t>(keyData.kernelNames.size())},
       {"kernel_names", kernelArray(keyData.kernelNames)},
       {"cached_object_sha256", objectSha256.str()},
@@ -552,6 +508,8 @@ bool validateMetadata(const TranslationCacheRequest &request,
       !requireEqualString(obj, "elf_machine", keyData.elfMachineHex, Reason) ||
       !requireEqualString(obj, "elf_flags", keyData.elfFlagsHex, Reason) ||
       !requireEqualInt(obj, "orig_mach", request.OrigMach, Reason) ||
+      !requireEqualInt(obj, "opt_level", static_cast<int64_t>(request.OptLevel),
+                       Reason) ||
       !requireEqualString(obj, "hotswap_rules_path", request.HotswapRulesPath,
                           Reason) ||
       !requireEqualString(obj, "hotswap_rules_sha256", keyData.rulesSha256,
@@ -567,10 +525,6 @@ bool validateMetadata(const TranslationCacheRequest &request,
                           keyData.buildIdentity, Reason) ||
       !requireEqualString(obj, "device_libraries_identity",
                           keyData.deviceLibrariesIdentity, Reason) ||
-      !requireEqualString(obj, "llc_identity", keyData.llcIdentity, Reason) ||
-      !requireEqualString(obj, "llvm_mc_identity", keyData.llvmMcIdentity,
-                          Reason) ||
-      !requireEqualString(obj, "lld_identity", keyData.lldIdentity, Reason) ||
       !requireEqualInt(obj, "kernel_count",
                        static_cast<int64_t>(keyData.kernelNames.size()),
                        Reason) ||
