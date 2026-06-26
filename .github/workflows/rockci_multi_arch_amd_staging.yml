@@ -16,9 +16,8 @@ name: Multi-Arch CI amd-staging
 on:
   push:
     branches:
-      - main
+      - amd/dev/libhipcxx/**
       - multi_arch/**
-      - release/therock-*
   workflow_dispatch:
     inputs:
       linux_amdgpu_families:

@@ -86,140 +86,15 @@ jobs:
           # Fetch the latest commit SHA from the PR branch
           PR_SHA=${{ github.event.pull_request.head.sha }}
           # Update the submodule pointer using cacheinfo
-          git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
+           git update-index --cacheinfo 160000,95241b06931f0fa13ee67392d498675795dd4248,math-libs/libhipcxx
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
-          git commit -m "Update submodule reference for compiler/amd-llvm"
-          git submodule update --init --recursive compiler/amd-llvm
+          git commit -m "Update submodule reference for math-libs/libhipcx"
+          git submodule update --init --recursive math-libs/libhipcx
           # Verify the pointer update
           git submodule status
           git submodule
 
-      - name: Update Submodule Pointer at compiler/amd-llvm for manual debug
-        if: ${{ github.event_name != 'pull_request' && github.workflow == 'ROCK CI Windows Debug Support' }}
-        run: |
-          git config --global --add safe.directory $PWD
-          echo "sha: $GITHUB_SHA"
-          # Update the submodule pointer using cacheinfo
-          git update-index --cacheinfo 160000,$GITHUB_SHA,compiler/amd-llvm
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
-          git commit -m "Update submodule reference for compiler/amd-llvm using branch SHA"
-          # Verify the pointer update
-          git submodule update --init --recursive compiler/amd-llvm          
-          git submodule status
-          git submodule
-
-      - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: multiple-pr-build-params
-          path: .
-
-      - name: Check for parameterised PR trigger
-        id: check_parameterised_trigger
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          if [ -f "./${{ github.run_id }}_PR_params.env" ]; then
-            echo "parameterised_trigger=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "parameterised_trigger=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Source the multiple PR's of params
-        if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
-        run: |
-          set -a
-          source ./${{ github.run_id }}_PR_params.env
-          set +a
-          echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
-          echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
-          echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
-          echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
-
-      - name: Update submodule pointers from provided parameter PR values
-        if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
-        run: |
-          git config --global --add safe.directory "$PWD"
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
-
-          trim_sha() {
-             printf '%s' "$1" | tr -d '[:space:]'
-          }
-          # Function to get SHA with git-ls
-          get_pr_sha() {
-             local pr_url="$1"
-             local base_repo_url=$(echo "$pr_url" | sed 's|/pull/.*||')
-             local pr_num=$(echo "$pr_url" | sed 's|.*/pull/||')
-             sha=$(git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}')
-             trim_sha "$sha"
-          }
-
-          merge_upstream_prs() {
-             local pr_urls="$1"
-             local url repo num ref
-             git submodule update --init --jobs 1 compiler/amd-llvm
-             IFS=',' read -ra PR_URLS <<< "$pr_urls"
-             for url in "${PR_URLS[@]}"; do
-               url="$(echo "$url" | xargs)"
-               [[ -z "$url" ]] && continue
-               repo="$(echo "$url" | sed 's|/pull/.*||')"
-               num="$(echo "$url" | sed 's|.*/pull/||')"
-               ref="upstream-pr-${num}"
-               echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
-               git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-               git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
-                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
-                 exit 1
-               }
-             done
-             MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
-          }
-
-          LLVM_SHA=""
-
-          # LLVM PR based on if its ROCm or Trunk
-          if [[ -n "$LLVM_ROCm_PR_URL" ]]; then
-              LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
-              echo "ROCm LLVM head SHA: $LLVM_SHA"
-          elif [[ -n "$LLVM_PR_URL" ]]; then
-              merge_upstream_prs "$LLVM_PR_URL"
-              LLVM_SHA="$MERGED_LLVM_SHA"
-              echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
-          fi
-
-          if [[ -n "$LLVM_SHA" ]]; then
-              git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
-          fi
-               
-          # SPIRV PR
-          if [[ -n "$SPIRV_PR_URL" ]]; then
-              SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
-              echo "SPIRV head SHA: $SPIRV_SHA"
-              git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
-          else
-              SPIRV_SHA="$(git ls-remote https://github.com/ROCm/SPIRV-LLVM-Translator.git refs/heads/amd-staging | awk '{print $1}')"
-              echo "SPIRV PR NOT Passed, defaulting to the amd-staging tip : $SPIRV_SHA"
-              git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
-          fi
-
-          # HIPIFY PR
-          if [[ -n "$HIPIFY_PR_URL" ]]; then
-              HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
-              echo "HIPIFY head SHA: $HIPIFY_SHA"
-              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
-          else
-              HIPIFY_SHA="$(git ls-remote https://github.com/ROCm/HIPIFY.git refs/heads/amd-staging | awk '{print $1}')"
-              echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
-              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
-          fi
-          git commit -m "Update submodule references from PR URLs"
-          git submodule update --init --recursive compiler/amd-llvm          
-          git submodule status
-          git submodule
 
       - name: "Map Current Directory to L Drive"
         id: subst
@@ -386,27 +261,6 @@ jobs:
             Set-Content -Path $file -Value $updated -NoNewline
             Write-Host "Patched: $file"
           }
-          
-      - name: Configure PR Projects
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
-        env:
-          cmake_preset: ${{ inputs.build_variant_cmake_preset }}
-          amdgpu_families: ${{ inputs.amdgpu_families }}
-          package_version: ${{ inputs.package_version }}
-          #extra_cmake_options: ${{ inputs.extra_cmake_options }}
-          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
-        run: |
-          cd L:
-          ccache -z
-          cmake -B 'B:\build' -S 'L:\' -GNinja \
-            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
-            ${{ steps.stage_config.outputs.cmake_args }} \
-            ${{ env.extra_cmake_options }} \
-            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
-
       - name: Configure All Projects
         if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
         env:
