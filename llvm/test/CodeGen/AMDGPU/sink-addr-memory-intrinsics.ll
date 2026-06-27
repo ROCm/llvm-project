@@ -6,9 +6,11 @@ define amdgpu_kernel void @memoryIntrinstic(ptr addrspace(3) %inptr, i1 %cond, p
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
+; CHECK-NEXT:    s_bitcmp1_b32 s1, 0
+; CHECK-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v0, s0
-; CHECK-NEXT:    s_bitcmp0_b32 s1, 0
-; CHECK-NEXT:    s_cbranch_scc1 .LBB0_2
+; CHECK-NEXT:    s_and_b64 vcc, exec, s[4:5]
+; CHECK-NEXT:    s_cbranch_vccz .LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %then
 ; CHECK-NEXT:    ds_read_b64_tr_b16 v[2:3], v0 offset:8192
 ; CHECK-NEXT:    s_mov_b32 s0, 0x5040100
@@ -49,9 +51,11 @@ define amdgpu_kernel void @badIntrinsicUse(ptr addrspace(3) %inptr, i1 %cond, pt
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
+; CHECK-NEXT:    s_bitcmp1_b32 s1, 0
+; CHECK-NEXT:    s_cselect_b64 s[6:7], -1, 0
 ; CHECK-NEXT:    s_addk_i32 s0, 0x2000
-; CHECK-NEXT:    s_bitcmp0_b32 s1, 0
-; CHECK-NEXT:    s_cbranch_scc1 .LBB1_2
+; CHECK-NEXT:    s_and_b64 vcc, exec, s[6:7]
+; CHECK-NEXT:    s_cbranch_vccz .LBB1_2
 ; CHECK-NEXT:  ; %bb.1: ; %then
 ; CHECK-NEXT:    v_mov_b32_e32 v0, s0
 ; CHECK-NEXT:    ds_read_b64_tr_b16 v[2:3], v0
@@ -100,9 +104,11 @@ define amdgpu_kernel void @badIntrinsicUse2(ptr addrspace(3) %inptr, i1 %cond, p
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
+; CHECK-NEXT:    s_bitcmp1_b32 s1, 0
+; CHECK-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; CHECK-NEXT:    s_addk_i32 s0, 0x2000
-; CHECK-NEXT:    s_bitcmp0_b32 s1, 0
-; CHECK-NEXT:    s_cbranch_scc1 .LBB2_2
+; CHECK-NEXT:    s_and_b64 vcc, exec, s[4:5]
+; CHECK-NEXT:    s_cbranch_vccz .LBB2_2
 ; CHECK-NEXT:  ; %bb.1: ; %then
 ; CHECK-NEXT:    v_mov_b32_e32 v0, s0
 ; CHECK-NEXT:    ds_read_b64_tr_b16 v[2:3], v0

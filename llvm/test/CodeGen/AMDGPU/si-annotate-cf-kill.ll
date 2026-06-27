@@ -29,25 +29,24 @@ define amdgpu_ps float @uniform_kill(float %a, i32 %b, float %c) {
 ; SI-NEXT:  ; %bb.3: ; %endif1
 ; SI-NEXT:    s_and_b64 exec, exec, s[0:1]
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
-; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v0
 ; SI-NEXT:    v_mov_b32_e32 v0, 0
-; SI-NEXT:    s_xor_b64 exec, vcc, exec
+; SI-NEXT:    s_xor_b64 s[0:1], exec, vcc
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB0_5
 ; SI-NEXT:  .LBB0_4: ; %if2
-; SI-NEXT:    s_mov_b32 s1, 0
-; SI-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x0
+; SI-NEXT:    s_mov_b32 s3, 0
+; SI-NEXT:    s_load_dwordx2 s[4:5], s[2:3], 0x0
 ; SI-NEXT:    v_add_f32_e32 v0, 1.0, v2
 ; SI-NEXT:    v_cvt_i32_f32_e32 v0, v0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    s_mov_b32 s2, s0
-; SI-NEXT:    s_mov_b32 s3, s1
-; SI-NEXT:    buffer_atomic_swap v0, off, s[0:3], 0 offset:4 glc
+; SI-NEXT:    s_mov_b32 s6, s4
+; SI-NEXT:    s_mov_b32 s7, s5
+; SI-NEXT:    buffer_atomic_swap v0, off, s[4:7], 0 offset:4 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0)
 ; SI-NEXT:    v_cvt_f32_i32_e32 v0, v0
 ; SI-NEXT:  .LBB0_5: ; %endif2
-; SI-NEXT:    s_or_b64 exec, exec, vcc
+; SI-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; SI-NEXT:    s_branch .LBB0_7
 ; SI-NEXT:  .LBB0_6:
 ; SI-NEXT:    s_mov_b64 exec, 0
@@ -81,25 +80,24 @@ define amdgpu_ps float @uniform_kill(float %a, i32 %b, float %c) {
 ; FLAT-NEXT:  ; %bb.3: ; %endif1
 ; FLAT-NEXT:    s_and_b64 exec, exec, s[0:1]
 ; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
-; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v0
 ; FLAT-NEXT:    v_mov_b32_e32 v0, 0
-; FLAT-NEXT:    s_xor_b64 exec, vcc, exec
+; FLAT-NEXT:    s_xor_b64 s[0:1], exec, vcc
+; FLAT-NEXT:    s_mov_b64 exec, vcc
 ; FLAT-NEXT:    ; divergent control-flow edge
 ; FLAT-NEXT:    s_cbranch_execz .LBB0_5
 ; FLAT-NEXT:  .LBB0_4: ; %if2
-; FLAT-NEXT:    s_mov_b32 s1, 0
-; FLAT-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x0
+; FLAT-NEXT:    s_mov_b32 s3, 0
+; FLAT-NEXT:    s_load_dwordx2 s[4:5], s[2:3], 0x0
 ; FLAT-NEXT:    v_add_f32_e32 v0, 1.0, v2
 ; FLAT-NEXT:    v_cvt_i32_f32_e32 v0, v0
 ; FLAT-NEXT:    s_waitcnt lgkmcnt(0)
-; FLAT-NEXT:    s_mov_b32 s2, s0
-; FLAT-NEXT:    s_mov_b32 s3, s1
-; FLAT-NEXT:    buffer_atomic_swap v0, off, s[0:3], 0 offset:4 glc
+; FLAT-NEXT:    s_mov_b32 s6, s4
+; FLAT-NEXT:    s_mov_b32 s7, s5
+; FLAT-NEXT:    buffer_atomic_swap v0, off, s[4:7], 0 offset:4 glc
 ; FLAT-NEXT:    s_waitcnt vmcnt(0)
 ; FLAT-NEXT:    v_cvt_f32_i32_e32 v0, v0
 ; FLAT-NEXT:  .LBB0_5: ; %endif2
-; FLAT-NEXT:    s_or_b64 exec, exec, vcc
+; FLAT-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; FLAT-NEXT:    s_branch .LBB0_7
 ; FLAT-NEXT:  .LBB0_6:
 ; FLAT-NEXT:    s_mov_b64 exec, 0

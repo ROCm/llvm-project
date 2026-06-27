@@ -233,34 +233,36 @@ define void @func_stacksave_nonentry_block(i1 %cond) #0 {
 ; WAVE32-OPT:       ; %bb.0: ; %bb0
 ; WAVE32-OPT-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; WAVE32-OPT-NEXT:    v_and_b32_e32 v0, 1, v0
-; WAVE32-OPT-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; WAVE32-OPT-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; WAVE32-OPT-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v0
+; WAVE32-OPT-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
+; WAVE32-OPT-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; WAVE32-OPT-NEXT:    ; divergent control-flow edge
 ; WAVE32-OPT-NEXT:    s_cbranch_execz .LBB4_2
 ; WAVE32-OPT-NEXT:  .LBB4_1: ; %bb1
-; WAVE32-OPT-NEXT:    s_lshr_b32 s4, s32, 5
+; WAVE32-OPT-NEXT:    s_lshr_b32 s5, s32, 5
 ; WAVE32-OPT-NEXT:    ;;#ASMSTART
-; WAVE32-OPT-NEXT:    ; use s4
+; WAVE32-OPT-NEXT:    ; use s5
 ; WAVE32-OPT-NEXT:    ;;#ASMEND
 ; WAVE32-OPT-NEXT:  .LBB4_2: ; %bb2
-; WAVE32-OPT-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; WAVE32-OPT-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; WAVE32-OPT-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; WAVE64-OPT-LABEL: func_stacksave_nonentry_block:
 ; WAVE64-OPT:       ; %bb.0: ; %bb0
 ; WAVE64-OPT-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; WAVE64-OPT-NEXT:    v_and_b32_e32 v0, 1, v0
-; WAVE64-OPT-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; WAVE64-OPT-NEXT:    s_xor_b64 exec, vcc, exec
+; WAVE64-OPT-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
+; WAVE64-OPT-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; WAVE64-OPT-NEXT:    s_mov_b64 exec, vcc
 ; WAVE64-OPT-NEXT:    ; divergent control-flow edge
 ; WAVE64-OPT-NEXT:    s_cbranch_execz .LBB4_2
 ; WAVE64-OPT-NEXT:  .LBB4_1: ; %bb1
-; WAVE64-OPT-NEXT:    s_lshr_b32 s4, s32, 6
+; WAVE64-OPT-NEXT:    s_lshr_b32 s6, s32, 6
 ; WAVE64-OPT-NEXT:    ;;#ASMSTART
-; WAVE64-OPT-NEXT:    ; use s4
+; WAVE64-OPT-NEXT:    ; use s6
 ; WAVE64-OPT-NEXT:    ;;#ASMEND
 ; WAVE64-OPT-NEXT:  .LBB4_2: ; %bb2
-; WAVE64-OPT-NEXT:    s_or_b64 exec, exec, vcc
+; WAVE64-OPT-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; WAVE64-OPT-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; WAVE32-O0-LABEL: func_stacksave_nonentry_block:
@@ -271,16 +273,12 @@ define void @func_stacksave_nonentry_block(i1 %cond) #0 {
 ; WAVE32-O0-NEXT:    s_mov_b32 exec_lo, s4
 ; WAVE32-O0-NEXT:    v_and_b32_e64 v0, 1, v0
 ; WAVE32-O0-NEXT:    v_cmp_eq_u32_e64 s4, v0, 1
-; WAVE32-O0-NEXT:    ; kill: def $sgpr5 killed $sgpr4
-; WAVE32-O0-NEXT:    s_mov_b32 s5, -1
-; WAVE32-O0-NEXT:    s_xor_b32 s4, s4, s5
-; WAVE32-O0-NEXT:    s_and_b32 s4, exec_lo, s4
+; WAVE32-O0-NEXT:    s_xor_b32 s5, exec_lo, s4
 ; WAVE32-O0-NEXT:    ; implicit-def: $vgpr1 : SGPR spill to VGPR lane
-; WAVE32-O0-NEXT:    v_writelane_b32 v1, s4, 0
+; WAVE32-O0-NEXT:    v_writelane_b32 v1, s5, 0
 ; WAVE32-O0-NEXT:    s_or_saveexec_b32 s7, -1
 ; WAVE32-O0-NEXT:    buffer_store_dword v1, off, s[0:3], s32 ; 4-byte Folded Spill
 ; WAVE32-O0-NEXT:    s_mov_b32 exec_lo, s7
-; WAVE32-O0-NEXT:    s_xor_b32 s4, s4, exec_lo
 ; WAVE32-O0-NEXT:    s_mov_b32 exec_lo, s4
 ; WAVE32-O0-NEXT:    ; divergent control-flow edge
 ; WAVE32-O0-NEXT:    s_cbranch_execz .LBB4_2
@@ -311,17 +309,13 @@ define void @func_stacksave_nonentry_block(i1 %cond) #0 {
 ; WAVE64-O0-NEXT:    s_mov_b64 exec, s[4:5]
 ; WAVE64-O0-NEXT:    v_and_b32_e64 v0, 1, v0
 ; WAVE64-O0-NEXT:    v_cmp_eq_u32_e64 s[4:5], v0, 1
-; WAVE64-O0-NEXT:    ; kill: def $sgpr6_sgpr7 killed $sgpr4_sgpr5
-; WAVE64-O0-NEXT:    s_mov_b64 s[6:7], -1
-; WAVE64-O0-NEXT:    s_xor_b64 s[4:5], s[4:5], s[6:7]
-; WAVE64-O0-NEXT:    s_and_b64 s[4:5], exec, s[4:5]
+; WAVE64-O0-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; WAVE64-O0-NEXT:    ; implicit-def: $vgpr1 : SGPR spill to VGPR lane
-; WAVE64-O0-NEXT:    v_writelane_b32 v1, s4, 0
-; WAVE64-O0-NEXT:    v_writelane_b32 v1, s5, 1
+; WAVE64-O0-NEXT:    v_writelane_b32 v1, s6, 0
+; WAVE64-O0-NEXT:    v_writelane_b32 v1, s7, 1
 ; WAVE64-O0-NEXT:    s_or_saveexec_b64 s[10:11], -1
 ; WAVE64-O0-NEXT:    buffer_store_dword v1, off, s[0:3], s32 ; 4-byte Folded Spill
 ; WAVE64-O0-NEXT:    s_mov_b64 exec, s[10:11]
-; WAVE64-O0-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
 ; WAVE64-O0-NEXT:    s_mov_b64 exec, s[4:5]
 ; WAVE64-O0-NEXT:    ; divergent control-flow edge
 ; WAVE64-O0-NEXT:    s_cbranch_execz .LBB4_2
@@ -353,16 +347,12 @@ define void @func_stacksave_nonentry_block(i1 %cond) #0 {
 ; WAVE32-WWM-PREALLOC-NEXT:    s_mov_b32 exec_lo, s4
 ; WAVE32-WWM-PREALLOC-NEXT:    v_and_b32_e64 v0, 1, v0
 ; WAVE32-WWM-PREALLOC-NEXT:    v_cmp_eq_u32_e64 s4, v0, 1
-; WAVE32-WWM-PREALLOC-NEXT:    ; kill: def $sgpr5 killed $sgpr4
-; WAVE32-WWM-PREALLOC-NEXT:    s_mov_b32 s5, -1
-; WAVE32-WWM-PREALLOC-NEXT:    s_xor_b32 s4, s4, s5
-; WAVE32-WWM-PREALLOC-NEXT:    s_and_b32 s4, exec_lo, s4
+; WAVE32-WWM-PREALLOC-NEXT:    s_xor_b32 s5, exec_lo, s4
 ; WAVE32-WWM-PREALLOC-NEXT:    ; implicit-def: $vgpr1 : SGPR spill to VGPR lane
-; WAVE32-WWM-PREALLOC-NEXT:    v_writelane_b32 v1, s4, 0
+; WAVE32-WWM-PREALLOC-NEXT:    v_writelane_b32 v1, s5, 0
 ; WAVE32-WWM-PREALLOC-NEXT:    s_or_saveexec_b32 s7, -1
 ; WAVE32-WWM-PREALLOC-NEXT:    buffer_store_dword v1, off, s[0:3], s32 ; 4-byte Folded Spill
 ; WAVE32-WWM-PREALLOC-NEXT:    s_mov_b32 exec_lo, s7
-; WAVE32-WWM-PREALLOC-NEXT:    s_xor_b32 s4, s4, exec_lo
 ; WAVE32-WWM-PREALLOC-NEXT:    s_mov_b32 exec_lo, s4
 ; WAVE32-WWM-PREALLOC-NEXT:    ; divergent control-flow edge
 ; WAVE32-WWM-PREALLOC-NEXT:    s_cbranch_execz .LBB4_2

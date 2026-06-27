@@ -62,14 +62,10 @@ define amdgpu_kernel void @loop_sgpr_spill_implicit_def_in_preheader(
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR $sgpr6, 20, [[DEF]]
   ; CHECK-NEXT:   renamable $sgpr7 = S_MOV_B32 0
   ; CHECK-NEXT:   S_CMP_EQ_U32 renamable $sgpr6, killed renamable $sgpr7, implicit-def $scc
-  ; CHECK-NEXT:   renamable $sgpr6_sgpr7 = S_CSELECT_B64 -1, 0, implicit killed $scc
-  ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_MOV_B64 -1
-  ; CHECK-NEXT:   renamable $sgpr6_sgpr7 = S_XOR_B64 killed renamable $sgpr6_sgpr7, killed renamable $sgpr8_sgpr9, implicit-def dead $scc
-  ; CHECK-NEXT:   renamable $vcc = S_AND_B64 $exec, killed renamable $sgpr6_sgpr7, implicit-def dead $scc
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr5, 21, [[DEF]]
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr4, 22, [[DEF]]
-  ; CHECK-NEXT:   S_CBRANCH_VCCNZ %bb.3, implicit killed $vcc
-  ; CHECK-NEXT:   S_BRANCH %bb.2
+  ; CHECK-NEXT:   S_CBRANCH_SCC1 %bb.2, implicit killed $scc
+  ; CHECK-NEXT:   S_BRANCH %bb.3
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2.loop.latch:
   ; CHECK-NEXT:   successors: %bb.1(0x80000000)

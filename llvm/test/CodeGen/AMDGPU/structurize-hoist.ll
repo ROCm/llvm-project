@@ -10,19 +10,20 @@ define void @test_extractvalue_then_else(ptr %ptr, i1 %cond) {
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX900-NEXT:    flat_load_dword v3, v[0:1]
 ; GFX900-NEXT:    v_and_b32_e32 v2, 1, v2
-; GFX900-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GFX900-NEXT:    s_xor_b64 exec, vcc, exec
-; GFX900-NEXT:    ; divergent control-flow edge
-; GFX900-NEXT:    s_or_b64 exec, exec, vcc
-; GFX900-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; GFX900-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v2
+; GFX900-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX900-NEXT:    s_mov_b64 exec, vcc
+; GFX900-NEXT:    ; divergent control-flow edge
+; GFX900-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX900-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX900-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX900-NEXT:  .LBB0_1: ; %else
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX900-NEXT:    v_add_u32_e32 v3, 1, v3
 ; GFX900-NEXT:  .LBB0_2: ; %merge
-; GFX900-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX900-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX900-NEXT:    flat_store_dword v[0:1], v3
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -52,19 +53,20 @@ define void @test_extractvalue_else_then(ptr %ptr, i1 %cond) {
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX900-NEXT:    flat_load_dword v3, v[0:1]
 ; GFX900-NEXT:    v_and_b32_e32 v2, 1, v2
-; GFX900-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GFX900-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX900-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v2
+; GFX900-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX900-NEXT:    s_mov_b64 exec, vcc
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX900-NEXT:  .LBB1_1: ; %else
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX900-NEXT:    v_add_u32_e32 v3, 1, v3
 ; GFX900-NEXT:  .LBB1_2:
-; GFX900-NEXT:    s_or_b64 exec, exec, vcc
-; GFX900-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX900-NEXT:    s_mov_b64 exec, vcc
-; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX900-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX900-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX900-NEXT:    ; divergent control-flow edge
+; GFX900-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX900-NEXT:    flat_store_dword v[0:1], v3
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -126,8 +128,8 @@ define amdgpu_kernel void @test_loop_with_if( ptr %ptr, i1 %cond) #0 {
 ; GFX900-NEXT:  .LBB2_3: ; %loop
 ; GFX900-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX900-NEXT:    flat_load_dwordx2 v[3:4], v[1:2]
-; GFX900-NEXT:    s_andn2_b64 vcc, exec, s[0:1]
-; GFX900-NEXT:    s_cbranch_vccnz .LBB2_1
+; GFX900-NEXT:    s_and_b64 vcc, exec, s[0:1]
+; GFX900-NEXT:    s_cbranch_vccz .LBB2_1
 ; GFX900-NEXT:  ; %bb.4: ; %if
 ; GFX900-NEXT:    ; in Loop: Header=BB2_3 Depth=1
 ; GFX900-NEXT:    v_cmp_gt_i32_e32 vcc, 11, v5
@@ -196,7 +198,7 @@ define void @test_nested_if(ptr %ptr, i32 %val, i1 %cond) {
 ; GFX900-NEXT:    flat_load_dword v4, v[0:1]
 ; GFX900-NEXT:    v_and_b32_e32 v3, 1, v3
 ; GFX900-NEXT:    v_cmp_eq_u32_e64 s[6:7], 1, v3
-; GFX900-NEXT:    v_cndmask_b32_e64 v5, 0, -1, s[6:7]
+; GFX900-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[6:7]
 ; GFX900-NEXT:    s_xor_b64 s[10:11], s[6:7], exec
 ; GFX900-NEXT:    s_mov_b64 s[8:9], s[6:7]
 ; GFX900-NEXT:    s_mov_b64 s[4:5], 0
@@ -204,7 +206,7 @@ define void @test_nested_if(ptr %ptr, i32 %val, i1 %cond) {
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX900-NEXT:  .LBB3_1: ; %if
-; GFX900-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
+; GFX900-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; GFX900-NEXT:    s_or_b64 s[8:9], s[6:7], vcc
 ; GFX900-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX900-NEXT:  .LBB3_2:
@@ -215,7 +217,7 @@ define void @test_nested_if(ptr %ptr, i32 %val, i1 %cond) {
 ; GFX900-NEXT:    s_cbranch_execz .LBB3_4
 ; GFX900-NEXT:  .LBB3_3: ; %else
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    v_mov_b32_e32 v3, v4
+; GFX900-NEXT:    v_mov_b32_e32 v5, v4
 ; GFX900-NEXT:  .LBB3_4:
 ; GFX900-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX900-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
@@ -223,15 +225,13 @@ define void @test_nested_if(ptr %ptr, i32 %val, i1 %cond) {
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB3_6
 ; GFX900-NEXT:  .LBB3_5: ; %if_2
-; GFX900-NEXT:    flat_load_dword v3, v[0:1]
+; GFX900-NEXT:    flat_load_dword v5, v[0:1]
 ; GFX900-NEXT:  .LBB3_6: ; %merge
 ; GFX900-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX900-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
-; GFX900-NEXT:    v_cndmask_b32_e64 v5, 0, 1, vcc
-; GFX900-NEXT:    v_cmp_ne_u32_e64 s[4:5], 1, v5
-; GFX900-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX900-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
+; GFX900-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX900-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX900-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX900-NEXT:    s_mov_b64 exec, vcc
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB3_9
 ; GFX900-NEXT:  .LBB3_7: ; %if_3
@@ -245,7 +245,7 @@ define void @test_nested_if(ptr %ptr, i32 %val, i1 %cond) {
 ; GFX900-NEXT:    s_cbranch_execz .LBB3_9
 ; GFX900-NEXT:  .LBB3_8: ; %if_4
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    v_add_u32_e32 v4, 1, v3
+; GFX900-NEXT:    v_add_u32_e32 v4, 1, v5
 ; GFX900-NEXT:  .LBB3_9:
 ; GFX900-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX900-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
