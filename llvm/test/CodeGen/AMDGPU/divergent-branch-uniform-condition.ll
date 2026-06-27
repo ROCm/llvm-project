@@ -70,16 +70,15 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:  .LBB0_5: ; %Flow2
 ; ISA-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc
-; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v1
 ; ISA-NEXT:    v_mov_b32_e32 v1, 0
-; ISA-NEXT:    s_xor_b64 exec, vcc, exec
+; ISA-NEXT:    s_xor_b64 s[0:1], exec, vcc
+; ISA-NEXT:    s_mov_b64 exec, vcc
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB0_7
 ; ISA-NEXT:  .LBB0_6: ; %if1
 ; ISA-NEXT:    v_sqrt_f32_e32 v1, v0
 ; ISA-NEXT:  .LBB0_7: ; %endloop
-; ISA-NEXT:    s_or_b64 exec, exec, vcc
+; ISA-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; ISA-NEXT:    exp mrt0, v1, v1, v1, v1 done vm
 ; ISA-NEXT:    s_endpgm
 start:

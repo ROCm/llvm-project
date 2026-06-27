@@ -1,6 +1,6 @@
 ; RUN: opt -S -mtriple=amdgcn-- -codegenprepare < %s | FileCheck -check-prefix=OPT %s
 ; RUN: opt -S -mtriple=amdgcn-- -mcpu=tonga -mattr=-flat-for-global -codegenprepare < %s | FileCheck -check-prefix=OPT %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn < %s | FileCheck -check-prefix=GCN %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN %s
 
 ; This particular case will actually be worse in terms of code size
@@ -27,7 +27,7 @@
 
 ; GCN-LABEL: {{^}}sink_ubfe_i32:
 ; GCN-NOT: lshr
-; GCN: s_cbranch_scc{{[0-1]}}
+; GCN: s_cbranch_vcc{{n?z}}
 
 ; GCN: ; %bb0
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x80008
@@ -176,16 +176,14 @@ ret:
 
 ; GCN-LABEL: {{^}}sink_ubfe_i64_span_midpoint:
 
-; GCN: s_cbranch_scc{{[0-1]}} .LBB3_2
+; GCN: s_lshr_b64 s[[[LO:[0-9]+]]:[[HI:[0-9]+]]], s[{{[0-9]+}}:{{[0-9]+}}], 30
+; GCN: s_cbranch_vcc{{n?z}} .LBB3_2
 
 ; GCN: ; %bb0
-; GCN: s_lshr_b64 s[[[LO:[0-9]+]]:[[HI:[0-9]+]]], s[[[LO2:[0-9]+]]:[[HI2:[0-9]+]]], 30
-; GCN: s_and_b32 s{{[0-9]+}},  s[[LO]], 0xff
+; GCN: s_and_b32 s{{[0-9]+}}, s[[LO]], 0xff
 
 ; GCN: .LBB3_2:
-; GCN-DEFAULT: s_lshr_b64 s[[[LO3:[0-9]+]]:[[HI3:[0-9]+]]], s[[[LO4:[0-9]+]]:[[HI4:[0-9]+]]], 30
-; GCN-DEFAULT: s_and_b32 s{{[0-9]+}},  s[[LO3]], 0x7f
-; GCN-TONGA: s_and_b32 s{{[0-9]+}},  s[[LO]], 0x7f
+; GCN: s_and_b32 s{{[0-9]+}}, s[[LO]], 0x7f
 
 ; GCN: .LBB3_3:
 ; GCN: buffer_store_dwordx2
@@ -229,7 +227,7 @@ ret:
 
 ; GCN-LABEL: {{^}}sink_ubfe_i64_low32:
 
-; GCN: s_cbranch_scc{{[0-1]}} .LBB4_2
+; GCN: s_cbranch_vcc{{n?z}} .LBB4_2
 
 ; GCN: ; %bb0
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x8000f
@@ -278,7 +276,7 @@ ret:
 ; OPT: ret
 
 ; GCN-LABEL: {{^}}sink_ubfe_i64_high32:
-; GCN: s_cbranch_scc{{[0-1]}} .LBB5_2
+; GCN: s_cbranch_vcc{{n?z}} .LBB5_2
 
 ; GCN: ; %bb0
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x80003

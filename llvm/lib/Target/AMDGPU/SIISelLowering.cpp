@@ -1059,6 +1059,7 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
                        ISD::UMAX,
                        ISD::SETCC,
                        ISD::SELECT,
+                       ISD::BRCOND,
                        ISD::SMIN,
                        ISD::SMAX,
                        ISD::UMIN,
@@ -18620,6 +18621,60 @@ SDValue SITargetLowering::performSelectCombine(SDNode *N,
                          SelectLHS, SelectRHS);
 }
 
+/// Fold a NOT-style i1 BRCOND condition into the branch by swapping edges with
+/// the sibling unconditional branch (thread-CFG / late wave transform only):
+///
+///   brcond (not x), T ; br F   ==>   brcond x, F ; br T
+///
+/// Recognized i1 NOT idioms for branch condition:
+///   (xor x, bit_1), (setcc x, bit_1, ne), (setcc x, bit_0, eq).
+///
+/// It avoids the S_XOR / V_CNDMASK + V_CMP materialization via i1 type
+/// promotion of boolean x by getting rid of the XOR/SETCC.
+SDValue SITargetLowering::performBrcondCombine(SDNode *N,
+                                               DAGCombinerInfo &DCI) const {
+  const SIMachineFunctionInfo *MFI =
+      DCI.DAG.getMachineFunction().getInfo<SIMachineFunctionInfo>();
+  if (MFI->isWaveCFG())
+    return SDValue();
+
+  // Only an XOR or SETCC condition can be an i1 NOT; gate on the opcode so the
+  // pattern matchers (and the sibling-branch scan below) are skipped for every
+  // other branch condition.
+  SDValue CondOp = N->getOperand(1);
+  unsigned CondOpc = CondOp.getOpcode();
+  if (CondOpc != ISD::XOR && CondOpc != ISD::SETCC)
+    return SDValue();
+
+  // Peel an i1 NOT off the condition.
+  SDValue PeeledCond;
+  bool IsNegated =
+      (CondOpc == ISD::XOR && sd_match(CondOp, m_Not(m_Value(PeeledCond)))) ||
+      (CondOpc == ISD::SETCC &&
+       (sd_match(CondOp, m_SetCC(m_Value(PeeledCond), m_AllOnes(),
+                                 m_SpecificCondCode(ISD::SETNE))) ||
+        sd_match(CondOp, m_SetCC(m_Value(PeeledCond), m_Zero(),
+                                 m_SpecificCondCode(ISD::SETEQ)))));
+  if (!IsNegated || PeeledCond.getValueType() != MVT::i1)
+    return SDValue();
+
+  // The fold is only possible if there is a sibling branch to take the old
+  // taken edge.
+  SDNode *BR = findUser(SDValue(N, 0), ISD::BR);
+  if (!BR)
+    return SDValue();
+
+  SelectionDAG &DAG = DCI.DAG;
+  SDLoc SL(N);
+
+  // brcond branches to the old fall-through edge on the de-negated condition;
+  // the unconditional branch inherits the old taken edge.
+  SDValue NewBRCOND = DAG.getNode(ISD::BRCOND, SL, MVT::Other, N->getOperand(0),
+                                  PeeledCond, BR->getOperand(1));
+  DAG.UpdateNodeOperands(BR, NewBRCOND, N->getOperand(2));
+  return NewBRCOND;
+}
+
 SDValue SITargetLowering::PerformDAGCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
   switch (N->getOpcode()) {
@@ -18644,6 +18699,10 @@ SDValue SITargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::UMAX:
   case ISD::USUBSAT:
     if (auto Res = promoteUniformOpToI32(SDValue(N, 0), DCI))
+      return Res;
+    break;
+  case ISD::BRCOND:
+    if (auto Res = performBrcondCombine(N, DCI))
       return Res;
     break;
   default:

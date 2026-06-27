@@ -712,20 +712,17 @@ define void @spill_sgpr_with_sgpr_uses() #0 {
 ; GCN-NEXT:    s_mov_b32 s5, s4
 ; GCN-NEXT:    ; implicit-def: $vgpr252 : SGPR spill to VGPR lane
 ; GCN-NEXT:    v_writelane_b32 v252, s5, 0
-; GCN-NEXT:    s_or_saveexec_b64 s[10:11], -1
+; GCN-NEXT:    s_or_saveexec_b64 s[8:9], -1
 ; GCN-NEXT:    buffer_store_dword v252, off, s[0:3], s32 offset:436 ; 4-byte Folded Spill
-; GCN-NEXT:    s_mov_b64 exec, s[10:11]
+; GCN-NEXT:    s_mov_b64 exec, s[8:9]
 ; GCN-NEXT:    s_mov_b32 s5, 0
 ; GCN-NEXT:    s_cmp_eq_u32 s4, s5
-; GCN-NEXT:    s_cselect_b64 s[4:5], -1, 0
-; GCN-NEXT:    s_mov_b64 s[6:7], -1
-; GCN-NEXT:    s_xor_b64 s[4:5], s[4:5], s[6:7]
-; GCN-NEXT:    s_and_b64 vcc, exec, s[4:5]
-; GCN-NEXT:    s_cbranch_vccnz .LBB3_2
-; GCN-NEXT:  ; %bb.1: ; %bb0
-; GCN-NEXT:    s_or_saveexec_b64 s[10:11], -1
+; GCN-NEXT:    s_cbranch_scc1 .LBB3_1
+; GCN-NEXT:    s_branch .LBB3_2
+; GCN-NEXT:  .LBB3_1: ; %bb0
+; GCN-NEXT:    s_or_saveexec_b64 s[8:9], -1
 ; GCN-NEXT:    buffer_load_dword v252, off, s[0:3], s32 offset:436 ; 4-byte Folded Reload
-; GCN-NEXT:    s_mov_b64 exec, s[10:11]
+; GCN-NEXT:    s_mov_b64 exec, s[8:9]
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_readlane_b32 s4, v252, 0
 ; GCN-NEXT:    ;;#ASMSTART

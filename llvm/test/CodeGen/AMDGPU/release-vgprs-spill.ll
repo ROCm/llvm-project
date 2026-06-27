@@ -14,13 +14,16 @@ define amdgpu_kernel void @f(ptr %ptr, i32 %arg) "amdgpu-flat-work-group-size"="
 ; CHECK-NEXT:    scratch_store_b32 off, v0, off offset:4 ; 4-byte Folded Spill
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    global_load_b32 v0, v0, s[2:3]
-; CHECK-NEXT:    s_bitcmp0_b32 s0, 0
+; CHECK-NEXT:    s_bitcmp1_b32 s0, 0
+; CHECK-NEXT:    s_cselect_b32 s0, -1, 0
+; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; CHECK-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    scratch_store_b32 off, v0, off ; 4-byte Folded Spill
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; clobber
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    s_cbranch_scc1 .LBB0_2
+; CHECK-NEXT:    s_cbranch_vccz .LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %true
 ; CHECK-NEXT:    s_clause 0x1 ; 8-byte Folded Reload
 ; CHECK-NEXT:    scratch_load_b32 v0, off, off offset:4

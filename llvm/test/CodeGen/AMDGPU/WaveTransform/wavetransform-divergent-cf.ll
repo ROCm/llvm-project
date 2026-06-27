@@ -494,14 +494,11 @@ define amdgpu_cs void @loop_two_exits(ptr addrspace(1) %out, i32 %val1, i32 %val
 ; CHECK-NEXT:    v_add_co_u32_e32 v5, vcc, s6, v0
 ; CHECK-NEXT:    v_addc_co_u32_e32 v6, vcc, v1, v6, vcc
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
-; CHECK-NEXT:    v_cndmask_b32_e64 v7, 0, 1, vcc
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v7
-; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; CHECK-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; CHECK-NEXT:    s_and_b64 s[6:7], s[6:7], exec
+; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; CHECK-NEXT:    global_store_dword v[5:6], v2, off
-; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_4
 ; CHECK-NEXT:  .LBB7_3: ; %latch
