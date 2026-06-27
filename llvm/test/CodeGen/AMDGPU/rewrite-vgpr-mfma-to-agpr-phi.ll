@@ -11,8 +11,10 @@ define amdgpu_kernel void @test_rewrite_mfma_copy_to_agpr_phi(ptr addrspace(1) %
 ; CHECK-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v32, 7, v0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    s_bitcmp0_b32 s6, 0
-; CHECK-NEXT:    s_cbranch_scc1 .LBB0_2
+; CHECK-NEXT:    s_bitcmp1_b32 s6, 0
+; CHECK-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; CHECK-NEXT:    s_and_b64 vcc, exec, s[4:5]
+; CHECK-NEXT:    s_cbranch_vccz .LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %if
 ; CHECK-NEXT:    global_load_dwordx4 a[28:31], v32, s[0:1] offset:112
 ; CHECK-NEXT:    global_load_dwordx4 a[24:27], v32, s[0:1] offset:96
