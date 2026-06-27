@@ -81,11 +81,8 @@ define void @machinesink_loop_variable_out_of_divergent_loop(i32 %arg, i1 %cmp49
 ; CHECK-NEXT:    ; => This Inner Loop Header: Depth=2
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v6
-; CHECK-NEXT:    v_cndmask_b32_e64 v5, 0, 1, vcc_lo
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v5
 ; CHECK-NEXT:    v_mov_b32_e32 v5, 1
-; CHECK-NEXT:    s_xor_b32 s12, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s7, s7, s12
+; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
 ; CHECK-NEXT:    s_xor_b32 s12, exec_lo, s7
 ; CHECK-NEXT:    s_and_b32 s12, s12, exec_lo
 ; CHECK-NEXT:    s_or_b32 s9, s9, s12
