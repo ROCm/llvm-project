@@ -188,6 +188,8 @@ define amdgpu_ps float @loop(i32 %z, float %v, i32 inreg %bound, ptr %extern_fun
 ; SI-NEXT:  .LBB3_2: ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_readfirstlane_b32 s6, v2
 ; SI-NEXT:    v_readfirstlane_b32 s7, v3
+; SI-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
+; SI-NEXT:    v_cmpx_eq_u64_e32 s[6:7], v[2:3]
 ; SI-NEXT:    s_mov_b64 s[0:1], s[12:13]
 ; SI-NEXT:    s_mov_b64 s[2:3], s[14:15]
 ; SI-NEXT:    s_swappc_b64 s[30:31], s[6:7]
@@ -195,8 +197,7 @@ define amdgpu_ps float @loop(i32 %z, float %v, i32 inreg %bound, ptr %extern_fun
 ; SI-NEXT:    s_andn2_wrexec_b32 s8, s8
 ; SI-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; SI-NEXT:    ; implicit-def: $vgpr0
-; SI-NEXT:    ; implicit-def: $vgpr4
-; SI-NEXT:    ; implicit-def: $vgpr5
+; SI-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; SI-NEXT:    s_cbranch_execnz .LBB3_2
 ; SI-NEXT:  ; %bb.3:
 ; SI-NEXT:    s_mov_b32 exec_lo, s5
@@ -212,6 +213,8 @@ define amdgpu_ps float @loop(i32 %z, float %v, i32 inreg %bound, ptr %extern_fun
 ; SI-NEXT:  .LBB3_6: ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_readfirstlane_b32 s4, v4
 ; SI-NEXT:    v_readfirstlane_b32 s5, v5
+; SI-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
+; SI-NEXT:    v_cmpx_eq_u64_e32 s[4:5], v[4:5]
 ; SI-NEXT:    s_mov_b64 s[0:1], s[12:13]
 ; SI-NEXT:    s_mov_b64 s[2:3], s[14:15]
 ; SI-NEXT:    s_swappc_b64 s[30:31], s[4:5]
@@ -265,14 +268,15 @@ define amdgpu_ps float @loop_with_use(i32 %z, float %v, i32 inreg %bound, ptr %e
 ; SI-NEXT:  .LBB4_2: ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_readfirstlane_b32 s6, v2
 ; SI-NEXT:    v_readfirstlane_b32 s7, v3
+; SI-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
+; SI-NEXT:    v_cmpx_eq_u64_e32 s[6:7], v[2:3]
 ; SI-NEXT:    v_mov_b32_e32 v0, v40
 ; SI-NEXT:    s_mov_b64 s[0:1], s[12:13]
 ; SI-NEXT:    s_mov_b64 s[2:3], s[14:15]
 ; SI-NEXT:    s_swappc_b64 s[30:31], s[6:7]
 ; SI-NEXT:    s_andn2_wrexec_b32 s8, s8
 ; SI-NEXT:    ; implicit-def: $vgpr2_vgpr3
-; SI-NEXT:    ; implicit-def: $vgpr4
-; SI-NEXT:    ; implicit-def: $vgpr5
+; SI-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; SI-NEXT:    s_cbranch_execnz .LBB4_2
 ; SI-NEXT:  ; %bb.3:
 ; SI-NEXT:    s_mov_b32 exec_lo, s5
@@ -288,6 +292,8 @@ define amdgpu_ps float @loop_with_use(i32 %z, float %v, i32 inreg %bound, ptr %e
 ; SI-NEXT:  .LBB4_6: ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_readfirstlane_b32 s4, v4
 ; SI-NEXT:    v_readfirstlane_b32 s5, v5
+; SI-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
+; SI-NEXT:    v_cmpx_eq_u64_e32 s[4:5], v[4:5]
 ; SI-NEXT:    v_mov_b32_e32 v0, v40
 ; SI-NEXT:    s_mov_b64 s[0:1], s[12:13]
 ; SI-NEXT:    s_mov_b64 s[2:3], s[14:15]
