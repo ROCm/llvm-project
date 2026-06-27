@@ -213,10 +213,9 @@ define void @func_non_entry_block_static_alloca_align4(ptr addrspace(1) %out, i3
 ; MUBUF-LABEL: func_non_entry_block_static_alloca_align4:
 ; MUBUF:       ; %bb.0: ; %entry
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; MUBUF-NEXT:    s_mov_b32 s7, s33
-; MUBUF-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; MUBUF-NEXT:    s_mov_b32 s33, s32
+; MUBUF-NEXT:    s_mov_b32 s8, s33
 ; MUBUF-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v2
+; MUBUF-NEXT:    s_mov_b32 s33, s32
 ; MUBUF-NEXT:    s_addk_i32 s32, 0x400
 ; MUBUF-NEXT:    s_xor_b64 exec, s[4:5], exec
 ; MUBUF-NEXT:    ; divergent control-flow edge
@@ -253,10 +252,9 @@ define void @func_non_entry_block_static_alloca_align4(ptr addrspace(1) %out, i3
 ; FLATSCR-LABEL: func_non_entry_block_static_alloca_align4:
 ; FLATSCR:       ; %bb.0: ; %entry
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; FLATSCR-NEXT:    s_mov_b32 s3, s33
-; FLATSCR-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; FLATSCR-NEXT:    s_mov_b32 s33, s32
+; FLATSCR-NEXT:    s_mov_b32 s4, s33
 ; FLATSCR-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v2
+; FLATSCR-NEXT:    s_mov_b32 s33, s32
 ; FLATSCR-NEXT:    s_add_i32 s32, s32, 16
 ; FLATSCR-NEXT:    s_xor_b64 exec, s[0:1], exec
 ; FLATSCR-NEXT:    ; divergent control-flow edge
@@ -321,11 +319,10 @@ define void @func_non_entry_block_static_alloca_align64(ptr addrspace(1) %out, i
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; MUBUF-NEXT:    s_mov_b32 s5, s33
 ; MUBUF-NEXT:    s_add_i32 s33, s32, 0xfc0
-; MUBUF-NEXT:    s_mov_b32 s8, s34
-; MUBUF-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
+; MUBUF-NEXT:    s_mov_b32 s6, s34
+; MUBUF-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
 ; MUBUF-NEXT:    s_and_b32 s33, s33, 0xfffff000
 ; MUBUF-NEXT:    s_mov_b32 s34, s32
-; MUBUF-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
 ; MUBUF-NEXT:    s_addk_i32 s32, 0x2000
 ; MUBUF-NEXT:    s_xor_b64 exec, vcc, exec
 ; MUBUF-NEXT:    ; divergent control-flow edge
@@ -360,25 +357,24 @@ define void @func_non_entry_block_static_alloca_align64(ptr addrspace(1) %out, i
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; FLATSCR-NEXT:    s_mov_b32 s1, s33
 ; FLATSCR-NEXT:    s_add_i32 s33, s32, 63
-; FLATSCR-NEXT:    s_mov_b32 s4, s34
-; FLATSCR-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
+; FLATSCR-NEXT:    s_mov_b32 s2, s34
+; FLATSCR-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
 ; FLATSCR-NEXT:    s_andn2_b32 s33, s33, 63
 ; FLATSCR-NEXT:    s_mov_b32 s34, s32
-; FLATSCR-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
 ; FLATSCR-NEXT:    s_addk_i32 s32, 0x80
 ; FLATSCR-NEXT:    s_xor_b64 exec, vcc, exec
 ; FLATSCR-NEXT:    ; divergent control-flow edge
 ; FLATSCR-NEXT:    s_cbranch_execz .LBB3_2
-; FLATSCR-NEXT:  ; %bb.1: ; %bb.0
-; FLATSCR-NEXT:    s_add_i32 s2, s32, 63
-; FLATSCR-NEXT:    s_andn2_b32 s2, s2, 63
+; FLATSCR-NEXT:  .LBB3_1: ; %bb.0
+; FLATSCR-NEXT:    s_add_i32 s0, s32, 63
+; FLATSCR-NEXT:    s_andn2_b32 s0, s0, 63
 ; FLATSCR-NEXT:    v_mov_b32_e32 v4, 0
 ; FLATSCR-NEXT:    v_mov_b32_e32 v5, 1
 ; FLATSCR-NEXT:    scratch_store_dwordx2 off, v[4:5], s0
 ; FLATSCR-NEXT:    v_lshl_add_u32 v2, v3, 2, s0
 ; FLATSCR-NEXT:    scratch_load_dword v2, v2, off
 ; FLATSCR-NEXT:    v_and_b32_e32 v3, 0x3ff, v31
-; FLATSCR-NEXT:    s_add_i32 s32, s2, 64
+; FLATSCR-NEXT:    s_add_i32 s32, s0, 64
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0)
 ; FLATSCR-NEXT:    v_add_u32_e32 v2, v2, v3
 ; FLATSCR-NEXT:    global_store_dword v[0:1], v2, off
