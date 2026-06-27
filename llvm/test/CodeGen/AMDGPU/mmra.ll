@@ -71,12 +71,9 @@ define void @atomicrmw_rel(ptr %ptr) {
   ; CHECK-NEXT:   [[V_AND_B32_e64_2:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[PHI]], killed [[V_OR_B32_e64_]], implicit $exec
   ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_AND_B32_e64_2]], %subreg.sub0, [[PHI]], %subreg.sub1
   ; CHECK-NEXT:   [[FLAT_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = FLAT_ATOMIC_CMPSWAP_RTN [[COPY4]], killed [[REG_SEQUENCE2]], 0, 1, implicit $exec, implicit $flat_scr, mmra !2 :: (load store release monotonic (s32) on %ir.AlignedAddr)
-  ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_64_xexec = V_CMP_EQ_U32_e64 [[FLAT_ATOMIC_CMPSWAP_RTN]], [[PHI]], implicit $exec, mmra !2
-  ; CHECK-NEXT:   [[V_CNDMASK_B32_e64_:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, killed [[V_CMP_EQ_U32_e64_]], implicit $exec
-  ; CHECK-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 1
-  ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 killed [[V_CNDMASK_B32_e64_]], killed [[S_MOV_B32_3]], implicit $exec
-  ; CHECK-NEXT:   SI_BRCOND %bb.1, killed [[V_CMP_NE_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-  ; CHECK-NEXT:   S_BRANCH %bb.2
+  ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[FLAT_ATOMIC_CMPSWAP_RTN]], [[PHI]], implicit $exec, mmra !2
+  ; CHECK-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+  ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2.atomicrmw.end:
   ; CHECK-NEXT:   SI_RETURN
@@ -211,12 +208,9 @@ define void @atomicrmw_rel_deepcopy(ptr %ptr) {
   ; CHECK-NEXT:   [[V_AND_B32_e64_2:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[PHI]], killed [[V_OR_B32_e64_]], implicit $exec
   ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_AND_B32_e64_2]], %subreg.sub0, [[PHI]], %subreg.sub1
   ; CHECK-NEXT:   [[FLAT_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = FLAT_ATOMIC_CMPSWAP_RTN [[COPY30]], killed [[REG_SEQUENCE2]], 0, 1, implicit $exec, implicit $flat_scr, mmra !0 :: (load store release monotonic (s32) on %ir.AlignedAddr)
-  ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_64_xexec = V_CMP_EQ_U32_e64 [[FLAT_ATOMIC_CMPSWAP_RTN]], [[PHI]], implicit $exec, mmra !0
-  ; CHECK-NEXT:   [[V_CNDMASK_B32_e64_:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, killed [[V_CMP_EQ_U32_e64_]], implicit $exec
-  ; CHECK-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 1
-  ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 killed [[V_CNDMASK_B32_e64_]], killed [[S_MOV_B32_3]], implicit $exec
-  ; CHECK-NEXT:   SI_BRCOND %bb.1, killed [[V_CMP_NE_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-  ; CHECK-NEXT:   S_BRANCH %bb.2
+  ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[FLAT_ATOMIC_CMPSWAP_RTN]], [[PHI]], implicit $exec, mmra !0
+  ; CHECK-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+  ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2.atomicrmw.end:
   ; CHECK-NEXT:   SI_RETURN

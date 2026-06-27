@@ -82,11 +82,9 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    ; Child Loop BB0_15 Depth 2
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[22:23]
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
-; CHECK-NEXT:    v_cndmask_b32_e64 v10, 0, 1, vcc
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v10
+; CHECK-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    s_or_b64 s[8:9], s[8:9], s[4:5]
-; CHECK-NEXT:    s_or_b64 s[14:15], s[14:15], vcc
+; CHECK-NEXT:    s_or_b64 s[14:15], s[14:15], s[4:5]
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_or_b64 s[18:19], s[18:19], s[4:5]
@@ -152,10 +150,7 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:  .LBB0_13: ; %dynamic-memcpy-expansion-residual-cond5
 ; CHECK-NEXT:    ; in Loop: Header=BB0_6 Depth=1
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v9
-; CHECK-NEXT:    v_cndmask_b32_e64 v10, 0, 1, vcc
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v10
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    s_or_b64 s[10:11], s[10:11], s[4:5]
+; CHECK-NEXT:    s_or_b64 s[10:11], s[10:11], vcc
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[10:11]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_mov_b64 s[14:15], 0
