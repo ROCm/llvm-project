@@ -6,6 +6,8 @@ on:
     #   - cron: "0 3 * * 0" # Runs weekly at 3 AM UTC Sundays
     workflow_dispatch:
 
+permissions:
+  contents: read
 
 jobs:
   donothing:
