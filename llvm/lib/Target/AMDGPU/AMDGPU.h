@@ -603,7 +603,7 @@ void initializeAMDGPUPreWaveTransformLegacyPass(PassRegistry &);
 extern char &AMDGPUPreWaveTransformID;
 
 class AMDGPUPreWaveTransformPass
-    : public OptionalPassInfoMixin<AMDGPUPreWaveTransformPass> {
+    : public RequiredPassInfoMixin<AMDGPUPreWaveTransformPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
