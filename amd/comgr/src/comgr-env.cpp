@@ -84,6 +84,11 @@ bool shouldEmitVerboseLogs() {
   return VerboseLogs && StringRef(VerboseLogs) != "0";
 }
 
+bool shouldUseHotswapEntryTrampolines() {
+  static char *EntryTrampolines = getenv("AMD_COMGR_HOTSWAP_ENTRY_TRAMPOLINES");
+  return EntryTrampolines && StringRef(EntryTrampolines) != "0";
+}
+
 llvm::StringRef getLLVMPath() {
   static const char *EnvLLVMPath = std::getenv("LLVM_PATH");
   return EnvLLVMPath;

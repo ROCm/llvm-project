@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
   if (argc < 4)
     fail("usage: hotswap-rewrite <elf_file> <source_isa> <target_isa> "
          "[--zero-size] [--output <path>] [--dump <file>] "
-         "[--check-idempotent]");
+         "[--check-idempotent] [--expect-status <status>]");
 
   const char *ElfFile = argv[1];
   const char *SourceISA = argv[2];
@@ -39,6 +39,7 @@ int main(int argc, char *argv[]) {
   int ZeroSize = 0;
   const char *OutputPath = NULL;
   const char *DumpFile = NULL;
+  const char *ExpectStatus = NULL;
   int CheckIdempotent = 0;
 
   for (int I = 4; I < argc; ++I) {
@@ -50,6 +51,8 @@ int main(int argc, char *argv[]) {
       DumpFile = argv[++I];
     else if (strcmp(argv[I], "--check-idempotent") == 0)
       CheckIdempotent = 1;
+    else if (strcmp(argv[I], "--expect-status") == 0 && I + 1 < argc)
+      ExpectStatus = argv[++I];
     else {
       fprintf(stderr, "error: unknown argument: %s\n", argv[I]);
       return 1;
@@ -69,6 +72,20 @@ int main(int argc, char *argv[]) {
   amd_comgr_status_t Status =
       amd_comgr_hotswap_rewrite(InputData, SourceISA, TargetISA, &OutputData);
 
+  const char *StatusString;
+  amd_comgr_(status_string(Status, &StatusString));
+
+  if (ExpectStatus) {
+    printf("RESULT: %s\n", StatusString);
+    if (strcmp(StatusString, ExpectStatus) != 0)
+      fail("expected status %s, saw %s", ExpectStatus, StatusString);
+    if (Status == AMD_COMGR_STATUS_SUCCESS)
+      amd_comgr_(release_data(OutputData));
+    amd_comgr_(release_data(InputData));
+    free(ElfBuf);
+    return 0;
+  }
+
   if (Status == AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT) {
     printf("RESULT: INVALID_ARGUMENT\n");
     amd_comgr_(release_data(InputData));
@@ -77,7 +94,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (Status != AMD_COMGR_STATUS_SUCCESS)
-    fail("unexpected error status %d", (int)Status);
+    fail("unexpected error status %s", StatusString);
 
   size_t OutSize = 0;
   amd_comgr_(get_data(OutputData, &OutSize, NULL));
