@@ -34,6 +34,9 @@ endif ()
 
 flang_module_target(libomp-mod PUBLIC)
 
+include(OpenMPDeviceFortranModules)
+openmp_require_host_flang_rt_modules_for_device_mod(libomp-mod)
+
 install(FILES
   "${RUNTIMES_OUTPUT_RESOURCE_MOD_DIR}/omp_lib.h"
   DESTINATION "${RUNTIMES_INSTALL_RESOURCE_MOD_PATH}"

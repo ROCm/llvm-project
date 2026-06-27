@@ -117,6 +117,9 @@ set(LIBOMP_BUILD_DATE "No_Timestamp")
 set(LIBOMP_FORTRAN_MODULES "${RUNTIMES_FORTRAN_MODULES}" CACHE BOOL
   "Create Fortran module files? (requires fortran compiler)")
 
+set(LIBOMP_HOST_FLANG_RT_MODULE_DIR "" CACHE PATH
+  "Directory containing host flang-rt .mod files (e.g. iso_c_binding.mod) when building device-side omp_lib.mod")
+
 option(LIBOMP_FORTRAN_MODULES_ONLY
   "Build only Fortran modules without libomp runtime library" OFF)
 if(LIBOMP_FORTRAN_MODULES_ONLY)

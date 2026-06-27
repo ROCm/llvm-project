@@ -455,6 +455,22 @@ function(runtime_register_target name)
   list(APPEND ${name}_extra_args -DLLVM_USE_LINKER=${LLVM_USE_LINKER})
   append_passthrough_options(${name}_extra_args RUNTIMES "${ARG_BASE_NAME};${name}")
 
+  # Device-side omp_lib.mod needs host flang-rt intrinsic modules. Device
+  # runtimes sub-builds are configured with LLVM_ENABLE_RUNTIMES=openmp only.
+  # Pass the host module path at configure time; order the build after the host
+  # runtimes build below (not flang-rt-mod directly, which would cycle configure).
+  if ("openmp" IN_LIST RUNTIMES_${name}_LLVM_ENABLE_RUNTIMES)
+    if ("${name}" MATCHES "^(amdgcn|nvptx)")
+      include(GetClangResourceDir)
+      include(GetToolchainDirs)
+      include(ExtendPath)
+      get_clang_resource_dir(_resource_dir PREFIX "${LLVM_BINARY_DIR}")
+      get_toolchain_module_subdir(_mod_subdir)
+      extend_path(_host_mod_dir "${_resource_dir}" "${_mod_subdir}/${LLVM_HOST_TRIPLE}")
+      list(APPEND ${name}_extra_args "-DLIBOMP_HOST_FLANG_RT_MODULE_DIR=${_host_mod_dir}")
+    endif()
+  endif()
+
   set_enable_per_target_runtime_dir()
 
   llvm_ExternalProject_Add(runtimes-${name}
@@ -798,6 +814,12 @@ if(build_runtimes)
         DEPENDS ${builtins_dep_name} ${extra_deps}
         CMAKE_ARGS -DLLVM_DEFAULT_TARGET_TRIPLE=${name} ${extra_cmake_args}
         EXTRA_ARGS TARGET_TRIPLE ${name} ${extra_args})
+    endforeach()
+
+    foreach(_device IN ITEMS amdgcn-amd-amdhsa nvptx64-nvidia-cuda)
+      if (TARGET runtimes-${_device}-build AND TARGET runtimes-build)
+        add_dependencies(runtimes-${_device}-build runtimes-build)
+      endif()
     endforeach()
 
     foreach(multilib ${LLVM_RUNTIME_MULTILIBS})
