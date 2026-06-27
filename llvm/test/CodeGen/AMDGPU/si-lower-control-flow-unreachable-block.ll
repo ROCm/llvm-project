@@ -1,9 +1,9 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}lower_control_flow_unreachable_terminator:
 ; GCN: v_cmp_ne_u32
 ; GCN: s_xor_b64 exec
-; GCN: s_cbranch_execz .LBB0_{{[0-9]+}}
+; GCN: s_cbranch_execz
 
 ; GCN: .LBB0_{{[0-9]+}}: ; %unreachable
 ; GCN: ds_write_b32

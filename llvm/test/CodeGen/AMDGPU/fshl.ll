@@ -2,7 +2,7 @@
 ; RUN: llc < %s -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tahiti | FileCheck %s --check-prefix=SI
 ; RUN: llc < %s -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga  | FileCheck %s --check-prefix=VI
 ; RUN: llc < %s -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx900 | FileCheck %s --check-prefix=GFX9
-; RUN: llc < %s -amdgpu-late-wave-transform=1 -mtriple=r600 -mcpu=redwood  | FileCheck %s --check-prefix=R600
+; RUN: llc < %s -mtriple=r600 -mcpu=redwood | FileCheck %s --check-prefix=R600
 ; RUN: llc < %s -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1010 | FileCheck %s --check-prefix=GFX10
 ; RUN: llc < %s -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 | FileCheck %s --check-prefix=GFX11
 
