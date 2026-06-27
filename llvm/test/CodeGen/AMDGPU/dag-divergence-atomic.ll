@@ -131,12 +131,11 @@ define protected amdgpu_kernel void @nand(ptr addrspace(1) %p, ptr addrspace(1) 
 ; CHECK-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] glc
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; CHECK-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v1
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; CHECK-NEXT:    v_mov_b32_e32 v1, v0
-; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB5_1
 ; CHECK-NEXT:  .LBB5_2: ; %atomicrmw.end
@@ -436,12 +435,11 @@ define protected amdgpu_kernel void @fadd(ptr addrspace(1) %p, ptr addrspace(1) 
 ; CHECK-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] glc
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; CHECK-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v1
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; CHECK-NEXT:    v_mov_b32_e32 v1, v0
-; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB18_1
 ; CHECK-NEXT:  .LBB18_2: ; %atomicrmw.end
@@ -477,12 +475,11 @@ define protected amdgpu_kernel void @fsub(ptr addrspace(1) %p, ptr addrspace(1) 
 ; CHECK-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] glc
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; CHECK-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v1
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; CHECK-NEXT:    v_mov_b32_e32 v1, v0
-; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB19_1
 ; CHECK-NEXT:  .LBB19_2: ; %atomicrmw.end

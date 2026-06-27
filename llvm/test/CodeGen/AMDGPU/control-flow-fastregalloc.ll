@@ -20,7 +20,7 @@
 ; GCN: v_cmp_eq_u32_e64 [[CMP0:s\[[0-9]+:[0-9]+\]]], v{{[0-9]+}}, v{{[0-9]+}}
 
 ; Spill saved exec
-; GCN: s_and_b64 s[[[SAVEEXEC_LO:[0-9]+]]:[[SAVEEXEC_HI:[0-9]+]]], exec, s[{{[0-9]+:[0-9]+}}]
+; GCN: s_xor_b64 s[[[SAVEEXEC_LO:[0-9]+]]:[[SAVEEXEC_HI:[0-9]+]]], exec, [[PRIMARY:s\[[0-9]+:[0-9]+\]]]
 ; VGPR: v_writelane_b32 [[SPILL_VGPR:v[0-9]+]], s[[SAVEEXEC_LO]], [[SAVEEXEC_LO_LANE:[0-9]+]]
 ; VGPR: v_writelane_b32 [[SPILL_VGPR]], s[[SAVEEXEC_HI]], [[SAVEEXEC_HI_LANE:[0-9]+]]
 ; VGPR: buffer_store_dword [[SPILL_VGPR]], off, s[0:3], 0 offset:[[SPILL_OFFSET:[0-9]+]] ; 4-byte Folded Spill
@@ -29,7 +29,6 @@
 ; VMEM: v_writelane_b32 v[[V_SAVEEXEC]], s[[SAVEEXEC_HI]], 1
 ; VMEM: buffer_store_dword v[[V_SAVEEXEC]], off, s[0:3], 0 offset:[[SAVEEXEC_OFFSET:[0-9]+]] ; 4-byte Folded Spill
 
-; GCN: s_xor_b64 [[PRIMARY:s\[[0-9]+:[0-9]+\]]], s[[[SAVEEXEC_LO]]:[[SAVEEXEC_HI]]], exec
 ; GCN: s_mov_b64 exec, [[PRIMARY]]
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN-NEXT: s_cbranch_execz [[ENDIF:.LBB[0-9]+_[0-9]+]]
@@ -94,7 +93,7 @@ endif:
 ; GCN: buffer_store_dword [[LOAD0]], off, s[0:3], 0 offset:[[LOAD0_OFFSET:[0-9]+]] ; 4-byte Folded Spill
 
 ; Spill saved exec
-; GCN: s_and_b64 s[[[SAVEEXEC_LO:[0-9]+]]:[[SAVEEXEC_HI:[0-9]+]]], exec, s[{{[0-9]+:[0-9]+}}]
+; GCN: s_xor_b64 s[[[SAVEEXEC_LO:[0-9]+]]:[[SAVEEXEC_HI:[0-9]+]]], exec, [[PRIMARY:s\[[0-9]+:[0-9]+\]]]
 ; VGPR: v_writelane_b32 [[SPILL_VGPR:v[0-9]+]], s[[SAVEEXEC_LO]], [[SAVEEXEC_LO_LANE:[0-9]+]]
 ; VGPR: v_writelane_b32 [[SPILL_VGPR]], s[[SAVEEXEC_HI]], [[SAVEEXEC_HI_LANE:[0-9]+]]
 ; VGPR: buffer_store_dword [[SPILL_VGPR]], off, s[0:3], 0 offset:[[SPILL_OFFSET:[0-9]+]] ; 4-byte Folded Spill
@@ -103,7 +102,6 @@ endif:
 ; VMEM: v_writelane_b32 v[[V_SAVEEXEC]], s[[SAVEEXEC_HI]], 1
 ; VMEM: buffer_store_dword v[[V_SAVEEXEC]], off, s[0:3], 0 offset:[[SAVEEXEC_OFFSET:[0-9]+]] ; 4-byte Folded Spill
 
-; GCN: s_xor_b64 [[PRIMARY:s\[[0-9]+:[0-9]+\]]], s[[[SAVEEXEC_LO]]:[[SAVEEXEC_HI]]], exec
 ; GCN: s_mov_b64 exec, [[PRIMARY]]
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN-NEXT: s_cbranch_execz [[END:.LBB[0-9]+_[0-9]+]]
@@ -170,16 +168,15 @@ end:
 ; GCN: v_cmp_eq_u32_e64 [[CMP0:s\[[0-9]+:[0-9]+\]]], v{{[0-9]+}}, [[ZERO]]
 
 ; Spill saved exec
-; GCN: s_and_b64 s[[[SAVEEXEC_LO:[0-9]+]]:[[SAVEEXEC_HI:[0-9]+]]], exec, s[{{[0-9]+:[0-9]+}}]
+; GCN: s_xor_b64 s[[[SAVEEXEC_LO:[0-9]+]]:[[SAVEEXEC_HI:[0-9]+]]], [[IF_PRIMARY:s\[[0-9]+:[0-9]+\]]], exec
 ; VGPR: v_writelane_b32 [[SPILL_VGPR:v[0-9]+]], s[[SAVEEXEC_LO]], [[SAVEEXEC_LO_LANE:[0-9]+]]
 ; VGPR: v_writelane_b32 [[SPILL_VGPR]], s[[SAVEEXEC_HI]], [[SAVEEXEC_HI_LANE:[0-9]+]]
+; VGPR: buffer_store_dword [[SPILL_VGPR]], off, s[0:3], 0 offset:[[SPILL_OFFSET:[0-9]+]] ; 4-byte Folded Spill
 
 ; VMEM: v_writelane_b32 v[[V_SAVEEXEC:[0-9]+]], s[[SAVEEXEC_LO]], 0
 ; VMEM: v_writelane_b32 v[[V_SAVEEXEC]], s[[SAVEEXEC_HI]], 1
 ; VMEM: buffer_store_dword v[[V_SAVEEXEC]], off, s[0:3], 0 offset:[[SAVEEXEC_OFFSET:[0-9]+]] ; 4-byte Folded Spill
 
-; GCN: s_xor_b64 [[IF_PRIMARY:s\[[0-9]+:[0-9]+\]]], s[[[SAVEEXEC_LO]]:[[SAVEEXEC_HI]]], exec
-; VGPR: buffer_store_dword [[SPILL_VGPR]], off, s[0:3], 0 offset:[[SPILL_OFFSET:[0-9]+]] ; 4-byte Folded Spill
 ; GCN: s_mov_b64 exec, [[IF_PRIMARY]]
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN-NEXT: s_cbranch_execz [[FLOW:.LBB[0-9]+_[0-9]+]]
@@ -205,7 +202,7 @@ end:
 ; GCN: s_or_b64 exec, exec, s[[[FLOW_S_RELOAD_SAVEEXEC_LO]]:[[FLOW_S_RELOAD_SAVEEXEC_HI]]]
 
 ; Spill saved exec
-; GCN: s_xor_b64 s[[[FLOW_SAVEEXEC_LO:[0-9]+]]:[[FLOW_SAVEEXEC_HI:[0-9]+]]], exec, {{s\[[0-9]+:[0-9]+\]}}
+; GCN: s_xor_b64 s[[[FLOW_SAVEEXEC_LO:[0-9]+]]:[[FLOW_SAVEEXEC_HI:[0-9]+]]], exec, [[ELSE_PRIMARY:s\[[0-9]+:[0-9]+\]]]
 ; VGPR: v_writelane_b32 [[SPILL_VGPR]], s[[FLOW_SAVEEXEC_LO]], [[FLOW_SAVEEXEC_LO_LANE:[0-9]+]]
 ; VGPR: v_writelane_b32 [[SPILL_VGPR]], s[[FLOW_SAVEEXEC_HI]], [[FLOW_SAVEEXEC_HI_LANE:[0-9]+]]
 ; VGPR: buffer_store_dword [[SPILL_VGPR]], off, s[0:3], 0 offset:[[SPILL_OFFSET:[0-9]+]] ; 4-byte Folded Spill
@@ -214,7 +211,8 @@ end:
 ; VMEM: v_writelane_b32 v[[FLOW_V_SAVEEXEC]], s[[FLOW_SAVEEXEC_HI]], 1
 ; VMEM: buffer_store_dword v[[FLOW_V_SAVEEXEC]], off, s[0:3], 0 offset:[[FLOW_SAVEEXEC_OFFSET:[0-9]+]] ; 4-byte Folded Spill
 
-; GCN: ; divergent control-flow edge
+; GCN: s_mov_b64 exec, [[ELSE_PRIMARY]]
+; GCN-NEXT: ; divergent control-flow edge
 ; GCN-NEXT: s_cbranch_execz [[ENDIF:.LBB[0-9]+_[0-9]+]]
 
 

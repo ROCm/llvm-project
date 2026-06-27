@@ -49,16 +49,14 @@ define amdgpu_kernel void @test_loop(ptr addrspace(3) %ptr, i32 %n) nounwind {
 ; GCN_DBG-NEXT:    s_mov_b32 s2, -1
 ; GCN_DBG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN_DBG-NEXT:    s_cmp_eq_u32 s1, s2
-; GCN_DBG-NEXT:    s_cselect_b64 s[2:3], -1, 0
-; GCN_DBG-NEXT:    s_mov_b64 s[4:5], -1
-; GCN_DBG-NEXT:    s_xor_b64 s[2:3], s[2:3], s[4:5]
-; GCN_DBG-NEXT:    s_and_b64 vcc, exec, s[2:3]
 ; GCN_DBG-NEXT:    v_writelane_b32 v2, s0, 1
-; GCN_DBG-NEXT:    s_or_saveexec_b64 s[6:7], -1
+; GCN_DBG-NEXT:    s_mov_b64 s[6:7], exec
+; GCN_DBG-NEXT:    s_mov_b64 exec, -1
 ; GCN_DBG-NEXT:    buffer_store_dword v2, off, s[12:15], 0 ; 4-byte Folded Spill
 ; GCN_DBG-NEXT:    s_mov_b64 exec, s[6:7]
-; GCN_DBG-NEXT:    s_cbranch_vccnz .LBB0_2
-; GCN_DBG-NEXT:  ; %bb.1: ; %for.exit
+; GCN_DBG-NEXT:    s_cbranch_scc1 .LBB0_1
+; GCN_DBG-NEXT:    s_branch .LBB0_2
+; GCN_DBG-NEXT:  .LBB0_1: ; %for.exit
 ; GCN_DBG-NEXT:    s_endpgm
 ; GCN_DBG-NEXT:  .LBB0_2: ; %for.body
 ; GCN_DBG-NEXT:    ; =>This Inner Loop Header: Depth=1
