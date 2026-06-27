@@ -5,6 +5,9 @@ on:
     branches: [amd-debug]
     types: [opened, reopened, synchronize, ready_for_review]
 
+permissions:
+  contents: read
+  statuses: write
 
 jobs:  
   trigger-build:
@@ -38,12 +41,18 @@ jobs:
         run: |
           import json
           import os
-          import shlex
+          import secrets
+          
           with open('${{ github.event_path }}') as fh:
-              event = json.load(fh)         
-          escaped = event['pull_request']['title']
+              event = json.load(fh)
+          
+          pr_title = event['pull_request']['title']
+          delimiter = secrets.token_hex(16)
+          
           with open(os.environ['GITHUB_ENV'], 'a') as fh:
-              print(f'PR_TITLE={escaped}', file=fh)
+              print(f'PR_TITLE<<{delimiter}', file=fh)
+              print(pr_title, file=fh)
+              print(delimiter, file=fh)
         shell: python3 {0}          
         
       - name: Trigger Buildbot Build
