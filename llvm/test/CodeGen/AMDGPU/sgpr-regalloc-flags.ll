@@ -42,7 +42,7 @@
 ; O0-NEXT: Slot index numbering
 ; O0-NEXT: Live Interval Analysis
 ; O0-NEXT: MachinePostDominator Tree Construction
-; O0-NEXT: SI Whole Quad Mode
+; O0-NEXT: AMDGPU Lower WQM Operations
 ; O0-NEXT: Fast Register Allocator
 ; O0-NEXT: AMDGPU Reserve Allocated VGPRs
 ; O0-NEXT: Machine Cycle Info Analysis

@@ -45,6 +45,8 @@ FunctionPass *createSILowerI1CopiesLegacyPass();
 FunctionPass *createSIShrinkInstructionsLegacyPass();
 FunctionPass *createSILoadStoreOptimizerLegacyPass();
 FunctionPass *createSIWholeQuadModeLegacyPass();
+FunctionPass *createAMDGPULowerStrictWQMLegacyPass();
+FunctionPass *createAMDGPULowerWQMOperationsLegacyPass();
 FunctionPass *createSIFixControlFlowLiveIntervalsPass();
 FunctionPass *createSIOptimizeExecMaskingPreRAPass();
 FunctionPass *createSIOptimizeVGPRLiveRangeLegacyPass();
@@ -239,6 +241,12 @@ extern char &SILoadStoreOptimizerLegacyID;
 
 void initializeSIWholeQuadModeLegacyPass(PassRegistry &);
 extern char &SIWholeQuadModeID;
+
+void initializeAMDGPULowerStrictWQMLegacyPass(PassRegistry &);
+extern char &AMDGPULowerStrictWQMLegacyID;
+
+void initializeAMDGPULowerWQMOperationsLegacyPass(PassRegistry &);
+extern char &AMDGPULowerWQMOperationsLegacyID;
 
 void initializeSILowerControlFlowLegacyPass(PassRegistry &);
 extern char &SILowerControlFlowLegacyID;

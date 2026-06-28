@@ -374,10 +374,11 @@ define amdgpu_cs_chain_preserve void @chain_preserve_to_chain_wwm(<3 x i32> inre
 ; DAGISEL-GFX11:       ; %bb.0:
 ; DAGISEL-GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL-GFX11-NEXT:    scratch_store_b32 off, v16, s32 ; 4-byte Folded Spill
-; DAGISEL-GFX11-NEXT:    s_or_saveexec_b32 s4, -1
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s3, s0
-; DAGISEL-GFX11-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s4
-; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL-GFX11-NEXT:    s_or_saveexec_b32 s0, -1
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; DAGISEL-GFX11-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s0
+; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; DAGISEL-GFX11-NEXT:    ;;#ASMSTART
 ; DAGISEL-GFX11-NEXT:    s_nop
 ; DAGISEL-GFX11-NEXT:    ;;#ASMEND
@@ -393,10 +394,10 @@ define amdgpu_cs_chain_preserve void @chain_preserve_to_chain_wwm(<3 x i32> inre
 ; DAGISEL-GFX10:       ; %bb.0:
 ; DAGISEL-GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL-GFX10-NEXT:    buffer_store_dword v16, off, s[48:51], s32 ; 4-byte Folded Spill
-; DAGISEL-GFX10-NEXT:    s_or_saveexec_b32 s4, -1
 ; DAGISEL-GFX10-NEXT:    s_mov_b32 s3, s0
-; DAGISEL-GFX10-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s4
-; DAGISEL-GFX10-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL-GFX10-NEXT:    s_or_saveexec_b32 s0, -1
+; DAGISEL-GFX10-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s0
+; DAGISEL-GFX10-NEXT:    s_mov_b32 exec_lo, s0
 ; DAGISEL-GFX10-NEXT:    ;;#ASMSTART
 ; DAGISEL-GFX10-NEXT:    s_nop
 ; DAGISEL-GFX10-NEXT:    ;;#ASMEND
