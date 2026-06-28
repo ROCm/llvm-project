@@ -22,40 +22,46 @@ using namespace llvm;
 
 namespace {
 
-class AMDGPUPreWaveTransform : public MachineFunctionPass {
+class AMDGPUPreWaveTransform {
+public:
+  bool run(MachineFunction &MF);
+};
+
+class AMDGPUPreWaveTransformLegacy : public MachineFunctionPass {
 public:
   static char ID;
 
-public:
-  AMDGPUPreWaveTransform() : MachineFunctionPass(ID) {
-    initializeAMDGPUPreWaveTransformPass(*PassRegistry::getPassRegistry());
+  AMDGPUPreWaveTransformLegacy() : MachineFunctionPass(ID) {
+    initializeAMDGPUPreWaveTransformLegacyPass(*PassRegistry::getPassRegistry());
   }
 
-  bool runOnMachineFunction(MachineFunction &MF) override;
+  bool runOnMachineFunction(MachineFunction &MF) override {
+    return AMDGPUPreWaveTransform().run(MF);
+  }
 
   StringRef getPassName() const override {
     return "AMDGPU Pre Wave Transform";
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.setPreservesCFG();
+    AU.setPreservesAll();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 };
 
 } // End anonymous namespace.
 
-INITIALIZE_PASS(AMDGPUPreWaveTransform, DEBUG_TYPE,
+INITIALIZE_PASS(AMDGPUPreWaveTransformLegacy, DEBUG_TYPE,
                 "AMDGPU Pre Wave Transform", false, false)
 
-char AMDGPUPreWaveTransform::ID = 0;
-char &llvm::AMDGPUPreWaveTransformID = AMDGPUPreWaveTransform::ID;
+char AMDGPUPreWaveTransformLegacy::ID = 0;
+char &llvm::AMDGPUPreWaveTransformID = AMDGPUPreWaveTransformLegacy::ID;
 
 FunctionPass *llvm::createAMDGPUPreWaveTransformPass() {
-  return new AMDGPUPreWaveTransform();
+  return new AMDGPUPreWaveTransformLegacy();
 }
 
-bool AMDGPUPreWaveTransform::runOnMachineFunction(MachineFunction &MF) {
+bool AMDGPUPreWaveTransform::run(MachineFunction &MF) {
   const SIInstrInfo *TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
   bool Changed = false;
 
@@ -69,4 +75,11 @@ bool AMDGPUPreWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   }
 
   return Changed;
+}
+
+PreservedAnalyses
+llvm::AMDGPUPreWaveTransformPass::run(MachineFunction &MF,
+                                      MachineFunctionAnalysisManager &MFAM) {
+  AMDGPUPreWaveTransform().run(MF);
+  return PreservedAnalyses::all();
 }

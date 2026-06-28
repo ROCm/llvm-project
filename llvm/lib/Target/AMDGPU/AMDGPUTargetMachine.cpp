@@ -744,7 +744,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUPreloadKernelArgumentsLegacyPass(*PR);
   initializeAMDGPUUniformIntrinsicCombineLegacyPass(*PR);
   initializeAMDGPUWaveTransformPass(*PR);
-  initializeAMDGPUPreWaveTransformPass(*PR);
+  initializeAMDGPUPreWaveTransformLegacyPass(*PR);
   initializeAMDGPUFinalizeISelWaveTransformLegacyPass(*PR);
 }
 
