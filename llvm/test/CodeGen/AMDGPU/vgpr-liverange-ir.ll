@@ -116,11 +116,9 @@ define amdgpu_ps float @else3(i32 %z, float %v, i32 inreg %bound, i32 %x0) #0 {
   ; SI-NEXT: {{  $}}
   ; SI-NEXT:   [[PHI:%[0-9]+]]:sreg_32 = PHI [[S_MOV_B32_]], %bb.0, %10, %bb.4
   ; SI-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[COPY]], %bb.0, %9, %bb.4
-  ; SI-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_NE_U32_e64 0, [[V_CNDMASK_B32_e64_]], implicit $exec
-  ; SI-NEXT:   [[V_CNDMASK_B32_e64_1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, killed [[V_CMP_NE_U32_e64_]], implicit $exec
-  ; SI-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32 = V_CMP_NE_U32_e64 1, killed [[V_CNDMASK_B32_e64_1]], implicit $exec
-  ; SI-NEXT:   SI_BRCOND %bb.3, killed [[V_CMP_NE_U32_e64_1]], implicit-def dead $exec, implicit-def dead $vcc_lo, implicit $exec
-  ; SI-NEXT:   S_BRANCH %bb.2
+  ; SI-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_NE_U32_e64 0, [[V_CNDMASK_B32_e64_]], implicit $exec
+  ; SI-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_NE_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc_lo, implicit $exec
+  ; SI-NEXT:   S_BRANCH %bb.3
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.2.if:
   ; SI-NEXT:   successors: %bb.4(0x80000000)
@@ -213,24 +211,24 @@ define amdgpu_ps float @loop(i32 %z, float %v, i32 inreg %bound, ptr %extern_fun
   ; SI-NEXT: bb.2:
   ; SI-NEXT:   successors: %bb.3(0x80000000)
   ; SI-NEXT: {{  $}}
-  ; SI-NEXT:   [[PHI:%[0-9]+]]:vreg_64 = PHI undef %44:vreg_64, %bb.3, [[REG_SEQUENCE]], %bb.1
-  ; SI-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI undef %46:vgpr_32, %bb.3, [[COPY4]], %bb.1
-  ; SI-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI]].sub0, implicit $exec
-  ; SI-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI]].sub1, implicit $exec
+  ; SI-NEXT:   [[PHI:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[S_MOV_B32_]], %bb.1, %37, %bb.3
+  ; SI-NEXT:   [[PHI1:%[0-9]+]]:vreg_64 = PHI undef %46:vreg_64, %bb.3, [[REG_SEQUENCE]], %bb.1
+  ; SI-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI undef %48:vgpr_32, %bb.3, [[COPY4]], %bb.1
+  ; SI-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI1]].sub0, implicit $exec
+  ; SI-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI1]].sub1, implicit $exec
   ; SI-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:sgpr_64 = REG_SEQUENCE killed [[V_READFIRSTLANE_B32_]], %subreg.sub0, killed [[V_READFIRSTLANE_B32_1]], %subreg.sub1
-  ; SI-NEXT:   [[V_CMP_EQ_U64_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 [[REG_SEQUENCE1]], killed [[PHI]], implicit $exec
-  ; SI-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 killed [[V_CMP_EQ_U64_e64_]], implicit-def $exec, implicit-def dead $scc, implicit $exec
+  ; SI-NEXT:   V_CMPX_EQ_U64_nosdst_e32_term [[REG_SEQUENCE1]], killed [[PHI1]], implicit-def $exec, implicit $exec
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.3:
   ; SI-NEXT:   successors: %bb.2(0x40000000), %bb.4(0x40000000)
   ; SI-NEXT: {{  $}}
   ; SI-NEXT:   ADJCALLSTACKUP 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
   ; SI-NEXT:   $sgpr0_sgpr1_sgpr2_sgpr3 = COPY [[COPY6]]
-  ; SI-NEXT:   $vgpr0 = COPY killed [[PHI1]]
+  ; SI-NEXT:   $vgpr0 = COPY killed [[PHI2]]
   ; SI-NEXT:   dead $sgpr30_sgpr31 = SI_CALL killed [[REG_SEQUENCE1]], 0, csr_amdgpu_si_gfx, implicit killed $sgpr0_sgpr1_sgpr2_sgpr3, implicit killed $vgpr0, implicit-def $vgpr0
   ; SI-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
   ; SI-NEXT:   [[COPY7:%[0-9]+]]:vgpr_32 = COPY killed $vgpr0
-  ; SI-NEXT:   $exec_lo = S_XOR_B32_term $exec_lo, killed [[S_AND_SAVEEXEC_B32_]], implicit-def dead $scc
+  ; SI-NEXT:   [[S_ANDN2_WREXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_ANDN2_WREXEC_B32 killed [[PHI]], implicit-def $exec, implicit-def dead $scc, implicit $exec
   ; SI-NEXT:   SI_WATERFALL_LOOP %bb.2, implicit $exec
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.4:
@@ -250,24 +248,24 @@ define amdgpu_ps float @loop(i32 %z, float %v, i32 inreg %bound, ptr %extern_fun
   ; SI-NEXT: bb.6:
   ; SI-NEXT:   successors: %bb.7(0x80000000)
   ; SI-NEXT: {{  $}}
-  ; SI-NEXT:   [[PHI2:%[0-9]+]]:vreg_64 = PHI undef %48:vreg_64, %bb.7, [[REG_SEQUENCE2]], %bb.5
-  ; SI-NEXT:   [[PHI3:%[0-9]+]]:vgpr_32 = PHI undef %50:vgpr_32, %bb.7, [[COPY4]], %bb.5
-  ; SI-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI2]].sub0, implicit $exec
-  ; SI-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI2]].sub1, implicit $exec
+  ; SI-NEXT:   [[PHI3:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[S_MOV_B32_1]], %bb.5, %29, %bb.7
+  ; SI-NEXT:   [[PHI4:%[0-9]+]]:vreg_64 = PHI undef %50:vreg_64, %bb.7, [[REG_SEQUENCE2]], %bb.5
+  ; SI-NEXT:   [[PHI5:%[0-9]+]]:vgpr_32 = PHI undef %52:vgpr_32, %bb.7, [[COPY4]], %bb.5
+  ; SI-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI4]].sub0, implicit $exec
+  ; SI-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI4]].sub1, implicit $exec
   ; SI-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:sgpr_64 = REG_SEQUENCE killed [[V_READFIRSTLANE_B32_2]], %subreg.sub0, killed [[V_READFIRSTLANE_B32_3]], %subreg.sub1
-  ; SI-NEXT:   [[V_CMP_EQ_U64_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 [[REG_SEQUENCE3]], killed [[PHI2]], implicit $exec
-  ; SI-NEXT:   [[S_AND_SAVEEXEC_B32_1:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 killed [[V_CMP_EQ_U64_e64_1]], implicit-def $exec, implicit-def dead $scc, implicit $exec
+  ; SI-NEXT:   V_CMPX_EQ_U64_nosdst_e32_term [[REG_SEQUENCE3]], killed [[PHI4]], implicit-def $exec, implicit $exec
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.7:
   ; SI-NEXT:   successors: %bb.6(0x40000000), %bb.8(0x40000000)
   ; SI-NEXT: {{  $}}
   ; SI-NEXT:   ADJCALLSTACKUP 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
   ; SI-NEXT:   $sgpr0_sgpr1_sgpr2_sgpr3 = COPY [[COPY9]]
-  ; SI-NEXT:   $vgpr0 = COPY killed [[PHI3]]
+  ; SI-NEXT:   $vgpr0 = COPY killed [[PHI5]]
   ; SI-NEXT:   dead $sgpr30_sgpr31 = SI_CALL killed [[REG_SEQUENCE3]], 0, csr_amdgpu_si_gfx, implicit killed $sgpr0_sgpr1_sgpr2_sgpr3, implicit killed $vgpr0, implicit-def $vgpr0
   ; SI-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
   ; SI-NEXT:   [[COPY10:%[0-9]+]]:vgpr_32 = COPY killed $vgpr0
-  ; SI-NEXT:   $exec_lo = S_XOR_B32_term $exec_lo, killed [[S_AND_SAVEEXEC_B32_1]], implicit-def dead $scc
+  ; SI-NEXT:   [[S_ANDN2_WREXEC_B32_1:%[0-9]+]]:sreg_32_xm0_xexec = S_ANDN2_WREXEC_B32 killed [[PHI3]], implicit-def $exec, implicit-def dead $scc, implicit $exec
   ; SI-NEXT:   SI_WATERFALL_LOOP %bb.6, implicit $exec
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.8:
@@ -277,8 +275,8 @@ define amdgpu_ps float @loop(i32 %z, float %v, i32 inreg %bound, ptr %extern_fun
   ; SI-NEXT:   [[COPY11:%[0-9]+]]:vgpr_32 = COPY killed [[COPY10]]
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.9.end:
-  ; SI-NEXT:   [[PHI4:%[0-9]+]]:vgpr_32 = PHI [[COPY11]], %bb.8, [[COPY8]], %bb.4
-  ; SI-NEXT:   $vgpr0 = COPY killed [[PHI4]]
+  ; SI-NEXT:   [[PHI6:%[0-9]+]]:vgpr_32 = PHI [[COPY11]], %bb.8, [[COPY8]], %bb.4
+  ; SI-NEXT:   $vgpr0 = COPY killed [[PHI6]]
   ; SI-NEXT:   SI_RETURN_TO_EPILOG killed $vgpr0
 main_body:
   %cc = icmp sgt i32 %z, 5
@@ -324,12 +322,12 @@ define amdgpu_ps float @loop_with_use(i32 %z, float %v, i32 inreg %bound, ptr %e
   ; SI-NEXT: bb.2:
   ; SI-NEXT:   successors: %bb.3(0x80000000)
   ; SI-NEXT: {{  $}}
-  ; SI-NEXT:   [[PHI:%[0-9]+]]:vreg_64 = PHI undef %45:vreg_64, %bb.3, [[REG_SEQUENCE]], %bb.1
-  ; SI-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI]].sub0, implicit $exec
-  ; SI-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI]].sub1, implicit $exec
+  ; SI-NEXT:   [[PHI:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[S_MOV_B32_]], %bb.1, %38, %bb.3
+  ; SI-NEXT:   [[PHI1:%[0-9]+]]:vreg_64 = PHI undef %47:vreg_64, %bb.3, [[REG_SEQUENCE]], %bb.1
+  ; SI-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI1]].sub0, implicit $exec
+  ; SI-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI1]].sub1, implicit $exec
   ; SI-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:sgpr_64 = REG_SEQUENCE killed [[V_READFIRSTLANE_B32_]], %subreg.sub0, killed [[V_READFIRSTLANE_B32_1]], %subreg.sub1
-  ; SI-NEXT:   [[V_CMP_EQ_U64_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 [[REG_SEQUENCE1]], killed [[PHI]], implicit $exec
-  ; SI-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 killed [[V_CMP_EQ_U64_e64_]], implicit-def $exec, implicit-def dead $scc, implicit $exec
+  ; SI-NEXT:   V_CMPX_EQ_U64_nosdst_e32_term [[REG_SEQUENCE1]], killed [[PHI1]], implicit-def $exec, implicit $exec
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.3:
   ; SI-NEXT:   successors: %bb.2(0x40000000), %bb.4(0x40000000)
@@ -340,7 +338,7 @@ define amdgpu_ps float @loop_with_use(i32 %z, float %v, i32 inreg %bound, ptr %e
   ; SI-NEXT:   dead $sgpr30_sgpr31 = SI_CALL killed [[REG_SEQUENCE1]], 0, csr_amdgpu_si_gfx, implicit killed $sgpr0_sgpr1_sgpr2_sgpr3, implicit killed $vgpr0, implicit-def $vgpr0
   ; SI-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
   ; SI-NEXT:   [[COPY7:%[0-9]+]]:vgpr_32 = COPY killed $vgpr0
-  ; SI-NEXT:   $exec_lo = S_XOR_B32_term $exec_lo, killed [[S_AND_SAVEEXEC_B32_]], implicit-def dead $scc
+  ; SI-NEXT:   [[S_ANDN2_WREXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_ANDN2_WREXEC_B32 killed [[PHI]], implicit-def $exec, implicit-def dead $scc, implicit $exec
   ; SI-NEXT:   SI_WATERFALL_LOOP %bb.2, implicit $exec
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.4:
@@ -360,12 +358,12 @@ define amdgpu_ps float @loop_with_use(i32 %z, float %v, i32 inreg %bound, ptr %e
   ; SI-NEXT: bb.6:
   ; SI-NEXT:   successors: %bb.7(0x80000000)
   ; SI-NEXT: {{  $}}
-  ; SI-NEXT:   [[PHI1:%[0-9]+]]:vreg_64 = PHI undef %47:vreg_64, %bb.7, [[REG_SEQUENCE2]], %bb.5
-  ; SI-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI1]].sub0, implicit $exec
-  ; SI-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI1]].sub1, implicit $exec
+  ; SI-NEXT:   [[PHI2:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[S_MOV_B32_1]], %bb.5, %30, %bb.7
+  ; SI-NEXT:   [[PHI3:%[0-9]+]]:vreg_64 = PHI undef %49:vreg_64, %bb.7, [[REG_SEQUENCE2]], %bb.5
+  ; SI-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI3]].sub0, implicit $exec
+  ; SI-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI3]].sub1, implicit $exec
   ; SI-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:sgpr_64 = REG_SEQUENCE killed [[V_READFIRSTLANE_B32_2]], %subreg.sub0, killed [[V_READFIRSTLANE_B32_3]], %subreg.sub1
-  ; SI-NEXT:   [[V_CMP_EQ_U64_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 [[REG_SEQUENCE3]], killed [[PHI1]], implicit $exec
-  ; SI-NEXT:   [[S_AND_SAVEEXEC_B32_1:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 killed [[V_CMP_EQ_U64_e64_1]], implicit-def $exec, implicit-def dead $scc, implicit $exec
+  ; SI-NEXT:   V_CMPX_EQ_U64_nosdst_e32_term [[REG_SEQUENCE3]], killed [[PHI3]], implicit-def $exec, implicit $exec
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.7:
   ; SI-NEXT:   successors: %bb.6(0x40000000), %bb.8(0x40000000)
@@ -376,7 +374,7 @@ define amdgpu_ps float @loop_with_use(i32 %z, float %v, i32 inreg %bound, ptr %e
   ; SI-NEXT:   dead $sgpr30_sgpr31 = SI_CALL killed [[REG_SEQUENCE3]], 0, csr_amdgpu_si_gfx, implicit killed $sgpr0_sgpr1_sgpr2_sgpr3, implicit killed $vgpr0, implicit-def $vgpr0
   ; SI-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
   ; SI-NEXT:   [[COPY10:%[0-9]+]]:vgpr_32 = COPY killed $vgpr0
-  ; SI-NEXT:   $exec_lo = S_XOR_B32_term $exec_lo, killed [[S_AND_SAVEEXEC_B32_1]], implicit-def dead $scc
+  ; SI-NEXT:   [[S_ANDN2_WREXEC_B32_1:%[0-9]+]]:sreg_32_xm0_xexec = S_ANDN2_WREXEC_B32 killed [[PHI2]], implicit-def $exec, implicit-def dead $scc, implicit $exec
   ; SI-NEXT:   SI_WATERFALL_LOOP %bb.6, implicit $exec
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.8:
@@ -386,8 +384,8 @@ define amdgpu_ps float @loop_with_use(i32 %z, float %v, i32 inreg %bound, ptr %e
   ; SI-NEXT:   [[COPY11:%[0-9]+]]:vgpr_32 = COPY killed [[COPY10]]
   ; SI-NEXT: {{  $}}
   ; SI-NEXT: bb.9.end:
-  ; SI-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI [[COPY11]], %bb.8, [[COPY8]], %bb.4
-  ; SI-NEXT:   [[V_ADD_F32_e64_:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e64 0, killed [[PHI2]], 0, killed [[COPY4]], 0, 0, implicit $mode, implicit $exec
+  ; SI-NEXT:   [[PHI4:%[0-9]+]]:vgpr_32 = PHI [[COPY11]], %bb.8, [[COPY8]], %bb.4
+  ; SI-NEXT:   [[V_ADD_F32_e64_:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e64 0, killed [[PHI4]], 0, killed [[COPY4]], 0, 0, implicit $mode, implicit $exec
   ; SI-NEXT:   $vgpr0 = COPY killed [[V_ADD_F32_e64_]]
   ; SI-NEXT:   SI_RETURN_TO_EPILOG killed $vgpr0
 main_body:

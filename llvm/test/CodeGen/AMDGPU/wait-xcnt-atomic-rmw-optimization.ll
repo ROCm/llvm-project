@@ -991,12 +991,9 @@ define amdgpu_kernel void @atomic_rmw_across_basic_blocks(ptr addrspace(1) %ptr,
 ; GFX1250-NEXT:    s_mov_b32 s1, 0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s0, s1
-; GFX1250-NEXT:    s_cselect_b32 s0, -1, 0
-; GFX1250-NEXT:    s_mov_b32 s1, -1
-; GFX1250-NEXT:    s_xor_b32 s0, s0, s1
-; GFX1250-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
-; GFX1250-NEXT:    s_cbranch_vccnz .LBB16_2
-; GFX1250-NEXT:  ; %bb.1: ; %then
+; GFX1250-NEXT:    s_cbranch_scc1 .LBB16_1
+; GFX1250-NEXT:    s_branch .LBB16_2
+; GFX1250-NEXT:  .LBB16_1: ; %then
 ; GFX1250-NEXT:    s_or_saveexec_b32 s6, -1
 ; GFX1250-NEXT:    scratch_load_b32 v2, off, off nv ; 4-byte Folded Reload
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
@@ -1163,12 +1160,9 @@ define amdgpu_kernel void @atomic_rmw_with_branch(ptr addrspace(1) %ptr, i32 %co
 ; GFX1250-NEXT:    s_mov_b32 s1, 0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s0, s1
-; GFX1250-NEXT:    s_cselect_b32 s0, -1, 0
-; GFX1250-NEXT:    s_mov_b32 s1, -1
-; GFX1250-NEXT:    s_xor_b32 s0, s0, s1
-; GFX1250-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
-; GFX1250-NEXT:    s_cbranch_vccnz .LBB18_2
-; GFX1250-NEXT:  ; %bb.1: ; %bb1
+; GFX1250-NEXT:    s_cbranch_scc1 .LBB18_1
+; GFX1250-NEXT:    s_branch .LBB18_2
+; GFX1250-NEXT:  .LBB18_1: ; %bb1
 ; GFX1250-NEXT:    s_or_saveexec_b32 s6, -1
 ; GFX1250-NEXT:    scratch_load_b32 v2, off, off nv ; 4-byte Folded Reload
 ; GFX1250-NEXT:    s_wait_xcnt 0x0

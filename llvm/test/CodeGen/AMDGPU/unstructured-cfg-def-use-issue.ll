@@ -50,7 +50,6 @@ define hidden void @widget() #0 {
 ; GCN-NEXT:    v_mov_b32_e32 v2, 0
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    v_mov_b32_e32 v1, 0
-; GCN-NEXT:    v_mov_b32_e32 v2, 0
 ; GCN-NEXT:    flat_store_dword v[0:1], v2
 ; GCN-NEXT:  .LBB0_6: ; %UnifiedReturnBlock
 ; GCN-NEXT:    s_or_b64 exec, exec, s[34:35]
