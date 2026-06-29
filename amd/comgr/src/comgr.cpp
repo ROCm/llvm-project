@@ -1392,7 +1392,7 @@ amd_comgr_status_t AMD_COMGR_API
               << " Comgr Branch-Commit: " << xstringify(AMD_COMGR_GIT_BRANCH)
               << '-' << xstringify(AMD_COMGR_GIT_COMMIT) << '\n'
               << "\t LLVM Commit: " << clang::getLLVMRevision();
-      getLogger().emitDebug(HeaderS.str());
+      getLogger().emitDebug(HeaderStr);
     }
 
     ProfilePoint ProfileAction(getActionKindName(ActionKind));
