@@ -16,6 +16,7 @@
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/FileSystem.h"
 
 using namespace llvm;
@@ -45,8 +46,9 @@ StringRef severityPrefix(LogLevel Severity) {
     return "comgr: info: ";
   case LogLevel::Debug:
     return "comgr: debug: ";
+  default:
+    return "comgr: ";
   }
-  return "comgr: ";
 }
 
 } // namespace
@@ -57,6 +59,14 @@ LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
   // otherwise to Error. An explicit, recognized value always wins (including
   // "none", which silences logging even when verbose logs are requested).
   LogLevel Fallback = VerboseFallback ? LogLevel::Debug : LogLevel::Error;
+  return StringSwitch<LogLevel>(Requested)
+    .CaseLower("none", LogLevel::None)
+    .CaseLower("error", LogLevel::Error)
+    .CaseLower("warning", LogLevel::Warning)
+    .CaseLower("info", LogLevel::Info)
+    .CaseLower("debug", LogLevel::Debug)
+    .Default(Fallback);
+  /* 
   if (Requested.empty())
     return Fallback;
 
@@ -72,6 +82,7 @@ LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
     return LogLevel::Debug;
 
   return Fallback;
+  */
 }
 
 Logger::Logger() : Level(resolveLevel()), Sink(nullptr) {

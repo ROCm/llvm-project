@@ -24,6 +24,7 @@
 #include "comgr-symbolizer.h"
 
 #include "clang/Basic/Version.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/Constants.h"
@@ -1374,8 +1375,8 @@ amd_comgr_status_t AMD_COMGR_API
     InitTimeStatistics(PerfLog);
 
     if (getLogger().isEnabled(LogLevel::Debug)) {
-      std::string HeaderStr;
-      raw_string_ostream HeaderS(HeaderStr);
+      SmallString<256> HeaderStr;
+      raw_svector_ostream HeaderS(HeaderStr);
       HeaderS << "amd_comgr_do_action:\n"
               << "\t  ActionKind: " << getActionKindName(ActionKind) << '\n'
               << "\t     IsaName: " << ActionInfoP->IsaName << '\n'
