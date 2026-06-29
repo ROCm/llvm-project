@@ -17,6 +17,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/FileSystem.h"
 
 using namespace llvm;
@@ -46,8 +47,11 @@ StringRef severityPrefix(LogLevel Severity) {
     return "comgr: info: ";
   case LogLevel::Debug:
     return "comgr: debug: ";
-  default:
+  case LogLevel::None:
     return "comgr: ";
+  default:
+    llvm_unreachable();
+    return "";
   }
 }
 
