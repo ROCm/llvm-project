@@ -101,14 +101,12 @@ jobs:
       - name: Install build deps for runtime build
         run: |
           dnf install -y --setopt=install_weak_deps=False \
-            numactl-devel elfutils-libelf-devel libdrm-devel || true
+            numactl-devel elfutils-libelf-devel libdrm-devel
 
       - name: Install comgr + device-libs into staging
         run: |
           cmake --install build-comgr --prefix $PWD/staging
           cmake --install build-device-libs --prefix $PWD/staging
-          echo "=== staging/lib after install (comgr files) ==="
-          ls -la staging/lib/libamd_comgr* 2>&1 || true
 
       - name: Checkout rocm-systems (pinned)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -370,7 +368,7 @@ jobs:
         if: always()
         run: |
           grep -oE '^FAIL: LLVM_SPIRV :: \S+' build/check-amd-llvm-spirv.log \
-            | sort -u > build/spirv-fails-pr.txt || true
+            | sort -u > build/spirv-fails-pr.txt
           echo "PR head failures:"; cat build/spirv-fails-pr.txt
 
       - name: Switch llvm-project to amd-staging tip for baseline
@@ -403,7 +401,7 @@ jobs:
         if: always()
         run: |
           grep -oE '^FAIL: LLVM_SPIRV :: \S+' build/check-amd-llvm-spirv-baseline.log \
-            | sort -u > build/spirv-fails-baseline.txt || true
+            | sort -u > build/spirv-fails-baseline.txt
           echo "Baseline failures:"; cat build/spirv-fails-baseline.txt
 
       # Fail the job on real regressions (PR head FAILs that aren't on
