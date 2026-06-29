@@ -59,7 +59,7 @@ enum class LogLevel {
 LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
 
 /// Process-global, thread-safe logging facility. Obtain the shared instance
-/// through getLogger(); do not construct directly.
+/// through getLogger(); do not construct directly excpt for tests.
 class Logger {
 public:
   /// Construct a Logger configured from the environment (AMD_COMGR_LOG_LEVEL
@@ -67,7 +67,7 @@ public:
   Logger();
 
   /// Construct a Logger with an explicit level and non-owning sink (which may
-  /// be null). Intended for tests and embedding.
+  /// be null). Intended for tests.
   Logger(LogLevel Level, llvm::raw_ostream *Sink);
 
   Logger(const Logger &) = delete;

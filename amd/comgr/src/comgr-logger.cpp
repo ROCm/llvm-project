@@ -45,8 +45,6 @@ StringRef severityPrefix(LogLevel Severity) {
     return "comgr: info: ";
   case LogLevel::Debug:
     return "comgr: debug: ";
-  case LogLevel::None:
-    return "comgr: ";
   }
   return "comgr: ";
 }

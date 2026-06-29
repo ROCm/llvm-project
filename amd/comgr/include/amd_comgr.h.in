@@ -141,30 +141,22 @@ extern "C" {
  * - @p AMD_COMGR_SAVE_LLVM_TEMPS: If this is set, and is not "0", Comgr
  *   forwards "--save-temps=obj" to Clang Driver invocations
  * - @p AMD_COMGR_REDIRECT_LOGS: If this is not set, or is set to "0", logs are
- *   only returned to the caller (via AMD_COMGR_DATA_KIND_LOG) as normal. If
- *   this is set to "stdout"/"-" or "stderr", logs are additionally copied to
- *   the standard output or error stream, respectively. If this is set to any
- *   other value, it is interpreted as a filename which logs are additionally
- *   appended to. In all cases the logs are still returned to the caller as
- *   well; setting this variable copies them to the extra destination, it does
- *   not move them. When a filename is used, it is opened once and kept open for
- *   the lifetime of the process, so the destination should not be rotated or
- *   removed while Comgr is in use. Logs may be redirected irrespective of
- *   whether logging is enabled.
+ *   returned to the caller as normal. If this is set to "stdout"/"-" or
+ *   "stderr", logs are additionally copied to the standard output or error
+ *   stream, respectively. If this is set to any other value, it is interpreted
+ *   as a filename which logs are appended to. In all cases logs are still
+ *   returned to the caller; this variable copies them, it does not move them.
+ *   Logs may be redirected irrespective of whether logging is enabled.
  * - @p AMD_COMGR_EMIT_VERBOSE_LOGS: If this is set, and is not "0", logs will
- *   include additional Comgr-specific informational messages. This is
- *   equivalent to setting AMD_COMGR_LOG_LEVEL to "debug", but only when
- *   AMD_COMGR_LOG_LEVEL is not set itself: an explicit AMD_COMGR_LOG_LEVEL
- *   always takes precedence (so AMD_COMGR_LOG_LEVEL=none suppresses logs even
- *   if this is enabled).
- * - @p AMD_COMGR_LOG_LEVEL: Controls the severity threshold of the global
- *   Comgr logger. Valid values, from least to most verbose, are "none",
- *   "error", "warning", "info", and "debug" (case-insensitive). The chosen
- *   level enables that severity and every less-verbose (more severe) one; for
- *   example, "warning" emits error and warning messages but suppresses info and
- *   debug. "none" suppresses all messages. When set, this takes precedence over
- *   AMD_COMGR_EMIT_VERBOSE_LOGS. If unset, the level defaults to "debug" when
- *   AMD_COMGR_EMIT_VERBOSE_LOGS is enabled, and to "error" otherwise.
+ *   include additional Comgr-specific informational messages. Equivalent to
+ *   AMD_COMGR_LOG_LEVEL=debug, unless AMD_COMGR_LOG_LEVEL is set, which takes
+ *   precedence.
+ * - @p AMD_COMGR_LOG_LEVEL: Sets the severity threshold of the Comgr logger.
+ *   Values from least to most verbose: "none", "error", "warning", "info",
+ *   "debug" (case-insensitive). A level enables that severity and all more
+ *   severe ones. Takes precedence over AMD_COMGR_EMIT_VERBOSE_LOGS; if unset,
+ *   defaults to "debug" when AMD_COMGR_EMIT_VERBOSE_LOGS is enabled, else
+ *   "error".
  */
 
 /** \defgroup symbol_versions_group Symbol Versions
