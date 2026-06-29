@@ -155,8 +155,7 @@ jobs:
             -DHIP_COMMON_DIR=$PWD/rocm-systems/projects/hip \
             -DCLR_BUILD_HIP=ON \
             -DROCM_KPACK_ENABLED=OFF \
-            -DHIP_ENABLE_ROCPROFILER_REGISTER=OFF \
-            -DHIPCC_BIN_DIR=
+            -DHIP_ENABLE_ROCPROFILER_REGISTER=OFF
 
       - name: Build CLR
         run: ninja -C build-clr install
