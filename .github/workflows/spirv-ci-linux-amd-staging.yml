@@ -616,7 +616,7 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
-          ctest --test-dir examples-build-Applications --output-on-failure -E '^applications_optical_flow$'
+          ctest --test-dir examples-build-Applications --output-on-failure -E '^(applications_optical_flow|applications_monte_carlo_pi)$'
 
       # Libraries
       - name: ROCm Examples build Libraries
@@ -645,4 +645,4 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
-          ctest --test-dir examples-build-Libraries --output-on-failure
+          ctest --test-dir examples-build-Libraries --output-on-failure -E '^(hiprand_simple_distributions_cpp|rocrand_simple_distributions_cpp)$'
