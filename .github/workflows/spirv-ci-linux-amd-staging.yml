@@ -293,7 +293,7 @@ jobs:
             build-rocprim build-hipcub build-rocrand build-hiprand staging
 
       - name: Upload build tree artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: linux-build-tree
           path: linux-build-tree.tar
@@ -346,7 +346,7 @@ jobs:
           persist-credentials: false
 
       - name: Download build tree artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: linux-build-tree
 
@@ -510,7 +510,7 @@ jobs:
           persist-credentials: false
 
       - name: Download build tree artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: linux-build-tree
 
@@ -563,7 +563,7 @@ jobs:
           path: rocm-examples
 
       - name: Download build tree artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: linux-build-tree
 
