@@ -97,27 +97,27 @@ __device__ void func1(int Arg) {
 // CHECK: DW_AT_external (true)
 
 // CHECK: DW_TAG_formal_parameter
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit0, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_location (DW_OP_regx SGPR32, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit0, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 // CHECK: DW_AT_name ("Arg")
 // CHECK: DW_AT_type ("int")
 
 // CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit4, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_location (DW_OP_regx SGPR32, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit4, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 // CHECK: DW_AT_name ("FuncVarA")
 // CHECK: DW_AT_type ("int")
 
 // CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit8, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_location (DW_OP_regx SGPR32, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit8, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 // CHECK: DW_AT_name ("FuncVarB")
 // CHECK: DW_AT_type ("int")
 
 // CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit16, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_location (DW_OP_regx SGPR32, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit16, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 // CHECK: DW_AT_name ("FuncVarAPointer")
 // CHECK: DW_AT_type ("int *")
 
 // CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit24, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_location (DW_OP_regx SGPR32, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit24, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 // CHECK: DW_AT_name ("FuncVarBPointer")
 // CHECK: DW_AT_type ("int *")
 // CHECK: NULL
