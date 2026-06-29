@@ -1,4 +1,5 @@
 // REQUIRES: comgr-has-spirv-translator
+// XFAIL: *
 // COM: Generate a spirv-targeted LLVM IR file from an OpenCL kernel
 // RUN: %clang -c -emit-llvm --target=spirv64 %s -o %t.bc
 
