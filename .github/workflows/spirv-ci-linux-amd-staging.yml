@@ -108,7 +108,7 @@ jobs:
           cmake --install build-comgr --prefix $PWD/staging
           cmake --install build-device-libs --prefix $PWD/staging
 
-      - name: Checkout rocm-systems (pinned)
+      - name: Checkout rocm-systems
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ROCm/rocm-systems
@@ -116,7 +116,7 @@ jobs:
           path: rocm-systems
           persist-credentials: false
 
-      - name: Checkout rocm-cmake (pinned)
+      - name: Checkout rocm-cmake
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ROCm/rocm-cmake
@@ -540,7 +540,7 @@ jobs:
         run: ctest --test-dir build-comgr --output-on-failure --rerun-failed
 
   # =====================================================================
-  # Test - rocm-examples (compile + run hello-world via amdgcnspirv)
+  # Test - rocm-examples
   # =====================================================================
 
   test_rocm_examples:
@@ -555,7 +555,7 @@ jobs:
 
 
     steps:
-      - name: Checkout rocm-examples (pinned)
+      - name: Checkout rocm-examples
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ROCm/rocm-examples
