@@ -70,23 +70,6 @@ LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
     .CaseLower("info", LogLevel::Info)
     .CaseLower("debug", LogLevel::Debug)
     .Default(Fallback);
-  /* 
-  if (Requested.empty())
-    return Fallback;
-
-  if (Requested.equals_insensitive("none"))
-    return LogLevel::None;
-  if (Requested.equals_insensitive("error"))
-    return LogLevel::Error;
-  if (Requested.equals_insensitive("warning"))
-    return LogLevel::Warning;
-  if (Requested.equals_insensitive("info"))
-    return LogLevel::Info;
-  if (Requested.equals_insensitive("debug"))
-    return LogLevel::Debug;
-
-  return Fallback;
-  */
 }
 
 Logger::Logger() : Level(resolveLevel()), Sink(nullptr) {
