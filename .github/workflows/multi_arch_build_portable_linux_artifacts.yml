@@ -208,7 +208,13 @@ jobs:
 
       - name: Configure
         env:
-          extra_cmake_options: ${{ inputs.test_type == 'full' && '-DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '' }}
+          extra_cmake_options: >-
+            ${{
+              inputs.stage_name == 'math-libs' && inputs.libhipcxx_pr_sha != '' &&
+                '-DTHEROCK_ENABLE_BLAS=OFF -DTHEROCK_ENABLE_FFT=OFF -DTHEROCK_ENABLE_SPARSE=OFF -DTHEROCK_ENABLE_SOLVER=OFF -DTHEROCK_ENABLE_ROCWMMA=OFF -DTHEROCK_ENABLE_ML_LIBS=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_LIBHIPCXX=OFF -DTHEROCK_ENABLE_RAND=ON -DTHEROCK_BUILD_TESTING=ON' ||
+              inputs.test_type == 'full' && '-DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' ||
+              ''
+            }}
         run: |
           cmake -B "${BUILD_DIR}" -S . -GNinja \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
