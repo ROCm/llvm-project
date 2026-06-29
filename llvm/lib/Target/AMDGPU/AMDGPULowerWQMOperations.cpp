@@ -1079,6 +1079,12 @@ void AMDGPULowerWQMOperations::processBlock(MachineBasicBlock &MBB,
   bool InStrictBracket = false;
   char SavedStateBeforeStrict = 0;
 
+  // Track whether a real Exact→WQM transition (toWQM) has been emitted in this
+  // block. When State == StateWQM from block-initial InNeeds, exec may not
+  // actually be in WQM (e.g., predecessor had a kill that narrowed exec).
+  // Only after an explicit toWQM() call do we know exec is genuinely WQM.
+  bool WQMTransitioned = false;
+
   BI.InitialState = State;
 
   for (unsigned Idx = 0;; ++Idx) {
@@ -1089,6 +1095,60 @@ void AMDGPULowerWQMOperations::processBlock(MachineBasicBlock &MBB,
       unsigned Opcode = II->getOpcode();
       if (Opcode == AMDGPU::ENTER_STRICT_WWM ||
           Opcode == AMDGPU::ENTER_STRICT_WQM) {
+        // Check if ENTER_STRICT_WQM bracket can be removed as redundant.
+        // This does NOT apply to STRICT_WWM (s_or_saveexec -1 is never
+        // redundant, and V_SET_INACTIVE_B32 operand 5 depends on the WWM
+        // bracket's saved exec register).
+        bool RemoveBracket = false;
+
+        if (Opcode == AMDGPU::ENTER_STRICT_WQM) {
+          if (State == StateWQM && WQMTransitioned) {
+            // Ambient state is already WQM: s_wqm(wqm(exec)) == wqm(exec).
+            RemoveBracket = true;
+          } else if (IsEntry && Idx == 0 && (BI.InNeeds & StateWQM)) {
+            // Entry block with bracket at Idx==0: the bracket arrived before
+            // the Idx==0 WQM transition logic could run (the bracket's
+            // `continue` short-circuits it). Emit toWQM now so the bracket
+            // becomes redundant. The WQM state persists through the bracket's
+            // interior instructions and continues past the EXIT_STRICT_WQM
+            // position, since no intervening instruction forces Exact.
+            if (FirstWQM == IE)
+              FirstWQM = II;
+            auto Before =
+                prepareInsertion(MBB, FirstWQM, II, /*PreferLast=*/true,
+                                 /*SaveSCC=*/WQMFromExec);
+            assert(WQMFromExec == (SavedWQMReg == 0));
+            toWQM(MBB, Before, SavedWQMReg);
+            if (SavedWQMReg) {
+              LIS->createAndComputeVirtRegInterval(SavedWQMReg);
+              SavedWQMReg = Register();
+            }
+            State = StateWQM;
+            WQMTransitioned = true;
+            RemoveBracket = true;
+          }
+        }
+
+        if (RemoveBracket) {
+          // Find the matching EXIT_STRICT_WQM in the same block.
+          auto ExitIt = std::next(II);
+          while (ExitIt != IE && ExitIt->getOpcode() != AMDGPU::EXIT_STRICT_WQM)
+            ++ExitIt;
+          assert(ExitIt != IE && "Missing EXIT_STRICT_WQM in block");
+
+          LLVM_DEBUG(dbgs() << "  Removing redundant STRICT_WQM bracket "
+                            << "(ambient state is WQM)\n");
+
+          // Remove EXIT first (it's after II), then ENTER.
+          LIS->RemoveMachineInstrFromMaps(*ExitIt);
+          ExitIt->eraseFromParent();
+          ++Next;
+          LIS->RemoveMachineInstrFromMaps(*II);
+          II->eraseFromParent();
+          II = Next;
+          continue;
+        }
+
         SavedStateBeforeStrict = State;
         InStrictBracket = true;
         ++Next;
@@ -1201,6 +1261,7 @@ void AMDGPULowerWQMOperations::processBlock(MachineBasicBlock &MBB,
         assert(WQMFromExec == (SavedWQMReg == 0));
 
         toWQM(MBB, Before, SavedWQMReg);
+        WQMTransitioned = true;
 
         if (SavedWQMReg) {
           LIS->createAndComputeVirtRegInterval(SavedWQMReg);
