@@ -47,9 +47,35 @@ jobs:
         shell: python3 {0}          
         
       - name: Trigger Buildbot Build
-        run: |          
-          echo "${{ secrets.BUILDBOT_HOST }}:${{ secrets.BUILDBOT_WORKER_PORT }}"
-          docker exec -e PR_TITLE="$PR_TITLE" "${{env.CONTAINER_NAME}}" /bin/bash -c 'buildbot sendchange -W ${{ secrets.BUILDBOT_USER }}  -a ${{secrets.BUILDBOT_USER}}:${{secrets.BUILDBOT_PWD}} --master="${{ secrets.BUILDBOT_HOST }}:${{ secrets.BUILDBOT_WORKER_PORT }}" --branch=${{ env.BASE_BRANCH }} --revision=${{ env.PR_SHA }} -p PR_NUMBER:${{ env.PR_NUMBER }} -p PR_TITLE:"$PR_TITLE"  -p PR_URL:${{ env.PR_URL }}  -p SHA:${{ env.PR_SHA }}'
+        env:
+          BUILDBOT_USER: ${{ secrets.BUILDBOT_USER }}
+          BUILDBOT_PWD: ${{ secrets.BUILDBOT_PWD }}
+          BUILDBOT_HOST: ${{ secrets.BUILDBOT_HOST }}
+          BUILDBOT_WORKER_PORT: ${{ secrets.BUILDBOT_WORKER_PORT }}
+        run: |
+          docker exec \
+            -e BUILDBOT_USER \
+            -e BUILDBOT_PWD \
+            -e BUILDBOT_HOST \
+            -e BUILDBOT_WORKER_PORT \
+            -e BASE_BRANCH="${{ env.BASE_BRANCH }}" \
+            -e PR_SHA="${{ env.PR_SHA }}" \
+            -e PR_NUMBER="${{ env.PR_NUMBER }}" \
+            -e PR_TITLE="$PR_TITLE" \
+            -e PR_URL="${{ env.PR_URL }}" \
+            "${{env.CONTAINER_NAME}}" \
+            /bin/bash -c '
+              buildbot sendchange \
+                -W "$BUILDBOT_USER" \
+                -a "$BUILDBOT_USER:$BUILDBOT_PWD" \
+                --master="$BUILDBOT_HOST:$BUILDBOT_WORKER_PORT" \
+                --branch="$BASE_BRANCH" \
+                --revision="$PR_SHA" \
+                -p PR_NUMBER:"$PR_NUMBER" \
+                -p PR_TITLE:"$PR_TITLE" \
+                -p PR_URL:"$PR_URL" \
+                -p SHA:"$PR_SHA"
+            '
           
       - name: Set Initial Status to Pending
         run: |
@@ -83,14 +109,14 @@ jobs:
           import time
           import requests
           GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-          BUILD_URL = 'http://${{ secrets.BUILDBOT_HOST }}:${{ secrets.BUILDBOT_MASTER_PORT }}/api/v2/builds'
+          BUILD_URL = 'https://${{ secrets.BUILDBOT_HOST }}:${{ secrets.BUILDBOT_MASTER_PORT }}/api/v2/builds'
           TARGET_SHA = os.getenv('PR_SHA')
           print('debug', TARGET_SHA)
           MAX_RETRIES = 10
           RETRY_INTERVAL = 30  # seconds
 
           def get_build_properties(build_id):
-              build_properties_url = f'http://${{ secrets.BUILDBOT_HOST }}:${{ secrets.BUILDBOT_MASTER_PORT }}/api/v2/builds/{build_id}/properties'
+              build_properties_url = f'https://${{ secrets.BUILDBOT_HOST }}:${{ secrets.BUILDBOT_MASTER_PORT }}/api/v2/builds/{build_id}/properties'
               response = requests.get(build_properties_url, headers={'Accept': 'application/json', 'Authorization': f'token {GITHUB_TOKEN}'})
               return response.json()
 
