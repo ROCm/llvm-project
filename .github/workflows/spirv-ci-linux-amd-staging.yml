@@ -27,7 +27,7 @@ jobs:
       - name: Checkout llvm-project (PR head)
         # On pull_request events: PR head from the (possibly fork) head repo.
         # On workflow_dispatch: the branch the dispatch was on.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -40,7 +40,7 @@ jobs:
         # the translator. Without an explicit repository/ref, checkout
         # defaults to the workflow's own repo (llvm-project) and clobbers
         # the translator path with llvm-project content.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
           ref: amd-staging
@@ -109,7 +109,7 @@ jobs:
           cmake --install build-device-libs --prefix $PWD/staging
 
       - name: Checkout rocm-systems
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/rocm-systems
           ref: develop
@@ -117,7 +117,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout rocm-cmake
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/rocm-cmake
           ref: develop
@@ -184,7 +184,7 @@ jobs:
 
       # Build rocPRIM
       - name: Checkout rocPRIM
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/rocPRIM
           ref: develop
@@ -206,7 +206,7 @@ jobs:
 
       # Build hipCUB
       - name: Checkout hipCUB
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/hipCUB
           ref: develop
@@ -227,7 +227,7 @@ jobs:
 
       # Build rocRAND
       - name: Checkout rocRAND
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/rocRAND
           ref: develop
@@ -252,7 +252,7 @@ jobs:
 
       # Build hipRAND
       - name: Checkout hipRAND
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/hipRAND
           ref: develop
@@ -324,7 +324,7 @@ jobs:
       - name: Checkout llvm-project (PR head)
         # On pull_request events: PR head from the (possibly fork) head repo.
         # On workflow_dispatch: the branch the dispatch was on.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -337,7 +337,7 @@ jobs:
         # the translator. Without an explicit repository/ref, checkout
         # defaults to the workflow's own repo (llvm-project) and clobbers
         # the translator path with llvm-project content.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
           ref: amd-staging
@@ -437,7 +437,7 @@ jobs:
       - name: Checkout llvm-project (PR head)
         # On pull_request events: PR head from the (possibly fork) head repo.
         # On workflow_dispatch: the branch the dispatch was on.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -450,7 +450,7 @@ jobs:
         # the translator. Without an explicit repository/ref, checkout
         # defaults to the workflow's own repo (llvm-project) and clobbers
         # the translator path with llvm-project content.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
           ref: amd-staging
@@ -488,7 +488,7 @@ jobs:
       - name: Checkout llvm-project (PR head)
         # On pull_request events: PR head from the (possibly fork) head repo.
         # On workflow_dispatch: the branch the dispatch was on.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -501,7 +501,7 @@ jobs:
         # the translator. Without an explicit repository/ref, checkout
         # defaults to the workflow's own repo (llvm-project) and clobbers
         # the translator path with llvm-project content.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
           ref: amd-staging
@@ -556,7 +556,7 @@ jobs:
 
     steps:
       - name: Checkout rocm-examples
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/rocm-examples
           ref: amd-staging
