@@ -80,7 +80,8 @@ jobs:
 
   ci_summary:
     name: CI Summary
-    if: always()
+    if: ${{ false }}
+    #if: always()
     needs:
       - setup
       - windows_build_and_test
