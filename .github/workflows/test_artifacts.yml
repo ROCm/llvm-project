@@ -105,7 +105,15 @@ jobs:
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
-            
+           
+      - name: Checkout CI config
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ROCm/therock-ci-config
+          ref: main
+          path: ci-config
+        continue-on-error: true
+ 
       - name: Setting up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
@@ -120,6 +128,7 @@ jobs:
           TEST_LABELS: ${{ inputs.test_labels }}
           # TODO(#3901): Consolidate run_functional_tests and benchmark_runs_on into a single run_extended_tests input.
           RUN_FUNCTIONAL_TESTS: ${{ inputs.run_functional_tests }}
+          CI_CONFIG_PATH: ci-config
         run: |
           if [[ "${TEST_TYPE:-}" == "quick" ]]; then
               PROJECTS_TO_TEST='rocroller,hipblas,hipblaslt,hipsolver,rocsolver,rocprim,hipcub,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma'

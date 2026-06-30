@@ -57,7 +57,7 @@ jobs:
       linux_build_config: >-
         {
           "per_family_info": [
-            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "test-runs-on": "linux-gfx942-1gpu-ossci-rocm", "sanity_check_only_for_family": false},
+            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "sanity_check_only_for_family": false},
             {"amdgpu_family": "gfx110X-all", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true},
             {"amdgpu_family": "gfx90a", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true}
           ],
@@ -99,6 +99,14 @@ jobs:
           ref: 'compiler/amd-staging'
           fetch-depth: 2
 
+      - name: Checkout CI config
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ROCm/therock-ci-config
+          ref: main
+          path: ci-config
+        continue-on-error: true
+
       - name: SHA of TheRock
         run: |
              git rev-parse HEAD
@@ -126,7 +134,8 @@ jobs:
           WINDOWS_TEST_LABELS: ${{ github.event.inputs.windows_test_labels }}
           WINDOWS_USE_PREBUILT_ARTIFACTS: ${{ github.event.inputs.windows_use_prebuilt_artifacts }}          
           BUILD_VARIANT: ${{ inputs.build_variant }}
-          RELEASE_TYPE: ${{ inputs.release_type }}            
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          CI_CONFIG_PATH: ci-config
         run: python ./build_tools/github_actions/configure_multi_arch_ci.py
 
       # Note: Other scripts treat "dev releases" and "CI builds" differently.
