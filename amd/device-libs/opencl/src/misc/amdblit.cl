@@ -470,47 +470,51 @@ __amd_copyBufferExt(
   }
 }
 
-__attribute__((always_inline)) void __amd_fillBufferUnAligned(__global void* __restrict buf,
-                                                 __constant uchar* __restrict pattern,
-                                                 int body_pattern, ulong2 body_tile_pattern,
-                                                 ulong body_tile_count, ulong body_tile_passes,
-                                                 ulong stride, ulong pattern_size,
-                                                 ulong tail_offset, __global uchar* __restrict body_ptr,
-                                                 __global uchar* __restrict body_tail_ptr,
-                                                 __global uchar* __restrict tail_ptr,
-                                                 __global ulong2* __restrict element_tiled,
-                                                 ushort4 counts, int isAligned) {
-  ulong id = get_global_id(0);
+__attribute__((always_inline)) void
+__amd_fillBufferUnAligned(__global void *__restrict buf, __constant uchar *__restrict pattern, ulong2 body_tile_pattern,
+                          ulong body_pattern, ulong body_tail_pattern, ulong body_tile_count, ulong body_tile_passes,
+                          ulong stride, ulong pattern_size, ulong tail_offset, __global uchar *__restrict body_ptr,
+                          __global uchar *__restrict body_tail_ptr, __global uchar *__restrict tail_ptr,
+                          __global ulong2 *__restrict element_tiled, ushort4 counts)
+{
+    ulong id = get_global_id(0);
 
-  // Handle head, body and tail in the first warp only.
-  // count values are each <= 4, so all unaligned work fits in 32 lanes.
-  // Skip when buffer is 16-byte aligned (no head/body/body_tail/tail regions).
-  if (!isAligned && id < 32) {
-    __global uchar* head_ptr = (__global uchar*)buf;
-    const uint lane = (uint)id;
-    const uint head_end = (uint)counts.s0;
-    const uint body_end = head_end + (uint)counts.s1;
-    const uint body_tail_end = body_end + (uint)counts.s2;
-    const uint tail_end = body_tail_end + (uint)counts.s3;
+    // Cleanup region: lanes 0..15 of group 0 wave 0 handle head/body/body_tail/tail.
+    // Body and body_tail are always uint64 stores (always either 0 or 1 element).
+    // Aligned-buffer case: counts are all zero, predicates fall through with no work.
+    // body_pattern and body_tail_pattern are host-rotated u64 payloads (rotated by their
+    // byte-offset-from-fill-start mod patternSize), so the unaligned-base case is byte-correct.
+    if (id < 16) {
+        __global uchar *head_ptr = (__global uchar *)buf;
+        const uint lane = (uint)id;
+        const uint head_end = (uint)counts.s0;
+        const uint body_end = head_end + (uint)counts.s1;
+        const uint body_tail_end = body_end + (uint)counts.s2;
+        const uint tail_end = body_tail_end + (uint)counts.s3;
 
-    if (lane < head_end) {
-      head_ptr[lane] = pattern[lane & (pattern_size - 1)];
-    } else if (lane < body_end) {
-      ((__global int*)body_ptr)[lane - head_end] = body_pattern;
-    } else if (lane < body_tail_end) {
-      ((__global int*)body_tail_ptr)[lane - body_end] = body_pattern;
-    } else if (lane < tail_end) {
-      const ulong tail_byte_idx = (ulong)(lane - body_tail_end);
-      tail_ptr[tail_byte_idx] =
-          pattern[(tail_offset + tail_byte_idx) & (pattern_size - 1)];
+        if (lane < head_end) {
+            head_ptr[lane] = pattern[lane & (pattern_size - 1)];
+        } else if (lane < body_end) {
+            *(__global ulong *)body_ptr = body_pattern;
+        } else if (lane < body_tail_end) {
+            *(__global ulong *)body_tail_ptr = body_tail_pattern;
+        } else if (lane < tail_end) {
+            const ulong tail_byte_idx = (ulong)(lane - body_tail_end);
+            tail_ptr[tail_byte_idx] = pattern[(tail_offset + tail_byte_idx) & (pattern_size - 1)];
+        }
     }
-  }
 
-  // We pass in the number of passes from the CPU to get the best code-gen
-  // We use the number of passes and the size to get correct behiaviour
-  for (ulong j = 0; (j < body_tile_passes) && (j * stride + id < body_tile_count); ++j) {
-    element_tiled[j * stride + id] = body_tile_pattern;
-  }
+    // Tile region: split-last-pass. Bulk passes have unconditional stores
+    // (host guarantees they are in-bounds); only the tail pass is per-lane guarded.
+    // body_tile_passes is a CPU-known bound for codegen.
+    ulong j = 0;
+    ulong idx = id;
+    for (; j + 1 < body_tile_passes; ++j, idx += stride) {
+        element_tiled[idx] = body_tile_pattern;
+    }
+    if (j < body_tile_passes && idx < body_tile_count) {
+        element_tiled[idx] = body_tile_pattern;
+    }
 }
 
 __attribute__((always_inline)) void
