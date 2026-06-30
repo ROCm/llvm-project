@@ -46,6 +46,10 @@ on:
         default: ci
       test_type:
         type: string   # Temp addiiton until release type is fixed
+      build_runs_on:
+        type: string
+        default: ""
+        description: "Build runner label (not currently used for Windows, reserved for future use)"          
 
 permissions:
   contents: read
