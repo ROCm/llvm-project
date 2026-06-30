@@ -16,8 +16,6 @@
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/StringSwitch.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/FileSystem.h"
 
 using namespace llvm;
@@ -25,6 +23,9 @@ using namespace llvm;
 namespace COMGR {
 
 namespace {
+
+// Maximum value on the severity/level scale; values above this are clamped.
+constexpr LogLevel MaxLogLevel = 20;
 
 // The capture stream is per-thread so that a captured Action on one thread does
 // not collect log output emitted by an unrelated API on another thread.
@@ -37,39 +38,18 @@ LogLevel resolveLevel() {
   return parseLogLevel(env::getLogLevel(), env::shouldEmitVerboseLogs());
 }
 
-StringRef severityPrefix(LogLevel Severity) {
-  switch (Severity) {
-  case LogLevel::Error:
-    return "comgr: error: ";
-  case LogLevel::Warning:
-    return "comgr: warning: ";
-  case LogLevel::Info:
-    return "comgr: info: ";
-  case LogLevel::Debug:
-    return "comgr: debug: ";
-  case LogLevel::None:
-    return "comgr: ";
-  default:
-    llvm_unreachable();
-    return "";
-  }
-}
-
 } // namespace
 
 LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
-  // When the variable is unset or unrecognized, default to Debug if verbose
-  // logs are requested for back-compat with AMD_COMGR_EMIT_VERBOSE_LOGS,
-  // otherwise to Error. An explicit, recognized value always wins (including
-  // "none", which silences logging even when verbose logs are requested).
-  LogLevel Fallback = VerboseFallback ? LogLevel::Debug : LogLevel::Error;
-  return StringSwitch<LogLevel>(Requested)
-    .CaseLower("none", LogLevel::None)
-    .CaseLower("error", LogLevel::Error)
-    .CaseLower("warning", LogLevel::Warning)
-    .CaseLower("info", LogLevel::Info)
-    .CaseLower("debug", LogLevel::Debug)
-    .Default(Fallback);
+  // When the variable is unset or not a valid integer, default to the most
+  // verbose level if verbose logs are requested for back-compat with
+  // AMD_COMGR_EMIT_VERBOSE_LOGS, otherwise to a low level that still shows
+  // errors.
+  unsigned Numeric;
+  if (Requested.getAsInteger(10, Numeric))
+    return VerboseFallback ? MaxLogLevel : 5;
+
+  return Numeric > MaxLogLevel ? MaxLogLevel : static_cast<LogLevel>(Numeric);
 }
 
 Logger::Logger() : Level(resolveLevel()), Sink(nullptr) {
@@ -120,7 +100,7 @@ void Logger::emit(LogLevel Severity, const Twine &Message) {
 
   SmallString<256> Buffer;
   StringRef Text = Message.toStringRef(Buffer);
-  StringRef Prefix = severityPrefix(Severity);
+  StringRef Prefix = "comgr: ";
 
   std::scoped_lock<std::mutex> Lock(Mutex);
 

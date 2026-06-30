@@ -1338,9 +1338,9 @@ amd_comgr_status_t AMD_COMGR_API
     raw_ostream *LogP = &LogS;
 
     // Tee Logger output emitted during this action into the in-memory buffer
-    // backing the AMD_COMGR_DATA_KIND_LOG data object, so emitError/emitDebug
-    // calls (here and in any Logger-aware API reached from this action) are
-    // collected for the caller alongside the global redirect sink.
+    // backing the AMD_COMGR_DATA_KIND_LOG data object, so emit() calls (here and
+    // in any Logger-aware API reached from this action) are collected for the
+    // caller alongside the global redirect sink.
     LogCaptureScope LogCapture(LogS);
 
     // When logs are redirected, the compiler-diagnostic stream is teed to both
@@ -1368,13 +1368,13 @@ amd_comgr_status_t AMD_COMGR_API
         // Redirect was requested but the Logger could not open the destination.
         // Surface its diagnostic into the returned comgr.log (the sink is null
         // here), matching the behavior before logging was centralized.
-        getLogger().emitError(SinkError);
+        getLogger().emit(/*Severity=*/5, SinkError);
       }
     }
 
     InitTimeStatistics(PerfLog);
 
-    if (getLogger().isEnabled(LogLevel::Debug)) {
+    if (getLogger().isEnabled(/*Severity=*/20)) {
       SmallString<256> HeaderStr;
       raw_svector_ostream HeaderS(HeaderStr);
       HeaderS << "amd_comgr_do_action:\n"
@@ -1392,7 +1392,7 @@ amd_comgr_status_t AMD_COMGR_API
               << " Comgr Branch-Commit: " << xstringify(AMD_COMGR_GIT_BRANCH)
               << '-' << xstringify(AMD_COMGR_GIT_COMMIT) << '\n'
               << "\t LLVM Commit: " << clang::getLLVMRevision();
-      getLogger().emitDebug(HeaderStr);
+      getLogger().emit(/*Severity=*/20, HeaderStr);
     }
 
     ProfilePoint ProfileAction(getActionKindName(ActionKind));
@@ -1434,13 +1434,13 @@ amd_comgr_status_t AMD_COMGR_API
       return Status;
     }
 
-    getLogger().emitDebug(Twine("\tReturnStatus: ") +
-                          getStatusName(ActionStatus) + "\n");
+    getLogger().emit(/*Severity=*/20, Twine("\tReturnStatus: ") +
+                                          getStatusName(ActionStatus) + "\n");
 
     // Flush any compiler diagnostics teed to the redirect sink. The sink is the
     // Logger's persistent (buffered) stream, so diagnostics written through the
     // tee are not otherwise flushed when the configured level suppresses the
-    // trailing emitDebug above.
+    // trailing debug emit() above.
     if (raw_ostream *Sink = getLogger().getSink()) {
       Sink->flush();
     }

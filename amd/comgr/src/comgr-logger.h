@@ -9,8 +9,8 @@
 /// \file
 /// This file declares COMGR::Logger, a process-global, thread-safe logging
 /// facility shared by every Comgr API. Any API can emit diagnostics at a
-/// configurable severity through a single set of utilities (emitError,
-/// emitWarning, emitInfo, emitDebug).
+/// configurable severity through Logger::emit, passing a numeric severity on a
+/// 0-to-20 scale.
 ///
 /// Output goes to two independent destinations:
 ///   - The global "sink": resolved once from AMD_COMGR_REDIRECT_LOGS (stdout,
@@ -20,8 +20,8 @@
 ///     ("comgr.log") data object returned to the caller.
 ///
 /// All writes are guarded by a mutex, so concurrent callers share the sink
-/// safely. The severity threshold is configured via AMD_COMGR_LOG_LEVEL; see
-/// COMGR::env::getLogLevel().
+/// safely. The severity threshold (a value in [0, 20]) is configured via
+/// AMD_COMGR_LOG_LEVEL; see COMGR::env::getLogLevel().
 ///
 //===----------------------------------------------------------------------===//
 
@@ -32,30 +32,26 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
 
 namespace COMGR {
 
-/// Severity of a log message, ordered from least to most verbose. A message is
-/// emitted only when its severity is enabled by the logger's configured level
-/// (see Logger::isEnabled). Info corresponds to the "Basic" granularity and
-/// Debug to the "Detailed" granularity.
-enum class LogLevel {
-  None = 0,
-  Error,
-  Warning,
-  Info,
-  Debug,
-};
+/// Severity of a log message, and the logger's configured threshold, expressed
+/// on a 0-to-20 scale where 0 silences logging and higher values are more
+/// verbose. A message is emitted only when its severity is non-zero and does
+/// not exceed the configured level (see Logger::isEnabled). Callers choose the
+/// numeric severity passed to Logger::emit; larger numbers are reserved for
+/// more detailed diagnostics.
+using LogLevel = uint8_t;
 
-/// Map a requested level string (the value of AMD_COMGR_LOG_LEVEL, which may be
-/// empty) to a LogLevel. Matching is case-insensitive over "none", "error",
-/// "warning", "info", and "debug". When @p Requested is empty or unrecognized,
-/// returns Debug if @p VerboseFallback is set (back-compat with
-/// AMD_COMGR_EMIT_VERBOSE_LOGS), otherwise Error. An explicit, recognized value
-/// always wins, including "none". Exposed for testing.
+/// Parse @p Requested (the value of AMD_COMGR_LOG_LEVEL, which may be empty) into
+/// a threshold on the 0-to-20 scale. The value must be a bare integer; it is
+/// clamped to [0, 20]. When @p Requested is empty or is not a valid integer,
+/// returns 20 if @p VerboseFallback is set (back-compat with
+/// AMD_COMGR_EMIT_VERBOSE_LOGS), otherwise 5. Exposed for testing.
 LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
 
 /// Process-global, thread-safe logging facility. Obtain the shared instance
@@ -74,11 +70,11 @@ public:
   Logger &operator=(const Logger &) = delete;
 
   /// Return whether a message of the given @p Severity would be emitted under
-  /// the current level. Callers that build expensive messages can guard their
-  /// formatting with this.
+  /// the current level. A severity of 0 is never emitted, and emission is
+  /// disabled entirely when the level is 0. Callers that build expensive
+  /// messages can guard their formatting with this.
   bool isEnabled(LogLevel Severity) const {
-    return Severity != LogLevel::None && Level != LogLevel::None &&
-           Severity <= Level;
+    return Severity != 0 && Level != 0 && Severity <= Level;
   }
 
   /// The currently configured maximum severity that will be emitted.
@@ -111,13 +107,6 @@ public:
   /// the global sink and, when one is installed on the calling thread, the
   /// capture stream. Thread-safe.
   void emit(LogLevel Severity, const llvm::Twine &Message);
-
-  void emitError(const llvm::Twine &Message) { emit(LogLevel::Error, Message); }
-  void emitWarning(const llvm::Twine &Message) {
-    emit(LogLevel::Warning, Message);
-  }
-  void emitInfo(const llvm::Twine &Message) { emit(LogLevel::Info, Message); }
-  void emitDebug(const llvm::Twine &Message) { emit(LogLevel::Debug, Message); }
 
 private:
   LogLevel Level;
