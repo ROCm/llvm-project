@@ -619,12 +619,9 @@ void AMDGPULowerStrictWQM::processBlock(MachineBasicBlock &MBB, BlockInfo &BI) {
         }
       } else {
         // If the instruction doesn't read EXEC (e.g. SGPR-only operations,
-        // meta instructions), it can safely execute in any mode. When we are
-        // already inside a strict bracket, keep the current state to avoid
-        // exiting and immediately re-entering, which would create unnecessary
-        // s_or_saveexec / s_mov_b64 exec pairs.
-        if (State & StateStrict)
-          Needs = State;
+        // meta instructions), it can safely execute in any mode. So keeping the
+        // current state to avoid exiting and immediately re-entering.
+        Needs = State;
       }
 
       ++Next;
