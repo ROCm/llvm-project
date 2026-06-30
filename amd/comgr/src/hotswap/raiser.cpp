@@ -674,6 +674,9 @@ static bool threadLoopUnsupportedWorkgroupMemoryOrBarrier(
       if (isSemOpInRange(Di.CanonOp, CanonicalOp::DS_LOAD_TR16_B128,
                          CanonicalOp::DS_SWIZZLE_B32))
         Kind = "LDS access";
+      else if (isSemOpInRange(Di.CanonOp, CanonicalOp::GLOBAL_LOAD_TR_FIRST,
+                              CanonicalOp::GLOBAL_LOAD_TR_LAST))
+        Kind = "cross-lane transpose load";
       break;
     }
 

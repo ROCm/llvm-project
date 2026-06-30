@@ -305,6 +305,9 @@ const char *canonicalOpName(CanonicalOp Op) {
     // FLAT async global -> LDS (gfx1250-only)
     S(GLOBAL_LOAD_ASYNC_TO_LDS_B8) S(GLOBAL_LOAD_ASYNC_TO_LDS_B32)
     S(GLOBAL_LOAD_ASYNC_TO_LDS_B64) S(GLOBAL_LOAD_ASYNC_TO_LDS_B128)
+    // FLAT WMMA load-with-transpose (gfx1250-only)
+    S(GLOBAL_LOAD_TR4_B64) S(GLOBAL_LOAD_TR6_B96)
+    S(GLOBAL_LOAD_TR8_B64) S(GLOBAL_LOAD_TR16_B128)
     // FLAT VMEM prefetch (gfx1250-only, hint-class)
     S(GLOBAL_PREFETCH_B8) S(FLAT_PREFETCH_B8)
     // AGPR

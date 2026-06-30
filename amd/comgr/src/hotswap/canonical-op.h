@@ -1276,6 +1276,13 @@ enum class CanonicalOp : uint16_t {
   GLOBAL_LOAD_ASYNC_TO_LDS_B64,
   GLOBAL_LOAD_ASYNC_TO_LDS_B128,
 
+  GLOBAL_LOAD_TR4_B64,
+  GLOBAL_LOAD_TR6_B96,
+  GLOBAL_LOAD_TR8_B64,
+  GLOBAL_LOAD_TR16_B128,
+  GLOBAL_LOAD_TR_FIRST = GLOBAL_LOAD_TR4_B64,
+  GLOBAL_LOAD_TR_LAST = GLOBAL_LOAD_TR16_B128,
+
   // -- gfx1250 VMEM prefetch (FLAT, hint-class) --
   //
   // FLAT advisory prefetch on a per-lane (divergent) VGPR pointer. The

@@ -21,6 +21,7 @@
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cassert>
@@ -30,6 +31,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <utility>
 
 #define DEBUG_TYPE "transpiler"
 
@@ -38,6 +40,61 @@ using namespace llvm;
 namespace COMGR::hotswap {
 
 namespace {
+
+// ds_bpermute addresses its source lane by byte: lane N reads byte N*4.
+constexpr unsigned kBpermuteLaneByteShift = 2;
+
+// {lane index within its GroupSize-lane group, lane id of the group's
+// element 0}. GroupSize must be a power of two.
+std::pair<Value *, Value *> emitTransposeGroup(RaiseContext &Ctx,
+                                               unsigned GroupSize) {
+  Value *LaneId = Ctx.emitLaneIdx();
+  Value *LaneInGroup =
+      Ctx.B.CreateAnd(LaneId, Ctx.B.getInt32(GroupSize - 1), "lane_in_group");
+  Value *GroupBase = Ctx.B.CreateAnd(
+      LaneId, Ctx.B.CreateNot(Ctx.B.getInt32(GroupSize - 1)), "group_base");
+  return {LaneInGroup, GroupBase};
+}
+
+// Load NumDwords dwords from Addr and ds_bpermute-gather every lane's raw
+// dwords across the group. Returns a flat GroupSize x NumDwords grid indexed
+// [K * NumDwords + D]. Emit inside an emitUnderExec region.
+llvm::SmallVector<Value *>
+gatherTransposeDwords(RaiseContext &Ctx, Value *Addr, Value *GroupBase,
+                      unsigned GroupSize, unsigned NumDwords,
+                      const Twine &RawName, const Twine &GatheredName) {
+  Function *Bperm =
+      Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_ds_bpermute);
+  auto *VecTy = FixedVectorType::get(Ctx.I32Ty, NumDwords);
+  // These per-lane tile addresses are only dword-aligned; don't let the
+  // vector type's larger ABI alignment over-promise.
+  Value *Raw = Ctx.B.CreateAlignedLoad(VecTy, Addr, Align(4), RawName);
+  llvm::SmallVector<Value *> RawDword(NumDwords);
+  for (unsigned D = 0; D < NumDwords; ++D)
+    RawDword[D] = Ctx.B.CreateExtractElement(Raw, Ctx.B.getInt32(D));
+
+  llvm::SmallVector<Value *> Gathered(GroupSize * NumDwords);
+  for (unsigned K = 0; K < GroupSize; ++K) {
+    Value *SrcLane = Ctx.B.CreateAdd(GroupBase, Ctx.B.getInt32(K));
+    Value *Sel =
+        Ctx.B.CreateShl(SrcLane, Ctx.B.getInt32(kBpermuteLaneByteShift));
+    for (unsigned D = 0; D < NumDwords; ++D)
+      Gathered[K * NumDwords + D] =
+          Ctx.B.CreateCall(Bperm, {Sel, RawDword[D]}, GatheredName);
+  }
+  return Gathered;
+}
+
+// Pick Dwords[Idx] for a runtime Idx via an equality select chain; Dwords[0]
+// is the Idx==0 / default case.
+Value *selectRuntimeDword(RaiseContext &Ctx, Value *Idx,
+                          ArrayRef<Value *> Dwords) {
+  Value *Pick = Dwords[0];
+  for (unsigned D = 1; D < Dwords.size(); ++D)
+    Pick = Ctx.B.CreateSelect(Ctx.B.CreateICmpEQ(Idx, Ctx.B.getInt32(D)),
+                              Dwords[D], Pick);
+  return Pick;
+}
 
 // Shared helper for the `_D16_HI` half-register-store lift shape.
 //
@@ -895,6 +952,159 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       Ctx.B.CreateAlignedStore(Loaded, EmuLdsPtr, AccessAlign);
       Ctx.B.CreateBr(ContBb);
       Ctx.B.SetInsertPoint(ContBb);
+    });
+
+    Hr.Handled = true;
+    return Hr;
+  }
+
+  // gfx1250 WMMA load-with-transpose: per-lane global load + cross-lane
+  // transpose via ds_bpermute. Byte-aligned widths share this path; TR6
+  // (bit-tight) is below.
+  if (Sop == CanonicalOp::GLOBAL_LOAD_TR4_B64 ||
+      Sop == CanonicalOp::GLOBAL_LOAD_TR8_B64 ||
+      Sop == CanonicalOp::GLOBAL_LOAD_TR16_B128) {
+    unsigned ElemBits;
+    unsigned NumDwords;
+    unsigned GroupSize;
+    switch (Sop) {
+    case CanonicalOp::GLOBAL_LOAD_TR4_B64:
+      ElemBits = 4;
+      NumDwords = 2;
+      GroupSize = 16;
+      break;
+    case CanonicalOp::GLOBAL_LOAD_TR8_B64:
+      ElemBits = 8;
+      NumDwords = 2;
+      GroupSize = 8;
+      break;
+    case CanonicalOp::GLOBAL_LOAD_TR16_B128:
+      ElemBits = 16;
+      NumDwords = 4;
+      GroupSize = 8;
+      break;
+    default:
+      llvm_unreachable("unhandled TR width");
+    }
+    assert(ElemBits != 0 && 32 % ElemBits == 0 &&
+           "byte-aligned TR element width must divide a dword");
+    assert(llvm::isPowerOf2_32(GroupSize) &&
+           "TR transpose lane group must be a power of two");
+    const unsigned TotalBytes = NumDwords * 4;
+    const unsigned ElemsPerDword = 32 / ElemBits;
+    const uint32_t ElemMask = llvm::maskTrailingOnes<uint32_t>(ElemBits);
+    assert(NumDwords * ElemsPerDword == GroupSize &&
+           "byte-aligned TR packing assumes one element per (lane, dword slot)");
+
+    ParsedReg Dest = Op.dst();
+    FlatAddr Fa =
+        decodeGlobalLoadAddr(Ctx, Di, Op, TotalBytes, "GLOBAL_LOAD_TR");
+    Value *Addr = Fa.Ptr;
+
+    auto [LaneInGroup, GroupBase] = emitTransposeGroup(Ctx, GroupSize);
+
+    Ctx.emitUnderExec([&] {
+      llvm::SmallVector<Value *> Gathered = gatherTransposeDwords(
+          Ctx, Addr, GroupBase, GroupSize, NumDwords, "tr_raw", "tr_gathered");
+
+      Value *SrcDwordIdx = Ctx.B.CreateUDiv(
+          LaneInGroup, Ctx.B.getInt32(ElemsPerDword), "tr_src_dword");
+      Value *ElemInDword = Ctx.B.CreateURem(
+          LaneInGroup, Ctx.B.getInt32(ElemsPerDword), "tr_elem_in_dword");
+      Value *ShiftBits =
+          Ctx.B.CreateMul(ElemInDword, Ctx.B.getInt32(ElemBits), "tr_shift");
+
+      for (unsigned J = 0; J < NumDwords; ++J) {
+        Value *OutDword = ConstantInt::get(Ctx.I32Ty, 0);
+        for (unsigned I = 0; I < ElemsPerDword; ++I) {
+          unsigned K = J * ElemsPerDword + I;
+          Value *Pick = selectRuntimeDword(
+              Ctx, SrcDwordIdx,
+              ArrayRef(Gathered).slice(K * NumDwords, NumDwords));
+          Value *Shifted = Ctx.B.CreateLShr(Pick, ShiftBits);
+          Value *Elem =
+              Ctx.B.CreateAnd(Shifted, Ctx.B.getInt32(ElemMask), "tr_elem");
+          Value *Placed =
+              Ctx.B.CreateShl(Elem, Ctx.B.getInt32(I * ElemBits), "tr_place");
+          OutDword = Ctx.B.CreateOr(OutDword, Placed, "tr_pack");
+        }
+        Ctx.Regs.storeVGPR32(Ctx.B, Dest.BaseIdx + J, OutDword);
+      }
+    });
+
+    Hr.Handled = true;
+    return Hr;
+  }
+
+  // TR6_B96: i6 elements packed bit-tight across 3 dwords; extraction and
+  // packing walk bit positions, not byte slots.
+  if (Sop == CanonicalOp::GLOBAL_LOAD_TR6_B96) {
+    const unsigned ElemBits = 6;
+    const unsigned NumDwords = 3;
+    const unsigned GroupSize = 16;
+    const unsigned NumElems = 16;
+    const unsigned TotalBytes = NumDwords * 4;
+    const uint32_t ElemMask = llvm::maskTrailingOnes<uint32_t>(ElemBits);
+    assert(NumElems == GroupSize &&
+           "TR6 packs one element per source lane in the group");
+
+    ParsedReg Dest = Op.dst();
+    FlatAddr Fa =
+        decodeGlobalLoadAddr(Ctx, Di, Op, TotalBytes, "GLOBAL_LOAD_TR6");
+    Value *Addr = Fa.Ptr;
+
+    auto [LaneInGroup, GroupBase] = emitTransposeGroup(Ctx, GroupSize);
+
+    Ctx.emitUnderExec([&] {
+      llvm::SmallVector<Value *> Gathered =
+          gatherTransposeDwords(Ctx, Addr, GroupBase, GroupSize, NumDwords,
+                                "tr6_raw", "tr6_gathered");
+
+      Value *BitOff =
+          Ctx.B.CreateMul(LaneInGroup, Ctx.B.getInt32(ElemBits), "tr6_bit");
+      Value *SrcLoIdx =
+          Ctx.B.CreateUDiv(BitOff, Ctx.B.getInt32(32), "tr6_lo_idx");
+      Value *BitInDword =
+          Ctx.B.CreateURem(BitOff, Ctx.B.getInt32(32), "tr6_bit_in_dword");
+
+      Value *Zero = ConstantInt::get(Ctx.I32Ty, 0);
+      llvm::SmallVector<Value *> OutDword(NumDwords, Zero);
+      for (unsigned K = 0; K < NumElems; ++K) {
+        ArrayRef<Value *> G =
+            ArrayRef(Gathered).slice(K * NumDwords, NumDwords);
+        // Lo = dwords[SrcLoIdx], Hi = dwords[SrcLoIdx+1] (0 past the end).
+        Value *Lo = selectRuntimeDword(Ctx, SrcLoIdx, G);
+        Value *Hi = selectRuntimeDword(Ctx, SrcLoIdx, {G[1], G[2], Zero});
+
+        // i6 to low bits of a 64-bit Lo|(Hi<<32) window.
+        Value *Lo64 = Ctx.B.CreateZExt(Lo, Ctx.I64Ty);
+        Value *Hi64 = Ctx.B.CreateZExt(Hi, Ctx.I64Ty);
+        Value *Win = Ctx.B.CreateOr(
+            Lo64, Ctx.B.CreateShl(Hi64, ConstantInt::get(Ctx.I64Ty, 32)),
+            "tr6_win");
+        Value *BitInDword64 = Ctx.B.CreateZExt(BitInDword, Ctx.I64Ty);
+        Value *Shifted64 = Ctx.B.CreateLShr(Win, BitInDword64);
+        Value *Elem64 =
+            Ctx.B.CreateAnd(Shifted64, ConstantInt::get(Ctx.I64Ty, ElemMask));
+        Value *Elem = Ctx.B.CreateTrunc(Elem64, Ctx.I32Ty, "tr6_elem");
+
+        // Compile-time output bit position.
+        const unsigned OutBit = K * ElemBits;
+        const unsigned OutDwordIdx = OutBit / 32;
+        const unsigned BitInOutDword = OutBit % 32;
+        OutDword[OutDwordIdx] = Ctx.B.CreateOr(
+            OutDword[OutDwordIdx],
+            Ctx.B.CreateShl(Elem, Ctx.B.getInt32(BitInOutDword)), "tr6_pack");
+        if (BitInOutDword + ElemBits > 32 && OutDwordIdx + 1 < NumDwords) {
+          Value *Hi32 =
+              Ctx.B.CreateLShr(Elem, Ctx.B.getInt32(32 - BitInOutDword));
+          OutDword[OutDwordIdx + 1] =
+              Ctx.B.CreateOr(OutDword[OutDwordIdx + 1], Hi32, "tr6_pack");
+        }
+      }
+
+      for (unsigned J = 0; J < NumDwords; ++J)
+        Ctx.Regs.storeVGPR32(Ctx.B, Dest.BaseIdx + J, OutDword[J]);
     });
 
     Hr.Handled = true;
