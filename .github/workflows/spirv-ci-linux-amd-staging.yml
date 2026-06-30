@@ -97,7 +97,7 @@ jobs:
       - name: Build Comgr
         run: ninja -C build-comgr amd_comgr
 
-      # Builds ROCR-Runtime (libhsa-runtime64.so) and CLR (libamdhip64.so)
+      # Builds ROCR-Runtime (libhsa-runtime64.so) and CLR (libamdhip64.so).
       - name: Install build deps for runtime build
         run: |
           dnf install -y --setopt=install_weak_deps=False \
@@ -165,7 +165,7 @@ jobs:
           mkdir -p staging/bin
           cp -a build/bin/amd-llvm-spirv staging/bin/
 
-      # Create hipconfig script for rocPRIM/hipCUB detection
+      # Create hipconfig script for rocPRIM/hipCUB detection.
       - name: Create hipconfig script
         run: |
           mkdir -p staging/bin
@@ -181,7 +181,7 @@ jobs:
           EOF
           chmod +x staging/bin/hipconfig
 
-      # Build rocPRIM
+      # Build rocPRIM.
       - name: Checkout rocPRIM
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -203,7 +203,7 @@ jobs:
           ninja -C build-rocprim
           cmake --install build-rocprim --prefix $PWD/staging
 
-      # Build hipCUB
+      # Build hipCUB.
       - name: Checkout hipCUB
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -224,7 +224,7 @@ jobs:
           ninja -C build-hipcub
           cmake --install build-hipcub --prefix $PWD/staging
 
-      # Build rocRAND
+      # Build rocRAND.
       - name: Checkout rocRAND
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -249,7 +249,7 @@ jobs:
           ninja -C build-rocrand
           cmake --install build-rocrand --prefix $PWD/staging
 
-      # Build hipRAND
+      # Build hipRAND.
       - name: Checkout hipRAND
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -572,7 +572,7 @@ jobs:
       - name: Install libnuma
         run: dnf install -y numactl-libs
 
-      # HIP-Basic
+      # HIP-Basic.
       - name: ROCm Examples build HIP-Basic
         run: |
           STAGING=$PWD/staging
@@ -595,7 +595,7 @@ jobs:
         run: |
           ctest --test-dir examples-build-hip-basic --output-on-failure -E '^hip_cooperative_groups$'
 
-      # Applications
+      # Applications.
       - name: ROCm Examples build Applications
         run: |
           STAGING=$PWD/staging
@@ -617,7 +617,7 @@ jobs:
         run: |
           ctest --test-dir examples-build-Applications --output-on-failure -E '^(applications_optical_flow|applications_monte_carlo_pi)$'
 
-      # Libraries
+      # Libraries.
       - name: ROCm Examples build Libraries
         run: |
           STAGING=$PWD/staging
