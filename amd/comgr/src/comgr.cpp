@@ -13,22 +13,27 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr.h"
+#ifndef COMGR_DISASSEMBLY_AND_METADATA_ONLY
 #include "comgr-compiler.h"
+#endif
 #include "comgr-device-libs.h"
 #include "comgr-disassembly.h"
+#include "comgr-symbolizer.h"
 #include "comgr-env.h"
 #include "comgr-metadata.h"
 #include "comgr-signal.h"
 #include "comgr-symbol.h"
-#include "comgr-symbolizer.h"
 
+#ifndef COMGR_DISASSEMBLY_AND_METADATA_ONLY
 #include "clang/Basic/Version.h"
+#endif
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/TargetSelect.h"
 #include <fstream>
 #include <mutex>
@@ -68,6 +73,7 @@ bool isSymbolInfoValid(amd_comgr_symbol_info_t SymbolInfo) {
 }
 
 
+#ifndef COMGR_DISASSEMBLY_AND_METADATA_ONLY
 amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
                                           DataAction *ActionInfo,
                                           DataSet *InputSet, DataSet *ResultSet,
@@ -109,6 +115,7 @@ amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 }
+#endif // COMGR_DISASSEMBLY_AND_METADATA_ONLY
 
 StringRef getLanguageName(amd_comgr_language_t Language) {
   switch (Language) {
@@ -1355,12 +1362,16 @@ amd_comgr_status_t AMD_COMGR_API
             << '\n'
             << " Comgr Branch-Commit: " << xstringify(AMD_COMGR_GIT_BRANCH)
             << '-' << xstringify(AMD_COMGR_GIT_COMMIT) << '\n'
-            << "\t LLVM Commit: " << clang::getLLVMRevision() << '\n';
+#ifndef COMGR_DISASSEMBLY_AND_METADATA_ONLY
+            << "\t LLVM Commit: " << clang::getLLVMRevision() << '\n'
+#endif
+          ;
       (*LogP).flush();
     }
 
     ProfilePoint ProfileAction(getActionKindName(ActionKind));
     switch (ActionKind) {
+#ifndef COMGR_DISASSEMBLY_AND_METADATA_ONLY
     case AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR:
     case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC:
     case AMD_COMGR_ACTION_UNBUNDLE:
@@ -1379,6 +1390,7 @@ amd_comgr_status_t AMD_COMGR_API
       ActionStatus = dispatchCompilerAction(ActionKind, ActionInfoP, InputSetP,
                                             ResultSetP, *LogP);
       break;
+#endif // COMGR_DISASSEMBLY_AND_METADATA_ONLY
     case AMD_COMGR_ACTION_ADD_PRECOMPILED_HEADERS:
       // Redirect the input to the output.
       // Deprecate and remove this action.
