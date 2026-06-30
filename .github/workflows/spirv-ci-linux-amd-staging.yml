@@ -52,7 +52,6 @@ jobs:
       - name: Configure LLVM
         run: |
           cmake -G Ninja -S llvm-project/llvm -B build \
-            -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DCMAKE_INSTALL_LIBDIR=lib \
             -DLLVM_ENABLE_PROJECTS="clang;lld" \
@@ -72,7 +71,6 @@ jobs:
       - name: Configure device-libs
         run: |
           cmake -G Ninja -S llvm-project/amd/device-libs -B build-device-libs \
-            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH=$PWD/build \
             -DCMAKE_INSTALL_LIBDIR=lib \
             -DLLVM_DIR=$PWD/build/lib/cmake/llvm
@@ -87,7 +85,6 @@ jobs:
         # turns ON (otherwise translator-dependent lit tests are UNSUPPORTED).
         run: |
           cmake -G Ninja -S llvm-project/amd/comgr -B build-comgr \
-            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_LIBDIR=lib \
             -DCMAKE_PREFIX_PATH="$PWD/build;$PWD/build-device-libs" \
             -DLLVM_DIR=$PWD/build/lib/cmake/llvm \
@@ -127,7 +124,6 @@ jobs:
       - name: Configure ROCR-Runtime
         run: |
           cmake -G Ninja -S rocm-systems/projects/rocr-runtime -B build-rocr \
-            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$PWD/build/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/build/bin/clang++ \
             -DBUILD_SHARED_LIBS=ON \
@@ -144,7 +140,6 @@ jobs:
       - name: Configure CLR (HIP runtime)
         run: |
           cmake -G Ninja -S rocm-systems/projects/clr -B build-clr \
-            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$PWD/build/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/build/bin/clang++ \
             -DBUILD_SHARED_LIBS=ON \
@@ -587,13 +582,13 @@ jobs:
             -DCMAKE_HIP_FLAGS="--rocm-path=$STAGING"                           \
             -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"    \
             -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"
-          cmake --build examples-build-hip-basic -j
+          cmake --build examples-build-hip-basic -j $(nproc)
 
       - name: ROCm Examples run HIP-Basic
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
-          ctest --test-dir examples-build-hip-basic --output-on-failure -E '^hip_cooperative_groups$'
+          ctest --test-dir examples-build-hip-basic --output-on-failure -j $(nproc) -E '^hip_cooperative_groups$' 
 
       # Applications.
       - name: ROCm Examples build Applications
@@ -609,13 +604,13 @@ jobs:
             -DCMAKE_HIP_FLAGS="--rocm-path=$STAGING"                           \
             -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"    \
             -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"
-          cmake --build examples-build-Applications -j
+          cmake --build examples-build-Applications -j $(nproc)
 
       - name: ROCm Examples run Applications
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
-          ctest --test-dir examples-build-Applications --output-on-failure -E '^(applications_optical_flow|applications_monte_carlo_pi)$'
+          ctest --test-dir examples-build-Applications --output-on-failure -j $(nproc) -E '^(applications_optical_flow|applications_monte_carlo_pi)$'
 
       # Libraries.
       - name: ROCm Examples build Libraries
@@ -631,17 +626,16 @@ jobs:
             -DHIP_PLATFORM=amd                                                 \
             -DROCM_PATH=$STAGING                                               \
             -DCMAKE_HIP_ARCHITECTURES=amdgcnspirv                              \
-            -DCMAKE_BUILD_TYPE=Release                                         \
             -DCMAKE_DISABLE_FIND_PACKAGE_Perl=TRUE                             \
             -DCMAKE_HIP_FLAGS="-DROCPRIM_DISABLE_DPP=1 --offload-new-driver --rocm-path=$STAGING -use-spirv-backend --rtlib=libgcc -unwindlib=libgcc" \
             -DCMAKE_HIP_LINK_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--unresolved-symbols=ignore-in-shared-libs" \
             -DCMAKE_CXX_FLAGS="--rtlib=libgcc -unwindlib=libgcc"               \
             -DCMAKE_EXE_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--unresolved-symbols=ignore-in-shared-libs" \
             -DCMAKE_SHARED_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc"
-          cmake --build examples-build-Libraries -j
+          cmake --build examples-build-Libraries -j $(nproc)
 
       - name: ROCm Examples run Libraries
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/staging/lib
         run: |
-          ctest --test-dir examples-build-Libraries --output-on-failure -E '^(hiprand_simple_distributions_cpp|rocrand_simple_distributions_cpp)$'
+          ctest --test-dir examples-build-Libraries --output-on-failure -j $(nproc) -E '^(hiprand_simple_distributions_cpp|rocrand_simple_distributions_cpp)$'
