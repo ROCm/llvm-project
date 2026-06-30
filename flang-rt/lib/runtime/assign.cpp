@@ -863,11 +863,13 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
   // See ConvertToFIR.cpp for the compile-time routing decisions.
 
   if (to.rank() != from.rank()) {
-    terminator.Crash("AssignSimple: rank mimatch (to.rank=%d, from.rank=%d)",
+    terminator.Crash("AssignSimple: rank mismatch (to.rank=%d, from.rank=%d)",
         to.rank(), from.rank());
   }
   if (to.ElementBytes() != from.ElementBytes()) {
-    terminator.Crash("AssignSimple: ElementBytes mismatch (to.ElementBytes=%d, from.ElementBytes=%d)",
+    terminator.Crash(
+        "AssignSimple: ElementBytes mismatch (to.ElementBytes=%d, "
+        "from.ElementBytes=%d)",
         to.ElementBytes(), from.ElementBytes());
   }
   if (to.type().IsDerived()) {
@@ -954,14 +956,14 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
     // This handles non-contiguous RHS (e.g., strided slices) by walking
     // the descriptor's subscripts.
     if (from.IsContiguous()) {
-      std::memcpy(tempBuffer, from.OffsetElement(), totalBytes);
+      runtime::memcpy(tempBuffer, from.OffsetElement(), totalBytes);
     } else {
       SubscriptValue fromAt[maxRank];
       from.GetLowerBounds(fromAt);
       char *tempAt{tempBuffer};
       for (std::size_t n{elements}; n-- > 0;
            from.IncrementSubscripts(fromAt), tempAt += elementBytes) {
-        std::memcpy(tempAt, from.Element<const char>(fromAt), elementBytes);
+        runtime::memcpy(tempAt, from.Element<const char>(fromAt), elementBytes);
       }
     }
   }
@@ -1021,7 +1023,7 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
     // not be contiguous.
     if (to.IsContiguous()) {
       // Both temp (always contiguous) and LHS are contiguous: bulk copy.
-      std::memcpy(to.OffsetElement(), tempBuffer, elements * elementBytes);
+      runtime::memcpy(to.OffsetElement(), tempBuffer, elements * elementBytes);
     } else {
       // LHS is non-contiguous (e.g., strided section): element-wise copy
       // from the contiguous temp buffer into LHS's strided layout.
@@ -1030,7 +1032,7 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
       const char *tempAt{tempBuffer};
       for (std::size_t n{elements}; n-- > 0;
            to.IncrementSubscripts(toAt), tempAt += elementBytes) {
-        std::memcpy(to.Element<char>(toAt), tempAt, elementBytes);
+        runtime::memcpy(to.Element<char>(toAt), tempAt, elementBytes);
       }
     }
     FreeMemory(tempBuffer);
@@ -1038,7 +1040,7 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
     // No aliasing: copy directly from RHS to LHS.
     if (to.IsContiguous() && from.IsContiguous()) {
       // Both contiguous: memmove handles any incidental overlap safely.
-      std::memmove(
+      runtime::memmove(
           to.OffsetElement(), from.OffsetElement(), elements * elementBytes);
     } else {
       // At least one non-contiguous: element-wise copy.
@@ -1049,8 +1051,8 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
       from.GetLowerBounds(fromAt);
       for (std::size_t n{elements}; n-- > 0;
            to.IncrementSubscripts(toAt), from.IncrementSubscripts(fromAt)) {
-        std::memmove(to.Element<char>(toAt), from.Element<const char>(fromAt),
-            elementBytes);
+        runtime::memmove(to.Element<char>(toAt),
+            from.Element<const char>(fromAt), elementBytes);
       }
     }
   }
