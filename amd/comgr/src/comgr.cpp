@@ -1368,13 +1368,13 @@ amd_comgr_status_t AMD_COMGR_API
         // Redirect was requested but the Logger could not open the destination.
         // Surface its diagnostic into the returned comgr.log (the sink is null
         // here), matching the behavior before logging was centralized.
-        getLogger().emit(/*Severity=*/5, SinkError);
+        getLogger().emit(/*Severity=*/1, SinkError);
       }
     }
 
     InitTimeStatistics(PerfLog);
 
-    if (getLogger().isEnabled(/*Severity=*/20)) {
+    if (getLogger().isEnabled(/*Severity=*/4)) {
       SmallString<256> HeaderStr;
       raw_svector_ostream HeaderS(HeaderStr);
       HeaderS << "amd_comgr_do_action:\n"
@@ -1392,7 +1392,7 @@ amd_comgr_status_t AMD_COMGR_API
               << " Comgr Branch-Commit: " << xstringify(AMD_COMGR_GIT_BRANCH)
               << '-' << xstringify(AMD_COMGR_GIT_COMMIT) << '\n'
               << "\t LLVM Commit: " << clang::getLLVMRevision();
-      getLogger().emit(/*Severity=*/20, HeaderStr);
+      getLogger().emit(/*Severity=*/4, HeaderStr);
     }
 
     ProfilePoint ProfileAction(getActionKindName(ActionKind));
@@ -1434,8 +1434,8 @@ amd_comgr_status_t AMD_COMGR_API
       return Status;
     }
 
-    getLogger().emit(/*Severity=*/20, Twine("\tReturnStatus: ") +
-                                          getStatusName(ActionStatus) + "\n");
+    getLogger().emit(/*Severity=*/4, Twine("\tReturnStatus: ") +
+                                         getStatusName(ActionStatus) + "\n");
 
     // Flush any compiler diagnostics teed to the redirect sink. The sink is the
     // Logger's persistent (buffered) stream, so diagnostics written through the

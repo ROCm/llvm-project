@@ -219,13 +219,15 @@ include:
   the caller; this variable copies them, it does not move them.
 * `AMD_COMGR_EMIT_VERBOSE_LOGS`: If this is set, and is not "0", logs will
   include additional Comgr-specific informational messages. Equivalent to
-  `AMD_COMGR_LOG_LEVEL=debug`, unless `AMD_COMGR_LOG_LEVEL` is set, which takes
+  `AMD_COMGR_LOG_LEVEL=4`, unless `AMD_COMGR_LOG_LEVEL` is set, which takes
   precedence.
-* `AMD_COMGR_LOG_LEVEL`: Sets the severity threshold of the Comgr logger. Values
-  from least to most verbose: "none", "error", "warning", "info", "debug"
-  (case-insensitive). A level enables that severity and all more severe ones.
-  Takes precedence over `AMD_COMGR_EMIT_VERBOSE_LOGS`; if unset, defaults to
-  "debug" when `AMD_COMGR_EMIT_VERBOSE_LOGS` is enabled, else "error".
+* `AMD_COMGR_LOG_LEVEL`: Sets the severity threshold of the Comgr logger as an
+  integer in the range [0, 4], where 0 disables logging and higher values are
+  more verbose. A message is emitted only when its severity does not exceed this
+  threshold. Values outside the range are clamped to it; non-integer values are
+  ignored. Takes precedence over `AMD_COMGR_EMIT_VERBOSE_LOGS`; if unset (or not
+  an integer), defaults to 4 when `AMD_COMGR_EMIT_VERBOSE_LOGS` is enabled, else
+  1.
 * `AMD_COMGR_TIME_STATISTICS`: If this is set, and is not "0", logs will
   include additional Comgr-specific timing information for compilation actions.
 * `AMD_COMGR_TIME_STATISTICS_GRANULARITY`: If this is set to "us" or "ns",

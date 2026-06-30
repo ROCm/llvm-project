@@ -10,7 +10,7 @@
 /// This file declares COMGR::Logger, a process-global, thread-safe logging
 /// facility shared by every Comgr API. Any API can emit diagnostics at a
 /// configurable severity through Logger::emit, passing a numeric severity on a
-/// 0-to-20 scale.
+/// 0-to-4 scale.
 ///
 /// Output goes to two independent destinations:
 ///   - The global "sink": resolved once from AMD_COMGR_REDIRECT_LOGS (stdout,
@@ -20,7 +20,7 @@
 ///     ("comgr.log") data object returned to the caller.
 ///
 /// All writes are guarded by a mutex, so concurrent callers share the sink
-/// safely. The severity threshold (a value in [0, 20]) is configured via
+/// safely. The severity threshold (a value in [0, 4]) is configured via
 /// AMD_COMGR_LOG_LEVEL; see COMGR::env::getLogLevel().
 ///
 //===----------------------------------------------------------------------===//
@@ -40,7 +40,7 @@
 namespace COMGR {
 
 /// Severity of a log message, and the logger's configured threshold, expressed
-/// on a 0-to-20 scale where 0 silences logging and higher values are more
+/// on a 0-to-4 scale where 0 silences logging and higher values are more
 /// verbose. A message is emitted only when its severity is non-zero and does
 /// not exceed the configured level (see Logger::isEnabled). Callers choose the
 /// numeric severity passed to Logger::emit; larger numbers are reserved for
@@ -48,10 +48,10 @@ namespace COMGR {
 using LogLevel = uint8_t;
 
 /// Parse @p Requested (the value of AMD_COMGR_LOG_LEVEL, which may be empty) into
-/// a threshold on the 0-to-20 scale. The value must be a bare integer; it is
-/// clamped to [0, 20]. When @p Requested is empty or is not a valid integer,
-/// returns 20 if @p VerboseFallback is set (back-compat with
-/// AMD_COMGR_EMIT_VERBOSE_LOGS), otherwise 5. Exposed for testing.
+/// a threshold on the 0-to-4 scale. The value must be a bare integer; it is
+/// clamped to [0, 4]. When @p Requested is empty or is not a valid integer,
+/// returns 4 if @p VerboseFallback is set (back-compat with
+/// AMD_COMGR_EMIT_VERBOSE_LOGS), otherwise 1. Exposed for testing.
 LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
 
 /// Process-global, thread-safe logging facility. Obtain the shared instance

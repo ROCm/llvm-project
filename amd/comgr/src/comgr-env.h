@@ -26,7 +26,7 @@ std::optional<llvm::StringRef> getRedirectLogs();
 /// Return whether the environment requests verbose logging.
 bool shouldEmitVerboseLogs();
 
-/// Return the raw value of AMD_COMGR_LOG_LEVEL (an integer in [0, 20]), or an
+/// Return the raw value of AMD_COMGR_LOG_LEVEL (an integer in [0, 4]), or an
 /// empty string if unset. The Logger parses this into a numeric severity
 /// threshold; see COMGR::parseLogLevel.
 llvm::StringRef getLogLevel();

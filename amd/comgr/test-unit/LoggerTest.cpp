@@ -23,34 +23,34 @@ using llvm::StringRef;
 
 // -- isEnabled / level filtering ---------------------------------------------
 //
-// Severities and levels are on a 0-to-20 scale where higher is more verbose; a
+// Severities and levels are on a 0-to-4 scale where higher is more verbose; a
 // message is emitted when its severity is non-zero and does not exceed the
 // configured level.
 
 TEST(Logger, ZeroLevelDisablesEverything) {
   Logger Log(0, nullptr);
-  EXPECT_FALSE(Log.isEnabled(5));
-  EXPECT_FALSE(Log.isEnabled(10));
-  EXPECT_FALSE(Log.isEnabled(20));
+  EXPECT_FALSE(Log.isEnabled(1));
+  EXPECT_FALSE(Log.isEnabled(2));
+  EXPECT_FALSE(Log.isEnabled(4));
 }
 
 TEST(Logger, LevelEnablesSeveritiesUpToItself) {
-  Logger Log(10, nullptr);
-  EXPECT_TRUE(Log.isEnabled(5));
-  EXPECT_TRUE(Log.isEnabled(10));
-  EXPECT_FALSE(Log.isEnabled(11));
-  EXPECT_FALSE(Log.isEnabled(20));
+  Logger Log(2, nullptr);
+  EXPECT_TRUE(Log.isEnabled(1));
+  EXPECT_TRUE(Log.isEnabled(2));
+  EXPECT_FALSE(Log.isEnabled(3));
+  EXPECT_FALSE(Log.isEnabled(4));
 }
 
 TEST(Logger, MaxLevelEnablesEverything) {
-  Logger Log(20, nullptr);
-  EXPECT_TRUE(Log.isEnabled(5));
-  EXPECT_TRUE(Log.isEnabled(10));
-  EXPECT_TRUE(Log.isEnabled(20));
+  Logger Log(4, nullptr);
+  EXPECT_TRUE(Log.isEnabled(1));
+  EXPECT_TRUE(Log.isEnabled(2));
+  EXPECT_TRUE(Log.isEnabled(4));
 }
 
 TEST(Logger, NeverEmitsZeroSeverity) {
-  Logger Log(20, nullptr);
+  Logger Log(4, nullptr);
   // A severity of 0 must never pass the filter.
   EXPECT_FALSE(Log.isEnabled(0));
 }
@@ -59,25 +59,25 @@ TEST(Logger, NeverEmitsZeroSeverity) {
 
 TEST(Logger, ParseLogLevelNumericValues) {
   EXPECT_EQ(int{parseLogLevel("0", false)}, 0);
-  EXPECT_EQ(int{parseLogLevel("5", false)}, 5);
-  EXPECT_EQ(int{parseLogLevel("20", false)}, 20);
+  EXPECT_EQ(int{parseLogLevel("2", false)}, 2);
+  EXPECT_EQ(int{parseLogLevel("4", false)}, 4);
 }
 
 TEST(Logger, ParseLogLevelClampsAboveMax) {
-  EXPECT_EQ(int{parseLogLevel("21", false)}, 20);
-  EXPECT_EQ(int{parseLogLevel("1000", false)}, 20);
+  EXPECT_EQ(int{parseLogLevel("5", false)}, 4);
+  EXPECT_EQ(int{parseLogLevel("1000", false)}, 4);
 }
 
 TEST(Logger, ParseLogLevelEmptyUsesVerboseFallback) {
   // Unset variable: low level normally, max level when verbose logs requested.
-  EXPECT_EQ(int{parseLogLevel("", false)}, 5);
-  EXPECT_EQ(int{parseLogLevel("", true)}, 20);
+  EXPECT_EQ(int{parseLogLevel("", false)}, 1);
+  EXPECT_EQ(int{parseLogLevel("", true)}, 4);
 }
 
 TEST(Logger, ParseLogLevelNonNumericUsesVerboseFallback) {
   // A non-integer value falls back to the same default as an unset variable.
-  EXPECT_EQ(int{parseLogLevel("foo", false)}, 5);
-  EXPECT_EQ(int{parseLogLevel("bar", true)}, 20);
+  EXPECT_EQ(int{parseLogLevel("foo", false)}, 1);
+  EXPECT_EQ(int{parseLogLevel("bar", true)}, 4);
 }
 
 // -- Sink output and prefixes ------------------------------------------------
@@ -85,12 +85,12 @@ TEST(Logger, ParseLogLevelNonNumericUsesVerboseFallback) {
 TEST(Logger, EmitsPrefixedAndNewlineTerminated) {
   std::string Out;
   raw_string_ostream OS(Out);
-  Logger Log(20, &OS);
+  Logger Log(4, &OS);
 
-  Log.emit(5, "boom");
-  Log.emit(10, "careful");
-  Log.emit(15, "fyi");
-  Log.emit(20, "trace");
+  Log.emit(1, "boom");
+  Log.emit(2, "careful");
+  Log.emit(3, "fyi");
+  Log.emit(4, "trace");
   OS.flush();
 
   EXPECT_EQ(Out, "comgr: boom\n"
@@ -102,19 +102,19 @@ TEST(Logger, EmitsPrefixedAndNewlineTerminated) {
 TEST(Logger, SuppressedSeverityWritesNothing) {
   std::string Out;
   raw_string_ostream OS(Out);
-  Logger Log(5, &OS);
+  Logger Log(1, &OS);
 
-  Log.emit(10, "dropped");
-  Log.emit(15, "dropped");
-  Log.emit(20, "dropped");
+  Log.emit(2, "dropped");
+  Log.emit(3, "dropped");
+  Log.emit(4, "dropped");
   OS.flush();
 
   EXPECT_TRUE(Out.empty());
 }
 
 TEST(Logger, NullSinkDoesNotCrash) {
-  Logger Log(20, nullptr);
-  Log.emit(5, "no sink");
+  Logger Log(4, nullptr);
+  Log.emit(1, "no sink");
   SUCCEED();
 }
 
@@ -123,16 +123,16 @@ TEST(Logger, NullSinkDoesNotCrash) {
 TEST(Logger, CaptureScopeTeesEmittedMessages) {
   std::string SinkOut;
   raw_string_ostream SinkOS(SinkOut);
-  Logger Log(20, &SinkOS);
+  Logger Log(4, &SinkOS);
 
   std::string CaptureOut;
   raw_string_ostream CaptureOS(CaptureOut);
   {
     LogCaptureScope Capture(CaptureOS);
-    Log.emit(5, "captured");
+    Log.emit(1, "captured");
   }
   // Outside the scope, the capture stream is detached.
-  Log.emit(5, "not captured");
+  Log.emit(1, "not captured");
 
   SinkOS.flush();
   CaptureOS.flush();
@@ -142,7 +142,7 @@ TEST(Logger, CaptureScopeTeesEmittedMessages) {
 }
 
 TEST(Logger, CaptureScopeRestoresPreviousOnExit) {
-  Logger Log(20, nullptr);
+  Logger Log(4, nullptr);
 
   std::string OuterOut;
   raw_string_ostream OuterOS(OuterOut);
@@ -153,11 +153,11 @@ TEST(Logger, CaptureScopeRestoresPreviousOnExit) {
     LogCaptureScope Outer(OuterOS);
     {
       LogCaptureScope Inner(InnerOS);
-      Log.emit(15, "inner");
+      Log.emit(3, "inner");
     }
-    Log.emit(15, "outer");
+    Log.emit(3, "outer");
   }
-  Log.emit(15, "none");
+  Log.emit(3, "none");
 
   OuterOS.flush();
   InnerOS.flush();
@@ -168,13 +168,13 @@ TEST(Logger, CaptureScopeRestoresPreviousOnExit) {
 }
 
 TEST(Logger, CaptureRespectsLevelFilter) {
-  Logger Log(5, nullptr);
+  Logger Log(1, nullptr);
   std::string CaptureOut;
   raw_string_ostream CaptureOS(CaptureOut);
   {
     LogCaptureScope Capture(CaptureOS);
-    Log.emit(20, "filtered");
-    Log.emit(5, "kept");
+    Log.emit(4, "filtered");
+    Log.emit(1, "kept");
   }
   CaptureOS.flush();
   EXPECT_EQ(CaptureOut, "comgr: kept\n");
@@ -185,7 +185,7 @@ TEST(Logger, CaptureRespectsLevelFilter) {
 TEST(Logger, ConcurrentEmitsAreNotInterleaved) {
   std::string Out;
   raw_string_ostream OS(Out);
-  Logger Log(20, &OS);
+  Logger Log(4, &OS);
 
   const int NumThreads = 8;
   const int PerThread = 200;
@@ -193,7 +193,7 @@ TEST(Logger, ConcurrentEmitsAreNotInterleaved) {
   for (int T = 0; T < NumThreads; ++T) {
     Threads.emplace_back([&Log]() {
       for (int I = 0; I < PerThread; ++I)
-        Log.emit(5, "line");
+        Log.emit(1, "line");
     });
   }
   for (std::thread &Th : Threads)
@@ -220,7 +220,7 @@ TEST(Logger, ConcurrentEmitsAreNotInterleaved) {
 // -- Capture streams are per-thread ------------------------------------------
 
 TEST(Logger, CaptureStreamIsThreadLocal) {
-  Logger Log(20, nullptr);
+  Logger Log(4, nullptr);
 
   std::string MainOut;
   raw_string_ostream MainOS(MainOut);
@@ -230,11 +230,11 @@ TEST(Logger, CaptureStreamIsThreadLocal) {
   std::thread Other([&]() {
     // No capture installed on this thread; it must not see the main thread's.
     SeenOnOtherThread = getThreadCaptureStream();
-    Log.emit(5, "other-thread");
+    Log.emit(1, "other-thread");
   });
   Other.join();
 
-  Log.emit(5, "main-thread");
+  Log.emit(1, "main-thread");
   MainOS.flush();
 
   EXPECT_EQ(SeenOnOtherThread.load(), nullptr);
