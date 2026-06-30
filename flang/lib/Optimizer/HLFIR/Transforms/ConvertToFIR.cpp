@@ -29,6 +29,10 @@ namespace hlfir {
 #define GEN_PASS_DEF_CONVERTHLFIRTOFIR
 #include "flang/Optimizer/HLFIR/Passes.h.inc"
 } // namespace hlfir
+static llvm::cl::opt<bool> useFortranAssignOnly(
+    "use-fortran-assign-only",
+    llvm::cl::desc("Do not use _FortranAAssignSimple. Only _FortranAAssign"),
+    llvm::cl::init(false));
 
 using namespace mlir;
 
@@ -196,7 +200,7 @@ public:
         // requires broadcasting CRITICAL: Only use Simple path for non-volatile
         // - volatile needs memory ordering NOTE: Contiguity is now handled at
         // runtime in AssignSimple
-        if (!lhs.isPolymorphic() &&
+        if (!useFortranAssignOnly && !lhs.isPolymorphic() &&
             fir::isa_trivial(lhs.getFortranElementType()) &&
             lhs.getRank() == rhs.getRank() &&
             !fir::isa_volatile_type(lhs.getType()) &&
