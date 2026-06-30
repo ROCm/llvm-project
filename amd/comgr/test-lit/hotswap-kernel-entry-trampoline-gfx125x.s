@@ -1,9 +1,9 @@
 // COM: HotSwap entry trampolines are supported across gfx125x.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1251 -nostdlib %s -o %t.gfx1251.elf
-// RUN: AMD_COMGR_HOTSWAP_ENTRY_TRAMPOLINES=1 hotswap-rewrite %t.gfx1251.elf \
+// RUN: hotswap-rewrite %t.gfx1251.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1251 amdgcn-amd-amdhsa--gfx1251 \
-// RUN:   --output %t.gfx1251.out.elf \
+// RUN:   --entry-trampolines --output %t.gfx1251.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
 // RUN: %llvm-objdump -d %t.gfx1251.out.elf | %FileCheck --check-prefix=DISASM %s
 
@@ -11,10 +11,10 @@
 // RUN:   -e 's/gfx1251/gfx12-5-generic/g' %s > %t.generic.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx12-5-generic -nostdlib \
 // RUN:   %t.generic.s -o %t.generic.elf
-// RUN: AMD_COMGR_HOTSWAP_ENTRY_TRAMPOLINES=1 hotswap-rewrite %t.generic.elf \
+// RUN: hotswap-rewrite %t.generic.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx12-5-generic \
 // RUN:   amdgcn-amd-amdhsa--gfx12-5-generic \
-// RUN:   --output %t.generic.out.elf \
+// RUN:   --entry-trampolines --output %t.generic.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
 // RUN: %llvm-objdump -d %t.generic.out.elf | %FileCheck --check-prefix=DISASM %s
 

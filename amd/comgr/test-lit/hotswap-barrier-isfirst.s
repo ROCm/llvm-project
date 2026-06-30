@@ -63,10 +63,10 @@
 // COM: With explicit B0->B0 stepping, entry trampolines must not accidentally
 // COM: enable B0-to-A0 instruction patches. The isfirst opcodes remain, while
 // COM: the kernel descriptor is still redirected through an appended entry stub.
-// RUN: AMD_COMGR_HOTSWAP_ENTRY_TRAMPOLINES=1 hotswap-rewrite %t.elf \
+// RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
-// RUN:   --output %t.b0b0.elf \
+// RUN:   --entry-trampolines --output %t.b0b0.elf \
 // RUN:   | %FileCheck --check-prefix=B0B0-API %s
 // B0B0-API: RESULT: SUCCESS
 // RUN: %llvm-objdump -d %t.b0b0.elf | %FileCheck --check-prefix=B0B0 %s
