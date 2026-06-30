@@ -6,7 +6,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "amd_comgr.h"
-#include "comgr-env.h"
 #include "comgr-hotswap-internal.h"
 #include "comgr.h"
 
@@ -125,33 +124,65 @@ static bool shouldRunB0A0Patches(const ParsedHotswapIsa &Source,
   return SourceIsB0 && !TargetIsB0;
 }
 
-} // namespace
+static amd_comgr_status_t validateHotswapRewriteOptions(
+    const amd_comgr_hotswap_rewrite_options_t *RewriteOptions,
+    uint64_t &RewriteFlags) {
+  if (!RewriteOptions) {
+    hotswap::log()
+        << "hotswap: error: amd_comgr_hotswap_rewrite_with_options: rewrite "
+           "options are required\n";
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
 
-amd_comgr_status_t AMD_COMGR_API amd_comgr_hotswap_rewrite(
-    amd_comgr_data_t input, const char *source_isa_name,
-    const char *target_isa_name, amd_comgr_data_t *output) {
+  if (RewriteOptions->size < sizeof(amd_comgr_hotswap_rewrite_options_t)) {
+    hotswap::log()
+        << "hotswap: error: amd_comgr_hotswap_rewrite_with_options: rewrite "
+           "options size "
+        << RewriteOptions->size << " is smaller than "
+        << sizeof(amd_comgr_hotswap_rewrite_options_t) << "\n";
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  static constexpr uint64_t SupportedFlags =
+      AMD_COMGR_HOTSWAP_REWRITE_FLAG_ENTRY_TRAMPOLINES;
+  if (RewriteOptions->flags & ~SupportedFlags) {
+    hotswap::log() << "hotswap: error: amd_comgr_hotswap_rewrite_with_options: "
+                      "unsupported rewrite option flags 0x";
+    hotswap::log().write_hex(RewriteOptions->flags & ~SupportedFlags);
+    hotswap::log() << "\n";
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  RewriteFlags = RewriteOptions->flags;
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+static amd_comgr_status_t
+hotswapRewrite(amd_comgr_data_t input, const char *source_isa_name,
+               const char *target_isa_name, uint64_t RewriteFlags,
+               const char *ApiName, amd_comgr_data_t *output) {
+  const bool RunEntryTrampolines =
+      RewriteFlags & AMD_COMGR_HOTSWAP_REWRITE_FLAG_ENTRY_TRAMPOLINES;
+
   DataObject *InputP = DataObject::convert(input);
   if (!InputP) {
-    hotswap::log()
-        << "hotswap: error: amd_comgr_hotswap_rewrite: invalid input data "
-           "handle\n";
+    hotswap::log() << "hotswap: error: " << ApiName
+                   << ": invalid input data handle\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
   if (!InputP->Data) {
-    hotswap::log()
-        << "hotswap: error: amd_comgr_hotswap_rewrite: input data is null\n";
+    hotswap::log() << "hotswap: error: " << ApiName << ": input data is null\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
   if (InputP->DataKind != AMD_COMGR_DATA_KIND_EXECUTABLE) {
-    hotswap::log()
-        << "hotswap: error: amd_comgr_hotswap_rewrite: input data kind must "
-           "be executable\n";
+    hotswap::log() << "hotswap: error: " << ApiName
+                   << ": input data kind must be executable\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
   if (!source_isa_name || !target_isa_name || !output) {
-    hotswap::log()
-        << "hotswap: error: amd_comgr_hotswap_rewrite: source ISA, target "
-           "ISA, and output handle are required\n";
+    hotswap::log() << "hotswap: error: " << ApiName
+                   << ": source ISA, target ISA, and output handle are "
+                      "required\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
@@ -162,26 +193,24 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_hotswap_rewrite(
 
   if (!isGfx12_5Processor(SourceIdent.Ident.Processor) ||
       !isGfx12_5Processor(TargetIdent.Ident.Processor)) {
-    hotswap::log()
-        << "hotswap: error: amd_comgr_hotswap_rewrite: only gfx125x "
-           "processors are supported, got source '"
-        << SourceIdent.Ident.Processor << "' and target '"
-        << TargetIdent.Ident.Processor << "'\n";
+    hotswap::log() << "hotswap: error: " << ApiName
+                   << ": only gfx125x processors are supported, got source '"
+                   << SourceIdent.Ident.Processor << "' and target '"
+                   << TargetIdent.Ident.Processor << "'\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
   if (SourceIdent.Ident.Processor != TargetIdent.Ident.Processor) {
-    hotswap::log()
-        << "hotswap: error: amd_comgr_hotswap_rewrite: processor retargeting "
-           "is not supported, got source '"
-        << SourceIdent.Ident.Processor << "' and target '"
-        << TargetIdent.Ident.Processor << "'\n";
+    hotswap::log() << "hotswap: error: " << ApiName
+                   << ": processor retargeting is not supported, got source '"
+                   << SourceIdent.Ident.Processor << "' and target '"
+                   << TargetIdent.Ident.Processor << "'\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
   hotswap::Gfx1250RewriteOptions Options;
   Options.RunB0A0Patches = SourceIdent.Ident.Processor == "gfx1250" &&
                            shouldRunB0A0Patches(SourceIdent, TargetIdent);
-  Options.RunEntryTrampolines = env::shouldUseHotswapEntryTrampolines();
+  Options.RunEntryTrampolines = RunEntryTrampolines;
 
   std::unique_ptr<llvm::MemoryBuffer> OutBuffer;
   amd_comgr_status_t Status = hotswap::retargetCodeObject(
@@ -189,28 +218,50 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_hotswap_rewrite(
   if (Status != AMD_COMGR_STATUS_SUCCESS)
     return Status;
   if (!OutBuffer) {
-    hotswap::log()
-        << "hotswap: error: amd_comgr_hotswap_rewrite: rewrite returned no "
-           "output buffer\n";
+    hotswap::log() << "hotswap: error: " << ApiName
+                   << ": rewrite returned no output buffer\n";
     return AMD_COMGR_STATUS_ERROR;
   }
 
   DataObject *OutputP = DataObject::allocate(AMD_COMGR_DATA_KIND_EXECUTABLE);
   if (!OutputP) {
-    hotswap::log() << "hotswap: error: amd_comgr_hotswap_rewrite: output data "
-                      "allocation failed\n";
+    hotswap::log() << "hotswap: error: " << ApiName
+                   << ": output data allocation failed\n";
     return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
   }
 
   if (amd_comgr_status_t SetStatus = OutputP->setData(std::move(OutBuffer))) {
-    hotswap::log()
-        << "hotswap: error: amd_comgr_hotswap_rewrite: output setData "
-           "failed with status "
-        << SetStatus << "\n";
+    hotswap::log() << "hotswap: error: " << ApiName
+                   << ": output setData failed with status " << SetStatus
+                   << "\n";
     OutputP->release();
     return SetStatus;
   }
 
   *output = DataObject::convert(OutputP);
   return AMD_COMGR_STATUS_SUCCESS;
+}
+
+} // namespace
+
+amd_comgr_status_t AMD_COMGR_API amd_comgr_hotswap_rewrite(
+    amd_comgr_data_t input, const char *source_isa_name,
+    const char *target_isa_name, amd_comgr_data_t *output) {
+  return hotswapRewrite(input, source_isa_name, target_isa_name,
+                        AMD_COMGR_HOTSWAP_REWRITE_FLAG_NONE,
+                        "amd_comgr_hotswap_rewrite", output);
+}
+
+amd_comgr_status_t AMD_COMGR_API amd_comgr_hotswap_rewrite_with_options(
+    amd_comgr_data_t input, const char *source_isa_name,
+    const char *target_isa_name,
+    const amd_comgr_hotswap_rewrite_options_t *rewrite_options,
+    amd_comgr_data_t *output) {
+  uint64_t RewriteFlags = AMD_COMGR_HOTSWAP_REWRITE_FLAG_NONE;
+  if (amd_comgr_status_t Status =
+          validateHotswapRewriteOptions(rewrite_options, RewriteFlags))
+    return Status;
+
+  return hotswapRewrite(input, source_isa_name, target_isa_name, RewriteFlags,
+                        "amd_comgr_hotswap_rewrite_with_options", output);
 }
