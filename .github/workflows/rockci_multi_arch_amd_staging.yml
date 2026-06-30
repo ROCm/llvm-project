@@ -81,6 +81,12 @@ jobs:
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
+      linux_build_config_override: >-
+        {"per_family_info":[{"amdgpu_family":"gfx94X-dcgpu"},{"amdgpu_family":"gfx110X-all","test-runs-on":""},{"amdgpu_family":"gfx1151","test-runs-on":""}],"dist_amdgpu_families":"gfx94X-dcgpu;gfx110X-all;gfx1151"}
+      linux_amdgpu_families: ${{ github.event.inputs.linux_amdgpu_families }}
+      windows_amdgpu_families: ${{ github.event.inputs.windows_amdgpu_families || 'none' }}
+      prebuilt_stages: ${{ github.event.inputs.prebuilt_stages }}
+      baseline_run_id: ${{ github.event.inputs.baseline_run_id }}        
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
