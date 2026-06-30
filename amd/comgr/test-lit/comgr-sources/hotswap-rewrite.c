@@ -8,8 +8,8 @@
 ///
 /// \file
 /// Canonical hotswap input/output driver for lit tests. Loads an ELF, runs
-/// the hotswap rewrite API, and optionally dumps the output and/or checks that
-/// a second rewrite produces identical output (idempotency).
+/// the hotswap rewrite API, and optionally dumps the output and/or reruns the
+/// same request and compares the two outputs.
 ///
 //===----------------------------------------------------------------------===//
 

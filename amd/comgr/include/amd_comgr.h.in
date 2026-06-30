@@ -2795,7 +2795,10 @@ amd_comgr_map_elf_virtual_address_to_code_object_offset(
  * patches (e.g. B0 to A0) and cross-family transpilation.
  * The input ELF is not modified; a new data object is created and returned.
  *
- * If no patches are needed, the output is a copy of the input.
+ * A successful call means COMGR produced a valid output code object, not
+ * necessarily that the output bytes differ from the input. If the
+ * source/target ISA pair selects no enabled transformation, the output is a
+ * copy of the input.
  *
  * Currently supported transformations:
  *   - GFX1250 B0 to A0
@@ -2870,7 +2873,10 @@ typedef struct amd_comgr_hotswap_rewrite_options_s {
  * patches (e.g. B0 to A0) and cross-family transpilation.
  * The input ELF is not modified; a new data object is created and returned.
  *
- * If no patches are needed, the output is a copy of the input.
+ * A successful call means COMGR produced a valid output code object, not
+ * necessarily that the output bytes differ from the input. If the
+ * source/target ISA pair and rewrite options select no enabled transformation,
+ * the output is a copy of the input.
  *
  * Currently supported transformations:
  *   - GFX1250 B0 to A0

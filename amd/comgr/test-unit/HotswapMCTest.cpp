@@ -274,6 +274,18 @@ static void expectInstMatchesAsm(const llvm::MCInst &Actual,
   expectSameOperands(Actual, Expected, Asm);
 }
 
+static bool appendSingleInstBytes(llvm::SmallVectorImpl<uint8_t> &Bytes,
+                                  llvm::StringRef Asm,
+                                  const LLVMState &S) {
+  llvm::SmallVector<uint8_t> Inst = assembleSingleInst(Asm, S);
+  if (Inst.empty()) {
+    ADD_FAILURE() << "failed to assemble: " << Asm.str();
+    return false;
+  }
+  Bytes.append(Inst.begin(), Inst.end());
+  return true;
+}
+
 TEST(CheckVgprOverlap, DetectsDirectOverlap) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -399,22 +411,12 @@ TEST(BuildKernelEntryTrampoline, MatcherRejectsWrongOperandShape) {
   ASSERT_TRUE(S.Valid);
 
   llvm::SmallVector<uint8_t> Bytes;
-  auto Append = [&](llvm::StringRef Asm) {
-    llvm::SmallVector<uint8_t> Inst = assembleSingleInst(Asm, S);
-    if (Inst.empty()) {
-      ADD_FAILURE() << "failed to assemble: " << Asm.str();
-      return false;
-    }
-    Bytes.append(Inst.begin(), Inst.end());
-    return true;
-  };
-
-  ASSERT_TRUE(Append("global_wb"));
-  ASSERT_TRUE(Append("v_nop"));
-  ASSERT_TRUE(Append("s_get_pc_i64 s[8:9]"));
-  ASSERT_TRUE(Append("s_add_u32 s8, s8, 0"));
-  ASSERT_TRUE(Append("s_addc_u32 s10, s10, 0"));
-  ASSERT_TRUE(Append("s_set_pc_i64 s[8:9]"));
+  ASSERT_TRUE(appendSingleInstBytes(Bytes, "global_wb", S));
+  ASSERT_TRUE(appendSingleInstBytes(Bytes, "v_nop", S));
+  ASSERT_TRUE(appendSingleInstBytes(Bytes, "s_get_pc_i64 s[8:9]", S));
+  ASSERT_TRUE(appendSingleInstBytes(Bytes, "s_add_u32 s8, s8, 0", S));
+  ASSERT_TRUE(appendSingleInstBytes(Bytes, "s_addc_u32 s10, s10, 0", S));
+  ASSERT_TRUE(appendSingleInstBytes(Bytes, "s_set_pc_i64 s[8:9]", S));
 
   llvm::SmallVector<uint8_t> CodeEnd = assembleSingleInst("s_code_end", S);
   ASSERT_EQ(CodeEnd.size(), MinInstSize);
