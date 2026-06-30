@@ -7,23 +7,23 @@ rewrite applied. The input code object is not modified.
 
 This directory contains COMGR's hotswap transpiler scaffolding, the raiser-based
 path for heavier cross-ISA transformations. The same-family stepping patches and
-optional entry trampolines are implemented in the surrounding COMGR source files
-and are exposed through `amd_comgr_hotswap_rewrite`.
+entry trampolines are implemented in the surrounding COMGR source files and are
+exposed through `amd_comgr_hotswap_rewrite_with_options`.
 
 ## Supported transformations
 
 | Transformation | Status |
 | -------------- | ------ |
 | gfx1250 B0 to A0 | Supported |
-| gfx125x entry trampolines | Supported, on by default |
+| gfx125x entry trampolines | Supported, opt-in |
 | gfx950 | Coming soon |
 | gfx942 | Coming soon |
 
-## Environment variables
+## Rewrite options
 
-| Variable | Effect |
-| -------- | ------ |
-| `AMD_COMGR_HOTSWAP_ENTRY_TRAMPOLINES` | Set to a nonzero value to enable gfx125x kernel descriptor entry redirection through COMGR-generated entry stubs, independent of A0/B0 stepping. Off by default. |
+Callers request optional gfx125x kernel descriptor entry redirection through
+`amd_comgr_hotswap_rewrite_with_options` with
+`AMD_COMGR_HOTSWAP_REWRITE_FLAG_ENTRY_TRAMPOLINES`.
 
 ## Transpiler (cross-gen)
 

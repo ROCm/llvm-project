@@ -26,9 +26,6 @@ std::optional<llvm::StringRef> getRedirectLogs();
 /// Return whether the environment requests verbose logging.
 bool shouldEmitVerboseLogs();
 
-/// Return whether hotswap should redirect kernel descriptors to entry stubs.
-bool shouldUseHotswapEntryTrampolines();
-
 /// Return whether the environment requests time statistics collection.
 bool needTimeStatistics();
 
