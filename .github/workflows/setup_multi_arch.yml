@@ -52,44 +52,15 @@ jobs:
     env:
       BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'      
     outputs:
-      enable_build_jobs: true
-      # Temporary fix on gfx94x due to non availability of MI325 machines
-      linux_build_config: >-
-        {
-          "per_family_info": [
-            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "sanity_check_only_for_family": false},
-            {"amdgpu_family": "gfx110X-all", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true},
-            {"amdgpu_family": "gfx90a", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true}
-          ],
-          "dist_amdgpu_families": "gfx94X-dcgpu;gfx110X-all;gfx90a",
-          "artifact_group": "multi-arch-release",
-          "build_variant_label": "release",
-          "build_variant_suffix": "",
-          "build_variant_cmake_preset": "",
-          "expect_failure": false,
-          "build_pytorch": true,
-          "prebuilt_stages": "",
-          "baseline_run_id": ""
-        }
-      windows_build_config: >-
-        {
-          "per_family_info": [
-            {"amdgpu_family": "gfx1151", "amdgpu_targets": "", "test-runs-on": "windows-gfx1151-gpu-rocm", "benchmark-runs-on": "windows-gfx1151-gpu-rocm"}
-          ],
-          "dist_amdgpu_families": "gfx1151",
-          "artifact_group": "multi-arch-release",
-          "build_variant_label": "release",
-          "build_variant_suffix": "",
-          "build_variant_cmake_preset": "windows-release",
-          "expect_failure": false,
-          "build_pytorch": true,
-          "prebuilt_stages": "",
-          "baseline_run_id": ""
-        }      
+      enable_build_jobs: ${{ steps.configure.outputs.enable_build_jobs }}
+      linux_build_config: ${{ steps.configure.outputs.linux_build_config }}
+      windows_build_config: ${{ steps.configure.outputs.windows_build_config }}
+      rocm_package_version: ${{ steps.rocm_package_version.outputs.rocm_package_version }}
       test_type: 'quick'        
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
       windows_test_labels: ${{ steps.configure.outputs.windows_test_labels }}
       rocm_package_version: ${{ steps.rocm_package_version.outputs.rocm_package_version }}
+
     steps:
       - name: Checking out repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
