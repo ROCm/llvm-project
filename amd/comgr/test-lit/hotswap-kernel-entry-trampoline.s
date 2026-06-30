@@ -13,9 +13,9 @@
 // NO-TRAMP: s_endpgm
 // NO-TRAMP-NOT: global_wb
 
-// RUN: AMD_COMGR_HOTSWAP_ENTRY_TRAMPOLINES=1 hotswap-rewrite %t.elf \
+// RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out.elf \
+// RUN:   --entry-trampolines --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
 
@@ -34,13 +34,21 @@
 // METADATA: .name:           entry_tramp_kernel
 // METADATA: .sgpr_count:     10
 
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --entry-trampolines --output %t.out2.elf \
+// RUN:   | %FileCheck --check-prefix=API2 %s
+// API2: RESULT: SUCCESS
+// RUN: cmp %t.out.elf %t.out2.elf
+
 // COM: If the requested entry trampoline cannot allocate an aligned scratch
 // COM: SGPR pair, the rewrite fails instead of returning a partial output.
 // RUN: sed 's/.sgpr_count: 8/.sgpr_count: 105/' %s > %t.highsgpr.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
 // RUN:   %t.highsgpr.s -o %t.highsgpr.elf
-// RUN: AMD_COMGR_HOTSWAP_ENTRY_TRAMPOLINES=1 hotswap-rewrite %t.highsgpr.elf amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 --expect-status ERROR \
+// RUN: hotswap-rewrite %t.highsgpr.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --entry-trampolines --expect-status ERROR \
 // RUN:   | %FileCheck --check-prefix=NO-SCRATCH %s
 // NO-SCRATCH: RESULT: ERROR
 
