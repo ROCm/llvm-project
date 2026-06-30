@@ -600,6 +600,7 @@ void AMDGPULowerStrictWQM::processBlock(MachineBasicBlock &MBB, BlockInfo &BI) {
   for (;;) {
     MachineBasicBlock::iterator Next = II;
     char Needs = 0; // default: doesn't need strict
+    bool IsExecIndependent = false;
 
     if (FirstStrict == IE)
       FirstStrict = II;
@@ -622,40 +623,38 @@ void AMDGPULowerStrictWQM::processBlock(MachineBasicBlock &MBB, BlockInfo &BI) {
         // meta instructions), it can safely execute in any mode. So keeping the
         // current state to avoid exiting and immediately re-entering.
         Needs = State;
+        IsExecIndependent = true;
       }
 
       ++Next;
     }
 
-    // Transition: exit strict if needed
-    if ((State & StateStrict) && !(Needs & State)) {
+    // Transition if the current state doesn't satisfy what's needed.
+    if (!(Needs & State)) {
       MachineBasicBlock::iterator Before =
           prepareInsertion(MBB, FirstStrict, II, false, true);
-      fromStrictMode(MBB, Before, SavedNonStrictReg, State);
-      LIS->createAndComputeVirtRegInterval(SavedNonStrictReg);
-      SavedNonStrictReg = Register();
-      State = 0;
+
+      if (State & StateStrict) {
+        fromStrictMode(MBB, Before, SavedNonStrictReg, State);
+        LIS->createAndComputeVirtRegInterval(SavedNonStrictReg);
+        SavedNonStrictReg = Register();
+        State = 0;
+      }
+
+      if (Needs & StateStrict) {
+        SavedNonStrictReg = MRI->createVirtualRegister(BoolRC);
+        toStrictMode(MBB, Before, SavedNonStrictReg, Needs);
+        State = Needs;
+      }
     }
 
-    // Transition: enter strict if needed
-    if ((Needs & StateStrict) && !(State & StateStrict)) {
-      MachineBasicBlock::iterator Before =
-          prepareInsertion(MBB, FirstStrict, II, false, true);
-      SavedNonStrictReg = MRI->createVirtualRegister(BoolRC);
-      toStrictMode(MBB, Before, SavedNonStrictReg, Needs);
-      State = Needs;
-    }
-
-    // Always reset FirstStrict so that the next iteration tracks the correct
-    // earliest safe insertion point. Without this, FirstStrict can get stuck
-    // at a non-strict instruction earlier in the block, causing
-    // ENTER_STRICT_WWM to be placed too early (pulling non-strict instructions
-    // like alloca computations into the WWM region, increasing register
-    // pressure and scratch usage). This also covers the exit-then-enter case
-    // (e.g. switching from StrictWWM to StrictWQM): the conditional reset at
-    // the top of the loop (FirstStrict = II when FirstStrict == IE) ensures
-    // the re-entry uses the correct insertion point.
-    FirstStrict = IE;
+    // Reset FirstStrict for EXEC-dependent instructions to prevent
+    // accumulation past instructions that are affected by EXEC changes.
+    // Preserve FirstStrict for EXEC-independent instructions (SGPR-only,
+    // meta) to give prepareInsertion a wider [FirstStrict, II] range for
+    // finding SCC-dead insertion points, matching SIWholeQuadMode's design.
+    if (!IsExecIndependent)
+      FirstStrict = IE;
 
     if (II == IE)
       break;

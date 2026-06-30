@@ -3008,6 +3008,8 @@ define amdgpu_ps float @test_strict_wqm_strict_wwm_wqm(i32 inreg %idx0, i32 inre
 ; GFX9-W64-NEXT:    s_mov_b32 s22, s4
 ; GFX9-W64-NEXT:    s_mov_b32 s21, s3
 ; GFX9-W64-NEXT:    s_mov_b32 s20, s2
+; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
+; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    s_mov_b32 s27, s9
 ; GFX9-W64-NEXT:    s_mov_b32 s26, s8
 ; GFX9-W64-NEXT:    s_mov_b32 s25, s7
@@ -3019,8 +3021,6 @@ define amdgpu_ps float @test_strict_wqm_strict_wwm_wqm(i32 inreg %idx0, i32 inre
 ; GFX9-W64-NEXT:    s_mov_b32 s14, s12
 ; GFX9-W64-NEXT:    s_mov_b32 s13, s11
 ; GFX9-W64-NEXT:    s_mov_b32 s12, s10
-; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
-; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    buffer_store_dword v0, v1, s[20:23], 0 idxen
@@ -3055,6 +3055,8 @@ define amdgpu_ps float @test_strict_wqm_strict_wwm_wqm(i32 inreg %idx0, i32 inre
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s28, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 s19, s17
+; GFX10-W32-NEXT:    s_mov_b32 s29, exec_lo
+; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 s23, s5
 ; GFX10-W32-NEXT:    s_mov_b32 s22, s4
 ; GFX10-W32-NEXT:    s_mov_b32 s21, s3
@@ -3070,10 +3072,8 @@ define amdgpu_ps float @test_strict_wqm_strict_wwm_wqm(i32 inreg %idx0, i32 inre
 ; GFX10-W32-NEXT:    s_mov_b32 s14, s12
 ; GFX10-W32-NEXT:    s_mov_b32 s13, s11
 ; GFX10-W32-NEXT:    s_mov_b32 s12, s10
-; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
-; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s29
 ; GFX10-W32-NEXT:    buffer_store_dword v0, v1, s[20:23], 0 idxen
 ; GFX10-W32-NEXT:    s_mov_b32 s1, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
@@ -3127,6 +3127,8 @@ define amdgpu_ps float @test_strict_wwm_strict_wqm_wqm(i32 inreg %idx0, i32 inre
 ; GFX9-W64-NEXT:    s_mov_b32 s18, s4
 ; GFX9-W64-NEXT:    s_mov_b32 s17, s3
 ; GFX9-W64-NEXT:    s_mov_b32 s16, s2
+; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
+; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    s_mov_b32 s14, s12
 ; GFX9-W64-NEXT:    s_mov_b32 s13, s11
 ; GFX9-W64-NEXT:    s_mov_b32 s12, s10
@@ -3134,8 +3136,6 @@ define amdgpu_ps float @test_strict_wwm_strict_wqm_wqm(i32 inreg %idx0, i32 inre
 ; GFX9-W64-NEXT:    s_mov_b32 s10, s8
 ; GFX9-W64-NEXT:    s_mov_b32 s9, s7
 ; GFX9-W64-NEXT:    s_mov_b32 s8, s6
-; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
-; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    buffer_store_dword v0, v1, s[16:19], 0 idxen
@@ -3146,9 +3146,9 @@ define amdgpu_ps float @test_strict_wwm_strict_wqm_wqm(i32 inreg %idx0, i32 inre
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    buffer_load_dword v4, v1, s[16:19], 0 idxen
-; GFX9-W64-NEXT:    ; kill: killed $vgpr2
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
+; GFX9-W64-NEXT:    ; kill: killed $vgpr2
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-W64-NEXT:    v_add_f32_e32 v2, v3, v3
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
@@ -3170,6 +3170,8 @@ define amdgpu_ps float @test_strict_wwm_strict_wqm_wqm(i32 inreg %idx0, i32 inre
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s20, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 s15, s13
+; GFX10-W32-NEXT:    s_mov_b32 s21, exec_lo
+; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 s19, s5
 ; GFX10-W32-NEXT:    s_mov_b32 s18, s4
 ; GFX10-W32-NEXT:    s_mov_b32 s17, s3
@@ -3181,10 +3183,8 @@ define amdgpu_ps float @test_strict_wwm_strict_wqm_wqm(i32 inreg %idx0, i32 inre
 ; GFX10-W32-NEXT:    s_mov_b32 s10, s8
 ; GFX10-W32-NEXT:    s_mov_b32 s9, s7
 ; GFX10-W32-NEXT:    s_mov_b32 s8, s6
-; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
-; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s21
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
@@ -3240,6 +3240,8 @@ define amdgpu_ps float @test_wqm_strict_wqm_wqm(i32 inreg %idx0, i32 inreg %idx1
 ; GFX9-W64-NEXT:    s_mov_b32 s18, s4
 ; GFX9-W64-NEXT:    s_mov_b32 s17, s3
 ; GFX9-W64-NEXT:    s_mov_b32 s16, s2
+; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
+; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    s_mov_b32 s14, s12
 ; GFX9-W64-NEXT:    s_mov_b32 s13, s11
 ; GFX9-W64-NEXT:    s_mov_b32 s12, s10
@@ -3247,8 +3249,6 @@ define amdgpu_ps float @test_wqm_strict_wqm_wqm(i32 inreg %idx0, i32 inreg %idx1
 ; GFX9-W64-NEXT:    s_mov_b32 s10, s8
 ; GFX9-W64-NEXT:    s_mov_b32 s9, s7
 ; GFX9-W64-NEXT:    s_mov_b32 s8, s6
-; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
-; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    buffer_store_dword v0, v1, s[16:19], 0 idxen
@@ -3277,6 +3277,8 @@ define amdgpu_ps float @test_wqm_strict_wqm_wqm(i32 inreg %idx0, i32 inreg %idx1
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s20, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 s15, s13
+; GFX10-W32-NEXT:    s_mov_b32 s21, exec_lo
+; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 s19, s5
 ; GFX10-W32-NEXT:    s_mov_b32 s18, s4
 ; GFX10-W32-NEXT:    s_mov_b32 s17, s3
@@ -3288,10 +3290,8 @@ define amdgpu_ps float @test_wqm_strict_wqm_wqm(i32 inreg %idx0, i32 inreg %idx1
 ; GFX10-W32-NEXT:    s_mov_b32 s10, s8
 ; GFX10-W32-NEXT:    s_mov_b32 s9, s7
 ; GFX10-W32-NEXT:    s_mov_b32 s8, s6
-; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
-; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s21
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v3, s1
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s20

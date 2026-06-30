@@ -686,14 +686,14 @@ define amdgpu_cs_chain void @chain_to_chain_wwm(<3 x i32> inreg %a, <3 x i32> %b
 ; DAGISEL-GFX11-LABEL: chain_to_chain_wwm:
 ; DAGISEL-GFX11:       ; %bb.0:
 ; DAGISEL-GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; DAGISEL-GFX11-NEXT:    s_or_saveexec_b32 s4, -1
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s3, s0
-; DAGISEL-GFX11-NEXT:    s_or_saveexec_b32 s0, -1
-; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
-; DAGISEL-GFX11-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s0
-; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; DAGISEL-GFX11-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s4
+; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, s4
 ; DAGISEL-GFX11-NEXT:    ;;#ASMSTART
 ; DAGISEL-GFX11-NEXT:    s_nop
 ; DAGISEL-GFX11-NEXT:    ;;#ASMEND
+; DAGISEL-GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL-GFX11-NEXT:    v_mov_b32_e32 v8, v1
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s4, chain_callee@abs32@lo
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s5, chain_callee@abs32@hi
@@ -704,10 +704,10 @@ define amdgpu_cs_chain void @chain_to_chain_wwm(<3 x i32> inreg %a, <3 x i32> %b
 ; DAGISEL-GFX10-LABEL: chain_to_chain_wwm:
 ; DAGISEL-GFX10:       ; %bb.0:
 ; DAGISEL-GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; DAGISEL-GFX10-NEXT:    s_or_saveexec_b32 s4, -1
 ; DAGISEL-GFX10-NEXT:    s_mov_b32 s3, s0
-; DAGISEL-GFX10-NEXT:    s_or_saveexec_b32 s0, -1
-; DAGISEL-GFX10-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s0
-; DAGISEL-GFX10-NEXT:    s_mov_b32 exec_lo, s0
+; DAGISEL-GFX10-NEXT:    v_cndmask_b32_e64 v1, 4, 3, s4
+; DAGISEL-GFX10-NEXT:    s_mov_b32 exec_lo, s4
 ; DAGISEL-GFX10-NEXT:    ;;#ASMSTART
 ; DAGISEL-GFX10-NEXT:    s_nop
 ; DAGISEL-GFX10-NEXT:    ;;#ASMEND
