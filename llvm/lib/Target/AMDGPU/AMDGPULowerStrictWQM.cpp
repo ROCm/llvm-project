@@ -638,10 +638,6 @@ void AMDGPULowerStrictWQM::processBlock(MachineBasicBlock &MBB, BlockInfo &BI) {
       LIS->createAndComputeVirtRegInterval(SavedNonStrictReg);
       SavedNonStrictReg = Register();
       State = 0;
-      // Reset FirstStrict to current instruction so that a subsequent
-      // re-entry into a different strict mode in the same iteration
-      // passes a valid iterator to prepareInsertion (not MBB.end()).
-      FirstStrict = II;
     }
 
     // Transition: enter strict if needed
@@ -651,7 +647,6 @@ void AMDGPULowerStrictWQM::processBlock(MachineBasicBlock &MBB, BlockInfo &BI) {
       SavedNonStrictReg = MRI->createVirtualRegister(BoolRC);
       toStrictMode(MBB, Before, SavedNonStrictReg, Needs);
       State = Needs;
-      FirstStrict = IE;
     }
 
     // Always reset FirstStrict so that the next iteration tracks the correct
@@ -659,7 +654,10 @@ void AMDGPULowerStrictWQM::processBlock(MachineBasicBlock &MBB, BlockInfo &BI) {
     // at a non-strict instruction earlier in the block, causing
     // ENTER_STRICT_WWM to be placed too early (pulling non-strict instructions
     // like alloca computations into the WWM region, increasing register
-    // pressure and scratch usage).
+    // pressure and scratch usage). This also covers the exit-then-enter case
+    // (e.g. switching from StrictWWM to StrictWQM): the conditional reset at
+    // the top of the loop (FirstStrict = II when FirstStrict == IE) ensures
+    // the re-entry uses the correct insertion point.
     FirstStrict = IE;
 
     if (II == IE)
