@@ -17,10 +17,6 @@ class AMDGPULowerWQMOperationsPass
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
-
-  MachineFunctionProperties getClearedProperties() const {
-    return MachineFunctionProperties().setIsSSA();
-  }
 };
 } // namespace llvm
 

@@ -210,10 +210,6 @@ public:
     AU.addPreserved<MachinePostDominatorTreeWrapperPass>();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
-
-  MachineFunctionProperties getClearedProperties() const override {
-    return MachineFunctionProperties().setIsSSA();
-  }
 };
 } // end anonymous namespace
 
@@ -1525,8 +1521,6 @@ bool AMDGPULowerWQMOperationsLegacy::runOnMachineFunction(MachineFunction &MF) {
 PreservedAnalyses
 AMDGPULowerWQMOperationsPass::run(MachineFunction &MF,
                                   MachineFunctionAnalysisManager &MFAM) {
-  MFPropsModifier _(*this, MF);
-
   LiveIntervals *LIS = &MFAM.getResult<LiveIntervalsAnalysis>(MF);
   MachineDominatorTree *MDT = &MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
   MachinePostDominatorTree *PDT =
