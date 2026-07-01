@@ -597,9 +597,23 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   std::vector<Trampoline> Growth = Deferred;
   if (!Deferred.empty()) {
     if (!fixupTrampolineBranches(Deferred, Text, Elf.textSize(), LS)) {
-      log() << "hotswap: error: trampoline branch fixup failed; aborting "
-               "rewrite\n";
-      return AMD_COMGR_STATUS_ERROR;
+      // A trampoline branch could not be encoded, so the local `Buf` copy
+      // is half-redirected; shipping it would run corrupted code. Fall back
+      // to the pristine input object (`ElfData`, untouched) so the loader
+      // runs the original unpatched code instead.
+      log() << "hotswap: error: some trampolines could not be fixed up; "
+            << "falling back to the original (unpatched) code object\n";
+      std::unique_ptr<WritableMemoryBuffer> Orig =
+          WritableMemoryBuffer::getNewUninitMemBuffer(ElfSize);
+      if (!Orig) {
+        log() << "hotswap: error: retargetCodeObject: "
+              << "getNewUninitMemBuffer(" << ElfSize
+              << ") failed (out of memory) for the fallback copy.\n";
+        return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+      }
+      std::memcpy(Orig->getBufferStart(), ElfData, ElfSize);
+      Out = std::move(Orig);
+      return AMD_COMGR_STATUS_SUCCESS;
     }
     Growth = Deferred;
   }

@@ -447,7 +447,12 @@ struct ScratchAlloc {
 
 std::optional<ScratchAlloc> tryAllocScratchVgpr(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
-  std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
+  // findKernelAtOffset matches against symbol virtual addresses, so bias the
+  // .text-relative DI.Offset by textAddr() (matching the other patches). A
+  // bare offset misses when .text has a non-zero sh_addr, leaving KdVgprs ==
+  // 0 and handing the allocator a live register.
+  std::string KernelName =
+      Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
   unsigned KdVgprs = 0;
   if (std::optional<unsigned> Opt =
           Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize))
@@ -762,7 +767,8 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
     // because the original data VGPR must be preserved as the store source.
     StoreScratch = tryAllocScratchVgpr(Ctx, Idx);
     if (!StoreScratch) {
-      std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
+      std::string KernelName =
+          Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
       StringRef KernelDisplay =
           KernelName.empty() ? StringRef("<unknown>") : StringRef(KernelName);
       std::optional<uint32_t> LdsSize =
