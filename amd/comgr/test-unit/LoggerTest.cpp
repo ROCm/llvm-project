@@ -197,7 +197,7 @@ TEST(Logger, ConcurrentEmitsAreNotInterleaved) {
   const int PerThread = 200;
   std::vector<std::thread> Threads;
   for (int T = 0; T < NumThreads; ++T) {
-    Threads.emplace_back([&Log]() {
+    Threads.emplace_back([&Log, PerThread]() {
       for (int I = 0; I < PerThread; ++I)
         Log.emit(1, "line");
     });
