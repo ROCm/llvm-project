@@ -347,6 +347,10 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
 // -- ElfView::findKernelAtOffset ----------------------------------------------
 
 std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
+  bool Found = false;
+  uint64_t BestValue = 0;
+  std::string BestName;
+
   for (const ELFT::Shdr &SymShdr : Sections) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
         SymShdr.sh_type != ELF::SHT_DYNSYM)
@@ -369,19 +373,26 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
         continue;
       if (Sym.st_shndx != TextSectionIndex)
         continue;
-      if (TextOffset < Sym.st_value || TextOffset >= Sym.st_value + Sym.st_size)
+      if (TextOffset < Sym.st_value)
+        continue;
+      if (Sym.st_size != 0 && TextOffset >= Sym.st_value + Sym.st_size)
+        continue;
+      if (Found && Sym.st_value <= BestValue)
         continue;
       Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
       if (!NameOrErr) {
-        log() << "hotswap: error: findKernelAtOffset: function symbol "
-              << "covering offset 0x" << utohexstr(TextOffset)
-              << " has unreadable name: " << toString(NameOrErr.takeError())
-              << "\n";
-        return "";
+        consumeError(NameOrErr.takeError());
+        continue;
       }
-      return NameOrErr->str();
+      Found = true;
+      BestValue = Sym.st_value;
+      BestName = NameOrErr->str();
     }
   }
+
+  if (Found)
+    return BestName;
+
   log() << "hotswap: findKernelAtOffset: no function symbol covers offset 0x"
         << utohexstr(TextOffset) << " in .text.\n";
   return "";

@@ -134,6 +134,35 @@ TEST(ElfView, KernelDescriptorsSkipsKdWhenFileOffsetOverflows) {
   EXPECT_EQ(ViewOrErr->findKernelDescriptor("overflow_kernel"), nullptr);
 }
 
+TEST(ElfView, FindKernelAtOffsetUsesNearestPrecedingZeroSizedFunction) {
+  using namespace llvm::ELF;
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.TextAddr = 0x4000;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  static constexpr uint64_t ShOff = sizeof(Elf64_Ehdr);
+  Elf64_Shdr SymtabSh{};
+  std::memcpy(&SymtabSh,
+              Obj.Bytes.data() + ShOff + 4 * sizeof(Elf64_Shdr),
+              sizeof(SymtabSh));
+
+  Elf64_Sym KernelSym{};
+  std::memcpy(&KernelSym,
+              Obj.Bytes.data() + SymtabSh.sh_offset + sizeof(Elf64_Sym),
+              sizeof(KernelSym));
+  KernelSym.st_size = 0;
+  std::memcpy(Obj.Bytes.data() + SymtabSh.sh_offset + sizeof(Elf64_Sym),
+              &KernelSym, sizeof(KernelSym));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->findKernelAtOffset(Opts.TextAddr + 8), Opts.KernelName);
+}
+
 TEST(ElfView, GrowWithTrampolinesShiftsAllocSectionSymbols) {
   static constexpr uint64_t GrowthBytes = 8;
 
