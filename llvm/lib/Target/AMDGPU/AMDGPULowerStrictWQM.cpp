@@ -629,8 +629,12 @@ void AMDGPULowerStrictWQM::processBlock(MachineBasicBlock &MBB, BlockInfo &BI) {
       ++Next;
     }
 
-    // Transition if the current state doesn't satisfy what's needed.
-    if (!(Needs & State)) {
+    // Transition if the current state doesn't satisfy what's needed and at
+    // least one side involves strict mode. The second condition prevents
+    // false positives when both Needs and State are 0 (non-strict instruction
+    // outside any strict region), which would otherwise trigger
+    // prepareInsertion and potentially insert dead SCC save/restore pairs.
+    if (!(Needs & State) && ((State | Needs) & StateStrict)) {
       MachineBasicBlock::iterator Before =
           prepareInsertion(MBB, FirstStrict, II, false, true);
 

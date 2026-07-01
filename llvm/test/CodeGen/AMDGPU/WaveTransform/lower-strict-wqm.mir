@@ -251,6 +251,44 @@ body:             |
 ...
 
 ---
+# Test that EXEC-reading non-strict instructions outside a strict region do
+# not trigger dead SCC save/restore pairs. V_ADD reads EXEC but its result
+# does NOT feed into STRICT_WWM, so it is NOT marked strict.
+name:            test_no_scc_save_outside_strict
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $sgpr0
+
+    ; CHECK-LABEL: name: test_no_scc_save_outside_strict
+    ; CHECK: liveins: $vgpr0, $vgpr1, $vgpr2, $sgpr0
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: [[COPY:%[0-9]+]]:sgpr_32 = COPY $sgpr0
+    ; CHECK-NEXT: [[COPY1:%[0-9]+]]:vgpr_32 = COPY $vgpr0
+    ; CHECK-NEXT: [[COPY2:%[0-9]+]]:vgpr_32 = COPY $vgpr1
+    ; CHECK-NEXT: [[ENTER_STRICT_WWM:%[0-9]+]]:sreg_64 = ENTER_STRICT_WWM -1, implicit-def $exec, implicit-def $scc, implicit $exec
+    ; CHECK-NEXT: [[COPY3:%[0-9]+]]:vgpr_32 = COPY $vgpr2
+    ; CHECK-NEXT: $exec = EXIT_STRICT_WWM [[ENTER_STRICT_WWM]]
+    ; CHECK-NEXT: S_CMP_EQ_U32 [[COPY]], 0, implicit-def $scc
+    ; CHECK-NEXT: [[V_ADD_U32_e32_:%[0-9]+]]:vgpr_32 = V_ADD_U32_e32 [[COPY1]], [[COPY1]], implicit $exec
+    ; CHECK-NEXT: [[V_ADD_U32_e32_1:%[0-9]+]]:vgpr_32 = V_ADD_U32_e32 [[COPY2]], [[COPY2]], implicit $exec
+    ; CHECK-NEXT: [[S_CSELECT_B32_:%[0-9]+]]:sgpr_32 = S_CSELECT_B32 [[COPY]], [[COPY]], implicit $scc
+    ; CHECK-NEXT: early-clobber [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 [[COPY3]], implicit $exec
+    ; CHECK-NEXT: S_ENDPGM 0, implicit [[V_ADD_U32_e32_]], implicit [[V_ADD_U32_e32_1]], implicit [[S_CSELECT_B32_]], implicit [[V_MOV_B32_e32_]]
+    %0:sgpr_32  = COPY $sgpr0
+    %10:vgpr_32 = COPY $vgpr0
+    %11:vgpr_32 = COPY $vgpr1
+    %12:vgpr_32 = COPY $vgpr2
+    S_CMP_EQ_U32 %0, 0, implicit-def $scc
+    %1:vgpr_32 = V_ADD_U32_e32 %10, %10, implicit $exec
+    %2:vgpr_32 = V_ADD_U32_e32 %11, %11, implicit $exec
+    %3:sgpr_32 = S_CSELECT_B32 %0, %0, implicit $scc
+    early-clobber %5:vgpr_32 = STRICT_WWM %12, implicit $exec
+    S_ENDPGM 0, implicit %1, implicit %2, implicit %3, implicit %5
+
+...
+
+---
 # Test that compute shaders with no strict operations are left unchanged.
 name:            test_no_strict_in_cs
 tracksRegLiveness: true
