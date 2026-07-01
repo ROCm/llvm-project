@@ -54,7 +54,9 @@ struct KernelDescriptorElfOptions {
   uint64_t TextAddr = 0x1000;
   uint64_t RodataAddr = 0x2000;
   bool EmitKernelDescriptorSymbol = true;
+  bool EmitDuplicateKernelDescriptorSymbol = false;
   std::optional<uint64_t> KernelDescriptorSymbolValue;
+  std::optional<uint64_t> DuplicateKernelDescriptorSymbolValue;
   uint32_t GroupSegmentFixedSize = 0;
   uint32_t ComputePgmRsrc3 = 0;
   std::optional<std::string> MetadataKernelName;
@@ -67,7 +69,9 @@ struct KernelDescriptorElf {
   std::vector<uint8_t> Bytes;
   uint64_t RodataAddr = 0;
   uint64_t KernelDescriptorOffset = 0;
+  uint64_t DuplicateKernelDescriptorOffset = 0;
   int64_t EntryOffset = 0;
+  int64_t DuplicateEntryOffset = 0;
 };
 
 inline std::string
@@ -156,6 +160,9 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   const bool HasMetadataNote = Options.MetadataSgprCount ||
                                Options.MetadataOmitSgprCount ||
                                Options.MetadataSgprCountAsString;
+  const bool HasDuplicateKd = Options.EmitKernelDescriptorSymbol &&
+                              Options.EmitDuplicateKernelDescriptorSymbol;
+  const uint64_t RodataBytes = KdBytes * (HasDuplicateKd ? 2 : 1);
   std::vector<uint8_t> MetadataNote;
   if (HasMetadataNote) {
     std::string MetadataBlob = makeAmdgpuMetadataBlob(Options);
@@ -163,9 +170,10 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   }
 
   const uint64_t RodataOff = alignTo8(TextOffset + Text.size());
-  const uint64_t StrTabOff = alignTo8(RodataOff + KdBytes);
+  const uint64_t StrTabOff = alignTo8(RodataOff + RodataBytes);
   const uint64_t SymTabOff = alignTo8(StrTabOff + StrTab.size());
-  const uint64_t SymCount = Options.EmitKernelDescriptorSymbol ? 3 : 2;
+  const uint64_t SymCount =
+      Options.EmitKernelDescriptorSymbol ? (HasDuplicateKd ? 4 : 3) : 2;
   const uint64_t ShStrTabOff =
       alignTo8(SymTabOff + SymCount * sizeof(Elf64_Sym));
   const uint64_t NoteOff =
@@ -180,11 +188,19 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   Result.Bytes.assign(BufSize, 0);
   Result.RodataAddr = Options.RodataAddr;
   Result.KernelDescriptorOffset = RodataOff;
+  Result.DuplicateKernelDescriptorOffset =
+      HasDuplicateKd ? RodataOff + KdBytes : 0;
   const uint64_t KernelDescriptorAddr =
       Options.KernelDescriptorSymbolValue.value_or(
           Options.ElfType == ET_REL ? 0 : Options.RodataAddr);
+  const uint64_t DuplicateKernelDescriptorAddr =
+      Options.DuplicateKernelDescriptorSymbolValue.value_or(
+          Options.ElfType == ET_REL ? KdBytes : Options.RodataAddr + KdBytes);
   Result.EntryOffset = static_cast<int64_t>(Options.TextAddr) -
                        static_cast<int64_t>(Options.RodataAddr);
+  Result.DuplicateEntryOffset =
+      static_cast<int64_t>(Options.TextAddr) -
+      static_cast<int64_t>(DuplicateKernelDescriptorAddr);
 
   uint8_t *Buf = Result.Bytes.data();
   std::memcpy(Buf + TextOffset, Text.data(), Text.size());
@@ -225,7 +241,7 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   RodataSh.sh_flags = SHF_ALLOC;
   RodataSh.sh_offset = RodataOff;
   RodataSh.sh_addr = Options.RodataAddr;
-  RodataSh.sh_size = KdBytes;
+  RodataSh.sh_size = RodataBytes;
   RodataSh.sh_addralign = 8;
   std::memcpy(Buf + ShOff + 2 * sizeof(Elf64_Shdr), &RodataSh,
               sizeof(RodataSh));
@@ -269,13 +285,27 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
       Buf + RodataOff +
           offsetof(hsa::kernel_descriptor_t, kernel_code_entry_byte_offset),
       &Result.EntryOffset, sizeof(Result.EntryOffset));
+  if (HasDuplicateKd)
+    std::memcpy(
+        Buf + Result.DuplicateKernelDescriptorOffset +
+            offsetof(hsa::kernel_descriptor_t, kernel_code_entry_byte_offset),
+        &Result.DuplicateEntryOffset, sizeof(Result.DuplicateEntryOffset));
   std::memcpy(Buf + RodataOff +
                   offsetof(hsa::kernel_descriptor_t, group_segment_fixed_size),
               &Options.GroupSegmentFixedSize,
               sizeof(Options.GroupSegmentFixedSize));
+  if (HasDuplicateKd)
+    std::memcpy(
+        Buf + Result.DuplicateKernelDescriptorOffset +
+            offsetof(hsa::kernel_descriptor_t, group_segment_fixed_size),
+        &Options.GroupSegmentFixedSize, sizeof(Options.GroupSegmentFixedSize));
   std::memcpy(Buf + RodataOff +
                   offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc3),
               &Options.ComputePgmRsrc3, sizeof(Options.ComputePgmRsrc3));
+  if (HasDuplicateKd)
+    std::memcpy(Buf + Result.DuplicateKernelDescriptorOffset +
+                    offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc3),
+                &Options.ComputePgmRsrc3, sizeof(Options.ComputePgmRsrc3));
 
   Elf64_Sym KernelSym{};
   KernelSym.st_name = KernelNameOff;
@@ -294,6 +324,16 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
     KdSym.st_value = KernelDescriptorAddr;
     KdSym.st_size = KdBytes;
     std::memcpy(Buf + SymTabOff + 2 * sizeof(Elf64_Sym), &KdSym, sizeof(KdSym));
+    if (HasDuplicateKd) {
+      Elf64_Sym DuplicateKdSym{};
+      DuplicateKdSym.st_name = KdNameOff;
+      DuplicateKdSym.setBindingAndType(STB_GLOBAL, STT_OBJECT);
+      DuplicateKdSym.st_shndx = 2;
+      DuplicateKdSym.st_value = DuplicateKernelDescriptorAddr;
+      DuplicateKdSym.st_size = KdBytes;
+      std::memcpy(Buf + SymTabOff + 3 * sizeof(Elf64_Sym), &DuplicateKdSym,
+                  sizeof(DuplicateKdSym));
+    }
   }
 
   return Result;

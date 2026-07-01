@@ -93,7 +93,7 @@ readSgprCountMetadataNode(const msgpack::DocNode &SgprNode,
   if (SgprNode.getKind() == msgpack::Type::UInt) {
     uint64_t SgprCount = SgprNode.getUInt();
     if (SgprCount > std::numeric_limits<unsigned>::max()) {
-      log() << "hotswap: error: " << Context << ": .sgpr_count for '"
+      log() << "hotswap: warning: " << Context << ": .sgpr_count for '"
             << KernelName << "' exceeds unsigned.\n";
       return std::nullopt;
     }
@@ -104,21 +104,145 @@ readSgprCountMetadataNode(const msgpack::DocNode &SgprNode,
     int64_t SgprCount = SgprNode.getInt();
     if (SgprCount < 0 || static_cast<uint64_t>(SgprCount) >
                              std::numeric_limits<unsigned>::max()) {
-      log() << "hotswap: error: " << Context << ": .sgpr_count for '"
+      log() << "hotswap: warning: " << Context << ": .sgpr_count for '"
             << KernelName << "' is outside unsigned range.\n";
       return std::nullopt;
     }
     return static_cast<unsigned>(SgprCount);
   }
 
-  log() << "hotswap: error: " << Context << ": .sgpr_count for '" << KernelName
-        << "' is not an integer.\n";
+  log() << "hotswap: warning: " << Context << ": .sgpr_count for '"
+        << KernelName << "' is not an integer.\n";
   return std::nullopt;
+}
+
+static std::optional<uint32_t> encodeSgprCountGranule(unsigned RequiredSgprs,
+                                                      StringRef KernelName,
+                                                      StringRef Context) {
+  if (RequiredSgprs == 0)
+    return 0;
+
+  uint64_t RequiredGranulated64 =
+      (static_cast<uint64_t>(RequiredSgprs) + SgprEncodingGranule - 1) /
+          SgprEncodingGranule -
+      1;
+  uint32_t MaxGranulated = static_cast<uint32_t>(
+      amdhsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT >>
+      amdhsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT_SHIFT);
+  if (RequiredGranulated64 > MaxGranulated) {
+    log() << "hotswap: error: " << Context << ": kernel '" << KernelName
+          << "' needs " << RequiredSgprs
+          << " SGPRs, which exceeds the descriptor encoding limit.\n";
+    return std::nullopt;
+  }
+
+  return static_cast<uint32_t>(RequiredGranulated64);
+}
+
+static std::optional<unsigned> readDescriptorSgprCount(const uint8_t *Kd,
+                                                       StringRef KernelName,
+                                                       StringRef Context) {
+  if (!Kd) {
+    log() << "hotswap: error: " << Context << ": kernel descriptor symbol '"
+          << KernelName << ".kd' not found for SGPR count fallback.\n";
+    return std::nullopt;
+  }
+
+  uint32_t Rsrc1;
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(amdhsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
+  uint32_t Granulated = AMDHSA_BITS_GET(
+      Rsrc1, amdhsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT);
+  uint64_t SgprCount =
+      (static_cast<uint64_t>(Granulated) + 1) * SgprEncodingGranule;
+  if (SgprCount > std::numeric_limits<unsigned>::max()) {
+    log() << "hotswap: error: " << Context << ": descriptor SGPR count for '"
+          << KernelName << "' exceeds unsigned.\n";
+    return std::nullopt;
+  }
+  return static_cast<unsigned>(SgprCount);
+}
+
+static void logSgprMetadataFallback(StringRef Context, StringRef KernelName,
+                                    StringRef Reason) {
+  log() << "hotswap: warning: " << Context << ": " << Reason << " for kernel '"
+        << KernelName
+        << "'; falling back to the kernel descriptor SGPR count.\n";
+}
+
+static uint8_t *
+findKernelDescriptorSymbol(const ELFFileT &File, ELFT::ShdrRange Sections,
+                           uint8_t *Data, size_t Size, StringRef KernelName,
+                           std::optional<uint64_t> VAddr, StringRef Context) {
+  std::string KdName;
+  if (!KernelName.empty())
+    KdName = (KernelName + ".kd").str();
+
+  for (const ELFT::Shdr &SymShdr : Sections) {
+    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+
+    Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
+    if (!SymsOrErr) {
+      log() << "hotswap: error: " << Context
+            << ": failed to read descriptor symbol table: "
+            << toString(SymsOrErr.takeError()) << "\n";
+      continue;
+    }
+    Expected<StringRef> StrTabOrErr =
+        File.getStringTableForSymtab(SymShdr, Sections);
+    if (!StrTabOrErr) {
+      log() << "hotswap: error: " << Context
+            << ": failed to read descriptor symbol string table: "
+            << toString(StrTabOrErr.takeError()) << "\n";
+      continue;
+    }
+
+    for (const ELFT::Sym &Sym : *SymsOrErr) {
+      Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
+      if (!NameOrErr) {
+        log() << "hotswap: error: " << Context
+              << ": failed to read descriptor symbol name: "
+              << toString(NameOrErr.takeError()) << "\n";
+        continue;
+      }
+
+      if (KernelName.empty()) {
+        if (!NameOrErr->ends_with(".kd"))
+          continue;
+      } else if (*NameOrErr != KdName) {
+        continue;
+      }
+
+      if (VAddr && Sym.st_value != *VAddr)
+        continue;
+
+      unsigned Shndx = Sym.st_shndx;
+      Expected<const ELFT::Shdr *> HostShdrOrErr = File.getSection(Shndx);
+      if (!HostShdrOrErr) {
+        log() << "hotswap: error: " << Context << ": descriptor symbol '"
+              << *NameOrErr << "' has unreadable section index " << Shndx
+              << ": " << toString(HostShdrOrErr.takeError()) << "\n";
+        continue;
+      }
+      const ELFT::Shdr &HostShdr = **HostShdrOrErr;
+      std::optional<uint64_t> FileOffset = checkedSectionFileOffset(
+          HostShdr, Sym.st_value, KdSize, Size,
+          (Twine(Context) + ": descriptor symbol '" + *NameOrErr + "'").str());
+      if (!FileOffset)
+        continue;
+      return Data + *FileOffset;
+    }
+  }
+  return nullptr;
 }
 
 static MetadataSgprUpdateStatus
 updateKernelMetadataSgprCount(uint8_t *Elf, const ELFFileT &File,
-                              StringRef KernelName, unsigned RequiredSgprs) {
+                              StringRef KernelName, unsigned RequiredSgprs,
+                              unsigned &EffectiveSgprs) {
   Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
   if (!PhdrsOrErr) {
     log() << "hotswap: error: updateKernelMetadataSgprCount: failed to read "
@@ -179,19 +303,22 @@ updateKernelMetadataSgprCount(uint8_t *Elf, const ELFFileT &File,
 
         msgpack::DocNode::MapTy::iterator SgprIt = KMap.find(".sgpr_count");
         if (SgprIt == KMap.end()) {
-          log() << "hotswap: error: updateKernelMetadataSgprCount: metadata "
-                << "for kernel '" << KernelName << "' has no .sgpr_count.\n";
-          return MetadataSgprUpdateStatus::Error;
+          logSgprMetadataFallback("updateKernelMetadataSgprCount", KernelName,
+                                  "metadata has no .sgpr_count");
+          return MetadataSgprUpdateStatus::NotFound;
         }
 
         std::optional<unsigned> CurrentSgprs = readSgprCountMetadataNode(
             SgprIt->second, KernelName, "updateKernelMetadataSgprCount");
         if (!CurrentSgprs)
-          return MetadataSgprUpdateStatus::Error;
-        if (RequiredSgprs <= *CurrentSgprs)
+          return MetadataSgprUpdateStatus::NotFound;
+        if (RequiredSgprs <= *CurrentSgprs) {
+          EffectiveSgprs = *CurrentSgprs;
           return MetadataSgprUpdateStatus::Found;
+        }
 
         SgprIt->second = static_cast<uint64_t>(RequiredSgprs);
+        EffectiveSgprs = RequiredSgprs;
         std::string NewBlob;
         Doc.writeToBlob(NewBlob);
         if (NewBlob.size() != Blob.size()) {
@@ -229,9 +356,9 @@ updateKernelMetadataSgprCount(uint8_t *Elf, const ELFFileT &File,
   }
 
   if (SawMetadataNote) {
-    log() << "hotswap: error: updateKernelMetadataSgprCount: AMDGPU metadata "
-          << "has no entry for kernel '" << KernelName << "'.\n";
-    return MetadataSgprUpdateStatus::Error;
+    logSgprMetadataFallback("updateKernelMetadataSgprCount", KernelName,
+                            "AMDGPU metadata has no matching entry");
+    return MetadataSgprUpdateStatus::NotFound;
   }
   return MetadataSgprUpdateStatus::NotFound;
 }
@@ -379,50 +506,14 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
 // -- ElfView::findKernelDescriptor --------------------------------------------
 
 uint8_t *ElfView::findKernelDescriptor(StringRef KernelName) {
-  std::string KdName = (KernelName + ".kd").str();
-  for (const ELFT::Shdr &SymShdr : Sections) {
-    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
-        SymShdr.sh_type != ELF::SHT_DYNSYM)
-      continue;
+  return findKernelDescriptorSymbol(File, Sections, data(), size(), KernelName,
+                                    std::nullopt, "findKernelDescriptor");
+}
 
-    Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
-    if (!SymsOrErr) {
-      consumeError(SymsOrErr.takeError());
-      continue;
-    }
-    Expected<StringRef> StrTabOrErr =
-        File.getStringTableForSymtab(SymShdr, Sections);
-    if (!StrTabOrErr) {
-      consumeError(StrTabOrErr.takeError());
-      continue;
-    }
-
-    for (const ELFT::Sym &Sym : *SymsOrErr) {
-      Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
-      if (!NameOrErr) {
-        consumeError(NameOrErr.takeError());
-        continue;
-      }
-      if (*NameOrErr != KdName)
-        continue;
-      unsigned Shndx = Sym.st_shndx;
-      Expected<const ELFT::Shdr *> HostShdrOrErr = File.getSection(Shndx);
-      if (!HostShdrOrErr) {
-        consumeError(HostShdrOrErr.takeError());
-        continue;
-      }
-      const ELFT::Shdr &HostShdr = **HostShdrOrErr;
-      std::optional<uint64_t> FileOffset = checkedSectionFileOffset(
-          HostShdr, Sym.st_value, KdSize, size(),
-          (Twine("findKernelDescriptor: descriptor symbol '") + *NameOrErr +
-           "'")
-              .str());
-      if (!FileOffset)
-        continue;
-      return data() + *FileOffset;
-    }
-  }
-  return nullptr;
+uint8_t *ElfView::findKernelDescriptorByVAddr(uint64_t DescriptorVAddr) {
+  return findKernelDescriptorSymbol(File, Sections, data(), size(), "",
+                                    DescriptorVAddr,
+                                    "findKernelDescriptorByVAddr");
 }
 
 // -- ElfView::kernelDescriptors -----------------------------------------------
@@ -507,11 +598,30 @@ ElfView::getKernelDescriptorVAddr(StringRef KernelName) const {
 
 bool ElfView::updateKernelDescriptorEntryOffset(StringRef KernelName,
                                                 int64_t NewEntryOffset) {
-  namespace hsa = amdhsa;
   uint8_t *Kd = findKernelDescriptor(KernelName);
   if (!Kd) {
     log() << "hotswap: error: updateKernelDescriptorEntryOffset: kernel "
           << "descriptor symbol '" << KernelName << ".kd' not found.\n";
+    return false;
+  }
+  namespace hsa = amdhsa;
+  std::memcpy(
+      Kd + offsetof(hsa::kernel_descriptor_t, kernel_code_entry_byte_offset),
+      &NewEntryOffset, sizeof(NewEntryOffset));
+  return true;
+}
+
+bool ElfView::updateKernelDescriptorEntryOffset(uint64_t DescriptorVAddr,
+                                                StringRef KernelName,
+                                                int64_t NewEntryOffset) {
+  namespace hsa = amdhsa;
+  uint8_t *Kd = findKernelDescriptorSymbol(File, Sections, data(), size(),
+                                           KernelName, DescriptorVAddr,
+                                           "updateKernelDescriptorEntryOffset");
+  if (!Kd) {
+    log() << "hotswap: error: updateKernelDescriptorEntryOffset: kernel "
+          << "descriptor symbol '" << KernelName << ".kd' at vaddr 0x"
+          << utohexstr(DescriptorVAddr) << " not found.\n";
     return false;
   }
   std::memcpy(
@@ -522,55 +632,56 @@ bool ElfView::updateKernelDescriptorEntryOffset(StringRef KernelName,
 
 bool ElfView::updateKernelDescriptorSgprCount(StringRef KernelName,
                                               unsigned RequiredSgprs) {
-  namespace hsa = amdhsa;
-  if (RequiredSgprs == 0)
-    return true;
-
-  uint8_t *Kd = findKernelDescriptor(KernelName);
-  if (!Kd) {
+  std::optional<uint64_t> DescriptorVAddr =
+      getKernelDescriptorVAddr(KernelName);
+  if (!DescriptorVAddr) {
     log() << "hotswap: error: updateKernelDescriptorSgprCount: kernel "
           << "descriptor symbol '" << KernelName << ".kd' not found.\n";
     return false;
   }
 
-  uint32_t Rsrc1 = 0;
-  std::memcpy(&Rsrc1,
-              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
-              sizeof(Rsrc1));
+  return updateKernelDescriptorSgprCount(*DescriptorVAddr, KernelName,
+                                         RequiredSgprs);
+}
 
-  uint32_t CurrentGranulated = AMDHSA_BITS_GET(
-      Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT);
-  uint64_t CurrentSgprs =
-      (static_cast<uint64_t>(CurrentGranulated) + 1) * SgprEncodingGranule;
+bool ElfView::updateKernelDescriptorSgprCount(uint64_t DescriptorVAddr,
+                                              StringRef KernelName,
+                                              unsigned RequiredSgprs) {
+  namespace hsa = amdhsa;
+  if (RequiredSgprs == 0)
+    return true;
 
-  std::optional<uint32_t> RequiredGranulated;
-  if (RequiredSgprs > CurrentSgprs) {
-    uint64_t RequiredGranulated64 =
-        (static_cast<uint64_t>(RequiredSgprs) + SgprEncodingGranule - 1) /
-            SgprEncodingGranule -
-        1;
-    uint32_t MaxGranulated = static_cast<uint32_t>(
-        hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT >>
-        hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT_SHIFT);
-    if (RequiredGranulated64 > MaxGranulated) {
-      log() << "hotswap: error: updateKernelDescriptorSgprCount: kernel '"
-            << KernelName << "' needs " << RequiredSgprs
-            << " SGPRs, which exceeds the descriptor encoding limit.\n";
-      return false;
-    }
-    RequiredGranulated = static_cast<uint32_t>(RequiredGranulated64);
+  if (!encodeSgprCountGranule(RequiredSgprs, KernelName,
+                              "updateKernelDescriptorSgprCount"))
+    return false;
+
+  uint8_t *Kd = findKernelDescriptorSymbol(File, Sections, data(), size(),
+                                           KernelName, DescriptorVAddr,
+                                           "updateKernelDescriptorSgprCount");
+  if (!Kd) {
+    log() << "hotswap: error: updateKernelDescriptorSgprCount: kernel "
+          << "descriptor symbol '" << KernelName << ".kd' at vaddr 0x"
+          << utohexstr(DescriptorVAddr) << " not found.\n";
+    return false;
   }
 
-  MetadataSgprUpdateStatus MetadataStatus =
-      updateKernelMetadataSgprCount(data(), File, KernelName, RequiredSgprs);
+  unsigned EffectiveSgprs = RequiredSgprs;
+  MetadataSgprUpdateStatus MetadataStatus = updateKernelMetadataSgprCount(
+      data(), File, KernelName, RequiredSgprs, EffectiveSgprs);
   if (MetadataStatus == MetadataSgprUpdateStatus::Error)
     return false;
   // NotFound is allowed for minimal code objects without AMDGPU metadata; in
   // that case the descriptor field remains the only SGPR count to update.
 
+  std::optional<uint32_t> RequiredGranulated = encodeSgprCountGranule(
+      EffectiveSgprs, KernelName, "updateKernelDescriptorSgprCount");
   if (!RequiredGranulated)
-    return true;
+    return false;
 
+  uint32_t Rsrc1 = 0;
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
   AMDHSA_BITS_SET(Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT,
                   *RequiredGranulated);
   std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
@@ -732,12 +843,20 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
 
           msgpack::DocNode::MapTy::iterator SgprIt = KMap.find(".sgpr_count");
           if (SgprIt == KMap.end()) {
-            log() << "hotswap: error: getKernelSgprCount: metadata for kernel '"
-                  << KernelName << "' has no .sgpr_count.\n";
-            return std::nullopt;
-          }
-          return readSgprCountMetadataNode(SgprIt->second, KernelName,
+            logSgprMetadataFallback("getKernelSgprCount", KernelName,
+                                    "metadata has no .sgpr_count");
+            uint8_t *Kd =
+                const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+            return readDescriptorSgprCount(Kd, KernelName,
                                            "getKernelSgprCount");
+          }
+          std::optional<unsigned> MetadataSgprs = readSgprCountMetadataNode(
+              SgprIt->second, KernelName, "getKernelSgprCount");
+          if (MetadataSgprs)
+            return MetadataSgprs;
+          uint8_t *Kd =
+              const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+          return readDescriptorSgprCount(Kd, KernelName, "getKernelSgprCount");
         }
       }
       if (Err) {
@@ -753,33 +872,18 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
   }
 
   if (SawMetadataNote) {
-    log() << "hotswap: error: getKernelSgprCount: AMDGPU metadata has no "
-          << ".sgpr_count entry for kernel '" << KernelName << "'.\n";
-    return std::nullopt;
+    logSgprMetadataFallback("getKernelSgprCount", KernelName,
+                            "AMDGPU metadata has no matching .sgpr_count");
+    uint8_t *Kd = const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+    return readDescriptorSgprCount(Kd, KernelName, "getKernelSgprCount");
   }
 
   // --- Fallback: read the KD field. ---
   // The LLVM assembler populates GRANULATED_WAVEFRONT_SGPR_COUNT even on
   // GFX10+ where the hardware ignores it, so this is still usable for
   // ROCm-compiled code objects that lack a metadata note.
-  namespace hsa = amdhsa;
   uint8_t *Kd = const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
-  if (!Kd)
-    return std::nullopt;
-  uint32_t Rsrc1;
-  std::memcpy(&Rsrc1,
-              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
-              sizeof(Rsrc1));
-  uint32_t Granulated = AMDHSA_BITS_GET(
-      Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT);
-  uint64_t SgprCount =
-      (static_cast<uint64_t>(Granulated) + 1) * SgprEncodingGranule;
-  if (SgprCount > std::numeric_limits<unsigned>::max()) {
-    log() << "hotswap: error: getKernelSgprCount: descriptor SGPR count for '"
-          << KernelName << "' exceeds unsigned.\n";
-    return std::nullopt;
-  }
-  return static_cast<unsigned>(SgprCount);
+  return readDescriptorSgprCount(Kd, KernelName, "getKernelSgprCount");
 }
 
 // -- ElfView::updateKernelDescriptor ------------------------------------------
@@ -820,14 +924,18 @@ void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
 // -- Section/program header adjustment for trampoline growth ------------------
 
 static bool adjustSectionHeaders(uint8_t *Elf, size_t ElfSize,
-                                 uint64_t TextOffset, uint64_t TextSize,
-                                 size_t TrampTotal) {
+                                 uint64_t TextOffset, uint64_t TextAddr,
+                                 uint64_t TextSize, size_t TrampTotal) {
   if (ElfSize < sizeof(Ehdr))
     return true;
 
   std::optional<uint64_t> TextEnd =
       checkedAddUint64(TextOffset, TextSize, "section header .text end");
   if (!TextEnd)
+    return false;
+  std::optional<uint64_t> TextEndAddr =
+      checkedAddUint64(TextAddr, TextSize, "section header .text vaddr end");
+  if (!TextEndAddr)
     return false;
   uint64_t Shoff;
   uint16_t Shentsize;
@@ -860,6 +968,8 @@ static bool adjustSectionHeaders(uint8_t *Elf, size_t ElfSize,
     uint8_t *Sh = Elf + *ShPos;
     uint64_t ShOffset;
     std::memcpy(&ShOffset, Sh + offsetof(Shdr, sh_offset), sizeof(ShOffset));
+    uint64_t ShFlags;
+    std::memcpy(&ShFlags, Sh + offsetof(Shdr, sh_flags), sizeof(ShFlags));
 
     if (ShOffset == TextOffset) {
       std::optional<uint64_t> NewTextSize =
@@ -877,11 +987,12 @@ static bool adjustSectionHeaders(uint8_t *Elf, size_t ElfSize,
       uint64_t NewOffsetValue = *NewOffset;
       std::memcpy(Sh + offsetof(Shdr, sh_offset), &NewOffsetValue,
                   sizeof(NewOffsetValue));
-      uint64_t ShFlags;
-      std::memcpy(&ShFlags, Sh + offsetof(Shdr, sh_flags), sizeof(ShFlags));
-      if (ShFlags & ELF::SHF_ALLOC) {
-        uint64_t ShAddr;
-        std::memcpy(&ShAddr, Sh + offsetof(Shdr, sh_addr), sizeof(ShAddr));
+    }
+
+    if (ShOffset != TextOffset && (ShFlags & ELF::SHF_ALLOC)) {
+      uint64_t ShAddr;
+      std::memcpy(&ShAddr, Sh + offsetof(Shdr, sh_addr), sizeof(ShAddr));
+      if (ShAddr >= *TextEndAddr) {
         std::optional<uint64_t> NewAddr =
             checkedAddUint64(ShAddr, TrampTotal, "post-.text section address");
         if (!NewAddr)
@@ -895,14 +1006,18 @@ static bool adjustSectionHeaders(uint8_t *Elf, size_t ElfSize,
 }
 
 static bool adjustProgramHeaders(uint8_t *Elf, size_t ElfSize,
-                                 uint64_t TextOffset, uint64_t TextSize,
-                                 size_t TrampTotal) {
+                                 uint64_t TextOffset, uint64_t TextAddr,
+                                 uint64_t TextSize, size_t TrampTotal) {
   if (ElfSize < sizeof(Ehdr))
     return true;
 
   std::optional<uint64_t> TextEnd =
       checkedAddUint64(TextOffset, TextSize, "program header .text end");
   if (!TextEnd)
+    return false;
+  std::optional<uint64_t> TextEndAddr =
+      checkedAddUint64(TextAddr, TextSize, "program header .text vaddr end");
+  if (!TextEndAddr)
     return false;
   uint64_t Phoff;
   uint16_t Phentsize;
@@ -925,42 +1040,60 @@ static bool adjustProgramHeaders(uint8_t *Elf, size_t ElfSize,
     uint64_t POffset;
     uint64_t PFilesz;
     uint64_t PMemsz;
+    uint64_t PVaddr;
+    uint64_t PPaddr;
     std::memcpy(&POffset, Ph + offsetof(Phdr, p_offset), sizeof(POffset));
     std::memcpy(&PFilesz, Ph + offsetof(Phdr, p_filesz), sizeof(PFilesz));
     std::memcpy(&PMemsz, Ph + offsetof(Phdr, p_memsz), sizeof(PMemsz));
+    std::memcpy(&PVaddr, Ph + offsetof(Phdr, p_vaddr), sizeof(PVaddr));
+    std::memcpy(&PPaddr, Ph + offsetof(Phdr, p_paddr), sizeof(PPaddr));
 
     std::optional<uint64_t> PEnd =
         checkedAddUint64(POffset, PFilesz, "program header file end");
     if (!PEnd)
       return false;
-    if (POffset <= TextOffset && *PEnd >= *TextEnd) {
+    std::optional<uint64_t> PVaddrEnd =
+        checkedAddUint64(PVaddr, PMemsz, "program header vaddr end");
+    if (!PVaddrEnd)
+      return false;
+
+    bool FileCoversText = POffset <= TextOffset && *PEnd >= *TextEnd;
+    bool VAddrCoversText = PVaddr <= TextAddr && *PVaddrEnd >= *TextEndAddr;
+    if (FileCoversText) {
       std::optional<uint64_t> NewPFilesz =
           checkedAddUint64(PFilesz, TrampTotal, "program header file size");
-      std::optional<uint64_t> NewPMemsz =
-          checkedAddUint64(PMemsz, TrampTotal, "program header memory size");
-      if (!NewPFilesz || !NewPMemsz)
+      if (!NewPFilesz)
         return false;
       PFilesz = *NewPFilesz;
-      PMemsz = *NewPMemsz;
       std::memcpy(Ph + offsetof(Phdr, p_filesz), &PFilesz, sizeof(PFilesz));
+    }
+    if (VAddrCoversText) {
+      std::optional<uint64_t> NewPMemsz =
+          checkedAddUint64(PMemsz, TrampTotal, "program header memory size");
+      if (!NewPMemsz)
+        return false;
+      PMemsz = *NewPMemsz;
       std::memcpy(Ph + offsetof(Phdr, p_memsz), &PMemsz, sizeof(PMemsz));
-    } else if (POffset > TextOffset) {
+    }
+
+    if (POffset > TextOffset) {
       std::optional<uint64_t> NewPOffset =
           checkedAddUint64(POffset, TrampTotal, "post-.text program offset");
       if (!NewPOffset)
         return false;
       POffset = *NewPOffset;
       std::memcpy(Ph + offsetof(Phdr, p_offset), &POffset, sizeof(POffset));
-      uint64_t PVaddr;
-      std::memcpy(&PVaddr, Ph + offsetof(Phdr, p_vaddr), sizeof(PVaddr));
+    }
+
+    if (PVaddr >= *TextEndAddr) {
       std::optional<uint64_t> NewPVaddr =
           checkedAddUint64(PVaddr, TrampTotal, "post-.text program vaddr");
       if (!NewPVaddr)
         return false;
       PVaddr = *NewPVaddr;
       std::memcpy(Ph + offsetof(Phdr, p_vaddr), &PVaddr, sizeof(PVaddr));
-      uint64_t PPaddr;
-      std::memcpy(&PPaddr, Ph + offsetof(Phdr, p_paddr), sizeof(PPaddr));
+    }
+    if (PPaddr >= *TextEndAddr) {
       std::optional<uint64_t> NewPPaddr =
           checkedAddUint64(PPaddr, TrampTotal, "post-.text program paddr");
       if (!NewPPaddr)
@@ -972,10 +1105,15 @@ static bool adjustProgramHeaders(uint8_t *Elf, size_t ElfSize,
   return true;
 }
 
-static bool adjustSymbolValues(uint8_t *Elf, size_t ElfSize,
-                               uint64_t TextOffset, size_t TrampTotal) {
+static bool adjustSymbolValues(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
+                               uint64_t TextSize, size_t TrampTotal) {
   if (TrampTotal == 0)
     return true;
+
+  std::optional<uint64_t> TextEndAddr =
+      checkedAddUint64(TextAddr, TextSize, "symbol .text vaddr end");
+  if (!TextEndAddr)
+    return false;
 
   Expected<ELFFileT> FileOrErr =
       ELFFileT::create(StringRef(reinterpret_cast<const char *>(Elf), ElfSize));
@@ -1027,7 +1165,7 @@ static bool adjustSymbolValues(uint8_t *Elf, size_t ElfSize,
       }
       const ELFT::Shdr &DefShdr = **DefShdrOrErr;
       if (!(DefShdr.sh_flags & ELF::SHF_ALLOC) ||
-          DefShdr.sh_offset <= TextOffset)
+          DefShdr.sh_addr < *TextEndAddr)
         continue;
 
       const uint8_t *SymBytes = reinterpret_cast<const uint8_t *>(&Sym);
@@ -1140,11 +1278,12 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
   if (TextEndSize < InputSize)
     std::memcpy(Out + Pos, Input + TextEndSize, InputSize - TextEndSize);
 
-  if (!adjustSectionHeaders(Out, NewSize, textOffset(), textSize(),
+  if (!adjustSectionHeaders(Out, NewSize, textOffset(), textAddr(), textSize(),
                             PaddedTrampTotal) ||
-      !adjustProgramHeaders(Out, NewSize, textOffset(), textSize(),
+      !adjustProgramHeaders(Out, NewSize, textOffset(), textAddr(), textSize(),
                             PaddedTrampTotal) ||
-      !adjustSymbolValues(Out, NewSize, textOffset(), PaddedTrampTotal))
+      !adjustSymbolValues(Out, NewSize, textAddr(), textSize(),
+                          PaddedTrampTotal))
     return nullptr;
   log() << "hotswap: growWithTrampolines: grew ELF from " << InputSize << " to "
         << NewSize << " bytes (" << Trampolines.size() << " trampoline"

@@ -56,6 +56,72 @@ void ensureLLVMInitialized() {
 }
 } // namespace COMGR
 
+namespace {
+struct DebugPatchCapture {
+  bool Enabled = false;
+  unsigned AddSymbolsCalls = 0;
+  unsigned DebugLineCalls = 0;
+  size_t LastSymbolTrampolineCount = 0;
+  size_t LastDebugLineTrampolineCount = 0;
+  uint64_t LastRangesGrowth = 0;
+  uint64_t LastInfoGrowth = 0;
+  uint64_t LastFrameGrowth = 0;
+};
+
+DebugPatchCapture DebugCapture;
+
+static uint64_t descriptorEntryTarget(const KernelDescriptorInfo &KD) {
+  if (KD.EntryOffset >= 0)
+    return KD.VAddr + static_cast<uint64_t>(KD.EntryOffset);
+
+  uint64_t Magnitude =
+      static_cast<uint64_t>(-(KD.EntryOffset + 1)) + static_cast<uint64_t>(1);
+  return KD.VAddr - Magnitude;
+}
+} // namespace
+
+namespace COMGR {
+namespace hotswap {
+bool addTrampolineSymbols(llvm::WritableMemoryBuffer &,
+                          llvm::ArrayRef<Trampoline> Trampolines, uint64_t,
+                          unsigned) {
+  if (DebugCapture.Enabled) {
+    ++DebugCapture.AddSymbolsCalls;
+    DebugCapture.LastSymbolTrampolineCount = Trampolines.size();
+  }
+  return true;
+}
+
+bool patchDebugLine(llvm::WritableMemoryBuffer &,
+                    llvm::ArrayRef<Trampoline> Trampolines, uint64_t,
+                    uint64_t) {
+  if (DebugCapture.Enabled) {
+    ++DebugCapture.DebugLineCalls;
+    DebugCapture.LastDebugLineTrampolineCount = Trampolines.size();
+  }
+  return true;
+}
+
+void patchDebugRanges(uint8_t *, size_t, uint64_t, uint64_t,
+                      uint64_t TrampTotal) {
+  if (DebugCapture.Enabled)
+    DebugCapture.LastRangesGrowth = TrampTotal;
+}
+
+void patchDebugInfo(uint8_t *, size_t, uint64_t, uint64_t,
+                    uint64_t TrampTotal) {
+  if (DebugCapture.Enabled)
+    DebugCapture.LastInfoGrowth = TrampTotal;
+}
+
+void patchDebugFrame(uint8_t *, size_t, uint64_t, uint64_t,
+                     uint64_t TrampTotal) {
+  if (DebugCapture.Enabled)
+    DebugCapture.LastFrameGrowth = TrampTotal;
+}
+} // namespace hotswap
+} // namespace COMGR
+
 // Build a TargetIdentifier for the gfx1250 test subtarget without features --
 // production callers go through parseTargetIdentifier; here we populate
 // directly so the tests stay self-contained.
@@ -518,6 +584,98 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
   const uint64_t StubVAddr =
       ViewOrErr->textAddr() + OldTextSize + Fixups[0].StubTextOffset;
   EXPECT_EQ(KDs[0].EntryOffset, static_cast<int64_t>(StubVAddr - *KdVAddr));
+}
+
+TEST(KernelEntryTrampoline, RewritesDuplicateKernelNamesByDescriptorVAddr) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.EmitDuplicateKernelDescriptorSymbol = true;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  std::vector<KernelDescriptorInfo> InputKDs = ViewOrErr->kernelDescriptors();
+  ASSERT_EQ(InputKDs.size(), 2u);
+  EXPECT_EQ(InputKDs[0].KernelName, InputKDs[1].KernelName);
+  EXPECT_NE(InputKDs[0].VAddr, InputKDs[1].VAddr);
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count = appendKernelEntryTrampolines(
+      *ViewOrErr, S, /*MaxSgprs=*/106, Growth, Fixups);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 2u);
+  ASSERT_EQ(Fixups.size(), 2u);
+  EXPECT_NE(Fixups[0].KernelDescriptorVAddr, Fixups[1].KernelDescriptorVAddr);
+
+  uint64_t OldTextSize = ViewOrErr->textSize();
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out =
+      ViewOrErr->growWithTrampolines(Growth, S.SNopBytes);
+  ASSERT_NE(Out, nullptr);
+  ASSERT_TRUE(rewriteKernelEntryDescriptorOffsets(*Out, OldTextSize, Fixups));
+
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+  ASSERT_GE(OutView->textSize(), OldTextSize);
+  uint64_t GrowthBytes = OutView->textSize() - OldTextSize;
+
+  std::vector<KernelDescriptorInfo> OutputKDs = OutView->kernelDescriptors();
+  ASSERT_EQ(OutputKDs.size(), 2u);
+  for (const KernelEntryTrampolineFixup &Fixup : Fixups) {
+    uint64_t ExpectedKdVAddr = Fixup.KernelDescriptorVAddr + GrowthBytes;
+    uint64_t ExpectedStubVAddr =
+        ViewOrErr->textAddr() + OldTextSize + Fixup.StubTextOffset;
+    bool Found = false;
+    for (const KernelDescriptorInfo &KD : OutputKDs) {
+      if (KD.VAddr != ExpectedKdVAddr)
+        continue;
+      Found = true;
+      EXPECT_EQ(descriptorEntryTarget(KD), ExpectedStubVAddr);
+    }
+    EXPECT_TRUE(Found);
+  }
+}
+
+TEST(KernelEntryTrampoline, EntryOnlyDebugShiftUsesTotalGrowthWithoutSymbols) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+
+  DebugCapture = DebugPatchCapture();
+  DebugCapture.Enabled = true;
+
+  Gfx1250RewriteOptions Options;
+  Options.RunB0A0Patches = false;
+  Options.RunEntryTrampolines = true;
+  std::unique_ptr<llvm::MemoryBuffer> Out;
+  amd_comgr_status_t Status = retargetCodeObject(
+      Obj.Bytes.data(), Obj.Bytes.size(), makeGfx1250Ident(), Options, Out);
+
+  DebugCapture.Enabled = false;
+
+  ASSERT_EQ(Status, AMD_COMGR_STATUS_SUCCESS);
+  ASSERT_NE(Out, nullptr);
+  EXPECT_EQ(DebugCapture.AddSymbolsCalls, 1u);
+  EXPECT_EQ(DebugCapture.DebugLineCalls, 1u);
+  EXPECT_EQ(DebugCapture.LastSymbolTrampolineCount, 0u);
+  EXPECT_EQ(DebugCapture.LastDebugLineTrampolineCount, 0u);
+  EXPECT_GT(DebugCapture.LastRangesGrowth, 0u);
+  EXPECT_EQ(DebugCapture.LastInfoGrowth, DebugCapture.LastRangesGrowth);
+  EXPECT_EQ(DebugCapture.LastFrameGrowth, DebugCapture.LastRangesGrowth);
 }
 
 TEST(KernelEntryTrampoline, AlignsStubByVirtualAddress) {

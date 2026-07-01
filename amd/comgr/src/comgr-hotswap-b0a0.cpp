@@ -475,23 +475,25 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
 }
 
 /// Fix up DWARF sections of the grown ELF after trampolines have been
-/// appended: adds trampoline symbols to the symbol table, shifts
-/// .debug_line / .debug_ranges / .debug_info / .debug_frame addresses by
-/// the total trampoline footprint, and reports per-section failures via
-/// log(). Individual patchDebug* helpers are weak stubs here; concrete
+/// appended. \p SymbolTrampolines contains only B0/A0 trampolines that
+/// correspond to rewritten source instructions and therefore may get
+/// trampoline symbols / line entries. \p TextGrowthBytes is the full .text
+/// growth, including entry stubs and padding, used to shift post-.text debug
+/// addresses. Individual patchDebug* helpers are weak stubs here; concrete
 /// implementations land in separate PRs.
 static void patchDebugSections(WritableMemoryBuffer &ElfBuf,
-                               ArrayRef<Trampoline> Trampolines,
-                               const ElfView &Elf, size_t GrowthTotal) {
+                               ArrayRef<Trampoline> SymbolTrampolines,
+                               const ElfView &Elf, size_t TextGrowthBytes) {
   uint8_t *Data = reinterpret_cast<uint8_t *>(ElfBuf.getBufferStart());
   size_t Size = ElfBuf.getBufferSize();
-  if (!addTrampolineSymbols(ElfBuf, Trampolines, Elf.textSize(),
+  if (!addTrampolineSymbols(ElfBuf, SymbolTrampolines, Elf.textSize(),
                             Elf.textSectionIndex()))
     log() << "hotswap: error: addTrampolineSymbols failed\n";
-  patchDebugRanges(Data, Size, Elf.textAddr(), Elf.textSize(), GrowthTotal);
-  patchDebugInfo(Data, Size, Elf.textAddr(), Elf.textSize(), GrowthTotal);
-  patchDebugFrame(Data, Size, Elf.textAddr(), Elf.textSize(), GrowthTotal);
-  if (!patchDebugLine(ElfBuf, Trampolines, Elf.textSize(), Elf.textAddr()))
+  patchDebugRanges(Data, Size, Elf.textAddr(), Elf.textSize(), TextGrowthBytes);
+  patchDebugInfo(Data, Size, Elf.textAddr(), Elf.textSize(), TextGrowthBytes);
+  patchDebugFrame(Data, Size, Elf.textAddr(), Elf.textSize(), TextGrowthBytes);
+  if (!patchDebugLine(ElfBuf, SymbolTrampolines, Elf.textSize(),
+                      Elf.textAddr()))
     log() << "hotswap: error: patchDebugLine failed\n";
 }
 

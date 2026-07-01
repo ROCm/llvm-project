@@ -211,6 +211,10 @@ public:
   /// or nullptr if not found.
   uint8_t *findKernelDescriptor(llvm::StringRef KernelName);
 
+  /// Pointer to the kernel_descriptor at \p DescriptorVAddr inside the buffer,
+  /// or nullptr if not found.
+  uint8_t *findKernelDescriptorByVAddr(uint64_t DescriptorVAddr);
+
   /// Enumerate kernel descriptor symbols named "<kernel>.kd" and read their
   /// current kernel_code_entry_byte_offset values.
   std::vector<KernelDescriptorInfo> kernelDescriptors() const;
@@ -224,8 +228,20 @@ public:
   bool updateKernelDescriptorEntryOffset(llvm::StringRef KernelName,
                                          int64_t NewEntryOffset);
 
+  /// Rewrite kernel_code_entry_byte_offset for the descriptor identified by
+  /// \p DescriptorVAddr.
+  bool updateKernelDescriptorEntryOffset(uint64_t DescriptorVAddr,
+                                         llvm::StringRef KernelName,
+                                         int64_t NewEntryOffset);
+
   /// Ensure the kernel descriptor reserves at least \p RequiredSgprs SGPRs.
   bool updateKernelDescriptorSgprCount(llvm::StringRef KernelName,
+                                       unsigned RequiredSgprs);
+
+  /// Ensure the descriptor identified by \p DescriptorVAddr reserves at least
+  /// \p RequiredSgprs SGPRs.
+  bool updateKernelDescriptorSgprCount(uint64_t DescriptorVAddr,
+                                       llvm::StringRef KernelName,
                                        unsigned RequiredSgprs);
 
   /// Read COMPUTE_PGM_RSRC3.INST_PREF_SIZE for \p KernelName.
@@ -258,11 +274,12 @@ public:
 
   /// Read the SGPR count for \p KernelName from the \c amdhsa.kernels
   /// msgpack metadata note (\c .sgpr_count key), falling back to the kernel
-  /// descriptor when the metadata note is absent. On GFX10+ the kernel
-  /// descriptor's \c GRANULATED_WAVEFRONT_SGPR_COUNT is architecturally
-  /// reserved, so metadata is the only reliable source when present.
-  /// Returns std::nullopt if the matching metadata is malformed, the kernel is
-  /// missing from present metadata, or the descriptor fallback is unavailable.
+  /// descriptor when the metadata note is absent or the matching kernel entry
+  /// is incomplete. On GFX10+ the kernel descriptor's
+  /// \c GRANULATED_WAVEFRONT_SGPR_COUNT is architecturally reserved, so
+  /// metadata is the preferred source when present. Returns std::nullopt if
+  /// the metadata note itself is corrupt or the descriptor fallback is
+  /// unavailable.
   std::optional<unsigned> getKernelSgprCount(llvm::StringRef KernelName) const;
 
   /// Update the RSRC1 VGPR granule count in the kernel descriptor for
@@ -689,6 +706,7 @@ HotswapPatchVTable &getHotswapPatchVTable();
 
 struct KernelEntryTrampolineFixup {
   std::string KernelName;
+  uint64_t KernelDescriptorVAddr = 0;
   uint64_t StubTextOffset = 0;
   unsigned RequiredSgprs = 0;
 };

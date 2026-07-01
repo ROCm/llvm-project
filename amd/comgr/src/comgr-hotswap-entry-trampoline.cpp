@@ -484,7 +484,12 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     Trampoline T;
     T.Bytes.assign(Stub.begin(), Stub.end());
     LocalGrowth.push_back(std::move(T));
-    LocalFixups.push_back({KD.KernelName, AppendOffset, *ScratchSgpr + 2});
+    KernelEntryTrampolineFixup Fixup;
+    Fixup.KernelName = KD.KernelName;
+    Fixup.KernelDescriptorVAddr = KD.VAddr;
+    Fixup.StubTextOffset = AppendOffset;
+    Fixup.RequiredSgprs = *ScratchSgpr + 2;
+    LocalFixups.push_back(std::move(Fixup));
     std::optional<uint64_t> NewAppendOffset = checkedAddUint64(
         AppendOffset, KernelEntryStubStride,
         (Twine("entry trampoline append offset after '") + KD.KernelName + "'")
@@ -538,12 +543,37 @@ bool rewriteKernelEntryDescriptorOffsets(
 
   bool Ok = true;
   ElfView &OutElf = *ViewOrErr;
+  if (OutElf.textSize() < OldTextSize) {
+    log() << "hotswap: error: grown ELF .text size " << OutElf.textSize()
+          << " is smaller than original .text size " << OldTextSize << ".\n";
+    return false;
+  }
+  uint64_t GrowthBytes = OutElf.textSize() - OldTextSize;
+  std::optional<uint64_t> OldTextEndVAddr =
+      checkedAddUint64(OutElf.textAddr(), OldTextSize,
+                       "entry trampoline original text end vaddr");
+  if (!OldTextEndVAddr)
+    return false;
+
   for (const KernelEntryTrampolineFixup &Fixup : Fixups) {
-    std::optional<uint64_t> KdVAddr =
-        OutElf.getKernelDescriptorVAddr(Fixup.KernelName);
-    if (!KdVAddr) {
+    uint64_t DescriptorVAddr = Fixup.KernelDescriptorVAddr;
+    if (DescriptorVAddr >= *OldTextEndVAddr) {
+      std::optional<uint64_t> ShiftedDescriptorVAddr =
+          checkedAddUint64(DescriptorVAddr, GrowthBytes,
+                           (Twine("entry trampoline descriptor vaddr for '") +
+                            Fixup.KernelName + "'")
+                               .str());
+      if (!ShiftedDescriptorVAddr) {
+        Ok = false;
+        continue;
+      }
+      DescriptorVAddr = *ShiftedDescriptorVAddr;
+    }
+
+    if (!OutElf.findKernelDescriptorByVAddr(DescriptorVAddr)) {
       log() << "hotswap: error: missing kernel descriptor for entry "
-            << "trampoline fixup '" << Fixup.KernelName << "'.\n";
+            << "trampoline fixup '" << Fixup.KernelName << "' at vaddr 0x"
+            << utohexstr(DescriptorVAddr) << ".\n";
       Ok = false;
       continue;
     }
@@ -563,7 +593,7 @@ bool rewriteKernelEntryDescriptorOffsets(
       continue;
     }
     std::optional<int64_t> NewOffset = checkedSignedDifference(
-        *StubVAddr, *KdVAddr,
+        *StubVAddr, DescriptorVAddr,
         (Twine("entry trampoline descriptor offset for '") + Fixup.KernelName +
          "'")
             .str());
@@ -571,10 +601,10 @@ bool rewriteKernelEntryDescriptorOffsets(
       Ok = false;
       continue;
     }
-    bool UpdatedEntry =
-        OutElf.updateKernelDescriptorEntryOffset(Fixup.KernelName, *NewOffset);
+    bool UpdatedEntry = OutElf.updateKernelDescriptorEntryOffset(
+        DescriptorVAddr, Fixup.KernelName, *NewOffset);
     bool UpdatedSgprs = OutElf.updateKernelDescriptorSgprCount(
-        Fixup.KernelName, Fixup.RequiredSgprs);
+        DescriptorVAddr, Fixup.KernelName, Fixup.RequiredSgprs);
     Ok = UpdatedEntry && UpdatedSgprs && Ok;
   }
   return Ok;
