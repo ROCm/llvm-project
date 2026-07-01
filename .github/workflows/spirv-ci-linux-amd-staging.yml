@@ -107,7 +107,6 @@ jobs:
       - name: Build Comgr
         run: ninja -C "$COMGR_BUILD" amd_comgr
 
-      # Builds ROCR-Runtime (libhsa-runtime64.so) and CLR (libamdhip64.so).
       - name: Install build deps for runtime build
         run: |
           dnf install -y --setopt=install_weak_deps=False \
