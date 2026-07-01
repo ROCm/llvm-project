@@ -111,19 +111,19 @@ define amdgpu_ps float @test_wwm1(i32 inreg %idx0, i32 inreg %idx1) {
 ; CHECK-LABEL: test_wwm1:
 ; CHECK:       ; %bb.0: ; %main_body
 ; CHECK-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; CHECK-NEXT:    v_mov_b32_e32 v0, s0
-; CHECK-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
+; CHECK-NEXT:    v_mov_b32_e32 v1, s0
+; CHECK-NEXT:    buffer_load_dword v2, v1, s[0:3], 0 idxen
 ; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
+; CHECK-NEXT:    buffer_store_dword v2, v1, s[0:3], 0 idxen
 ; CHECK-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; CHECK-NEXT:    v_mov_b32_e32 v0, s1
-; CHECK-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
+; CHECK-NEXT:    v_mov_b32_e32 v1, s1
+; CHECK-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_add_f32_e32 v0, v1, v0
+; CHECK-NEXT:    v_add_f32_e32 v1, v2, v1
 ; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
-; CHECK-NEXT:    v_mov_b32_e32 v1, v0
-; CHECK-NEXT:    v_add_f32_e32 v0, v1, v1
+; CHECK-NEXT:    v_mov_b32_e32 v0, v1
+; CHECK-NEXT:    v_add_f32_e32 v0, v0, v0
 ; CHECK-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
 ; CHECK-NEXT:    ; return to shader part epilog
 main_body:
@@ -143,19 +143,19 @@ define amdgpu_ps float @test_strict_wwm1(i32 inreg %idx0, i32 inreg %idx1) {
 ; CHECK-LABEL: test_strict_wwm1:
 ; CHECK:       ; %bb.0: ; %main_body
 ; CHECK-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; CHECK-NEXT:    v_mov_b32_e32 v0, s0
-; CHECK-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
+; CHECK-NEXT:    v_mov_b32_e32 v1, s0
+; CHECK-NEXT:    buffer_load_dword v2, v1, s[0:3], 0 idxen
 ; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
+; CHECK-NEXT:    buffer_store_dword v2, v1, s[0:3], 0 idxen
 ; CHECK-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; CHECK-NEXT:    v_mov_b32_e32 v0, s1
-; CHECK-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
+; CHECK-NEXT:    v_mov_b32_e32 v1, s1
+; CHECK-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_add_f32_e32 v0, v1, v0
+; CHECK-NEXT:    v_add_f32_e32 v1, v2, v1
 ; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
-; CHECK-NEXT:    v_mov_b32_e32 v1, v0
-; CHECK-NEXT:    v_add_f32_e32 v0, v1, v1
+; CHECK-NEXT:    v_mov_b32_e32 v0, v1
+; CHECK-NEXT:    v_add_f32_e32 v0, v0, v0
 ; CHECK-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
 ; CHECK-NEXT:    ; return to shader part epilog
 main_body:

@@ -25,7 +25,9 @@
 #include "AMDGPUHazardLatency.h"
 #include "AMDGPUIGroupLP.h"
 #include "AMDGPUISelDAGToDAG.h"
+#include "AMDGPULowerStrictWQM.h"
 #include "AMDGPULowerVGPREncoding.h"
+#include "AMDGPULowerWQMOperations.h"
 #include "AMDGPUMacroFusion.h"
 #include "AMDGPUNextUseAnalysis.h"
 #include "AMDGPUPartitionVGPRsForRA.h"
@@ -719,6 +721,8 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeSIInsertWaitcntsLegacyPass(*PR);
   initializeSIModeRegisterLegacyPass(*PR);
   initializeSIWholeQuadModeLegacyPass(*PR);
+  initializeAMDGPULowerStrictWQMLegacyPass(*PR);
+  initializeAMDGPULowerWQMOperationsLegacyPass(*PR);
   initializeSILowerControlFlowLegacyPass(*PR);
   initializeSIPreEmitPeepholeLegacyPass(*PR);
   initializeSILateBranchLoweringLegacyPass(*PR);
@@ -1896,6 +1900,11 @@ bool GCNPassConfig::addRegAssignAndRewriteFast() {
   addPass(&GCNPreRALongBranchRegID);
 
   if (LateWaveTransform) {
+    // Lower strict WWM/WQM operations (STRICT_WWM, STRICT_WQM,
+    // V_SET_INACTIVE) before pre-allocation so that ENTER/EXIT brackets
+    // are visible to SIPreAllocateWWMRegs.
+    addPass(createAMDGPULowerStrictWQMLegacyPass());
+
     // To Allocate wwm registers used in whole quad mode operations (for
     // shaders). Scheduling it early before the AMDGPUPartitionVGPRs pass so
     // that this custom allocation will always have enough registers.
@@ -1914,10 +1923,10 @@ bool GCNPassConfig::addRegAssignAndRewriteFast() {
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
 
-    // si-wqm runs post-WaveTransform so it sees the wave-level CFG with flow
-    // blocks. This matches the legacy pipeline where si-wqm runs after
-    // SILowerControlFlow has created the structurized CFG.
-    addPass(&SIWholeQuadModeID);
+    // Lower WQM/Exact transitions post-WaveTransform so it sees the
+    // wave-level CFG with flow blocks. This matches the legacy pipeline
+    // where si-wqm runs after SILowerControlFlow.
+    addPass(createAMDGPULowerWQMOperationsLegacyPass());
 
     // Long-tem plan: we want to update the liveness of those allocated physical
     // VGPRs on the whole-wave CFG so that they have correct interferences with
@@ -1971,6 +1980,11 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
   addPass(&GCNPreRALongBranchRegID);
 
   if (LateWaveTransform) {
+    // Lower strict WWM/WQM operations (STRICT_WWM, STRICT_WQM,
+    // V_SET_INACTIVE) before pre-allocation so that ENTER/EXIT brackets
+    // are visible to SIPreAllocateWWMRegs.
+    addPass(createAMDGPULowerStrictWQMLegacyPass());
+
     // To Allocate wwm registers used in whole quad mode operations (for
     // shaders). Scheduling it early before the AMDGPUPartitionVGPRs pass so
     // that this custom allocation will always have enough registers.
@@ -1991,10 +2005,10 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
 
-    // si-wqm runs post-WaveTransform so it sees the wave-level CFG with flow
-    // blocks. This matches the legacy pipeline where si-wqm runs after
-    // SILowerControlFlow has created the structurized CFG.
-    addPass(&SIWholeQuadModeID);
+    // Lower WQM/Exact transitions post-WaveTransform so it sees the
+    // wave-level CFG with flow blocks. This matches the legacy pipeline
+    // where si-wqm runs after SILowerControlFlow.
+    addPass(createAMDGPULowerWQMOperationsLegacyPass());
 
     // Long-tem plan: we want to update the liveness of those allocated physical
     // VGPRs on the whole-wave CFG so that they have correct interferences with

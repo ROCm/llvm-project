@@ -323,15 +323,21 @@ define amdgpu_gfx ptr addrspace(5) @sponentry_gfx_dyn_alloc(i32 %val) #0 {
 ; DAGISEL-NEXT:    s_wait_samplecnt 0x0
 ; DAGISEL-NEXT:    s_wait_bvhcnt 0x0
 ; DAGISEL-NEXT:    s_wait_kmcnt 0x0
-; DAGISEL-NEXT:    v_lshl_add_u32 v1, v0, 2, 15
 ; DAGISEL-NEXT:    s_mov_b32 s2, s33
 ; DAGISEL-NEXT:    s_mov_b32 s33, s32
+; DAGISEL-NEXT:    s_xor_saveexec_b32 s0, -1
+; DAGISEL-NEXT:    s_clause 0x1 ; 8-byte Folded Spill
+; DAGISEL-NEXT:    scratch_store_b32 off, v1, s33 offset:4
+; DAGISEL-NEXT:    scratch_store_b32 off, v2, s33 offset:8
+; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
+; DAGISEL-NEXT:    v_lshl_add_u32 v3, v0, 2, 15
 ; DAGISEL-NEXT:    s_add_co_i32 s32, s32, 16
 ; DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
-; DAGISEL-NEXT:    v_and_b32_e32 v1, -16, v1
+; DAGISEL-NEXT:    v_and_b32_e32 v3, -16, v3
 ; DAGISEL-NEXT:    s_or_saveexec_b32 s0, -1
 ; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL-NEXT:    v_cndmask_b32_e64 v1, 0, v1, s0
+; DAGISEL-NEXT:    v_cndmask_b32_e64 v1, 0, v3, s0
 ; DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; DAGISEL-NEXT:    v_max_u32_dpp v1, v1, v1 row_shr:1 row_mask:0xf bank_mask:0xf
 ; DAGISEL-NEXT:    v_max_u32_dpp v1, v1, v1 row_shr:2 row_mask:0xf bank_mask:0xf
@@ -346,14 +352,21 @@ define amdgpu_gfx ptr addrspace(5) @sponentry_gfx_dyn_alloc(i32 %val) #0 {
 ; DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
 ; DAGISEL-NEXT:    s_mov_b32 s0, s32
 ; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL-NEXT:    v_add_nc_u32_e64 v1, s0, s1
+; DAGISEL-NEXT:    v_add_nc_u32_e64 v3, s0, s1
 ; DAGISEL-NEXT:    s_wait_storecnt 0x0
 ; DAGISEL-NEXT:    scratch_store_b32 off, v0, s0 scope:SCOPE_SYS
 ; DAGISEL-NEXT:    s_wait_storecnt 0x0
 ; DAGISEL-NEXT:    v_mov_b32_e32 v0, s33
-; DAGISEL-NEXT:    v_readfirstlane_b32 s32, v1
+; DAGISEL-NEXT:    v_readfirstlane_b32 s32, v3
 ; DAGISEL-NEXT:    s_mov_b32 s32, s33
+; DAGISEL-NEXT:    s_xor_saveexec_b32 s0, -1
+; DAGISEL-NEXT:    s_clause 0x1 ; 8-byte Folded Reload
+; DAGISEL-NEXT:    scratch_load_b32 v1, off, s33 offset:4
+; DAGISEL-NEXT:    scratch_load_b32 v2, off, s33 offset:8
+; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
 ; DAGISEL-NEXT:    s_mov_b32 s33, s2
+; DAGISEL-NEXT:    s_wait_loadcnt 0x0
 ; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -524,14 +537,14 @@ define amdgpu_cs_chain void @sponentry_cs_chain_dyn_alloc(i32 %val) #0 {
 ; DAGISEL-NEXT:    s_wait_samplecnt 0x0
 ; DAGISEL-NEXT:    s_wait_bvhcnt 0x0
 ; DAGISEL-NEXT:    s_wait_kmcnt 0x0
-; DAGISEL-NEXT:    v_lshl_add_u32 v0, v8, 2, 15
+; DAGISEL-NEXT:    v_lshl_add_u32 v2, v8, 2, 15
 ; DAGISEL-NEXT:    s_mov_b32 s33, s32
 ; DAGISEL-NEXT:    s_add_co_i32 s32, s32, 16
 ; DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
-; DAGISEL-NEXT:    v_and_b32_e32 v0, -16, v0
+; DAGISEL-NEXT:    v_and_b32_e32 v2, -16, v2
 ; DAGISEL-NEXT:    s_or_saveexec_b32 s0, -1
 ; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL-NEXT:    v_cndmask_b32_e64 v0, 0, v0, s0
+; DAGISEL-NEXT:    v_cndmask_b32_e64 v0, 0, v2, s0
 ; DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; DAGISEL-NEXT:    v_max_u32_dpp v0, v0, v0 row_shr:1 row_mask:0xf bank_mask:0xf
 ; DAGISEL-NEXT:    v_max_u32_dpp v0, v0, v0 row_shr:2 row_mask:0xf bank_mask:0xf
@@ -545,15 +558,15 @@ define amdgpu_cs_chain void @sponentry_cs_chain_dyn_alloc(i32 %val) #0 {
 ; DAGISEL-NEXT:    v_readlane_b32 s1, v0, 31
 ; DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
 ; DAGISEL-NEXT:    s_mov_b32 s0, s32
-; DAGISEL-NEXT:    v_mov_b32_e32 v1, s33
+; DAGISEL-NEXT:    v_mov_b32_e32 v3, s33
 ; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL-NEXT:    v_add_nc_u32_e64 v0, s0, s1
+; DAGISEL-NEXT:    v_add_nc_u32_e64 v2, s0, s1
 ; DAGISEL-NEXT:    s_wait_storecnt 0x0
 ; DAGISEL-NEXT:    scratch_store_b32 off, v8, s0 scope:SCOPE_SYS
 ; DAGISEL-NEXT:    s_wait_storecnt 0x0
-; DAGISEL-NEXT:    scratch_store_b32 off, v1, s0 scope:SCOPE_SYS
+; DAGISEL-NEXT:    scratch_store_b32 off, v3, s0 scope:SCOPE_SYS
 ; DAGISEL-NEXT:    s_wait_storecnt 0x0
-; DAGISEL-NEXT:    v_readfirstlane_b32 s32, v0
+; DAGISEL-NEXT:    v_readfirstlane_b32 s32, v2
 ; DAGISEL-NEXT:    s_alloc_vgpr 0
 ; DAGISEL-NEXT:    s_endpgm
 ;
