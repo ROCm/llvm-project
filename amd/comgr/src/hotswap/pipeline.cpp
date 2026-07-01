@@ -48,48 +48,48 @@ namespace {
 
 using TimingClock = std::chrono::steady_clock;
 
-double secondsBetween(TimingClock::time_point start,
-                      TimingClock::time_point end) {
-  return std::chrono::duration<double>(end - start).count();
+double secondsBetween(TimingClock::time_point Start,
+                      TimingClock::time_point End) {
+  return std::chrono::duration<double>(End - Start).count();
 }
 
 TimingClock::time_point timingStart(bool CollectTimings) {
   return CollectTimings ? TimingClock::now() : TimingClock::time_point{};
 }
 
-double timingElapsed(bool CollectTimings, TimingClock::time_point start) {
-  return CollectTimings ? secondsBetween(start, TimingClock::now()) : 0.0;
+double timingElapsed(bool CollectTimings, TimingClock::time_point Start) {
+  return CollectTimings ? secondsBetween(Start, TimingClock::now()) : 0.0;
 }
 
-bool writeFile(llvm::StringRef path, llvm::StringRef contents) {
+bool writeFile(llvm::StringRef Path, llvm::StringRef Contents) {
   std::error_code EC;
-  llvm::raw_fd_ostream Out(path, EC, llvm::sys::fs::OF_Text);
+  llvm::raw_fd_ostream Out(Path, EC, llvm::sys::fs::OF_Text);
   if (EC) {
-    llvm::errs() << "transpiler: Cannot write file: " << path << ": "
+    llvm::errs() << "transpiler: Cannot write file: " << Path << ": "
                  << EC.message() << "\n";
     return false;
   }
-  Out.write(contents.data(), contents.size());
+  Out.write(Contents.data(), Contents.size());
   Out.flush();
   if (Out.has_error()) {
-    llvm::errs() << "transpiler: write failed for: " << path << "\n";
+    llvm::errs() << "transpiler: write failed for: " << Path << "\n";
     return false;
   }
   return true;
 }
 
-bool writeFile(llvm::StringRef path, llvm::ArrayRef<uint8_t> data) {
+bool writeFile(llvm::StringRef Path, llvm::ArrayRef<uint8_t> Data) {
   std::error_code EC;
-  llvm::raw_fd_ostream Out(path, EC, llvm::sys::fs::OF_None);
+  llvm::raw_fd_ostream Out(Path, EC, llvm::sys::fs::OF_None);
   if (EC) {
-    llvm::errs() << "transpiler: Cannot write file: " << path << ": "
+    llvm::errs() << "transpiler: Cannot write file: " << Path << ": "
                  << EC.message() << "\n";
     return false;
   }
-  Out.write(reinterpret_cast<const char *>(data.data()), data.size());
+  Out.write(reinterpret_cast<const char *>(Data.data()), Data.size());
   Out.flush();
   if (Out.has_error()) {
-    llvm::errs() << "transpiler: write failed for: " << path << "\n";
+    llvm::errs() << "transpiler: write failed for: " << Path << "\n";
     return false;
   }
   return true;
@@ -105,21 +105,21 @@ bool writeFile(llvm::StringRef path, llvm::ArrayRef<uint8_t> data) {
 // The returned basename preserves a readable prefix of the original name
 // for debuggability; it's only intended for temp-dir scratch files --
 // symbol names inside the IR itself are unaffected.
-std::string makeSafeBasename(llvm::StringRef kernelName,
-                             size_t reservedSuffixBytes = 8) {
-  constexpr size_t kMaxComponentBytes = 255;
-  if (kernelName.size() + reservedSuffixBytes <= kMaxComponentBytes)
-    return kernelName.str();
+std::string makeSafeBasename(llvm::StringRef KernelName,
+                             size_t ReservedSuffixBytes = 8) {
+  constexpr size_t MaxComponentBytes = 255;
+  if (KernelName.size() + ReservedSuffixBytes <= MaxComponentBytes)
+    return KernelName.str();
 
-  uint64_t h = llvm::xxh3_64bits(kernelName);
+  uint64_t H = llvm::xxh3_64bits(KernelName);
 
-  constexpr size_t kHashHexBytes = 16;   // 64-bit hash as hex
-  constexpr size_t kSeparatorBytes = 1;  // '_'
-  const size_t prefixBudget = kMaxComponentBytes - reservedSuffixBytes -
-                              kHashHexBytes - kSeparatorBytes;
-  std::string prefix = kernelName.substr(0, prefixBudget).str();
-  std::string hex = llvm::utohexstr(h, /*LowerCase=*/true, /*Width=*/16);
-  return prefix + "_" + hex;
+  constexpr size_t HashHexBytes = 16;  // 64-bit hash as hex
+  constexpr size_t SeparatorBytes = 1; // '_'
+  const size_t PrefixBudget =
+      MaxComponentBytes - ReservedSuffixBytes - HashHexBytes - SeparatorBytes;
+  std::string Prefix = KernelName.substr(0, PrefixBudget).str();
+  std::string Hex = llvm::utohexstr(H, /*LowerCase=*/true, /*Width=*/16);
+  return Prefix + "_" + Hex;
 }
 
 llvm::OptimizationLevel toOptimizationLevel(unsigned Level) {
@@ -136,20 +136,21 @@ llvm::OptimizationLevel toOptimizationLevel(unsigned Level) {
 }
 
 std::unique_ptr<llvm::TargetMachine>
-createHotswapTargetMachine(llvm::StringRef targetISA, unsigned OptLevel) {
-  std::string err;
-  llvm::Triple triple(kAMDGPUTriple);
-  const llvm::Target *target = llvm::TargetRegistry::lookupTarget(triple, err);
+createHotswapTargetMachine(llvm::StringRef TargetISA, unsigned OptLevel) {
+  std::string Err;
+  llvm::Triple TheTriple(kAMDGPUTriple);
+  const llvm::Target *TheTarget =
+      llvm::TargetRegistry::lookupTarget(TheTriple, Err);
   // The triple is hardcoded and the AMDGPU target is linked in, so a lookup
   // miss is a build misconfiguration rather than a recoverable error.
-  if (!target)
+  if (!TheTarget)
     llvm::report_fatal_error(
-        llvm::Twine("transpiler: AMDGPU target not registered: ") + err);
+        llvm::Twine("transpiler: AMDGPU target not registered: ") + Err);
   llvm::CodeGenOptLevel CGOL = llvm::CodeGenOpt::getLevel(OptLevel).value_or(
       llvm::CodeGenOptLevel::Default);
-  llvm::TargetOptions opts;
-  return std::unique_ptr<llvm::TargetMachine>(target->createTargetMachine(
-      triple, targetISA, /*Features=*/"", opts, llvm::Reloc::PIC_,
+  llvm::TargetOptions Opts;
+  return std::unique_ptr<llvm::TargetMachine>(TheTarget->createTargetMachine(
+      TheTriple, TargetISA, /*Features=*/"", Opts, llvm::Reloc::PIC_,
       /*CodeModel=*/std::nullopt, CGOL));
 }
 
@@ -174,12 +175,12 @@ void runOptPipeline(llvm::Module &M, llvm::TargetMachine &TM,
   MPM.run(M, MAM);
 }
 
-// In-process `llc`: run codegen for `M` and emit `fileType` to `OS`.
+// In-process `llc`: run codegen for `M` and emit `FileType` to `OS`.
 llvm::Error emitCodeGen(llvm::Module &M, llvm::TargetMachine &TM,
-                        llvm::CodeGenFileType fileType,
+                        llvm::CodeGenFileType FileType,
                         llvm::raw_pwrite_stream &OS) {
   llvm::legacy::PassManager PM;
-  if (TM.addPassesToEmitFile(PM, OS, /*DwoOut=*/nullptr, fileType))
+  if (TM.addPassesToEmitFile(PM, OS, /*DwoOut=*/nullptr, FileType))
     return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                    "target cannot emit requested file type");
   PM.run(M);
@@ -187,54 +188,53 @@ llvm::Error emitCodeGen(llvm::Module &M, llvm::TargetMachine &TM,
 }
 
 struct DumpDir {
-  llvm::SmallString<128> path;
-  bool valid = false;
-  bool persistent = false;
+  llvm::SmallString<128> Path;
+  bool Valid = false;
+  bool Persistent = false;
 
   DumpDir() {
-    static const char *envDir = std::getenv("HSA_HOTSWAP_DUMP_DIR");
-    if (envDir && envDir[0]) {
-      persistent = true;
-      path = envDir;
-      if (auto ec = llvm::sys::fs::create_directories(path)) {
-        llvm::errs() << "hotswap: failed to create dump dir '"
-                     << path << "': " << ec.message() << "\n";
+    static const char *EnvDir = std::getenv("HSA_HOTSWAP_DUMP_DIR");
+    if (EnvDir && EnvDir[0]) {
+      Persistent = true;
+      Path = EnvDir;
+      if (auto EC = llvm::sys::fs::create_directories(Path)) {
+        llvm::errs() << "hotswap: failed to create dump dir '" << Path
+                     << "': " << EC.message() << "\n";
         return;
       }
       // Create a unique subdirectory per invocation so parallel runs
       // don't clobber each other.
-      llvm::SmallString<128> sub;
-      if (auto ec = llvm::sys::fs::createUniqueDirectory(
-              path + "/hotswap", sub)) {
-        llvm::errs() << "hotswap: failed to create subdir in '"
-                     << path << "': " << ec.message() << "\n";
+      llvm::SmallString<128> Sub;
+      if (auto EC =
+              llvm::sys::fs::createUniqueDirectory(Path + "/hotswap", Sub)) {
+        llvm::errs() << "hotswap: failed to create subdir in '" << Path
+                     << "': " << EC.message() << "\n";
         return;
       }
-      path = sub;
-      valid = true;
+      Path = Sub;
+      Valid = true;
     } else {
-      if (auto ec =
-              llvm::sys::fs::createUniqueDirectory("transpiler", path)) {
-        llvm::errs() << "hotswap: failed to create temp dir: "
-                     << ec.message() << "\n";
+      if (auto EC = llvm::sys::fs::createUniqueDirectory("transpiler", Path)) {
+        llvm::errs() << "hotswap: failed to create temp dir: " << EC.message()
+                     << "\n";
       } else {
-        valid = true;
+        Valid = true;
       }
     }
   }
 
   ~DumpDir() {
-    if (valid && !persistent)
-      llvm::sys::fs::remove_directories(path);
+    if (Valid && !Persistent)
+      llvm::sys::fs::remove_directories(Path);
   }
 
   DumpDir(const DumpDir &) = delete;
   DumpDir &operator=(const DumpDir &) = delete;
 
-  std::string filePath(llvm::StringRef name) const {
-    llvm::SmallString<256> p(path);
-    llvm::sys::path::append(p, name);
-    return std::string(p);
+  std::string filePath(llvm::StringRef Name) const {
+    llvm::SmallString<256> P(Path);
+    llvm::sys::path::append(P, Name);
+    return std::string(P);
   }
 };
 
@@ -243,11 +243,11 @@ struct DumpDir {
 static thread_local bool StrictModeOverrideActive = false;
 static thread_local bool StrictModeOverrideValue = false;
 
-ScopedStrictMode::ScopedStrictMode(bool enabled)
+ScopedStrictMode::ScopedStrictMode(bool Enabled)
     : PreviousActive(StrictModeOverrideActive),
       PreviousValue(StrictModeOverrideValue) {
   StrictModeOverrideActive = true;
-  StrictModeOverrideValue = enabled;
+  StrictModeOverrideValue = Enabled;
 }
 
 ScopedStrictMode::~ScopedStrictMode() {
@@ -267,176 +267,177 @@ bool isStrictMode() {
   // Treats any non-empty value as enabled to keep the runner side
   // (`HSA_HOTSWAP_STRICT=1`) and the pipeline side decoupled; a future
   // shell that writes `HSA_HOTSWAP_STRICT=true` still works.
-  static const bool s_strict = []() {
-    const char *v = std::getenv("HSA_HOTSWAP_STRICT");
-    return v && v[0] != '\0';
+  static const bool Strict = []() {
+    const char *V = std::getenv("HSA_HOTSWAP_STRICT");
+    return V && V[0] != '\0';
   }();
-  return s_strict;
+  return Strict;
 }
 
 // Raise one kernel to IR, then opt + codegen it to a relocatable .o.
-// On success, writes the .o to objPath and returns true.
-static bool raiseAndCompileKernel(const TextSection &text,
-                                  llvm::MemoryBufferRef codeObjectData,
-                                  llvm::StringRef kernelName,
-                                  llvm::StringRef sourceISA,
-                                  llvm::StringRef targetISA,
-                                  const DumpDir &tmpDir,
-                                  llvm::StringRef objPath,
-                                  PipelineResult &result,
-                                  const PipelineOptions &options) {
-  auto raiseStart = timingStart(options.CollectTimings);
-  llvm::Expected<KernelMeta> metaOrErr =
-      extractKernelMeta(codeObjectData, kernelName);
-  if (!metaOrErr) {
-    llvm::errs() << "transpiler: WARNING: No metadata found for '" << kernelName
-                 << "': " << llvm::toString(metaOrErr.takeError())
+// On success, writes the .o to ObjPath and returns true.
+static bool raiseAndCompileKernel(
+    const TextSection &Text, llvm::MemoryBufferRef CodeObjectData,
+    llvm::StringRef KernelName, llvm::StringRef SourceISA,
+    llvm::StringRef TargetISA, const DumpDir &TmpDir, llvm::StringRef ObjPath,
+    PipelineResult &Result, const PipelineOptions &Options) {
+  auto RaiseStart = timingStart(Options.CollectTimings);
+  llvm::Expected<KernelMeta> MetaOrErr =
+      extractKernelMeta(CodeObjectData, KernelName);
+  if (!MetaOrErr) {
+    llvm::errs() << "transpiler: WARNING: No metadata found for '" << KernelName
+                 << "': " << llvm::toString(MetaOrErr.takeError())
                  << ", using empty metadata\n";
   }
-  KernelMeta meta = metaOrErr ? std::move(*metaOrErr) : KernelMeta{};
-  if (meta.Args.empty()) {
-    llvm::errs() << "transpiler: WARNING: No metadata found for '" << kernelName
+  KernelMeta Meta = MetaOrErr ? std::move(*MetaOrErr) : KernelMeta{};
+  if (Meta.Args.empty()) {
+    llvm::errs() << "transpiler: WARNING: No metadata found for '" << KernelName
                  << "', using empty metadata\n";
   }
 
-  auto kernelExtentOrErr = findKernelSymbolExtent(codeObjectData, kernelName);
-  if (!kernelExtentOrErr) {
-    std::string err = llvm::toString(kernelExtentOrErr.takeError());
-    llvm::errs() << "transpiler: " << err << "\n";
-    result.FailKernel = kernelName;
-    result.FailMnemonic = "__kernel_extent__";
-    result.FailReason = "KernelSymbolExtentLookupFailed";
-    result.FailFormat = "KernelSymbolExtentLookupFailed";
-    result.FailDetail = err;
-    result.Timings.raiseSeconds += timingElapsed(options.CollectTimings, raiseStart);
+  auto KernelExtentOrErr = findKernelSymbolExtent(CodeObjectData, KernelName);
+  if (!KernelExtentOrErr) {
+    std::string Err = llvm::toString(KernelExtentOrErr.takeError());
+    llvm::errs() << "transpiler: " << Err << "\n";
+    Result.FailKernel = KernelName;
+    Result.FailMnemonic = "__kernel_extent__";
+    Result.FailReason = "KernelSymbolExtentLookupFailed";
+    Result.FailFormat = "KernelSymbolExtentLookupFailed";
+    Result.FailDetail = Err;
+    Result.Timings.raiseSeconds +=
+        timingElapsed(Options.CollectTimings, RaiseStart);
     return false;
   }
-  uint64_t kernelOffset = kernelExtentOrErr->Offset;
-  uint64_t kernelSize = kernelExtentOrErr->Size;
-  LLVM_DEBUG(if (kernelOffset > 0)
-    llvm::dbgs() << "transpiler: Kernel '" << kernelName
-                 << "' at .text offset 0x" << llvm::utohexstr(kernelOffset)
-                 << " size 0x" << llvm::utohexstr(kernelSize) << "\n");
+  uint64_t KernelOffset = KernelExtentOrErr->Offset;
+  uint64_t KernelSize = KernelExtentOrErr->Size;
+  LLVM_DEBUG(if (KernelOffset > 0) llvm::dbgs()
+             << "transpiler: Kernel '" << KernelName << "' at .text offset 0x"
+             << llvm::utohexstr(KernelOffset) << " size 0x"
+             << llvm::utohexstr(KernelSize) << "\n");
 
-  auto raised = raiseToIR(text.Bytes, sourceISA, kernelName, meta, kernelOffset,
-                           kernelSize, targetISA,
-                           options.EnableWritelaneRewrite,
-                           options.EnableWaveNative,
-                           options.AssumeHipGlobalOffsetZero);
-  if (!raised.Success) {
-    llvm::errs() << "transpiler: Raising '" << kernelName << "' to LLVM IR failed";
-    result.FailKernel = kernelName;
+  auto Raised =
+      raiseToIR(Text.Bytes, SourceISA, KernelName, Meta, KernelOffset,
+                KernelSize, TargetISA, Options.EnableWritelaneRewrite,
+                Options.EnableWaveNative, Options.AssumeHipGlobalOffsetZero);
+  if (!Raised.Success) {
+    llvm::errs() << "transpiler: Raising '" << KernelName
+                 << "' to LLVM IR failed";
+    Result.FailKernel = KernelName;
     RaiseFailure Failure =
-        raised.Failure.hasFailed()
-            ? raised.Failure
+        Raised.Failure.hasFailed()
+            ? Raised.Failure
             : RaiseFailure::internalFailure(
                   "raiseToIR returned failure without a structured reason");
     std::string RenderedFailure = formatRaiseFailure(Failure);
     llvm::errs() << " (" << RenderedFailure << ")";
-    result.FailMnemonic = Failure.Mnemonic;
-    result.FailReason = reasonString(Failure.Reason);
-    result.FailFormat = Failure.Format;
-    result.FailDetail = RenderedFailure;
-    result.FailOffset = Failure.Offset;
+    Result.FailMnemonic = Failure.Mnemonic;
+    Result.FailReason = reasonString(Failure.Reason);
+    Result.FailFormat = Failure.Format;
+    Result.FailDetail = RenderedFailure;
+    Result.FailOffset = Failure.Offset;
     llvm::errs() << "\n";
-    result.Timings.raiseSeconds += timingElapsed(options.CollectTimings, raiseStart);
+    Result.Timings.raiseSeconds +=
+        timingElapsed(Options.CollectTimings, RaiseStart);
     return false;
   }
-  result.LiftedCount += raised.LiftedCount;
-  result.TotalCount += raised.TotalCount;
-  if (raised.UsesScratchPrivateSegment) {
-    result.UsesScratchPrivateSegment = true;
-    if (raised.SourcePrivateSegmentFixedSize >
-        result.SourcePrivateSegmentFixedSize)
-      result.SourcePrivateSegmentFixedSize = raised.SourcePrivateSegmentFixedSize;
+  Result.LiftedCount += Raised.LiftedCount;
+  Result.TotalCount += Raised.TotalCount;
+  if (Raised.UsesScratchPrivateSegment) {
+    Result.UsesScratchPrivateSegment = true;
+    if (Raised.SourcePrivateSegmentFixedSize >
+        Result.SourcePrivateSegmentFixedSize)
+      Result.SourcePrivateSegmentFixedSize =
+          Raised.SourcePrivateSegmentFixedSize;
   }
-  result.C5SuppressedCount += raised.C5SuppressedCount;
-  if (result.C5SuppressionReason.empty() &&
-      !raised.C5SuppressionReason.empty())
-    result.C5SuppressionReason = raised.C5SuppressionReason;
-  result.Timings.raiseSeconds += timingElapsed(options.CollectTimings, raiseStart);
-  if (!result.IrText.empty())
-    result.IrText += "\n";
-  result.IrText += raised.IrText;
+  Result.C5SuppressedCount += Raised.C5SuppressedCount;
+  if (Result.C5SuppressionReason.empty() && !Raised.C5SuppressionReason.empty())
+    Result.C5SuppressionReason = Raised.C5SuppressionReason;
+  Result.Timings.raiseSeconds +=
+      timingElapsed(Options.CollectTimings, RaiseStart);
+  if (!Result.IrText.empty())
+    Result.IrText += "\n";
+  Result.IrText += Raised.IrText;
 
-  LLVM_DEBUG(llvm::dbgs() << "transpiler: Raised '" << kernelName << "' "
-                           << raised.LiftedCount << "/"
-                           << raised.TotalCount << " instructions\n");
+  LLVM_DEBUG(llvm::dbgs() << "transpiler: Raised '" << KernelName << "' "
+                          << Raised.LiftedCount << "/" << Raised.TotalCount
+                          << " instructions\n");
 
   // Kernel names from Tensile et al. routinely exceed 255 bytes, which is
   // the per-component limit on ext4/xfs/tmpfs.  makeSafeBasename() hashes
   // the tail and truncates the head when the full name would blow the
   // budget; the symbol name inside the IR stays untouched, so debug
   // tooling can still resolve the long name from the LLVM module.
-  std::string fileStem = makeSafeBasename(kernelName, /*reservedSuffixBytes=*/5);
+  std::string FileStem =
+      makeSafeBasename(KernelName, /*ReservedSuffixBytes=*/5);
 
   // Codegen consumes the in-memory module directly; the .ll/.s/.dis files are
   // debug dumps only, so skip them unless a persistent dump dir was set (a
   // non-persistent temp dir is deleted on exit, taking the dumps with it).
-  auto writeIrStart = timingStart(options.CollectTimings);
-  if (tmpDir.persistent) {
-    writeFile(tmpDir.filePath(fileStem + ".ll"), raised.IrText);
-    static const char *s_dumpInput = std::getenv("HSA_HOTSWAP_DUMP_INPUT");
-    if (s_dumpInput && s_dumpInput[0] == '1' && !raised.DisasmText.empty())
-      writeFile(tmpDir.filePath(fileStem + ".dis"), raised.DisasmText);
+  auto WriteIrStart = timingStart(Options.CollectTimings);
+  if (TmpDir.Persistent) {
+    writeFile(TmpDir.filePath(FileStem + ".ll"), Raised.IrText);
+    static const char *DumpInput = std::getenv("HSA_HOTSWAP_DUMP_INPUT");
+    if (DumpInput && DumpInput[0] == '1' && !Raised.DisasmText.empty())
+      writeFile(TmpDir.filePath(FileStem + ".dis"), Raised.DisasmText);
   }
-  result.Timings.writeIrSeconds +=
-      timingElapsed(options.CollectTimings, writeIrStart);
+  Result.Timings.writeIrSeconds +=
+      timingElapsed(Options.CollectTimings, WriteIrStart);
 
-  if (!raised.Module) {
-    llvm::errs() << "transpiler: raiser produced no module for '" << kernelName
+  if (!Raised.Module) {
+    llvm::errs() << "transpiler: raiser produced no module for '" << KernelName
                  << "'\n";
     return false;
   }
-  llvm::Module &M = *raised.Module;
+  llvm::Module &M = *Raised.Module;
 
   std::unique_ptr<llvm::TargetMachine> TM =
-      createHotswapTargetMachine(targetISA, options.OptLevel);
+      createHotswapTargetMachine(TargetISA, Options.OptLevel);
   if (!TM) {
     llvm::errs() << "transpiler: failed to create TargetMachine for '"
-                 << kernelName << "'\n";
+                 << KernelName << "'\n";
     return false;
   }
   M.setDataLayout(TM->createDataLayout());
 
-  auto optStart = timingStart(options.CollectTimings);
-  runOptPipeline(M, *TM, options.OptLevel);
-  result.Timings.optSeconds += timingElapsed(options.CollectTimings, optStart);
+  auto OptStart = timingStart(Options.CollectTimings);
+  runOptPipeline(M, *TM, Options.OptLevel);
+  Result.Timings.optSeconds += timingElapsed(Options.CollectTimings, OptStart);
 
   // Object codegen consumes the module, so clone it first when a debug
   // assembly dump is still needed.
-  std::unique_ptr<llvm::Module> asmModule;
-  if (tmpDir.persistent)
-    asmModule = llvm::CloneModule(M);
+  std::unique_ptr<llvm::Module> AsmModule;
+  if (TmpDir.Persistent)
+    AsmModule = llvm::CloneModule(M);
 
-  llvm::SmallVector<char, 4096> objBytes;
-  auto llcStart = timingStart(options.CollectTimings);
-  llvm::Error err = [&] {
-    llvm::raw_svector_ostream OS(objBytes);
+  llvm::SmallVector<char, 4096> ObjBytes;
+  auto LlcStart = timingStart(Options.CollectTimings);
+  llvm::Error Err = [&] {
+    llvm::raw_svector_ostream OS(ObjBytes);
     return emitCodeGen(M, *TM, llvm::CodeGenFileType::ObjectFile, OS);
   }();
-  result.Timings.llcSeconds += timingElapsed(options.CollectTimings, llcStart);
-  if (err) {
-    llvm::errs() << "transpiler: llc failed for '" << kernelName
-                 << "': " << llvm::toString(std::move(err)) << "\n";
+  Result.Timings.llcSeconds += timingElapsed(Options.CollectTimings, LlcStart);
+  if (Err) {
+    llvm::errs() << "transpiler: llc failed for '" << KernelName
+                 << "': " << llvm::toString(std::move(Err)) << "\n";
     return false;
   }
 
-  if (!writeFile(objPath, llvm::ArrayRef<uint8_t>(
-                              reinterpret_cast<const uint8_t *>(objBytes.data()),
-                              objBytes.size())))
+  if (!writeFile(ObjPath,
+                 llvm::ArrayRef<uint8_t>(
+                     reinterpret_cast<const uint8_t *>(ObjBytes.data()),
+                     ObjBytes.size())))
     return false;
 
   // Textual assembly is a debug-only artifact emitted from the clone so the
   // object codegen above stays the canonical lowering.
-  if (asmModule) {
-    llvm::SmallString<4096> asmText;
-    llvm::raw_svector_ostream OS(asmText);
-    if (llvm::Error err = emitCodeGen(
-            *asmModule, *TM, llvm::CodeGenFileType::AssemblyFile, OS))
-      llvm::consumeError(std::move(err));
+  if (AsmModule) {
+    llvm::SmallString<4096> AsmText;
+    llvm::raw_svector_ostream OS(AsmText);
+    if (llvm::Error Err = emitCodeGen(*AsmModule, *TM,
+                                      llvm::CodeGenFileType::AssemblyFile, OS))
+      llvm::consumeError(std::move(Err));
     else
-      writeFile(tmpDir.filePath(fileStem + ".s"), asmText);
+      writeFile(TmpDir.filePath(FileStem + ".s"), AsmText);
   }
 
   return true;
@@ -444,240 +445,241 @@ static bool raiseAndCompileKernel(const TextSection &text,
 
 // Link one or more relocatable .o files into a shared HSACO using the
 // in-process LLD ELF driver.
-static bool linkObjects(llvm::ArrayRef<std::string> objPaths,
-                        llvm::StringRef hsacoPath) {
-  std::string hsacoPathStr = hsacoPath.str();
-  llvm::SmallVector<const char *, 16> args;
-  args.push_back("ld.lld");
-  args.push_back("-shared");
-  args.push_back("--threads=1");
-  args.push_back("-o");
-  args.push_back(hsacoPathStr.c_str());
-  for (auto &o : objPaths)
-    args.push_back(o.c_str());
+static bool linkObjects(llvm::ArrayRef<std::string> ObjPaths,
+                        llvm::StringRef HsacoPath) {
+  std::string HsacoPathStr = HsacoPath.str();
+  llvm::SmallVector<const char *, 16> Args;
+  Args.push_back("ld.lld");
+  Args.push_back("-shared");
+  Args.push_back("--threads=1");
+  Args.push_back("-o");
+  Args.push_back(HsacoPathStr.c_str());
+  for (auto &O : ObjPaths)
+    Args.push_back(O.c_str());
 
   // lld::lldMain drives a process-global CommonLinkerContext and is neither
   // re-entrant nor thread-safe; serialize all in-process links.
-  static std::mutex lldMutex;
-  std::lock_guard<std::mutex> lldLock(lldMutex);
-  lld::Result ret =
-      lld::lldMain(args, llvm::outs(), llvm::errs(), {{lld::Gnu, &lld::elf::link}});
+  static std::mutex LldMutex;
+  std::lock_guard<std::mutex> LldLock(LldMutex);
+  lld::Result Ret = lld::lldMain(Args, llvm::outs(), llvm::errs(),
+                                 {{lld::Gnu, &lld::elf::link}});
   lld::CommonLinkerContext::destroy();
-  if (ret.retCode != 0 || !ret.canRunAgain) {
+  if (Ret.retCode != 0 || !Ret.canRunAgain) {
     llvm::errs() << "transpiler: ld.lld failed\n";
     return false;
   }
   return true;
 }
 
-void collectTargetPrivateSegmentMetadata(PipelineResult &result,
-                                         llvm::ArrayRef<std::string> kernelNames) {
+void collectTargetPrivateSegmentMetadata(
+    PipelineResult &Result, llvm::ArrayRef<std::string> KernelNames) {
   using namespace llvm::amdhsa;
-  if (!result.Hsaco || result.Hsaco->getBufferSize() == 0)
+  if (!Result.Hsaco || Result.Hsaco->getBufferSize() == 0)
     return;
-  llvm::MemoryBufferRef hsacoBuf = result.Hsaco->getMemBufferRef();
-  for (llvm::StringRef kernelName : kernelNames) {
-    llvm::Expected<KernelMeta> metaOrErr =
-        extractKernelMeta(hsacoBuf, kernelName);
-    if (!metaOrErr) {
-      llvm::consumeError(metaOrErr.takeError());
+  llvm::MemoryBufferRef HsacoBuf = Result.Hsaco->getMemBufferRef();
+  for (llvm::StringRef KernelName : KernelNames) {
+    llvm::Expected<KernelMeta> MetaOrErr =
+        extractKernelMeta(HsacoBuf, KernelName);
+    if (!MetaOrErr) {
+      llvm::consumeError(MetaOrErr.takeError());
       continue;
     }
-    KernelMeta &meta = *metaOrErr;
-    if (!meta.HasKernelDescriptor)
+    KernelMeta &Meta = *MetaOrErr;
+    if (!Meta.HasKernelDescriptor)
       continue;
-    result.TargetPrivateSegmentFixedSize = std::max(
-        result.TargetPrivateSegmentFixedSize,
-        static_cast<uint32_t>(meta.PrivateSegmentFixedSize));
-    const bool enabled =
-        (meta.ComputePgmRsrc2 &
+    Result.TargetPrivateSegmentFixedSize =
+        std::max(Result.TargetPrivateSegmentFixedSize,
+                 static_cast<uint32_t>(Meta.PrivateSegmentFixedSize));
+    const bool Enabled =
+        (Meta.ComputePgmRsrc2 &
          (1u << COMPUTE_PGM_RSRC2_ENABLE_PRIVATE_SEGMENT_SHIFT)) != 0;
-    result.TargetEnablePrivateSegment |= enabled;
+    Result.TargetEnablePrivateSegment |= Enabled;
   }
 }
 
-PipelineResult runPipeline(llvm::MemoryBufferRef codeObjectData,
-                           llvm::StringRef sourceISA,
-                           llvm::StringRef targetISA,
-                           llvm::StringRef kernelName,
-                           PipelineOptions options) {
-  auto totalStart = timingStart(options.CollectTimings);
-  PipelineResult result;
+PipelineResult runPipeline(llvm::MemoryBufferRef CodeObjectData,
+                           llvm::StringRef SourceISA, llvm::StringRef TargetISA,
+                           llvm::StringRef KernelName,
+                           PipelineOptions Options) {
+  auto TotalStart = timingStart(Options.CollectTimings);
+  PipelineResult Result;
   auto finish = [&]() {
-    result.Timings.totalSeconds = timingElapsed(options.CollectTimings, totalStart);
-    return std::move(result);
+    Result.Timings.totalSeconds =
+        timingElapsed(Options.CollectTimings, TotalStart);
+    return std::move(Result);
   };
 
-  auto extractTextStart = timingStart(options.CollectTimings);
-  llvm::Expected<TextSection> textOrErr = extractTextSection(codeObjectData);
-  result.Timings.extractTextSeconds =
-      timingElapsed(options.CollectTimings, extractTextStart);
-  if (!textOrErr) {
+  auto ExtractTextStart = timingStart(Options.CollectTimings);
+  llvm::Expected<TextSection> TextOrErr = extractTextSection(CodeObjectData);
+  Result.Timings.extractTextSeconds =
+      timingElapsed(Options.CollectTimings, ExtractTextStart);
+  if (!TextOrErr) {
     llvm::errs() << "transpiler: Failed to extract .text section: "
-                 << llvm::toString(textOrErr.takeError()) << "\n";
+                 << llvm::toString(TextOrErr.takeError()) << "\n";
     return finish();
   }
-  TextSection text = std::move(*textOrErr);
+  TextSection Text = std::move(*TextOrErr);
 
-  auto tempDirStart = timingStart(options.CollectTimings);
-  DumpDir tmpDir;
-  result.Timings.createTempDirSeconds =
-      timingElapsed(options.CollectTimings, tempDirStart);
-  if (!tmpDir.valid)
+  auto TempDirStart = timingStart(Options.CollectTimings);
+  DumpDir TmpDir;
+  Result.Timings.createTempDirSeconds =
+      timingElapsed(Options.CollectTimings, TempDirStart);
+  if (!TmpDir.Valid)
     return finish();
 
   {
-    static const char *s_dumpInput = std::getenv("HSA_HOTSWAP_DUMP_INPUT");
-    if (s_dumpInput && s_dumpInput[0] == '1')
-      writeFile(tmpDir.filePath("input.co"),
+    static const char *DumpInput = std::getenv("HSA_HOTSWAP_DUMP_INPUT");
+    if (DumpInput && DumpInput[0] == '1')
+      writeFile(TmpDir.filePath("input.co"),
                 llvm::ArrayRef(reinterpret_cast<const uint8_t *>(
-                                   codeObjectData.getBufferStart()),
-                               codeObjectData.getBufferSize()));
+                                   CodeObjectData.getBufferStart()),
+                               CodeObjectData.getBufferSize()));
   }
 
-  std::string objPath   = tmpDir.filePath("kernel.o");
-  std::string hsacoPath = tmpDir.filePath("kernel.Hsaco");
+  std::string ObjPath = TmpDir.filePath("kernel.o");
+  std::string HsacoPath = TmpDir.filePath("kernel.Hsaco");
 
-  if (!raiseAndCompileKernel(text, codeObjectData, kernelName,
-                             sourceISA, targetISA, tmpDir, objPath, result,
-                             options))
+  if (!raiseAndCompileKernel(Text, CodeObjectData, KernelName, SourceISA,
+                             TargetISA, TmpDir, ObjPath, Result, Options))
     return finish();
 
-  auto linkStart = timingStart(options.CollectTimings);
-  if (!linkObjects({objPath}, hsacoPath))
+  auto LinkStart = timingStart(Options.CollectTimings);
+  if (!linkObjects({ObjPath}, HsacoPath))
     return finish();
-  result.Timings.linkSeconds += timingElapsed(options.CollectTimings, linkStart);
+  Result.Timings.linkSeconds +=
+      timingElapsed(Options.CollectTimings, LinkStart);
 
-  auto readHsacoStart = timingStart(options.CollectTimings);
-  if (auto hsacoBufOrErr =
-          llvm::MemoryBuffer::getFile(hsacoPath, /*IsText=*/false)) {
-    result.Hsaco = std::move(*hsacoBufOrErr);
+  auto ReadHsacoStart = timingStart(Options.CollectTimings);
+  if (auto HsacoBufOrErr =
+          llvm::MemoryBuffer::getFile(HsacoPath, /*IsText=*/false)) {
+    Result.Hsaco = std::move(*HsacoBufOrErr);
   } else {
-    llvm::errs() << "transpiler: Cannot read HSACO: " << hsacoPath << ": "
-                 << hsacoBufOrErr.getError().message() << "\n";
+    llvm::errs() << "transpiler: Cannot read HSACO: " << HsacoPath << ": "
+                 << HsacoBufOrErr.getError().message() << "\n";
   }
-  result.Timings.readHsacoSeconds +=
-      timingElapsed(options.CollectTimings, readHsacoStart);
-  if (!result.Hsaco || result.Hsaco->getBufferSize() == 0) {
+  Result.Timings.readHsacoSeconds +=
+      timingElapsed(Options.CollectTimings, ReadHsacoStart);
+  if (!Result.Hsaco || Result.Hsaco->getBufferSize() == 0) {
     llvm::errs() << "transpiler: Failed to read HSACO\n";
     return finish();
   }
-  std::string kernelNameStr = kernelName.str();
-  auto collectMetadataStart = timingStart(options.CollectTimings);
-  collectTargetPrivateSegmentMetadata(result, {kernelNameStr});
-  result.Timings.collectMetadataSeconds +=
-      timingElapsed(options.CollectTimings, collectMetadataStart);
+  std::string KernelNameStr = KernelName.str();
+  auto CollectMetadataStart = timingStart(Options.CollectTimings);
+  collectTargetPrivateSegmentMetadata(Result, {KernelNameStr});
+  Result.Timings.collectMetadataSeconds +=
+      timingElapsed(Options.CollectTimings, CollectMetadataStart);
 
   LLVM_DEBUG(llvm::dbgs() << "transpiler: HSACO generated: "
-                          << result.Hsaco->getBufferSize() << " bytes\n");
-  result.Success = true;
+                          << Result.Hsaco->getBufferSize() << " bytes\n");
+  Result.Success = true;
   return finish();
 }
 
-PipelineResult runPipelineAllKernels(llvm::MemoryBufferRef codeObjectData,
-                                     llvm::StringRef sourceISA,
-                                     llvm::StringRef targetISA,
-                                     PipelineOptions options) {
-  auto totalStart = timingStart(options.CollectTimings);
-  PipelineResult result;
+PipelineResult runPipelineAllKernels(llvm::MemoryBufferRef CodeObjectData,
+                                     llvm::StringRef SourceISA,
+                                     llvm::StringRef TargetISA,
+                                     PipelineOptions Options) {
+  auto TotalStart = timingStart(Options.CollectTimings);
+  PipelineResult Result;
   auto finish = [&]() {
-    result.Timings.totalSeconds = timingElapsed(options.CollectTimings, totalStart);
-    return std::move(result);
+    Result.Timings.totalSeconds =
+        timingElapsed(Options.CollectTimings, TotalStart);
+    return std::move(Result);
   };
 
-  auto listKernelsStart = timingStart(options.CollectTimings);
-  llvm::Expected<llvm::SmallVector<std::string>> kernelNamesOrErr =
-      listKernelNames(codeObjectData);
-  result.Timings.listKernelsSeconds =
-      timingElapsed(options.CollectTimings, listKernelsStart);
-  if (!kernelNamesOrErr) {
+  auto ListKernelsStart = timingStart(Options.CollectTimings);
+  llvm::Expected<llvm::SmallVector<std::string>> KernelNamesOrErr =
+      listKernelNames(CodeObjectData);
+  Result.Timings.listKernelsSeconds =
+      timingElapsed(Options.CollectTimings, ListKernelsStart);
+  if (!KernelNamesOrErr) {
     llvm::errs() << "transpiler: No kernels found in code object: "
-                 << llvm::toString(kernelNamesOrErr.takeError()) << "\n";
+                 << llvm::toString(KernelNamesOrErr.takeError()) << "\n";
     return finish();
   }
-  llvm::SmallVector<std::string> kernelNames = std::move(*kernelNamesOrErr);
-  if (kernelNames.empty()) {
+  llvm::SmallVector<std::string> KernelNames = std::move(*KernelNamesOrErr);
+  if (KernelNames.empty()) {
     llvm::errs() << "transpiler: No kernels found in code object\n";
     return finish();
   }
 
-  LLVM_DEBUG(llvm::dbgs() << "transpiler: Raising " << kernelNames.size()
-                          << " kernel(s) [" << sourceISA << " -> " << targetISA
+  LLVM_DEBUG(llvm::dbgs() << "transpiler: Raising " << KernelNames.size()
+                          << " kernel(s) [" << SourceISA << " -> " << TargetISA
                           << "]\n");
 
-  auto extractTextStart = timingStart(options.CollectTimings);
-  llvm::Expected<TextSection> textOrErr = extractTextSection(codeObjectData);
-  result.Timings.extractTextSeconds =
-      timingElapsed(options.CollectTimings, extractTextStart);
-  if (!textOrErr) {
+  auto ExtractTextStart = timingStart(Options.CollectTimings);
+  llvm::Expected<TextSection> TextOrErr = extractTextSection(CodeObjectData);
+  Result.Timings.extractTextSeconds =
+      timingElapsed(Options.CollectTimings, ExtractTextStart);
+  if (!TextOrErr) {
     llvm::errs() << "transpiler: Failed to extract .text section: "
-                 << llvm::toString(textOrErr.takeError()) << "\n";
+                 << llvm::toString(TextOrErr.takeError()) << "\n";
     return finish();
   }
-  TextSection text = std::move(*textOrErr);
+  TextSection Text = std::move(*TextOrErr);
 
-  auto tempDirStart = timingStart(options.CollectTimings);
-  DumpDir tmpDir;
-  result.Timings.createTempDirSeconds =
-      timingElapsed(options.CollectTimings, tempDirStart);
-  if (!tmpDir.valid)
+  auto TempDirStart = timingStart(Options.CollectTimings);
+  DumpDir TmpDir;
+  Result.Timings.createTempDirSeconds =
+      timingElapsed(Options.CollectTimings, TempDirStart);
+  if (!TmpDir.Valid)
     return finish();
 
-  static const char *s_dumpInput = std::getenv("HSA_HOTSWAP_DUMP_INPUT");
-  if (s_dumpInput && s_dumpInput[0] == '1')
-    writeFile(tmpDir.filePath("input.co"),
+  static const char *DumpInput = std::getenv("HSA_HOTSWAP_DUMP_INPUT");
+  if (DumpInput && DumpInput[0] == '1')
+    writeFile(TmpDir.filePath("input.co"),
               llvm::ArrayRef(reinterpret_cast<const uint8_t *>(
-                                 codeObjectData.getBufferStart()),
-                             codeObjectData.getBufferSize()));
+                                 CodeObjectData.getBufferStart()),
+                             CodeObjectData.getBufferSize()));
 
-  std::vector<std::string> objPaths;
-  for (size_t i = 0; i < kernelNames.size(); ++i) {
-    const auto &kName = kernelNames[i];
-    std::string objPath = tmpDir.filePath("k" + std::to_string(i) + ".o");
+  std::vector<std::string> ObjPaths;
+  for (size_t I = 0; I < KernelNames.size(); ++I) {
+    const auto &KName = KernelNames[I];
+    std::string ObjPath = TmpDir.filePath("k" + std::to_string(I) + ".o");
 
-    LLVM_DEBUG(llvm::dbgs() << "transpiler:   [" << (i + 1) << "/"
-                            << kernelNames.size() << "] " << kName << " ... ");
+    LLVM_DEBUG(llvm::dbgs() << "transpiler:   [" << (I + 1) << "/"
+                            << KernelNames.size() << "] " << KName << " ... ");
 
-    if (!raiseAndCompileKernel(text, codeObjectData, kName,
-                               sourceISA, targetISA, tmpDir, objPath, result,
-                               options)) {
+    if (!raiseAndCompileKernel(Text, CodeObjectData, KName, SourceISA,
+                               TargetISA, TmpDir, ObjPath, Result, Options)) {
       LLVM_DEBUG(llvm::dbgs() << "FAILED\n");
-      result.Success = false;
+      Result.Success = false;
       return finish();
     }
     LLVM_DEBUG(llvm::dbgs() << "OK\n");
-    objPaths.push_back(std::move(objPath));
+    ObjPaths.push_back(std::move(ObjPath));
   }
 
-  std::string hsacoPath = tmpDir.filePath("merged.Hsaco");
-  auto linkStart = timingStart(options.CollectTimings);
-  if (!linkObjects(objPaths, hsacoPath))
+  std::string HsacoPath = TmpDir.filePath("merged.Hsaco");
+  auto LinkStart = timingStart(Options.CollectTimings);
+  if (!linkObjects(ObjPaths, HsacoPath))
     return finish();
-  result.Timings.linkSeconds += timingElapsed(options.CollectTimings, linkStart);
+  Result.Timings.linkSeconds +=
+      timingElapsed(Options.CollectTimings, LinkStart);
 
-  auto readHsacoStart = timingStart(options.CollectTimings);
-  if (auto hsacoBufOrErr =
-          llvm::MemoryBuffer::getFile(hsacoPath, /*IsText=*/false)) {
-    result.Hsaco = std::move(*hsacoBufOrErr);
+  auto ReadHsacoStart = timingStart(Options.CollectTimings);
+  if (auto HsacoBufOrErr =
+          llvm::MemoryBuffer::getFile(HsacoPath, /*IsText=*/false)) {
+    Result.Hsaco = std::move(*HsacoBufOrErr);
   } else {
-    llvm::errs() << "transpiler: Cannot read HSACO: " << hsacoPath << ": "
-                 << hsacoBufOrErr.getError().message() << "\n";
+    llvm::errs() << "transpiler: Cannot read HSACO: " << HsacoPath << ": "
+                 << HsacoBufOrErr.getError().message() << "\n";
   }
-  result.Timings.readHsacoSeconds +=
-      timingElapsed(options.CollectTimings, readHsacoStart);
-  if (!result.Hsaco || result.Hsaco->getBufferSize() == 0) {
+  Result.Timings.readHsacoSeconds +=
+      timingElapsed(Options.CollectTimings, ReadHsacoStart);
+  if (!Result.Hsaco || Result.Hsaco->getBufferSize() == 0) {
     llvm::errs() << "transpiler: Failed to read merged HSACO\n";
     return finish();
   }
-  auto collectMetadataStart = timingStart(options.CollectTimings);
-  collectTargetPrivateSegmentMetadata(result, kernelNames);
-  result.Timings.collectMetadataSeconds +=
-      timingElapsed(options.CollectTimings, collectMetadataStart);
+  auto CollectMetadataStart = timingStart(Options.CollectTimings);
+  collectTargetPrivateSegmentMetadata(Result, KernelNames);
+  Result.Timings.collectMetadataSeconds +=
+      timingElapsed(Options.CollectTimings, CollectMetadataStart);
 
   LLVM_DEBUG(llvm::dbgs() << "transpiler: Merged HSACO: "
-                          << result.Hsaco->getBufferSize() << " bytes, "
-                          << kernelNames.size() << " kernel(s)\n");
-  result.Success = true;
+                          << Result.Hsaco->getBufferSize() << " bytes, "
+                          << KernelNames.size() << " kernel(s)\n");
+  Result.Success = true;
   return finish();
 }
 
