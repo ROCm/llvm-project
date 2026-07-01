@@ -133,33 +133,34 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; GFX8-SDAG:       ; %bb.0: ; %entry
 ; GFX8-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-SDAG-NEXT:    v_and_b32_e32 v0, 1, v0
-; GFX8-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
+; GFX8-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
 ; GFX8-SDAG-NEXT:    s_mov_b32 m0, -1
-; GFX8-SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX8-SDAG-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX8-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX8-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX8-SDAG-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX8-SDAG-NEXT:  .LBB2_1: ; %bb0
 ; GFX8-SDAG-NEXT:    v_mov_b32_e32 v0, 0
-; GFX8-SDAG-NEXT:    s_mov_b64 s[4:5], 0xc8
-; GFX8-SDAG-NEXT:    ds_write_b32 v0, v0
-; GFX8-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x0
-; GFX8-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-SDAG-NEXT:    s_trap 2
-; GFX8-SDAG-NEXT:  .LBB2_2:
-; GFX8-SDAG-NEXT:    s_or_b64 exec, exec, vcc
-; GFX8-SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX8-SDAG-NEXT:    s_mov_b64 exec, vcc
-; GFX8-SDAG-NEXT:    ; divergent control-flow edge
-; GFX8-SDAG-NEXT:    s_cbranch_execz .LBB2_4
-; GFX8-SDAG-NEXT:  .LBB2_3: ; %bb1
-; GFX8-SDAG-NEXT:    v_mov_b32_e32 v0, 1
 ; GFX8-SDAG-NEXT:    s_mov_b64 s[6:7], 0xc8
 ; GFX8-SDAG-NEXT:    ds_write_b32 v0, v0
 ; GFX8-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[6:7], 0x0
 ; GFX8-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-SDAG-NEXT:    s_trap 2
-; GFX8-SDAG-NEXT:  .LBB2_4: ; %ret
+; GFX8-SDAG-NEXT:  .LBB2_2:
 ; GFX8-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX8-SDAG-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-SDAG-NEXT:    ; divergent control-flow edge
+; GFX8-SDAG-NEXT:    s_cbranch_execz .LBB2_4
+; GFX8-SDAG-NEXT:  .LBB2_3: ; %bb1
+; GFX8-SDAG-NEXT:    v_mov_b32_e32 v0, 1
+; GFX8-SDAG-NEXT:    s_mov_b64 s[4:5], 0xc8
+; GFX8-SDAG-NEXT:    ds_write_b32 v0, v0
+; GFX8-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x0
+; GFX8-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX8-SDAG-NEXT:    s_trap 2
+; GFX8-SDAG-NEXT:  .LBB2_4: ; %ret
+; GFX8-SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX8-SDAG-NEXT:    v_mov_b32_e32 v0, 2
 ; GFX8-SDAG-NEXT:    s_mov_b64 s[4:5], 0xc8
 ; GFX8-SDAG-NEXT:    ds_write_b32 v0, v0
@@ -213,8 +214,9 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; GFX9-SDAG:       ; %bb.0: ; %entry
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    v_and_b32_e32 v0, 1, v0
-; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; GFX9-SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
+; GFX9-SDAG-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX9-SDAG-NEXT:  .LBB2_1: ; %bb0
@@ -222,9 +224,9 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; GFX9-SDAG-NEXT:    ds_write_b32 v0, v0
 ; GFX9-SDAG-NEXT:    s_trap 2
 ; GFX9-SDAG-NEXT:  .LBB2_2:
-; GFX9-SDAG-NEXT:    s_or_b64 exec, exec, vcc
-; GFX9-SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX9-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execz .LBB2_4
 ; GFX9-SDAG-NEXT:  .LBB2_3: ; %bb1
@@ -232,7 +234,7 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; GFX9-SDAG-NEXT:    ds_write_b32 v0, v0
 ; GFX9-SDAG-NEXT:    s_trap 2
 ; GFX9-SDAG-NEXT:  .LBB2_4: ; %ret
-; GFX9-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX9-SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, 2
 ; GFX9-SDAG-NEXT:    ds_write_b32 v0, v0
 ; GFX9-SDAG-NEXT:    s_trap 2
@@ -272,12 +274,12 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; SDAG:       ; %bb.0: ; %entry
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SDAG-NEXT:    v_and_b32_e32 v0, 1, v0
-; SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; SDAG-NEXT:    s_xor_b64 s[10:11], vcc, exec
+; SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
+; SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; SDAG-NEXT:    s_mov_b64 s[4:5], 0
-; SDAG-NEXT:    s_mov_b64 s[8:9], -1
+; SDAG-NEXT:    s_mov_b64 s[10:11], -1
 ; SDAG-NEXT:    s_mov_b64 s[6:7], 0
-; SDAG-NEXT:    s_mov_b64 exec, s[10:11]
+; SDAG-NEXT:    s_mov_b64 exec, vcc
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB2_3
 ; SDAG-NEXT:  .LBB2_1: ; %bb0
@@ -285,11 +287,11 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; SDAG-NEXT:    ds_write_b32 v0, v0
 ; SDAG-NEXT:    s_cbranch_execnz .LBB2_8
 ; SDAG-NEXT:  ; %bb.2:
-; SDAG-NEXT:    s_and_b64 s[6:7], s[8:9], exec
+; SDAG-NEXT:    s_and_b64 s[6:7], s[10:11], exec
 ; SDAG-NEXT:  .LBB2_3:
-; SDAG-NEXT:    s_or_b64 exec, exec, vcc
-; SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; SDAG-NEXT:    s_mov_b64 exec, vcc
+; SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
+; SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB2_5
 ; SDAG-NEXT:  .LBB2_4: ; %bb1
@@ -298,7 +300,7 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SDAG-NEXT:    ds_write_b32 v0, v0
 ; SDAG-NEXT:  .LBB2_5:
-; SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
+; SDAG-NEXT:    s_or_b64 exec, exec, s[10:11]
 ; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
@@ -457,22 +459,23 @@ define i32 @func_uses_lds_phi_after(i1 %cond, ptr addrspace(1) %ptr) {
 ; GFX8-SDAG-NEXT:    flat_load_dword v0, v[1:2] glc
 ; GFX8-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-SDAG-NEXT:    v_and_b32_e32 v3, 1, v3
-; GFX8-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v3
-; GFX8-SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX8-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v3
+; GFX8-SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; GFX8-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX8-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX8-SDAG-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX8-SDAG-NEXT:  .LBB4_1: ; %use.bb
 ; GFX8-SDAG-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX8-SDAG-NEXT:    s_mov_b32 m0, -1
-; GFX8-SDAG-NEXT:    s_mov_b64 s[4:5], 0xc8
+; GFX8-SDAG-NEXT:    s_mov_b64 s[6:7], 0xc8
 ; GFX8-SDAG-NEXT:    ds_write_b32 v0, v0
-; GFX8-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x0
+; GFX8-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[6:7], 0x0
 ; GFX8-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-SDAG-NEXT:    s_trap 2
 ; GFX8-SDAG-NEXT:    flat_load_dword v0, v[1:2] glc
 ; GFX8-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-SDAG-NEXT:  .LBB4_2: ; %ret
-; GFX8-SDAG-NEXT:    s_or_b64 exec, exec, vcc
+; GFX8-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX8-GISEL-LABEL: func_uses_lds_phi_after:
@@ -507,8 +510,9 @@ define i32 @func_uses_lds_phi_after(i1 %cond, ptr addrspace(1) %ptr) {
 ; GFX9-SDAG-NEXT:    global_load_dword v0, v[1:2], off glc
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    v_and_b32_e32 v3, 1, v3
-; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v3
-; GFX9-SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v3
+; GFX9-SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; GFX9-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX9-SDAG-NEXT:  .LBB4_1: ; %use.bb
@@ -518,7 +522,7 @@ define i32 @func_uses_lds_phi_after(i1 %cond, ptr addrspace(1) %ptr) {
 ; GFX9-SDAG-NEXT:    global_load_dword v0, v[1:2], off glc
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:  .LBB4_2: ; %ret
-; GFX9-SDAG-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -550,8 +554,9 @@ define i32 @func_uses_lds_phi_after(i1 %cond, ptr addrspace(1) %ptr) {
 ; SDAG-NEXT:    global_load_dword v0, v[1:2], off glc
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; SDAG-NEXT:    v_and_b32_e32 v3, 1, v3
-; SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v3
-; SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v3
+; SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; SDAG-NEXT:    s_mov_b64 exec, vcc
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB4_3
 ; SDAG-NEXT:  .LBB4_1: ; %use.bb
@@ -562,7 +567,7 @@ define i32 @func_uses_lds_phi_after(i1 %cond, ptr addrspace(1) %ptr) {
 ; SDAG-NEXT:    global_load_dword v0, v[1:2], off glc
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; SDAG-NEXT:  .LBB4_3: ; %ret
-; SDAG-NEXT:    s_or_b64 exec, exec, vcc
+; SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
 ; SDAG-NEXT:  .LBB4_4:

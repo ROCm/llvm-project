@@ -1621,14 +1621,8 @@ define amdgpu_kernel void @extract_neg_offset_vgpr(ptr addrspace(1) %out) {
 ; NOOPT-NEXT:    ; implicit-def: $vgpr0
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:  .LBB5_1: ; =>This Inner Loop Header: Depth=1
-; NOOPT-NEXT:    s_or_saveexec_b64 s[16:17], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
-; NOOPT-NEXT:    buffer_load_dword v31, off, s[20:23], 0 offset:76 ; 4-byte Folded Reload
-; NOOPT-NEXT:    s_mov_b64 exec, s[16:17]
-; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v31, 6
-; NOOPT-NEXT:    v_readlane_b32 s1, v31, 7
 ; NOOPT-NEXT:    buffer_load_dword v17, off, s[20:23], 0 offset:68 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[20:23], 0 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[20:23], 0 offset:4 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[20:23], 0 offset:8 ; 4-byte Folded Reload
@@ -1639,11 +1633,17 @@ define amdgpu_kernel void @extract_neg_offset_vgpr(ptr addrspace(1) %out) {
 ; NOOPT-NEXT:    buffer_load_dword v7, off, s[20:23], 0 offset:28 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v8, off, s[20:23], 0 offset:32 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v9, off, s[20:23], 0 offset:36 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(6)
 ; NOOPT-NEXT:    buffer_load_dword v10, off, s[20:23], 0 offset:40 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(5)
 ; NOOPT-NEXT:    buffer_load_dword v11, off, s[20:23], 0 offset:44 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(4)
 ; NOOPT-NEXT:    buffer_load_dword v12, off, s[20:23], 0 offset:48 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(3)
 ; NOOPT-NEXT:    buffer_load_dword v13, off, s[20:23], 0 offset:52 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(2)
 ; NOOPT-NEXT:    buffer_load_dword v14, off, s[20:23], 0 offset:56 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(1)
 ; NOOPT-NEXT:    buffer_load_dword v15, off, s[20:23], 0 offset:60 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v16, off, s[20:23], 0 offset:64 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -1654,17 +1654,11 @@ define amdgpu_kernel void @extract_neg_offset_vgpr(ptr addrspace(1) %out) {
 ; NOOPT-NEXT:    v_movrels_b32_e32 v0, v0
 ; NOOPT-NEXT:    buffer_store_dword v0, off, s[20:23], 0 offset:72 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v0, off, s[20:23], 0 offset:68 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v31, s2, 6
-; NOOPT-NEXT:    v_writelane_b32 v31, s3, 7
-; NOOPT-NEXT:    s_or_saveexec_b64 s[16:17], -1
-; NOOPT-NEXT:    buffer_store_dword v31, off, s[20:23], 0 offset:76 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 exec, s[16:17]
 ; NOOPT-NEXT:    s_xor_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_cbranch_execnz .LBB5_1
 ; NOOPT-NEXT:  ; %bb.2:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[16:17], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
+; NOOPT-NEXT:    s_waitcnt expcnt(2)
 ; NOOPT-NEXT:    buffer_load_dword v31, off, s[20:23], 0 offset:76 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[16:17]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -1680,6 +1674,7 @@ define amdgpu_kernel void @extract_neg_offset_vgpr(ptr addrspace(1) %out) {
 ; NOOPT-NEXT:    v_readlane_b32 s1, v31, 1
 ; NOOPT-NEXT:    v_readlane_b32 s2, v31, 2
 ; NOOPT-NEXT:    v_readlane_b32 s3, v31, 3
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[20:23], 0 offset:72 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
 ; NOOPT-NEXT:    buffer_store_dword v0, off, s[0:3], 0
@@ -4264,13 +4259,6 @@ define amdgpu_kernel void @insert_neg_offset_vgpr(ptr addrspace(1) %in, ptr addr
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[20:23], 0 offset:60 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:  .LBB14_1: ; =>This Inner Loop Header: Depth=1
-; NOOPT-NEXT:    s_or_saveexec_b64 s[16:17], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
-; NOOPT-NEXT:    buffer_load_dword v31, off, s[20:23], 0 offset:200 ; 4-byte Folded Reload
-; NOOPT-NEXT:    s_mov_b64 exec, s[16:17]
-; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v31, 9
-; NOOPT-NEXT:    v_readlane_b32 s1, v31, 10
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[20:23], 0 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[20:23], 0 offset:4 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[20:23], 0 offset:8 ; 4-byte Folded Reload
@@ -4334,17 +4322,10 @@ define amdgpu_kernel void @insert_neg_offset_vgpr(ptr addrspace(1) %in, ptr addr
 ; NOOPT-NEXT:    buffer_store_dword v13, off, s[20:23], 0 offset:52 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v14, off, s[20:23], 0 offset:56 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[20:23], 0 offset:60 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v31, s2, 9
-; NOOPT-NEXT:    v_writelane_b32 v31, s3, 10
-; NOOPT-NEXT:    s_or_saveexec_b64 s[16:17], -1
-; NOOPT-NEXT:    buffer_store_dword v31, off, s[20:23], 0 offset:200 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 exec, s[16:17]
 ; NOOPT-NEXT:    s_xor_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_cbranch_execnz .LBB14_1
 ; NOOPT-NEXT:  ; %bb.2:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[16:17], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v31, off, s[20:23], 0 offset:200 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[16:17]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -4363,6 +4344,7 @@ define amdgpu_kernel void @insert_neg_offset_vgpr(ptr addrspace(1) %in, ptr addr
 ; NOOPT-NEXT:    v_readlane_b32 s4, v31, 0
 ; NOOPT-NEXT:    v_readlane_b32 s5, v31, 1
 ; NOOPT-NEXT:    v_readlane_b32 s6, v31, 2
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v15, off, s[20:23], 0 offset:136 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v16, off, s[20:23], 0 offset:140 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v17, off, s[20:23], 0 offset:144 ; 4-byte Folded Reload
@@ -4753,13 +4735,6 @@ define amdgpu_kernel void @insert_neg_inline_offset_vgpr(ptr addrspace(1) %in, p
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[20:23], 0 offset:60 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:  .LBB15_1: ; =>This Inner Loop Header: Depth=1
-; NOOPT-NEXT:    s_or_saveexec_b64 s[16:17], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
-; NOOPT-NEXT:    buffer_load_dword v31, off, s[20:23], 0 offset:200 ; 4-byte Folded Reload
-; NOOPT-NEXT:    s_mov_b64 exec, s[16:17]
-; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v31, 9
-; NOOPT-NEXT:    v_readlane_b32 s1, v31, 10
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[20:23], 0 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[20:23], 0 offset:4 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[20:23], 0 offset:8 ; 4-byte Folded Reload
@@ -4823,17 +4798,10 @@ define amdgpu_kernel void @insert_neg_inline_offset_vgpr(ptr addrspace(1) %in, p
 ; NOOPT-NEXT:    buffer_store_dword v13, off, s[20:23], 0 offset:52 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v14, off, s[20:23], 0 offset:56 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[20:23], 0 offset:60 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v31, s2, 9
-; NOOPT-NEXT:    v_writelane_b32 v31, s3, 10
-; NOOPT-NEXT:    s_or_saveexec_b64 s[16:17], -1
-; NOOPT-NEXT:    buffer_store_dword v31, off, s[20:23], 0 offset:200 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 exec, s[16:17]
 ; NOOPT-NEXT:    s_xor_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_cbranch_execnz .LBB15_1
 ; NOOPT-NEXT:  ; %bb.2:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[16:17], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v31, off, s[20:23], 0 offset:200 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[16:17]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -4852,6 +4820,7 @@ define amdgpu_kernel void @insert_neg_inline_offset_vgpr(ptr addrspace(1) %in, p
 ; NOOPT-NEXT:    v_readlane_b32 s4, v31, 0
 ; NOOPT-NEXT:    v_readlane_b32 s5, v31, 1
 ; NOOPT-NEXT:    v_readlane_b32 s6, v31, 2
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v15, off, s[20:23], 0 offset:136 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v16, off, s[20:23], 0 offset:140 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v17, off, s[20:23], 0 offset:144 ; 4-byte Folded Reload
@@ -5310,14 +5279,8 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    ; implicit-def: $vgpr0
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:  .LBB16_1: ; =>This Inner Loop Header: Depth=1
-; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
-; NOOPT-NEXT:    buffer_load_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Reload
-; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
-; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v18, 23
-; NOOPT-NEXT:    v_readlane_b32 s1, v18, 24
 ; NOOPT-NEXT:    buffer_load_dword v17, off, s[36:39], 0 offset:76 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[36:39], 0 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[36:39], 0 offset:4 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[36:39], 0 offset:8 ; 4-byte Folded Reload
@@ -5328,11 +5291,17 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    buffer_load_dword v7, off, s[36:39], 0 offset:28 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v8, off, s[36:39], 0 offset:32 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v9, off, s[36:39], 0 offset:36 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(6)
 ; NOOPT-NEXT:    buffer_load_dword v10, off, s[36:39], 0 offset:40 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(5)
 ; NOOPT-NEXT:    buffer_load_dword v11, off, s[36:39], 0 offset:44 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(4)
 ; NOOPT-NEXT:    buffer_load_dword v12, off, s[36:39], 0 offset:48 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(3)
 ; NOOPT-NEXT:    buffer_load_dword v13, off, s[36:39], 0 offset:52 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(2)
 ; NOOPT-NEXT:    buffer_load_dword v14, off, s[36:39], 0 offset:56 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(1)
 ; NOOPT-NEXT:    buffer_load_dword v15, off, s[36:39], 0 offset:60 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v16, off, s[36:39], 0 offset:68 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -5343,17 +5312,11 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    v_movrels_b32_e32 v0, v0
 ; NOOPT-NEXT:    buffer_store_dword v0, off, s[36:39], 0 offset:80 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v0, off, s[36:39], 0 offset:76 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v18, s2, 23
-; NOOPT-NEXT:    v_writelane_b32 v18, s3, 24
-; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
-; NOOPT-NEXT:    buffer_store_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
 ; NOOPT-NEXT:    s_xor_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_cbranch_execnz .LBB16_1
 ; NOOPT-NEXT:  ; %bb.2:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
+; NOOPT-NEXT:    s_waitcnt expcnt(2)
 ; NOOPT-NEXT:    buffer_load_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -5385,7 +5348,8 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    v_readlane_b32 s13, v18, 18
 ; NOOPT-NEXT:    v_readlane_b32 s14, v18, 19
 ; NOOPT-NEXT:    v_readlane_b32 s15, v18, 20
-; NOOPT-NEXT:    v_writelane_b32 v18, s16, 25
+; NOOPT-NEXT:    v_writelane_b32 v18, s16, 23
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    v_mov_b32_e32 v0, s0
 ; NOOPT-NEXT:    v_mov_b32_e32 v1, s1
 ; NOOPT-NEXT:    v_mov_b32_e32 v2, s2
@@ -5419,22 +5383,16 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    buffer_store_dword v14, off, s[36:39], 0 offset:140 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[36:39], 0 offset:144 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    s_mov_b64 s[0:1], exec
-; NOOPT-NEXT:    v_writelane_b32 v18, s0, 26
-; NOOPT-NEXT:    v_writelane_b32 v18, s1, 27
+; NOOPT-NEXT:    v_writelane_b32 v18, s0, 24
+; NOOPT-NEXT:    v_writelane_b32 v18, s1, 25
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
 ; NOOPT-NEXT:    buffer_store_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
 ; NOOPT-NEXT:    ; implicit-def: $vgpr0
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:  .LBB16_4: ; =>This Inner Loop Header: Depth=1
-; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
-; NOOPT-NEXT:    buffer_load_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Reload
-; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
-; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v18, 28
-; NOOPT-NEXT:    v_readlane_b32 s1, v18, 29
 ; NOOPT-NEXT:    buffer_load_dword v17, off, s[36:39], 0 offset:148 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[36:39], 0 offset:84 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[36:39], 0 offset:88 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[36:39], 0 offset:92 ; 4-byte Folded Reload
@@ -5445,11 +5403,17 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    buffer_load_dword v7, off, s[36:39], 0 offset:112 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v8, off, s[36:39], 0 offset:116 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v9, off, s[36:39], 0 offset:120 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(6)
 ; NOOPT-NEXT:    buffer_load_dword v10, off, s[36:39], 0 offset:124 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(5)
 ; NOOPT-NEXT:    buffer_load_dword v11, off, s[36:39], 0 offset:128 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(4)
 ; NOOPT-NEXT:    buffer_load_dword v12, off, s[36:39], 0 offset:132 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(3)
 ; NOOPT-NEXT:    buffer_load_dword v13, off, s[36:39], 0 offset:136 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(2)
 ; NOOPT-NEXT:    buffer_load_dword v14, off, s[36:39], 0 offset:140 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(1)
 ; NOOPT-NEXT:    buffer_load_dword v15, off, s[36:39], 0 offset:144 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v16, off, s[36:39], 0 offset:64 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -5460,22 +5424,16 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    v_movrels_b32_e32 v0, v0
 ; NOOPT-NEXT:    buffer_store_dword v0, off, s[36:39], 0 offset:152 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v0, off, s[36:39], 0 offset:148 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v18, s2, 28
-; NOOPT-NEXT:    v_writelane_b32 v18, s3, 29
-; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
-; NOOPT-NEXT:    buffer_store_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
 ; NOOPT-NEXT:    s_xor_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_cbranch_execnz .LBB16_4
 ; NOOPT-NEXT:  ; %bb.5:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
+; NOOPT-NEXT:    s_waitcnt expcnt(2)
 ; NOOPT-NEXT:    buffer_load_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v18, 26
-; NOOPT-NEXT:    v_readlane_b32 s1, v18, 27
+; NOOPT-NEXT:    v_readlane_b32 s0, v18, 24
+; NOOPT-NEXT:    v_readlane_b32 s1, v18, 25
 ; NOOPT-NEXT:    s_mov_b64 exec, s[0:1]
 ; NOOPT-NEXT:  ; %bb.6:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
@@ -5487,6 +5445,7 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    v_readlane_b32 s5, v18, 1
 ; NOOPT-NEXT:    v_readlane_b32 s6, v18, 2
 ; NOOPT-NEXT:    v_readlane_b32 s7, v18, 3
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[36:39], 0 offset:72 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[36:39], 0 offset:152 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[36:39], 0 offset:80 ; 4-byte Folded Reload
@@ -5496,15 +5455,12 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    buffer_store_dword v1, off, s[4:7], 0
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
 ; NOOPT-NEXT:    v_cmp_eq_u32_e64 s[0:1], v0, s0
-; NOOPT-NEXT:    s_mov_b64 s[2:3], -1
-; NOOPT-NEXT:    s_xor_b64 s[0:1], s[0:1], s[2:3]
-; NOOPT-NEXT:    s_and_b64 s[0:1], exec, s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v18, s0, 30
-; NOOPT-NEXT:    v_writelane_b32 v18, s1, 31
+; NOOPT-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; NOOPT-NEXT:    v_writelane_b32 v18, s2, 26
+; NOOPT-NEXT:    v_writelane_b32 v18, s3, 27
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
 ; NOOPT-NEXT:    buffer_store_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
-; NOOPT-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
 ; NOOPT-NEXT:    s_mov_b64 exec, s[0:1]
 ; NOOPT-NEXT:    ; divergent control-flow edge
 ; NOOPT-NEXT:    s_cbranch_execz .LBB16_8
@@ -5514,7 +5470,7 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    buffer_load_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s4, v18, 25
+; NOOPT-NEXT:    v_readlane_b32 s4, v18, 23
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:    s_mov_b32 s7, s1
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
@@ -5534,8 +5490,8 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    buffer_load_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v18, 30
-; NOOPT-NEXT:    v_readlane_b32 s1, v18, 31
+; NOOPT-NEXT:    v_readlane_b32 s0, v18, 26
+; NOOPT-NEXT:    v_readlane_b32 s1, v18, 27
 ; NOOPT-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_endpgm
 ;
@@ -6059,13 +6015,6 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[28:31], 0 offset:60 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:  .LBB17_1: ; =>This Inner Loop Header: Depth=1
-; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
-; NOOPT-NEXT:    buffer_load_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Reload
-; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
-; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v32, 11
-; NOOPT-NEXT:    v_readlane_b32 s1, v32, 12
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[28:31], 0 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[28:31], 0 offset:4 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[28:31], 0 offset:8 ; 4-byte Folded Reload
@@ -6129,17 +6078,10 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; NOOPT-NEXT:    buffer_store_dword v13, off, s[28:31], 0 offset:52 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v14, off, s[28:31], 0 offset:56 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[28:31], 0 offset:60 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v32, s2, 11
-; NOOPT-NEXT:    v_writelane_b32 v32, s3, 12
-; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
-; NOOPT-NEXT:    buffer_store_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
 ; NOOPT-NEXT:    s_xor_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_cbranch_execnz .LBB17_1
 ; NOOPT-NEXT:  ; %bb.2:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -6159,19 +6101,26 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; NOOPT-NEXT:    buffer_load_dword v6, off, s[28:31], 0 offset:108 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v7, off, s[28:31], 0 offset:112 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v8, off, s[28:31], 0 offset:116 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(6)
 ; NOOPT-NEXT:    buffer_load_dword v9, off, s[28:31], 0 offset:120 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(5)
 ; NOOPT-NEXT:    buffer_load_dword v10, off, s[28:31], 0 offset:124 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(4)
 ; NOOPT-NEXT:    buffer_load_dword v11, off, s[28:31], 0 offset:128 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(3)
 ; NOOPT-NEXT:    buffer_load_dword v12, off, s[28:31], 0 offset:132 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(2)
 ; NOOPT-NEXT:    buffer_load_dword v13, off, s[28:31], 0 offset:136 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(1)
 ; NOOPT-NEXT:    buffer_load_dword v14, off, s[28:31], 0 offset:140 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v15, off, s[28:31], 0 offset:144 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    v_mov_b32_e32 v16, 63
 ; NOOPT-NEXT:    buffer_store_dword v16, off, s[28:31], 0 offset:212 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    s_mov_b64 s[0:1], exec
 ; NOOPT-NEXT:    s_waitcnt vmcnt(14)
-; NOOPT-NEXT:    v_writelane_b32 v32, s0, 13
-; NOOPT-NEXT:    v_writelane_b32 v32, s1, 14
+; NOOPT-NEXT:    v_writelane_b32 v32, s0, 11
+; NOOPT-NEXT:    v_writelane_b32 v32, s1, 12
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
 ; NOOPT-NEXT:    buffer_store_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
@@ -6197,13 +6146,6 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[28:31], 0 offset:208 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:  .LBB17_4: ; =>This Inner Loop Header: Depth=1
-; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
-; NOOPT-NEXT:    buffer_load_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Reload
-; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
-; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v32, 15
-; NOOPT-NEXT:    v_readlane_b32 s1, v32, 16
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[28:31], 0 offset:148 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[28:31], 0 offset:152 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[28:31], 0 offset:156 ; 4-byte Folded Reload
@@ -6267,22 +6209,15 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; NOOPT-NEXT:    buffer_store_dword v13, off, s[28:31], 0 offset:200 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v14, off, s[28:31], 0 offset:204 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[28:31], 0 offset:208 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v32, s2, 15
-; NOOPT-NEXT:    v_writelane_b32 v32, s3, 16
-; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
-; NOOPT-NEXT:    buffer_store_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
 ; NOOPT-NEXT:    s_xor_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_cbranch_execnz .LBB17_4
 ; NOOPT-NEXT:  ; %bb.5:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v32, 13
-; NOOPT-NEXT:    v_readlane_b32 s1, v32, 14
+; NOOPT-NEXT:    v_readlane_b32 s0, v32, 11
+; NOOPT-NEXT:    v_readlane_b32 s1, v32, 12
 ; NOOPT-NEXT:    s_mov_b64 exec, s[0:1]
 ; NOOPT-NEXT:  ; %bb.6:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
@@ -6325,9 +6260,11 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; NOOPT-NEXT:    v_mov_b32_e32 v3, v22
 ; NOOPT-NEXT:    v_mov_b32_e32 v4, v21
 ; NOOPT-NEXT:    v_mov_b32_e32 v8, v20
-; NOOPT-NEXT:    s_waitcnt vmcnt(4)
+; NOOPT-NEXT:    s_waitcnt vmcnt(4) expcnt(2)
 ; NOOPT-NEXT:    v_mov_b32_e32 v13, v27
+; NOOPT-NEXT:    s_waitcnt expcnt(1)
 ; NOOPT-NEXT:    v_mov_b32_e32 v14, v26
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    v_mov_b32_e32 v15, v25
 ; NOOPT-NEXT:    v_mov_b32_e32 v9, v24
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -6364,15 +6301,12 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; NOOPT-NEXT:    buffer_store_dwordx4 v[1:4], off, s[4:7], 0
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
 ; NOOPT-NEXT:    v_cmp_eq_u32_e64 s[0:1], v0, s0
-; NOOPT-NEXT:    s_mov_b64 s[2:3], -1
-; NOOPT-NEXT:    s_xor_b64 s[0:1], s[0:1], s[2:3]
-; NOOPT-NEXT:    s_and_b64 s[0:1], exec, s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v32, s0, 17
-; NOOPT-NEXT:    v_writelane_b32 v32, s1, 18
+; NOOPT-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; NOOPT-NEXT:    v_writelane_b32 v32, s2, 13
+; NOOPT-NEXT:    v_writelane_b32 v32, s3, 14
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
 ; NOOPT-NEXT:    buffer_store_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
-; NOOPT-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
 ; NOOPT-NEXT:    s_mov_b64 exec, s[0:1]
 ; NOOPT-NEXT:    ; divergent control-flow edge
 ; NOOPT-NEXT:    s_cbranch_execz .LBB17_8
@@ -6397,8 +6331,8 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; NOOPT-NEXT:    buffer_load_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v32, 17
-; NOOPT-NEXT:    v_readlane_b32 s1, v32, 18
+; NOOPT-NEXT:    v_readlane_b32 s0, v32, 13
+; NOOPT-NEXT:    v_readlane_b32 s1, v32, 14
 ; NOOPT-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_endpgm
 ;
@@ -7443,12 +7377,9 @@ define amdgpu_kernel void @extract_adjacent_blocks(i32 %arg) {
 ; NOOPT-NEXT:    s_mov_b32 s1, 0
 ; NOOPT-NEXT:    s_waitcnt lgkmcnt(0)
 ; NOOPT-NEXT:    s_cmp_eq_u32 s0, s1
-; NOOPT-NEXT:    s_cselect_b64 s[0:1], -1, 0
-; NOOPT-NEXT:    s_mov_b64 s[2:3], -1
-; NOOPT-NEXT:    s_xor_b64 s[0:1], s[0:1], s[2:3]
-; NOOPT-NEXT:    s_and_b64 vcc, exec, s[0:1]
-; NOOPT-NEXT:    s_cbranch_vccnz .LBB19_2
-; NOOPT-NEXT:  ; %bb.1: ; %bb1
+; NOOPT-NEXT:    s_cbranch_scc1 .LBB19_1
+; NOOPT-NEXT:    s_branch .LBB19_2
+; NOOPT-NEXT:  .LBB19_1: ; %bb1
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:    s_mov_b32 s6, s1
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
@@ -7637,12 +7568,9 @@ define amdgpu_kernel void @insert_adjacent_blocks(i32 %arg, float %val0) {
 ; NOOPT-NEXT:    s_waitcnt lgkmcnt(0)
 ; NOOPT-NEXT:    s_mov_b32 s1, 0
 ; NOOPT-NEXT:    s_cmp_eq_u32 s0, s1
-; NOOPT-NEXT:    s_cselect_b64 s[0:1], -1, 0
-; NOOPT-NEXT:    s_mov_b64 s[2:3], -1
-; NOOPT-NEXT:    s_xor_b64 s[0:1], s[0:1], s[2:3]
-; NOOPT-NEXT:    s_and_b64 vcc, exec, s[0:1]
-; NOOPT-NEXT:    s_cbranch_vccnz .LBB20_2
-; NOOPT-NEXT:  ; %bb.1: ; %bb1
+; NOOPT-NEXT:    s_cbranch_scc1 .LBB20_1
+; NOOPT-NEXT:    s_branch .LBB20_2
+; NOOPT-NEXT:  .LBB20_1: ; %bb1
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:    s_mov_b32 s6, s1
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
@@ -9285,11 +9213,10 @@ define amdgpu_kernel void @broken_phi_bb(i32 %arg, i32 %arg1) {
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[24:27], 0 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
 ; NOOPT-NEXT:    v_cmp_lt_i32_e64 s[0:1], v0, s0
-; NOOPT-NEXT:    s_mov_b64 s[2:3], -1
-; NOOPT-NEXT:    s_xor_b64 s[0:1], s[0:1], s[2:3]
 ; NOOPT-NEXT:    s_and_b64 vcc, exec, s[0:1]
-; NOOPT-NEXT:    s_cbranch_vccnz .LBB26_6
-; NOOPT-NEXT:  ; %bb.2: ; %bb4
+; NOOPT-NEXT:    s_cbranch_vccnz .LBB26_2
+; NOOPT-NEXT:    s_branch .LBB26_6
+; NOOPT-NEXT:  .LBB26_2: ; %bb4
 ; NOOPT-NEXT:    ; in Loop: Header=BB26_1 Depth=1
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[20:21], -1
 ; NOOPT-NEXT:    buffer_load_dword v18, off, s[24:27], 0 offset:140 ; 4-byte Folded Reload
@@ -9354,13 +9281,6 @@ define amdgpu_kernel void @broken_phi_bb(i32 %arg, i32 %arg1) {
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:  .LBB26_3: ; Parent Loop BB26_1 Depth=1
 ; NOOPT-NEXT:    ; => This Inner Loop Header: Depth=2
-; NOOPT-NEXT:    s_or_saveexec_b64 s[20:21], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
-; NOOPT-NEXT:    buffer_load_dword v18, off, s[24:27], 0 offset:140 ; 4-byte Folded Reload
-; NOOPT-NEXT:    s_mov_b64 exec, s[20:21]
-; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v18, 4
-; NOOPT-NEXT:    v_readlane_b32 s1, v18, 5
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[24:27], 0 offset:4 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[24:27], 0 offset:8 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[24:27], 0 offset:12 ; 4-byte Folded Reload
@@ -9424,17 +9344,10 @@ define amdgpu_kernel void @broken_phi_bb(i32 %arg, i32 %arg1) {
 ; NOOPT-NEXT:    buffer_store_dword v13, off, s[24:27], 0 offset:56 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v14, off, s[24:27], 0 offset:60 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[24:27], 0 offset:64 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v18, s2, 4
-; NOOPT-NEXT:    v_writelane_b32 v18, s3, 5
-; NOOPT-NEXT:    s_or_saveexec_b64 s[20:21], -1
-; NOOPT-NEXT:    buffer_store_dword v18, off, s[24:27], 0 offset:140 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 exec, s[20:21]
 ; NOOPT-NEXT:    s_xor_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_cbranch_execnz .LBB26_3
 ; NOOPT-NEXT:  ; %bb.4: ; in Loop: Header=BB26_1 Depth=1
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[20:21], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v18, off, s[24:27], 0 offset:140 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[20:21]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -9451,12 +9364,19 @@ define amdgpu_kernel void @broken_phi_bb(i32 %arg, i32 %arg1) {
 ; NOOPT-NEXT:    buffer_load_dword v6, off, s[24:27], 0 offset:100 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v7, off, s[24:27], 0 offset:104 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v8, off, s[24:27], 0 offset:108 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(6)
 ; NOOPT-NEXT:    buffer_load_dword v9, off, s[24:27], 0 offset:112 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(5)
 ; NOOPT-NEXT:    buffer_load_dword v10, off, s[24:27], 0 offset:116 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(4)
 ; NOOPT-NEXT:    buffer_load_dword v11, off, s[24:27], 0 offset:120 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(3)
 ; NOOPT-NEXT:    buffer_load_dword v12, off, s[24:27], 0 offset:124 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(2)
 ; NOOPT-NEXT:    buffer_load_dword v13, off, s[24:27], 0 offset:128 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(1)
 ; NOOPT-NEXT:    buffer_load_dword v14, off, s[24:27], 0 offset:132 ; 4-byte Folded Reload
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v15, off, s[24:27], 0 offset:136 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_waitcnt vmcnt(14)
 ; NOOPT-NEXT:    buffer_store_dword v0, off, s[24:27], 0 ; 4-byte Folded Spill
@@ -9722,7 +9642,6 @@ define amdgpu_cs void @insert_or_disj_index(ptr addrspace(1) %out, ptr addrspace
 ; NOOPT-NEXT:    v_mov_b32_e32 v1, v2
 ; NOOPT-NEXT:    buffer_store_dword v0, off, s[16:19], 0 offset:132 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v1, off, s[16:19], 0 offset:136 ; 4-byte Folded Spill
-; NOOPT-NEXT:    ; kill: def $sgpr8_sgpr9_sgpr10_sgpr11 killed $sgpr4_sgpr5_sgpr6_sgpr7
 ; NOOPT-NEXT:    s_waitcnt expcnt(1)
 ; NOOPT-NEXT:    v_mov_b32_e32 v0, s1
 ; NOOPT-NEXT:    buffer_load_dword v0, v0, s[4:7], s0 offen
@@ -9801,13 +9720,6 @@ define amdgpu_cs void @insert_or_disj_index(ptr addrspace(1) %out, ptr addrspace
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[16:19], 0 offset:60 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    ; implicit-def: $sgpr0_sgpr1
 ; NOOPT-NEXT:  .LBB27_1: ; =>This Inner Loop Header: Depth=1
-; NOOPT-NEXT:    s_or_saveexec_b64 s[12:13], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
-; NOOPT-NEXT:    buffer_load_dword v33, off, s[16:19], 0 offset:208 ; 4-byte Folded Reload
-; NOOPT-NEXT:    s_mov_b64 exec, s[12:13]
-; NOOPT-NEXT:    s_waitcnt vmcnt(0)
-; NOOPT-NEXT:    v_readlane_b32 s0, v33, 11
-; NOOPT-NEXT:    v_readlane_b32 s1, v33, 12
 ; NOOPT-NEXT:    buffer_load_dword v0, off, s[16:19], 0 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v1, off, s[16:19], 0 offset:4 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    buffer_load_dword v2, off, s[16:19], 0 offset:8 ; 4-byte Folded Reload
@@ -9871,17 +9783,10 @@ define amdgpu_cs void @insert_or_disj_index(ptr addrspace(1) %out, ptr addrspace
 ; NOOPT-NEXT:    buffer_store_dword v13, off, s[16:19], 0 offset:52 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v14, off, s[16:19], 0 offset:56 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    buffer_store_dword v15, off, s[16:19], 0 offset:60 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v33, s2, 11
-; NOOPT-NEXT:    v_writelane_b32 v33, s3, 12
-; NOOPT-NEXT:    s_or_saveexec_b64 s[12:13], -1
-; NOOPT-NEXT:    buffer_store_dword v33, off, s[16:19], 0 offset:208 ; 4-byte Folded Spill
-; NOOPT-NEXT:    s_mov_b64 exec, s[12:13]
 ; NOOPT-NEXT:    s_xor_b64 exec, exec, s[0:1]
 ; NOOPT-NEXT:    s_cbranch_execnz .LBB27_1
 ; NOOPT-NEXT:  ; %bb.2:
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[12:13], -1
-; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    buffer_load_dword v33, off, s[16:19], 0 offset:208 ; 4-byte Folded Reload
 ; NOOPT-NEXT:    s_mov_b64 exec, s[12:13]
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
@@ -9926,9 +9831,11 @@ define amdgpu_cs void @insert_or_disj_index(ptr addrspace(1) %out, ptr addrspace
 ; NOOPT-NEXT:    v_mov_b32_e32 v1, v24
 ; NOOPT-NEXT:    v_mov_b32_e32 v2, v23
 ; NOOPT-NEXT:    v_mov_b32_e32 v3, v22
+; NOOPT-NEXT:    s_waitcnt expcnt(6)
 ; NOOPT-NEXT:    v_mov_b32_e32 v9, v21
-; NOOPT-NEXT:    s_waitcnt vmcnt(4)
+; NOOPT-NEXT:    s_waitcnt vmcnt(4) expcnt(1)
 ; NOOPT-NEXT:    v_mov_b32_e32 v14, v28
+; NOOPT-NEXT:    s_waitcnt expcnt(0)
 ; NOOPT-NEXT:    v_mov_b32_e32 v15, v27
 ; NOOPT-NEXT:    v_mov_b32_e32 v16, v26
 ; NOOPT-NEXT:    v_mov_b32_e32 v10, v25

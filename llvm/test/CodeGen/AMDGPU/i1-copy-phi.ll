@@ -11,7 +11,7 @@
 ; SI:    v_cndmask_b32_e64   v{{[0-9]+}}, 0, -1
 
 ; SI: ; %bb3
-; SI:    s_or_b64            exec, exec, vcc
+; SI:    s_or_b64            exec, exec, s[{{[0-9]+:[0-9]+}}]
 
 define amdgpu_kernel void @br_i1_phi(i32 %arg) {
 bb:
