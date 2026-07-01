@@ -45,7 +45,7 @@ namespace COMGR {
 /// not exceed the configured level (see Logger::isEnabled). Callers choose the
 /// numeric severity passed to Logger::emit; larger numbers are reserved for
 /// more detailed diagnostics.
-using LogLevel = uint8_t;
+using LogLevel = uint32_t;
 
 /// Parse @p Requested (the value of AMD_COMGR_LOG_LEVEL, which may be empty) into
 /// a threshold on the 0-to-4 scale. The value must be a bare integer; it is
@@ -80,28 +80,26 @@ public:
   /// The currently configured maximum severity that will be emitted.
   LogLevel getLevel() const { return Level; }
 
-  /// Return the global sink stream, resolved once from AMD_COMGR_REDIRECT_LOGS
-  /// (stdout, stderr, or an appended file), or null when logs are not
-  /// redirected. Callers that maintain their own per-action log stream can
-  /// reuse this to avoid opening the redirect destination a second time.
-  /// Direct writes to the returned stream are NOT serialized against emit();
-  /// callers that tee output into the sink should go through writeToSink() so
-  /// they share the logger's mutex.
-  llvm::raw_ostream *getSink() const { return Sink; }
+  /// Whether a global redirect sink (from AMD_COMGR_REDIRECT_LOGS) is active.
+  /// The stream itself is not exposed; use writeToSink()/sinkFlush() so all
+  /// access stays serialized under the logger's mutex.
+  bool hasSink() const { return Sink != nullptr; }
 
   /// Return a diagnostic describing why the redirect sink could not be opened,
   /// or an empty string when redirection was not requested or succeeded. The
   /// Logger is constructed before any per-action log buffer exists, so the
-  /// action layer surfaces this into the returned comgr.log when getSink() is
-  /// null despite AMD_COMGR_REDIRECT_LOGS being set.
+  /// action layer surfaces this into the returned comgr.log when hasSink() is
+  /// false despite AMD_COMGR_REDIRECT_LOGS being set.
   llvm::StringRef getSinkError() const { return SinkError; }
 
-  /// Write @p Data verbatim to the global sink while holding the logger's mutex,
-  /// so callers that tee their own output into the sink (see TeeStream in
-  /// comgr.cpp) serialize with emit() instead of racing on the shared stream.
-  /// No prefix or newline is added and the sink is not flushed (the caller is
-  /// expected to flush once it is done). A no-op when there is no sink.
+  /// Write @p Data verbatim to the global sink under the logger's mutex, so teed
+  /// output (see TeeStream in comgr.cpp) does not race emit(). No prefix,
+  /// newline, or flush is added; a no-op when there is no sink.
   void writeToSink(llvm::StringRef Data);
+
+  /// Flush the global sink under the logger's mutex. A no-op when there is no
+  /// sink.
+  void sinkFlush();
 
   /// Emit @p Message at @p Severity, prefixed and newline-terminated. Writes to
   /// the global sink and, when one is installed on the calling thread, the

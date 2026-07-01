@@ -87,11 +87,15 @@ void Logger::writeToSink(StringRef Data) {
   if (!Sink)
     return;
 
-  // Share the same mutex as emit() so teed output and Logger messages never
-  // interleave mid-write on the shared sink. The sink is intentionally left
-  // unflushed here; the caller flushes once when the action completes.
   std::scoped_lock<std::mutex> Lock(Mutex);
   *Sink << Data;
+}
+
+void Logger::sinkFlush() {
+  if (!Sink)
+    return;
+  std::scoped_lock<std::mutex> Lock(Mutex);
+  Sink->flush();
 }
 
 void Logger::emit(LogLevel Severity, const Twine &Message) {

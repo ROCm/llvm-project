@@ -58,26 +58,26 @@ TEST(Logger, NeverEmitsZeroSeverity) {
 // -- parseLogLevel (AMD_COMGR_LOG_LEVEL mapping) -----------------------------
 
 TEST(Logger, ParseLogLevelNumericValues) {
-  EXPECT_EQ(int{parseLogLevel("0", false)}, 0);
-  EXPECT_EQ(int{parseLogLevel("2", false)}, 2);
-  EXPECT_EQ(int{parseLogLevel("4", false)}, 4);
+  EXPECT_EQ(parseLogLevel("0", false), 0);
+  EXPECT_EQ(parseLogLevel("2", false), 2);
+  EXPECT_EQ(parseLogLevel("4", false), 4);
 }
 
 TEST(Logger, ParseLogLevelClampsAboveMax) {
-  EXPECT_EQ(int{parseLogLevel("5", false)}, 4);
-  EXPECT_EQ(int{parseLogLevel("1000", false)}, 4);
+  EXPECT_EQ(parseLogLevel("5", false), 4);
+  EXPECT_EQ(parseLogLevel("1000", false), 4);
 }
 
 TEST(Logger, ParseLogLevelEmptyUsesVerboseFallback) {
   // Unset variable: low level normally, max level when verbose logs requested.
-  EXPECT_EQ(int{parseLogLevel("", false)}, 1);
-  EXPECT_EQ(int{parseLogLevel("", true)}, 4);
+  EXPECT_EQ(parseLogLevel("", false), 1);
+  EXPECT_EQ(parseLogLevel("", true), 4);
 }
 
 TEST(Logger, ParseLogLevelNonNumericUsesVerboseFallback) {
   // A non-integer value falls back to the same default as an unset variable.
-  EXPECT_EQ(int{parseLogLevel("foo", false)}, 1);
-  EXPECT_EQ(int{parseLogLevel("bar", true)}, 4);
+  EXPECT_EQ(parseLogLevel("foo", false), 1);
+  EXPECT_EQ(parseLogLevel("bar", true), 4);
 }
 
 // -- Sink output and prefixes ------------------------------------------------
@@ -258,7 +258,7 @@ TEST(Logger, RedirectOpenFailureIsRecorded) {
   Logger Log;
   unsetenv("AMD_COMGR_REDIRECT_LOGS");
 
-  EXPECT_EQ(Log.getSink(), nullptr);
+  EXPECT_FALSE(Log.hasSink());
   EXPECT_FALSE(Log.getSinkError().empty());
   EXPECT_NE(Log.getSinkError().find("unable to redirect log to file"),
             StringRef::npos);

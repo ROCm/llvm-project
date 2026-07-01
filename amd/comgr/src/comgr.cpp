@@ -55,26 +55,24 @@ using namespace COMGR;
 using namespace COMGR::TimeStatistics;
 
 namespace {
-// A raw_ostream that forwards every write to two destinations. Used to send the
-// compiler-diagnostic stream to both the in-memory comgr.log buffer and the
-// global redirect sink at once, so the returned AMD_COMGR_DATA_KIND_LOG object
-// and the redirect destination stay consistent (mirroring how Logger messages
-// already reach both via LogCaptureScope). The sink write goes through
-// Logger::writeToSink so it holds the logger's mutex and never interleaves with
-// a concurrent Logger::emit on the shared stream.
+// A raw_ostream that forwards writes to both the in-memory comgr.log buffer and
+// the global redirect sink, keeping the returned log object and the redirect
+// destination consistent. The sink write goes through Logger::writeToSink so it
+// holds the logger's mutex and never races a concurrent Logger::emit.
 class TeeStream : public raw_ostream {
 public:
-  explicit TeeStream(raw_ostream &Buffer) : Buffer(Buffer) { SetUnbuffered(); }
+  explicit TeeStream(raw_ostream &Buffer, Logger &Log) : Buffer(Buffer), Log(Log) { SetUnbuffered(); }
 
 private:
   void write_impl(const char *Ptr, size_t Size) override {
     Buffer.write(Ptr, Size);
-    getLogger().writeToSink(StringRef(Ptr, Size));
+    Log.writeToSink(StringRef(Ptr, Size));
     Pos += Size;
   }
   uint64_t current_pos() const override { return Pos; }
 
   raw_ostream &Buffer;
+  Logger &Log;
   uint64_t Pos = 0;
 };
 
@@ -1342,6 +1340,7 @@ amd_comgr_status_t AMD_COMGR_API
     // in any Logger-aware API reached from this action) are collected for the
     // caller alongside the global redirect sink.
     LogCaptureScope LogCapture(LogS);
+    Logger &Log = getLogger();
 
     // When logs are redirected, the compiler-diagnostic stream is teed to both
     // LogS and the redirect sink so the returned comgr.log object and the
@@ -1357,24 +1356,23 @@ amd_comgr_status_t AMD_COMGR_API
       // Reuse its sink rather than opening the same target a second time. A null
       // sink means the file failed to open (handled below); we then keep writing
       // only to the in-memory LogS.
-      if (getLogger().getSink()) {
-        RedirectTee.emplace(LogS);
+      if (Log.hasSink()) {
+        RedirectTee.emplace(LogS, Log);
         LogP = &RedirectTee.value();
         if (RedirectLog != "stdout" && RedirectLog != "stderr" &&
             RedirectLog != "-")
           PerfLog = RedirectLog.str();
-      } else if (StringRef SinkError = getLogger().getSinkError();
+      } else if (StringRef SinkError = Log.getSinkError();
                  !SinkError.empty()) {
         // Redirect was requested but the Logger could not open the destination.
-        // Surface its diagnostic into the returned comgr.log (the sink is null
-        // here), matching the behavior before logging was centralized.
-        getLogger().emit(/*Severity=*/1, SinkError);
+        // Surface its diagnostic into the returned comgr.log (the sink is null here).
+        Log.emit(/*Severity=*/1, SinkError);
       }
     }
 
     InitTimeStatistics(PerfLog);
 
-    if (getLogger().isEnabled(/*Severity=*/4)) {
+    if (Log.isEnabled(/*Severity=*/4)) {
       SmallString<256> HeaderStr;
       raw_svector_ostream HeaderS(HeaderStr);
       HeaderS << "amd_comgr_do_action:\n"
@@ -1392,7 +1390,7 @@ amd_comgr_status_t AMD_COMGR_API
               << " Comgr Branch-Commit: " << xstringify(AMD_COMGR_GIT_BRANCH)
               << '-' << xstringify(AMD_COMGR_GIT_COMMIT) << '\n'
               << "\t LLVM Commit: " << clang::getLLVMRevision();
-      getLogger().emit(/*Severity=*/4, HeaderStr);
+      Log.emit(/*Severity=*/4, HeaderStr);
     }
 
     ProfilePoint ProfileAction(getActionKindName(ActionKind));
@@ -1434,16 +1432,10 @@ amd_comgr_status_t AMD_COMGR_API
       return Status;
     }
 
-    getLogger().emit(/*Severity=*/4, Twine("\tReturnStatus: ") +
+    Log.emit(/*Severity=*/4, Twine("\tReturnStatus: ") +
                                          getStatusName(ActionStatus) + "\n");
 
-    // Flush any compiler diagnostics teed to the redirect sink. The sink is the
-    // Logger's persistent (buffered) stream, so diagnostics written through the
-    // tee are not otherwise flushed when the configured level suppresses the
-    // trailing debug emit() above.
-    if (raw_ostream *Sink = getLogger().getSink()) {
-      Sink->flush();
-    }
+    Log.sinkFlush();
 
     if (ActionInfoP->Logging) {
       amd_comgr_data_t LogT;
