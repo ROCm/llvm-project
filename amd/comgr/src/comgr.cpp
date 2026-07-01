@@ -1366,13 +1366,13 @@ amd_comgr_status_t AMD_COMGR_API
                  !SinkError.empty()) {
         // Redirect was requested but the Logger could not open the destination.
         // Surface its diagnostic into the returned comgr.log (the sink is null here).
-        Log.emit(/*Severity=*/1, SinkError);
+        Log.emit(LogLevel::Error, SinkError);
       }
     }
 
     InitTimeStatistics(PerfLog);
 
-    if (Log.isEnabled(/*Severity=*/4)) {
+    if (Log.isEnabled(LogLevel::Debug)) {
       SmallString<256> HeaderStr;
       raw_svector_ostream HeaderS(HeaderStr);
       HeaderS << "amd_comgr_do_action:\n"
@@ -1390,7 +1390,7 @@ amd_comgr_status_t AMD_COMGR_API
               << " Comgr Branch-Commit: " << xstringify(AMD_COMGR_GIT_BRANCH)
               << '-' << xstringify(AMD_COMGR_GIT_COMMIT) << '\n'
               << "\t LLVM Commit: " << clang::getLLVMRevision();
-      Log.emit(/*Severity=*/4, HeaderStr);
+      Log.emit(LogLevel::Debug, HeaderStr);
     }
 
     ProfilePoint ProfileAction(getActionKindName(ActionKind));
@@ -1432,7 +1432,7 @@ amd_comgr_status_t AMD_COMGR_API
       return Status;
     }
 
-    Log.emit(/*Severity=*/4, Twine("\tReturnStatus: ") +
+    Log.emit(LogLevel::Debug, Twine("\tReturnStatus: ") +
                                          getStatusName(ActionStatus) + "\n");
 
     Log.sinkFlush();

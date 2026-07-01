@@ -24,9 +24,6 @@ namespace COMGR {
 
 namespace {
 
-// Maximum value on the severity/level scale; values above this are clamped.
-constexpr LogLevel MaxLogLevel = 4;
-
 // The capture stream is per-thread so that a captured Action on one thread does
 // not collect log output emitted by an unrelated API on another thread.
 thread_local raw_ostream *ThreadCaptureStream = nullptr;
@@ -47,9 +44,10 @@ LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
   // errors.
   unsigned Numeric;
   if (Requested.getAsInteger(10, Numeric))
-    return VerboseFallback ? MaxLogLevel : 1;
+    return VerboseFallback ? LogLevel::Debug : LogLevel::Error;
 
-  return Numeric > MaxLogLevel ? MaxLogLevel : static_cast<LogLevel>(Numeric);
+  unsigned Max = static_cast<unsigned>(LogLevel::Debug);
+  return static_cast<LogLevel>(Numeric > Max ? Max : Numeric);
 }
 
 Logger::Logger() : Level(resolveLevel()), Sink(nullptr) {
