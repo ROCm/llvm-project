@@ -162,15 +162,27 @@ __device__ double test_isnan() {
 
 // Check that device malloc and free do not conflict with std headers.
 #include <cstdlib>
-// MALLOC-LABEL: define{{.*}}@_Z11test_malloc
-// MALLOC: call {{.*}}ptr @malloc(i64
-// MALLOC: call {{.*}}ptr @malloc(i64
 // MALLOC-LABEL: define weak {{.*}}ptr @malloc(i64
+// MALLOC:  icmp ne ptr @__asan_malloc_impl, null
+// MALLOC:  call i64 @__asan_malloc_impl(i64 {{.*}}, i64 {{.*}})
 // MALLOC:  call i64 @__ockl_dm_alloc
 // NOMALLOC:  call void @llvm.trap
 // MALLOC-ASAN-LABEL: define weak {{.*}}ptr @malloc(i64
+// MALLOC-ASAN:  icmp ne ptr @__asan_malloc_impl, null
 // MALLOC-ASAN:  call ptr @llvm.returnaddress.p0(i32 0)
 // MALLOC-ASAN:  call i64 @__asan_malloc_impl(i64 {{.*}}, i64 {{.*}})
+// MALLOC-LABEL: define weak {{.*}}void @free(ptr
+// MALLOC:  icmp ne ptr @__asan_free_impl, null
+// MALLOC:  call void @__asan_free_impl(i64 {{.*}}, i64 {{.*}})
+// MALLOC:  call void @__ockl_dm_dealloc
+// NOMALLOC: call void @llvm.trap
+// MALLOC-ASAN-LABEL: define weak {{.*}}void @free(ptr
+// MALLOC-ASAN:  icmp ne ptr @__asan_free_impl, null
+// MALLOC-ASAN:  call ptr @llvm.returnaddress.p0(i32 0)
+// MALLOC-ASAN:  call void @__asan_free_impl(i64 {{.*}}, i64 {{.*}})
+// MALLOC-LABEL: define{{.*}}@_Z11test_malloc
+// MALLOC: call {{.*}}ptr @malloc(i64
+// MALLOC: call {{.*}}ptr @malloc(i64
 __device__ void test_malloc(void *a) {
   a = malloc(42);
   a = std::malloc(42);
@@ -179,12 +191,6 @@ __device__ void test_malloc(void *a) {
 // MALLOC-LABEL: define{{.*}}@_Z9test_free
 // MALLOC: call {{.*}}void @free(ptr
 // MALLOC: call {{.*}}void @free(ptr
-// MALLOC-LABEL: define weak {{.*}}void @free(ptr
-// MALLOC:  call void @__ockl_dm_dealloc
-// NOMALLOC: call void @llvm.trap
-// MALLOC-ASAN-LABEL: define weak {{.*}}void @free(ptr
-// MALLOC-ASAN:  call ptr @llvm.returnaddress.p0(i32 0)
-// MALLOC-ASAN:  call void @__asan_free_impl(i64 {{.*}}, i64 {{.*}})
 __device__ void test_free(void *a) {
   free(a);
   std::free(a);
