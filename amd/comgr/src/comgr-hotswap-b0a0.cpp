@@ -277,6 +277,13 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
 // offset is TargetOffset - (FromOffset + size); size is 8 (forward, 32-bit
 // literal) or 12 (backward, 64-bit literal), resolved by trying each. Encoded
 // via the MC assembler. Returns empty on failure.
+//
+// Invariant: callers only take this path for *far* sites (those a short
+// s_branch cannot reach, i.e. offsets well beyond the simm16 dword range), so
+// the literal never falls in the inline-constant range. A tiny offset would
+// assemble to the 4-byte inline-constant form, match neither candidate size,
+// and return empty; that is acceptable, since no caller passes such an offset
+// (see EncodeLongBranch.SmallOffsetReturnsEmpty).
 SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
                                       uint64_t TargetOffset) {
   for (uint32_t Size : {LongBranchFwdBytes, LongBranchMaxBytes}) {
@@ -299,8 +306,28 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     ArrayRef<uint8_t> Replacement) {
-  const bool Far =
-      static_cast<int64_t>(Ctx.TextSize - InstOffset) > LongBranchThreshold;
+  // This trampoline lands right after .text and after every trampoline already
+  // queued -- later ones are appended behind it and cannot shift it, and
+  // fixupTrampolineBranches walks the same list in the same order -- so its
+  // final pool offset is known exactly now.
+  uint64_t PoolStart = Ctx.TextSize;
+  for (const Trampoline &Prev : Ctx.OutTrampolines)
+    PoolStart += Prev.Bytes.size();
+
+  // An s_branch encodes To - From as a signed simm16 dword field, in range iff
+  // (To - From - MinInstSize) / MinInstSize fits [BranchOffsetMin,
+  // BranchOffsetMax] (see LLVMState::encodeSBranch). Test both edges with the
+  // short branch-back slot; the branch-back (pool tail -> site) is the farther
+  // of the two. Go long only when a short branch cannot reach.
+  auto WithinSBranch = [](uint64_t From, uint64_t To) {
+    int64_t Dword = (static_cast<int64_t>(To) - static_cast<int64_t>(From) -
+                     static_cast<int64_t>(MinInstSize)) /
+                    static_cast<int64_t>(MinInstSize);
+    return Dword >= BranchOffsetMin && Dword <= BranchOffsetMax;
+  };
+  const uint64_t ShortBackFrom = PoolStart + Replacement.size();
+  const bool Far = !(WithinSBranch(InstOffset, PoolStart) &&
+                     WithinSBranch(ShortBackFrom, InstOffset + InstSize));
 
   Trampoline T;
   T.OriginalOffset = InstOffset;

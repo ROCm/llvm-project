@@ -2,9 +2,9 @@
 // COM: trampoline pool sits farther than s_branch's +-128 KB reach from the
 // COM: patch site, both trampoline edges use s_add_pc_i64 (a PC-relative long
 // COM: branch that reaches anywhere, needs no scratch register, and does not
-// COM: touch SCC) instead of s_branch. A large .rept filler (~80 KB, non-NOP
-// COM: so it forms no usable sled) pushes the pool out of range of the
-// COM: tensor_load_to_lds at the top of the kernel.
+// COM: touch SCC) instead of s_branch. A large .rept filler (~160 KB, non-NOP
+// COM: so it forms no usable sled) pushes the pool past s_branch's real reach
+// COM: from the tensor_load_to_lds at the top of the kernel.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -45,9 +45,10 @@
 test_far:
   tensor_load_to_lds s[0:3], s[4:11]
   s_endpgm
-  // ~80 KB of non-NOP filler so the appended trampoline pool is beyond
-  // s_branch reach from the tensor_load above (forces the long-branch path).
-  .rept 20000
+  // ~160 KB of non-NOP filler so the appended trampoline pool is beyond
+  // s_branch's +-128 KB reach from the tensor_load above (forces the
+  // long-branch path).
+  .rept 40000
     s_mov_b32 s0, s1
   .endr
 .Ltest_far_end:

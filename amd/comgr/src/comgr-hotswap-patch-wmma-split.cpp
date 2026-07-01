@@ -655,12 +655,8 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   // Assemble the split sequence and defer trampoline emission to
   // emitToTrampoline, which picks a short s_branch or an s_add_pc_i64 long
   // branch based on the site's distance from the appended pool.
-  std::string AsmSource;
-  for (const std::string &Line : AsmLines) {
-    AsmSource += Line;
-    AsmSource += '\n';
-  }
-  SmallVector<uint8_t> Replacement = assembleSingleInst(AsmSource, Ctx.LS);
+  SmallVector<uint8_t> Replacement =
+      assembleSingleInst(joinAsmLines(AsmLines), Ctx.LS);
   if (Replacement.empty()) {
     log() << "hotswap: error: WMMA split: trampoline assembly failed for "
           << DI.Mnemonic << "\n";

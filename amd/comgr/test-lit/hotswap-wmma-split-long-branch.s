@@ -2,7 +2,8 @@
 // COM: emitToTrampoline with the other patch families, so a split site beyond
 // COM: s_branch's +-128 KB reach of the appended pool uses an s_add_pc_i64
 // COM: long branch on both edges instead of falling back. A large .rept filler
-// COM: (~80 KB, non-NOP) pushes the pool out of range of the WMMA at the top.
+// COM: (~160 KB, non-NOP) pushes the pool past s_branch's real reach from the
+// COM: WMMA at the top.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -41,9 +42,9 @@
 test_wsplit_far:
   v_wmma_f32_16x16x128_fp8_fp8 v[32:39], v[0:15], v[16:31], v[32:39]
   s_endpgm
-  // ~80 KB of non-NOP filler so the appended trampoline pool is beyond
-  // s_branch reach from the WMMA above (forces the long-branch path).
-  .rept 20000
+  // ~160 KB of non-NOP filler so the appended trampoline pool is beyond
+  // s_branch's +-128 KB reach from the WMMA above (forces the long-branch path).
+  .rept 40000
     s_mov_b32 s0, s1
   .endr
 .size test_wsplit_far, .-test_wsplit_far

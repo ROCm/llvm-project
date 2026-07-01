@@ -129,14 +129,11 @@ static constexpr uint32_t MinInstSize = 4;
 
 // s_add_pc_i64 long-branch encoded sizes: 8 bytes for a forward (32-bit
 // literal) offset, 12 for a backward (64-bit literal) one. The back slot
-// reserves the max; unused tail bytes are s_nop-padded.
+// reserves the max; unused tail bytes are s_nop-padded. emitToTrampoline picks
+// the long path only when a short s_branch cannot reach the site's exact pool
+// offset on either edge (computed from the already-queued trampolines).
 static constexpr uint32_t LongBranchFwdBytes = 8;
 static constexpr uint32_t LongBranchMaxBytes = 12;
-
-// Take the long-branch path when the site is this far from .text end (i.e. the
-// appended pool may exceed s_branch reach). The margin below MaxSledDistance
-// covers pool growth so an in-range decision cannot later go out of range.
-static constexpr int64_t LongBranchThreshold = MaxSledDistance - 65536;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
 // LLVMState::encodeSBranch to reject out-of-range branches before handing
@@ -439,10 +436,18 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 llvm::SmallVector<uint8_t> assembleSingleInst(llvm::StringRef AsmStr,
                                               const LLVMState &LS);
 
+/// Join \p AsmLines into a single newline-terminated assembly source string,
+/// as expected by assembleSingleInst (which accepts multiple instructions).
+std::string joinAsmLines(llvm::ArrayRef<std::string> AsmLines);
+
 /// Assemble \p AsmLines and append a branch-back to the next instruction
 /// after the original (\p OriginalOffset + \p OriginalSize). The branch-back
 /// is encoded via LLVMState::encodeSBranch, so no ISA-specific opcode needs
 /// to flow in from the caller.
+///
+/// NOTE: no production caller remains (WMMA-split now defers edge encoding to
+/// emitToTrampoline / fixupTrampolineBranches). Kept only as a self-contained
+/// helper exercised by the unit tests; prefer emitToTrampoline for new code.
 Trampoline buildTrampoline(llvm::ArrayRef<std::string> AsmLines,
                            uint64_t OriginalOffset, uint32_t OriginalSize,
                            uint64_t TrampolineTextOffset, const LLVMState &LS);
