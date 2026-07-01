@@ -28,7 +28,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/Support/ConvertUTF.h"
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -1877,7 +1876,6 @@ void ProcessWarningOptions(DiagnosticsEngine &Diags,
                            const DiagnosticOptions &Opts,
                            llvm::vfs::FileSystem &VFS, bool ReportDiags = true);
 void EscapeStringForDiagnostic(StringRef Str, SmallVectorImpl<char> &OutStr);
-llvm::SmallString<16> DisplayCodePointForDiagnostic(llvm::UTF32 CodePoint);
 } // namespace clang
 
 #endif // LLVM_CLANG_BASIC_DIAGNOSTIC_H

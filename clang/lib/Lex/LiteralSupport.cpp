@@ -539,11 +539,6 @@ static bool ProcessNumericUCNEscape(const char *ThisTokBegin,
   return !HasError;
 }
 
-static bool allowedInCharacterName(char C) {
-  return (C >= 'A' && C <= 'Z') || (C >= '0' && C <= '9') || C == '-' ||
-         C == ' ';
-}
-
 static void DiagnoseInvalidUnicodeCharacterName(
     DiagnosticsEngine *Diags, const LangOptions &Features, FullSourceLoc Loc,
     const char *TokBegin, const char *TokRangeBegin, const char *TokRangeEnd,
@@ -554,27 +549,6 @@ static void DiagnoseInvalidUnicodeCharacterName(
       << Name;
 
   namespace u = llvm::sys::unicode;
-
-  bool HasIllegalCharacter = false;
-  for (const char *P = Name.begin(), *E = Name.end(); P != E;) {
-    if (allowedInCharacterName(*P)) {
-      ++P;
-      continue;
-    }
-    const auto *Src = reinterpret_cast<const llvm::UTF8 *>(P);
-    const auto *SrcEnd = reinterpret_cast<const llvm::UTF8 *>(E);
-    llvm::UTF32 CodePoint = 0;
-    if (llvm::convertUTF8Sequence(&Src, SrcEnd, &CodePoint,
-                                  llvm::strictConversion) != llvm::conversionOK)
-      break;
-    SourceLocation CharLoc = Lexer::AdvanceToTokenCharacter(
-        Loc, (TokRangeBegin - TokBegin) + (P - Name.begin()), Loc.getManager(),
-        Features);
-    Diags->Report(CharLoc, diag::note_invalid_ucn_name_character)
-        << DisplayCodePointForDiagnostic(CodePoint);
-    HasIllegalCharacter = true;
-    break;
-  }
 
   std::optional<u::LooseMatchingResult> Res =
       u::nameToCodepointLooseMatching(Name);
@@ -587,12 +561,6 @@ static void DiagnoseInvalidUnicodeCharacterName(
                Res->Name);
     return;
   }
-
-  // Providing illegal characters suggests a fundamental misuse of the feature,
-  // like providing emoji in \N{}. Offering alternative suggestions is often
-  // unhelpful in that scenario.
-  if (HasIllegalCharacter)
-    return;
 
   unsigned Distance = 0;
   SmallVector<u::MatchForCodepointName> Matches =
@@ -608,9 +576,17 @@ static void DiagnoseInvalidUnicodeCharacterName(
       break;
     Distance = Match.Distance;
 
+    std::string Str;
+    llvm::UTF32 V = Match.Value;
+    bool Converted =
+        llvm::convertUTF32ToUTF8String(llvm::ArrayRef<llvm::UTF32>(&V, 1), Str);
+    (void)Converted;
+    assert(Converted && "Found a match wich is not a unicode character");
+
     Diag(Diags, Features, Loc, TokBegin, TokRangeBegin, TokRangeEnd,
          diag::note_invalid_ucn_name_candidate)
-        << Match.Name << DisplayCodePointForDiagnostic(Match.Value)
+        << Match.Name << llvm::utohexstr(Match.Value)
+        << Str // FIXME: Fix the rendering of non printable characters
         << FixItHint::CreateReplacement(
                MakeCharSourceRange(Features, Loc, TokBegin, TokRangeBegin,
                                    TokRangeEnd),
