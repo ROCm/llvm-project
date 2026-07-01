@@ -39,7 +39,7 @@ static constexpr unsigned SgprEncodingGranule = 8;
 enum class MetadataSgprUpdateStatus {
   NotFound,
   Found,
-  Error,
+  Error
 };
 
 static std::optional<uint64_t> checkedAdd(uint64_t LHS, uint64_t RHS,
