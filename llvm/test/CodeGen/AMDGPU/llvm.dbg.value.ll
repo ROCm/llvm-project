@@ -1,4 +1,3 @@
-; XFAIL: *
 ; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn-unknown-amdhsa -mcpu=gfx700 < %s | FileCheck -check-prefixes=GCN,NOOPT %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-unknown-amdhsa -mcpu=gfx700 < %s | FileCheck -check-prefixes=GCN,OPT %s
 
