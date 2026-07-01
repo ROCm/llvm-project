@@ -6,65 +6,65 @@ define <2 x i16> @extract_2xi16(ptr addrspace(1) %p0, ptr addrspace(1) %p1, i1 %
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_and_b32_e32 v4, 1, v4
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
-; GCN-NEXT:    s_mov_b32 s6, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %T
-; GCN-NEXT:    s_mov_b32 s8, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s8
-; GCN-NEXT:    buffer_load_ushort v2, v[0:1], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_ushort v2, v[0:1], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v4, v[0:1], s[4:7], 0 addr64 offset:2 glc
+; GCN-NEXT:    buffer_load_ushort v4, v[0:1], s[8:11], 0 addr64 offset:2 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[4:7], 0 addr64 offset:4 glc
+; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[8:11], 0 addr64 offset:4 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[4:7], 0 addr64 offset:6 glc
+; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[8:11], 0 addr64 offset:6 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[4:7], 0 addr64 offset:8 glc
+; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[8:11], 0 addr64 offset:8 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[4:7], 0 addr64 offset:10 glc
+; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[8:11], 0 addr64 offset:10 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[4:7], 0 addr64 offset:12 glc
+; GCN-NEXT:    buffer_load_ushort v3, v[0:1], s[8:11], 0 addr64 offset:12 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v0, v[0:1], s[4:7], 0 addr64 offset:14 glc
+; GCN-NEXT:    buffer_load_ushort v0, v[0:1], s[8:11], 0 addr64 offset:14 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 16, v4
 ; GCN-NEXT:    v_or_b32_e32 v0, v2, v0
 ; GCN-NEXT:  .LBB0_2:
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_4
 ; GCN-NEXT:  .LBB0_3: ; %F
-; GCN-NEXT:    s_mov_b32 s10, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s10
-; GCN-NEXT:    buffer_load_ushort v0, v[2:3], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_ushort v0, v[2:3], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v4, v[2:3], s[4:7], 0 addr64 offset:2 glc
+; GCN-NEXT:    buffer_load_ushort v4, v[2:3], s[8:11], 0 addr64 offset:2 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[4:7], 0 addr64 offset:4 glc
+; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[8:11], 0 addr64 offset:4 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[4:7], 0 addr64 offset:6 glc
+; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[8:11], 0 addr64 offset:6 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[4:7], 0 addr64 offset:8 glc
+; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[8:11], 0 addr64 offset:8 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[4:7], 0 addr64 offset:10 glc
+; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[8:11], 0 addr64 offset:10 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[4:7], 0 addr64 offset:12 glc
+; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[8:11], 0 addr64 offset:12 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[4:7], 0 addr64 offset:14 glc
+; GCN-NEXT:    buffer_load_ushort v1, v[2:3], s[8:11], 0 addr64 offset:14 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_lshlrev_b32_e32 v1, 16, v4
 ; GCN-NEXT:    v_or_b32_e32 v0, v0, v1
 ; GCN-NEXT:  .LBB0_4: ; %exit
-; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    v_bfe_i32 v0, v0, 0, 16
 ; GCN-NEXT:    v_bfe_i32 v1, v4, 0, 16
 ; GCN-NEXT:    v_mov_b32_e32 v2, 0xffff
@@ -100,45 +100,45 @@ define <2 x i64> @extract_2xi64(ptr addrspace(1) %p0, ptr addrspace(1) %p1, i1 %
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_and_b32_e32 v4, 1, v4
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
-; GCN-NEXT:    s_mov_b32 s6, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_2
 ; GCN-NEXT:  .LBB1_1: ; %T
-; GCN-NEXT:    s_mov_b32 s8, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s8
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB1_2:
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_4
 ; GCN-NEXT:  .LBB1_3: ; %F
-; GCN-NEXT:    s_mov_b32 s10, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s10
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB1_4: ; %exit
-; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    v_mov_b32_e32 v1, 0xffff8000
 ; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, -1, v5
 ; GCN-NEXT:    v_cndmask_b32_e32 v0, -1, v1, vcc
@@ -170,45 +170,45 @@ define <4 x i64> @extract_4xi64(ptr addrspace(1) %p0, ptr addrspace(1) %p1, i1 %
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_and_b32_e32 v4, 1, v4
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
-; GCN-NEXT:    s_mov_b32 s6, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB2_2
 ; GCN-NEXT:  .LBB2_1: ; %T
-; GCN-NEXT:    s_mov_b32 s8, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s8
-; GCN-NEXT:    buffer_load_dwordx4 v[7:10], v[0:1], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[7:10], v[0:1], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[11:14], v[0:1], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[11:14], v[0:1], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB2_2:
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB2_4
 ; GCN-NEXT:  .LBB2_3: ; %F
-; GCN-NEXT:    s_mov_b32 s10, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s10
-; GCN-NEXT:    buffer_load_dwordx4 v[7:10], v[2:3], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[7:10], v[2:3], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[11:14], v[2:3], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[11:14], v[2:3], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB2_4: ; %exit
-; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    v_mov_b32_e32 v1, 0xffff8000
 ; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, -1, v8
 ; GCN-NEXT:    v_cndmask_b32_e32 v0, -1, v1, vcc
@@ -246,61 +246,61 @@ define <8 x i64> @extract_8xi64(ptr addrspace(1) %p0, ptr addrspace(1) %p1, i1 %
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_and_b32_e32 v4, 1, v4
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
-; GCN-NEXT:    s_mov_b32 s6, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB3_2
 ; GCN-NEXT:  .LBB3_1: ; %T
-; GCN-NEXT:    s_mov_b32 s8, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s8
-; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[4:7], 0 addr64 offset:112 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[8:11], 0 addr64 offset:112 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[4:7], 0 addr64 offset:96 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[8:11], 0 addr64 offset:96 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[4:7], 0 addr64 offset:80 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[8:11], 0 addr64 offset:80 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[4:7], 0 addr64 offset:64 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[8:11], 0 addr64 offset:64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[10:13], v[0:1], s[4:7], 0 addr64 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[10:13], v[0:1], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[7:10], v[0:1], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[7:10], v[0:1], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB3_2:
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB3_4
 ; GCN-NEXT:  .LBB3_3: ; %F
-; GCN-NEXT:    s_mov_b32 s10, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s10
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:112 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:112 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:96 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:96 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:80 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:80 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:64 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[10:13], v[2:3], s[4:7], 0 addr64 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[10:13], v[2:3], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[7:10], v[2:3], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[7:10], v[2:3], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB3_4: ; %exit
-; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    v_mov_b32_e32 v9, 0xffff8000
 ; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, -1, v11
 ; GCN-NEXT:    v_cndmask_b32_e32 v0, -1, v9, vcc
@@ -350,45 +350,45 @@ define <2 x double> @extract_2xf64(ptr addrspace(1) %p0, ptr addrspace(1) %p1, i
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_and_b32_e32 v4, 1, v4
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
-; GCN-NEXT:    s_mov_b32 s6, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB4_2
 ; GCN-NEXT:  .LBB4_1: ; %T
-; GCN-NEXT:    s_mov_b32 s8, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s8
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB4_2:
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB4_4
 ; GCN-NEXT:  .LBB4_3: ; %F
-; GCN-NEXT:    s_mov_b32 s10, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s10
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB4_4: ; %exit
-; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0xbff00000
 ; GCN-NEXT:    v_cmp_lt_f64_e32 vcc, -1.0, v[4:5]
 ; GCN-NEXT:    v_cndmask_b32_e64 v1, v0, -2.0, vcc
@@ -420,45 +420,45 @@ define <4 x double> @extract_4xf64(ptr addrspace(1) %p0, ptr addrspace(1) %p1, i
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_and_b32_e32 v4, 1, v4
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
-; GCN-NEXT:    s_mov_b32 s6, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB5_2
 ; GCN-NEXT:  .LBB5_1: ; %T
-; GCN-NEXT:    s_mov_b32 s8, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s8
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[12:15], v[0:1], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[12:15], v[0:1], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[0:1], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB5_2:
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB5_4
 ; GCN-NEXT:  .LBB5_3: ; %F
-; GCN-NEXT:    s_mov_b32 s10, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s10
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[4:7], 0 addr64 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[12:15], v[2:3], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[12:15], v[2:3], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[0:3], v[2:3], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB5_4: ; %exit
-; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0xbff00000
 ; GCN-NEXT:    v_cmp_nlt_f64_e32 vcc, -1.0, v[8:9]
 ; GCN-NEXT:    v_cndmask_b32_e32 v1, -2.0, v0, vcc
@@ -496,61 +496,61 @@ define <8 x double> @extract_8xf64(ptr addrspace(1) %p0, ptr addrspace(1) %p1, i
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_and_b32_e32 v4, 1, v4
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
-; GCN-NEXT:    s_mov_b32 s6, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB6_2
 ; GCN-NEXT:  .LBB6_1: ; %T
-; GCN-NEXT:    s_mov_b32 s8, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s8
-; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[4:7], 0 addr64 offset:112 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[8:11], 0 addr64 offset:112 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[4:7], 0 addr64 offset:96 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[8:11], 0 addr64 offset:96 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[4:7], 0 addr64 offset:80 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[8:11], 0 addr64 offset:80 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[4:7], 0 addr64 offset:64 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[2:5], v[0:1], s[8:11], 0 addr64 offset:64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[16:19], v[0:1], s[4:7], 0 addr64 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[16:19], v[0:1], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[0:1], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[0:1], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[12:15], v[0:1], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[12:15], v[0:1], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB6_2:
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB6_4
 ; GCN-NEXT:  .LBB6_3: ; %F
-; GCN-NEXT:    s_mov_b32 s10, 0xf000
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_mov_b64 s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b32 s7, s10
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:112 glc
+; GCN-NEXT:    s_mov_b32 s11, 0xf000
+; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_mov_b32 s8, s10
+; GCN-NEXT:    s_mov_b32 s9, s10
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:112 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:96 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:96 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:80 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:80 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:64 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[16:19], v[2:3], s[4:7], 0 addr64 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[16:19], v[2:3], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[4:7], 0 addr64 offset:16 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[4:7], v[2:3], s[8:11], 0 addr64 offset:16 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[4:7], 0 addr64 offset:32 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[8:11], v[2:3], s[8:11], 0 addr64 offset:32 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    buffer_load_dwordx4 v[12:15], v[2:3], s[4:7], 0 addr64 offset:48 glc
+; GCN-NEXT:    buffer_load_dwordx4 v[12:15], v[2:3], s[8:11], 0 addr64 offset:48 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB6_4: ; %exit
-; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0xbff00000
 ; GCN-NEXT:    v_cmp_nlt_f64_e32 vcc, -1.0, v[16:17]
 ; GCN-NEXT:    v_cndmask_b32_e32 v1, -2.0, v0, vcc
