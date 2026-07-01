@@ -80,6 +80,12 @@ TEST(Logger, ParseLogLevelNonNumericUsesVerboseFallback) {
   EXPECT_EQ(parseLogLevel("bar", true), 4);
 }
 
+TEST(Logger, ParseLogLevelExplicitWinsOverVerbose) {
+  EXPECT_EQ(parseLogLevel("0", true), 0);
+  EXPECT_EQ(parseLogLevel("2", true), 2);
+  EXPECT_EQ(parseLogLevel("4", true), 4);
+}
+
 // -- Sink output and prefixes ------------------------------------------------
 
 TEST(Logger, EmitsPrefixedAndNewlineTerminated) {
