@@ -79,6 +79,10 @@ struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
+  // When set, both edges use an s_add_pc_i64 long branch instead of s_branch
+  // (reaches anywhere, no scratch reg, no SCC). Set when the appended pool is
+  // beyond s_branch's +-128 KB reach; widens the reserved branch-back slot.
+  bool Long = false;
 };
 
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
@@ -122,6 +126,17 @@ static constexpr uint64_t MinNopSledSize = 8;
 
 // Minimum AMDGPU instruction size (one dword).
 static constexpr uint32_t MinInstSize = 4;
+
+// s_add_pc_i64 long-branch encoded sizes: 8 bytes for a forward (32-bit
+// literal) offset, 12 for a backward (64-bit literal) one. The back slot
+// reserves the max; unused tail bytes are s_nop-padded.
+static constexpr uint32_t LongBranchFwdBytes = 8;
+static constexpr uint32_t LongBranchMaxBytes = 12;
+
+// Take the long-branch path when the site is this far from .text end (i.e. the
+// appended pool may exceed s_branch reach). The margin below MaxSledDistance
+// covers pool growth so an in-range decision cannot later go out of range.
+static constexpr int64_t LongBranchThreshold = MaxSledDistance - 65536;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
 // LLVMState::encodeSBranch to reject out-of-range branches before handing
@@ -607,6 +622,13 @@ struct PatchContext {
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     llvm::ArrayRef<uint8_t> Replacement);
+
+// Encode an s_add_pc_i64 PC-relative long branch from \p FromOffset to
+// \p TargetOffset (.text byte offsets). Exposed for unit testing the offset
+// math / encoding. Returns empty on failure.
+llvm::SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS,
+                                            uint64_t FromOffset,
+                                            uint64_t TargetOffset);
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement);

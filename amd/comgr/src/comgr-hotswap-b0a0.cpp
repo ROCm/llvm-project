@@ -272,23 +272,55 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
   return true;
 }
 
-/// Queue a deferred trampoline for the instruction at [\p InstOffset,
-/// \p InstOffset + \p InstSize) with \p Replacement as its body. The final
-/// branch encoding (branch-back at the trampoline tail and branch-forward
-/// overwrite at the original site) is filled in by fixupTrampolineBranches
-/// once the post-.text trampoline layout is known -- we reserve
-/// MinInstSize zero bytes at the end of the trampoline body as a
-/// placeholder rather than encoding twice. Used when there is no reachable
-/// NOP sled for an in-place sled patch.
+// s_add_pc_i64 long branch from \p FromOffset to \p TargetOffset (.text
+// offsets). It adds a signed literal to the next instruction's PC, so the
+// offset is TargetOffset - (FromOffset + size); size is 8 (forward, 32-bit
+// literal) or 12 (backward, 64-bit literal), resolved by trying each. Encoded
+// via the MC assembler. Returns empty on failure.
+SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
+                                      uint64_t TargetOffset) {
+  for (uint32_t Size : {LongBranchFwdBytes, LongBranchMaxBytes}) {
+    int64_t Off = static_cast<int64_t>(TargetOffset) -
+                  static_cast<int64_t>(FromOffset + Size);
+    SmallVector<uint8_t> Bytes =
+        assembleSingleInst("s_add_pc_i64 " + std::to_string(Off), LS);
+    if (Bytes.size() == Size)
+      return Bytes;
+  }
+  return {};
+}
+
+/// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
+/// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
+/// the pool layout is known. A site beyond s_branch reach of the appended pool
+/// uses an s_add_pc_i64 long branch (no scratch reg, no SCC) on both edges; its
+/// 8-byte forward branch overwrites the site in place, so a smaller site
+/// declines rather than clobbering the next instruction.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     ArrayRef<uint8_t> Replacement) {
+  const bool Far =
+      static_cast<int64_t>(Ctx.TextSize - InstOffset) > LongBranchThreshold;
+
   Trampoline T;
   T.OriginalOffset = InstOffset;
   T.OriginalSize = InstSize;
   T.Bytes.insert(T.Bytes.end(), Replacement.begin(), Replacement.end());
-  // Reserve the branch-back slot; fixupTrampolineBranches fills it in.
-  T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
+
+  if (Far) {
+    if (InstSize < LongBranchFwdBytes) {
+      log() << "hotswap: long trampoline: site 0x" << utohexstr(InstOffset)
+            << " is " << InstSize << " B < " << LongBranchFwdBytes
+            << " B forward branch; declining (site left unpatched)\n";
+      return false;
+    }
+    T.Long = true;
+    // Reserve the long branch-back slot (worst-case 64-bit-literal size).
+    T.Bytes.insert(T.Bytes.end(), LongBranchMaxBytes, uint8_t{0});
+  } else {
+    // Reserve the short branch-back slot; fixupTrampolineBranches fills it in.
+    T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
+  }
   Ctx.OutTrampolines.emplace_back(std::move(T));
   return true;
 }
@@ -449,25 +481,40 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
-    SmallVector<uint8_t> BrBack = LS.encodeSBranch(
-        TP + T.Bytes.size() - MinInstSize, T.OriginalOffset + T.OriginalSize);
-    if (BrBack.empty()) {
+    // Long trampolines reserve a wider branch-back slot and use s_add_pc_i64
+    // on both edges; short ones use s_branch. Both slots are s_nop-padded to
+    // their reserved size after the branch is written.
+    const uint32_t BackReserve = T.Long ? LongBranchMaxBytes : MinInstSize;
+    const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
+    const uint64_t ReturnTo = T.OriginalOffset + T.OriginalSize;
+
+    SmallVector<uint8_t> BrBack = T.Long
+                                      ? encodeLongBranch(LS, BackSlot, ReturnTo)
+                                      : LS.encodeSBranch(BackSlot, ReturnTo);
+    if (BrBack.empty() || BrBack.size() > BackReserve) {
       log() << "hotswap: error: trampoline branch-back encoding failed at 0x"
-            << utohexstr(T.OriginalOffset) << "\n";
+            << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
       return false;
     }
-    std::memcpy(T.Bytes.data() + T.Bytes.size() - MinInstSize, BrBack.data(),
+    std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve, BrBack.data(),
                 BrBack.size());
+    for (uint32_t I = BrBack.size(); I + MinInstSize <= BackReserve;
+         I += MinInstSize)
+      std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve + I,
+                  LS.SNopBytes.data(), MinInstSize);
 
-    SmallVector<uint8_t> BrFwd = LS.encodeSBranch(T.OriginalOffset, TP);
-    if (BrFwd.empty()) {
+    SmallVector<uint8_t> BrFwd =
+        T.Long ? encodeLongBranch(LS, T.OriginalOffset, TP)
+               : LS.encodeSBranch(T.OriginalOffset, TP);
+    if (BrFwd.empty() || BrFwd.size() > T.OriginalSize) {
       log() << "hotswap: error: trampoline branch-fwd encoding failed at 0x"
-            << utohexstr(T.OriginalOffset) << "\n";
+            << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
       return false;
     }
     std::memcpy(Text + T.OriginalOffset, BrFwd.data(), BrFwd.size());
     // Pad the tail of the replaced slot with cached s_nop bytes.
-    for (uint32_t I = MinInstSize; I < T.OriginalSize; I += MinInstSize)
+    for (uint32_t I = BrFwd.size(); I + MinInstSize <= T.OriginalSize;
+         I += MinInstSize)
       std::memcpy(Text + T.OriginalOffset + I, LS.SNopBytes.data(),
                   MinInstSize);
   }
