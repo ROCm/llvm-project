@@ -40,7 +40,7 @@ define amdgpu_cs void @should_not_hoist_set_inactive(<4 x i32> inreg %i14, i32 i
 ; GCN-NEXT:    v_mov_b32_dpp v4, v3 row_xmask:1 row_mask:0xf bank_mask:0xf
 ; GCN-NEXT:    s_mov_b32 exec_lo, s8
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GCN-NEXT:    v_mov_b32_e32 v3, v4
+; GCN-NEXT:    v_mov_b32_e32 v5, v4
 ; GCN-NEXT:    s_or_b32 s6, s6, vcc_lo
 ; GCN-NEXT:    s_xor_b32 s8, exec_lo, s6
 ; GCN-NEXT:    s_and_b32 s8, s8, exec_lo
@@ -51,7 +51,7 @@ define amdgpu_cs void @should_not_hoist_set_inactive(<4 x i32> inreg %i14, i32 i
 ; GCN-NEXT:    s_cbranch_execz .LBB0_1
 ; GCN-NEXT:  .LBB0_4: ; %bb2
 ; GCN-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; GCN-NEXT:    buffer_atomic_add v3, off, s[0:3], 0
+; GCN-NEXT:    buffer_atomic_add v5, off, s[0:3], 0
 ; GCN-NEXT:    s_branch .LBB0_1
 ; GCN-NEXT:  .LBB0_5: ; %bb5
 ; GCN-NEXT:    s_endpgm
