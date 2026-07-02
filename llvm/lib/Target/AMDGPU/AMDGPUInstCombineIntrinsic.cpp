@@ -1016,6 +1016,9 @@ static Value *matchShuffleToHWIntrinsic(IRBuilderBase &B, Value *Src,
 static std::optional<Instruction *>
 tryOptimizeShufflePattern(InstCombiner &IC, IntrinsicInst &II,
                           const GCNSubtarget &ST) {
+
+  return std::nullopt;
+
   const DataLayout &DL = IC.getDataLayout();
   if (DL.getTypeSizeInBits(II.getType()) != 32)
     return std::nullopt;
