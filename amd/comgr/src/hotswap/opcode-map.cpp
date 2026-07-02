@@ -825,6 +825,7 @@ static const Entry kCanonTable[] = {
     E(GLOBAL_STORE_SHORT_D16_HI, GLOBAL_STORE_SHORT_D16_HI),
     E(GLOBAL_STORE_DWORD, GLOBAL_STORE_DWORD), E(GLOBAL_STORE_DWORDX2, GLOBAL_STORE_DWORDX2),
     E(GLOBAL_STORE_DWORDX3, GLOBAL_STORE_DWORDX3), E(GLOBAL_STORE_DWORDX4, GLOBAL_STORE_DWORDX4),
+    E(GLOBAL_WB, GLOBAL_WB),
     // Scratch/private-segment VMEM. Keep these as explicit CanonicalOps rather than
     // routing through GLOBAL_*: the handler must preserve scratch swizzling and
     // KD private-segment ABI semantics, not global address-space semantics.

@@ -10,6 +10,8 @@
 #include "handlers.h"
 
 #include "canonical-op.h"
+#include "SIDefines.h"
+#include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/Constants.h"
@@ -94,6 +96,19 @@ Value *selectRuntimeDword(RaiseContext &Ctx, Value *Idx,
     Pick = Ctx.B.CreateSelect(Ctx.B.CreateICmpEQ(Idx, Ctx.B.getInt32(D)),
                               Dwords[D], Pick);
   return Pick;
+}
+
+// Return the decoded cache-policy operand for scoped global cache operations.
+std::optional<int64_t> getCPolImm(const DecodedInst &Di) {
+  int CpolIdx =
+      AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::cpol);
+  if (CpolIdx < 0 ||
+      static_cast<unsigned>(CpolIdx) >= Di.Inst.getNumOperands())
+    return std::nullopt;
+  const MCOperand &Mop = Di.Inst.getOperand(static_cast<unsigned>(CpolIdx));
+  if (!Mop.isImm())
+    return std::nullopt;
+  return Mop.getImm();
 }
 
 // Shared helper for the `_D16_HI` half-register-store lift shape.
@@ -277,6 +292,49 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
   HandlerResult Hr;
   StringRef Mn(Di.Mnemonic);
   CanonicalOp Sop = Di.CanonOp;
+
+  if (Sop == CanonicalOp::GLOBAL_WB) {
+    std::optional<int64_t> Cpol = getCPolImm(Di);
+    if (!Cpol) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "FLAT", "global_wb missing immediate cpol/scope operand");
+      return Hr;
+    }
+
+    uint64_t RawCpol = static_cast<uint64_t>(*Cpol);
+    uint64_t Scope = RawCpol & AMDGPU::CPol::SCOPE;
+    if ((RawCpol & ~static_cast<uint64_t>(AMDGPU::CPol::SCOPE)) != 0) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "FLAT",
+          "global_wb cache-policy bits outside SCOPE are not modelled");
+      return Hr;
+    }
+
+    // CU-scope writeback is a no-op that still returns "done"; there is no
+    // target cache operation to preserve.
+    if (Scope == AMDGPU::CPol::SCOPE_CU) {
+      Hr.Handled = true;
+      return Hr;
+    }
+
+    if (Scope == AMDGPU::CPol::SCOPE_DEV) {
+      SyncScope::ID AgentScope = Ctx.C.getOrInsertSyncScopeID("agent");
+      Ctx.B.CreateFence(AtomicOrdering::Release, AgentScope);
+      Hr.Handled = true;
+      return Hr;
+    }
+
+    if (Scope == AMDGPU::CPol::SCOPE_SYS) {
+      Ctx.B.CreateFence(AtomicOrdering::Release, SyncScope::System);
+      Hr.Handled = true;
+      return Hr;
+    }
+
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        Di, "FLAT",
+        "global_wb SCOPE_SE cannot be represented by gfx942 writeback fences");
+    return Hr;
+  }
 
   // ---------------------------------------------------------------------
   // FLAT scratch family (`scratch_load_*`, `scratch_store_*`).

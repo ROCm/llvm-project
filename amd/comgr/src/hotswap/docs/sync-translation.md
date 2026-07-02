@@ -364,18 +364,20 @@ AMDGPULowerMemoryModel pass learns it.
 
 ### 5.4 Standalone cache operations
 
-These SemOps do not yet exist. Adding them is the first real ISA
-divergence handled at the sync-translation level:
+`GLOBAL_WB` is implemented; the remaining rows are adjacent cache-op coverage
+still pending:
 
-| New SemOp | gfx12 source | gfx950 lowering |
+| CanonicalOp | gfx12 source | gfx942/gfx950 lowering |
 |---|---|---|
 | `GLOBAL_INV` | `global_inv scope` | `call void @llvm.amdgcn.buffer.wbinvl1()` for CU/DEV; refuse SYS |
-| `GLOBAL_WB` | `global_wb scope` | `call void @llvm.amdgcn.buffer.wbl2()` for DEV |
+| `GLOBAL_WB` | `global_wb scope` | no-op for CU; `fence syncscope("agent") release` for DEV; system `fence release` for SYS; refuse SE |
 | `GLOBAL_WBINV` | `global_wbinv scope` | composition of the two |
 | `BUFFER_INV` | `buffer_inv scope` | same as `GLOBAL_INV` on gfx950 (unified L1) |
 
-If the source's `scope` is not representable with the target's
-intrinsics (e.g., gfx950 has no per-XCD cache op), refuse.
+If the source scope has no target IR memory-model equivalent, refuse. This LLVM
+tree has no direct `buffer_wbl2` intrinsic, so `GLOBAL_WB` uses the release-fence
+IR that the AMDGPU backend already lowers to `buffer_wbl2 sc1` for agent scope
+and `buffer_wbl2 sc0 sc1` for system scope, followed by the required wait.
 
 Most Triton/Gluon kernels never emit standalone cache ops -- the
 AMDGPULowerMemoryModel pass derives them from atomic ordering+scope.
