@@ -1092,6 +1092,12 @@ struct StackDepotStats {
 // indicate that sanitizer allocator should not attempt to release memory to OS.
 const s32 kReleaseToOSIntervalNever = -1;
 
+#if SANITIZER_AMDGPU
+void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag);
+#else
+inline void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag) {}
+#endif
+
 // Platform hook invoked before dlopen. Performs platform-specific dlopen flag
 // checks (e.g. RTLD_DEEPBIND on Linux).
 void OnDlOpen(const char* filename, int flag);

@@ -92,7 +92,7 @@ subroutine distribute_parallel_do_simd_private()
   ! CHECK:      omp.parallel {
   ! CHECK:      omp.distribute {
   ! CHECK-NEXT: omp.wsloop {
-  ! DEFAULT-NEXT: omp.simd linear(%{{.*}}) private(@{{.*}} %[[X]]#0 -> %[[X_ARG:[^:]+]]
+  ! DEFAULT-NEXT: omp.simd linear(val(%{{.*}})) private(@{{.*}} %[[X]]#0 -> %[[X_ARG:[^:]+]]
   ! DEFAULT-SAME:                  : !fir.ref<i64>) {
   ! OPENMP52-NEXT: omp.simd linear(val(%{{.*}})) private(@{{.*}} %[[X]]#0 -> %[[X_ARG:[^:]+]]
   ! OPENMP52-SAME:                  : !fir.ref<i64>) {

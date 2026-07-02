@@ -299,4 +299,9 @@ int32_t __kmpc_gpu_xteam_reduce_nowait(IdentTy *Loc, void *reduce_data,
   return gpu_block_reduce<false>(reduce_data, shflFct, cpyFct, NumThreads,
                                  ThreadId);
 }
+
+void __kmpc_nvptx_end_reduce(int32_t TId) {}
+
+void __kmpc_nvptx_end_reduce_nowait(int32_t TId) {}
+
 } // extern "C"

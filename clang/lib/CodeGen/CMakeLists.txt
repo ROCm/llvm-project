@@ -64,6 +64,7 @@ add_clang_library(clangCodeGen
   CGAtomic.cpp
   CGBlocks.cpp
   CGBuiltin.cpp
+  CGEmitEmissaryExec.cpp
   CGCUDANV.cpp
   CGCUDARuntime.cpp
   CGCXX.cpp
@@ -162,10 +163,6 @@ add_clang_library(clangCodeGen
   Targets/XCore.cpp
   TrapReasonBuilder.cpp
   VarBypassDetector.cpp
-
-  DISABLE_PCH_REUSE # PCH contains private headers
-  PRECOMPILE_HEADERS
-  [["pch.h"]]
 
   DEPENDS
   vt_gen

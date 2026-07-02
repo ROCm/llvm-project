@@ -161,6 +161,9 @@ public:
   bool isFrameOffsetLegal(const MachineInstr *MI, Register BaseReg,
                           int64_t Offset) const override;
 
+  std::optional<unsigned> getDwarfRegLaneSize(int64_t DwarfReg,
+                                              bool isEH) const override;
+
   const TargetRegisterClass *
   getPointerRegClass(unsigned Kind = 0) const override;
 

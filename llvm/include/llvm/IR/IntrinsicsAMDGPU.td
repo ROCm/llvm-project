@@ -904,6 +904,17 @@ def int_amdgcn_bitop3 :
                         [LLVMMatchType<0>, LLVMMatchType<0>, LLVMMatchType<0>, llvm_i32_ty],
                         [ImmArg<ArgIndex<3>>]>;
 
+class AMDGPUGlobalStore : Intrinsic <
+  [],
+  [global_ptr_ty,          // Base global pointer to store to
+   llvm_v4i32_ty,          // Data to store
+   llvm_metadata_ty],      // Scope
+  [ IntrWriteMem, WriteOnly<ArgIndex<0>>, NoCapture<ArgIndex<0>>,
+    IntrWillReturn, IntrNoCallback, IntrNoFree ],
+  "",
+  [SDNPMemOperand, SDNPMayStore]
+>;
+
 class AMDGPUAVStore : Intrinsic <
   [],
   [llvm_anyptr_ty,         // Pointer to store to (flat or global)
@@ -913,6 +924,18 @@ class AMDGPUAVStore : Intrinsic <
     NonNull<ArgIndex<0>>, IntrWillReturn, IntrNoCallback, IntrNoFree ],
   "",
   [SDNPMemOperand, SDNPMayStore]
+>;
+
+def int_amdgcn_global_store_b128 : AMDGPUGlobalStore;
+
+class AMDGPUGlobalLoad : Intrinsic <
+  [llvm_v4i32_ty],
+  [global_ptr_ty,          // Base global pointer to load from
+   llvm_metadata_ty],      // Scope
+  [ IntrReadMem, ReadOnly<ArgIndex<0>>, NoCapture<ArgIndex<0>>, IntrWillReturn,
+    IntrNoCallback, IntrNoFree ],
+  "",
+  [SDNPMemOperand, SDNPMayLoad]
 >;
 
 def int_amdgcn_av_store_b128 : AMDGPUAVStore;
@@ -927,6 +950,7 @@ class AMDGPUAVLoad : Intrinsic <
   [SDNPMemOperand, SDNPMayLoad]
 >;
 
+def int_amdgcn_global_load_b128 : AMDGPUGlobalLoad;
 def int_amdgcn_av_load_b128 : AMDGPUAVLoad;
 
 } // TargetPrefix = "amdgcn"

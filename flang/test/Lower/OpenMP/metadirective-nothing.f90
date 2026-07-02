@@ -13,10 +13,10 @@ subroutine test_begin_nothing_variant()
   x = 0
   !$omp begin metadirective &
 #ifdef OMP_52
-  !$omp & when(implementation={vendor(llvm)}: nothing) &
+  !$omp & when(implementation={vendor(amd)}: nothing) &
   !$omp & otherwise(parallel)
 #else
-  !$omp & when(implementation={vendor(llvm)}: nothing) &
+  !$omp & when(implementation={vendor(amd)}: nothing) &
   !$omp & default(parallel)
 #endif
   x = 1
@@ -49,7 +49,7 @@ subroutine test_begin_nothing_first_match()
   integer :: x
   x = 0
   !$omp begin metadirective &
-  !$omp & when(implementation={vendor(llvm)}: nothing) &
+  !$omp & when(implementation={vendor(amd)}: nothing) &
 #ifdef OMP_52
   !$omp & when(user={condition(.false.)}: task) &
   !$omp & otherwise(parallel)

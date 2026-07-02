@@ -214,12 +214,59 @@ __device__ __attribute__((pure)) _Float16 __ocml_pown_f16(_Float16, int);
 typedef _Float16 __2f16 __attribute__((ext_vector_type(2)));
 typedef short __2i16 __attribute__((ext_vector_type(2)));
 
+// We need to match C99's bool and get an i1 in the IR.
+#ifdef __cplusplus
+typedef bool __ockl_bool;
+#else
+typedef _Bool __ockl_bool;
+#endif
+
+__device__ __attribute__((const)) float __ockl_fdot2(__2f16 a, __2f16 b,
+                                                     float c, __ockl_bool s);
+__device__ __attribute__((const)) __2f16 __ocml_ceil_2f16(__2f16);
+__device__ __attribute__((const)) __2f16 __ocml_fabs_2f16(__2f16);
+__device__ __2f16 __ocml_cos_2f16(__2f16);
+__device__ __attribute__((pure)) __2f16 __ocml_exp_2f16(__2f16);
+__device__ __attribute__((pure)) __2f16 __ocml_exp10_2f16(__2f16);
+__device__ __attribute__((pure)) __2f16 __ocml_exp2_2f16(__2f16);
+__device__ __attribute__((const)) __2f16 __ocml_floor_2f16(__2f16);
+__device__ __attribute__((const))
+__2f16 __ocml_fma_2f16(__2f16, __2f16, __2f16);
+__device__ __attribute__((const)) __2i16 __ocml_isinf_2f16(__2f16);
+__device__ __attribute__((const)) __2i16 __ocml_isnan_2f16(__2f16);
+__device__ __attribute__((pure)) __2f16 __ocml_log_2f16(__2f16);
+__device__ __attribute__((pure)) __2f16 __ocml_log10_2f16(__2f16);
+__device__ __attribute__((pure)) __2f16 __ocml_log2_2f16(__2f16);
+
+__device__ __attribute__((const)) __2f16 __ocml_rint_2f16(__2f16);
+__device__ __attribute__((const)) __2f16 __ocml_rsqrt_2f16(__2f16);
+__device__ __2f16 __ocml_sin_2f16(__2f16);
+__device__ __attribute__((const)) __2f16 __ocml_sqrt_2f16(__2f16);
+__device__ __attribute__((const)) __2f16 __ocml_trunc_2f16(__2f16);
+__device__ __attribute__((const)) __2f16 __ocml_pown_2f16(__2f16, __2i16);
+
 __device__ void __asan_poison_memory_region(const void *addr,
                                             __SIZE_TYPE__ size);
 __device__ void __asan_unpoison_memory_region(const void *addr,
                                               __SIZE_TYPE__ size);
 __device__ int __asan_address_is_poisoned(const void *addr);
 __device__ void *__asan_region_is_poisoned(void *beg, __SIZE_TYPE__ size);
+
+__device__ __attribute__((pure)) _Float16 __ocml_exp_f16(_Float16);
+__device__ __attribute__((pure)) _Float16 __ocml_exp10_f16(_Float16);
+__device__ __attribute__((pure)) _Float16 __ocml_exp2_f16(_Float16);
+__device__ __attribute__((const)) _Float16 __ocml_fma_f16(_Float16, _Float16,
+                                                          _Float16);
+__device__ __attribute__((pure)) _Float16 __ocml_log_f16(_Float16);
+__device__ __attribute__((pure)) _Float16 __ocml_log10_f16(_Float16);
+__device__ __attribute__((pure)) _Float16 __ocml_log2_f16(_Float16);
+
+__device__ __attribute__((const)) _Float16 __ocml_sqrt_f16(_Float16);
+
+__device__ __attribute__((pure)) float __ocml_exp2_f32(float);
+__device__ __attribute__((pure)) float __ocml_exp_f32(float);
+__device__ __attribute__((const)) _Float16 __ocml_ceil_f16(_Float16);
+__device__ __attribute__((const)) _Float16 __ocml_floor_f16(_Float16);
 
 #if __has_feature(address_sanitizer)
 #define ASAN_POISON_MEMORY_REGION(addr, size)                                  \

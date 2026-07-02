@@ -27,6 +27,7 @@
 #include "flang/Optimizer/Builder/DirectivesCommon.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Builder/HLFIRTools.h"
+#include "flang/Optimizer/Builder/MutableBox.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
 #include "flang/Optimizer/Dialect/Support/KindMapping.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
@@ -60,6 +61,12 @@ namespace {
 class MapInfoFinalizationPass
     : public flangomp::impl::MapInfoFinalizationPassBase<
           MapInfoFinalizationPass> {
+public:
+  MapInfoFinalizationPass() = default;
+
+  MapInfoFinalizationPass(
+      const flangomp::MapInfoFinalizationPassOptions &options)
+      : MapInfoFinalizationPassBase(options) {}
 
   /// Helper class tracking a members parent and its
   /// placement in the parents member list
@@ -93,8 +100,7 @@ class MapInfoFinalizationPass
   containsPath(const llvm::SmallVectorImpl<llvm::SmallVector<int64_t>> &paths,
                llvm::ArrayRef<int64_t> path) {
     return llvm::any_of(paths, [&](const llvm::SmallVector<int64_t> &p) {
-      return p.size() == path.size() &&
-             std::equal(p.begin(), p.end(), path.begin());
+      return p.size() == path.size() && std::equal(p.begin(), p.end(), path.begin());
     });
   }
 
@@ -333,6 +339,15 @@ class MapInfoFinalizationPass
                     });
   }
 
+  // Check if the declaration operation we have refers to a dummy
+  // function argument.
+  bool isDummyArgument(mlir::Operation *op) {
+    if (auto declareOp = mlir::dyn_cast<hlfir::DeclareOp>(op))
+      if (auto dummyScope = declareOp.getDummyScope())
+        return true;
+    return false;
+  }
+
   /// When provided a MapInfoOp containing a descriptor type that
   /// we must expand into multiple maps this function will extract
   /// the value from it and return it, in certain cases we must
@@ -350,8 +365,8 @@ class MapInfoFinalizationPass
 
     canDescBeDeferred = canDeferDescriptorMapping(descriptor);
 
-    if (!mlir::isa<fir::BaseBoxType>(descriptor.getType()) &&
-        !fir::factory::isOptionalArgument(descriptor.getDefiningOp()))
+    if ((!mlir::isa<fir::BaseBoxType>(descriptor.getType()) &&
+         !fir::factory::isOptionalArgument(descriptor.getDefiningOp())))
       return descriptor;
 
     mlir::Value &alloca = localBoxAllocas[descriptor.getDefiningOp()];
@@ -377,21 +392,21 @@ class MapInfoFinalizationPass
       builder.restoreInsertionPoint(insPt);
     }
 
-    // We should only emit a store if the passed in data is present, it is
-    // possible a user passes in no argument to an optional parameter, in which
-    // case we cannot store or we'll segfault on the emitted memcpy.
-    // TODO: We currently emit a present -> load/store every time we use a
-    // mapped value that requires a local allocation, this isn't the most
-    // efficient, although, it is more correct in a lot of situations. One
-    // such situation is emitting a this series of instructions in separate
-    // segments of a branch (e.g. two target regions in separate else/if branch
-    // mapping the same function argument), however, it would be nice to be able
-    // to optimize these situations e.g. raising the load/store out of the
-    // branch if possible. But perhaps this is best left to lower level
-    // optimisation passes.
+    // Make sure that our new allocation is "allocated" to default box state.
+    mlir::Type boxType = fir::unwrapRefType(alloca.getType());
+    mlir::Value nullBox = fir::factory::createUnallocatedBox(
+        builder, loc, boxType, /*nonDeferredLenParams=*/{});
+    fir::StoreOp::create(builder, loc, nullBox, alloca);
+
+    // Only overwrite with actual descriptor data if present.
+    // TODO: We currently emit a present check every time we use a mapped
+    // value that requires a local allocation. This isn't the most efficient,
+    // but it is correct for situations like separate target regions in
+    // different branches mapping the same function argument. Optimization
+    // (e.g., hoisting the load/store) is best left to lower level passes.
     auto isPresent =
         fir::IsPresentOp::create(builder, loc, builder.getI1Type(), descriptor);
-    builder.genIfOp(loc, {}, isPresent, false)
+    builder.genIfOp(loc, {}, isPresent, /*withElseRegion=*/false)
         .genThen([&]() {
           descriptor = builder.loadIfRef(loc, descriptor);
           fir::StoreOp::create(builder, loc, descriptor, alloca);
@@ -417,10 +432,9 @@ class MapInfoFinalizationPass
   /// important thing to note is that we normally move the bounds from
   /// the descriptor map onto the base address map.
   ///
-  /// \p mapInfoOpLoc is the location of the MapInfoOp being expanded (the
-  /// descriptor map before this pass splits it). Lowering attaches a NameLoc
-  /// there for the Fortran map text. This is used with new Ops being
-  /// created by this function.
+  /// \p parentOp is the MapInfoOp being expanded (the descriptor map before
+  /// this pass splits it). Lowering attaches a NameLoc there for the Fortran
+  /// map text. New ops created here use its location so NameLoc is preserved.
   mlir::omp::MapInfoOp
   genBaseAddrMap(mlir::Location mapInfoOpLoc, mlir::Value descriptor,
                  mlir::omp::MapInfoOp parentOp,
@@ -754,34 +768,20 @@ class MapInfoFinalizationPass
   mlir::omp::ClauseMapFlags
   getDescriptorMapType(mlir::omp::ClauseMapFlags mapTypeFlag,
                        mlir::Operation *target) {
-    using MapFlags = mlir::omp::ClauseMapFlags;
-    MapFlags flags = MapFlags::none;
+    using mapFlags = mlir::omp::ClauseMapFlags;
+    mapFlags flags = mapFlags::none;
 
     if (llvm::isa_and_nonnull<mlir::omp::TargetExitDataOp,
                               mlir::omp::TargetUpdateOp>(target)) {
-      return mapTypeFlag;
+      flags |= mapTypeFlag | mapFlags::descriptor;
+      return flags;
     }
 
-    flags |= MapFlags::to | (mapTypeFlag & MapFlags::implicit);
+    flags |= mapFlags::to | mapFlags::descriptor | mapFlags::always |
+             (mapTypeFlag & mapFlags::implicit);
 
-    // Descriptors for objects will always be copied. This is because the
-    // descriptor can be rematerialized by the compiler, and so the address
-    // of the descriptor for a given object at one place in the code may
-    // differ from that address in another place. The contents of the
-    // descriptor (the base address in particular) will remain unchanged
-    // though.
-    // TODO/FIXME: We currently cannot have MAP_CLOSE and MAP_ALWAYS on
-    // the descriptor at once, these are mutually exclusive and when
-    // both are applied the runtime will fail to map.
-    flags |= ((MapFlags(mapTypeFlag) & MapFlags::close) == MapFlags::close)
-                 ? MapFlags::close
-                 : MapFlags::always;
-
-    // For unified_shared_memory, we additionally add `CLOSE` on the descriptor
-    // to ensure device-local placement where required by tests relying on USM +
-    // close semantics.
     if (moduleRequiresUSM(target->getParentOfType<mlir::ModuleOp>()))
-      flags |= MapFlags::close;
+      flags |= mapFlags::close;
     return flags;
   }
 
@@ -1241,7 +1241,8 @@ class MapInfoFinalizationPass
         builder, op->getLoc(), op.getResult().getType(), op.getVarPtr(),
         op.getVarPtrTypeAttr(),
         builder.getAttr<mlir::omp::ClauseMapFlagsAttr>(
-            mlir::omp::ClauseMapFlags::to | mlir::omp::ClauseMapFlags::always),
+            mlir::omp::ClauseMapFlags::to | mlir::omp::ClauseMapFlags::always |
+            mlir::omp::ClauseMapFlags::descriptor),
         op.getMapCaptureTypeAttr(), /*varPtrPtr=*/mlir::Value{},
         /*varPtrPtrType=*/mlir::TypeAttr{}, mlir::SmallVector<mlir::Value>{},
         mlir::ArrayAttr{},
@@ -1395,23 +1396,32 @@ class MapInfoFinalizationPass
 
       // Next, walk `omp.map.info` ops to see if any record members should be
       // implicitly mapped.
+      // TODO/FIXME/UPDATE: I believe we need to add implicit capture of
+      // allocatable members of arbitrary depths for this before we can
+      // switch it on in ATD, as currently it will break some currently
+      // downstream changes that existing working benchmarks depend on.
+      // However, hopefully with the addition of:
+      //        https://github.com/llvm/llvm-project/pull/119588
+      // and the correct mapping of all allocatable members, we'd
+      // get the desired behaviour in all cases, if not, need to have a
+      // think about the current behaviour we have.
       func->walk([&](mlir::omp::MapInfoOp op) {
         mlir::Type underlyingType =
             fir::unwrapRefType(op.getVarPtr().getType());
 
-        // TODO Test with and support more complicated cases; like arrays for
-        // records, for example.
+        // Test with and support records (derived types) that have allocatable
+        // members directly or nested via other records.
         if (!fir::isRecordWithAllocatableMember(underlyingType))
-          return mlir::WalkResult::advance();
+          return;
 
-        // TODO For now, only consider `omp.target` ops. Other ops that support
+        // For now, only consider `omp.target` ops. Other ops that support
         // `map` clauses will follow later.
         mlir::omp::TargetOp target =
             mlir::dyn_cast_if_present<mlir::omp::TargetOp>(
                 getFirstTargetUser(op));
 
         if (!target)
-          return mlir::WalkResult::advance();
+          return;
 
         auto mapClauseOwner =
             llvm::dyn_cast<mlir::omp::MapClauseOwningOpInterface>(*target);
@@ -1430,10 +1440,7 @@ class MapInfoFinalizationPass
         mlir::getForwardSlice(opBlockArg, &mapVarForwardSlice);
 
         mapVarForwardSlice.remove_if([&](mlir::Operation *sliceOp) {
-          // TODO Support coordinate_of ops.
-          //
-          // TODO Support call ops by recursively examining the forward slice of
-          // the corresponding parameter to the field in the called function.
+          // TODO Support coordinate_of ops and calls (by tracking parameters).
           return !mlir::isa<hlfir::DesignateOp>(sliceOp);
         });
 
@@ -1470,7 +1477,7 @@ class MapInfoFinalizationPass
                                field, newMapOpsForFields, newMemberIndexPaths);
         }
 
-        // Handle nested allocatable fields along any component chain
+        // 2) Handle nested allocatable fields along any component chain
         // referenced in the region via HLFIR designates.
         llvm::SmallVector<llvm::SmallVector<int64_t>> seenIndexPaths;
         for (mlir::Operation *sliceOp : mapVarForwardSlice) {
@@ -1546,21 +1553,21 @@ class MapInfoFinalizationPass
         }
 
         if (newMapOpsForFields.empty())
-          return mlir::WalkResult::advance();
+          return;
 
         // Deduplicate by index path to avoid emitting duplicate members for
         // the same component. Use a set-based key to keep this near O(n).
         llvm::SmallVector<mlir::Value> dedupMapOps;
         llvm::SmallVector<llvm::SmallVector<int64_t>> dedupIndexPaths;
         llvm::StringSet<> seenKeys;
-        for (auto [i, mapOp] : llvm::enumerate(newMapOpsForFields)) {
+        for (auto [i, mapOpV] : llvm::enumerate(newMapOpsForFields)) {
           const auto &path = newMemberIndexPaths[i];
           llvm::SmallString<64> key;
           buildPathKey(path, key);
           if (seenKeys.contains(key))
             continue;
           seenKeys.insert(key);
-          dedupMapOps.push_back(mapOp);
+          dedupMapOps.push_back(mapOpV);
           dedupIndexPaths.emplace_back(path.begin(), path.end());
         }
         op.getMembersMutable().append(dedupMapOps);
@@ -1568,10 +1575,8 @@ class MapInfoFinalizationPass
         if (mlir::ArrayAttr oldAttr = op.getMembersIndexAttr())
           for (mlir::Attribute indexList : oldAttr) {
             llvm::SmallVector<int64_t> listVec;
-
             for (mlir::Attribute index : mlir::cast<mlir::ArrayAttr>(indexList))
               listVec.push_back(mlir::cast<mlir::IntegerAttr>(index).getInt());
-
             newMemberIndices.emplace_back(std::move(listVec));
           }
         for (auto &path : dedupIndexPaths)
@@ -1581,7 +1586,6 @@ class MapInfoFinalizationPass
         // Set to partial map only if there is no user-defined mapper.
         op.setPartialMap(op.getMapperIdAttr() == nullptr);
 
-        return mlir::WalkResult::advance();
       });
 
       // Expand type(C_PTR) only when unified_shared_memory is required,
@@ -1677,14 +1681,16 @@ class MapInfoFinalizationPass
       // within a target region. At which point we map the relevant descriptor
       // data and the runtime should correctly associate the data with the
       // descriptor and bind together and allow clean mapping and execution.
-      for (auto deferrableAndAttach : deferrableDesc) {
-        auto mapOp = llvm::dyn_cast<mlir::omp::MapInfoOp>(
-            std::get<0>(deferrableAndAttach));
-        mlir::Operation *targetUser = getFirstTargetUser(mapOp);
-        assert(targetUser && "expected user of map operation was not found");
-        builder.setInsertionPoint(mapOp);
-        removeTopLevelDescriptor(deferrableAndAttach, builder, targetUser);
-        addImplicitDescriptorMapToTargetDataOp(mapOp, builder, *targetUser);
+      if (deferDescMapping) {
+        for (auto deferrableAndAttach : deferrableDesc) {
+          auto mapOp = llvm::dyn_cast<mlir::omp::MapInfoOp>(
+              std::get<0>(deferrableAndAttach));
+          mlir::Operation *targetUser = getFirstTargetUser(mapOp);
+          assert(targetUser && "expected user of map operation was not found");
+          builder.setInsertionPoint(mapOp);
+          removeTopLevelDescriptor(deferrableAndAttach, builder, targetUser);
+          addImplicitDescriptorMapToTargetDataOp(mapOp, builder, *targetUser);
+        }
       }
 
       // Wait until after we have generated all of our maps to add them onto
@@ -1698,5 +1704,11 @@ class MapInfoFinalizationPass
     });
   }
 };
-
 } // namespace
+
+std::unique_ptr<mlir::Pass>
+flangomp::createMapInfoFinalizationPass(bool deferDescMap) {
+  MapInfoFinalizationPassOptions options;
+  options.deferDescMapping = deferDescMap;
+  return std::make_unique<MapInfoFinalizationPass>(options);
+}

@@ -125,8 +125,9 @@ bool ParseFrameDescription(const char *frame_descr,
 // immediately after printing error report.
 class ScopedInErrorReport {
  public:
-  explicit ScopedInErrorReport(bool fatal = false)
-      : halt_on_error_(fatal || flags()->halt_on_error) {
+  explicit ScopedInErrorReport(bool fatal = false, bool nonself = false)
+      : halt_on_error_(fatal || flags()->halt_on_error),
+        nonself_report_(nonself) {
     // Deadlock Prevention Between ASan and LSan
     //
     // Background:
@@ -171,8 +172,10 @@ class ScopedInErrorReport {
     ASAN_ON_ERROR();
     if (current_error_.IsValid()) current_error_.Print();
 
-    // Make sure the current thread is announced.
-    DescribeThread(GetCurrentThread());
+    if (!nonself_report_)
+      // Make sure the current thread is announced.
+      DescribeThread(GetCurrentThread());
+
     // We may want to grab this lock again when printing stats.
     asanThreadRegistry().Unlock();
     // Print memory stats.
@@ -238,6 +241,9 @@ class ScopedInErrorReport {
   // with the debugger and point it to an error description.
   static ErrorDescription current_error_;
   bool halt_on_error_;
+  // used to control logging specific information when non-self entity is
+  // reporting
+  bool nonself_report_;
 };
 
 ErrorDescription ScopedInErrorReport::current_error_(LINKER_INITIALIZED);
@@ -531,6 +537,134 @@ void ReportGenericError(uptr pc, uptr bp, uptr sp, uptr addr, bool is_write,
   ErrorGeneric error(GetCurrentTidOrInvalid(), pc, bp, sp, addr, is_write,
                      access_size);
   in_report.ReportError(error);
+}
+
+void ReportNonselfError(uptr *nonself_callstack, u32 n_nonself_callstack,
+                        uptr *nonself_addrs, u32 n_nonself_addrs,
+                        u64 *nonself_tids, u32 n_nonself_tids, bool is_write,
+                        u32 access_size, bool is_abort,
+                        const char *nonself_name, s64 nonself_vma_adjust,
+                        int nonself_fd, u64 nonself_file_extent_size,
+                        u64 nonself_file_extent_start) {
+  ScopedInErrorReport in_report(is_abort, true);
+  // delegate to amdgpu error handler
+  if (!internal_strcmp(ErrorNonSelfAMDGPU::key, nonself_name)) {
+    ErrorNonSelfAMDGPU amdgpu_wavefront_error(
+        nonself_callstack, n_nonself_callstack, nonself_addrs, n_nonself_addrs,
+        nonself_tids, n_nonself_tids, (bool)is_write, access_size, nonself_fd,
+        nonself_vma_adjust, nonself_file_extent_start,
+        nonself_file_extent_size);
+    in_report.ReportError(amdgpu_wavefront_error);
+  }
+  // default fallback
+  else {
+    ErrorNonSelfGeneric error_val(
+        nonself_callstack, n_nonself_callstack, nonself_addrs, n_nonself_addrs,
+        nonself_tids, n_nonself_tids, (bool)is_write, access_size, nonself_fd,
+        nonself_vma_adjust, nonself_file_extent_start,
+        nonself_file_extent_size);
+    in_report.ReportError(error_val);
+  }
+}
+
+static constexpr uptr kNonselfLeakCapacity = 1024;
+static constexpr int kMaxTrackedDevices = 16;
+
+struct NonselfLeak {
+  u64 alloc_pc;        // hash key (0 = empty slot)
+  u64 total_bytes;
+  u64 count;
+  int device_id;
+  s64 vma_adjust;
+  int fd;
+  u64 file_extent_size;
+  u64 file_extent_start;
+};
+
+static NonselfLeak nonself_leak_table[kNonselfLeakCapacity];
+
+static NonselfLeak *NonselfLeakFind(u64 pc, int device_id) {
+  uptr idx = (uptr)(pc * 0x9e3779b97f4a7c15ULL) & (kNonselfLeakCapacity - 1);
+  for (uptr i = 0; i < kNonselfLeakCapacity; i++) {
+    NonselfLeak *slot = &nonself_leak_table[idx];
+    if (slot->alloc_pc == 0)
+      return slot;
+    if (slot->alloc_pc == pc && slot->device_id == device_id)
+      return slot;
+    idx = (idx + 1) & (kNonselfLeakCapacity - 1);
+  }
+  return nullptr;
+}
+
+void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
+                       const char *device_name, s64 vma_adjust, int fd,
+                       u64 file_extent_size, u64 file_extent_start) {
+  if (!common_flags()->detect_leaks)
+    return;
+
+  if (device_id == -1) {
+    struct { u64 bytes; u64 count; } dev_totals[kMaxTrackedDevices] = {};
+
+    for (uptr i = 0; i < kNonselfLeakCapacity; i++) {
+      NonselfLeak *e = &nonself_leak_table[i];
+      if (e->alloc_pc == 0)
+        continue;
+
+      Printf("Leak of %llu byte(s) in %llu allocation(s) on %s device %d "
+             "from:\n",
+             e->total_bytes, e->count,
+             device_name ? device_name : "unknown", e->device_id);
+
+      InternalScopedString source_location;
+      source_location.AppendF("    #0 0x%llx", e->alloc_pc);
+#if SANITIZER_AMDGPU
+      source_location.Append(" in ");
+      __sanitizer::AMDGPUCodeObjectSymbolizer symbolizer;
+      symbolizer.Init(e->fd, e->file_extent_start, e->file_extent_size);
+      if (!symbolizer.SymbolizePC(e->alloc_pc - e->vma_adjust, source_location))
+        source_location.Append("<unavailable>\n");
+      symbolizer.Release();
+#else
+      source_location.Append(" (<unavailable>)\n");
+#endif
+      Printf("%s", source_location.data());
+
+      if (e->device_id >= 0 && e->device_id < kMaxTrackedDevices) {
+        dev_totals[e->device_id].bytes += e->total_bytes;
+        dev_totals[e->device_id].count += e->count;
+      }
+    }
+
+    for (int i = 0; i < kMaxTrackedDevices; i++) {
+      if (dev_totals[i].count > 0)
+        Printf(
+            "SUMMARY: AddressSanitizer: %llu byte(s) leaked in %llu "
+            "allocation(s) on %s device %d.\n",
+            dev_totals[i].bytes, dev_totals[i].count,
+            device_name ? device_name : "unknown", i);
+    }
+
+    internal_memset(nonself_leak_table, 0, sizeof(nonself_leak_table));
+    return;
+  }
+
+  NonselfLeak *slot = NonselfLeakFind(alloc_pc, device_id);
+  if (!slot)
+    return;
+
+  if (slot->alloc_pc == 0) {
+    slot->alloc_pc = alloc_pc;
+    slot->total_bytes = alloc_size;
+    slot->count = 1;
+    slot->device_id = device_id;
+    slot->vma_adjust = vma_adjust;
+    slot->fd = fd;
+    slot->file_extent_size = file_extent_size;
+    slot->file_extent_start = file_extent_start;
+  } else {
+    slot->total_bytes += alloc_size;
+    slot->count++;
+  }
 }
 
 }  // namespace __asan

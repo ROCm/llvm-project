@@ -13,6 +13,8 @@
 #include "clang/Driver/Tool.h"
 #include "clang/Options/Options.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/Process.h"
 
 using namespace clang::driver;
 using namespace clang::driver::toolchains;
@@ -63,7 +65,26 @@ void AMDGPUOpenMPToolChain::AddClangCXXStdlibIncludeArgs(
 
 void AMDGPUOpenMPToolChain::AddClangSystemIncludeArgs(
     const ArgList &DriverArgs, ArgStringList &CC1Args) const {
+  // OpenMP offload code targeting AMDGPU frequently includes ROCm/HIP headers
+  // (e.g. <hip/hip_runtime.h>) directly. Add the ROCm include directories so
+  // those headers are found without requiring an explicit -I. The install is
+  // laid out as <root>/lib/llvm/bin/clang, so the HIP headers live in
+  // <root>/include (three levels up from the driver dir) and the toolchain's
+  // own headers in <root>/lib/llvm/include (one level up).
+  const Driver &D = HostTC.getDriver();
+  CC1Args.push_back("-internal-isystem");
+  CC1Args.push_back(DriverArgs.MakeArgString(D.Dir + "/../include"));
+  CC1Args.push_back("-internal-isystem");
+  CC1Args.push_back(DriverArgs.MakeArgString(D.Dir + "/../../../include"));
+
   HostTC.AddClangSystemIncludeArgs(DriverArgs, CC1Args);
+
+  // The HIP headers pull in the cuda_wrappers headers, which must precede the
+  // standard C++ headers added above.
+  CC1Args.push_back("-internal-isystem");
+  SmallString<128> P(HostTC.getDriver().ResourceDir);
+  llvm::sys::path::append(P, "include/cuda_wrappers");
+  CC1Args.push_back(DriverArgs.MakeArgString(P));
 }
 
 void AMDGPUOpenMPToolChain::AddIAMCUIncludeArgs(const ArgList &Args,
@@ -92,3 +113,46 @@ AMDGPUOpenMPToolChain::getDeviceLibs(
 
   return BCLibs;
 }
+
+
+/// Convert path list to Fortran frontend argument
+static void AddFlangSysIncludeArg(const ArgList &DriverArgs,
+                                  ArgStringList &Flang1args,
+                                  ToolChain::path_list IncludePathList) {
+  std::string ArgValue; // Path argument value
+
+  // Make up argument value consisting of paths separated by colons
+  bool first = true;
+  for (auto P : IncludePathList) {
+    if (first) {
+      first = false;
+    } else {
+      ArgValue += ":";
+    }
+    ArgValue += P;
+  }
+
+  // Add the argument
+  Flang1args.push_back("-stdinc");
+  Flang1args.push_back(DriverArgs.MakeArgString(ArgValue));
+}
+
+/// Currently only adding include dir from install directory
+void AMDGPUOpenMPToolChain::AddFlangSystemIncludeArgs(const ArgList &DriverArgs,
+                                            ArgStringList &Flang1args) const {
+  path_list IncludePathList;
+  const Driver &D = getDriver();
+
+  if (DriverArgs.hasArg(options::OPT_nostdinc))
+    return;
+
+  {
+    SmallString<128> P(D.Dir);
+    llvm::sys::path::append(P, "../include");
+    IncludePathList.push_back(DriverArgs.MakeArgString(P.str()));
+  }
+
+  AddFlangSysIncludeArg(DriverArgs, Flang1args, IncludePathList);
+  return;
+}
+

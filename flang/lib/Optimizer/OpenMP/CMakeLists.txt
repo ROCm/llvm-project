@@ -5,6 +5,7 @@ add_flang_library(FlangOpenMPTransforms
   DoConcurrentConversion.cpp
   FunctionFiltering.cpp
   GenericLoopConversion.cpp
+  GlobalFiltering.cpp
   HostOpFiltering.cpp
   MapsForPrivatizedSymbols.cpp
   MapInfoFinalization.cpp
@@ -35,6 +36,7 @@ add_flang_library(FlangOpenMPTransforms
 
   MLIR_LIBS
   MLIRFuncDialect
+  MLIRMathTransforms
   MLIROpenMPDialect
   MLIROpenMPTransforms
   MLIRIR

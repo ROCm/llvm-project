@@ -64,6 +64,11 @@ public:
   llvm::opt::DerivedArgList *
   TranslateArgs(const llvm::opt::DerivedArgList &Args, BoundArch BA,
                 Action::OffloadKind DeviceOffloadKind) const override;
+  void addActionsFromClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
+                                        llvm::opt::ArgStringList &CC1Args,
+                                        const JobAction &JA,
+                                        Compilation &C,
+                                        const InputInfoList &Inputs) const override;
 
   void
   addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
@@ -92,6 +97,10 @@ public:
 
   /// HIP uses LTO by default to link device bitcode.
   LTOKind getDefaultLTOMode() const override { return LTOK_Full; }
+
+  /// We need to adjust the LTO mode based on user arguments.
+  LTOKind getLTOMode(const llvm::opt::ArgList &Args,
+                     Action::OffloadKind Kind = Action::OFK_None) const override;
 
   const ToolChain &HostTC;
   ParsedTargetIDType

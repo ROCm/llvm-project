@@ -2071,8 +2071,9 @@ static bool mapTypeToBool(ClauseMapFlags value, ClauseMapFlags flag) {
 /// Parses a map_entries map type from a string format back into its numeric
 /// value.
 ///
-/// map-clause = `map_clauses (  ( `(` `always, `? `implicit, `? `ompx_hold, `?
-/// `close, `? `present, `? ( `to` | `from` | `delete` `)` )+ `)` )
+/// map-clause = `map_clauses (  ( `(` `attach, `? `always, `? `implicit, `?
+/// `ompx_hold, `? `close, `? `present, `? ( `to` | `from` | `delete` `)` )+ `)`
+/// )
 static ParseResult parseMapClause(OpAsmParser &parser,
                                   ClauseMapFlagsAttr &mapType) {
   ClauseMapFlags mapTypeBits = ClauseMapFlags::none;
@@ -2097,6 +2098,9 @@ static ParseResult parseMapClause(OpAsmParser &parser,
 
     if (mapTypeMod == "present")
       mapTypeBits |= ClauseMapFlags::present;
+
+    if (mapTypeMod == "descriptor")
+      mapTypeBits |= ClauseMapFlags::descriptor;
 
     if (mapTypeMod == "to")
       mapTypeBits |= ClauseMapFlags::to;
@@ -2174,6 +2178,8 @@ static void printMapClause(OpAsmPrinter &p, Operation *op,
     mapTypeStrs.push_back("close");
   if (mapTypeToBool(mapFlags, ClauseMapFlags::present))
     mapTypeStrs.push_back("present");
+  if (mapTypeToBool(mapFlags, ClauseMapFlags::descriptor))
+    mapTypeStrs.push_back("descriptor");
 
   // special handling of to/from/tofrom/delete and release/alloc, release +
   // alloc are the abscense of one of the other flags, whereas tofrom requires
@@ -2917,7 +2923,7 @@ LogicalResult TeamsOp::verify() {
                      "in any OpenMP dialect operations");
 
   // Check for num_teams clause restrictions
-  if (failed(verifyNumTeamsClause(op, this->getNumTeamsLower(),
+  if (failed(verifyNumTeamsClause(getOperation(), this->getNumTeamsLower(),
                                   this->getNumTeamsUpperVars())))
     return failure();
 
@@ -2932,7 +2938,7 @@ LogicalResult TeamsOp::verify() {
         "expected equal sizes for allocate and allocator variables");
 
   if (failed(verifyDynGroupprivateClause(
-          op, getDynGroupprivateAccessGroupAttr(),
+          getOperation(), getDynGroupprivateAccessGroupAttr(),
           getDynGroupprivateFallbackAttr(), getDynGroupprivateSize())))
     return failure();
 

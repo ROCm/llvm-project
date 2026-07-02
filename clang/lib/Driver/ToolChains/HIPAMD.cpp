@@ -47,7 +47,10 @@ void AMDGCN::Linker::constructLLVMLinkCommand(
   // for the extracted archive of bitcode to inputs.
   auto TargetID = Args.getLastArgValue(options::OPT_mcpu_EQ);
   AddStaticDeviceLibsLinking(C, *this, JA, Inputs, Args, LinkerInputs, "amdgcn",
-                             TargetID, /*IsBitCodeSDL=*/true);
+                             TargetID,
+                             /*IsBitCodeSDL=*/true,
+                             /*PostClangLink=*/false);
+
   tools::constructLLVMLinkCommand(C, *this, JA, Inputs, LinkerInputs, Output,
                                   Args);
 }
@@ -96,6 +99,11 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
     LldArgs.push_back("-plugin-opt=-avail-extern-gv-in-addrspace-to-local=3");
   }
 
+  if (Arg *A = Args.getLastArgNoClaim(options::OPT_g_Group))
+    if (!A->getOption().matches(options::OPT_g0) &&
+        !A->getOption().matches(options::OPT_ggdb0))
+      LldArgs.push_back("-plugin-opt=-amdgpu-spill-cfi-saved-regs");
+
   for (const Arg *A : Args.filtered(options::OPT_mllvm)) {
     LldArgs.push_back(
         Args.MakeArgString(Twine("-plugin-opt=") + A->getValue(0)));
@@ -138,7 +146,9 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
   // for the extracted archive of bitcode to inputs.
   auto TargetID = Args.getLastArgValue(options::OPT_mcpu_EQ);
   AddStaticDeviceLibsLinking(C, *this, JA, Inputs, Args, LldArgs, "amdgcn",
-                             TargetID, /*IsBitCodeSDL=*/true);
+                             TargetID,
+                             /*IsBitCodeSDL=*/true,
+                             /*PostClangLink=*/false);
 
   LldArgs.push_back("--no-whole-archive");
 
@@ -232,6 +242,11 @@ HIPAMDToolChain::HIPAMDToolChain(const Driver &D, const llvm::Triple &Triple,
   getProgramPaths().push_back(getDriver().Dir);
 }
 
+void HIPAMDToolChain::addActionsFromClangTargetOptions(
+    const llvm::opt::ArgList &DriverArgs, llvm::opt::ArgStringList &CC1Args,
+    const JobAction &JA, Compilation &C, const InputInfoList &Inputs) const {
+}
+
 void HIPAMDToolChain::addClangTargetOptions(
     const llvm::opt::ArgList &DriverArgs, llvm::opt::ArgStringList &CC1Args,
     BoundArch BA, Action::OffloadKind DeviceOffloadingKind) const {
@@ -300,6 +315,15 @@ Tool *HIPAMDToolChain::buildLinker() const {
   assert(getTriple().isAMDGCN() ||
          getTriple().getArch() == llvm::Triple::spirv64);
   return new tools::AMDGCN::Linker(*this);
+}
+
+LTOKind HIPAMDToolChain::getLTOMode(const ArgList &Args,
+                                    Action::OffloadKind Kind) const {
+  if (getTriple().isAMDGCN() && getDriver().offloadDeviceOnly() &&
+      !Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc, false) &&
+      !Args.hasArg(options::OPT_foffload_lto, options::OPT_foffload_lto_EQ))
+    return LTOK_None;
+  return ToolChain::getLTOMode(Args, Kind);
 }
 
 ToolChain::CXXStdlibType
@@ -394,7 +418,7 @@ HIPAMDToolChain::getDeviceLibs(const llvm::opt::ArgList &DriverArgs,
     if (InstLib.empty())
       return BCLibs;
     if (llvm::sys::fs::exists(InstLib))
-      BCLibs.emplace_back(InstLib);
+      BCLibs.push_back(InstLib);
     else
       getDriver().Diag(diag::err_drv_no_such_file) << InstLib;
   }

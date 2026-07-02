@@ -378,7 +378,6 @@ void RocmInstallationDetector::detectDeviceLibrary() {
   else if (std::optional<std::string> LibPathEnv =
                llvm::sys::Process::GetEnv("HIP_DEVICE_LIB_PATH"))
     LibDevicePath = std::move(*LibPathEnv);
-
   auto &FS = D.getVFS();
   if (!LibDevicePath.empty()) {
     // Maintain compatability with HIP flag/envvar pointing directly at the
@@ -420,6 +419,16 @@ void RocmInstallationDetector::detectDeviceLibrary() {
   HasDeviceLibrary = CheckDeviceLib(LibDevicePath, true);
   if (HasDeviceLibrary)
     return;
+
+  // Find device libraries in <LLVM_DIR>/amdgcn/bitcode
+  auto &oROCmDirs = getInstallationPathCandidates();
+  for (const auto &Candidate : oROCmDirs) {
+    LibDevicePath = Candidate.Path;
+    llvm::sys::path::append(LibDevicePath, "amdgcn", "bitcode");
+    HasDeviceLibrary = CheckDeviceLib(LibDevicePath, true);
+    if (HasDeviceLibrary)
+      return;
+  }
 
   // Find device libraries in a legacy ROCm directory structure
   // ${ROCM_ROOT}/amdgcn/bitcode/*
@@ -637,7 +646,12 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   getToolChain().addProfileRTLibs(Args, CmdArgs);
-  addSanitizerRuntimes(getToolChain(), Args, CmdArgs);
+
+  // Divergent because asanrtl.bc does not use the standard compiler-rt
+  // semantics. Skip this if `-fsanitize=address` is set.
+  const SanitizerArgs &SanArgs = getToolChain().getSanitizerArgs(Args);
+  if (!SanArgs.needsAsanRt())
+    addSanitizerRuntimes(getToolChain(), Args, CmdArgs);
 
   if (Args.hasArg(options::OPT_stdlib))
     CmdArgs.append({"-lc", "-lm"});
@@ -660,17 +674,46 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 void amdgpu::getAMDGPUTargetFeatures(const Driver &D,
                                      const llvm::Triple &Triple,
                                      const llvm::opt::ArgList &Args,
-                                     std::vector<StringRef> &Features) {
+                                     std::vector<StringRef> &Features,
+                                     StringRef /*TcTargetID*/) {
   if (Args.hasFlag(options::OPT_mwavefrontsize64,
                    options::OPT_mno_wavefrontsize64, false))
     Features.push_back("+wavefrontsize64");
 
+  // TODO: Remove during upstreaming target id.
+  if (Args.getLastArg(options::OPT_msram_ecc_legacy)) {
+    Features.push_back("+sramecc");
+  }
+  if (Args.getLastArg(options::OPT_mno_sram_ecc_legacy)) {
+    Features.push_back("-sramecc");
+  }
   if (Args.hasFlag(options::OPT_mamdgpu_precise_memory_op,
                    options::OPT_mno_amdgpu_precise_memory_op, false))
     Features.push_back("+precise-memory");
 
   handleTargetFeaturesGroup(D, Triple, Args, Features,
                             options::OPT_m_amdgpu_Features_Group);
+}
+
+llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>
+amdgpu::dlr::getCommonDeviceLibNames(
+    const llvm::opt::ArgList &DriverArgs, const SanitizerArgs &SanArgs,
+    const Driver &D, const std::string &GPUArch, bool isOpenMP,
+    const RocmInstallationDetector &RocmInstallation,
+    const clang::driver::Action::OffloadKind DeviceOffloadingKind) {
+  auto Kind = llvm::AMDGPU::parseArchAMDGCN(GPUArch);
+  const StringRef CanonArch = llvm::AMDGPU::getArchNameAMDGCN(Kind);
+
+  StringRef LibDeviceFile = RocmInstallation.getLibDeviceFile(CanonArch);
+  auto ABIVer = DeviceLibABIVersion::fromCodeObjectVersion(
+      getAMDGPUCodeObjectVersion(D, DriverArgs));
+  if (!RocmInstallation.checkCommonBitcodeLibs(CanonArch, LibDeviceFile,
+                                               ABIVer))
+    return {};
+  
+  return RocmInstallation.getCommonBitcodeLibs(
+      DriverArgs, LibDeviceFile, GPUArch, DeviceOffloadingKind,
+      SanArgs.needsAsanRt());
 }
 
 /// AMDGPU Toolchain
@@ -940,8 +983,15 @@ AMDGPUToolChain::getGPUArch(const llvm::opt::ArgList &DriverArgs) const {
 AMDGPUToolChain::ParsedTargetIDType
 AMDGPUToolChain::getParsedTargetID(const llvm::opt::ArgList &DriverArgs) const {
   StringRef TargetID = DriverArgs.getLastArgValue(options::OPT_mcpu_EQ);
+  // For offload toolchains (HIP, OpenMP, etc.), `getAuxTriple()` is the host;
+  // `-march=` there refers to the host CPU (e.g. haswell) and must not be
+  // parsed as an AMDGPU Target ID. Only standalone AMDGPU uses `-march=` as
+  // a legacy spelling for the GPU `-mcpu=` (see TranslateArgs when OFK_None).
+  if (TargetID.empty() && !getAuxTriple())
+    TargetID = DriverArgs.getLastArgValue(options::OPT_march_EQ);
+
   if (TargetID.empty())
-    return {};
+    return {std::nullopt, std::nullopt, std::nullopt};
 
   llvm::StringMap<bool> FeatureMap;
   auto OptionalGpuArch = parseTargetID(getTriple(), TargetID, &FeatureMap);
@@ -1107,6 +1157,13 @@ RocmInstallationDetector::getCommonBitcodeLibs(
     AddBCLib(ABIVerPath);
 
   return BCLibs;
+}
+
+bool AMDGPUToolChain::shouldSkipArgument(const llvm::opt::Arg *A) const {
+  Option O = A->getOption();
+  if (O.matches(options::OPT_fPIE) || O.matches(options::OPT_fpie))
+    return true;
+  return false;
 }
 
 llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>

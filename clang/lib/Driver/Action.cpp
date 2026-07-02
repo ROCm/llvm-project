@@ -30,6 +30,8 @@ const char *Action::getClassName(ActionClass AC) {
   case AnalyzeJobClass:
     return "analyzer";
   case CompileJobClass: return "compiler";
+  case FortranFrontendJobClass:
+    return "fortranfrontend";
   case BackendJobClass: return "backend";
   case AssembleJobClass: return "assembler";
   case IfsMergeJobClass: return "interface-stub-merger";
@@ -62,8 +64,19 @@ const char *Action::getClassName(ActionClass AC) {
 void Action::propagateDeviceOffloadInfo(OffloadKind OKind, BoundArch OArch,
                                         const ToolChain *OToolChain) {
   // Offload action set its own kinds on their dependences.
-  if (Kind == OffloadClass)
+  // But we still need to preserve OffloadingDeviceKind and OffloadingArch
+  // where toplevel action is an unbundle.
+  // HIP assumes offload kind and offload arch of OffloadAction to be
+  // determined by its ctor and not to be changed by subsequent actions,
+  // otherwise the following use case will break:
+  // compile -> offload -> bundle -> offload.
+  if (Kind == OffloadClass) {
+    if (OKind != OFK_HIP) {
+      OffloadingDeviceKind = OKind;
+      OffloadingArch = OArch;
+    }
     return;
+  }
   // Unbundling actions use the host kinds.
   if (Kind == OffloadUnbundlingJobClass)
     return;

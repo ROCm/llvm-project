@@ -1765,9 +1765,17 @@ void OmpStructureChecker::CheckThreadprivateOrDeclareTargetVar(
         "A variable in a %s directive cannot be an element of a common block"_err_en_US,
         ContextDirectiveAsFortran());
   } else if (FindEquivalenceSet(*name->symbol)) {
-    context_.Say(name->source,
-        "A variable in a %s directive cannot appear in an EQUIVALENCE statement"_err_en_US,
-        ContextDirectiveAsFortran());
+    auto allowThreadprivateEquivalence{
+        context_.langOptions().AllowThreadprivateEquivalence};
+    if (!allowThreadprivateEquivalence) {
+      context_.Say(name->source,
+          "A variable in a %s directive cannot appear in an EQUIVALENCE statement"_err_en_US,
+          ContextDirectiveAsFortran());
+    } else {
+      context_.Say(name->source,
+          "Variable '%s' appears a %s directive and an EQUIVALENCE statement, which does not conform to the OpenMP API specification."_warn_en_US,
+          name->symbol->name(), ContextDirectiveAsFortran());
+    }
   } else if (name->symbol->test(Symbol::Flag::OmpThreadprivate) &&
       directive == llvm::omp::Directive::OMPD_declare_target) {
     context_.Say(name->source,
@@ -1813,6 +1821,18 @@ void OmpStructureChecker::CheckThreadprivateOrDeclareTargetVar(
     llvm::omp::Directive directive{GetContext().directive};
     for (const auto &obj : cb->objects()) {
       if (FindEquivalenceSet(*obj)) {
+#if 0//<<<<<<< HEAD
+        auto allowThreadprivateEquivalence{
+            context_.langOptions().AllowThreadprivateEquivalence};
+        if (!allowThreadprivateEquivalence) {
+          context_.Say(name.source,
+              "A variable in a %s directive cannot appear in an EQUIVALENCE statement (variable '%s' from common block '/%s/')"_err_en_US,
+              ContextDirectiveAsFortran(), obj->name(), name.symbol->name());
+        } else {
+          context_.Say(name.source,
+              "Variable '%s' from common block '%s' appears in an EQUIVALENCE statement and a %s directive, which does not conform to the OpenMP API specification."_warn_en_US,
+              obj->name(), name.symbol->name(), ContextDirectiveAsFortran());
+#else//=======
         if (directive == llvm::omp::Directive::OMPD_threadprivate) {
           context_.Warn(common::LanguageFeature::OpenMPThreadprivateEquivalence,
               name.source,
@@ -1822,6 +1842,7 @@ void OmpStructureChecker::CheckThreadprivateOrDeclareTargetVar(
           context_.Say(name.source,
               "A variable in a %s directive cannot appear in an EQUIVALENCE statement (variable '%s' from common block '/%s/')"_err_en_US,
               ContextDirectiveAsFortran(), obj->name(), name.symbol->name());
+#endif//>>>>>>> 5881ce66b121
         }
       }
     }

@@ -5,7 +5,7 @@
 subroutine test_loop_variant()
   integer :: i
   !$omp metadirective &
-  !$omp & when(implementation={vendor(llvm)}: parallel do) &
+  !$omp & when(implementation={vendor(amd)}: parallel do) &
   !$omp & default(nothing)
   do i = 1, 100
   end do

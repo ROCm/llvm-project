@@ -9,9 +9,9 @@
 #ifndef LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_AMDGPUOPENMP_H
 #define LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_AMDGPUOPENMP_H
 
-#include "AMDGPU.h"
-#include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
+#include "clang/Driver/Tool.h"
+#include "AMDGPU.h"
 
 namespace clang {
 namespace driver {
@@ -20,8 +20,41 @@ namespace toolchains {
 class AMDGPUOpenMPToolChain;
 }
 
-namespace toolchains {
+namespace tools {
 
+namespace AMDGCN {
+  // Construct command for creating HIP fatbin.
+  void constructHIPFatbinCommand(Compilation &C, const JobAction &JA,
+                  StringRef OutputFileName, const InputInfoList &Inputs,
+                  const llvm::opt::ArgList &TCArgs, const Tool& T);
+
+// Runs llvm-link/opt/llc/lld, which links multiple LLVM bitcode, together with
+// device library, then compiles it to ISA in a shared object.
+class LLVM_LIBRARY_VISIBILITY OpenMPLinker : public Tool {
+public:
+  OpenMPLinker(const ToolChain &TC)
+      : Tool("AMDGCN::OpenMPLinker", "amdgcn-link", TC) {}
+
+  bool hasIntegratedCPP() const override { return false; }
+
+  void ConstructJob(Compilation &C, const JobAction &JA,
+                    const InputInfo &Output, const InputInfoList &Inputs,
+                    const llvm::opt::ArgList &TCArgs,
+                    const char *LinkingOutput) const override;
+
+private:
+  /// \return output file name from build-select, prelink, and preopt
+  const char *constructOmpExtraCmds(Compilation &C, const JobAction &JA,
+                                    const InputInfoList &Inputs,
+                                    const llvm::opt::ArgList &Args,
+                                    llvm::StringRef TargetID,
+                                    llvm::StringRef OutputFilePrefix) const;
+};
+
+} // end namespace AMDGCN
+} // end namespace tools
+
+namespace toolchains {
 class LLVM_LIBRARY_VISIBILITY AMDGPUOpenMPToolChain final
     : public ROCMToolChain {
 public:
@@ -37,6 +70,7 @@ public:
   addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                         llvm::opt::ArgStringList &CC1Args, BoundArch BA,
                         Action::OffloadKind DeviceOffloadKind) const override;
+
   CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
   void AddClangCXXStdlibIncludeArgs(
       const llvm::opt::ArgList &Args,
@@ -46,6 +80,13 @@ public:
                             llvm::opt::ArgStringList &CC1Args) const override;
   void AddIAMCUIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                            llvm::opt::ArgStringList &CC1Args) const override;
+  void
+  AddFlangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
+                            llvm::opt::ArgStringList &FlangArgs) const override;
+
+  StringRef getAsanRTLPath() const {
+    return RocmInstallation->getAsanRTLPath();
+  }
 
   VersionTuple
   computeMSVCVersion(const Driver *D,

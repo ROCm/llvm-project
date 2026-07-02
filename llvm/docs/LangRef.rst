@@ -6609,21 +6609,22 @@ metadata nodes are related to debug info.
 DICompileUnit
 """""""""""""
 
-``DICompileUnit`` nodes represent a compile unit. The ``enums:``,
-``retainedTypes:``, ``globals:``, ``imports:`` and ``macros:`` fields are tuples
-containing the debug info to be emitted along with the compile unit, regardless
-of code optimizations (some nodes are only emitted if there are references to
-them from instructions). The ``debugInfoForProfiling:`` field is a boolean
-indicating whether or not line-table discriminators are updated to provide
-more-accurate debug info for profiling results.
+``DICompileUnit`` nodes represent a compile unit. ``DICompileUnit`` nodes must
+be ``distinct``. The ``enums:``, ``retainedTypes:``, ``globals:``, ``imports:``
+and ``macros:`` fields are tuples containing the debug info to be emitted along
+with the compile unit, regardless of code optimizations (some nodes are only
+emitted if there are references to them from instructions). The
+``debugInfoForProfiling:`` field is a boolean indicating whether or not
+line-table discriminators are updated to provide more-accurate debug info for
+profiling results.
 
 .. code-block:: text
 
-    !0 = !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "clang",
-                        isOptimized: true, flags: "-O2", runtimeVersion: 2,
-                        splitDebugFilename: "abc.debug", emissionKind: FullDebug,
-                        enums: !2, retainedTypes: !3, globals: !4, imports: !5,
-                        macros: !6, dwoId: 0x0abcd)
+    !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "clang",
+                                 isOptimized: true, flags: "-O2", runtimeVersion: 2,
+                                 splitDebugFilename: "abc.debug", emissionKind: FullDebug,
+                                 enums: !2, retainedTypes: !3, globals: !4, imports: !5,
+                                 macros: !6, dwoId: 0x0abcd)
 
 The optional ``dialect:`` field encodes the source-language *dialect* of the
 compile unit as an enum. It corresponds to the ``DW_AT_LLVM_language_dialect``
@@ -17912,7 +17913,7 @@ using a less accurate calculation.
 
 
 '``llvm.ldexp.*``' Intrinsic
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Syntax:
 """""""
@@ -29603,7 +29604,7 @@ unspecified sequence of rounding operations.
 
 
 '``llvm.experimental.constrained.ldexp``' Intrinsic
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Syntax:
 """""""

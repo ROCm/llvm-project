@@ -1911,7 +1911,8 @@ void PreRARematStage::finalizeGCNRegion() {
   // target there is no point in trying to re-schedule further regions.
   if (!TargetOcc)
     return;
-  RegionReverts.emplace_back(RegionIdx, Unsched, PressureBefore);
+  RegionReverts.emplace_back(RegionIdx, Unsched, PressureBefore,
+                             ScheduleReverted);
   if (DAG.MinOccupancy < *TargetOcc) {
     REMAT_DEBUG(dbgs() << "Region " << RegionIdx
                        << " cannot meet occupancy target, interrupting "
@@ -1922,6 +1923,7 @@ void PreRARematStage::finalizeGCNRegion() {
 
 void GCNSchedStage::checkScheduling() {
   // Check the results of scheduling.
+  ScheduleReverted = false;
   PressureAfter = DAG.getRealRegPressure(RegionIdx);
 
   LLVM_DEBUG(dbgs() << "Pressure after scheduling: " << print(PressureAfter));
@@ -2288,6 +2290,10 @@ void GCNSchedStage::modifyRegionSchedule(unsigned RegionIdx,
   // outside the region (whether that is a MBB end or a terminator MI).
   assert(RegionEnd == DAG.Regions[RegionIdx].second && "region end mismatch");
   DAG.Regions[RegionIdx].first = MIOrder.front();
+}
+
+unsigned PreRARematStage::getStageTargetOccupancy() const {
+  return TargetOcc ? *TargetOcc : MFI.getMinWavesPerEU();
 }
 
 /// Returns true if reaching def \p RD will be in AGPR form after the rewrite
@@ -2935,10 +2941,6 @@ bool RewriteMFMAFormStage::rewrite(
   return true;
 }
 
-unsigned PreRARematStage::getStageTargetOccupancy() const {
-  return TargetOcc ? *TargetOcc : MFI.getMinWavesPerEU();
-}
-
 bool PreRARematStage::setObjective() {
   const Function &F = MF.getFunction();
 
@@ -3164,7 +3166,11 @@ void PreRARematStage::finalizeGCNSchedStage() {
     return;
 
   // Revert re-scheduling in all affected regions.
-  for (const auto &[RegionIdx, OrigMIOrder, MaxPressure] : RegionReverts) {
+  for (const auto &[RegionIdx, OrigMIOrder, MaxPressure, AlreadyReverted] :
+       RegionReverts) {
+    DAG.Pressure[RegionIdx] = MaxPressure;
+    if (AlreadyReverted)
+      continue;
     REMAT_DEBUG(dbgs() << "Reverting re-scheduling in region " << RegionIdx
                        << '\n');
     DAG.Pressure[RegionIdx] = MaxPressure;

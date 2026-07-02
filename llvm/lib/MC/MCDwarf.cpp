@@ -1906,8 +1906,8 @@ const MCSymbol &FrameEmitterImpl::EmitCIE(const MCDwarfFrameInfo &Frame) {
   uint8_t CIEVersion = getCIEVersion(IsEH, context.getDwarfVersion());
   Streamer.emitInt8(CIEVersion);
 
+  SmallString<8> Augmentation;
   if (IsEH) {
-    SmallString<8> Augmentation;
     Augmentation += "z";
     if (Frame.Personality)
       Augmentation += "P";
@@ -1920,8 +1920,8 @@ const MCSymbol &FrameEmitterImpl::EmitCIE(const MCDwarfFrameInfo &Frame) {
       Augmentation += "B";
     if (Frame.IsMTETaggedFrame)
       Augmentation += "G";
-    Streamer.emitBytes(Augmentation);
   }
+  Streamer.emitBytes(Augmentation);
   Streamer.emitInt8(0);
 
   if (CIEVersion >= 4) {

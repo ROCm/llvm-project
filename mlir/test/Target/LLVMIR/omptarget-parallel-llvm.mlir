@@ -1,5 +1,4 @@
 // RUN: mlir-translate -mlir-to-llvmir %s | FileCheck %s
-
 // The aim of the test is to check the LLVM IR codegen for the device
 // for omp target parallel construct
 

@@ -12,6 +12,12 @@ else()
   set(LIBOMPTARGET_DEBUG False)
 endif()
 
+if ("compiler-rt" IN_LIST LLVM_ENABLE_RUNTIMES)
+  set(LIBOMPTARGET_TEST_GPU_PGO True)
+else()
+  set(LIBOMPTARGET_TEST_GPU_PGO False)
+endif()
+
 # Replace the space from user's input with ";" in case that CMake add escape
 # char into the lit command.
 string(REPLACE " " ";" LIBOMPTARGET_LIT_ARG_LIST "${LIBOMPTARGET_LIT_ARGS}")
@@ -72,5 +78,6 @@ add_offload_testsuite(check-offload
 
 add_lit_testsuite(check-offload-unit "Running offload unittest suites"
   ${CMAKE_CURRENT_BINARY_DIR}/unit
-  EXCLUDE_FROM_CHECK_ALL
-  DEPENDS LLVMOffload OffloadUnitTests)
+  EXCLUDE_FROM_CHECK_ALL 
+  #DEPENDS LLVMOffload
+   OffloadUnitTests)

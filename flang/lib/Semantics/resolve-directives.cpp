@@ -475,17 +475,15 @@ public:
   // "const T &". For a class D derived from B, and an explicit overload
   // of Pre(const B &), a call to Pre(D) will select the template instead
   // of the base clase overload.
-  // Don't use the inherited Pre/Post functions. Instead, create a last-
-  // resort catch-all overload that is worse than any derived-to-base
-  // conversion. This will, for example,invoke Pre(const OmpBlockConstruct &)
-  // for directives derived from it.
-  struct Anything {
-    // User-defined conversion constructor will be worse than all more
-    // "natural" conversions.
-    template <typename T> Anything(const T &) {}
+  // Force user-defined conversion from any const-reference, to make sure
+  // that the Pre(AbsorbAnyReference) and Post(AbsorbAnyReference) overloads
+  // will be worse than derived-to-base conversions. This will, for example,
+  // invoke Pre(const OmpBlockConstruct &) for directives derived from it.
+  struct AbsorbAnyReference {
+    template <typename T> AbsorbAnyReference(const T &) {}
   };
-  bool Pre(Anything) { return true; }
-  void Post(Anything) {}
+  bool Pre(AbsorbAnyReference) { return true; }
+  void Post(AbsorbAnyReference) {}
 
   bool Pre(const parser::SpecificationPart &) {
     partStack_.push_back(PartKind::SpecificationPart);
@@ -2544,15 +2542,15 @@ static bool IsTargetCaptureImplicitlyFirstprivatizeable(const Symbol &symbol,
   // as it overrides the implicit Firstprivatization of scalars OpenMP rule.
   if (!defaultMap.empty()) {
     if (llvm::is_contained(
-            defaultMap, parser::OmpVariableCategory::Value::All) &&
-        defaultMap[parser::OmpVariableCategory::Value::All] !=
+            defaultMap, parser::OmpVariableCategory::Value::Scalar) &&
+        defaultMap[parser::OmpVariableCategory::Value::Scalar] !=
             parser::OmpDefaultmapClause::ImplicitBehavior::Firstprivate) {
       return false;
     }
 
     if (llvm::is_contained(
-            defaultMap, parser::OmpVariableCategory::Value::Scalar) &&
-        defaultMap[parser::OmpVariableCategory::Value::Scalar] !=
+            defaultMap, parser::OmpVariableCategory::Value::All) &&
+        defaultMap[parser::OmpVariableCategory::Value::All] !=
             parser::OmpDefaultmapClause::ImplicitBehavior::Firstprivate) {
       return false;
     }
@@ -2777,7 +2775,8 @@ void OmpAttributeVisitor::CreateImplicitSymbols(
       dsa = {dirContext.defaultDSA};
       makeSymbol(dsa);
       PRINT_IMPLICIT_RULE("1) default");
-    } else if (parallelDir) {
+    } else if (!targetDir && parallelDir/*(!enableDelayedPrivatizationStaging && parallelDir) ||
+        (enableDelayedPrivatizationStaging && !targetDir && parallelDir)*/) {
       // 2) parallel -> shared
       dsa = {Symbol::Flag::OmpShared};
       makeSymbol(dsa);

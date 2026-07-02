@@ -1006,6 +1006,7 @@ Function *CodeExtractor::constructFunctionDeclaration(
       case Attribute::SanitizeRealtime:
       case Attribute::SanitizeRealtimeBlocking:
       case Attribute::SanitizeAllocToken:
+      case Attribute::SanitizedPaddedGlobal:
       case Attribute::SpeculativeLoadHardening:
       case Attribute::StackProtect:
       case Attribute::StackProtectReq:
@@ -1359,6 +1360,7 @@ static void fixupDebugInfoPostExtraction(Function &OldFunc, Function &NewFunc,
       NewVar = DIB.createAutoVariable(
           NewScope, OldVar->getName(), OldVar->getFile(), OldVar->getLine(),
           OldVar->getType(), /*AlwaysPreserve=*/false, DINode::FlagZero,
+          OldVar->getDWARFMemorySpace(),
           OldVar->getAlignInBits());
     }
     return cast<DILocalVariable>(NewVar);

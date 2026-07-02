@@ -14,6 +14,7 @@
 #include "AMDGPUTargetMachine.h"
 #include "GCNSubtarget.h"
 #include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/Target/TargetMachine.h"
@@ -1609,10 +1610,17 @@ static bool runImpl(SetVector<Function *> &Functions, bool IsModulePass,
   AC.DeleteFns = DeleteFns;
   AC.DefaultInitializeLiveInternals = false;
   AC.IndirectCalleeSpecializationCallback =
-      [](Attributor &A, const AbstractAttribute &AA, CallBase &CB,
-         Function &Callee, unsigned NumAssumedCallees) {
-        return !AMDGPU::isEntryFunctionCC(Callee.getCallingConv()) &&
-               (NumAssumedCallees <= IndirectCallSpecializationThreshold);
+      [&TM](Attributor &A, const AbstractAttribute &AA, CallBase &CB,
+            Function &Callee, unsigned NumAssumedCallees) {
+        if (AMDGPU::isEntryFunctionCC(Callee.getCallingConv()))
+          return false;
+        // Singleton functions can be specialized.
+        if (NumAssumedCallees == 1)
+          return true;
+        // Otherwise specialize uniform values.
+        const auto &TTI = TM.getTargetTransformInfo(*CB.getCaller());
+        return TTI.getValueUniformity(CB.getCalledOperand()) ==
+               ValueUniformity::AlwaysUniform;
       };
   AC.IPOAmendableCB = [](const Function &F) {
     return F.getCallingConv() == CallingConv::AMDGPU_KERNEL;
