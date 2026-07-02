@@ -74,8 +74,12 @@ The LLVM Language Reference defines the following :ref:`scopes<syncscope>`:
 AMDGPU scopes
 -------------
 
+.. _amdgpu-specific-scopes:
+
 The AMDGPU backend further refines the LLVM scopes with the following
-target-defined scopes and constraints:
+target-defined scopes:
+
+**Synchronization Scopes**
 
 - *system scope* (same as LLVM)
 - "agent" scope
@@ -84,22 +88,80 @@ target-defined scopes and constraints:
 - "wavefront" scope
 - "singlethread" scope (same as LLVM)
 
-These are arranged from largest scope (*system scope*) to smallest scope
-("singlethread").
+**DMA Scopes**
 
-- Every instance ``X`` of some scope ``S1`` other than "singlethread" scope is
-  partitioned by the scope ``S2`` one level below it. Each subset defined by this
-  partition is an instance of ``S2`` and is called a *subscope instance* of ``X``.
-- It follows that if two scope instances ``X`` and ``Y`` intersect, then their
-  intersection is the smaller of ``X`` and ``Y``.
-- A scope ``S1`` is a *subscope* of a scope ``S2`` if every instance of ``S1``
-  is a subscope instance of some instance of ``S2``.
+- "lds-dma" scope
 
-**Inclusive Scopes**: Two operations ``X`` and ``Y`` are said to have *inclusive
-scopes* if the scope instance of each operation contains the other operation. In
-that case, the *common scope instance* ``S'`` of ``X`` and ``Y`` is the
-intersection of their scope instances. The scope corresponding to ``S'`` is also
-termed as the *common scope* of ``X`` and ``Y``.
+Two structures relate these scopes: the *partition structure* and the *subscope
+relation*.
+
+Partition Structure
+^^^^^^^^^^^^^^^^^^^
+
+An edge from ``S1`` to ``S2`` in the partition structure means that
+every instance of ``S2`` is partitioned by instances of ``S1``:
+
+  Every operation in an ``S2`` instance belongs to exactly one ``S1`` instance.
+
+.. code-block:: text
+
+   singlethread -> wavefront -> workgroup --> cluster -> agent -> system
+                                                 ^
+                                                 |
+                                              lds-dma
+
+An operation is *included in* a scope instance ``I`` if it belongs to ``I``, or
+belongs to a scope instance that is part of ``I``'s partition (transitively).
+Each operation is included in exactly one instance of every scope along its
+partition chain, and zero instances of scopes outside its chain:
+
+- Thread operations are included in instances along the chain:
+  ``singlethread``, ``wavefront``, ``workgroup``, ``cluster``, ``agent``,
+  *system*.
+- :ref:`DMA operations<amdgpu-dma-operations>` are included in instances along
+  the chain: ``lds-dma``, ``cluster``, ``agent``, *system*.
+
+If an operation is included in instances of two distinct scopes, those scopes
+are comparable (one is a subscope of the other). If two comparable scope
+instances each include some common operation, one is a subset of the other.
+
+.. _amdgpu-subscope-relation:
+
+Subscope Relation
+^^^^^^^^^^^^^^^^^
+
+A scope ``S1`` is a *subscope* of scope ``S2``, written ``S1 ≤ S2``, if there
+is a directed path from ``S1`` to ``S2`` in the following graph:
+
+.. code-block:: text
+
+   singlethread -> wavefront -> workgroup --> cluster -> agent -> system
+                       |                        ^
+                       |                        |
+                       +------> lds-dma --------+
+
+The subscope relation extends the partition structure with one additional edge:
+``wavefront ≤ lds-dma``. This edge enables availability and visibility
+propagation between the two partition chains (see `Ordering`_), even though
+"wavefront" operations are not included in "lds-dma" instances.
+
+Note that "lds-dma" and "workgroup" are incomparable in the subscope relation.
+
+A scope instance ``I1`` of scope ``S1`` is a *subscope instance* of scope
+instance ``I2`` of scope ``S2`` if ``S1 ≤ S2``. For partition edges, association
+follows from the partition itself. For the additional edge, a "wavefront"
+instance is associated with an "lds-dma" instance if they correspond to the same
+"workgroup".
+
+Inclusive Scopes
+^^^^^^^^^^^^^^^^
+
+Two operations ``X`` and ``Y`` are said to have *inclusive scopes* if the scope
+instance of each operation includes the other operation (where *includes* is
+defined through the partition structure). In that case, the *common scope
+instance* ``S'`` of ``X`` and ``Y`` is the intersection of their scope
+instances. The scope corresponding to ``S'`` is also termed as the *common
+scope* of ``X`` and ``Y``.
 
 Availability and Visibility
 ===========================
@@ -346,12 +408,14 @@ The following properties follow from the definitions above:
    which always require a happens-before link with the preceding operation in
    the chain.
 
-2. **A write cannot be made available in a scope that does not contain it.** The
-   definition of an availability operation ``X`` requires that ``X``'s scope
-   instance includes ``W`` as a precondition. Since every scope instance that
-   includes ``X`` also includes ``W``, availability cannot reach a scope
-   instance that excludes ``W``. In other words, availability can only "expand
-   outwards" into progressively larger scopes.
+2. **Availability and partition chains.** Through program order (the second
+   condition in the availability definition), a write ``W`` can be made
+   available in any scope of the invoking thread, including scopes outside
+   ``W``'s partition chain. For example, a thread can make a regular store
+   available at "lds-dma" scope even though the store is not included in any
+   "lds-dma" instance. Through chaining (the third condition), availability
+   can only expand within ``W``'s partition chain, because the chaining
+   requires the target scope instance to include ``W``.
 
 3. **Visibility is bounded by availability.** When a write is available in a
    scope instance, it can be made visible in that scope instance by a visibility
@@ -372,8 +436,12 @@ The following properties follow from the definitions above:
    only checks the immediate predecessor, so intermediate operations can bridge
    scope gaps that the endpoints cannot satisfy directly. Such a chain passes
    through at least one availability operation and at least one visibility
-   operation with inclusive scopes, such that their common scope includes both
-   ``W`` and ``R``.
+   operation with inclusive scopes. When ``W`` and ``R`` are in the same
+   partition chain, the common scope of the bridging operations includes both
+   ``W`` and ``R``. When they are in different partition chains (e.g., a DMA
+   write observed by a thread read), the visibility operation establishes
+   location-order with ``R`` through program order, without requiring the
+   common scope to include ``R``.
 
 .. _amdgcn-av-vulkan:
 
