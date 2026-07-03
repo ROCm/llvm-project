@@ -107,6 +107,16 @@ SerializeGPUModuleBase::SerializeGPUModuleBase(
   // Append the files in the target attribute.
   if (target.getLink())
     librariesToLink.append(target.getLink().begin(), target.getLink().end());
+
+  // Check for `-asm-verbose` in the command line options (`opts=` argument
+  // of `gpu-module-to-binary`).
+  auto cmdOpts = targetOptions.tokenizeCmdOptions();
+  for (const char *arg : cmdOpts.second) {
+    if (StringRef(arg) == "-asm-verbose") {
+      asmVerbose = true;
+      break;
+    }
+  }
 }
 
 void SerializeGPUModuleBase::init() {
@@ -129,7 +139,7 @@ StringRef SerializeGPUModuleBase::getToolkitPath() const { return toolkitPath; }
 
 llvm::TargetOptions SerializeGPUModuleBase::getTargetOptions() {
   llvm::TargetOptions options;
-  options.MCOptions.AsmVerbose = true;
+  options.MCOptions.AsmVerbose = asmVerbose;
   return options;
 }
 

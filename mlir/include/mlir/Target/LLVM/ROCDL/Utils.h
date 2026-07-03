@@ -93,8 +93,11 @@ public:
   /// Removes unnecessary metadata from the loaded bitcode files.
   LogicalResult handleBitcodeFile(llvm::Module &module) override;
 
-  /// Enables `AsmVerbose` so the AMDGPU AsmPrinter emits its "Kernel info"
-  /// comment block (register usage, occupancy, ...) into textual ISA output.
+  /// Returns `llvm::TargetOptions` with `AsmVerbose` set according to whether
+  /// `-asm-verbose` was passed in the target options' command line options
+  /// (see `gpu-module-to-binary`'s `opts` argument). When set, the AMDGPU
+  /// AsmPrinter emits its "Kernel info" comment block (register usage,
+  /// occupancy, ...) into textual ISA output.
   llvm::TargetOptions getTargetOptions() override;
 
 protected:
@@ -126,6 +129,10 @@ protected:
 
   /// AMD GCN libraries to use when linking, the default is using none.
   AMDGCNLibraries deviceLibs = AMDGCNLibraries::None;
+
+  /// Whether `-asm-verbose` was requested via the target options' command
+  /// line options. See `getTargetOptions()`.
+  bool asmVerbose = false;
 };
 
 /// Returns a map containing the `amdhsa.kernels` ELF metadata for each of the
