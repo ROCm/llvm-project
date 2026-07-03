@@ -127,6 +127,12 @@ ROCDLTargetAttr SerializeGPUModuleBase::getTarget() const { return target; }
 
 StringRef SerializeGPUModuleBase::getToolkitPath() const { return toolkitPath; }
 
+llvm::TargetOptions SerializeGPUModuleBase::getTargetOptions() {
+  llvm::TargetOptions options;
+  options.MCOptions.AsmVerbose = true;
+  return options;
+}
+
 ArrayRef<Attribute> SerializeGPUModuleBase::getLibrariesToLink() const {
   return librariesToLink;
 }

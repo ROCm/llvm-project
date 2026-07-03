@@ -16,6 +16,7 @@
 
 #include "mlir/IR/Operation.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Target/TargetOptions.h"
 
 namespace llvm {
 class TargetMachine;
@@ -72,6 +73,14 @@ protected:
 
   /// Hook for performing additional actions on the llvmModule post linking.
   virtual void handleModulePostLink(llvm::Module &module) {}
+
+  /// Hook for building the `llvm::TargetOptions` used to create the
+  /// `TargetMachine`. Subclasses may override to tweak codegen options, for
+  /// example enabling `AsmVerbose` to get the AsmPrinter's per-kernel
+  /// register/occupancy usage comments in textual ISA output.
+  virtual llvm::TargetOptions getTargetOptions() {
+    return llvm::TargetOptions();
+  }
 
   /// Serializes the LLVM IR bitcode to an object file, by default it serializes
   /// to LLVM bitcode.

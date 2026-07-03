@@ -63,8 +63,8 @@ FailureOr<llvm::TargetMachine *> ModuleToObject::getOrCreateTargetMachine() {
            << "Failed to lookup target for triple '" << triple << "' " << error;
 
   // Create the target machine using the target.
-  targetMachine.reset(
-      target->createTargetMachine(parsedTriple, chip, features, {}, {}));
+  targetMachine.reset(target->createTargetMachine(parsedTriple, chip, features,
+                                                  getTargetOptions(), {}));
   if (!targetMachine)
     return getOperation().emitError()
            << "Failed to create target machine for triple '" << triple << "'";

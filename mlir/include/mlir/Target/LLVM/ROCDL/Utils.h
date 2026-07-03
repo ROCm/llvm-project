@@ -20,6 +20,7 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Target/LLVM/ModuleToObject.h"
 #include "llvm/ADT/BitmaskEnum.h"
+#include "llvm/Target/TargetOptions.h"
 
 namespace mlir {
 namespace ROCDL {
@@ -91,6 +92,10 @@ public:
 
   /// Removes unnecessary metadata from the loaded bitcode files.
   LogicalResult handleBitcodeFile(llvm::Module &module) override;
+
+  /// Enables `AsmVerbose` so the AMDGPU AsmPrinter emits its "Kernel info"
+  /// comment block (register usage, occupancy, ...) into textual ISA output.
+  llvm::TargetOptions getTargetOptions() override;
 
 protected:
   /// Adds `oclc` control variables to the LLVM Module if needed. It also sets
