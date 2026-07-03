@@ -4,7 +4,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=fiji < %s | FileCheck -enable-var-scope --check-prefixes=VI %s
 
 ; FIXME-TRUE16. fix true16 test
-; XUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -mattr=+real-true16 < %s | FileCheck -enable-var-scope --check-prefixes=GFX11,GFX11-SAFE-TRUE16 %s
+; XUN: llc -mtriple=amdgcn -mcpu=gfx1100 -mattr=+real-true16 < %s | FileCheck -enable-var-scope --check-prefixes=GFX11,GFX11-SAFE-TRUE16 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -mattr=-real-true16 < %s | FileCheck -enable-var-scope --check-prefixes=GFX11 %s
 
 ; --------------------------------------------------------------------------------
