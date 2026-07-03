@@ -180,6 +180,35 @@ TEST(OpcodeMap, Gfx1250VectorF32F64RealOpcodesMapToCanonicalOps) {
             COMGR::hotswap::CanonicalOp::V_CVT_F64_F32);
 }
 
+// Regression for rocm-systems#144: these gfx12 FP64 VOP1 ops have both
+// e32 and e64 real encodings. OpcodeMap only lists the e64 pseudo, so the
+// e32 form must canonicalize through AMDGPU::getVOPe64() before lookup.
+// Pin the reported sqrt case and the RCP/RSQ siblings with the same shape.
+TEST(OpcodeMap, Gfx1250F64TransBothEncodingsMapToCanonicalOps) {
+  ensureAMDGPURegistered();
+
+  COMGR::hotswap::MCState State;
+  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+
+  COMGR::hotswap::OpcodeMap Map;
+  Map.build(*State.InstrInfo);
+
+  // v_sqrt_f64 -- the opcode from #144.
+  EXPECT_EQ(Map.lookup(llvm::AMDGPU::V_SQRT_F64_e64_gfx12),
+            COMGR::hotswap::CanonicalOp::V_SQRT_F64);
+  EXPECT_EQ(Map.lookup(llvm::AMDGPU::V_SQRT_F64_e32_gfx12),
+            COMGR::hotswap::CanonicalOp::V_SQRT_F64);
+  // Siblings with the same encoding shape.
+  EXPECT_EQ(Map.lookup(llvm::AMDGPU::V_RCP_F64_e64_gfx12),
+            COMGR::hotswap::CanonicalOp::V_RCP_F64);
+  EXPECT_EQ(Map.lookup(llvm::AMDGPU::V_RCP_F64_e32_gfx12),
+            COMGR::hotswap::CanonicalOp::V_RCP_F64);
+  EXPECT_EQ(Map.lookup(llvm::AMDGPU::V_RSQ_F64_e64_gfx12),
+            COMGR::hotswap::CanonicalOp::V_RSQ_F64);
+  EXPECT_EQ(Map.lookup(llvm::AMDGPU::V_RSQ_F64_e32_gfx12),
+            COMGR::hotswap::CanonicalOp::V_RSQ_F64);
+}
+
 TEST(OpcodeMap, Gfx1250TanhF32RealOpcodeMapsToCanonicalOp) {
   ensureAMDGPURegistered();
 
