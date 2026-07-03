@@ -395,6 +395,30 @@ TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
   expectInstMatchesAsm(Decoded[5].Inst, "s_set_pc_i64 s[8:9]", S);
 }
 
+TEST(BuildKernelEntryTrampoline, PrefixPrefiltersNonStubBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Stub =
+      buildKernelEntryTrampoline(/*StubVAddr=*/0x200000,
+                                 /*EntryVAddr=*/0x10100,
+                                 /*ScratchSgpr=*/8, S);
+  ASSERT_EQ(Stub.size(), KernelEntryStubStride);
+  EXPECT_TRUE(hasKernelEntryTrampolinePrefix(Stub, S));
+
+  llvm::SmallVector<uint8_t> NonStub;
+  ASSERT_TRUE(appendSingleInstBytes(NonStub, "s_endpgm", S));
+  while (NonStub.size() < KernelEntryStubStride)
+    NonStub.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  ASSERT_EQ(NonStub.size(), KernelEntryStubStride);
+
+  EXPECT_FALSE(hasKernelEntryTrampolinePrefix(NonStub, S));
+  EXPECT_FALSE(isKernelEntryTrampoline(NonStub, S));
+
+  llvm::ArrayRef<uint8_t> ShortCandidate(Stub.data(), MinInstSize);
+  EXPECT_FALSE(hasKernelEntryTrampolinePrefix(ShortCandidate, S));
+}
+
 TEST(BuildKernelEntryTrampoline, MatcherRejectsNonStubBytes) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -424,6 +448,7 @@ TEST(BuildKernelEntryTrampoline, MatcherRejectsWrongOperandShape) {
     Bytes.append(CodeEnd.begin(), CodeEnd.end());
   ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
 
+  EXPECT_TRUE(hasKernelEntryTrampolinePrefix(Bytes, S));
   EXPECT_FALSE(isKernelEntryTrampoline(Bytes, S));
 }
 

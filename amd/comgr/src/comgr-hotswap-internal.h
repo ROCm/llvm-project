@@ -695,6 +695,13 @@ llvm::SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
 bool isKernelEntryTrampoline(llvm::ArrayRef<uint8_t> Bytes,
                              const LLVMState &LS);
 
+/// Cheap raw-byte prefilter for the entry stubs produced by
+/// buildKernelEntryTrampoline. This is intentionally weaker than
+/// isKernelEntryTrampoline and exists to avoid running the disassembler over
+/// arbitrary original kernel entry bytes during idempotency checks.
+bool hasKernelEntryTrampolinePrefix(llvm::ArrayRef<uint8_t> Bytes,
+                                    const LLVMState &LS);
+
 /// Compute the trailing readable guard needed after an appended kernel-entry
 /// stub pool so CP instruction prefetches from the last stub cannot run past
 /// mapped .text bytes.
