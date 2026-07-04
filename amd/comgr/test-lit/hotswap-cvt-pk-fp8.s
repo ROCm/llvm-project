@@ -22,6 +22,7 @@
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=LOW %s
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=HIGH %s
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NOCLAMP %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=LITERAL %s
 
 // ---- Kernel 1: CLAMP=1, low half (should be patched) --------------------------
 //
@@ -155,6 +156,40 @@ test_cvt_pk_fp8_noclamp:
 .Ltest_cvt_pk_fp8_noclamp_end:
 .size test_cvt_pk_fp8_noclamp, .Ltest_cvt_pk_fp8_noclamp_end-test_cvt_pk_fp8_noclamp
 
+// ---- Kernel 4: CLAMP=1 with literal F32 sources (12-byte encoding) -----------
+//
+// COM: Literal VOP3 operands are decoded as immediate MC operands and extend
+// COM: the instruction to 12 bytes. The patch materializes the literal into
+// COM: scratch VGPRs before running the normal per-source conversion sequence.
+// COM: The replacement body can be emitted into any nearby NOP sled; in this
+// COM: fixture it uses the sled after test_cvt_pk_fp8_noclamp and branches
+// COM: back to test_cvt_pk_fp8_literal+0xc.
+
+// LITERAL-LABEL: <test_cvt_pk_fp8_noclamp>:
+// LITERAL:       v_cvt_pk_fp8_f32
+// LITERAL:       s_endpgm
+// LITERAL-NEXT:  s_mov_b32
+// LITERAL-NEXT:  v_mov_b32{{.*}}0x477f0000
+// LITERAL-NEXT:  v_mov_b32{{.*}}0x477f0000
+// LITERAL-NEXT:  v_and_b32{{.*}}0x7fffffff
+// LITERAL:       v_lshl_or_b32
+// LITERAL-NEXT:  v_bfi_b32 v4,
+// LITERAL:       s_branch{{.*}}<test_cvt_pk_fp8_literal+0xc>
+// LITERAL-LABEL: <test_cvt_pk_fp8_literal>:
+// LITERAL-NEXT:  s_branch{{.*}}<test_cvt_pk_fp8_noclamp+0xc>
+// LITERAL-NEXT:  s_nop
+// LITERAL-NEXT:  s_nop
+// LITERAL-NEXT:  s_endpgm
+
+.globl test_cvt_pk_fp8_literal
+.p2align 8
+.type test_cvt_pk_fp8_literal,@function
+test_cvt_pk_fp8_literal:
+  v_cvt_pk_fp8_f32 v4, 0x477f0000, 0x477f0000 clamp
+  s_endpgm
+.Ltest_cvt_pk_fp8_literal_end:
+.size test_cvt_pk_fp8_literal, .Ltest_cvt_pk_fp8_literal_end-test_cvt_pk_fp8_literal
+
 .rodata
 .p2align 8
 .amdhsa_kernel test_cvt_pk_fp8_low
@@ -167,5 +202,9 @@ test_cvt_pk_fp8_noclamp:
 .end_amdhsa_kernel
 .amdhsa_kernel test_cvt_pk_fp8_noclamp
   .amdhsa_next_free_vgpr 13
+  .amdhsa_next_free_sgpr 2
+.end_amdhsa_kernel
+.amdhsa_kernel test_cvt_pk_fp8_literal
+  .amdhsa_next_free_vgpr 5
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel
