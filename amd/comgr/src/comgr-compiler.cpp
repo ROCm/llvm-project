@@ -27,6 +27,7 @@
 #include "lld/Common/CommonLinkerContext.h"
 #include "lld/Common/Driver.h"
 #include "clang/CodeGen/CodeGenAction.h"
+#include "clang/Config/config.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Driver/Job.h"
@@ -1198,26 +1199,28 @@ amd_comgr_status_t AMDGPUCompiler::removeTmpDirs() {
 #endif
 }
 
-enum class CxxStdlib { Default, Libcxx, Libstdcxx };
+enum class CxxStdlib { Libcxx, Libstdcxx };
 
-static CxxStdlib getRequestedCxxStdlib(ArrayRef<const char *> Argv) {
-  CxxStdlib Result = CxxStdlib::Default;
+static CxxStdlib getEffectiveCxxStdlib(ArrayRef<const char *> Argv) {
+  StringRef RequestedStdlib;
   for (size_t I = 0; I < Argv.size(); ++I) {
     StringRef A(Argv[I] ? Argv[I] : "");
-    StringRef Value;
     if (A.starts_with("-stdlib="))
-      Value = A.drop_front(StringRef("-stdlib=").size());
+      RequestedStdlib = A.drop_front(StringRef("-stdlib=").size());
     else if (A == "-stdlib" && I + 1 < Argv.size() && Argv[I + 1])
-      Value = Argv[++I];
-    else
-      continue;
-
-    if (Value == "libc++")
-      Result = CxxStdlib::Libcxx;
-    else if (Value == "libstdc++")
-      Result = CxxStdlib::Libstdcxx;
+      RequestedStdlib = Argv[++I];
   }
-  return Result;
+  if (RequestedStdlib == "libc++")
+    return CxxStdlib::Libcxx;
+  if (RequestedStdlib == "libstdc++")
+    return CxxStdlib::Libstdcxx;
+
+  StringRef DefaultStdlib(CLANG_DEFAULT_CXX_STDLIB);
+  if (DefaultStdlib == "libc++")
+    return CxxStdlib::Libcxx;
+  if (DefaultStdlib == "libstdc++")
+    return CxxStdlib::Libstdcxx;
+  return CxxStdlib::Libstdcxx;
 }
 
 static bool probeLibcxxHeadersUnder(StringRef Root, std::string *FoundPath) {
@@ -1228,7 +1231,7 @@ static bool probeLibcxxHeadersUnder(StringRef Root, std::string *FoundPath) {
   };
 
   SmallString<256> LibCxx(Root);
-  sys::path::append(LibCxx, "include", "c++", "v1", "__config_site");
+  sys::path::append(LibCxx, "include", "c++", "v1", "cstddef");
   if (sys::fs::exists(LibCxx))
     return Hit(LibCxx);
   return false;
@@ -1285,7 +1288,7 @@ static bool detectSystemCxxHeadersOnDisk(ArrayRef<const char *> Argv,
   }
   if (SysRoot.empty())
     SysRoot = "/";
-  CxxStdlib Stdlib = getRequestedCxxStdlib(Argv);
+  CxxStdlib Stdlib = getEffectiveCxxStdlib(Argv);
 
   // An explicit --gcc-toolchain limits clang's GCC search to that prefix.
   // Do not fall back to host/sysroot C++ headers if that prefix has none.
