@@ -1,0 +1,50 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+name: Config CI matrix
+description: >-
+  Builds a fixed multi-arch CI matrix for compiler config: three Linux
+  GPU families (gfx94X-dcgpu, gfx110X-all, gfx90a), tests on gfx942 only,
+  and runtime build_runs_on selection via weighted runner labels.
+
+inputs:
+  build_variant:
+    description: 'Build variant (e.g. "release", "asan").'
+    required: false
+    default: release
+  ci_config_path:
+    description: >-
+      Path to checked-out therock-ci-config repo for runner weights.
+      Empty uses local amdgpu_family_matrix defaults.
+    required: false
+    default: ""
+  prebuilt_stages:
+    description: "Comma-separated build stages to skip."
+    required: false
+    default: ""
+  baseline_run_id:
+    description: "Workflow run ID to copy prebuilt stage artifacts from."
+    required: false
+    default: ""
+
+outputs:
+  linux_build_config:
+    description: JSON Linux build configuration for multi_arch_ci_linux.yml.
+    value: ${{ steps.build_matrix.outputs.linux_build_config }}
+  windows_build_config:
+    description: JSON Windows build configuration for multi_arch_ci_windows.yml.
+    value: ${{ steps.build_matrix.outputs.windows_build_config }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build convergence CI matrix
+      id: build_matrix
+      shell: bash
+      env:
+        BUILD_VARIANT: ${{ inputs.build_variant }}
+        CI_CONFIG_PATH: ${{ inputs.ci_config_path }}
+        PREBUILT_STAGES: ${{ inputs.prebuilt_stages }}
+        BASELINE_RUN_ID: ${{ inputs.baseline_run_id }}
+      run: python "${{ github.action_path }}/config_ci_matrix.py"
+
