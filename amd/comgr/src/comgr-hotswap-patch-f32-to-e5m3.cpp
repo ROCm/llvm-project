@@ -78,6 +78,40 @@ std::string fmtModifiedSrc(StringRef BareReg, unsigned Mods) {
   return R;
 }
 
+std::string fmtLiteral32(int64_t Imm) {
+  return "0x" + utohexstr(static_cast<uint32_t>(Imm));
+}
+
+bool isRegOrImm(const MCOperand &Op) { return Op.isReg() || Op.isImm(); }
+
+/// Format a register or literal F32 source for replacement assembly. Literal
+/// VOP3 operands are materialized into \p TempReg so the emulation sequence can
+/// freely use integer ALU instructions that otherwise cannot carry multiple
+/// literal operands.
+bool materializeF32Source(raw_string_ostream &OS, const MCOperand &Op,
+                          unsigned Mods, StringRef TempReg,
+                          const MCRegisterInfo &MRI, uint64_t Offset,
+                          StringRef InstName, std::string &BareSrc,
+                          std::string &ModifiedSrc) {
+  if (Op.isReg()) {
+    BareSrc = toAsmRegName(MRI, Op.getReg());
+    ModifiedSrc = fmtModifiedSrc(BareSrc, Mods);
+    return true;
+  }
+
+  if (Op.isImm()) {
+    BareSrc = TempReg.str();
+    OS << "v_mov_b32 " << BareSrc << ", " << fmtLiteral32(Op.getImm())
+       << "\n";
+    ModifiedSrc = fmtModifiedSrc(BareSrc, Mods);
+    return true;
+  }
+
+  log() << "hotswap: error: " << InstName
+        << ": unsupported source operand at 0x" << utohexstr(Offset) << "\n";
+  return false;
+}
+
 // -- VOP3 operand layout structs -------------------------------------------
 //
 // Mirrors the MCInst operand order produced by the AMDGPU disassembler for
@@ -234,12 +268,6 @@ void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src, StringRef BareSrc,
 
 uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
-  if (DI.Size != 8) {
-    log() << "hotswap: error: cvt_pk_fp8_f32: unexpected inst size " << DI.Size
-          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
-  }
-
   const MCInst &Inst = DI.Inst;
   const VOP3Fp8TwoSrcLayout &L = TwoSrcFp8Layout;
 
@@ -254,6 +282,12 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
       Inst.getOperand(L.Clamp).getImm() == 0)
     return 0;
 
+  if (DI.Size != 8 && DI.Size != 12) {
+    log() << "hotswap: error: cvt_pk_fp8_f32: unexpected inst size " << DI.Size
+          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
   // OPSEL[3] (write-high) is folded into src0_mods by the disassembler.
   // SISrcMods encodes OP_SEL_1 at bit 3 (value 8).
   unsigned Src0Mods = Inst.getOperand(L.Src0Mods).isImm()
@@ -262,20 +296,17 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   bool WriteHigh = (Src0Mods >> 3) & 1;
 
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-  if (!Inst.getOperand(L.VDst).isReg() || !Inst.getOperand(L.Src0).isReg() ||
-      !Inst.getOperand(L.Src1).isReg()) {
+  if (!Inst.getOperand(L.VDst).isReg() ||
+      !isRegOrImm(Inst.getOperand(L.Src0)) ||
+      !isRegOrImm(Inst.getOperand(L.Src1))) {
     log() << "hotswap: error: cvt_pk_fp8_f32: unexpected imm operand at 0x"
           << utohexstr(DI.Offset) << "\n";
     return 0;
   }
   std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
-  std::string Src0Bare = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
-  std::string Src1Bare = toAsmRegName(MRI, Inst.getOperand(L.Src1).getReg());
   unsigned Src1Mods = Inst.getOperand(L.Src1Mods).isImm()
                           ? Inst.getOperand(L.Src1Mods).getImm()
                           : 0;
-  std::string Src0Str = fmtModifiedSrc(Src0Bare, Src0Mods);
-  std::string Src1Str = fmtModifiedSrc(Src1Bare, Src1Mods);
 
   ScratchAllocation SA = allocateScratch(Ctx, Idx);
 
@@ -313,6 +344,18 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   // Save VCC before clobbering it with v_cmp_* instructions.
   AsmOS << "s_mov_b32 " << VccSaveName << ", vcc_lo\n";
 
+  std::string Src0Bare;
+  std::string Src1Bare;
+  std::string Src0Str;
+  std::string Src1Str;
+  if (!materializeF32Source(AsmOS, Inst.getOperand(L.Src0), Src0Mods, T0Name,
+                            MRI, DI.Offset, "cvt_pk_fp8_f32", Src0Bare,
+                            Src0Str) ||
+      !materializeF32Source(AsmOS, Inst.getOperand(L.Src1), Src1Mods, T1Name,
+                            MRI, DI.Offset, "cvt_pk_fp8_f32", Src1Bare,
+                            Src1Str))
+    return 0;
+
   // --- src0 → byte in T0 (scratch: T2) ---
   emitF32ToUE5M3(AsmOS, Src0Str, Src0Bare, T0Name, T2Name, NaN0Name);
 
@@ -343,7 +386,7 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, ReplacementBytes))
     return 0;
 
   if (!SA.KernelName.empty()) {
