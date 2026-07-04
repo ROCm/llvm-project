@@ -49,7 +49,7 @@
 // BYTE0-NEXT:  v_bfi_b32
 // COM: --- F32 -> F16 -> UE5M3 ---
 // BYTE0-NEXT:  v_cvt_f16_f32
-// BYTE0-NEXT:  v_lshrrev_b32
+// BYTE0-NEXT:  v_bfe_u32
 // COM: --- Overflow clamp ---
 // BYTE0-NEXT:  v_min_u32
 // COM: --- NaN override ---
@@ -94,7 +94,7 @@ test_cvt_sr_fp8_byte0:
 // BYTE2-NEXT:  v_bfi_b32
 // COM: --- F32 -> F16 -> UE5M3 ---
 // BYTE2-NEXT:  v_cvt_f16_f32
-// BYTE2-NEXT:  v_lshrrev_b32
+// BYTE2-NEXT:  v_bfe_u32
 // COM: --- Overflow clamp ---
 // BYTE2-NEXT:  v_min_u32
 // COM: --- NaN override ---

@@ -231,8 +231,11 @@ void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src, StringRef BareSrc,
 
   // RTE rounding: extract guard_bits = F16[6:0], shift to get preliminary
   // byte, then compute round_up = (guard_bits*2 + lsb) > 128.
+  // GFX1250 encodes v_cvt_f16_f32 as a True16 low-half write, so use a
+  // bitfield extract for F16[15:7] instead of a 32-bit shift that would pull
+  // preserved high-half bits into the FP8 byte.
   OS << "v_and_b32 " << Tmp << ", 0x7F, " << Out << "\n";
-  OS << "v_lshrrev_b32 " << Out << ", 7, " << Out << "\n";
+  OS << "v_bfe_u32 " << Out << ", " << Out << ", 7, 9\n";
   OS << "v_lshlrev_b32 " << Tmp << ", 1, " << Tmp << "\n";
   // v_bfi_b32: dst = (mask & insert) | (~mask & background)
   // With mask=0xFFFFFFFE: copies Tmp[31:1] and Out[0] → guard*2 + lsb
@@ -530,7 +533,7 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
 
   // --- F32 → F16 → UE5M3 (truncation, not RTE — SR noise handles rounding) ---
   AsmOS << "v_cvt_f16_f32 " << OutName << ", " << OutName << "\n";
-  AsmOS << "v_lshrrev_b32 " << OutName << ", 7, " << OutName << "\n";
+  AsmOS << "v_bfe_u32 " << OutName << ", " << OutName << ", 7, 9\n";
 
   // --- Overflow clamp (safety) ---
   AsmOS << "v_min_u32 " << OutName << ", 0xFE, " << OutName << "\n";

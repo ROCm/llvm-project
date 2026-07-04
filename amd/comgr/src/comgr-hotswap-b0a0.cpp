@@ -32,6 +32,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
 
+#include <algorithm>
 #include <limits>
 
 using namespace llvm;
@@ -198,23 +199,125 @@ LLVM_ATTRIBUTE_WEAK void patchDebugFrame(uint8_t *, size_t, uint64_t, uint64_t,
 
 // -- NOP sled scanning --------------------------------------------------------
 
-/// Scan \p Decoded for runs of consecutive `s_nop` instructions at least
-/// MinNopSledSize bytes long and return the resulting NopSled list (each
-/// sled records Start / End byte offsets in .text and the initial WritePos
-/// at Start). These sleds are the landing zones emitToNopSled targets for
-/// in-place rewrites. NOPs are identified by MC opcode (cached on \p LS at
-/// initLLVM() time) rather than mnemonic string, so the scanner is robust
-/// against printer aliasing / mnemonic formatting variations.
-static std::vector<NopSled>
-buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
+struct FunctionTextRange {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
+};
+
+static std::vector<FunctionTextRange> buildFunctionTextRanges(
+    const ElfView &Elf) {
+  std::vector<FunctionTextRange> Ranges;
+  uint64_t TextBegin = Elf.textAddr();
+  uint64_t TextEnd = TextBegin + Elf.textSize();
+  for (const ElfView::ELFT::Shdr &SymShdr : Elf.sections()) {
+    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+
+    Expected<ElfView::ELFT::SymRange> SymsOrErr =
+        Elf.file().symbols(&SymShdr);
+    if (!SymsOrErr) {
+      consumeError(SymsOrErr.takeError());
+      continue;
+    }
+
+    std::vector<const ElfView::ELFT::Sym *> FuncSyms;
+    for (const ElfView::ELFT::Sym &Sym : *SymsOrErr) {
+      if (Sym.getType() != ELF::STT_FUNC && Sym.getType() != ELF::STT_GNU_IFUNC)
+        continue;
+      if (Sym.st_shndx != Elf.textSectionIndex())
+        continue;
+      FuncSyms.push_back(&Sym);
+    }
+    llvm::sort(FuncSyms, [](const ElfView::ELFT::Sym *A,
+                            const ElfView::ELFT::Sym *B) {
+      if (A->st_value != B->st_value)
+        return A->st_value < B->st_value;
+      return A->st_size > B->st_size;
+    });
+
+    for (size_t I = 0, E = FuncSyms.size(); I != E; ++I) {
+      const ElfView::ELFT::Sym &Sym = *FuncSyms[I];
+      uint64_t BeginVA = Sym.st_value;
+      if (BeginVA < TextBegin || BeginVA >= TextEnd)
+        continue;
+      uint64_t EndVA = TextEnd;
+      if (Sym.st_size != 0) {
+        EndVA = Sym.st_value + Sym.st_size;
+        if (EndVA < BeginVA)
+          EndVA = TextEnd;
+        EndVA = std::min(EndVA, TextEnd);
+      } else {
+        for (size_t J = I + 1; J != E; ++J) {
+          if (FuncSyms[J]->st_value > BeginVA) {
+            EndVA = std::min(static_cast<uint64_t>(FuncSyms[J]->st_value),
+                             TextEnd);
+            break;
+          }
+        }
+      }
+      Ranges.push_back({BeginVA - TextBegin, EndVA - TextBegin});
+    }
+  }
+  llvm::sort(Ranges, [](const FunctionTextRange &L, const FunctionTextRange &R) {
+    if (L.Begin != R.Begin)
+      return L.Begin < R.Begin;
+    return L.End < R.End;
+  });
+  return Ranges;
+}
+
+static bool isInFunctionTextRange(ArrayRef<FunctionTextRange> Ranges,
+                                  uint64_t Offset) {
+  auto It = std::upper_bound(
+      Ranges.begin(), Ranges.end(), Offset,
+      [](uint64_t Value, const FunctionTextRange &R) {
+        return Value < R.Begin;
+      });
+  if (It == Ranges.begin())
+    return false;
+  --It;
+  return Offset < It->End;
+}
+
+static bool isZeroFillDword(const uint8_t *Text, uint64_t TextSize,
+                            const InternalDecodedInst &DI,
+                            ArrayRef<FunctionTextRange> FunctionRanges) {
+  if (DI.Size != MinInstSize || DI.Offset > TextSize ||
+      MinInstSize > TextSize - DI.Offset ||
+      isInFunctionTextRange(FunctionRanges, DI.Offset))
+    return false;
+  return std::all_of(Text + DI.Offset, Text + DI.Offset + MinInstSize,
+                     [](uint8_t B) { return B == 0; });
+}
+
+/// Scan \p Decoded for runs of consecutive `s_nop` instructions or undecoded
+/// zero-filled alignment padding at least MinNopSledSize bytes long and return
+/// the resulting NopSled list (each sled records Start / End byte offsets in
+/// .text and the initial WritePos at Start). These sleds are the landing zones
+/// emitToNopSled targets for in-place rewrites. NOPs are identified by MC
+/// opcode (cached on \p LS at initLLVM() time) rather than mnemonic string, so
+/// the scanner is robust against printer aliasing / mnemonic formatting
+/// variations. Zero-filled padding appears in generated code between
+/// function-symbol ranges; it decodes as v_illegal but is still writable .text
+/// space once hotswap redirects control to an assembled replacement.
+static std::vector<NopSled> buildNopSledMap(
+    ArrayRef<InternalDecodedInst> Decoded, const uint8_t *Text,
+    uint64_t TextSize, const LLVMState &LS, const ElfView &Elf) {
   std::vector<NopSled> Sleds;
+  std::vector<FunctionTextRange> FunctionRanges = buildFunctionTextRanges(Elf);
   const size_t N = Decoded.size();
   size_t I = 0;
   while (I < N) {
-    if (Decoded[I].Inst.getOpcode() == LS.SNopOpcode) {
+    bool IsSledInst = Decoded[I].Inst.getOpcode() == LS.SNopOpcode;
+    bool IsZeroFill =
+        isZeroFillDword(Text, TextSize, Decoded[I], FunctionRanges);
+    if (IsSledInst || IsZeroFill) {
       uint64_t Start = Decoded[I].Offset;
       uint64_t End = Start;
-      while (I < N && Decoded[I].Inst.getOpcode() == LS.SNopOpcode) {
+      while (I < N &&
+             (Decoded[I].Inst.getOpcode() == LS.SNopOpcode ||
+              isZeroFillDword(Text, TextSize, Decoded[I], FunctionRanges))) {
         End = Decoded[I].Offset + Decoded[I].Size;
         ++I;
       }
@@ -328,14 +431,15 @@ static uint32_t runPerInstPass(uint32_t (*Fn)(PatchContext &, size_t),
 /// the whole-function WMMA-hazard pass after the per-instruction loop and
 /// records per-kernel stats via ElfView::updateKernelDescriptor.
 /// Returns the total number of applied patches across all passes.
-static uint32_t
+static std::optional<uint32_t>
 applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
                         uint8_t *Text, uint64_t TextSize, const LLVMState &LS,
                         std::vector<Trampoline> &OutTrampolines, ElfView &Elf,
                         std::vector<ScratchPatchInfo> &OutScratchPatches,
                         const RewriteConfig &Config) {
   uint32_t Patched = 0;
-  std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS);
+  std::vector<NopSled> Sleds =
+      buildNopSledMap(Decoded, Text, TextSize, LS, Elf);
 
   CFG Cfg = buildCfg(Decoded, *LS.MCII);
   LivenessInfo Liveness =
@@ -414,14 +518,37 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
       continue;
     std::optional<unsigned> VgprsBefore =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
+    std::optional<unsigned> SgprsBefore = Elf.getKernelSgprCount(KName);
     if (Stats.ExtraVgprs > 0)
       Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs,
                                  Config.VgprGranuleSize);
+    if (Stats.ExtraSgprs > 0) {
+      if (!SgprsBefore) {
+        log() << "hotswap: error: failed to read SGPR count for kernel "
+              << KName << "\n";
+        return std::nullopt;
+      }
+      if (Stats.ExtraSgprs >
+          std::numeric_limits<unsigned>::max() - *SgprsBefore) {
+        log() << "hotswap: error: SGPR count for kernel " << KName
+              << " overflows unsigned after hotswap scratch allocation\n";
+        return std::nullopt;
+      }
+      unsigned RequiredSgprs = *SgprsBefore + Stats.ExtraSgprs;
+      if (!Elf.updateKernelDescriptorSgprCount(KName, RequiredSgprs)) {
+        log() << "hotswap: error: failed to update SGPR count for kernel "
+              << KName << "\n";
+        return std::nullopt;
+      }
+    }
     std::optional<unsigned> VgprsAfter =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
+    std::optional<unsigned> SgprsAfter = Elf.getKernelSgprCount(KName);
     log() << "hotswap: liveness: kernel " << KName
           << ": vgprs_before=" << VgprsBefore.value_or(0)
           << ", vgprs_after=" << VgprsAfter.value_or(0)
+          << ", sgprs_before=" << SgprsBefore.value_or(0)
+          << ", sgprs_after=" << SgprsAfter.value_or(0)
           << ", scratch_reused=" << Stats.ScratchReused
           << ", scratch_above_kd=" << Stats.ScratchAboveKd << "\n";
   }
@@ -586,8 +713,12 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
       return AMD_COMGR_STATUS_ERROR;
     }
 
-    Count = applyGfx1250B0toA0Rules(Decoded, Text, Elf.textSize(), LS, Deferred,
-                                    Elf, ScratchPatches, Config);
+    std::optional<uint32_t> Patched = applyGfx1250B0toA0Rules(
+        Decoded, Text, Elf.textSize(), LS, Deferred, Elf, ScratchPatches,
+        Config);
+    if (!Patched)
+      return AMD_COMGR_STATUS_ERROR;
+    Count = *Patched;
     log() << "hotswap: applied " << Count << " B0-to-A0 patches\n";
   } else {
     log() << "hotswap: B0-to-A0 patches disabled for this rewrite\n";

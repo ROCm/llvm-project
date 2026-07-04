@@ -347,6 +347,7 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
 // -- ElfView::findKernelAtOffset ----------------------------------------------
 
 std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
+  uint64_t TextEnd = textAddr() + textSize();
   for (const ELFT::Shdr &SymShdr : Sections) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
         SymShdr.sh_type != ELF::SHT_DYNSYM)
@@ -364,12 +365,39 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
       continue;
     }
 
+    std::vector<const ELFT::Sym *> FuncSyms;
     for (const ELFT::Sym &Sym : *SymsOrErr) {
       if (Sym.getType() != ELF::STT_FUNC && Sym.getType() != ELF::STT_GNU_IFUNC)
         continue;
       if (Sym.st_shndx != TextSectionIndex)
         continue;
-      if (TextOffset < Sym.st_value || TextOffset >= Sym.st_value + Sym.st_size)
+      FuncSyms.push_back(&Sym);
+    }
+    llvm::sort(FuncSyms, [](const ELFT::Sym *A, const ELFT::Sym *B) {
+      if (A->st_value != B->st_value)
+        return A->st_value < B->st_value;
+      return A->st_size > B->st_size;
+    });
+
+    for (size_t I = 0, E = FuncSyms.size(); I != E; ++I) {
+      const ELFT::Sym &Sym = *FuncSyms[I];
+      uint64_t Begin = Sym.st_value;
+      uint64_t End = TextEnd;
+      if (Sym.st_size != 0) {
+        End = Sym.st_value + Sym.st_size;
+        if (End < Begin)
+          End = TextEnd;
+        End = std::min(End, TextEnd);
+      } else {
+        for (size_t J = I + 1; J != E; ++J) {
+          if (FuncSyms[J]->st_value > Begin) {
+            End = std::min(static_cast<uint64_t>(FuncSyms[J]->st_value),
+                           TextEnd);
+            break;
+          }
+        }
+      }
+      if (TextOffset < Begin || TextOffset >= End)
         continue;
       Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
       if (!NameOrErr) {
