@@ -237,8 +237,8 @@ public:
   /// `group_segment_size` and propagated to the device via the
   /// `hidden_dynamic_lds_size` kernarg) and is *not* included here, so the
   /// returned value is a lower bound on the total LDS the kernel may
-  /// touch. Callers that need to flag potential overflow of A0's 16-bit M0
-  /// limit (DEGFXMI400-12025) can use this as a "definitely exceeds"
+  /// touch. Callers that need to flag potential overflow of gfx1250 A0's
+  /// 16-bit M0 limit can use this as a "definitely exceeds"
   /// check; "static fits, dynamic pushes over" cannot be detected
   /// statically. See AMDGPUUsage "Code Object V3 Kernel Descriptor"
   /// (GROUP_SEGMENT_FIXED_SIZE).
