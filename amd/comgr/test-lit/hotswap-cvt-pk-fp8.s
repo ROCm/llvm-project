@@ -12,10 +12,12 @@
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --dump %t.out.elf --check-idempotent \
+// RUN:   --dump %t.out.elf --check-idempotent 2>&1 \
 // RUN:   | %FileCheck --check-prefix=API %s
+// API: hotswap: liveness: kernel test_cvt_pk_fp8_literal:
+// API-SAME: sgprs_before=8, sgprs_after=16
 // API: REWRITE: SUCCESS
 // API: IDEMPOTENT: YES
 
@@ -41,7 +43,7 @@
 // LOW-NEXT:  v_max_num_f32{{.*}}, 0, v1
 // LOW-NEXT:  v_cvt_f16_f32
 // LOW-NEXT:  v_and_b32
-// LOW-NEXT:  v_lshrrev_b32
+// LOW-NEXT:  v_bfe_u32
 // LOW-NEXT:  v_lshlrev_b32
 // LOW-NEXT:  v_bfi_b32
 // LOW-NEXT:  v_cmp_lt_u32{{.*}}0x80
@@ -57,7 +59,7 @@
 // LOW-NEXT:  v_max_num_f32{{.*}}, 0, v2
 // LOW-NEXT:  v_cvt_f16_f32
 // LOW-NEXT:  v_and_b32
-// LOW-NEXT:  v_lshrrev_b32
+// LOW-NEXT:  v_bfe_u32
 // LOW-NEXT:  v_lshlrev_b32
 // LOW-NEXT:  v_bfi_b32
 // LOW-NEXT:  v_cmp_lt_u32{{.*}}0x80
@@ -97,7 +99,7 @@ test_cvt_pk_fp8_low:
 // HIGH-NEXT:  v_max_num_f32{{.*}}, 0, v6
 // HIGH-NEXT:  v_cvt_f16_f32
 // HIGH-NEXT:  v_and_b32
-// HIGH-NEXT:  v_lshrrev_b32
+// HIGH-NEXT:  v_bfe_u32
 // HIGH-NEXT:  v_lshlrev_b32
 // HIGH-NEXT:  v_bfi_b32
 // HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x80
@@ -113,7 +115,7 @@ test_cvt_pk_fp8_low:
 // HIGH-NEXT:  v_max_num_f32{{.*}}, 0, v7
 // HIGH-NEXT:  v_cvt_f16_f32
 // HIGH-NEXT:  v_and_b32
-// HIGH-NEXT:  v_lshrrev_b32
+// HIGH-NEXT:  v_bfe_u32
 // HIGH-NEXT:  v_lshlrev_b32
 // HIGH-NEXT:  v_bfi_b32
 // HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x80

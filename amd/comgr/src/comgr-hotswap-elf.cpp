@@ -336,13 +336,7 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
 // -- ElfView::findKernelAtOffset ----------------------------------------------
 
 std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
-  // Select the nearest-preceding STT_FUNC symbol (greatest st_value <=
-  // TextOffset). AMDGPU kernel entry symbols often have st_size == 0, so an
-  // exact containment test never matches; honor st_size only when non-zero.
-  //
-  // The nearest-preceding function could be a non-kernel device function; the
-  // guard below rejects that case so callers never scratch-allocate against a
-  // non-kernel context.
+  uint64_t TextEnd = textAddr() + textSize();
   bool Found = false;
   uint64_t BestValue = 0;
   std::string BestName;
@@ -364,15 +358,39 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
       continue;
     }
 
+    std::vector<const ELFT::Sym *> FuncSyms;
     for (const ELFT::Sym &Sym : *SymsOrErr) {
       if (Sym.getType() != ELF::STT_FUNC && Sym.getType() != ELF::STT_GNU_IFUNC)
         continue;
       if (Sym.st_shndx != TextSectionIndex)
         continue;
-      if (TextOffset < Sym.st_value)
-        continue;
-      // Honor an explicit upper bound; skip it for zero-size symbols.
-      if (Sym.st_size != 0 && TextOffset >= Sym.st_value + Sym.st_size)
+      FuncSyms.push_back(&Sym);
+    }
+    llvm::sort(FuncSyms, [](const ELFT::Sym *A, const ELFT::Sym *B) {
+      if (A->st_value != B->st_value)
+        return A->st_value < B->st_value;
+      return A->st_size > B->st_size;
+    });
+
+    for (size_t I = 0, E = FuncSyms.size(); I != E; ++I) {
+      const ELFT::Sym &Sym = *FuncSyms[I];
+      uint64_t Begin = Sym.st_value;
+      uint64_t End = TextEnd;
+      if (Sym.st_size != 0) {
+        End = Sym.st_value + Sym.st_size;
+        if (End < Begin)
+          End = TextEnd;
+        End = std::min(End, TextEnd);
+      } else {
+        for (size_t J = I + 1; J != E; ++J) {
+          if (FuncSyms[J]->st_value > Begin) {
+            End = std::min(static_cast<uint64_t>(FuncSyms[J]->st_value),
+                           TextEnd);
+            break;
+          }
+        }
+      }
+      if (TextOffset < Begin || TextOffset >= End)
         continue;
       if (Found && Sym.st_value <= BestValue)
         continue;
