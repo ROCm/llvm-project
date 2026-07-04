@@ -1,0 +1,71 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+name: TheRock Windows build prep
+description: >
+  Windows-only TheRock checkout hotfixes before configure/build: patch removal,
+  LLVM/COMGR test CMake hooks, llvm-lit install skip, and hip-tests skip.
+
+inputs:
+  stage_name:
+    description: "Stage name (e.g. compiler-runtime, math-libs)."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Remove unused existing patches
+      shell: bash
+      run: |
+        set -euo pipefail
+        rm -fv patches/amd-mainline/llvm-project/0003-HACK-Handle-ROCM-installation-layout-of-lib-llvm-bin.patch
+        rm -fv patches/amd-mainline/llvm-project/0009-Add-gcc-toolset-13-prefix-detection.patch
+        rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
+
+    - name: Fix LLVM test variable mismatch
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
+          cmake/therock_subproject.cmake compiler/CMakeLists.txt
+
+    - name: Auto-forward THEROCK_BUILD_COMGR_TESTS to subprojects
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        sed -i '/^  THEROCK_BUILD_TESTING$/a\  THEROCK_BUILD_COMGR_TESTS' \
+          cmake/therock_subproject.cmake
+
+    - name: Enable COMGR tests via THEROCK_BUILD_TESTING fallback
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
+          compiler/pre_hook_amd-comgr.cmake
+
+    - name: Remove llvm-lit install/wrapper code (fails on Windows)
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        sed -i '/Install llvm-lit script/,/^  ")/d' \
+          compiler/pre_hook_amd-llvm.cmake
+
+    - name: Skip hip-tests on Windows (ROCm root not available)
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        sed -i '/^if(THEROCK_BUILD_TESTING)/,/^endif(THEROCK_BUILD_TESTING)/d' \
+          core/CMakeLists.txt
+
+    - name: Re-enable selective tool disable when only COMGR tests are on
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        sed -i 's/ AND NOT THEROCK_BUILD_COMGR_TESTS//' \
+          compiler/pre_hook_amd-llvm.cmake

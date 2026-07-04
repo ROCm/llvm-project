@@ -1,0 +1,77 @@
+name: TheRock build prep (patches and hotfixes)
+description: >
+  Removes obsolete patches, debug SHA logging,
+  optional nightly HIP cherry-pick,CK Wno-error for nightly math-libs,
+  and LLVM/COMGR CMake test hook fixes.
+
+inputs:
+  release_type:
+    description: 'Release type (e.g. nightly, dev, "" for PR CI).'
+    required: false
+    default: ""
+  stage_name:
+    description: "Stage name (e.g. compiler-runtime, math-libs)."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Remove unused existing patches
+      shell: bash
+      run: |
+        rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
+
+    - name: Temp fix for hiprtc/hipcc test (Nightly)
+      shell: bash
+      if: ${{ github.event_name != 'pull_request' && (inputs.release_type == 'nightly' && inputs.stage_name == 'compiler-runtime') }}
+      run: |
+        git config --global user.email "z1-cciauto@amd.com"
+        git config --global user.name "Z1 cciauto"
+        cd compiler/amd-llvm
+        git fetch origin pull/2719/head:pr-2719
+        if ! git cherry-pick pr-2719; then
+            _conflicts="$(mktemp)"
+            trap 'rm -f "${_conflicts}"' EXIT
+            git diff --name-only --diff-filter=U >"${_conflicts}"
+            while IFS= read -r f; do
+              [ -n "${f}" ] || continue
+              git checkout --theirs -- "${f}"
+              git add -- "${f}"
+            done <"${_conflicts}"
+            GIT_EDITOR=true git cherry-pick --continue
+         fi
+         cd ../..
+         git add compiler/amd-llvm
+         git commit -m "Update amd-llvm submodule with PR 2719"
+
+    - name: TheRock and llvm SHA
+      shell: bash
+      if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
+      run: |
+        git config --global --add safe.directory "$PWD"
+        git log --oneline -1
+        ls -l compiler/amd-llvm
+        cd compiler/amd-llvm/llvm
+        ls -l
+        git log --oneline -3
+        cd -
+
+    - name: Use Wno-error for CK (nightly)
+      shell: bash
+      if: ${{ github.event_name != 'pull_request' && (inputs.release_type == 'nightly' && inputs.stage_name == 'math-libs') }}
+      run: |
+        sed -i 's/-Werror\b/-Wno-error/g' rocm-libraries/projects/composablekernel/CMakeLists.txt
+
+    - name: Fix LLVM test variable mismatch
+      shell: bash
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
+          cmake/therock_subproject.cmake compiler/CMakeLists.txt
+
+    - name: Enable COMGR tests via THEROCK_BUILD_TESTING fallback
+      shell: bash
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
+          compiler/pre_hook_amd-comgr.cmake
