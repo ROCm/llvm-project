@@ -800,11 +800,11 @@ TEST(HotswapPatchVTable, ProcessSingletonIdentityAndEagerInstall) {
 
 // -- DS ADDTID trampoline support ---------------------------------------------
 //
-// Tests for the ds_load_addtid_b32 / ds_store_addtid_b32 trampoline patch
-// (DEGFXMI400-12025). Coverage is bottom-up: first that the encode/decode
-// of ADDTID instructions exposes the expected MCInst operand layout, then
-// that buildTrampoline assembles and decodes a full ADDTID replacement body
-// plus its branch-back tail.
+// Tests for the ds_load_addtid_b32 / ds_store_addtid_b32 gfx1250 trampoline
+// patch. Coverage is bottom-up: first that the encode/decode of ADDTID
+// instructions exposes the expected MCInst operand layout, then that
+// buildTrampoline assembles and decodes a full ADDTID replacement body plus
+// its branch-back tail.
 
 namespace {
 
