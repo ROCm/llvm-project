@@ -116,40 +116,9 @@ jobs:
       BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'
     outputs:
       enable_build_jobs: true
-      # Temporary fix on gfx94x due to non availability of MI325 machines
-      linux_build_config: >-
-        {
-          "per_family_info": [
-            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "test-runs-on": "linux-gfx942-1gpu-core42-ossci-rocm", "sanity_check_only_for_family": false},
-            {"amdgpu_family": "gfx110X-all", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true},
-            {"amdgpu_family": "gfx90a", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true}
-          ],
-          "dist_amdgpu_families": "gfx94X-dcgpu;gfx110X-all;gfx90a",
-          "artifact_group": "multi-arch-release",
-          "build_variant_label": "release",
-          "build_variant_suffix": "",
-          "build_variant_cmake_preset": "",
-          "expect_failure": false,
-          "build_pytorch": true,
-          "prebuilt_stages": "",
-          "baseline_run_id": ""
-        }
-      windows_build_config: >-
-        {
-          "per_family_info": [
-            {"amdgpu_family": "gfx1151", "amdgpu_targets": "", "test-runs-on": "windows-gfx1151-gpu-rocm", "benchmark-runs-on": "windows-gfx1151-gpu-rocm"}
-          ],
-          "dist_amdgpu_families": "gfx1151",
-          "artifact_group": "multi-arch-release",
-          "build_variant_label": "release",
-          "build_variant_suffix": "",
-          "build_variant_cmake_preset": "windows-release",
-          "expect_failure": false,
-          "build_pytorch": true,
-          "prebuilt_stages": "",
-          "baseline_run_id": ""
-        }
-      test_type: 'quick'      
+      linux_build_config: ${{ steps.convergence_config.outputs.linux_build_config }}
+      windows_build_config: ${{ steps.convergence_config.outputs.windows_build_config }}
+      test_type: 'quick'
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
       windows_test_labels: ${{ steps.configure.outputs.windows_test_labels }}
       rocm_package_version: ${{ steps.rocm_package_version.outputs.rocm_package_version }}
@@ -213,6 +182,15 @@ jobs:
           # (e.g., adding test runners for architectures not enabled in TheRock's default config)
           EXTERNAL_FAMILY_OVERRIDES: ${{ inputs.external_repo != '' && toJSON(fromJSON(inputs.external_repo).family_overrides) || '' }}            
         run: python ./build_tools/github_actions/configure_multi_arch_ci.py
+
+      - name: Build Test CI Config matrix
+        id: convergence_config
+        uses: ROCm/llvm-project/.github/actions/ci-config-matrix@amd/dev/kirthana14m/rockci-compiler-convergence
+        with:
+          build_variant: ${{ inputs.build_variant }}
+          ci_config_path: ci-config
+          prebuilt_stages: ${{ inputs.prebuilt_stages }}
+          baseline_run_id: ${{ inputs.baseline_run_id }}
 
       # Note: Other scripts treat "dev releases" and "CI builds" differently.
       # Here we set to a "dev" package version even for CI builds:
