@@ -365,6 +365,7 @@ jobs:
           ls -lh "${DIST_DIR}/"
 
       - name: Configure AWS Credentials
+        if: ${{ github.repository == 'ROCm/TheRock' }}
         uses: ./.github/actions/configure_aws_artifacts_credentials
         with:
           release_type: ci

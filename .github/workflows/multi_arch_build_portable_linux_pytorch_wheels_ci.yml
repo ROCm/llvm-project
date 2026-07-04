@@ -299,8 +299,8 @@ jobs:
           ls -lh "${{ env.PACKAGE_DIST_DIR }}/"
 
       - name: Configure AWS Credentials
-        uses: ./.github/actions/configure_aws_artifacts_credentials
         if: ${{ github.repository == 'ROCm/TheRock' }}
+        uses: ./.github/actions/configure_aws_artifacts_credentials
         with:
           release_type: ci
 
