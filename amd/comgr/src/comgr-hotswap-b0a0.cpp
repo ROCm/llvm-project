@@ -205,8 +205,8 @@ struct FunctionTextRange {
   uint64_t End = 0;
 };
 
-static std::vector<FunctionTextRange> buildFunctionTextRanges(
-    const ElfView &Elf) {
+static std::vector<FunctionTextRange>
+buildFunctionTextRanges(const ElfView &Elf) {
   std::vector<FunctionTextRange> Ranges;
   uint64_t TextBegin = Elf.textAddr();
   uint64_t TextEnd = TextBegin + Elf.textSize();
@@ -215,8 +215,7 @@ static std::vector<FunctionTextRange> buildFunctionTextRanges(
         SymShdr.sh_type != ELF::SHT_DYNSYM)
       continue;
 
-    Expected<ElfView::ELFT::SymRange> SymsOrErr =
-        Elf.file().symbols(&SymShdr);
+    Expected<ElfView::ELFT::SymRange> SymsOrErr = Elf.file().symbols(&SymShdr);
     if (!SymsOrErr) {
       consumeError(SymsOrErr.takeError());
       continue;
@@ -230,12 +229,12 @@ static std::vector<FunctionTextRange> buildFunctionTextRanges(
         continue;
       FuncSyms.push_back(&Sym);
     }
-    llvm::sort(FuncSyms, [](const ElfView::ELFT::Sym *A,
-                            const ElfView::ELFT::Sym *B) {
-      if (A->st_value != B->st_value)
-        return A->st_value < B->st_value;
-      return A->st_size > B->st_size;
-    });
+    llvm::sort(FuncSyms,
+               [](const ElfView::ELFT::Sym *A, const ElfView::ELFT::Sym *B) {
+                 if (A->st_value != B->st_value)
+                   return A->st_value < B->st_value;
+                 return A->st_size > B->st_size;
+               });
 
     for (size_t I = 0, E = FuncSyms.size(); I != E; ++I) {
       const ElfView::ELFT::Sym &Sym = *FuncSyms[I];
@@ -251,8 +250,8 @@ static std::vector<FunctionTextRange> buildFunctionTextRanges(
       } else {
         for (size_t J = I + 1; J != E; ++J) {
           if (FuncSyms[J]->st_value > BeginVA) {
-            EndVA = std::min(static_cast<uint64_t>(FuncSyms[J]->st_value),
-                             TextEnd);
+            EndVA =
+                std::min(static_cast<uint64_t>(FuncSyms[J]->st_value), TextEnd);
             break;
           }
         }
@@ -260,21 +259,22 @@ static std::vector<FunctionTextRange> buildFunctionTextRanges(
       Ranges.push_back({BeginVA - TextBegin, EndVA - TextBegin});
     }
   }
-  llvm::sort(Ranges, [](const FunctionTextRange &L, const FunctionTextRange &R) {
-    if (L.Begin != R.Begin)
-      return L.Begin < R.Begin;
-    return L.End < R.End;
-  });
+  llvm::sort(Ranges,
+             [](const FunctionTextRange &L, const FunctionTextRange &R) {
+               if (L.Begin != R.Begin)
+                 return L.Begin < R.Begin;
+               return L.End < R.End;
+             });
   return Ranges;
 }
 
 static bool isInFunctionTextRange(ArrayRef<FunctionTextRange> Ranges,
                                   uint64_t Offset) {
-  auto It = std::upper_bound(
-      Ranges.begin(), Ranges.end(), Offset,
-      [](uint64_t Value, const FunctionTextRange &R) {
-        return Value < R.Begin;
-      });
+  ArrayRef<FunctionTextRange>::iterator It =
+      std::upper_bound(Ranges.begin(), Ranges.end(), Offset,
+                       [](uint64_t Value, const FunctionTextRange &R) {
+                         return Value < R.Begin;
+                       });
   if (It == Ranges.begin())
     return false;
   --It;
@@ -302,9 +302,9 @@ static bool isZeroFillDword(const uint8_t *Text, uint64_t TextSize,
 /// variations. Zero-filled padding appears in generated code between
 /// function-symbol ranges; it decodes as v_illegal but is still writable .text
 /// space once hotswap redirects control to an assembled replacement.
-static std::vector<NopSled> buildNopSledMap(
-    ArrayRef<InternalDecodedInst> Decoded, const uint8_t *Text,
-    uint64_t TextSize, const LLVMState &LS, const ElfView &Elf) {
+static std::vector<NopSled>
+buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const uint8_t *Text,
+                uint64_t TextSize, const LLVMState &LS, const ElfView &Elf) {
   std::vector<NopSled> Sleds;
   std::vector<FunctionTextRange> FunctionRanges = buildFunctionTextRanges(Elf);
   const size_t N = Decoded.size();
@@ -807,9 +807,9 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
       return AMD_COMGR_STATUS_ERROR;
     }
 
-    std::optional<uint32_t> Patched = applyGfx1250B0toA0Rules(
-        Decoded, Text, Elf.textSize(), LS, Deferred, Elf, ScratchPatches,
-        Config);
+    std::optional<uint32_t> Patched =
+        applyGfx1250B0toA0Rules(Decoded, Text, Elf.textSize(), LS, Deferred,
+                                Elf, ScratchPatches, Config);
     if (!Patched)
       return AMD_COMGR_STATUS_ERROR;
     Count = *Patched;

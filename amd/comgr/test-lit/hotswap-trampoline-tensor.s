@@ -1,18 +1,18 @@
 // COM: Test HotSwap trampoline patch: tensor_load_to_lds multicast fix.
 // COM: Prepends s_pack_hh_b32_b16 to clear multicast routing bits in
 // COM: the descriptor's base SGPR. Base operand variants via NOP sled:
-// COM:   dead SGPR  — only s_pack_hh prepended (no save/restore)
-// COM:   live SGPR  — s_mov save, s_pack_hh, tensor, s_mov restore
-// COM:   alt descriptor — different SGPR range (s[16:23]) for pack target
-// COM:   SGPR redef — descriptor SGPR overwritten before use (dead path)
-// COM:   zero-size FUNC — live path when the function symbol has st_size == 0
+// COM:   dead SGPR - only s_pack_hh prepended (no save/restore)
+// COM:   live SGPR - s_mov save, s_pack_hh, tensor, s_mov restore
+// COM:   alt descriptor - different SGPR range (s[16:23]) for pack target
+// COM:   SGPR redef - descriptor SGPR overwritten before use (dead path)
+// COM:   zero-size FUNC - live path when the function symbol has st_size == 0
 // COM: Verifies per-kernel behavior with CHECK-LABEL blocks and explicit
 // COM: s_branch checks.
 // COM:
 // COM: Companion tests:
-// COM:   hotswap-trampoline-tensor-nosled.s     — trampoline fallback path
-// COM:   hotswap-trampoline-tensor-multi.s      — multi-site stacking
-// COM:   hotswap-trampoline-tensor-liveness.s   — isSgprLiveAfter edge cases
+// COM:   hotswap-trampoline-tensor-nosled.s     - trampoline fallback path
+// COM:   hotswap-trampoline-tensor-multi.s      - multi-site stacking
+// COM:   hotswap-trampoline-tensor-liveness.s   - isSgprLiveAfter edge cases
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -22,7 +22,7 @@
 // RUN:   2>&1 \
 // RUN:   | %FileCheck --check-prefix=API %s
 // API-NOT: kernel descriptor symbol '.kd' not found
-// API: hotswap: tensor_load_to_lds: s4 live, save/restore via v{{[1-9][0-9]*}}
+// API: hotswap: tensor_load_to_lds: s4 live, save/restore via s{{[0-9]+}}
 // API-NOT: kernel descriptor symbol '.kd' not found
 // API: RESULT: SUCCESS
 
@@ -73,7 +73,7 @@
 // COM: Kernel 4 (SGPR redefined before use): s4 is overwritten by
 // COM: s_mov_b32 s4, 0 immediately after tensor_load, then s_endpgm.
 // COM: isSgprLiveAfter sees a def-before-use and takes the dead path
-// COM: — no save/restore needed.
+// COM: - no save/restore needed.
 // DISASM-LABEL: <test_tensor_sgpr_redef>:
 // DISASM-NOT: v_writelane_b32
 // DISASM-NOT: v_readlane_b32
@@ -90,12 +90,12 @@
 // COM: find the descriptor so scratch allocation does not fall back to v0.
 // DISASM-LABEL: <test_tensor_zero_size>:
 // DISASM: s_branch
-// DISASM: s_mov_b32
-// DISASM: v_writelane_b32
-// DISASM: s_pack_hh_b32_b16
-// DISASM: tensor_load_to_lds
-// DISASM: v_readlane_b32
-// DISASM: s_branch
+// DISASM: s_endpgm
+// DISASM: s_mov_b32 [[ZERO_SCRATCH:s[0-9]+]], s4
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds
+// DISASM-NEXT: s_mov_b32 s4, [[ZERO_SCRATCH]]
+// DISASM-NEXT: s_branch
 
 // COM: Idempotency: rewriting the output again should produce identical bytes.
 // RUN: hotswap-rewrite %t.out.elf \
