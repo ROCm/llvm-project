@@ -34,7 +34,7 @@ def main() -> None:
             {
                 "amdgpu_family": "gfx94X-dcgpu",
                 "amdgpu_targets": "gfx942",
-                "test-runs-on": "linux-gfx942-1gpu-core42-ossci-rocm",
+                "test-runs-on": "linux-gfx942-1gpu-ccs-csp-ossci-rocm",
                 "sanity_check_only_for_family": False,
             },
             {
