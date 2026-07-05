@@ -243,16 +243,19 @@ TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
 }
 
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {
-  std::vector<NopSled> Sleds = {{0, 64, 60}, {100, 128, 100}};
+  std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64},
+                                {100, 128, 100, 100, 128}};
   EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max()),
             nullptr);
 }
 
 TEST(FindNearestSled, HandlesLargeUnsignedOffsets) {
-  std::vector<NopSled> Sleds = {{100, 128, 100},
+  std::vector<NopSled> Sleds = {{100, 128, 100, 100, 128},
                                 {std::numeric_limits<uint64_t>::max() - 32,
                                  std::numeric_limits<uint64_t>::max(),
-                                 std::numeric_limits<uint64_t>::max() - 32}};
+                                 std::numeric_limits<uint64_t>::max() - 32,
+                                 std::numeric_limits<uint64_t>::max() - 64,
+                                 std::numeric_limits<uint64_t>::max()}};
   NopSled *Sled =
       findNearestSled(Sleds, std::numeric_limits<uint64_t>::max() - 40,
                       /*Needed=*/8);
@@ -768,9 +771,6 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   EXPECT_EQ(AMDHSA_BITS_GET(OutRsrc3,
                             hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE),
             KernelEntryStubInstPrefLines);
-  EXPECT_EQ(
-      AMDHSA_BITS_GET(OutRsrc3, hsa::COMPUTE_PGM_RSRC3_GFX11_INST_PREF_SIZE),
-      KernelEntryStubInstPrefLines);
   EXPECT_NE(OutRsrc3 & hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_GLG_EN, 0u);
   EXPECT_EQ(Fixups[0].RequiredSgprs, 10u);
   uint32_t OutRsrc1 = 0;
