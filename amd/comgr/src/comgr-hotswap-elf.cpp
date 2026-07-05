@@ -653,6 +653,44 @@ ElfView::getKernelDescriptorInstPrefSize(StringRef KernelName,
   return std::nullopt;
 }
 
+bool ElfView::updateKernelDescriptorInstPrefSize(StringRef KernelName,
+                                                 StringRef TargetCpu,
+                                                 uint32_t InstPrefLines) {
+  namespace hsa = amdhsa;
+  uint8_t *Kd = findKernelDescriptor(KernelName);
+  if (!Kd) {
+    log() << "hotswap: error: updateKernelDescriptorInstPrefSize: kernel "
+          << "descriptor symbol '" << KernelName << ".kd' not found.\n";
+    return false;
+  }
+
+  if (!TargetCpu.starts_with("gfx12")) {
+    log() << "hotswap: error: updateKernelDescriptorInstPrefSize: unsupported "
+          << "target CPU '" << TargetCpu << "' for kernel '" << KernelName
+          << "'.\n";
+    return false;
+  }
+
+  uint32_t MaxInstPrefLines = static_cast<uint32_t>(
+      hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE >>
+      hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE_SHIFT);
+  if (InstPrefLines > MaxInstPrefLines) {
+    log() << "hotswap: error: updateKernelDescriptorInstPrefSize: value "
+          << InstPrefLines << " exceeds the gfx12 descriptor encoding limit.\n";
+    return false;
+  }
+
+  uint32_t Rsrc3 = 0;
+  std::memcpy(&Rsrc3,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc3),
+              sizeof(Rsrc3));
+  AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE,
+                  InstPrefLines);
+  std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc3),
+              &Rsrc3, sizeof(Rsrc3));
+  return true;
+}
+
 // -- ElfView::getKernelVgprCount ----------------------------------------------
 
 std::optional<unsigned>

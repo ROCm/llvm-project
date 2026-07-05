@@ -85,6 +85,10 @@ struct Trampoline {
 // the same 256-byte alignment expected by AMDGPU kernel descriptors.
 static constexpr uint64_t KernelEntryStubStride = 256;
 static constexpr uint64_t KernelEntryInstPrefUnitBytes = 128;
+static_assert(KernelEntryStubStride % KernelEntryInstPrefUnitBytes == 0,
+              "entry-stub stride must be an integral prefetch span");
+static constexpr uint32_t KernelEntryStubInstPrefLines =
+    KernelEntryStubStride / KernelEntryInstPrefUnitBytes;
 
 struct KernelDescriptorInfo {
   std::string KernelName;
@@ -221,6 +225,11 @@ public:
   std::optional<uint32_t>
   getKernelDescriptorInstPrefSize(llvm::StringRef KernelName,
                                   llvm::StringRef TargetCpu) const;
+
+  /// Rewrite COMPUTE_PGM_RSRC3.INST_PREF_SIZE for \p KernelName.
+  bool updateKernelDescriptorInstPrefSize(llvm::StringRef KernelName,
+                                          llvm::StringRef TargetCpu,
+                                          uint32_t InstPrefLines);
 
   /// Read the VGPR count from the kernel descriptor for \p KernelName.
   /// Returns std::nullopt if the descriptor is not found.
@@ -680,6 +689,7 @@ struct KernelEntryTrampolineFixup {
   std::string KernelName;
   uint64_t StubTextOffset = 0;
   unsigned RequiredSgprs = 0;
+  uint32_t InstPrefLines = 0;
 };
 
 /// Build a 256-byte, entry-aligned HotSwap kernel-entry stub at
@@ -715,10 +725,11 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     std::vector<Trampoline> &Growth,
     std::vector<KernelEntryTrampolineFixup> &OutFixups);
 
-/// Apply descriptor entry-offset rewrites recorded by
-/// appendKernelEntryTrampolines after the ELF has been grown.
+/// Apply descriptor rewrites recorded by appendKernelEntryTrampolines after
+/// the ELF has been grown.
 bool rewriteKernelEntryDescriptorOffsets(
     llvm::WritableMemoryBuffer &OutBuf, uint64_t OldTextSize,
+    llvm::StringRef TargetCpu,
     llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------

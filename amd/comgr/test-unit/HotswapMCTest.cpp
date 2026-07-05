@@ -520,7 +520,7 @@ TEST(BuildKernelEntryTrampoline, MatcherRejectsWrongOperandShape) {
   EXPECT_FALSE(isKernelEntryTrampoline(Bytes, S));
 }
 
-TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
+TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   namespace hsa = llvm::amdhsa;
 
   LLVMState S = initLLVM(makeGfx1250Ident());
@@ -532,6 +532,8 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
   uint32_t Rsrc3 = 0;
   AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE, 7);
   Rsrc3 |= hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_GLG_EN;
+  AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX125_NAMED_BAR_CNT, 3);
+  AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX125_TCP_SPLIT, 5);
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.ComputePgmRsrc3 = Rsrc3;
   comgr_test::KernelDescriptorElf Obj =
@@ -550,12 +552,12 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
   ASSERT_TRUE(Count.has_value());
   EXPECT_EQ(*Count, 1u);
   ASSERT_EQ(Fixups.size(), 1u);
+  EXPECT_EQ(Fixups[0].InstPrefLines, KernelEntryStubInstPrefLines);
 
-  const uint64_t ExpectedGuard = computeKernelEntryPrefetchGuardBytes(7);
-  EXPECT_EQ(ExpectedGuard,
-            7u * KernelEntryInstPrefUnitBytes - KernelEntryStubStride);
+  const uint64_t ExpectedGuard =
+      computeKernelEntryPrefetchGuardBytes(KernelEntryStubInstPrefLines);
+  EXPECT_EQ(ExpectedGuard, 0u);
   ASSERT_FALSE(Growth.empty());
-  EXPECT_EQ(Growth.back().Bytes.size(), ExpectedGuard);
 
   const uint64_t OldTextSize = ViewOrErr->textSize();
   const uint64_t TextEndVAddr = ViewOrErr->textAddr() + OldTextSize;
@@ -575,7 +577,8 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
       ViewOrErr->growWithTrampolines(Growth, S.SNopBytes);
   ASSERT_NE(Out, nullptr);
 
-  ASSERT_TRUE(rewriteKernelEntryDescriptorOffsets(*Out, OldTextSize, Fixups));
+  ASSERT_TRUE(
+      rewriteKernelEntryDescriptorOffsets(*Out, OldTextSize, S.Cpu, Fixups));
 
   uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
   llvm::Expected<ElfView> OutView =
@@ -588,9 +591,17 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
   std::memcpy(&OutRsrc3,
               OutKd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc3),
               sizeof(OutRsrc3));
+  uint32_t ExpectedRsrc3 = Rsrc3;
+  AMDHSA_BITS_SET(ExpectedRsrc3,
+                  hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE,
+                  KernelEntryStubInstPrefLines);
+  EXPECT_EQ(OutRsrc3, ExpectedRsrc3);
   EXPECT_EQ(AMDHSA_BITS_GET(OutRsrc3,
                             hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE),
-            7u);
+            KernelEntryStubInstPrefLines);
+  EXPECT_EQ(
+      AMDHSA_BITS_GET(OutRsrc3, hsa::COMPUTE_PGM_RSRC3_GFX11_INST_PREF_SIZE),
+      KernelEntryStubInstPrefLines);
   EXPECT_NE(OutRsrc3 & hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_GLG_EN, 0u);
   EXPECT_EQ(Fixups[0].RequiredSgprs, 10u);
   uint32_t OutRsrc1 = 0;

@@ -787,7 +787,7 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
       GrowthTotal += T.Bytes.size();
     }
     patchDebugSections(*Result, Deferred, Elf, GrowthTotal);
-    if (!rewriteKernelEntryDescriptorOffsets(*Result, Elf.textSize(),
+    if (!rewriteKernelEntryDescriptorOffsets(*Result, Elf.textSize(), LS.Cpu,
                                              EntryFixups))
       return AMD_COMGR_STATUS_ERROR;
   } else {
