@@ -16,6 +16,15 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Upload submodule commit file
+      if: ${{ hashFiles(format('submodule-commit-{0}.txt', inputs.stage_name)) != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: submodule-commit-${{ inputs.stage_name }}
+        path: submodule-commit-${{ inputs.stage_name }}.txt
+        overwrite: true
+        retention-days: 1
+
     - name: Remove unused existing patches
       shell: bash
       run: |
