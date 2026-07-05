@@ -96,12 +96,12 @@ bool shouldEmitVerboseLogs() {
 
 llvm::StringRef getLLVMPath() {
   static const char *EnvLLVMPath = COMGR_GETENV("LLVM_PATH");
-  return EnvLLVMPath;
+  return EnvLLVMPath ? EnvLLVMPath : "";
 }
 
 StringRef getCachePolicy() {
   static const char *EnvCachePolicy = COMGR_GETENV("AMD_COMGR_CACHE_POLICY");
-  return EnvCachePolicy;
+  return EnvCachePolicy ? EnvCachePolicy : "";
 }
 
 StringRef getCacheDirectory() {
