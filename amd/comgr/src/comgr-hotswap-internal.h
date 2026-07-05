@@ -100,6 +100,13 @@ struct NopSled {
   uint64_t Start = 0;
   uint64_t End = 0;
   uint64_t WritePos = 0;
+  uint64_t FunctionStart = 0;
+  uint64_t FunctionEnd = 0;
+};
+
+struct FunctionTextRange {
+  uint64_t Start = 0;
+  uint64_t End = 0;
 };
 
 // -- Rewrite rule -------------------------------------------------------------
@@ -199,6 +206,11 @@ public:
   /// Find the kernel function symbol whose range includes \p TextAddress.
   /// Returns "" if no matching function symbol exists.
   std::string findKernelAtAddress(uint64_t TextAddress) const;
+
+  /// Find the section-relative `.text` range of the function containing
+  /// \p TextOffset, or std::nullopt if no sized function symbol covers it.
+  std::optional<FunctionTextRange>
+  findFunctionTextRangeAtOffset(uint64_t TextOffset) const;
 
   /// Pointer to the kernel_descriptor for \p KernelName inside the buffer,
   /// or nullptr if not found.
