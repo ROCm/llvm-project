@@ -192,9 +192,9 @@ public:
   uint8_t *textData() { return data() + textOffset(); }
   const uint8_t *textData() const { return data() + textOffset(); }
 
-  /// Find the kernel function symbol whose range includes \p TextOffset.
+  /// Find the kernel function symbol whose range includes \p TextAddress.
   /// Returns "" if no matching function symbol exists.
-  std::string findKernelAtOffset(uint64_t TextOffset) const;
+  std::string findKernelAtAddress(uint64_t TextAddress) const;
 
   /// Pointer to the kernel_descriptor for \p KernelName inside the buffer,
   /// or nullptr if not found.

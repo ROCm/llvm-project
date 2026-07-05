@@ -30,7 +30,7 @@ test_cvt_pk_fp8_zero_fill_source:
 
 .globl test_cvt_pk_fp8_zero_fill_sled
 test_cvt_pk_fp8_zero_fill_sled:
-  .zero 256
+  .zero 768
 
 .globl test_cvt_pk_fp8_zero_fill_after
 .p2align 8

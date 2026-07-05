@@ -288,13 +288,13 @@ bool applyByteReplace(const RewriteRule &Rule, uint64_t InstOffset,
 NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
                          uint64_t Needed) {
   NopSled *Best = nullptr;
-  int64_t BestDist = INT64_MAX;
+  uint64_t BestDist = std::numeric_limits<uint64_t>::max();
   for (NopSled &Sled : Sleds) {
-    if (Sled.WritePos + Needed > Sled.End)
+    if (Sled.WritePos > Sled.End || Needed > Sled.End - Sled.WritePos)
       continue;
-    int64_t Dist = std::abs(static_cast<int64_t>(Sled.WritePos) -
-                            static_cast<int64_t>(Offset));
-    if (Dist < MaxSledDistance && Dist < BestDist) {
+    uint64_t Dist = Sled.WritePos > Offset ? Sled.WritePos - Offset
+                                           : Offset - Sled.WritePos;
+    if (Dist < static_cast<uint64_t>(MaxSledDistance) && Dist < BestDist) {
       Best = &Sled;
       BestDist = Dist;
     }
@@ -344,10 +344,17 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
   return ElfView(std::move(*FileOrErr), Sections, Text, TextIdx);
 }
 
-// -- ElfView::findKernelAtOffset ----------------------------------------------
+// -- ElfView::findKernelAtAddress ---------------------------------------------
 
-std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
-  uint64_t TextEnd = textAddr() + textSize();
+std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
+  uint64_t TextBegin = textAddr();
+  uint64_t TextSize = textSize();
+  if (TextSize > std::numeric_limits<uint64_t>::max() - TextBegin) {
+    log() << "hotswap: error: findKernelAtAddress: .text virtual address "
+          << "range overflows uint64_t.\n";
+    return "";
+  }
+  uint64_t TextEnd = TextBegin + TextSize;
   for (const ELFT::Shdr &SymShdr : Sections) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
         SymShdr.sh_type != ELF::SHT_DYNSYM)
@@ -382,6 +389,8 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
     for (size_t I = 0, E = FuncSyms.size(); I != E; ++I) {
       const ELFT::Sym &Sym = *FuncSyms[I];
       uint64_t Begin = Sym.st_value;
+      if (Begin < TextBegin || Begin >= TextEnd)
+        continue;
       uint64_t End = TextEnd;
       if (Sym.st_size != 0) {
         End = Sym.st_value + Sym.st_size;
@@ -391,18 +400,18 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
       } else {
         for (size_t J = I + 1; J != E; ++J) {
           if (FuncSyms[J]->st_value > Begin) {
-            End = std::min(static_cast<uint64_t>(FuncSyms[J]->st_value),
-                           TextEnd);
+            End =
+                std::min(static_cast<uint64_t>(FuncSyms[J]->st_value), TextEnd);
             break;
           }
         }
       }
-      if (TextOffset < Begin || TextOffset >= End)
+      if (TextAddress < Begin || TextAddress >= End)
         continue;
       Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
       if (!NameOrErr) {
-        log() << "hotswap: error: findKernelAtOffset: function symbol "
-              << "covering offset 0x" << utohexstr(TextOffset)
+        log() << "hotswap: error: findKernelAtAddress: function symbol "
+              << "covering address 0x" << utohexstr(TextAddress)
               << " has unreadable name: " << toString(NameOrErr.takeError())
               << "\n";
         return "";
@@ -410,8 +419,8 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
       return NameOrErr->str();
     }
   }
-  log() << "hotswap: findKernelAtOffset: no function symbol covers offset 0x"
-        << utohexstr(TextOffset) << " in .text.\n";
+  log() << "hotswap: findKernelAtAddress: no function symbol covers address 0x"
+        << utohexstr(TextAddress) << " in .text.\n";
   return "";
 }
 
