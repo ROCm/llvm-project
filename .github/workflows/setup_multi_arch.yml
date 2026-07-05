@@ -167,9 +167,9 @@ jobs:
           RELEASE_TYPE: ${{ inputs.release_type }}
           BUILD_PYTORCH: ${{ inputs.build_pytorch }}
           BUILD_JAX: ${{ inputs.build_jax }}
-          PYTHON_VERSION: ${{ inputs.python_version }}            
-          LINUX_AMDGPU_FAMILIES: 'gfx94X-dcgpu,gfx110X-all,gfx90a'
-          WINDOWS_AMDGPU_FAMILIES: "gfx1151"            
+          PYTHON_VERSION: ${{ inputs.python_version }}
+          LINUX_AMDGPU_FAMILIES: ${{ inputs.linux_amdgpu_families != '' && inputs.linux_amdgpu_families || 'gfx94x,gfx110x,gfx90a' }}
+          WINDOWS_AMDGPU_FAMILIES: ${{ inputs.windows_amdgpu_families != '' && inputs.windows_amdgpu_families || 'gfx1151' }}
           LINUX_TEST_LABELS: ${{ inputs.linux_test_labels }}
           WINDOWS_TEST_LABELS: ${{ inputs.windows_test_labels }}
           PREBUILT_STAGES: ${{ inputs.prebuilt_stages }}
