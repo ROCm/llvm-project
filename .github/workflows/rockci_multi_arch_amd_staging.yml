@@ -149,7 +149,7 @@ jobs:
     name: Manifest Diff
     # Refs are auto-derived from push / pull_request events only.
     # For manual runs, dispatch manifest-diff.yml directly with explicit refs.
-    if: {{ false }} 
+    if: ${{ false }} 
     #if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'schedule' }}
     uses: ./.github/workflows/manifest-diff.yml
     permissions:
