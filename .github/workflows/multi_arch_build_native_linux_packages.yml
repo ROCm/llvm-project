@@ -52,7 +52,7 @@ run-name: Build ${{ inputs.native_package_type }} packages (${{ inputs.rocm_vers
 jobs:
   build_native_packages:
     name: Build ${{ inputs.native_package_type }} packages
-    runs_on: azure-linux-scale-rocm
+    runs-on: azure-linux-scale-rocm
     #runs-on: ${{ github.repository_owner == 'ROCm' && 'aws-linux-scale-rocm-prod' || 'ubuntu-24.04' }}
     container:
       image: ghcr.io/rocm/no_rocm_image_ubuntu24_04:latest
