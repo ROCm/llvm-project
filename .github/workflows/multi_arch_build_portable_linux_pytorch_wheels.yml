@@ -145,7 +145,7 @@ permissions:
 jobs:
   build_pytorch_wheels:
     name: Build | py ${{ inputs.python_version }} | torch ${{ inputs.pytorch_git_ref }}
-    runs_on: azure-linux-scale-rocm
+    runs-on: azure-linux-scale-rocm
     #runs-on: ${{ github.repository_owner == 'ROCm' && 'aws-linux-scale-rocm-prod' || 'ubuntu-24.04' }}
     permissions:
       id-token: write
