@@ -6,9 +6,9 @@
 // COM: conversion, RTE rounding, overflow clamping, and NaN override.
 // COM:
 // COM: Companion tests:
-// COM:   hotswap-cvt-fp8-modifiers.s — source modifier variants
-// COM:   hotswap-cvt-fp8-nosled.s    — trampoline fallback path
-// COM:   hotswap-cvt-fp8-multi.s     — multi-site stacking
+// COM:   hotswap-cvt-fp8-modifiers.s - source modifier variants
+// COM:   hotswap-cvt-fp8-nosled.s    - trampoline fallback path
+// COM:   hotswap-cvt-fp8-multi.s     - multi-site stacking
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -29,7 +29,7 @@
 // ---- Kernel 1: CLAMP=1, low half (should be patched) --------------------------
 //
 // COM: Original site is replaced with s_branch. Trampoline body: VCC save,
-// COM: two per-source F32→UE5M3 conversions (15 instructions each), pack
+// COM: two per-source F32->UE5M3 conversions (23 instructions each), pack
 // COM: into 16-bit pair, merge into low half of vdst via v_bfi_b32, VCC restore.
 
 // LOW-LABEL: <test_cvt_pk_fp8_low>:
@@ -41,6 +41,12 @@
 // LOW-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
 // LOW-NEXT:  s_mov_b32
 // LOW-NEXT:  v_max_num_f32{{.*}}, 0, v1
+// LOW-NEXT:  v_cmp_le_f32{{.*}}0x47780000
+// LOW-NEXT:  s_mov_b32
+// LOW-NEXT:  v_mul_f32{{.*}}0x39000000
+// LOW-NEXT:  v_cvt_nearest_i32_f32
+// LOW-NEXT:  v_add{{.*}}0xf0
+// LOW-NEXT:  v_min_u32{{.*}}0xfe
 // LOW-NEXT:  v_cvt_f16_f32
 // LOW-NEXT:  v_and_b32
 // LOW-NEXT:  v_bfe_u32
@@ -48,7 +54,9 @@
 // LOW-NEXT:  v_bfi_b32
 // LOW-NEXT:  v_cmp_lt_u32{{.*}}0x80
 // LOW-NEXT:  v_add_co_ci_u32
-// LOW-NEXT:  v_min_u32
+// LOW-NEXT:  v_min_u32{{.*}}0xfe
+// LOW-NEXT:  s_mov_b32
+// LOW-NEXT:  v_cndmask_b32
 // LOW-NEXT:  s_mov_b32
 // LOW-NEXT:  v_mov_b32
 // LOW-NEXT:  v_cndmask_b32
@@ -57,6 +65,12 @@
 // LOW-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
 // LOW-NEXT:  s_mov_b32
 // LOW-NEXT:  v_max_num_f32{{.*}}, 0, v2
+// LOW-NEXT:  v_cmp_le_f32{{.*}}0x47780000
+// LOW-NEXT:  s_mov_b32
+// LOW-NEXT:  v_mul_f32{{.*}}0x39000000
+// LOW-NEXT:  v_cvt_nearest_i32_f32
+// LOW-NEXT:  v_add{{.*}}0xf0
+// LOW-NEXT:  v_min_u32{{.*}}0xfe
 // LOW-NEXT:  v_cvt_f16_f32
 // LOW-NEXT:  v_and_b32
 // LOW-NEXT:  v_bfe_u32
@@ -64,7 +78,9 @@
 // LOW-NEXT:  v_bfi_b32
 // LOW-NEXT:  v_cmp_lt_u32{{.*}}0x80
 // LOW-NEXT:  v_add_co_ci_u32
-// LOW-NEXT:  v_min_u32
+// LOW-NEXT:  v_min_u32{{.*}}0xfe
+// LOW-NEXT:  s_mov_b32
+// LOW-NEXT:  v_cndmask_b32
 // LOW-NEXT:  s_mov_b32
 // LOW-NEXT:  v_mov_b32
 // LOW-NEXT:  v_cndmask_b32
@@ -97,6 +113,12 @@ test_cvt_pk_fp8_low:
 // HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
 // HIGH-NEXT:  s_mov_b32
 // HIGH-NEXT:  v_max_num_f32{{.*}}, 0, v6
+// HIGH-NEXT:  v_cmp_le_f32{{.*}}0x47780000
+// HIGH-NEXT:  s_mov_b32
+// HIGH-NEXT:  v_mul_f32{{.*}}0x39000000
+// HIGH-NEXT:  v_cvt_nearest_i32_f32
+// HIGH-NEXT:  v_add{{.*}}0xf0
+// HIGH-NEXT:  v_min_u32{{.*}}0xfe
 // HIGH-NEXT:  v_cvt_f16_f32
 // HIGH-NEXT:  v_and_b32
 // HIGH-NEXT:  v_bfe_u32
@@ -104,7 +126,9 @@ test_cvt_pk_fp8_low:
 // HIGH-NEXT:  v_bfi_b32
 // HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x80
 // HIGH-NEXT:  v_add_co_ci_u32
-// HIGH-NEXT:  v_min_u32
+// HIGH-NEXT:  v_min_u32{{.*}}0xfe
+// HIGH-NEXT:  s_mov_b32
+// HIGH-NEXT:  v_cndmask_b32
 // HIGH-NEXT:  s_mov_b32
 // HIGH-NEXT:  v_mov_b32
 // HIGH-NEXT:  v_cndmask_b32
@@ -113,6 +137,12 @@ test_cvt_pk_fp8_low:
 // HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
 // HIGH-NEXT:  s_mov_b32
 // HIGH-NEXT:  v_max_num_f32{{.*}}, 0, v7
+// HIGH-NEXT:  v_cmp_le_f32{{.*}}0x47780000
+// HIGH-NEXT:  s_mov_b32
+// HIGH-NEXT:  v_mul_f32{{.*}}0x39000000
+// HIGH-NEXT:  v_cvt_nearest_i32_f32
+// HIGH-NEXT:  v_add{{.*}}0xf0
+// HIGH-NEXT:  v_min_u32{{.*}}0xfe
 // HIGH-NEXT:  v_cvt_f16_f32
 // HIGH-NEXT:  v_and_b32
 // HIGH-NEXT:  v_bfe_u32
@@ -120,7 +150,9 @@ test_cvt_pk_fp8_low:
 // HIGH-NEXT:  v_bfi_b32
 // HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x80
 // HIGH-NEXT:  v_add_co_ci_u32
-// HIGH-NEXT:  v_min_u32
+// HIGH-NEXT:  v_min_u32{{.*}}0xfe
+// HIGH-NEXT:  s_mov_b32
+// HIGH-NEXT:  v_cndmask_b32
 // HIGH-NEXT:  s_mov_b32
 // HIGH-NEXT:  v_mov_b32
 // HIGH-NEXT:  v_cndmask_b32
@@ -163,25 +195,22 @@ test_cvt_pk_fp8_noclamp:
 // COM: Literal VOP3 operands are decoded as immediate MC operands and extend
 // COM: the instruction to 12 bytes. The patch materializes the literal into
 // COM: scratch VGPRs before running the normal per-source conversion sequence.
-// COM: The replacement body can be emitted into any nearby NOP sled; in this
-// COM: fixture it uses the sled after test_cvt_pk_fp8_noclamp and branches
-// COM: back to test_cvt_pk_fp8_literal+0xc.
+// COM: The replacement body can be emitted into any nearby NOP sled, so this
+// COM: check verifies the original 12-byte slot and the generated body rather
+// COM: than a specific sled label.
 
-// LITERAL-LABEL: <test_cvt_pk_fp8_noclamp>:
-// LITERAL:       v_cvt_pk_fp8_f32
-// LITERAL:       s_endpgm
-// LITERAL-NEXT:  s_mov_b32
-// LITERAL-NEXT:  v_mov_b32{{.*}}0x477f0000
-// LITERAL-NEXT:  v_mov_b32{{.*}}0x477f0000
-// LITERAL-NEXT:  v_and_b32{{.*}}0x7fffffff
-// LITERAL:       v_lshl_or_b32
-// LITERAL-NEXT:  v_bfi_b32 v4,
-// LITERAL:       s_branch{{.*}}<test_cvt_pk_fp8_literal+0xc>
 // LITERAL-LABEL: <test_cvt_pk_fp8_literal>:
-// LITERAL-NEXT:  s_branch{{.*}}<test_cvt_pk_fp8_noclamp+0xc>
+// LITERAL-NEXT:  s_branch
 // LITERAL-NEXT:  s_nop
 // LITERAL-NEXT:  s_nop
 // LITERAL-NEXT:  s_endpgm
+// LITERAL:       v_mov_b32{{.*}}0x477f0000
+// LITERAL-NEXT:  v_mov_b32{{.*}}0x477f0000
+// LITERAL-NEXT:  v_and_b32{{.*}}0x7fffffff
+// LITERAL:       v_cmp_le_f32{{.*}}0x47780000
+// LITERAL:       v_lshl_or_b32
+// LITERAL-NEXT:  v_bfi_b32 v4,
+// LITERAL:       s_branch{{.*}}<test_cvt_pk_fp8_literal+0xc>
 
 .globl test_cvt_pk_fp8_literal
 .p2align 8

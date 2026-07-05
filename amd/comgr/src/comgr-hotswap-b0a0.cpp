@@ -209,7 +209,13 @@ static std::vector<FunctionTextRange>
 buildFunctionTextRanges(const ElfView &Elf) {
   std::vector<FunctionTextRange> Ranges;
   uint64_t TextBegin = Elf.textAddr();
-  uint64_t TextEnd = TextBegin + Elf.textSize();
+  uint64_t TextSize = Elf.textSize();
+  if (TextSize > std::numeric_limits<uint64_t>::max() - TextBegin) {
+    log() << "hotswap: error: function text range scan: .text virtual "
+          << "address range overflows uint64_t.\n";
+    return Ranges;
+  }
+  uint64_t TextEnd = TextBegin + TextSize;
   for (const ElfView::ELFT::Shdr &SymShdr : Elf.sections()) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
         SymShdr.sh_type != ELF::SHT_DYNSYM)
@@ -265,7 +271,17 @@ buildFunctionTextRanges(const ElfView &Elf) {
                  return L.Begin < R.Begin;
                return L.End < R.End;
              });
-  return Ranges;
+  std::vector<FunctionTextRange> MergedRanges;
+  for (const FunctionTextRange &Range : Ranges) {
+    if (Range.Begin >= Range.End)
+      continue;
+    if (MergedRanges.empty() || Range.Begin > MergedRanges.back().End) {
+      MergedRanges.push_back(Range);
+      continue;
+    }
+    MergedRanges.back().End = std::max(MergedRanges.back().End, Range.End);
+  }
+  return MergedRanges;
 }
 
 static bool isInFunctionTextRange(ArrayRef<FunctionTextRange> Ranges,
@@ -284,8 +300,8 @@ static bool isInFunctionTextRange(ArrayRef<FunctionTextRange> Ranges,
 static bool isZeroFillDword(const uint8_t *Text, uint64_t TextSize,
                             const InternalDecodedInst &DI,
                             ArrayRef<FunctionTextRange> FunctionRanges) {
-  if (DI.Size != MinInstSize || DI.Offset > TextSize ||
-      MinInstSize > TextSize - DI.Offset ||
+  if (FunctionRanges.empty() || DI.Size != MinInstSize ||
+      DI.Offset > TextSize || MinInstSize > TextSize - DI.Offset ||
       isInFunctionTextRange(FunctionRanges, DI.Offset))
     return false;
   return std::all_of(Text + DI.Offset, Text + DI.Offset + MinInstSize,
@@ -299,9 +315,9 @@ static bool isZeroFillDword(const uint8_t *Text, uint64_t TextSize,
 /// emitToNopSled targets for in-place rewrites. NOPs are identified by MC
 /// opcode (cached on \p LS at initLLVM() time) rather than mnemonic string, so
 /// the scanner is robust against printer aliasing / mnemonic formatting
-/// variations. Zero-filled padding appears in generated code between
-/// function-symbol ranges; it decodes as v_illegal but is still writable .text
-/// space once hotswap redirects control to an assembled replacement.
+/// variations. Zero-filled padding is accepted only when function-symbol ranges
+/// prove it is between functions; zero bytes inside a function are executable
+/// code and are not sled space.
 static std::vector<NopSled>
 buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const uint8_t *Text,
                 uint64_t TextSize, const LLVMState &LS, const ElfView &Elf) {
@@ -339,13 +355,12 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const uint8_t *Text,
 /// original site, overwrites the original site with a branch-forward to the
 /// sled, and pads the leftover bytes of the original slot with cached s_nop
 /// bytes. Advances \c Sled.WritePos by the amount consumed. Returns false if
-/// either branch encoding fails, leaving \c Ctx.Text partially written.
+/// either branch encoding fails. Branches are encoded before any bytes are
+/// written so a failure leaves \c Ctx.Text and \c Sled.WritePos unchanged.
 [[nodiscard]] bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,
                                  uint64_t InstOffset, uint32_t InstSize,
                                  ArrayRef<uint8_t> Replacement) {
   const LLVMState &LS = Ctx.LS;
-  std::memcpy(Ctx.Text + Sled.WritePos, Replacement.data(), Replacement.size());
-
   SmallVector<uint8_t> BrBack = LS.encodeSBranch(
       Sled.WritePos + Replacement.size(), InstOffset + InstSize);
   if (BrBack.empty()) {
@@ -355,8 +370,6 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const uint8_t *Text,
           << utohexstr(InstOffset + InstSize) << " failed.\n";
     return false;
   }
-  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack.data(),
-              BrBack.size());
 
   SmallVector<uint8_t> BrFwd = LS.encodeSBranch(InstOffset, Sled.WritePos);
   if (BrFwd.empty()) {
@@ -365,6 +378,10 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const uint8_t *Text,
           << utohexstr(Sled.WritePos) << " failed.\n";
     return false;
   }
+
+  std::memcpy(Ctx.Text + Sled.WritePos, Replacement.data(), Replacement.size());
+  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack.data(),
+              BrBack.size());
   std::memcpy(Ctx.Text + InstOffset, BrFwd.data(), BrFwd.size());
 
   // Pad the tail of the replaced instruction slot with cached s_nop bytes
@@ -471,12 +488,17 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        ArrayRef<uint8_t> Replacement) {
-  // findNearestSled already enforces that the returned sled has at least
-  // `Needed` bytes of headroom, so a non-null result is sufficient to take
-  // the in-place path.
+  // findNearestSled enforces sled headroom. emitToNopSled still validates
+  // exact branch reachability because branch-back distance includes the
+  // replacement size, not just the original instruction offset.
   uint64_t Needed = Replacement.size() + MinInstSize;
-  if (NopSled *Sled = findNearestSled(Ctx.NopSleds, InstOffset, Needed))
-    return emitToNopSled(Ctx, *Sled, InstOffset, InstSize, Replacement);
+  if (NopSled *Sled = findNearestSled(Ctx.NopSleds, InstOffset, Needed)) {
+    if (emitToNopSled(Ctx, *Sled, InstOffset, InstSize, Replacement))
+      return true;
+    log() << "hotswap: emitReplacementCode: NOP sled at offset 0x"
+          << utohexstr(Sled->WritePos)
+          << " is not branch-reachable after assembly; using trampoline.\n";
+  }
   return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement);
 }
 
