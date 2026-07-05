@@ -73,7 +73,8 @@ on:
 jobs:
   build_stage:
     name: ${{ inputs.stage_display_name }}
-    runs-on: ${{ inputs.build_runs_on }}
+    runs-on: aws-linux-scale-rocm-prod
+    #runs-on: ${{ inputs.build_runs_on }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
       id-token: write
