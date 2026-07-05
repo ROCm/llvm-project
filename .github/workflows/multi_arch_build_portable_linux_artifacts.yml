@@ -73,7 +73,7 @@ on:
 jobs:
   build_stage:
     name: ${{ inputs.stage_display_name }}
-    runs-on: aws-linux-scale-rocm-prod
+    runs-on: azure-linux-scale-rocm    #temp until aws access is provided
     #runs-on: ${{ inputs.build_runs_on }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
@@ -142,7 +142,12 @@ jobs:
 
       - name: Fetch sources
         timeout-minutes: 30
-        run: ./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1 ${EXTERNAL_FETCH_SOURCES_ARGS}
+        run: |
+             commit_log=$(./build_tools/fetch_sources.py --stage "${STAGE_NAME}" --jobs 12 --depth 1)
+             echo "$commit_log" | awk -F"'" '/Submodule path/ {
+               n = split($2, a, "/")
+               print a[n], $4
+             }' > submodule-commit-${STAGE_NAME}.txt          
 
       - name: build prep (patches & hotfixes for CK, hipcc and hiprtc, tests)
         uses: ROCm/llvm-project/.github/actions/temp-build-fix@amd/dev/kirthana14m/rockci-compiler-convergence
