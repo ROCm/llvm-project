@@ -32,6 +32,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
 
+#include <algorithm>
 #include <limits>
 
 using namespace llvm;
@@ -74,6 +75,67 @@ static RewriteConfig makeGfx1250B0A0Config() {
   Config.MaxSgprs = Gfx1250MaxSgprs;
   Config.VgprGranuleSize = Gfx1250VgprGranuleSize;
   return Config;
+}
+
+static bool appendCodeEndGuard(std::vector<Trampoline> &Growth,
+                               uint64_t GuardBytes, const LLVMState &LS) {
+  if (GuardBytes == 0)
+    return true;
+
+  SmallVector<uint8_t> CodeEnd = assembleSingleInst("s_code_end", LS);
+  if (CodeEnd.empty()) {
+    log() << "hotswap: error: failed to assemble s_code_end for trampoline "
+          << "prefetch guard.\n";
+    return false;
+  }
+  if (GuardBytes % CodeEnd.size() != 0) {
+    log() << "hotswap: error: trampoline prefetch guard size " << GuardBytes
+          << " is not a multiple of s_code_end size " << CodeEnd.size()
+          << ".\n";
+    return false;
+  }
+  if (GuardBytes > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+    log() << "hotswap: error: trampoline prefetch guard size " << GuardBytes
+          << " exceeds size_t.\n";
+    return false;
+  }
+
+  Trampoline Guard;
+  while (static_cast<uint64_t>(Guard.Bytes.size()) < GuardBytes)
+    Guard.Bytes.append(CodeEnd.begin(), CodeEnd.end());
+  Growth.push_back(std::move(Guard));
+  return true;
+}
+
+static std::optional<uint32_t> getMaxKernelInstPrefSize(const ElfView &Elf,
+                                                        const LLVMState &LS) {
+  std::vector<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
+  uint32_t MaxInstPrefLines = 0;
+  for (const KernelDescriptorInfo &KD : Descriptors) {
+    std::optional<uint32_t> InstPrefLines =
+        Elf.getKernelDescriptorInstPrefSize(KD.KernelName, LS.Cpu);
+    if (!InstPrefLines)
+      return std::nullopt;
+    MaxInstPrefLines = std::max(MaxInstPrefLines, *InstPrefLines);
+  }
+  return MaxInstPrefLines;
+}
+
+static bool
+appendDeferredTrampolinePrefetchGuard(const ElfView &Elf, const LLVMState &LS,
+                                      std::vector<Trampoline> &Growth) {
+  std::optional<uint32_t> MaxInstPrefLines = getMaxKernelInstPrefSize(Elf, LS);
+  if (!MaxInstPrefLines)
+    return false;
+
+  uint64_t GuardBytes =
+      static_cast<uint64_t>(*MaxInstPrefLines) * KernelEntryInstPrefUnitBytes;
+  if (!appendCodeEndGuard(Growth, GuardBytes, LS))
+    return false;
+
+  log() << "hotswap: appended " << GuardBytes
+        << " trampoline prefetch guard bytes\n";
+  return true;
 }
 
 // -- Forward declarations for liveness/DWARF stubs ----------------------------
@@ -198,32 +260,58 @@ LLVM_ATTRIBUTE_WEAK void patchDebugFrame(uint8_t *, size_t, uint64_t, uint64_t,
 
 // -- NOP sled scanning --------------------------------------------------------
 
+static void appendNopSledIfLarge(std::vector<NopSled> &Sleds, uint64_t Start,
+                                 uint64_t End,
+                                 FunctionTextRange FunctionRange) {
+  if (End - Start >= MinNopSledSize)
+    Sleds.push_back(
+        {Start, End, Start, FunctionRange.Start, FunctionRange.End});
+}
+
 /// Scan \p Decoded for runs of consecutive `s_nop` instructions at least
-/// MinNopSledSize bytes long and return the resulting NopSled list (each
-/// sled records Start / End byte offsets in .text and the initial WritePos
-/// at Start). These sleds are the landing zones emitToNopSled targets for
-/// in-place rewrites. NOPs are identified by MC opcode (cached on \p LS at
-/// initLLVM() time) rather than mnemonic string, so the scanner is robust
-/// against printer aliasing / mnemonic formatting variations.
+/// MinNopSledSize bytes long and return the resulting NopSled list. Each sled
+/// records its owning function range so emitReplacementCode can only borrow
+/// padding from the same kernel as the instruction being patched. NOPs outside
+/// any sized function symbol are ignored.
 static std::vector<NopSled>
-buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
+buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+                const ElfView &Elf) {
   std::vector<NopSled> Sleds;
-  const size_t N = Decoded.size();
-  size_t I = 0;
-  while (I < N) {
-    if (Decoded[I].Inst.getOpcode() == LS.SNopOpcode) {
-      uint64_t Start = Decoded[I].Offset;
-      uint64_t End = Start;
-      while (I < N && Decoded[I].Inst.getOpcode() == LS.SNopOpcode) {
-        End = Decoded[I].Offset + Decoded[I].Size;
-        ++I;
-      }
-      if (End - Start >= MinNopSledSize)
-        Sleds.push_back({Start, End, Start});
-    } else {
-      ++I;
+  bool HasActiveRange = false;
+  FunctionTextRange ActiveRange;
+  uint64_t Start = 0;
+  uint64_t End = 0;
+
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (DI.Inst.getOpcode() != LS.SNopOpcode) {
+      if (HasActiveRange)
+        appendNopSledIfLarge(Sleds, Start, End, ActiveRange);
+      HasActiveRange = false;
+      continue;
     }
+
+    std::optional<FunctionTextRange> Range =
+        Elf.findFunctionTextRangeAtOffset(DI.Offset);
+    if (!Range || DI.Size > Range->End - DI.Offset) {
+      if (HasActiveRange)
+        appendNopSledIfLarge(Sleds, Start, End, ActiveRange);
+      HasActiveRange = false;
+      continue;
+    }
+
+    if (!HasActiveRange || ActiveRange.Start != Range->Start ||
+        ActiveRange.End != Range->End || DI.Offset != End) {
+      if (HasActiveRange)
+        appendNopSledIfLarge(Sleds, Start, End, ActiveRange);
+      ActiveRange = *Range;
+      HasActiveRange = true;
+      Start = DI.Offset;
+    }
+    End = DI.Offset + DI.Size;
   }
+
+  if (HasActiveRange)
+    appendNopSledIfLarge(Sleds, Start, End, ActiveRange);
   return Sleds;
 }
 
@@ -335,7 +423,7 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
                         std::vector<ScratchPatchInfo> &OutScratchPatches,
                         const RewriteConfig &Config) {
   uint32_t Patched = 0;
-  std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS);
+  std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS, Elf);
 
   CFG Cfg = buildCfg(Decoded, *LS.MCII);
   LivenessInfo Liveness =
@@ -614,6 +702,10 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   } else {
     log() << "hotswap: kernel-entry trampolines disabled for this rewrite\n";
   }
+
+  if (!Deferred.empty() &&
+      !appendDeferredTrampolinePrefetchGuard(Elf, LS, Growth))
+    return AMD_COMGR_STATUS_ERROR;
 
   if (!Growth.empty()) {
     Result = Elf.growWithTrampolines(Growth, LS.SNopBytes);

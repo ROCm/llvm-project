@@ -50,6 +50,20 @@ TEST(ElfView, RejectsNonElfInput) {
   llvm::consumeError(ViewOrErr.takeError());
 }
 
+// -- findNearestSled ----------------------------------------------------------
+
+TEST(FindNearestSled, SkipsSledsOutsideInstructionFunctionRange) {
+  std::vector<NopSled> Sleds;
+  Sleds.push_back({0, 32, 0, 0, 32});
+  Sleds.push_back({96, 128, 96, 96, 160});
+
+  NopSled *Sled = findNearestSled(Sleds, 108, 8);
+  ASSERT_NE(Sled, nullptr);
+  EXPECT_EQ(Sled->Start, 96u);
+
+  EXPECT_EQ(findNearestSled(Sleds, 64, 8), nullptr);
+}
+
 // -- ElfView::getKernelStaticLdsSize ------------------------------------------
 
 TEST(ElfView, GetKernelStaticLdsSizeReturnsNulloptWhenKdMissing) {

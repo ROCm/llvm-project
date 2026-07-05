@@ -290,10 +290,18 @@ NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
   NopSled *Best = nullptr;
   int64_t BestDist = INT64_MAX;
   for (NopSled &Sled : Sleds) {
-    if (Sled.WritePos + Needed > Sled.End)
+    if (Offset < Sled.FunctionStart || Offset >= Sled.FunctionEnd)
       continue;
-    int64_t Dist = std::abs(static_cast<int64_t>(Sled.WritePos) -
-                            static_cast<int64_t>(Offset));
+    if (Sled.WritePos > Sled.End || Needed > Sled.End - Sled.WritePos)
+      continue;
+    if (Sled.WritePos > Sled.FunctionEnd ||
+        Needed > Sled.FunctionEnd - Sled.WritePos)
+      continue;
+    uint64_t Dist64 = Sled.WritePos > Offset ? Sled.WritePos - Offset
+                                             : Offset - Sled.WritePos;
+    if (Dist64 > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+      continue;
+    int64_t Dist = static_cast<int64_t>(Dist64);
     if (Dist < MaxSledDistance && Dist < BestDist) {
       Best = &Sled;
       BestDist = Dist;
@@ -385,6 +393,38 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
   log() << "hotswap: findKernelAtOffset: no function symbol covers offset 0x"
         << utohexstr(TextOffset) << " in .text.\n";
   return "";
+}
+
+std::optional<FunctionTextRange>
+ElfView::findFunctionTextRangeAtOffset(uint64_t TextOffset) const {
+  for (const ELFT::Shdr &SymShdr : Sections) {
+    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+
+    Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
+    if (!SymsOrErr) {
+      consumeError(SymsOrErr.takeError());
+      continue;
+    }
+
+    for (const ELFT::Sym &Sym : *SymsOrErr) {
+      if (Sym.getType() != ELF::STT_FUNC && Sym.getType() != ELF::STT_GNU_IFUNC)
+        continue;
+      if (Sym.st_shndx != TextSectionIndex || Sym.st_size == 0)
+        continue;
+      if (Sym.st_value < textAddr())
+        continue;
+
+      uint64_t Start = Sym.st_value - textAddr();
+      if (Sym.st_size > std::numeric_limits<uint64_t>::max() - Start)
+        continue;
+      uint64_t End = Start + Sym.st_size;
+      if (TextOffset >= Start && TextOffset < End)
+        return FunctionTextRange{Start, End};
+    }
+  }
+  return std::nullopt;
 }
 
 // -- ElfView::findKernelDescriptor --------------------------------------------
