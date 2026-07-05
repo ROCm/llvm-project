@@ -144,10 +144,9 @@ template <typename T, typename ST> struct omptarget_nvptx_LoopSupport {
       if (chunk > 0) {
         // round up to make sure the chunk is enough to cover all iterations
         T tripCount = ub - lb + 1; // +1 because ub is inclusive
-        T span = (tripCount + numberOfActiveOMPThreads - 1) /
-                 numberOfActiveOMPThreads;
+        T span = utils::roundUp(tripCount, numberOfActiveOMPThreads);
         // perform chunk adjustment
-        chunk = (span + chunk - 1) & ~(chunk - 1);
+        chunk = utils::alignUp(span, chunk);
 
         ASSERT0(LT_FUSSY, ub >= lb, "ub must be >= lb.");
         T oldUb = ub;
@@ -195,24 +194,6 @@ template <typename T, typename ST> struct omptarget_nvptx_LoopSupport {
     *plower = lb;
     *pupper = ub;
     *pstride = stride;
-  }
-
-  /// static init function that takes into account multi-device execution
-  static void for_static_init_md(int32_t global_tid, int32_t schedtype,
-                                 int32_t *plastiter, T *plower_md, T *pupper_md,
-                                 T *plower, T *pupper, ST *pstride, ST chunk,
-                                 bool IsSPMDExecutionMode) {
-    T multi_device_lb;
-    multi_device_lb = *plower_md;
-    T multi_device_ub;
-    multi_device_ub = *pupper_md;
-
-    for_static_init(global_tid, schedtype, plastiter, &multi_device_lb,
-                    &multi_device_ub, pstride, chunk, IsSPMDExecutionMode);
-
-    // Perform post static init adjustment of LB and UB
-    *plower = multi_device_lb;
-    *pupper = multi_device_ub;
   }
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -308,9 +289,9 @@ template <typename T, typename ST> struct omptarget_nvptx_LoopSupport {
       ST stride;
       int lastiter = 0;
       // round up to make sure the chunk is enough to cover all iterations
-      T span = (tripCount + tnum - 1) / tnum;
+      T span = utils::roundUp(tripCount, tnum);
       // perform chunk adjustment
-      chunk = (span + chunk - 1) & ~(chunk - 1);
+      chunk = utils::alignUp(span, chunk);
 
       T oldUb = ub;
       ForStaticChunk(lastiter, lb, ub, stride, chunk, threadId, tnum);
@@ -357,7 +338,7 @@ template <typename T, typename ST> struct omptarget_nvptx_LoopSupport {
 
   static uint64_t NextIter() {
     __kmpc_impl_lanemask_t active = mapping::activemask();
-    uint32_t leader = utils::ffs(active) - 1;
+    uint32_t leader = utils::ctz(active);
     uint32_t change = utils::popc(active);
     __kmpc_impl_lanemask_t lane_mask_lt = mapping::lanemaskLT();
     unsigned int rank = utils::popc(active & lane_mask_lt);
@@ -616,46 +597,6 @@ void __kmpc_dispatch_fini_8u(IdentTy *loc, int32_t tid) {
 
 // deinit
 void __kmpc_dispatch_deinit(IdentTy *loc, int32_t tid) { popDST(); }
-
-////////////////////////////////////////////////////////////////////////////////
-// KMP interface implementation (static loops) for multi-device
-////////////////////////////////////////////////////////////////////////////////
-
-void __kmpc_distribute_static_init_multi_device_4(
-    IdentTy *loc, int32_t global_tid, int32_t schedtype, int32_t *plastiter,
-    int32_t *plower_md, int32_t *pupper_md, int32_t *plower, int32_t *pupper,
-    int32_t *pstride, int32_t incr, int32_t chunk) {
-  omptarget_nvptx_LoopSupport<int32_t, int32_t>::for_static_init_md(
-      global_tid, schedtype, plastiter, plower_md, pupper_md, plower, pupper,
-      pstride, chunk, mapping::isSPMDMode());
-}
-
-void __kmpc_distribute_static_init_multi_device_4u(
-    IdentTy *loc, int32_t global_tid, int32_t schedtype, int32_t *plastiter,
-    uint32_t *plower_md, uint32_t *pupper_md, uint32_t *plower,
-    uint32_t *pupper, int32_t *pstride, int32_t incr, int32_t chunk) {
-  omptarget_nvptx_LoopSupport<uint32_t, int32_t>::for_static_init_md(
-      global_tid, schedtype, plastiter, plower_md, pupper_md, plower, pupper,
-      pstride, chunk, mapping::isSPMDMode());
-}
-
-void __kmpc_distribute_static_init_multi_device_8(
-    IdentTy *loc, int32_t global_tid, int32_t schedtype, int32_t *plastiter,
-    int64_t *plower_md, int64_t *pupper_md, int64_t *plower, int64_t *pupper,
-    int64_t *pstride, int64_t incr, int64_t chunk) {
-  omptarget_nvptx_LoopSupport<int64_t, int64_t>::for_static_init_md(
-      global_tid, schedtype, plastiter, plower_md, pupper_md, plower, pupper,
-      pstride, chunk, mapping::isSPMDMode());
-}
-
-void __kmpc_distribute_static_init_multi_device_8u(
-    IdentTy *loc, int32_t global_tid, int32_t schedtype, int32_t *plastiter,
-    uint64_t *plower_md, uint64_t *pupper_md, uint64_t *plower,
-    uint64_t *pupper, int64_t *pstride, int64_t incr, int64_t chunk) {
-  omptarget_nvptx_LoopSupport<uint64_t, int64_t>::for_static_init_md(
-      global_tid, schedtype, plastiter, plower_md, pupper_md, plower, pupper,
-      pstride, chunk, mapping::isSPMDMode());
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // KMP interface implementation (static loops)
@@ -953,6 +894,15 @@ public:
     // All teams need to participate.
     Ty NumBlocks = mapping::getNumberOfBlocksInKernel();
     Ty BId = mapping::getBlockIdInKernel();
+
+    // In the SPMD no-loop fast path (OneIterationPerThread=1), the caller
+    // derives NumThreads from omp_get_num_threads() which is evaluated before
+    // the parallel region is active and returns 1 instead of the actual block
+    // size. This produces a stride of 1 in NormalizedLoopNestNoChunk, leaving
+    // iterations [NumBlocks+blocksize-1 .. NumIters-1] permanently unexecuted.
+    // Read the hardware block size directly, which is always correct here.
+    if (OneIterationPerThread)
+      NumThreads = static_cast<Ty>(mapping::getMaxTeamThreads());
 
     // If the block chunk is not specified we pick a default now.
     if (BlockChunk == 0)

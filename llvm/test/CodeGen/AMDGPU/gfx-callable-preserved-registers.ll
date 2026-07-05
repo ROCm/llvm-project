@@ -868,8 +868,8 @@ define amdgpu_gfx void @test_call_void_func_void_clobber_s33() #0 {
 ; GFX10-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s35
 ; GFX10-NEXT:    v_writelane_b32 v40, s34, 2
-; GFX10-NEXT:    v_writelane_b32 v40, s30, 0
 ; GFX10-NEXT:    s_addk_i32 s32, 0x200
+; GFX10-NEXT:    v_writelane_b32 v40, s30, 0
 ; GFX10-NEXT:    v_writelane_b32 v40, s31, 1
 ; GFX10-NEXT:    s_mov_b32 s35, void_func_void_clobber_s33@abs32@hi
 ; GFX10-NEXT:    s_mov_b32 s34, void_func_void_clobber_s33@abs32@lo
@@ -895,8 +895,8 @@ define amdgpu_gfx void @test_call_void_func_void_clobber_s33() #0 {
 ; GFX11-NEXT:    scratch_store_b32 off, v40, s33 ; 4-byte Folded Spill
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-NEXT:    v_writelane_b32 v40, s0, 2
-; GFX11-NEXT:    v_writelane_b32 v40, s30, 0
 ; GFX11-NEXT:    s_add_i32 s32, s32, 16
+; GFX11-NEXT:    v_writelane_b32 v40, s30, 0
 ; GFX11-NEXT:    v_writelane_b32 v40, s31, 1
 ; GFX11-NEXT:    s_mov_b32 s1, void_func_void_clobber_s33@abs32@hi
 ; GFX11-NEXT:    s_mov_b32 s0, void_func_void_clobber_s33@abs32@lo
@@ -953,8 +953,8 @@ define amdgpu_gfx void @test_call_void_func_void_clobber_s34() #0 {
 ; GFX10-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s35
 ; GFX10-NEXT:    v_writelane_b32 v40, s34, 2
-; GFX10-NEXT:    v_writelane_b32 v40, s30, 0
 ; GFX10-NEXT:    s_addk_i32 s32, 0x200
+; GFX10-NEXT:    v_writelane_b32 v40, s30, 0
 ; GFX10-NEXT:    v_writelane_b32 v40, s31, 1
 ; GFX10-NEXT:    s_mov_b32 s35, void_func_void_clobber_s34@abs32@hi
 ; GFX10-NEXT:    s_mov_b32 s34, void_func_void_clobber_s34@abs32@lo
@@ -980,8 +980,8 @@ define amdgpu_gfx void @test_call_void_func_void_clobber_s34() #0 {
 ; GFX11-NEXT:    scratch_store_b32 off, v40, s33 ; 4-byte Folded Spill
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-NEXT:    v_writelane_b32 v40, s0, 2
-; GFX11-NEXT:    v_writelane_b32 v40, s30, 0
 ; GFX11-NEXT:    s_add_i32 s32, s32, 16
+; GFX11-NEXT:    v_writelane_b32 v40, s30, 0
 ; GFX11-NEXT:    v_writelane_b32 v40, s31, 1
 ; GFX11-NEXT:    s_mov_b32 s1, void_func_void_clobber_s34@abs32@hi
 ; GFX11-NEXT:    s_mov_b32 s0, void_func_void_clobber_s34@abs32@lo

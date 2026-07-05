@@ -38,6 +38,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/ValueHandle.h"
+#include "llvm/Support/Allocator.h"
 #include "llvm/Transforms/Utils/SanitizerStats.h"
 #include <optional>
 
@@ -55,6 +56,13 @@ class IndexedInstrProfReader;
 namespace vfs {
 class FileSystem;
 }
+
+namespace abi {
+class ArgInfo;
+class IRTypeMapper;
+class TargetInfo;
+class TypeBuilder;
+} // namespace abi
 }
 
 namespace clang {
@@ -95,7 +103,9 @@ class CGOpenCLRuntime;
 class CGOpenMPRuntime;
 class CGCUDARuntime;
 class CGHLSLRuntime;
+class CGFunctionInfo;
 class CoverageMappingModuleGen;
+class QualTypeMapper;
 class TargetCodeGenInfo;
 
 enum ForDefinition_t : bool {
@@ -484,32 +494,6 @@ public:
     uint8_t OpKindsFound;
   };
 
-  /// Metadata for multi-device kernel codegen
-  struct MultiDeviceBoundsInfo {
-    MultiDeviceBoundsInfo(VarDecl *LBArg, VarDecl *UBArg)
-        : LBArg{LBArg}, UBArg{UBArg} {}
-    VarDecl *LBArg;
-    VarDecl *UBArg;
-  };
-  using MultiDeviceFunctionBoundsMap =
-      llvm::DenseMap<const llvm::Function *, MultiDeviceBoundsInfo>;
-
-  struct MultiDeviceKernelInfo {
-    MultiDeviceKernelInfo(OptKernelNestDirectives Dirs,
-                          MultiDeviceFunctionBoundsMap FBM,
-                          bool CanBeMultiDevice)
-        : MultiDeviceNestDirs{Dirs}, FunctionBoundsMap{FBM},
-          CanBeMultiDevice{CanBeMultiDevice} {}
-
-    OptKernelNestDirectives MultiDeviceNestDirs;
-    MultiDeviceFunctionBoundsMap FunctionBoundsMap;
-    bool CanBeMultiDevice;
-    bool NewBoundsHaveBeenUsed = false;
-  };
-  /// Map construct statement to corresponding metadata for a NoLoop kernel.
-  using MultiDeviceKernelMap =
-      llvm::DenseMap<const Stmt *, MultiDeviceKernelInfo>;
-
 private:
   ASTContext &Context;
   const LangOptions &LangOpts;
@@ -534,6 +518,18 @@ private:
   bool isXteamScanCandidate = false;
 
   mutable std::unique_ptr<TargetCodeGenInfo> TheTargetCodeGenInfo;
+
+  /// Cached LLVMABI target lowering info, lazily constructed when the
+  /// experimental ABI lowering path is taken.
+  mutable std::unique_ptr<llvm::abi::TargetInfo> TheLLVMABITargetInfo;
+
+  /// Allocator and mappers used by the experimental LLVMABI-based lowering
+  /// path (gated on -fexperimental-abi-lowering). Constructed unconditionally
+  /// so the path can be entered without re-checking initialization, but the
+  /// caches stay empty when the flag is off.
+  llvm::BumpPtrAllocator AbiAlloc;
+  std::unique_ptr<QualTypeMapper> AbiMapper;
+  std::unique_ptr<llvm::abi::IRTypeMapper> AbiReverseMapper;
 
   // This should not be moved earlier, since its initialization depends on some
   // of the previous reference members being already initialized and also checks
@@ -565,7 +561,6 @@ private:
   NoLoopKernelMap NoLoopKernels;
   NoLoopKernelMap BigJumpLoopKernels;
   XteamRedKernelMap XteamRedKernels;
-  MultiDeviceKernelMap MultiDeviceKernels;
 
   // A set of references that have only been seen via a weakref so far. This is
   // used to remove the weak of the reference if we ever see a direct reference
@@ -638,6 +633,11 @@ private:
 
   /// A queue of (optional) vtables to consider emitting.
   std::vector<const CXXRecordDecl*> DeferredVTables;
+
+  /// In incremental compilation, the set of vtable classes whose vtable
+  /// definitions were emitted into a previous PTU's module. Carried forward
+  /// by moveLazyEmissionStates() so later PTUs skip re-defining them.
+  llvm::SmallPtrSet<const CXXRecordDecl *, 8> EmittedVTables;
 
   /// A queue of (optional) vtables that may be emitted opportunistically.
   std::vector<const CXXRecordDecl *> OpportunisticVTables;
@@ -775,6 +775,9 @@ private:
   /// A vector of metadata strings for dependent libraries for ELF.
   SmallVector<llvm::MDNode *, 16> ELFDependentLibraries;
 
+  /// Global variable for copyright pragma comment (if present).
+  llvm::GlobalVariable *LoadTimeCommentGlobal = nullptr;
+
   /// @name Cache for Objective-C runtime types
   /// @{
 
@@ -796,7 +799,6 @@ private:
   void createCUDARuntime();
   void createHLSLRuntime();
 
-  bool isTriviallyRecursive(const FunctionDecl *F);
   bool shouldEmitFunction(GlobalDecl GD);
   // Whether a global variable should be emitted by CUDA/HIP host/device
   // related attributes.
@@ -1066,6 +1068,21 @@ public:
   void maybeSetTrivialComdat(const Decl &D, llvm::GlobalObject &GO);
 
   const ABIInfo &getABIInfo();
+
+  /// Lazily build and return the LLVMABI library's TargetInfo for the current
+  /// target. Used by the experimental ABI lowering path
+  /// (-fexperimental-abi-lowering).
+  const llvm::abi::TargetInfo &getLLVMABITargetInfo(llvm::abi::TypeBuilder &TB);
+
+  /// True when -fexperimental-abi-lowering is in effect AND the active target
+  /// has an LLVMABI implementation we can route to.
+  bool shouldUseLLVMABILowering() const;
+
+  /// Drive the experimental LLVMABI-based lowering path: map argument and
+  /// return types into the LLVMABI library, ask its target lowering to fill
+  /// in classification, and write the results back into FI.
+  void computeABIInfoUsingLib(CGFunctionInfo &FI);
+
   CGCXXABI &getCXXABI() const { return *ABI; }
   llvm::LLVMContext &getLLVMContext() { return VMContext; }
 
@@ -1444,6 +1461,9 @@ public:
   // are needed or if they are alias to each other.
   llvm::Function *codegenCXXStructor(GlobalDecl GD);
 
+  /// Emit a trap stub body for functions in ASTContext::CUDADeviceInvalidFuncs.
+  bool tryEmitCUDADeviceInvalidFunctionBody(GlobalDecl GD, llvm::Function *Fn);
+
   /// Return the address of the constructor/destructor of the given type.
   llvm::Constant *
   getAddrOfCXXStructor(GlobalDecl GD, const CGFunctionInfo *FnInfo = nullptr,
@@ -1688,7 +1708,6 @@ public:
   /// Appends a dependent lib to the appropriate metadata value.
   void AddDependentLib(StringRef Lib);
 
-
   llvm::GlobalVariable::LinkageTypes getFunctionLinkage(GlobalDecl GD);
 
   void setFunctionLinkage(GlobalDecl GD, llvm::Function *F) {
@@ -1882,11 +1901,11 @@ public:
   void createFunctionTypeMetadataForIcall(const FunctionDecl *FD,
                                           llvm::Function *F);
 
-  /// Create and attach type metadata if the function is a potential indirect
-  /// call target to support call graph section.
+  /// Create and attach callgraph metadata if the function is a potential
+  /// indirect call target to support call graph section.
   void createIndirectFunctionTypeMD(const FunctionDecl *FD, llvm::Function *F);
 
-  /// Create and attach type metadata to the given call.
+  /// Create and attach callee_type metadata to the given call.
   void createCalleeTypeMetadataForIcall(const QualType &QT, llvm::CallBase *CB);
 
   /// Set type metadata to the given function.
@@ -2113,12 +2132,6 @@ public:
   /// reduction variables are created for subsequent codegen phases to work on.
   NoLoopXteamErr checkAndSetXteamRedKernel(const OMPExecutableDirective &D);
 
-  /// If we are able to generate a multi-device kernel for this directive,
-  /// return true, otherwise return false. If successful, metadata for the
-  /// argument variables is created for subsequent codegen phases to work on.
-  bool checkAndSetMultiDeviceKernel(const OMPExecutableDirective &D,
-                                    bool CanBeMultiDevice);
-
   /// Compute the block size to be used for a kernel.
   int getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D);
   /// Used in optimized kernel codegen, compute the block size from the nested
@@ -2332,57 +2345,6 @@ public:
   std::pair<CodeGenModule::NoLoopXteamErr, const Expr *>
   getStatusXteamSupportedPseudoObject(const PseudoObjectExpr *PO);
 
-  /// Are we generating multi-device kernel for the statement
-  bool multiDeviceFStmtEntryExists(const Stmt *S) {
-    return MultiDeviceKernels.find(S) != MultiDeviceKernels.end();
-  }
-  bool isMultiDeviceKernel(const Stmt *S) {
-    if (MultiDeviceKernels.find(S) == MultiDeviceKernels.end())
-      return false;
-    MultiDeviceKernelInfo MDInfo = MultiDeviceKernels.find(S)->second;
-    return MDInfo.CanBeMultiDevice;
-  }
-  bool isMultiDeviceKernel(const OMPExecutableDirective &D);
-
-  /// Given a ForStmt for which Multi Device codegen will be done, save the
-  /// metadata for the LB and UB args.
-  void saveMultiDeviceArgs(const OMPExecutableDirective &D,
-                           const llvm::Function *F, VarDecl *LBDecl,
-                           VarDecl *UBDecl) {
-    assert(isMultiDeviceKernel(getSingleForStmt(getOptKernelKey(D))) &&
-           "Must be a multi-device kernel");
-    const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
-    assert((MultiDeviceKernels.find(FStmt) != MultiDeviceKernels.end()) &&
-           "FStmt not found");
-    MultiDeviceKernelInfo &MDInfo = MultiDeviceKernels.find(FStmt)->second;
-    MDInfo.FunctionBoundsMap.insert(
-        std::make_pair(F, MultiDeviceBoundsInfo(LBDecl, UBDecl)));
-  }
-
-  /// Retrieve the metadata for the LB arg.
-  MultiDeviceBoundsInfo getMultiDeviceBounds(const OMPExecutableDirective &D,
-                                             const llvm::Function *F) {
-    const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
-    assert((MultiDeviceKernels.find(FStmt) != MultiDeviceKernels.end()) &&
-           "FStmt not found");
-    MultiDeviceKernelInfo MDInfo = MultiDeviceKernels.find(FStmt)->second;
-    assert(MDInfo.FunctionBoundsMap.find(F) != MDInfo.FunctionBoundsMap.end() &&
-           "Function must exist");
-    return MDInfo.FunctionBoundsMap.find(F)->second;
-  }
-
-  /// Retrieve the metadata for the LB arg.
-  VarDecl *getMultiDeviceLBArg(const OMPExecutableDirective &D,
-                               const llvm::Function *F) {
-    return getMultiDeviceBounds(D, F).LBArg;
-  }
-
-  /// Retrieve the metadata for the LB arg.
-  VarDecl *getMultiDeviceUBArg(const OMPExecutableDirective &D,
-                               const llvm::Function *F) {
-    return getMultiDeviceBounds(D, F).UBArg;
-  }
-
   /// Move some lazily-emitted states to the NewBuilder. This is especially
   /// essential for the incremental parsing environment like Clang Interpreter,
   /// because we'll lose all important information after each repl.
@@ -2428,7 +2390,7 @@ public:
   bool shouldEmitConvergenceTokens() const {
     // TODO: this should probably become unconditional once the controlled
     // convergence becomes the norm.
-    return getTriple().isSPIRVLogical();
+    return getTriple().isSPIRVLogical() || getTriple().isDXIL();
   }
 
   void addUndefinedGlobalForTailCall(
@@ -2515,6 +2477,15 @@ public:
   llvm::GlobalValue *getPFPDeactivationSymbol(const FieldDecl *FD);
 
 private:
+  /// Translate an llvm::abi::ArgInfo (computed by the LLVMABI library) into
+  /// the clang ABIArgInfo consumed by the rest of CodeGen. Used by the
+  /// experimental ABI lowering path.
+  ABIArgInfo convertABIArgInfo(const llvm::abi::ArgInfo &AbiInfo,
+                               QualType Type);
+
+  /// Process #pragma comment(copyright, ...).
+  void ProcessPragmaCommentCopyright(StringRef Comment, bool isFromASTFile);
+
   bool shouldDropDLLAttribute(const Decl *D, const llvm::GlobalValue *GV) const;
 
   llvm::Constant *GetOrCreateLLVMFunction(
@@ -2688,6 +2659,13 @@ private:
   void EmitSYCLKernelCaller(const FunctionDecl *KernelEntryPointFn,
                             ASTContext &Ctx);
 
+  /// Attach the "sycl-module-id" function attribute to \p Fn, to record the
+  /// module ID for the translation unit. This attribute is applied to SYCL
+  /// kernel entry point functions and functions declared with the
+  /// sycl_external attribute to enable them to be identified as entry points
+  /// by clang-sycl-linker during device-code splitting.
+  void addSYCLModuleIdAttr(llvm::Function *Fn);
+
   /// Determine whether the definition must be emitted; if this returns \c
   /// false, the definition can be emitted lazily if it's used.
   bool MustBeEmitted(const ValueDecl *D);
@@ -2754,15 +2732,6 @@ private:
   /// Collect the reduction variables that may satisfy Xteam criteria
   std::pair<NoLoopXteamErr, XteamRedCollectionInfo>
   collectXteamRedVars(const OptKernelNestDirectives &NestDirs);
-
-  /// Top level checker for multi device of the loop
-  NoLoopXteamErr getMultiDeviceForStmtStatus(const OMPExecutableDirective &,
-                                             const Stmt *);
-
-  /// Are clauses on a combined OpenMP construct compatible with multi-device
-  /// codegen?
-  NoLoopXteamErr
-  getMultiDeviceStatusForClauses(const OptKernelNestDirectives &NestDirs);
 
   /// Emit deactivation symbols for any PFP fields whose offset is taken with
   /// offsetof.

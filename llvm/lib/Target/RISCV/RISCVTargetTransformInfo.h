@@ -364,6 +364,9 @@ public:
 
   bool isLegalMaskedCompressStore(Type *DataTy, Align Alignment) const override;
 
+  bool isLegalBroadcastLoad(Type *ElementTy,
+                            ElementCount NumElements) const override;
+
   /// \returns How the target needs this vector-predicated operation to be
   /// transformed.
   TargetTransformInfo::VPLegalization
@@ -398,7 +401,6 @@ public:
         Intrinsic::vp_sdiv,
         Intrinsic::vp_srem,
         Intrinsic::vp_store,
-        Intrinsic::vp_trunc,
         Intrinsic::vp_udiv,
         Intrinsic::vp_urem};
     if (!ST->hasVInstructions() ||
@@ -448,7 +450,8 @@ public:
     }
   }
 
-  unsigned getMaxInterleaveFactor(ElementCount VF) const override {
+  unsigned getMaxInterleaveFactor(ElementCount VF,
+                                  bool HasUnorderedReductions) const override {
     // Don't interleave if the loop has been vectorized with scalable vectors.
     if (VF.isScalable())
       return 1;

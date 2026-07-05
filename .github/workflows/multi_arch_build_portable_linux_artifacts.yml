@@ -4,7 +4,7 @@
 # Reusable Workflow: Build Stage Artifacts
 #
 # This workflow builds TheRock stage artifacts for all stages.
-# Handles both generic stages (foundation, compiler-runtime, etc.) and
+# Handles both generic stages (compiler-runtime, profiler-apps, etc.) and
 # per-arch stages (math-libs, comm-libs) using conditional logic.
 #
 # Artifacts flow between stages via S3 using the artifact_manager.py tool.
@@ -22,7 +22,7 @@ on:
       stage_name:
         type: string
         required: true
-        description: "Stage name (e.g., foundation, math-libs, compiler-runtime)"
+        description: "Stage name (e.g., compiler-runtime, math-libs)"
       stage_display_name:
         type: string
         required: true
@@ -52,7 +52,9 @@ on:
       release_type:
         description: 'Release type: "" for CI, or "dev", "nightly", "prerelease". Controls artifact bucket and IAM role.'
         type: string
-        default: ""
+        default: ci
+      test_type:
+        type: string
 
 jobs:
   build_stage:
@@ -62,7 +64,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:a382085df3ba2419b58aa9051350883a0d0b732a4bc0a4ef60458f8161bb08c6
       options: -v /runner/config:/home/awsconfig/
     env:
       AWS_SHARED_CREDENTIALS_FILE: /home/awsconfig/credentials.ini
@@ -76,7 +78,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
@@ -122,6 +124,7 @@ jobs:
           source ./${{ github.run_id }}_PR_params.env
           set +a
           echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
+          echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
           echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
           echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
 
@@ -129,18 +132,56 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
         run: |
           git config --global --add safe.directory "$PWD"
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
+          trim_sha() {
+             printf '%s' "$1" | tr -d '[:space:]'
+          }
           # Function to get SHA with git-ls
           get_pr_sha() {
              local pr_url="$1"
              local base_repo_url=$(echo "$pr_url" | sed 's|/pull/.*||')
              local pr_num=$(echo "$pr_url" | sed 's|.*/pull/||')
-             git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
+             sha=$(git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}')
+             trim_sha "$sha"
           }
 
-          # LLVM PR
-          LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
-          echo "LLVM head SHA: $LLVM_SHA"
-          git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
+          merge_upstream_prs() {
+             local pr_urls="$1"
+             local url repo num ref
+             git submodule update --init --jobs 1 compiler/amd-llvm
+             IFS=',' read -ra PR_URLS <<< "$pr_urls"
+             for url in "${PR_URLS[@]}"; do
+               url="$(echo "$url" | xargs)"
+               [[ -z "$url" ]] && continue
+               repo="$(echo "$url" | sed 's|/pull/.*||')"
+               num="$(echo "$url" | sed 's|.*/pull/||')"
+               ref="upstream-pr-${num}"
+               echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
+               git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
+               git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
+                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
+                 exit 1
+               }
+             done
+             MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
+          }
+
+          LLVM_SHA=""
+
+          # LLVM PR based on if its ROCm or Trunk
+          if [[ -n "$LLVM_ROCm_PR_URL" ]]; then
+              LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")" 
+              echo "ROCm LLVM head SHA: $LLVM_SHA"
+          elif [[ -n "$LLVM_PR_URL" ]]; then
+              merge_upstream_prs "$LLVM_PR_URL"
+              LLVM_SHA="$MERGED_LLVM_SHA"
+              echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
+          fi
+
+          if [[ -n "$LLVM_SHA" ]]; then
+              git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
+          fi
 
           # SPIRV PR
           if [[ -n "$SPIRV_PR_URL" ]]; then
@@ -163,13 +204,11 @@ jobs:
               echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
               git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
           fi
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule references from PR URLs"
-          git submodule update --init --recursive compiler/amd-llvm
+          git submodule update --init --recursive compiler/amd-llvm          
           git submodule status
           git submodule
-            
+          
       - name: Install python deps
         run: |
           pip install -r requirements.txt
@@ -193,7 +232,7 @@ jobs:
       - name: Setup ccache
         run: |
           ./build_tools/setup_ccache.py \
-            --config-preset "github-oss-presubmit" \
+            --config-preset "github-oss-dev" \
             --dir "$(dirname $CCACHE_CONFIGPATH)" \
             --local-path "$CACHE_DIR/ccache"
 
@@ -219,10 +258,45 @@ jobs:
 
       - name: Fetch sources
         timeout-minutes: 30
-        run: ./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
+        run: |
+             commit_log=$(./build_tools/fetch_sources.py --stage "${STAGE_NAME}" --jobs 12 --depth 1)
+             echo "$commit_log" | awk -F"'" '/Submodule path/ {
+               n = split($2, a, "/")
+               print a[n], $4
+             }' > submodule-commit-${STAGE_NAME}.txt
 
+      - name: Upload submodule commit file
+        uses: actions/upload-artifact@v4
+        with:
+          name: submodule-commit-${{ inputs.stage_name }}
+          path: submodule-commit-${{ inputs.stage_name }}.txt
+          overwrite: true
+          retention-days: 1
+
+      - name: Temp fix for hiprtc/hipcc test (Nightly)
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'compiler-runtime') }}
+        run: |
+             git config --global user.email "z1-cciauto@amd.com"
+             git config --global user.name "Z1 cciauto"
+             cd compiler/amd-llvm
+             git fetch origin pull/2719/head:pr-2719
+             if ! git cherry-pick pr-2719; then
+                _conflicts="$(mktemp)"
+                trap 'rm -f "${_conflicts}"' EXIT
+                git diff --name-only --diff-filter=U >"${_conflicts}"
+                while IFS= read -r f; do
+                  [ -n "${f}" ] || continue
+                  git checkout --theirs -- "${f}"
+                  git add -- "${f}"
+                done <"${_conflicts}"
+                GIT_EDITOR=true git cherry-pick --continue
+             fi
+             cd ../..
+             git add compiler/amd-llvm
+             git commit -m "Update amd-llvm submodule with PR 2719"             
+ 
       - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         run: |
              git config --global --add safe.directory $PWD
              git log --oneline -1
@@ -247,13 +321,31 @@ jobs:
         if: ${{ steps.stage_config.outputs.pip_install_cmd || steps.stage_config_pr.outputs.pip_install_cmd }}
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
+
+      - name: Use Wno-error for CK (nightly)
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
+        run: |
+          sed -i 's/-Werror\b/-Wno-error/g' rocm-libraries/projects/composablekernel/CMakeLists.txt
+
+      - name: Fix LLVM test variable mismatch
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
+            cmake/therock_subproject.cmake compiler/CMakeLists.txt
+
+      - name: Enable COMGR tests via THEROCK_BUILD_TESTING fallback
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
+            compiler/pre_hook_amd-comgr.cmake
+
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
+          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
           BUILD_DIR: build           
         run: |
           cmake -B "${BUILD_DIR}" -S . -GNinja \
@@ -270,7 +362,7 @@ jobs:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: ${{ inputs.extra_cmake_options }}
+          extra_cmake_options: "${{ inputs.extra_cmake_options }} -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON"
           BUILD_DIR: build
         run: |
           cmake -B "${BUILD_DIR}" -S . -GNinja \
@@ -278,12 +370,49 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
-            ${{ steps.stage_config.outputs.cmake_args }}            
+            ${{ steps.stage_config.outputs.cmake_args }} \
+            ${{ env.extra_cmake_options }} 
 
       - name: Build stage
         run: |
           python build_tools/memory_monitor.py --phase Build -- \
             cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+
+      - name: LLVM Lit Tests
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-llvm
+
+      - name: Clang Lit Tests
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-clang
+
+      - name: Flang Lit Tests
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-flang
+
+      - name: MLIR Lit Tests
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-mlir
+
+      - name: LLD Lit Tests
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-lld
+
+      - name: COMGR Lit Tests
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          "${BUILD_DIR}"/compiler/amd-llvm/build/bin/llvm-lit \
+            "${BUILD_DIR}"/compiler/amd-comgr/build/test-lit -v
+
+      - name: COMGR CTest
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          ctest --test-dir "${BUILD_DIR}"/compiler/amd-comgr/build --output-on-failure
 
       - name: Report
         if: ${{ !cancelled() }}
@@ -300,12 +429,13 @@ jobs:
       #  with:
       #    release_type: ${{ inputs.release_type }}
 
-      - name: Configure AWS Credentials for artifact upload - temp
+      - name: Configure AWS Credentials for non-forked repos - temp
+        if: ${{ github.repository == 'ROCm/TheRock' }}
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           aws-region: us-east-2
           role-to-assume: arn:aws:iam::692859939525:role/therock-ci-external
-
+          
       # TODO(#3336): Attempt upload `always()`?
       #   * If some part of the build failed, partial artifacts may be useful for debugging.
       #   * This script fails if `build_dir / "artifacts"` does not exist. That's useful

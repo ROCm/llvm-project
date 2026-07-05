@@ -8,15 +8,12 @@ breaks build of hipblaslt
 breaks rocgdb UT
 [Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
 ---
-needs SPIRV/COMGR
-18e695890306 [SPIRV][AMDGPU][clang][CodeGen][opt] Add late-resolved 
+breaks windows build
+[cmake] Refactor DIA SDK detection into FindDIASDK module (#160354)
 ---
-breaks build of llvm
-[clang][CIR][doc] Add auto-generated ClangIR documentation (#190354)
+breaks windows build: [amd-llvm] terminate called after throwing an instance of 'std::bad_alloc'
+Make][CodeGen] Add PCH for Clang CodeGen (#206018)
 ---
-breaks reduction_teams aomp_mappings_newrt
-[Offload] Make kernel dynamic memory handling more generic (#194403)
----
-breaks smoke, smoke-fort-limbo
-[Clang] Emit LLVM flatten attribute instead of per-callsite alwaysinline (#188615)
+breaks accel2023 456
+[Flang][OpenMP][MLIR] Improve SPMD-No-Loop handling (#3168)
 ---

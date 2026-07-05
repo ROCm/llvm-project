@@ -12,6 +12,7 @@ add_llvm_component_library(LLVMAMDGPUDisassembler
   MC
   MCDisassembler
   Object
+  TargetParser
   Support
 
   ADD_TO_COMPONENT

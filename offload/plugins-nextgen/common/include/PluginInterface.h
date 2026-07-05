@@ -151,6 +151,14 @@ struct AsyncInfoWrapperTy {
     return getQueueAs<Ty>();
   }
 
+  /// Explicitly synchronize with the __tgt_async_info's pending operations
+  /// regardless of which async info this object wraps. The associated
+  /// underlying queue (if any) will not be released. Calling this function does
+  /// not obviate the need to call the finalize function later. This function is
+  /// intended for specific use cases where a synchronous operation needs to
+  /// explicitly wait for the operations already on the queue.
+  Error synchronize();
+
   /// Synchronize with the __tgt_async_info's pending operations if it's the
   /// internal async info. The error associated to the asynchronous operations
   /// issued in this queue must be provided in \p Err. This function will update
@@ -419,8 +427,7 @@ struct GenericKernelTy {
   Error launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
                ptrdiff_t *ArgOffsets, KernelArgsTy &KernelArgs,
                KernelExtraArgsTy *KernelExtraArgs,
-               AsyncInfoWrapperTy &AsyncInfoWrapper,
-               RecordReplayTy::HandleTy *RRHandle = nullptr) const;
+               AsyncInfoWrapperTy &AsyncInfoWrapper) const;
   virtual Error launchImpl(GenericDeviceTy &GenericDevice,
                            uint32_t NumThreads[3], uint32_t NumBlocks[3],
                            uint32_t DynBlockMemSize, KernelArgsTy &KernelArgs,
@@ -430,11 +437,23 @@ struct GenericKernelTy {
   virtual Expected<uint64_t> maxGroupSize(GenericDeviceTy &GenericDevice,
                                           uint64_t DynamicMemSize) const = 0;
 
+  /// Get the maximum number of work groups that can be launched cooperatively.
+  virtual Expected<uint32_t>
+  getMaxCooperativeGroupCount(GenericDeviceTy &GenericDevice,
+                              const uint32_t NumThreads[3],
+                              uint32_t DynBlockMemSize) const {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "cooperative launch not supported");
+  }
+
   /// Get the kernel name.
   const char *getName() const { return Name.c_str(); }
 
   /// Get the size of the static per-block memory consumed by the kernel.
   uint32_t getStaticBlockMemSize() const { return StaticBlockMemSize; };
+
+  /// Get the maximum number of threads per block that this kernel may use.
+  uint32_t getMaxThreads() const { return MaxNumThreads; }
 
   /// Get the kernel image.
   DeviceImageTy &getImage() const {
@@ -448,11 +467,13 @@ struct GenericKernelTy {
   }
 
   /// Return a device pointer to a new kernel launch environment.
-  Expected<KernelLaunchEnvironmentTy *>
-  getKernelLaunchEnvironment(GenericDeviceTy &GenericDevice,
-                             const KernelArgsTy &KernelArgs,
-                             const DynBlockMemConfTy &DynBlockMemConf,
-                             AsyncInfoWrapperTy &AsyncInfoWrapper) const;
+  ///
+  /// \p NumBlocks0 is the number of blocks for this launch and is used to size
+  /// the reduction buffer.
+  Expected<KernelLaunchEnvironmentTy *> getKernelLaunchEnvironment(
+      GenericDeviceTy &GenericDevice, const KernelArgsTy &KernelArgs,
+      const DynBlockMemConfTy &DynBlockMemConf,
+      AsyncInfoWrapperTy &AsyncInfoWrapper, uint32_t NumBlocks0) const;
 
   /// Indicate whether an execution mode is valid.
   static bool isValidExecutionMode(OMPTgtExecModeFlags ExecutionMode) {
@@ -480,9 +501,6 @@ struct GenericKernelTy {
       return true;
     return false;
   }
-
-  /// Check if kernel is a multi-device kernel.
-  bool isMultiDeviceKernel() const { return IsMultiDeviceKernel; }
 
   /// Compute kernel occupancy
   /// This function computes the max(upperbound) occupancy for a lanuched kernel
@@ -556,17 +574,14 @@ protected:
   /// Prints generic kernel launch information.
   Error printLaunchInfo(GenericDeviceTy &GenericDevice,
                         KernelArgsTy &KernelArgs, uint32_t NumThreads[3],
-                        uint32_t NumBlocks[3], int64_t MultiDeviceLB,
-                        int64_t MultiDeviceUB) const;
+                        uint32_t NumBlocks[3]) const;
 
   /// Prints plugin-specific kernel launch information after generic kernel
   /// launch information
   virtual Error printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
                                        KernelArgsTy &KernelArgs,
                                        uint32_t NumThreads[3],
-                                       uint32_t NumBlocks[3],
-                                       int64_t MultiDeviceLB,
-                                       int64_t MultiDeviceUB) const;
+                                       uint32_t NumBlocks[3]) const;
 
 private:
   /// Prepare the block memory buffer requested for the kernel and execute the
@@ -592,27 +607,27 @@ private:
     return std::make_pair(false, BlockSize);
   }
 
-  /// Get the number of threads and blocks for the kernel based on the
-  /// user-defined threads and block clauses.
-  virtual uint32_t getNumThreads(GenericDeviceTy &GenericDevice,
-                                 uint32_t ThreadLimitClause[3]) const;
+  /// Get the effective number of threads for the kernel based on the
+  /// user-defined number of threads.
+  virtual uint32_t getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
+                                          uint32_t UserThreadLimit) const;
 
+  /// Get the effective number of blocks for the kernel based on the
+  /// user-defined number of blocks and the loop trip count.
   /// The number of threads \p NumThreads can be adjusted by this method.
   /// \p IsNumThreadsFromUser is true is \p NumThreads is defined by user via
   /// thread_limit clause.
-  virtual
-  uint32_t getNumBlocks(GenericDeviceTy &GenericDevice,
-                        uint32_t BlockLimitClause[3], uint64_t LoopTripCount,
-                        uint32_t &NumThreads, bool IsNumThreadsFromUser) const;
+  virtual uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
+                                         uint32_t UserNumBlocks,
+                                         uint64_t LoopTripCount,
+                                         uint32_t &EffectiveNumThreads,
+                                         bool IsNumThreadsFromUser) const;
 
   /// The kernel name.
   std::string Name;
 
   /// The execution flags of the kernel.
   OMPTgtExecModeFlags ExecutionMode;
-
-  /// The multi-device kernel flag.
-  bool IsMultiDeviceKernel;
 
   /// The image that contains this kernel.
   DeviceImageTy *ImagePtr = nullptr;
@@ -1006,7 +1021,8 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual Error memoryVAUnMap(void *VAddr, size_t Size);
 
   /// Allocate data on the device or involving the device.
-  Expected<void *> dataAlloc(int64_t Size, void *HostPtr, TargetAllocTy Kind);
+  Expected<void *> dataAlloc(int64_t Size, void *HostPtr, TargetAllocTy Kind,
+                             size_t Alignment);
 
   /// Deallocate data from the device or involving the device.
   Error dataDelete(void *TgtPtr, TargetAllocTy Kind);
@@ -1150,17 +1166,20 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
                                     AsyncInfoWrapperTy &AsyncInfo) = 0;
 
   /// Create an event.
-  Error createEvent(void **EventPtrStorage);
-  virtual Error createEventImpl(void **EventPtrStorage) = 0;
+  Error createEvent(void **EventPtrStorage, bool EnableProfiling = false);
+  virtual Error createEventImpl(void **EventPtrStorage,
+                                bool EnableProfiling) = 0;
 
   /// Destroy an event.
-  Error destroyEvent(void *Event);
-  virtual Error destroyEventImpl(void *EventPtr) = 0;
+  Error destroyEvent(void *Event, bool EnableProfiling = false);
+  virtual Error destroyEventImpl(void *EventPtr, bool EnableProfiling) = 0;
 
   /// Start the recording of the event.
-  Error recordEvent(void *Event, __tgt_async_info *AsyncInfo);
+  Error recordEvent(void *Event, __tgt_async_info *AsyncInfo,
+                    bool EnableProfiling = false);
   virtual Error recordEventImpl(void *EventPtr,
-                                AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
+                                AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                bool EnableProfiling) = 0;
 
   /// Wait for an event to finish. Notice this wait is asynchronous if the
   /// __tgt_async_info is not nullptr.
@@ -1203,7 +1222,11 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// Get the number of lanes used for the RPC interface.
   virtual uint32_t getRPCNumLanes() const { return getWarpSize(); }
   uint32_t getThreadLimit() const { return GridValues.GV_Max_WG_Size; }
-  uint32_t getBlockLimit() const { return GridValues.GV_Max_Teams; }
+  /// Get the maximum number of blocks that can be launched. The \p NumThreads
+  /// argument is the per-block thread count the kernel will be launched with.
+  virtual uint32_t getBlockLimit(uint32_t NumThreads) const {
+    return GridValues.GV_Max_Teams;
+  }
   uint32_t getDefaultNumThreads() const {
     return GridValues.GV_Default_WG_Size;
   }
@@ -1336,11 +1359,7 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
     return Error::success();
   }
 
-  uint32_t getNumMultiDevices() const { return OMPX_NumMultiDevices; }
-
   bool enableRuntimeAutotuning() const { return OMPX_EnableRuntimeAutotuning; }
-
-  bool getMultiDeviceKernelValue(void *EntryPtr);
 
   KernelRunRecordTy *getKernelRunRecords() const { return KernelRunRecords; }
 
@@ -1412,6 +1431,7 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   Error initRecordReplay(int64_t Size, void *VAddr, bool IsRecord,
                          bool IsNative, bool SaveOutput, bool EmitReport,
+                         const char *ReportFilename,
                          const char *OutputDirPath) {
     if (RecordReplay)
       return Plugin::error(error::ErrorCode::INVALID_ARGUMENT,
@@ -1427,7 +1447,7 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
     RecordReplay =
         new NativeRecordReplayTy(Status, OutputDirPath ? OutputDirPath : "",
-                                 SaveOutput, EmitReport, *this);
+                                 SaveOutput, EmitReport, ReportFilename, *this);
     return RecordReplay->init(Size, VAddr);
   }
 
@@ -1528,9 +1548,6 @@ protected:
   /// regarding the initial number of streams and events.
   UInt32Envar OMPX_InitialNumStreams;
   UInt32Envar OMPX_InitialNumEvents;
-
-  /// Specify the number of devices used by multi-device kernels.
-  UInt32Envar OMPX_NumMultiDevices;
 
   /// Envar to enable runtime tuning.
   BoolEnvar OMPX_EnableRuntimeAutotuning;
@@ -1933,6 +1950,7 @@ public:
   int32_t initialize_record_replay(int32_t DeviceId, int64_t MemorySize,
                                    void *VAddr, bool IsRecord, bool IsNative,
                                    bool SaveOutput, bool EmitReport,
+                                   const char *ReportFilename,
                                    const char *OutputDirPath);
 
   /// Loads the associated binary into the plugin and returns a handle to it.
@@ -2073,12 +2091,6 @@ public:
                                            bool isUnifiedSharedMemory,
                                            bool isAutoZeroCopy,
                                            bool isEagerMaps);
-
-  /// Return number of devices used by multi-device kernels.
-  int32_t get_num_multi_devices(int32_t DeviceId);
-
-  /// Check if kernel is multi-device.
-  bool kernel_is_multi_device(int32_t DeviceId, void *TgtEntryPtr);
 
   /// Return true if a descriptor of size 'Size' should be allocated using
   /// shared memory.

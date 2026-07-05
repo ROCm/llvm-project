@@ -214,7 +214,7 @@ static bool StmtCanThrow(const Stmt *S) {
 //    i8 1, label %yield.cleanup ; go here when destroyed
 //  ]
 //
-//  See llvm's docs/Coroutines.rst for more details.
+//  See llvm's docs/Coroutines.md for more details.
 //
 namespace {
   struct LValueOrRValue {
@@ -423,15 +423,13 @@ CodeGenFunction::generateAwaitSuspendWrapper(Twine const &CoroName,
 
   ASTContext &C = getContext();
 
-  FunctionArgList args;
-
-  ImplicitParamDecl AwaiterDecl(C, C.VoidPtrTy, ImplicitParamKind::Other);
-  ImplicitParamDecl FrameDecl(C, C.VoidPtrTy, ImplicitParamKind::Other);
+  auto *AwaiterDecl =
+      ImplicitParamDecl::Create(C, C.VoidPtrTy, ImplicitParamKind::Other);
+  auto *FrameDecl =
+      ImplicitParamDecl::Create(C, C.VoidPtrTy, ImplicitParamKind::Other);
   QualType ReturnTy = S.getSuspendExpr()->getType();
 
-  args.push_back(&AwaiterDecl);
-  args.push_back(&FrameDecl);
-
+  FunctionArgList args{AwaiterDecl, FrameDecl};
   const CGFunctionInfo &FI =
       CGM.getTypes().arrangeBuiltinFunctionDeclaration(ReturnTy, args);
 
@@ -452,12 +450,12 @@ CodeGenFunction::generateAwaitSuspendWrapper(Twine const &CoroName,
   StartFunction(GlobalDecl(), ReturnTy, Fn, FI, args);
 
   // FIXME: add TBAA metadata to the loads
-  llvm::Value *AwaiterPtr = Builder.CreateLoad(GetAddrOfLocalVar(&AwaiterDecl));
+  llvm::Value *AwaiterPtr = Builder.CreateLoad(GetAddrOfLocalVar(AwaiterDecl));
   auto AwaiterLValue =
-      MakeNaturalAlignAddrLValue(AwaiterPtr, AwaiterDecl.getType());
+      MakeNaturalAlignAddrLValue(AwaiterPtr, AwaiterDecl->getType());
 
   CurAwaitSuspendWrapper.FramePtr =
-      Builder.CreateLoad(GetAddrOfLocalVar(&FrameDecl));
+      Builder.CreateLoad(GetAddrOfLocalVar(FrameDecl));
 
   auto AwaiterBinder = CodeGenFunction::OpaqueValueMappingData::bind(
       *this, S.getOpaqueValue(), AwaiterLValue);
@@ -570,7 +568,7 @@ getBundlesForCoroEnd(CodeGenFunction &CGF) {
 namespace {
 // We will insert coro.end to cut any of the destructors for objects that
 // do not need to be destroyed once the coroutine is resumed.
-// See llvm/docs/Coroutines.rst for more details about coro.end.
+// See llvm/docs/Coroutines.md for more details about coro.end.
 struct CallCoroEnd final : public EHScopeStack::Cleanup {
   void Emit(CodeGenFunction &CGF, Flags flags) override {
     auto &CGM = CGF.CGM;
@@ -755,6 +753,36 @@ struct GetReturnObjectManager {
     }
   }
 
+  Address EmitDirectReturnObjectCleanup() {
+    if (!DirectEmit || !CGF.ReturnValue.isValid())
+      return Address::invalid();
+
+    QualType RetTy = CGF.FnRetTy;
+    QualType::DestructionKind DtorKind = RetTy.isDestructedType();
+    if (DtorKind == QualType::DK_none || !CGF.needsEHCleanup(DtorKind))
+      return Address::invalid();
+
+    Address ActiveFlag = CGF.CreateTempAlloca(
+        Builder.getInt1Ty(), CharUnits::One(), "coro.result.active");
+    Builder.CreateStore(Builder.getFalse(), ActiveFlag);
+
+    auto OldTop = CGF.EHStack.stable_begin();
+    CGF.pushDestroy(EHCleanup, CGF.ReturnValue, RetTy,
+                    CGF.getDestroyer(DtorKind),
+                    /*useEHCleanupForArray*/ true);
+    auto Top = CGF.EHStack.stable_begin();
+
+    for (auto B = CGF.EHStack.find(Top), E = CGF.EHStack.find(OldTop); B != E;
+         ++B) {
+      if (auto *Cleanup = dyn_cast<EHCleanupScope>(&*B)) {
+        assert(!Cleanup->hasActiveFlag() && "cleanup already has active flag?");
+        Cleanup->setActiveFlag(ActiveFlag);
+        Cleanup->setTestFlagInEHCleanup();
+      }
+    }
+    return ActiveFlag;
+  }
+
   void EmitGroInit() {
     if (DirectEmit) {
       // ReturnValue should be valid as long as the coroutine's return type
@@ -770,9 +798,12 @@ struct GetReturnObjectManager {
       // otherwise the call to get_return_object wouldn't be in front
       // of initial_suspend.
       if (CGF.ReturnValue.isValid()) {
+        auto ActiveFlag = EmitDirectReturnObjectCleanup();
         CGF.EmitAnyExprToMem(S.getReturnValue(), CGF.ReturnValue,
                              S.getReturnValue()->getType().getQualifiers(),
                              /*IsInit*/ true);
+        if (ActiveFlag.isValid())
+          Builder.CreateStore(Builder.getTrue(), ActiveFlag);
       }
       return;
     }

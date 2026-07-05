@@ -7,12 +7,23 @@
 ///
 /// \file
 /// Dispatcher for B0-to-A0 silicon stepping patches and the
-/// retargetCodeObjectB0A0 orchestrator that drives the full pipeline:
+/// retargetCodeObject orchestrator that drives the full pipeline:
 /// decode -> patch -> trampoline growth -> DWARF update.
 ///
-/// Patch entry points are declared as weak symbols returning 0. Each
-/// comgr-hotswap-patch-*.cpp file provides a strong override, allowing
-/// patches to land as independent PRs with no merge conflicts.
+/// Patch passes are dispatched through HotswapPatchVTable. The membership
+/// list lives in comgr-hotswap-patches.def; each entry corresponds to one
+/// slot on the vtable and one register*Patch function in a sibling
+/// comgr-hotswap-patch-*.cpp. installHotswapPatches() walks the .def to
+/// bind every slot. The vtable is exposed through getHotswapPatchVTable(),
+/// a Meyers singleton whose initializer eagerly runs installHotswapPatches
+/// on its private storage; C++11 [stmt.dcl]/4 guarantees this happens
+/// exactly once and is safe under concurrent first access, so the
+/// dispatcher and the amd_comgr_hotswap_rewrite entry point can fetch the
+/// fully-bound vtable with no explicit synchronization.
+/// This replaces the prior LLVM_ATTRIBUTE_WEAK + `#if !defined(_MSC_VER)`
+/// override pattern, which silently disabled hotswap on Windows because
+/// PE/COFF does not honour weak the way ELF does
+/// (issue ROCm/llvm-project#2479).
 ///
 //===----------------------------------------------------------------------===//
 
@@ -20,6 +31,8 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
+
+#include <limits>
 
 using namespace llvm;
 
@@ -33,11 +46,15 @@ namespace hotswap {
 // layer only carries ISA identifiers and register granularity -- no
 // target-specific opcode bits should land here.
 
-static constexpr unsigned Gfx1250MaxVgprs = 256;
-// GFX12 wave32 VGPR granularity; SGPR granularity is a fixed 16 across all
-// AMDGPU generations Comgr's hotswap currently supports.
-static constexpr unsigned Gfx1250VgprGranuleSize = 8;
-static constexpr unsigned Gfx1250SgprGranuleSize = 16;
+static constexpr unsigned Gfx1250MaxVgprs = 1024;
+// GFX1250 wave32 VGPR ENCODING granularity is 16 (per
+// AMDGPUBaseInfo::getVGPREncodingGranule with Feature1024AddressableVGPRs),
+// not the 8 used by earlier GFX10/11 wave32. Used by ElfView's KD
+// decode/encode helpers (getKernelVgprCount / updateKernelDescriptor) to
+// interpret COMPUTE_PGM_RSRC1.GRANULATED_WORKITEM_VGPR_COUNT.
+// GFX12 wave32: 106 user-addressable SGPRs (s0-s105); s106-s107 are VCC.
+static constexpr unsigned Gfx1250MaxSgprs = 106;
+static constexpr unsigned Gfx1250VgprGranuleSize = 16;
 
 /// Build the default RewriteConfig used for the GFX1250 B0-to-A0 rewrite:
 /// fills in the identity source / target ISA (both gfx1250) and the
@@ -54,21 +71,18 @@ static RewriteConfig makeGfx1250B0A0Config() {
   Config.TargetIsa = "amdgcn-amd-amdhsa--gfx1250";
   Config.TargetCpu = "gfx1250";
   Config.MaxVgprs = Gfx1250MaxVgprs;
+  Config.MaxSgprs = Gfx1250MaxSgprs;
   Config.VgprGranuleSize = Gfx1250VgprGranuleSize;
-  Config.SgprGranuleSize = Gfx1250SgprGranuleSize;
   return Config;
 }
 
-// -- Forward declarations for patch/liveness/DWARF stubs ----------------------
+// -- Forward declarations for liveness/DWARF stubs ----------------------------
 //
-// These have weak default definitions below; patch .cpp files may provide
-// strong overrides at link time so patches can land as independent PRs.
+// These have weak default definitions below. The apply* patch families use
+// HotswapPatchVTable dispatch; these lower-level helpers stay on weak stubs
+// until a real implementation lands, at which point they should migrate to
+// an explicit registration contract as well.
 
-uint32_t applyInPlacePatches(PatchContext &, size_t);
-uint32_t applyTrampolinePatches(PatchContext &, size_t);
-uint32_t applyWmmaHazardPatch(PatchContext &);
-uint32_t applyWmmaSplitPatches(PatchContext &, size_t);
-uint32_t applyScratchPatches(PatchContext &, size_t);
 CFG buildCfg(ArrayRef<InternalDecodedInst> Decoded, const MCInstrInfo &);
 LivenessInfo computeLiveness(ArrayRef<InternalDecodedInst> Decoded, const CFG &,
                              const MCInstrInfo &, const MCRegisterInfo &,
@@ -91,25 +105,42 @@ void patchDebugInfo(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
 void patchDebugFrame(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
                      uint64_t TextSizeBefore, uint64_t TrampTotal);
 
-// -- Weak-symbol patch stubs --------------------------------------------------
+// -- HotswapPatchVTable plumbing ----------------------------------------------
+//
+// Patch-module forward declarations live in comgr-hotswap-internal.h
+// (driven off the same comgr-hotswap-patches.def), so libamd_comgr and
+// the unit tests share one prototype source. Here we supply the
+// singleton accessor and the installer that walks the .def to invoke
+// each register*Patch. A .def entry without a matching register*Patch
+// definition produces a link error at libamd_comgr link time.
+//
+// installHotswapPatches() is exposed in the header so unit tests can
+// bind a local HotswapPatchVTable for fixture-style coverage. Production
+// code never calls it directly: getHotswapPatchVTable()'s initializer
+// invokes it eagerly on the singleton's private storage, which the C++11
+// magic-static rule guarantees runs exactly once even under concurrent
+// first access. That removes both the explicit std::call_once at the
+// retargetCodeObject entry point and any inter-TU static-init order
+// dependency on the patch modules.
 
-LLVM_ATTRIBUTE_WEAK uint32_t applyInPlacePatches(PatchContext &, size_t) {
-  return 0;
+void installHotswapPatches(HotswapPatchVTable &VT) {
+#define HOTSWAP_PATCH(Name) register##Name##Patch(VT);
+#include "comgr-hotswap-patches.def"
+#undef HOTSWAP_PATCH
 }
-LLVM_ATTRIBUTE_WEAK uint32_t applyTrampolinePatches(PatchContext &, size_t) {
-  return 0;
-}
-LLVM_ATTRIBUTE_WEAK uint32_t applyWmmaHazardPatch(PatchContext &) { return 0; }
-LLVM_ATTRIBUTE_WEAK uint32_t applyWmmaSplitPatches(PatchContext &, size_t) {
-  return 0;
-}
-LLVM_ATTRIBUTE_WEAK uint32_t applyScratchPatches(PatchContext &, size_t) {
-  return 0;
+
+HotswapPatchVTable &getHotswapPatchVTable() {
+  static HotswapPatchVTable VT = [] {
+    HotswapPatchVTable Tmp;
+    installHotswapPatches(Tmp);
+    return Tmp;
+  }();
+  return VT;
 }
 
 // -- Weak-symbol liveness stubs -----------------------------------------------
 //
-// Conservative defaults: all VGPRs reported live. ScratchAllocator will
+// Conservative defaults: all VGPRs reported live. VgprAllocator will
 // allocate above KD count (correct but suboptimal until the real liveness
 // layer lands).
 
@@ -205,32 +236,32 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
 /// sled, and pads the leftover bytes of the original slot with cached s_nop
 /// bytes. Advances \c Sled.WritePos by the amount consumed. Returns false if
 /// either branch encoding fails, leaving \c Ctx.Text partially written.
-[[nodiscard]] static bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,
-                                        uint64_t InstOffset, uint32_t InstSize,
-                                        ArrayRef<uint8_t> Replacement) {
+[[nodiscard]] bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,
+                                 uint64_t InstOffset, uint32_t InstSize,
+                                 ArrayRef<uint8_t> Replacement) {
   const LLVMState &LS = Ctx.LS;
   std::memcpy(Ctx.Text + Sled.WritePos, Replacement.data(), Replacement.size());
 
-  uint8_t BrBack[MinInstSize];
-  if (!LS.encodeSBranch(Sled.WritePos + Replacement.size(),
-                        InstOffset + InstSize, BrBack)) {
+  SmallVector<uint8_t> BrBack = LS.encodeSBranch(
+      Sled.WritePos + Replacement.size(), InstOffset + InstSize);
+  if (BrBack.empty()) {
     log() << "hotswap: error: emitToNopSled: encodeSBranch for branch-back "
           << "at sled offset 0x"
           << utohexstr(Sled.WritePos + Replacement.size()) << " -> 0x"
           << utohexstr(InstOffset + InstSize) << " failed.\n";
     return false;
   }
-  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack,
-              sizeof(BrBack));
+  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack.data(),
+              BrBack.size());
 
-  uint8_t BrFwd[MinInstSize];
-  if (!LS.encodeSBranch(InstOffset, Sled.WritePos, BrFwd)) {
+  SmallVector<uint8_t> BrFwd = LS.encodeSBranch(InstOffset, Sled.WritePos);
+  if (BrFwd.empty()) {
     log() << "hotswap: error: emitToNopSled: encodeSBranch for branch-fwd "
           << "at original offset 0x" << utohexstr(InstOffset) << " -> sled 0x"
           << utohexstr(Sled.WritePos) << " failed.\n";
     return false;
   }
-  std::memcpy(Ctx.Text + InstOffset, BrFwd, sizeof(BrFwd));
+  std::memcpy(Ctx.Text + InstOffset, BrFwd.data(), BrFwd.size());
 
   // Pad the tail of the replaced instruction slot with cached s_nop bytes
   // (pre-encoded in LLVMState at initLLVM() time).
@@ -249,10 +280,9 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
 /// MinInstSize zero bytes at the end of the trampoline body as a
 /// placeholder rather than encoding twice. Used when there is no reachable
 /// NOP sled for an in-place sled patch.
-[[nodiscard]] static bool emitToTrampoline(PatchContext &Ctx,
-                                           uint64_t InstOffset,
-                                           uint32_t InstSize,
-                                           ArrayRef<uint8_t> Replacement) {
+[[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
+                                    uint32_t InstSize,
+                                    ArrayRef<uint8_t> Replacement) {
   Trampoline T;
   T.OriginalOffset = InstOffset;
   T.OriginalSize = InstSize;
@@ -266,12 +296,10 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
 /// Emit \p Replacement for the instruction at [\p InstOffset,
 /// \p InstOffset + \p InstSize). Prefers an in-place NOP-sled rewrite when a
 /// reachable sled with sufficient headroom exists; otherwise falls back to a
-/// deferred trampoline. Marked [[maybe_unused]] because the weak-stub patch
-/// passes in this file do not yet call it -- the concrete patch .cpp files
-/// that land alongside will.
-[[maybe_unused, nodiscard]] static bool
-emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
-                    ArrayRef<uint8_t> Replacement) {
+/// deferred trampoline.
+[[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
+                                       uint32_t InstSize,
+                                       ArrayRef<uint8_t> Replacement) {
   // findNearestSled already enforces that the returned sled has at least
   // `Needed` bytes of headroom, so a non-null result is sufficient to take
   // the in-place path.
@@ -282,6 +310,15 @@ emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
 }
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
+
+/// Per-instruction patch-pass trampoline: invokes \p Fn with (\p Ctx,
+/// \p Idx) if it is non-null, or returns 0 otherwise. nullptr means
+/// the corresponding pass family has no implementation linked in
+/// (e.g. scratch today), which the dispatcher treats as a no-op slot.
+static uint32_t runPerInstPass(uint32_t (*Fn)(PatchContext &, size_t),
+                               PatchContext &Ctx, size_t Idx) {
+  return Fn ? Fn(Ctx, Idx) : 0;
+}
 
 /// Main per-instruction dispatcher for the GFX1250 B0-to-A0 rewrite.
 /// Builds the NOP sled map, CFG, and VGPR liveness for the decoded stream,
@@ -320,35 +357,55 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
                    OutTrampolines,   Sleds,   Elf,  Liveness, KernelStats,
                    OutScratchPatches};
 
+  const HotswapPatchVTable &VT = getHotswapPatchVTable();
+
+  // Skip undecoded slots produced by the decoder for bytes it could not
+  // classify as a valid instruction; the dispatcher has nothing to match
+  // against on these and we must not invoke the patch passes for them.
+  constexpr StringLiteral UnknownMnemonic = "<unknown>";
+
   for (size_t Idx = 0, E = Decoded.size(); Idx < E; ++Idx) {
     const InternalDecodedInst &DI = Decoded[Idx];
-    if (DI.Mnemonic == "<unknown>")
+    if (DI.Mnemonic == UnknownMnemonic)
       continue;
 
-    uint32_t P = 0;
-    P += applyInPlacePatches(Ctx, Idx);
-    if (P) {
+    if (uint32_t P = runPerInstPass(VT.applyInPlacePatches, Ctx, Idx)) {
       Patched += P;
       continue;
     }
-    P += applyTrampolinePatches(Ctx, Idx);
-    if (P) {
+    if (uint32_t P = runPerInstPass(VT.applyTrampolinePatches, Ctx, Idx)) {
       Patched += P;
       continue;
     }
-    P += applyWmmaSplitPatches(Ctx, Idx);
-    if (P) {
+    if (uint32_t P = runPerInstPass(VT.applyWmmaSplitPatches, Ctx, Idx)) {
       Patched += P;
       continue;
     }
-    P += applyScratchPatches(Ctx, Idx);
-    if (P) {
+    if (uint32_t P = runPerInstPass(VT.applyScratchPatches, Ctx, Idx)) {
+      Patched += P;
+      continue;
+    }
+    if (uint32_t P = runPerInstPass(VT.applyWmmaScale16Patches, Ctx, Idx)) {
       Patched += P;
       continue;
     }
   }
 
-  Patched += applyWmmaHazardPatch(Ctx);
+  // Whole-kernel passes below run after per-instruction patches. Earlier
+  // passes may have modified Text bytes, but the Decoded stream still holds
+  // the original MCInst/Mnemonic/Offset entries. This is safe because:
+  //  - In-place patches only change opcodes within the same encoding size,
+  //    preserving instruction boundaries and offsets.
+  //  - Trampoline patches replace the original instruction with a branch
+  //    (same size), so the Decoded entry's Offset still points at the
+  //    branch site; the WMMA classifier and VOP3PX2 mnemonic match won't
+  //    treat a branch as WMMA/VALU/VOP3PX2.
+  // If a future patch family changes instruction boundaries, the Decoded
+  // stream must be rebuilt before these passes run.
+  if (VT.applyWmmaHazardPatch)
+    Patched += VT.applyWmmaHazardPatch(Ctx);
+  if (VT.applyVop3px2Src2Fix)
+    Patched += VT.applyVop3px2Src2Fix(Ctx);
 
   for (const llvm::StringMapEntry<KernelPatchStats> &KV : KernelStats) {
     StringRef KName = KV.first();
@@ -358,9 +415,8 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
     std::optional<unsigned> VgprsBefore =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
     if (Stats.ExtraVgprs > 0)
-      Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs, 0,
-                                 Config.VgprGranuleSize,
-                                 Config.SgprGranuleSize);
+      Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs,
+                                 Config.VgprGranuleSize);
     std::optional<unsigned> VgprsAfter =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
     log() << "hotswap: liveness: kernel " << KName
@@ -372,7 +428,7 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
   return Patched;
 }
 
-// -- retargetCodeObjectB0A0 helpers -------------------------------------------
+// -- retargetCodeObject helpers -------------------------------------------
 
 /// Finalize the deferred trampolines produced by emitToTrampoline: resolves
 /// the branch-back at the tail of each trampoline to land on the next
@@ -380,7 +436,7 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
 /// padding at the original .text slot, and reports per-trampoline encoding
 /// failures through log(). Runs after all patch passes finish so the
 /// post-.text layout of trampolines is known. Returns false if any
-/// trampoline could not be fixed up, but still patches the ones that can.
+/// trampoline could not be fixed up.
 [[nodiscard]] static bool
 fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
                         uint64_t TextSize, const LLVMState &LS) {
@@ -393,23 +449,23 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
-    uint8_t BrBack[MinInstSize];
-    if (!LS.encodeSBranch(TP + T.Bytes.size() - MinInstSize,
-                          T.OriginalOffset + T.OriginalSize, BrBack)) {
+    SmallVector<uint8_t> BrBack = LS.encodeSBranch(
+        TP + T.Bytes.size() - MinInstSize, T.OriginalOffset + T.OriginalSize);
+    if (BrBack.empty()) {
       log() << "hotswap: error: trampoline branch-back encoding failed at 0x"
             << utohexstr(T.OriginalOffset) << "\n";
       return false;
     }
-    std::memcpy(T.Bytes.data() + T.Bytes.size() - MinInstSize, BrBack,
-                sizeof(BrBack));
+    std::memcpy(T.Bytes.data() + T.Bytes.size() - MinInstSize, BrBack.data(),
+                BrBack.size());
 
-    uint8_t BrFwd[MinInstSize];
-    if (!LS.encodeSBranch(T.OriginalOffset, TP, BrFwd)) {
+    SmallVector<uint8_t> BrFwd = LS.encodeSBranch(T.OriginalOffset, TP);
+    if (BrFwd.empty()) {
       log() << "hotswap: error: trampoline branch-fwd encoding failed at 0x"
             << utohexstr(T.OriginalOffset) << "\n";
       return false;
     }
-    std::memcpy(Text + T.OriginalOffset, BrFwd, sizeof(BrFwd));
+    std::memcpy(Text + T.OriginalOffset, BrFwd.data(), BrFwd.size());
     // Pad the tail of the replaced slot with cached s_nop bytes.
     for (uint32_t I = MinInstSize; I < T.OriginalSize; I += MinInstSize)
       std::memcpy(Text + T.OriginalOffset + I, LS.SNopBytes.data(),
@@ -426,15 +482,15 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
 /// implementations land in separate PRs.
 static void patchDebugSections(WritableMemoryBuffer &ElfBuf,
                                ArrayRef<Trampoline> Trampolines,
-                               const ElfView &Elf, size_t TrampTotal) {
+                               const ElfView &Elf, size_t GrowthTotal) {
   uint8_t *Data = reinterpret_cast<uint8_t *>(ElfBuf.getBufferStart());
   size_t Size = ElfBuf.getBufferSize();
   if (!addTrampolineSymbols(ElfBuf, Trampolines, Elf.textSize(),
                             Elf.textSectionIndex()))
     log() << "hotswap: error: addTrampolineSymbols failed\n";
-  patchDebugRanges(Data, Size, Elf.textAddr(), Elf.textSize(), TrampTotal);
-  patchDebugInfo(Data, Size, Elf.textAddr(), Elf.textSize(), TrampTotal);
-  patchDebugFrame(Data, Size, Elf.textAddr(), Elf.textSize(), TrampTotal);
+  patchDebugRanges(Data, Size, Elf.textAddr(), Elf.textSize(), GrowthTotal);
+  patchDebugInfo(Data, Size, Elf.textAddr(), Elf.textSize(), GrowthTotal);
+  patchDebugFrame(Data, Size, Elf.textAddr(), Elf.textSize(), GrowthTotal);
   if (!patchDebugLine(ElfBuf, Trampolines, Elf.textSize(), Elf.textAddr()))
     log() << "hotswap: error: patchDebugLine failed\n";
 }
@@ -466,11 +522,31 @@ static void runScratchVerification(WritableMemoryBuffer &OutBuf,
           << "scratch conflicts\n";
 }
 
-// -- retargetCodeObjectB0A0 ---------------------------------------------------
+// -- retargetCodeObject -------------------------------------------------------
 
-amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
-                                          const TargetIdentifier &TargetIdent,
-                                          std::unique_ptr<MemoryBuffer> &Out) {
+amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
+                                      const TargetIdentifier &TargetIdent,
+                                      const Gfx1250RewriteOptions &Options,
+                                      std::unique_ptr<MemoryBuffer> &Out) {
+  // The dispatcher fetches the patch vtable lazily via
+  // getHotswapPatchVTable() inside applyGfx1250B0toA0Rules; the singleton's
+  // initializer binds every register*Patch slot on first access, so no
+  // explicit install step is needed here.
+
+  if (!Options.RunB0A0Patches && !Options.RunEntryTrampolines) {
+    std::unique_ptr<WritableMemoryBuffer> Result =
+        WritableMemoryBuffer::getNewUninitMemBuffer(ElfSize);
+    if (!Result) {
+      log() << "hotswap: error: retargetCodeObject: "
+            << "getNewUninitMemBuffer(" << ElfSize
+            << ") failed (out of memory) for the no-op output copy.\n";
+      return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+    }
+    std::memcpy(Result->getBufferStart(), ElfData, ElfSize);
+    Out = std::move(Result);
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
+
   // Take a working copy so the input is preserved and we have a mutable
   // buffer to parse / patch.
   std::vector<uint8_t> Buf(static_cast<const uint8_t *>(ElfData),
@@ -478,12 +554,12 @@ amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
 
   Expected<ElfView> ViewOrErr = ElfView::create(Buf.data(), Buf.size());
   if (!ViewOrErr) {
-    log() << "hotswap: error: retargetCodeObjectB0A0: input is not a "
+    log() << "hotswap: error: retargetCodeObject: input is not a "
           << "parseable ELF64 (" << toString(ViewOrErr.takeError()) << ").\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
   if (ViewOrErr->textSize() == 0) {
-    log() << "hotswap: error: retargetCodeObjectB0A0: input ELF has empty "
+    log() << "hotswap: error: retargetCodeObject: input ELF has empty "
           << ".text section; nothing to rewrite.\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
@@ -491,7 +567,7 @@ amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
 
   LLVMState LS = initLLVM(TargetIdent);
   if (!LS.Valid) {
-    log() << "hotswap: error: retargetCodeObjectB0A0: initLLVM failed "
+    log() << "hotswap: error: retargetCodeObject: initLLVM failed "
           << "for CPU '" << TargetIdent.Processor << "'; aborting rewrite.\n";
     return AMD_COMGR_STATUS_ERROR;
   }
@@ -499,41 +575,72 @@ amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
   RewriteConfig Config = makeGfx1250B0A0Config();
 
   uint8_t *Text = Elf.textData();
-  std::vector<InternalDecodedInst> Decoded;
-  if (!decodeTextSection(Text, Elf.textSize(), LS, Decoded)) {
-    log() << "hotswap: error: retargetCodeObjectB0A0: decodeTextSection "
-          << "failed on .text (" << Elf.textSize() << " bytes).\n";
-    return AMD_COMGR_STATUS_ERROR;
-  }
-
+  uint64_t Count = 0;
   std::vector<Trampoline> Deferred;
   std::vector<ScratchPatchInfo> ScratchPatches;
-  uint32_t Count = applyGfx1250B0toA0Rules(
-      Decoded, Text, Elf.textSize(), LS, Deferred, Elf, ScratchPatches, Config);
-
-  log() << "hotswap: applied " << Count << " patches\n";
-
-  std::unique_ptr<WritableMemoryBuffer> Result;
-  if (!Deferred.empty()) {
-    if (!fixupTrampolineBranches(Deferred, Text, Elf.textSize(), LS))
-      log() << "hotswap: error: some trampolines could not be fixed up\n";
-
-    Result = Elf.growWithTrampolines(Deferred, LS.SNopBytes);
-    if (!Result) {
-      log() << "hotswap: error: retargetCodeObjectB0A0: "
-            << "ElfView::growWithTrampolines returned null with "
-            << Deferred.size() << " trampolines queued.\n";
+  if (Options.RunB0A0Patches) {
+    std::vector<InternalDecodedInst> Decoded;
+    if (!decodeTextSection(Text, Elf.textSize(), LS, Decoded)) {
+      log() << "hotswap: error: retargetCodeObject: decodeTextSection "
+            << "failed on .text (" << Elf.textSize() << " bytes).\n";
       return AMD_COMGR_STATUS_ERROR;
     }
 
-    size_t TrampTotal = 0;
-    for (const Trampoline &T : Deferred)
-      TrampTotal += T.Bytes.size();
-    patchDebugSections(*Result, Deferred, Elf, TrampTotal);
+    Count = applyGfx1250B0toA0Rules(Decoded, Text, Elf.textSize(), LS, Deferred,
+                                    Elf, ScratchPatches, Config);
+    log() << "hotswap: applied " << Count << " B0-to-A0 patches\n";
+  } else {
+    log() << "hotswap: B0-to-A0 patches disabled for this rewrite\n";
+  }
+
+  std::unique_ptr<WritableMemoryBuffer> Result;
+  std::vector<Trampoline> Growth = Deferred;
+  if (!Deferred.empty()) {
+    if (!fixupTrampolineBranches(Deferred, Text, Elf.textSize(), LS)) {
+      log() << "hotswap: error: trampoline branch fixup failed; aborting "
+               "rewrite\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+    Growth = Deferred;
+  }
+
+  std::vector<KernelEntryTrampolineFixup> EntryFixups;
+  if (Options.RunEntryTrampolines) {
+    std::optional<uint32_t> EntryCount = appendKernelEntryTrampolines(
+        Elf, LS, Config.MaxSgprs, Growth, EntryFixups);
+    if (!EntryCount)
+      return AMD_COMGR_STATUS_ERROR;
+    Count += *EntryCount;
+  } else {
+    log() << "hotswap: kernel-entry trampolines disabled for this rewrite\n";
+  }
+
+  if (!Growth.empty()) {
+    Result = Elf.growWithTrampolines(Growth, LS.SNopBytes);
+    if (!Result) {
+      log() << "hotswap: error: retargetCodeObject: "
+            << "ElfView::growWithTrampolines returned null with "
+            << Growth.size() << " trampolines queued.\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    size_t GrowthTotal = 0;
+    for (const Trampoline &T : Growth) {
+      if (T.Bytes.size() > std::numeric_limits<size_t>::max() - GrowthTotal) {
+        log() << "hotswap: error: retargetCodeObject: growth byte count "
+              << "overflows size_t.\n";
+        return AMD_COMGR_STATUS_ERROR;
+      }
+      GrowthTotal += T.Bytes.size();
+    }
+    patchDebugSections(*Result, Deferred, Elf, GrowthTotal);
+    if (!rewriteKernelEntryDescriptorOffsets(*Result, Elf.textSize(),
+                                             EntryFixups))
+      return AMD_COMGR_STATUS_ERROR;
   } else {
     Result = WritableMemoryBuffer::getNewUninitMemBuffer(ElfSize);
     if (!Result) {
-      log() << "hotswap: error: retargetCodeObjectB0A0: "
+      log() << "hotswap: error: retargetCodeObject: "
             << "getNewUninitMemBuffer(" << ElfSize
             << ") failed (out of memory) for the patched output copy.\n";
       return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;

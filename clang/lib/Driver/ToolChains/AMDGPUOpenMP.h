@@ -16,16 +16,6 @@
 namespace clang {
 namespace driver {
 
-/// Is -Ofast used?
-bool isOFastUsed(const llvm::opt::ArgList &Args);
-
-/// Is -fopenmp-target-fast or -Ofast used
-bool isTargetFastUsed(const llvm::opt::ArgList &Args);
-
-/// Ignore possibility of environment variables if either
-/// -fopenmp-target-fast or -Ofast is used.
-bool shouldIgnoreEnvVars(const llvm::opt::ArgList &Args);
-
 namespace toolchains {
 class AMDGPUOpenMPToolChain;
 }
@@ -76,23 +66,11 @@ public:
     return &HostTC.getTriple();
   }
 
-  llvm::opt::DerivedArgList *
-  TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
-                Action::OffloadKind DeviceOffloadKind) const override;
   void
   addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                        llvm::opt::ArgStringList &CC1Args,
+                        llvm::opt::ArgStringList &CC1Args, BoundArch BA,
                         Action::OffloadKind DeviceOffloadKind) const override;
 
-  bool useIntegratedAs() const override { return true; }
-  bool isCrossCompiling() const override { return true; }
-  bool isPICDefault() const override { return false; }
-  bool isPIEDefault(const llvm::opt::ArgList &Args) const override { return false; }
-  bool isPICDefaultForced() const override { return false; }
-  bool SupportsProfiling() const override { return false; }
-  bool IsMathErrnoDefault() const override { return false; }
-
-  void addClangWarningOptions(llvm::opt::ArgStringList &CC1Args) const override;
   CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
   void AddClangCXXStdlibIncludeArgs(
       const llvm::opt::ArgList &Args,
@@ -106,8 +84,6 @@ public:
   AddFlangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &FlangArgs) const override;
 
-  SanitizerMask getSupportedSanitizers() const override;
-
   StringRef getAsanRTLPath() const {
     return RocmInstallation->getAsanRTLPath();
   }
@@ -116,10 +92,12 @@ public:
   computeMSVCVersion(const Driver *D,
                      const llvm::opt::ArgList &Args) const override;
 
-  unsigned GetDefaultDwarfVersion() const override { return 5; }
   llvm::SmallVector<BitCodeLibraryInfo, 12>
-  getDeviceLibs(const llvm::opt::ArgList &Args,
+  getDeviceLibs(const llvm::opt::ArgList &Args, BoundArch BA,
                 const Action::OffloadKind DeviceOffloadKind) const override;
+
+  /// OpenMP uses LTO by default to link device bitcode.
+  LTOKind getDefaultLTOMode() const override { return LTOK_Full; }
 
   const ToolChain &HostTC;
 };

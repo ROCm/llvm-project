@@ -39,7 +39,6 @@
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/CodeGen/WasmEHFuncInfo.h"
 #include "llvm/CodeGen/WinEHFuncInfo.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Attributes.h"
@@ -248,11 +247,6 @@ void MachineFunction::init() {
     WinEHInfo = new (Allocator) WinEHFuncInfo();
   }
 
-  if (isScopedEHPersonality(classifyEHPersonality(
-          F.hasPersonalityFn() ? F.getPersonalityFn() : nullptr))) {
-    WasmEHInfo = new (Allocator) WasmEHFuncInfo();
-  }
-
   if (!Target.isCompatibleDataLayout(getDataLayout())) {
     report_fatal_error(
         formatv("Can't create a MachineFunction using a Module with a "
@@ -269,6 +263,22 @@ void MachineFunction::initTargetMachineFunctionInfo(
     const TargetSubtargetInfo &STI) {
   assert(!MFInfo && "MachineFunctionInfo already set");
   MFInfo = Target.createMachineFunctionInfo(Allocator, F, &STI);
+}
+
+MachineFunctionInfo *MachineFunction::cloneInfoFrom(
+    const MachineFunction &OrigMF,
+    const DenseMap<MachineBasicBlock *, MachineBasicBlock *> &Src2DstMBB) {
+  assert(!MFInfo && "new function already has MachineFunctionInfo");
+  if (!OrigMF.MFInfo)
+    return nullptr;
+
+  MachineFunctionInfo *ClonedInfo =
+      OrigMF.MFInfo->clone(Allocator, *this, Src2DstMBB);
+  if (!ClonedInfo)
+    return nullptr;
+
+  RegInfo->copyPendingVirtRegMapEntriesFrom(OrigMF.getRegInfo());
+  return ClonedInfo;
 }
 
 MachineFunction::~MachineFunction() {
@@ -318,11 +328,6 @@ void MachineFunction::clear() {
     WinEHInfo->~WinEHFuncInfo();
     Allocator.Deallocate(WinEHInfo);
   }
-
-  if (WasmEHInfo) {
-    WasmEHInfo->~WasmEHFuncInfo();
-    Allocator.Deallocate(WasmEHInfo);
-  }
 }
 
 const DataLayout &MachineFunction::getDataLayout() const {
@@ -368,8 +373,8 @@ MachineFunction::addFrameInst(const MCCFIInstruction &Inst) {
   return FrameInstructions.size() - 1;
 }
 
-void MachineFunction::replaceFrameInstRegister(Register FromReg,
-                                               Register ToReg) {
+void MachineFunction::replaceFrameInstRegister(MCRegister FromReg,
+                                               MCRegister ToReg) {
   const MCRegisterInfo *MCRI = Ctx.getRegisterInfo();
   unsigned DwarfFromReg = MCRI->getDwarfRegNum(FromReg, false);
   unsigned DwarfToReg = MCRI->getDwarfRegNum(ToReg, false);
@@ -754,7 +759,7 @@ MachineFunction::CallSiteInfo::CallSiteInfo(const CallBase &CB) {
 
   for (const MDOperand &Op : CalleeTypeList->operands()) {
     MDNode *TypeMD = cast<MDNode>(Op);
-    MDString *TypeIdStr = cast<MDString>(TypeMD->getOperand(1));
+    MDString *TypeIdStr = cast<MDString>(TypeMD->getOperand(0));
     // Compute numeric type id from generalized type id string
     uint64_t TypeIdVal = MD5Hash(TypeIdStr->getString());
     IntegerType *Int64Ty = Type::getInt64Ty(CB.getContext());
@@ -1794,7 +1799,7 @@ void MachineConstantPool::print(raw_ostream &OS) const {
 // ProfileSummaryInfo::getEntryCount().
 //===----------------------------------------------------------------------===//
 template <>
-std::optional<Function::ProfileCount>
+std::optional<uint64_t>
 ProfileSummaryInfo::getEntryCount<llvm::MachineFunction>(
     const llvm::MachineFunction *F) const {
   return F->getFunction().getEntryCount();

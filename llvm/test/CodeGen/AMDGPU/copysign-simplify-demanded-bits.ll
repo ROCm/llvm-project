@@ -149,7 +149,7 @@ define <2 x double> @test_pown_reduced_fast_v2f64_known_odd(<2 x double> %x, <2 
   ret <2 x double> %pow_sign1
 }
 
-define float @copysign_f32_f32_sign_known_p0_or_n0(float %x, i32 %y.i) {
+define float @copysign_f32_f32_sign_known_p0_or_n0(float %x, i32 %y.i) #2 {
 ; GFX9-LABEL: copysign_f32_f32_sign_known_p0_or_n0:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -163,7 +163,7 @@ define float @copysign_f32_f32_sign_known_p0_or_n0(float %x, i32 %y.i) {
   ret float %copysign
 }
 
-define double @copysign_f64_f32_sign_known_p0_or_n0(double %x, i32 %y.i) {
+define double @copysign_f64_f32_sign_known_p0_or_n0(double %x, i32 %y.i) #2 {
 ; GFX9-LABEL: copysign_f64_f32_sign_known_p0_or_n0:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -178,7 +178,7 @@ define double @copysign_f64_f32_sign_known_p0_or_n0(double %x, i32 %y.i) {
   ret double %copysign
 }
 
-define half @copysign_f16_f32_sign_known_p0_or_n0(half %x, i32 %y.i) {
+define half @copysign_f16_f32_sign_known_p0_or_n0(half %x, i32 %y.i) #2 {
 ; GFX9-LABEL: copysign_f16_f32_sign_known_p0_or_n0:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -194,7 +194,7 @@ define half @copysign_f16_f32_sign_known_p0_or_n0(half %x, i32 %y.i) {
   ret half %copysign
 }
 
-define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_fabs(float %x.arg, i32 %y.i) {
+define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_fabs(float %x.arg, i32 %y.i) #2 {
 ; GFX9-LABEL: copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_fabs:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -209,7 +209,7 @@ define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_fabs(floa
   ret float %copysign
 }
 
-define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_select(float %x.arg, i32 %y.i) {
+define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_select(float %x.arg, i32 %y.i) #2 {
 ; GFX9-LABEL: copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_select:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -227,7 +227,7 @@ define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_select(fl
   ret float %copysign
 }
 
-define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_nnan_nsz_sqrt(float %x.arg, i32 %y.i) {
+define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_nnan_nsz_sqrt(float %x.arg, i32 %y.i) #2 {
 ; GFX9-LABEL: copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_nnan_nsz_sqrt:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -260,7 +260,7 @@ define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_nnan_nsz_
   ret float %copysign
 }
 
-define float @copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nsz_sqrt(float %x.arg, i32 %y.i) {
+define float @copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nsz_sqrt(float %x.arg, i32 %y.i) #2 {
 ; GFX9-LABEL: copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nsz_sqrt:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -293,7 +293,7 @@ define float @copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nsz_sqrt
   ret float %copysign
 }
 
-define float @copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nnan_sqrt(float %x.arg, i32 %y.i) {
+define float @copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nnan_sqrt(float %x.arg, i32 %y.i) #2 {
 ; GFX9-LABEL: copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nnan_sqrt:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -326,7 +326,7 @@ define float @copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nnan_sqr
   ret float %copysign
 }
 
-define float @test_copysign_pow_fast_f32__integral_y(float %x, i32 %y.i) {
+define float @test_copysign_pow_fast_f32__integral_y(float %x, i32 %y.i) #2 {
 ; GFX9-LABEL: test_copysign_pow_fast_f32__integral_y:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -474,3 +474,4 @@ declare hidden double @_Z4log2d(double) #1
 
 attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
 attributes #1 = { norecurse nounwind memory(read) }
+attributes #2 = { nounwind }

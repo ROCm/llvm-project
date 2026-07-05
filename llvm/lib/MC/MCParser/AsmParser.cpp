@@ -868,14 +868,17 @@ bool AsmParser::processIncbinFile(const std::string &Filename, int64_t Skip,
   if (SymbolScanningMode)
     return false;
 
+  // The buffer is consumed only by emitBytes. Skip the NUL termination to
+  // enable mmap in more cases, reading only the touched pages instead of the
+  // whole file.
   std::string IncludedFile;
-  unsigned NewBuf =
-      SrcMgr.AddIncludeFile(Filename, Lexer.getLoc(), IncludedFile);
-  if (!NewBuf)
+  ErrorOr<std::unique_ptr<MemoryBuffer>> BufOrErr = SrcMgr.OpenIncludeFile(
+      Filename, IncludedFile, /*RequiresNullTerminator=*/false);
+  if (!BufOrErr)
     return true;
 
   // Pick up the bytes from the file and emit them.
-  StringRef Bytes = SrcMgr.getMemoryBuffer(NewBuf)->getBuffer();
+  StringRef Bytes = (*BufOrErr)->getBuffer();
   Bytes = Bytes.drop_front(Skip);
   if (Count) {
     int64_t Res;
@@ -2881,6 +2884,13 @@ void AsmParser::handleMacroExit() {
 }
 
 bool AsmParser::parseAssignment(StringRef Name, AssignmentKind Kind) {
+  // If the LTO library has asked us to discard this symbol, skip the
+  // assignment without ever calling parseAssignmentExpression.
+  if (discardLTOSymbol(Name)) {
+    eatToEndOfStatement();
+    return false;
+  }
+
   MCSymbol *Sym;
   const MCExpr *Value;
   SMLoc ExprLoc = getTok().getLoc();
@@ -2896,9 +2906,6 @@ bool AsmParser::parseAssignment(StringRef Name, AssignmentKind Kind) {
     // should just return out.
     return false;
   }
-
-  if (discardLTOSymbol(Name))
-    return false;
 
   // Do the assignment.
   switch (Kind) {
@@ -3471,8 +3478,8 @@ bool AsmParser::parseDirectiveAlign(bool IsPow2, uint8_t ValueSize) {
   // Check whether we should use optimal code alignment for this .align
   // directive.
   if (MAI.useCodeAlign(*Section) && !HasFillExpr) {
-    getStreamer().emitCodeAlignment(
-        Align(Alignment), &getTargetParser().getSTI(), MaxBytesToFill);
+    getStreamer().emitCodeAlignment(Align(Alignment),
+                                    getTargetParser().getSTI(), MaxBytesToFill);
   } else {
     // FIXME: Target specific behavior about how the "extra" bytes are filled.
     getStreamer().emitValueToAlignment(Align(Alignment), FillExpr, ValueSize,
@@ -6283,7 +6290,7 @@ bool AsmParser::parseMSInlineAsm(
         OS << "]";
       break;
     case AOK_Label:
-      OS << Ctx.getAsmInfo().getPrivateLabelPrefix() << AR.Label;
+      OS << Ctx.getAsmInfo().getInternalSymbolPrefix() << AR.Label;
       break;
     case AOK_Input:
       if (AR.IntelExpRestricted)

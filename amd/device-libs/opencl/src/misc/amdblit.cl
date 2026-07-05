@@ -52,6 +52,13 @@ typedef union streamBatchMemOpParams_union {
   ulong pad[6];
 } BatchMemOpParams;
 
+typedef struct CopyBufferBatchDescriptor {
+  ulong source_address;
+  ulong destination_address;
+  ulong aligned_element_count;
+  uint aligned_element_size;
+  uint trailing_byte_count;
+} CopyBufferBatchDescriptor;
 
 static const uint SplitCount = 3;
 
@@ -470,6 +477,49 @@ __amd_copyBufferExt(
   }
 }
 
+__attribute__((always_inline)) void
+__amd_copyBufferBatch(
+    __global void* descriptor_buffer,
+    uint workgroup_size,
+    uint copy_stride)
+{
+  __global const CopyBufferBatchDescriptor* descriptors =
+      (__global const CopyBufferBatchDescriptor*)descriptor_buffer;
+  uint work_item_id = (uint)get_local_id(0);
+  uint group_ordinal = (uint)get_group_id(0);
+  uint descriptor_index = (uint)get_group_id(1);
+
+  CopyBufferBatchDescriptor descriptor = descriptors[descriptor_index];
+  __global uchar* source = (__global uchar*)descriptor.source_address;
+  __global uchar* destination = (__global uchar*)descriptor.destination_address;
+  ulong copy_index = ((ulong)group_ordinal * workgroup_size) + work_item_id;
+
+  if (descriptor.aligned_element_size == sizeof(ulong2)) {
+    __global ulong2* source_data = (__global ulong2*)source;
+    __global ulong2* destination_data = (__global ulong2*)destination;
+    while (copy_index < descriptor.aligned_element_count) {
+      destination_data[copy_index] = source_data[copy_index];
+      copy_index += copy_stride;
+    }
+  } else {
+    __global uint* source_data = (__global uint*)source;
+    __global uint* destination_data = (__global uint*)destination;
+    while (copy_index < descriptor.aligned_element_count) {
+      destination_data[copy_index] = source_data[copy_index];
+      copy_index += copy_stride;
+    }
+  }
+  if ((descriptor.trailing_byte_count != 0) && (group_ordinal == 0) &&
+      (work_item_id == 0)) {
+    ulong tail_start =
+        descriptor.aligned_element_count * descriptor.aligned_element_size;
+    ulong tail_end = tail_start + descriptor.trailing_byte_count;
+    for (ulong i = tail_start; i < tail_end; ++i) {
+      destination[i] = source[i];
+    }
+  }
+}
+
 __attribute__((always_inline)) void __amd_fillBufferUnAligned(__global void* __restrict buf,
                                                  __constant uchar* __restrict pattern,
                                                  int body_pattern, ulong2 body_tile_pattern,
@@ -789,12 +839,13 @@ __amd_streamOpsDecrement(
     __global atomic_ulong* ptrUlong,
     ulong value) {
 
-    // Use atomic_fetch_add_explicit as a workaround for known hardware limitations affecting
-    // atomic_fetch_sub_explicit over PCIe.
-    if (ptrUint) {
-      atomic_fetch_add_explicit (ptrUint, -value,  memory_order_relaxed, memory_scope_all_svm_devices);
-    } else {
-      atomic_fetch_add_explicit  (ptrUlong, -value,  memory_order_relaxed, memory_scope_all_svm_devices);
+    __attribute__((atomic(remote_memory, fine_grained_memory)))
+    {
+      if (ptrUint) {
+        __scoped_atomic_fetch_sub((volatile uint*)ptrUint, (uint)value, memory_order_relaxed, __MEMORY_SCOPE_SYSTEM);
+      } else {
+        __scoped_atomic_fetch_sub((volatile ulong*)ptrUlong, value, memory_order_relaxed, __MEMORY_SCOPE_SYSTEM);
+      }
     }
 }
 

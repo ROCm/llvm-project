@@ -50,6 +50,22 @@ static const VarDecl *getBaseDecl(const Expr *Ref);
 static OpenMPDirectiveKind
 getEffectiveDirectiveKind(const OMPExecutableDirective &S);
 
+/// Whether a combined `distribute parallel for` may use the fused
+/// distr_static_chunk + static_chunkone schedule (enum 93): one
+/// for_static_init, no surrounding distribute_static_init.
+static bool canEmitGPUFusedDistSchedule(const CodeGenModule &CGM,
+                                        const OMPLoopDirective &S,
+                                        OpenMPDirectiveKind DKind) {
+  // Reduction-only for now. Non-reduction cases might follow in the future, but
+  // need more analysis for maximum profit.
+  return CGM.getLangOpts().OpenMPIsTargetDevice && CGM.getTriple().isGPU() &&
+         isOpenMPLoopBoundSharingDirective(DKind) &&
+         S.hasClausesOfKind<OMPReductionClause>() &&
+         !S.getSingleClause<OMPDistScheduleClause>() &&
+         !S.getSingleClause<OMPScheduleClause>() &&
+         !S.getSingleClause<OMPOrderedClause>();
+}
+
 namespace {
 /// Lexical scope for OpenMP executable constructs, that handles correct codegen
 /// for captured expressions.
@@ -492,7 +508,7 @@ void CodeGenFunction::GenerateOpenMPCapturedVars(
       // and load it as a void pointer.
       if (!CurField->getType()->isAnyPointerType()) {
         ASTContext &Ctx = getContext();
-        Address DstAddr = CreateMemTemp(
+        Address DstAddr = CreateMemTempWithoutCast(
             Ctx.getUIntPtrType(),
             Twine(CurCap->getCapturedVar()->getName(), ".casted"));
         LValue DstLV = MakeAddrLValue(DstAddr, Ctx.getUIntPtrType());
@@ -532,40 +548,6 @@ void CodeGenFunction::GenerateOpenMPCapturedVars(
                                      Itr->second.RedVarExpr->getType());
     }
   }
-}
-
-// This function should be called on the host when preparing to emit the
-// code that launches the kernel on the device.
-void CodeGenFunction::GenerateOpenMPCapturedVarsDevice(
-    const CapturedStmt &S, SmallVectorImpl<llvm::Value *> &CapturedVars,
-    SmallVectorImpl<llvm::Value *> &MultiTargetVars,
-    const Stmt *XteamRedNestKey) {
-  ASTContext &Ctx = getContext();
-
-  // If a for loop exists then it means we can use multi-target split on
-  // this target region.
-  if (CGM.getLangOpts().OpenMPTargetMultiDevice) {
-    assert(!CGM.getLangOpts().OpenMPIsTargetDevice &&
-           "This should only happen on host CG");
-
-    // Add LB placeholder:
-    Address CastedLBMultiAddr =
-        CreateMemTemp(Ctx.getUIntPtrType(), "LB.multi.addr");
-    LValue CastedLBMultiLV =
-        MakeAddrLValue(CastedLBMultiAddr, Ctx.getUIntPtrType());
-    llvm::Value *LBValue = EmitLoadOfScalar(CastedLBMultiLV, S.getBeginLoc());
-    MultiTargetVars.push_back(LBValue);
-
-    // Add UB placeholder:
-    Address CastedUBMultiAddr =
-        CreateMemTemp(Ctx.getUIntPtrType(), "UB.multi.addr");
-    LValue CastedUBMultiLV =
-        MakeAddrLValue(CastedUBMultiAddr, Ctx.getUIntPtrType());
-    llvm::Value *UBValue = EmitLoadOfScalar(CastedUBMultiLV, S.getBeginLoc());
-    MultiTargetVars.push_back(UBValue);
-  }
-
-  GenerateOpenMPCapturedVars(S, CapturedVars, XteamRedNestKey);
 }
 
 static Address castValueFromUintptr(CodeGenFunction &CGF, SourceLocation Loc,
@@ -640,8 +622,7 @@ static llvm::Function *emitOutlinedFunctionPrologue(
     llvm::DenseMap<const Decl *, std::pair<const Expr *, llvm::Value *>>
         &VLASizes,
     llvm::Value *&CXXThisValue, const FunctionOptions &FO,
-    bool argsNeedAddrSpace, bool isXteamKernel, bool AddMultiDeviceArgs,
-    bool AddArgsToTopKernelOnly) {
+    bool argsNeedAddrSpace, bool isXteamKernel) {
   const CapturedDecl *CD = FO.S->getCapturedDecl();
   const RecordDecl *RD = FO.S->getCapturedRecordDecl();
   assert(CD->hasBody() && "missing CapturedDecl body");
@@ -656,46 +637,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
   TargetArgs.append(
       CD->param_begin(),
       std::next(CD->param_begin(), CD->getContextParamPosition()));
-
-  // Add arguments for multi-device targets if enabled and if there is a an
-  // iteration space associated with the directive containing the target
-  // directive.
-  unsigned ContextArgsMultiDeviceOffset = 0;
-  VarDecl *LBDeclVD = nullptr;
-  VarDecl *UBDeclVD = nullptr;
-
-  // Determine if two extra arguments should be added. The args should always
-  // be added to the top kernel when in multi-device mode and on the device.
-  bool AddedExtraMDArgs = false;
-  if (AddArgsToTopKernelOnly) {
-    AddedExtraMDArgs = true;
-  } else if (AddMultiDeviceArgs) {
-    assert(CGM.getOptKernelKey(D) &&
-           "Mapping key for Xteam reduction statement not found");
-    const ForStmt *FStmt = CGM.getSingleForStmt(CGM.getOptKernelKey(D));
-    assert(FStmt && "For statement for directive not found");
-
-    // If we have a valid for statement for this target region then we can
-    // emit a multi-device target for it. Add the two arguments that hold the
-    // lower and upper bound for the loop:
-    if (FStmt) {
-      AddedExtraMDArgs = true;
-    }
-  }
-
-  if (AddedExtraMDArgs) {
-    QualType Int64Ty =
-        Ctx.getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/1);
-    LBDeclVD = ImplicitParamDecl::Create(Ctx, Int64Ty,
-                                         ImplicitParamKind::CapturedContext);
-    Args.emplace_back(LBDeclVD);
-    TargetArgs.emplace_back(LBDeclVD);
-    UBDeclVD = ImplicitParamDecl::Create(Ctx, Int64Ty,
-                                         ImplicitParamKind::CapturedContext);
-    Args.emplace_back(UBDeclVD);
-    TargetArgs.emplace_back(UBDeclVD);
-    ContextArgsMultiDeviceOffset = 2;
-  }
 
   auto I = FO.S->captures().begin();
   FunctionDecl *DebugFunctionDecl = nullptr;
@@ -735,18 +676,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
     }
     if (ArgType->isVariablyModifiedType())
       ArgType = getCanonicalParamType(Ctx, ArgType);
-
-    // Set the IPD QualType for kernel args to be in device AS (1)
-    if (CapVar && CGM.getLangOpts().OpenMPIsTargetDevice && argsNeedAddrSpace &&
-        (Ctx.getTargetInfo().getTriple().isAMDGCN())) {
-      const clang::Type *ty = ArgType.getTypePtr();
-      if (ty->isAnyPointerType() || ty->isReferenceType()) {
-        clang::LangAS LLVM_AS = CapVar->getType().getAddressSpace();
-        if (LLVM_AS == LangAS::Default)
-          LLVM_AS = LangAS::cuda_device;
-        ArgType = Ctx.getAddrSpaceQualType(ArgType, LLVM_AS);
-      }
-    }
 
     VarDecl *Arg;
     if (CapVar && (CapVar->getTLSKind() != clang::VarDecl::TLS_None)) {
@@ -877,12 +806,8 @@ static llvm::Function *emitOutlinedFunctionPrologue(
                     FO.UIntPtrCastRequired ? FO.Loc : FO.S->getBeginLoc(),
                     FO.UIntPtrCastRequired ? FO.Loc
                                            : CD->getBody()->getBeginLoc());
-
-  // When multi-device targets are enabled and applicable to this kernel then
-  // we need to add an offset of 2 to the regular offset since now the
-  // context variables start in position 3 instead of 1. The loop below will
-  // iterate over any variables captured from the user context.
-  unsigned Cnt = ContextArgsMultiDeviceOffset + CD->getContextParamPosition();
+                                           
+  unsigned Cnt = CD->getContextParamPosition();
   I = FO.S->captures().begin();
   for (const FieldDecl *FD : RD->fields()) {
     // Do not map arguments if we emit function with non-original types.
@@ -951,15 +876,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
     ++I;
   }
 
-  if (AddMultiDeviceArgs) {
-    const ForStmt *FStmt = CGM.getSingleForStmt(CGM.getOptKernelKey(D));
-    if (FStmt) {
-      // Save these emitted arguments to use them later on if we need to emit an
-      // outlined function in the generic case.
-      CGM.saveMultiDeviceArgs(D, F, LBDeclVD, UBDeclVD);
-    }
-  }
-
   return F;
 }
 
@@ -995,8 +911,7 @@ static llvm::Function *emitOutlinedFunctionPrologueAggregate(
   Address ContextAddr = CGF.GetAddrOfLocalVar(CD->getContextParam());
   ContextV = CGF.Builder.CreateLoad(ContextAddr);
 
-  // The runtime passes arguments as a flat array of promoted intptr_t values.
-  llvm::Type *IntPtrTy = CGF.IntPtrTy;
+  // The runtime passes arguments as an array of pointers.
   llvm::Type *PtrTy = CGF.Builder.getPtrTy();
   llvm::Align PtrAlign = CGM.getDataLayout().getPointerABIAlignment(0);
   CharUnits SlotAlign = CharUnits::fromQuantity(PtrAlign.value());
@@ -1004,11 +919,12 @@ static llvm::Function *emitOutlinedFunctionPrologueAggregate(
   for (auto [FD, C, FieldIdx] :
        llvm::zip(RD->fields(), CS.captures(),
                  llvm::seq<unsigned>(RD->getNumFields()))) {
-    llvm::Value *Slot =
-        CGF.Builder.CreateConstInBoundsGEP1_32(IntPtrTy, ContextV, FieldIdx);
+    llvm::Value *SlotPtr =
+        CGF.Builder.CreateConstInBoundsGEP1_32(PtrTy, ContextV, FieldIdx);
+    llvm::Value *Slot = CGF.Builder.CreateAlignedLoad(PtrTy, SlotPtr, PtrAlign);
 
-    // Generate the appropriate load from the GEP into the __context struct.
-    // This includes all of the user arguments as well as the implicit kernel
+    // Generate the appropriate load from the per-argument storage. This
+    // includes all of the user arguments as well as the implicit kernel
     // argument pointer.
     if (C.capturesVariableByCopy() && FD->getType()->isAnyPointerType()) {
       const VarDecl *CurVD = C.getCapturedVar();
@@ -1070,9 +986,7 @@ static llvm::Function *emitOutlinedFunctionPrologueAggregate(
 }
 
 llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
-    const CapturedStmt &S, const OMPExecutableDirective &D,
-    bool CanHaveMultiDeviceArgs, bool IsTopKernel) {
-  SourceLocation Loc = D.getBeginLoc();
+    const CapturedStmt &S, const OMPExecutableDirective &D, SourceLocation Loc) {
   assert(
       CapturedStmtInfo &&
       "CapturedStmtInfo should be set when generating the captured function");
@@ -1127,11 +1041,6 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
       !CGM.getTriple().isAMDGCN() && !isXteamKernel &&
       (getDebugInfo() && CGM.getCodeGenOpts().hasReducedDebugInfo());
 
-  // Determine if the kernel is multi-device. The check and set function will
-  // verify if the value has been set before, if it has been set then return it.
-  bool IsMultiDeviceKernel =
-      CGM.checkAndSetMultiDeviceKernel(D, CanHaveMultiDeviceArgs);
-
   OpenMPDirectiveKind EKind = getEffectiveDirectiveKind(D);
   bool IsDeviceKernel = CGM.getOpenMPRuntime().isGPU() &&
                         isOpenMPTargetExecutionDirective(EKind) &&
@@ -1147,31 +1056,17 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
                               CapturedStmtInfo->getHelperName(), Loc,
                               IsDeviceKernel);
     WrapperCGF.CapturedStmtInfo = CapturedStmtInfo;
-    // TODO: Determine if the wrapper function needs to pass in multi-device
-    // args in the meantime it is always false.
     WrapperF = emitOutlinedFunctionPrologue(
         WrapperCGF, D, Args, LocalAddrs, VLASizes, WrapperCGF.CXXThisValue,
-        WrapperFO, isKernel, isXteamKernel, /*AddMultiDeviceArgs*/ false,
-        /*AddArgsToTopKernelOnly*/ false);
+        WrapperFO, isKernel, isXteamKernel);
     Out << "_debug__";
   }
   FunctionOptions FO(&S, !NeedWrapperFunction, /*RegisterCastedArgsOnly=*/false,
                      Out.str(), Loc, !NeedWrapperFunction && IsDeviceKernel);
-
-  // Add multi-device args only if this is the team level or higher. For
-  // outlined parallel level we should never emit multi device arguments even if
-  // this is deemed to be a multi device kernel. The team level, when outlined,
-  // will correctly pass the LB and UB values to the outlined parallel region as
-  // prev.UB and prev.LB arguments.
-  bool ShouldEmitMultiDevicePrologue =
-      IsMultiDeviceKernel && CanHaveMultiDeviceArgs;
-  bool AddArgsToTopKernelOnly = IsTopKernel && !ShouldEmitMultiDevicePrologue &&
-                                getLangOpts().OpenMPTargetMultiDevice &&
-                                getLangOpts().OpenMPIsTargetDevice;
+                     
   llvm::Function *F = emitOutlinedFunctionPrologue(
       *this, D, WrapperArgs, WrapperLocalAddrs, WrapperVLASizes, CXXThisValue,
-      FO, isKernel, isXteamKernel, ShouldEmitMultiDevicePrologue,
-      AddArgsToTopKernelOnly);
+      FO, isKernel, isXteamKernel);
   CodeGenFunction::OMPPrivateScope LocalScope(*this);
   for (const auto &LocalAddrPair : WrapperLocalAddrs) {
     if (LocalAddrPair.second.first) {
@@ -1192,18 +1087,17 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
       EmitOptKernel(
           D, FStmt,
           llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP, Loc,
-          &WrapperArgs);
+          /*WrapperArgs=*/nullptr);
     else
       EmitOptKernel(
           D, FStmt,
           llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP,
-          Loc, &WrapperArgs);
+          Loc, /*WrapperArgs=*/nullptr);
   } else if (CGM.getLangOpts().OpenMPIsTargetDevice && isXteamKernel) {
     EmitOptKernel(D, FStmt,
                   llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_XTEAM_RED,
                   Loc, &WrapperArgs);
   } else {
-    // TODO: for multi-device targets handle this case
     if (!(CGM.isXteamScanKernel() && !CGM.isXteamScanPhaseOne))
       // This condition prevents any codegen for the host fallback function of
       // the PhaseTwo kernel of Xteam Scan.
@@ -1300,8 +1194,7 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunctionAggregate(
                        /*IsDeviceKernel=*/false);
     F = emitOutlinedFunctionPrologue(
         *this, D, Args, LocalAddrs, VLASizes, CXXThisValue, FO,
-        /*argsNeedAddrSpace=*/false, /*isXteamKernel=*/false,
-        /*AddMultiDeviceArgs=*/false, /*AddArgsToTopKernelOnly=*/false);
+        /*argsNeedAddrSpace=*/false, /*isXteamKernel=*/false);
   } else {
     llvm::Value *ContextV = nullptr;
     F = emitOutlinedFunctionPrologueAggregate(*this, Args, LocalAddrs, VLASizes,
@@ -1313,11 +1206,14 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunctionAggregate(
       const ImplicitParamDecl *Param = CD->getParam(I);
       if (Param == CD->getContextParam())
         continue;
-      llvm::Value *ParamAddr = Builder.CreateConstInBoundsGEP1_32(
-          IntPtrTy, ContextV, FieldIdx, Twine(Param->getName()) + ".addr");
+      llvm::Align PtrAlign = CGM.getDataLayout().getPointerABIAlignment(0);
+      llvm::Value *SlotPtr = Builder.CreateConstInBoundsGEP1_32(
+          Builder.getPtrTy(), ContextV, FieldIdx,
+          Twine(Param->getName()) + ".addr");
+      llvm::Value *ParamAddr =
+          Builder.CreateAlignedLoad(Builder.getPtrTy(), SlotPtr, PtrAlign);
       llvm::Value *ParamVal = Builder.CreateAlignedLoad(
-          Builder.getPtrTy(), ParamAddr,
-          CGM.getDataLayout().getPointerABIAlignment(0), Param->getName());
+          Builder.getPtrTy(), ParamAddr, PtrAlign, Param->getName());
       Address ParamLocalAddr =
           CreateMemTemp(Param->getType(), Param->getName());
       Builder.CreateStore(ParamVal, ParamLocalAddr);
@@ -1354,25 +1250,24 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunctionAggregate(
 
   for (auto [FD, InnerParam, SlotIdx] : llvm::zip(
            RD->fields(), F->args(), llvm::seq<unsigned>(RD->getNumFields()))) {
-    llvm::Value *Slot = WrapperCGF.Builder.CreateConstInBoundsGEP1_32(
-        WrapperCGF.IntPtrTy, WrapperContextV, SlotIdx);
+    llvm::Value *SlotPtr = WrapperCGF.Builder.CreateConstInBoundsGEP1_32(
+        WrapperCGF.Builder.getPtrTy(), WrapperContextV, SlotIdx);
+    llvm::Value *Slot = WrapperCGF.Builder.CreateAlignedLoad(
+        WrapperCGF.Builder.getPtrTy(), SlotPtr, PtrAlign);
     llvm::Value *Val = WrapperCGF.Builder.CreateAlignedLoad(
         InnerParam.getType(), Slot, PtrAlign, InnerParam.getName());
     CallArgs.push_back(Val);
   }
 
   unsigned SlotIdx = RD->getNumFields();
-  auto *InnerParam = F->arg_begin() + SlotIdx;
-  for (unsigned I = CD->getContextParamPosition() + 1; I < CD->getNumParams();
-       ++I) {
-    llvm::Value *Slot = WrapperCGF.Builder.CreateConstInBoundsGEP1_32(
-        WrapperCGF.IntPtrTy, WrapperContextV, SlotIdx);
-    llvm::Value *Val = WrapperCGF.Builder.CreateAlignedLoad(
-        InnerParam->getType(), Slot, PtrAlign, InnerParam->getName());
-    CallArgs.push_back(Val);
-    ++SlotIdx;
-    ++InnerParam;
-  }
+  auto InnerParam = F->arg_begin() + SlotIdx;
+  llvm::Value *SlotPtr = WrapperCGF.Builder.CreateConstInBoundsGEP1_32(
+      WrapperCGF.Builder.getPtrTy(), WrapperContextV, SlotIdx);
+  llvm::Value *Slot = WrapperCGF.Builder.CreateAlignedLoad(
+      WrapperCGF.Builder.getPtrTy(), SlotPtr, PtrAlign);
+  llvm::Value *Val = WrapperCGF.Builder.CreateAlignedLoad(
+      InnerParam->getType(), Slot, PtrAlign, InnerParam->getName());
+  CallArgs.push_back(Val);
 
   assert(InnerParam == F->arg_end() && "Argument count mismatch");
   CGM.getOpenMPRuntime().emitOutlinedFunctionCall(WrapperCGF, Loc, F, CallArgs);
@@ -2918,78 +2813,6 @@ void CodeGenFunction::EmitOMPInnerLoop(
   EmitBlock(LoopExit.getBlock());
 }
 
-void CodeGenFunction::EmitOMPMultiDeviceInnerLoop(
-    const OMPExecutableDirective &S, bool RequiresCleanup, const Expr *LoopCond,
-    const Expr *IncExpr, const VarDecl *IVDecl,
-    const llvm::function_ref<void(CodeGenFunction &)> BodyGen,
-    const llvm::function_ref<void(CodeGenFunction &)> PostIncGen) {
-  // If this is not a multi-device kernel, call the previous method.
-  if (!CGM.isMultiDeviceKernel(S))
-    return EmitOMPInnerLoop(S, RequiresCleanup, LoopCond, IncExpr, BodyGen,
-                            PostIncGen);
-
-  auto LoopExit = getJumpDestInCurrentScope("omp.inner.for.end");
-
-  // Start the loop with a block that tests the condition.
-  auto CondBlock = createBasicBlock("omp.inner.for.cond");
-  EmitBlock(CondBlock);
-  const SourceRange R = S.getSourceRange();
-
-  // If attributes are attached, push to the basic block with them.
-  const auto &OMPED = cast<OMPExecutableDirective>(S);
-  const CapturedStmt *ICS = OMPED.getInnermostCapturedStmt();
-  const Stmt *SS = ICS->getCapturedStmt();
-  const AttributedStmt *AS = dyn_cast_or_null<AttributedStmt>(SS);
-  OMPLoopNestStack.clear();
-  if (AS)
-    LoopStack.push(CondBlock, CGM.getContext(), CGM.getCodeGenOpts(),
-                   AS->getAttrs(), SourceLocToDebugLoc(R.getBegin()),
-                   SourceLocToDebugLoc(R.getEnd()));
-  else
-    LoopStack.push(CondBlock, SourceLocToDebugLoc(R.getBegin()),
-                   SourceLocToDebugLoc(R.getEnd()));
-
-  // If there are any cleanups between here and the loop-exit scope,
-  // create a block to stage a loop exit along.
-  llvm::BasicBlock *ExitBlock = LoopExit.getBlock();
-  if (RequiresCleanup)
-    ExitBlock = createBasicBlock("omp.inner.for.cond.cleanup");
-
-  llvm::BasicBlock *LoopBody = createBasicBlock("omp.inner.for.body");
-  // Emit condition bearing in mind that the condition should be compared
-  // against MultiDeviceUB not the original loop UB.
-  llvm::Value *IV = Builder.CreateLoad(GetAddrOfLocalVar(IVDecl));
-  llvm::Value *IVCast = Builder.CreateIntCast(IV, Int64Ty, /*isSigned=*/true);
-  Address MultiDeviceUBAddr =
-      GetAddrOfLocalVar(CGM.getMultiDeviceUBArg(S, CurFn));
-  llvm::Value *MultiDeviceUB = Builder.CreateLoad(MultiDeviceUBAddr);
-  llvm::Value *CmpI = Builder.CreateICmpSLE(IVCast, MultiDeviceUB);
-  Builder.CreateCondBr(CmpI, LoopBody, ExitBlock);
-  if (ExitBlock != LoopExit.getBlock()) {
-    EmitBlock(ExitBlock);
-    EmitBranchThroughCleanup(LoopExit);
-  }
-
-  EmitBlock(LoopBody);
-  incrementProfileCounter(&S);
-
-  // Create a block for the increment.
-  JumpDest Continue = getJumpDestInCurrentScope("omp.inner.for.inc");
-  BreakContinueStack.push_back(BreakContinue(*SS, LoopExit, Continue));
-
-  BodyGen(*this);
-
-  // Emit "IV = IV + 1" and a back-edge to the condition block.
-  EmitBlock(Continue.getBlock());
-  EmitIgnoredExpr(IncExpr);
-  PostIncGen(*this);
-  BreakContinueStack.pop_back();
-  EmitBranch(CondBlock);
-  LoopStack.pop();
-  // Emit the fall-through block.
-  EmitBlock(LoopExit.getBlock());
-}
-
 bool CodeGenFunction::EmitOMPLinearClauseInit(const OMPLoopDirective &D) {
   if (!HaveInsertPoint())
     return false;
@@ -4027,13 +3850,7 @@ void CodeGenFunction::EmitOMPDistributeOuterLoop(
   CGOpenMPRuntime::StaticRTInput StaticInit(
       IVSize, IVSigned, /* Ordered = */ false, LoopArgs.IL, LoopArgs.LB,
       LoopArgs.UB, LoopArgs.ST, LoopArgs.Chunk);
-  bool IsMultiDeviceKernel = CGM.isMultiDeviceKernel(S);
-  if (IsMultiDeviceKernel)
-    StaticInit.setMultiDeviceLBUB(
-        GetAddrOfLocalVar(CGM.getMultiDeviceLBArg(S, CurFn)),
-        GetAddrOfLocalVar(CGM.getMultiDeviceUBArg(S, CurFn)));
-  RT.emitDistributeStaticInit(*this, S.getBeginLoc(), ScheduleKind, StaticInit,
-                              IsMultiDeviceKernel);
+  RT.emitDistributeStaticInit(*this, S.getBeginLoc(), ScheduleKind, StaticInit);
 
   // for combined 'distribute' and 'for' the increment expression of distribute
   // is stored in DistInc. For 'distribute' alone, it is in Inc.
@@ -4374,6 +4191,17 @@ bool CodeGenFunction::EmitOMPWorksharingLoop(
           RT.isStaticChunked(ScheduleKind.Schedule,
                              /* Chunked */ Chunk != nullptr) &&
           HasChunkSizeOne && isOpenMPLoopBoundSharingDirective(EKind);
+      // GPU combined `distribute parallel for`: emit a single
+      // for_static_init with the fused distr_static_chunk + static_chunkone
+      // schedule (enum 93). The surrounding EmitOMPDistributeLoop must skip
+      // its distribute_static_init under the same conditions. Both sites are
+      // guarded by canEmitGPUFusedDistSchedule() alone so they cannot
+      // disagree; the assert guards the invariant that makes this safe today,
+      // aka that the implicit GPU default schedule is always static chunk-one.
+      ScheduleKind.UseFusedDistChunkSchedule =
+          canEmitGPUFusedDistSchedule(CGM, S, EKind);
+      assert((!ScheduleKind.UseFusedDistChunkSchedule || StaticChunkedOne) &&
+             "fused distribute schedule requires a static chunk-one schedule");
       bool IsMonotonic =
           Ordered ||
           (ScheduleKind.Schedule == OMPC_SCHEDULE_static &&
@@ -5868,7 +5696,7 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
       ParamTypes.push_back(PrivatesPtr->getType());
       for (const Expr *E : Data.PrivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-        RawAddress PrivatePtr = CGF.CreateMemTemp(
+        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
             CGF.getContext().getPointerType(E->getType()), ".priv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
@@ -5876,9 +5704,9 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
       }
       for (const Expr *E : Data.FirstprivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-        RawAddress PrivatePtr =
-            CGF.CreateMemTemp(CGF.getContext().getPointerType(E->getType()),
-                              ".firstpriv.ptr.addr");
+        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
+            CGF.getContext().getPointerType(E->getType()),
+            ".firstpriv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         FirstprivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
@@ -5886,9 +5714,9 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
       }
       for (const Expr *E : Data.LastprivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-        RawAddress PrivatePtr =
-            CGF.CreateMemTemp(CGF.getContext().getPointerType(E->getType()),
-                              ".lastpriv.ptr.addr");
+        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
+            CGF.getContext().getPointerType(E->getType()),
+            ".lastpriv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
         ParamTypes.push_back(PrivatePtr.getType());
@@ -5899,7 +5727,7 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
           Ty = CGF.getContext().getPointerType(Ty);
         if (isAllocatableDecl(VD))
           Ty = CGF.getContext().getPointerType(Ty);
-        RawAddress PrivatePtr = CGF.CreateMemTemp(
+        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
             CGF.getContext().getPointerType(Ty), ".local.ptr.addr");
         auto Result = UntiedLocalVars.insert(
             std::make_pair(VD, std::make_pair(PrivatePtr, Address::invalid())));
@@ -6190,9 +6018,9 @@ void CodeGenFunction::EmitOMPTargetTaskBasedDirective(
       ParamTypes.push_back(PrivatesPtr->getType());
       for (const Expr *E : Data.FirstprivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-        RawAddress PrivatePtr =
-            CGF.CreateMemTemp(CGF.getContext().getPointerType(E->getType()),
-                              ".firstpriv.ptr.addr");
+        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
+            CGF.getContext().getPointerType(E->getType()),
+            ".firstpriv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
         ParamTypes.push_back(PrivatePtr.getType());
@@ -6828,6 +6656,14 @@ void CodeGenFunction::EmitOMPDistributeLoop(const OMPLoopDirective &S,
       const unsigned IVSize = getContext().getTypeSize(IVExpr->getType());
       const bool IVSigned = IVExpr->getType()->hasSignedIntegerRepresentation();
 
+      // GPU fused schedule: omit the outer distribute loop and let the inner
+      // worksharing loop schedule the flattened team/thread iteration space.
+      if (canEmitGPUFusedDistSchedule(CGM, S, S.getDirectiveKind())) {
+        JumpDest LoopExit =
+            getJumpDestInCurrentScope(createBasicBlock("omp.loop.exit"));
+        CodeGenLoop(*this, S, LoopExit);
+        EmitBlock(LoopExit.getBlock());
+      } else {
       // OpenMP [2.10.8, distribute Construct, Description]
       // If dist_schedule is specified, kind must be static. If specified,
       // iterations are divided into chunks of size chunk_size, chunks are
@@ -6839,7 +6675,6 @@ void CodeGenFunction::EmitOMPDistributeLoop(const OMPLoopDirective &S,
       bool StaticChunked =
           RT.isStaticChunked(ScheduleKind, /* Chunked */ Chunk != nullptr) &&
           isOpenMPLoopBoundSharingDirective(S.getDirectiveKind());
-      bool IsMultiDeviceKernel = CGM.isMultiDeviceKernel(S);
       if (RT.isStaticNonchunked(ScheduleKind,
                                 /* Chunked */ Chunk != nullptr) ||
           StaticChunked) {
@@ -6847,60 +6682,15 @@ void CodeGenFunction::EmitOMPDistributeLoop(const OMPLoopDirective &S,
             IVSize, IVSigned, /* Ordered = */ false, IL.getAddress(),
             LB.getAddress(), UB.getAddress(), ST.getAddress(),
             StaticChunked ? Chunk : nullptr);
-        // If the current emission is part of multi-device kernel then we need
-        // to invoke a special method.
-        if (IsMultiDeviceKernel)
-          StaticInit.setMultiDeviceLBUB(
-              GetAddrOfLocalVar(CGM.getMultiDeviceLBArg(S, CurFn)),
-              GetAddrOfLocalVar(CGM.getMultiDeviceUBArg(S, CurFn)));
         RT.emitDistributeStaticInit(*this, S.getBeginLoc(), ScheduleKind,
-                                    StaticInit, IsMultiDeviceKernel);
+                                    StaticInit);
         JumpDest LoopExit =
             getJumpDestInCurrentScope(createBasicBlock("omp.loop.exit"));
-
-        // For multi device kernels we have to compare against the MultiDeviceUB
-        // instead of the GlobalUB.
-        if (CGM.isMultiDeviceKernel(S)) {
-          // UB = min(UB, MultiDeviceUB);
-          // Step 1: load UB variable which was just passed and modified by the
-          // distribute static init runtime function.
-          llvm::Value *UBVal = Builder.CreateLoad(UB.getAddress());
-
-          // Step 2: Get the address of the Multi Device UB and load it:
-          Address MultiDeviceUBAddr =
-              GetAddrOfLocalVar(CGM.getMultiDeviceUBArg(S, CurFn));
-          llvm::Value *MultiDeviceUB = Builder.CreateLoad(MultiDeviceUBAddr);
-
-          // Step 3: Make sure the compared values have the same type:
-          llvm::Value *UBValCasted =
-              Builder.CreateIntCast(UBVal, Int64Ty, /*isSigned=*/true);
-
-          // Step 4: Compare the values: if current UB is > MultiDeviceUB then
-          // ensure that we do not go beyond the MultiDeviceUB.
-          llvm::Value *CmpI = Builder.CreateICmpSGT(UBValCasted, MultiDeviceUB);
-          auto MDCheckTrue = createBasicBlock("omp.md.check.true");
-          auto MDCheckEnd = createBasicBlock("omp.md.check.end");
-
-          // Step 5: Emit the comparison:
-          Builder.CreateCondBr(CmpI, MDCheckTrue, MDCheckEnd);
-
-          // Step 6: Emit the true block which will store the upper bound.
-          EmitBlock(MDCheckTrue);
-          llvm::Value *MultiDeviceUBCasted = Builder.CreateIntCast(
-              MultiDeviceUB, UBVal->getType(), /*isSigned=*/true);
-          Builder.CreateStore(MultiDeviceUBCasted, UB.getAddress());
-          EmitBranch(MDCheckEnd);
-
-          // Step 7: emit condition end block
-          EmitBlock(MDCheckEnd);
-        } else {
-          // UB = min(UB, GlobalUB);
-          EmitIgnoredExpr(
-              isOpenMPLoopBoundSharingDirective(S.getDirectiveKind())
+        // UB = min(UB, GlobalUB);
+        EmitIgnoredExpr(isOpenMPLoopBoundSharingDirective(S.getDirectiveKind())
                   ? S.getCombinedEnsureUpperBound()
                   : S.getEnsureUpperBound());
-        }
-
+                  
         // IV = LB;
         EmitIgnoredExpr(isOpenMPLoopBoundSharingDirective(S.getDirectiveKind())
                             ? S.getCombinedInit()
@@ -6944,83 +6734,34 @@ void CodeGenFunction::EmitOMPDistributeLoop(const OMPLoopDirective &S,
               if (isOpenMPSimdDirective(S.getDirectiveKind()))
                 CGF.EmitOMPSimdInit(S);
             },
-            [&S, &LoopScope, Cond, IncExpr, IVDecl, LoopExit, &CodeGenLoop,
-             StaticChunked, UB](CodeGenFunction &CGF, PrePostActionTy &) {
-              CGF.EmitOMPMultiDeviceInnerLoop(
-                  S, LoopScope.requiresCleanups(), Cond, IncExpr, IVDecl,
+            [&S, &LoopScope, Cond, IncExpr, LoopExit, &CodeGenLoop,
+             StaticChunked](CodeGenFunction &CGF, PrePostActionTy &) {
+              CGF.EmitOMPInnerLoop(
+                  S, LoopScope.requiresCleanups(), Cond, IncExpr,
                   [&S, LoopExit, &CodeGenLoop](CodeGenFunction &CGF) {
                     CodeGenLoop(CGF, S, LoopExit);
                   },
-                  [&S, StaticChunked, UB](CodeGenFunction &CGF) {
+                  [&S, StaticChunked](CodeGenFunction &CGF) {
                     if (StaticChunked) {
                       CGF.EmitIgnoredExpr(S.getCombinedNextLowerBound());
                       CGF.EmitIgnoredExpr(S.getCombinedNextUpperBound());
-                      // TODO: emit UB = min(UB, MutliDeviceUB)
-                      if (CGF.CGM.isMultiDeviceKernel(S)) {
-                        // UB = min(UB, MultiDeviceUB);
-                        // Step 1: load UB variable which was just passed and
-                        // modified by the distribute static init runtime
-                        // function.
-                        llvm::Value *UBVal =
-                            CGF.Builder.CreateLoad(UB.getAddress());
-
-                        // Step 2: Get the address of the Multi Device UB and
-                        // load it:
-                        Address MultiDeviceUBAddr = CGF.GetAddrOfLocalVar(
-                            CGF.CGM.getMultiDeviceUBArg(S, CGF.CurFn));
-                        llvm::Value *MultiDeviceUB =
-                            CGF.Builder.CreateLoad(MultiDeviceUBAddr);
-
-                        // Step 3: Make sure the compared values have the same
-                        // type:
-                        llvm::Value *UBValCasted = CGF.Builder.CreateIntCast(
-                            UBVal, CGF.Int64Ty, /*isSigned=*/true);
-
-                        // Step 4: Compare the values: if current UB is >
-                        // MultiDeviceUB then ensure that we do not go beyond
-                        // the MultiDeviceUB.
-                        llvm::Value *CmpI = CGF.Builder.CreateICmpSGT(
-                            UBValCasted, MultiDeviceUB);
-                        auto MDCheckTrue =
-                            CGF.createBasicBlock("omp.md.check.true");
-                        auto MDCheckEnd =
-                            CGF.createBasicBlock("omp.md.check.end");
-
-                        // Step 5: Emit the comparison:
-                        CGF.Builder.CreateCondBr(CmpI, MDCheckTrue, MDCheckEnd);
-
-                        // Step 6: Emit the true block which will store the
-                        // upper bound.
-                        CGF.EmitBlock(MDCheckTrue);
-                        llvm::Value *MultiDeviceUBCasted =
-                            CGF.Builder.CreateIntCast(MultiDeviceUB,
-                                                      UBVal->getType(),
-                                                      /*isSigned=*/true);
-                        CGF.Builder.CreateStore(MultiDeviceUBCasted,
-                                                UB.getAddress());
-                        CGF.EmitBranch(MDCheckEnd);
-
-                        // Step 7: emit condition end block
-                        CGF.EmitBlock(MDCheckEnd);
-                      } else {
-                        CGF.EmitIgnoredExpr(S.getCombinedEnsureUpperBound());
-                      }
+                      CGF.EmitIgnoredExpr(S.getCombinedEnsureUpperBound());
                       CGF.EmitIgnoredExpr(S.getCombinedInit());
                     }
                   });
             });
-        EmitBlock(LoopExit.getBlock());
-        // Tell the runtime we are done.
-        RT.emitForStaticFinish(*this, S.getEndLoc(), OMPD_distribute);
-      } else {
-        // Emit the outer loop, which requests its work chunk [LB..UB] from
-        // runtime and runs the inner loop to process it.
-        // TODO: handle this case for Multi-Device Kernels.
-        const OMPLoopArguments LoopArguments = {
-            LB.getAddress(), UB.getAddress(), ST.getAddress(), IL.getAddress(),
-            Chunk};
-        EmitOMPDistributeOuterLoop(ScheduleKind, S, LoopScope, LoopArguments,
-                                   CodeGenLoop);
+          EmitBlock(LoopExit.getBlock());
+          // Tell the runtime we are done.
+          RT.emitForStaticFinish(*this, S.getEndLoc(), OMPD_distribute);
+        } else {
+          // Emit the outer loop, which requests its work chunk [LB..UB] from
+          // runtime and runs the inner loop to process it.
+          const OMPLoopArguments LoopArguments = {
+              LB.getAddress(), UB.getAddress(), ST.getAddress(), IL.getAddress(),
+              Chunk};
+          EmitOMPDistributeOuterLoop(ScheduleKind, S, LoopScope, LoopArguments,
+                                     CodeGenLoop);
+        }
       }
       if (isOpenMPSimdDirective(S.getDirectiveKind())) {
         EmitOMPSimdFinal(S, [IL, &S](CodeGenFunction &CGF) {
@@ -7079,9 +6820,7 @@ emitOutlinedOrderedFunction(CodeGenModule &CGM, const CapturedStmt *S,
   CodeGenFunction::CGCapturedStmtInfo CapStmtInfo;
   CGF.CapturedStmtInfo = &CapStmtInfo;
   llvm::Function *Fn = 
-      CGF.GenerateOpenMPCapturedStmtFunction(*S, D,
-                                             /*CanHaveMultiDeviceArgs*/ false,
-                                             /*IsTopKernel*/ false);
+      CGF.GenerateOpenMPCapturedStmtFunction(*S, D, D.getBeginLoc());
   Fn->setDoesNotRecurse();
   return Fn;
 }

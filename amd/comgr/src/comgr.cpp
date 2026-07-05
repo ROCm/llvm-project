@@ -248,7 +248,6 @@ amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
   Ident.Features.erase(Ident.Features.begin());
 
 
-  // TODO: Add a LIT test for this
   if (IdentStr == "spirv64-amd-amdhsa--amdgcnspirv" ||
       IdentStr == "spirv64-amd-amdhsa-unknown-amdgcnspirv") {
     // Features not supported for SPIR-V
@@ -274,7 +273,7 @@ amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
 
 void COMGR::ensureLLVMInitialized() {
 
-  // LLVMInitializeAMDGPUTargetInfo calls TargetRegistry.cpp:RegisterTarget()
+  // LLVMInitialize<...>TargetInfo calls TargetRegistry.cpp:RegisterTarget()
   // This function is not thread safe. There may be thread safety issues
   // with the other LLVMInitialize functions as well. For completeness, we
   // include all of these initialization functions in mutual exclusion region
@@ -293,6 +292,12 @@ void COMGR::ensureLLVMInitialized() {
     LLVMInitializeAMDGPUDisassembler();
     LLVMInitializeAMDGPUAsmParser();
     LLVMInitializeAMDGPUAsmPrinter();
+#ifdef COMGR_SPIRV_BACKEND_AVAILABLE
+    LLVMInitializeSPIRVTarget();
+    LLVMInitializeSPIRVTargetInfo();
+    LLVMInitializeSPIRVTargetMC();
+    LLVMInitializeSPIRVAsmPrinter();
+#endif
     LLVMInitialized = true;
   }
 }
@@ -640,6 +645,11 @@ amd_comgr_status_t AMD_COMGR_API
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
+  // Drive letters like "C:\" break getFilePath()'s temp-dir join.
+  if (Name && StringRef(Name).contains(':')) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
   return DataP->setName(Name);
 }
 
@@ -929,8 +939,8 @@ amd_comgr_status_t AMD_COMGR_API
     return AMD_COMGR_STATUS_SUCCESS;
   }
 
-  if (StringRef(IsaName) == "spir64-amd-amdhsa--amdgcnspirv" ||
-      StringRef(IsaName )== "spir64-amd-amdhsa-unknown-amdgcnspirv") {
+  if (StringRef(IsaName) == "spirv64-amd-amdhsa--amdgcnspirv" ||
+      StringRef(IsaName) == "spirv64-amd-amdhsa-unknown-amdgcnspirv") {
     return ActionP->setIsaName(IsaName);
   }
 
@@ -1135,6 +1145,62 @@ amd_comgr_status_t AMD_COMGR_API
   }
 
   ActionP->ShouldLinkDeviceLibs = ShouldLinkDeviceLibs;
+
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMD_COMGR_API
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    amd_comgr_action_info_set_block_sizes
+    //
+    (amd_comgr_action_info_t ActionInfo, const size_t *BlockSizes,
+     size_t Count) {
+  DataAction *ActionP = DataAction::convert(ActionInfo);
+
+  if (!ActionP || (!BlockSizes && Count)) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  ActionP->BlockSizes.clear();
+  if (BlockSizes && Count > 0) {
+    ActionP->BlockSizes.assign(BlockSizes, BlockSizes + Count);
+  }
+
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMD_COMGR_API
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    amd_comgr_action_info_get_block_sizes_count
+    //
+    (amd_comgr_action_info_t ActionInfo, size_t *Count) {
+  DataAction *ActionP = DataAction::convert(ActionInfo);
+
+  if (!ActionP || !Count) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  *Count = ActionP->BlockSizes.size();
+
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMD_COMGR_API
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    amd_comgr_action_info_get_block_sizes
+    //
+    (amd_comgr_action_info_t ActionInfo, size_t Count, size_t *BlockSizes) {
+  DataAction *ActionP = DataAction::convert(ActionInfo);
+
+  if (!ActionP || !BlockSizes) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (Count < ActionP->BlockSizes.size()) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  std::copy(ActionP->BlockSizes.begin(), ActionP->BlockSizes.end(), BlockSizes);
 
   return AMD_COMGR_STATUS_SUCCESS;
 }
@@ -2076,14 +2142,23 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
     auto Rodata = std::move(RodataOrError.get());
 
     // Collect an unmangled name for each name expression
+    StringRef RodataStr(reinterpret_cast<const char *>(Rodata.data()),
+                        Rodata.size());
     for (auto *ExpData : NameExpDataVec) {
       // TODO: If/when an accessor API becomes available to get the starting
       // address for the section, switch to that
       size_t Offset = ExpData->RodataOffset - RodataShdr.sh_offset;
 
-      // Store from the offset up until the first '\0'
-      const char *Unmangled = reinterpret_cast<const char *>(&Rodata[Offset]);
-      ExpData->UnmangledName = StringRef(Unmangled);
+      // RodataOffset derives from the untrusted ELF r_addend; reject offsets
+      // outside .rodata (a too-small value also wraps to a large Offset here).
+      if (Offset >= Rodata.size()) {
+        for (auto *Ptr : NameExpDataVec)
+          delete Ptr;
+        return AMD_COMGR_STATUS_ERROR;
+      }
+
+      // Store from the offset up until the first '\0', bounded to .rodata.
+      ExpData->UnmangledName = RodataStr.substr(Offset).split('\0').first;
     }
 
     // Populate mangled names now that mangled values are set

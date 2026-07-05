@@ -30,10 +30,6 @@ extern "C" emis_return_t Emissary(char *data) {
     result = 0;
     break;
   }
-  case EMIS_ID_FORTRT: {
-    result = EmissaryFortrt(data, &ab);
-    break;
-  }
   case EMIS_ID_PRINT: {
     result = EmissaryPrint(data, &ab);
     break;

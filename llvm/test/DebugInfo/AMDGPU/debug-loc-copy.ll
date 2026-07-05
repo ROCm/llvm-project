@@ -4,6 +4,7 @@
 ; Verify that the debug locations in this function are correct, in particular
 ; that the location for %cast doesn't appear in the block of %lab.
 
+
 define void @_Z12lane_pc_testj() #0 !dbg !9 {
 ; GCN-LABEL: _Z12lane_pc_testj:
 ; GCN:       .Lfunc_begin0:
@@ -24,9 +25,9 @@ define void @_Z12lane_pc_testj() #0 !dbg !9 {
 ; GCN-NEXT:    .cfi_undefined 40
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:  ; %bb.1: ; %lab
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:  .Ltmp0:
 ; GCN-NEXT:    .loc 0 12 1 prologue_end ; t.cpp:12:1
+; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    s_mov_b64 s[6:7], src_private_base
 ; GCN-NEXT:    s_mov_b32 s6, -1
 ; GCN-NEXT:    s_lshr_b32 s8, s32, 5
@@ -56,7 +57,7 @@ lab:
   ret void
 }
 
-attributes #0 = { noinline optnone }
+attributes #0 = { nounwind noinline optnone }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3, !4, !5, !6, !7, !8}

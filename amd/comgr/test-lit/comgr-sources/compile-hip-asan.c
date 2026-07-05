@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
 
   amd_comgr_(create_action_info(&DataAction));
   amd_comgr_(action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_HIP));
-  amd_comgr_(action_info_set_isa_name(DataAction, "amdgcn-amd-amdhsa--gfx900"));
+  amd_comgr_(action_info_set_isa_name(DataAction, "amdgcn-amd-amdhsa--gfx900:xnack+"));
   amd_comgr_(action_info_set_option_list(DataAction, CompileOptions,
                                          CompileOptionsCount));
   amd_comgr_(action_info_set_device_lib_linking(DataAction, true));

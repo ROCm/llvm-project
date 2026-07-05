@@ -201,6 +201,12 @@ if(WIN32 AND NOT MINGW AND NOT CYGWIN)
 endif()
 
 macro(test_targets)
+  if("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "amdgpu|amdgcn")
+    set(COMPILER_RT_TARGET_AMDGPU TRUE)
+  else()
+    set(COMPILER_RT_TARGET_AMDGPU FALSE)
+  endif()
+
   # Find and run MSVC (not clang-cl) and get its version. This will tell clang-cl
   # what version of MSVC to pretend to be so that the STL works.
   set(MSVC_VERSION_FLAG "")
@@ -243,7 +249,7 @@ macro(test_targets)
           test_target_arch(x86_64 "" "")
         endif()
       endif()
-    elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "amdgcn")
+    elseif(COMPILER_RT_TARGET_AMDGPU)
       test_target_arch(amdgcn "" "--target=amdgcn-amd-amdhsa" "-nogpulib"
                        "-flto" "-fconvergent-functions"
                        "-Xclang -mcode-object-version=none")
@@ -290,8 +296,10 @@ macro(test_targets)
         test_target_arch(mips64 "" "-mips64r2" "-mabi=64")
       endif()
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "nvptx")
-      test_target_arch(nvptx64 "" "--nvptx64-nvidia-cuda" "-nogpulib" "-flto"
-                       "-fconvergent-functions" "-c")
+      test_target_arch(nvptx64 "" "--nvptx64-nvidia-cuda" "-nogpulib" "-flto" "-c"
+                               "-fconvergent-functions")
+    elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "spirv64")
+      test_target_arch(spirv64 "" "--spirv64-unknown-unknown" "-nogpulib" "-flto" "-c")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "arm")
       if(WIN32)
         test_target_arch(arm "" "" "")
@@ -317,6 +325,8 @@ macro(test_targets)
       test_target_arch(wasm64 "" "--target=wasm64-unknown-unknown")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "ve")
       test_target_arch(ve "__ve__" "--target=ve-unknown-none")
+    elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "alpha")
+      test_target_arch(alpha "" "")
     endif()
     set(COMPILER_RT_OS_SUFFIX "")
   endif()

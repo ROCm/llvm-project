@@ -284,7 +284,7 @@ public:
                             uint8_t FillLen = 1,
                             unsigned MaxBytesToEmit = 0) override;
 
-  void emitCodeAlignment(Align Alignment, const MCSubtargetInfo *STI,
+  void emitCodeAlignment(Align Alignment, const MCSubtargetInfo &STI,
                          unsigned MaxBytesToEmit = 0) override;
   void emitPrefAlign(Align Alignment, const MCSymbol &End, bool EmitNops,
                      uint8_t Fill, const MCSubtargetInfo &STI) override;
@@ -400,8 +400,7 @@ public:
   void emitCFILLVMRegisterPair(int64_t Register, int64_t R1, int64_t R1Size,
                                int64_t R2, int64_t R2Size, SMLoc Loc) override;
   void emitCFILLVMVectorRegisters(
-      int64_t Register,
-      std::vector<MCCFIInstruction::VectorRegisterWithLane> VRs,
+      int64_t Register, ArrayRef<MCCFIInstruction::VectorRegisterWithLane> VRs,
       SMLoc Loc) override;
   void emitCFILLVMVectorOffset(int64_t Register, int64_t RegisterSize,
                                int64_t MaskRegister, int64_t MaskRegisterSize,
@@ -420,6 +419,8 @@ public:
   void emitWinCFIFuncletOrFuncEnd(SMLoc Loc) override;
   void emitWinCFISplitChained(SMLoc Loc) override;
   void emitWinCFIPushReg(MCRegister Register, SMLoc Loc) override;
+  void emitWinCFIPush2Regs(MCRegister Reg1, MCRegister Reg2,
+                           SMLoc Loc) override;
   void emitWinCFISetFrame(MCRegister Register, unsigned Offset,
                           SMLoc Loc) override;
   void emitWinCFIAllocStack(unsigned Size, SMLoc Loc) override;
@@ -1572,7 +1573,7 @@ void MCAsmStreamer::emitValueToAlignment(Align Alignment, int64_t Fill,
 }
 
 void MCAsmStreamer::emitCodeAlignment(Align Alignment,
-                                      const MCSubtargetInfo *STI,
+                                      const MCSubtargetInfo &STI,
                                       unsigned MaxBytesToEmit) {
   // Emit with a text fill value.
   if (MAI->getTextAlignFillValue())
@@ -1877,7 +1878,7 @@ void MCAsmStreamer::emitCVLocDirective(unsigned FunctionId, unsigned FileNo,
                                        bool PrologueEnd, bool IsStmt,
                                        StringRef FileName, SMLoc Loc) {
   // Validate the directive.
-  if (!checkCVLocSection(FunctionId, FileNo, Loc))
+  if (!checkCVLocSection(FunctionId, Loc))
     return;
 
   OS << "\t.cv_loc\t" << FunctionId << " " << FileNo << " " << Line << " "
@@ -2219,7 +2220,7 @@ void MCAsmStreamer::emitCFILLVMRegisterPair(int64_t Register, int64_t R1,
 }
 
 void MCAsmStreamer::emitCFILLVMVectorRegisters(
-    int64_t Register, std::vector<MCCFIInstruction::VectorRegisterWithLane> VRs,
+    int64_t Register, ArrayRef<MCCFIInstruction::VectorRegisterWithLane> VRs,
     SMLoc Loc) {
   MCStreamer::emitCFILLVMVectorRegisters(Register, VRs, Loc);
 
@@ -2389,6 +2390,17 @@ void MCAsmStreamer::emitWinCFIPushReg(MCRegister Register, SMLoc Loc) {
 
   OS << "\t.seh_pushreg ";
   InstPrinter->printRegName(OS, Register);
+  EmitEOL();
+}
+
+void MCAsmStreamer::emitWinCFIPush2Regs(MCRegister Reg1, MCRegister Reg2,
+                                        SMLoc Loc) {
+  MCStreamer::emitWinCFIPush2Regs(Reg1, Reg2, Loc);
+
+  OS << "\t.seh_push2regs ";
+  InstPrinter->printRegName(OS, Reg1);
+  OS << ", ";
+  InstPrinter->printRegName(OS, Reg2);
   EmitEOL();
 }
 

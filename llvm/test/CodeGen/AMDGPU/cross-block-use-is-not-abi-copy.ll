@@ -286,5 +286,5 @@ declare hidden <3 x half> @func_v3f16()
 
 declare hidden { <4 x i32>, <4 x half> } @func_struct() #0
 
-attributes #0 = { nounwind}
+attributes #0 = { nounwind }
 

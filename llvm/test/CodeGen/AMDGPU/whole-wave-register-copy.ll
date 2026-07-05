@@ -68,4 +68,4 @@ define void @vector_reg_liverange_split() #0 {
 
 declare void @foo()
 
-attributes #0 = { "amdgpu-num-vgpr"="41" "amdgpu-num-sgpr"="34"}
+attributes #0 = { "amdgpu-num-vgpr"="41" "amdgpu-num-sgpr"="34" nounwind }
