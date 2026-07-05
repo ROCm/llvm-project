@@ -48,6 +48,8 @@ on:
         description: 'Release type: "ci", "dev", "nightly", or "prerelease"'
         type: string
         default: ci
+      test_type:
+        type: string   # Temp addiiton until release type is fixed          
       repository:
         description: "Repository to checkout. Defaults to github.repository."
         type: string
@@ -60,7 +62,6 @@ on:
         description: "JSON config for external repo checkout (repository, ref, checkout_path, source_package, fetch_sources_args)"
         type: string
         default: ""
-
 permissions:
   contents: read
 
@@ -82,6 +83,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
       repository: ${{ inputs.repository }}
       ref: ${{ inputs.ref }}
       external_repo_config: ${{ inputs.external_repo_config }}
@@ -106,6 +108,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}        
       repository: ${{ inputs.repository }}
       ref: ${{ inputs.ref }}
       external_repo_config: ${{ inputs.external_repo_config }}
@@ -163,6 +166,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}        
       repository: ${{ inputs.repository }}
       ref: ${{ inputs.ref }}
       external_repo_config: ${{ inputs.external_repo_config }}
@@ -191,6 +195,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}        
       repository: ${{ inputs.repository }}
       ref: ${{ inputs.ref }}
       external_repo_config: ${{ inputs.external_repo_config }}
@@ -217,6 +222,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}        
       repository: ${{ inputs.repository }}
       ref: ${{ inputs.ref }}
       external_repo_config: ${{ inputs.external_repo_config }}
@@ -241,6 +247,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}        
       repository: ${{ inputs.repository }}
       ref: ${{ inputs.ref }}
       external_repo_config: ${{ inputs.external_repo_config }}
@@ -265,6 +272,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}        
       repository: ${{ inputs.repository }}
       ref: ${{ inputs.ref }}
       external_repo_config: ${{ inputs.external_repo_config }}
@@ -319,6 +327,7 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}        
       repository: ${{ inputs.repository }}
       ref: ${{ inputs.ref }}
       external_repo_config: ${{ inputs.external_repo_config }}
@@ -352,4 +361,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: submodule-commit-all
-          path: manifest.txt          
+          path: manifest.txt 

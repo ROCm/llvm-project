@@ -50,6 +50,8 @@ on:
         description: 'Release type; controls artifact bucket and IAM role'
         type: string
         default: ci
+      test_type:
+        type: string        
       repository:
         description: "Repository to checkout. Defaults to github.repository."
         type: string
@@ -188,7 +190,7 @@ jobs:
           python build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1 ${EXTERNAL_FETCH_SOURCES_ARGS}
 
       - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
+        if: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full')) && inputs.stage_name == 'compiler-runtime' }}
         run: |
              git config --global --add safe.directory $PWD
              git log --oneline -1
@@ -212,7 +214,7 @@ jobs:
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
       - name: Use Wno-error for CK (nightly)
-        if: ${{ github.event_name != 'pull_request' && (inputs.release_type == 'nightly' && inputs.stage_name == 'math-libs') }}
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
         shell: pwsh
         run: |
           $file = "rocm-libraries/projects/composablekernel/CMakeLists.txt"
@@ -224,7 +226,7 @@ jobs:
           }
 
       - name: Configure PR Projects
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
@@ -245,7 +247,7 @@ jobs:
             ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
 
       - name: Configure All Projects
-        if: ${{ github.event_name != 'pull_request' && inputs.release_type == 'nightly' }}
+        if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}

@@ -5,8 +5,7 @@ description: >
   and LLVM/COMGR CMake test hook fixes.
 
 inputs:
-  release_type:
-    description: 'Release type (e.g. nightly, dev, "" for PR CI).'
+  test_type:
     required: false
     default: ""
   stage_name:
@@ -32,7 +31,7 @@ runs:
 
     - name: Temp fix for hiprtc/hipcc test (Nightly)
       shell: bash
-      if: ${{ github.event_name != 'pull_request' && (inputs.release_type == 'nightly' && inputs.stage_name == 'compiler-runtime') }}
+      if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'compiler-runtime') }}
       run: |
         git config --global user.email "z1-cciauto@amd.com"
         git config --global user.name "Z1 cciauto"
@@ -55,7 +54,7 @@ runs:
 
     - name: TheRock and llvm SHA
       shell: bash
-      if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
+      if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
       run: |
         git config --global --add safe.directory "$PWD"
         git log --oneline -1
@@ -67,7 +66,7 @@ runs:
 
     - name: Use Wno-error for CK (nightly)
       shell: bash
-      if: ${{ github.event_name != 'pull_request' && (inputs.release_type == 'nightly' && inputs.stage_name == 'math-libs') }}
+      if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
       run: |
         sed -i 's/-Werror\b/-Wno-error/g' rocm-libraries/projects/composablekernel/CMakeLists.txt
 

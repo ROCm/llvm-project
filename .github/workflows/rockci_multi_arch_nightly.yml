@@ -90,7 +90,6 @@ jobs:
       rocm_deb_package_version: ${{ needs.setup.outputs.rocm_deb_package_version }}
       rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
       test_type: 'full'
-      release_type: 'nightly'
       changed_projects: ${{ inputs.changed_projects || '' }}
     permissions:
       contents: read
@@ -111,7 +110,6 @@ jobs:
       test_labels: ${{ needs.setup.outputs.windows_test_labels }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: 'full'
-      release_type: 'nightly'
       changed_projects: ${{ inputs.changed_projects || '' }}
     permissions:
       contents: read

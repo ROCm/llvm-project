@@ -53,6 +53,8 @@ on:
         description: 'Release type; controls artifact bucket and IAM role'
         type: string
         default: ci
+      test_type:
+        type: string        
       build_runs_on:
         description: "Build runner label (selected by configure script with weighted distribution)"
         type: string
@@ -152,7 +154,7 @@ jobs:
       - name: build prep (patches & hotfixes for CK, hipcc and hiprtc, tests)
         uses: ROCm/llvm-project/.github/actions/temp-build-fix@amd/dev/kirthana14m/rockci-compiler-convergence
         with:
-          release_type: ${{ inputs.release_type }}
+          test_type: ${{ inputs.test_type }}
           stage_name: ${{ inputs.stage_name }}
 
       - name: Get stage configuration
@@ -170,7 +172,7 @@ jobs:
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
       - name: Configure PR Projects
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
@@ -188,7 +190,7 @@ jobs:
            ${{ env.extra_cmake_options }}
 
       - name: Configure All Projects
-        if: ${{ github.event_name != 'pull_request' && inputs.release_type == 'nightly' }}
+        if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
