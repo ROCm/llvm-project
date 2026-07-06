@@ -16,16 +16,6 @@
 namespace clang {
 namespace driver {
 
-/// Is -Ofast used?
-bool isOFastUsed(const llvm::opt::ArgList &Args);
-
-/// Is -fopenmp-target-fast or -Ofast used
-bool isTargetFastUsed(const llvm::opt::ArgList &Args);
-
-/// Ignore possibility of environment variables if either
-/// -fopenmp-target-fast or -Ofast is used.
-bool shouldIgnoreEnvVars(const llvm::opt::ArgList &Args);
-
 namespace toolchains {
 class AMDGPUOpenMPToolChain;
 }
@@ -78,8 +68,7 @@ public:
 
   void
   addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                        llvm::opt::ArgStringList &CC1Args,
-                        llvm::StringRef BoundArch,
+                        llvm::opt::ArgStringList &CC1Args, BoundArch BA,
                         Action::OffloadKind DeviceOffloadKind) const override;
 
   CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
@@ -95,7 +84,6 @@ public:
   AddFlangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &FlangArgs) const override;
 
-
   StringRef getAsanRTLPath() const {
     return RocmInstallation->getAsanRTLPath();
   }
@@ -105,8 +93,11 @@ public:
                      const llvm::opt::ArgList &Args) const override;
 
   llvm::SmallVector<BitCodeLibraryInfo, 12>
-  getDeviceLibs(const llvm::opt::ArgList &Args, llvm::StringRef BoundArch,
+  getDeviceLibs(const llvm::opt::ArgList &Args, BoundArch BA,
                 const Action::OffloadKind DeviceOffloadKind) const override;
+
+  /// OpenMP uses LTO by default to link device bitcode.
+  LTOKind getDefaultLTOMode() const override { return LTOK_Full; }
 
   const ToolChain &HostTC;
 };

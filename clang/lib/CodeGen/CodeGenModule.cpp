@@ -1813,10 +1813,23 @@ void CodeGenModule::Release() {
   // for an int access. This allows LLVM to reason about what memory can be
   // accessed by certain library calls that only touch errno.
   if (TBAA) {
-    TBAAAccessInfo TBAAInfo = getTBAAAccessInfo(Context.IntTy);
-    if (llvm::MDNode *IntegerNode = getTBAAAccessTagInfo(TBAAInfo)) {
+    if (llvm::MDNode *IntegerNode = getTBAATypeInfo(Context.IntTy)) {
+      // Pretend that errno is part of a __libc_errno struct, to indicate that
+      // it should alias with plain integer accesses, but not int member
+      // accesses in structs.
+      llvm::MDBuilder MDB(TheModule.getContext());
+      uint64_t Size = Context.getTypeSizeInChars(Context.IntTy).getQuantity();
+      llvm::MDNode *StructNode =
+          CodeGenOpts.NewStructPathTBAA
+              ? MDB.createTBAATypeNode(TBAA->getChar(), Size,
+                                       MDB.createString("__libc_errno"),
+                                       {{0, Size, IntegerNode}})
+              : MDB.createTBAAStructTypeNode("__libc_errno",
+                                             {{IntegerNode, 0}});
+      TBAAAccessInfo Info(StructNode, IntegerNode, 0, Size);
+      llvm::MDNode *StructTagNode = getTBAAAccessTagInfo(Info);
       auto *ErrnoTBAAMD = TheModule.getOrInsertNamedMetadata(ErrnoTBAAMDName);
-      ErrnoTBAAMD->addOperand(IntegerNode);
+      ErrnoTBAAMD->addOperand(StructTagNode);
     }
   }
 }
@@ -3393,24 +3406,19 @@ static void setLinkageForGV(llvm::GlobalValue *GV, const NamedDecl *ND) {
     GV->setLinkage(llvm::GlobalValue::ExternalWeakLinkage);
 }
 
-static bool hasExistingGeneralizedTypeMD(llvm::Function *F) {
-  llvm::MDNode *MD = F->getMetadata(llvm::LLVMContext::MD_type);
-  return MD && MD->hasGeneralizedMDString();
-}
-
 void CodeGenModule::createIndirectFunctionTypeMD(const FunctionDecl *FD,
                                                  llvm::Function *F) {
-  // Return if generalized type metadata is already attached.
-  if (hasExistingGeneralizedTypeMD(F))
-    return;
-
   // All functions which are not internal linkage could be indirect targets.
   // Address taken functions with internal linkage could be indirect targets.
   if (!F->hasLocalLinkage() ||
       F->getFunction().hasAddressTaken(nullptr, /*IgnoreCallbackUses=*/true,
                                        /*IgnoreAssumeLikeCalls=*/true,
-                                       /*IgnoreLLVMUsed=*/false))
-    F->addTypeMetadata(0, CreateMetadataIdentifierGeneralized(FD->getType()));
+                                       /*IgnoreLLVMUsed=*/false)) {
+    F->addMetadata(llvm::LLVMContext::MD_callgraph,
+                   *llvm::MDTuple::get(
+                       getLLVMContext(),
+                       {CreateMetadataIdentifierGeneralized(FD->getType())}));
+  }
 }
 
 void CodeGenModule::createFunctionTypeMetadataForIcall(const FunctionDecl *FD,
@@ -3428,12 +3436,10 @@ void CodeGenModule::createFunctionTypeMetadataForIcall(const FunctionDecl *FD,
                                            /*GeneralizePointers=*/false);
   llvm::Metadata *MD = CreateMetadataIdentifierForType(FnType);
   F->addTypeMetadata(0, MD);
-  // Add the generalized identifier if not added already.
-  if (!hasExistingGeneralizedTypeMD(F)) {
-    QualType GenPtrFnType = GeneralizeFunctionType(getContext(), FD->getType(),
-                                                   /*GeneralizePointers=*/true);
-    F->addTypeMetadata(0, CreateMetadataIdentifierGeneralized(GenPtrFnType));
-  }
+
+  QualType GenPtrFnType = GeneralizeFunctionType(getContext(), FD->getType(),
+                                                 /*GeneralizePointers=*/true);
+  F->addTypeMetadata(0, CreateMetadataIdentifierGeneralized(GenPtrFnType));
 
   // Emit a hash-based bit set entry for cross-DSO calls.
   if (CodeGenOpts.SanitizeCfiCrossDso)
@@ -3452,10 +3458,7 @@ void CodeGenModule::createCalleeTypeMetadataForIcall(const QualType &QT,
     return;
 
   llvm::Metadata *TypeIdMD = CreateMetadataIdentifierGeneralized(QT);
-  llvm::MDTuple *TypeTuple = llvm::MDTuple::get(
-      getLLVMContext(), {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
-                             llvm::Type::getInt64Ty(getLLVMContext()), 0)),
-                         TypeIdMD});
+  llvm::MDTuple *TypeTuple = llvm::MDTuple::get(getLLVMContext(), {TypeIdMD});
   llvm::MDTuple *MDN = llvm::MDNode::get(getLLVMContext(), {TypeTuple});
   CB->setMetadata(llvm::LLVMContext::MD_callee_type, MDN);
 }
@@ -4738,120 +4741,69 @@ static bool HasNonDllImportDtor(QualType T) {
 }
 
 namespace {
-  struct FunctionIsDirectlyRecursive
-      : public ConstStmtVisitor<FunctionIsDirectlyRecursive, bool> {
-    const StringRef Name;
-    const Builtin::Context &BI;
-    FunctionIsDirectlyRecursive(StringRef N, const Builtin::Context &C)
-        : Name(N), BI(C) {}
+// Make sure we're not referencing non-imported vars or functions.
+struct DLLImportFunctionVisitor
+    : public RecursiveASTVisitor<DLLImportFunctionVisitor> {
+  bool SafeToInline = true;
 
-    bool VisitCallExpr(const CallExpr *E) {
-      const FunctionDecl *FD = E->getDirectCallee();
-      if (!FD)
-        return false;
-      AsmLabelAttr *Attr = FD->getAttr<AsmLabelAttr>();
-      if (Attr && Name == Attr->getLabel())
-        return true;
-      unsigned BuiltinID = FD->getBuiltinID();
-      if (!BuiltinID || !BI.isLibFunction(BuiltinID))
-        return false;
-      std::string BuiltinNameStr = BI.getName(BuiltinID);
-      StringRef BuiltinName = BuiltinNameStr;
-      return BuiltinName.consume_front("__builtin_") && Name == BuiltinName;
-    }
+  bool shouldVisitImplicitCode() const { return true; }
 
-    bool VisitStmt(const Stmt *S) {
-      for (const Stmt *Child : S->children())
-        if (Child && this->Visit(Child))
-          return true;
-      return false;
-    }
-  };
-
-  // Make sure we're not referencing non-imported vars or functions.
-  struct DLLImportFunctionVisitor
-      : public RecursiveASTVisitor<DLLImportFunctionVisitor> {
-    bool SafeToInline = true;
-
-    bool shouldVisitImplicitCode() const { return true; }
-
-    bool VisitVarDecl(VarDecl *VD) {
-      if (VD->getTLSKind()) {
-        // A thread-local variable cannot be imported.
-        SafeToInline = false;
-        return SafeToInline;
-      }
-
-      // A variable definition might imply a destructor call.
-      if (VD->isThisDeclarationADefinition())
-        SafeToInline = !HasNonDllImportDtor(VD->getType());
-
+  bool VisitVarDecl(VarDecl *VD) {
+    if (VD->getTLSKind()) {
+      // A thread-local variable cannot be imported.
+      SafeToInline = false;
       return SafeToInline;
     }
 
-    bool VisitCXXBindTemporaryExpr(CXXBindTemporaryExpr *E) {
-      if (const auto *D = E->getTemporary()->getDestructor())
-        SafeToInline = D->hasAttr<DLLImportAttr>();
-      return SafeToInline;
-    }
+    // A variable definition might imply a destructor call.
+    if (VD->isThisDeclarationADefinition())
+      SafeToInline = !HasNonDllImportDtor(VD->getType());
 
-    bool VisitDeclRefExpr(DeclRefExpr *E) {
-      ValueDecl *VD = E->getDecl();
-      if (isa<FunctionDecl>(VD))
-        SafeToInline = VD->hasAttr<DLLImportAttr>();
-      else if (VarDecl *V = dyn_cast<VarDecl>(VD))
-        SafeToInline = !V->hasGlobalStorage() || V->hasAttr<DLLImportAttr>();
-      return SafeToInline;
-    }
-
-    bool VisitCXXConstructExpr(CXXConstructExpr *E) {
-      SafeToInline = E->getConstructor()->hasAttr<DLLImportAttr>();
-      return SafeToInline;
-    }
-
-    bool VisitCXXMemberCallExpr(CXXMemberCallExpr *E) {
-      CXXMethodDecl *M = E->getMethodDecl();
-      if (!M) {
-        // Call through a pointer to member function. This is safe to inline.
-        SafeToInline = true;
-      } else {
-        SafeToInline = M->hasAttr<DLLImportAttr>();
-      }
-      return SafeToInline;
-    }
-
-    bool VisitCXXDeleteExpr(CXXDeleteExpr *E) {
-      SafeToInline = E->getOperatorDelete()->hasAttr<DLLImportAttr>();
-      return SafeToInline;
-    }
-
-    bool VisitCXXNewExpr(CXXNewExpr *E) {
-      SafeToInline = E->getOperatorNew()->hasAttr<DLLImportAttr>();
-      return SafeToInline;
-    }
-  };
-}
-
-// isTriviallyRecursive - Check if this function calls another
-// decl that, because of the asm attribute or the other decl being a builtin,
-// ends up pointing to itself.
-bool
-CodeGenModule::isTriviallyRecursive(const FunctionDecl *FD) {
-  StringRef Name;
-  if (getCXXABI().getMangleContext().shouldMangleDeclName(FD)) {
-    // asm labels are a special kind of mangling we have to support.
-    AsmLabelAttr *Attr = FD->getAttr<AsmLabelAttr>();
-    if (!Attr)
-      return false;
-    Name = Attr->getLabel();
-  } else {
-    Name = FD->getName();
+    return SafeToInline;
   }
 
-  FunctionIsDirectlyRecursive Walker(Name, Context.BuiltinInfo);
-  const Stmt *Body = FD->getBody();
-  return Body ? Walker.Visit(Body) : false;
-}
+  bool VisitCXXBindTemporaryExpr(CXXBindTemporaryExpr *E) {
+    if (const auto *D = E->getTemporary()->getDestructor())
+      SafeToInline = D->hasAttr<DLLImportAttr>();
+    return SafeToInline;
+  }
+
+  bool VisitDeclRefExpr(DeclRefExpr *E) {
+    ValueDecl *VD = E->getDecl();
+    if (isa<FunctionDecl>(VD))
+      SafeToInline = VD->hasAttr<DLLImportAttr>();
+    else if (VarDecl *V = dyn_cast<VarDecl>(VD))
+      SafeToInline = !V->hasGlobalStorage() || V->hasAttr<DLLImportAttr>();
+    return SafeToInline;
+  }
+
+  bool VisitCXXConstructExpr(CXXConstructExpr *E) {
+    SafeToInline = E->getConstructor()->hasAttr<DLLImportAttr>();
+    return SafeToInline;
+  }
+
+  bool VisitCXXMemberCallExpr(CXXMemberCallExpr *E) {
+    CXXMethodDecl *M = E->getMethodDecl();
+    if (!M) {
+      // Call through a pointer to member function. This is safe to inline.
+      SafeToInline = true;
+    } else {
+      SafeToInline = M->hasAttr<DLLImportAttr>();
+    }
+    return SafeToInline;
+  }
+
+  bool VisitCXXDeleteExpr(CXXDeleteExpr *E) {
+    SafeToInline = E->getOperatorDelete()->hasAttr<DLLImportAttr>();
+    return SafeToInline;
+  }
+
+  bool VisitCXXNewExpr(CXXNewExpr *E) {
+    SafeToInline = E->getOperatorNew()->hasAttr<DLLImportAttr>();
+    return SafeToInline;
+  }
+};
+} // namespace
 
 bool CodeGenModule::shouldEmitFunction(GlobalDecl GD) {
   if (getFunctionLinkage(GD) != llvm::Function::AvailableExternallyLinkage)
@@ -4913,7 +4865,7 @@ bool CodeGenModule::shouldEmitFunction(GlobalDecl GD) {
   // but a function that calls itself through asm label/`__builtin_` trickery is
   // clearly not equivalent to the real implementation.
   // This happens in glibc's btowc and in some configure checks.
-  return !isTriviallyRecursive(F);
+  return !getCXXABI().getMangleContext().isTriviallyRecursive(F);
 }
 
 bool CodeGenModule::shouldOpportunisticallyEmitVTables() {
@@ -8112,7 +8064,13 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
     if (LangOpts.SYCLIsDevice)
       break;
     auto *AD = cast<FileScopeAsmDecl>(D);
-    getModule().appendModuleInlineAsm(AD->getAsmString());
+
+    const TargetOptions &TargetOpts = getTarget().getTargetOpts();
+    llvm::Module::GlobalAsmProperties Props;
+    Props.TargetFeatures = llvm::join(TargetOpts.Features, ",");
+    Props.TargetCPU = TargetOpts.CPU;
+    getModule().appendModuleInlineAsm(
+        llvm::Module::GlobalAsmFragment(AD->getAsmString(), Props));
     break;
   }
 
@@ -9637,17 +9595,6 @@ CodeGenModule::getNoLoopForStmtStatus(const OMPExecutableDirective &D,
   return std::make_pair(NxSuccess, HasNestedGenericCall);
 }
 
-CodeGenModule::NoLoopXteamErr
-CodeGenModule::getMultiDeviceForStmtStatus(const OMPExecutableDirective &D,
-                                           const Stmt *OMPStmt) {
-  const ForStmt *FStmt = getSingleForStmt(OMPStmt);
-  if (FStmt == nullptr)
-    return NxNoSingleForStmt;
-
-  assert(isa<OMPLoopDirective>(D) && "Expected a loop directive");
-  return NxSuccess;
-}
-
 int64_t CodeGenModule::getXteamRedNumTeamsFromClause(
     const OptKernelNestDirectives &NestDirs) {
   for (const auto &D : NestDirs) {
@@ -9887,26 +9834,6 @@ CodeGenModule::NoLoopXteamErr CodeGenModule::getXteamRedStatusForClauses(
   return getNoLoopCompatibleSchedStatus(LD);
 }
 
-CodeGenModule::NoLoopXteamErr CodeGenModule::getMultiDeviceStatusForClauses(
-    const OptKernelNestDirectives &NestDirs) {
-  for (auto &D : NestDirs) {
-    if (D->hasClausesOfKind<OMPDependClause>() ||
-        D->hasClausesOfKind<OMPInReductionClause>() ||
-        D->hasClausesOfKind<OMPDistScheduleClause>() ||
-        D->hasClausesOfKind<OMPLastprivateClause>() ||
-        D->hasClausesOfKind<OMPCopyinClause>() ||
-        D->hasClausesOfKind<OMPOrderedClause>())
-      return NxUnsupportedTargetClause;
-  }
-  if (!isa<OMPLoopDirective>(NestDirs.back()))
-    return NxNotLoopDirective;
-  const OMPLoopDirective &LD = cast<OMPLoopDirective>(*NestDirs.back());
-  NoLoopXteamErr NxStatus = NxSuccess;
-  if ((NxStatus = getNoLoopCompatibleOrderStatus(LD)))
-    return NxStatus;
-  return getNoLoopCompatibleSchedStatus(LD);
-}
-
 /// Given a directive, collect metadata for the reduction variables for Xteam
 /// reduction, if applicable
 std::pair<CodeGenModule::NoLoopXteamErr, CodeGenModule::XteamRedCollectionInfo>
@@ -9972,7 +9899,6 @@ CodeGenModule::collectXteamRedVars(const OptKernelNestDirectives &NestDirs) {
 
   // Either we emit Xteam code for all reduction variables or none at all.
   // Track whether the kernel has any min/max reduction variable.
-  bool isMultiDeviceCompile = getLangOpts().OpenMPTargetMultiDevice;
   bool isFastReductionEnabled = getLangOpts().OpenMPTargetFastReduction;
   for (auto &D : NestDirs) {
     for (const auto *C : D->getClausesOfKind<OMPReductionClause>()) {
@@ -10042,14 +9968,6 @@ CodeGenModule::collectXteamRedVars(const OptKernelNestDirectives &NestDirs) {
         auto MinMaxOp = getMinMaxReduction(
             BinExprRhs, Ref->getType()->isUnsignedIntegerType());
         OpKindsFound |= MinMaxOp;
-
-        // Multi-device compilation is not compatible with Xteam min/max,
-        // so disable Xteam codegen.
-        if (MinMaxOp != XR_OP_unknown && isMultiDeviceCompile) {
-          return std::make_pair(
-              NxMultiDeviceMinMaxNotSupported,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        }
 
         // Fast reduction is not compatible with Xteam min/max, so
         // disable Xteam codegen.
@@ -10388,49 +10306,6 @@ CodeGenModule::checkAndSetXteamRedKernel(const OMPExecutableDirective &D) {
   return NxOptionDisabledOrHasCall;
 }
 
-bool CodeGenModule::checkAndSetMultiDeviceKernel(
-    const OMPExecutableDirective &D, bool CanBeMultiDevice) {
-  bool IsMultiDeviceKernel = false;
-
-  if (!getLangOpts().OpenMPTargetMultiDevice ||
-      !getLangOpts().OpenMPIsTargetDevice)
-    return IsMultiDeviceKernel;
-
-  OptKernelNestDirectives NestDirs;
-  if (checkNest(D, &NestDirs) == NxSuccess &&
-      getMultiDeviceStatusForClauses(NestDirs) == NxSuccess &&
-      D.hasAssociatedStmt()) {
-    const OMPExecutableDirective &InnermostDir = *NestDirs.back();
-    if (InnermostDir.hasAssociatedStmt() &&
-        getMultiDeviceForStmtStatus(
-            InnermostDir, InnermostDir.getAssociatedStmt()) == NxSuccess) {
-      // The metadata map for all optimized kernels will have the ForStmt
-      // as the key.
-      const ForStmt *FStmt = getSingleForStmt(InnermostDir.getAssociatedStmt());
-
-      // Check that we are on the device and that multi device has been enabled.
-      if (FStmt) {
-        // Set the entry only if we have not set it before otherwise just return
-        // the outcome of the isMultiDeviceKernel check. If this is the first
-        // time the function is called the code below will add an entry to the
-        // struct to keep track of the multi kernel metadata.
-        if (!multiDeviceFStmtEntryExists(FStmt)) {
-          // Now that a multi-device kernel will be generated, set the nest map
-          addOptKernelNestMap(NestDirs);
-
-          MultiDeviceFunctionBoundsMap FunctionBoundsMap;
-          MultiDeviceKernels.insert(std::make_pair(
-              FStmt, MultiDeviceKernelInfo(NestDirs, FunctionBoundsMap,
-                                           CanBeMultiDevice)));
-        }
-        IsMultiDeviceKernel = isMultiDeviceKernel(FStmt);
-      }
-    }
-  }
-
-  return IsMultiDeviceKernel;
-}
-
 bool CodeGenModule::isXteamRedKernel(const OMPExecutableDirective &D) {
   if (!D.hasAssociatedStmt())
     return false;
@@ -10456,15 +10331,6 @@ bool CodeGenModule::isNoLoopKernel(const OMPExecutableDirective &D) {
   if (FStmt == nullptr)
     return false;
   return isNoLoopKernel(FStmt);
-}
-
-bool CodeGenModule::isMultiDeviceKernel(const OMPExecutableDirective &D) {
-  if (!D.hasAssociatedStmt())
-    return false;
-  const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
-  if (FStmt == nullptr)
-    return false;
-  return isMultiDeviceKernel(FStmt);
 }
 
 void CodeGenModule::addOptKernelNestMap(

@@ -3,7 +3,7 @@
 # similar although simpler functionality. We should figure out how to merge
 # the two files.
 
-set(COMMON_CMAKE_ARGS "-DHAVE_LLVM_LIT=ON;-DCLANG_RESOURCE_DIR=${CLANG_RESOURCE_DIR}")
+set(COMMON_CMAKE_ARGS "-DHAVE_LLVM_LIT=ON;-DCLANG_RESOURCE_DIR=${CLANG_RESOURCE_DIR};-DLLVM_LIBDIR_SUFFIX=${LLVM_LIBDIR_SUFFIX}")
 if(APPLE AND CMAKE_OSX_SYSROOT AND (LLVM_TARGET_TRIPLE STREQUAL LLVM_HOST_TRIPLE))
   # Only propagate the host sysroot for native runtimes builds.
   list(APPEND RUNTIMES_CMAKE_ARGS "-DCMAKE_OSX_SYSROOT=${CMAKE_OSX_SYSROOT}")
@@ -690,7 +690,7 @@ if(build_runtimes)
       set(FORTRT_DEP FortranRuntime)
     endif()
     foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP} ${AMDGPU_ARCH_DEP} ${FORTRT_DEP})
-      if(TARGET ${dep} AND OPENMP_ENABLE_LIBOMPTARGET)
+      if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()
     endforeach()
