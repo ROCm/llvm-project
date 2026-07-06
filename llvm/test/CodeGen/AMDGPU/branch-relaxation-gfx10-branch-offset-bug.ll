@@ -1,6 +1,6 @@
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1030 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1030 %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1010 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1010 %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1030 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1030 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1030 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1010 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1010 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1030 %s
 
 ; For gfx1010, overestimate the branch size in case we need to insert
 ; a nop for the buggy offset.
@@ -52,13 +52,10 @@ bb3:
 }
 
 ; GCN-LABEL: {{^}}long_forward_exec_branch_3f_offset_bug:
-; GFX1030: s_mov_b32
-; GFX1030: v_cmpx_eq_u32
-; GFX1030: s_cbranch_execnz [[RELAX_BB:.LBB[0-9]+_[0-9]+]]
-
-; GFX1010: v_cmp_eq_u32
-; GFX1010: s_and_saveexec_b32
-; GFX1010-NEXT: s_cbranch_execnz  [[RELAX_BB:.LBB[0-9]+_[0-9]+]]
+; GCN: v_cmp_ne_u32_e64
+; GCN: s_xor_b32
+; GCN: s_mov_b32
+; GCN: s_cbranch_execnz [[RELAX_BB:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: s_getpc_b64
 ; GCN-NEXT: [[POST_GETPC:.Lpost_getpc[0-9]+]]:{{$}}
