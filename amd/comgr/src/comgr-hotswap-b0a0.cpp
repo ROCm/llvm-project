@@ -32,6 +32,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
 
+#include <cassert>
 #include <limits>
 
 using namespace llvm;
@@ -278,14 +279,22 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
 // literal) or 12 (backward, 64-bit literal), resolved by trying each. Encoded
 // via the MC assembler. Returns empty on failure.
 //
-// Invariant: callers only take this path for *far* sites (those a short
-// s_branch cannot reach, i.e. offsets well beyond the simm16 dword range), so
-// the literal never falls in the inline-constant range. A tiny offset would
-// assemble to the 4-byte inline-constant form, match neither candidate size,
-// and return empty; that is acceptable, since no caller passes such an offset
-// (see EncodeLongBranch.SmallOffsetReturnsEmpty).
+// Precondition: callers only long-branch *far* sites, so the target is far
+// enough that s_add_pc_i64 always needs a real (>= 32-bit) literal. A tiny
+// offset would instead assemble to the 4-byte inline-constant form, match
+// neither candidate size, and yield empty. That is asserted here (assert
+// liberally); the empty return is kept as a release-build safety net so a
+// stray near target degrades to the unpatched-object fallback rather than
+// crashing the loader.
 SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
                                       uint64_t TargetOffset) {
+  [[maybe_unused]] const int64_t Distance =
+      static_cast<int64_t>(TargetOffset) - static_cast<int64_t>(FromOffset);
+  [[maybe_unused]] const int64_t MinLongDistance = LongBranchMaxBytes;
+  assert((Distance > MinLongDistance || Distance < -MinLongDistance) &&
+         "encodeLongBranch: target is not a far site; the long-branch path is "
+         "only valid for offsets beyond an s_add_pc_i64 instruction's reach");
+
   for (uint32_t Size : {LongBranchFwdBytes, LongBranchMaxBytes}) {
     int64_t Off = static_cast<int64_t>(TargetOffset) -
                   static_cast<int64_t>(FromOffset + Size);
@@ -687,6 +696,10 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
       }
       std::memcpy(Orig->getBufferStart(), ElfData, ElfSize);
       Out = std::move(Orig);
+      // SUCCESS here is misleading the returned buffer is the
+      // *unpatched* original, so callers cannot tell "rewrote successfully"
+      // from "declined and fell back". The status vocabulary needs a distinct
+      // "no-op / not-applied" code.
       return AMD_COMGR_STATUS_SUCCESS;
     }
     Growth = Deferred;

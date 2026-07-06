@@ -216,19 +216,6 @@ TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
   EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
 }
 
-// A near target whose literal lands in the inline-constant range assembles to
-// the 4-byte inline form, matches neither the 8- nor 12-byte candidate, and so
-// returns empty. This is the documented invariant that callers only take the
-// long-branch path for far sites (see encodeLongBranch in comgr-hotswap-b0a0).
-TEST(EncodeLongBranch, SmallOffsetReturnsEmpty) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-  // Landing PC == From + size + imm; keep imm tiny so the literal is an inline
-  // constant regardless of which candidate size is tried.
-  const uint64_t From = 0x1000, To = From + LongBranchFwdBytes + 4;
-  EXPECT_TRUE(encodeLongBranch(S, From, To).empty());
-}
-
 // -- assembleSingleInst / decodeTextSection round-trip ------------------------
 
 TEST(AssembleDecode, SNopRoundTrip) {

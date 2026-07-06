@@ -350,6 +350,10 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
   // Select the nearest-preceding STT_FUNC symbol (greatest st_value <=
   // TextOffset). AMDGPU kernel entry symbols often have st_size == 0, so an
   // exact containment test never matches; honor st_size only when non-zero.
+  //
+  // The nearest-preceding function could be a non-kernel device function; the
+  // guard below rejects that case so callers never scratch-allocate against a
+  // non-kernel context.
   bool Found = false;
   uint64_t BestValue = 0;
   std::string BestName;
@@ -394,8 +398,20 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
     }
   }
 
-  if (Found)
-    return BestName;
+  if (Found) {
+    // Confirm the selected symbol is actually a kernel: every kernel carries a
+    // "<name>.kd" descriptor symbol, whereas a plain device function does not.
+    // This is the same descriptor lookup getKernelVgprCount performs, so a real
+    // kernel is never rejected; a non-kernel is reported as "not found" so the
+    // caller declines instead of scratch-allocating against a wrong context.
+    if (const_cast<ElfView *>(this)->findKernelDescriptor(BestName)) {
+      return BestName;
+    }
+    log() << "hotswap: findKernelAtOffset: nearest function symbol '"
+          << BestName << "' preceding offset 0x" << utohexstr(TextOffset)
+          << " has no .kd descriptor (not a kernel); treating as no match.\n";
+    return "";
+  }
 
   log() << "hotswap: findKernelAtOffset: no function symbol covers offset 0x"
         << utohexstr(TextOffset) << " in .text.\n";
