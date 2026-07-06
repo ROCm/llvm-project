@@ -77,7 +77,7 @@ FunctionCallee getF32Intrinsic(RaiseContext &Ctx, Intrinsic::ID IID) {
 // extract), F16 two-src arith (add/sub/mul/min/max/mac/fmac), packed
 // F16 fmac, 16-bit min/max and reverse-operand shifts, byte pack,
 // V_BFREV_B32 / V_NOT_B32, and F32 single-src transcendentals
-// (rcp/exp/log/ldexp/sqrt/rsq/floor/ceil/trunc/rndne/fract).
+// (rcp/exp/log/sin/cos/ldexp/sqrt/rsq/floor/ceil/trunc/rndne/fract).
 //
 // Grouped here because each case is 1-5 lines of IR emission and they
 // would bloat the arithmetic / 3-src sub-handlers if interleaved.
@@ -603,6 +603,23 @@ HandlerResult handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di,
     Ctx.writeReg32(Op.dst(),
                    Ctx.B.CreateBitCast(
                        Ctx.B.CreateCall(Log2Fn, {S}, "log"), Ctx.I32Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
+  case CanonicalOp::V_SIN_F32:
+  case CanonicalOp::V_COS_F32: {
+    if (!requireDefaultOutputModsIfPresent(Di, Hr))
+      return Hr;
+    Value *S = Ctx.B.CreateBitCast(Op.srcF(0), Ctx.F32Ty);
+    bool IsSin = Di.CanonOp == CanonicalOp::V_SIN_F32;
+    Intrinsic::ID Intrin = IsSin ? Intrinsic::amdgcn_sin
+                                 : Intrinsic::amdgcn_cos;
+    const char *Name = IsSin ? "sin" : "cos";
+    Function *TrigFn =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrin, {Ctx.F32Ty});
+    Ctx.writeReg32(Op.dst(),
+                   Ctx.B.CreateBitCast(
+                       Ctx.B.CreateCall(TrigFn, {S}, Name), Ctx.I32Ty));
     Hr.Handled = true;
     return Hr;
   }

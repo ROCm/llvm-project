@@ -355,6 +355,10 @@ enum class CanonicalOp : uint16_t {
   V_CVT_F32_F64, V_CVT_F64_F32,
   V_CVT_F64_U32, V_CVT_F64_I32, V_CVT_U32_F64, V_CVT_I32_F64,
   V_RCP_IFLAG_F32, V_RCP_F32, V_RSQ_F32, V_SQRT_F32, V_EXP_F32, V_LOG_F32,
+  // VOP1/VOP3 F32 trigonometric TRANS ops. The ISA defines these as
+  // sin/cos(src * 2*pi), not generic radian-domain sin/cos; lower through
+  // the AMDGPU intrinsics that select the hardware TRANS instructions.
+  V_SIN_F32, V_COS_F32,
   V_FREXP_EXP_I32_F64,
   // Targets with native tanh support lower this through `llvm.amdgcn.tanh.*`;
   // other targets use OCML when a matching OCML entry point exists.
