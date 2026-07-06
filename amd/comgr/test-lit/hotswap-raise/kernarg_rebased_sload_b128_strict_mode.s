@@ -9,15 +9,8 @@
 ; Triton may load an explicit by-value argument pointer into the physical
 ; kernarg SGPR pair, rebase it, and then issue more s_load_b128 operations
 ; through that pointer. The initial SMEM load proves the pair is non-entry, but
-; the later ALU rebase is not yet value-tracked, so strict mode refuses instead
-; of assuming the rebased value is still non-entry.
-
-; STRICT: implicit-arg offsets may be applied to the target runtime hidden-arg block on some CFG paths
-
-; PERMISSIVE-LABEL: define amdgpu_kernel void @kernarg_rebased_sload_b128(
-; PERMISSIVE-NOT: call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
-; PERMISSIVE: inttoptr i64
-; PERMISSIVE: load i32, ptr addrspace(1)
+; the later non-literal ALU rebase is not value-tracked, so strict mode refuses
+; instead of assuming the rebased value is still non-entry.
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 5
@@ -25,6 +18,7 @@
 	.globl	kernarg_rebased_sload_b128
 	.p2align	8
 	.type	kernarg_rebased_sload_b128,@function
+; PERMISSIVE-LABEL: define amdgpu_kernel void @kernarg_rebased_sload_b128(
 kernarg_rebased_sload_b128:
 	s_load_b128 s[0:3], s[0:1], 0x0 nv
 	s_wait_kmcnt 0x0
@@ -35,6 +29,10 @@ kernarg_rebased_sload_b128:
 	s_cbranch_scc1 .Lload
 	s_nop 0
 .Lload:
+; STRICT: source implicit-arg offsets may be applied to the target runtime hidden-arg block on some CFG paths
+; PERMISSIVE-NOT: call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
+; PERMISSIVE: inttoptr i64
+; PERMISSIVE: load i32, ptr addrspace(1)
 	s_load_b128 s[4:7], s[0:1], 0x30
 	s_wait_kmcnt 0x0
 	v_mov_b32_e32 v0, s4

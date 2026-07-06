@@ -274,8 +274,8 @@ Each hidden arg is one of:
 | `hidden_remainder_{x,y,z}` | present | present | identity |
 | `hidden_grid_dims` | present | present | identity |
 | `hidden_global_offset_{x,y,z}` | present | present | derivable only for HIP-launched HotSwap kernels (`0`); otherwise refuse |
-| `hidden_private_base` | present (gfx12 flat-scratch base) | N/A on buffer scratch | derivable -- 0 on gfx950 |
-| `hidden_shared_base` | present (gfx12 flat-LDS base) | N/A | derivable -- 0 on gfx950 |
+| `hidden_private_base` | present (gfx12 flat-scratch/aperture base) | target aperture state, not a source-layout identity | refuse until a target-capability proof maps the aperture use |
+| `hidden_shared_base` | present (gfx12 flat-LDS/aperture base) | target aperture state, not a source-layout identity | refuse until a target-capability proof maps the aperture use |
 | `hidden_default_queue` | present | present | identity |
 | `hidden_completion_action` | present | present | identity |
 | `hidden_multigrid_sync_arg` | present | present | identity |
@@ -288,15 +288,17 @@ grid-global offset, so those fields are the all-zero 64-bit value. Standalone
 pipeline users do not get that assumption and the raiser refuses the field
 instead of guessing another frontend's launch contract.
 
-The two other **derivable** entries (`hidden_private_base`,
-`hidden_shared_base`) exist because gfx1250 uses architected flat scratch /
-flat-LDS addressing spaces with non-zero base addresses; on gfx950 the
-per-kernel scratch goes through a buffer descriptor (the "flat scratch" path
-compiles down to V# ops) and private_base is effectively zero.
+`hidden_private_base` and `hidden_shared_base` are deliberately not treated as
+zero just because the target backend may lower ordinary private/shared memory
+without exposing the same source hidden slots. These fields describe
+aperture-related state (`SCRATCH_BASE`, `SHARED_BASE`, flat scratch/shared base
+source operands); a source kernel that explicitly reads them is observing that
+ABI surface. Until the translator has a proof that the source read is either
+unused or reconstructed by the target memory lowering, strict mode refuses those
+fields rather than synthesizing a convenient constant.
 
-The raiser replaces reads of these slots with a constant `i64 0`. If
-the kernel *writes* to them (it shouldn't -- they're consumed from the
-kernarg-backed hidden block, not written), that is a refusal case.
+If the kernel *writes* to any hidden slot (it shouldn't -- they're consumed from
+the kernarg-backed hidden block, not written), that is a refusal case.
 
 ## 6. Embedded descriptors
 

@@ -17,13 +17,14 @@ using namespace llvm;
 namespace COMGR::hotswap {
 
 std::optional<SourceHiddenArgByte>
-classifySourceHiddenArgByte(ArrayRef<KernelArgMeta> Args, int ByteOffset) {
+classifySourceHiddenArgByte(ArrayRef<KernelArgMeta> Args, int64_t ByteOffset) {
   if (ByteOffset < 0)
     return std::nullopt;
-  uint32_t Offset = static_cast<uint32_t>(ByteOffset);
+  uint64_t Offset = static_cast<uint64_t>(ByteOffset);
 
   for (const KernelArgMeta &Arg : Args) {
-    if (Offset < Arg.Offset || Offset >= Arg.Offset + Arg.Size)
+    uint64_t ArgEnd = static_cast<uint64_t>(Arg.Offset) + Arg.Size;
+    if (Offset < Arg.Offset || Offset >= ArgEnd)
       continue;
 
     StringRef Kind(Arg.ValueKind);
@@ -60,6 +61,20 @@ classifySourceHiddenArgByte(ArrayRef<KernelArgMeta> Args, int ByteOffset) {
       Result.Kind = SourceHiddenArgKind::HiddenGlobalOffsetY;
     else if (Kind == "hidden_global_offset_z")
       Result.Kind = SourceHiddenArgKind::HiddenGlobalOffsetZ;
+    else if (Kind == "hidden_private_base")
+      Result.Kind = SourceHiddenArgKind::HiddenPrivateBase;
+    else if (Kind == "hidden_shared_base")
+      Result.Kind = SourceHiddenArgKind::HiddenSharedBase;
+    else if (Kind == "hidden_default_queue")
+      Result.Kind = SourceHiddenArgKind::HiddenDefaultQueue;
+    else if (Kind == "hidden_completion_action")
+      Result.Kind = SourceHiddenArgKind::HiddenCompletionAction;
+    else if (Kind == "hidden_multigrid_sync_arg")
+      Result.Kind = SourceHiddenArgKind::HiddenMultigridSyncArg;
+    else if (Kind == "hidden_hostcall_buffer")
+      Result.Kind = SourceHiddenArgKind::HiddenHostcallBuffer;
+    else if (Kind == "hidden_heap_v1")
+      Result.Kind = SourceHiddenArgKind::HiddenHeapV1;
     else
       Result.Kind = SourceHiddenArgKind::UnsupportedHidden;
     return Result;

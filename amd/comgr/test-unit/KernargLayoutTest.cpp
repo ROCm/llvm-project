@@ -78,7 +78,7 @@ TEST(KernargLayout, ClassifiesGroupSizeRemainderAndGridDims) {
 
 TEST(KernargLayout, ClassifiesUnsupportedHiddenKinds) {
   std::vector<KernelArgMeta> Args = {
-      makeArg("hostcall", 64, 8, "hidden_hostcall_buffer"),
+      makeArg("printf", 64, 8, "hidden_printf_buffer"),
   };
 
   std::optional<SourceHiddenArgByte> Unsupported =
@@ -86,6 +86,33 @@ TEST(KernargLayout, ClassifiesUnsupportedHiddenKinds) {
   ASSERT_TRUE(Unsupported.has_value());
 
   EXPECT_EQ(Unsupported->Kind, SourceHiddenArgKind::UnsupportedHidden);
+}
+
+TEST(KernargLayout, ClassifiesIdentityAndDerivedHiddenKinds) {
+  std::vector<KernelArgMeta> Args = {
+      makeArg("private_base", 64, 4, "hidden_private_base"),
+      makeArg("shared_base", 68, 4, "hidden_shared_base"),
+      makeArg("default_queue", 72, 8, "hidden_default_queue"),
+      makeArg("completion_action", 80, 8, "hidden_completion_action"),
+      makeArg("multigrid", 88, 8, "hidden_multigrid_sync_arg"),
+      makeArg("hostcall", 96, 8, "hidden_hostcall_buffer"),
+      makeArg("heap", 104, 8, "hidden_heap_v1"),
+  };
+
+  EXPECT_EQ(classifySourceHiddenArgByte(Args, 64)->Kind,
+            SourceHiddenArgKind::HiddenPrivateBase);
+  EXPECT_EQ(classifySourceHiddenArgByte(Args, 68)->Kind,
+            SourceHiddenArgKind::HiddenSharedBase);
+  EXPECT_EQ(classifySourceHiddenArgByte(Args, 72)->Kind,
+            SourceHiddenArgKind::HiddenDefaultQueue);
+  EXPECT_EQ(classifySourceHiddenArgByte(Args, 80)->Kind,
+            SourceHiddenArgKind::HiddenCompletionAction);
+  EXPECT_EQ(classifySourceHiddenArgByte(Args, 88)->Kind,
+            SourceHiddenArgKind::HiddenMultigridSyncArg);
+  EXPECT_EQ(classifySourceHiddenArgByte(Args, 96)->Kind,
+            SourceHiddenArgKind::HiddenHostcallBuffer);
+  EXPECT_EQ(classifySourceHiddenArgByte(Args, 104)->Kind,
+            SourceHiddenArgKind::HiddenHeapV1);
 }
 
 TEST(KernargLayout, NonHiddenAndMissingOffsetsAreNotHidden) {

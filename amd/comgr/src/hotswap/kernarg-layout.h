@@ -47,6 +47,13 @@ enum class SourceHiddenArgKind {
   HiddenGlobalOffsetX,
   HiddenGlobalOffsetY,
   HiddenGlobalOffsetZ,
+  HiddenPrivateBase,
+  HiddenSharedBase,
+  HiddenDefaultQueue,
+  HiddenCompletionAction,
+  HiddenMultigridSyncArg,
+  HiddenHostcallBuffer,
+  HiddenHeapV1,
   UnsupportedHidden,
 };
 
@@ -54,8 +61,8 @@ enum class SourceHiddenArgKind {
 struct SourceHiddenArgByte {
   SourceHiddenArgKind Kind = SourceHiddenArgKind::None;
   llvm::StringRef ValueKind;
-  int ArgOffset = 0;
-  int ByteOffset = 0;
+  int64_t ArgOffset = 0;
+  int64_t ByteOffset = 0;
 
   unsigned byteIndexInArg() const {
     return static_cast<unsigned>(ByteOffset - ArgOffset);
@@ -65,7 +72,7 @@ struct SourceHiddenArgByte {
 // Resolve a byte offset in the source ABI's flat kernarg/hidden-arg metadata
 // view. Unsupported hidden args are reported as matched-but-unsupported.
 std::optional<SourceHiddenArgByte> classifySourceHiddenArgByte(
-    llvm::ArrayRef<KernelArgMeta> Args, int ByteOffset);
+    llvm::ArrayRef<KernelArgMeta> Args, int64_t ByteOffset);
 
 } // namespace COMGR::hotswap
 

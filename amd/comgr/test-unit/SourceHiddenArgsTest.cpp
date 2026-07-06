@@ -193,7 +193,7 @@ TEST(SourceHiddenArgs, GlobalOffsetXRefusesWithoutHipLaunchAssumption) {
 
 TEST(SourceHiddenArgs, UnsupportedHiddenArgFailsLoudly) {
   std::vector<KernelArgMeta> Args = {
-      makeArg("hostcall", 64, 8, "hidden_hostcall_buffer"),
+      makeArg("printf", 64, 8, "hidden_printf_buffer"),
   };
   HiddenArgModule HM;
   SourceHiddenArgContext Ctx = HM.context(Args);
@@ -206,6 +206,57 @@ TEST(SourceHiddenArgs, UnsupportedHiddenArgFailsLoudly) {
   EXPECT_EQ(Value.Value, nullptr);
   EXPECT_NE(Value.FailureDetail.find("unsupported source hidden argument kind"),
             std::string::npos);
+}
+
+TEST(SourceHiddenArgs, PrivateAndSharedBaseRefuseWithoutApertureProof) {
+  std::vector<KernelArgMeta> Args = {
+      makeArg("private_base", 64, 4, "hidden_private_base"),
+      makeArg("shared_base", 68, 4, "hidden_shared_base"),
+  };
+  HiddenArgModule HM;
+  SourceHiddenArgContext Ctx = HM.context(Args);
+
+  SourceHiddenArgValue Private =
+      emitSourceHiddenInteger(Ctx, /*ByteOffset=*/64, /*ByteWidth=*/4,
+                              /*IsSigned=*/false);
+  SourceHiddenArgValue Shared =
+      emitSourceHiddenInteger(Ctx, /*ByteOffset=*/68, /*ByteWidth=*/4,
+                              /*IsSigned=*/false);
+
+  EXPECT_TRUE(Private.Matched);
+  EXPECT_EQ(Private.Value, nullptr);
+  EXPECT_NE(Private.FailureDetail.find("hidden_private_base"),
+            std::string::npos);
+
+  EXPECT_TRUE(Shared.Matched);
+  EXPECT_EQ(Shared.Value, nullptr);
+  EXPECT_NE(Shared.FailureDetail.find("hidden_shared_base"),
+            std::string::npos);
+}
+
+TEST(SourceHiddenArgs, HostcallUsesTargetImplicitArgOffset) {
+  std::vector<KernelArgMeta> Args = {
+      makeArg("hostcall", 56, 8, "hidden_hostcall_buffer"),
+  };
+  HiddenArgModule HM;
+  HM.F->addFnAttr("amdgpu-no-implicitarg-ptr");
+  HM.F->addFnAttr("amdgpu-no-hostcall-ptr");
+  SourceHiddenArgContext Ctx = HM.context(Args);
+
+  SourceHiddenArgValue Value =
+      emitSourceHiddenInteger(Ctx, /*ByteOffset=*/56, /*ByteWidth=*/4,
+                              /*IsSigned=*/false);
+
+  ASSERT_TRUE(Value.Matched);
+  ASSERT_NE(Value.Value, nullptr);
+  EXPECT_TRUE(Value.FailureDetail.empty());
+
+  std::string IR = HM.str();
+  EXPECT_NE(IR.find("@llvm.amdgcn.implicitarg.ptr"), std::string::npos);
+  EXPECT_NE(IR.find("i32 80"), std::string::npos);
+  EXPECT_EQ(IR.find("i32 56"), std::string::npos);
+  EXPECT_EQ(IR.find("amdgpu-no-implicitarg-ptr"), std::string::npos);
+  EXPECT_EQ(IR.find("amdgpu-no-hostcall-ptr"), std::string::npos);
 }
 
 TEST(SourceHiddenArgs, NonHiddenOffsetDoesNotMatch) {

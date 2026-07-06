@@ -119,12 +119,12 @@ PipelineResult runPipelineAllKernels(llvm::MemoryBufferRef CodeObjectData,
 ///     (handle-sopk.cpp): silently dropped in non-strict mode but the
 ///     kernel may rely on the FP rounding / denormal / IEEE / FTZ bits
 ///     being set.
-///   * `llvm.amdgcn.implicitarg.ptr` lifts (handle-smem.cpp): emit
-///     `gep = implicitarg_ptr + sourceImplOffset; load i32, gep` which
-///     bakes the source ISA's hidden-arg byte layout into a load against
-///     the target ISA's hidden-arg block. Any mismatch in base or
-///     layout produces wrong values for `hidden_block_count_*`,
-///     `hidden_grid_dims`, etc.
+///   * Unsupported or unproved `llvm.amdgcn.implicitarg.ptr` lifts
+///     (handle-smem.cpp): strict mode refuses dynamic source implicit-arg
+///     offsets, unmatched source hidden-arg metadata, and hidden fields without
+///     explicit source-ABI synthesis or target-ABI identity mapping. Supported
+///     fields are materialized by `source-hidden-args.cpp`, not by applying
+///     source byte offsets to the target runtime's hidden-arg block.
 ///
 /// Parsed once on first call (`std::getenv("HSA_HOTSWAP_STRICT")`); the
 /// callers (handler implementations) read the flag without round-tripping

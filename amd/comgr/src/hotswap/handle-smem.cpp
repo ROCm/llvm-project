@@ -78,25 +78,28 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.getKernargPtrProvenance();
     bool BaseIsKnownNonEntry = BaseProvenance.isNonEntry();
     bool BaseIsLiveEntry = BaseProvenance.isLiveEntry();
+    int64_t SourceByteOffset = ByteOffset;
+    if (BaseIsLiveEntry)
+      SourceByteOffset += BaseProvenance.EntryByteOffset;
 
-    // Implicit-args reroute. AMDGPU exposes the implicit-arg block through
-    // `amdgcn_implicitarg_ptr`. A source kernel that issues
-    // `s_load_b* sN, kernarg_pair, off` with `off >= implicitArgsBase`
-    // is reading hidden args through the source-ABI flat layout; the
-    // lifted kernel must materialise those bytes via the implicit-arg
-    // pointer with the offset rebased to `off - implicitArgsBase`.
+    // Implicit-args reroute. A source kernel reading through the entry kernarg
+    // pointer plus a constant byte offset at or beyond `implicitArgsBase` is
+    // reading hidden args through the source ABI's flat metadata view. The
+    // effective source offset is the proven Entry+Const provenance offset plus
+    // this SMEM instruction's immediate.
     //
     // Strict mode requires source hidden-arg synthesis for offsets in this
     // range. Permissive mode uses ROCm's matching gfx9-12 hidden-arg layout.
     //
     // Gating: the physical SGPR pair must be the source-ABI kernarg pair, and
-    // CFG provenance must prove that the pair still contains the entry kernarg
-    // pointer. A proven non-entry pair no longer carries the dispatch-provided
-    // entry pointer and therefore falls through to the generic load path below.
+    // CFG provenance must prove either Entry+Const (source hidden-arg
+    // synthesis/remap) or NonEntry (ordinary memory). Unknown remains a strict
+    // refusal because source offsets might otherwise be applied to the target
+    // hidden block.
     bool IsSourceImplicitArgOffset =
         BaseIsKernargPair && !BaseIsKnownNonEntry && ImmOffset &&
         Ctx.Kernargs.ImplicitArgsBase > 0 &&
-        ByteOffset >= Ctx.Kernargs.ImplicitArgsBase;
+        SourceByteOffset >= Ctx.Kernargs.ImplicitArgsBase;
     bool IsEntryImplicitArgLoad =
         IsSourceImplicitArgOffset && BaseIsLiveEntry;
     if (IsSourceImplicitArgOffset && !IsEntryImplicitArgLoad &&
@@ -124,9 +127,10 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
                                        Ctx.I32Ty,
                                        Ctx.I64Ty,
                                        Ctx.Kernargs.Args,
-                                       Ctx.AssumeHipGlobalOffsetZero};
+                                       Ctx.AssumeHipGlobalOffsetZero,
+                                       Ctx.TargetCodeObjectVersion};
       SourceHiddenArgValue HiddenBase =
-          emitSourceHiddenDword(HiddenCtx, ByteOffset);
+          emitSourceHiddenDword(HiddenCtx, SourceByteOffset);
       if (!HiddenBase.Matched) {
         if (isStrictMode()) {
           Hr.Failure = RaiseFailure::strictUnsafeLowering(
@@ -140,7 +144,8 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
             &Ctx.M, Intrinsic::amdgcn_implicitarg_ptr);
         Value *ImplPtr =
             Ctx.B.CreateCall(FnImplicitArgPtr, {}, "implicitarg_ptr");
-        int64_t ImplOffset = ByteOffset - Ctx.Kernargs.ImplicitArgsBase;
+        int64_t ImplOffset =
+            SourceByteOffset - Ctx.Kernargs.ImplicitArgsBase;
         Value *Gep =
             (ImplOffset == 0)
                          ? ImplPtr
@@ -166,7 +171,8 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       for (int D = 0; D < LoadDwords; D++) {
         SourceHiddenArgValue Dw =
             D == 0 ? HiddenBase
-                   : emitSourceHiddenDword(HiddenCtx, ByteOffset + D * 4);
+                   : emitSourceHiddenDword(HiddenCtx,
+                                           SourceByteOffset + D * 4);
         if (!Dw.Matched) {
           Hr.Failure = RaiseFailure::unsupportedInstructionForm(
               Di, "SMEM", "source hidden-arg SMEM load spans non-hidden bytes");
@@ -274,10 +280,13 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
     unsigned OffIdx = Op.srcIdx(1);
     if (Di.isImm(OffIdx)) {
       int64_t Off = Op.srcImm(1);
+      int64_t SourceByteOffset = Off;
+      if (BaseIsLiveEntry)
+        SourceByteOffset += BaseProvenance.EntryByteOffset;
       bool IsSourceImplicitArgOffset =
           BaseIsKernargPair && !BaseIsKnownNonEntry &&
           Ctx.Kernargs.ImplicitArgsBase > 0 &&
-          Off >= Ctx.Kernargs.ImplicitArgsBase;
+          SourceByteOffset >= Ctx.Kernargs.ImplicitArgsBase;
       bool IsEntryImplicitArgLoad =
           IsSourceImplicitArgOffset && BaseIsLiveEntry;
       if (IsSourceImplicitArgOffset && !IsEntryImplicitArgLoad &&
@@ -297,9 +306,10 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
                                          Ctx.I32Ty,
                                          Ctx.I64Ty,
                                          Ctx.Kernargs.Args,
-                                         Ctx.AssumeHipGlobalOffsetZero};
+                                         Ctx.AssumeHipGlobalOffsetZero,
+                                         Ctx.TargetCodeObjectVersion};
         SourceHiddenArgValue Hidden = emitSourceHiddenInteger(
-            HiddenCtx, static_cast<int>(Off), IsHalfWord ? 2 : 1, IsSigned);
+            HiddenCtx, SourceByteOffset, IsHalfWord ? 2 : 1, IsSigned);
         if (Hidden.Matched && Hidden.Value) {
           Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx, Hidden.Value);
           Hr.Handled = true;
@@ -322,7 +332,7 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       if (Off != 0)
         Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, Ctx.B.getInt64(Off));
     } else {
-      if (BaseIsKernargPair && !BaseIsKnownNonEntry &&
+      if ((BaseIsKernargPair && !BaseIsKnownNonEntry) &&
           Ctx.Kernargs.ImplicitArgsBase > 0 &&
           isStrictMode()) {
         Hr.Failure = RaiseFailure::strictUnsafeLowering(

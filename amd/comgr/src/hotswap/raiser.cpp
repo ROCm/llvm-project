@@ -178,15 +178,17 @@ static bool isSemOpInRange(CanonicalOp Op, CanonicalOp First, CanonicalOp Last) 
 // treating source implicit-arg offsets as hidden-arg accesses once the full
 // pair is known not to hold the dispatch-provided entry pointer.
 //
-// The prepass below computes one conservative fact per kernarg-pointer lane at
-// each decoded basic block:
-//   * LiveEntry   - every incoming path still carries that entry-pointer lane.
-//   * NonEntry    - every incoming path overwrote that lane with a value loaded
-//                  from memory rather than the dispatch-provided entry SGPR
-//                  value.
-//   * Unknown     - paths disagree, are unreachable, or cannot be classified.
-// Only a full pair of LiveEntry lanes permits hidden-arg synthesis. A full pair
-// of NonEntry lanes uses ordinary memory lowering; mixed facts are ambiguous.
+// The prepass below computes one conservative fact for the physical SGPR pair
+// that originally held kernarg_segment_ptr at each decoded basic block:
+//   * Entry+Const(N) - every incoming path carries the dispatch-provided entry
+//                     kernarg pointer plus the same constant byte offset N.
+//   * NonEntry      - every incoming path overwrote the pair with a value loaded
+//                     from memory rather than the dispatch-provided entry SGPR
+//                     value. Constant rebases of such a value remain NonEntry.
+//   * Unknown       - paths disagree, are unreachable, or include an
+//                     unclassified write. Strict hidden-arg lowering refuses.
+// Partial-lane writes are Unknown because the two 32-bit lanes no longer form a
+// coherent pointer fact.
 //
 // Register identity comes from MC register classes and TableGen-declared defs;
 // mnemonic text and TSFlags are insufficient for overlap checks.
@@ -229,9 +231,21 @@ enum class KernargPtrLaneDataflowState {
 struct KernargPtrDataflowState {
   KernargPtrLaneDataflowState Low = KernargPtrLaneDataflowState::Unvisited;
   KernargPtrLaneDataflowState High = KernargPtrLaneDataflowState::Unvisited;
+  int64_t EntryByteOffset = 0;
 
   bool operator==(KernargPtrDataflowState Other) const {
-    return Low == Other.Low && High == Other.High;
+    return Low == Other.Low && High == Other.High &&
+           EntryByteOffset == Other.EntryByteOffset;
+  }
+
+  bool isLiveEntry() const {
+    return Low == KernargPtrLaneDataflowState::LiveEntry &&
+           High == KernargPtrLaneDataflowState::LiveEntry;
+  }
+
+  bool isNonEntry() const {
+    return Low == KernargPtrLaneDataflowState::NonEntry &&
+           High == KernargPtrLaneDataflowState::NonEntry;
   }
 };
 
@@ -256,8 +270,6 @@ struct KernargProvenanceBlock {
   unsigned LastIdx = 0;
   // False when Start is a recovered leader but no instruction decodes there.
   bool HasInsts = false;
-  // Sequential effect of this block's instructions on the kernarg SGPR lanes.
-  KernargPtrLaneEffect Effect;
   // Indices into the Blocks vector.
   SmallVector<unsigned, 2> Successors;
 };
@@ -286,7 +298,9 @@ static KernargPrepassDef classifyKernargPrepassDef(const MCRegisterInfo &MRI,
   default:
     break;
   }
-  unsigned Enc = MRI.getEncodingValue(Reg);
+  // Query the canonical low lane, not the tuple register. Tuple encodings can
+  // carry aggregate metadata; the dataflow fact is keyed on 32-bit SGPR lanes.
+  unsigned Enc = MRI.getEncodingValue(Lane);
   if (Enc & (AMDGPU::HWEncoding::IS_VGPR | AMDGPU::HWEncoding::IS_AGPR))
     return {KernargPrepassDef::Kind::NotTracked, 0};
   if (!AMDGPU::isSGPR(Lane, &MRI))
@@ -411,8 +425,52 @@ static KernargPtrLaneDataflowState applyKernargPtrLaneEffect(
 static KernargPtrDataflowState
 applyKernargPtrEffect(KernargPtrDataflowState State,
                       KernargPtrLaneEffect Effect) {
-  return {applyKernargPtrLaneEffect(State.Low, Effect.Low),
-          applyKernargPtrLaneEffect(State.High, Effect.High)};
+  KernargPtrDataflowState Result = {
+      applyKernargPtrLaneEffect(State.Low, Effect.Low),
+      applyKernargPtrLaneEffect(State.High, Effect.High),
+      State.EntryByteOffset};
+  if (!Result.isLiveEntry())
+    Result.EntryByteOffset = 0;
+  return Result;
+}
+
+// Apply one decoded instruction to the pair-level dataflow fact. Most
+// instructions reduce to lane overwrite effects; scalar add/sub of a literal
+// gets a pair-level transfer because it can preserve `Entry+Const` or
+// `NonEntry` provenance through a constant rebase.
+static KernargPtrDataflowState
+applyKernargPtrInstructionEffect(const MCRegisterInfo &MRI,
+                                 const MCInstrInfo &MII,
+                                 const MCSubtargetInfo &STI,
+                                 KernargPtrDataflowState State,
+                                 const DecodedInst &Di,
+                                 unsigned KernargPtrSgpr) {
+  if (State.Low == KernargPtrLaneDataflowState::Unvisited &&
+      State.High == KernargPtrLaneDataflowState::Unvisited)
+    return State;
+
+  auto IsKernargPair = [&](MCRegister Reg) {
+    KernargPrepassDef Def = classifyKernargPrepassDef(MRI, Reg);
+    return Def.DefKind == KernargPrepassDef::Kind::IndexedSgpr &&
+           Def.Index == KernargPtrSgpr;
+  };
+  KernargPtrConstRebase Rebase =
+      classifyKernargPtrConstRebase(Di, IsKernargPair);
+  if (Rebase.TouchesKernargPtr) {
+    if (Rebase.Delta) {
+      if (State.isLiveEntry()) {
+        State.EntryByteOffset += *Rebase.Delta;
+        return State;
+      }
+      if (State.isNonEntry())
+        return State;
+    }
+    return {KernargPtrLaneDataflowState::Unknown,
+            KernargPtrLaneDataflowState::Unknown, 0};
+  }
+
+  return applyKernargPtrEffect(
+      State, instructionKernargPtrEffect(MRI, MII, STI, Di, KernargPtrSgpr));
 }
 
 // Join two predecessor facts for one lane. Unvisited is bottom; disagreements
@@ -433,8 +491,24 @@ joinKernargPtrLaneStates(KernargPtrLaneDataflowState Lhs,
 static KernargPtrDataflowState
 joinKernargPtrStates(KernargPtrDataflowState Lhs,
                      KernargPtrDataflowState Rhs) {
-  return {joinKernargPtrLaneStates(Lhs.Low, Rhs.Low),
-          joinKernargPtrLaneStates(Lhs.High, Rhs.High)};
+  if (Lhs.Low == KernargPtrLaneDataflowState::Unvisited &&
+      Lhs.High == KernargPtrLaneDataflowState::Unvisited)
+    return Rhs;
+  if (Rhs.Low == KernargPtrLaneDataflowState::Unvisited &&
+      Rhs.High == KernargPtrLaneDataflowState::Unvisited)
+    return Lhs;
+
+  KernargPtrDataflowState Result = {
+      joinKernargPtrLaneStates(Lhs.Low, Rhs.Low),
+      joinKernargPtrLaneStates(Lhs.High, Rhs.High), 0};
+  if (Result.isLiveEntry()) {
+    if (Lhs.isLiveEntry() && Rhs.isLiveEntry() &&
+        Lhs.EntryByteOffset == Rhs.EntryByteOffset)
+      Result.EntryByteOffset = Lhs.EntryByteOffset;
+    else
+      Result.Low = Result.High = KernargPtrLaneDataflowState::Unknown;
+  }
+  return Result;
 }
 
 // Export solver-only bottom as Unknown before storing facts in RaiseContext.
@@ -456,20 +530,12 @@ toFinalKernargPtrLaneProvenance(KernargPtrLaneDataflowState State) {
 // by instruction lowering.
 static KernargPtrProvenance
 toFinalKernargPtrProvenance(KernargPtrDataflowState State) {
-  return {toFinalKernargPtrLaneProvenance(State.Low),
-          toFinalKernargPtrLaneProvenance(State.High)};
-}
-
-// Compose instruction effects in source program order. A later write to a lane
-// replaces the earlier fact for that lane; preserve effects leave it untouched.
-static KernargPtrLaneEffect
-composeKernargPtrEffect(KernargPtrLaneEffect BlockEffect,
-                        KernargPtrLaneEffect InstEffect) {
-  if (InstEffect.Low != KernargPtrLaneEffectKind::Preserve)
-    BlockEffect.Low = InstEffect.Low;
-  if (InstEffect.High != KernargPtrLaneEffectKind::Preserve)
-    BlockEffect.High = InstEffect.High;
-  return BlockEffect;
+  KernargPtrProvenance Result = {toFinalKernargPtrLaneProvenance(State.Low),
+                                 toFinalKernargPtrLaneProvenance(State.High),
+                                 0};
+  if (Result.isLiveEntry())
+    Result.EntryByteOffset = State.EntryByteOffset;
+  return Result;
 }
 
 // Build the strict-mode failure for an unsupported preloaded hidden kernarg.
@@ -583,10 +649,6 @@ computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
     for (unsigned J = Block.FirstIdx;
          J < NumInsts && Insts[J].Offset < NextStart; ++J) {
       Block.LastIdx = J;
-      Block.Effect = composeKernargPtrEffect(
-          Block.Effect,
-          instructionKernargPtrEffect(MRI, MII, STI, Insts[J],
-                                      KernargPtrSgpr));
       if (decodedInstEndsBlock(Insts[J]))
         break;
     }
@@ -627,15 +689,27 @@ computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
             {KernargPtrLaneDataflowState::LiveEntry,
              KernargPtrLaneDataflowState::LiveEntry});
 
-  // Finite-height per-lane diamond lattice: facts only move upward from
-  // Unvisited to a concrete path fact and then, if paths disagree or a write is
-  // unknown, to Unknown. Unknown is absorbing under join, so backedges converge.
+  // Walk each instruction so transfer functions can depend on the incoming
+  // pair fact; Entry+Const rebases cannot be pre-composed as lane effects.
+  auto TransferThroughBlock = [&](KernargPtrDataflowState In,
+                                  const KernargProvenanceBlock &Block) {
+    if (!Block.HasInsts)
+      return In;
+    for (unsigned J = Block.FirstIdx; J <= Block.LastIdx; ++J)
+      In = applyKernargPtrInstructionEffect(MRI, MII, STI, In, Insts[J],
+                                            KernargPtrSgpr);
+    return In;
+  };
+
+  // Finite-height lattice: facts only move upward from Unvisited to a concrete
+  // path fact and then, if paths disagree or a write is unknown, to Unknown.
+  // Entry+Const joins preserve only identical offsets; differing offsets become
+  // Unknown, so backedges that increment the entry pointer converge by refusing.
   bool Changed = true;
   while (Changed) {
     Changed = false;
     for (unsigned I = 0; I < NumBlocks; ++I) {
-      KernargPtrDataflowState Out =
-          applyKernargPtrEffect(State[I], Blocks[I].Effect);
+      KernargPtrDataflowState Out = TransferThroughBlock(State[I], Blocks[I]);
       for (unsigned Succ : Blocks[I].Successors)
         Changed |= MergeInto(Succ, Out);
     }
@@ -1399,10 +1473,21 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
     Regs.storeSGPR32(B, UserSgprLayout.WorkgroupIdYSgpr,
                      B.CreateCall(FnWorkgroupIdY, {}, "wg_id_y"));
   }
+  // Hidden-arg remaps use the ABI version the backend will emit for this
+  // module. If target emission starts pinning a module flag, thread that value
+  // here instead of relying on LLVM's default.
+  unsigned TargetCodeObjectVersion = AMDGPU::getDefaultAMDHSACodeObjectVersion();
   auto EmitPreloadedKernargDword = [&](IRBuilder<> &SeedB,
                                        int ByteOffset) -> Value * {
-    SourceHiddenArgContext HiddenCtx{
-        C, M, SeedB, I8Ty, I32Ty, I64Ty, Meta.Args, AssumeHipGlobalOffsetZero};
+    SourceHiddenArgContext HiddenCtx{C,
+                                     M,
+                                     SeedB,
+                                     I8Ty,
+                                     I32Ty,
+                                     I64Ty,
+                                     Meta.Args,
+                                     AssumeHipGlobalOffsetZero,
+                                     TargetCodeObjectVersion};
     SourceHiddenArgValue Hidden = emitSourceHiddenDword(HiddenCtx, ByteOffset);
     if (Hidden.Matched && Hidden.Value)
       return Hidden.Value;
@@ -1603,8 +1688,8 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   auto *F64Ty = Type::getDoubleTy(C);
   // `userSgprLayout` was built above before Phase 4 so entry SGPR seeding
   // and handler-side ABI decisions use the same descriptor-derived mapping.
-  RaiseContext Ctx{C, M, B, Regs, Projection, Mc, Isa, TargetIsa, Kernargs,
-                   &UserSgprLayout, F,
+  RaiseContext Ctx{C, M, B, Regs, Projection, Mc, Isa, TargetIsa,
+                   TargetCodeObjectVersion, Kernargs, &UserSgprLayout, F,
                    nullptr,
                    I1Ty, I8Ty, I32Ty, I64Ty, F32Ty, F16Ty, F64Ty,
                    PtrGlobalTy, OffsetToBb, KernelOffset, KernelEndOffset};
