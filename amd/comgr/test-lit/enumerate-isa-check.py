@@ -50,7 +50,7 @@ def main(argv):
         # The GPU name is everything after the final "--" (vendor/OS are
         # empty here), including any feature suffix such as ":sramecc+",
         # which clang accepts on -mcpu.
-        gpu = isa.rsplit("--", 1)[-1]
+        gpu = isa.split("-", 4)[-1]
 
         run(common + ["-mcpu=" + gpu, "-c", source, "-o", obj])
         run(common + ["-mcpu=" + gpu, "-shared", source, "-o", shared])
