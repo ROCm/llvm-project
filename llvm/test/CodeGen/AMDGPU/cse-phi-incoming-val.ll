@@ -1,15 +1,15 @@
-; RUN: llc < %s -mtriple=amdgcn--amdpal -mcpu=gfx900 | FileCheck %s
+; RUN: llc < %s -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=gfx900 | FileCheck %s
 
 ; Check that the redundant immediate MOV instruction
 ; (by-product of handling phi nodes) is not found
 ; in the generated code.
 
 ; CHECK-LABEL: {{^}}mov_opt:
-; CHECK: s_mov_b32 [[SREG:s[0-9]+]], 1.0
-; CHECK: %bb.1:
+; CHECK: ; %bb
+; CHECK: v_mov_b32_e32 [[VREG:v[0-9]+]], 1.0
 ; CHECK-NOT: v_mov_b32_e32 {{v[0-9]+}}, 1.0
-; CHECK: BB0_3:
-; CHECK: v_mov_b32_e32 v{{[0-9]+}}, [[SREG]]
+; CHECK: %bb10
+; CHECK-NOT: v_mov_b32_e32 {{v[0-9]+}}, 1.0
 
 define amdgpu_ps void @mov_opt(i32 %arg, i32 inreg %arg1, i32 inreg %arg2) local_unnamed_addr #0 {
 bb:
