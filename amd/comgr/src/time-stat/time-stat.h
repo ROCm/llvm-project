@@ -15,6 +15,11 @@
 #include "amd_comgr.h"
 #include <iostream>
 
+#ifndef _WIN32
+#include <cerrno>
+#include <fcntl.h>
+#endif
+
 namespace COMGR {
 namespace TimeStatistics {
 
@@ -35,9 +40,23 @@ public:
   PerfStats() {}
   bool Init(std::string LogFile) {
     std::error_code EC;
-    std::unique_ptr<llvm::raw_fd_ostream> LogF(
-        new (std::nothrow)
-            llvm::raw_fd_ostream(LogFile, EC, llvm::sys::fs::OF_Text));
+    std::unique_ptr<llvm::raw_fd_ostream> LogF;
+#ifndef _WIN32
+    // Open with O_NOFOLLOW so a symlink pre-planted at the log path is not
+    // followed. The path may be caller-influenced (AMD_COMGR_REDIRECT_LOGS) or
+    // default to a CWD-relative file, so refuse to write through a symlink.
+    int FD = ::open(LogFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW,
+                    0644);
+    if (FD < 0) {
+      EC = std::error_code(errno, std::generic_category());
+    } else {
+      LogF.reset(new (std::nothrow)
+                     llvm::raw_fd_ostream(FD, /*shouldClose=*/true));
+    }
+#else
+    LogF.reset(new (std::nothrow)
+                   llvm::raw_fd_ostream(LogFile, EC, llvm::sys::fs::OF_Text));
+#endif
     if (EC) {
       std::cerr << "Failed to open log file " << LogFile << "for perf stats "
                 << EC.message() << "\n ";
