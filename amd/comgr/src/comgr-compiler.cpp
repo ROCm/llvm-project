@@ -26,8 +26,8 @@
 #include "comgr-unpackage-command.h"
 #include "lld/Common/CommonLinkerContext.h"
 #include "lld/Common/Driver.h"
+#include "clang/Basic/Diagnostic.h"
 #include "clang/CodeGen/CodeGenAction.h"
-#include "clang/Config/config.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Driver/Job.h"
@@ -1199,112 +1199,70 @@ amd_comgr_status_t AMDGPUCompiler::removeTmpDirs() {
 #endif
 }
 
-enum class CxxStdlib { Libcxx, Libstdcxx };
+// Clang's driver builds C++ standard library include paths under an
+// `include/c++` component for the normal libc++ and libstdc++ layouts.
+// Examples are `.../include/c++/v1` for libc++ and
+// `.../include/c++/<gcc-version>` for libstdc++. Clang's own resource
+// include directory uses a different layout, such as `.../lib/clang/N/include`,
+// so this is enough to distinguish C++ standard library include paths from
+// Clang builtin header paths.
+static bool isCxxStdlibIncludePath(StringRef Path) {
+  return Path.contains("/include/c++/") || Path.contains("\\include\\c++\\");
+}
 
-static CxxStdlib getEffectiveCxxStdlib(ArrayRef<const char *> Argv) {
-  StringRef RequestedStdlib;
-  for (size_t I = 0; I < Argv.size(); ++I) {
-    StringRef A(Argv[I] ? Argv[I] : "");
-    if (A.starts_with("-stdlib="))
-      RequestedStdlib = A.drop_front(StringRef("-stdlib=").size());
-    else if (A == "-stdlib" && I + 1 < Argv.size() && Argv[I + 1])
-      RequestedStdlib = Argv[++I];
+static bool isIncludePathFlag(StringRef Arg) {
+  return Arg == "-internal-isystem" || Arg == "-isystem" ||
+         Arg == "-idirafter" || Arg == "-cxx-isystem";
+}
+
+static bool getJoinedIncludePath(StringRef Arg, StringRef Prefix,
+                                 StringRef &Path) {
+  if (!Arg.starts_with(Prefix) || Arg.size() == Prefix.size())
+    return false;
+  Path = Arg.drop_front(Prefix.size());
+  return true;
+}
+
+bool AMDGPUCompiler::driverAddsCxxStdlibInclude(ArrayRef<const char *> Argv,
+                                                std::string *FoundPath) {
+  std::unique_ptr<DiagnosticOptions> DiagOpts(new DiagnosticOptions);
+  IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs);
+  DiagnosticsEngine Diags(DiagID, *DiagOpts, new IgnoringDiagConsumer);
+  ProcessWarningOptions(Diags, *DiagOpts, *OverlayFS, /*ReportDiags=*/false);
+
+  Driver TheDriver((Twine(env::getLLVMPath()) + "/bin/clang").str(),
+                   llvm::sys::getDefaultTargetTriple(), Diags,
+                   "AMDGPU Code Object Manager", OverlayFS);
+  TheDriver.setCheckInputsExist(false);
+  TheDriver.setProbePrecompiled(false);
+
+  std::unique_ptr<Compilation> C(TheDriver.BuildCompilation(Argv));
+  if (!C || C->containsError())
+    return false;
+
+  for (auto &Job : C->getJobs()) {
+    const llvm::opt::ArgStringList &Arguments = Job.getArguments();
+    for (size_t I = 0; I < Arguments.size(); ++I) {
+      StringRef Arg(Arguments[I] ? Arguments[I] : "");
+      StringRef Path;
+      if (isIncludePathFlag(Arg)) {
+        if (I + 1 >= Arguments.size())
+          continue;
+        Path = StringRef(Arguments[++I] ? Arguments[I] : "");
+      } else if (!getJoinedIncludePath(Arg, "-isystem", Path) &&
+                 !getJoinedIncludePath(Arg, "-idirafter", Path) &&
+                 !getJoinedIncludePath(Arg, "-cxx-isystem", Path) &&
+                 !getJoinedIncludePath(Arg, "-internal-isystem", Path)) {
+        continue;
+      }
+
+      if (isCxxStdlibIncludePath(Path)) {
+        if (FoundPath)
+          *FoundPath = Path.str();
+        return true;
+      }
+    }
   }
-  if (RequestedStdlib == "libc++")
-    return CxxStdlib::Libcxx;
-  if (RequestedStdlib == "libstdc++")
-    return CxxStdlib::Libstdcxx;
-
-  StringRef DefaultStdlib(CLANG_DEFAULT_CXX_STDLIB);
-  if (DefaultStdlib == "libc++")
-    return CxxStdlib::Libcxx;
-  if (DefaultStdlib == "libstdc++")
-    return CxxStdlib::Libstdcxx;
-  return CxxStdlib::Libstdcxx;
-}
-
-static bool probeLibcxxHeadersUnder(StringRef Root, std::string *FoundPath) {
-  auto Hit = [&](const Twine &P) {
-    if (FoundPath)
-      *FoundPath = P.str();
-    return true;
-  };
-
-  SmallString<256> LibCxx(Root);
-  sys::path::append(LibCxx, "include", "c++", "v1", "cstddef");
-  if (sys::fs::exists(LibCxx))
-    return Hit(LibCxx);
-  return false;
-}
-
-static bool probeLibstdcxxHeadersUnder(StringRef Root, std::string *FoundPath) {
-  auto Hit = [&](const Twine &P) {
-    if (FoundPath)
-      *FoundPath = P.str();
-    return true;
-  };
-
-  SmallString<256> CxxRoot(Root);
-  sys::path::append(CxxRoot, "include", "c++");
-  std::error_code EC;
-  for (sys::fs::directory_iterator DI(CxxRoot, EC), End; DI != End && !EC;
-       DI.increment(EC)) {
-    if (DI->type() != sys::fs::file_type::directory_file)
-      continue;
-    if (sys::path::filename(DI->path()) == "v1")
-      continue;
-    SmallString<256> Probe(DI->path());
-    sys::path::append(Probe, "cstddef");
-    if (sys::fs::exists(Probe))
-      return Hit(Probe);
-  }
-  return false;
-}
-
-static bool probeCxxHeadersUnder(StringRef Root, CxxStdlib Stdlib,
-                                 std::string *FoundPath) {
-  if (Stdlib == CxxStdlib::Libcxx)
-    return probeLibcxxHeadersUnder(Root, FoundPath);
-  return probeLibstdcxxHeadersUnder(Root, FoundPath);
-}
-
-// Probe common system C++ header locations, including --sysroot and
-// --gcc-toolchain redirects. Unknown layouts keep the previous embedded
-// fallback behavior.
-static bool detectSystemCxxHeadersOnDisk(ArrayRef<const char *> Argv,
-                                         std::string *FoundPath) {
-  std::string SysRoot;
-  std::string GccToolchain;
-  for (size_t I = 0; I < Argv.size(); ++I) {
-    StringRef A(Argv[I] ? Argv[I] : "");
-    if (A == "--sysroot" && I + 1 < Argv.size() && Argv[I + 1])
-      SysRoot = Argv[I + 1];
-    else if (A.starts_with("--sysroot="))
-      SysRoot = A.drop_front(StringRef("--sysroot=").size()).str();
-    else if (A == "--gcc-toolchain" && I + 1 < Argv.size() && Argv[I + 1])
-      GccToolchain = Argv[I + 1];
-    else if (A.starts_with("--gcc-toolchain="))
-      GccToolchain = A.drop_front(StringRef("--gcc-toolchain=").size()).str();
-  }
-  if (SysRoot.empty())
-    SysRoot = "/";
-  CxxStdlib Stdlib = getEffectiveCxxStdlib(Argv);
-
-  // An explicit --gcc-toolchain limits clang's GCC search to that prefix.
-  // Do not fall back to host/sysroot C++ headers if that prefix has none.
-  if (!GccToolchain.empty())
-    return probeCxxHeadersUnder(GccToolchain, Stdlib, FoundPath);
-
-  SmallString<256> SysUsr(SysRoot);
-  sys::path::append(SysUsr, "usr");
-  if (probeCxxHeadersUnder(SysUsr, Stdlib, FoundPath))
-    return true;
-
-  SmallString<256> SysUsrLocal(SysRoot);
-  sys::path::append(SysUsrLocal, "usr", "local");
-  if (probeCxxHeadersUnder(SysUsrLocal, Stdlib, FoundPath))
-    return true;
-
   return false;
 }
 
@@ -1340,11 +1298,12 @@ bool AMDGPUCompiler::shouldSkipEmbeddedHeaders(ArrayRef<const char *> Argv) {
       return Decide(true, Twine("user passed ") + S);
   }
 
-  // System C++ headers found: skip embedded to avoid the partial-overlay
-  // mixing bug (ROCm-issue-2445).
+  // System C++ headers found by the driver: skip embedded to avoid the
+  // partial-overlay mixing bug (ROCm-issue-2445).
   std::string FoundPath;
-  if (detectSystemCxxHeadersOnDisk(Argv, &FoundPath))
-    return Decide(true, Twine("system C++ headers found at ") + FoundPath);
+  if (driverAddsCxxStdlibInclude(Argv, &FoundPath))
+    return Decide(true,
+                  Twine("clang driver found C++ headers at ") + FoundPath);
   return Decide(false, "no system C++ headers found, falling back to embedded");
 }
 
@@ -1380,6 +1339,9 @@ amd_comgr_status_t AMDGPUCompiler::processFile(DataObject *Input,
 
   SmallVector<const char *, 128> DetectionArgv = Argv;
   DetectionArgv.append(EnvArgv.begin(), EnvArgv.end());
+  DetectionArgv.push_back(InputFilePath);
+  DetectionArgv.push_back("-o");
+  DetectionArgv.push_back(OutputFilePath);
 
   // Inject embedded libc++ only when system C++ headers are unavailable; the
   // embedded set is partial and must not be mixed with host libstdc++/libc++.

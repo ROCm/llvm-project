@@ -75,6 +75,8 @@ class AMDGPUCompiler {
   /// are available, when the user passed `-nostdinc++`, or when overridden
   /// via AMD_COMGR_USE_EMBEDDED_LIBCXX=disable. Cached after first call.
   bool shouldSkipEmbeddedHeaders(llvm::ArrayRef<const char *> Argv);
+  bool driverAddsCxxStdlibInclude(llvm::ArrayRef<const char *> Argv,
+                                  std::string *FoundPath);
 
   amd_comgr_status_t translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
                                                  DataSet *BcOutSet);

@@ -101,8 +101,8 @@ static int hasSystemLibstdcxxHeaders(void) {
 }
 
 static int hasSystemLibcxxHeaders(void) {
-  return fileExists("/usr/include/c++/v1/__config_site") ||
-         fileExists("/usr/local/include/c++/v1/__config_site");
+  return fileExists("/usr/include/c++/v1/cstddef") ||
+         fileExists("/usr/local/include/c++/v1/cstddef");
 }
 
 static void printLogs(amd_comgr_data_set_t DataSet) {
@@ -274,8 +274,7 @@ int main(int argc, char *argv[]) {
   if (Mode != TEST_DISTROLESS && Mode != TEST_GCC_TOOLCHAIN &&
       !logContains(DataSetBc, "Embedded libc++ headers: skipped"))
     fail("expected embedded libc++ skipped log");
-  if (Mode == TEST_SYSTEM_LIBCXX &&
-      !logContains(DataSetBc, "c++/v1/__config_site"))
+  if (Mode == TEST_SYSTEM_LIBCXX && !logContains(DataSetBc, "c++/v1"))
     fail("expected system libc++ detection path in log");
 
   printf("RESULT: PASS\n");
