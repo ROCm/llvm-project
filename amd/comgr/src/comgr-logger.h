@@ -51,11 +51,11 @@ enum class LogLevel {
   Debug,
 };
 
-/// Parse @p Requested (the value of AMD_COMGR_LOG_LEVEL, which may be empty) into
-/// a threshold. The value must be a bare integer; it is clamped to
-/// [None, Debug]. When @p Requested is empty or is not a valid integer, returns
-/// Debug if @p VerboseFallback is set (back-compat with
-/// AMD_COMGR_EMIT_VERBOSE_LOGS), otherwise Error. Exposed for testing.
+/// Parse @p Requested (the value of AMD_COMGR_LOG_LEVEL, which may be empty)
+/// into a threshold. The value must be a bare integer; it is clamped to [None,
+/// Debug]. When @p Requested is empty or is not a valid integer, returns Debug
+/// if @p VerboseFallback is set (back-compat with AMD_COMGR_EMIT_VERBOSE_LOGS),
+/// otherwise Error. Exposed for testing.
 LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
 
 /// Process-global, thread-safe logging facility. Obtain the shared instance
@@ -97,8 +97,8 @@ public:
   /// false despite AMD_COMGR_REDIRECT_LOGS being set.
   llvm::StringRef getSinkError() const { return SinkError; }
 
-  /// Write @p Data verbatim to the global sink under the logger's mutex, so teed
-  /// output (see TeeStream in comgr.cpp) does not race emit(). No prefix,
+  /// Write @p Data verbatim to the global sink under the logger's mutex, so
+  /// teed output (see TeeStream in comgr.cpp) does not race emit(). No prefix,
   /// newline, or flush is added; a no-op when there is no sink.
   void writeToSink(llvm::StringRef Data);
 
@@ -120,8 +120,8 @@ private:
   llvm::raw_ostream *Sink;
   std::unique_ptr<llvm::raw_fd_ostream> SinkFile;
 
-  // Diagnostic recorded when AMD_COMGR_REDIRECT_LOGS named a file that could not
-  // be opened. Empty otherwise. Surfaced to the caller via getSinkError().
+  // Diagnostic recorded when AMD_COMGR_REDIRECT_LOGS named a file that could
+  // not be opened. Empty otherwise. Surfaced to the caller via getSinkError().
   std::string SinkError;
 
   // Guards all writes to Sink and to the active capture stream.

@@ -61,7 +61,10 @@ namespace {
 // holds the logger's mutex and never races a concurrent Logger::emit.
 class TeeStream : public raw_ostream {
 public:
-  explicit TeeStream(raw_ostream &Buffer, Logger &Log) : Buffer(Buffer), Log(Log) { SetUnbuffered(); }
+  explicit TeeStream(raw_ostream &Buffer, Logger &Log)
+      : Buffer(Buffer), Log(Log) {
+    SetUnbuffered();
+  }
 
 private:
   void write_impl(const char *Ptr, size_t Size) override {
@@ -1351,20 +1354,20 @@ amd_comgr_status_t AMD_COMGR_API
     if (std::optional<StringRef> RedirectLogs = env::getRedirectLogs()) {
       StringRef RedirectLog = *RedirectLogs;
       // The global Logger already resolved and opened the redirect destination
-      // (see Logger::Logger), recording any file-open failure in getSinkError().
-      // Reuse its sink rather than opening the same target a second time. A null
-      // sink means the file failed to open (handled below); we then keep writing
-      // only to the in-memory LogS.
+      // (see Logger::Logger), recording any file-open failure in
+      // getSinkError(). Reuse its sink rather than opening the same target a
+      // second time. A null sink means the file failed to open (handled below);
+      // we then keep writing only to the in-memory LogS.
       if (Log.hasSink()) {
         RedirectTee.emplace(LogS, Log);
         LogP = &RedirectTee.value();
         if (RedirectLog != "stdout" && RedirectLog != "stderr" &&
             RedirectLog != "-")
           PerfLog = RedirectLog.str();
-      } else if (StringRef SinkError = Log.getSinkError();
-                 !SinkError.empty()) {
+      } else if (StringRef SinkError = Log.getSinkError(); !SinkError.empty()) {
         // Redirect was requested but the Logger could not open the destination.
-        // Surface its diagnostic into the returned comgr.log (the sink is null here).
+        // Surface its diagnostic into the returned comgr.log (the sink is null
+        // here).
         Log.emit(LogLevel::Error, SinkError);
       }
     }
@@ -1431,8 +1434,8 @@ amd_comgr_status_t AMD_COMGR_API
       return Status;
     }
 
-    Log.emit(LogLevel::Debug, Twine("\tReturnStatus: ") +
-                                         getStatusName(ActionStatus) + "\n");
+    Log.emit(LogLevel::Debug,
+             Twine("\tReturnStatus: ") + getStatusName(ActionStatus) + "\n");
 
     Log.sinkFlush();
 
