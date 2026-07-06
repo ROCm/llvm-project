@@ -106,7 +106,7 @@ jobs:
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
       - name: Submodule PR update (covers parameterised and PR creation)
-        uses: ROCm/llvm-project/.github/actions/submodule-pr-update@amd/dev/kirthana14m/rockci-compiler-convergence
+        uses: ROCm/llvm-project/.github/actions/submodule-pr-update@compiler-ci
 
       - name: "Map Current Directory to L Drive"
         id: subst
@@ -157,7 +157,7 @@ jobs:
           python build_tools/health_status.py
 
       - name: Windows build and test hot fixes
-        uses: ROCm/llvm-project/.github/actions/windows-build-test-fix@amd/dev/kirthana14m/rockci-compiler-convergence
+        uses: ROCm/llvm-project/.github/actions/windows-build-test-fix@compiler-ci
         with:
           stage_name: ${{ inputs.stage_name }}
 

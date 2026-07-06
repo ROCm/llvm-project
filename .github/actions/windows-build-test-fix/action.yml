@@ -69,3 +69,11 @@ runs:
         set -euo pipefail
         sed -i 's/ AND NOT THEROCK_BUILD_COMGR_TESTS//' \
           compiler/pre_hook_amd-llvm.cmake
+
+    - name: Remove ununsed existing patchces
+      shell: bash
+      run: |
+        rm -fv patches/amd-mainline/llvm-project/0003-HACK-Handle-ROCM-installation-layout-of-lib-llvm-bin.patch
+        rm -fv patches/amd-mainline/llvm-project/0009-Add-gcc-toolset-13-prefix-detection.patch
+        rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
+

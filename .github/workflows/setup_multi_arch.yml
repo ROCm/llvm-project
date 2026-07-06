@@ -185,7 +185,7 @@ jobs:
 
       - name: Build Test CI Config matrix
         id: convergence_config
-        uses: ROCm/llvm-project/.github/actions/ci-config-matrix@amd/dev/kirthana14m/rockci-compiler-convergence
+        uses: ROCm/llvm-project/.github/actions/ci-config-matrix@compiler-ci
         with:
           build_variant: ${{ inputs.build_variant }}
           ci_config_path: ci-config
