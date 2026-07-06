@@ -1808,22 +1808,23 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     if (Input->DataKind != AMD_COMGR_DATA_KIND_PACKAGE)
       return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
 
-    llvm::SmallVector<llvm::object::OffloadFile> Files;
-
-    llvm::StringRef DataBuffer(Input->Data, Input->Size);
-    llvm::MemoryBufferRef DataBufferRef(DataBuffer, "package_data");
-    if (llvm::Error E = llvm::object::extractOffloadBinaries(DataBufferRef, Files)) {
-      llvm::logAllUnhandledErrors(std::move(E), llvm::errs(),
-                                  "Failed to extract offload binaries: ");
-      return AMD_COMGR_STATUS_ERROR;
-    }
-
     // Generate random name if none provided
     if (StringRef(Input->Name).empty()) {
       llvm::SmallString<22> Result;
       llvm::sys::fs::createUniquePath("comgr-package-%%%%%%%%", Result, false);
 
       Input->setName(Result);
+    }
+
+    llvm::SmallVector<llvm::object::OffloadFile> Files;
+
+    llvm::MemoryBufferRef DataBufferRef(StringRef(Input->Data, Input->Size),
+                                        Input->Name);
+    if (llvm::Error E =
+            llvm::object::extractOffloadBinaries(DataBufferRef, Files)) {
+      llvm::logAllUnhandledErrors(std::move(E), llvm::errs(),
+                                  "Failed to extract offload binaries: ");
+      return AMD_COMGR_STATUS_ERROR;
     }
 
     // Generate prefix for output files
