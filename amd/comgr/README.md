@@ -254,10 +254,13 @@ include:
   symbols for each entry stub. These symbols are skipped by default on this
   load-time-critical path, so this variable restores them to aid in debugging.
 * `AMD_COMGR_USE_EMBEDDED_LIBCXX`: Controls Comgr's embedded libc++ header
-  fallback for HIP. If set to `force` or `1`, Comgr always adds the embedded
-  libc++ include path. If set to `disable` or `0`, Comgr never adds it. Any
-  other value, or leaving it unset, uses the default `auto` mode: Comgr skips
-  the embedded path when system C++ headers are found.
+  fallback for HIP. If unset, Comgr uses `auto` mode. In `auto` mode,
+  Comgr first honors user include-control options such as `-nostdinc++`,
+  `-nostdinc`, and `-nostdlibinc`. If none are present, Comgr asks the
+  Clang driver whether system C++ headers are available. Embedded libc++
+  headers are used only when no system C++ headers are found. Explicit env
+  values override `auto`: `force` or `1` always uses embedded libc++
+  headers, and `disable` or `0` never uses them.
 
 ### VFS
 Comgr implements support for an in-memory, virtual filesystem (VFS) for storing

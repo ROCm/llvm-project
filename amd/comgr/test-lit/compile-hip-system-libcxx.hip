@@ -1,7 +1,8 @@
 // COM: System libc++ should only suppress embedded libc++ when requested.
+// REQUIRES: system-libcxx
 // RUN: compile-hip-cxx-headers --mode=system-libcxx %s | %FileCheck %s
 
-// CHECK: RESULT: {{PASS|SKIPPED}}
+// CHECK: RESULT: PASS
 
 #include <cstddef>
 

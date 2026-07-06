@@ -25,6 +25,10 @@ if platform.system() == "Windows":
     config.available_features.add("system-windows")
 elif platform.system() == "Linux":
     config.available_features.add("system-linux")
+    if os.path.exists("/usr/include/c++/v1/cstddef") or os.path.exists(
+        "/usr/local/include/c++/v1/cstddef"
+    ):
+        config.available_features.add("system-libcxx")
 
 # By default, disable the cache for the tests.
 # Test for the cache must explicitly enable this variable.
