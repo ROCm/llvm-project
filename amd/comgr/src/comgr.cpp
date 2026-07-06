@@ -1336,9 +1336,8 @@ amd_comgr_status_t AMD_COMGR_API
     raw_ostream *LogP = &LogS;
 
     // Tee Logger output emitted during this action into the in-memory buffer
-    // backing the AMD_COMGR_DATA_KIND_LOG data object, so emit() calls (here and
-    // in any Logger-aware API reached from this action) are collected for the
-    // caller alongside the global redirect sink.
+    // backing the AMD_COMGR_DATA_KIND_LOG data object, so emit() calls are
+    // collected for the caller.
     LogCaptureScope LogCapture(LogS);
     Logger &Log = getLogger();
 

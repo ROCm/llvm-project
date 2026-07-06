@@ -224,7 +224,14 @@ include:
 * `AMD_COMGR_LOG_LEVEL`: Sets the severity threshold of the Comgr logger as an
   integer in the range [0, 4], where 0 disables logging and higher values are
   more verbose. A message is emitted only when its severity does not exceed this
-  threshold. Values outside the range are clamped to it; non-integer values are
+  threshold. The levels denote:
+  * `0` (None): logging disabled; no messages are emitted.
+  * `1` (Error): errors only.
+  * `2` (Warning): errors and warnings.
+  * `3` (Info): errors, warnings, and informational messages.
+  * `4` (Debug): all of the above plus verbose debug diagnostics.
+
+  Values outside the range are clamped to it; non-integer values are
   ignored. Takes precedence over `AMD_COMGR_EMIT_VERBOSE_LOGS`; if unset (or not
   an integer), defaults to 4 when `AMD_COMGR_EMIT_VERBOSE_LOGS` is enabled, else
   1.
