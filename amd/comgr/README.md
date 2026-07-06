@@ -222,14 +222,19 @@ include:
   `AMD_COMGR_LOG_LEVEL=4`, unless `AMD_COMGR_LOG_LEVEL` is set, which takes
   precedence.
 * `AMD_COMGR_LOG_LEVEL`: Sets the severity threshold of the Comgr logger as an
-  integer in the range [0, 4], where 0 disables logging and higher values are
-  more verbose. A message is emitted only when its severity does not exceed this
-  threshold. The levels denote:
-  * `0` (None): logging disabled; no messages are emitted.
+  integer in the range [0, 4], where 0 disables Comgr's own log messages and
+  higher values are more verbose. A Comgr log message is emitted only when its
+  severity does not exceed this threshold. The levels denote:
+  * `0` (None): Comgr's own log messages are disabled; none are emitted.
   * `1` (Error): errors only.
   * `2` (Warning): errors and warnings.
   * `3` (Info): errors, warnings, and informational messages.
   * `4` (Debug): all of the above plus verbose debug diagnostics.
+
+  This threshold governs only Comgr's own log messages. Diagnostics produced by
+  the underlying compiler and tools are always returned to the caller (and
+  redirected when `AMD_COMGR_REDIRECT_LOGS` is set) regardless of this level,
+  so a level of 0 does not necessarily produce empty output.
 
   Values outside the range are clamped to it; non-integer values are
   ignored. Takes precedence over `AMD_COMGR_EMIT_VERBOSE_LOGS`; if unset (or not
