@@ -1,16 +1,17 @@
-; RUN: llc -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -check-prefix=SI %s
-; RUN: llc -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefix=SI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -check-prefix=SI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefix=SI %s
 
 ; SI-LABEL: {{^}}br_i1_phi:
 
 ; SI: ; %bb
 ; SI:    s_mov_b64           [[TMP:s\[[0-9]+:[0-9]+\]]], 0
+; SI:    v_cndmask_b32_e64   v{{[0-9]+}}, 0, -1, [[TMP]]
 
 ; SI: ; %bb2
-; SI:    s_mov_b64           [[TMP]], exec
+; SI:    v_cndmask_b32_e64   v{{[0-9]+}}, 0, -1
 
 ; SI: ; %bb3
-; SI:    s_and_saveexec_b64  {{s\[[0-9]+:[0-9]+\]}}, [[TMP]]
+; SI:    s_or_b64            exec, exec, s[{{[0-9]+:[0-9]+}}]
 
 define amdgpu_kernel void @br_i1_phi(i32 %arg) {
 bb:
