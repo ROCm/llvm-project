@@ -419,6 +419,57 @@ TEST(BuildKernelEntryTrampoline, PrefixPrefiltersNonStubBytes) {
   EXPECT_FALSE(hasKernelEntryTrampolinePrefix(ShortCandidate, S));
 }
 
+TEST(BuildKernelEntryTrampoline, PrefixPrefiltersHipblasltSmokeEntryBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // Reduced from the gfx1250 hipBLASLt MXF8/BF16 smoke kernel entry. The
+  // idempotency path should reject this by raw prefix before classifying it as
+  // a possible appended entry stub.
+  const uint8_t EntryBytes[] = {
+      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
+      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
+      0xff, 0x02, 0x3f, 0x8b, 0xff, 0xff, 0xff, 0x3f,
+      0x02, 0x9e, 0x40, 0x85, 0x03, 0x00, 0xc1, 0xbe,
+  };
+
+  llvm::SmallVector<uint8_t> Candidate;
+  Candidate.append(EntryBytes, EntryBytes + sizeof(EntryBytes));
+  while (Candidate.size() < KernelEntryStubStride)
+    Candidate.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  ASSERT_EQ(Candidate.size(), KernelEntryStubStride);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Candidate.data(), sizeof(EntryBytes), S,
+                                Decoded));
+  ASSERT_GE(Decoded.size(), 5u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "s_setreg_imm32_b32");
+  EXPECT_EQ(Decoded[1].Mnemonic, "s_setreg_imm32_b32");
+  EXPECT_EQ(Decoded[2].Mnemonic, "s_and_b32");
+  EXPECT_FALSE(hasKernelEntryTrampolinePrefix(Candidate, S));
+  EXPECT_FALSE(isKernelEntryTrampoline(Candidate, S));
+}
+
+TEST(BuildKernelEntryTrampoline, PrefixPrefiltersUnknownDecodeBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const uint8_t UnknownInst[] = {0xff, 0xff, 0xff, 0xff};
+
+  llvm::SmallVector<uint8_t> Candidate;
+  Candidate.append(UnknownInst, UnknownInst + sizeof(UnknownInst));
+  while (Candidate.size() < KernelEntryStubStride)
+    Candidate.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  ASSERT_EQ(Candidate.size(), KernelEntryStubStride);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Candidate.data(), MinInstSize, S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "<unknown>");
+  EXPECT_FALSE(hasKernelEntryTrampolinePrefix(Candidate, S));
+  EXPECT_FALSE(isKernelEntryTrampoline(Candidate, S));
+}
+
 TEST(BuildKernelEntryTrampoline, MatcherRejectsNonStubBytes) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

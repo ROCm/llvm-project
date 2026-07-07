@@ -253,6 +253,9 @@ decodeEntryStubTargetVAddr(ArrayRef<InternalDecodedInst> Decoded,
 }
 
 bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
+  if (!hasKernelEntryTrampolinePrefix(Bytes, LS))
+    return false;
+
   std::vector<InternalDecodedInst> Decoded;
   return decodeKernelEntryStub(Bytes, LS, Decoded, "isKernelEntryTrampoline") &&
          hasEntryStubOperandShape(Decoded, LS);

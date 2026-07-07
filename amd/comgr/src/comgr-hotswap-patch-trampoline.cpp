@@ -17,10 +17,10 @@
 ///     byte offsets scaled appropriately for each encoding.
 ///   - tensor_load_to_lds     : prepend s_pack_hh_b32_b16 to clear multicast
 ///     routing bits in the group descriptor's base SGPR
-  ///   - ds_*_addtid_b32        : compute the LDS address through the ALU and
-  ///     issue a regular ds_*_b32, bypassing the gfx1250 A0 16-bit M0
-  ///     truncation. On B0 the DS unit reads 20 bits of M0; on A0 it reads only
-  ///     16, silently dropping bits [19:16].
+///   - ds_*_addtid_b32        : compute the LDS address through the ALU and
+///     issue a regular ds_*_b32, bypassing the gfx1250 A0 16-bit M0
+///     truncation. On B0 the DS unit reads 20 bits of M0; on A0 it reads only
+///     16, silently dropping bits [19:16].
 ///
 //===----------------------------------------------------------------------===//
 
