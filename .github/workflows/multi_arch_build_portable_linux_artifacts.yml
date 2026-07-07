@@ -380,6 +380,12 @@ jobs:
 
       - name: LLVM Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        env:
+          LIT_XFAIL_NOT: >-
+            LLVM :: CodeGen/AMDGPU/debug-independence-adjustSchedDependency.ll;
+            LLVM :: CodeGen/AMDGPU/ds-read2-write2-debug-info.ll;
+            LLVM :: CodeGen/AMDGPU/llvm.dbg.value.ll;
+            LLVM :: DebugInfo/AMDGPU/dbg-value-sched-crash.ll          
         run: |
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-llvm
 
