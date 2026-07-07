@@ -302,6 +302,222 @@ TEST(ElfView, GrowWithTrampolinesKeepsIsaReferenceConsistentWithSymbol) {
   EXPECT_EQ(IsaResolved, SymbolVAddr);
 }
 
+// A fully-linked code object's DWARF encodes *absolute* virtual addresses of
+// code and data (DW_AT_low_pc, DW_OP_addr, the .debug_addr pool, .debug_line
+// set_address) with no relocations. growWithTrampolines shifts post-.text
+// virtual addresses and symbols but leaves .debug_* contents untouched (the
+// patchDebug* hooks in comgr-hotswap-b0a0.cpp are weak no-op stubs), so any such
+// address goes stale by the trampoline size -- the debugger would resolve a
+// global to the pre-shift location. This is the debug-info analogue of the
+// ISA-literal corruption above.
+namespace {
+
+// Minimal ET_DYN AMDGPU object:
+//   [1] .text        (alloc, exec)  at TextAddr
+//   [2] .data        (alloc, write) at DataAddr -- holds global "g"
+//   [3] .debug_info  (non-alloc)    -- 8-byte absolute address DWARF would
+//                                       encode for "g" (stands in for a
+//                                       DW_AT_low_pc / DW_OP_addr / .debug_addr
+//                                       entry)
+//   [4] .symtab  [5] .strtab  [6] .shstrtab
+// Both .data and .debug_info follow .text, so growWithTrampolines shifts them.
+struct DwarfRefElf {
+  std::vector<uint8_t> Bytes;
+  uint64_t DataAddr = 0;
+  unsigned DebugSectionIndex = 3;
+  unsigned SymtabSectionIndex = 4;
+  unsigned GlobalSymIndex = 1;
+};
+
+DwarfRefElf makeDwarfRefElf(uint64_t TextAddr = 0x1000,
+                            uint64_t DataAddr = 0x2000) {
+  using namespace llvm::ELF;
+  constexpr uint64_t TextSize = 16;
+  constexpr unsigned SymCount = 2;  // null + "g"
+
+  static const char ShStr[] =
+      "\0.text\0.data\0.debug_info\0.symtab\0.strtab\0.shstrtab\0";
+  constexpr uint32_t NameText = 1;
+  constexpr uint32_t NameData = 7;
+  constexpr uint32_t NameDebug = 13;
+  constexpr uint32_t NameSymtab = 25;
+  constexpr uint32_t NameStrtab = 33;
+  constexpr uint32_t NameShstrtab = 41;
+
+  static const char Str[] = "\0g\0";
+  constexpr uint32_t GNameOff = 1;
+
+  constexpr unsigned ShNum = 7;
+  const uint64_t ShOff = sizeof(Elf64_Ehdr);
+  const uint64_t TextOff =
+      comgr_test::alignTo8(ShOff + ShNum * sizeof(Elf64_Shdr));
+  const uint64_t DataOff = comgr_test::alignTo8(TextOff + TextSize);
+  const uint64_t DebugOff = comgr_test::alignTo8(DataOff + 8);
+  const uint64_t StrOff = comgr_test::alignTo8(DebugOff + 8);
+  const uint64_t SymOff = comgr_test::alignTo8(StrOff + sizeof(Str));
+  const uint64_t ShStrOff =
+      comgr_test::alignTo8(SymOff + SymCount * sizeof(Elf64_Sym));
+  const uint64_t BufSize = comgr_test::alignTo8(ShStrOff + sizeof(ShStr) + 64);
+
+  DwarfRefElf R;
+  R.Bytes.assign(BufSize, 0);
+  R.DataAddr = DataAddr;
+  uint8_t *B = R.Bytes.data();
+
+  Elf64_Ehdr Ehdr = comgr_test::makeElf64Ehdr(EM_AMDGPU);
+  Ehdr.e_ident[EI_OSABI] = ELFOSABI_AMDGPU_HSA;
+  Ehdr.e_type = ET_DYN;
+  Ehdr.e_version = EV_CURRENT;
+  Ehdr.e_shoff = ShOff;
+  Ehdr.e_ehsize = sizeof(Elf64_Ehdr);
+  Ehdr.e_shentsize = sizeof(Elf64_Shdr);
+  Ehdr.e_shnum = ShNum;
+  Ehdr.e_shstrndx = 6;
+  std::memcpy(B, &Ehdr, sizeof(Ehdr));
+
+  std::memcpy(B + StrOff, Str, sizeof(Str));
+  std::memcpy(B + ShStrOff, ShStr, sizeof(ShStr));
+
+  // The absolute address DWARF encodes for "g".
+  const uint64_t DebugAddr = DataAddr;
+  std::memcpy(B + DebugOff, &DebugAddr, sizeof(DebugAddr));
+
+  auto writeShdr = [&](unsigned Idx, const Elf64_Shdr &Sh) {
+    std::memcpy(B + ShOff + Idx * sizeof(Elf64_Shdr), &Sh, sizeof(Sh));
+  };
+
+  Elf64_Shdr Text{};
+  Text.sh_name = NameText;
+  Text.sh_type = SHT_PROGBITS;
+  Text.sh_flags = SHF_ALLOC | SHF_EXECINSTR;
+  Text.sh_offset = TextOff;
+  Text.sh_addr = TextAddr;
+  Text.sh_size = TextSize;
+  Text.sh_addralign = 4;
+  writeShdr(1, Text);
+
+  Elf64_Shdr Data{};
+  Data.sh_name = NameData;
+  Data.sh_type = SHT_PROGBITS;
+  Data.sh_flags = SHF_ALLOC | SHF_WRITE;
+  Data.sh_offset = DataOff;
+  Data.sh_addr = DataAddr;
+  Data.sh_size = 8;
+  Data.sh_addralign = 8;
+  writeShdr(2, Data);
+
+  Elf64_Shdr Debug{};
+  Debug.sh_name = NameDebug;
+  Debug.sh_type = SHT_PROGBITS;
+  Debug.sh_flags = 0;  // non-alloc, like real .debug_* sections
+  Debug.sh_offset = DebugOff;
+  Debug.sh_size = 8;
+  Debug.sh_addralign = 1;
+  writeShdr(3, Debug);
+
+  Elf64_Shdr Symtab{};
+  Symtab.sh_name = NameSymtab;
+  Symtab.sh_type = SHT_SYMTAB;
+  Symtab.sh_offset = SymOff;
+  Symtab.sh_size = SymCount * sizeof(Elf64_Sym);
+  Symtab.sh_link = 5;  // .strtab
+  Symtab.sh_info = 1;
+  Symtab.sh_entsize = sizeof(Elf64_Sym);
+  writeShdr(4, Symtab);
+
+  Elf64_Shdr Strtab{};
+  Strtab.sh_name = NameStrtab;
+  Strtab.sh_type = SHT_STRTAB;
+  Strtab.sh_offset = StrOff;
+  Strtab.sh_size = sizeof(Str);
+  writeShdr(5, Strtab);
+
+  Elf64_Shdr Shstr{};
+  Shstr.sh_name = NameShstrtab;
+  Shstr.sh_type = SHT_STRTAB;
+  Shstr.sh_offset = ShStrOff;
+  Shstr.sh_size = sizeof(ShStr);
+  writeShdr(6, Shstr);
+
+  Elf64_Sym G{};
+  G.st_name = GNameOff;
+  G.setBindingAndType(STB_GLOBAL, STT_OBJECT);
+  G.st_shndx = 2;  // .data
+  G.st_value = DataAddr;
+  G.st_size = 8;
+  std::memcpy(B + SymOff + 1 * sizeof(Elf64_Sym), &G, sizeof(G));
+
+  return R;
+}
+
+// Read an 8-byte value from section [Idx] at intra-section byte offset Off.
+uint64_t readSectionU64(const ElfView &V, unsigned Idx, uint64_t Off) {
+  uint64_t Val = 0;
+  std::memcpy(&Val,
+              V.data() + static_cast<uint64_t>(V.sections()[Idx].sh_offset) + Off,
+              sizeof(Val));
+  return Val;
+}
+
+// Read st_value of symbol SymIdx in the symbol table at section [SymtabIdx].
+uint64_t readSymbolValue(const ElfView &V, unsigned SymtabIdx, unsigned SymIdx) {
+  llvm::ELF::Elf64_Sym Sym{};
+  std::memcpy(&Sym,
+              V.data() + static_cast<uint64_t>(V.sections()[SymtabIdx].sh_offset) +
+                  SymIdx * sizeof(llvm::ELF::Elf64_Sym),
+              sizeof(Sym));
+  return Sym.st_value;
+}
+
+}  // namespace
+
+// The invariant: after appending trampolines, the address the object's DWARF
+// encodes for a global must still equal the address the symbol table reports for
+// it. growWithTrampolines shifts the symbol but not the DWARF address, so they
+// disagree -- the debug-info analogue of Unit_hipModuleGetGlobal_Functional.
+//
+// This FAILS against the current implementation and is expected to pass once a
+// fix keeps DWARF and the symbol table in agreement -- by not moving the symbol
+// at all, or by relocating DWARF alongside it (see
+// GrowWithTrampolinesKeepsIsaReferenceConsistentWithSymbol).
+TEST(ElfView, GrowWithTrampolinesKeepsDwarfConsistentWithSymbol) {
+  static constexpr uint64_t GrowthBytes = 0x100;
+
+  DwarfRefElf Obj = makeDwarfRefElf();
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  // Sanity: before the rewrite, DWARF and the symbol agree.
+  ASSERT_EQ(readSectionU64(*ViewOrErr, Obj.DebugSectionIndex, 0), Obj.DataAddr);
+  ASSERT_EQ(
+      readSymbolValue(*ViewOrErr, Obj.SymtabSectionIndex, Obj.GlobalSymIndex),
+      Obj.DataAddr);
+
+  Trampoline T;
+  T.Bytes.assign(GrowthBytes, 0);
+  std::vector<Trampoline> Trampolines{T};
+  const uint8_t SNop[4] = {};
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out =
+      ViewOrErr->growWithTrampolines(Trampolines, SNop);
+  ASSERT_NE(Out, nullptr);
+
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  // Address DWARF still encodes for "g" ...
+  const uint64_t DwarfAddr =
+      readSectionU64(*OutView, Obj.DebugSectionIndex, 0);
+  // ... vs. the (shifted) address the symbol table now reports for "g".
+  const uint64_t SymbolVAddr =
+      readSymbolValue(*OutView, Obj.SymtabSectionIndex, Obj.GlobalSymIndex);
+
+  EXPECT_EQ(DwarfAddr, SymbolVAddr);
+}
+
 TEST(ElfView, UpdateKernelDescriptorSgprCountUpdatesMetadataAndDescriptor) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
