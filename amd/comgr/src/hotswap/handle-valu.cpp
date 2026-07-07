@@ -36,17 +36,6 @@ namespace COMGR::hotswap {
 
 namespace {
 
-std::optional<int64_t> readNamedImmOperand(const DecodedInst &Di,
-                                           AMDGPU::OpName Name) {
-  int Idx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
-  if (Idx < 0 || static_cast<unsigned>(Idx) >= Di.Inst.getNumOperands())
-    return std::nullopt;
-  unsigned OperandIdx = static_cast<unsigned>(Idx);
-  if (!Di.isImm(OperandIdx))
-    return std::nullopt;
-  return Di.getImm(OperandIdx);
-}
-
 std::optional<bool> readVOP3Clamp(const DecodedInst &Di, HandlerResult &Hr,
                                   StringRef OpName) {
   std::optional<int64_t> Clamp =

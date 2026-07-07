@@ -30,14 +30,6 @@ bool readNamedImm(const DecodedInst &Di, AMDGPU::OpName Name, int64_t &Out) {
   return true;
 }
 
-std::optional<int64_t> readNamedImmOperand(const DecodedInst &Di,
-                                           AMDGPU::OpName Name) {
-  int64_t Value = 0;
-  if (!readNamedImm(Di, Name, Value))
-    return std::nullopt;
-  return Value;
-}
-
 } // namespace
 
 bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,

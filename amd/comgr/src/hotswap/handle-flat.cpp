@@ -98,19 +98,6 @@ Value *selectRuntimeDword(RaiseContext &Ctx, Value *Idx,
   return Pick;
 }
 
-// Return the decoded cache-policy operand for scoped global cache operations.
-std::optional<int64_t> getCPolImm(const DecodedInst &Di) {
-  int CpolIdx =
-      AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::cpol);
-  if (CpolIdx < 0 ||
-      static_cast<unsigned>(CpolIdx) >= Di.Inst.getNumOperands())
-    return std::nullopt;
-  const MCOperand &Mop = Di.Inst.getOperand(static_cast<unsigned>(CpolIdx));
-  if (!Mop.isImm())
-    return std::nullopt;
-  return Mop.getImm();
-}
-
 // Shared helper for the `_D16_HI` half-register-store lift shape.
 //
 // Both `GLOBAL_STORE_SHORT_D16_HI` and `FLAT_STORE_SHORT_D16_HI` have
@@ -294,7 +281,8 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
   CanonicalOp Sop = Di.CanonOp;
 
   if (Sop == CanonicalOp::GLOBAL_WB) {
-    std::optional<int64_t> Cpol = getCPolImm(Di);
+    std::optional<int64_t> Cpol =
+        readNamedImmOperand(Di, AMDGPU::OpName::cpol);
     if (!Cpol) {
       Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT", "global_wb missing immediate cpol/scope operand");

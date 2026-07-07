@@ -80,6 +80,15 @@ struct ISAProfile {
   // GFX6-GFX120 field to a 6-bit field. Keep this as an ABI property rather
   // than deriving it from a string at each use site.
   bool HasGfx125UserSgprCountField = false;
+  // True iff the V# buffer-resource descriptor carries a 57-bit base and
+  // 45-bit num_records field. SMEM buffer loads decode source descriptors via
+  // this bit before rebuilding a target resource with LLVM's target lowering.
+  bool Has45BitNumRecordsBufferResource = false;
+  // Signed base-address payload width for V# buffer resources. gfx12+ exposes
+  // 57 address bits; older targets use the 48-bit descriptor shape built by
+  // LLVM's make.buffer.rsrc lowering. Cross-ISA descriptor rebuilds must prove
+  // the decoded source base is representable in the target width.
+  unsigned BufferResourceBaseBits = 48;
   // True iff the source ISA exposes 1024 addressable VGPRs
   // (FeatureGFX1250Insts / AMDGPU.td `1024-addressable-vgprs`). On these
   // targets s_setreg targeting HW_REG_MODE captures VGPR_MSB from the operand
@@ -117,6 +126,9 @@ struct ISAProfile {
     P.HasPrngInst = STI.hasFeature(llvm::AMDGPU::FeaturePrngInst);
     P.HasFP8Insts = STI.hasFeature(llvm::AMDGPU::FeatureFP8Insts);
     P.HasGfx125UserSgprCountField = llvm::AMDGPU::isGFX1250Plus(STI);
+    P.Has45BitNumRecordsBufferResource =
+        STI.hasFeature(llvm::AMDGPU::Feature45BitNumRecordsBufferResource);
+    P.BufferResourceBaseBits = P.Has45BitNumRecordsBufferResource ? 57 : 48;
     P.Has1024AddressableVGPRs =
         STI.hasFeature(llvm::AMDGPU::Feature1024AddressableVGPRs);
     P.LdsByteCapacity =

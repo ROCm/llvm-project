@@ -10,10 +10,18 @@
 #include "pipeline.h" // isStrictMode()
 #include "source-hidden-args.h"
 
+#include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <algorithm>
 #include <cassert>
+#include <optional>
 
 #define DEBUG_TYPE "transpiler"
 
@@ -30,6 +38,214 @@ Value *addStaticSmemByteOffset64(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Di.StaticOffset || *Di.StaticOffset == 0)
     return Offset;
   return Ctx.B.CreateAdd(Offset, Ctx.B.getInt64(*Di.StaticOffset), Name);
+}
+
+// Match scalar buffer-resource loads as a single handler family.
+bool isScalarBufferLoad(CanonicalOp Sop) {
+  switch (Sop) {
+  case CanonicalOp::S_BUFFER_LOAD_B32:
+  case CanonicalOp::S_BUFFER_LOAD_B64:
+  case CanonicalOp::S_BUFFER_LOAD_B96:
+  case CanonicalOp::S_BUFFER_LOAD_B128:
+  case CanonicalOp::S_BUFFER_LOAD_B256:
+  case CanonicalOp::S_BUFFER_LOAD_B512:
+    return true;
+  default:
+    return false;
+  }
+}
+
+// Return the TableGen destination register-class width for an explicit def.
+unsigned defRegClassDwordCount(RaiseContext &Ctx, const DecodedInst &Di,
+                               unsigned DefIdx) {
+  const MCInstrInfo &MII = *Ctx.Mc.InstrInfo;
+  const MCRegisterInfo &MRI = *Ctx.Mc.RegInfo;
+  const MCSubtargetInfo &STI = *Ctx.Mc.SubtargetInfo;
+  const MCInstrDesc &Desc = MII.get(Di.Inst.getOpcode());
+  ArrayRef<MCOperandInfo> Operands = Desc.operands();
+  assert(DefIdx < Operands.size() && "missing SMEM def operand metadata");
+
+  int16_t RegClassId = MII.getOpRegClassID(
+      Operands[DefIdx], STI.getHwMode(MCSubtargetInfo::HwMode_RegInfo));
+  assert(RegClassId >= 0 && "SMEM def operand must have a register class");
+
+  unsigned Bits = MRI.getRegClass(RegClassId).getSizeInBits();
+  assert(Bits != 0 && Bits % 32 == 0 &&
+         "SMEM def register class must have dword width");
+  return Bits / 32;
+}
+
+// Build descriptor arithmetic in a common 64-bit integer type.
+Value *zextToI64(RaiseContext &Ctx, Value *V, const Twine &Name = "") {
+  return Ctx.B.CreateZExt(V, Ctx.I64Ty, Name);
+}
+
+// Sign-extend a low-bit address field after extracting it from a descriptor.
+Value *signExtendLowBitsI64(RaiseContext &Ctx, Value *V, unsigned Bits,
+                            const Twine &Name) {
+  assert(Bits > 0 && Bits < 64 &&
+         "expected sign extension from sub-i64 width");
+  unsigned Shift = 64 - Bits;
+  Value *Shifted =
+      Ctx.B.CreateShl(V, ConstantInt::get(Ctx.I64Ty, Shift), Name + ".shl");
+  return Ctx.B.CreateAShr(Shifted, ConstantInt::get(Ctx.I64Ty, Shift), Name);
+}
+
+// Dword scalar buffer loads ignore the low two address bits.
+Value *alignDwordAddress64(RaiseContext &Ctx, Value *Addr, const Twine &Name) {
+  return Ctx.B.CreateAnd(Addr, Ctx.B.getInt64(~uint64_t(3)), Name);
+}
+
+// Dword scalar buffer loads ignore the low two offset bits.
+Value *alignDwordOffset32(RaiseContext &Ctx, Value *Offset, const Twine &Name) {
+  return Ctx.B.CreateAnd(Offset, ConstantInt::get(Ctx.I32Ty, ~uint32_t(3)),
+                         Name);
+}
+
+// Emit a branch to llvm.trap when a dynamic translation contract is violated.
+void emitTrapUnless(RaiseContext &Ctx, Value *Condition,
+                    const Twine &ReasonName) {
+  Function *Trap =
+      Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::trap);
+  BasicBlock *CurBB = Ctx.B.GetInsertBlock();
+  Function *F = CurBB->getParent();
+  BasicBlock *TrapBB =
+      BasicBlock::Create(Ctx.C, ReasonName + ".trap", F);
+  BasicBlock *ContBB =
+      BasicBlock::Create(Ctx.C, ReasonName + ".cont", F);
+
+  Ctx.B.CreateCondBr(Condition, ContBB, TrapBB);
+  Ctx.B.SetInsertPoint(TrapBB);
+  Ctx.B.CreateCall(Trap);
+  Ctx.B.CreateUnreachable();
+  Ctx.B.SetInsertPoint(ContBB);
+}
+
+// Check that the source buffer-resource base fits in the target descriptor.
+void emitBufferBaseRepresentabilityGuard(RaiseContext &Ctx, Value *BaseAddr) {
+  if (Ctx.TargetIsa.BufferResourceBaseBits >= Ctx.Isa.BufferResourceBaseBits)
+    return;
+
+  unsigned TargetBits = Ctx.TargetIsa.BufferResourceBaseBits;
+  if (TargetBits >= 64)
+    return;
+
+  auto *TargetBaseTy = IntegerType::get(Ctx.C, TargetBits);
+  Value *Narrow = Ctx.B.CreateTrunc(BaseAddr, TargetBaseTy,
+                                    "sbuf_base_target_bits");
+  Value *RoundTrip = Ctx.B.CreateSExt(Narrow, Ctx.I64Ty,
+                                      "sbuf_base_target_sext");
+  Value *Representable =
+      Ctx.B.CreateICmpEQ(RoundTrip, BaseAddr, "sbuf_base_target_ok");
+  // A gfx12 descriptor can carry a wider base than a gfx942 descriptor.
+  // The runtime normally constructs descriptors from target-valid process
+  // pointers; this guard makes that contract explicit for dynamic descriptors.
+  emitTrapUnless(Ctx, Representable, "sbuf_base_unrepresentable");
+}
+
+// Source descriptor fields after projecting them to the target raw-buffer form.
+struct SourceScalarBufferResource {
+  Value *BasePtr = nullptr;
+  Value *ExtentBytes = nullptr;
+};
+
+// Decode the source buffer-resource descriptor fields used by S_BUFFER_LOAD.
+SourceScalarBufferResource decodeSourceScalarBufferResource(RaiseContext &Ctx,
+                                                            ParsedReg Base) {
+  Value *Dw0 = Ctx.Regs.loadSGPR32(Ctx.B, Base.BaseIdx);
+  Value *Dw1 = Ctx.Regs.loadSGPR32(Ctx.B, Base.BaseIdx + 1);
+  Value *Dw2 = Ctx.Regs.loadSGPR32(Ctx.B, Base.BaseIdx + 2);
+  Value *Dw3 = Ctx.Regs.loadSGPR32(Ctx.B, Base.BaseIdx + 3);
+
+  Value *BaseAddr = nullptr;
+  Value *Stride = nullptr;
+  Value *NumRecords = nullptr;
+
+  if (Ctx.Isa.Has45BitNumRecordsBufferResource) {
+    Value *Low64 = Ctx.B.CreateOr(
+        zextToI64(Ctx, Dw0),
+        Ctx.B.CreateShl(zextToI64(Ctx, Dw1), Ctx.B.getInt64(32)),
+        "sbuf_rsrc_lo");
+    Value *High64 = Ctx.B.CreateOr(
+        zextToI64(Ctx, Dw2),
+        Ctx.B.CreateShl(zextToI64(Ctx, Dw3), Ctx.B.getInt64(32)),
+        "sbuf_rsrc_hi");
+
+    // S_BUFFER_LOAD uses these gfx12+ buffer resource fields:
+    //   base_address = resource[56:0]
+    //   num_records  = resource[101:57]
+    //   stride       = resource[121:108]
+    // S_BUFFER_LOAD ignores the other descriptor bits, so they are not copied
+    // into the target resource.
+    constexpr uint64_t Base57Mask = (1ULL << 57) - 1;
+    constexpr uint64_t NumRecordsHigh38Mask = (1ULL << 38) - 1;
+    Value *Base57 =
+        Ctx.B.CreateAnd(Low64, Ctx.B.getInt64(Base57Mask), "sbuf_base57");
+    BaseAddr = signExtendLowBitsI64(Ctx, Base57, 57, "sbuf_base64");
+    Value *NumLo = Ctx.B.CreateLShr(Low64, Ctx.B.getInt64(57),
+                                    "sbuf_num_records_lo");
+    Value *NumHi =
+        Ctx.B.CreateAnd(High64, Ctx.B.getInt64(NumRecordsHigh38Mask),
+                        "sbuf_num_records_hi");
+    NumRecords = Ctx.B.CreateOr(
+        NumLo, Ctx.B.CreateShl(NumHi, Ctx.B.getInt64(7)),
+        "sbuf_num_records");
+    Value *Stride64 =
+        Ctx.B.CreateAnd(Ctx.B.CreateLShr(High64, Ctx.B.getInt64(44)),
+                        Ctx.B.getInt64(0x3fffull), "sbuf_stride64");
+    Stride = Ctx.B.CreateTrunc(Stride64, Type::getInt16Ty(Ctx.C),
+                               "sbuf_stride");
+  } else {
+    Value *BaseLo = zextToI64(Ctx, Dw0);
+    Value *BaseHi16 =
+        Ctx.B.CreateAnd(zextToI64(Ctx, Dw1), Ctx.B.getInt64(0xffff));
+    Value *Base48 =
+        Ctx.B.CreateOr(BaseLo, Ctx.B.CreateShl(BaseHi16, Ctx.B.getInt64(32)),
+                       "sbuf_base48");
+    BaseAddr = signExtendLowBitsI64(Ctx, Base48, 48, "sbuf_base64");
+    Stride = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Dw1, Ctx.B.getInt32(16)),
+                               Type::getInt16Ty(Ctx.C), "sbuf_stride");
+    NumRecords = zextToI64(Ctx, Dw2, "sbuf_num_records");
+  }
+
+  // This handler covers only the dword-width S_BUFFER_LOAD_B* family. Source
+  // hardware forces both the descriptor base and byte offsets to dword
+  // alignment for these loads.
+  BaseAddr = alignDwordAddress64(Ctx, BaseAddr, "sbuf_base_aligned");
+  emitBufferBaseRepresentabilityGuard(Ctx, BaseAddr);
+
+  Value *Stride64 = zextToI64(Ctx, Stride, "sbuf_stride_zext");
+  Value *StrideIsZero =
+      Ctx.B.CreateICmpEQ(Stride64, Ctx.B.getInt64(0), "sbuf_stride_zero");
+  Value *SizeStride =
+      Ctx.B.CreateSelect(StrideIsZero, Ctx.B.getInt64(1), Stride64,
+                         "sbuf_size_stride");
+  // Source S_BUFFER_LOAD bounds use:
+  //   m_size = (stride == 0 ? 1 : stride) * num_records
+  // Raw pointer buffer loads take the extent in bytes, so rebuild the target
+  // resource with that byte extent rather than passing source num_records
+  // through directly.
+  Value *ExtentBytes =
+      Ctx.B.CreateMul(SizeStride, NumRecords, "sbuf_extent_bytes");
+
+  return {Ctx.B.CreateIntToPtr(BaseAddr, Ctx.PtrGlobalTy, "sbuf_base_ptr"),
+          ExtentBytes};
+}
+
+// Rebuild a target buffer resource with the source scalar-buffer byte extent.
+Value *emitTargetBufferResource(RaiseContext &Ctx,
+                                const SourceScalarBufferResource &Resource) {
+  Function *MakeRsrc = Intrinsic::getOrInsertDeclaration(
+      &Ctx.M, Intrinsic::amdgcn_make_buffer_rsrc,
+      {PointerType::get(Ctx.C, 8), PointerType::get(Ctx.C, 1)});
+  // Build a target raw-buffer resource whose byte extent matches the source
+  // scalar-buffer bound. `stride=0` is intentional here: S_BUFFER_LOAD does not
+  // use stride to compute the address, only to derive its OOB size.
+  return Ctx.B.CreateCall(
+      MakeRsrc,
+      {Resource.BasePtr, ConstantInt::get(Type::getInt16Ty(Ctx.C), 0),
+       Resource.ExtentBytes, ConstantInt::get(Ctx.I32Ty, 0)},
+      "sbuf_rsrc");
 }
 
 } // namespace
@@ -227,6 +443,130 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       }
       Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx, LoadDwords);
     }
+    Hr.Handled = true;
+    return Hr;
+  }
+
+  if (isScalarBufferLoad(Sop)) {
+    ParsedReg Dest = Op.dst();
+    ParsedReg Base = Op.srcReg(0);
+
+    if (Dest.RegKind != ParsedReg::SGPR || Dest.BaseIdx < 0) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "SMEM", "S_BUFFER_LOAD expects an SGPR destination");
+      return Hr;
+    }
+    // The payload width is encoded in the TableGen destination operand class.
+    unsigned LoadDwords = defRegClassDwordCount(Ctx, Di, /*DefIdx=*/0);
+    if (Base.RegKind != ParsedReg::SGPR || Base.BaseIdx < 0 ||
+        (Base.BaseIdx % 4) != 0 ||
+        static_cast<size_t>(Base.BaseIdx + 3) >= Ctx.Regs.Sgpr.size()) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "SMEM",
+          "S_BUFFER_LOAD expects a four-SGPR resource descriptor in sbase");
+      return Hr;
+    }
+    if (Di.HasScaleOffset) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "SMEM",
+          "S_BUFFER_LOAD does not support scale_offset; refusing malformed "
+          "or unmodelled SMEM buffer offset semantics");
+      return Hr;
+    }
+    if (std::optional<int64_t> CPol =
+            readNamedImmOperand(Di, AMDGPU::OpName::cpol);
+        CPol && *CPol != 0) {
+      // SMEM CPol carries TH/SCOPE cache-coherence semantics. Rebuilding the
+      // access through raw-pointer buffer loads with a default target
+      // cachepolicy would silently change those semantics, so reject until
+      // there is an explicit source->target cache-policy table.
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "SMEM",
+          "S_BUFFER_LOAD cache-policy/scope bits are not modelled");
+      return Hr;
+    }
+
+    unsigned OffIdx = Op.srcIdx(1);
+    Value *Offset = nullptr;
+    if (Di.isImm(OffIdx)) {
+      int64_t Imm = Op.srcImm(1);
+      if (Imm < 0) {
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+            Di, "SMEM",
+            "S_BUFFER_LOAD negative static offset would MEMVIOL on source");
+        return Hr;
+      }
+      Offset =
+          ConstantInt::get(Ctx.I32Ty, static_cast<uint32_t>(Imm) & ~3u);
+    } else if (Di.isReg(OffIdx)) {
+      if (Di.StaticOffset && *Di.StaticOffset < 0) {
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+            Di, "SMEM",
+            "S_BUFFER_LOAD negative static offset would MEMVIOL on source");
+        return Hr;
+      }
+      Offset = alignDwordOffset32(Ctx, Op.src(1), "sbuf_soffset_aligned");
+      if (Di.StaticOffset && *Di.StaticOffset != 0)
+        Offset = Ctx.B.CreateAdd(
+            Offset,
+            ConstantInt::get(Ctx.I32Ty,
+                             static_cast<uint32_t>(*Di.StaticOffset) & ~3u),
+            "sbuf_offset_plus_imm");
+    } else {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "SMEM", "S_BUFFER_LOAD offset must be an immediate or SGPR");
+      return Hr;
+    }
+
+    SourceScalarBufferResource Resource =
+        decodeSourceScalarBufferResource(Ctx, Base);
+    Value *Rsrc = emitTargetBufferResource(Ctx, Resource);
+    Value *Soffset = ConstantInt::get(Ctx.I32Ty, 0);
+    Value *AuxFlags = ConstantInt::get(Ctx.I32Ty, 0);
+    // S_BUFFER_LOAD reads through the buffer resource in sbase. Decode the
+    // source fields this instruction uses, then rebuild a target resource with
+    // the same base and byte extent. Target buffer hardware then returns zero
+    // for out-of-bounds load elements.
+    // This path is limited to the default cache policy; explicit SMEM TH/SCOPE
+    // bits are rejected above.
+    //
+    // Use raw-pointer buffer loads because WaveNative can carry different
+    // descriptor values for the two source-wave halves inside one target wave.
+    // The backend lowers such non-uniform resource values correctly.
+    for (unsigned D = 0; D < LoadDwords;) {
+      // Target raw-buffer loads select up to dwordx4, so split wider scalar
+      // buffer loads into consecutive chunks.
+      unsigned ChunkDwords = std::min(4u, LoadDwords - D);
+      Type *LoadTy = ChunkDwords == 1
+                         ? Ctx.I32Ty
+                         : static_cast<Type *>(
+                               FixedVectorType::get(Ctx.I32Ty, ChunkDwords));
+      Function *BufLd = Intrinsic::getOrInsertDeclaration(
+          &Ctx.M, Intrinsic::amdgcn_raw_ptr_buffer_load, {LoadTy});
+      Value *ChunkOffset = Offset;
+      if (D != 0)
+        ChunkOffset = Ctx.B.CreateAdd(
+            Offset, ConstantInt::get(Ctx.I32Ty, static_cast<uint32_t>(D * 4)),
+            "sbuf_chunk_offset");
+      Value *Loaded =
+          Ctx.B.CreateCall(BufLd, {Rsrc, ChunkOffset, Soffset, AuxFlags},
+                           "sbuf_load");
+
+      if (ChunkDwords == 1) {
+        Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + static_cast<int>(D),
+                             Loaded);
+      } else {
+        for (unsigned I = 0; I < ChunkDwords; ++I) {
+          Value *Dw = Ctx.B.CreateExtractElement(
+              Loaded, ConstantInt::get(Ctx.I32Ty, I), "sbuf_load_dw");
+          Ctx.Regs.storeSGPR32(Ctx.B,
+                               Dest.BaseIdx + static_cast<int>(D + I), Dw);
+        }
+      }
+      D += ChunkDwords;
+    }
+    Ctx.noteSgprMemoryLoadForKernargProvenance(
+        Dest.BaseIdx, static_cast<int>(LoadDwords));
     Hr.Handled = true;
     return Hr;
   }

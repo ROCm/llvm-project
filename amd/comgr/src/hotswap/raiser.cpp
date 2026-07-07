@@ -388,7 +388,9 @@ instructionKernargPtrEffect(const MCRegisterInfo &MRI, const MCInstrInfo &MII,
       continue;
     bool IsDwordSmemLoad =
         isSemOpInRange(Di.CanonOp, CanonicalOp::S_LOAD_B32,
-                       CanonicalOp::S_LOAD_B512);
+                       CanonicalOp::S_LOAD_B512) ||
+        isSemOpInRange(Di.CanonOp, CanonicalOp::S_BUFFER_LOAD_B32,
+                       CanonicalOp::S_BUFFER_LOAD_B512);
     unsigned DefWidth =
         IsDwordSmemLoad
             ? kernargPrepassDefRegClassWidth32(MII, MRI, STI, Desc, I)
