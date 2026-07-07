@@ -1394,6 +1394,8 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
       Intrinsic::getOrInsertDeclaration(&M, Intrinsic::amdgcn_workgroup_id_x);
   Function *FnWorkgroupIdY =
       Intrinsic::getOrInsertDeclaration(&M, Intrinsic::amdgcn_workgroup_id_y);
+  Function *FnDispatchPtr =
+      Intrinsic::getOrInsertDeclaration(&M, Intrinsic::amdgcn_dispatch_ptr);
   Function *FnKargPtr =
       Intrinsic::getOrInsertDeclaration(&M, Intrinsic::amdgcn_kernarg_segment_ptr);
   // Build the source-ISA user-SGPR ABI from the kernel descriptor.
@@ -1454,12 +1456,14 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   // SGPRs away from s[0:1]/s2/s3. Hardcoding those indices mis-seeds entry
   // state and turns real source values into undef reads on the JIT path.
   //
-  // Seed the kernarg pair with ptrtoint(amdgcn_kernarg_segment_ptr) so the
-  // generic GEP+load path in handle-smem.cpp materialises kernarg SMEM
-  // loads as real scalar loads (the backend selects s_load_* off the
-  // addrspace(4) cast). storeSGPR64 ptrtoint-splits the pointer into two
-  // i32 halves; loadSGPR64 reconstructs and the SMEM handler casts back
-  // to ptr addrspace(4).
+  // Seed ABI-provided entry pointers with the matching AMDGPU intrinsics. The
+  // source descriptor's dispatch_ptr bit means the corresponding SGPR pair
+  // holds the AQL dispatch packet base, and source SMEM may legally load
+  // through it just like it loads through kernarg_segment_ptr.
+  if (UserSgprLayout.DispatchPtrSgpr >= 0) {
+    Regs.storeSGPR64(B, UserSgprLayout.DispatchPtrSgpr,
+                     B.CreateCall(FnDispatchPtr, {}, "dispatch_ptr"));
+  }
   if (UserSgprLayout.KernargSegmentPtrSgpr >= 0) {
     Regs.storeSGPR64(B, UserSgprLayout.KernargSegmentPtrSgpr,
                      B.CreateCall(FnKargPtr, {}, "kernarg_ptr"));
@@ -1630,11 +1634,12 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
     SeedB.CreateStore(ConstantInt::get(I32Ty, 0), Regs.FlatScr[0]);
     SeedB.CreateStore(ConstantInt::get(I32Ty, 0), Regs.FlatScr[1]);
 
-    // Mirror the entry-BB user-SGPR seeding above: the kernarg pair is
-    // re-seeded with `amdgcn_kernarg_segment_ptr` so kernarg SMEM loads
-    // inside the thread-loop iteration body lift through the same
-    // GEP+load shape, and preloaded-kernarg SGPRs materialise through the
-    // same hidden-arg/implicit-range policy as the entry block.
+    // Mirror the entry-BB user-SGPR seeding above so the thread-loop body sees
+    // the same source ABI state as a normal source wave.
+    if (UserSgprLayout.DispatchPtrSgpr >= 0) {
+      Regs.storeSGPR64(SeedB, UserSgprLayout.DispatchPtrSgpr,
+                       SeedB.CreateCall(FnDispatchPtr, {}, "dispatch_ptr"));
+    }
     if (UserSgprLayout.KernargSegmentPtrSgpr >= 0) {
       Regs.storeSGPR64(SeedB, UserSgprLayout.KernargSegmentPtrSgpr,
                        SeedB.CreateCall(FnKargPtr, {}, "kernarg_ptr"));
