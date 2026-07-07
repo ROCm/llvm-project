@@ -156,6 +156,66 @@ TEST(EncodeSBranch, FailsOnInvalidState) {
   EXPECT_TRUE(S.encodeSBranch(0, 8).empty());
 }
 
+// -- encodeLongBranch (s_add_pc_i64) -----------------------------------------
+//
+// The long branch reaches anywhere via s_add_pc_i64, which adds a signed
+// literal to the PC of the next instruction: landing PC == From + size + imm.
+// A positive (forward) offset fits a 32-bit literal (8 bytes); a negative
+// (backward) offset needs a 64-bit literal (12 bytes). These verify the offset
+// math and encoding structurally rather than pinning exact bytes.
+
+// Read the signed literal that follows the 4-byte opcode dword.
+static int64_t longBranchLiteral(llvm::ArrayRef<uint8_t> Out) {
+  if (Out.size() == LongBranchFwdBytes)
+    return static_cast<int32_t>(readDword(Out.data() + MinInstSize));
+  int64_t V = 0;
+  std::memcpy(&V, Out.data() + MinInstSize, sizeof(V));
+  return V;
+}
+
+TEST(EncodeLongBranch, ForwardLandsOnTarget) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  // ~512 KB forward -- well beyond s_branch's +-128 KB reach.
+  const uint64_t From = 0x1000, To = 0x81000;
+  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
+  ASSERT_EQ(Out.size(), LongBranchFwdBytes);
+  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
+
+  std::vector<InternalDecodedInst> Dec;
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
+  ASSERT_EQ(Dec.size(), 1u);
+  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
+}
+
+TEST(EncodeLongBranch, BackwardUsesWideLiteralAndLandsOnTarget) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  // Backward jump (trampoline tail -> earlier return point).
+  const uint64_t From = 0x81000, To = 0x1004;
+  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
+  ASSERT_EQ(Out.size(), LongBranchMaxBytes);
+  EXPECT_EQ(static_cast<int64_t>(From) + static_cast<int64_t>(Out.size()) +
+                longBranchLiteral(Out),
+            static_cast<int64_t>(To));
+
+  std::vector<InternalDecodedInst> Dec;
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
+  ASSERT_EQ(Dec.size(), 1u);
+  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
+}
+
+TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  // 4 MB: s_branch rejects it, the long branch encodes it.
+  const uint64_t From = 0, To = 0x400000;
+  EXPECT_TRUE(S.encodeSBranch(From, To).empty());
+  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
+  ASSERT_FALSE(Out.empty());
+  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
+}
+
 // -- assembleSingleInst / decodeTextSection round-trip ------------------------
 
 TEST(AssembleDecode, SNopRoundTrip) {
@@ -395,6 +455,81 @@ TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
   expectInstMatchesAsm(Decoded[5].Inst, "s_set_pc_i64 s[8:9]", S);
 }
 
+TEST(BuildKernelEntryTrampoline, PrefixPrefiltersNonStubBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Stub =
+      buildKernelEntryTrampoline(/*StubVAddr=*/0x200000,
+                                 /*EntryVAddr=*/0x10100,
+                                 /*ScratchSgpr=*/8, S);
+  ASSERT_EQ(Stub.size(), KernelEntryStubStride);
+  EXPECT_TRUE(hasKernelEntryTrampolinePrefix(Stub, S));
+
+  llvm::SmallVector<uint8_t> NonStub;
+  ASSERT_TRUE(appendSingleInstBytes(NonStub, "s_endpgm", S));
+  while (NonStub.size() < KernelEntryStubStride)
+    NonStub.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  ASSERT_EQ(NonStub.size(), KernelEntryStubStride);
+
+  EXPECT_FALSE(hasKernelEntryTrampolinePrefix(NonStub, S));
+  EXPECT_FALSE(isKernelEntryTrampoline(NonStub, S));
+
+  llvm::ArrayRef<uint8_t> ShortCandidate(Stub.data(), MinInstSize);
+  EXPECT_FALSE(hasKernelEntryTrampolinePrefix(ShortCandidate, S));
+}
+
+TEST(BuildKernelEntryTrampoline, PrefixPrefiltersHipblasltSmokeEntryBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // Reduced from the gfx1250 hipBLASLt MXF8/BF16 smoke kernel entry. The
+  // idempotency path should reject this by raw prefix before classifying it as
+  // a possible appended entry stub.
+  const uint8_t EntryBytes[] = {
+      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
+      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
+      0xff, 0x02, 0x3f, 0x8b, 0xff, 0xff, 0xff, 0x3f,
+      0x02, 0x9e, 0x40, 0x85, 0x03, 0x00, 0xc1, 0xbe,
+  };
+
+  llvm::SmallVector<uint8_t> Candidate;
+  Candidate.append(EntryBytes, EntryBytes + sizeof(EntryBytes));
+  while (Candidate.size() < KernelEntryStubStride)
+    Candidate.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  ASSERT_EQ(Candidate.size(), KernelEntryStubStride);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Candidate.data(), sizeof(EntryBytes), S,
+                                Decoded));
+  ASSERT_GE(Decoded.size(), 5u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "s_setreg_imm32_b32");
+  EXPECT_EQ(Decoded[1].Mnemonic, "s_setreg_imm32_b32");
+  EXPECT_EQ(Decoded[2].Mnemonic, "s_and_b32");
+  EXPECT_FALSE(hasKernelEntryTrampolinePrefix(Candidate, S));
+  EXPECT_FALSE(isKernelEntryTrampoline(Candidate, S));
+}
+
+TEST(BuildKernelEntryTrampoline, PrefixPrefiltersUnknownDecodeBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const uint8_t UnknownInst[] = {0xff, 0xff, 0xff, 0xff};
+
+  llvm::SmallVector<uint8_t> Candidate;
+  Candidate.append(UnknownInst, UnknownInst + sizeof(UnknownInst));
+  while (Candidate.size() < KernelEntryStubStride)
+    Candidate.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  ASSERT_EQ(Candidate.size(), KernelEntryStubStride);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Candidate.data(), MinInstSize, S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "<unknown>");
+  EXPECT_FALSE(hasKernelEntryTrampolinePrefix(Candidate, S));
+  EXPECT_FALSE(isKernelEntryTrampoline(Candidate, S));
+}
+
 TEST(BuildKernelEntryTrampoline, MatcherRejectsNonStubBytes) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -424,6 +559,7 @@ TEST(BuildKernelEntryTrampoline, MatcherRejectsWrongOperandShape) {
     Bytes.append(CodeEnd.begin(), CodeEnd.end());
   ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
 
+  EXPECT_TRUE(hasKernelEntryTrampolinePrefix(Bytes, S));
   EXPECT_FALSE(isKernelEntryTrampoline(Bytes, S));
 }
 
@@ -775,11 +911,11 @@ TEST(HotswapPatchVTable, ProcessSingletonIdentityAndEagerInstall) {
 
 // -- DS ADDTID trampoline support ---------------------------------------------
 //
-// Tests for the ds_load_addtid_b32 / ds_store_addtid_b32 trampoline patch
-// (DEGFXMI400-12025). Coverage is bottom-up: first that the encode/decode
-// of ADDTID instructions exposes the expected MCInst operand layout, then
-// that buildTrampoline assembles and decodes a full ADDTID replacement body
-// plus its branch-back tail.
+// Tests for the ds_load_addtid_b32 / ds_store_addtid_b32 gfx1250 trampoline
+// patch. Coverage is bottom-up: first that the encode/decode of ADDTID
+// instructions exposes the expected MCInst operand layout, then that
+// buildTrampoline assembles and decodes a full ADDTID replacement body plus
+// its branch-back tail.
 
 namespace {
 

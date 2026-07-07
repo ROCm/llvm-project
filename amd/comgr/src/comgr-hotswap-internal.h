@@ -52,6 +52,7 @@
 #include "llvm/Object/ELF.h"
 #include "llvm/Object/ELFTypes.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
+#include "llvm/Support/CheckedArithmetic.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -73,12 +74,26 @@ inline llvm::raw_ostream &log() {
   return COMGR::env::shouldEmitVerboseLogs() ? llvm::errs() : llvm::nulls();
 }
 
+inline std::optional<uint64_t> checkedAddUint64(uint64_t LHS, uint64_t RHS,
+                                                llvm::StringRef Context) {
+  std::optional<uint64_t> Result = llvm::checkedAddUnsigned(LHS, RHS);
+  if (Result)
+    return Result;
+
+  log() << "hotswap: error: " << Context << " overflows uint64_t.\n";
+  return std::nullopt;
+}
+
 // -- Trampoline and NOP sled --------------------------------------------------
 
 struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
+  // When set, both edges use an s_add_pc_i64 long branch instead of s_branch
+  // (reaches anywhere, no scratch reg, no SCC). Set when the appended pool is
+  // beyond s_branch's +-128 KB reach; widens the reserved branch-back slot.
+  bool Long = false;
 };
 
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
@@ -122,6 +137,14 @@ static constexpr uint64_t MinNopSledSize = 8;
 
 // Minimum AMDGPU instruction size (one dword).
 static constexpr uint32_t MinInstSize = 4;
+
+// s_add_pc_i64 long-branch encoded sizes: 8 bytes for a forward (32-bit
+// literal) offset, 12 for a backward (64-bit literal) one. The back slot
+// reserves the max; unused tail bytes are s_nop-padded. emitToTrampoline picks
+// the long path only when a short s_branch cannot reach the site's exact pool
+// offset on either edge (computed from the already-queued trampolines).
+static constexpr uint32_t LongBranchFwdBytes = 8;
+static constexpr uint32_t LongBranchMaxBytes = 12;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
 // LLVMState::encodeSBranch to reject out-of-range branches before handing
@@ -237,8 +260,8 @@ public:
   /// `group_segment_size` and propagated to the device via the
   /// `hidden_dynamic_lds_size` kernarg) and is *not* included here, so the
   /// returned value is a lower bound on the total LDS the kernel may
-  /// touch. Callers that need to flag potential overflow of A0's 16-bit M0
-  /// limit (DEGFXMI400-12025) can use this as a "definitely exceeds"
+  /// touch. Callers that need to flag potential overflow of gfx1250 A0's
+  /// 16-bit M0 limit can use this as a "definitely exceeds"
   /// check; "static fits, dynamic pushes over" cannot be detected
   /// statically. See AMDGPUUsage "Code Object V3 Kernel Descriptor"
   /// (GROUP_SEGMENT_FIXED_SIZE).
@@ -424,10 +447,18 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 llvm::SmallVector<uint8_t> assembleSingleInst(llvm::StringRef AsmStr,
                                               const LLVMState &LS);
 
+/// Join \p AsmLines into a single newline-terminated assembly source string,
+/// as expected by assembleSingleInst (which accepts multiple instructions).
+std::string joinAsmLines(llvm::ArrayRef<std::string> AsmLines);
+
 /// Assemble \p AsmLines and append a branch-back to the next instruction
 /// after the original (\p OriginalOffset + \p OriginalSize). The branch-back
 /// is encoded via LLVMState::encodeSBranch, so no ISA-specific opcode needs
 /// to flow in from the caller.
+///
+/// NOTE: no production caller remains (WMMA-split now defers edge encoding to
+/// emitToTrampoline / fixupTrampolineBranches). Kept only as a self-contained
+/// helper exercised by the unit tests; prefer emitToTrampoline for new code.
 Trampoline buildTrampoline(llvm::ArrayRef<std::string> AsmLines,
                            uint64_t OriginalOffset, uint32_t OriginalSize,
                            uint64_t TrampolineTextOffset, const LLVMState &LS);
@@ -537,7 +568,7 @@ struct VgprAllocator {
 };
 
 /// Allocates scratch SGPRs for a patch point. Unlike VGPRs (which have full
-/// dataflow liveness), SGPRs have no liveness analysis — we always allocate
+/// dataflow liveness), SGPRs have no liveness analysis, so we always allocate
 /// above the kernel descriptor's reported SGPR count. This is conservative
 /// but safe: no SGPR currently in use by the kernel can be clobbered.
 struct SgprAllocator {
@@ -607,6 +638,13 @@ struct PatchContext {
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     llvm::ArrayRef<uint8_t> Replacement);
+
+// Encode an s_add_pc_i64 PC-relative long branch from \p FromOffset to
+// \p TargetOffset (.text byte offsets). Exposed for unit testing the offset
+// math / encoding. Returns empty on failure.
+llvm::SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS,
+                                            uint64_t FromOffset,
+                                            uint64_t TargetOffset);
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement);
@@ -694,6 +732,13 @@ llvm::SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
 /// buildKernelEntryTrampoline, used to keep the rewrite idempotent.
 bool isKernelEntryTrampoline(llvm::ArrayRef<uint8_t> Bytes,
                              const LLVMState &LS);
+
+/// Cheap raw-byte prefilter for the entry stubs produced by
+/// buildKernelEntryTrampoline. This is intentionally weaker than
+/// isKernelEntryTrampoline and exists to avoid running the disassembler over
+/// arbitrary original kernel entry bytes during idempotency checks.
+bool hasKernelEntryTrampolinePrefix(llvm::ArrayRef<uint8_t> Bytes,
+                                    const LLVMState &LS);
 
 /// Compute the trailing readable guard needed after an appended kernel-entry
 /// stub pool so CP instruction prefetches from the last stub cannot run past
