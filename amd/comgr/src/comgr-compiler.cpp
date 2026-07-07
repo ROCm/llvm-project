@@ -41,6 +41,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/LLVMContext.h"
@@ -1798,6 +1799,38 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
+// Determine the output file extension and Comgr data kind for an unpackaged
+// offload image by inspecting the image's magic bytes
+static amd_comgr_status_t
+getUnpackagedImageInfo(StringRef Image, const char *&FileExtension,
+                       amd_comgr_data_kind_t &DataKind) {
+  switch (llvm::identify_magic(Image)) {
+  case llvm::file_magic::elf:
+  case llvm::file_magic::elf_relocatable:
+  case llvm::file_magic::elf_executable:
+  case llvm::file_magic::elf_shared_object:
+  case llvm::file_magic::elf_core:
+    FileExtension = "o";
+    DataKind = AMD_COMGR_DATA_KIND_EXECUTABLE;
+    break;
+  case llvm::file_magic::bitcode:
+    FileExtension = "bc";
+    DataKind = AMD_COMGR_DATA_KIND_BC;
+    break;
+  case llvm::file_magic::cuda_fatbinary:
+    FileExtension = "fatbin";
+    DataKind = AMD_COMGR_DATA_KIND_FATBIN;
+    break;
+  case llvm::file_magic::spirv_object:
+    FileExtension = "spv";
+    DataKind = AMD_COMGR_DATA_KIND_SPIRV;
+    break;
+  default:
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
 amd_comgr_status_t AMDGPUCompiler::unpackage() {
   if (auto Status = createTmpDirs()) {
     return Status;
@@ -1856,26 +1889,11 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
         if (EntryTarget == FileTarget ||
             llvm::object::areTargetsCompatible(EntryTarget, FileTarget)) {
           const char *FileExtension;
-          switch (Binary->getImageKind()) {
-          case llvm::object::IMG_Object:
-            FileExtension = "o";
-            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_EXECUTABLE);
-            break;
-          case llvm::object::IMG_Bitcode:
-            FileExtension = "bc";
-            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_BC);
-            break;
-          case llvm::object::IMG_Fatbinary:
-            FileExtension = "fatbin";
-            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_FATBIN);
-            break;
-          case llvm::object::IMG_SPIRV:
-            FileExtension = "spv";
-            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_SPIRV);
-            break;
-          default:
-            return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
-          }
+          amd_comgr_data_kind_t DataKind;
+          if (auto Status = getUnpackagedImageInfo(Binary->getImage(),
+                                                   FileExtension, DataKind))
+            return Status;
+          DataKinds.push_back(DataKind);
 
           SmallString<128> OutputFilePath = OutputDir;
           sys::path::append(OutputFilePath,
