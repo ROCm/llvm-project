@@ -144,9 +144,6 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
       test_type: ${{ inputs.test_type }}        
-      repository: ${{ inputs.repository }}
-      ref: ${{ inputs.ref }}
-      external_repo_config: ${{ inputs.external_repo_config }}
     permissions:
       contents: read
       id-token: write        
