@@ -634,6 +634,7 @@ defvar cpp17 = LangOpts<"CPlusPlus17">;
 defvar cpp20 = LangOpts<"CPlusPlus20">;
 defvar cpp23 = LangOpts<"CPlusPlus23">;
 defvar cpp26 = LangOpts<"CPlusPlus26">;
+defvar cpp29 = LangOpts<"CPlusPlus29">;
 defvar c99 = LangOpts<"C99">;
 defvar c23 = LangOpts<"C23">;
 defvar lang_std = LangOpts<"LangStd">;
@@ -1950,7 +1951,7 @@ defm pseudo_probe_for_profiling
                   CodeGenOpts<"PseudoProbeForProfiling">, DefaultFalse,
                   PosFlag<SetTrue, [], [ClangOption], "Emit">,
                   NegFlag<SetFalse, [], [ClangOption], "Do not emit">,
-                  BothFlags<[], [ClangOption, CC1Option, CLOption],
+                  BothFlags<[], [ClangOption, CC1Option, CLOption, FlangOption, FC1Option],
                             " pseudo probes for sample profiling">>;
 def fprofile_list_EQ : Joined<["-"], "fprofile-list=">,
     Group<f_Group>, Visibility<[ClangOption, CC1Option, CLOption]>,
@@ -2099,7 +2100,7 @@ def fcolor_diagnostics : Flag<["-"], "fcolor-diagnostics">, Group<f_Group>,
   Visibility<[ClangOption, CLOption, DXCOption, CC1Option, FlangOption, FC1Option]>,
   HelpText<"Enable colors in diagnostics">;
 def fno_color_diagnostics : Flag<["-"], "fno-color-diagnostics">, Group<f_Group>,
-  Visibility<[ClangOption, CLOption, DXCOption, FlangOption]>,
+  Visibility<[ClangOption, CLOption, DXCOption, CC1Option, FlangOption, FC1Option]>,
   HelpText<"Disable colors in diagnostics">;
 def : Flag<["-"], "fdiagnostics-color">, Group<f_Group>,
   Visibility<[ClangOption, CLOption, DXCOption, FlangOption]>,
@@ -3411,6 +3412,16 @@ def clangir_enable_idiom_recognizer : Flag<["-"], "clangir-enable-idiom-recogniz
   HelpText<"ClangIR: Enable Idiom Recognizer pass">,
   MarshallingInfoFlag<FrontendOpts<"ClangIREnableIdiomRecognizer">>;
 
+def clangir_lib_opt_EQ : Joined<["-"], "clangir-lib-opt=">,
+  Visibility<[ClangOption, CC1Option]>, Group<f_Group>, Values<"all">,
+  HelpText<"Enable C/C++ library based optimizations (with options)">,
+  MarshallingInfoString<FrontendOpts<"ClangIRLibOptOptions">>;
+
+def clangir_lib_opt : Flag<["-"], "clangir-lib-opt">,
+  Visibility<[ClangOption, CC1Option]>, Group<f_Group>,
+  Alias<clangir_lib_opt_EQ>, AliasArgs<["all"]>,
+  HelpText<"Enable C/C++ library based optimizations">;
+
 defm clangir : BoolFOption<"clangir",
   FrontendOpts<"UseClangIRPipeline">, DefaultFalse,
   PosFlag<SetTrue, [], [ClangOption, CC1Option], "Use the ClangIR pipeline to compile">,
@@ -3766,7 +3777,7 @@ defm modulemap_allow_subdirectory_search : BoolFOption <"modulemap-allow-subdire
   PosFlag<SetTrue, [], [], "Allow to search for module maps in subdirectories of search paths">,
   NegFlag<SetFalse>, BothFlags<[NoXarchOption], [ClangOption, CC1Option]>>;
 defm modules : BoolFOption<"modules",
-  LangOpts<"Modules">, Default<fcxx_modules.KeyPath>,
+  LangOpts<"ClangModules">, DefaultFalse,
   PosFlag<SetTrue, [], [ClangOption, CC1Option],
           "Enable the 'modules' language feature">,
   NegFlag<SetFalse>, BothFlags<
@@ -4206,14 +4217,6 @@ def fno_openmp_target_xteam_no_loop_scan : Flag<["-"], "fno-openmp-target-xteam-
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Do not use the no-loop variant of the cross-team specialized kernel code generation for 'scan' directive.">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamNoLoopScan">>;
-def fopenmp_target_multi_device : Flag<["-"], "fopenmp-target-multi-device">, Group<f_Group>,
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Enable code generation to emit support for multi device target region execution">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetMultiDevice">>;
-def fno_openmp_target_multi_device : Flag<["-"], "fno-openmp-target-multi-device">, Group<f_Group>,
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option,FlangOption]>,
-  HelpText<"Do not use code generation to emit support for multi target offloading">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetMultiDevice">>;
 
 //===----------------------------------------------------------------------===//
 // Shared cc1 + fc1 OpenMP Target Options
@@ -4782,6 +4785,14 @@ def floop_interchange : Flag<["-"], "floop-interchange">, Group<f_Group>,
   HelpText<"Enable the loop interchange pass">, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>;
 def fno_loop_interchange: Flag<["-"], "fno-loop-interchange">, Group<f_Group>,
   HelpText<"Disable the loop interchange pass">, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>;
+defm enable_new_pm_codegen
+    : BoolFOption<"enable-new-pm-codegen", CodeGenOpts<"EnableNewPMCodeGen">, DefaultFalse,
+                  NegFlag<SetFalse, [], [CC1Option],
+                          "Do not use the NewPM for the Codegen Pipeline">,
+                  PosFlag<SetTrue, [], [CC1Option],
+                          "Use the NewPM for the Codegen Pipeline">>,
+      DocBrief<
+          [{When enabled, use the NewPM to drive the Codegen pipeline.}]>;
 defm experimental_loop_fusion
     : OptInCC1FFlag<"experimental-loop-fusion", "Enable", "Disable",
                     "Enable the loop fusion pass",
@@ -5787,7 +5798,7 @@ def mno_restrict_it: Flag<["-"], "mno-restrict-it">, Group<m_arm_Features_Group>
   HelpText<"Allow generation of complex IT blocks.">;
 def marm : Flag<["-"], "marm">, Alias<mno_thumb>;
 def ffixed_r9 : Flag<["-"], "ffixed-r9">, Group<m_Group>,
-  HelpText<"Reserve the r9 register (ARM/x86_64 only)">;
+  HelpText<"Reserve the r9 register (ARM/Hexagon/x86_64 only)">;
 def mno_movt : Flag<["-"], "mno-movt">, Group<m_arm_Features_Group>,
   HelpText<"Disallow use of movt/movw pairs (ARM only)">;
 def mcrc : Flag<["-"], "mcrc">, Group<m_Group>,
@@ -7150,6 +7161,9 @@ def mhexagon_hvx_length_EQ : Joined<["-"], "mhvx-length=">,
 def mhexagon_hvx_qfloat : Flag<["-"], "mhvx-qfloat">,
   Group<m_hexagon_Features_HVX_Group>,
   HelpText<"Enable Hexagon HVX QFloat instructions">;
+def mhexagon_hvx_qfloat_EQ : Joined<["-"], "mhvx-qfloat=">,
+  Group<m_hexagon_Features_HVX_Group>,
+  HelpText<"Enable Hexagon HVX QFloat instructions with mode: strict-ieee, ieee, lossy, legacy (v79+)">;
 def mno_hexagon_hvx_qfloat : Flag<["-"], "mno-hvx-qfloat">,
   Group<m_hexagon_Features_HVX_Group>,
   HelpText<"Disable Hexagon HVX QFloat instructions">;
@@ -7159,7 +7173,10 @@ def mhexagon_hvx_ieee_fp : Flag<["-"], "mhvx-ieee-fp">,
 def mno_hexagon_hvx_ieee_fp : Flag<["-"], "mno-hvx-ieee-fp">,
   Group<m_hexagon_Features_Group>,
   HelpText<"Disable Hexagon HVX IEEE floating-point">;
-def ffixed_r19: Flag<["-"], "ffixed-r19">, Group<f_Group>,
+foreach i = {6-7} in
+    def ffixed_r#i : Flag<["-"], "ffixed-r"#i>, Group<m_Group>,
+    HelpText<"Reserve register r"#i#" (Hexagon only)">;
+def ffixed_r19: Flag<["-"], "ffixed-r19">, Group<m_Group>,
   HelpText<"Reserve register r19 (Hexagon/x86_64 only; x86_64 requires APX EGPR)">;
 } // let Flags = [TargetSpecific]
 def mmemops : Flag<["-"], "mmemops">, Group<m_hexagon_Features_Group>,
@@ -7267,8 +7284,6 @@ def mamx_int8 : Flag<["-"], "mamx-int8">, Group<m_x86_Features_Group>;
 def mno_amx_int8 : Flag<["-"], "mno-amx-int8">, Group<m_x86_Features_Group>;
 def mamx_fp8 : Flag<["-"], "mamx-fp8">, Group<m_x86_Features_Group>;
 def mno_amx_fp8 : Flag<["-"], "mno-amx-fp8">, Group<m_x86_Features_Group>;
-def mamx_tf32 : Flag<["-"], "mamx-tf32">, Group<m_x86_Features_Group>;
-def mno_amx_tf32 : Flag<["-"], "mno-amx-tf32">, Group<m_x86_Features_Group>;
 def mamx_tile : Flag<["-"], "mamx-tile">, Group<m_x86_Features_Group>;
 def mno_amx_tile : Flag<["-"], "mno-amx-tile">, Group<m_x86_Features_Group>;
 def mamx_movrs: Flag<["-"], "mamx-movrs">, Group<m_x86_Features_Group>;
@@ -7492,10 +7507,10 @@ def ffixed_edi : Flag<["-"], "ffixed-edi">, Group<m_Group>,
                  HelpText<"Reserve the edi register (x86 only)">;
 foreach i = {8, 10-15} in
     def ffixed_r#i : Flag<["-"], "ffixed-r"#i>, Group<m_Group>,
-    HelpText<"Reserve the r"#i#" register (x86_64 only)">;
+    HelpText<"Reserve the r"#i#" register (Hexagon/x86_64 only)">;
 foreach i = {16-18,20-31} in
     def ffixed_r#i : Flag<["-"], "ffixed-r"#i>, Group<m_Group>,
-    HelpText<"Reserve the r"#i#" register (x86_64 with APX EGPR only)">;
+    HelpText<"Reserve the r"#i#" register (Hexagon/x86_64 only; x86_64 requires APX EGPR)">;
 
 } // let Flags = [TargetSpecific]
 
@@ -7669,6 +7684,16 @@ def fsycl_host_only : Flag<["-"], "fsycl-host-only">,
 def sycl_link : Flag<["--"], "sycl-link">, Flags<[HelpHidden]>,
   HelpText<"Perform link through clang-sycl-linker via the target "
   "offloading toolchain.">;
+def fsycl_device_image_split_EQ : Joined<["-"], "fsycl-device-image-split=">,
+  HelpText<"Select the granularity at which SYCL device code is grouped into "
+           "device images: kernel (one device image per kernel) | "
+           "translation_unit (one device image per translation unit) | "
+           "link_unit (one device image per linking unit). "
+           "Default is 'translation_unit'.">,
+  Values<"kernel,translation_unit,link_unit">;
+def fsycl_device_image_split : Flag<["-"], "fsycl-device-image-split">,
+  Alias<fsycl_device_image_split_EQ>, AliasArgs<["translation_unit"]>,
+  HelpText<"Group SYCL device code into device images: one per 'translation_unit'.">;
 } // let Group = sycl_Group
 
 // OS-specific options
@@ -7712,6 +7737,11 @@ let Visibility = [CC1Option, CC1AsOption, FC1Option] in {
 def tune_cpu : Separate<["-"], "tune-cpu">,
   HelpText<"Tune for a specific cpu type">,
   MarshallingInfoString<TargetOpts<"TuneCPU">>;
+def fexec_charset : Separate<["-"], "fexec-charset">, MetaVarName<"<encoding>">,
+  HelpText<"Set the <encoding> for ordinary string and character literals. "
+           "Supported character encodings include ISO-8859-1, UTF-8, IBM1047, "
+           "and possibly those supported by ICU or the host iconv library.">,
+  MarshallingInfoString<LangOpts<"LiteralEncoding">>;
 def target_cpu : Separate<["-"], "target-cpu">,
   HelpText<"Target a specific cpu type">,
   MarshallingInfoString<TargetOpts<"CPU">>;
@@ -9379,7 +9409,7 @@ def _SLASH_execution_charset : CLCompileJoined<"execution-charset:">,
   HelpText<"Set runtime encoding, supports only UTF-8">,
   Alias<fexec_charset_EQ>;
 def _SLASH_std : CLCompileJoined<"std:">,
-  HelpText<"Set language version (c++14,c++17,c++20,c++23preview,c++latest,c11,c17)">;
+  HelpText<"Set language version (c++14,c++17,c++20,c++23preview,c++26preview,c++latest,c11,c17)">;
 def _SLASH_U : CLJoinedOrSeparate<"U">, HelpText<"Undefine macro">,
   MetaVarName<"<macro>">, Alias<U>;
 def _SLASH_validate_charset : CLFlag<"validate-charset">,
