@@ -76,7 +76,7 @@ jobs:
            )
          )
        ))
-    uses: ./.github/workflows/setup_multi_arch.yml
+    uses: ./.github/workflows/setup_multi_arch_test.yml
     with:
       build_variant: "release"
 
