@@ -13,11 +13,11 @@ define amdgpu_kernel void @partial_copy(<4 x i32> %arg) #0 {
   ; REGALLOC-GFX908-NEXT: {{  $}}
   ; REGALLOC-GFX908-NEXT:   INLINEASM &"; use $0", sideeffect attdialect, reguse:AGPR_32, undef renamable $agpr0
   ; REGALLOC-GFX908-NEXT:   INLINEASM &"; def $0", sideeffect attdialect, regdef:VReg_128, def $vgpr0_vgpr1_vgpr2_vgpr3
-  ; REGALLOC-GFX908-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = COPY killed $vgpr0_vgpr1_vgpr2_vgpr3
+  ; REGALLOC-GFX908-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = lr-split COPY killed $vgpr0_vgpr1_vgpr2_vgpr3
   ; REGALLOC-GFX908-NEXT:   INLINEASM &"; def $0", sideeffect attdialect, regdef:VReg_64, def $vgpr0_vgpr1
   ; REGALLOC-GFX908-NEXT:   SI_SPILL_AV64_SAVE killed $vgpr0_vgpr1, %stack.0, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.0, align 4, addrspace 5)
   ; REGALLOC-GFX908-NEXT:   INLINEASM &"; clobber", sideeffect attdialect, clobber, implicit-def dead early-clobber $agpr4, clobber, implicit-def dead early-clobber $agpr5
-  ; REGALLOC-GFX908-NEXT:   $vgpr0_vgpr1_vgpr2_vgpr3 = COPY killed renamable $agpr0_agpr1_agpr2_agpr3
+  ; REGALLOC-GFX908-NEXT:   $vgpr0_vgpr1_vgpr2_vgpr3 = lr-split COPY killed renamable $agpr0_agpr1_agpr2_agpr3
   ; REGALLOC-GFX908-NEXT:   GLOBAL_STORE_DWORDX4 undef $vgpr0_vgpr1, killed $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, implicit $exec :: (volatile store (s128) into `ptr addrspace(1) poison`, addrspace 1)
   ; REGALLOC-GFX908-NEXT:   renamable $sgpr0_sgpr1_sgpr2_sgpr3 = S_LOAD_DWORDX4_IMM killed renamable $sgpr4_sgpr5, 0, 0 :: (dereferenceable invariant load (s128) from %ir.arg.kernarg.offset1, addrspace 4)
   ; REGALLOC-GFX908-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = COPY killed renamable $sgpr0_sgpr1_sgpr2_sgpr3
@@ -39,12 +39,12 @@ define amdgpu_kernel void @partial_copy(<4 x i32> %arg) #0 {
   ; PEI-GFX908-NEXT:   $sgpr13 = S_ADDC_U32 $sgpr13, 0, implicit-def dead $scc, implicit $scc, implicit-def $sgpr12_sgpr13_sgpr14_sgpr15
   ; PEI-GFX908-NEXT:   INLINEASM &"; use $0", sideeffect attdialect, reguse:AGPR_32, undef renamable $agpr0
   ; PEI-GFX908-NEXT:   INLINEASM &"; def $0", sideeffect attdialect, regdef:VReg_128, def $vgpr0_vgpr1_vgpr2_vgpr3
-  ; PEI-GFX908-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = COPY killed $vgpr0_vgpr1_vgpr2_vgpr3, implicit $exec
+  ; PEI-GFX908-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = lr-split COPY killed $vgpr0_vgpr1_vgpr2_vgpr3, implicit $exec
   ; PEI-GFX908-NEXT:   INLINEASM &"; def $0", sideeffect attdialect, regdef:VReg_64, def $vgpr0_vgpr1
   ; PEI-GFX908-NEXT:   BUFFER_STORE_DWORD_OFFSET killed $vgpr0, $sgpr12_sgpr13_sgpr14_sgpr15, 0, 0, 0, 0, implicit $exec, implicit-def $vgpr0_vgpr1, implicit $vgpr0_vgpr1 :: ("amdgpu-thread-private" store (s32) into %stack.0, addrspace 5)
   ; PEI-GFX908-NEXT:   $agpr6 = V_ACCVGPR_WRITE_B32_e64 killed $vgpr1, implicit $exec, implicit killed $vgpr0_vgpr1
   ; PEI-GFX908-NEXT:   INLINEASM &"; clobber", sideeffect attdialect, clobber, implicit-def dead early-clobber $agpr4, clobber, implicit-def dead early-clobber $agpr5
-  ; PEI-GFX908-NEXT:   $vgpr0_vgpr1_vgpr2_vgpr3 = COPY killed renamable $agpr0_agpr1_agpr2_agpr3, implicit $exec
+  ; PEI-GFX908-NEXT:   $vgpr0_vgpr1_vgpr2_vgpr3 = lr-split COPY killed renamable $agpr0_agpr1_agpr2_agpr3, implicit $exec
   ; PEI-GFX908-NEXT:   GLOBAL_STORE_DWORDX4 undef $vgpr0_vgpr1, killed $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, implicit $exec :: (volatile store (s128) into `ptr addrspace(1) poison`, addrspace 1)
   ; PEI-GFX908-NEXT:   renamable $sgpr0_sgpr1_sgpr2_sgpr3 = S_LOAD_DWORDX4_IMM killed renamable $sgpr4_sgpr5, 0, 0 :: (dereferenceable invariant load (s128) from %ir.arg.kernarg.offset1, addrspace 4)
   ; PEI-GFX908-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = COPY killed renamable $sgpr0_sgpr1_sgpr2_sgpr3, implicit $exec
@@ -64,9 +64,9 @@ define amdgpu_kernel void @partial_copy(<4 x i32> %arg) #0 {
   ; REGALLOC-GFX90A-NEXT: {{  $}}
   ; REGALLOC-GFX90A-NEXT:   INLINEASM &"; use $0", sideeffect attdialect, reguse:AGPR_32, undef renamable $agpr0
   ; REGALLOC-GFX90A-NEXT:   INLINEASM &"; def $0", sideeffect attdialect, regdef:VReg_128_Align2, def $vgpr0_vgpr1_vgpr2_vgpr3
-  ; REGALLOC-GFX90A-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = COPY killed $vgpr0_vgpr1_vgpr2_vgpr3
+  ; REGALLOC-GFX90A-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = lr-split COPY killed $vgpr0_vgpr1_vgpr2_vgpr3
   ; REGALLOC-GFX90A-NEXT:   INLINEASM &"; def $0", sideeffect attdialect, regdef:VReg_64_Align2, def $vgpr0_vgpr1
-  ; REGALLOC-GFX90A-NEXT:   $vgpr2_vgpr3 = COPY killed $vgpr0_vgpr1
+  ; REGALLOC-GFX90A-NEXT:   $vgpr2_vgpr3 = lr-split COPY killed $vgpr0_vgpr1
   ; REGALLOC-GFX90A-NEXT:   INLINEASM &"; clobber", sideeffect attdialect, clobber, implicit-def dead early-clobber $agpr4, clobber, implicit-def dead early-clobber $agpr5
   ; REGALLOC-GFX90A-NEXT:   GLOBAL_STORE_DWORDX4 undef $vgpr0_vgpr1, killed renamable $agpr0_agpr1_agpr2_agpr3, 0, 0, implicit $exec :: (volatile store (s128) into `ptr addrspace(1) poison`, addrspace 1)
   ; REGALLOC-GFX90A-NEXT:   renamable $sgpr0_sgpr1_sgpr2_sgpr3 = S_LOAD_DWORDX4_IMM killed renamable $sgpr4_sgpr5, 0, 0 :: (dereferenceable invariant load (s128) from %ir.arg.kernarg.offset1, addrspace 4)
@@ -84,9 +84,9 @@ define amdgpu_kernel void @partial_copy(<4 x i32> %arg) #0 {
   ; PEI-GFX90A-NEXT: {{  $}}
   ; PEI-GFX90A-NEXT:   INLINEASM &"; use $0", sideeffect attdialect, reguse:AGPR_32, undef renamable $agpr0
   ; PEI-GFX90A-NEXT:   INLINEASM &"; def $0", sideeffect attdialect, regdef:VReg_128_Align2, def $vgpr0_vgpr1_vgpr2_vgpr3
-  ; PEI-GFX90A-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = COPY killed $vgpr0_vgpr1_vgpr2_vgpr3, implicit $exec
+  ; PEI-GFX90A-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = lr-split COPY killed $vgpr0_vgpr1_vgpr2_vgpr3, implicit $exec
   ; PEI-GFX90A-NEXT:   INLINEASM &"; def $0", sideeffect attdialect, regdef:VReg_64_Align2, def $vgpr0_vgpr1
-  ; PEI-GFX90A-NEXT:   $vgpr2_vgpr3 = COPY killed $vgpr0_vgpr1, implicit $exec
+  ; PEI-GFX90A-NEXT:   $vgpr2_vgpr3 = lr-split COPY killed $vgpr0_vgpr1, implicit $exec
   ; PEI-GFX90A-NEXT:   INLINEASM &"; clobber", sideeffect attdialect, clobber, implicit-def dead early-clobber $agpr4, clobber, implicit-def dead early-clobber $agpr5
   ; PEI-GFX90A-NEXT:   GLOBAL_STORE_DWORDX4 undef $vgpr0_vgpr1, killed renamable $agpr0_agpr1_agpr2_agpr3, 0, 0, implicit $exec :: (volatile store (s128) into `ptr addrspace(1) poison`, addrspace 1)
   ; PEI-GFX90A-NEXT:   renamable $sgpr0_sgpr1_sgpr2_sgpr3 = S_LOAD_DWORDX4_IMM killed renamable $sgpr4_sgpr5, 0, 0 :: (dereferenceable invariant load (s128) from %ir.arg.kernarg.offset1, addrspace 4)

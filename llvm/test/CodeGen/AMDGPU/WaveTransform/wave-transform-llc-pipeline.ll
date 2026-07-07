@@ -49,6 +49,10 @@
 ; GCN-O0-NEXT:      Dominator Tree Construction
 ; GCN-O0-NEXT:      AMDGPU Lower Kernel Arguments
 ; GCN-O0-NEXT:    Lower buffer fat pointer operations to buffer resources
+; GCN-O0-NEXT:      FunctionPass Manager
+; GCN-O0-NEXT:        Dominator Tree Construction
+; GCN-O0-NEXT:        Natural Loop Information
+; GCN-O0-NEXT:        Scalar Evolution Analysis
 ; GCN-O0-NEXT:    AMDGPU lower intrinsics
 ; GCN-O0-NEXT:    FunctionPass Manager
 ; GCN-O0-NEXT:      Lazy Value Information Analysis
@@ -274,6 +278,10 @@
 ; GCN-O3-NEXT:      Scalar Evolution Analysis
 ; GCN-O3-NEXT:      GPU Load and Store Vectorizer
 ; GCN-O3-NEXT:    Lower buffer fat pointer operations to buffer resources
+; GCN-O3-NEXT:      FunctionPass Manager
+; GCN-O3-NEXT:        Dominator Tree Construction
+; GCN-O3-NEXT:        Natural Loop Information
+; GCN-O3-NEXT:        Scalar Evolution Analysis
 ; GCN-O3-NEXT:    AMDGPU lower intrinsics
 ; GCN-O3-NEXT:    FunctionPass Manager
 ; GCN-O3-NEXT:      Lazy Value Information Analysis

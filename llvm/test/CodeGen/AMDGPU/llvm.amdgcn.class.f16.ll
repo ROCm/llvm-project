@@ -13,18 +13,20 @@ define amdgpu_kernel void @class_f16(
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0x1100f000
 ; VI-SDAG-NEXT:    s_mov_b32 s6, -1
 ; VI-SDAG-NEXT:    s_mov_b32 s10, s6
-; VI-SDAG-NEXT:    s_mov_b32 s11, s7
 ; VI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-SDAG-NEXT:    s_mov_b32 s4, s2
 ; VI-SDAG-NEXT:    s_mov_b32 s5, s3
-; VI-SDAG-NEXT:    buffer_load_dword v0, off, s[8:11], 0
-; VI-SDAG-NEXT:    buffer_load_ushort v1, off, s[4:7], 0
-; VI-SDAG-NEXT:    s_mov_b32 s4, s0
-; VI-SDAG-NEXT:    s_mov_b32 s5, s1
+; VI-SDAG-NEXT:    s_mov_b32 s11, s7
+; VI-SDAG-NEXT:    buffer_load_ushort v0, off, s[4:7], 0
+; VI-SDAG-NEXT:    buffer_load_dword v1, off, s[8:11], 0
+; VI-SDAG-NEXT:    s_mov_b32 s2, s6
+; VI-SDAG-NEXT:    s_mov_b32 s3, s7
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; VI-SDAG-NEXT:    v_cmp_class_f16_e32 vcc, v1, v0
-; VI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
-; VI-SDAG-NEXT:    buffer_store_dword v0, off, s[4:7], 0
+; VI-SDAG-NEXT:    v_cmp_class_f16_e32 vcc, v0, v1
+; VI-SDAG-NEXT:    s_and_b64 s[4:5], vcc, exec
+; VI-SDAG-NEXT:    s_cselect_b32 s4, -1, 0
+; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s4
+; VI-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-SDAG-NEXT:    s_endpgm
 ;
 ; VI-GISEL-LABEL: class_f16:
@@ -71,7 +73,9 @@ define amdgpu_kernel void @class_f16_fabs(
 ; VI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s5
 ; VI-SDAG-NEXT:    v_cmp_class_f16_e64 s[4:5], |s4|, v0
-; VI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; VI-SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; VI-SDAG-NEXT:    s_cselect_b32 s4, -1, 0
+; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-SDAG-NEXT:    s_endpgm
 ;
@@ -114,7 +118,9 @@ define amdgpu_kernel void @class_f16_fneg(
 ; VI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s5
 ; VI-SDAG-NEXT:    v_cmp_class_f16_e64 s[4:5], -s4, v0
-; VI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; VI-SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; VI-SDAG-NEXT:    s_cselect_b32 s4, -1, 0
+; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-SDAG-NEXT:    s_endpgm
 ;
@@ -157,7 +163,9 @@ define amdgpu_kernel void @class_f16_fabs_fneg(
 ; VI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s5
 ; VI-SDAG-NEXT:    v_cmp_class_f16_e64 s[4:5], -|s4|, v0
-; VI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; VI-SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; VI-SDAG-NEXT:    s_cselect_b32 s4, -1, 0
+; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-SDAG-NEXT:    s_endpgm
 ;
@@ -199,7 +207,9 @@ define amdgpu_kernel void @class_f16_1(
 ; VI-SDAG-NEXT:    s_mov_b32 s2, -1
 ; VI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_cmp_class_f16_e64 s[4:5], s4, 1
-; VI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; VI-SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; VI-SDAG-NEXT:    s_cselect_b32 s4, -1, 0
+; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-SDAG-NEXT:    s_endpgm
 ;
@@ -234,7 +244,9 @@ define amdgpu_kernel void @class_f16_64(
 ; VI-SDAG-NEXT:    s_mov_b32 s2, -1
 ; VI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_cmp_class_f16_e64 s[4:5], s4, 64
-; VI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; VI-SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; VI-SDAG-NEXT:    s_cselect_b32 s4, -1, 0
+; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-SDAG-NEXT:    s_endpgm
 ;
@@ -270,7 +282,9 @@ define amdgpu_kernel void @class_f16_full_mask(
 ; VI-SDAG-NEXT:    s_mov_b32 s2, -1
 ; VI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_cmp_class_f16_e32 vcc, s4, v0
-; VI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
+; VI-SDAG-NEXT:    s_and_b64 s[4:5], vcc, exec
+; VI-SDAG-NEXT:    s_cselect_b32 s4, -1, 0
+; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-SDAG-NEXT:    s_endpgm
 ;
@@ -307,7 +321,9 @@ define amdgpu_kernel void @class_f16_nine_bit_mask(
 ; VI-SDAG-NEXT:    s_mov_b32 s2, -1
 ; VI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_cmp_class_f16_e32 vcc, s4, v0
-; VI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
+; VI-SDAG-NEXT:    s_and_b64 s[4:5], vcc, exec
+; VI-SDAG-NEXT:    s_cselect_b32 s4, -1, 0
+; VI-SDAG-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-SDAG-NEXT:    s_endpgm
 ;

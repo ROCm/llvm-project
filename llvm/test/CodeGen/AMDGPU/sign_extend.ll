@@ -11,10 +11,10 @@ define amdgpu_kernel void @s_sext_i1_to_i32(ptr addrspace(1) %out, i32 %a, i32 %
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_mov_b64 s[4:5], s[2:3]
 ; SI-NEXT:    s_cmp_eq_u32 s4, s5
-; SI-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; SI-NEXT:    s_cselect_b32 s4, -1, 0
 ; SI-NEXT:    s_mov_b32 s2, s7
 ; SI-NEXT:    s_mov_b32 s3, s6
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; SI-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; SI-NEXT:    s_endpgm
 ;
@@ -26,10 +26,10 @@ define amdgpu_kernel void @s_sext_i1_to_i32(ptr addrspace(1) %out, i32 %a, i32 %
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    s_mov_b64 s[4:5], s[2:3]
 ; VI-NEXT:    s_cmp_eq_u32 s4, s5
-; VI-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; VI-NEXT:    s_cselect_b32 s4, -1, 0
 ; VI-NEXT:    s_mov_b32 s2, s7
 ; VI-NEXT:    s_mov_b32 s3, s6
-; VI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-NEXT:    s_endpgm
   %cmp = icmp eq i32 %a, %b
@@ -86,10 +86,10 @@ define amdgpu_kernel void @s_sext_i1_to_i64(ptr addrspace(1) %out, i32 %a, i32 %
 ; SI-NEXT:    s_mov_b64 s[4:5], s[2:3]
 ; SI-NEXT:    s_cmp_eq_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 s[4:5], -1, 0
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; SI-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-NEXT:    s_mov_b32 s2, s7
 ; SI-NEXT:    s_mov_b32 s3, s6
-; SI-NEXT:    v_mov_b32_e32 v1, v0
+; SI-NEXT:    v_mov_b32_e32 v1, s5
 ; SI-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
 ; SI-NEXT:    s_endpgm
 ;
@@ -102,10 +102,10 @@ define amdgpu_kernel void @s_sext_i1_to_i64(ptr addrspace(1) %out, i32 %a, i32 %
 ; VI-NEXT:    s_mov_b64 s[4:5], s[2:3]
 ; VI-NEXT:    s_cmp_eq_u32 s4, s5
 ; VI-NEXT:    s_cselect_b64 s[4:5], -1, 0
-; VI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    s_mov_b32 s2, s7
 ; VI-NEXT:    s_mov_b32 s3, s6
-; VI-NEXT:    v_mov_b32_e32 v1, v0
+; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
 ; VI-NEXT:    s_endpgm
   %cmp = icmp eq i32 %a, %b
@@ -223,10 +223,10 @@ define amdgpu_kernel void @s_sext_i1_to_i16(ptr addrspace(1) %out, i32 %a, i32 %
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_mov_b64 s[4:5], s[2:3]
 ; SI-NEXT:    s_cmp_eq_u32 s4, s5
-; SI-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; SI-NEXT:    s_cselect_b32 s4, -1, 0
 ; SI-NEXT:    s_mov_b32 s2, s7
 ; SI-NEXT:    s_mov_b32 s3, s6
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; SI-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-NEXT:    buffer_store_short v0, off, s[0:3], 0
 ; SI-NEXT:    s_endpgm
 ;
@@ -238,10 +238,10 @@ define amdgpu_kernel void @s_sext_i1_to_i16(ptr addrspace(1) %out, i32 %a, i32 %
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    s_mov_b64 s[4:5], s[2:3]
 ; VI-NEXT:    s_cmp_eq_u32 s4, s5
-; VI-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; VI-NEXT:    s_cselect_b32 s4, -1, 0
 ; VI-NEXT:    s_mov_b32 s2, s7
 ; VI-NEXT:    s_mov_b32 s3, s6
-; VI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    buffer_store_short v0, off, s[0:3], 0
 ; VI-NEXT:    s_endpgm
   %cmp = icmp eq i32 %a, %b
@@ -267,7 +267,9 @@ define amdgpu_kernel void @s_sext_i1_to_i16_with_and(ptr addrspace(1) %out, i32 
 ; SI-NEXT:    s_cmp_eq_u32 s6, s7
 ; SI-NEXT:    s_cselect_b64 s[6:7], -1, 0
 ; SI-NEXT:    s_and_b64 s[4:5], s[4:5], s[6:7]
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; SI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; SI-NEXT:    s_cselect_b32 s4, -1, 0
+; SI-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-NEXT:    buffer_store_short v0, off, s[0:3], 0
 ; SI-NEXT:    s_endpgm
 ;
@@ -283,7 +285,9 @@ define amdgpu_kernel void @s_sext_i1_to_i16_with_and(ptr addrspace(1) %out, i32 
 ; VI-NEXT:    s_cmp_eq_u32 s6, s7
 ; VI-NEXT:    s_cselect_b64 s[6:7], -1, 0
 ; VI-NEXT:    s_and_b64 s[4:5], s[4:5], s[6:7]
-; VI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
+; VI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; VI-NEXT:    s_cselect_b32 s4, -1, 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    buffer_store_short v0, off, s[0:3], 0
 ; VI-NEXT:    s_endpgm
   %cmp0 = icmp eq i32 %a, %b

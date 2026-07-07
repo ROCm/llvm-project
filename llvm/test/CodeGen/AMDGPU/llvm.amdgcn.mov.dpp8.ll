@@ -6,7 +6,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -global-isel-abort=2 -mtriple=amdgcn -mcpu=gfx1200 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefix=GFX10PLUS %s
 
 ; RUN: not llc -global-isel=0 -mtriple=amdgcn -mcpu=gfx900 -filetype=null < %s 2>&1 | FileCheck -check-prefix=ERR %s
-; RUN: not llc -global-isel=1 -global-isel-abort=0 -mtriple=amdgcn -mcpu=gfx900 -filetype=null < %s 2>&1 | FileCheck -check-prefix=ERR %s
+; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -global-isel-abort=0 -mtriple=amdgcn -mcpu=gfx900 -filetype=null < %s 2>&1 | FileCheck -check-prefix=ERR %s
 
 ; ERR: error: <unknown>:0:0: in function dpp8_test void (ptr addrspace(1), i32): intrinsic not supported on subtarget
 

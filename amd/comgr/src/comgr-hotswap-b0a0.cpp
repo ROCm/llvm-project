@@ -7,7 +7,7 @@
 ///
 /// \file
 /// Dispatcher for B0-to-A0 silicon stepping patches and the
-/// retargetCodeObjectB0A0 orchestrator that drives the full pipeline:
+/// retargetCodeObject orchestrator that drives the full pipeline:
 /// decode -> patch -> trampoline growth -> DWARF update.
 ///
 /// Patch passes are dispatched through HotswapPatchVTable. The membership
@@ -31,6 +31,9 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
+
+#include <cassert>
+#include <limits>
 
 using namespace llvm;
 
@@ -118,7 +121,7 @@ void patchDebugFrame(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
 // invokes it eagerly on the singleton's private storage, which the C++11
 // magic-static rule guarantees runs exactly once even under concurrent
 // first access. That removes both the explicit std::call_once at the
-// retargetCodeObjectB0A0 entry point and any inter-TU static-init order
+// retargetCodeObject entry point and any inter-TU static-init order
 // dependency on the patch modules.
 
 void installHotswapPatches(HotswapPatchVTable &VT) {
@@ -270,23 +273,90 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
   return true;
 }
 
-/// Queue a deferred trampoline for the instruction at [\p InstOffset,
-/// \p InstOffset + \p InstSize) with \p Replacement as its body. The final
-/// branch encoding (branch-back at the trampoline tail and branch-forward
-/// overwrite at the original site) is filled in by fixupTrampolineBranches
-/// once the post-.text trampoline layout is known -- we reserve
-/// MinInstSize zero bytes at the end of the trampoline body as a
-/// placeholder rather than encoding twice. Used when there is no reachable
-/// NOP sled for an in-place sled patch.
+// s_add_pc_i64 long branch from \p FromOffset to \p TargetOffset (.text
+// offsets). It adds a signed literal to the next instruction's PC, so the
+// offset is TargetOffset - (FromOffset + size); size is 8 (forward, 32-bit
+// literal) or 12 (backward, 64-bit literal), resolved by trying each. Encoded
+// via the MC assembler. Returns empty on failure.
+//
+// Precondition: callers only long-branch *far* sites, so the target is far
+// enough that s_add_pc_i64 always needs a real (>= 32-bit) literal. A tiny
+// offset would instead assemble to the 4-byte inline-constant form, match
+// neither candidate size, and yield empty. That is asserted here (assert
+// liberally); the empty return is kept as a release-build safety net so a
+// stray near target degrades to the unpatched-object fallback rather than
+// crashing the loader.
+SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
+                                      uint64_t TargetOffset) {
+  [[maybe_unused]] const int64_t Distance =
+      static_cast<int64_t>(TargetOffset) - static_cast<int64_t>(FromOffset);
+  [[maybe_unused]] const int64_t MinLongDistance = LongBranchMaxBytes;
+  assert((Distance > MinLongDistance || Distance < -MinLongDistance) &&
+         "encodeLongBranch: target is not a far site; the long-branch path is "
+         "only valid for offsets beyond an s_add_pc_i64 instruction's reach");
+
+  for (uint32_t Size : {LongBranchFwdBytes, LongBranchMaxBytes}) {
+    int64_t Off = static_cast<int64_t>(TargetOffset) -
+                  static_cast<int64_t>(FromOffset + Size);
+    SmallVector<uint8_t> Bytes =
+        assembleSingleInst("s_add_pc_i64 " + std::to_string(Off), LS);
+    if (Bytes.size() == Size)
+      return Bytes;
+  }
+  return {};
+}
+
+/// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
+/// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
+/// the pool layout is known. A site beyond s_branch reach of the appended pool
+/// uses an s_add_pc_i64 long branch (no scratch reg, no SCC) on both edges; its
+/// 8-byte forward branch overwrites the site in place, so a smaller site
+/// declines rather than clobbering the next instruction.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     ArrayRef<uint8_t> Replacement) {
+  // This trampoline lands right after .text and after every trampoline already
+  // queued -- later ones are appended behind it and cannot shift it, and
+  // fixupTrampolineBranches walks the same list in the same order -- so its
+  // final pool offset is known exactly now.
+  uint64_t PoolStart = Ctx.TextSize;
+  for (const Trampoline &Prev : Ctx.OutTrampolines)
+    PoolStart += Prev.Bytes.size();
+
+  // An s_branch encodes To - From as a signed simm16 dword field, in range iff
+  // (To - From - MinInstSize) / MinInstSize fits [BranchOffsetMin,
+  // BranchOffsetMax] (see LLVMState::encodeSBranch). Test both edges with the
+  // short branch-back slot; the branch-back (pool tail -> site) is the farther
+  // of the two. Go long only when a short branch cannot reach.
+  auto WithinSBranch = [](uint64_t From, uint64_t To) {
+    int64_t Dword = (static_cast<int64_t>(To) - static_cast<int64_t>(From) -
+                     static_cast<int64_t>(MinInstSize)) /
+                    static_cast<int64_t>(MinInstSize);
+    return Dword >= BranchOffsetMin && Dword <= BranchOffsetMax;
+  };
+  const uint64_t ShortBackFrom = PoolStart + Replacement.size();
+  const bool Far = !(WithinSBranch(InstOffset, PoolStart) &&
+                     WithinSBranch(ShortBackFrom, InstOffset + InstSize));
+
   Trampoline T;
   T.OriginalOffset = InstOffset;
   T.OriginalSize = InstSize;
   T.Bytes.insert(T.Bytes.end(), Replacement.begin(), Replacement.end());
-  // Reserve the branch-back slot; fixupTrampolineBranches fills it in.
-  T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
+
+  if (Far) {
+    if (InstSize < LongBranchFwdBytes) {
+      log() << "hotswap: long trampoline: site 0x" << utohexstr(InstOffset)
+            << " is " << InstSize << " B < " << LongBranchFwdBytes
+            << " B forward branch; declining (site left unpatched)\n";
+      return false;
+    }
+    T.Long = true;
+    // Reserve the long branch-back slot (worst-case 64-bit-literal size).
+    T.Bytes.insert(T.Bytes.end(), LongBranchMaxBytes, uint8_t{0});
+  } else {
+    // Reserve the short branch-back slot; fixupTrampolineBranches fills it in.
+    T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
+  }
   Ctx.OutTrampolines.emplace_back(std::move(T));
   return true;
 }
@@ -426,7 +496,7 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
   return Patched;
 }
 
-// -- retargetCodeObjectB0A0 helpers -------------------------------------------
+// -- retargetCodeObject helpers -------------------------------------------
 
 /// Finalize the deferred trampolines produced by emitToTrampoline: resolves
 /// the branch-back at the tail of each trampoline to land on the next
@@ -434,7 +504,7 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
 /// padding at the original .text slot, and reports per-trampoline encoding
 /// failures through log(). Runs after all patch passes finish so the
 /// post-.text layout of trampolines is known. Returns false if any
-/// trampoline could not be fixed up, but still patches the ones that can.
+/// trampoline could not be fixed up.
 [[nodiscard]] static bool
 fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
                         uint64_t TextSize, const LLVMState &LS) {
@@ -447,25 +517,40 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
-    SmallVector<uint8_t> BrBack = LS.encodeSBranch(
-        TP + T.Bytes.size() - MinInstSize, T.OriginalOffset + T.OriginalSize);
-    if (BrBack.empty()) {
+    // Long trampolines reserve a wider branch-back slot and use s_add_pc_i64
+    // on both edges; short ones use s_branch. Both slots are s_nop-padded to
+    // their reserved size after the branch is written.
+    const uint32_t BackReserve = T.Long ? LongBranchMaxBytes : MinInstSize;
+    const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
+    const uint64_t ReturnTo = T.OriginalOffset + T.OriginalSize;
+
+    SmallVector<uint8_t> BrBack = T.Long
+                                      ? encodeLongBranch(LS, BackSlot, ReturnTo)
+                                      : LS.encodeSBranch(BackSlot, ReturnTo);
+    if (BrBack.empty() || BrBack.size() > BackReserve) {
       log() << "hotswap: error: trampoline branch-back encoding failed at 0x"
-            << utohexstr(T.OriginalOffset) << "\n";
+            << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
       return false;
     }
-    std::memcpy(T.Bytes.data() + T.Bytes.size() - MinInstSize, BrBack.data(),
+    std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve, BrBack.data(),
                 BrBack.size());
+    for (uint32_t I = BrBack.size(); I + MinInstSize <= BackReserve;
+         I += MinInstSize)
+      std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve + I,
+                  LS.SNopBytes.data(), MinInstSize);
 
-    SmallVector<uint8_t> BrFwd = LS.encodeSBranch(T.OriginalOffset, TP);
-    if (BrFwd.empty()) {
+    SmallVector<uint8_t> BrFwd =
+        T.Long ? encodeLongBranch(LS, T.OriginalOffset, TP)
+               : LS.encodeSBranch(T.OriginalOffset, TP);
+    if (BrFwd.empty() || BrFwd.size() > T.OriginalSize) {
       log() << "hotswap: error: trampoline branch-fwd encoding failed at 0x"
-            << utohexstr(T.OriginalOffset) << "\n";
+            << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
       return false;
     }
     std::memcpy(Text + T.OriginalOffset, BrFwd.data(), BrFwd.size());
     // Pad the tail of the replaced slot with cached s_nop bytes.
-    for (uint32_t I = MinInstSize; I < T.OriginalSize; I += MinInstSize)
+    for (uint32_t I = BrFwd.size(); I + MinInstSize <= T.OriginalSize;
+         I += MinInstSize)
       std::memcpy(Text + T.OriginalOffset + I, LS.SNopBytes.data(),
                   MinInstSize);
   }
@@ -480,15 +565,15 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
 /// implementations land in separate PRs.
 static void patchDebugSections(WritableMemoryBuffer &ElfBuf,
                                ArrayRef<Trampoline> Trampolines,
-                               const ElfView &Elf, size_t TrampTotal) {
+                               const ElfView &Elf, size_t GrowthTotal) {
   uint8_t *Data = reinterpret_cast<uint8_t *>(ElfBuf.getBufferStart());
   size_t Size = ElfBuf.getBufferSize();
   if (!addTrampolineSymbols(ElfBuf, Trampolines, Elf.textSize(),
                             Elf.textSectionIndex()))
     log() << "hotswap: error: addTrampolineSymbols failed\n";
-  patchDebugRanges(Data, Size, Elf.textAddr(), Elf.textSize(), TrampTotal);
-  patchDebugInfo(Data, Size, Elf.textAddr(), Elf.textSize(), TrampTotal);
-  patchDebugFrame(Data, Size, Elf.textAddr(), Elf.textSize(), TrampTotal);
+  patchDebugRanges(Data, Size, Elf.textAddr(), Elf.textSize(), GrowthTotal);
+  patchDebugInfo(Data, Size, Elf.textAddr(), Elf.textSize(), GrowthTotal);
+  patchDebugFrame(Data, Size, Elf.textAddr(), Elf.textSize(), GrowthTotal);
   if (!patchDebugLine(ElfBuf, Trampolines, Elf.textSize(), Elf.textAddr()))
     log() << "hotswap: error: patchDebugLine failed\n";
 }
@@ -520,15 +605,30 @@ static void runScratchVerification(WritableMemoryBuffer &OutBuf,
           << "scratch conflicts\n";
 }
 
-// -- retargetCodeObjectB0A0 ---------------------------------------------------
+// -- retargetCodeObject -------------------------------------------------------
 
-amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
-                                          const TargetIdentifier &TargetIdent,
-                                          std::unique_ptr<MemoryBuffer> &Out) {
+amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
+                                      const TargetIdentifier &TargetIdent,
+                                      const Gfx1250RewriteOptions &Options,
+                                      std::unique_ptr<MemoryBuffer> &Out) {
   // The dispatcher fetches the patch vtable lazily via
   // getHotswapPatchVTable() inside applyGfx1250B0toA0Rules; the singleton's
   // initializer binds every register*Patch slot on first access, so no
   // explicit install step is needed here.
+
+  if (!Options.RunB0A0Patches && !Options.RunEntryTrampolines) {
+    std::unique_ptr<WritableMemoryBuffer> Result =
+        WritableMemoryBuffer::getNewUninitMemBuffer(ElfSize);
+    if (!Result) {
+      log() << "hotswap: error: retargetCodeObject: "
+            << "getNewUninitMemBuffer(" << ElfSize
+            << ") failed (out of memory) for the no-op output copy.\n";
+      return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+    }
+    std::memcpy(Result->getBufferStart(), ElfData, ElfSize);
+    Out = std::move(Result);
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
 
   // Take a working copy so the input is preserved and we have a mutable
   // buffer to parse / patch.
@@ -537,12 +637,12 @@ amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
 
   Expected<ElfView> ViewOrErr = ElfView::create(Buf.data(), Buf.size());
   if (!ViewOrErr) {
-    log() << "hotswap: error: retargetCodeObjectB0A0: input is not a "
+    log() << "hotswap: error: retargetCodeObject: input is not a "
           << "parseable ELF64 (" << toString(ViewOrErr.takeError()) << ").\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
   if (ViewOrErr->textSize() == 0) {
-    log() << "hotswap: error: retargetCodeObjectB0A0: input ELF has empty "
+    log() << "hotswap: error: retargetCodeObject: input ELF has empty "
           << ".text section; nothing to rewrite.\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
@@ -550,7 +650,7 @@ amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
 
   LLVMState LS = initLLVM(TargetIdent);
   if (!LS.Valid) {
-    log() << "hotswap: error: retargetCodeObjectB0A0: initLLVM failed "
+    log() << "hotswap: error: retargetCodeObject: initLLVM failed "
           << "for CPU '" << TargetIdent.Processor << "'; aborting rewrite.\n";
     return AMD_COMGR_STATUS_ERROR;
   }
@@ -558,41 +658,90 @@ amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
   RewriteConfig Config = makeGfx1250B0A0Config();
 
   uint8_t *Text = Elf.textData();
-  std::vector<InternalDecodedInst> Decoded;
-  if (!decodeTextSection(Text, Elf.textSize(), LS, Decoded)) {
-    log() << "hotswap: error: retargetCodeObjectB0A0: decodeTextSection "
-          << "failed on .text (" << Elf.textSize() << " bytes).\n";
-    return AMD_COMGR_STATUS_ERROR;
-  }
-
+  uint64_t Count = 0;
   std::vector<Trampoline> Deferred;
   std::vector<ScratchPatchInfo> ScratchPatches;
-  uint32_t Count = applyGfx1250B0toA0Rules(
-      Decoded, Text, Elf.textSize(), LS, Deferred, Elf, ScratchPatches, Config);
-
-  log() << "hotswap: applied " << Count << " patches\n";
-
-  std::unique_ptr<WritableMemoryBuffer> Result;
-  if (!Deferred.empty()) {
-    if (!fixupTrampolineBranches(Deferred, Text, Elf.textSize(), LS))
-      log() << "hotswap: error: some trampolines could not be fixed up\n";
-
-    Result = Elf.growWithTrampolines(Deferred, LS.SNopBytes);
-    if (!Result) {
-      log() << "hotswap: error: retargetCodeObjectB0A0: "
-            << "ElfView::growWithTrampolines returned null with "
-            << Deferred.size() << " trampolines queued.\n";
+  if (Options.RunB0A0Patches) {
+    std::vector<InternalDecodedInst> Decoded;
+    if (!decodeTextSection(Text, Elf.textSize(), LS, Decoded)) {
+      log() << "hotswap: error: retargetCodeObject: decodeTextSection "
+            << "failed on .text (" << Elf.textSize() << " bytes).\n";
       return AMD_COMGR_STATUS_ERROR;
     }
 
-    size_t TrampTotal = 0;
-    for (const Trampoline &T : Deferred)
-      TrampTotal += T.Bytes.size();
-    patchDebugSections(*Result, Deferred, Elf, TrampTotal);
+    Count = applyGfx1250B0toA0Rules(Decoded, Text, Elf.textSize(), LS, Deferred,
+                                    Elf, ScratchPatches, Config);
+    log() << "hotswap: applied " << Count << " B0-to-A0 patches\n";
+  } else {
+    log() << "hotswap: B0-to-A0 patches disabled for this rewrite\n";
+  }
+
+  std::unique_ptr<WritableMemoryBuffer> Result;
+  std::vector<Trampoline> Growth = Deferred;
+  if (!Deferred.empty()) {
+    if (!fixupTrampolineBranches(Deferred, Text, Elf.textSize(), LS)) {
+      // A trampoline branch could not be encoded, so the local `Buf` copy
+      // is half-redirected; shipping it would run corrupted code. Fall back
+      // to the pristine input object (`ElfData`, untouched) so the loader
+      // runs the original unpatched code instead.
+      log() << "hotswap: error: some trampolines could not be fixed up; "
+            << "falling back to the original (unpatched) code object\n";
+      std::unique_ptr<WritableMemoryBuffer> Orig =
+          WritableMemoryBuffer::getNewUninitMemBuffer(ElfSize);
+      if (!Orig) {
+        log() << "hotswap: error: retargetCodeObject: "
+              << "getNewUninitMemBuffer(" << ElfSize
+              << ") failed (out of memory) for the fallback copy.\n";
+        return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+      }
+      std::memcpy(Orig->getBufferStart(), ElfData, ElfSize);
+      Out = std::move(Orig);
+      // SUCCESS here is misleading the returned buffer is the
+      // *unpatched* original, so callers cannot tell "rewrote successfully"
+      // from "declined and fell back". The status vocabulary needs a distinct
+      // "no-op / not-applied" code.
+      return AMD_COMGR_STATUS_SUCCESS;
+    }
+    Growth = Deferred;
+  }
+
+  std::vector<KernelEntryTrampolineFixup> EntryFixups;
+  if (Options.RunEntryTrampolines) {
+    std::optional<uint32_t> EntryCount = appendKernelEntryTrampolines(
+        Elf, LS, Config.MaxSgprs, Growth, EntryFixups);
+    if (!EntryCount)
+      return AMD_COMGR_STATUS_ERROR;
+    Count += *EntryCount;
+  } else {
+    log() << "hotswap: kernel-entry trampolines disabled for this rewrite\n";
+  }
+
+  if (!Growth.empty()) {
+    Result = Elf.growWithTrampolines(Growth, LS.SNopBytes);
+    if (!Result) {
+      log() << "hotswap: error: retargetCodeObject: "
+            << "ElfView::growWithTrampolines returned null with "
+            << Growth.size() << " trampolines queued.\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    size_t GrowthTotal = 0;
+    for (const Trampoline &T : Growth) {
+      if (T.Bytes.size() > std::numeric_limits<size_t>::max() - GrowthTotal) {
+        log() << "hotswap: error: retargetCodeObject: growth byte count "
+              << "overflows size_t.\n";
+        return AMD_COMGR_STATUS_ERROR;
+      }
+      GrowthTotal += T.Bytes.size();
+    }
+    patchDebugSections(*Result, Deferred, Elf, GrowthTotal);
+    if (!rewriteKernelEntryDescriptorOffsets(*Result, Elf.textSize(),
+                                             EntryFixups))
+      return AMD_COMGR_STATUS_ERROR;
   } else {
     Result = WritableMemoryBuffer::getNewUninitMemBuffer(ElfSize);
     if (!Result) {
-      log() << "hotswap: error: retargetCodeObjectB0A0: "
+      log() << "hotswap: error: retargetCodeObject: "
             << "getNewUninitMemBuffer(" << ElfSize
             << ") failed (out of memory) for the patched output copy.\n";
       return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
