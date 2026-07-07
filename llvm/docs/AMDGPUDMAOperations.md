@@ -10,14 +10,14 @@
 
 DMA (or "Direct Memory Access") operations transfer data between different kinds
 of memory directly without occupying registers in the invoking wave. They are
-usually {ref}`asynchronous<amdgpu-async-operations>` asynchronous, and require
+usually {ref}`asynchronous<amdgpu-async-operations>`, and require
 the user to explicitly track completion using
 {ref}`asyncmarks<amdgpu-async-operations>`.
 
 All DMA operations support the same cache modifiers as ordinary load/store
 operations from registers. They cannot be performed atomically.
 
-### GFX9 DMA
+## GFX9 LDS DMA Instructions
 
 Each GFX9 DMA instruction has a synchronous counterpart (e.g.,
 ``@llvm.amdgcn.load.to.lds`` for ``@llvm.amdgcn.load.async.to.lds``). The
@@ -88,11 +88,13 @@ The intrinsics differ in two orthogonal ways:
 - **ptr** vs non-ptr: The ``ptr`` variants use ``ptr addrspace(8)`` for the
   buffer resource descriptor; the non-ptr variants use ``<4 x i32>``.
 
-### GFX1250
+## GFX1250 Instructions
 
-GFX1250 LDS DMA instructions implement nontemporal (via metadata) as if they
-were loads from the global address space. Tensor DMA instructions do not support
-volatile or nontemporal.
+- LDS DMA instructions implement nontemporal (via metadata) as if they were
+  loads from the global address space.
+- Tensor instructions do not support volatile or nontemporal.
+
+### LDS DMA Instructions
 
 **Global Addressing**
 
@@ -123,7 +125,7 @@ void @llvm.amdgcn.global.store.async.from.lds.b<N>(
 
 Stores data from LDS to global memory.
 
-**Tensor Addressing**
+### Tensor Instructions
 
 ```llvm
 void @llvm.amdgcn.tensor.{load.to|store.from}.lds(
@@ -144,3 +146,141 @@ Despite the absence of ``.async`` in their names, these intrinsics are
 asynchronous.
 
 All arguments must be wave-uniform.
+
+(amdgpu-dma-memory-model)=
+
+## Memory Model
+
+Each dynamic instance of a DMA *instruction* ``X`` initiates a DMA *operation*
+``D`` performed in the corresponding {ref}`DMA scope<amdgpu-dma-scopes>`.
+
+- ``X`` *happens-before* ``D``.
+- If ``D`` is a synchronous operation:
+
+  - For each operation ``Y`` such that ``X`` is *program-ordered* before ``Y``,
+    ``D`` *happens-before* ``Y``.
+
+- Else ``D`` is related in *happens-before* as defined for
+  {ref}`asynchronous operations<amdgpu-asyncmark-memory-model>`.
+
+### Availability and Visibility
+
+Each DMA operation is performed in an instance ``I`` of the corresponding
+{ref}`DMA scope<amdgpu-dma-scopes>` ``S``. In addition, the user may specify a
+scope ``S'`` such that ``S`` is a subscope of ``S'``. The effect of the DMA
+operation can be modeled as the following sequence in LLVM IR:
+
+```llvm
+; M = max(S, S')
+;
+@llvm.amdgcn.make.visible(ptr %src, M)
+load  ptr %src ...  ; non-atomic
+store ptr %dst ...  ; non-atomic
+@llvm.amdgcn.make.available(ptr %dst, M)
+```
+
+```{note}
+When the DMA operation ``D`` is performed in an instance ``I`` of scope ``S``,
+it is not included in any subscope instances of ``I``. This means that the
+{ref}`amdgpu-availability-visibility` operations performed by ``D`` **cannot**
+form an *inclusive scope* relationship with those subscopes. This requires
+threads to perform additional availability and visibility operations that ensure
+{ref}`location order<amdgpu-location-order>` in certain rare cases shown below.
+```
+
+#### Wavefront Scope
+
+Consider a thread that writes to global memory and then initiates a DMA
+operation that reads from the same location. The two operations are related in
+*happens-before*, but the DMA operation is not contained in the "singlethread"
+scope instance. The global write is not visible from the DMA read; an explicit
+``make.available`` at ``lds-dma`` scope is needed to bridge this gap.
+
+```llvm
+store %val, ptr %global
+call @llvm.amdgcn.make.available(%global, !"lds-dma")      ; <---
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+But such a use-case is **exceedingly rare**, where a thread writes out to global
+memory, and then tries to read the same data back into LDS via a DMA operation.
+
+The same result can be achieved using a *store-available* operation too:
+
+```llvm
+call @llvm.amdgcn.av.global.store(%global, %val, !"lds-dma")
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+A similar pattern is required when storing to global using DMA:
+
+```llvm
+call @llvm.amdgcn.global.store.async.from.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+call @llvm.amdgcn.make.visible(%global, !"lds-dma")           ; <---
+%val = load ptr %global
+```
+
+The ``make.visible`` at ``lds-dma`` scope is necessary because the DMA write is
+not automatically visible to the subsequent global read.
+
+#### Workgroup Scope
+
+Consider the case where one wave writes to global memory and a different wave in
+the same workgroup initiates a DMA operation that reads from the same location.
+A workgroup-scope fence can provide *happens-before* between the waves but does
+not make the write available at ``lds-dma`` scope. The DMA operation is not
+contained in the workgroup scope instance, so the fence's *MakeAvailable* and
+the DMA do not have inclusive scopes. An explicit ``make.available`` at
+``lds-dma`` scope is needed to bridge this gap.
+
+```llvm
+; wave 1
+store %val, ptr addrspace(1) %global
+call @llvm.amdgcn.make.available(%global, !"lds-dma")      ; <---
+fence release syncscope("workgroup")
+
+; wave 2
+fence acquire syncscope("workgroup")
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+Similarly, when one wave stores to global memory using a DMA operation and a
+different wave reads from the same location, an explicit ``make.visible`` at
+``lds-dma`` scope is needed. The workgroup fence's *MakeVisible* cannot observe
+the DMA write because the DMA is not contained in the workgroup scope instance.
+
+```llvm
+; wave 1
+call @llvm.amdgcn.global.store.async.from.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+fence release syncscope("workgroup")
+
+; wave 2
+fence acquire syncscope("workgroup")
+call @llvm.amdgcn.make.visible(%global, !"lds-dma")        ; <---
+%val = load ptr addrspace(1) %global
+```
+
+### Implementation Details
+
+[This section is informational.]
+
+1. On GFX9 target, the compiler ignores the calls to
+   `@llvm.amdgcn.make.available(!"lds-dma")` and
+   `@llvm.amdgcn.make.visible(!"lds-dma")`. The LDS DMA implementation on GFX9
+   sees the same state of memory as the requesting thread.
+2. On GFX1250, the compiler emits a cache write-back or invalidate at
+   `SCOPE_SE` for `@llvm.amdgcn.make.available(!"lds-dma")` and
+   `@llvm.amdgcn.make.visible(!"lds-dma")` respectively.

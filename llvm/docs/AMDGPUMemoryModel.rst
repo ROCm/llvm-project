@@ -74,12 +74,12 @@ The LLVM Language Reference defines the following :ref:`scopes<syncscope>`:
 AMDGPU scopes
 -------------
 
-The AMDGPU backend further refines the LLVM scopes with the following
-target-defined scopes and constraints:
+The AMDGPU target defines the following LLVM scopes:
 
 - *system scope* (same as LLVM)
 - "agent" scope
 - "cluster" scope
+- "lds-dma" scope (does not support synchronization)
 - "workgroup" scope
 - "wavefront" scope
 - "singlethread" scope (same as LLVM)
@@ -87,19 +87,57 @@ target-defined scopes and constraints:
 These are arranged from largest scope (*system scope*) to smallest scope
 ("singlethread").
 
-- Every instance ``X`` of some scope ``S1`` other than "singlethread" scope is
-  partitioned by the scope ``S2`` one level below it. Each subset defined by this
-  partition is an instance of ``S2`` and is called a *subscope instance* of ``X``.
-- It follows that if two scope instances ``X`` and ``Y`` intersect, then their
-  intersection is the smaller of ``X`` and ``Y``.
-- A scope ``S1`` is a *subscope* of a scope ``S2`` if every instance of ``S1``
-  is a subscope instance of some instance of ``S2``.
+- Every scope ``S1`` other than *system scope* is a *subscope* of the scopes
+  above it in this linear arrangement.
+- If ``S1`` is a subscope of ``S2``, then an instance ``I1`` of ``S1`` is a
+  subset of some instance ``I2`` of ``S2``, and ``I1`` is said to be a
+  *subscope* instance of ``I2``.
+- If two scope instances ``I1`` and ``I2`` intersect, then their intersection is
+  the smaller of ``I1`` and ``I2``.
 
-**Inclusive Scopes**: Two operations ``X`` and ``Y`` are said to have *inclusive
+.. _amdgpu-dma-scopes:
+
+DMA Scopes
+^^^^^^^^^^
+
+Every class of :ref:`DMA operations<amdgpu-dma-memory-model>` has a
+corresponding DMA scope. When an instruction ``I1`` initiates a DMA operation
+``D1``, ``D1`` belongs to the corresponding DMA scope instance that also
+includes ``I1``.
+
+These scopes can only be used as an argument to :ref:`availability and
+visibility operations<amdgpu-availability-visibility>`.
+
+- Previous writes to the source location must be *made available* to the
+  corresponding scope before initiating the DMA operation.
+- The DMA writes to the destination must be *made visible* from that scope to
+  eventual read operations.
+
+All the LDS DMA and Tensor operations initiated from a workgroup are contained
+in an "lds-dma" scope instance ``L``. The corresponding "workgroup" scope
+instance is a *subscope instance* of ``L``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 50 50
+
+   * - DMA Scope
+     - DMA Operations
+     - Corresponding ``syncscope``
+   * - lds-dma
+     - LDS DMA, Tensor
+     - workgroup
+
+Inclusive Scopes
+^^^^^^^^^^^^^^^^
+
+Two operations ``X`` and ``Y`` are said to have *inclusive
 scopes* if the scope instance of each operation contains the other operation. In
 that case, the *common scope instance* ``S'`` of ``X`` and ``Y`` is the
 intersection of their scope instances. The scope corresponding to ``S'`` is also
 termed as the *common scope* of ``X`` and ``Y``.
+
+.. _amdgpu-availability-visibility:
 
 Availability and Visibility
 ===========================
@@ -285,6 +323,8 @@ and one of the following holds:
 
   Then ``Y`` makes ``W`` visible in the intersection ``S`` of ``S1`` and ``S2``,
   and every subscope instance of ``S`` that includes ``Y``.
+
+.. _amdgpu-location-order:
 
 Location Order
 --------------
