@@ -1,6 +1,6 @@
 ; RUN: opt -mtriple=amdgcn-- -S -structurizecfg -si-annotate-control-flow -simplifycfg-require-and-preserve-domtree=1 %s | FileCheck -check-prefix=OPT %s
 ; RUN: opt -mtriple=amdgcn-- -S -passes=structurizecfg,si-annotate-control-flow -simplifycfg-require-and-preserve-domtree=1 %s | FileCheck -check-prefix=OPT %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx600 -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
 
 ; OPT-LABEL: @annotate_unreachable_noloop(
 ; OPT-NOT: call i1 @llvm.amdgcn.loop
@@ -38,9 +38,9 @@ bb5:                                              ; preds = %bb3, %bb1
 
 ; GCN-LABEL: {{^}}annotate_ret_noloop:
 ; GCN: load_dwordx4
-; GCN: v_cmp_nlt_f32
-; GCN: s_and_saveexec_b64
-; GCN-NEXT: s_endpgm
+; GCN: v_cmp_lt_f32
+; GCN: s_xor_b64
+; GCN: s_endpgm
 ; GCN: .Lfunc_end
 define amdgpu_kernel void @annotate_ret_noloop(ptr addrspace(1) noalias nocapture readonly %arg) #0 {
 bb:
