@@ -32,10 +32,18 @@ thread_local raw_ostream *ThreadCaptureStream = nullptr;
 
 Logger::Logger() : Level(env::resolveLevel()), Sink(nullptr) {
   std::optional<StringRef> RedirectLogs = env::getRedirectLogs();
-  if (!RedirectLogs)
-    return;
+  if (RedirectLogs)
+    openSink(*RedirectLogs);
+}
 
-  StringRef RedirectLog = *RedirectLogs;
+Logger::Logger(LogLevel Level, raw_ostream *Sink) : Level(Level), Sink(Sink) {}
+
+Logger::Logger(LogLevel Level, StringRef RedirectTarget)
+    : Level(Level), Sink(nullptr) {
+  openSink(RedirectTarget);
+}
+
+void Logger::openSink(StringRef RedirectLog) {
   if (RedirectLog == "stdout" || RedirectLog == "-") {
     Sink = &outs();
   } else if (RedirectLog == "stderr") {
@@ -55,11 +63,10 @@ Logger::Logger() : Level(env::resolveLevel()), Sink(nullptr) {
                       .str();
     } else {
       Sink = SinkFile.get();
+      SinkFilename = RedirectLog.str();
     }
   }
 }
-
-Logger::Logger(LogLevel Level, raw_ostream *Sink) : Level(Level), Sink(Sink) {}
 
 void Logger::writeToSink(StringRef Data) {
   if (!Sink)

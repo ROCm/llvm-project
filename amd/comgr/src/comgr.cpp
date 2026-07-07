@@ -1351,8 +1351,7 @@ amd_comgr_status_t AMD_COMGR_API
     // AMD_COMGR_REDIRECT_LOGS copies logs to the extra destination and
     // does not move them away from the caller's comgr.log object.
     std::optional<TeeStream> RedirectTee;
-    if (std::optional<StringRef> RedirectLogs = env::getRedirectLogs()) {
-      StringRef RedirectLog = *RedirectLogs;
+    if (env::getRedirectLogs()) {
       // The global Logger already resolved and opened the redirect destination
       // (see Logger::Logger), recording any file-open failure in
       // getSinkError(). Reuse its sink rather than opening the same target a
@@ -1361,9 +1360,12 @@ amd_comgr_status_t AMD_COMGR_API
       if (Log.hasSink()) {
         RedirectTee.emplace(LogS, Log);
         LogP = &RedirectTee.value();
-        if (RedirectLog != "stdout" && RedirectLog != "stderr" &&
-            RedirectLog != "-")
-          PerfLog = RedirectLog.str();
+        // Reuse the destination the Logger already resolved to a file. Empty
+        // when the sink is a stream (stdout/stderr/"-"), so time statistics
+        // stay off in that case.
+        StringRef RedirectFile = Log.getRedirectFilename();
+        if (!RedirectFile.empty())
+          PerfLog = RedirectFile.str();
       } else if (StringRef SinkError = Log.getSinkError(); !SinkError.empty()) {
         // Redirect was requested but the Logger could not open the destination.
         // Surface its diagnostic into the returned comgr.log (the sink is null

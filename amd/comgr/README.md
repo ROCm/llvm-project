@@ -236,10 +236,10 @@ include:
   redirected when `AMD_COMGR_REDIRECT_LOGS` is set) regardless of this level,
   so a level of 0 does not necessarily produce empty output.
 
-  Values outside the range are clamped to it; non-integer values are
-  ignored. Takes precedence over `AMD_COMGR_EMIT_VERBOSE_LOGS`; if unset (or not
-  an integer), defaults to 4 when `AMD_COMGR_EMIT_VERBOSE_LOGS` is enabled, else
-  1.
+  Integers above the range are clamped to 4. Negative and non-integer values are
+  invalid and not supported. Takes precedence over `AMD_COMGR_EMIT_VERBOSE_LOGS`;
+  if unset (or invalid), defaults to 4 when `AMD_COMGR_EMIT_VERBOSE_LOGS` is
+  enabled, else 1.
 * `AMD_COMGR_TIME_STATISTICS`: If this is set, and is not "0", logs will
   include additional Comgr-specific timing information for compilation actions.
 * `AMD_COMGR_TIME_STATISTICS_GRANULARITY`: If this is set to "us" or "ns",

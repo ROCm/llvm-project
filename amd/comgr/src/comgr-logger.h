@@ -55,6 +55,14 @@ public:
   /// be null). Intended for tests.
   Logger(LogLevel Level, llvm::raw_ostream *Sink);
 
+  /// Construct a Logger with an explicit level, resolving the sink from
+  /// @p RedirectTarget exactly as the default constructor resolves
+  /// AMD_COMGR_REDIRECT_LOGS ("stdout"/"stderr"/"-" select a stream; any other
+  /// value is opened as an append-mode file). Bypasses the process-global
+  /// environment cache so redirect behavior can be exercised deterministically.
+  /// Intended for tests.
+  Logger(LogLevel Level, llvm::StringRef RedirectTarget);
+
   Logger(const Logger &) = delete;
   Logger &operator=(const Logger &) = delete;
 
@@ -82,6 +90,13 @@ public:
   /// false despite AMD_COMGR_REDIRECT_LOGS being set.
   llvm::StringRef getSinkError() const { return SinkError; }
 
+  /// Return the filename the redirect sink was opened on, or an empty string
+  /// when the sink is a stream (stdout/stderr/"-") or redirection was not
+  /// requested. Lets callers reuse the resolved destination (e.g. as the time-
+  /// statistics output path) without re-classifying the raw AMD_COMGR_REDIRECT_
+  /// LOGS value against the reserved stream names.
+  llvm::StringRef getRedirectFilename() const { return SinkFilename; }
+
   /// Write @p Data verbatim to the global sink under the logger's mutex, so
   /// teed output (see TeeStream in comgr.cpp) does not race emit(). No prefix,
   /// newline, or flush is added; a no-op when there is no sink.
@@ -97,6 +112,12 @@ public:
   void emit(LogLevel Severity, const llvm::Twine &Message);
 
 private:
+  // Resolve and install the redirect sink from @p RedirectLog, using the same
+  // rules as the default constructor: "stdout"/"stderr"/"-" select a standard
+  // stream; any other value is opened as an append-mode file, recording a
+  // diagnostic in SinkError on failure. Shared by the constructors.
+  void openSink(llvm::StringRef RedirectLog);
+
   LogLevel Level;
 
   // The global sink, resolved once at construction. Null when logs are not
@@ -104,6 +125,11 @@ private:
   // stream is owned by SinkFile.
   llvm::raw_ostream *Sink;
   std::unique_ptr<llvm::raw_fd_ostream> SinkFile;
+
+  // The filename the sink was opened on, when AMD_COMGR_REDIRECT_LOGS named a
+  // file that opened successfully. Empty for stream sinks (stdout/stderr/"-")
+  // or when redirection was not requested. Surfaced via getRedirectFilename().
+  std::string SinkFilename;
 
   // Diagnostic recorded when AMD_COMGR_REDIRECT_LOGS named a file that could
   // not be opened. Empty otherwise. Surfaced to the caller via getSinkError().

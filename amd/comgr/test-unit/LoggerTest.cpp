@@ -9,6 +9,8 @@
 #include "comgr-logger.h"
 #include "gtest/gtest.h"
 
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <atomic>
@@ -223,6 +225,57 @@ TEST(Logger, ConcurrentEmitsAreNotInterleaved) {
   EXPECT_EQ(Lines, NumThreads * PerThread);
 }
 
+TEST(Logger, ConcurrentEmitAndSinkWritesAreSerialized) {
+  // emit() and writeToSink() share the logger mutex so that a TeeStream teeing
+  // compiler diagnostics into the redirect sink cannot interleave with a
+  // concurrent emit() on the same Logger. Drive both against one shared sink
+  // and require every chunk to land intact.
+  std::string Out;
+  raw_string_ostream OS(Out);
+  Logger Log(LogLevel::Debug, &OS);
+
+  const int NumThreads = 8;
+  const int PerThread = 200;
+  std::vector<std::thread> Threads;
+  for (int T = 0; T < NumThreads; ++T) {
+    Threads.emplace_back([&Log, PerThread]() {
+      for (int I = 0; I < PerThread; ++I)
+        Log.emit(LogLevel::Error, "line");
+    });
+    // writeToSink writes verbatim (no prefix/newline added), so the payload
+    // carries its own newline to make each teed chunk a distinct line.
+    Threads.emplace_back([&Log, PerThread]() {
+      for (int I = 0; I < PerThread; ++I)
+        Log.writeToSink("tee\n");
+    });
+  }
+  for (std::thread &Th : Threads)
+    Th.join();
+  OS.flush();
+
+  // Each emit() and each writeToSink() is atomic under the mutex, so every line
+  // is one intact chunk and both counts must match.
+  int EmitLines = 0;
+  int TeeLines = 0;
+  StringRef Remaining(Out);
+  while (!Remaining.empty()) {
+    std::pair<StringRef, StringRef> Split = Remaining.split('\n');
+    if (Split.first.empty() && Split.second.empty())
+      break;
+    if (!Split.first.empty()) {
+      EXPECT_TRUE(Split.first == "comgr: line" || Split.first == "tee")
+          << "torn chunk: " << Split.first.str();
+      if (Split.first == "comgr: line")
+        ++EmitLines;
+      else if (Split.first == "tee")
+        ++TeeLines;
+    }
+    Remaining = Split.second;
+  }
+  EXPECT_EQ(EmitLines, NumThreads * PerThread);
+  EXPECT_EQ(TeeLines, NumThreads * PerThread);
+}
+
 // -- Capture streams are per-thread ------------------------------------------
 
 TEST(Logger, CaptureStreamIsThreadLocal) {
@@ -253,6 +306,37 @@ TEST(Logger, CaptureStreamIsThreadLocal) {
 // environment is read only once per process. This must therefore be the ONLY
 // test that constructs an environment-configured Logger; a second one with
 // different values would not observe them. setenv/unsetenv are POSIX-only.
+
+TEST(Logger, RedirectToFileWritesEmittedMessages) {
+  // Redirect to a real, writable file via the explicit-target constructor,
+  // which runs the same sink resolution as the environment path without
+  // touching the process-global AMD_COMGR_REDIRECT_LOGS cache (so this stays
+  // deterministic alongside RedirectOpenFailureIsRecorded). The Logger must
+  // install a file sink (hasSink()), expose the resolved path via
+  // getRedirectFilename(), record no open error, and route emitted messages
+  // into the file.
+  llvm::SmallString<128> Path;
+  ASSERT_FALSE(llvm::sys::fs::createTemporaryFile("comgr-logger", "log", Path));
+
+  {
+    Logger Log(LogLevel::Error, StringRef(Path));
+
+    EXPECT_TRUE(Log.hasSink());
+    EXPECT_TRUE(Log.getSinkError().empty());
+    EXPECT_EQ(Log.getRedirectFilename(), StringRef(Path));
+
+    Log.emit(LogLevel::Error, "redirected message");
+    // Suppressed severities (above the resolved level) write nothing.
+    Log.emit(LogLevel::None, "should not appear");
+  }
+
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> Buf =
+      llvm::MemoryBuffer::getFile(Path);
+  ASSERT_TRUE(static_cast<bool>(Buf));
+  EXPECT_EQ((*Buf)->getBuffer(), "comgr: redirected message\n");
+
+  llvm::sys::fs::remove(Path);
+}
 
 #ifndef _WIN32
 TEST(Logger, RedirectOpenFailureIsRecorded) {
