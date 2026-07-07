@@ -1133,8 +1133,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   unsigned ClassifierWaveIdLiftScalarizedSites = 0;
   {
     ObstructionReport Report =
-        buildObstructionReport(Insts, Mc, Isa, TargetIsa,
-                               EnableWritelaneRewrite);
+        buildObstructionReport(Insts, Mc, Projection, EnableWritelaneRewrite);
     for (const auto &S : Report.Sites)
       if (S.Kind == ObstructionKind::WaveIdLiftScalarized)
         ++ClassifierWaveIdLiftScalarizedSites;

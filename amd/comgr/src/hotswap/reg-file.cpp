@@ -443,10 +443,11 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
     // scalar width to i32.
     assert(!V->getType()->isPointerTy() &&
            "VCC_HI_SCRATCH/EXEC_HI_SCRATCH is a data scalar; pointer writes are a raiser bug");
-    assert(V->getType()->getPrimitiveSizeInBits() == 32 &&
-           "VCC_HI_SCRATCH/EXEC_HI_SCRATCH is a 32-bit data scalar");
-    if (!V->getType()->isIntegerTy(32))
-      V = B.CreateBitCast(V, B.getInt32Ty());
+    if (V->getType() != B.getInt32Ty()) {
+      unsigned Bits = V->getType()->getPrimitiveSizeInBits();
+      V = Bits > 32 ? B.CreateTrunc(V, B.getInt32Ty())
+                    : B.CreateBitCast(V, B.getInt32Ty());
+    }
     B.CreateStore(V, Pr.RegKind == ParsedReg::VCC_HI_SCRATCH ? VccHiScratch
       : ExecHiScratch);
     return;

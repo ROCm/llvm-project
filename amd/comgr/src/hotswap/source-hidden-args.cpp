@@ -269,10 +269,16 @@ SourceHiddenArgValue emitSourceHiddenInteger(SourceHiddenArgContext &Ctx,
                                              int64_t ByteOffset,
                                              unsigned ByteWidth,
                                              bool IsSigned) {
-  if (ByteWidth != 1 && ByteWidth != 2 && ByteWidth != 4)
-    report_fatal_error("unsupported source hidden integer byte width");
-
   SourceHiddenArgValue Result;
+  if (ByteWidth != 1 && ByteWidth != 2 && ByteWidth != 4) {
+    Result.Matched = true;
+    Result.FailureDetail =
+        (Twine("unsupported source hidden integer byte width ") +
+         Twine(ByteWidth))
+            .str();
+    return Result;
+  }
+
   Value *Acc = Ctx.B.getInt32(0);
   for (unsigned I = 0; I < ByteWidth; ++I) {
     SourceHiddenArgValue Byte =

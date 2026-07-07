@@ -61,7 +61,8 @@ struct HiddenArgModule {
   }
 
   SourceHiddenArgContext context(ArrayRef<KernelArgMeta> Args,
-                                 bool AssumeHipGlobalOffsetZero = false) {
+                                 bool AssumeHipGlobalOffsetZero = false,
+                                 unsigned TargetCodeObjectVersion = 6) {
     return SourceHiddenArgContext{C,
                                   M,
                                   B,
@@ -69,7 +70,8 @@ struct HiddenArgModule {
                                   Type::getInt32Ty(C),
                                   Type::getInt64Ty(C),
                                   Args,
-                                  AssumeHipGlobalOffsetZero};
+                                  AssumeHipGlobalOffsetZero,
+                                  TargetCodeObjectVersion};
   }
 };
 
@@ -257,6 +259,90 @@ TEST(SourceHiddenArgs, HostcallUsesTargetImplicitArgOffset) {
   EXPECT_EQ(IR.find("i32 56"), std::string::npos);
   EXPECT_EQ(IR.find("amdgpu-no-implicitarg-ptr"), std::string::npos);
   EXPECT_EQ(IR.find("amdgpu-no-hostcall-ptr"), std::string::npos);
+}
+
+// Pointer hidden args move between source and target ABI offsets.
+TEST(SourceHiddenArgs, PointerIdentityHiddenArgsUseTargetImplicitArgOffsets) {
+  struct Case {
+    const char *Name;
+    const char *ValueKind;
+    const char *NoAttr;
+    int ExpectedOffset;
+  };
+  const Case Cases[] = {
+      {"default_queue", "hidden_default_queue", "amdgpu-no-default-queue", 104},
+      {"completion_action", "hidden_completion_action",
+       "amdgpu-no-completion-action", 112},
+      {"multigrid", "hidden_multigrid_sync_arg",
+       "amdgpu-no-multigrid-sync-arg", 88},
+      {"heap", "hidden_heap_v1", "amdgpu-no-heap-ptr", 96},
+  };
+
+  for (const Case &C : Cases) {
+    std::vector<KernelArgMeta> Args = {
+        makeArg(C.Name, 56, 8, C.ValueKind),
+    };
+    HiddenArgModule HM;
+    HM.F->addFnAttr("amdgpu-no-implicitarg-ptr");
+    HM.F->addFnAttr(C.NoAttr);
+    SourceHiddenArgContext Ctx = HM.context(Args);
+
+    SourceHiddenArgValue Value =
+        emitSourceHiddenInteger(Ctx, /*ByteOffset=*/56, /*ByteWidth=*/4,
+                                /*IsSigned=*/false);
+
+    ASSERT_TRUE(Value.Matched) << C.ValueKind;
+    ASSERT_NE(Value.Value, nullptr) << C.ValueKind;
+    EXPECT_TRUE(Value.FailureDetail.empty()) << C.ValueKind;
+
+    std::string IR = HM.str();
+    EXPECT_NE(IR.find("@llvm.amdgcn.implicitarg.ptr"), std::string::npos)
+        << C.ValueKind;
+    EXPECT_NE(IR.find("i32 " + std::to_string(C.ExpectedOffset)),
+              std::string::npos)
+        << C.ValueKind;
+    EXPECT_EQ(IR.find("i32 56"), std::string::npos) << C.ValueKind;
+    EXPECT_EQ(IR.find("amdgpu-no-implicitarg-ptr"), std::string::npos)
+        << C.ValueKind;
+    EXPECT_EQ(IR.find(C.NoAttr), std::string::npos) << C.ValueKind;
+  }
+}
+
+// COV4 has no heap pointer field, so heap_v1 must refuse.
+TEST(SourceHiddenArgs, HeapV1RefusesBeforeCodeObjectV5) {
+  std::vector<KernelArgMeta> Args = {
+      makeArg("heap", 56, 8, "hidden_heap_v1"),
+  };
+  HiddenArgModule HM;
+  SourceHiddenArgContext Ctx =
+      HM.context(Args, /*AssumeHipGlobalOffsetZero=*/false,
+                 /*TargetCodeObjectVersion=*/4);
+
+  SourceHiddenArgValue Value =
+      emitSourceHiddenInteger(Ctx, /*ByteOffset=*/56, /*ByteWidth=*/4,
+                              /*IsSigned=*/false);
+
+  EXPECT_TRUE(Value.Matched);
+  EXPECT_EQ(Value.Value, nullptr);
+  EXPECT_NE(Value.FailureDetail.find("hidden_heap_v1"), std::string::npos);
+}
+
+// Bad helper widths should report through SourceHiddenArgValue, not abort.
+TEST(SourceHiddenArgs, UnsupportedIntegerWidthFailsWithoutFatalError) {
+  std::vector<KernelArgMeta> Args = {
+      makeArg("hostcall", 56, 8, "hidden_hostcall_buffer"),
+  };
+  HiddenArgModule HM;
+  SourceHiddenArgContext Ctx = HM.context(Args);
+
+  SourceHiddenArgValue Value =
+      emitSourceHiddenInteger(Ctx, /*ByteOffset=*/56, /*ByteWidth=*/8,
+                              /*IsSigned=*/false);
+
+  EXPECT_TRUE(Value.Matched);
+  EXPECT_EQ(Value.Value, nullptr);
+  EXPECT_NE(Value.FailureDetail.find("unsupported source hidden integer byte width"),
+            std::string::npos);
 }
 
 TEST(SourceHiddenArgs, NonHiddenOffsetDoesNotMatch) {

@@ -736,7 +736,8 @@ HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
                                        "mbcnt_lane_bit");
       Value *BelowMask = Ctx.B.CreateSub(LaneBit, Ctx.B.getInt32(1),
                                          "mbcnt_below_mask");
-      Value *Masked = Ctx.B.CreateAnd(Op.src(0), BelowMask, "mbcnt_masked");
+      Value *SrcMask = Ctx.readOpSourceWaveMask32(Di, Op.srcIdx(0));
+      Value *Masked = Ctx.B.CreateAnd(SrcMask, BelowMask, "mbcnt_masked");
       Function *Ctpop = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::ctpop, {Ctx.I32Ty});
       Result = Ctx.B.CreateAdd(

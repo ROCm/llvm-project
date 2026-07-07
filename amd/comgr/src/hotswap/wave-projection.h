@@ -202,6 +202,11 @@ public:
   virtual llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                                    llvm::Value *V) const = 0;
 
+  // Return the source-wave slice of a wave mask, e.g. for `v_mbcnt_lo`.
+  virtual llvm::Value *emitCurrentSourceWaveMask(
+      llvm::IRBuilder<> &B, llvm::Value *Mask,
+      const llvm::Twine &Name = "source_wave_mask") const;
+
   // True iff this projection guarantees hardware EXEC = -1 between
   // `emitUnderExec` diamonds *kernel-wide*.  When this is true the
   // WMMA -> MFMA redistribute / MFMA / collect pipeline in
@@ -232,6 +237,10 @@ public:
   // source-wave instances; a native target-wave `readlane(31)` or
   // `readfirstlane` would collapse those instances together.
   virtual bool sourceWaveScopedLaneOps() const { return false; }
+
+  // True when mbcnt-derived V_CMPX predicates remain independent for each
+  // packed source wave's EXEC mask.
+  virtual bool preservesMbcntDerivedVcmpxExec() const { return false; }
 
   // Number of source waves whose per-lane fragment data is present in
   // each target wave under this projection's mapping.  Callers that
@@ -436,6 +445,7 @@ public:
   // target lanes 32..63).  Callers emitting per-source-wave passes
   // run two iterations under this projection.
   unsigned numSourceWavesPerTarget() const override { return 2; }
+  bool preservesMbcntDerivedVcmpxExec() const override { return true; }
 
   llvm::Value *emitInitialExec(llvm::IRBuilder<> &B) const override;
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &B,
@@ -446,6 +456,9 @@ public:
       const override;
   llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                            llvm::Value *V) const override;
+  llvm::Value *emitCurrentSourceWaveMask(
+      llvm::IRBuilder<> &B, llvm::Value *Mask,
+      const llvm::Twine &Name = "source_wave_mask") const override;
 };
 
 // ============================================================================

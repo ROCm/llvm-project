@@ -446,6 +446,36 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
   return UndefValue::get(I32Ty);
 }
 
+Value *RaiseContext::readOpSourceWaveMask32(const DecodedInst &Di,
+                                            unsigned OpIdx) {
+  if (!Di.isReg(OpIdx))
+    return readOp32(Di, OpIdx);
+
+  ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);
+  if (Pr.RegKind == ParsedReg::EXEC)
+    return Projection.emitCurrentSourceWaveMask(B, Regs.loadExec(B),
+                                                "exec_srcwave_mask");
+  if (Pr.RegKind == ParsedReg::VCC)
+    return Projection.emitCurrentSourceWaveMask(
+        B, Regs.readVCCAsWaveMask(B, Regs.ExecTy), "vcc_srcwave_mask");
+  if (Pr.RegKind == ParsedReg::SGPR && Pr.BaseIdx >= 0) {
+    Value *Fallback = readOp32(Di, OpIdx);
+    if (Value *ShadowValid = loadSgprWaveMaskValid(Pr.BaseIdx)) {
+      Value *ShadowExec = loadSgprWaveMaskExec(Pr.BaseIdx);
+      if (ShadowExec->getType() != Regs.ExecTy)
+        ShadowExec =
+            B.CreateZExtOrTrunc(ShadowExec, Regs.ExecTy, "sgpr_mask_exec_cast");
+      Value *ShadowMask = Projection.emitCurrentSourceWaveMask(
+          B, ShadowExec, "sgpr_srcwave_mask_shadow");
+      return B.CreateSelect(ShadowValid, ShadowMask, Fallback,
+                            "sgpr_srcwave_mask");
+    }
+    return Fallback;
+  }
+
+  return readOp32(Di, OpIdx);
+}
+
 Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
   if (Di.isReg(OpIdx)) {
     ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);

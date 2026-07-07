@@ -139,6 +139,16 @@ Value *WaveProjection::emitPackedWorkitemId(IRBuilder<> &B,
   return packWorkitemId(B, emitWorkitemIdX(B), NumDims);
 }
 
+Value *WaveProjection::emitCurrentSourceWaveMask(IRBuilder<> &B, Value *Mask,
+                                                 const Twine &Name) const {
+  Type *SourceTy = sourceWaveMaskTy();
+  if (!Mask->getType()->isIntegerTy())
+    report_fatal_error("emitCurrentSourceWaveMask expects an integer mask");
+  if (Mask->getType() == SourceTy)
+    return Mask;
+  return B.CreateZExtOrTrunc(Mask, SourceTy, Name);
+}
+
 Value *
 ModuloReplicationProjection::emitPackedWorkitemId(IRBuilder<> &B,
                                                   unsigned NumDims) const {
@@ -495,6 +505,28 @@ Value *WaveNativeProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
   Value *Bit = B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1),
                             "wn_mask_lane_bit");
   return B.CreateICmpNE(Bit, ConstantInt::get(TargetTy, 0), "wn_mask_lane_i1");
+}
+
+Value *WaveNativeProjection::emitCurrentSourceWaveMask(IRBuilder<> &B,
+                                                       Value *Mask,
+                                                       const Twine &Name) const {
+  if (!Mask->getType()->isIntegerTy())
+    report_fatal_error("emitCurrentSourceWaveMask expects an integer mask");
+
+  Type *SourceTy = sourceWaveMaskTy();
+  unsigned SourceBits = SourceTy->getPrimitiveSizeInBits();
+  unsigned MaskBits = Mask->getType()->getPrimitiveSizeInBits();
+  if (MaskBits <= SourceBits)
+    return B.CreateZExtOrTrunc(Mask, SourceTy, Name);
+
+  Value *LaneId = emitLaneIdx(B);
+  Value *SourceWaveBase = B.CreateAnd(
+      LaneId, B.getInt32(~(static_cast<uint32_t>(Src.WaveSize) - 1u)),
+      Name + "_base");
+  Value *Shift =
+      B.CreateZExtOrTrunc(SourceWaveBase, Mask->getType(), Name + "_shift");
+  Value *AtSourceWave = B.CreateLShr(Mask, Shift, Name + "_at_srcwave");
+  return B.CreateTrunc(AtSourceWave, SourceTy, Name);
 }
 
 // ----------------------------------------------------------------------------

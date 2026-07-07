@@ -22,6 +22,7 @@
 namespace COMGR::hotswap {
 
 struct MCState;
+class WaveProjection;
 
 // ============================================================================
 // Wave-size obstruction classifier.
@@ -37,13 +38,10 @@ struct MCState;
 // landed-rewrites table (if any) that would discharge it, and
 // (c) whether the rewrite is implemented in the current raiser.
 //
-// The decider function `decideProjection` consumes that report and
-// returns either a projection to run (outcome a / b) or a structured
-// `RaiseFailure` to propagate (outcome c). The projection today is
-// always `ModuloReplicationProjection` -- wave-size-translation.md
-// §2.2's coverage ladder envisions `ThreadLoopProjection` /
-// `ScalarizationProjection` as future rungs, but no corpus kernel
-// reaches them in the currently audited corpus.
+// The raiser selects a `WaveProjection` before this classifier runs, and the
+// report is computed against that selected projection. Some sites are
+// discharged by the projection itself; for example WaveNative handles
+// mbcnt-derived `V_CMPX` EXEC predicates while ModRep still refuses them.
 //
 // Analysis strategy -- mostly syntactic, with decoded-register provenance
 // where needed.
@@ -70,16 +68,9 @@ struct MCState;
 //   - NonCommutativeAtomic: matched by mnemonic substring
 //     (`cmpswap`, `atomic_swap`, `atomic_xchg`). Exact at the
 //     mnemonic level.
-//   - CmpxFromLaneId / SaveExecFromLaneId: the principled check
-//     asks "does this v_cmpx / s_*_saveexec's source-operand
-//     dataflow chain contain a value derived from
-//     `amdgcn.mbcnt.{lo,hi}`?". The implementation tracks decoded
-//     physical-register provenance across the MC stream and refuses
-//     only when the EXEC writer's predicate/mask is actually
-//     mbcnt-derived. This is still conservative across unmodelled
-//     memory/control-flow joins, but it avoids the old kernel-wide
-//     false positive where a shuffle selector used mbcnt and an
-//     unrelated bounds-check v_cmpx appeared in the same kernel.
+//   - CmpxFromLaneId / SaveExecFromLaneId: decoded-register provenance tracks
+//     whether an EXEC writer actually consumes `v_mbcnt_*` data. WaveNative
+//     handles V_CMPX; scalar saveexec masks still refuse.
 //
 // The sound direction of the imprecision is preserved: false
 // positives (refuse a safe kernel) are benign; false negatives
@@ -193,7 +184,7 @@ enum class ObstructionKind : uint8_t {
   // The EXEC mask the kernel writes depends on the absolute lane
   // position; under modulo-replication the projection does not
   // reproduce the source's intent.
-  CmpxFromLaneId,           // v_cmpx predicate is derived from v_mbcnt_*.
+  CmpxFromLaneId,           // mbcnt-derived v_cmpx (WaveNative-only).
   SaveExecFromLaneId,       // s_*_saveexec_b32 source mask is derived from v_mbcnt_*.
 };
 
@@ -217,6 +208,7 @@ enum class RewriteId : uint8_t {
                             // WaveIdLiftScalarized site as "implemented rewrite
                             // available" instead of "refuse outright" so the
                             // classifier lets the kernel through to Phase 6.5.
+  WaveNativeMbcntCmpx,      // source-wave mbcnt -> target-width V_CMPX EXEC.
 };
 
 // Human-readable short label for an `ObstructionKind` -- used in the
@@ -303,8 +295,7 @@ struct ObstructionReport {
 // explicitly. See wave-size-translation.md §5.6.3.
 ObstructionReport buildObstructionReport(llvm::ArrayRef<DecodedInst> Insts,
                                           const MCState &Mc,
-                                          const ISAProfile &Src,
-                                          const ISAProfile &Tgt,
+                                          const WaveProjection &Projection,
                                           bool EnableWritelaneRewrite = true);
 
 // ----------------------------------------------------------------------------

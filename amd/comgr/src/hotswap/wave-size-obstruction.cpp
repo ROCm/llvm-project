@@ -12,6 +12,7 @@
 #include "isa-profile.h"
 #include "mc-state.h"
 #include "canonical-op.h"
+#include "wave-projection.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h" // AMDGPU::OpName, AMDGPU::TTMP_32RegClassID, AMDGPU::mc2PseudoReg
 #include "Utils/AMDGPUBaseInfo.h"             // AMDGPU::getNamedOperandIdx
@@ -96,6 +97,8 @@ const char *rewriteIdName(RewriteId R) {
   case RewriteId::PostRaiseCrossLaneRewrite:
     return "post-raise cross-lane rewrite (writelane -> select, "
            "readlane -> ds.bpermute)";
+  case RewriteId::WaveNativeMbcntCmpx:
+    return "WaveNative source-wave mbcnt -> V_CMPX EXEC projection";
   }
   return "UnknownRewriteId";
 }
@@ -266,6 +269,8 @@ bool dsSwizzleSafeForModRep(uint16_t Imm) {
 struct LanePredicatedExecSite {
   const DecodedInst *Inst;
   ObstructionKind Kind; // CmpxFromLaneId or SaveExecFromLaneId.
+  RewriteId Rewrite = RewriteId::None;
+  bool RewriteImplemented = false;
   std::string Detail;
 };
 
@@ -401,7 +406,8 @@ bool isSaveExecB32(CanonicalOp Sop) {
 
 SmallVector<LanePredicatedExecSite>
 findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
-                            const MCRegisterInfo &MRI) {
+                            const MCRegisterInfo &MRI,
+                            const WaveProjection &Projection) {
   LaneIdProvenanceTracker Tracker(MRI);
   SmallVector<LanePredicatedExecSite> Sites;
 
@@ -427,10 +433,22 @@ findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
       SccTainted = false;
     } else if (Sop == CanonicalOp::V_CMPX) {
       if (SourceTainted) {
-        Sites.push_back(
-            {&Di, ObstructionKind::CmpxFromLaneId,
-             "v_cmpx operand dataflow is derived from v_mbcnt_*; EXEC would "
-             "be gated by absolute target lane position under cross-widening"});
+        if (Projection.preservesMbcntDerivedVcmpxExec()) {
+          Sites.push_back(
+              {&Di, ObstructionKind::CmpxFromLaneId,
+               RewriteId::WaveNativeMbcntCmpx, /*RewriteImplemented=*/true,
+               "v_cmpx operand dataflow is derived from v_mbcnt_*; "
+               "WaveNative lowers v_mbcnt_lo with a source-wave-local mask "
+               "and ballots the compare into target-width EXEC storage"});
+        } else {
+          Sites.push_back(
+              {&Di, ObstructionKind::CmpxFromLaneId, RewriteId::None,
+               /*RewriteImplemented=*/false,
+               "v_cmpx operand dataflow is derived from v_mbcnt_*; EXEC "
+               "would need independent source-wave masks, but the selected "
+               "projection aliases target lanes L and L+W_s through one "
+               "source-width EXEC mask"});
+        }
       }
       ExplicitDefsTainted = false;
       VccTainted = false;
@@ -440,9 +458,10 @@ findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
       if (SourceTainted) {
         Sites.push_back(
             {&Di, ObstructionKind::SaveExecFromLaneId,
+             RewriteId::None, /*RewriteImplemented=*/false,
              "s_*_saveexec_b32 source mask dataflow is derived from "
-             "v_mbcnt_*; EXEC would be gated by absolute target lane "
-             "position under cross-widening"});
+             "v_mbcnt_*; no target-width source-wave mask projection is "
+             "implemented for scalar saveexec masks"});
       }
       ExplicitDefsTainted = OldExecTainted;
       VccTainted = false;
@@ -557,10 +576,11 @@ bool isCanonicalWaveIdBfe(const DecodedInst &Di,
 
 ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
                                           const MCState &Mc,
-                                          const ISAProfile &Src,
-                                          const ISAProfile &Tgt,
+                                          const WaveProjection &Projection,
                                           bool EnableWritelaneRewrite) {
   ObstructionReport Report;
+  const ISAProfile &Src = Projection.sourceIsa();
+  const ISAProfile &Tgt = Projection.targetIsa();
   if (Src.WaveSize == Tgt.WaveSize)
     return Report;
   const MCRegisterInfo &MRI = *Mc.RegInfo;
@@ -577,7 +597,7 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
   // not by adding `raw.contains(...)` substring tests.
   bool HaveWmma = false;
   SmallVector<LanePredicatedExecSite> LanePredicatedExecSites =
-      findLanePredicatedExecSites(Insts, MRI);
+      findLanePredicatedExecSites(Insts, MRI, Projection);
   // Deferred TtmpWaveIdLeak site emission. The canonical shape --
   // `s_bfe_u32 sDST, ttmp8, 0x50019` -- has a principled rescue in
   // `handle-sop2.cpp`'s `S_BFE_U32` pattern-lift, which emits
@@ -1113,15 +1133,14 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
 
   // Second pass: emit Class-4 EXEC writers whose predicate/mask was
   // actually proven to depend on a v_mbcnt_* result by the decoded-
-  // register provenance pre-walk. This replaces the old kernel-wide
-  // co-occurrence heuristic while preserving the same fail-loud
-  // outcome for true mbcnt-fed EXEC predicates.
+  // register provenance pre-walk. WaveNative marks mbcnt-fed V_CMPX
+  // as implemented; MODREP and scalar saveexec masks still refuse.
   for (const auto &Pw : LanePredicatedExecSites) {
     ObstructionSite Site;
     Site.Inst = Pw.Inst;
     Site.Kind = Pw.Kind;
-    Site.Rewrite = RewriteId::None;
-    Site.RewriteImplemented = false;
+    Site.Rewrite = Pw.Rewrite;
+    Site.RewriteImplemented = Pw.RewriteImplemented;
     Site.Detail = Pw.Detail;
     Report.Sites.push_back(std::move(Site));
   }
@@ -1147,7 +1166,7 @@ std::string renderObstructionTrace(const ObstructionReport &Report,
 
   if (Report.Sites.empty()) {
     Os << "  obstructions found: none\n"
-       << "  outcome: (a) wave-size-oblivious -- emit modulo-replication\n";
+       << "  outcome: (a) wave-size-oblivious -- emit selected projection\n";
     return Out;
   }
 
@@ -1175,7 +1194,7 @@ std::string renderObstructionTrace(const ObstructionReport &Report,
           "(wave-size-translation.md \u00a77's pending-rewrite table)\n";
   } else {
     Os << "  outcome: (b) rewrite-then-emit -- all obstruction sites have "
-          "an implemented rewrite; emit modulo-replication\n";
+          "an implemented rewrite/projection; emit selected projection\n";
   }
   return Out;
 }
