@@ -178,6 +178,83 @@ TEST(ElfView, GrowWithTrampolinesShiftsAllocSectionSymbols) {
   EXPECT_EQ(KDs[0].VAddr, Obj.RodataAddr + GrowthBytes);
 }
 
+TEST(ElfView, AppendExecutableSegmentPreservesAllocSectionSymbols) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  std::vector<KernelDescriptorInfo> InputKDs = ViewOrErr->kernelDescriptors();
+  ASSERT_EQ(InputKDs.size(), 1u);
+
+  llvm::Expected<ElfView::ELFT::PhdrRange> InputPhdrsOrErr =
+      ViewOrErr->file().program_headers();
+  ASSERT_TRUE((bool)InputPhdrsOrErr)
+      << llvm::toString(InputPhdrsOrErr.takeError());
+  unsigned InputLoadCount = 0;
+  for (const ElfView::ELFT::Phdr &Phdr : *InputPhdrsOrErr) {
+    if (Phdr.p_type == llvm::ELF::PT_LOAD)
+      ++InputLoadCount;
+  }
+
+  std::optional<ExecutableSegmentPlan> Plan = ViewOrErr->planExecutableSegment(
+      KernelEntryStubStride, KernelEntryStubSegmentAlign, 0);
+  ASSERT_TRUE(Plan.has_value());
+  llvm::SmallVector<uint8_t> Payload(KernelEntryStubStride, 0xcc);
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out =
+      ViewOrErr->appendExecutableSegment(Payload, *Plan, ".hotswap.entry");
+  ASSERT_NE(Out, nullptr);
+
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  EXPECT_EQ(OutView->textAddr(), ViewOrErr->textAddr());
+  EXPECT_EQ(OutView->textSize(), ViewOrErr->textSize());
+  std::vector<KernelDescriptorInfo> OutputKDs = OutView->kernelDescriptors();
+  ASSERT_EQ(OutputKDs.size(), 1u);
+  EXPECT_EQ(OutputKDs[0].VAddr, InputKDs[0].VAddr);
+  EXPECT_EQ(OutputKDs[0].EntryOffset, InputKDs[0].EntryOffset);
+
+  llvm::Expected<ElfView::ELFT::PhdrRange> OutputPhdrsOrErr =
+      OutView->file().program_headers();
+  ASSERT_TRUE((bool)OutputPhdrsOrErr)
+      << llvm::toString(OutputPhdrsOrErr.takeError());
+  unsigned OutputLoadCount = 0;
+  bool FoundNewLoad = false;
+  for (const ElfView::ELFT::Phdr &Phdr : *OutputPhdrsOrErr) {
+    if (Phdr.p_type != llvm::ELF::PT_LOAD)
+      continue;
+    ++OutputLoadCount;
+    if (Phdr.p_vaddr != Plan->SegmentVAddr)
+      continue;
+    FoundNewLoad = true;
+    EXPECT_EQ(Phdr.p_flags, llvm::ELF::PF_R | llvm::ELF::PF_X);
+    EXPECT_GE(Phdr.p_filesz, Plan->PayloadOffset + Payload.size());
+  }
+  EXPECT_EQ(OutputLoadCount, InputLoadCount + 1);
+  EXPECT_TRUE(FoundNewLoad);
+
+  bool FoundPayloadSection = false;
+  for (const ElfView::ELFT::Shdr &Shdr : OutView->sections()) {
+    llvm::Expected<llvm::StringRef> NameOrErr =
+        OutView->file().getSectionName(Shdr);
+    ASSERT_TRUE((bool)NameOrErr) << llvm::toString(NameOrErr.takeError());
+    if (*NameOrErr != ".hotswap.entry")
+      continue;
+    FoundPayloadSection = true;
+    EXPECT_EQ(Shdr.sh_type, llvm::ELF::SHT_PROGBITS);
+    EXPECT_EQ(Shdr.sh_flags, llvm::ELF::SHF_ALLOC | llvm::ELF::SHF_EXECINSTR);
+    EXPECT_EQ(Shdr.sh_addr, Plan->PayloadVAddr);
+    EXPECT_EQ(Shdr.sh_size, Payload.size());
+  }
+  EXPECT_TRUE(FoundPayloadSection);
+}
+
 TEST(ElfView, UpdateKernelDescriptorSgprCountUpdatesMetadataAndDescriptor) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";

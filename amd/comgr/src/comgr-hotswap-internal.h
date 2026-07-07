@@ -81,14 +81,25 @@ struct Trampoline {
   llvm::SmallVector<uint8_t> Bytes;
 };
 
-// Kernel-entry stubs are appended as normal .text growth. Keep each entry on
-// the same 256-byte alignment expected by AMDGPU kernel descriptors.
+// Kernel-entry stubs live in a separate executable load segment so existing
+// fully linked code/data references keep their already-resolved addresses.
+// Keep each entry on the same 256-byte alignment expected by AMDGPU kernel
+// descriptors.
 static constexpr uint64_t KernelEntryStubStride = 256;
+static constexpr uint64_t KernelEntryStubSegmentAlign = 4096;
 static constexpr uint64_t KernelEntryInstPrefUnitBytes = 128;
 static_assert(KernelEntryStubStride % KernelEntryInstPrefUnitBytes == 0,
               "entry-stub stride must be an integral prefetch span");
 static constexpr uint32_t KernelEntryStubInstPrefLines =
     KernelEntryStubStride / KernelEntryInstPrefUnitBytes;
+
+struct ExecutableSegmentPlan {
+  uint64_t SegmentVAddr = 0;
+  uint64_t PayloadOffset = 0;
+  uint64_t PayloadVAddr = 0;
+  uint64_t PayloadAlign = 0;
+  uint64_t SegmentAlign = 0;
+};
 
 struct KernelDescriptorInfo {
   std::string KernelName;
@@ -291,6 +302,23 @@ public:
   std::unique_ptr<llvm::WritableMemoryBuffer>
   growWithTrampolines(llvm::ArrayRef<Trampoline> Trampolines,
                       llvm::ArrayRef<uint8_t> SNopBytes) const;
+
+  /// Plan a new executable load segment above all existing allocated
+  /// addresses. \p ReservedVAddrGrowth accounts for any pending .text-growth
+  /// rewrite that will shift later allocated sections before the segment is
+  /// appended.
+  std::optional<ExecutableSegmentPlan>
+  planExecutableSegment(uint64_t PayloadAlign, uint64_t SegmentAlign,
+                        uint64_t ReservedVAddrGrowth) const;
+
+  /// Append \p PayloadBytes into a new executable PT_LOAD described by
+  /// \p Plan. Existing section virtual addresses, symbols, and program
+  /// headers are left unchanged; the ELF and section-header tables are
+  /// relocated to make room for one extra program and section header.
+  std::unique_ptr<llvm::WritableMemoryBuffer>
+  appendExecutableSegment(llvm::ArrayRef<uint8_t> PayloadBytes,
+                          const ExecutableSegmentPlan &Plan,
+                          llvm::StringRef SectionName) const;
 
 private:
   ElfView(ELFFileT File, ELFT::ShdrRange Sections,
@@ -699,7 +727,7 @@ HotswapPatchVTable &getHotswapPatchVTable();
 
 struct KernelEntryTrampolineFixup {
   std::string KernelName;
-  uint64_t StubTextOffset = 0;
+  uint64_t StubVAddr = 0;
   unsigned RequiredSgprs = 0;
   uint32_t InstPrefLines = 0;
 };
@@ -730,18 +758,18 @@ bool hasKernelEntryTrampolinePrefix(llvm::ArrayRef<uint8_t> Bytes,
 uint64_t computeKernelEntryPrefetchGuardBytes(uint32_t InstPrefLines);
 
 /// Append one entry stub per kernel descriptor that does not already target a
-/// HotSwap entry stub. The stubs are appended to \p Growth and descriptor
-/// rewrites are recorded in \p OutFixups for application after ELF growth.
+/// HotSwap entry stub. The stubs are appended to \p EntryBytes starting at
+/// \p StubBaseVAddr and descriptor rewrites are recorded in \p OutFixups for
+/// application after the executable stub segment is appended.
 std::optional<uint32_t> appendKernelEntryTrampolines(
     const ElfView &Elf, const LLVMState &LS, unsigned MaxSgprs,
-    std::vector<Trampoline> &Growth,
+    uint64_t StubBaseVAddr, llvm::SmallVectorImpl<uint8_t> &EntryBytes,
     std::vector<KernelEntryTrampolineFixup> &OutFixups);
 
 /// Apply descriptor rewrites recorded by appendKernelEntryTrampolines after
-/// the ELF has been grown.
+/// the ELF has been rewritten.
 bool rewriteKernelEntryDescriptorOffsets(
-    llvm::WritableMemoryBuffer &OutBuf, uint64_t OldTextSize,
-    llvm::StringRef TargetCpu,
+    llvm::WritableMemoryBuffer &OutBuf, llvm::StringRef TargetCpu,
     llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------

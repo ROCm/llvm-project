@@ -71,6 +71,42 @@ checkedAlignToSize(size_t Value, uint64_t Alignment, StringRef Context) {
   return static_cast<size_t>(*Aligned);
 }
 
+static std::optional<uint64_t>
+checkedAlignToU64(uint64_t Value, uint64_t Alignment, StringRef Context) {
+  if (Alignment <= 1)
+    return Value;
+  uint64_t Remainder = Value % Alignment;
+  if (Remainder == 0)
+    return Value;
+  return checkedAdd(Value, Alignment - Remainder, Context);
+}
+
+static std::optional<uint64_t> checkedMulU64(uint64_t LHS, uint64_t RHS,
+                                             StringRef Context) {
+  std::optional<uint64_t> Result = checkedMulUnsigned(LHS, RHS);
+  if (Result)
+    return Result;
+
+  log() << "hotswap: error: " << Context << " overflows uint64_t.\n";
+  return std::nullopt;
+}
+
+static bool isRangeInFile(uint64_t Offset, uint64_t RangeSize,
+                          uint64_t FileSize, StringRef Context) {
+  if (Offset > FileSize || RangeSize > FileSize - Offset) {
+    uint64_t End = Offset;
+    std::optional<uint64_t> EndOrErr =
+        checkedAdd(Offset, RangeSize, "diagnostic file range end");
+    if (EndOrErr)
+      End = *EndOrErr;
+    log() << "hotswap: error: " << Context << " range [0x" << utohexstr(Offset)
+          << ", 0x" << utohexstr(End) << ") exceeds ELF size 0x"
+          << utohexstr(FileSize) << ".\n";
+    return false;
+  }
+  return true;
+}
+
 static std::optional<uint64_t> checkedSectionFileOffset(const ELFT::Shdr &Sec,
                                                         uint64_t VAddr,
                                                         uint64_t AccessSize,
@@ -1138,6 +1174,356 @@ static bool adjustSymbolValues(uint8_t *Elf, size_t ElfSize,
     ++SectionIndex;
   }
   return true;
+}
+
+// -- ElfView::planExecutableSegment ------------------------------------------
+
+std::optional<ExecutableSegmentPlan>
+ElfView::planExecutableSegment(uint64_t PayloadAlign, uint64_t SegmentAlign,
+                               uint64_t ReservedVAddrGrowth) const {
+  if (PayloadAlign == 0 || SegmentAlign == 0) {
+    log() << "hotswap: error: planExecutableSegment: zero alignment "
+          << "(payload=" << PayloadAlign << ", segment=" << SegmentAlign
+          << ").\n";
+    return std::nullopt;
+  }
+
+  const ELFFileT::Elf_Ehdr &Header = File.getHeader();
+  if (Header.e_phnum == ELF::PN_XNUM) {
+    log() << "hotswap: error: planExecutableSegment: extended program-header "
+          << "counts are not supported.\n";
+    return std::nullopt;
+  }
+  if (Header.e_phnum == std::numeric_limits<uint16_t>::max()) {
+    log() << "hotswap: error: planExecutableSegment: program-header count "
+          << Header.e_phnum << " cannot grow by one.\n";
+    return std::nullopt;
+  }
+
+  uint64_t ChosenSegmentAlign = std::max(SegmentAlign, PayloadAlign);
+  uint64_t MaxAllocEnd = 0;
+  bool SawLoadSegment = false;
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (!PhdrsOrErr) {
+    log() << "hotswap: error: planExecutableSegment: failed to read program "
+          << "headers: " << toString(PhdrsOrErr.takeError()) << "\n";
+    return std::nullopt;
+  }
+
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_type != ELF::PT_LOAD)
+      continue;
+    SawLoadSegment = true;
+    std::optional<uint64_t> SegmentEnd = checkedAdd(
+        Phdr.p_vaddr, Phdr.p_memsz, "planExecutableSegment load segment end");
+    if (!SegmentEnd)
+      return std::nullopt;
+    MaxAllocEnd = std::max(MaxAllocEnd, *SegmentEnd);
+    if (Phdr.p_align > ChosenSegmentAlign)
+      ChosenSegmentAlign = Phdr.p_align;
+  }
+
+  if (!SawLoadSegment) {
+    for (const ELFT::Shdr &Shdr : Sections) {
+      if (!(Shdr.sh_flags & ELF::SHF_ALLOC))
+        continue;
+      std::optional<uint64_t> SectionEnd =
+          checkedAdd(Shdr.sh_addr, Shdr.sh_size,
+                     "planExecutableSegment alloc section end");
+      if (!SectionEnd)
+        return std::nullopt;
+      MaxAllocEnd = std::max(MaxAllocEnd, *SectionEnd);
+    }
+  }
+
+  std::optional<uint64_t> ReservedEnd =
+      checkedAdd(MaxAllocEnd, ReservedVAddrGrowth,
+                 "planExecutableSegment reserved vaddr growth");
+  if (!ReservedEnd)
+    return std::nullopt;
+
+  std::optional<uint64_t> NewPhdrCount =
+      checkedAdd(static_cast<uint64_t>(Header.e_phnum), 1,
+                 "planExecutableSegment program-header count");
+  if (!NewPhdrCount)
+    return std::nullopt;
+  std::optional<uint64_t> NewPhdrBytes =
+      checkedMulU64(*NewPhdrCount, sizeof(Phdr),
+                    "planExecutableSegment program-header byte count");
+  if (!NewPhdrBytes)
+    return std::nullopt;
+  std::optional<uint64_t> PayloadOffset = checkedAlignToU64(
+      *NewPhdrBytes, PayloadAlign, "planExecutableSegment payload offset");
+  if (!PayloadOffset)
+    return std::nullopt;
+  std::optional<uint64_t> SegmentVAddr = checkedAlignToU64(
+      *ReservedEnd, ChosenSegmentAlign, "planExecutableSegment segment vaddr");
+  if (!SegmentVAddr)
+    return std::nullopt;
+  std::optional<uint64_t> PayloadVAddr = checkedAdd(
+      *SegmentVAddr, *PayloadOffset, "planExecutableSegment payload vaddr");
+  if (!PayloadVAddr)
+    return std::nullopt;
+
+  return ExecutableSegmentPlan{*SegmentVAddr, *PayloadOffset, *PayloadVAddr,
+                               PayloadAlign, ChosenSegmentAlign};
+}
+
+// -- ElfView::appendExecutableSegment ----------------------------------------
+
+std::unique_ptr<WritableMemoryBuffer>
+ElfView::appendExecutableSegment(ArrayRef<uint8_t> PayloadBytes,
+                                 const ExecutableSegmentPlan &Plan,
+                                 StringRef SectionName) const {
+  if (PayloadBytes.empty()) {
+    log() << "hotswap: error: appendExecutableSegment: empty payload.\n";
+    return nullptr;
+  }
+  if (Plan.SegmentAlign == 0 || Plan.PayloadAlign == 0 ||
+      Plan.PayloadOffset == 0) {
+    log() << "hotswap: error: appendExecutableSegment: invalid segment plan.\n";
+    return nullptr;
+  }
+  std::optional<uint64_t> ExpectedPayloadVAddr =
+      checkedAdd(Plan.SegmentVAddr, Plan.PayloadOffset,
+                 "appendExecutableSegment payload vaddr");
+  if (!ExpectedPayloadVAddr || *ExpectedPayloadVAddr != Plan.PayloadVAddr) {
+    log() << "hotswap: error: appendExecutableSegment: inconsistent payload "
+          << "vaddr in segment plan.\n";
+    return nullptr;
+  }
+
+  const size_t InputSize = size();
+  const uint8_t *Input = data();
+  const ELFFileT::Elf_Ehdr &Header = File.getHeader();
+  if (Header.e_phnum == ELF::PN_XNUM ||
+      Header.e_phnum == std::numeric_limits<uint16_t>::max()) {
+    log() << "hotswap: error: appendExecutableSegment: program-header count "
+          << Header.e_phnum << " cannot grow by one.\n";
+    return nullptr;
+  }
+  if (Header.e_shnum == ELF::SHN_UNDEF ||
+      Header.e_shnum == std::numeric_limits<uint16_t>::max()) {
+    log() << "hotswap: error: appendExecutableSegment: section-header count "
+          << Header.e_shnum << " cannot grow by one.\n";
+    return nullptr;
+  }
+  if (Header.e_phnum != 0 && Header.e_phentsize < sizeof(Phdr)) {
+    log() << "hotswap: error: appendExecutableSegment: program-header entry "
+          << "size " << Header.e_phentsize << " is smaller than "
+          << sizeof(Phdr) << ".\n";
+    return nullptr;
+  }
+  if (Header.e_shentsize < sizeof(Shdr)) {
+    log() << "hotswap: error: appendExecutableSegment: section-header entry "
+          << "size " << Header.e_shentsize << " is smaller than "
+          << sizeof(Shdr) << ".\n";
+    return nullptr;
+  }
+
+  const uint16_t OldPhnum = Header.e_phnum;
+  const uint16_t NewPhnum = OldPhnum + 1;
+  const uint16_t OldShnum = Header.e_shnum;
+  const uint16_t NewShnum = OldShnum + 1;
+
+  std::optional<uint64_t> SegmentFileOff64 =
+      checkedAlignToU64(static_cast<uint64_t>(InputSize), Plan.SegmentAlign,
+                        "appendExecutableSegment segment file offset");
+  if (!SegmentFileOff64)
+    return nullptr;
+  if (*SegmentFileOff64 >
+      static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+    log() << "hotswap: error: appendExecutableSegment: segment file offset "
+          << "exceeds size_t.\n";
+    return nullptr;
+  }
+  size_t SegmentFileOff = static_cast<size_t>(*SegmentFileOff64);
+
+  std::optional<uint64_t> NewPhdrBytes =
+      checkedMulU64(NewPhnum, sizeof(Phdr),
+                    "appendExecutableSegment program-header byte count");
+  if (!NewPhdrBytes)
+    return nullptr;
+  if (Plan.PayloadOffset < *NewPhdrBytes) {
+    log() << "hotswap: error: appendExecutableSegment: payload offset "
+          << Plan.PayloadOffset << " overlaps relocated program headers ("
+          << *NewPhdrBytes << " bytes).\n";
+    return nullptr;
+  }
+
+  std::optional<uint64_t> PayloadFileOff64 =
+      checkedAdd(*SegmentFileOff64, Plan.PayloadOffset,
+                 "appendExecutableSegment payload file offset");
+  if (!PayloadFileOff64)
+    return nullptr;
+  std::optional<uint64_t> PayloadEnd64 =
+      checkedAdd(*PayloadFileOff64, PayloadBytes.size(),
+                 "appendExecutableSegment payload end");
+  if (!PayloadEnd64)
+    return nullptr;
+  std::optional<uint64_t> SegmentFileSize =
+      checkedAdd(Plan.PayloadOffset, PayloadBytes.size(),
+                 "appendExecutableSegment segment file size");
+  if (!SegmentFileSize)
+    return nullptr;
+
+  std::vector<Phdr> NewPhdrs(NewPhnum);
+  for (uint16_t I = 0; I < OldPhnum; ++I) {
+    std::optional<uint64_t> PhEntryDelta =
+        checkedMulU64(I, Header.e_phentsize,
+                      "appendExecutableSegment program-header entry offset");
+    if (!PhEntryDelta)
+      return nullptr;
+    std::optional<uint64_t> PhEntryOff =
+        checkedAdd(Header.e_phoff, *PhEntryDelta,
+                   "appendExecutableSegment program-header file offset");
+    if (!PhEntryOff)
+      return nullptr;
+    if (!isRangeInFile(*PhEntryOff, sizeof(Phdr), InputSize,
+                       "appendExecutableSegment program-header"))
+      return nullptr;
+    std::memcpy(&NewPhdrs[I], Input + *PhEntryOff, sizeof(Phdr));
+    if (NewPhdrs[I].p_type == ELF::PT_PHDR) {
+      NewPhdrs[I].p_offset = SegmentFileOff;
+      NewPhdrs[I].p_vaddr = Plan.SegmentVAddr;
+      NewPhdrs[I].p_paddr = Plan.SegmentVAddr;
+      NewPhdrs[I].p_filesz = *NewPhdrBytes;
+      NewPhdrs[I].p_memsz = *NewPhdrBytes;
+      NewPhdrs[I].p_flags = ELF::PF_R;
+      NewPhdrs[I].p_align = 8;
+    }
+  }
+
+  Phdr &NewLoad = NewPhdrs[OldPhnum];
+  NewLoad.p_type = ELF::PT_LOAD;
+  NewLoad.p_flags = ELF::PF_R | ELF::PF_X;
+  NewLoad.p_offset = SegmentFileOff;
+  NewLoad.p_vaddr = Plan.SegmentVAddr;
+  NewLoad.p_paddr = Plan.SegmentVAddr;
+  NewLoad.p_filesz = *SegmentFileSize;
+  NewLoad.p_memsz = *SegmentFileSize;
+  NewLoad.p_align = Plan.SegmentAlign;
+
+  std::vector<Shdr> NewShdrs(NewShnum);
+  for (uint16_t I = 0; I < OldShnum; ++I) {
+    std::optional<uint64_t> ShEntryDelta =
+        checkedMulU64(I, Header.e_shentsize,
+                      "appendExecutableSegment section-header entry offset");
+    if (!ShEntryDelta)
+      return nullptr;
+    std::optional<uint64_t> ShEntryOff =
+        checkedAdd(Header.e_shoff, *ShEntryDelta,
+                   "appendExecutableSegment section-header file offset");
+    if (!ShEntryOff)
+      return nullptr;
+    if (!isRangeInFile(*ShEntryOff, sizeof(Shdr), InputSize,
+                       "appendExecutableSegment section-header"))
+      return nullptr;
+    std::memcpy(&NewShdrs[I], Input + *ShEntryOff, sizeof(Shdr));
+  }
+
+  std::vector<uint8_t> NewShStr;
+  uint32_t NewSectionName = 0;
+  if (Header.e_shstrndx < OldShnum) {
+    const Shdr &OldShStr = NewShdrs[Header.e_shstrndx];
+    if (!isRangeInFile(OldShStr.sh_offset, OldShStr.sh_size, InputSize,
+                       "appendExecutableSegment shstrtab"))
+      return nullptr;
+    if (OldShStr.sh_size > std::numeric_limits<uint32_t>::max() ||
+        SectionName.size() + 1 >
+            std::numeric_limits<uint32_t>::max() - OldShStr.sh_size) {
+      log() << "hotswap: error: appendExecutableSegment: section-name string "
+            << "table is too large.\n";
+      return nullptr;
+    }
+    NewShStr.assign(Input + OldShStr.sh_offset,
+                    Input + OldShStr.sh_offset + OldShStr.sh_size);
+    NewSectionName = static_cast<uint32_t>(NewShStr.size());
+    NewShStr.insert(NewShStr.end(), SectionName.begin(), SectionName.end());
+    NewShStr.push_back('\0');
+  } else {
+    log() << "hotswap: appendExecutableSegment: no valid section-name string "
+          << "table; appending unnamed executable section.\n";
+  }
+
+  Shdr &PayloadSh = NewShdrs[OldShnum];
+  PayloadSh.sh_name = NewSectionName;
+  PayloadSh.sh_type = ELF::SHT_PROGBITS;
+  PayloadSh.sh_flags = ELF::SHF_ALLOC | ELF::SHF_EXECINSTR;
+  PayloadSh.sh_addr = Plan.PayloadVAddr;
+  PayloadSh.sh_offset = *PayloadFileOff64;
+  PayloadSh.sh_size = PayloadBytes.size();
+  PayloadSh.sh_addralign = Plan.PayloadAlign;
+
+  uint64_t ShStrOff64 = *PayloadEnd64;
+  if (!NewShStr.empty()) {
+    if (Header.e_shstrndx < OldShnum) {
+      NewShdrs[Header.e_shstrndx].sh_offset = ShStrOff64;
+      NewShdrs[Header.e_shstrndx].sh_size = NewShStr.size();
+    }
+    std::optional<uint64_t> ShStrEnd64 = checkedAdd(
+        ShStrOff64, NewShStr.size(), "appendExecutableSegment shstrtab end");
+    if (!ShStrEnd64)
+      return nullptr;
+    ShStrOff64 = *ShStrEnd64;
+  }
+
+  std::optional<uint64_t> NewShOff64 = checkedAlignToU64(
+      ShStrOff64, 8, "appendExecutableSegment section-header table offset");
+  if (!NewShOff64)
+    return nullptr;
+  std::optional<uint64_t> NewShdrBytes =
+      checkedMulU64(NewShnum, sizeof(Shdr),
+                    "appendExecutableSegment section-header byte count");
+  if (!NewShdrBytes)
+    return nullptr;
+  std::optional<uint64_t> NewSize64 = checkedAdd(
+      *NewShOff64, *NewShdrBytes, "appendExecutableSegment output ELF size");
+  if (!NewSize64)
+    return nullptr;
+  if (*NewSize64 > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+    log() << "hotswap: error: appendExecutableSegment: output ELF size "
+          << "exceeds size_t.\n";
+    return nullptr;
+  }
+  const size_t NewSize = static_cast<size_t>(*NewSize64);
+
+  std::unique_ptr<WritableMemoryBuffer> Buf =
+      WritableMemoryBuffer::getNewUninitMemBuffer(NewSize);
+  if (!Buf) {
+    log() << "hotswap: error: appendExecutableSegment: "
+          << "WritableMemoryBuffer::getNewUninitMemBuffer(" << NewSize
+          << ") failed (out of memory).\n";
+    return nullptr;
+  }
+
+  uint8_t *Out = reinterpret_cast<uint8_t *>(Buf->getBufferStart());
+  std::memset(Out, 0, NewSize);
+  std::memcpy(Out, Input, InputSize);
+  std::memcpy(Out + SegmentFileOff, NewPhdrs.data(),
+              static_cast<size_t>(*NewPhdrBytes));
+  std::memcpy(Out + *PayloadFileOff64, PayloadBytes.data(),
+              PayloadBytes.size());
+  if (!NewShStr.empty())
+    std::memcpy(Out + *PayloadEnd64, NewShStr.data(), NewShStr.size());
+  std::memcpy(Out + *NewShOff64, NewShdrs.data(),
+              static_cast<size_t>(*NewShdrBytes));
+
+  Ehdr NewHeader;
+  std::memcpy(&NewHeader, Input, sizeof(NewHeader));
+  NewHeader.e_phoff = SegmentFileOff;
+  NewHeader.e_phentsize = sizeof(Phdr);
+  NewHeader.e_phnum = NewPhnum;
+  NewHeader.e_shoff = *NewShOff64;
+  NewHeader.e_shentsize = sizeof(Shdr);
+  NewHeader.e_shnum = NewShnum;
+  std::memcpy(Out, &NewHeader, sizeof(NewHeader));
+
+  log() << "hotswap: appendExecutableSegment: appended " << PayloadBytes.size()
+        << " executable payload bytes at vaddr 0x"
+        << utohexstr(Plan.PayloadVAddr) << "; ELF grew from " << InputSize
+        << " to " << NewSize << " bytes.\n";
+  return Buf;
 }
 
 // -- ElfView::growWithTrampolines ---------------------------------------------

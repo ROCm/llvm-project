@@ -76,6 +76,297 @@ static uint32_t readDword(const uint8_t *Bytes) {
   return V;
 }
 
+static uint32_t appendString(std::string &Table, llvm::StringRef Value) {
+  uint32_t Offset = static_cast<uint32_t>(Table.size());
+  Table += Value;
+  Table.push_back('\0');
+  return Offset;
+}
+
+static std::optional<uint64_t> findSymbolVAddr(const ElfView &View,
+                                               llvm::StringRef Name) {
+  for (const ElfView::ELFT::Shdr &SymShdr : View.sections()) {
+    if (SymShdr.sh_type != llvm::ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != llvm::ELF::SHT_DYNSYM)
+      continue;
+
+    llvm::Expected<ElfView::ELFT::SymRange> SymsOrErr =
+        View.file().symbols(&SymShdr);
+    if (!SymsOrErr) {
+      llvm::consumeError(SymsOrErr.takeError());
+      return std::nullopt;
+    }
+    llvm::Expected<llvm::StringRef> StrTabOrErr =
+        View.file().getStringTableForSymtab(SymShdr, View.sections());
+    if (!StrTabOrErr) {
+      llvm::consumeError(StrTabOrErr.takeError());
+      return std::nullopt;
+    }
+
+    for (const ElfView::ELFT::Sym &Sym : *SymsOrErr) {
+      llvm::Expected<llvm::StringRef> SymNameOrErr = Sym.getName(*StrTabOrErr);
+      if (!SymNameOrErr) {
+        llvm::consumeError(SymNameOrErr.takeError());
+        return std::nullopt;
+      }
+      if (*SymNameOrErr == Name)
+        return Sym.st_value;
+    }
+  }
+  return std::nullopt;
+}
+
+static std::optional<uint64_t> findSectionVAddr(const ElfView &View,
+                                                llvm::StringRef Name) {
+  for (const ElfView::ELFT::Shdr &Shdr : View.sections()) {
+    llvm::Expected<llvm::StringRef> SectionNameOrErr =
+        View.file().getSectionName(Shdr);
+    if (!SectionNameOrErr) {
+      llvm::consumeError(SectionNameOrErr.takeError());
+      return std::nullopt;
+    }
+    if (*SectionNameOrErr == Name)
+      return Shdr.sh_addr;
+  }
+  return std::nullopt;
+}
+
+struct ManagedGlobalKernelElf {
+  std::vector<uint8_t> Bytes;
+  uint64_t TextAddr = 0;
+  uint64_t TextOffset = 0;
+  uint64_t TextSize = 0;
+  uint64_t DataAddr = 0;
+  uint64_t BssAddr = 0;
+  uint64_t LiteralOffset = 0;
+  uint64_t BakedDelta = 0;
+};
+
+static ManagedGlobalKernelElf makeManagedGlobalKernelElf(const LLVMState &S) {
+  using namespace llvm::ELF;
+  namespace hsa = llvm::amdhsa;
+
+  static constexpr uint64_t PhOff = sizeof(Elf64_Ehdr);
+  static constexpr uint64_t TextOff = 0x240;
+  static constexpr uint64_t TextAddr = 0x1600;
+  static constexpr uint64_t TextSize = 64;
+  static constexpr uint64_t RodataAddr = 0x3000;
+  static constexpr uint64_t DataAddr = 0x3870;
+  static constexpr uint64_t BssAddr = 0x3878;
+  static constexpr uint64_t DataSize = 8;
+  static constexpr uint64_t BssSize = 4;
+  static constexpr uint64_t LiteralOffset = 16;
+  static constexpr uint64_t KdBytes = sizeof(hsa::kernel_descriptor_t);
+
+  std::vector<uint8_t> Text(TextSize, 0);
+  llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
+  std::memcpy(Text.data(), EndPgm.data(), EndPgm.size());
+  uint64_t BakedDelta = BssAddr - (TextAddr + LiteralOffset);
+  std::memcpy(Text.data() + LiteralOffset, &BakedDelta, sizeof(BakedDelta));
+
+  std::string StrTab;
+  StrTab.push_back('\0');
+  uint32_t KernelNameOff = appendString(StrTab, "GPU_func");
+  uint32_t KdNameOff = appendString(StrTab, "GPU_func.kd");
+  uint32_t ManagedNameOff = appendString(StrTab, "x.managed");
+  uint32_t XNameOff = appendString(StrTab, "x");
+
+  std::string ShStrTab;
+  ShStrTab.push_back('\0');
+  uint32_t TextNameOff = appendString(ShStrTab, ".text");
+  uint32_t RodataNameOff = appendString(ShStrTab, ".rodata");
+  uint32_t DataNameOff = appendString(ShStrTab, ".data");
+  uint32_t BssNameOff = appendString(ShStrTab, ".bss");
+  uint32_t StrTabNameOff = appendString(ShStrTab, ".strtab");
+  uint32_t SymTabNameOff = appendString(ShStrTab, ".symtab");
+  uint32_t ShStrTabNameOff = appendString(ShStrTab, ".shstrtab");
+
+  const uint64_t RodataOff = comgr_test::alignTo8(TextOff + Text.size());
+  const uint64_t DataOff = comgr_test::alignTo8(RodataOff + KdBytes);
+  const uint64_t StrTabOff = comgr_test::alignTo8(DataOff + DataSize);
+  static constexpr uint64_t SymCount = 5;
+  const uint64_t SymTabOff = comgr_test::alignTo8(StrTabOff + StrTab.size());
+  const uint64_t ShStrTabOff =
+      comgr_test::alignTo8(SymTabOff + SymCount * sizeof(Elf64_Sym));
+  const uint64_t ShOff = comgr_test::alignTo8(ShStrTabOff + ShStrTab.size());
+  static constexpr uint64_t ShCount = 8;
+  const uint64_t BufSize =
+      comgr_test::alignTo8(ShOff + ShCount * sizeof(Elf64_Shdr));
+
+  ManagedGlobalKernelElf Result;
+  Result.Bytes.assign(BufSize, 0);
+  Result.TextAddr = TextAddr;
+  Result.TextOffset = TextOff;
+  Result.TextSize = Text.size();
+  Result.DataAddr = DataAddr;
+  Result.BssAddr = BssAddr;
+  Result.LiteralOffset = LiteralOffset;
+  Result.BakedDelta = BakedDelta;
+
+  uint8_t *Buf = Result.Bytes.data();
+  std::memcpy(Buf + TextOff, Text.data(), Text.size());
+  std::memcpy(Buf + StrTabOff, StrTab.data(), StrTab.size());
+  std::memcpy(Buf + ShStrTabOff, ShStrTab.data(), ShStrTab.size());
+
+  Elf64_Ehdr Ehdr = comgr_test::makeElf64Ehdr(EM_AMDGPU);
+  Ehdr.e_ident[EI_OSABI] = ELFOSABI_AMDGPU_HSA;
+  Ehdr.e_type = ET_DYN;
+  Ehdr.e_version = EV_CURRENT;
+  Ehdr.e_ehsize = sizeof(Elf64_Ehdr);
+  Ehdr.e_phoff = PhOff;
+  Ehdr.e_phentsize = sizeof(Elf64_Phdr);
+  Ehdr.e_phnum = 3;
+  Ehdr.e_shoff = ShOff;
+  Ehdr.e_shentsize = sizeof(Elf64_Shdr);
+  Ehdr.e_shnum = ShCount;
+  Ehdr.e_shstrndx = 7;
+  std::memcpy(Buf, &Ehdr, sizeof(Ehdr));
+
+  Elf64_Phdr PhdrTable{};
+  PhdrTable.p_type = PT_PHDR;
+  PhdrTable.p_offset = PhOff;
+  PhdrTable.p_vaddr = PhOff;
+  PhdrTable.p_paddr = PhOff;
+  PhdrTable.p_filesz = 3 * sizeof(Elf64_Phdr);
+  PhdrTable.p_memsz = 3 * sizeof(Elf64_Phdr);
+  PhdrTable.p_flags = PF_R;
+  PhdrTable.p_align = 8;
+  std::memcpy(Buf + PhOff, &PhdrTable, sizeof(PhdrTable));
+
+  Elf64_Phdr TextLoad{};
+  TextLoad.p_type = PT_LOAD;
+  TextLoad.p_flags = PF_R | PF_X;
+  TextLoad.p_offset = TextOff;
+  TextLoad.p_vaddr = TextAddr;
+  TextLoad.p_paddr = TextAddr;
+  TextLoad.p_filesz = Text.size();
+  TextLoad.p_memsz = Text.size();
+  TextLoad.p_align = 0x1000;
+  std::memcpy(Buf + PhOff + sizeof(Elf64_Phdr), &TextLoad, sizeof(TextLoad));
+
+  Elf64_Phdr DataLoad{};
+  DataLoad.p_type = PT_LOAD;
+  DataLoad.p_flags = PF_R | PF_W;
+  DataLoad.p_offset = RodataOff;
+  DataLoad.p_vaddr = RodataAddr;
+  DataLoad.p_paddr = RodataAddr;
+  DataLoad.p_filesz = DataOff + DataSize - RodataOff;
+  DataLoad.p_memsz = BssAddr + BssSize - RodataAddr;
+  DataLoad.p_align = 0x1000;
+  std::memcpy(Buf + PhOff + 2 * sizeof(Elf64_Phdr), &DataLoad,
+              sizeof(DataLoad));
+
+  int64_t EntryOffset =
+      static_cast<int64_t>(TextAddr) - static_cast<int64_t>(RodataAddr);
+  std::memcpy(
+      Buf + RodataOff +
+          offsetof(hsa::kernel_descriptor_t, kernel_code_entry_byte_offset),
+      &EntryOffset, sizeof(EntryOffset));
+
+  Elf64_Shdr TextSh{};
+  TextSh.sh_name = TextNameOff;
+  TextSh.sh_type = SHT_PROGBITS;
+  TextSh.sh_flags = SHF_ALLOC | SHF_EXECINSTR;
+  TextSh.sh_addr = TextAddr;
+  TextSh.sh_offset = TextOff;
+  TextSh.sh_size = Text.size();
+  TextSh.sh_addralign = 4;
+  std::memcpy(Buf + ShOff + 1 * sizeof(Elf64_Shdr), &TextSh, sizeof(TextSh));
+
+  Elf64_Shdr RodataSh{};
+  RodataSh.sh_name = RodataNameOff;
+  RodataSh.sh_type = SHT_PROGBITS;
+  RodataSh.sh_flags = SHF_ALLOC;
+  RodataSh.sh_addr = RodataAddr;
+  RodataSh.sh_offset = RodataOff;
+  RodataSh.sh_size = KdBytes;
+  RodataSh.sh_addralign = 8;
+  std::memcpy(Buf + ShOff + 2 * sizeof(Elf64_Shdr), &RodataSh,
+              sizeof(RodataSh));
+
+  Elf64_Shdr DataSh{};
+  DataSh.sh_name = DataNameOff;
+  DataSh.sh_type = SHT_PROGBITS;
+  DataSh.sh_flags = SHF_ALLOC | SHF_WRITE;
+  DataSh.sh_addr = DataAddr;
+  DataSh.sh_offset = DataOff;
+  DataSh.sh_size = DataSize;
+  DataSh.sh_addralign = 8;
+  std::memcpy(Buf + ShOff + 3 * sizeof(Elf64_Shdr), &DataSh, sizeof(DataSh));
+
+  Elf64_Shdr BssSh{};
+  BssSh.sh_name = BssNameOff;
+  BssSh.sh_type = SHT_NOBITS;
+  BssSh.sh_flags = SHF_ALLOC | SHF_WRITE;
+  BssSh.sh_addr = BssAddr;
+  BssSh.sh_offset = DataOff + DataSize;
+  BssSh.sh_size = BssSize;
+  BssSh.sh_addralign = 4;
+  std::memcpy(Buf + ShOff + 4 * sizeof(Elf64_Shdr), &BssSh, sizeof(BssSh));
+
+  Elf64_Shdr StrTabSh{};
+  StrTabSh.sh_name = StrTabNameOff;
+  StrTabSh.sh_type = SHT_STRTAB;
+  StrTabSh.sh_offset = StrTabOff;
+  StrTabSh.sh_size = StrTab.size();
+  std::memcpy(Buf + ShOff + 5 * sizeof(Elf64_Shdr), &StrTabSh,
+              sizeof(StrTabSh));
+
+  Elf64_Shdr SymTabSh{};
+  SymTabSh.sh_name = SymTabNameOff;
+  SymTabSh.sh_type = SHT_SYMTAB;
+  SymTabSh.sh_offset = SymTabOff;
+  SymTabSh.sh_size = SymCount * sizeof(Elf64_Sym);
+  SymTabSh.sh_link = 5;
+  SymTabSh.sh_entsize = sizeof(Elf64_Sym);
+  std::memcpy(Buf + ShOff + 6 * sizeof(Elf64_Shdr), &SymTabSh,
+              sizeof(SymTabSh));
+
+  Elf64_Shdr ShStrTabSh{};
+  ShStrTabSh.sh_name = ShStrTabNameOff;
+  ShStrTabSh.sh_type = SHT_STRTAB;
+  ShStrTabSh.sh_offset = ShStrTabOff;
+  ShStrTabSh.sh_size = ShStrTab.size();
+  std::memcpy(Buf + ShOff + 7 * sizeof(Elf64_Shdr), &ShStrTabSh,
+              sizeof(ShStrTabSh));
+
+  Elf64_Sym KernelSym{};
+  KernelSym.st_name = KernelNameOff;
+  KernelSym.setBindingAndType(STB_GLOBAL, STT_FUNC);
+  KernelSym.st_shndx = 1;
+  KernelSym.st_value = TextAddr;
+  KernelSym.st_size = Text.size();
+  std::memcpy(Buf + SymTabOff + 1 * sizeof(Elf64_Sym), &KernelSym,
+              sizeof(KernelSym));
+
+  Elf64_Sym KdSym{};
+  KdSym.st_name = KdNameOff;
+  KdSym.setBindingAndType(STB_GLOBAL, STT_OBJECT);
+  KdSym.st_shndx = 2;
+  KdSym.st_value = RodataAddr;
+  KdSym.st_size = KdBytes;
+  std::memcpy(Buf + SymTabOff + 2 * sizeof(Elf64_Sym), &KdSym, sizeof(KdSym));
+
+  Elf64_Sym ManagedSym{};
+  ManagedSym.st_name = ManagedNameOff;
+  ManagedSym.setBindingAndType(STB_GLOBAL, STT_OBJECT);
+  ManagedSym.st_shndx = 3;
+  ManagedSym.st_value = DataAddr;
+  ManagedSym.st_size = DataSize;
+  std::memcpy(Buf + SymTabOff + 3 * sizeof(Elf64_Sym), &ManagedSym,
+              sizeof(ManagedSym));
+
+  Elf64_Sym XSym{};
+  XSym.st_name = XNameOff;
+  XSym.setBindingAndType(STB_GLOBAL, STT_OBJECT);
+  XSym.st_shndx = 4;
+  XSym.st_value = BssAddr;
+  XSym.st_size = BssSize;
+  std::memcpy(Buf + SymTabOff + 4 * sizeof(Elf64_Sym), &XSym, sizeof(XSym));
+
+  return Result;
+}
+
 // -- initLLVM ----------------------------------------------------------------
 
 TEST(InitLLVM, ValidGfx1250) {
@@ -268,15 +559,13 @@ static void expectSameOperands(const llvm::MCInst &Actual,
 }
 
 static void expectInstMatchesAsm(const llvm::MCInst &Actual,
-                                 llvm::StringRef Asm,
-                                 const LLVMState &S) {
+                                 llvm::StringRef Asm, const LLVMState &S) {
   llvm::MCInst Expected = assembleOne(Asm, S);
   expectSameOperands(Actual, Expected, Asm);
 }
 
 static bool appendSingleInstBytes(llvm::SmallVectorImpl<uint8_t> &Bytes,
-                                  llvm::StringRef Asm,
-                                  const LLVMState &S) {
+                                  llvm::StringRef Asm, const LLVMState &S) {
   llvm::SmallVector<uint8_t> Inst = assembleSingleInst(Asm, S);
   if (Inst.empty()) {
     ADD_FAILURE() << "failed to assemble: " << Asm.str();
@@ -477,10 +766,13 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   uint8_t *Kd = ViewOrErr->findKernelDescriptor("kernel");
   ASSERT_NE(Kd, nullptr);
 
-  std::vector<Trampoline> Growth;
+  std::optional<ExecutableSegmentPlan> Plan = ViewOrErr->planExecutableSegment(
+      KernelEntryStubStride, KernelEntryStubSegmentAlign, 0);
+  ASSERT_TRUE(Plan.has_value());
+  llvm::SmallVector<uint8_t> EntryBytes;
   std::vector<KernelEntryTrampolineFixup> Fixups;
   std::optional<uint32_t> Count = appendKernelEntryTrampolines(
-      *ViewOrErr, S, /*MaxSgprs=*/106, Growth, Fixups);
+      *ViewOrErr, S, /*MaxSgprs=*/106, Plan->PayloadVAddr, EntryBytes, Fixups);
   ASSERT_TRUE(Count.has_value());
   EXPECT_EQ(*Count, 1u);
   ASSERT_EQ(Fixups.size(), 1u);
@@ -489,30 +781,17 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   const uint64_t ExpectedGuard =
       computeKernelEntryPrefetchGuardBytes(KernelEntryStubInstPrefLines);
   EXPECT_EQ(ExpectedGuard, 0u);
-  ASSERT_FALSE(Growth.empty());
-
-  const uint64_t OldTextSize = ViewOrErr->textSize();
-  const uint64_t TextEndVAddr = ViewOrErr->textAddr() + OldTextSize;
-  const uint64_t ExpectedStubOffset =
-      ((TextEndVAddr + KernelEntryStubStride - 1) &
-       ~(KernelEntryStubStride - 1)) -
-      TextEndVAddr;
-  EXPECT_EQ(Fixups[0].StubTextOffset, ExpectedStubOffset);
-
-  uint64_t GrowthTotal = 0;
-  for (const Trampoline &T : Growth)
-    GrowthTotal += T.Bytes.size();
-  EXPECT_EQ(GrowthTotal,
-            ExpectedStubOffset + KernelEntryStubStride + ExpectedGuard);
+  EXPECT_EQ(EntryBytes.size(), KernelEntryStubStride + ExpectedGuard);
+  EXPECT_EQ(Fixups[0].StubVAddr, Plan->PayloadVAddr);
 
   std::unique_ptr<llvm::WritableMemoryBuffer> Out =
-      ViewOrErr->growWithTrampolines(Growth, S.SNopBytes);
+      ViewOrErr->appendExecutableSegment(EntryBytes, *Plan, ".hotswap.entry");
   ASSERT_NE(Out, nullptr);
 
-  ASSERT_TRUE(
-      rewriteKernelEntryDescriptorOffsets(*Out, OldTextSize, S.Cpu, Fixups));
+  ASSERT_TRUE(rewriteKernelEntryDescriptorOffsets(*Out, S.Cpu, Fixups));
 
-  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  uint8_t *OutData = const_cast<uint8_t *>(
+      reinterpret_cast<const uint8_t *>(Out->getBufferStart()));
   llvm::Expected<ElfView> OutView =
       ElfView::create(OutData, Out->getBufferSize());
   ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
@@ -551,9 +830,8 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   ASSERT_EQ(KDs.size(), 1u);
   std::optional<uint64_t> KdVAddr = OutView->getKernelDescriptorVAddr("kernel");
   ASSERT_TRUE(KdVAddr.has_value());
-  const uint64_t StubVAddr =
-      ViewOrErr->textAddr() + OldTextSize + Fixups[0].StubTextOffset;
-  EXPECT_EQ(KDs[0].EntryOffset, static_cast<int64_t>(StubVAddr - *KdVAddr));
+  EXPECT_EQ(KDs[0].EntryOffset,
+            static_cast<int64_t>(Fixups[0].StubVAddr - *KdVAddr));
 }
 
 TEST(KernelEntryTrampoline, AlignsStubByVirtualAddress) {
@@ -571,20 +849,19 @@ TEST(KernelEntryTrampoline, AlignsStubByVirtualAddress) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  std::vector<Trampoline> Growth;
+  std::optional<ExecutableSegmentPlan> Plan = ViewOrErr->planExecutableSegment(
+      KernelEntryStubStride, KernelEntryStubSegmentAlign, 0);
+  ASSERT_TRUE(Plan.has_value());
+  llvm::SmallVector<uint8_t> EntryBytes;
   std::vector<KernelEntryTrampolineFixup> Fixups;
   std::optional<uint32_t> Count = appendKernelEntryTrampolines(
-      *ViewOrErr, S, /*MaxSgprs=*/106, Growth, Fixups);
+      *ViewOrErr, S, /*MaxSgprs=*/106, Plan->PayloadVAddr, EntryBytes, Fixups);
 
   ASSERT_TRUE(Count.has_value());
   EXPECT_EQ(*Count, 1u);
   ASSERT_EQ(Fixups.size(), 1u);
-  const uint64_t StubVAddr =
-      ViewOrErr->textAddr() + ViewOrErr->textSize() + Fixups[0].StubTextOffset;
-  EXPECT_EQ(StubVAddr % KernelEntryStubStride, 0u);
-  EXPECT_NE((ViewOrErr->textSize() + Fixups[0].StubTextOffset) %
-                KernelEntryStubStride,
-            0u);
+  EXPECT_EQ(Fixups[0].StubVAddr % KernelEntryStubStride, 0u);
+  EXPECT_EQ(Fixups[0].StubVAddr, Plan->PayloadVAddr);
 }
 
 TEST(KernelEntryTrampoline, AppendReturnsZeroWhenNoDescriptorsExist) {
@@ -602,14 +879,15 @@ TEST(KernelEntryTrampoline, AppendReturnsZeroWhenNoDescriptorsExist) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  std::vector<Trampoline> Growth;
+  llvm::SmallVector<uint8_t> EntryBytes;
   std::vector<KernelEntryTrampolineFixup> Fixups;
   std::optional<uint32_t> Count = appendKernelEntryTrampolines(
-      *ViewOrErr, S, /*MaxSgprs=*/106, Growth, Fixups);
+      *ViewOrErr, S, /*MaxSgprs=*/106, /*StubBaseVAddr=*/0x4000, EntryBytes,
+      Fixups);
 
   ASSERT_TRUE(Count.has_value());
   EXPECT_EQ(*Count, 0u);
-  EXPECT_TRUE(Growth.empty());
+  EXPECT_TRUE(EntryBytes.empty());
   EXPECT_TRUE(Fixups.empty());
 }
 
@@ -628,19 +906,75 @@ TEST(KernelEntryTrampoline, AppendFailsWithoutSgprScratchPair) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  Trampoline Existing;
-  Existing.Bytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
-  std::vector<Trampoline> Growth;
-  Growth.push_back(Existing);
+  llvm::SmallVector<uint8_t> EntryBytes;
   std::vector<KernelEntryTrampolineFixup> Fixups;
   std::optional<uint32_t> Count = appendKernelEntryTrampolines(
-      *ViewOrErr, S, /*MaxSgprs=*/106, Growth, Fixups);
+      *ViewOrErr, S, /*MaxSgprs=*/106, /*StubBaseVAddr=*/0x4000, EntryBytes,
+      Fixups);
 
   EXPECT_FALSE(Count.has_value());
-  ASSERT_EQ(Growth.size(), 1u);
-  EXPECT_EQ(llvm::ArrayRef<uint8_t>(Growth[0].Bytes),
-            llvm::ArrayRef<uint8_t>(Existing.Bytes));
+  EXPECT_TRUE(EntryBytes.empty());
   EXPECT_TRUE(Fixups.empty());
+}
+
+TEST(KernelEntryTrampoline, EntryRewritePreservesManagedGlobalReferences) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  ManagedGlobalKernelElf Obj = makeManagedGlobalKernelElf(S);
+  llvm::Expected<ElfView> InputView =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)InputView) << llvm::toString(InputView.takeError());
+  ASSERT_EQ(findSectionVAddr(*InputView, ".data"), Obj.DataAddr);
+  ASSERT_EQ(findSectionVAddr(*InputView, ".bss"), Obj.BssAddr);
+  ASSERT_EQ(findSymbolVAddr(*InputView, "x.managed"), Obj.DataAddr);
+  ASSERT_EQ(findSymbolVAddr(*InputView, "x"), Obj.BssAddr);
+
+  uint64_t InputBakedDelta = 0;
+  std::memcpy(&InputBakedDelta,
+              Obj.Bytes.data() + Obj.TextOffset + Obj.LiteralOffset,
+              sizeof(InputBakedDelta));
+  ASSERT_EQ(InputBakedDelta, Obj.BakedDelta);
+
+  Gfx1250RewriteOptions Options;
+  Options.RunB0A0Patches = false;
+  Options.RunEntryTrampolines = true;
+  std::unique_ptr<llvm::MemoryBuffer> Out;
+  amd_comgr_status_t Status = retargetCodeObject(
+      Obj.Bytes.data(), Obj.Bytes.size(), makeGfx1250Ident(), Options, Out);
+  ASSERT_EQ(Status, AMD_COMGR_STATUS_SUCCESS);
+  ASSERT_NE(Out, nullptr);
+
+  uint8_t *OutData = const_cast<uint8_t *>(
+      reinterpret_cast<const uint8_t *>(Out->getBufferStart()));
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  EXPECT_EQ(OutView->textAddr(), Obj.TextAddr);
+  EXPECT_EQ(OutView->textSize(), Obj.TextSize);
+  EXPECT_EQ(std::memcmp(OutView->textData(), Obj.Bytes.data() + Obj.TextOffset,
+                        Obj.TextSize),
+            0);
+
+  uint64_t OutputBakedDelta = 0;
+  std::memcpy(&OutputBakedDelta, OutView->textData() + Obj.LiteralOffset,
+              sizeof(OutputBakedDelta));
+  EXPECT_EQ(OutputBakedDelta, Obj.BakedDelta);
+
+  EXPECT_EQ(findSectionVAddr(*OutView, ".data"), Obj.DataAddr);
+  EXPECT_EQ(findSectionVAddr(*OutView, ".bss"), Obj.BssAddr);
+  EXPECT_EQ(findSymbolVAddr(*OutView, "x.managed"), Obj.DataAddr);
+  EXPECT_EQ(findSymbolVAddr(*OutView, "x"), Obj.BssAddr);
+
+  std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
+  ASSERT_EQ(KDs.size(), 1u);
+  ASSERT_GE(KDs[0].EntryOffset, 0);
+  uint64_t NewEntryVAddr =
+      KDs[0].VAddr + static_cast<uint64_t>(KDs[0].EntryOffset);
+  EXPECT_GT(NewEntryVAddr, Obj.BssAddr);
+  EXPECT_EQ(findSectionVAddr(*OutView, ".hotswap.entry"),
+            NewEntryVAddr - (NewEntryVAddr % KernelEntryStubStride));
 }
 
 // -- classifyWmmaNops ---------------------------------------------------------

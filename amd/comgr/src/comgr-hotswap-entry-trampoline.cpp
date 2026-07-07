@@ -270,17 +270,6 @@ bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,
          std::equal(Prefix.begin(), Prefix.end(), Bytes.begin());
 }
 
-static std::optional<uint64_t>
-checkedAlignTo(uint64_t Value, uint64_t Alignment, StringRef Context) {
-  if (Alignment == 0)
-    return Value;
-
-  uint64_t Remainder = Value % Alignment;
-  if (Remainder == 0)
-    return Value;
-  return checkedAdd(Value, Alignment - Remainder, Context);
-}
-
 static std::optional<uint64_t> entryVAddr(const KernelDescriptorInfo &KD) {
   if (KD.EntryOffset >= 0)
     return checkedAdd(
@@ -299,37 +288,54 @@ static std::optional<uint64_t> entryVAddr(const KernelDescriptorInfo &KD) {
   return KD.VAddr - Magnitude;
 }
 
-static std::optional<bool>
-descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
-                                  const KernelDescriptorInfo &KD,
-                                  const LLVMState &LS) {
+static std::optional<ArrayRef<uint8_t>>
+findExecutableBytesAtVAddr(const ElfView &Elf, uint64_t VAddr, uint64_t Size) {
+  for (const ElfView::ELFT::Shdr &Shdr : Elf.sections()) {
+    if (!(Shdr.sh_flags & ELF::SHF_ALLOC) ||
+        !(Shdr.sh_flags & ELF::SHF_EXECINSTR) ||
+        Shdr.sh_type == ELF::SHT_NOBITS)
+      continue;
+    if (VAddr < Shdr.sh_addr)
+      continue;
+    uint64_t Delta = VAddr - Shdr.sh_addr;
+    if (Delta > Shdr.sh_size || Size > Shdr.sh_size - Delta)
+      continue;
+    if (Shdr.sh_offset > Elf.size() || Delta > Elf.size() - Shdr.sh_offset ||
+        Size > Elf.size() - Shdr.sh_offset - Delta) {
+      log() << "hotswap: error: executable section bytes for vaddr 0x"
+            << utohexstr(VAddr) << " extend past the ELF buffer.\n";
+      return std::nullopt;
+    }
+    return ArrayRef<uint8_t>(Elf.data() + Shdr.sh_offset + Delta, Size);
+  }
+  return std::nullopt;
+}
+
+static std::optional<bool> descriptorAlreadyTargetsEntryStub(
+    const ElfView &Elf, const KernelDescriptorInfo &KD, const LLVMState &LS) {
   std::optional<uint64_t> Entry = entryVAddr(KD);
   if (!Entry)
     return std::nullopt;
-  if (*Entry < Elf.textAddr())
-    return false;
 
   std::optional<uint64_t> TextEnd =
       checkedAdd(Elf.textAddr(), Elf.textSize(), "entry trampoline text end");
   if (!TextEnd)
     return std::nullopt;
 
-  const uint64_t TextOffset = *Entry - Elf.textAddr();
-  if (TextOffset > Elf.textSize() ||
-      KernelEntryStubStride > Elf.textSize() - TextOffset)
+  std::optional<ArrayRef<uint8_t>> Candidate =
+      findExecutableBytesAtVAddr(Elf, *Entry, KernelEntryStubStride);
+  if (!Candidate)
     return false;
 
-  ArrayRef<uint8_t> Candidate(Elf.textData() + TextOffset,
-                              KernelEntryStubStride);
   // The full idempotency matcher uses LLVM's AMDGPU disassembler. Avoid
   // running it over arbitrary original kernel entry bytes; real code objects
   // can contain byte streams that are valid executable code but still trip
   // decoder corner cases before COMGR can finish rewriting.
-  if (!hasKernelEntryTrampolinePrefix(Candidate, LS))
+  if (!hasKernelEntryTrampolinePrefix(*Candidate, LS))
     return false;
 
   std::vector<InternalDecodedInst> Decoded;
-  if (!decodeKernelEntryStub(Candidate, LS, Decoded,
+  if (!decodeKernelEntryStub(*Candidate, LS, Decoded,
                              "entry trampoline idempotency matcher"))
     return false;
   if (!hasEntryStubOperandShape(Decoded, LS))
@@ -340,20 +346,6 @@ descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
     return std::nullopt;
 
   return *Target >= Elf.textAddr() && *Target < *TextEnd && *Target < *Entry;
-}
-
-static std::optional<uint64_t>
-totalTrampolineBytes(ArrayRef<Trampoline> Trampolines) {
-  uint64_t Total = 0;
-  for (const Trampoline &T : Trampolines) {
-    std::optional<uint64_t> NewTotal =
-        checkedAdd(Total, static_cast<uint64_t>(T.Bytes.size()),
-                   "existing trampoline byte count");
-    if (!NewTotal)
-      return std::nullopt;
-    Total = *NewTotal;
-  }
-  return Total;
 }
 
 static std::optional<int64_t>
@@ -407,40 +399,51 @@ static std::optional<unsigned> allocateEntryStubScratchSgprs(
   return ScratchBase;
 }
 
-static bool appendPaddingTrampoline(std::vector<Trampoline> &Out,
-                                    uint64_t PadBytes, ArrayRef<uint8_t> Fill) {
-  if (PadBytes == 0)
+static bool appendFillBytes(SmallVectorImpl<uint8_t> &Out, uint64_t FillBytes,
+                            ArrayRef<uint8_t> Fill, StringRef Context) {
+  if (FillBytes < Out.size()) {
+    log() << "hotswap: error: " << Context << " target size " << FillBytes
+          << " is smaller than existing size " << Out.size() << ".\n";
+    return false;
+  }
+  uint64_t Needed = FillBytes - Out.size();
+  if (Needed == 0)
     return true;
   if (Fill.empty()) {
-    log() << "hotswap: error: entry-stub alignment padding requested without "
-          << "cached s_nop bytes.\n";
+    log() << "hotswap: error: " << Context
+          << " requested without fill bytes.\n";
     return false;
   }
-  if (PadBytes % Fill.size() != 0) {
-    log() << "hotswap: error: entry-stub alignment padding size " << PadBytes
-          << " is not a multiple of cached s_nop size " << Fill.size() << ".\n";
+  if (Needed % Fill.size() != 0) {
+    log() << "hotswap: error: " << Context << " size " << Needed
+          << " is not a multiple of fill size " << Fill.size() << ".\n";
     return false;
   }
-  if (PadBytes > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
-    log() << "hotswap: error: entry-stub alignment padding size " << PadBytes
+  if (Needed > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+    log() << "hotswap: error: " << Context << " size " << Needed
           << " exceeds size_t.\n";
     return false;
   }
 
-  Trampoline Pad;
-  while (static_cast<uint64_t>(Pad.Bytes.size()) < PadBytes)
-    Pad.Bytes.append(Fill.begin(), Fill.end());
-  Out.push_back(std::move(Pad));
+  while (static_cast<uint64_t>(Out.size()) < FillBytes)
+    Out.append(Fill.begin(), Fill.end());
   return true;
 }
 
 std::optional<uint32_t> appendKernelEntryTrampolines(
     const ElfView &Elf, const LLVMState &LS, unsigned MaxSgprs,
-    std::vector<Trampoline> &Growth,
+    uint64_t StubBaseVAddr, SmallVectorImpl<uint8_t> &EntryBytes,
     std::vector<KernelEntryTrampolineFixup> &OutFixups) {
   std::vector<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
   if (Descriptors.empty())
     return 0;
+
+  if (StubBaseVAddr % KernelEntryStubStride != 0) {
+    log() << "hotswap: error: entry trampoline stub base vaddr 0x"
+          << utohexstr(StubBaseVAddr) << " is not aligned to "
+          << KernelEntryStubStride << " bytes.\n";
+    return std::nullopt;
+  }
 
   struct WorkItem {
     KernelDescriptorInfo KD;
@@ -468,41 +471,14 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
   if (Work.empty())
     return 0;
 
-  std::optional<uint64_t> ExistingGrowthBytes = totalTrampolineBytes(Growth);
-  if (!ExistingGrowthBytes)
-    return std::nullopt;
-  uint64_t AppendOffset = *ExistingGrowthBytes;
-  std::optional<uint64_t> TextEndVAddr =
-      checkedAdd(Elf.textAddr(), Elf.textSize(), "entry trampoline text end");
-  if (!TextEndVAddr)
-    return std::nullopt;
-  std::optional<uint64_t> StubPoolBaseVAddr =
-      checkedAdd(*TextEndVAddr, AppendOffset, "entry trampoline stub-pool base");
-  if (!StubPoolBaseVAddr)
-    return std::nullopt;
-  std::optional<uint64_t> AlignedStubPoolBaseVAddr =
-      checkedAlignTo(*StubPoolBaseVAddr, KernelEntryStubStride,
-                     "entry trampoline aligned stub-pool base");
-  if (!AlignedStubPoolBaseVAddr)
-    return std::nullopt;
-  const uint64_t StubStart = *AlignedStubPoolBaseVAddr - *TextEndVAddr;
-  std::vector<Trampoline> LocalGrowth;
   std::vector<KernelEntryTrampolineFixup> LocalFixups;
-  if (!appendPaddingTrampoline(LocalGrowth, StubStart - AppendOffset,
-                               LS.SNopBytes))
-    return std::nullopt;
-  AppendOffset = StubStart;
+  SmallVector<uint8_t> LocalBytes;
+  uint64_t AppendOffset = 0;
 
   for (const WorkItem &Item : Work) {
     const KernelDescriptorInfo &KD = Item.KD;
-    std::optional<uint64_t> StubTextEnd = checkedAdd(
-        Elf.textSize(), AppendOffset,
-        (Twine("entry trampoline append offset for '") + KD.KernelName + "'")
-            .str());
-    if (!StubTextEnd)
-      return std::nullopt;
     std::optional<uint64_t> StubVAddr = checkedAdd(
-        Elf.textAddr(), *StubTextEnd,
+        StubBaseVAddr, AppendOffset,
         (Twine("entry trampoline vaddr for '") + KD.KernelName + "'").str());
     if (!StubVAddr)
       return std::nullopt;
@@ -522,11 +498,16 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
       return std::nullopt;
     }
 
-    Trampoline T;
-    T.Bytes.assign(Stub.begin(), Stub.end());
-    LocalGrowth.push_back(std::move(T));
+    if (Stub.size() != KernelEntryStubStride) {
+      log() << "hotswap: error: kernel-entry trampoline for '" << KD.KernelName
+            << "' has size " << Stub.size() << ", expected "
+            << KernelEntryStubStride << ".\n";
+      return std::nullopt;
+    }
+
+    LocalBytes.append(Stub.begin(), Stub.end());
     LocalFixups.push_back(
-        {KD.KernelName, AppendOffset, *ScratchSgpr + 2, Item.InstPrefLines});
+        {KD.KernelName, *StubVAddr, *ScratchSgpr + 2, Item.InstPrefLines});
     std::optional<uint64_t> NewAppendOffset = checkedAdd(
         AppendOffset, KernelEntryStubStride,
         (Twine("entry trampoline append offset after '") + KD.KernelName + "'")
@@ -541,7 +522,8 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
   if (GuardBytes != 0) {
     SmallVector<uint8_t> CodeEnd = getCodeEndBytes(LS);
     if (CodeEnd.empty() ||
-        !appendPaddingTrampoline(LocalGrowth, GuardBytes, CodeEnd))
+        !appendFillBytes(LocalBytes, AppendOffset + GuardBytes, CodeEnd,
+                         "entry-stub prefetch guard"))
       return std::nullopt;
   }
 
@@ -554,8 +536,7 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     return std::nullopt;
   }
 
-  for (Trampoline &T : LocalGrowth)
-    Growth.push_back(std::move(T));
+  EntryBytes.append(LocalBytes.begin(), LocalBytes.end());
   OutFixups.insert(OutFixups.end(), LocalFixups.begin(), LocalFixups.end());
 
   log() << "hotswap: installed " << LocalFixups.size()
@@ -565,7 +546,7 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
 }
 
 bool rewriteKernelEntryDescriptorOffsets(
-    WritableMemoryBuffer &OutBuf, uint64_t OldTextSize, StringRef TargetCpu,
+    WritableMemoryBuffer &OutBuf, StringRef TargetCpu,
     ArrayRef<KernelEntryTrampolineFixup> Fixups) {
   if (Fixups.empty())
     return true;
@@ -589,23 +570,8 @@ bool rewriteKernelEntryDescriptorOffsets(
       Ok = false;
       continue;
     }
-    std::optional<uint64_t> StubTextOffset = checkedAdd(
-        OldTextSize, Fixup.StubTextOffset,
-        (Twine("entry trampoline text offset for '") + Fixup.KernelName + "'")
-            .str());
-    if (!StubTextOffset) {
-      Ok = false;
-      continue;
-    }
-    std::optional<uint64_t> StubVAddr = checkedAdd(
-        OutElf.textAddr(), *StubTextOffset,
-        (Twine("entry trampoline vaddr for '") + Fixup.KernelName + "'").str());
-    if (!StubVAddr) {
-      Ok = false;
-      continue;
-    }
     std::optional<int64_t> NewOffset = checkedSignedDifference(
-        *StubVAddr, *KdVAddr,
+        Fixup.StubVAddr, *KdVAddr,
         (Twine("entry trampoline descriptor offset for '") + Fixup.KernelName +
          "'")
             .str());

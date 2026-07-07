@@ -20,11 +20,15 @@
 // API: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
-// RUN: %llvm-objdump -s -j .rodata %t.out.elf | %FileCheck --check-prefix=RODATA %s
+// RUN: %llvm-readelf --section-headers --segments %t.out.elf \
+// RUN:   | %FileCheck --check-prefix=SEGMENT %s
+// RUN: %llvm-readelf --symbols %t.elf %t.out.elf \
+// RUN:   | %FileCheck --check-prefix=SYMBOLS %s
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=METADATA %s
 
 // DISASM-LABEL: <entry_tramp_kernel>:
 // DISASM: s_endpgm
+// DISASM: Disassembly of section .hotswap.entry:
 // DISASM: global_wb
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_get_pc_i64 s[8:9]
@@ -32,8 +36,15 @@
 // DISASM-NEXT: s_add_co_ci_u32 s9
 // DISASM-NEXT: s_set_pc_i64 s[8:9]
 
-// RODATA: Contents of section .rodata
-// RODATA: {{[0-9a-f]+}} {{[0-9a-f]+}} {{[0-9a-f]+}} {{[0-9a-f]+}} 20000000
+// SEGMENT: .hotswap.entry
+// SEGMENT: LOAD
+
+// SYMBOLS-LABEL: File: {{.*}}.elf
+// SYMBOLS: [[MANAGED:[0-9a-f]+]] {{.*}} x.managed
+// SYMBOLS: [[X:[0-9a-f]+]] {{.*}} x
+// SYMBOLS-LABEL: File: {{.*}}.out.elf
+// SYMBOLS: [[MANAGED]] {{.*}} x.managed
+// SYMBOLS: [[X]] {{.*}} x
 
 // METADATA: .name:           entry_tramp_kernel
 // METADATA: .sgpr_count:     10
@@ -91,3 +102,19 @@ entry_tramp_kernel:
       .wavefront_size: 64
       .max_flat_workgroup_size: 256
 .end_amdgpu_metadata
+
+.data
+.globl x.managed
+.p2align 3
+.type x.managed,@object
+x.managed:
+  .quad 0
+.size x.managed, 8
+
+.bss
+.globl x
+.p2align 2
+.type x,@object
+x:
+  .long 0
+.size x, 4

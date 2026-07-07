@@ -690,22 +690,41 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
       return AMD_COMGR_STATUS_ERROR;
     }
     Growth = Deferred;
+    if (!appendDeferredTrampolinePrefetchGuard(Elf, LS, Growth))
+      return AMD_COMGR_STATUS_ERROR;
+  }
+
+  size_t GrowthTotal = 0;
+  for (const Trampoline &T : Growth) {
+    if (T.Bytes.size() > std::numeric_limits<size_t>::max() - GrowthTotal) {
+      log() << "hotswap: error: retargetCodeObject: growth byte count "
+            << "overflows size_t.\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+    GrowthTotal += T.Bytes.size();
   }
 
   std::vector<KernelEntryTrampolineFixup> EntryFixups;
+  SmallVector<uint8_t> EntryBytes;
+  std::optional<ExecutableSegmentPlan> EntryPlan;
   if (Options.RunEntryTrampolines) {
-    std::optional<uint32_t> EntryCount = appendKernelEntryTrampolines(
-        Elf, LS, Config.MaxSgprs, Growth, EntryFixups);
-    if (!EntryCount)
-      return AMD_COMGR_STATUS_ERROR;
-    Count += *EntryCount;
+    if (!Elf.kernelDescriptors().empty()) {
+      EntryPlan = Elf.planExecutableSegment(
+          KernelEntryStubStride, KernelEntryStubSegmentAlign, GrowthTotal);
+      if (!EntryPlan)
+        return AMD_COMGR_STATUS_ERROR;
+      std::optional<uint32_t> EntryCount = appendKernelEntryTrampolines(
+          Elf, LS, Config.MaxSgprs, EntryPlan->PayloadVAddr, EntryBytes,
+          EntryFixups);
+      if (!EntryCount)
+        return AMD_COMGR_STATUS_ERROR;
+      if (EntryBytes.empty())
+        EntryPlan = std::nullopt;
+      Count += *EntryCount;
+    }
   } else {
     log() << "hotswap: kernel-entry trampolines disabled for this rewrite\n";
   }
-
-  if (!Deferred.empty() &&
-      !appendDeferredTrampolinePrefetchGuard(Elf, LS, Growth))
-    return AMD_COMGR_STATUS_ERROR;
 
   if (!Growth.empty()) {
     Result = Elf.growWithTrampolines(Growth, LS.SNopBytes);
@@ -716,19 +735,7 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
       return AMD_COMGR_STATUS_ERROR;
     }
 
-    size_t GrowthTotal = 0;
-    for (const Trampoline &T : Growth) {
-      if (T.Bytes.size() > std::numeric_limits<size_t>::max() - GrowthTotal) {
-        log() << "hotswap: error: retargetCodeObject: growth byte count "
-              << "overflows size_t.\n";
-        return AMD_COMGR_STATUS_ERROR;
-      }
-      GrowthTotal += T.Bytes.size();
-    }
     patchDebugSections(*Result, Deferred, Elf, GrowthTotal);
-    if (!rewriteKernelEntryDescriptorOffsets(*Result, Elf.textSize(), LS.Cpu,
-                                             EntryFixups))
-      return AMD_COMGR_STATUS_ERROR;
   } else {
     Result = WritableMemoryBuffer::getNewUninitMemBuffer(ElfSize);
     if (!Result) {
@@ -739,6 +746,30 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     }
     std::memcpy(Result->getBufferStart(), Buf.data(), ElfSize);
   }
+
+  if (!EntryBytes.empty()) {
+    uint8_t *OutData = reinterpret_cast<uint8_t *>(Result->getBufferStart());
+    Expected<ElfView> OutView =
+        ElfView::create(OutData, Result->getBufferSize());
+    if (!OutView) {
+      log() << "hotswap: error: retargetCodeObject: failed to reparse output "
+            << "before appending entry stubs: " << toString(OutView.takeError())
+            << "\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+    std::unique_ptr<WritableMemoryBuffer> WithEntryStubs =
+        OutView->appendExecutableSegment(EntryBytes, *EntryPlan,
+                                         ".hotswap.entry");
+    if (!WithEntryStubs) {
+      log() << "hotswap: error: retargetCodeObject: failed to append "
+            << "kernel-entry trampoline segment.\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+    Result = std::move(WithEntryStubs);
+  }
+
+  if (!rewriteKernelEntryDescriptorOffsets(*Result, LS.Cpu, EntryFixups))
+    return AMD_COMGR_STATUS_ERROR;
 
   if (!ScratchPatches.empty())
     runScratchVerification(*Result, LS, ScratchPatches, Config.MaxVgprs);
