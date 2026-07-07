@@ -1,13 +1,15 @@
-; RUN: llc -global-isel=0 -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -global-isel=0 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -check-prefix=GCN,GCN-SDAG %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -check-prefix=GCN,GCN-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefix=GCN,GCN-SDAG %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefix=GCN,GCN-GISEL %s
 
 ; GCN-LABEL: {{^}}vgpr:
 ; GCN-DAG: v_mov_b32_e32 v1, v0
-; GCN-DAG: exp mrt0, v0, v0, v0, v0 done vm
-; GCN: s_waitcnt expcnt(0)
+; GCN-SDAG-DAG: exp mrt0, v1, v1, v1, v1 done vm
+; GCN-GISEL-DAG: exp mrt0, v0, v0, v0, v0 done vm
+; GCN-GISEL: s_waitcnt expcnt(0)
 ; GCN: v_add_f32_e32 v0, 1.0, v1
+; GCN-SDAG: s_waitcnt expcnt(0)
 ; GCN-NOT: s_endpgm
 define amdgpu_vs { float, float } @vgpr(ptr addrspace(4) inreg %arg, i32 inreg %arg1, i32 inreg %arg2, float %arg3) #0 {
 bb:
@@ -205,7 +207,8 @@ bb:
 }
 
 ; GCN-LABEL: {{^}}both:
-; GCN-DAG: exp mrt0, v0, v0, v0, v0 done vm
+; GCN-SDAG-DAG: exp mrt0, v1, v1, v1, v1 done vm
+; GCN-GISEL-DAG: exp mrt0, v0, v0, v0, v0 done vm
 ; GCN-DAG: v_mov_b32_e32 v1, v0
 ; GCN-DAG: s_mov_b32 s1, s2
 ; GCN-DAG: s_waitcnt expcnt(0)
