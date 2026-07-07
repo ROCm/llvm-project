@@ -1,4 +1,5 @@
 // COM: Force Comgr's embedded libc++ fallback path.
+// REQUIRES: system-linux
 // RUN: compile-hip-cxx-headers --mode=distroless %s | %FileCheck %s
 
 // CHECK: Embedded libc++ headers: active
