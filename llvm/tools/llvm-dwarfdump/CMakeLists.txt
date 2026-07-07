@@ -4,7 +4,8 @@ set(LLVM_LINK_COMPONENTS
   DebugInfoDWARFLowLevel
   AllTargetsDescs
   AllTargetsInfos
-  BinaryFormat
+  Core
+  IRReader
   MC
   Object
   Support
