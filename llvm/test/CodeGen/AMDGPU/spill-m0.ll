@@ -1,7 +1,7 @@
-; RUN: llc -O0 -amdgpu-spill-sgpr-to-vgpr=1 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -enable-var-scope -check-prefix=TOVGPR -check-prefix=GCN %s
-; RUN: llc -O0 -amdgpu-spill-sgpr-to-vgpr=1 -mtriple=amdgcn -mcpu=tonga  < %s | FileCheck -enable-var-scope -check-prefix=TOVGPR -check-prefix=GCN %s
-; RUN: llc -O0 -amdgpu-spill-sgpr-to-vgpr=0 -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -enable-var-scope -check-prefix=TOVMEM -check-prefix=GCN %s
-; RUN: llc -O0 -amdgpu-spill-sgpr-to-vgpr=0 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -enable-var-scope -check-prefix=TOVMEM -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -amdgpu-spill-sgpr-to-vgpr=1 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -enable-var-scope -check-prefix=TOVGPR -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -amdgpu-spill-sgpr-to-vgpr=1 -mtriple=amdgcn -mcpu=tonga  < %s | FileCheck -enable-var-scope -check-prefix=TOVGPR -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -amdgpu-spill-sgpr-to-vgpr=0 -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -enable-var-scope -check-prefix=TOVMEM -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -amdgpu-spill-sgpr-to-vgpr=0 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -enable-var-scope -check-prefix=TOVMEM -check-prefix=GCN %s
 
 ; XXX - Why does it like to use vcc?
 
@@ -20,7 +20,8 @@
 ; TOVMEM: buffer_store_dword [[SPILL_VREG]], off, s{{\[[0-9]+:[0-9]+\]}}, 0 ; 4-byte Folded Spill
 ; TOVMEM: s_mov_b64 exec, [[COPY_EXEC]]
 
-; GCN: s_cbranch_vccnz [[ENDIF:.LBB[0-9]+_[0-9]+]]
+; GCN: s_cbranch_scc1
+; GCN-NEXT: s_branch [[ENDIF:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: [[ENDIF]]:
 ; TOVGPR: v_readlane_b32 [[M0_RESTORE:s[0-9]+]], [[SPILL_VREG]], [[M0_LANE]]
