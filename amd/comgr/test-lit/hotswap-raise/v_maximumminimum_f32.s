@@ -1,13 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_maximumminimum_f32_kernel 2>/dev/null | %FileCheck %s --check-prefix=IR
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out --kernel=v_maximumminimum_f32_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
-;
-; Lift test for v_maximumminimum_f32. This is the IEEE-754 2019
-; NaN-propagating clamp form:
-;   dst = minimum(maximum(src0, src1), src2)
-; It must not lower through maxnum/minnum, which are the NaN-pruning `.NUM`
-; semantics used by v_minmax_num_f32.
 
+; v_maximumminimum_f32 fused IEEE max-then-min lift.
 ; IR-LABEL: define amdgpu_kernel void @v_maximumminimum_f32_kernel(
 ; IR-NOT: @llvm.maxnum
 ; IR-NOT: @llvm.minnum
@@ -17,7 +12,6 @@
 ; IR: [[OUT:%[^ ]+]] = call float @llvm.minimum.f32(float [[INNER]], float %{{[^)]+}})
 ; IR-NOT: @llvm.maxnum
 ; IR-NOT: @llvm.minnum
-
 ; PIPE: raise_cli: wrote
 ; PIPE-SAME: v_maximumminimum_f32_kernel
 
@@ -35,9 +29,7 @@ v_maximumminimum_f32_kernel:
 	v_mov_b32_e32 v1, s1
 	v_mov_b32_e32 v2, s2
 	v_mov_b32_e32 v3, 0
-	;;#ASMSTART
 	v_maximumminimum_f32 v0, v0, v1, v2
-	;;#ASMEND
 	global_store_b32 v3, v0, s[0:1]
 	s_endpgm
 	.section	.rodata,"a",@progbits

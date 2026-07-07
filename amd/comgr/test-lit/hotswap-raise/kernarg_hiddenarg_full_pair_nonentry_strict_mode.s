@@ -1,29 +1,23 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco
 ; RUN: env HSA_HOTSWAP_STRICT=1 raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --assume-hip-global-offset-zero \
-; RUN:   --emit-ir=kernarg_hiddenarg_full_pair_same_block \
-; RUN:   | %FileCheck %s --check-prefix=SAME
-; RUN: env HSA_HOTSWAP_STRICT=1 raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --assume-hip-global-offset-zero \
-; RUN:   --emit-ir=kernarg_hiddenarg_full_pair_successor \
-; RUN:   | %FileCheck %s --check-prefix=SUCC
-;
-; A full-pair hidden-arg load into s[0:1] proves the physical pair is no
-; longer the entry kernarg pointer. Cover same-BB and successor-BB consumers.
+; RUN:   --emit-ir=kernarg_hiddenarg_full_pair_same_block,kernarg_hiddenarg_full_pair_successor \
+; RUN:   | %FileCheck %s
 
+; NonEntry kernarg provenance: s_load rebases the whole pair, lifting hidden-arg loads to ordinary global memory (same-block + successor).
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	kernarg_hiddenarg_full_pair_same_block
 	.p2align	8
 	.type	kernarg_hiddenarg_full_pair_same_block,@function
-; SAME-LABEL: define amdgpu_kernel void @kernarg_hiddenarg_full_pair_same_block(
+; CHECK-LABEL: define amdgpu_kernel void @kernarg_hiddenarg_full_pair_same_block(
 kernarg_hiddenarg_full_pair_same_block:
 	s_load_b64 s[0:1], s[0:1], 0x8
 	s_wait_kmcnt 0x0
-; SAME-NOT: call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
-; SAME: inttoptr i64
-; SAME: load i32, ptr addrspace(1)
+; CHECK-NOT: call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
+; CHECK: inttoptr i64
+; CHECK: load i32, ptr addrspace(1)
 	s_load_b32 s2, s[0:1], 0x8
 	s_wait_kmcnt 0x0
 	v_mov_b32_e32 v0, s2
@@ -32,16 +26,16 @@ kernarg_hiddenarg_full_pair_same_block:
 	.globl	kernarg_hiddenarg_full_pair_successor
 	.p2align	8
 	.type	kernarg_hiddenarg_full_pair_successor,@function
-; SUCC-LABEL: define amdgpu_kernel void @kernarg_hiddenarg_full_pair_successor(
+; CHECK-LABEL: define amdgpu_kernel void @kernarg_hiddenarg_full_pair_successor(
 kernarg_hiddenarg_full_pair_successor:
 	s_load_b64 s[0:1], s[0:1], 0x8
 	s_wait_kmcnt 0x0
 	s_branch .Lload_successor
 	s_nop 0
 .Lload_successor:
-; SUCC-NOT: call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
-; SUCC: inttoptr i64
-; SUCC: load i32, ptr addrspace(1)
+; CHECK-NOT: call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
+; CHECK: inttoptr i64
+; CHECK: load i32, ptr addrspace(1)
 	s_load_b32 s2, s[0:1], 0x8
 	s_wait_kmcnt 0x0
 	v_mov_b32_e32 v0, s2

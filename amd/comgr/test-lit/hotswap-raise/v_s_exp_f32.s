@@ -4,18 +4,8 @@
 ; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_s_exp_f32_clamp_kernel 2>&1 | %FileCheck %s --check-prefix=REFUSE-CLAMP
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_s_exp_f32_omod_kernel 2>&1 | %FileCheck %s --check-prefix=REFUSE-OMOD
-;
-; Lift test for gfx12 VOP3 pseudo-scalar exp2. The instruction manual defines
-; v_s_exp_f32 as an OPF_SCALAR_TRANS VALU op:
-;   D0.f32 = pow(2.0F, S0.f32)
-; with scalar source/destination registers, 1 ULP accuracy, and flushed
-; denormals. Preserve that special-function contract through the AMDGPU
-; intrinsic instead of generic llvm.exp2.
 
-; v_s_exp_f32 must lift through the AMDGPU exp2 intrinsic, not the
-; generic libm `llvm.exp2`.  Kernarg fetches now go through
-; `llvm.amdgcn.kernarg.segment.ptr` + a real load (the i32 source
-; reaches the bitcast via that path).
+; scalar v_s_exp_f32 lifts to @llvm.amdgcn.exp2.f32; non-default clamp/omod refused.
 ; CHECK-LABEL: define amdgpu_kernel void @v_s_exp_f32_kernel(
 ; CHECK: call ptr addrspace(4) @llvm.amdgcn.kernarg.segment.ptr()
 ; CHECK: [[SRC:%[^ ]+]] = bitcast i32 %{{[^ ]+}} to float
@@ -23,9 +13,6 @@
 ; CHECK: bitcast float [[EXP]] to i32
 ; CHECK-NOT: call {{.*}}@llvm.exp2.f32
 ; CHECK: declare {{.*}}float @llvm.amdgcn.exp2.f32(float)
-
-; Non-default output modifiers are deliberately outside the declared support
-; set until their exact clamp / omod semantics are modeled in the lifter.
 ; REFUSE-CLAMP: with non-default clamp/omod is not yet lifted
 ; REFUSE-OMOD: with non-default clamp/omod is not yet lifted
 
@@ -53,10 +40,8 @@ v_s_exp_f32_kernel:
 	s_cmp_eq_u32 s3, 0
 	s_cselect_b32 s0, ttmp9, s1
 	v_mad_u32 v0, s0, s2, v0
-	;;#ASMSTART
 	v_s_exp_f32 s0, s6
 
-	;;#ASMEND
 	v_mov_b32_e32 v1, s0
 	global_store_b32 v0, v1, s[4:5] scale_offset
 	s_endpgm

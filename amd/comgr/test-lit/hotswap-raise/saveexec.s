@@ -1,44 +1,14 @@
 ; RUN: %llvm_mc -mcpu=gfx942 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --emit-ir=saveexec_kernel 2>/dev/null | %FileCheck %s
-;
-; Audit: `s_and_saveexec_b64` routes its EXEC write through
-; `storeExec` (handle_sop1.cpp). This SemOp family is the one
-; EXEC-writer that is simultaneously an SGPR-pair producer — the
-; handler has to (a) save the OLD EXEC into the destination SGPR
-; pair, and (b) write `old_exec AND src` to EXEC. Post-mem2reg we
-; cannot see the SGPR-pair save directly (the saved value may fold
-; away if the kernel never reads it), but we can see the new EXEC
-; SSA value (`%new_exec`) being consumed by the SPE active-bit
-; computation that wraps the subsequent side-effectful store.
-;
-; If the S_AND_SAVEEXEC_B64 handler regressed and no longer routed
-; through storeExec, the `lshr i64 <exec>, %spe_lane_mod` before the
-; store would still read `-1` (the initial EXEC) instead of
-; `%new_exec`, and the single-lane-gated store would silently
-; execute on every lane.
 
+; s_and_saveexec_b64 EXEC save + AND read-modify-write lowered to per-lane mask.
 ; CHECK-LABEL: define amdgpu_kernel void @saveexec_kernel(
-
-; v_cmp_lt_u32_e64 produces the narrow mask in s[4:5]. Pre-mem2reg
-; that's a store to the relevant sgpr alloca; post-mem2reg it's the
-; SSA name for the comparison's sign-extended i64 representation.
 ; CHECK:       %vcmp = icmp ult i32 %tid, 16
-
-; s_and_saveexec_b64 writes `old_exec AND src` to EXEC. The handler
-; names the new EXEC SSA value `%new_exec` — this is the audit
-; signal.
 ; CHECK:       %new_exec = and i64 -1, %{{[^ ]+}}
-
-; The SPE lane-active computation that follows (wrapping the
-; global_store_dword) keys off %new_exec, NOT -1. This proves the
-; SSA graph of EXEC reflects the saveexec write.
 ; CHECK:       %[[AT_LANE:[^ ]+]] = lshr i64 %new_exec, %{{[^ ]+}}
 ; CHECK-NEXT:  %[[BIT:[^ ]+]] = and i64 %[[AT_LANE]], 1
 ; CHECK-NEXT:  %[[ACTIVE:[^ ]+]] = icmp ne i64 %[[BIT]], 0
 ; CHECK-NEXT:  br i1 %[[ACTIVE]], label %[[DO:[^ ,]+]], label %{{[^ ,]+}}
-
-; The store under the narrowed EXEC is the observable side-effect
-; that motivates the whole audit.
 ; CHECK:       [[DO]]:
 ; CHECK-NEXT:    store i32 {{.*}}, ptr addrspace(1) %{{[^ ]+}}, align 4
 
@@ -55,14 +25,12 @@ saveexec_kernel:
 	v_mov_b32_e32 v1, 0xcc
 	s_waitcnt lgkmcnt(0)
 	v_lshl_add_u64 v[2:3], s[0:1], 0, v[2:3]
-	;;#ASMSTART
 	v_cmp_lt_u32_e64 s[4:5], v0, 16
 	s_and_saveexec_b64 s[6:7], s[4:5]
 	global_store_dword v[2:3], v1, off
 	s_waitcnt vmcnt(0)
 	s_mov_b64 exec, s[6:7]
 	
-	;;#ASMEND
 	s_endpgm
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0

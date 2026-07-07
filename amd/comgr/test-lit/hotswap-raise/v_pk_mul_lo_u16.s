@@ -1,31 +1,10 @@
 ; RUN: %llvm_mc -mcpu=gfx942 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_pk_mul_lo_u16_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for the VOP3P packed-pair `<2 x i16>` modular u16 multiply
-; (V_PK_MUL_LO_U16). The "lo" in the name keeps the low 16 bits of the
-; per-lane 32-bit product, so this is plain modular multiply: signed
-; vs unsigned does not change the result. The handler is the same
-; shape used for V_PK_ADD_U16 / V_PK_LSHLREV_B16 -- bitcast each i32
-; source to `<2 x i16>`, run the op_sel / op_sel_hi default lo->lo,
-; hi->hi insert/extract round-trip, run a lane-wise `mul <2 x i16>`,
-; bitcast the i16x2 result back to i32 for the VGPR write-back.
 
+; v_pk_mul_lo_u16 packed u16 multiply lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_pk_mul_lo_u16_kernel(
-
-; The packed lane-wise multiply. `pk_mul_lo_u16` is the handler-pinned
-; name; `pk_i16_pack` is the shared bitcast-back name used by the
-; entire VOP3P packed-int family.
 ; CHECK: %pk_mul_lo_u16{{[0-9]*}} = mul <2 x i16> %{{[^,]+}}, %{{[^)]+}}
 ; CHECK: %pk_i16_pack{{[0-9]*}} = bitcast <2 x i16> %pk_mul_lo_u16{{[0-9]*}} to i32
-
-; Negative pins:
-;   * No nuw/nsw flag on the multiply -- the AMDGPU hardware op is
-;     defined as modular (low 16 bits of the 32-bit product); adding
-;     nuw/nsw would poison legal hardware inputs.
-;   * No lift via an `llvm.amdgcn.pk*` intrinsic -- the lift family
-;     emits the explicit `<2 x i16>` shape, not a target intrinsic.
-;   * No fadd / add (the wrong-family lifts would silently miscompile).
-;   * No zext of the i16x2 result to i32x2 (would lose the high lane).
 ; CHECK-NOT: mul nuw <2 x i16>
 ; CHECK-NOT: mul nsw <2 x i16>
 ; CHECK-NOT: call {{.*}} @llvm.amdgcn.pk
@@ -44,9 +23,7 @@ v_pk_mul_lo_u16_kernel:
 	s_waitcnt lgkmcnt(0)
 	v_mov_b32_e32 v1, 0x00030002
 	v_mov_b32_e32 v2, 0x00050007
-	;;#ASMSTART
 	v_pk_mul_lo_u16 v3, v1, v2
-	;;#ASMEND
 	global_store_dword v0, v3, s[0:1]
 	s_endpgm
 	.section	.rodata,"a",@progbits

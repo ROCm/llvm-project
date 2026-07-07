@@ -1,6 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx950 --emit-ir=v_i16_max_kernel | %FileCheck %s
-;
+
+; v_pk_max_i16 packed i16 signed max lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_i16_max_kernel(
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

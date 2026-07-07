@@ -2,22 +2,11 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=smem_modified_kernarg_pair_alias_kernel 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; Companion to `smem_modified_kernarg_pair_base.s` covering the
-; alias-then-overwrite shape: s[12:13] is copied from the entry
-; kernarg pair, then s[0:1] is overwritten via that alias. The lift
-; produces an `addrspace(1)` SMEM load through s[0:1]; the AMDGPU
-; backend's lowering picks SMEM vs VMEM from load uniformity at
-; codegen time without needing a lift-side addrspace hint.
 
+; Aliased/copied kernarg-pointer pair still resolves to a kernarg.segment.ptr load.
 ; CHECK-LABEL: define amdgpu_kernel void @smem_modified_kernarg_pair_alias_kernel(
 ; CHECK-SAME: ptr addrspace(4) byref([4 x i8]) align 16 %kargs
-
-; The entry kernarg pair is seeded from `amdgcn_kernarg_segment_ptr`
-; (which always returns `ptr addrspace(4)`).
 ; CHECK: call ptr addrspace(4) @llvm.amdgcn.kernarg.segment.ptr()
-
-; The post-overwrite SMEM load lands on `addrspace(1)`.
 ; CHECK: %smem_load = load i32, ptr addrspace(1) %{{[^,]+}}, align 4
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

@@ -1,31 +1,10 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=s_mul_hi_i32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for s_mul_hi_i32. Pins that the SOP2 signed mul-high
-; lowers to a 64-bit `mul` of two `sext`-widened i32 inputs,
-; followed by `lshr ... 32` and `trunc to i32`. The handler lives
-; in transpiler/handle_sop2.cpp under
-; `if (sop == SemOp::S_MUL_HI_I32) { ... }`; the SemOp lives in
-; transpiler/semop.hpp under SOP2.
-;
-; The shape difference vs S_MUL_HI_U32 (which uses `zext`) is the
-; only operational distinction — that's exactly what this test
-; pins. A regression that swaps `sext` → `zext` would silently
-; turn a signed mul-high into an unsigned one and produce the
-; wrong sign on the upper bits when either operand is negative.
 
+; s_mul_hi_i32 signed high multiply via i64 widen/mul/lshr/trunc.
 ; CHECK-LABEL: define amdgpu_kernel void @s_mul_hi_i32_kernel(
-
-; The two inputs must be sign-extended (not zero-extended) before
-; the wide multiply. Pin both sext sites; if either degenerates to
-; zext the test fires.
 ; CHECK-DAG: sext i32 %{{[^ ]+}} to i64
 ; CHECK-DAG: sext i32 %{{[^ ]+}} to i64
-
-; Wide multiply, then take the upper 32 bits (lshr 32) and trunc.
-; Names use the `_i_wide` / `mulhi_i` suffixes the handler emits so
-; that a future refactor that drops the I-suffix (e.g. unifies the
-; two handlers into a single template) is caught.
 ; CHECK: mul {{.*}}i64 %{{.*}}, %{{.*}}
 ; CHECK: lshr {{.*}}i64 %{{.*}}, 32
 ; CHECK: trunc {{.*}}i64 %{{.*}} to i32
@@ -54,10 +33,8 @@ s_mul_hi_i32_kernel:
 	s_cmp_eq_u32 s3, 0
 	s_cselect_b32 s0, ttmp9, s1
 	v_mad_u32 v0, s0, s2, v0
-	;;#ASMSTART
 	s_mul_hi_i32 s0, s6, s7
 	
-	;;#ASMEND
 	v_mov_b32_e32 v1, s0
 	global_store_b32 v0, v1, s[4:5] scale_offset
 	s_endpgm

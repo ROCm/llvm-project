@@ -1,10 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=s_scalar_f32_rounding_kernel 2>/dev/null | %FileCheck %s
-;
-; AMD's ISA manual defines these SOP1 scalar float operations as F32 input and
-; F32 output. In particular, s_trunc_f32 rounds toward zero and stores the
-; integer part back in floating-point format, not as an integer conversion.
 
+; s_ceil/floor/trunc/rndne_f32 scalar rounding lifted to llvm rounding intrinsics.
 ; CHECK-LABEL: define amdgpu_kernel void @s_scalar_f32_rounding_kernel(
 ; CHECK-DAG: call float @llvm.ceil.f32(float {{.*}})
 ; CHECK-DAG: call float @llvm.floor.f32(float {{.*}})

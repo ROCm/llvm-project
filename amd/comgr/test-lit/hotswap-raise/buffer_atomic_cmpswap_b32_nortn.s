@@ -2,33 +2,10 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx1250 \
 ; RUN:     --emit-ir=buffer_atomic_cmpswap_b32_nortn_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Non-RTN companion of `lit_tests/buffer_atomic_cmpswap_b32/`.  Pins
-; that the MUBUF-atomic handler in `handle_mubuf.cpp` emits the
-; raw-buffer cmpswap intrinsic without a write-back when the
-; source instruction is the non-RTN form.  See the companion
-; `.hip` block comment for the full rationale.
-;
-; The cmp/new value-pair read uses the decoded MUBUF data operand +
-; `baseIdx + 1` synthesis in the handler — same path as the RTN
-; variant, because vdata is present in both forms, just differing in
-; whether it's tied to a destination.  What differs:
-;
-;   1. RTN: the intrinsic result is written
-;      back to `op.dst()` via writeReg32 — the lit fixture for the
-;      RTN variant pins both the intrinsic and write-back path.
-;   2. Non-RTN (this fixture): the intrinsic still emits (the compare-
-;      and-exchange atomic side-effect is preserved), but the
-;      `di.numDefs > 0` guard skips the write-back.  No
-;      flat-pointer `cmpxchg` or `atomicrmw` should appear in the
-;      lifted IR for this kernel.
 
+; Raw-buffer atomic cmpswap b32 (no-return) lift.
 ; CHECK-LABEL: define amdgpu_kernel void @buffer_atomic_cmpswap_b32_nortn_kernel(
-
-; The cmpswap itself — same raw-buffer shape as the RTN variant.
 ; CHECK: call i32 @llvm.amdgcn.raw.buffer.atomic.cmpswap
-
-; Negative pin: not routed through flat-pointer lowering.
 ; CHECK-NOT: cmpxchg
 ; CHECK-NOT: atomicrmw xchg
 
@@ -48,11 +25,9 @@ buffer_atomic_cmpswap_b32_nortn_kernel: ; @buffer_atomic_cmpswap_b32_nortn_kerne
 	v_mov_b64_e32 v[0:1], s[2:3]
 	s_mov_b32 s4, s0
 	s_mov_b32 s5, s1
-	;;#ASMSTART
 	buffer_atomic_cmpswap_b32 v[0:1], v2, s[4:7], null offen scope:SCOPE_DEV
 	s_wait_loadcnt 0
 	
-	;;#ASMEND
 	s_endpgm
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0

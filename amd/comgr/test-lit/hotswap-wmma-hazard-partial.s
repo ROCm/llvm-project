@@ -1,21 +1,16 @@
-// COM: Test WMMA hazard with pre-existing v_nops: 3 v_nops already present
-// COM: between WMMA (needs 8) and overlapping VALU. Should insert 5 more.
-
 // RUN: %clang --target=amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
-// API: RESULT: SUCCESS
-
-// COM: Verify the patched layout. v_wmma_i32_16x16x64_iu8 needs 8 v_nops on
-// COM: A0. The kernel body has 3 pre-existing v_nops before the hazardous
-// COM: VALU; the patch must keep them, replace the VALU with an s_branch
-// COM: to a trampoline, and emit exactly 5 v_nops (the deficit = 8 - 3)
-// COM: immediately before the relocated VALU. CHECK-NEXT pins the in-body
-// COM: nop count and CHECK-COUNT-5 + CHECK-NEXT pin the trampoline count.
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --output %t.out2.elf \
+// RUN:   | %FileCheck --check-prefix=API2 %s
+// RUN: cmp %t.out.elf %t.out2.elf
+
+// API: RESULT: SUCCESS
 // DISASM: v_wmma_i32_16x16x64_iu8
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: v_nop
@@ -24,14 +19,7 @@
 // DISASM: s_endpgm
 // DISASM-COUNT-5: v_nop
 // DISASM-NEXT: v_add_f32
-
-// COM: Idempotency
-// RUN: hotswap-rewrite %t.out.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out2.elf \
-// RUN:   | %FileCheck --check-prefix=API2 %s
 // API2: RESULT: SUCCESS
-// RUN: cmp %t.out.elf %t.out2.elf
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

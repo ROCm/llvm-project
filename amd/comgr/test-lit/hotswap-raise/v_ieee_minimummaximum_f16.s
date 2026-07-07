@@ -1,11 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_ieee_minimummaximum_f16_kernel 2>/dev/null | %FileCheck %s --check-prefix=IR
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out --kernel=v_ieee_minimummaximum_f16_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
-;
-; Canary for the f16 minimum/maximum family. IEEE forms must use
-; NaN-propagating half intrinsics, .NUM forms must use maximumnum/minimumnum,
-; and high-half source/destination op_sel must be explicit in IR.
 
+; v_minimummaximum_f16 IEEE min/max (and minmax_num) lift.
 ; IR-LABEL: define amdgpu_kernel void @v_ieee_minimummaximum_f16_kernel(
 ; IR-NOT: @llvm.maxnum.f16
 ; IR-NOT: @llvm.minnum.f16
@@ -27,7 +24,6 @@
 ; IR: call half @llvm.minimumnum.f16(half [[NUM_MAXMIN_INNER]], half %{{[^)]+}})
 ; IR: f16_src_hi
 ; IR: f16_merge_hi
-
 ; PIPE: raise_cli: wrote
 ; PIPE-SAME: v_ieee_minimummaximum_f16_kernel
 
@@ -45,7 +41,6 @@ v_ieee_minimummaximum_f16_kernel:
 	v_mov_b32_e32 v1, s1
 	v_mov_b32_e32 v2, s2
 	v_mov_b32_e32 v3, 0
-	;;#ASMSTART
 	v_maximum_f16 v4, v0, v1
 	v_minimum_f16 v5, v0, v1
 	v_maximum3_f16 v6, v0, v1, v2
@@ -55,7 +50,6 @@ v_ieee_minimummaximum_f16_kernel:
 	v_minmax_num_f16 v10, v0, v1, v2
 	v_maxmin_num_f16 v11, v0, v1, v2
 	v_maximumminimum_f16 v12, v0, v1, v2 op_sel:[1,1,1,1]
-	;;#ASMEND
 	global_store_b32 v3, v4, s[0:1]
 	global_store_b32 v3, v5, s[0:1] offset:4
 	global_store_b32 v3, v6, s[0:1] offset:8

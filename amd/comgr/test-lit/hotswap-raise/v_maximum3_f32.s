@@ -1,32 +1,10 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_maximum3_f32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for v_maximum3_f32 (gfx11+/gfx12 ternary IEEE-754 2019
-; NaN-propagating max).  Pins that the VOP3 ternary maximum lowers to
-; the canonical 2-step llvm.maximum.f32 intrinsic chain, mirroring the
-; existing V_MAX3_F32 handler shape but with the NaN-propagating
-; intrinsic instead of the NaN-pruning maxnum.  Handler in
-; transpiler/handle_valu.cpp under
-; `if (sop == CanonicalOp::V_MAXIMUM3_F32 || sop == CanonicalOp::V_MINIMUM3_F32)`;
-; the CanonicalOp lives in transpiler/canonical_op.hpp (HasMinimum3Maximum3F32 in
-; AMDGPU.td:194; VOP3 opcodes 0x22e/0x22f).
-;
-; The shape difference vs V_MAX3_F32 is the use of
-; @llvm.maximum.f32 (NaN-propagating) instead of @llvm.maxnum.f32
-; (NaN-pruning).  A regression that swaps `maximum` -> `maxnum` would
-; silently change NaN semantics on the whole gfx12 ternary class.
 
+; v_maximum3_f32 3-input IEEE maximum lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_maximum3_f32_kernel(
-
-; The handler emits two llvm.maximum calls; the final one is named
-; `fmaximum3` (verbatim from the handler's outName field).  The
-; intermediate intrinsic call between s0 and s1 is unnamed by the
-; handler -- match it by call shape rather than by name.
 ; CHECK: call float @llvm.maximum.f32(float %{{[^,]+}}, float %{{[^)]+}})
 ; CHECK: %fmaximum3{{[0-9]*}} = call float @llvm.maximum.f32(float %{{[^,]+}}, float %{{[^)]+}})
-
-; Negative checks: must NOT lift via maxnum (the V_MAX3_F32 pattern --
-; would imply the NaN-pruning handler accidentally absorbed this op).
 ; CHECK-NOT: call {{.*}}@llvm.maxnum
 ; CHECK-NOT: call {{.*}}@llvm.minimum
 ; CHECK-NOT: call {{.*}}@llvm.minnum
@@ -45,9 +23,7 @@ v_maximum3_f32_kernel:
 	v_mov_b32_e32 v1, s1
 	v_mov_b32_e32 v2, s2
 	v_mov_b32_e32 v3, 0
-	;;#ASMSTART
 	v_maximum3_f32 v0, v0, v1, v2
-	;;#ASMEND
 	global_store_b32 v3, v0, s[0:1]
 	s_endpgm
 	.section	.rodata,"a",@progbits

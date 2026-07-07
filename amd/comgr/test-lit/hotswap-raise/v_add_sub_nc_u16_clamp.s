@@ -1,10 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_add_sub_nc_u16_clamp_kernel 2>/dev/null | %FileCheck %s
-;
-; Pins VOP3 integer clamp for v_{add,sub}_nc_u16. The manuals define clamp in
-; the unsigned 16-bit integer domain for these U16 forms, so the lift must use
-; saturating i16 arithmetic before merging the selected half back into vdst.
 
+; v_add_nc_u16/v_sub_nc_u16 clamp uadd.sat/usub.sat lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_add_sub_nc_u16_clamp_kernel(
 ; CHECK: %vadd_nc_u16{{[0-9]*}} = call i16 @llvm.uadd.sat.i16(
 ; CHECK: %vadd_u16_merge_lo{{[0-9]*}} = or {{(disjoint )?}}i32 %{{[^,]+}}, %{{[^ ]+}}
@@ -44,11 +41,9 @@ v_add_sub_nc_u16_clamp_kernel:
 	s_wait_loadcnt 0x0
 	v_lshrrev_b32_e32 v0, 16, v1
 	v_and_b32_e32 v1, 0xffff, v1
-	;;#ASMSTART
 	v_add_nc_u16 v0, v1, v0 clamp
 	v_sub_nc_u16 v0, v1, v0 op_sel:[1,1,1] clamp
 
-	;;#ASMEND
 	global_store_b16 v2, v0, s[0:1] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

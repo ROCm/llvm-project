@@ -1,25 +1,11 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_ldexp_f64_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for v_ldexp_f64. Pins that the VOP3 64-bit ldexp lowers to
-; `llvm.ldexp.f64.i32`, and that the src0 abs/neg VOP3 modifiers (here
-; applied as `-|v[0:1]|`) flow into the lifted IR as `fabs` + `fneg`
-; ahead of the intrinsic call. The handler lives in
-; src/hotswap/handle-valu.cpp under
-; `if (Sop == CanonicalOp::V_LDEXP_F64) { ... }`; the CanonicalOp lives
-; in src/hotswap/canonical-op.h under the FP64 group.
 
+; v_ldexp_f64 lift with neg/abs input modifiers.
 ; CHECK-LABEL: define amdgpu_kernel void @v_ldexp_f64_kernel(
-
-; src0 modifier path: `|src0|` lifts to `llvm.fabs.f64`, then `-` lifts
-; to an `fneg`, and the negated value is the first operand to the
-; ldexp intrinsic.
 ; CHECK: [[ABS:%[a-zA-Z0-9_.]+]] = {{.*}}call {{.*}}double @llvm.fabs.f64(double {{.*}})
 ; CHECK: [[NEG:%[a-zA-Z0-9_.]+]] = fneg {{.*}}double [[ABS]]
 ; CHECK: call {{.*}}double @llvm.ldexp.f64.i32(double [[NEG]], i32 {{.*}})
-
-; Intrinsic declarations must be present (proves the calls were
-; created against the right overloads).
 ; CHECK-DAG: declare {{.*}}double @llvm.ldexp.f64.i32(double, i32)
 ; CHECK-DAG: declare {{.*}}double @llvm.fabs.f64(double)
 
@@ -49,10 +35,8 @@ v_ldexp_f64_kernel:
 	v_mad_u32 v2, s0, s2, v0
 	global_load_b64 v[0:1], v2, s[6:7] scale_offset
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_ldexp_f64 v[0:1], -|v[0:1]|, v0
 
-	;;#ASMEND
 	global_store_b64 v2, v[0:1], s[4:5] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

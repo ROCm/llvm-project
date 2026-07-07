@@ -1,10 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir | %FileCheck %s
-;
-; gfx12 prints LLVM's FLAT_ATOMIC_*_X2 integer family as
-; `flat_atomic_*_{u64,i64,b64}`.  Cover both the plain flat-address form and
-; the SADDR form whose VGPR offset is scaled by the 64-bit element size.
 
+; Lift 64-bit flat_atomic integer RMW ops (sub/add/and/or/xor/min/max/umin/umax) to i64 atomicrmw.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

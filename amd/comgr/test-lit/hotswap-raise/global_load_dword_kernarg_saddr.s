@@ -1,24 +1,10 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=global_load_dword_kernarg_saddr_kernel 2>/dev/null | %FileCheck %s
-;
-; GLOBAL_LOAD SADDR can use the source-ABI kernarg SGPR pair directly.
-; Under the kernarg-segment-ptr ABI Hotswap seeds that pair with the result
-; of `llvm.amdgcn.kernarg.segment.ptr()` (split into two i32 halves through
-; ptrtoint and re-assembled at every use), so the SGPR pair holds the real
-; kernarg segment address.  GPT-OSS `_upcast_from_mxfp` uses this shape to
-; read unaligned TensorDescriptor fields at offsets 94/98.  The regression
-; below pins the unaligned case: the source's
-; `global_load_b32 ..., s[0:1] offset:2` lowers to a regular GEP+load
-; against an addrspace(1) pointer reconstructed from the kernarg segment
-; pointer — not as a literal load from address 0x2.
 
+; global_load_b32 with kernarg-segment SADDR + kernarg provenance.
 ; CHECK-LABEL: define amdgpu_kernel void @global_load_dword_kernarg_saddr_kernel(ptr addrspace(4) byref([24 x i8]) align 16 %kargs)
-; The kernarg SGPR pair is materialized from amdgcn.kernarg.segment.ptr,
-; ptrtoint-split into two i32 halves, then reconstructed at every use.
 ; CHECK: %kernarg_ptr = call ptr addrspace(4) @llvm.amdgcn.kernarg.segment.ptr()
 ; CHECK: ptrtoint ptr addrspace(4) %kernarg_ptr to i64
-; The unaligned offset:2 load uses a GEP at byte offset 2 against the
-; reconstructed addrspace(1) pointer, then a regular i32-aligned load.
 ; CHECK: inttoptr i64 %{{.*}} to ptr addrspace(1)
 ; CHECK: getelementptr i8, ptr addrspace(1) %{{.*}}, i64 2
 ; CHECK: load float, ptr addrspace(1) %{{.*}}, align 4

@@ -1,11 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=saveexec_vcc_hi_kernel 2>&1 | %FileCheck %s
-;
-; Wave32 source -> wave64 target: vcc_hi is a scratch scalar, not the wave mask.
-; A saveexec naming vcc_hi as its destination must write the saved EXEC into the
-; scratch slot; one naming vcc_hi as its source must read the mask back from it.
 
+; s_and_saveexec_b32 via vcc_hi round-trips wave32 exec mask as i32.
 ; CHECK-LABEL: define amdgpu_kernel void @saveexec_vcc_hi_kernel(
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -15,14 +12,11 @@
 	.p2align	8
 	.type	saveexec_vcc_hi_kernel,@function
 saveexec_vcc_hi_kernel:
-; Destination: saved old EXEC is narrowed into the vcc_hi scratch slot.
 ; CHECK: %[[SAVED:.+]] = trunc i64 %{{.+}} to i32
 	s_and_saveexec_b32 vcc_hi, s4
-; The cndmask reads vcc_hi scratch, consuming the saved value.
 ; CHECK: zext i32 %[[SAVED]] to i64
 ; CHECK: = select i1 %{{.+}}, i32
 	v_cndmask_b32 v6, v2, v3, vcc_hi
-; Source: second saveexec reads vcc_hi scratch as the AND mask.
 ; CHECK: %wn_src_to_exec_zext{{[0-9]*}} = zext i32 %[[SAVED]] to i64
 ; CHECK: and i64 %new_exec, %wn_src_to_exec_mask{{[0-9]*}}
 	s_and_saveexec_b32 s6, vcc_hi

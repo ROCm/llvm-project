@@ -1,10 +1,3 @@
-// Test M-split with neg_lo:[0,0,1] on src2.
-//
-// Differs from K-split: M-split has no carry, so the original src2's
-// modifier applies to BOTH halves (each half has its own M-slice of
-// src2). The MATRIX_FMT_FP4 modifiers added by the splitter come BEFORE
-// the preserved neg_lo, mirroring how the printer orders them.
-
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
@@ -33,7 +26,6 @@ kernel:
   s_endpgm
 .size kernel, .-kernel
 
-// Idempotency.
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out2.elf \

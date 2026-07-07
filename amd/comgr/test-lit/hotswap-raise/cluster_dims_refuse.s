@@ -1,11 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx950 --emit-ir=cluster_dims_refuse_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=ERR
-;
-; Explicit non-disabled source clusters require real TTMP6 cluster workgroup
-; state. The current HotSwap ABI model only supports disabled source clusters,
-; so the lift must refuse instead of seeding TTMP6 as singleton state.
-;
+
+; Refuse source.cluster_dims requiring real TTMP6 cluster workgroup state.
 ; ERR: raise_cli: kernel 'cluster_dims_refuse_kernel' failed to raise: unsupported-source-cluster-dims: <source-cluster-dims> [unsupported-source-cluster-dims]
 ; ERR-SAME: .cluster_dims=[2,1,1] requires real TTMP6 cluster workgroup state
 

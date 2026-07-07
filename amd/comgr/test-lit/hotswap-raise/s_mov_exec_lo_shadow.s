@@ -2,14 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=s_mov_exec_lo_shadow_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; `s_mov_b32 sN, exec_lo` saves a source-wave EXEC mask in a 32-bit SGPR.
-; Under WaveNative wave32 -> wave64 lifting, the live EXEC alloca can carry
-; distinct masks for target lanes 0..31 and 32..63.  The save must therefore
-; record the full per-lane shadow for later scalar mask algebra; otherwise a
-; later `s_or_b32 exec_lo, exec_lo, sN` would restore only the low 32 bits and
-; replicate them into the upper half.
 
+; s_mov/s_or_b32 exec_lo scalar EXEC-writer projected to wave-native ballot mask.
 ; CHECK-LABEL: define amdgpu_kernel void @s_mov_exec_lo_shadow_kernel(
 ; CHECK: %[[SAVED_I1:.*]] = icmp ne i64 %{{.*}}, 0
 ; CHECK: %wm_shadow_exec{{[0-9]*}} = call i64 @llvm.amdgcn.ballot.i64(i1 %[[SAVED_I1]])

@@ -2,11 +2,8 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=c2_dpp_row_shr_bound_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Positive canary for the shared DPP16 out-of-range path. row_shr:4
-; can read outside the 16-lane row; bound_ctrl:1 must turn those lanes
-; into zero after the ds_bpermute rewrite rather than preserving `old`.
 
+; Lower DPP row_shr with in-row bounds masking to ds_bpermute.
 ; CHECK-LABEL: define amdgpu_kernel void @c2_dpp_row_shr_bound_kernel(
 ; CHECK-NOT: call i32 @llvm.amdgcn.update.dpp.i32(
 ; CHECK-DAG: %cwd_dpp_within_row = and i32 %{{.+}}, 15
@@ -47,10 +44,8 @@ c2_dpp_row_shr_bound_kernel:            ; @c2_dpp_row_shr_bound_kernel
 	v_mad_u32 v0, s0, s4, v0
 	global_load_b32 v1, v0, s[2:3] scale_offset
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_mov_b32_dpp v1, v1 row_shr:4 row_mask:0xf bank_mask:0xf bound_ctrl:1
 
-	;;#ASMEND
 	global_store_b32 v0, v1, s[2:3] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

@@ -3,34 +3,12 @@
 ; RUN:     --target-isa=gfx942 \
 ; RUN:     --emit-ir=flat_store_short_d16_hi_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; FLAT-addressing companion to
-; `global_store_short_d16_hi/global_store_short_d16_hi.ll`.  Same
-; "upper 16 bits of source VGPR" lift shape; different addrspace
-; literal on the store (addrspace(0) for FLAT, addrspace(1) for
-; GLOBAL).  Both route through the shared
-; `emitD16HiHalfTruncI16` helper in handle_flat.cpp so the
-; `d16hi_shift` / `d16hi_trunc` breadcrumbs are identical across
-; the two fixtures.
-;
-; Refusing to let a future refactor break ONLY the FLAT branch:
-; this fixture is what surfaces such a regression.  Without it,
-; the GLOBAL fixture alone would pass-while-FLAT-silently-broke.
 
+; flat_store_short_d16_hi: D16-hi i16 store lowering (lshr 16 / trunc).
 ; CHECK-LABEL: define amdgpu_kernel void @flat_store_short_d16_hi_kernel(
-
-; Same shared-helper IR shape as the GLOBAL fixture.
 ; CHECK-DAG: %d16hi_shift = lshr i32 %{{.+}}, 16
 ; CHECK-DAG: %d16hi_trunc = trunc i32 %d16hi_shift to i16
-
-; i16-wide store.  FLAT address space is addrspace(0), which the
-; backend lowers to either `flat_store_short` (flat aperture) or
-; `global_store_short` (when the pointer is provably global) — we
-; don't care which at the IR level; we care that the VALUE stored
-; is the upper-half-bf16 and NOT the low-16 of the source.
 ; CHECK: store i16 %d16hi_trunc, ptr %{{[^,]+}}
-
-; Width regressions.
 ; CHECK-NOT: store i32 %d16hi_trunc, ptr %
 ; CHECK-NOT: store i8 %d16hi_trunc, ptr %
 
@@ -60,10 +38,8 @@ flat_store_short_d16_hi_kernel:         ; @flat_store_short_d16_hi_kernel
 	v_dual_mov_b32 v2, s2 :: v_dual_ashrrev_i32 v1, 31, v0
 	s_delay_alu instid0(VALU_DEP_1)
 	v_lshl_add_u64 v[0:1], v[0:1], 1, s[0:1]
-	;;#ASMSTART
 	flat_store_short_d16_hi v[0:1], v2
 	
-	;;#ASMEND
 	s_endpgm
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0

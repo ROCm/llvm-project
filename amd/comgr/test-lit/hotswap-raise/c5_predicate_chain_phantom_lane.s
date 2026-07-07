@@ -3,22 +3,8 @@
 ; RUN:     --target-isa=gfx942 \
 ; RUN:     --emit-ir=c5_predicate_chain_phantom_lane_kernel 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; Regression fence for the single-source-wave MODREP C5 case.
-;
-; The kernel contains the C5 shape (`workitem.id.x` -> `icmp ult` against
-; a small compile-time constant) and statically declares
-; `max_flat_workgroup_size: 32`. For a gfx1250 wave32 source raised to a
-; gfx942 wave64 target, `raiser.cpp` routes this phantom-lane launch to
-; `ModuloReplicationProjection` so target lanes 32..63 remain hardware-
-; inactive for the whole kernel. Because no active target replica lane can
-; observe a different architectural `tid`, the C5 replica-divergence proof
-; obligation does not apply and the raise must succeed.
-;
-; The full active-replica MODREP refusal is pinned by
-; `c5_predicate_chain_tid.s` under `--disable-wave-native`; this fixture
-; pins the complementary no-active-replica case.
-;
+
+; Phantom-lane regime (max_flat_workgroup_size < target wave width) falls back to modulo-replication.
 ; CHECK: phantom-lane regime
 ; CHECK-SAME: max_flat_workgroup_size=32
 ; CHECK-SAME: target wavefront width=64
@@ -55,14 +41,10 @@ c5_predicate_chain_phantom_lane_kernel: ; @c5_predicate_chain_phantom_lane_kerne
 	s_cmp_eq_u32 s5, 0
 	s_cselect_b32 s0, ttmp9, s1
 	v_mad_u32 v1, s0, s4, v0
-	;;#ASMSTART
 	v_cmp_lt_u32_e64 s0, v0, 16
 	
-	;;#ASMEND
-	;;#ASMSTART
 	v_cndmask_b32_e64 v0, -1, v0, s0
 	
-	;;#ASMEND
 	global_store_b32 v1, v0, s[2:3] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

@@ -1,11 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_max3_i32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for v_max3_i32. The hardware semantics are:
-;   v_max_i32(v_max_i32(S0, S1), S2)
-; LLVM's AMDGPU .td names the same semantic AMDGPUsmax3, so the
-; target-independent lift is the two-step llvm.smax.i32 chain.
 
+; v_max3_i32 3-input signed max lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_max3_i32_kernel(
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -40,7 +36,6 @@ v_max3_i32_kernel:
 	s_wait_loadcnt 0x0
 ; CHECK: %vmax3_i32_lo{{[0-9]*}} = call i32 @llvm.smax.i32(i32 %{{[^,]+}}, i32 %{{[^)]+}})
 ; CHECK: %vmax3_i32{{[0-9]*}} = call i32 @llvm.smax.i32(i32 %vmax3_i32_lo{{[0-9]*}}, i32 %{{[^)]+}})
-; Negative checks: this is signed integer max, not unsigned max or FP maxnum.
 ; CHECK-NOT: call {{.*}}@llvm.umax
 ; CHECK-NOT: call {{.*}}@llvm.maxnum
 	v_max3_i32 v0, v0, v1, v2

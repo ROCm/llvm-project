@@ -1,11 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_pk_fma_bf16_kernel 2>/dev/null | %FileCheck %s --check-prefix=IR
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out --kernel=v_pk_fma_bf16_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
-;
-; Translation canary for the second RWKV7/FLA packed-BF16 blocker:
-; `v_pk_fma_bf16` is the three-source sibling of `v_pk_add_bf16`, using the
-; same packed BF16 source selection and per-lane negation modifiers.
 
+; v_pk_fma_bf16 packed bf16 FMA lift.
 ; IR-LABEL: define amdgpu_kernel void @v_pk_fma_bf16_kernel(
 ; IR: call <2 x bfloat> @llvm.fma.v2bf16(
 ; IR: [[MOD_SRC0:%[^ ]+]] = bitcast i32 {{[^ ]+}} to <2 x bfloat>
@@ -32,10 +29,8 @@ v_pk_fma_bf16_kernel:
 	v_mov_b32_e32 v1, 0x3f803f80
 	v_mov_b32_e32 v2, 0x40004000
 	v_mov_b32_e32 v3, 0x40404040
-	;;#ASMSTART
 	v_pk_fma_bf16 v4, v1, v2, v3
 	v_pk_fma_bf16 v5, v1, v2, v3 op_sel:[1,0,0] op_sel_hi:[0,1,1] neg_lo:[1,0,0] neg_hi:[0,1,0]
-	;;#ASMEND
 	global_store_b32 v0, v4, s[0:1] scale_offset
 	v_lshlrev_b32_e32 v7, 2, v0
 	global_store_b32 v7, v5, s[0:1] scale_offset

@@ -19,14 +19,8 @@
 ; RUN:   && %ld_lld -shared %t.se.o -o %t.se.hsaco \
 ; RUN:   && %not %raise_cli %t.se.hsaco --target-isa=gfx942 --emit-ir=global_wb_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-SE
-;
-; gfx1250 global_wb scope:SCOPE_DEV flushes dirty lower-scope global cache data
-; to device/agent scope.  The target gfx942 backend lowers an agent release
-; fence to the matching L2 writeback operation plus the required wait.
-; System scope follows the same IR memory-model path and lowers to the gfx942
-; system-scope writeback. CU scope is a no-op/done-returning form. SE scope has
-; no matching LLVM/gfx942 fence scope and must refuse rather than widen silently.
 
+; global_wb scope lowering: SCOPE_DEV/SYS -> fence + buffer_wbl2; SCOPE_SE refused.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

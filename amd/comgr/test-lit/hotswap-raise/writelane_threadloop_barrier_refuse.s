@@ -3,13 +3,8 @@
 ; RUN:     --enable-writelane-rewrite \
 ; RUN:     --emit-ir=writelane_threadloop_barrier_refuse_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=IR
-;
-; A readlane/writelane -> readfirstlane chain used to fall back to
-; ThreadLoopProjection; with workgroup barriers/LDS that was unsafe.  The
-; explicit readfirstlane is now rewritten to a source-wave `ds_bpermute`
-; broadcast under WaveNative, so the barrier-bearing kernel no longer needs
-; ThreadLoop.
-;
+
+; writelane rewrite past s.barrier refuses thread-loop projection.
 ; IR-NOT: ThreadLoopProjection
 ; IR-LABEL: define amdgpu_kernel void @writelane_threadloop_barrier_refuse_kernel(
 ; IR: call void @llvm.amdgcn.s.barrier()

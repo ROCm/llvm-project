@@ -1,11 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx950 --emit-ir=ttmp6_cluster_workgroup_id_init_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; gfx12+ source kernels may read TTMP6 for workgroup-cluster fields. When
-; source metadata disables clusters, the source-visible cluster is the
-; singleton cluster: workgroup-in-cluster IDs and max IDs are all zero.
 
+; ttmp6 cluster/workgroup-id register seeding.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

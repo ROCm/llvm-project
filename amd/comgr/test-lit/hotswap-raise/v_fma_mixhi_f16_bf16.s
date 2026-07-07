@@ -2,15 +2,9 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=v_fma_mixhi_f16_bf16_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Pins V_FMA_MIXHI_F16 and V_FMA_MIXHI_BF16 lowering. These are the high-half
-; siblings of the existing MIXLO forms: mixed selected inputs feed an f32
-; `llvm.fma`, the result rounds to the mnemonic's narrow type, and only the
-; high 16 bits of the tied destination are written.
 
+; v_fma_mixhi_f16/bf16 high-half packed FMA-mix lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_fma_mixhi_f16_bf16_kernel(
-
-; F16 high-half form: src0 low half, src1 high half, src2 full f32.
 ; CHECK-DAG: %mixhi_cvt = fpext half %{{.*}} to float
 ; CHECK-DAG: lshr i32 %{{.*}}, 16
 ; CHECK-DAG: %mixhi_cvt{{[0-9]+}} = fpext half %{{.*}} to float
@@ -21,15 +15,11 @@
 ; CHECK: %fma_mixhi_f16_old_lo = and i32 %{{.*}}, 65535
 ; CHECK: %fma_mixhi_f16_hi_bits = shl i32 %{{.*}}, 16
 ; CHECK: %fma_mixhi_f16_pack = or i32 %fma_mixhi_f16_old_lo, %fma_mixhi_f16_hi_bits
-
-; BF16 high-half form uses the same selection/writeback shape with bfloat.
 ; CHECK-DAG: %mixhi_cvt_bf16 = fpext bfloat %{{.*}} to float
 ; CHECK-DAG: %mixhi_cvt_bf16{{[0-9]+}} = fpext bfloat %{{.*}} to float
 ; CHECK: %fma_mixhi_bf16 = call float @llvm.fma.f32(float %mixhi_cvt_bf16, float %mixhi_cvt_bf16{{[0-9]+}}, float %{{.*}})
 ; CHECK: %fma_mixhi_bf16_round = fptrunc float %fma_mixhi_bf16 to bfloat
 ; CHECK: bitcast bfloat %fma_mixhi_bf16_round to i16
-
-; High-half writeback preserves the old destination low half explicitly.
 ; CHECK: %{{.*}} = zext i16 %{{.*}} to i32
 ; CHECK: %fma_mixhi_bf16_old_lo = and i32 %{{.*}}, 65535
 ; CHECK: %fma_mixhi_bf16_hi_bits = shl i32 %{{.*}}, 16
@@ -50,10 +40,8 @@ v_fma_mixhi_f16_bf16_kernel:
 	v_mov_b32_e32 v1, s0
 	v_mov_b32_e32 v2, s0
 	v_mov_b32_e32 v4, s0
-	;;#ASMSTART
 	v_fma_mixhi_f16 v2, v1, v3, v5 op_sel:[0,1,0] op_sel_hi:[1,1,0]
 	v_fma_mixhi_bf16 v4, v1, v3, v5 op_sel:[0,1,0] op_sel_hi:[1,1,0]
-	;;#ASMEND
 	global_store_b64 v0, v[2:3], s[0:1] scale_offset
 	global_store_b32 v0, v4, s[0:1] offset:8 scale_offset
 	s_endpgm

@@ -3,12 +3,8 @@
 ; RUN:     --assume-hip-global-offset-zero \
 ; RUN:     --emit-ir=kernarg_diamond_unknown_strict_refuse 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; A diamond join where one incoming path still has the entry kernarg pointer
-; and the other has an ordinary write to the physical s[0:1] pair must converge
-; to Unknown at the join. Strict mode must then refuse source-hidden-arg
-; synthesis.
 
+; strict-mode refusal: diamond CFG merge yields Unknown kernarg-ptr provenance at the hidden-arg load.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

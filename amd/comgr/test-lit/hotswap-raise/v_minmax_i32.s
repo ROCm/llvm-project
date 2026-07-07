@@ -5,9 +5,8 @@
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --write-hsaco=%t.gfx942.hsaco --kernel=v_int_minmax_family_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=PIPE
-;
-; Lift test for the gfx11+/gfx12 integer ternary min/max family.
 
+; v_min/max_i32 signed int minmax family lift.
 ; IR-LABEL: define amdgpu_kernel void @v_int_minmax_family_kernel(
 ; IR-NOT: call {{.*}}@llvm.minnum
 ; IR-NOT: call {{.*}}@llvm.maxnum

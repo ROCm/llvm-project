@@ -1,30 +1,22 @@
-// COM: Test HotSwap in-place patch: cluster_load_async_to_lds_{b8,b32,b64,b128}
-// COM: -> global_load_async_to_lds_{b8,b32,b64,b128}.
-
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
-// API: RESULT: SUCCESS
-
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --output %t.out2.elf \
+// RUN:   | %FileCheck --check-prefix=API2 %s
+// RUN: cmp %t.out.elf %t.out2.elf
 
-// COM: All cluster_load_async_to_lds variants should be replaced
+// API: RESULT: SUCCESS
 // DISASM-NOT: cluster_load_async_to_lds
 // DISASM-DAG: global_load_async_to_lds_b8
 // DISASM-DAG: global_load_async_to_lds_b32
 // DISASM-DAG: global_load_async_to_lds_b64
 // DISASM-DAG: global_load_async_to_lds_b128
-
-// COM: Idempotency: output should be identical on second rewrite.
-// RUN: hotswap-rewrite %t.out.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out2.elf \
-// RUN:   | %FileCheck --check-prefix=API2 %s
 // API2: RESULT: SUCCESS
-// RUN: cmp %t.out.elf %t.out2.elf
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

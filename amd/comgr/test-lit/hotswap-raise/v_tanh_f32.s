@@ -2,21 +2,16 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_tanh_f32_kernel 2>&1 | %FileCheck %s --check-prefix=IR
 ; RUN: raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_tanh_f32_kernel 2>&1 | %FileCheck %s --check-prefix=SAME
 ; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_tanh_f32_omod_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=MOD
-;
-; Targets with native tanh support keep the AMDGPU intrinsic path. Cross-target
-; lifts to targets without native tanh support use the matching OCML entry point
-; and inline the linked device-library body before final lowering.
 
+; v_tanh_f32 cross-target expands via __ocml_tanh_f32 (native amdgcn.tanh.f32 same-target); clamp/omod refused.
 ; IR-LABEL: define amdgpu_kernel void @v_tanh_f32_kernel(
 ; IR: __ocml_tanh_f32.exit:
 ; IR-NOT: call {{.*}}@__ocml_tanh_f32
 ; IR: ret void
 ; IR-NOT: declare {{.*}}@__ocml_tanh_f32
-
 ; SAME-LABEL: define amdgpu_kernel void @v_tanh_f32_kernel(
 ; SAME: call float @llvm.amdgcn.tanh.f32(
 ; SAME-NOT: __ocml_tanh_f32
-
 ; MOD-DAG: kernel 'v_tanh_f32_omod_refuse_kernel'
 ; MOD-DAG: V_TANH_F32 with non-default clamp/omod is not yet lifted
 ; MOD-DAG: output modifier semantics must not be silently dropped

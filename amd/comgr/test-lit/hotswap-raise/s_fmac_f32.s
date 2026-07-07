@@ -1,16 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=s_fmac_f32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for gfx12 scalar fused multiply-accumulate. The instruction manual
-; defines s_fmac_f32 as an OPF_DACCUM SOP2 instruction:
-;   D0.f32 = fma(S0.f32, S1.f32, D0.f32)
-; The old destination value is therefore the accumulator operand, and the lift
-; must use llvm.fma rather than an explicit fmul/fadd pair or llvm.fmuladd.
 
-; s_fmac_f32 must lift to a single @llvm.fma.f32, never to
-; @llvm.fmuladd or a separate fmul/fadd pair.  The accumulator and
-; both multiplicands all come from kernarg loads via
-; `llvm.amdgcn.kernarg.segment.ptr`.
+; s_fmac_f32 scalar fused multiply-add lifted to llvm.fma.f32.
 ; CHECK-LABEL: define amdgpu_kernel void @s_fmac_f32_kernel(
 ; CHECK: call ptr addrspace(4) @llvm.amdgcn.kernarg.segment.ptr()
 ; CHECK: [[SRC0:%[^ ]+]] = bitcast i32 %{{[^ ]+}} to float
@@ -46,11 +37,9 @@ s_fmac_f32_kernel:
 	s_cmp_eq_u32 s3, 0
 	s_cselect_b32 s0, ttmp9, s1
 	v_mad_u32 v0, s0, s2, v0
-	;;#ASMSTART
 	s_mov_b32 s0, s4
 	s_fmac_f32 s0, s6, s7
 	
-	;;#ASMEND
 	v_mov_b32_e32 v1, s0
 	global_store_b32 v0, v1, s[4:5] scale_offset
 	s_endpgm

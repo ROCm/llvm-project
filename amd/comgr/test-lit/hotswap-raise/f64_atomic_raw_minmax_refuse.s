@@ -1,12 +1,11 @@
 ; RUN: %llvm_mc -mcpu=gfx942 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=flat_atomic_f64_raw_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=FLAT
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=global_atomic_f64_raw_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=GLOBAL
-;
-; FLAT-DAG: kernel 'flat_atomic_f64_raw_refuse_kernel'
-; FLAT-DAG: f64 atomic min/max from a pre-gfx12 source uses raw compare semantics
-;
-; GLOBAL-DAG: kernel 'global_atomic_f64_raw_refuse_kernel'
-; GLOBAL-DAG: f64 atomic min/max from a pre-gfx12 source uses raw compare semantics
+; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=flat_atomic_f64_raw_refuse_kernel,global_atomic_f64_raw_refuse_kernel 2>&1 | %FileCheck %s
+
+; Refuse f64 atomic min/max lift from a pre-gfx12 source (raw compare semantics).
+; CHECK-DAG: kernel 'flat_atomic_f64_raw_refuse_kernel'
+; CHECK-DAG: f64 atomic min/max from a pre-gfx12 source uses raw compare semantics
+; CHECK-DAG: kernel 'global_atomic_f64_raw_refuse_kernel'
+; CHECK-DAG: f64 atomic min/max from a pre-gfx12 source uses raw compare semantics
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6

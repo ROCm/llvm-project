@@ -2,6 +2,7 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_floor_f64_kernel \
 ; RUN:   | %FileCheck %s
 
+; v_floor_f64 lift with fneg/fabs input modifiers.
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
         .text

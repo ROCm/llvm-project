@@ -1,33 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:        --emit-ir=setpc_terminal_fallthrough_kernel 2>&1 | %FileCheck %s
-;
-; Regression for a kernel-boundary-violation in the s_set_pc_i64 analysis.
-;
-; When the FINAL decoded instruction of a kernel is an unconditional
-; s_set_pc_i64 (a DirectA tail-jump / Pattern-B return), its fallthrough
-; offset is `di.offset + di.size` == the kernel's one-past-the-end
-; boundary (KernelEndOffset). Phase 1 of setpc-analysis.cpp used to
-; register that fallthrough as an `extraBlockStart` unconditionally; the
-; raiser then rejected the whole kernel with
-;   "s_set_pc_i64 analysis discovered a target outside the selected
-;    kernel extent"
-; even though an unconditional s_set_pc has no fallthrough control-flow
-; edge at all (nothing ever executes the boundary offset).
-;
-; This reproduces the shape seen in the wan2.2 Triton kernel
-; triton_poi_fused__fused_rms_norm_cat_...view_8: a tail region of
-; getpc+add+add+s_set_pc chains whose very last instruction is a
-; terminal s_set_pc landing exactly at the kernel end. The fix gates the
-; fallthrough block-leader registration on an instruction actually
-; beginning at that offset, so the boundary offset is no longer treated
-; as a decode target.
-;
-; The explicit `.size` below ends the kernel symbol exactly at the
-; terminal s_set_pc, so its fallthrough == KernelEndOffset (the bug
-; trigger). The chain resolves to an in-kernel block (.Ltarget), so the
-; site is DirectA and lowers to a `br label %bb_0x<target>`.
 
+; s_set_pc_i64 backward resolvable target folded to br with no unreachable.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -42,9 +17,6 @@ setpc_terminal_fallthrough_kernel:
 	v_mov_b32 v1, 0xDEAD0001
 	s_wait_kmcnt 0x0
 	global_store_b32 v0, v1, s[0:1] scale_offset
-	; Terminal DirectA set_pc: chain resolves to .Ltarget (a non-entry
-	; in-kernel block). It is the LAST instruction; its fallthrough lands
-	; on the kernel-end boundary.
 	s_get_pc_i64 s[10:11]
 .Lpost:
 	s_add_co_u32 s10, s10, (.Ltarget - .Lpost)

@@ -1,7 +1,3 @@
-// Test that matrix_b_reuse is stripped on both halves of a K-split,
-// same rationale as matrix_a_reuse (the B matrix is sliced in half by
-// K, so the reuse-buffer assertion no longer holds after rewrite).
-
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
@@ -32,7 +28,6 @@ kernel:
   s_endpgm
 .size kernel, .-kernel
 
-// Idempotency.
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out2.elf \

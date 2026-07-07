@@ -1,13 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_pk_add_bf16_kernel 2>/dev/null | %FileCheck %s --check-prefix=IR
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out --kernel=v_pk_add_bf16_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
-;
-; Translation canary for the RWKV7/FLA raiser gap:
-; `v_pk_add_bf16` is a gfx1250 VOP3P packed `<2 x bfloat>` add. Before the
-; handler support landed, this fixture failed with `Unsupported instruction:
-; v_pk_add_bf16`; after the fix it raises to IR and completes the gfx1250 ->
-; gfx942 pipeline.
 
+; v_pk_add_bf16 packed bf16 add lift.
 ; IR-LABEL: define amdgpu_kernel void @v_pk_add_bf16_kernel(
 ; IR: [[SRC0:%[^ ]+]] = bitcast i32 {{[^ ]+}} to <2 x bfloat>
 ; IR-DAG: [[SRC0_LO:%[^ ]+]] = extractelement <2 x bfloat> [[SRC0]], i64 0
@@ -44,10 +39,8 @@ v_pk_add_bf16_kernel:
 	s_wait_kmcnt 0x0
 	v_mov_b32_e32 v1, 0x3f803f80
 	v_mov_b32_e32 v2, 0x40004000
-	;;#ASMSTART
 	v_pk_add_bf16 v3, v1, v2
 	v_pk_add_bf16 v4, v1, v2 op_sel:[1,0] op_sel_hi:[0,1] neg_lo:[1,0] neg_hi:[0,1]
-	;;#ASMEND
 	global_store_b32 v0, v3, s[0:1] scale_offset
 	v_lshlrev_b32_e32 v6, 2, v0
 	global_store_b32 v6, v4, s[0:1] scale_offset

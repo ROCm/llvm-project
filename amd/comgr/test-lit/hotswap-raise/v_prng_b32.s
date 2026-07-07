@@ -4,16 +4,11 @@
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_prng_b32_kernel \
 ; RUN:     2>/dev/null \
 ; RUN:   | %FileCheck %s --check-prefixes=CHECK,CROSS
-;
-; v_prng_b32: out = (in << 1) ^ (in[31] ? 197 : 0).
-;   SAME  -- gfx950 has FeaturePrngInst: emit llvm.amdgcn.prng.b32.
-;   CROSS -- gfx942 lacks it: expand the LFSR step in IR.
 
+; v_prng_b32 intrinsic keep (same-target) vs xorshift lowering (cross-target).
 ; CHECK-LABEL: define amdgpu_kernel void @v_prng_b32_kernel(
-
 ; SAME: %prng_b32{{[0-9]*}} = call i32 @llvm.amdgcn.prng.b32(i32 %{{[^)]+}})
 ; SAME-NOT: select i1
-
 ; CROSS: %prng_shl{{[0-9]*}} = shl i32 %{{[^,]+}}, 1
 ; CROSS: %prng_neg{{[0-9]*}} = icmp slt i32 %{{[^,]+}}, 0
 ; CROSS: %prng_tap{{[0-9]*}} = select i1 %prng_neg{{[0-9]*}}, i32 197, i32 0
@@ -30,12 +25,8 @@ v_prng_b32_kernel:
 	s_load_dwordx4 s[0:3], s[0:1], 0x0
 	s_waitcnt lgkmcnt(0)
 	v_mov_b32_e32 v1, s2
-	;;#ASMSTART
 	v_prng_b32 v0, v1
-	;;#ASMEND
-	;;#ASMSTART
 	v_prng_b32_e64 v2, v1
-	;;#ASMEND
 	v_mov_b32_e32 v3, 0
 	global_store_dword v3, v0, s[0:1]
 	global_store_dword v3, v2, s[0:1]

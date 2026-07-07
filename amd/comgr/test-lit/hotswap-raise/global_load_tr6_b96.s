@@ -1,11 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=global_load_tr6_b96_kernel | %FileCheck %s
-;
-; Cross-target lift of gfx1250 global_load_tr6_b96 (WMMA i6 matrix load
-; with transpose, 16-lane group). i6 elements straddle dword boundaries,
-; so unlike TR4/TR8/TR16 extraction uses an i64 sliding window.
 
+; global_load_tr6_b96 transpose lift: ds.bpermute lane-shuffle emulation on gfx942.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -21,10 +18,8 @@ global_load_tr6_b96_kernel:
 ; CHECK: [[LANELO:%[a-zA-Z_0-9]+]] = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0)
 ; CHECK: call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 [[LANELO]])
 ; CHECK: = load <3 x i32>, ptr addrspace(1)
-; 48 ds.bpermute: 16 source lanes x 3 raw dwords.
 ; CHECK-COUNT-48: call i32 @llvm.amdgcn.ds.bpermute(
 ; CHECK-NOT: call i32 @llvm.amdgcn.ds.bpermute(
-; i64 window (lo | (hi << 32)), mask to 6 bits, trunc to i32.
 ; CHECK: zext i32 %{{[^ ]+}} to i64
 ; CHECK: shl i64 %{{[^,]+}}, 32
 ; CHECK: %tr6_win{{[0-9]*}} = or i64

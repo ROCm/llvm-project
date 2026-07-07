@@ -3,16 +3,9 @@
 ; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=sendmsg_gs_alloc_req_kernel 2>&1 | %FileCheck %s --check-prefix=STDERR
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=sendmsg_dealloc_passthrough_kernel 2>/dev/null | %FileCheck %s --check-prefix=PASSTHROUGH
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=sendmsg_dealloc_drop_kernel 2>/dev/null | %FileCheck %s --check-prefix=DROP
-;
-; s_sendmsg message-ID policy for a gfx1250 lift. INTERRUPT (ID=1) is portable
-; and lifts to the intrinsic with the current M0 payload. DEALLOC_VGPRS (ID=3)
-; passes through on a gfx1250 target but drops on a gfx942 target, which reserves
-; ID=3 and frees VGPRs implicitly at s_endpgm. Any other ID (here GS_ALLOC_REQ)
-; refuses, since the same SIMM16 aliases different messages across generations;
-; the raiser exits non-zero and names s_sendmsg / SOPP.
 
+; s_sendmsg interrupt lift, dealloc passthrough/drop, and gs_alloc_req [SOPP] refusal.
 ; INTERRUPT-LABEL: define amdgpu_kernel void @sendmsg_interrupt_kernel(
-; The M0 immediate 0x42 (66) folds through to the intrinsic argument.
 ; INTERRUPT: call void @llvm.amdgcn.s.sendmsg(i32 1, i32 66)
 
 ; STDERR: raise_cli: kernel 'sendmsg_gs_alloc_req_kernel' failed to raise:
@@ -20,7 +13,6 @@
 ; STDERR-SAME: [SOPP]
 
 ; PASSTHROUGH-LABEL: define amdgpu_kernel void @sendmsg_dealloc_passthrough_kernel(
-; M0 is never written, so the alloca-init value (0) folds into the argument.
 ; PASSTHROUGH: call void @llvm.amdgcn.s.sendmsg(i32 3, i32 0)
 
 ; DROP-LABEL: define amdgpu_kernel void @sendmsg_dealloc_drop_kernel(

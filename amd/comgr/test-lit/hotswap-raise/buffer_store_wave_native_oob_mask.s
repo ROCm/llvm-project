@@ -5,28 +5,11 @@
 ; RUN: raise_cli %t.hsaco --target-isa=gfx942 --disable-wave-native \
 ; RUN:   --emit-ir=buffer_store_wave_native_oob_mask_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s --check-prefix=MR
-;
-; Regression guard for Triton's masked MUBUF-store idiom under WaveNative
-; gfx1250->gfx942 translation.
-;
-; The source packet below encodes the store predicate in the vector offset:
-; lane 0 stores at byte offset 0, all other lanes store at byte offset 64
-; against an SRD with NUM_RECORDS=4.  Hardware drops the OOB lanes.  Under
-; WaveNative, the projection has a full-wave hardware EXEC invariant, so the
-; lifted raw buffer store must be emitted as the source packet intended:
-; full-wave issue plus per-lane OOB suppression.  Wrapping this store in an
-; additional `emitUnderExec` diamond can make the translated code stricter than
-; the source packet and drop the valid lane too; this is the shape that broke
-; GPT-OSS `get_num_kv_splits_triton`.
-;
-; The ModuloReplication opt-out remains the ordinary side-effect path: it does
-; not provide a full-wave EXEC invariant, so the store stays under
-; `emitUnderExec`.
 
+; Buffer store OOB-lane masking under wave-native vs modulo-replication.
 ; WN-LABEL: define amdgpu_kernel void @buffer_store_wave_native_oob_mask_kernel(
 ; WN: call i1 @llvm.amdgcn.init.whole.wave()
 ; WN: call void @llvm.amdgcn.raw.buffer.store.i32(
-
 ; MR-LABEL: define amdgpu_kernel void @buffer_store_wave_native_oob_mask_kernel(
 ; MR: br i1 %{{[^,]+}}, label %spe_do{{[0-9]*}}, label %spe_skip{{[0-9]*}}
 ; MR: spe_do{{[0-9]*}}:

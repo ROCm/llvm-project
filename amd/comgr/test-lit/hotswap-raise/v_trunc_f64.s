@@ -2,6 +2,8 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_trunc_f64_kernel \
 ; RUN:   | %FileCheck %s
 
+; v_trunc_f64 lifts to @llvm.trunc.f64 with neg/abs modifiers.
+
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
         .text

@@ -1,10 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx942 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --emit-ir 2>/dev/null | %FileCheck %s
-;
-; Lift test for the LDS ds_add F64 atomics: the no-return form (ds_add_f64)
-; and the return form (ds_add_rtn_f64), which additionally writes back the
-; pre-op value. Both lift to an addrspace(3) `atomicrmw fadd double`.
 
+; Lift ds_add_f64/ds_add_rtn_f64 to double atomicrmw fadd on addrspace(3).
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6
 	.text
@@ -16,10 +13,8 @@ ds_add_f64_kernel:
 	v_mov_b32_e32 v2, 0
 	v_mov_b32_e32 v3, 0x3ff00000
 ; CHECK-LABEL: define amdgpu_kernel void @ds_add_f64_kernel(
-; No-return form: plain addrspace(3) atomicrmw fadd.
 ; CHECK: atomicrmw fadd ptr addrspace(3) %{{[^,]+}}, double %{{[^ ]+}}
 	ds_add_f64 v0, v[2:3]
-; Return form: same atomicrmw, plus the returned value bitcast back to i64.
 ; CHECK: %[[RMW:.+]] = atomicrmw fadd ptr addrspace(3) %{{[^,]+}}, double %{{[^ ]+}}
 ; CHECK: bitcast double %[[RMW]] to i64
 	ds_add_rtn_f64 v[4:5], v0, v[2:3]

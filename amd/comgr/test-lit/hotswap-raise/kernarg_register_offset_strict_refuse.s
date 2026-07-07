@@ -2,12 +2,8 @@
 ; RUN:   && env HSA_HOTSWAP_STRICT=1 %not raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=kernarg_register_offset_strict_refuse 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; A dynamic SMEM offset through the entry kernarg pair may land in the source
-; implicit-arg range. Without a range proof that the SGPR offset stays below
-; implicitArgsBase, strict mode must refuse instead of using the target
-; explicit kernarg segment.
 
+; strict-mode refusal: dynamic (register) kernarg offset may reach the source implicit-arg range.
 ; CHECK: dynamic source kernarg offsets may reach the source implicit-arg range
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

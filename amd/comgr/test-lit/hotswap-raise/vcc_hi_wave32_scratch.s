@@ -1,12 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vcc_hi_scratch_kernel 2>/dev/null | %FileCheck %s
-;
-; Wave32 source raised to a wave64 target.  Exercises the wave32 VCC_HI
-; handling: parseReg (raise-context.cpp) routes VCC_HI to its own
-; VCC_HI_SCRATCH slot, and collectAllocas (reg-file.cpp) promotes that slot,
-; so a VCC-writing v_cmp cannot clobber the scratch value.  Per-instruction
-; CHECKs are inline in the kernel body below.
+
+; vcc_hi holds a plain i32 scratch value (no alloca) while vcc_lo drives cndmask (wave32 VCC_HI-as-regular-register).
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
@@ -16,7 +12,6 @@
 ; CHECK-LABEL: define amdgpu_kernel void @vcc_hi_scratch_kernel(
 vcc_hi_scratch_kernel:
 	s_mov_b32 vcc_hi, 42
-	; The scratch slot is promoted, never left as a private alloca:
 	; CHECK-NOT: %VccHiScratch = alloca
 	v_cmp_lt_i32 vcc_lo, v0, v1
 	; CHECK: %[[VCMP:[a-zA-Z0-9_.]+]] = icmp slt
@@ -24,8 +19,6 @@ vcc_hi_scratch_kernel:
 	; CHECK: select i1 %[[VCMP]]
 	v_mov_b32 v2, vcc_hi
 	ds_store_b32 v3, v2
-	; vcc_hi still reads 42 -- distinct from the VCC the v_cmp wrote -- and
-	; reaches the store as a propagated constant (proving it was promoted):
 	; CHECK: store i32 42, ptr addrspace(3)
 	ds_store_b32 v6, v5
 	s_endpgm

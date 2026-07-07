@@ -1,22 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=setpc_mcexpr_addend_kernel | %FileCheck %s
-;
-; s_set_pc_i64 Pattern A (statically resolvable intra-kernel branch) with the
-; chain addend written as a label-difference, which the disassembler surfaces
-; as an MCExpr literal rather than a plain Imm. Pins that imm32 folds the
-; MCExpr addend through the PC chain
-;   s_get_pc_i64 -> s_add_co_u32 -> s_add_co_ci_u32
-; instead of breaking the chain and forcing the site to Unresolvable.
-;
-; Layout:
-;     0x10: s_get_pc_i64 s[10:11]
-;     0x14: .Lpost  s_add_co_u32 s10, s10, lit(0x1C)
-;     0x1C:         s_add_co_ci_u32 s11, s11, lit(0x0)
-;     0x24:         s_set_pc_i64 s[10:11]
-;     0x30: .Ltarget v_mov_b32 v1, 0xDEAD0001
-;   target = .Lpost(0x14) + (.Ltarget - .Lpost)(0x1C) = 0x30 -> bb_0x30.
-; Both addends exercise the MCExpr path: low lit(0x1C) and high lit(0x0).
 
+; s_set_pc_i64 with an MCExpr addend classified to a direct branch by.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

@@ -1,10 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_pk_bf16_siblings_kernel 2>/dev/null | %FileCheck %s --check-prefix=IR
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out --kernel=v_pk_bf16_siblings_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
-;
-; Lift test for the remaining gfx1250 packed BF16 VOP3P arithmetic siblings:
-; `v_pk_mul_bf16`, `v_pk_min_num_bf16`, and `v_pk_max_num_bf16`.
 
+; v_pk_mul/min/max bf16 sibling lowerings.
 ; IR-LABEL: define amdgpu_kernel void @v_pk_bf16_siblings_kernel(
 ; IR: [[MUL_SRC:%[^ ]+]] = bitcast i32 {{[^ ]+}} to <2 x bfloat>
 ; IR-DAG: [[MUL_LO:%[^ ]+]] = extractelement <2 x bfloat> [[MUL_SRC]], i64 0
@@ -37,13 +35,11 @@ v_pk_bf16_siblings_kernel:
 	s_wait_kmcnt 0x0
 	v_mov_b32_e32 v1, 0x3f803f80
 	v_mov_b32_e32 v2, 0x40004000
-	;;#ASMSTART
 	v_pk_mul_bf16 v3, v1, v2 op_sel:[1,0] op_sel_hi:[0,1] neg_lo:[1,0] neg_hi:[0,1]
 	v_pk_min_num_bf16 v4, v1, v2
 	v_pk_max_num_bf16 v5, v1, v2
 	v_pk_min_num_bf16 v6, v1, v2 clamp
 	v_pk_max_num_bf16 v7, v1, v2 clamp
-	;;#ASMEND
 	global_store_b32 v0, v3, s[0:1] scale_offset
 	v_lshlrev_b32_e32 v8, 2, v0
 	global_store_b32 v8, v4, s[0:1] scale_offset

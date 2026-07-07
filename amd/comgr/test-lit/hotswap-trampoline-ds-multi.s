@@ -1,30 +1,20 @@
-// COM: Test multi-DS stacking: two ds_load_2addr_stride64_b32 sites
-// COM: before a single s_wait_dscnt. Each expansion bumps the wait by 1,
-// COM: so the final counter should be 0x2 (not 0x1).
-
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
-// API: RESULT: SUCCESS
-
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
 
-// COM: Both DS2 instructions are replaced by s_branch to their respective
-// COM: expansion sleds. The single s_wait_dscnt is bumped twice (0x0 -> 0x2).
+// API: RESULT: SUCCESS
 // DISASM-LABEL: <test_multi_ds>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
 // DISASM: s_branch
 // DISASM: s_wait_dscnt 0x2
-
-// COM: Idempotency
-// RUN: hotswap-rewrite %t.out.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --check-idempotent \
-// RUN:   | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

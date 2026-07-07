@@ -1,15 +1,10 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx950 --emit-ir=cluster_dims_overflow_refuse_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=OVERFLOW
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx950 --emit-ir=cluster_dims_negative_refuse_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=NEGATIVE
-;
-; Malformed cluster dimensions must not be narrowed into valid-looking values.
-; In particular, UINT32_MAX+1 would otherwise truncate to the disabled-cluster
-; sentinel zero.
-;
-; OVERFLOW: raise_cli: kernel 'cluster_dims_overflow_refuse_kernel' metadata: hotswap: extractKernelMeta: kernel 'cluster_dims_overflow_refuse_kernel' has malformed .cluster_dims metadata
-; NEGATIVE: raise_cli: kernel 'cluster_dims_negative_refuse_kernel' metadata: hotswap: extractKernelMeta: kernel 'cluster_dims_negative_refuse_kernel' has malformed .cluster_dims metadata
+; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx950 --emit-ir=cluster_dims_overflow_refuse_kernel,cluster_dims_negative_refuse_kernel 2>&1 \
+; RUN:   | %FileCheck %s
+
+; Refuse malformed.cluster_dims metadata (overflow/negative).
+; CHECK-DAG: raise_cli: kernel 'cluster_dims_overflow_refuse_kernel' metadata: hotswap: extractKernelMeta: kernel 'cluster_dims_overflow_refuse_kernel' has malformed .cluster_dims metadata
+; CHECK-DAG: raise_cli: kernel 'cluster_dims_negative_refuse_kernel' metadata: hotswap: extractKernelMeta: kernel 'cluster_dims_negative_refuse_kernel' has malformed .cluster_dims metadata
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6

@@ -8,12 +8,8 @@
 ; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_s_rsq_f32_clamp_kernel 2>&1 | %FileCheck %s --check-prefix=REFUSE-RSQ
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_s_sqrt_f32_omod_kernel 2>&1 | %FileCheck %s --check-prefix=REFUSE-SQRT
-;
-; gfx12 VOP3 pseudo-scalar f32 transcendental family. These instructions are
-; VALU special functions with scalar source and scalar destination registers.
-; The default clamp=0/omod=0 forms preserve source semantics through AMDGPU
-; hardware intrinsics; non-default output modifiers are refused until modeled.
 
+; scalar v_s_log/rcp/rsq/sqrt_f32 lift to amdgcn log/rcp/rsq/sqrt.f32; non-default clamp/omod refused.
 ; CHECK-LABEL: define amdgpu_kernel void @v_s_trans_f32_kernel(
 ; CHECK: call float @llvm.amdgcn.log.f32(float {{.*}})
 ; CHECK: call float @llvm.amdgcn.rcp.f32(float {{.*}})
@@ -25,7 +21,6 @@
 ; CHECK: declare {{.*}}float @llvm.amdgcn.rcp.f32(float)
 ; CHECK: declare {{.*}}float @llvm.amdgcn.rsq.f32(float)
 ; CHECK: declare {{.*}}float @llvm.amdgcn.sqrt.f32(float)
-
 ; REFUSE-LOG: V_S_LOG_F32 with non-default clamp/omod is not yet lifted
 ; REFUSE-RCP: V_S_RCP_F32 with non-default clamp/omod is not yet lifted
 ; REFUSE-RSQ: V_S_RSQ_F32 with non-default clamp/omod is not yet lifted

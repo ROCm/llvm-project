@@ -2,15 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vector_add 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; gfx1200 HIP kernels commonly compute the linear workitem index with
-; `ttmp9 * hidden_group_size_x + tid`.  The source hidden group size is not
-; present in the lifted target HSACO's opaque `kargs` parameter, so lowering it
-; through target `implicitarg.ptr` materializes an invalid load beyond kargs and
-; every workgroup sees the wrong stride.  The raiser must synthesize source
-; hidden_group_size_x from the dispatch packet and therefore keep dispatch-ptr
-; available on the target kernel.
 
+; hidden_group_size seeded from dispatch.ptr, not implicitarg.ptr.
 ; CHECK-LABEL: define amdgpu_kernel void @vector_add(
 ; CHECK: call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 ; CHECK: getelementptr inbounds i8, ptr addrspace(4) %{{[^,]+}}, i32 4

@@ -2,11 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=workitem_id_y_kernel \
 ; RUN:   | %FileCheck %s
-;
-; Exercises the kernel-entry v0 seed (WaveProjection::emitPackedWorkitemId,
-; driven from raiser.cpp): the packed workitem id must reconstruct the Y field
-; so a source threadIdx.y read survives instead of folding to 0.
 
+; Packed workitem.id.y source-register seeding (workitem.id.x|y<<10 recovery).
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -19,8 +16,6 @@ workitem_id_y_kernel:
 	v_dual_mov_b32 v1, 1 :: v_dual_lshrrev_b32 v0, 8, v0
 	v_and_b32_e32 v0, 0xffc, v0
 	s_wait_kmcnt 0x0
-; The seed packs the native per-lane Y field into v0's [10:19] bits, so the
-; source's shift/mask recovers threadIdx.y instead of a constant 0.
 ; CHECK: %tid = call i32 @llvm.amdgcn.workitem.id.x()
 ; CHECK: %tid_y = call i32 @llvm.amdgcn.workitem.id.y()
 ; CHECK: %tid_y_shl = shl i32 %tid_y, 10

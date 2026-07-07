@@ -1,10 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=sapc_block_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; An s_add_pc_i64 that ends a recovered block resolves through the byte-offset
-; successor model: site 0xC + 12-byte lit64 encoding + 8 = 0x20.
 
+; s_add_pc_i64 as a block terminator resolved to a direct branch.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

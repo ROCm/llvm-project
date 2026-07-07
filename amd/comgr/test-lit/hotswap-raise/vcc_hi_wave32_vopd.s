@@ -1,13 +1,17 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:     --emit-ir=vcc_hi_vopd_kernel | %FileCheck %s
-; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:     --emit-ir=exec_hi_vopd_cond_kernel | %FileCheck %s --check-prefix=EXECHI
-;
-; On a wave32 source vcc_hi / exec_hi are free scratch scalars; a VOPD
-; component that names either as a source or as the cndmask condition must route
-; to its own scratch slot, not the real VCC / EXEC. See
-; ParsedReg::VCC_HI_SCRATCH.
+; RUN:     --emit-ir=vcc_hi_vopd_kernel,exec_hi_vopd_cond_kernel | %FileCheck %s
+
+; vcc_hi as scratch/condition inside v_dual (VOPD) cndmask+mov under wave32 mask translation.
+; CHECK-LABEL: define amdgpu_kernel void @vcc_hi_vopd_kernel(
+; CHECK: %vcmp = icmp slt
+; CHECK: %vopd_cndmask = select i1 %vcmp
+; CHECK: store i32 42, ptr addrspace(3)
+; CHECK-LABEL: define amdgpu_kernel void @exec_hi_vopd_cond_kernel(
+; CHECK: %vcmp = icmp slt
+; CHECK: %[[LANEBIT:wn_mask_lane_i1[0-9]*]] = icmp ne i64 %{{.*}}, 0
+; CHECK: %vopd_cndmask = select i1 %[[LANEBIT]]
+; CHECK-NOT: %vopd_cndmask = select i1 %vcmp
 
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
@@ -18,11 +22,6 @@
 vcc_hi_vopd_kernel:
         s_mov_b32 vcc_hi, 42
         v_cmp_lt_i32 vcc_lo, v0, v1
-; The dual cndmask still consumes the real VCC:
-; CHECK: %vcmp = icmp slt
-; CHECK: %vopd_cndmask = select i1 %vcmp
-; The dual mov reads the vcc_hi scratch (constant 42), independent of the VCC:
-; CHECK: store i32 42, ptr addrspace(3)
         v_dual_cndmask_b32 v5, v0, v1 :: v_dual_mov_b32 v8, vcc_hi
         ds_store_b32 v6, v5
         ds_store_b32 v7, v8
@@ -34,12 +33,6 @@ vcc_hi_vopd_kernel:
 exec_hi_vopd_cond_kernel:
         s_mov_b32 exec_hi, s4
         v_cmp_lt_i32 vcc_lo, v0, v1
-; The dual cndmask condition is the per-lane bit of the exec_hi scratch, not the
-; real VCC compare %vcmp:
-; EXECHI: %vcmp = icmp slt
-; EXECHI: %[[LANEBIT:wn_mask_lane_i1[0-9]*]] = icmp ne i64 %{{.*}}, 0
-; EXECHI: %vopd_cndmask = select i1 %[[LANEBIT]]
-; EXECHI-NOT: %vopd_cndmask = select i1 %vcmp
         v_dual_cndmask_b32 v5, v0, v1, exec_hi :: v_dual_mov_b32 v8, v2
         ds_store_b32 v6, v5
         ds_store_b32 v7, v8

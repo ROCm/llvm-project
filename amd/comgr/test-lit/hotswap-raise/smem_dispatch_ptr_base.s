@@ -2,12 +2,8 @@
 ; RUN:   && %raise_cli %t.hsaco --isa=gfx1250 --target-isa=gfx942 \
 ; RUN:     --emit-ir=smem_dispatch_ptr_base_kernel \
 ; RUN:   | %FileCheck %s
-;
-; Regression pin for gfx1250 source kernels that enable dispatch_ptr and then
-; issue scalar memory loads through s[0:1]. The source ABI initializes that
-; SGPR pair with the AQL dispatch packet pointer; leaving it unset in the
-; raised register file materialized loads from an undef/null base.
 
+; Dispatch-ptr SGPR seeding for scalar loads through s[0:1].
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

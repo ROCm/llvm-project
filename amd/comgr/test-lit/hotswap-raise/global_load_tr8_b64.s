@@ -1,11 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=global_load_tr8_b64_kernel | %FileCheck %s
-;
-; Cross-target lift of gfx1250 global_load_tr8_b64 (WMMA i8 matrix load
-; with transpose, 8-lane group). No gfx942 isel pattern for the native
-; intrinsic, so the handler emits per-lane global load + ds_bpermute.
 
+; global_load_tr8_b64 transpose lift: ds.bpermute lane-shuffle emulation on gfx942.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -21,7 +18,6 @@ global_load_tr8_b64_kernel:
 ; CHECK: [[LANELO:%[a-zA-Z_0-9]+]] = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0)
 ; CHECK: call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 [[LANELO]])
 ; CHECK: = load <2 x i32>, ptr addrspace(1)
-; 16 ds.bpermute: 8 source lanes x 2 raw dwords.
 ; CHECK-COUNT-16: call i32 @llvm.amdgcn.ds.bpermute(
 ; CHECK-NOT: call i32 @llvm.amdgcn.ds.bpermute(
 ; CHECK: and i32 %{{[^,]+}}, 255

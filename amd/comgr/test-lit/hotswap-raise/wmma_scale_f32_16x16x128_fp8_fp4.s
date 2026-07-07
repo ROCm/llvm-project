@@ -1,12 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=wmma_scale_f32_16x16x128_fp8_fp4_kernel | %FileCheck %s --check-prefix=IR_GFX942
-;
-; Mixed-format cross-target lift (gfx1250 -> gfx942): A is FP8 E4M3
-; (pass-through), B is FP4 (widens to FP8), both dispatching to fp8.fp8.
-; Scale formats differ -- A is E8M0, B is E4M3 -- exercising the mixed
-; branch of buildScaleFactorVec: A via ldexp + NaN select, B via hw
-; cvt_f32_fp8, combined with fmul (no E8M0 sum-of-exponents shortcut).
 
+; Scaled f8f6f4 WMMA fp8xfp4 format re-encode (fp8 to gfx942 FNUZ).
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -41,20 +36,15 @@ wmma_scale_f32_16x16x128_fp8_fp4_kernel:
 	s_delay_alu instid0(VALU_DEP_1)
 ; IR_GFX942-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_fp8_fp4_kernel(
 
-; FP8 x FP4 -> fp8.fp8 dispatch, 8 K-blocks under WaveNative. (The FP4
-; widening surface is pinned in the fp4_fp4 fixture.)
 ; IR_GFX942: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 ; IR_GFX942-COUNT-7: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 
-; B side: UE4M3 hw cvt (sign bit masked off first).
 ; IR_GFX942-DAG: and i32 %{{[^,]+}}, 127
 ; IR_GFX942-DAG: call float @llvm.amdgcn.cvt.f32.fp8(
 
-; A side: E8M0 ldexp(1.0, byte - 127). Combine via fmul.
 ; IR_GFX942-DAG: sub i32 %{{[^,]+}}, 127
 ; IR_GFX942-DAG: fmul float
 
-; Negative: no LUT, no cross-target dispatch, no other MFMA combos.
 ; IR_GFX942-NOT: @__const.
 ; IR_GFX942-NOT: @llvm.amdgcn.wmma.scale.f32.16x16x128.f8f6f4
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.scale.f32.16x16x128.f8f6f4

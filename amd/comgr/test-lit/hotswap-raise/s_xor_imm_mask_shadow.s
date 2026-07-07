@@ -3,29 +3,13 @@
 ; RUN:     --target-isa=gfx942 --disable-wave-native \
 ; RUN:     --emit-ir=s_xor_imm_mask_shadow_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Pins immediate-source SOP2 shadow propagation for:
-;   v_cmp_* -> s_xor_b32 sN, sN, -1 -> v_cndmask ... sN
-;
-; Pre-fix, `tryGetSrcWaveMaskI1` returned null for non-reg SOP2 operands,
-; so `s_xor_b32 sN, sN, -1` could not re-record a derived per-lane i1 shadow.
-; The downstream SGPR-conditioned cndmask then fell back to extracting lane bits
-; from the narrow SGPR mask, reintroducing cross-widening loss.
-;
+
+; s_xor_b32 by -1 mask lowered to i1 predicate inversion (lane-mask shadow).
 ; CHECK-LABEL: define amdgpu_kernel void @s_xor_imm_mask_shadow_kernel(
-;
-; Producer compare.
 ; CHECK: [[CMP:%[[:alnum:]_.]+]] = fcmp oge float %{{[^,]+}}, 5.000000e-01
-;
-; Immediate operand `-1` must still participate in i1-space derivation via
-; source->exec-width extraction (no null/non-reg early-out):
 ; CHECK: [[IMM_MASK:%[[:alnum:]_.]+]] = icmp ne i64 %mask_lane_bit, 0
 ; CHECK: [[INV:%[[:alnum:]_.]+]] = xor i1 [[CMP]], [[IMM_MASK]]
-;
-; SGPR-conditioned cndmask must consume the derived i1 directly (shadow path),
-; not a fallback extract chain from narrow SGPR bits.
 ; CHECK: %cndmask = select i1 [[INV]], i32 1065353216, i32 -1082130432
-;
 ; CHECK-NOT: %mask_lane_i1
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -40,12 +24,10 @@ s_xor_imm_mask_shadow_kernel:           ; @s_xor_imm_mask_shadow_kernel
 	s_wait_kmcnt 0x0
 	global_load_b32 v1, v0, s[2:3] scale_offset
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_cmp_ge_f32_e64 s2, |v1|, 0.5
 	s_xor_b32 s2, s2, -1
 	v_cndmask_b32_e64 v1, -1.0, 1.0, s2
 	
-	;;#ASMEND
 	global_store_b32 v0, v1, s[0:1] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

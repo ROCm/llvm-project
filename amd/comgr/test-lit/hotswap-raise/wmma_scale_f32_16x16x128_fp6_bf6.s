@@ -1,11 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=wmma_scale_f32_16x16x128_fp6_bf6_kernel | %FileCheck %s --check-prefix=IR_GFX942
-;
-; Mixed-format cross-target lift: A is FP6 (-> FP8), B is BF6 (-> BF8),
-; so the post-widen dispatch lands on the cross-typed fp8.bf8 MFMA. Both
-; scales are E8M0, so buildScaleFactorVec takes the combined-exponent
-; fast path (one ldexp on sum-of-bytes - 254, not per-side decode + fmul).
 
+; Scaled f8f6f4 WMMA fp6xbf6 format re-encode, gfx942.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -42,16 +38,13 @@ wmma_scale_f32_16x16x128_fp6_bf6_kernel:
 	s_delay_alu instid0(VALU_DEP_1)
 ; IR_GFX942-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_fp6_bf6_kernel(
 
-; FP6 x BF6 -> fp8.bf8 dispatch, 8 K-blocks total under WaveNative.
 ; IR_GFX942: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.bf8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 ; IR_GFX942-COUNT-7: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.bf8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 
-; E8M0 x E8M0 fast path: combined biased exponent, no per-side decode.
 ; IR_GFX942-DAG: sub i32 %{{[^,]+}}, 254
 ; IR_GFX942-NOT: call float @llvm.amdgcn.cvt.f32.fp8(
 ; IR_GFX942-NOT: fmul float
 
-; Negatives: no LUT, no other MFMA combo, no scaled WMMA/MFMA fallback.
 ; IR_GFX942-NOT: @__const.
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.f32.16x16x32.bf8.fp8

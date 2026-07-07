@@ -1,14 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=s_minmax_num_f32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for gfx12 scalar NUM extrema. Pins that the gfx1250
-; `s_max_num_f32` / `s_min_num_f32` real mnemonics route through the SOP2
-; scalar handler and lower to LLVM's IEEE-2019 number-select intrinsics:
-; numeric operand wins over NaN, including signaling NaN after invalid is set,
-; and signed zeros are ordered (+0 > -0 for max, -0 < +0 for min). The
-; NaN-propagating `llvm.maximum` / `llvm.minimum`
-; intrinsics belong to the separate S_MAXIMUM_F32 / S_MINIMUM_F32 family.
 
+; s_max_num_f32/s_min_num_f32 lifted to llvm.maximumnum/minimumnum.f32.
 ; CHECK-LABEL: define amdgpu_kernel void @s_minmax_num_f32_kernel(
 ; CHECK: %s_fmax_num{{[0-9]*}} = call float @llvm.maximumnum.f32(float %{{[^,]+}}, float %{{[^)]+}})
 ; CHECK: %s_fmin_num{{[0-9]*}} = call float @llvm.minimumnum.f32(float %{{[^,]+}}, float %{{[^)]+}})
@@ -39,11 +32,9 @@ s_minmax_num_f32_kernel:
 	s_cmp_eq_u32 s3, 0
 	s_cselect_b32 s0, ttmp9, s1
 	v_mad_u32 v0, s0, s2, v0
-	;;#ASMSTART
 	s_max_num_f32 s0, s6, s7
 	s_min_num_f32 s1, s6, s7
 	
-	;;#ASMEND
 	v_mov_b32_e32 v1, s0
 	v_mov_b32_e32 v2, s1
 	global_store_b32 v0, v1, s[4:5] scale_offset

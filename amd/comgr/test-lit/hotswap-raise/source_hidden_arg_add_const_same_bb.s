@@ -2,11 +2,8 @@
 ; RUN:   && env HSA_HOTSWAP_STRICT=1 raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=source_hidden_add_const_same_bb 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Same-BB live provenance check: the consuming load appears immediately after
-; the constant kernarg-pointer rebase, so the prepass cannot hide a stale live
-; transfer function in handle-sop2.cpp.
 
+; Constant addition to the entry kernarg pointer stays an Entry+Const fact, remapped to target implicitarg.ptr offset 80.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

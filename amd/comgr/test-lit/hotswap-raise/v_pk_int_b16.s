@@ -1,29 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_pk_int_b16_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for the VOP3P packed-pair `<2 x i16>` int family
-; (V_PK_LSHLREV_B16 + V_PK_ADD_U16 + V_PK_ASHRREV_I16). Pins both:
-;
-;   * The shared operand-decode shape — `bitcast i32 -> <2 x i16>`
-;     for each source (lo i16 = bits[15:0], hi i16 = bits[31:16]),
-;     followed by an `extractelement` + `insertelement` round-trip
-;     that pins the op_sel / op_sel_hi default permutation
-;     (lo->lo, hi->hi). The kernel uses default modifiers on every
-;     source so the round-trip should fold to the identity vector
-;     in any subsequent IR pass — the explicit insert/extract pair
-;     is what the handler emits literally.
-;
-;   * The per-opcode IR dispatch — `shl <2 x i16>` (after an
-;     explicit `and <2 x i16> ..., <i16 15, i16 15>` shift-count
-;     mask matching the AMDGPU clshl_rev_16 hardware clamp) for
-;     V_PK_LSHLREV_B16, `add <2 x i16>` for V_PK_ADD_U16, and
-;     `ashr <2 x i16>` for V_PK_ASHRREV_I16.
-;
-; Same-target lift (gfx1250 -> gfx1250) because the V_PK packed-int
-; family is identical-on-the-wire across gfx9+ (no cross-arch
-; emulation needed); the lit test pins the IR shape, the round-trip
-; through llc would re-emit the same opcodes verbatim.
 
+; v_pk_lshlrev/add/ashrrev packed int b16 lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_pk_int_b16_kernel(
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -53,21 +31,16 @@ v_pk_int_b16_kernel:
 	v_lshlrev_b32_e32 v2, 1, v1
 	global_load_b32 v0, v1, s[6:7] scale_offset
 	s_wait_loadcnt 0x0
-	; V_PK_LSHLREV_B16: masks shift count to low 4 bits, then shl <2 x i16>
-	; (count=src0, value=src1).
 	; CHECK: %pk_lshlrev_amt{{[0-9]*}} = and <2 x i16> {{.+}}, splat (i16 15)
 	; CHECK: %pk_lshlrev{{[0-9]*}} = shl <2 x i16> %{{[^,]+}}, %pk_lshlrev_amt{{[0-9]*}}
 	; CHECK: %pk_i16_pack{{[0-9]*}} = bitcast <2 x i16> %pk_lshlrev{{[0-9]*}} to i32
 	; CHECK-NOT: shl <2 x f32>
 	; CHECK-NOT: zext <2 x i16> %pk_lshlrev{{[0-9]*}} to <2 x i32>
 	v_pk_lshlrev_b16 v0, 0x60002, v0
-	; V_PK_ADD_U16: lane-wise add <2 x i16>.
 	; CHECK: %pk_add_u16{{[0-9]*}} = add <2 x i16> %{{[^,]+}}, %{{[^)]+}}
 	; CHECK: %pk_i16_pack{{[0-9]*}} = bitcast <2 x i16> %pk_add_u16{{[0-9]*}} to i32
 	; CHECK-NOT: sub <2 x i16>
 	v_pk_add_u16 v1, v0, v0
-	; V_PK_ASHRREV_I16 arithmetic right-shifts each i16 lane of src1 by the
-	; low 4 bits of the corresponding src0 lane
 	; CHECK: %pk_ashrrev_amt{{[0-9]*}} = and <2 x i16> {{.+}}, splat (i16 15)
 	; CHECK: %pk_ashrrev{{[0-9]*}} = ashr <2 x i16> %{{[^,]+}}, %pk_ashrrev_amt{{[0-9]*}}
 	; CHECK: %pk_i16_pack{{[0-9]*}} = bitcast <2 x i16> %pk_ashrrev{{[0-9]*}} to i32

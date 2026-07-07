@@ -1,24 +1,10 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_minmax_num_f32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for v_minmax_num_f32. Pins:
-;   * Inner `@llvm.minimumnum.f32` (named `vminmax_inner`).
-;   * Outer `@llvm.maximumnum.f32` (named `vminmax_num`).
-; Same layered-intrinsic pattern as V_MAX3_NUM_F32 / V_MIN3_NUM_F32 /
-; V_MED3_NUM_F32 in handle-valu.cpp under CanonicalOp::V_MINMAX_NUM_F32.
 
+; v_minmax_num_f32 fused minnum/maxnum lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_minmax_num_f32_kernel(
-
-; The inner minimumnum and the outer maximumnum, both named. Hardware
-; semantic is maximumnum(minimumnum(src0, src1), src2).
 ; CHECK: %vminmax_inner{{[0-9]*}} = call float @llvm.minimumnum.f32(float %{{[^,]+}}, float %{{[^)]+}})
 ; CHECK: %vminmax_num{{[0-9]*}} = call float @llvm.maximumnum.f32(float %vminmax_inner{{[0-9]*}}, float %{{[^)]+}})
-
-; Negative checks: must NOT lift via the IEEE-2019
-; NaN-propagating @llvm.maximum / @llvm.minimum (those are
-; reserved for V_MINIMUMMAXIMUM_F32 / V_MAXIMUMMINIMUM_F32 at
-; opcodes 0x26c / 0x26d) — confusing the .NUM and .non-.NUM
-; families would silently flip NaN-handling semantics.
 ; CHECK-NOT: call {{.*}}@llvm.maximum
 ; CHECK-NOT: call {{.*}}@llvm.minimum
 
@@ -52,10 +38,8 @@ v_minmax_num_f32_kernel:
 	v_lshl_add_u64 v[0:1], v[0:1], 2, s[2:3]
 	global_load_b96 v[0:2], v[0:1], off
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_minmax_num_f32 v0, v0, v1, v2
 	
-	;;#ASMEND
 	global_store_b32 v3, v0, s[0:1] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

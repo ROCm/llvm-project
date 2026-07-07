@@ -2,18 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=setreg_mode_vgpr_msb_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Regression guard for gfx1250 MODE-setreg VGPR_MSB capture. For why this
-; matters, see handleSOPK() in handle-sopk.cpp: the `HwregId == HwregIdMode`
-; branch of the S_SETREG_IMM32_B32 handling, and the VgprMsb* constants in
-; amdgpu-mode-hwreg.h.
-;
-; This test drives the handoff end-to-end: a prologue MODE setreg with imm
-; 0x1001 sets DST_VGPR_MSB=01; the following writelane to v0 must lift as a
-; Vgpr256 phi; a later SRC0_VGPR_MSB=01 read of v0 must source that phi (not
-; Vgpr0); and the final store keeps the Vgpr256 def-use chain alive past
-; dead-code elimination (DCE).
 
+; MODE DST_VGPR_MSB imm setreg resolves the writelane dst to v256.
 ; CHECK-LABEL: define amdgpu_kernel void @setreg_mode_vgpr_msb_kernel(
 ; CHECK: [[V256:%Vgpr256[._0-9]*]] = phi i32 [ %cwd_writelane_rewritten
 ; CHECK: [[V1:%Vgpr1[._0-9]*]] = phi i32 [ [[V256]]

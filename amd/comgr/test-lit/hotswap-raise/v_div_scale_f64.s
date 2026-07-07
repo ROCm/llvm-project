@@ -1,12 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_div_scale_f64_kernel | %FileCheck %s
-;
-; Lift v_div_scale_f64 to the struct-returning
-; llvm.amdgcn.div.scale.f64. Both decode arms are exercised:
-;   (denom, denom, numer)  src0==src1 -> scale-denominator, i1 false
-;   (numer, denom, numer)  src0==src2 -> scale-numerator,   i1 true
-; The per-lane i1 carry-out is routed to the SDST (vcc_lo here).
 
+; v_div_scale f64 {double,i1} lift.
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
         .text

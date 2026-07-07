@@ -1,11 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_fract_f64_kernel | %FileCheck %s
-;
-; Lift v_fract_f64 to llvm.amdgcn.fract.f64 (native: clamps to the
-; largest value < 1.0), not a generic x - floor(x) which would round
-; near-integer negatives up to 1.0. The second instruction checks that
-; an abs/neg source modifier is applied, not silently dropped.
 
+; v_fract_f64 lift with fneg input modifier.
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
         .text

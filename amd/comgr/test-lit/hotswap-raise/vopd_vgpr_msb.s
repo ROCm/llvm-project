@@ -2,13 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vopd_vgpr_msb_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Regression guard for gfx1250 `s_set_vgpr_msb` banking on VOPD packets.
-; The VOPD packet writes `v138 /*v394*/`; the following scalar VALU reads
-; `v138 /*v394*/`. If VOPD ignores the destination MSB bits, the later read
-; comes from an undefined high-bank register and the lifted shift contains
-; `shl i32 undef, 4`.
 
+; VOPD component operands use s_set_vgpr_msb high-VGPR addressing (gfx125x VGPR MSB).
 ; CHECK-LABEL: define amdgpu_kernel void @vopd_vgpr_msb_kernel(
 ; CHECK-NOT: shl i32 undef, 4
 ; CHECK: shl i32 %{{[^,]+}}, 4

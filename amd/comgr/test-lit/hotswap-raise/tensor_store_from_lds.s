@@ -1,14 +1,8 @@
 ; REQUIRES: tdm-runtime
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=tensor_store_from_lds_kernel 2>&1 | %FileCheck %s --check-prefix=IR
-;
-; VIMAGE TENSOR `tensor_store_from_lds_d2` cross-target fixture. The load
-; direction is covered by `tensor_load_to_lds.s`; this sibling pins that
-; the same `marshalTDMArgs` path dispatches stores through the
-; `hotswap_tdm_store_from_lds` runtime body rather than accidentally reusing
-; the load helper. The helper is inlined before codegen so the final kernel
-; does not acquire a device-call/private-segment ABI dependency.
 
+; Tensor store-from-LDS TDM descriptor lift.
 ; IR: @llvm.compiler.used
 ; IR-SAME: @hotswap_tdm_store_from_lds
 ; IR-LABEL: define amdgpu_kernel void @tensor_store_from_lds_kernel
@@ -24,11 +18,9 @@
 tensor_store_from_lds_kernel:
 	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
 	s_load_b64 s[0:1], s[0:1], 0x0
-	;;#ASMSTART
 	.long 0xd0714001
 	.long 0x7c000000
 	.long 0x7c7c0428
-	;;#ASMEND
 	s_wait_kmcnt 0x0
 	global_store_b32 v0, v0, s[0:1] scale_offset
 	s_endpgm

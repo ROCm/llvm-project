@@ -1,10 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_rndne_f64_kernel | %FileCheck %s
-;
-; The ISA manual describes V_RNDNE_F64 as round-to-nearest-even, and
-; TableGen models it as froundeven. Lift it as the target-independent
-; round-to-nearest-even intrinsic (not llvm.rint/llvm.round). The second
-; instruction checks an abs/neg source modifier is applied.
+
+; v_rndne_f64 lifts to @llvm.roundeven.f64 (not rint/round), with neg modifier.
 
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6

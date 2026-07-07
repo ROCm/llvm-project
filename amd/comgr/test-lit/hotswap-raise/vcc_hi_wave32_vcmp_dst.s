@@ -1,11 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vcmp_scratch_dst_kernel | %FileCheck %s
-;
-; A wave32 V_CMP naming vcc_hi / exec_hi as its destination must deposit the
-; ballot into that scratch slot, not the real VCC / EXEC, so a downstream
-; consumer reads a real wave mask. The consumer side is
-; vcc_hi_wave32_cndmask_cond.s. See ParsedReg::VCC_HI_SCRATCH.
+
+; v_cmp into vcc_hi/exec_hi dest lifts via ballot mask + cndmask lane-select.
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -17,14 +14,11 @@
 vcmp_scratch_dst_kernel:
 	s_load_b128 s[4:7], s[0:1], 0x0
 	s_wait_kmcnt 0x0
-; The vcc_hi compare is balloted into the vcc_hi scratch:
 ; CHECK: %vcmp = icmp
 ; CHECK: call i64 @llvm.amdgcn.ballot.i64(i1 %vcmp)
 	v_cmp_gt_i64_e64 vcc_hi, s[4:5], s[6:7]
-; and the cndmask consuming vcc_hi selects on the per-lane bit extracted from it:
 ; CHECK: %cndmask = select i1 %wn_mask_lane_i1{{[0-9]*}}, i32 {{.*}}, i32
 	v_cndmask_b32 v5, v0, v1, vcc_hi
-; The same routing applies to the exec_hi scratch slot:
 ; CHECK: icmp
 ; CHECK: call i64 @llvm.amdgcn.ballot.i64(
 ; CHECK: select i1 %wn_mask_lane_i1{{[0-9]*}}, i32 {{.*}}, i32

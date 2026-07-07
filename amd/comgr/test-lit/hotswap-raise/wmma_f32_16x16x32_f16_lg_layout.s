@@ -2,17 +2,8 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --enable-wave-native \
 ; RUN:     --emit-ir=wmma_f32_16x16x32_f16_lg_layout_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Wave32 source raised to a wave64 target.  Guards the WMMA->MFMA
-; lane-group source layout in redistributeInput / runGroupPass
-; (wmma-lowering.cpp), which swizzles the gfx12 WMMA per-lane operand
-; layout into the gfx942 MFMA layout.  For each lane group (lane_id >> 4)
-; the source dword is bpermuted from the lo or hi W32 half: LG0/LG1 read
-; the LO half (addr_lo), LG2/LG3 read the HI half (addr_hi).  The fix
-; corrected an LG1<->LG2 swap, so the anchor below is that the LG1 source
-; (second bpermute) uses addr_lo, not addr_hi.  This is the F16 dispatch
-; fork of emitWMMAtoMFMA; the BF16/8-bit siblings share redistributeInput.
-; Per-instruction CHECKs are inline in the kernel body below.
+
+; v_wmma_f32_16x16x32_f16 -> mfma.16x16x16f16 with ds.bpermute lane-group layout, wave-native.
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
@@ -22,18 +13,11 @@
 ; CHECK-LABEL: define amdgpu_kernel void @wmma_f32_16x16x32_f16_lg_layout_kernel(
 wmma_f32_16x16x32_f16_lg_layout_kernel:
 	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
-	; Kernel-entry whole-wave virtualisation:
 	; CHECK: call i1 @llvm.amdgcn.init.whole.wave()
 	v_wmma_f32_16x16x32_f16 v[16:23], v[0:7], v[8:15], v[16:23]
-	; Per-half source addresses and the lane-group index:
 	; CHECK: %addr_lo = shl i32 %{{.*}}, 2
 	; CHECK: %addr_hi = shl i32 %{{.*}}, 2
 	; CHECK: %lane_grp = lshr i32 %{{.*}}, 4
-	;
-	; One redistribute block: four bpermutes (LG0..LG3) then the
-	; selectByLaneGroup chain.  THE FIX: the LG1 source (second bpermute)
-	; uses addr_lo and the LG2 source (third) uses addr_hi; the pre-fix
-	; swap had LG1->addr_hi / LG2->addr_lo.
 	; CHECK: %[[V0:bperm[0-9]*]] = call i32 @llvm.amdgcn.ds.bpermute(i32 %addr_lo, i32 %{{.*}})
 	; CHECK-NEXT: %[[V1:bperm[0-9]*]] = call i32 @llvm.amdgcn.ds.bpermute(i32 %addr_lo, i32 %{{.*}})
 	; CHECK-NEXT: %[[V2:bperm[0-9]*]] = call i32 @llvm.amdgcn.ds.bpermute(i32 %addr_hi, i32 %{{.*}})
@@ -44,9 +28,6 @@ wmma_f32_16x16x32_f16_lg_layout_kernel:
 	; CHECK-NEXT: %[[SEL1:[0-9]+]] = select i1 %{{.*}}, i32 %[[V1]], i32 %[[SEL2]]
 	; CHECK-NEXT: %{{.*}} = icmp eq i32 %lane_grp, 0
 	; CHECK-NEXT: %{{.*}} = select i1 %{{.*}}, i32 %[[V0]], i32 %[[SEL1]]
-	;
-	; F16 dispatch identity (must be the f16 MFMA, not the BF16 sibling,
-	; and the native gfx12 WMMA must be gone since gfx942 has no WMMA12):
 	; CHECK: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16f16(
 	; CHECK-NOT: @llvm.amdgcn.mfma.f32.16x16x16bf16
 	; CHECK-NOT: @llvm.amdgcn.wmma.f32.16x16x32.f16

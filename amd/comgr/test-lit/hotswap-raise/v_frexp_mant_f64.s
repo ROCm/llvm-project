@@ -1,11 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_frexp_mant_f64_kernel | %FileCheck %s
-;
-; Lift v_frexp_mant_f64 to llvm.amdgcn.frexp.mant.f64, not the
-; struct-returning llvm.frexp (different inf/NaN semantics). The declare
-; check pins the f64 overload, and the second instruction checks an
-; abs/neg source modifier is applied.
 
+; v_frexp_mant_f64 lift with fneg input modifier.
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
         .text

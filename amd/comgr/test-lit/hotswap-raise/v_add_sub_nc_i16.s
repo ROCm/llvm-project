@@ -1,11 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_add_sub_nc_i16_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for signed true16 v_{add,sub}_nc_i16. Pins:
-;   * unclamped forms are plain wrapping i16 add/sub;
-;   * clamp uses signed i16 saturation, distinct from the unsigned U16 forms;
-;   * selected destination-half writes preserve the other half.
 
+; v_add_nc_i16/v_sub_nc_i16 (incl. saturating sadd/ssub) lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_add_sub_nc_i16_kernel(
 ; CHECK: %vadd_nc_i16{{[0-9]*}} = add i16 %{{[^,]+}}, %{{[^ ]+}}
 ; CHECK: %vadd_i16_merge_lo{{[0-9]*}} = or {{(disjoint )?}}i32 %{{[^,]+}}, %{{[^ ]+}}
@@ -48,13 +44,11 @@ v_add_sub_nc_i16_kernel:
 	s_wait_loadcnt 0x0
 	v_lshrrev_b32_e32 v0, 16, v1
 	v_and_b32_e32 v1, 0xffff, v1
-	;;#ASMSTART
 	v_add_nc_i16 v0, v1, v0
 	v_sub_nc_i16 v0, v1, v0 op_sel:[1,1,1]
 	v_add_nc_i16 v0, v1, v0 clamp
 	v_sub_nc_i16 v0, v1, v0 op_sel:[1,1,1] clamp
 
-	;;#ASMEND
 	global_store_b16 v2, v0, s[0:1] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

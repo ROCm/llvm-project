@@ -1,12 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=s_fmaak_fmamk_f32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for gfx12 scalar literal fused multiply-add forms. The instruction
-; manual defines:
-;   s_fmaak_f32: D0.f32 = fma(S0.f32, S1.f32, SIMM32.f32)
-;   s_fmamk_f32: D0.f32 = fma(S0.f32, SIMM32.f32, S1.f32)
-; The literal position must survive the lift.
 
+; s_fmaak_f32/s_fmamk_f32 scalar fused multiply-add lift to llvm.fma.f32.
 ; CHECK-LABEL: define amdgpu_kernel void @s_fmaak_fmamk_f32_kernel(
 ; CHECK: [[FMAAK:%[^ ]+]] = call float @llvm.fma.f32(float %{{[^,]+}}, float %{{[^,]+}}, float 1.000000e+00)
 ; CHECK: bitcast float [[FMAAK]] to i32
@@ -38,11 +33,9 @@ s_fmaak_fmamk_f32_kernel:
 	s_cmp_eq_u32 s3, 0
 	s_cselect_b32 s0, ttmp9, s1
 	v_mad_u32 v0, s0, s2, v0
-	;;#ASMSTART
 	s_fmaak_f32 s0, s4, s5, 0x3f800000
 	s_fmamk_f32 s1, s4, 0x40000000, s6
 	s_add_u32 s0, s0, s1
-	;;#ASMEND
 	v_mov_b32_e32 v1, s0
 	global_store_b32 v0, v1, s[4:5] scale_offset
 	s_endpgm

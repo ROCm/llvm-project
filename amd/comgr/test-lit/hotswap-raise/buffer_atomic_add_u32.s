@@ -1,45 +1,9 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=buffer_atomic_add_u32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for the gfx11+/gfx1250 VBUFFER buffer-atomic add
-; (`buffer_atomic_add_u32`).  The kernel is dispatched via the
-; raw-buffer atomic lowering branch in transpiler/handle_mubuf.cpp
-; (`llvm.amdgcn.raw.buffer.atomic.add`); the new bit is the
-; `VBUF4(BUFFER_ATOMIC_ADD, BUFFER_ATOMIC_ADD)` entry in
-; transpiler/opcode_map.cpp that maps the gfx12 `_VBUFFER_*`
-; addressing-mode opcodes to the same SemOp the legacy `_OFFSET /
-; _OFFEN / _IDXEN / _BOTHEN` MUBUF forms already mapped to.
-;
-; This regression-pins the failure mode that motivated the change:
-; scope_discovery___sum_bitmatrix_rows refused on
-; `buffer_atomic_add_u32 v0, v1, s[4:7], null offen` with
-; `unsupportedOpcode [MUBUF]` because no opcode_map entry existed
-; for `BUFFER_ATOMIC_ADD_VBUFFER_OFFEN`, despite the SemOp +
-; handler being present.
-;
-; Invariants:
-;
-;   1. The buffer atomic lifts to the raw-buffer atomic intrinsic,
-;      preserving the SRSRC descriptor, per-lane vaddr, soffset, and
-;      hardware OOB behavior. Lowering through a generic flat
-;      `atomicrmw` loses that descriptor-relative address and can
-;      fault on kernels such as GPT-OSS `_sum_bitmatrix_rows`.
-;   2. NO refusal diagnostic in stderr — exit 0, not the legacy
-;      `unsupportedOpcode [MUBUF]` path.
-;
-; What we don't pin: the exact pointer-construction shape upstream
-; of the atomic (the SRD-to-pointer translation goes through the
-; raw_buffer descriptor decoder which has its own dedicated
-; coverage); nor the address space of the resulting pointer (the
-; backend chooses based on the SRD).
 
+; Raw-buffer atomic add u32 lift.
 ; CHECK-LABEL: define amdgpu_kernel void @buffer_atomic_add_u32_kernel(
-
-; The atomic itself: a raw-buffer atomic intrinsic. Use a loose match
-; on the operands because their SSA names depend on kernarg lowering.
 ; CHECK: call i32 @llvm.amdgcn.raw.buffer.atomic.add
-
-; Negative pin: do not lower through a flat pointer atomic.
 ; CHECK-NOT: atomicrmw add
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -56,11 +20,9 @@ buffer_atomic_add_u32_kernel:
 	s_wait_kmcnt 0x0
 	v_mov_b32_e32 v1, s2
 	s_mov_b32 s2, -1
-	;;#ASMSTART
 	buffer_atomic_add_u32 v1, v0, s[0:3], null offen scope:SCOPE_DEV
 	s_wait_loadcnt 0
 	
-	;;#ASMEND
 	s_endpgm
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0

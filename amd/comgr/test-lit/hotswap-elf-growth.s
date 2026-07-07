@@ -1,25 +1,14 @@
-// COM: Verify that hotswap-rewrite succeeds on a clang-assembled ELF where
-// COM: .dynamic follows .text (the layout that previously caused
-// COM: growWithTrampolines to refuse). No patches are applied here (the
-// COM: kernel contains no patchable instructions), but the rewrite pipeline
-// COM: must accept the ELF rather than returning an error.
-
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-
-// COM: Confirm .dynamic exists after .text in the input ELF.
 // RUN: %llvm-readelf --section-headers %t.elf | %FileCheck --check-prefix=LAYOUT %s
-// LAYOUT: .text
-// LAYOUT: .dynamic
-
-// COM: hotswap-rewrite must succeed (not reject the ELF).
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
-// API: RESULT: SUCCESS
-
-// COM: Output ELF is valid and disassemblable.
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+
+// LAYOUT: .text
+// LAYOUT: .dynamic
+// API: RESULT: SUCCESS
 // DISASM: file format elf64-amdgpu
 // DISASM: s_endpgm
 

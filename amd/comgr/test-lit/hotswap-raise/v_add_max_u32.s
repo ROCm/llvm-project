@@ -1,18 +1,15 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_add_max_u32_kernel 2>/dev/null | %FileCheck %s --check-prefixes=BOTH,DEFAULT
-; RUN: raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_add_max_u32_clamp_kernel 2>/dev/null | %FileCheck %s --check-prefixes=BOTH,CLAMP
-;
-; Lift test for gfx1250 v_add_max_u32:
-;	dst = umax(uaddsat(src0, src1), src2).
-;
-; DEFAULT-LABEL: define amdgpu_kernel void @v_add_max_u32_kernel(
-; CLAMP-LABEL: define amdgpu_kernel void @v_add_max_u32_clamp_kernel(
-; DEFAULT: %v_add_max_u32_sum{{[0-9]*}} = call i32 @llvm.uadd.sat.i32(i32 %{{[^,]+}}, i32 -1)
-; CLAMP: %v_add_max_u32_sum{{[0-9]*}} = call i32 @llvm.uadd.sat.i32(i32 {{[^,]+}}, i32 {{[^,]+}})
-; DEFAULT: %v_add_max_u32{{[0-9]*}} = call i32 @llvm.umax.i32(i32 %v_add_max_u32_sum{{[0-9]*}}, i32 %{{[^)]+}})
-; CLAMP: %v_add_max_u32{{[0-9]*}} = call i32 @llvm.umax.i32(i32 %v_add_max_u32_sum{{[0-9]*}}, i32 3)
-; BOTH-NOT: call {{.*}}@llvm.amdgcn.add.max.u32
-;
+; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_add_max_u32_kernel,v_add_max_u32_clamp_kernel 2>/dev/null | %FileCheck %s
+
+; v_add_max_u32 uadd.sat+umax lift.
+; CHECK-LABEL: define amdgpu_kernel void @v_add_max_u32_kernel(
+; CHECK: %v_add_max_u32_sum{{[0-9]*}} = call i32 @llvm.uadd.sat.i32(i32 %{{[^,]+}}, i32 -1)
+; CHECK: %v_add_max_u32{{[0-9]*}} = call i32 @llvm.umax.i32(i32 %v_add_max_u32_sum{{[0-9]*}}, i32 %{{[^)]+}})
+; CHECK-NOT: call {{.*}}@llvm.amdgcn.add.max.u32
+; CHECK-LABEL: define amdgpu_kernel void @v_add_max_u32_clamp_kernel(
+; CHECK: %v_add_max_u32_sum{{[0-9]*}} = call i32 @llvm.uadd.sat.i32(i32 {{[^,]+}}, i32 {{[^,]+}})
+; CHECK: %v_add_max_u32{{[0-9]*}} = call i32 @llvm.umax.i32(i32 %v_add_max_u32_sum{{[0-9]*}}, i32 3)
+; CHECK-NOT: call {{.*}}@llvm.amdgcn.add.max.u32
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6

@@ -2,16 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=v_cmp_i16_trunc_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Integer 16-bit V_CMP operands are carried in 32-bit VGPR / inline-constant
-; containers, but the compare semantics are i16/u16.  This pins the signed
-; i16 path that `_topk_forward`'s bf16 key conversion exercises:
-;
-;   v_cmp_lt_i16 s4, -1, v1
-;
-; with v1's low half holding 0xbfce must compare `i16 -1 < i16 0xbfce`
-; (false), not `i32 -1 < i32 0x0000bfce` (true).
-;
+
+; v_cmp_lt_i16 signed i16 compare (trunc operands)+ballot lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_cmp_i16_trunc_kernel(
 ; CHECK: [[SRC:%[A-Za-z0-9_.]+]] = trunc i32 {{.*}} to i16
 ; CHECK: [[CMP:%[^ ]+]] = icmp slt i16 -1, [[SRC]]

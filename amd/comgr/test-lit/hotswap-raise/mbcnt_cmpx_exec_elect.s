@@ -6,11 +6,8 @@
 ; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx942 --disable-wave-native \
 ; RUN:     --emit-ir=mbcnt_cmpx_exec_elect_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=MODREP
-;
-; Wave32 single-lane elect: mbcnt(exec) == 0 updates EXEC. WaveNative must
-; slice the current source-wave EXEC for mbcnt, then ballot V_CMPX to i64.
-; MODREP keeps refusing this C4 shape.
 
+; mbcnt-fed V_CMPX EXEC projection: wave-native lifts the source-wave mask, disable-wave-native refuses.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

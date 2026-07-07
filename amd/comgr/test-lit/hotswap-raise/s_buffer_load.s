@@ -11,12 +11,8 @@
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=s_buffer_load_unrepresentable_base_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=TRAP
-;
-; gfx12 S_BUFFER_LOAD consumes a four-SGPR buffer resource descriptor. The
-; raiser decodes the source descriptor fields used by scalar buffer loads,
-; rebuilds a target raw-buffer resource with the source byte extent, and lets
-; target buffer hardware return zero for out-of-bounds load elements.
 
+; s_buffer_load_b64/96/128 lift to buffer.rsrc + raw.ptr.buffer.load, with scope-refusal/trap paths.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

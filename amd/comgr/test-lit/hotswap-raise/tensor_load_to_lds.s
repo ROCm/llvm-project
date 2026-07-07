@@ -1,23 +1,8 @@
 ; REQUIRES: tdm-runtime
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=tensor_load_to_lds_kernel 2>&1 | %FileCheck %s --check-prefix=IR-XT
-;
-; Lift test for VIMAGE TENSOR `tensor_load_to_lds_d2`. Pins the
-; cross-target TDM-emulation behaviour of transpiler/handle_vimage.cpp
-; under SemOp::TENSOR_LOAD_TO_LDS.
-;
-; The gfx1250 TENSOR cnt unit (`MIMGInstructions.td:2049-2113`,
-; `let SubtargetPredicate = isGFX125xOnly`) has no native equivalent
-; on gfx942 and the matching LLVM intrinsic is also gated
-; isGFX125xOnly. Cross-target lifts therefore route through the
-; link-merged TDM runtime helper instead of emitting the intrinsic
-; directly. The helper is inlined before codegen so the final kernel
-; does not acquire a device-call/private-segment ABI dependency. This
-; fixture is gated on `tdm-runtime`; no-runtime builds keep the
-; handler's loud refusal path and skip this helper test.
-;
-; Cross-target helper lowering: the helper bitcode is present, but the
-; kernel body contains the inlined TDM walk and no direct helper call.
+
+; Tensor load-to-LDS TDM descriptor lift.
 ; IR-XT: @llvm.compiler.used
 ; IR-XT-SAME: @hotswap_tdm_load_to_lds
 ; IR-XT-LABEL: define amdgpu_kernel void @tensor_load_to_lds_kernel
@@ -26,69 +11,11 @@
 
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=tensor_load_to_lds_kernel 2>&1 | %FileCheck %s --check-prefix=IR
-;
-; Lift fixture for VIMAGE TENSOR `tensor_load_to_lds_d2` — same-target
-; (gfx1250 -> gfx1250) intrinsic-emit path. Pins the principled
-; lift in transpiler/handle_vimage.cpp under
-; SemOp::TENSOR_LOAD_TO_LDS when `ctx.targetIsa.hasTensorOps` is
-; true. Companion RUN line above pins the cross-target (gfx942)
-; helper-call path.
-;
-; The MIMGInstructions.td:2049-2113 `VIMAGE_TENSOR_Pseudo` operand
-; layout for the `_d2` form is `vaddr0:SReg_128, vaddr1:SReg_256,
-; r128:imm, cpol:imm`. The matching LLVM intrinsic
-; (IntrinsicsAMDGPU.td:4197-4214) is
-;
-;   void llvm.amdgcn.tensor.load.to.lds(<4 x i32> grp0,
-;                                        <8 x i32> grp1,
-;                                        <4 x i32> grp2,
-;                                        <4 x i32> grp3,
-;                                        <8 x i32> grp4_reserved,
-;                                        i32 immarg cachepolicy)
-;
-; The handler marshals each SGPR range into the matching
-; `<n x i32>` via `loadSGPR32` + `insertelement`, zero-fills the
-; unused `_d2` groups (2 and 3) and the always-reserved group 4,
-; and threads the `cpol` immediate through as `i32 0` for the
-; corpus encoding (the hand-encoded `D0710001 7C000000 7C7C0428`
-; payload sets cpol=0).
-;
-; We pin two things:
-;   1. The eight insertelement chain that materialises group 0 from
-;      s40..s43 and group 1 from s4..s11. The fixture's inline-asm
-;      clobber list never assigns those SGPRs, so the loads fold to
-;      `undef` — the structural shape of the chain is what matters.
-;   2. The intrinsic call's argument vector: groups 0/1 are the
-;      marshalled SGPR vectors; groups 2/3 are <4 x i32>
-;      zeroinitializer; group 4 is <8 x i32> zeroinitializer; cpol
-;      is the constant `i32 0`.
-;
-; Drift indicators:
-;   * If a future LLVM rename swaps the intrinsic name (e.g. drops
-;     `tensor.` prefix) the IR check fails immediately and pinpoints
-;     the rename rather than letting a silently mis-named intrinsic
-;     reach the backend.
-;   * If the operand-marshalling order changes (group ordering,
-;     vector widths, or the reserved-group convention) the
-;     insertelement / call-argument shape diverges and FileCheck
-;     reports the exact line.
 
-; Group 0: <4 x i32> built from four sequential SGPR reads (s40..s43).
-; The first lane seeds the chain off `poison`; the last lane
-; (`i64 3`) closes it. LLVM's instnamer suffixes the SSA values
-; (`%td_grp0`, `%td_grp02`, ...) so we use a regex on the trailing
-; numeric.
 ; IR: %td_grp0{{[0-9]*}} = insertelement <4 x i32> poison, i32 {{.*}}, i64 0
 ; IR: %td_grp0{{[0-9]*}} = insertelement <4 x i32> %td_grp0{{[0-9]*}}, i32 {{.*}}, i64 3
-
-; Group 1: <8 x i32> built from eight sequential SGPR reads (s4..s11).
 ; IR: %td_grp1{{[0-9]*}} = insertelement <8 x i32> poison, i32 {{.*}}, i64 0
 ; IR: %td_grp1{{[0-9]*}} = insertelement <8 x i32> %td_grp1{{[0-9]*}}, i32 {{.*}}, i64 7
-
-; The intrinsic call: groups 2/3 are <4 x i32> zeroinitializer
-; (unused for the `_d2` form), group 4 is <8 x i32> zeroinitializer
-; (always reserved), and the cpol immediate is `i32 0` for the
-; corpus payload.
 ; IR: call void @llvm.amdgcn.tensor.load.to.lds(
 ; IR-SAME: <4 x i32> %td_grp0
 ; IR-SAME: <8 x i32> %td_grp1
@@ -106,12 +33,10 @@
 tensor_load_to_lds_kernel:
 	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
 	s_load_b64 s[0:1], s[0:1], 0x0
-	;;#ASMSTART
 	.long 0xd0710001
 	.long 0x7c000000
 	.long 0x7c7c0428
 	
-	;;#ASMEND
 	s_wait_kmcnt 0x0
 	global_store_b32 v0, v0, s[0:1] scale_offset
 	s_endpgm

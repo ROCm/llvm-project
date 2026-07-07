@@ -2,10 +2,7 @@
 ; RUN:   && env HSA_HOTSWAP_STRICT=1 raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=source_hidden_sub_const_identity 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Constant subtraction from the entry kernarg pointer is still a proven
-; Entry+Const fact in the same block. Source effective byte 56 maps to target
-; hostcall offset 80.
+; Constant subtraction from the entry kernarg pointer stays an Entry+Const fact, remapped to target implicitarg.ptr offset 80.
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6

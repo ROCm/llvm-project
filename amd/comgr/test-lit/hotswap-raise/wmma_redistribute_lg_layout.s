@@ -2,16 +2,8 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --enable-wave-native \
 ; RUN:     --emit-ir=wmma_redistribute_lg_layout_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Wave32 source raised to a wave64 target.  Guards the WMMA->MFMA input
-; redistribution lane-group layout in redistributeInput / selectByLaneGroup
-; (wmma-lowering.cpp): per lane group (lane_id >> 4) the source dword is
-; bpermuted from the lo or hi W32 half -- LG0/LG1 read the LO half (addr_lo),
-; LG2/LG3 read the HI half (addr_hi), and the lo/hi halves share one source
-; dword.  A regression that reordered the addresses would interleave addr_lo
-; and addr_hi and fail the CHECK-NEXT sequence.  This is the BF16 fork of
-; emitWMMAtoMFMA.  Per-instruction CHECKs are inline in the kernel body below.
 
+; wmma_f32_16x16x32_bf16 lane-group (lg) layout redistribution via ds.bpermute for wave translation.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
 	.globl	wmma_redistribute_lg_layout_kernel
@@ -21,17 +13,13 @@
 wmma_redistribute_lg_layout_kernel:
 	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
 	v_wmma_f32_16x16x32_bf16 v[16:23], v[0:7], v[8:15], v[16:23]
-	; Per-half source addresses and the lane-group index:
 	; CHECK: %addr_lo = shl i32 %{{.+}}, 2
 	; CHECK: %addr_hi = shl i32 %{{.+}}, 2
 	; CHECK: %lane_grp = lshr i32 %{{.+}}, 4
-	; One redistribute block: LG0/LG1 read addr_lo, LG2/LG3 read addr_hi,
-	; and the lo/hi halves share one source dword ([[DWG]], [[DWG2]]):
 	; CHECK: %[[V0:bperm[0-9]*]] = call i32 @llvm.amdgcn.ds.bpermute(i32 %addr_lo, i32 %[[DWG:dw[0-9]*]])
 	; CHECK-NEXT: %[[V1:bperm[0-9]*]] = call i32 @llvm.amdgcn.ds.bpermute(i32 %addr_lo, i32 %[[DWG2:dw[0-9]*]])
 	; CHECK-NEXT: %[[V2:bperm[0-9]*]] = call i32 @llvm.amdgcn.ds.bpermute(i32 %addr_hi, i32 %[[DWG]])
 	; CHECK-NEXT: %[[V3:bperm[0-9]*]] = call i32 @llvm.amdgcn.ds.bpermute(i32 %addr_hi, i32 %[[DWG2]])
-	; selectByLaneGroup mux (V3 default, then LG2/LG1/LG0):
 	; CHECK-NEXT: %[[EQ2:[0-9]+]] = icmp eq i32 %lane_grp, 2
 	; CHECK-NEXT: %{{[0-9]+}} = select i1 %[[EQ2]], i32 %[[V2]], i32 %[[V3]]
 	; CHECK-NEXT: %[[EQ1:[0-9]+]] = icmp eq i32 %lane_grp, 1

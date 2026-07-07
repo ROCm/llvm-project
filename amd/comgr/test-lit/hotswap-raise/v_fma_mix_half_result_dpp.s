@@ -5,15 +5,8 @@
 ; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=v_fma_mix_half_result_dpp8_refuse_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=DPP8
-;
-; DPP16 is already a generic source-pathway modifier in the raiser: src0 is
-; wrapped in llvm.amdgcn.update.dpp before the MIX source-selection logic sees
-; it. Under gfx1250:32 -> gfx942 cross-widening, the update.dpp site is then
-; rewritten to an explicit ds_bpermute topology.
-;
-; DPP8 remains intentionally unsupported in the generic DPP path. This fixture
-; keeps that fail-closed contract pinned for the mixed-FMA family.
 
+; v_fma_mixlo_f16 DPP16 (bpermute) lift and DPP8 refusal.
 ; DPP16-LABEL: define amdgpu_kernel void @v_fma_mix_half_result_dpp16_kernel(
 ; DPP16-NOT: call i32 @llvm.amdgcn.update.dpp.i32(
 ; DPP16-DAG: %cwd_dpp_selector = shl i32 %cwd_dpp_src_abs, 2
@@ -23,7 +16,6 @@
 ; DPP16: %fma_mixlo_f16_round = fptrunc float %fma_mixlo_f16 to half
 ; DPP16-NOT: call i32 @llvm.amdgcn.update.dpp.i32(
 ; DPP16: declare i32 @llvm.amdgcn.ds.bpermute(i32, i32)
-
 ; DPP8-DAG: kernel 'v_fma_mix_half_result_dpp8_refuse_kernel'
 ; DPP8-DAG: DPP cross-lane site
 ; DPP8-DAG: hasDpp == false
@@ -41,9 +33,7 @@ v_fma_mix_half_result_dpp16_kernel:
 	v_add_nc_u32_e64 v5, s0, 8
 	v_mov_b32_e32 v1, s0
 	v_mov_b32_e32 v2, s0
-	;;#ASMSTART
 	v_fma_mixlo_f16 v2, v1, v3, v5 op_sel:[0,1,0] op_sel_hi:[1,1,0] row_shr:1 row_mask:0xf bank_mask:0xf bound_ctrl:1
-	;;#ASMEND
 	global_store_b32 v0, v2, s[0:1] scale_offset
 	s_endpgm
 
@@ -57,9 +47,7 @@ v_fma_mix_half_result_dpp8_refuse_kernel:
 	v_add_nc_u32_e64 v5, s0, 8
 	v_mov_b32_e32 v1, s0
 	v_mov_b32_e32 v2, s0
-	;;#ASMSTART
 	v_fma_mixlo_f16 v2, v1, v3, v5 op_sel:[0,1,0] op_sel_hi:[1,1,0] dpp8:[0,1,2,3,4,5,6,7]
-	;;#ASMEND
 	global_store_b32 v0, v2, s[0:1] scale_offset
 	s_endpgm
 

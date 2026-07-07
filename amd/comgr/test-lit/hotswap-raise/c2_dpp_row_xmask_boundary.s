@@ -2,11 +2,8 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=c2_dpp_row_xmask_boundary_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Boundary canary for enabling the whole DPP16 row_xmask family, not
-; just RWKV7's row_xmask:2.  row_xmask:15 is the all-low-bits flip
-; within each 16-lane row; it remains row-local and always in range.
 
+; Lower DPP row_xmask boundary case (xor 15) to ds_bpermute.
 ; CHECK-LABEL: define amdgpu_kernel void @c2_dpp_row_xmask_boundary_kernel(
 ; CHECK-NOT: call i32 @llvm.amdgcn.update.dpp.i32(
 ; CHECK-DAG: %cwd_dpp_within_row = and i32 %{{.+}}, 15
@@ -45,10 +42,8 @@ c2_dpp_row_xmask_boundary_kernel:       ; @c2_dpp_row_xmask_boundary_kernel
 	v_mad_u32 v0, s0, s4, v0
 	global_load_b32 v1, v0, s[2:3] scale_offset
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_mov_b32_dpp v1, v1 row_xmask:15 row_mask:0xf bank_mask:0xf
 
-	;;#ASMEND
 	global_store_b32 v0, v1, s[2:3] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

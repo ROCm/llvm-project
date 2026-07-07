@@ -2,53 +2,11 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx1250 \
 ; RUN:     --emit-ir=buffer_atomic_swap_b32_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Lift test for the gfx11+/gfx1250 VBUFFER buffer-atomic swap
-; (`buffer_atomic_swap_b32`).  Sibling of
-; `lit_tests/buffer_atomic_add_u32/`, which pins the commutative
-; add path; this fixture pins the exchange path through
-; `llvm.amdgcn.raw.buffer.atomic.swap` in handle_mubuf.cpp.  The RTN-form
-; write-back (see the "RTN-form
-; write-back" comment in that handler) is the semantic point of
-; `buffer_atomic_swap`: the caller reads the old value.  Without
-; write-back, the handler would emit a raw-buffer swap call that
-; discards the original value and reduce the swap to a store —
-; quietly miscompiling any CAS-loop that relies on it.
-;
-; Same-target lift (gfx1250 → gfx1250).  The `buffer_atomic_swap_b32`
-; opcode is non-commutative — cross-widening wave32 → wave64 races
-; target lanes i and i+W_s on the same memory cell, which the
-; Class-3 non-commutative-atomic classifier refuses at the
-; projection-decision stage (see
-; hotswap/docs/wave-size-translation.md §3 / §7's unrewritable
-; table).  So the cross-widen path would refuse BEFORE reaching
-; this handler, making the handler unreachable via that route.
-; Same-target lifts skip the cross-widen classifier (R=1, no replica
-; race possible) and exercise the handler directly — that's the path
-; this fixture pins.  A future `ThreadLoopProjection` that emulates
-; wave64 via per-source-wave loops would also bypass the replica-race
-; refusal and exercise this handler; re-running the fixture with a
-; `--target-isa=gfx942` RUN line once that projection lands is the
-; extension direction.
-;
-; Invariants:
-;
-;   1. The swap lifts to the raw-buffer atomic intrinsic, preserving
-;      descriptor-relative addressing and hardware OOB behavior.
-;   2. The RTN write-back is present: the intrinsic's old-value
-;      result reaches the destination VGPR through `writeReg32`.
 
+; Raw-buffer atomic swap b32 (return) lift.
 ; CHECK-LABEL: define amdgpu_kernel void @buffer_atomic_swap_b32_kernel(
-
-; The atomic itself: raw-buffer swap, not a flat pointer atomic.
 ; CHECK: call i32 @llvm.amdgcn.raw.buffer.atomic.swap
-
-; Negative pin: no flat pointer atomic.
 ; CHECK-NOT: atomicrmw xchg
-
-; Negative pin: no `cmpxchg` — SWAP and CMPSWAP are distinct opcodes
-; with distinct handler arms; a regression that routes SWAP through
-; the CMPSWAP path (or vice versa) would be caught here.
 ; CHECK-NOT: cmpxchg
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -67,11 +25,9 @@ buffer_atomic_swap_b32_kernel:          ; @buffer_atomic_swap_b32_kernel
 	v_mov_b32_e32 v2, s6
 	s_mov_b32 s0, s4
 	s_mov_b32 s1, s5
-	;;#ASMSTART
 	buffer_atomic_swap_b32 v2, v1, s[0:3], null offen th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 	s_wait_loadcnt 0
 	
-	;;#ASMEND
 	global_store_b32 v0, v2, s[4:5] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

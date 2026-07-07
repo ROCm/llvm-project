@@ -1,26 +1,19 @@
-// COM: Test HotSwap in-place patch: cluster_load_b64 -> global_load_b64.
-
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
-// API: RESULT: SUCCESS
-
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
-
-// COM: cluster_load_b64 should be swapped to global_load_b64
-// DISASM-NOT: cluster_load_b64
-// DISASM-DAG: global_load_b64 v[0:1]
-
-// COM: Idempotency: output should be identical on second rewrite.
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out2.elf \
 // RUN:   | %FileCheck --check-prefix=API2 %s
-// API2: RESULT: SUCCESS
 // RUN: cmp %t.out.elf %t.out2.elf
+
+// API: RESULT: SUCCESS
+// DISASM-NOT: cluster_load_b64
+// DISASM-DAG: global_load_b64 v[0:1]
+// API2: RESULT: SUCCESS
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

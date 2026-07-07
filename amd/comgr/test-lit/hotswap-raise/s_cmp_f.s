@@ -1,14 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=s_cmp_f_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for the gfx11+ SOPC scalar FP ordered/unordered compares
-; (s_cmp_o/u_f32 and s_cmp_o/u_f16). Ordered lifts to `fcmp ord`, unordered
-; to `fcmp uno`; the SCC result is read back by the following s_cselect_b32.
-; F32 operands are bitcast to float, F16 operands truncated to i16 and
-; bitcast to half. See the SOPC handler block in hotswap/handle-sopc.cpp.
 
+; s_cmp_o/u_f32/f16 scalar ordered/unordered float compare lift.
 ; CHECK-LABEL: define amdgpu_kernel void @s_cmp_f_kernel(
-
 ; CHECK-DAG: fcmp ord float %{{[^,]+}}, %{{[^,]+}}
 ; CHECK-DAG: fcmp uno float %{{[^,]+}}, %{{[^,]+}}
 ; CHECK-DAG: fcmp ord half %{{[^,]+}}, %{{[^,]+}}
@@ -39,7 +33,6 @@ s_cmp_f_kernel:
 	s_cmp_eq_u32 s9, 0
 	s_cselect_b32 s0, ttmp9, s1
 	v_mad_u32 v0, s0, s8, v0
-	;;#ASMSTART
 	s_cmp_o_f32 s6, s2
 	s_cselect_b32 s0, 1, 0
 	s_cmp_u_f32 s6, s2
@@ -49,7 +42,6 @@ s_cmp_f_kernel:
 	s_cmp_u_f16 s6, s2
 	s_cselect_b32 s0, 1, 0
 
-	;;#ASMEND
 	v_mov_b32_e32 v1, s0
 	global_store_b32 v0, v1, s[4:5] scale_offset
 	s_endpgm

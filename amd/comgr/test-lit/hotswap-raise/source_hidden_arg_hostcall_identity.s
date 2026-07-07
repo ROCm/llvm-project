@@ -2,13 +2,7 @@
 ; RUN:   && env HSA_HOTSWAP_STRICT=1 raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=source_hidden_hostcall_identity 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; `hidden_hostcall_buffer` has the same semantic value across the gfx1250 ->
-; gfx942 ABI boundary, but not the same byte offset. The source reaches it
-; through a constant-rebased kernarg pointer in a predecessor block (`entry + 16`,
-; then `s_load ... offset 0x28`, effective source byte 56). The lifted target
-; kernel must carry that Entry+Const fact through CFG provenance, request the
-; target hidden field, and load it at target implicitarg.ptr offset 80.
+; hidden_hostcall_buffer resolved through Entry+Const kernarg provenance carried across a predecessor block, remapped to target implicitarg.ptr offset 80.
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6

@@ -1,12 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx950 --emit-ir=smem_sgpr_imm_scale_offset_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; GFX12 SMEM supports SGPR offset plus a static immediate offset, and with
-; scale_offset the SGPR part is scaled by the load width before adding the
-; static byte offset. This test case covers that SGPR_IMM load shape:
-;   s_load_b32 ..., sBASE, sOFF offset:0x808 scale_offset
-;
+
+; SMEM SGPR+imm offset with scale_offset lowered to a scaled GEP.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

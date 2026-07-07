@@ -33,11 +33,21 @@
 // filename (look for `gfx<digits>[a-z]?`) when `--isa=` is not passed.
 //
 // --emit-ir mode. Designed for lit tests. Runs raiseToIR in-process (no
-// fork), dumps the raised LLVM IR for a single kernel on stdout, and
-// leaves stderr alone so FileCheck can match warnings / abort-gate
-// diagnostics. Selects the only kernel when the code object has one, or
-// requires the ``=<kernel>`` form when there are multiple. Exits 0 iff
-// the kernel raised successfully; non-zero otherwise.
+// fork), dumps the raised LLVM IR on stdout, and leaves stderr alone so
+// FileCheck can match warnings / abort-gate diagnostics. Kernel
+// selection:
+//
+//   --emit-ir              all kernels, in code-object order
+//   --emit-ir=<kernel>     one kernel
+//   --emit-ir=<k1>,<k2>    the listed kernels, in the given order
+//
+// When more than one kernel is emitted, each kernel's IR is preceded by
+// a `; === raise_cli kernel: <name> ===` separator so a single
+// FileCheck pass can anchor per-kernel checks. A kernel that fails to
+// raise prints its diagnostic to stderr and the loop continues; the
+// exit code is 0 iff every selected kernel raised successfully. This
+// lets an all-refusing kernel set stay under a single `%not ... 2>&1`
+// RUN line.
 //
 // --target-isa=<arch>. Optional. Controls the target ISA the raiser
 // lowers for; defaults to the source ISA (same-wave translation). Use
@@ -203,9 +213,10 @@ cl::opt<std::string>
                                            "(default: same as --isa)."));
 
 cl::opt<std::string>
-    EmitIrOpt("emit-ir", cl::ValueOptional, cl::value_desc("kernel"),
-              cl::desc("Dump raised LLVM IR for a single kernel on stdout "
-                       "(no fork; stderr left alone for FileCheck)."));
+    EmitIrOpt("emit-ir", cl::ValueOptional, cl::value_desc("kernel[,kernel...]"),
+              cl::desc("Dump raised LLVM IR on stdout (no fork; stderr left "
+                       "alone for FileCheck). Bare = all kernels; =<k>[,<k>...] "
+                       "selects a subset in order."));
 
 cl::opt<std::string>
     WriteHsacoOpt("write-hsaco", cl::value_desc("path"),
@@ -324,7 +335,8 @@ int main(int argc, char **argv) {
   llvm::cl::ParseCommandLineOptions(
       argc, argv,
       "Per-kernel raiser CLI. Default mode emits per-kernel OK/FAIL lines on "
-      "stdout; --emit-ir and --write-hsaco select the single-kernel modes.\n");
+      "stdout; --emit-ir dumps raised IR for one or more kernels and "
+      "--write-hsaco writes a single kernel's HSACO.\n");
 
   std::string coPath = CoPathOpt;
   std::string isa = IsaOpt;
@@ -390,70 +402,91 @@ int main(int argc, char **argv) {
 
   // --emit-ir path — no fork, no stderr redirect. Used by lit tests that
   // FileCheck the raised IR on stdout and the raiser diagnostics on
-  // stderr. One kernel per invocation.
+  // stderr. Processes one or more kernels per invocation.
   if (emitIr) {
-    std::string target;
+    // Resolve the target list: bare --emit-ir selects every kernel in
+    // code-object order; --emit-ir=<k>[,<k>...] selects the listed
+    // kernels in the given order.
+    llvm::SmallVector<std::string> Targets;
     if (emitIrKernel.empty()) {
-      if (kernelNames.size() != 1) {
-        llvm::errs() << "raise_cli: --emit-ir requires =<kernel> when the "
-                        "code object has "
-                     << kernelNames.size() << " kernels\n";
-        return 2;
-      }
-      target = kernelNames.front();
+      Targets.assign(kernelNames.begin(), kernelNames.end());
     } else {
-      bool found = false;
-      for (const auto &kn : kernelNames)
-        if (kn == emitIrKernel) {
-          target = kn;
-          found = true;
-          break;
+      llvm::SmallVector<llvm::StringRef> Requested;
+      llvm::StringRef(emitIrKernel)
+          .split(Requested, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+      for (llvm::StringRef Req : Requested) {
+        Req = Req.trim();
+        bool Found = false;
+        for (const auto &kn : kernelNames)
+          if (kn == Req) {
+            Targets.push_back(kn);
+            Found = true;
+            break;
+          }
+        if (!Found) {
+          llvm::errs() << "raise_cli: kernel '" << Req << "' not found in "
+                       << coPath << "\n";
+          return 2;
         }
-      if (!found) {
-        llvm::errs() << "raise_cli: kernel '" << emitIrKernel
-                     << "' not found in " << coPath << "\n";
-        return 2;
       }
     }
-    auto metaOrErr = COMGR::hotswap::extractKernelMeta(coData, target);
-    if (!metaOrErr) {
-      llvm::errs() << "raise_cli: kernel '" << target << "' metadata: "
-                   << llvm::toString(metaOrErr.takeError()) << "\n";
-      return 1;
+    if (Targets.empty()) {
+      llvm::errs() << "raise_cli: no kernels selected by --emit-ir in " << coPath
+                   << "\n";
+      return 2;
     }
-    COMGR::hotswap::KernelMeta meta = std::move(*metaOrErr);
-    auto kernelExtentOrErr =
-        COMGR::hotswap::findKernelSymbolExtent(coData, target);
-    if (!kernelExtentOrErr) {
-      std::string err = llvm::toString(kernelExtentOrErr.takeError());
-      llvm::errs() << "raise_cli: kernel '" << target
-                   << "' extent lookup failed: " << err << "\n";
-      return 1;
+
+    // A multi-kernel dump prefixes each kernel with a separator so a
+    // single FileCheck pass can anchor per-kernel CHECK-LABEL blocks.
+    bool Multi = Targets.size() > 1;
+    bool AnyFailed = false;
+    for (const std::string &Target : Targets) {
+      auto metaOrErr = COMGR::hotswap::extractKernelMeta(coData, Target);
+      if (!metaOrErr) {
+        llvm::errs() << "raise_cli: kernel '" << Target << "' metadata: "
+                     << llvm::toString(metaOrErr.takeError()) << "\n";
+        AnyFailed = true;
+        continue;
+      }
+      COMGR::hotswap::KernelMeta meta = std::move(*metaOrErr);
+      auto kernelExtentOrErr =
+          COMGR::hotswap::findKernelSymbolExtent(coData, Target);
+      if (!kernelExtentOrErr) {
+        std::string err = llvm::toString(kernelExtentOrErr.takeError());
+        llvm::errs() << "raise_cli: kernel '" << Target
+                     << "' extent lookup failed: " << err << "\n";
+        AnyFailed = true;
+        continue;
+      }
+      uint64_t kernelOffset = kernelExtentOrErr->Offset;
+      uint64_t kernelSize = kernelExtentOrErr->Size;
+      auto raised = COMGR::hotswap::raiseToIR(text.Bytes, isa, Target, meta,
+                                          kernelOffset, kernelSize, targetIsa,
+                                          EnableWritelaneRewrite,
+                                          EnableWaveNative,
+                                          AssumeHipGlobalOffsetZeroOpt);
+      if (!raised.Success) {
+        // Contract: raiseToIR only populates RaiseResult::IrText on the
+        // success path (the last write before setting `success = true`),
+        // so we cannot dump partial IR here. Callers that need stderr
+        // diagnostics (abort-gate lit tests, etc.) FileCheck the raiser's
+        // stderr — we leave that untouched.
+        COMGR::hotswap::RaiseFailure Failure =
+            raised.Failure.hasFailed()
+                ? raised.Failure
+                : COMGR::hotswap::RaiseFailure::internalFailure(
+                      "raiseToIR returned failure without a structured reason");
+        llvm::errs() << "raise_cli: kernel '" << Target
+                     << "' failed to raise: "
+                     << COMGR::hotswap::formatRaiseFailure(Failure) << "\n";
+        AnyFailed = true;
+        continue;
+      }
+      if (Multi)
+        llvm::outs() << "; === raise_cli kernel: " << Target << " ===\n";
+      llvm::outs().write(raised.IrText.data(), raised.IrText.size());
     }
-    uint64_t kernelOffset = kernelExtentOrErr->Offset;
-    uint64_t kernelSize = kernelExtentOrErr->Size;
-    auto raised = COMGR::hotswap::raiseToIR(text.Bytes, isa, target, meta,
-                                        kernelOffset, kernelSize, targetIsa,
-                                        EnableWritelaneRewrite,
-                                        EnableWaveNative,
-                                        AssumeHipGlobalOffsetZeroOpt);
-    if (!raised.Success) {
-      // Contract: raiseToIR only populates RaiseResult::IrText on the
-      // success path (the last write before setting `success = true`),
-      // so we cannot dump partial IR here. Callers that need stderr
-      // diagnostics (abort-gate lit tests, etc.) FileCheck the raiser's
-      // stderr — we leave that untouched.
-      COMGR::hotswap::RaiseFailure Failure =
-          raised.Failure.hasFailed()
-              ? raised.Failure
-              : COMGR::hotswap::RaiseFailure::internalFailure(
-                    "raiseToIR returned failure without a structured reason");
-      llvm::errs() << "raise_cli: kernel '" << target << "' failed to raise: "
-                   << COMGR::hotswap::formatRaiseFailure(Failure) << "\n";
-      return 1;
-    }
-    llvm::outs().write(raised.IrText.data(), raised.IrText.size());
-    return 0;
+    return AnyFailed ? 1 : 0;
   }
 
   // --write-hsaco path — runs the full pipeline (raise + llc + lld)

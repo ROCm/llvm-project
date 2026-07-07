@@ -1,64 +1,37 @@
 ; RUN: %llvm_mc -mcpu=gfx942 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:     --emit-ir=v_fma_f16_basic_kernel 2>/dev/null \
-; RUN:   | %FileCheck %s --check-prefix=BASIC
-; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:     --emit-ir=v_fma_f16_opsel_kernel 2>/dev/null \
-; RUN:   | %FileCheck %s --check-prefix=OPSEL
-; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:     --emit-ir=v_fma_f16_dsthi_kernel 2>/dev/null \
-; RUN:   | %FileCheck %s --check-prefix=DSTHI
-; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:     --emit-ir=v_fma_f16_neg_kernel 2>/dev/null \
-; RUN:   | %FileCheck %s --check-prefix=NEG
-;
-; Pins VOP3 V_FMA_F16 (gfx9+ V_FMA_F16_gfx9_e64 pseudo). Verifies:
-;   * Default op_sel ([0,0,0,0]) reads the low 16 bits of each source
-;     and writes the result into the low 16 bits of the destination
-;     while preserving the destination's high half (BASIC).
-;   * Source-half op_sel bits route the high 16 bits of the relevant
-;     source through `lshr i32 ..., 16` before the trunc/bitcast (OPSEL).
-;   * Destination op_sel bit 3 toggles the writeback to the high half
-;     and preserves the destination's low half (DSTHI).
-;   * VOP3 neg/abs source modifiers lower to `fneg half` / `llvm.fabs.f16`
-;     before the fused multiply-add (NEG).
-;
-; All four kernels assemble the gfx9+ V_FMA_F16 pseudo
-; (V_FMA_F16_gfx9_e64 after t16/fake16 collapse) and raise to the same
-; ISA so the test exercises the in-target round-trip for the f16 fused
-; multiply-add lowering in handle-valu.cpp.
+; RUN:     --emit-ir=v_fma_f16_basic_kernel,v_fma_f16_opsel_kernel,v_fma_f16_dsthi_kernel,v_fma_f16_neg_kernel 2>/dev/null \
+; RUN:   | %FileCheck %s
 
-; BASIC-LABEL: define amdgpu_kernel void @v_fma_f16_basic_kernel(
-; BASIC-DAG: trunc i32 {{.*}} to i16
-; BASIC-DAG: bitcast i16 {{.*}} to half
-; BASIC: %fma_f16 = call half @llvm.fma.f16(
-; BASIC: bitcast half %fma_f16 to i16
-; BASIC: zext i16 {{.*}} to i32
-; BASIC: and i32 {{.*}}, -65536
-; BASIC: %f16_merge_lo = or i32
-; BASIC-NOT: unsupported instruction
-
-; OPSEL-LABEL: define amdgpu_kernel void @v_fma_f16_opsel_kernel(
-; OPSEL-DAG: %f16_src_hi = lshr i32 {{.*}}, 16
-; OPSEL-DAG: %f16_src_hi{{[0-9]+}} = lshr i32 {{.*}}, 16
-; OPSEL: %fma_f16 = call half @llvm.fma.f16(
-; OPSEL: %f16_merge_lo = or i32
-; OPSEL-NOT: unsupported instruction
-
-; DSTHI-LABEL: define amdgpu_kernel void @v_fma_f16_dsthi_kernel(
-; DSTHI: %fma_f16 = call half @llvm.fma.f16(
-; DSTHI: bitcast half %fma_f16 to i16
-; DSTHI: zext i16 {{.*}} to i32
-; DSTHI: and i32 {{.*}}, 65535
-; DSTHI: shl i32 {{.*}}, 16
-; DSTHI: %f16_merge_hi = or i32
-; DSTHI-NOT: unsupported instruction
-
-; NEG-LABEL: define amdgpu_kernel void @v_fma_f16_neg_kernel(
-; NEG: %neg_f16 = fneg half
-; NEG: %abs_f16 = call half @llvm.fabs.f16(half
-; NEG: %fma_f16 = call half @llvm.fma.f16(half %neg_f16, half {{.*}}, half %abs_f16)
-; NEG-NOT: unsupported instruction
+; v_fma_f16 op_sel/dsthi/neg-abs packed half FMA lift.
+; CHECK-LABEL: define amdgpu_kernel void @v_fma_f16_basic_kernel(
+; CHECK-DAG: trunc i32 {{.*}} to i16
+; CHECK-DAG: bitcast i16 {{.*}} to half
+; CHECK: %fma_f16 = call half @llvm.fma.f16(
+; CHECK: bitcast half %fma_f16 to i16
+; CHECK: zext i16 {{.*}} to i32
+; CHECK: and i32 {{.*}}, -65536
+; CHECK: %f16_merge_lo = or i32
+; CHECK-NOT: unsupported instruction
+; CHECK-LABEL: define amdgpu_kernel void @v_fma_f16_opsel_kernel(
+; CHECK-DAG: %f16_src_hi = lshr i32 {{.*}}, 16
+; CHECK-DAG: %f16_src_hi{{[0-9]+}} = lshr i32 {{.*}}, 16
+; CHECK: %fma_f16 = call half @llvm.fma.f16(
+; CHECK: %f16_merge_lo = or i32
+; CHECK-NOT: unsupported instruction
+; CHECK-LABEL: define amdgpu_kernel void @v_fma_f16_dsthi_kernel(
+; CHECK: %fma_f16 = call half @llvm.fma.f16(
+; CHECK: bitcast half %fma_f16 to i16
+; CHECK: zext i16 {{.*}} to i32
+; CHECK: and i32 {{.*}}, 65535
+; CHECK: shl i32 {{.*}}, 16
+; CHECK: %f16_merge_hi = or i32
+; CHECK-NOT: unsupported instruction
+; CHECK-LABEL: define amdgpu_kernel void @v_fma_f16_neg_kernel(
+; CHECK: %neg_f16 = fneg half
+; CHECK: %abs_f16 = call half @llvm.fabs.f16(half
+; CHECK: %fma_f16 = call half @llvm.fma.f16(half %neg_f16, half {{.*}}, half %abs_f16)
+; CHECK-NOT: unsupported instruction
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6

@@ -3,11 +3,8 @@
 ; RUN:     --assume-hip-global-offset-zero \
 ; RUN:     --emit-ir=hidden_global_offset_x_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Strict-mode boundary: known source-hidden-arg synthesis must not be
-; short-circuited by the `HSA_HOTSWAP_STRICT=1` guard; only the
-; `amdgcn_implicitarg_ptr` fallback is mode-gated.
 
+; Entry+Const kernarg provenance synthesizes hidden_global_offset_x; assume-zero folds to phi 0.
 ; CHECK-LABEL: define amdgpu_kernel void @hidden_global_offset_x_kernel(
 ; CHECK-NOT: call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 ; CHECK: phi i32 [ 0, %{{[a-zA-Z_0-9]+}} ], [ %tid, %{{[a-zA-Z_0-9]+}} ]

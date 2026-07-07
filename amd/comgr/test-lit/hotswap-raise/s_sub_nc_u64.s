@@ -1,29 +1,9 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=s_sub_nc_u64_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for s_sub_nc_u64. Pins that the SOP2 64-bit no-carry
-; subtract lowers to a single `sub i64`. The handler lives in
-; transpiler/handle_sop2.cpp under
-; `if (sop == SemOp::S_SUB_NC_U64) { ... }`; the SemOp lives in
-; transpiler/semop.hpp under SOP2.
-;
-; The "nc" suffix matters: the gfx12 form intentionally does NOT
-; update SCC (see SOPInstructions.td around line 661 — `S_SUB_U64`
-; is defined outside the surrounding `let Defs = [SCC]` block). A
-; regression that emits a `usub.with.overflow` intrinsic (or any
-; SCC-writing variant) would defeat that, so we negative-CHECK
-; both shapes.
 
+; s_sub_nc_u64 64-bit scalar subtract lifted to i64 sub.
 ; CHECK-LABEL: define amdgpu_kernel void @s_sub_nc_u64_kernel(
-
-; The lifted body must contain a single i64 sub — the handler's
-; `ssub64` value-name is the canonical breadcrumb (mirrors the
-; `sadd64` / `smul64` siblings in the same handler file).
 ; CHECK: sub {{.*}}i64 %{{[^,]+}}, %{{[^,]+}}
-
-; Negative checks: no SCC-defining intrinsic and no narrower-width
-; sub for this kernel. If the handler ever shrinks to 32-bit halves
-; or grows an overflow-tracked variant, this fires.
 ; CHECK-NOT: @llvm.usub.with.overflow
 ; CHECK-NOT: sub {{.*}}i32
 
@@ -52,10 +32,8 @@ s_sub_nc_u64_kernel:
 	s_cmp_eq_u32 s9, 0
 	s_cselect_b32 s0, ttmp9, s1
 	v_mad_u32 v2, s0, s8, v0
-	;;#ASMSTART
 	s_sub_nc_u64 s[0:1], s[6:7], s[2:3]
 	
-	;;#ASMEND
 	v_mov_b64_e32 v[0:1], s[0:1]
 	global_store_b64 v2, v[0:1], s[4:5] scale_offset
 	s_endpgm

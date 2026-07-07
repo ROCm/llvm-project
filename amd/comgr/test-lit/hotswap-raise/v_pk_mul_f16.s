@@ -4,11 +4,8 @@
 ; RUN: raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_pk_mul_f16_clamp_kernel 2>/dev/null | %FileCheck %s --check-prefix=CLAMP
 ; RUN: raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_pk_mul_f16_imm_kernel 2>/dev/null | %FileCheck %s --check-prefix=IMM
 ; RUN: raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_pk_mul_f16_imm_kernel 2>/dev/null | %FileCheck %s --check-prefix=CROSS
-;
-; Pins VOP3P `v_pk_mul_f16`: packed `<2 x half>` lane selection and negation
-; come from the decoded srcN_modifiers operands, arithmetic lowers to a lane-wise
-; `fmul <2 x half>`, and clamp is applied after the multiply via min/max.
 
+; v_pk_mul_f16 packed f16 multiply (with modifier/clamp/imm/cross-target arms) lift.
 ; BASIC-LABEL: define amdgpu_kernel void @v_pk_mul_f16_basic_kernel(
 ; BASIC: fmul <2 x half>
 ; BASIC-NOT: call <2 x half> @llvm.fma.v2f16(

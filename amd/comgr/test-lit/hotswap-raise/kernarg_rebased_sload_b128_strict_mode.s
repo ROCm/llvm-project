@@ -5,13 +5,8 @@
 ; RUN: raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=kernarg_rebased_sload_b128 \
 ; RUN:   | %FileCheck %s --check-prefix=PERMISSIVE
-;
-; Triton may load an explicit by-value argument pointer into the physical
-; kernarg SGPR pair, rebase it, and then issue more s_load_b128 operations
-; through that pointer. The initial SMEM load proves the pair is non-entry, but
-; the later non-literal ALU rebase is not value-tracked, so strict mode refuses
-; instead of assuming the rebased value is still non-entry.
 
+; rebased s_load_b128: strict refuses (Unknown-provenance CFG path), permissive lifts to an ordinary global load.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 5
 	.text

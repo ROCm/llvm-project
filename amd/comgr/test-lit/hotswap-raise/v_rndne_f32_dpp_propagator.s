@@ -2,12 +2,8 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=v_rndne_f32_dpp_propagator_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; V_RNDNE_F32 lowers to llvm.roundeven.f32. When a DPP result feeds that
-; intrinsic, the cross-widen pass must treat roundeven as a VGPR-safe
-; propagator; otherwise the shared DPP rewrite would be blocked as if the
-; DPP value flowed into an unaudited or SGPR-forced use.
 
+; v_rndne_f32 with DPP selector propagated to ds.bpermute.
 ; CHECK-LABEL: define amdgpu_kernel void @v_rndne_f32_dpp_propagator_kernel(
 ; CHECK-NOT: call i32 @llvm.amdgcn.update.dpp.i32(
 ; CHECK-DAG: %cwd_dpp_bperm = call i32 @llvm.amdgcn.ds.bpermute(i32 %cwd_dpp_selector, i32 %{{[^,]+}})
@@ -42,11 +38,9 @@ v_rndne_f32_dpp_propagator_kernel:       ; @v_rndne_f32_dpp_propagator_kernel
 	v_mad_u32 v0, s0, s4, v0
 	global_load_b32 v1, v0, s[2:3] scale_offset
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_mov_b32_dpp v1, v1 row_shr:4 row_mask:0xf bank_mask:0xf bound_ctrl:1
 	v_rndne_f32 v1, v1
 
-	;;#ASMEND
 	global_store_b32 v0, v1, s[2:3] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

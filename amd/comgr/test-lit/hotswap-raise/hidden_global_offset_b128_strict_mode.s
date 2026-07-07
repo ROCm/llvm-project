@@ -3,12 +3,8 @@
 ; RUN:     --assume-hip-global-offset-zero \
 ; RUN:     --emit-ir=hidden_global_offset_b128_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Wide SMEM hidden-arg synthesis: AISE kernels may read two adjacent 64-bit
-; hidden_global_offset fields with one s_load_b128. The source ABI value is
-; HIP's always-zero global work offset, so each dword is synthesized and strict
-; mode must not fall back to the target hidden-arg block.
 
+; hidden_global_offset zeroed via --assume-hip-global-offset-zero under HSA_HOTSWAP_STRICT; no implicitarg.ptr.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

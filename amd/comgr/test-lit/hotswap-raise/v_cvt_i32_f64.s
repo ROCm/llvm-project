@@ -1,25 +1,19 @@
 ; RUN: %llvm_mc -mcpu=gfx942 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco
-; RUN: %raise_cli %t.hsaco --emit-ir=v_cvt_i32_f64_kernel | %FileCheck %s --check-prefix=I32
-; RUN: %raise_cli %t.hsaco --emit-ir=v_cvt_u32_f64_kernel | %FileCheck %s --check-prefix=U32
+; RUN: %raise_cli %t.hsaco --emit-ir=v_cvt_i32_f64_kernel,v_cvt_u32_f64_kernel | %FileCheck %s
 
-; F64 -> I32/U32 conversions saturate out-of-range inputs and map NaN to 0,
-; so they lower to the fptosi.sat/fptoui.sat intrinsics rather than plain
-; fptosi/fptoui (which are UB on overflow).
-
-; I32-LABEL: define amdgpu_kernel void @v_cvt_i32_f64_kernel(
-; I32: %cvt_i32_f64 = call i32 @llvm.fptosi.sat.i32.f64(double %{{[^,]+}})
-; e64 src0 modifiers applied to the f64 source before the convert:
-; I32: %neg = fneg double %{{[^,]+}}
-; I32: %cvt_i32_f64{{[0-9]*}} = call i32 @llvm.fptosi.sat.i32.f64(double %neg)
-; I32: %abs = call double @llvm.fabs.f64(double %{{[^,]+}})
-; I32: %cvt_i32_f64{{[0-9]*}} = call i32 @llvm.fptosi.sat.i32.f64(double %abs)
-; I32-NOT: fptoui double
-; I32-NOT: fptosi double
-
-; U32-LABEL: define amdgpu_kernel void @v_cvt_u32_f64_kernel(
-; U32: %cvt_u32_f64 = call i32 @llvm.fptoui.sat.i32.f64(double %{{[^,]+}})
-; U32-NOT: fptoui double
-; U32-NOT: fptosi double
+; v_cvt_i32/u32_f64 (with neg/abs) fptosi/fptoui.sat lift.
+; CHECK-LABEL: define amdgpu_kernel void @v_cvt_i32_f64_kernel(
+; CHECK: %cvt_i32_f64 = call i32 @llvm.fptosi.sat.i32.f64(double %{{[^,]+}})
+; CHECK: %neg = fneg double %{{[^,]+}}
+; CHECK: %cvt_i32_f64{{[0-9]*}} = call i32 @llvm.fptosi.sat.i32.f64(double %neg)
+; CHECK: %abs = call double @llvm.fabs.f64(double %{{[^,]+}})
+; CHECK: %cvt_i32_f64{{[0-9]*}} = call i32 @llvm.fptosi.sat.i32.f64(double %abs)
+; CHECK-NOT: fptoui double
+; CHECK-NOT: fptosi double
+; CHECK-LABEL: define amdgpu_kernel void @v_cvt_u32_f64_kernel(
+; CHECK: %cvt_u32_f64 = call i32 @llvm.fptoui.sat.i32.f64(double %{{[^,]+}})
+; CHECK-NOT: fptoui double
+; CHECK-NOT: fptosi double
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6
@@ -32,15 +26,9 @@ v_cvt_i32_f64_kernel:
 	s_waitcnt lgkmcnt(0)
 	v_mov_b32_e32 v2, s2
 	v_mov_b32_e32 v3, s3
-	;;#ASMSTART
 	v_cvt_i32_f64 v0, v[2:3]
-	;;#ASMEND
-	;;#ASMSTART
 	v_cvt_i32_f64_e64 v6, -v[2:3]
-	;;#ASMEND
-	;;#ASMSTART
 	v_cvt_i32_f64_e64 v8, |v[2:3]|
-	;;#ASMEND
 	v_mov_b32_e32 v4, 0
 	global_store_dword v4, v0, s[0:1]
 	global_store_dword v4, v6, s[0:1]
@@ -54,9 +42,7 @@ v_cvt_u32_f64_kernel:
 	s_waitcnt lgkmcnt(0)
 	v_mov_b32_e32 v2, s2
 	v_mov_b32_e32 v3, s3
-	;;#ASMSTART
 	v_cvt_u32_f64 v0, v[2:3]
-	;;#ASMEND
 	v_mov_b32_e32 v4, 0
 	global_store_dword v4, v0, s[0:1]
 	s_endpgm

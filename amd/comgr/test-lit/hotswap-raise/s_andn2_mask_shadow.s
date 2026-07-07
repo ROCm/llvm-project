@@ -2,17 +2,8 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=s_andn2_mask_shadow_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Regression for cross-widened scalar wave-mask algebra through the negated
-; SOP2 family.  `v_cmp_* -> sN` records a full target-width per-lane i1 shadow;
-; negated scalar mask ops must preserve that full-width i1 so a following
-; `v_cndmask_b32` does not fall back to a lossy source-width mask.
-;
-; The gfx1250 VOP3 cndmask encoding consumes a 32-bit scalar condition here, so
-; this fixture covers the practical B32 forms. The B64 implementation follows
-; the same helper path, but an SGPR-pair cndmask condition is not an assemblable
-; gfx1250 source form for this test.
 
+; s_andn2/orn2/nand/nor/xnor wave-mask boolean lowering.
 ; CHECK-LABEL: define amdgpu_kernel void @s_andn2_mask_shadow_kernel(
 ; CHECK: %wave_mask_andn2 = and i1
 ; CHECK: %cndmask = select i1 %wave_mask_andn2, i32 1, i32 0

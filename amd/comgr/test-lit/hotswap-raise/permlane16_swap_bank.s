@@ -1,14 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=permlane16_swap_bank_kernel 2>/dev/null | %FileCheck %s
-;
-; Exercises emitPermLaneSwapEmulation (handle-valu-cross-lane.cpp), which lowers
-; v_permlane16_swap_b32.  Its two outputs are tied: vdst to vdst_in and src0_out
-; to src0.  src0_out must be written back to src0's own VGPR_MSB bank, not the
-; destination bank (see the comment on Src0OutReg); the two only diverge when
-; vdst and src0 are in different banks.  s_set_vgpr_msb 0x40 puts vdst in bank1
-; and src0 in bank0, so src0_out must land in src0's bank-0 register (Vgpr2).
 
+; v_permlane16_swap_b32 partner-swap lowering to ds.bpermute.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
 	.globl	permlane16_swap_bank_kernel
@@ -20,14 +14,10 @@ permlane16_swap_bank_kernel:
 	global_load_b32 v2, v0, s[2:3]
 	s_set_vgpr_msb 0x40
 	v_permlane16_swap_b32 v1, v2
-	; Partner-lane (XOR 16) byte address shared by both swap halves:
 	; CHECK: %pls16_partner{{[0-9]*}} = xor i32 %{{[^,]+}}, 16
 	; CHECK: %pls16_addr{{[0-9]*}} = shl i32 %pls16_partner{{[0-9]*}}, 2
-	; src0 is read, and src0_out selected, from src0's real bank-0 register:
 	; CHECK: %pls16_bperm_src0{{[0-9]*}} = call i32 @llvm.amdgcn.ds.bpermute(i32 %pls16_addr{{[0-9]*}}, i32 %Vgpr2{{[._0-9]*}})
 	; CHECK: %pls16_new_src0_out{{[0-9]*}} = select i1 %{{[^,]+}}, i32 %pls16_bperm_vdst{{[0-9]*}}, i32 %Vgpr2{{[._0-9]*}}
-	; src0_out is written back to Vgpr2: this phi exists only because src0_out
-	; targets src0's own bank; a destination-bank regression would drop it.
 	; CHECK: %Vgpr2.{{[0-9]+}} = phi i32 [ %pls16_new_src0_out{{[0-9]*}},
 	s_set_vgpr_msb 0
 	global_store_b32 v0, v1, s[0:1]

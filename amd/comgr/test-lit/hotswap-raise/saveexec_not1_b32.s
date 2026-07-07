@@ -1,12 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=saveexec_not1_kernel | %FileCheck %s
-;
-; The "not1" SAVEEXEC variants invert the EXEC operand, not the SGPR source:
-; S_AND_NOT1_SAVEEXEC_B32 (canonical S_ANDN2_SAVEEXEC_B32) lifts EXEC to
-; `Src & ~OldExec`, and S_OR_NOT1_SAVEEXEC_B32 (canonical S_ORN2_SAVEEXEC_B32)
-; lifts it to `Src | ~OldExec`. See the SAVEEXEC handlers in handle-sop1.cpp.
 
+; s_and_not1/or_not1_saveexec_b32 EXEC save + ANDN2/ORN2 read-modify-write.
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
         .text
@@ -16,7 +12,6 @@
 ; CHECK-LABEL: define amdgpu_kernel void @saveexec_not1_kernel(
 saveexec_not1_kernel:
         v_cmp_gt_f32_e64 s2, v0, v1
-; New EXEC = Src & ~OldExec: the inverted operand is the saved EXEC.
 ; CHECK: %[[NOTEXEC:[0-9]+]] = xor i64 %saved_exec, -1
 ; CHECK: %new_exec = and i64 %{{[a-zA-Z0-9_.]+}}, %[[NOTEXEC]]
         s_and_not1_saveexec_b32 s3, s2
@@ -24,7 +19,6 @@ saveexec_not1_kernel:
         ds_store_b32 v5, v4
         s_or_b32 exec_lo, exec_lo, s3
         v_cmp_gt_f32_e64 s2, v0, v1
-; New EXEC = Src | ~OldExec: the inverted operand is the saved EXEC.
 ; CHECK: %[[NOTEXEC2:[0-9]+]] = xor i64 %{{[a-zA-Z0-9_.]+}}, -1
 ; CHECK: %{{[a-zA-Z0-9_.]+}} = or i64 %{{[a-zA-Z0-9_.]+}}, %[[NOTEXEC2]]
         s_or_not1_saveexec_b32 s3, s2

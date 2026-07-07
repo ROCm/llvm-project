@@ -3,40 +3,13 @@
 ; RUN:     --enable-writelane-rewrite \
 ; RUN:     --emit-ir=readlane_divergent_rewrite_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s --check-prefix=REWRITE
-;
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --disable-writelane-rewrite \
 ; RUN:     --emit-ir=readlane_divergent_rewrite_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s --check-prefix=UNCHANGED
-;
-; Divergence-triggered `v_readlane_b32` rewrite contract.
-;
-; REWRITE path (--enable-writelane-rewrite on):
-;   * `rewriteCrossLaneDivergent` replaces the
-;     `@llvm.amdgcn.readlane` call with a `ds_bpermute` whose selector
-;     is `((lane_id & ~(W_s-1)) | lane_idx) << 2`. The lane_id helper
-;     is the canonical `mbcnt_lo(-1, 0); mbcnt_hi(-1, prev)` pair built
-;     once at the entry block.
-;   * Asserts the four stable signatures, all keyed on
-;     rewriter-specific `cwd_*` variable names (disambiguates from the
-;     raiser's SPE-wrapper lane_id construction around writelane /
-;     readlane primitive sites):
-;       (a) the `cwd_lane_id_lo` + `cwd_lane_id` two-step mbcnt pair,
-;       (b) the `cwd_rl_selector` byte-offset (shl by 2),
-;       (c) the `cwd_readlane_rewritten` ds_bpermute call,
-;       (d) the absence of any `cwd_writelane_rewritten` sibling
-;           (write half must NOT fire on this fixture).
-;
-; UNCHANGED path (flag off): `@llvm.amdgcn.readlane` survives; the
-; rewriter-emitted `cwd_*` values are absent. Commit 1's default-off
-; invariant. The raiser's own `ds_bpermute` lowerings for other
-; opcodes (e.g. the dedicated DS_BPERMUTE handler exercised by
-; `ds_bpermute_b32`) remain unrelated to this contract; we key the
-; negative assertion on the rewriter's `cwd_readlane_rewritten` name
-; rather than on `ds_bpermute` to keep the fixture robust against
-; corpus shifts.
 
+; divergent readlane->ds.bpermute rewrite gated by writelane-rewrite flag.
 ; REWRITE-LABEL: define amdgpu_kernel void @readlane_divergent_rewrite_kernel(
 ; REWRITE: %cwd_lane_id_lo = call i32 @llvm.amdgcn.mbcnt.lo
 ; REWRITE: %cwd_lane_id = call i32 @llvm.amdgcn.mbcnt.hi
@@ -72,10 +45,8 @@ readlane_divergent_rewrite_kernel:      ; @readlane_divergent_rewrite_kernel
 	s_cselect_b32 s3, ttmp9, s4
 	s_delay_alu instid0(SALU_CYCLE_1)
 	v_mad_u32 v1, s3, s2, v0
-	;;#ASMSTART
 	v_readlane_b32 s2, v1, 0
 	
-	;;#ASMEND
 	v_mov_b32_e32 v0, s2
 	global_store_b32 v1, v0, s[0:1] scale_offset
 	s_endpgm

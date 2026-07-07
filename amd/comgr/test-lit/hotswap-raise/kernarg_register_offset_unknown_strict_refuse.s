@@ -2,12 +2,8 @@
 ; RUN:   && env HSA_HOTSWAP_STRICT=1 %not raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=kernarg_register_offset_unknown_strict_refuse 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; A CFG join with one path preserving the entry kernarg pointer and another
-; path writing the physical kernarg SGPR pair has Unknown provenance. A dynamic
-; SMEM offset through that pair may still reach source implicit args, so strict
-; mode must refuse rather than falling through to a generic kernarg load.
 
+; strict-mode refusal: Unknown kernarg-ptr provenance + dynamic (register) offset may reach the source implicit-arg range.
 ; CHECK: dynamic source kernarg offsets may reach the source implicit-arg range
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

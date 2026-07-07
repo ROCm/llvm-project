@@ -1,65 +1,18 @@
 ; RUN: %llvm_mc -mcpu=gfx942 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --emit-ir=divergent_exec_kernel 2>/dev/null | %FileCheck %s
-;
-; Audit: V_CMPX, S_AND_B64→EXEC, and S_MOV_B64→EXEC all route their
-; EXEC writes through `storeExec` (handle_valu.cpp / handle_sop2.cpp /
-; handle_sop1.cpp respectively). Post-mem2reg, the observable is that
-; the `lshr i64 <exec>, %spe_lane_mod` in the SPE active-bit
-; computation following each writer consumes the NEW EXEC SSA value
-; (not the previous one).
-;
-; Concretely the fixture produces, in order:
-;
-;   global_store_dword        (initial under EXEC = -1)
-;   v_cmpx_lt_u32_e64 ...     <-- writes EXEC to `%cmpx_exec`
-;   global_store_dword        (under %cmpx_exec)
-;   s_mov_b64 exec, -1        <-- writes EXEC back to -1
-;   v_cmpx_ge_u32_e64 ...     <-- writes EXEC to `%cmpx_exec64`
-;   v_cmp_lt_u32_e64 s[4:5]   (SGPR mask — NOT EXEC)
-;   s_and_b64 exec, exec, s   <-- writes EXEC to `%and64`
-;   global_store_dword        (under %and64)
-;   s_mov_b64 exec, -1        <-- writes EXEC back to -1
-;
-; We assert the lshr following each side-effectful store uses the
-; right EXEC SSA value.
 
+; v_cmpx/s_and_b64 exec scalar EXEC-writers projected to wave-native masks/.
 ; CHECK-LABEL: define amdgpu_kernel void @divergent_exec_kernel(
-
-; Initial store is under full EXEC. We match any `store i32 <val>`
-; irrespective of whether <val> is a constant or an SSA name.
 ; CHECK:       lshr i64 -1, %{{[^ ]+}}
 ; CHECK:       store i32 {{.*}}, ptr addrspace(1) %{{[^ ]+}}, align 4
-
-; After the first v_cmpx, the EXEC SSA value becomes %cmpx_exec.
-; This is the most important signal: the V_CMPX handler routed its
-; write through storeExec, mem2reg promoted the alloca to SSA, and
-; the next SPE diamond correctly consumes the narrowed mask.
 ; CHECK:       %cmpx_exec = and i64 -1, %{{[^ ]+}}
 ; CHECK:       lshr i64 %cmpx_exec, %{{[^ ]+}}
-
-; Store under the narrowed EXEC (valA = 0xAA = 170).
 ; CHECK:       store i32 {{.*}}, ptr addrspace(1) %{{[^ ]+}}, align 4
-
-; Between region 1 and region 2 the fixture issues
-; `s_mov_b64 exec, -1` to restore EXEC. We audit the S_MOV_B64 →
-; EXEC handler path by observing the SECOND v_cmpx's `and i64 -1,
-; %...` consumes the constant `-1` — meaning the SSA graph reset
-; cleanly after the mov. If S_MOV_B64's handler did NOT route its
-; write through `storeExec`, this would still read `%cmpx_exec`
-; (the mask from region 1) and we'd see
-; `%cmpx_exec64 = and i64 %cmpx_exec, %...` instead.
 ; CHECK:       %cmpx_exec{{[0-9]+}} = and i64 -1, %{{[^ ]+}}
-
-; s_and_b64 exec, exec, s[4:5] writes EXEC to %and64. This proves
-; the S_AND_B{32,64} handler on an EXEC destination routes through
-; storeExec. The SPE predicate uses the derived per-lane shadow, not
-; the raw scalar %and64 value.
 ; CHECK:       %and64 = and i64 %{{[^ ]+}}, %{{[^ ]+}}
 ; CHECK:       %[[WAVE_MASK_AND64:[^ ]+]] = and i1 %{{[^ ]+}}, %{{[^ ]+}}
 ; CHECK-NEXT:  %[[WAVE_MASK_EXEC:[^ ]+]] = call i64 @llvm.amdgcn.ballot.i64(i1 %[[WAVE_MASK_AND64]])
 ; CHECK:       lshr i64 %[[WAVE_MASK_EXEC]], %{{[^ ]+}}
-
-; Final store under the %and64 mask (valB = 0xBB = 187).
 ; CHECK:       store i32 {{.*}}, ptr addrspace(1) %{{[^ ]+}}, align 4
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
@@ -76,7 +29,6 @@ divergent_exec_kernel:
 	s_waitcnt lgkmcnt(0)
 	v_lshl_add_u64 v[4:5], s[0:1], 0, v[2:3]
 	v_mov_b32_e32 v2, 0xbb
-	;;#ASMSTART
 	global_store_dword v[4:5], v3, off
 	s_waitcnt vmcnt(0)
 	v_cmpx_lt_u32_e64 exec, v0, 16
@@ -90,7 +42,6 @@ divergent_exec_kernel:
 	s_waitcnt vmcnt(0)
 	s_mov_b64 exec, -1
 	
-	;;#ASMEND
 	s_endpgm
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0

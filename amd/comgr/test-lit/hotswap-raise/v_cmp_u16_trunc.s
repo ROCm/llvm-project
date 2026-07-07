@@ -2,17 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=v_cmp_u16_trunc_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Unsigned 16-bit V_CMP operands are carried in 32-bit VGPR /
-; inline-constant containers, but the compare semantics are u16.  This is the
-; unsigned sibling of v_cmp_i16_trunc.s and makes sure the shared 16-bit V_CMP
-; lowering does not only work for signed predicates.
-;
-;   v_cmp_lt_u16 s4, 0x8000, v1
-;
-; with v1's low half holding 0xbfce must compare
-; `u16 0x8000 < u16 0xbfce`, not some later 32-bit interpretation.
-;
+
+; v_cmp_lt_u16 unsigned i16 compare (trunc operands)+ballot lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_cmp_u16_trunc_kernel(
 ; CHECK: [[RHS:%[A-Za-z0-9_.]+]] = trunc i32 {{.*}} to i16
 ; CHECK: [[CMP:%[^ ]+]] = icmp ult i16 -32768, [[RHS]]

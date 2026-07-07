@@ -1,28 +1,10 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_max3_u32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for v_max3_u32. Pins that the VOP3 ternary unsigned
-; max lowers to the canonical 2-step llvm.umax.i32 intrinsic chain.
-; The handler lives in transpiler/handle_valu.cpp under
-; `if (sop == SemOp::V_MAX3_U32) { ... }`; the SemOp lives in
-; transpiler/semop.hpp under VOP3.
-;
-; The shape difference vs V_MAX3_F32 (FP fmax-of-fmax via
-; @llvm.maxnum.f32) is the use of unsigned integer max intrinsics — the
-; .td pattern is `AMDGPUumax3` which is `(umax (umax a, b), c)`.
-; A regression that swaps `llvm.umax` → `llvm.smax` would silently turn
-; the unsigned max into a signed one.
 
+; v_max3_u32 3-input unsigned max lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_max3_u32_kernel(
-
-; The handler emits two llvm.umax calls with names `vmax3_lo`
-; (intermediate `umax(a, b)`) and `vmax3` (final `umax(_, c)`).
 ; CHECK: %vmax3_lo{{[0-9]*}} = call i32 @llvm.umax.i32(i32 %{{[^,]+}}, i32 %{{[^)]+}})
 ; CHECK: %vmax3{{[0-9]*}} = call i32 @llvm.umax.i32(i32 %vmax3_lo{{[0-9]*}}, i32 %{{[^)]+}})
-
-; Negative checks: must NOT lift via signed compare or via the
-; FP @llvm.maxnum intrinsic (that would imply the f32 family
-; handler accidentally absorbed this op).
 ; CHECK-NOT: icmp sgt
 ; CHECK-NOT: call {{.*}}@llvm.smax
 ; CHECK-NOT: call {{.*}}@llvm.maxnum
@@ -57,10 +39,8 @@ v_max3_u32_kernel:
 	v_lshl_add_u64 v[0:1], v[0:1], 2, s[2:3]
 	global_load_b96 v[0:2], v[0:1], off
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_max3_u32 v0, v0, v1, v2
 	
-	;;#ASMEND
 	global_store_b32 v3, v0, s[0:1] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

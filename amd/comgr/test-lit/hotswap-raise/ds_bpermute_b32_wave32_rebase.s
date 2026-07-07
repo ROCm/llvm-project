@@ -2,14 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=ds_bpermute_b32_wave32_rebase_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; A gfx1250 DS_BPERMUTE_B32 selector is a source-wave-local byte offset:
-; `(addr / 4) % 32` chooses a lane inside the current wave32. Under the
-; WaveNative gfx1250 -> gfx942 lift, target lanes 32..63 model a second
-; source wave. The selector must therefore be rebased by the current
-; source-wave half before calling the wave64 `llvm.amdgcn.ds.bpermute`;
-; otherwise upper-half lanes gather from lanes 0..31.
 
+; Rebase wave32 ds_bpermute_b32 source-lane addressing onto the target wave64 layout.
 ; CHECK-LABEL: define amdgpu_kernel void @ds_bpermute_b32_wave32_rebase_kernel(
 ; CHECK: %bperm_local_addr{{[0-9]*}} = and i32 %{{[^,]+}}, 127
 ; CHECK: %bperm_srcwave_lane_base{{[0-9]*}} = and i32 %{{[^,]+}}, -32

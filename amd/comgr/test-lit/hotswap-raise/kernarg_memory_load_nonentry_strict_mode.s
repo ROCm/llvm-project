@@ -2,13 +2,8 @@
 ; RUN: env HSA_HOTSWAP_STRICT=1 raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=kernarg_memory_load_nonentry_strict_mode \
 ; RUN:   | %FileCheck %s --check-prefix=STRICT
-;
-; Models a Triton pattern where an explicit pointer argument is loaded through
-; the entry kernarg pair and reused in the same physical SGPR pair. After the
-; first load, s[0:1] carries a pointer value read from the kernarg buffer, so
-; the later high-offset load must use ordinary memory lowering rather than
-; source hidden-arg lowering.
 
+; NonEntry kernarg provenance: s_load_b128 nv rebases the pair, so the follow-up load lifts to ordinary global memory under strict mode.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 5
 	.text

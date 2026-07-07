@@ -1,16 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=global_load_saddr_nonkernarg_after_merge_kernel 2>/dev/null | %FileCheck %s
-;
-; Regression for GPT-OSS RoPE: under the previous raise-side kernarg-pair
-; provenance tracker, a control-flow merge erased the fact that SGPRs
-; populated by wide kernarg SMEM loads are ordinary non-kernarg values.
-; The subsequent overwrite of s[0:1] from those SGPRs was therefore marked
-; Unknown, and GLOBAL_LOAD SADDR refused as if it might still be the entry
-; kernarg pointer.  The kernarg-segment-ptr ABI (where the SGPR pair holds
-; the real `amdgcn.kernarg.segment.ptr` value, not a sentinel) has since
-; obsoleted that tracker; the test stays as a behavioural pin that the
-; merge-then-overwrite shape lifts cleanly to a regular addrspace(1) load.
 
+; global_load_b32 SADDR from non-kernarg (merged) base: saddr_vaddr synthesis.
 ; CHECK-LABEL: define amdgpu_kernel void @global_load_saddr_nonkernarg_after_merge_kernel(
 ; CHECK: saddr_vaddr
 ; CHECK: load float, ptr addrspace(1)

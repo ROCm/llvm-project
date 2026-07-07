@@ -1,10 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_trig_preop_f64_kernel | %FileCheck %s
-;
-; Lift v_trig_preop_f64 (2/pi table lookup, F64 src0 + I32 segment
-; select src1) to llvm.amdgcn.trig.preop.f64. v2 is initialised so the
-; segment selector is a real lifted SSA value (not undef), and the
-; second instruction checks an abs/neg src0 modifier is applied.
+
+; v_trig_preop_f64 lifts to @llvm.amdgcn.trig.preop.f64 with neg modifier.
 
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6

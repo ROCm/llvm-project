@@ -1,14 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=qwen_index_put_boundary_kernel 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; PyTorch boolean-mask index_put objects can place many related kernels in one
-; `.text` section. The selected symbol ends with a backward branch and no
-; trailing `s_endpgm`; a later, different put/take symbol contains
-; `global_atomic_cmpswap_b32`. Decoding must stop at the selected symbol's ELF
-; size, otherwise obstruction analysis reports the later symbol's CAS as if it
-; belonged to the selected index_put kernel.
-;
+
+; kernel symbol-boundary decoding keeps the lift from bleeding into the next kernel's CAS.
 ; CHECK-LABEL: define amdgpu_kernel void @qwen_index_put_boundary_kernel
 ; CHECK-NOT: NonCommutativeAtomic
 ; CHECK-NOT: global_atomic_cmpswap

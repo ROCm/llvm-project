@@ -3,12 +3,8 @@
 ; RUN:     --assume-hip-global-offset-zero \
 ; RUN:     --emit-ir=hidden_global_offset_x_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Source-hidden-arg synthesis for `hidden_global_offset_{x,y,z}`:
-; HIP launches always pass offset = 0, so the slot lifts to constant
-; `i64 0`. The constant flows through the byte-slice machinery into
-; the wave-native EXEC-diamond VGPR phi as the active-arm value.
 
+; hidden_global_offset_x zeroed via --assume-hip-global-offset-zero; no implicitarg.ptr.
 ; CHECK-LABEL: define amdgpu_kernel void @hidden_global_offset_x_kernel(
 ; CHECK-NOT: call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 ; CHECK: phi i32 [ 0, %{{[a-zA-Z_0-9]+}} ], [ %tid, %{{[a-zA-Z_0-9]+}} ]

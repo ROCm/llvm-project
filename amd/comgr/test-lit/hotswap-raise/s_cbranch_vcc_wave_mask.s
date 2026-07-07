@@ -19,14 +19,12 @@
 ; RUN:     --emit-ir=sop2_wave_mask_scalar_scc_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=SCALAR \
 ; RUN:     --implicit-check-not=_scc_ballot
-;
+
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 
-; s_cbranch_vccz is a scalar branch on whether the whole VCC wave mask is
-; zero. It must not branch on the current lane's i1 VCC bit.
-;
+; s_cbranch_vcc/vccnz wave-mask ballot branch lowering (vs per-lane SCC path).
 ; VCC-LABEL: define amdgpu_kernel void @s_cbranch_vcc_wave_mask_kernel(
 	.globl	s_cbranch_vcc_wave_mask_kernel
 	.p2align	8
@@ -46,8 +44,7 @@ s_cbranch_vcc_wave_mask_kernel:
 	global_store_b32 v0, v1, s[0:1] scale_offset
 	s_endpgm
 
-; s_cbranch_vccnz is the nonzero form of the same full-wave VCC test.
-;
+; s_cbranch_vccnz: nonzero form of the full-wave VCC test.
 ; VCCNZ-LABEL: define amdgpu_kernel void @s_cbranch_vccnz_wave_mask_kernel(
 	.globl	s_cbranch_vccnz_wave_mask_kernel
 	.p2align	8
@@ -68,10 +65,7 @@ s_cbranch_vccnz_wave_mask_kernel:
 	global_store_b32 v0, v1, s[0:1] scale_offset
 	s_endpgm
 
-; These scalar ops combine values that came from vector compares. For
-; and/or/xor/andn2, the result is still a lane mask, so SCC must be computed
-; from whether any lane in the full mask is set.
-;
+; SOP2 and/or/xor/andn2 on lane masks: SCC from whether any lane in the mask is set.
 ; SCC-LABEL: define amdgpu_kernel void @sop2_wave_mask_scc_kernel(
 	.globl	sop2_wave_mask_scc_kernel
 	.p2align	8
@@ -92,7 +86,6 @@ sop2_wave_mask_scc_kernel:
 	s_branch .L_scc_or
 .L_scc_and_nonzero:
 	v_mov_b32_e32 v1, 1
-	; Fall through to keep all SCC cases in one lit kernel.
 .L_scc_or:
 	v_cmp_lt_u32_e64 s2, v0, 16
 	v_cmp_ne_u32_e64 s3, v0, 31
@@ -188,9 +181,7 @@ sop2_wave_mask_scc_kernel:
 	global_store_b32 v0, v1, s[0:1] scale_offset
 	s_endpgm
 
-; EXEC destinations still propagate the wave mask and derive SCC from the
-; resulting full-wave ballot.
-;
+; SOP2 writes to EXEC propagate the wave mask and derive SCC from the ballot.
 ; EXEC-LABEL: define amdgpu_kernel void @sop2_wave_mask_exec_scc_kernel(
 	.globl	sop2_wave_mask_exec_scc_kernel
 	.p2align	8
@@ -213,9 +204,7 @@ sop2_wave_mask_exec_scc_kernel:
 	global_store_b32 v0, v1, s[0:1] scale_offset
 	s_endpgm
 
-; Complementing ops can set scalar register bits outside the lane mask. Keep SCC
-; based on the scalar result, while still tracking the lane mask for later users.
-;
+; Complementing SOP2 ops derive SCC from the full scalar result while still tracking the lane mask.
 ; SCALAR-LABEL: define amdgpu_kernel void @sop2_wave_mask_scalar_scc_kernel(
 	.globl	sop2_wave_mask_scalar_scc_kernel
 	.p2align	8

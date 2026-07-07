@@ -1,42 +1,25 @@
-// COM: Test HotSwap in-place patches: cluster_load -> global_load and
-// COM: s_clause -> s_nop replacements on a kernel containing both.
-
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
-// API: RESULT: SUCCESS
-
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
-
-// COM: cluster_load mnemonics should be gone, replaced by global_load
-// DISASM-NOT: cluster_load_b32
-// DISASM-NOT: cluster_load_b128
-
-// COM: s_clause should be gone, replaced by s_nop
-// DISASM-NOT: s_clause
-
-// COM: Replacement global_load instructions should be present
-// DISASM-DAG: global_load_b32 v0
-// DISASM-DAG: global_load_b128 v[4:7]
-
-// COM: The s_nop replacement for s_clause
-// DISASM-DAG: s_nop
-
-// COM: Original global_load instructions should still be there
-// DISASM-DAG: global_load_b32 v10
-// DISASM-DAG: global_load_b32 v11
-
-// COM: Idempotency: rewriting the patched output again should produce
-// COM: identical bytes.
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out2.elf \
 // RUN:   | %FileCheck --check-prefix=API2 %s
-// API2: RESULT: SUCCESS
 // RUN: cmp %t.out.elf %t.out2.elf
+
+// API: RESULT: SUCCESS
+// DISASM-NOT: cluster_load_b32
+// DISASM-NOT: cluster_load_b128
+// DISASM-NOT: s_clause
+// DISASM-DAG: global_load_b32 v0
+// DISASM-DAG: global_load_b128 v[4:7]
+// DISASM-DAG: s_nop
+// DISASM-DAG: global_load_b32 v10
+// DISASM-DAG: global_load_b32 v11
+// API2: RESULT: SUCCESS
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

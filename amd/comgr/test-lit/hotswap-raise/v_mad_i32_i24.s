@@ -1,38 +1,30 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_mad_i32_i24_kernel 2>/dev/null | %FileCheck %s --check-prefix=DEFAULT
-; RUN: raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_mad_i32_i24_clamp_kernel 2>/dev/null | %FileCheck %s --check-prefix=CLAMP
-; RUN: raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_mad_u32_u24_clamp_kernel 2>/dev/null | %FileCheck %s --check-prefix=UCLAMP
-;
-; Lift test for signed 24-bit multiply-add:
-;   dst = signext24(src0) * signext24(src1) + src2
-; The unclamped form wraps naturally in i32 IR. The clamp form computes in i64
-; and saturates to signed i32 range before truncating back to the destination.
+; RUN:   && raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_mad_i32_i24_kernel,v_mad_i32_i24_clamp_kernel,v_mad_u32_u24_clamp_kernel 2>/dev/null | %FileCheck %s
 
-; DEFAULT-LABEL: define amdgpu_kernel void @v_mad_i32_i24_kernel(
-; DEFAULT: shl i32 %{{[^,]+}}, 8
-; DEFAULT: ashr i32 %{{[^,]+}}, 8
-; DEFAULT: %mad_i24_mul{{[0-9]*}} = mul i32
-; DEFAULT: %mad_i24{{[0-9]*}} = add i32 %mad_i24_mul{{[0-9]*}},
-; DEFAULT-NOT: %mad_i24_clamp
-
-; CLAMP-LABEL: define amdgpu_kernel void @v_mad_i32_i24_clamp_kernel(
-; CLAMP: sext i32 %{{[^ ]+}} to i64
-; CLAMP: %mad_i24_mul_wide{{[0-9]*}} = mul i64
-; CLAMP: %mad_i24_wide{{[0-9]*}} = add i64
-; CLAMP: icmp slt i64 %{{[^,]+}}, -2147483648
-; CLAMP: select i1 %{{[^,]+}}, i64 -2147483648
-; CLAMP: icmp sgt i64 %{{[^,]+}}, 2147483647
-; CLAMP: select i1 %{{[^,]+}}, i64 2147483647
-; CLAMP: trunc i64 %mad_i24_clamp{{[0-9]*}} to i32
-
-; UCLAMP-LABEL: define amdgpu_kernel void @v_mad_u32_u24_clamp_kernel(
-; UCLAMP: and i32 %{{[^,]+}}, 16777215
-; UCLAMP: zext i32 %{{[^ ]+}} to i64
-; UCLAMP: %mad_u24_mul_wide{{[0-9]*}} = mul i64
-; UCLAMP: %mad_u24_wide{{[0-9]*}} = add i64
-; UCLAMP: icmp ugt i64 %{{[^,]+}}, 4294967295
-; UCLAMP: select i1 %{{[^,]+}}, i64 4294967295
-; UCLAMP: trunc i64 %mad_u24_clamp{{[0-9]*}} to i32
+; v_mad_i32_i24/u32_u24 (+clamp) 24-bit multiply-add lift.
+; CHECK-LABEL: define amdgpu_kernel void @v_mad_i32_i24_kernel(
+; CHECK: shl i32 %{{[^,]+}}, 8
+; CHECK: ashr i32 %{{[^,]+}}, 8
+; CHECK: %mad_i24_mul{{[0-9]*}} = mul i32
+; CHECK: %mad_i24{{[0-9]*}} = add i32 %mad_i24_mul{{[0-9]*}},
+; CHECK-NOT: %mad_i24_clamp
+; CHECK-LABEL: define amdgpu_kernel void @v_mad_i32_i24_clamp_kernel(
+; CHECK: sext i32 %{{[^ ]+}} to i64
+; CHECK: %mad_i24_mul_wide{{[0-9]*}} = mul i64
+; CHECK: %mad_i24_wide{{[0-9]*}} = add i64
+; CHECK: icmp slt i64 %{{[^,]+}}, -2147483648
+; CHECK: select i1 %{{[^,]+}}, i64 -2147483648
+; CHECK: icmp sgt i64 %{{[^,]+}}, 2147483647
+; CHECK: select i1 %{{[^,]+}}, i64 2147483647
+; CHECK: trunc i64 %mad_i24_clamp{{[0-9]*}} to i32
+; CHECK-LABEL: define amdgpu_kernel void @v_mad_u32_u24_clamp_kernel(
+; CHECK: and i32 %{{[^,]+}}, 16777215
+; CHECK: zext i32 %{{[^ ]+}} to i64
+; CHECK: %mad_u24_mul_wide{{[0-9]*}} = mul i64
+; CHECK: %mad_u24_wide{{[0-9]*}} = add i64
+; CHECK: icmp ugt i64 %{{[^,]+}}, 4294967295
+; CHECK: select i1 %{{[^,]+}}, i64 4294967295
+; CHECK: trunc i64 %mad_u24_clamp{{[0-9]*}} to i32
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6

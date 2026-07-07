@@ -1,46 +1,26 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_cvt_u32_u16_lo_kernel 2>/dev/null | %FileCheck %s --check-prefix=LO
-; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_cvt_u32_u16_hi_kernel 2>/dev/null | %FileCheck %s --check-prefix=HI
-; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_cvt_u32_u16_e64_hi_kernel 2>/dev/null | %FileCheck %s --check-prefix=E64HI
+; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
+; RUN:     --emit-ir=v_cvt_u32_u16_lo_kernel,v_cvt_u32_u16_hi_kernel,v_cvt_u32_u16_e64_hi_kernel 2>/dev/null \
+; RUN:   | %FileCheck %s
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out --kernel=v_cvt_u32_u16_lo_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
-;
-; gfx11+ true16 u16 -> u32 zero-extend. The source half is selected by
-; src0's op_sel bit in one of two places, depending on encoding form:
-;   * `_e32` (the form llvm-mc emits for plain `v_cvt_u32_u16 v, vN.h`):
-;     the MCInst src0 slot holds a `_LO16` / `_HI16` subreg of the parent
-;     VGPR. There is no src0_modifiers operand.
-;   * `_e64` (forced by the explicit `_e64` mnemonic): the disassembler
-;     prints `v0, v1.h op_sel:[1,0]` -- both the subreg and the
-;     `src0_modifiers[OP_SEL_0]` bit are set. This kernel pins the
-;     modifier-decode path (handler must accept OP_SEL_0 in its allowed
-;     modifier mask and OR it with the subreg signal).
-;
-; The handler in handle-valu-small-ops.cpp lifts each form as
-;   half = trunc i32 [src0 >> (src0_hi ? 16 : 0)] to i16
-;   dst  = zext i16 half to i32
-; The `CHECK-NOT: sext` lines pin the unsigned (zero-extend) conversion
-; contract -- a future drift to `sext` would silently sign-extend i16
-; sources with the MSB set.
 
-; LO-LABEL: define amdgpu_kernel void @v_cvt_u32_u16_lo_kernel(
-; LO: trunc i32 {{.*}} to i16
-; LO: %cvt_u32_u16{{.*}} = zext i16 {{.*}} to i32
-; LO-NOT: lshr i32 {{.*}}, 16
-; LO-NOT: sext
-
-; HI-LABEL: define amdgpu_kernel void @v_cvt_u32_u16_hi_kernel(
-; HI: lshr i32 {{.*}}, 16
-; HI: trunc i32 {{.*}} to i16
-; HI: %cvt_u32_u16{{.*}} = zext i16 {{.*}} to i32
-; HI-NOT: sext
-
-; E64HI-LABEL: define amdgpu_kernel void @v_cvt_u32_u16_e64_hi_kernel(
-; E64HI: lshr i32 {{.*}}, 16
-; E64HI: trunc i32 {{.*}} to i16
-; E64HI: %cvt_u32_u16{{.*}} = zext i16 {{.*}} to i32
-; E64HI-NOT: sext
-; E64HI-NOT: unsupported source modifiers
-
+; v_cvt_u32_u16 lo/hi zext-i16 lift.
+; CHECK-LABEL: define amdgpu_kernel void @v_cvt_u32_u16_lo_kernel(
+; CHECK: trunc i32 {{.*}} to i16
+; CHECK: %cvt_u32_u16{{.*}} = zext i16 {{.*}} to i32
+; CHECK-NOT: lshr i32 {{.*}}, 16
+; CHECK-NOT: sext
+; CHECK-LABEL: define amdgpu_kernel void @v_cvt_u32_u16_hi_kernel(
+; CHECK: lshr i32 {{.*}}, 16
+; CHECK: trunc i32 {{.*}} to i16
+; CHECK: %cvt_u32_u16{{.*}} = zext i16 {{.*}} to i32
+; CHECK-NOT: sext
+; CHECK-LABEL: define amdgpu_kernel void @v_cvt_u32_u16_e64_hi_kernel(
+; CHECK: lshr i32 {{.*}}, 16
+; CHECK: trunc i32 {{.*}} to i16
+; CHECK: %cvt_u32_u16{{.*}} = zext i16 {{.*}} to i32
+; CHECK-NOT: sext
+; CHECK-NOT: unsupported source modifiers
 ; PIPE: raise_cli: wrote
 ; PIPE-SAME: v_cvt_u32_u16_lo_kernel
 

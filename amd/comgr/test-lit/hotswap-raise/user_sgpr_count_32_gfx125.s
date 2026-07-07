@@ -2,13 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --isa=gfx1250 --target-isa=gfx942 \
 ; RUN:     --emit-ir=user_sgpr_count_32_gfx125_kernel 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; GPT-OSS/SGLang RoPE regression pin: gfx125 widens
-; compute_pgm_rsrc2.USER_SGPR_COUNT to 6 bits. A descriptor with
-; kernarg_segment_ptr (2 SGPRs) plus 30 kernarg-preload dwords is valid and
-; encodes the count as 32. Decoding it through the older 5-bit field reads zero
-; and falsely reports a KD inconsistency.
 
+; gfx1250->gfx942 user-SGPR/kernarg-preload layout remap.
 ; CHECK-NOT: user-sgpr-layout-mismatch
 ; CHECK-LABEL: define amdgpu_kernel void @user_sgpr_count_32_gfx125_kernel(
 ; CHECK-SAME: ptr addrspace(4) byref([120 x i8]) align 16 %kargs

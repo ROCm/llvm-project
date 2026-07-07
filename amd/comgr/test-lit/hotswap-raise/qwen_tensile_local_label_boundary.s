@@ -1,12 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=qwen_tensile_local_label_boundary_kernel 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; Tensile code objects often set the public kernel function's ELF size to zero
-; and use many local labels inside the function body. The symbol-extent fallback
-; must bound decode by the next metadata kernel symbol, not by the next local
-; label or helper function, or only part of the selected kernel is raised.
-;
+
+; local-label boundary decoding stops the lift at the next kernel, excluding its CAS.
 ; CHECK-LABEL: define amdgpu_kernel void @qwen_tensile_local_label_boundary_kernel
 ; CHECK: store
 ; CHECK-NOT: NonCommutativeAtomic

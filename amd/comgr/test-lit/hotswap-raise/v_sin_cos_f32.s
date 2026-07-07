@@ -4,11 +4,7 @@
 ; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_sin_f32_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=SIN-REFUSE
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_cos_f32_omod_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=COS-REFUSE
-;
-; The ISA manual defines v_sin_f32/v_cos_f32 as F32 -> F32 vector TRANS
-; instructions computing sin/cos(src * 2*pi), with full-range inputs and
-; denormal support. Preserve that hardware contract through the AMDGPU
-; intrinsics rather than generic LLVM radian-domain sin/cos intrinsics.
+; v_sin_f32/v_cos_f32 lift to @llvm.amdgcn.sin/cos (revolutions domain), not the radian-domain llvm.sin/cos.
 
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6

@@ -2,14 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=phantom_lane_workitem_clamp_kernel \
 ; RUN:   | %FileCheck %s
-;
-; When the target wave is wider than the source workgroup, the upper target
-; lanes carry no source workitem and must have their workitem id clamped to 0.
-; Here the source is wave32 (gfx1250) with .max_flat_workgroup_size 32 and the
-; target is wave64 (gfx942), so target lanes 32..63 are clamped. See
-; ModuloReplicationProjection::emitWorkitemIdX and
-; hotswap/docs/modrep-predicate-chain.md.
 
+; phantom-lane workitem.id clamp of inactive lanes to 0.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -20,20 +14,11 @@
 phantom_lane_workitem_clamp_kernel:
 	s_load_b64 s[2:3], s[0:1], 0x0
 	s_wait_kmcnt 0x0
-; The real-lane test compares the flat lane id (mbcnt across the whole wave),
-; not workitem.id.x, so it stays correct for multidimensional workgroups where
-; tid.x is only the X coordinate while max_flat_workgroup_size is the flattened
-; total. The clamped id replaces phantom lanes' tid with 0.
-; The mbcnt lane-id pair is hoisted to the top of the entry block (emitted
-; once per kernel), so it precedes the workitem.id.x read it is compared
-; against in the real-lane test.
 ; CHECK: %[[LANE:[A-Za-z0-9._]+]] = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %{{[A-Za-z0-9._]+}})
 ; CHECK: %tid = call i32 @llvm.amdgcn.workitem.id.x()
 ; CHECK: %tid_is_real_lane = icmp ult i32 %[[LANE]], 32
 ; CHECK: %tid_phantom_clamp = select i1 %tid_is_real_lane, i32 %tid, i32 0
 	v_lshlrev_b32 v1, 2, v0
-; The clamped id feeds the store's byte offset, and hence the store address, not
-; just the stored value:
 ; CHECK: %vlshl = shl i32 %tid_phantom_clamp, 2
 ; CHECK: %[[VOFF:[A-Za-z0-9._]+]] = sext i32 %vlshl to i64
 ; CHECK: %[[VADDR:[A-Za-z0-9._]+]] = add i64 %{{[A-Za-z0-9._]+}}, %[[VOFF]]

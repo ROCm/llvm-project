@@ -1,12 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir | %FileCheck %s
-;
-; gfx12 prints LLVM's GLOBAL_ATOMIC_ADD_X2 family as
-; `global_atomic_add_u64`.  The SADDR form below is the no-return stream
-; counter shape: VGPR32 byte/element offset, VGPR64 data, SGPR64 global base.
-; The plain form additionally pins the RTN path by storing the returned old
-; value.
 
+; global_atomic_add_u64 lift: scale_offset SADDR and RTN forms -> atomicrmw add.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

@@ -1,7 +1,3 @@
-; Negative fixture: DPP16 `fi:1` must refuse loudly. The manuals'
-; Table 57 gives FI-specific inactive-source behavior, but
-; llvm.amdgcn.update.dpp has no FI operand today.
-
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %not %raise_cli %t.hsaco \
 ; RUN:     --target-isa=gfx942 --emit-ir=c2_dpp_fi_refuse_kernel \
@@ -13,12 +9,12 @@
 ; RUN:   2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=SAME
 
+; Refuse DPP16 fetch-inactive (fi:1) form unmodeled by llvm.amdgcn.update.dpp.
 ; CROSS-DAG: kernel 'c2_dpp_fi_refuse_kernel'
 ; CROSS-DAG: DPP16 FI fetch-inactive form
 ; CROSS-DAG: llvm.amdgcn.update.dpp has no FI operand
 ; CROSS-DAG: Table 57 fetch-inactive semantics
 ; CROSS-DAG: rewrite pending
-
 ; SAME-DAG: kernel 'c2_dpp_fi_refuse_kernel'
 ; SAME-DAG: DPP16 FI fetch-inactive form
 ; SAME-DAG: llvm.amdgcn.update.dpp has no FI operand
@@ -50,10 +46,8 @@ c2_dpp_fi_refuse_kernel:                ; @c2_dpp_fi_refuse_kernel
 	v_mad_u32 v0, s0, s4, v0
 	global_load_b32 v1, v0, s[2:3] scale_offset
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_mov_b32_dpp v1, v1 row_xmask:2 row_mask:0xf bank_mask:0xf fi:1
 
-	;;#ASMEND
 	global_store_b32 v0, v1, s[2:3] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

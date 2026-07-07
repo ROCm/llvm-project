@@ -1,11 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=wmma_scale_f32_16x16x128_fp4_fp4_e4m3_kernel | %FileCheck %s --check-prefix=IR_GFX942
-;
-; FP4 x FP4 with matching E4M3 (UE4M3) scales on both sides -- the
-; "F4 x F4 with non-E8M0 scales requires matching scale formats" rule.
-; Both sides widen FP4 -> FP8 and decode the scale via hw cvt_f32_fp8,
-; combining via fmul (no E8M0 sum-of-exponents fast path).
 
+; Scaled f8f6f4 WMMA fp4xfp4 with e4m3 scale re-encode, gfx942.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -36,19 +32,15 @@ wmma_scale_f32_16x16x128_fp4_fp4_e4m3_kernel:
 	s_delay_alu instid0(VALU_DEP_1)
 ; IR_GFX942-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_fp4_fp4_e4m3_kernel(
 
-; FP4 x FP4 -> fp8.fp8 MFMA dispatch, 8 K-blocks total under WaveNative.
 ; IR_GFX942: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 ; IR_GFX942-COUNT-7: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 
-; UE4M3 scale decode: sign bit masked off before the signed-E4M3 cvt.
 ; IR_GFX942-DAG: and i32 %{{[^,]+}}, 127
 ; IR_GFX942-DAG: call float @llvm.amdgcn.cvt.f32.fp8(
 
-; Combine via fmul; no E8M0 sum-of-exponents fast path.
 ; IR_GFX942-DAG: fmul float
 ; IR_GFX942-NOT: sub i32 %{{[^,]+}}, 254
 
-; Negatives: no LUT, no other MFMA combo, no cross-target dispatch.
 ; IR_GFX942-NOT: @__const.
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.f32.16x16x32.fp8.bf8
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.f32.16x16x32.bf8.fp8

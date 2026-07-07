@@ -1,31 +1,20 @@
-// COM: Passthrough test for the VOP3PX2 scale_src2 bit-field fix. A kernel
-// COM: with no V_WMMA_SCALE* instructions must be left structurally
-// COM: unchanged: no bits are modified, and the disassembly must match the
-// COM: original layout.
-
 // RUN: %clang --target=amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
-// API: RESULT: SUCCESS
-
-// COM: No V_WMMA_SCALE instructions, so the patch must not fire.
-// COM: Verify the disassembly layout is preserved and that v_wmma_scale
-// COM: does not appear (DISASM-NOT scope: between v_wmma_f32 and s_endpgm).
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
-// DISASM: v_wmma_f32_16x16x128_f8f6f4
-// DISASM-NOT: v_wmma_scale
-// DISASM: s_endpgm
-
-// COM: Idempotency: second rewrite must produce identical bytes.
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out2.elf \
 // RUN:   | %FileCheck --check-prefix=API2 %s
-// API2: RESULT: SUCCESS
 // RUN: cmp %t.out.elf %t.out2.elf
+
+// API: RESULT: SUCCESS
+// DISASM: v_wmma_f32_16x16x128_f8f6f4
+// DISASM-NOT: v_wmma_scale
+// DISASM: s_endpgm
+// API2: RESULT: SUCCESS
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

@@ -2,6 +2,7 @@
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_maximum_f64_kernel \
 ; RUN:   | %FileCheck %s
 
+; v_maximum_f64 IEEE maximum lift.
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
         .text

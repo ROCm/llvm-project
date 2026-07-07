@@ -1,10 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_cvt_f64_f32_kernel 2>/dev/null | %FileCheck %s --check-prefix=IR
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out --kernel=v_cvt_f64_f32_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
-;
-; Vector F32 -> F64 conversion, paired with v_cvt_f32_f64 so the FP32/FP64
-; conversion family is supported symmetrically.
 
+; v_cvt_f64_f32 fpext float->double lift.
 ; IR-LABEL: define amdgpu_kernel void @v_cvt_f64_f32_kernel(
 ; IR: [[SRC:%[^ ]+]] = bitcast i32 {{%[^ ]+}} to float
 ; IR-NEXT: [[F64:%[^ ]+]] = fpext float [[SRC]] to double
@@ -26,9 +24,7 @@ v_cvt_f64_f32_kernel:
 	s_wait_kmcnt 0x0
 	v_mov_b32_e32 v0, s4
 	v_mov_b32_e32 v1, 0
-	;;#ASMSTART
 	v_cvt_f64_f32 v[2:3], v0
-	;;#ASMEND
 	global_store_b64 v1, v[2:3], s[2:3] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

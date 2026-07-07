@@ -1,28 +1,10 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_xor3_b32_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for v_xor3_b32. Pins that the VOP3 ternary xor lowers
-; to two nested `xor i32` instructions (matches the .td iselect
-; pattern at VOP3Instructions.td:1350 — `(xor (xor a, b), c)`).
-; The handler lives in transpiler/handle_valu.cpp under
-; `if (sop == SemOp::V_XOR3_B32) { ... }`; the SemOp lives in
-; transpiler/semop.hpp under VOP3.
-;
-; Direct mirror of V_OR3_B32 in the same file (one block above) —
-; if a future refactor changes one, both should change in
-; lockstep.
 
+; v_xor3_b32 lowered as chained i32 xors (no amdgcn.perm/bitop3) 3-input xor.
 ; CHECK-LABEL: define amdgpu_kernel void @v_xor3_b32_kernel(
-
-; The handler emits the inner xor unnamed (default IRBuilder
-; behaviour) and the outer xor as `vxor3` — pin both shapes.
 ; CHECK: xor i32 %{{[^,]+}}, %{{[^ ]+}}
 ; CHECK: xor i32 %{{[^,]+}}, %{{[^ ]+}}
-
-; Negative checks: bitwise ternary must NOT lift via the bitop3
-; LUT-expansion path (V_BITOP3_B32 is for the explicit imm8 LUT
-; instruction — confusing the two would balloon the IR with 8
-; minterm AND/OR chains).
 ; CHECK-NOT: call {{.*}}@llvm.amdgcn.perm
 ; CHECK-NOT: bitop3
 
@@ -56,10 +38,8 @@ v_xor3_b32_kernel:
 	v_lshl_add_u64 v[0:1], v[0:1], 2, s[2:3]
 	global_load_b96 v[0:2], v[0:1], off
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_xor3_b32 v0, v0, v1, v2
 	
-	;;#ASMEND
 	global_store_b32 v3, v0, s[0:1] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

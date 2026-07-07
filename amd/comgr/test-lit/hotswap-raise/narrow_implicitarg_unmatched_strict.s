@@ -2,11 +2,8 @@
 ; RUN:   && env HSA_HOTSWAP_STRICT=1 %not raise_cli %t.hsaco \
 ; RUN:     --target-isa=gfx942 --emit-ir=narrow_implicitarg_unmatched 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; Narrow scalar loads share the same strict hidden-arg contract as dword SMEM:
-; an implicit-range offset that does not map to source hidden metadata must not
-; fall through to a raw kernarg-segment load in strict mode.
 
+; strict-mode refusal when narrowed implicit-arg offsets hit the target hidden-arg block.
 ; CHECK: implicit-arg offsets are being applied to the target runtime hidden-arg block
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

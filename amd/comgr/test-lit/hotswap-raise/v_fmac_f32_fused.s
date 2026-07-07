@@ -1,21 +1,17 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:     --emit-ir=v_fmac_f32_fused_kernel 2>/dev/null \
-; RUN:   | %FileCheck %s --check-prefix=FUSED
-; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:     --emit-ir=v_fmac_f32_vopd_kernel 2>/dev/null \
-; RUN:   | %FileCheck %s --check-prefix=VOPD
+; RUN:     --emit-ir=v_fmac_f32_fused_kernel,v_fmac_f32_vopd_kernel 2>/dev/null \
+; RUN:   | %FileCheck %s
 
-; FUSED-LABEL: define amdgpu_kernel void @v_fmac_f32_fused_kernel(
-; FUSED: %fmac = call float @llvm.fma.f32(float %{{.+}}, float %{{.+}}, float %{{.+}})
-; FUSED-NOT: call {{.*}}@llvm.fmuladd.f32
-; FUSED-NOT: fmul {{.*}}float
-; FUSED-NOT: fadd {{.*}}float
-
-; VOPD-LABEL: define amdgpu_kernel void @v_fmac_f32_vopd_kernel(
-; VOPD: %vopd_fmac = call float @llvm.fma.f32(float %{{.+}}, float %{{.+}}, float %{{.+}})
-; VOPD-NOT: call {{.*}}@llvm.fmuladd.f32
+; v_fmac_f32 fused-FMA lift.
+; CHECK-LABEL: define amdgpu_kernel void @v_fmac_f32_fused_kernel(
+; CHECK: %fmac = call float @llvm.fma.f32(float %{{.+}}, float %{{.+}}, float %{{.+}})
+; CHECK-NOT: call {{.*}}@llvm.fmuladd.f32
+; CHECK-NOT: fmul {{.*}}float
+; CHECK-NOT: fadd {{.*}}float
+; CHECK-LABEL: define amdgpu_kernel void @v_fmac_f32_vopd_kernel(
+; CHECK: %vopd_fmac = call float @llvm.fma.f32(float %{{.+}}, float %{{.+}}, float %{{.+}})
+; CHECK-NOT: call {{.*}}@llvm.fmuladd.f32
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -24,9 +20,7 @@
 	.p2align	8
 	.type	v_fmac_f32_fused_kernel,@function
 v_fmac_f32_fused_kernel:
-	;;#ASMSTART
 	v_fmac_f32_e64 v3, v1, v2
-	;;#ASMEND
 	s_endpgm
 
 	.globl	v_fmac_f32_vopd_kernel
@@ -39,9 +33,7 @@ v_fmac_f32_vopd_kernel:
 	global_load_b32 v2, v0, s[0:1] offset:4
 	global_load_b32 v3, v0, s[0:1] offset:8
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	v_dual_mov_b32 v4, v0 :: v_dual_fmac_f32 v3, v1, v2
-	;;#ASMEND
 	global_store_b32 v0, v3, s[2:3]
 	s_endpgm
 

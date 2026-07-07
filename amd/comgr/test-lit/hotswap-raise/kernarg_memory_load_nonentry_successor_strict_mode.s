@@ -2,15 +2,8 @@
 ; RUN: env HSA_HOTSWAP_STRICT=1 raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=kernarg_memory_load_nonentry_successor_strict_mode \
 ; RUN:   | %FileCheck %s --check-prefix=STRICT
-;
-; This is the cross-basic-block companion to
-; kernarg_memory_load_nonentry_strict_mode.s. The first block overwrites the
-; physical kernarg SGPR pair with an explicit pointer loaded from memory, then
-; branches to a successor that performs a high-offset load through the same
-; SGPR numbers. Strict mode should use the prepass-computed non-entry block
-; entry fact for the successor and lower the load as ordinary memory, not refuse
-; it as an ambiguous source hidden-arg access.
 
+; NonEntry kernarg provenance proven across a successor block: load lifts to ordinary global memory under strict mode.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 5
 	.text

@@ -1,19 +1,13 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_pk_bf16_add_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=ADD
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_pk_bf16_mul_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=MUL
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_pk_bf16_fma_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=FMA
-;
-; The packed BF16 add/mul/fma opcodes expose the shared VOP3P clamp bit in the
-; encoding, but Hotswap does not model the overflow-mode semantics tied to that
-; bit. Refuse nonzero clamp loudly rather than lowering it as ordinary [0, 1]
-; ALU clamp.
+; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_pk_bf16_add_clamp_refuse_kernel,v_pk_bf16_mul_clamp_refuse_kernel,v_pk_bf16_fma_clamp_refuse_kernel 2>&1 | %FileCheck %s
 
-; ADD: v_pk_add_bf16 has a nonzero clamp bit
-; ADD-SAME: overflow-mode semantics are not modelled
-; MUL: v_pk_mul_bf16 has a nonzero clamp bit
-; MUL-SAME: overflow-mode semantics are not modelled
-; FMA: v_pk_fma_bf16 has a nonzero clamp bit
-; FMA-SAME: overflow-mode semantics are not modelled
+; v_pk_add/mul/fma_bf16 clamp-bit refusal.
+; CHECK: v_pk_add_bf16 has a nonzero clamp bit
+; CHECK-SAME: overflow-mode semantics are not modelled
+; CHECK: v_pk_mul_bf16 has a nonzero clamp bit
+; CHECK-SAME: overflow-mode semantics are not modelled
+; CHECK: v_pk_fma_bf16 has a nonzero clamp bit
+; CHECK-SAME: overflow-mode semantics are not modelled
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6

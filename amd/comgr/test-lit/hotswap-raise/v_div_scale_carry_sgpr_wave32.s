@@ -1,38 +1,20 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=div_carry_sgpr_kernel | %FileCheck %s
-;
-; Wave32-source -> wave64-target lift of the IEEE fdiv carry chain
-; v_div_scale_f32 (flag -> SGPR) ; s_mov_b32 vcc_lo, sN ; v_div_fmas_f32.
-; The carry is per-lane, so the s_mov must commit the producer's per-lane shadow
-; into VCC rather than re-widening the truncated SGPR. Two carry chains cover
-; both cases: same-BB (the fresh per-lane i1 is consumed directly, s2 carry)
-; and cross-BB (the same-BB cache is cleared after a branch so the consumer
-; must read the memory-backed shadow, s3 carry).
-; See hotswap/docs/sgpr-wave-mask-translation.md.
 
+; v_div_scale/div_fmas f32 wave32 SGPR carry-mask lift (ballot).
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	div_carry_sgpr_kernel
 	.p2align	8
 	.type	div_carry_sgpr_kernel,@function
-; The .Lnext (cross-BB) block is the branch target and is emitted ahead of the
-; entry body's per-lane expansion, so its checks come first below even though it
-; is the second carry chain in source order.
 ; CHECK-LABEL: define amdgpu_kernel void @div_carry_sgpr_kernel(
-;
-; Cross-BB consumer: a separate block, so the same-BB i1 cache is gone and it
-; must read the memory-backed shadow; the fmas consumes that selected carry:
 ; CHECK: %sgpr_mask_shadow_sel = select i1
 ; CHECK: call float @llvm.amdgcn.div.fmas.f32(float %{{[^,]+}}, float %{{[^,]+}}, float %{{[^,]+}}, i1 %sgpr_mask_shadow_sel)
-;
-; Same-BB consumer: the fresh per-lane carry is captured and the producer also
-; stores it to the SGPR as a wave-mask ballot, not a zext of the lane's bit:
 ; CHECK: %divscale = call { float, i1 } @llvm.amdgcn.div.scale.f32(float %{{[^,]+}}, float %{{[^,]+}}, i1 false)
 ; CHECK: [[CARRY:%[0-9]+]] = extractvalue { float, i1 } %divscale, 1
 ; CHECK: %{{.+}} = call i64 @llvm.amdgcn.ballot.i64(i1 [[CARRY]])
-; The fmas consumes the per-lane carry directly, not a re-widened SGPR mask:
 ; CHECK-NOT: wn_mask_widen
 ; CHECK-NOT: sgpr_mask_shadow_sel
 ; CHECK: call float @llvm.amdgcn.div.fmas.f32(float %{{[^,]+}}, float %{{[^,]+}}, float %{{[^,]+}}, i1 [[CARRY]])

@@ -1,12 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_div_fmas_f64_kernel | %FileCheck %s
-;
-; Lift v_div_fmas_f64 to llvm.amdgcn.div.fmas.f64. The implicit VCC
-; input (the div-scale carry) becomes the i1 fourth argument; here VCC
-; is produced by a preceding v_cmp so the carry is a real SSA i1, not a
-; folded constant. The second instruction checks that an abs/neg source
-; modifier is applied rather than silently dropped.
 
+; v_div_fmas_f64 (with neg mod, vcc carry) div.fmas.f64 lift.
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
         .text

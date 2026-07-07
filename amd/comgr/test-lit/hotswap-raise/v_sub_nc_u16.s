@@ -1,24 +1,14 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_sub_nc_u16_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for v_sub_nc_u16. Pins:
-;   * default op_sel:[0,0,0] is a wrapping i16 sub that writes the low
-;     destination half while preserving the old high half.
-;   * op_sel:[1,1,1] extracts high source halves and writes the high
-;     destination half while preserving the old low half.
-;   * no 32-bit subtract or AMDGPU u16 intrinsic is introduced.
 
+; v_sub_nc_u16 lowered as i16 sub with lo/hi op_sel lane pack/merge (no amdgcn u16 intrinsic) subtract.
 ; CHECK-LABEL: define amdgpu_kernel void @v_sub_nc_u16_kernel(
-
-; Default low-half sub and merge.
 ; CHECK: trunc i32 %{{[^ ]+}} to i16
 ; CHECK: trunc i32 %{{[^ ]+}} to i16
 ; CHECK: %vsub_nc_u16{{[0-9]*}} = sub i16 %{{[^,]+}}, %{{[^ ]+}}
 ; CHECK-DAG: zext i16 %vsub_nc_u16{{[0-9]*}} to i32
 ; CHECK-DAG: and i32 %{{[^,]+}}, -65536
 ; CHECK: %vsub_u16_merge_lo{{[0-9]*}} = or {{(disjoint )?}}i32 %{{[^,]+}}, %{{[^ ]+}}
-
-; High-half source extraction and high-half merge.
 ; CHECK: lshr i32 %{{[^,]+}}, 16
 ; CHECK: lshr i32 %{{[^,]+}}, 16
 ; CHECK: %vsub_nc_u16{{[0-9]*}} = sub i16 %{{[^,]+}}, %{{[^ ]+}}
@@ -26,7 +16,6 @@
 ; CHECK-DAG: shl i32 %{{[^,]+}}, 16
 ; CHECK-DAG: and i32 %{{[^,]+}}, 65535
 ; CHECK: %vsub_u16_merge_hi{{[0-9]*}} = or {{(disjoint )?}}i32 %{{[^,]+}}, %{{[^ ]+}}
-
 ; CHECK-NOT: sub i32
 ; CHECK-NOT: call {{.*}}@llvm.amdgcn{{.*}}u16
 
@@ -62,11 +51,9 @@ v_sub_nc_u16_kernel:
 	s_wait_loadcnt 0x0
 	v_lshrrev_b32_e32 v0, 16, v1
 	v_and_b32_e32 v1, 0xffff, v1
-	;;#ASMSTART
 	v_sub_nc_u16 v0, v1, v0
 	v_sub_nc_u16 v0, v1, v0 op_sel:[1,1,1]
 
-	;;#ASMEND
 	global_store_b16 v2, v0, s[0:1] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

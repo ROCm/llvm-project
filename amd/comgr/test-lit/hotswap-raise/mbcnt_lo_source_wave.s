@@ -2,13 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=mbcnt_lo_source_wave_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; A wave32 source `v_mbcnt_lo_u32_b32 src, carry` counts only lanes below the
-; current lane in the source wave.  Under wave32 -> wave64 lifting, target
-; lanes 32..63 model a second source wave and must see lane ids 0..31 again,
-; not the target hardware low-half saturation value.  The lowering therefore
-; computes the source-local lane id and ctpop(masked src) explicitly.
 
+; v_mbcnt_lo wave-size translation to ctpop over source-wave lane mask.
 ; CHECK-LABEL: define amdgpu_kernel void @mbcnt_lo_source_wave_kernel(
 ; CHECK: %mbcnt_source_lane{{[0-9]*}} = and i32 %{{[^,]+}}, 31
 ; CHECK: %mbcnt_below_mask{{[0-9]*}} = sub i32 %mbcnt_lane_bit{{[0-9]*}}, 1

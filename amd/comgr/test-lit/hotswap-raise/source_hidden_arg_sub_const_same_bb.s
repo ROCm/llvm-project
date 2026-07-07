@@ -2,11 +2,8 @@
 ; RUN:   && env HSA_HOTSWAP_STRICT=1 raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=source_hidden_sub_const_same_bb 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; Same-BB live provenance check for subtraction: `entry + 0x20 - 0x10`,
-; followed by a source hidden-arg load in the same basic block. This pins the
-; live handler transfer, not just the CFG prepass seed at successor entry.
 
+; Constant subtraction from the entry kernarg pointer stays an Entry+Const fact, remapped to target implicitarg.ptr offset 80.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text

@@ -2,19 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vbuffer_vgpr_msb_roles_kernel \
 ; RUN:   | %FileCheck %s
-;
-; Regression guard: gfx1250 `s_set_vgpr_msb` maps its MSB fields to operands
-; by instruction-format-specific *role*, not by VALU's positional
-; src0/src1/src2/vdst order. For VBUFFER, slot 0 is the address (vaddr) and
-; slot 3 is the data (vdata) -- the opposite slots from a VALU op.
-;
-; The kernel writes the high-bank address register v968 (= v200 + 3*256) with
-; 42, then sets slot 0 = 3 (=> +768) before a `buffer_store`. With the correct
-; VBUFFER role mapping the store's address (vaddr) operand v200 is lifted as the
-; high-bank v968 (value 42), while the data (vdata) operand v0 (slot 3 = 0) is
-; unchanged (value 7). A raiser that assumed VALU src0/src1/src2/vdst order
-; would instead extend the *data* operand and read the address from low-bank
-; v200 (value 11).
+
+; s_set_vgpr_msb selects the high-VGPR bank per operand role for the vbuffer store.
 
     .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
     .amdhsa_code_object_version 6
@@ -29,9 +18,6 @@ vbuffer_vgpr_msb_roles_kernel:
     s_set_vgpr_msb 0xc0
     v_mov_b32_e32 v200, 42
     s_set_vgpr_msb 0x3
-; The store's voffset must come from the high-bank address (value 42) and must
-; never be the low-bank v200 (value 11). A positional (VALU-order) raiser would
-; extend the data operand instead and read the address low-bank.
 ; CHECK-LABEL: define amdgpu_kernel void @vbuffer_vgpr_msb_roles_kernel(
 ; CHECK-NOT: add i32 0, 11
 ; CHECK: [[VOFF:%[0-9]+]] = add i32 0, 42

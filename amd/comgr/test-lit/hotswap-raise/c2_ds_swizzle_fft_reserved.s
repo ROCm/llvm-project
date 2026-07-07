@@ -1,33 +1,10 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=c2_ds_swizzle_fft_reserved_kernel 2>&1 | %FileCheck %s --check-prefix=STDERR
-;
-; Negative case for the P6 lift after the audit follow-up that
-; tightened the FFT_MODE / ROTATE_MODE envelope checks to require
-; reserved bits clear (matches the AsmParser's encoding contract
-; and the `Swizzle::EncBits` table in SIDefines.h).
-;
-; Companion to c2_ds_swizzle_unsafe.ll, which pins refusal of the
-; RESERVED top-nibble envelope (top nibble in {0x9, 0xA, 0xB, 0xD,
-; 0xF}). This fixture pins refusal of imms that fall *within* a
-; valid envelope (FFT_MODE here) but have reserved bits set —
-; another category whose hardware semantics are undefined.
-;
-; The imm `offset:0xe020` selects FFT_MODE (top nibble 0xE) with FFT
-; swizzle selector 0 (bits 0..4 = 0) BUT reserved bit 5 = 1. Without
-; the reserved-bit validation, the broader-envelope check would
-; have accepted this imm; with the validation, the classifier
-; refuses with a "not a valid swizzle encoding" detail line.
 
-; Same cross-wave-shuffle-rewrite-pending failure as before.
+; Refuse ds_swizzle with reserved FFT/ROTATE encoding bits.
 ; STDERR: transpiler: pre-translation abort:
 ; STDERR-SAME: cross-wave-shuffle-rewrite-pending
 ; STDERR-SAME: ds_swizzle
-
-; The classifier trace must surface the imm-specific rejection.
-; The detail line wording covers both refusal categories (RESERVED
-; top-nibble OR FFT/ROTATE reserved bits set) — we assert the parts
-; that are stable across either category so the same .ll wording
-; could pin both fixtures' refusals.
 ; STDERR: DsSwizzle
 ; STDERR-SAME: Class 2
 ; STDERR: rewrite: P6
@@ -37,8 +14,6 @@
 ; STDERR-SAME: FFT/ROTATE reserved bits set
 ; STDERR-SAME: AMDGPU hardware semantics undefined
 ; STDERR: outcome: (c) refuse
-
-; Final raise_cli refusal line.
 ; STDERR: raise_cli: kernel 'c2_ds_swizzle_fft_reserved_kernel' failed to raise:
 ; STDERR-SAME: ds_swizzle
 
@@ -68,11 +43,9 @@ c2_ds_swizzle_fft_reserved_kernel:
 	v_mad_u32 v1, s0, s4, v0
 	global_load_b32 v0, v1, s[2:3] scale_offset
 	s_wait_loadcnt 0x0
-	;;#ASMSTART
 	ds_swizzle_b32 v0, v0 offset:0xe020
 	s_wait_dscnt 0
 	
-	;;#ASMEND
 	global_store_b32 v1, v0, s[2:3] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits

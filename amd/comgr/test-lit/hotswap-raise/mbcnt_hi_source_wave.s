@@ -2,13 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=mbcnt_hi_source_wave_kernel 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; Regression guard for wave32->wave64 lifting of v_mbcnt_hi_u32_b32.
-; The hi-half mask is empty for all source lanes 0..31, making mbcnt_hi
-; a pass-through of src1. The lifted IR must not contain a user-level
-; mbcnt.hi call (the raiser's own lane-ID helpers do emit mbcnt.hi, but
-; those use a distinct SSA name that does not match the CHECK-NOT pattern).
 
+; v_mbcnt_lo/hi source-wave translation: wave32 v_mbcnt_hi is a pass-through.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -19,13 +14,10 @@
 mbcnt_hi_source_wave_kernel:
 	s_load_b64 s[0:1], s[0:1], 0x0
 	s_wait_kmcnt 0x0
-	; v_mbcnt_lo lifts to an add.
 	; CHECK: %mbcnt_lo_srcwave{{[0-9]*}} = add i32 %mbcnt_pop{{[0-9]*}}, 0
 	v_mbcnt_lo_u32_b32 v1, -1, 0
-	; v_mbcnt_hi is a source-wave pass-through here, not a target mbcnt.hi.
 	; CHECK-NOT: %mbcnt_hi{{[0-9]*}} = call i32 @llvm.amdgcn.mbcnt.hi
 	v_mbcnt_hi_u32_b32 v1, -1, v1
-	; The pass-through value flows through the lane-active phi into the store.
 	; CHECK: phi i32 [ %mbcnt_lo_srcwave{{[0-9]*}},
 	global_store_b32 v0, v1, s[0:1] scale_offset
 	s_endpgm

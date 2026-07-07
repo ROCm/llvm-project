@@ -1,68 +1,43 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_rcp_iflag_f32_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=RCP-IFLAG
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_rcp_f32_omod_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=RCP
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_exp_f32_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=EXP
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_log_f32_omod_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=LOG
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_ldexp_f32_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=LDEXP
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_sqrt_f32_omod_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=SQRT
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_rsq_f32_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=RSQ
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_floor_f32_omod_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=FLOOR
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_ceil_f32_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=CEIL
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_trunc_f32_omod_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=TRUNC
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_rndne_f32_clamp_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=RNDNE
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_fract_f32_omod_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=FRACT
-;
-; The manual lists OPF_CLAMP_ALU and OPF_OMOD_SCALE on these F32
-; small-op VOP3 forms. The base lifts cover the unmodified operations;
-; non-default output modifiers must refuse until modeled.
+; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_rcp_iflag_f32_clamp_refuse_kernel,v_rcp_f32_omod_refuse_kernel,v_exp_f32_clamp_refuse_kernel,v_log_f32_omod_refuse_kernel,v_ldexp_f32_clamp_refuse_kernel,v_sqrt_f32_omod_refuse_kernel,v_rsq_f32_clamp_refuse_kernel,v_floor_f32_omod_refuse_kernel,v_ceil_f32_clamp_refuse_kernel,v_trunc_f32_omod_refuse_kernel,v_rndne_f32_clamp_refuse_kernel,v_fract_f32_omod_refuse_kernel 2>&1 | %FileCheck %s
 
-; RCP-IFLAG-DAG: kernel 'v_rcp_iflag_f32_clamp_refuse_kernel'
-; RCP-IFLAG-DAG: V_RCP_IFLAG_F32 with non-default clamp/omod is not yet lifted
-; RCP-IFLAG-DAG: output modifier semantics must not be silently dropped
-
-; RCP-DAG: kernel 'v_rcp_f32_omod_refuse_kernel'
-; RCP-DAG: V_RCP_F32 with non-default clamp/omod is not yet lifted
-; RCP-DAG: output modifier semantics must not be silently dropped
-
-; EXP-DAG: kernel 'v_exp_f32_clamp_refuse_kernel'
-; EXP-DAG: V_EXP_F32 with non-default clamp/omod is not yet lifted
-; EXP-DAG: output modifier semantics must not be silently dropped
-
-; LOG-DAG: kernel 'v_log_f32_omod_refuse_kernel'
-; LOG-DAG: V_LOG_F32 with non-default clamp/omod is not yet lifted
-; LOG-DAG: output modifier semantics must not be silently dropped
-
-; LDEXP-DAG: kernel 'v_ldexp_f32_clamp_refuse_kernel'
-; LDEXP-DAG: V_LDEXP_F32 with non-default clamp/omod is not yet lifted
-; LDEXP-DAG: output modifier semantics must not be silently dropped
-
-; SQRT-DAG: kernel 'v_sqrt_f32_omod_refuse_kernel'
-; SQRT-DAG: V_SQRT_F32 with non-default clamp/omod is not yet lifted
-; SQRT-DAG: output modifier semantics must not be silently dropped
-
-; RSQ-DAG: kernel 'v_rsq_f32_clamp_refuse_kernel'
-; RSQ-DAG: V_RSQ_F32 with non-default clamp/omod is not yet lifted
-; RSQ-DAG: output modifier semantics must not be silently dropped
-
-; FLOOR-DAG: kernel 'v_floor_f32_omod_refuse_kernel'
-; FLOOR-DAG: V_FLOOR_F32 with non-default clamp/omod is not yet lifted
-; FLOOR-DAG: output modifier semantics must not be silently dropped
-
-; CEIL-DAG: kernel 'v_ceil_f32_clamp_refuse_kernel'
-; CEIL-DAG: V_CEIL_F32 with non-default clamp/omod is not yet lifted
-; CEIL-DAG: output modifier semantics must not be silently dropped
-
-; TRUNC-DAG: kernel 'v_trunc_f32_omod_refuse_kernel'
-; TRUNC-DAG: V_TRUNC_F32 with non-default clamp/omod is not yet lifted
-; TRUNC-DAG: output modifier semantics must not be silently dropped
-
-; RNDNE-DAG: kernel 'v_rndne_f32_clamp_refuse_kernel'
-; RNDNE-DAG: V_RNDNE_F32 with non-default clamp/omod is not yet lifted
-; RNDNE-DAG: output modifier semantics must not be silently dropped
-
-; FRACT-DAG: kernel 'v_fract_f32_omod_refuse_kernel'
-; FRACT-DAG: V_FRACT_F32 with non-default clamp/omod is not yet lifted
-; FRACT-DAG: output modifier semantics must not be silently dropped
+; Refuse f32 unary ops carrying non-default clamp/omod output modifiers.
+; CHECK-DAG: kernel 'v_rcp_iflag_f32_clamp_refuse_kernel'
+; CHECK-DAG: V_RCP_IFLAG_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_rcp_f32_omod_refuse_kernel'
+; CHECK-DAG: V_RCP_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_exp_f32_clamp_refuse_kernel'
+; CHECK-DAG: V_EXP_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_log_f32_omod_refuse_kernel'
+; CHECK-DAG: V_LOG_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_ldexp_f32_clamp_refuse_kernel'
+; CHECK-DAG: V_LDEXP_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_sqrt_f32_omod_refuse_kernel'
+; CHECK-DAG: V_SQRT_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_rsq_f32_clamp_refuse_kernel'
+; CHECK-DAG: V_RSQ_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_floor_f32_omod_refuse_kernel'
+; CHECK-DAG: V_FLOOR_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_ceil_f32_clamp_refuse_kernel'
+; CHECK-DAG: V_CEIL_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_trunc_f32_omod_refuse_kernel'
+; CHECK-DAG: V_TRUNC_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_rndne_f32_clamp_refuse_kernel'
+; CHECK-DAG: V_RNDNE_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
+; CHECK-DAG: kernel 'v_fract_f32_omod_refuse_kernel'
+; CHECK-DAG: V_FRACT_F32 with non-default clamp/omod is not yet lifted
+; CHECK-DAG: output modifier semantics must not be silently dropped
 
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6

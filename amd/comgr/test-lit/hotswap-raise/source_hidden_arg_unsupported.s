@@ -2,11 +2,8 @@
 ; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=unsupported_hidden_printf 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; Source hidden args must not silently fall back to the target runtime's
-; implicit-arg layout. If we cannot synthesize or identity-map a source hidden
-; arg, refuse the translation.
 
+; Unsupported source hidden-argument kind refused during kernarg-provenance remap.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1200"
 	.amdhsa_code_object_version 6
 	.text

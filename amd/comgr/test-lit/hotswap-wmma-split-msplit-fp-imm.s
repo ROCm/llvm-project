@@ -1,14 +1,3 @@
-// Test M-split src2 = FP inline immediate (`1.0`).
-//
-// Differs from K-split FP-imm: there is no carry between halves on
-// the M axis (each half writes a different M-slice of dst), so BOTH
-// halves carry the same src2 imm. Both halves also carry the
-// splitter-added `matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4`
-// suffix (the destination opcode v_wmma_f32_16x16x128_f8f6f4 has
-// matrix_*_fmt operands that the source opcode v_wmma_f32_32x16x128_f4
-// does not, and they must be set to MATRIX_FMT_FP4 so the f8f6f4
-// destination interprets the data as the source's f4 layout).
-
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
@@ -37,7 +26,6 @@ kernel:
   s_endpgm
 .size kernel, .-kernel
 
-// Idempotency.
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out2.elf \

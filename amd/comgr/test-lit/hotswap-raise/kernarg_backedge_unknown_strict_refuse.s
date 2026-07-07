@@ -3,12 +3,8 @@
 ; RUN:     --assume-hip-global-offset-zero \
 ; RUN:     --emit-ir=kernarg_backedge_unknown_strict_refuse 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; A loop header with the entry edge still has the kernarg pointer, but the
-; backedge has an ordinary write to the physical s[0:1] pair. The header fact
-; must converge to Unknown and strict mode must refuse source-hidden-arg
-; synthesis.
 
+; strict-mode refusal: backedge yields Unknown kernarg-ptr provenance, immediate offset may hit source implicit-arg range.
 ; CHECK: source implicit-arg offsets may be applied to the target runtime hidden-arg block on some CFG paths
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

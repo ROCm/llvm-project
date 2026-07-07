@@ -5,29 +5,22 @@
 ; RUN: raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_tanh_f16_mods_kernel 2>&1 | %FileCheck %s --check-prefix=MODS
 ; RUN: raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_tanh_f16_dpp_kernel 2>&1 | %FileCheck %s --check-prefix=DPP
 ; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_tanh_f16_omod_refuse_kernel 2>&1 | %FileCheck %s --check-prefix=MOD
-;
-; F16 tanh uses the native AMDGPU intrinsic when the target can select it.
-; Cross-target lifts to targets without native tanh support use
-; `__ocml_tanh_f16`, then inline the linked device-library body before final
-; lowering.
 
+; v_tanh_f16 cross-target expands via ocml (native amdgcn.tanh.f16 same-target); hi/mods/dpp lanes handled, clamp/omod refused.
 ; IR-LABEL: define amdgpu_kernel void @v_tanh_f16_kernel(
 ; IR-NOT: call {{.*}}@__ocml_tanh_f16
 ; IR: tanh_f16_merge_lo
 ; IR: ret void
 ; IR-NOT: declare {{.*}}@__ocml_tanh_f16
-
 ; SAME-LABEL: define amdgpu_kernel void @v_tanh_f16_kernel(
 ; SAME: call half @llvm.amdgcn.tanh.f16(
 ; SAME-NOT: __ocml_tanh_f16
-
 ; HI-LABEL: define amdgpu_kernel void @v_tanh_f16_hi_kernel(
 ; HI: lshr i32 {{.*}}, 16
 ; HI: tanh_f16_merge_hi
 ; HI-NOT: call {{.*}}@__ocml_tanh_f16
 ; HI: ret void
 ; HI-NOT: declare {{.*}}@__ocml_tanh_f16
-
 ; MODS-LABEL: define amdgpu_kernel void @v_tanh_f16_mods_kernel(
 ; MODS: call half @llvm.fabs.f16(
 ; MODS: fneg half
@@ -35,7 +28,6 @@
 ; MODS: tanh_f16_merge_lo
 ; MODS: ret void
 ; MODS-NOT: declare {{.*}}@__ocml_tanh_f16
-
 ; DPP-LABEL: define amdgpu_kernel void @v_tanh_f16_dpp_kernel(
 ; DPP-NOT: call i32 @llvm.amdgcn.update.dpp.i32(
 ; DPP-DAG: %cwd_dpp_selector = shl i32 %cwd_dpp_src_abs, 2
@@ -45,7 +37,6 @@
 ; DPP: tanh_f16_merge_lo
 ; DPP: declare i32 @llvm.amdgcn.ds.bpermute(i32, i32)
 ; DPP-NOT: declare {{.*}}@__ocml_tanh_f16
-
 ; MOD-DAG: kernel 'v_tanh_f16_omod_refuse_kernel'
 ; MOD-DAG: V_TANH_F16 with non-default clamp/omod is not yet lifted
 ; MOD-DAG: output modifier semantics must not be silently dropped

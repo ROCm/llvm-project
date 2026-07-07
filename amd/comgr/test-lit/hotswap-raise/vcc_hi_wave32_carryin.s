@@ -1,9 +1,8 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vcc_hi_carryin_kernel | %FileCheck %s
-;
-; A wave32 vcc_hi used as a carry-in must route to its own scratch slot, not the
-; real VCC. See ParsedReg::VCC_HI_SCRATCH.
+
+; vcc_hi as a regular SGPR feeds carry-in to v_add_co_ci_u32 via wave32->wave64 mask translation.
 
         .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
         .amdhsa_code_object_version 6
@@ -16,7 +15,6 @@ vcc_hi_carryin_kernel:
         s_mov_b32 vcc_hi, s4
 ; CHECK: %vcmp = icmp slt
         v_cmp_lt_i32 vcc_lo, v0, v1
-; The carry-in is the per-lane bit of the vcc_hi scratch, not %vcmp:
 ; CHECK: %[[LANEBIT:wn_mask_lane_i1[0-9]*]] = icmp ne i64 %{{.*}}, 0
 ; CHECK: %[[CIN:[0-9]+]] = zext i1 %[[LANEBIT]] to i32
 ; CHECK: call { i32, i1 } @llvm.uadd.with.overflow.i32(i32 %{{.*}}, i32 %[[CIN]])

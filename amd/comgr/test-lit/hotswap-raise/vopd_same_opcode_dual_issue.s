@@ -2,10 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vopd_same_opcode_dual_issue_kernel \
 ; RUN:   | %FileCheck %s
-;
-; VOPD packets pairing each dual-issue opcode with itself, exercising
-; both halves of every CanonicalOp branch in handle-vopd.cpp.
 
+; identical-opcode v_dual pairs lift as two scalar ops, not a <2 x> vector.
 ; CHECK-LABEL: define amdgpu_kernel void @vopd_same_opcode_dual_issue_kernel(
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -32,13 +30,11 @@ vopd_same_opcode_dual_issue_kernel:     ; @vopd_same_opcode_dual_issue_kernel
 ; CHECK-NOT: fmul <2 x float>
 	v_dual_mul_f32 v6, v0, v1 :: v_dual_mul_f32 v7, v2, v3
 
-; SUB, not SUBREV.
 ; CHECK: %vopd_fsub = fsub float
 ; CHECK: %vopd_fsub{{[0-9]+}} = fsub float
 ; CHECK-NOT: %vopd_fsubrev = fsub float
 	v_dual_sub_f32 v10, v0, v1 :: v_dual_sub_f32 v11, v2, v3
 
-; S0 - S1.
 ; CHECK: %vopd_sub = sub i32
 ; CHECK: %vopd_sub{{[0-9]+}} = sub i32
 	v_dual_sub_nc_u32 v12, v0, v1 :: v_dual_sub_nc_u32 v13, v2, v3
@@ -47,12 +43,10 @@ vopd_same_opcode_dual_issue_kernel:     ; @vopd_same_opcode_dual_issue_kernel
 ; CHECK: %vopd_fma{{[0-9]+}} = call float @llvm.fma.f32(float %{{[^,]+}}, float %{{[^,]+}}, float %{{[^,]+}})
 	v_dual_fma_f32 v14, v0, v1, v2 :: v_dual_fma_f32 v15, v2, v3, v0
 
-; Shared literal K=1.0.
 ; CHECK: %vopd_fmaak = call float @llvm.fma.f32(float %{{[^,]+}}, float %{{[^,]+}}, float 1.000000e+00)
 ; CHECK: %vopd_fmaak{{[0-9]+}} = call float @llvm.fma.f32(float %{{[^,]+}}, float %{{[^,]+}}, float 1.000000e+00)
 	v_dual_fmaak_f32 v16, v0, v1, 0x3f800000 :: v_dual_fmaak_f32 v17, v2, v3, 0x3f800000
 
-; Reversed operands, shift amount second.
 ; CHECK-DAG: %vopd_shl = shl i32 %{{[^,]+}}, 4
 ; CHECK-DAG: %vopd_shl{{[0-9]+}} = shl i32 %{{[^,]+}}, 2
 ; CHECK-NOT: %vopd_lshr =

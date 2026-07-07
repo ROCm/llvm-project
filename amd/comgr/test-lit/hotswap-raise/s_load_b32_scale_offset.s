@@ -1,30 +1,13 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=s_load_b32_scale_offset_kernel 2>/dev/null | %FileCheck %s
-;
-; Lift test for the `scale_offset` (CPol::SCAL) modifier on an
-; SGPR-offset `s_load_b32`.  Pins that the handler honours
-; `di.hasScaleOffset` by scaling the zero-extended SGPR offset by the
-; load's data-type size (4B for b32) before adding it to the base.
-; Without this scaling the SGPR-offset arm emits a raw-byte GEP that
-; is correct only when the offset is zero — multi-block launches then
-; load the wrong dword.
 
+; s_load_b32 scale_offset scaled-offset GEP lowering.
 ; CHECK-LABEL: define amdgpu_kernel void @s_load_b32_scale_offset_kernel(
-
-; Kernarg fetches go through `llvm.amdgcn.kernarg.segment.ptr` + a
-; real load.
 ; CHECK: call ptr addrspace(4) @llvm.amdgcn.kernarg.segment.ptr()
-
-; The SGPR offset is zero-extended to i64 (`smem_roff`) and then
-; multiplied by the element size (4B for b32, `smem_roff_scaled`)
-; before going into the byte-unit GEP off the load base.
 ; CHECK: %smem_roff = zext i32 %{{[^ ,]+}} to i64
 ; CHECK: %smem_roff_scaled = mul i64 %smem_roff, 4
 ; CHECK: getelementptr inbounds i8, ptr addrspace(1) %{{[^ ,]+}}, i64 %smem_roff_scaled
 ; CHECK: %smem_load{{[0-9]*}} = load i32, ptr addrspace(1) %{{[^ ,]+}}, align 4
-
-; The unscaled `smem_roff` must NOT itself reach a GEP — that's the
-; pre-fix miscompile shape.
 ; CHECK-NOT: getelementptr inbounds i8, ptr addrspace(1) %{{[^ ,]+}}, i64 %smem_roff{{$}}
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -40,11 +23,9 @@ s_load_b32_scale_offset_kernel:         ; @s_load_b32_scale_offset_kernel
 	s_load_b128 s[4:7], s[0:1], 0x0
 	s_load_b32 s2, s[0:1], 0x10
 	s_wait_kmcnt 0x0
-	;;#ASMSTART
 	s_load_b32 s0, s[6:7], s2 offset:0x0 scale_offset
 	s_wait_kmcnt 0
 	
-	;;#ASMEND
 	v_mov_b32_e32 v1, s0
 	global_store_b32 v0, v1, s[4:5] scale_offset
 	s_endpgm

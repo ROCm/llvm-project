@@ -1,20 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=s_wait_dscnt_barrier_kernel 2>/dev/null | %FileCheck %s
-;
-; Focused regression for source wait-counter preservation around LDS barriers.
-;
-; The real TensorDescriptor `_upcast_from_mxfp` path writes packed BF16 tiles
-; through LDS, executes `s_wait_dscnt 0`, then enters the gfx12 split barrier
-; (`s_barrier_signal` / `s_barrier_wait`) before re-reading those LDS slots.
-; Treating `s_wait_dscnt` as a no-op lets the target reach the barrier before
-; the prior DS write is complete.  On gfx942 that surfaced as sparse,
-; nondeterministic sign-bit flips after the LDS reshape.
-;
-; This fixture pins the structural lowering: the source wait must become a real
-; target wait operation between the LDS store and the barrier, and the wait after
-; the LDS load must survive too.  If either wait is dropped, FileCheck fails
-; deterministically instead of relying on a runtime race to reproduce.
 
+; s_wait_dscnt + s_barrier_signal/wait lowered to s.waitcnt + s.barrier.
 ; CHECK-LABEL: define amdgpu_kernel void @s_wait_dscnt_barrier_kernel(
 ; CHECK: store <4 x i32> %{{[^,]+}}, ptr addrspace(3) %{{[^,]+}}
 ; CHECK: call void @llvm.amdgcn.s.waitcnt(i32 0)

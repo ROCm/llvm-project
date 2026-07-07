@@ -2,20 +2,14 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=scratch_private_segment_kernel 2>&1 | %FileCheck %s --check-prefix=IR
 ; RUN: rm -rf %t.dump && HSA_HOTSWAP_DUMP_DIR=%t.dump raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out --kernel=scratch_private_segment_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
 ; RUN: %FileCheck %s --check-prefix=ASM < %t.dump/hotswap-*/scratch_private_segment_kernel.s
-;
-; Focused positive fixture for FLAT scratch/private-memory translation.
-; The source KD requests a 64-byte private segment and the body uses
-; scratch_store/load at offset 0. Hotswap must model that as addrspace(5)
-; private memory so the target AMDGPU backend emits valid scratch KD state.
 
+; FLAT scratch_store/load lifted to a private-segment alloca (addrspace 5).
 ; IR: source_private_segment = alloca i8, i32 64, align 4, addrspace(5)
 ; IR: scratch_ptr
 ; IR: store i32 {{.*}}, ptr addrspace(5) {{.*}}, align 4
 ; IR: load i32, ptr addrspace(5) {{.*}}, align 4
-
 ; PIPE: raise_cli: wrote
 ; PIPE-SAME: scratch_private_segment_kernel
-
 ; ASM: .amdhsa_private_segment_fixed_size {{[1-9][0-9]*}}
 ; ASM: .amdhsa_enable_private_segment 1
 

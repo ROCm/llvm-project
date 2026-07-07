@@ -2,12 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vopd_bitop2_bitop3_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; `v_dual_bitop2_b32` carries a bitop3 truth-table immediate even when LLVM's
-; component pseudo canonicalises to a simple bitwise SemOp. Triton `tl.sort`
-; uses `bitop3:0x14` as XOR in its `xor_sum`/indicator math; lowering it as
-; plain AND duplicates one side of each compare-and-swap pair.
 
+; v_dual_bitop2 with a bitop3 truth-table lifts to the encoded boolean op (xor here).
 ; CHECK-LABEL: define amdgpu_kernel void @vopd_bitop2_bitop3_kernel(
 ; CHECK: xor i32 %tid, -1
 ; CHECK: xor i32 1, -1
@@ -22,9 +18,7 @@
 vopd_bitop2_bitop3_kernel:
 ; %bb.0:
 	v_mov_b32_e32 v3, 1
-	;;#ASMSTART
 	v_dual_lshlrev_b32 v1, 1, v0 :: v_dual_bitop2_b32 v2, v0, v3 bitop3:0x14
-	;;#ASMEND
 	global_store_dword v0, v2, s[0:1]
 	s_endpgm
 	.section	.rodata,"a",@progbits

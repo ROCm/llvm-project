@@ -1,31 +1,19 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=flat_prefetch_b8_kernel 2>&1 | %FileCheck %s --check-prefix=STDERR
-;
-; Lift refusal test for FLAT `flat_prefetch_b8` for targets
-; that do not support prefetch. 
-;
-; STDERR-COUNT-3: transpiler: FLAT: flat_prefetch_b8 has no equivalent on the compilation target 
-; STDERR: kernel 'flat_prefetch_b8_kernel' failed to raise: unsupported-instruction-form: flat_prefetch_b8 [FLAT]
-
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=flat_prefetch_b8_kernel 2>&1 | %FileCheck %s --check-prefix=IR
-;
-; Lift fixture for FLAT `flat_prefetch_b8` — the same-target
-; (gfx1250 -> gfx1250) intrinsic-emit path.
-;
-; Get the 64 bit address directly from a pair of vgprs
+
+; flat_prefetch_b8: gfx1250 flat.prefetch lift; refused with no gfx942 equivalent.
+; STDERR-COUNT-3: transpiler: FLAT: flat_prefetch_b8 has no equivalent on the compilation target
+; STDERR: kernel 'flat_prefetch_b8_kernel' failed to raise: unsupported-instruction-form: flat_prefetch_b8 [FLAT]
 ; IR: %[[VADDR64:.+]] = inttoptr i64 %{{.*}} to ptr{{$}}
 ; IR: call void @llvm.amdgcn.flat.prefetch(ptr %[[VADDR64]], i32 0)
-;
-; Add the vgpr 32 bit offset to the sgpr address
 ; IR: %[[SADDR64_OFF:.+]] = add i64 %{{.*}}, %{{.*}}
 ; IR: %[[SADDR64_OFF_CAST:.+]] = inttoptr i64 %[[SADDR64_OFF]] to ptr{{$}}
 ; IR: call void @llvm.amdgcn.flat.prefetch(ptr %[[SADDR64_OFF_CAST]], i32 8)
-;
-; Add the vgpr 32 bit offset and the sgpr address, then do a gep of the offset 
 ; IR: %[[SADDR64_OFF2:.+]] = add i64 %{{.*}}, %{{.*}}
 ; IR: %[[SADDR64_OFF_CAST2:.+]] = inttoptr i64 %[[SADDR64_OFF2]] to ptr{{$}}
-; IR: %[[SADDR64_OFF_CAST_GEP2:.+]] = getelementptr i8, ptr %[[SADDR64_OFF_CAST2]], i64 128 
+; IR: %[[SADDR64_OFF_CAST_GEP2:.+]] = getelementptr i8, ptr %[[SADDR64_OFF_CAST2]], i64 128
 ; IR: call void @llvm.amdgcn.flat.prefetch(ptr %[[SADDR64_OFF_CAST_GEP2]], i32 9)
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

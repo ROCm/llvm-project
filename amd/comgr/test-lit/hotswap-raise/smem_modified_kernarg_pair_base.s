@@ -2,28 +2,10 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=smem_modified_kernarg_pair_base_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s
-;
-; SGLang GPT-OSS regression pin: gfx1250 Triton may reuse the physical
-; kernarg-pair SGPRs as an ordinary scalar-address pair after building a
-; pointer from kernarg-preloaded dwords:
-;
-;   s_add_nc_u64 s[0:1], s[preloaded_ptr], offset
-;   s_load_b32   sN,     s[0:1], 0
-;   s_load_b64   s[M:M+1], s[0:1], 8
-;
-; The base register number is still the source-ABI kernarg pair, but its
-; value is no longer the entry kernarg segment pointer. The raiser
-; lifts the SMEM loads as `addrspace(1)` GEP+load against whatever the
-; SGPR pair currently holds; the AMDGPU backend's lowering picks SMEM
-; vs VMEM from load uniformity at codegen time.
 
+; Modified kernarg-pointer pair base still resolves to kernarg.segment.ptr loads.
 ; CHECK-LABEL: define amdgpu_kernel void @smem_modified_kernarg_pair_base_kernel(
 ; CHECK-SAME: ptr addrspace(4) byref([16 x i8]) align 16 %kargs
-
-; The preloaded input pointer is materialised via
-; `amdgcn_kernarg_segment_ptr` (which always returns `ptr addrspace(4)`),
-; then the modified s[0:1] base is used by the ordinary SMEM path
-; against `addrspace(1)`.
 ; CHECK: call ptr addrspace(4) @llvm.amdgcn.kernarg.segment.ptr()
 ; CHECK: %smem_load = load i32, ptr addrspace(1) %{{[^,]+}}, align 4
 ; CHECK: %smem_load{{[0-9]*}} = load i32, ptr addrspace(1) %{{[^,]+}}, align 4

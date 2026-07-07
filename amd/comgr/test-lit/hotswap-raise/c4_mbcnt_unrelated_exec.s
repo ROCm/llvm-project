@@ -2,14 +2,8 @@
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=c4_mbcnt_unrelated_exec_kernel 2>&1 \
 ; RUN:   | %FileCheck %s
-;
-; Regression for the Issue #13 follow-up: the C4 classifier must not refuse a
-; kernel merely because `v_mbcnt_*` and an EXEC writer appear in the same
-; instruction stream.  Here the `v_cmpx` is an ordinary bounds-style guard whose
-; operands are independent of mbcnt; the mbcnt value is used only to form a
-; ds_bpermute selector.  The kernel should raise and still contain the rebased
-; source-wave ds_bpermute call.
 
+; Accept mbcnt/ds_bpermute whose exec use is unrelated (no Class 4 cross-wave-lane-predicated-exec refusal); src-wave rebase.
 ; CHECK-NOT: cross-wave-lane-predicated-exec
 ; CHECK-LABEL: define amdgpu_kernel void @c4_mbcnt_unrelated_exec_kernel(
 ; CHECK: %bperm_srcwave_addr{{[0-9]*}} = or i32 %bperm_local_addr{{[0-9]*}}, %bperm_srcwave_byte_base{{[0-9]*}}

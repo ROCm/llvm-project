@@ -1,8 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=v_frexp_exp_i32_f64_kernel 2>/dev/null | %FileCheck %s
-;
-; v_frexp_exp_i32_f64: f64 source, i32 exponent result.
 
+; v_frexp_exp_i32_f64 lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_frexp_exp_i32_f64_kernel(
 ; CHECK: %frexp_exp = call i32 @llvm.amdgcn.frexp.exp.i32.f64(double %{{.+}})
 ; CHECK-NOT: call { double, i32 } @llvm.frexp
@@ -21,9 +20,7 @@ v_frexp_exp_i32_f64_kernel:
 	v_mov_b32_e32 v2, s4
 	v_mov_b32_e32 v3, s5
 	v_mov_b32_e32 v1, 0
-	;;#ASMSTART
 	v_frexp_exp_i32_f64 v0, v[2:3]
-	;;#ASMEND
 	global_store_b32 v1, v0, s[2:3] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits
