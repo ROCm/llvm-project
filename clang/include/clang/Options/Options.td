@@ -9199,6 +9199,12 @@ def opt_record_format : Separate<["-"], "opt-record-format">,
 
 } // let Visibility = [CC1Option, FC1Option]
 
+defm use_emissary_print : BoolFOption<"use-emissary-print",
+  LangOpts<"UseEmissaryPrint">, DefaultFalse,
+  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+  "Enable use of Emissary printf/fprint override device libc printf/fprintf">,
+  NegFlag<SetFalse>>;
+
 //===----------------------------------------------------------------------===//
 // cc1as-only Options
 //===----------------------------------------------------------------------===//

@@ -6,33 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Emits device code for an encountered call to vargs functions _emissary_exec
-// The emitted code has three parts:
-// 1  call __llvm_omp_emissary_prealloc for memory buffer to contain all args
-// 2. Store each arg into the buffer.
-// 3. call to __llvm_omp_emissary_rpc function.
-//===----------------------------------------------------------------------===//
-
-#include "../../openmp/device/include/EmissaryIds.h"
-#include "CodeGenFunction.h"
-#include "clang/Basic/Builtins.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/Support/MathExtras.h"
-#include "llvm/Transforms/Utils/AMDGPUEmitPrintf.h"
-
-using namespace clang;
-using namespace CodeGen;
-
 // EmitEmissaryExec:
 //
 // When a device call to the varadic function _emissary_exec is encountered
 // (in CGExpr.cpp) EmitEmissaryExec does these steps:
 //
 // 1. If string lens are runtime dependent, Emit code to determine runtime len.
-// 2. Emits call to allocate memory __llvm_omp_emissary_premalloc,
+// 2. Emits call to allocate memory __llvm_emissary_premalloc,
 // 3. Emit stores of each arg into arg buffer,
-// 4. Emits call to function __llvm_omp_emissary_rpc.
+// 4. Emits call to function __llvm_emissary_rpc or __llvm_emissary_rpc_dm
 //
 // The arg buffer is a struct that contains the length, number of args, an
 // array of 4-byte keys that represent the type of of each arg, an array of
@@ -42,7 +24,18 @@ using namespace CodeGen;
 // type. encoded by the macro _PACK_TY_BITLEN(x,y) ((uint32_t)x << 16) |
 // ((uint32_t)y)
 //
-// TODO: Add example of call to _emissary_exec() and the corresponding struct
+//===----------------------------------------------------------------------===//
+
+#include "../../../clang/lib/Headers/EmissaryIds.h"
+#include "CodeGenFunction.h"
+#include "clang/Basic/Builtins.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/Support/MathExtras.h"
+#include "llvm/Transforms/Utils/AMDGPUEmitPrintf.h"
+
+using namespace clang;
+using namespace CodeGen;
 
 // These static helper functions support EmitEmissaryExec.
 static llvm::Function *GetOmpStrlenDeclaration(CodeGenModule &CGM) {
@@ -99,17 +92,18 @@ static const StringLiteral *getSL(const clang::Expr *argX,
   return SL;
 }
 
-// Returns a function pointer to __llvm_omp_emissary_premalloc
+// Returns a function pointer to __llvm_emissary_premalloc
 static llvm::Function *GetEmissaryAllocDeclaration(CodeGenModule &CGM) {
   auto &M = CGM.getModule();
-  const char *_executeName = "__llvm_omp_emissary_premalloc";
+  // clang::CodeGen::CodeGenTypes &CGT = CGM.getTypes();
+  const char *_executeName = "__llvm_emissary_premalloc";
   llvm::Type *ArgTypes[] = {CGM.Int32Ty};
   llvm::Function *FN;
+  // Maybe this should be pointer to char instead of pointer to void
   llvm::FunctionType *VargsFnAllocFuncType = llvm::FunctionType::get(
       CGM.getTypes().ConvertType(
           CGM.getContext().getPointerType(CGM.getContext().VoidTy)),
       ArgTypes, false);
-
   if (!(FN = M.getFunction(_executeName)))
     FN = llvm::Function::Create(VargsFnAllocFuncType,
                                 llvm::GlobalVariable::ExternalLinkage,
@@ -118,11 +112,15 @@ static llvm::Function *GetEmissaryAllocDeclaration(CodeGenModule &CGM) {
   return FN;
 }
 
-// Returns a function pointer to __llvm_omp_emissary_rpc
-static llvm::Function *GetEmissaryExecDeclaration(CodeGenModule &CGM) {
-  const char *_executeName = "__llvm_omp_emissary_rpc";
+// Returns a function pointer to __llvm_emissary_rpc
+static llvm::Function *GetEmissaryExecDeclaration(CodeGenModule &CGM,
+                                                  bool hasXfers) {
+  const char *_executeName =
+      hasXfers ? "__llvm_emissary_rpc_dm" : "__llvm_emissary_rpc";
   auto &M = CGM.getModule();
-  llvm::Type *ArgTypes[] = {CGM.Int64Ty, CGM.VoidPtrTy};
+  llvm::Type *ArgTypes[] = {
+      CGM.Int32Ty, CGM.getTypes().ConvertType(CGM.getContext().getPointerType(
+                       CGM.getContext().VoidTy))};
   llvm::Function *FN;
   llvm::FunctionType *VarfnFuncType =
       llvm::FunctionType::get(CGM.Int64Ty, ArgTypes, false);
@@ -136,22 +134,60 @@ static llvm::Function *GetEmissaryExecDeclaration(CodeGenModule &CGM) {
 // A macro to pack the llvm type ID and numbits into 4-byte key
 #define _PACK_TY_BITLEN(x, y) ((uint32_t)x << 16) | ((uint32_t)y)
 
+static EmisTyID getEmisTyID(llvm::Type::TypeID tyid) {
+  switch (tyid) {
+  case llvm::Type::HalfTyID:     ///< 16-bit floating point type
+  case llvm::Type::X86_FP80TyID: ///< 80-bit floating point type (X87)
+  case llvm::Type::BFloatTyID:   ///< 16-bit floating point type (7-bit
+                                 ///< significand)
+    return EmisInvalidTy;
+  case llvm::Type::FloatTyID:  ///< 32-bit floating point type
+  case llvm::Type::DoubleTyID: ///< 64-bit floating point type
+  case llvm::Type::FP128TyID:  ///< 128-bit floating point type (112-bit
+                               ///< significand)
+    return EmisFloatTy;
+  case llvm::Type::PPC_FP128TyID: ///< 128-bit floating point type (two 64-bits,
+                                  ///< PowerPC)
+  case llvm::Type::VoidTyID:      ///< type with no size
+  case llvm::Type::LabelTyID:     ///< Labels
+  case llvm::Type::MetadataTyID:  ///< Metadata
+  case llvm::Type::X86_AMXTyID:   ///< AMX vectors (8192 bits, X86 specific)
+  case llvm::Type::TokenTyID:     ///< Tokens
+    return EmisInvalidTy;
+  // Derived types... see DerivedTypes.h file.
+  case llvm::Type::IntegerTyID: ///< Arbitrary bit width integers
+    return EmisIntegerTy;
+  // case llvm::Type::ByteTyID:     ///< Arbitrary bit width bytes  FIXME put
+  // back on next upstream merge.
+  case llvm::Type::FunctionTyID: ///< Functions
+    return EmisInvalidTy;
+  case llvm::Type::PointerTyID: ///< Pointers
+    return EmisPointerTy;
+  case llvm::Type::StructTyID:         ///< Structures
+  case llvm::Type::ArrayTyID:          ///< Arrays
+  case llvm::Type::FixedVectorTyID:    ///< Fixed width SIMD vector type
+  case llvm::Type::ScalableVectorTyID: ///< Scalable SIMD vector type
+  case llvm::Type::TypedPointerTyID: ///< Typed pointer used by some GPU targets
+  case llvm::Type::TargetExtTyID:    ///< Target extension type
+    return EmisInvalidTy;
+  default:
+    return EmisInvalidTy;
+  }
+}
+
 //  ----- External function EmitEmissaryExec called from CGExpr.cpp -----
 RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
   assert(getTarget().getTriple().isAMDGCN() ||
          getTarget().getTriple().isNVPTX());
   assert(E->getNumArgs() >= 1); // _emissary_exec always has at least one arg.
-
   const llvm::DataLayout &DL = CGM.getDataLayout();
-
   CallArgList Args;
-
   // --- Insert 1st emisid arg if emiting fprintf or printf.
   unsigned int AOE = 0;
   if (E->getDirectCallee()->getNameAsString() == "fprintf") {
     constexpr unsigned long long emisid =
-        ((unsigned long long)EMIS_ID_PRINT << 32) |
-        (unsigned long long)_fprintf_idx;
+        ((unsigned long long)EMIS_ID_PRINT << 48) |
+        ((unsigned long long)_fprintf_idx << 32);
     Args.add(
         RValue::get(llvm::ConstantInt::get(Int64Ty, emisid)),
         getContext().getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/false));
@@ -159,8 +195,8 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
   }
   if (E->getDirectCallee()->getNameAsString() == "printf") {
     constexpr unsigned long long emisid =
-        ((unsigned long long)EMIS_ID_PRINT << 32) |
-        (unsigned long long)_printf_idx;
+        ((unsigned long long)EMIS_ID_PRINT << 48) |
+        ((unsigned long long)_printf_idx << 32);
     Args.add(
         RValue::get(llvm::ConstantInt::get(Int64Ty, emisid)),
         getContext().getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/false));
@@ -179,7 +215,6 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
     CGM.ErrorUnsupported(E, "non-scalar arg in GPU vargs function");
     return RValue::get(llvm::ConstantInt::get(IntTy, 0));
   }
-
   // NumArgs always includes emisid, but E->getNumArgs() could be 1 less if
   // inserted it above.
   unsigned NumArgs = (unsigned)Args.size();
@@ -187,8 +222,7 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
   llvm::SmallVector<llvm::Value *, 32> VarStrLengths;
   llvm::Value *TotalVarStrsLength = llvm::ConstantInt::get(Int32Ty, 0);
   bool hasVarStrings = false;
-  ArgTypes.push_back(
-      Int32Ty); // First field in struct will be total DataLen FIXME
+  ArgTypes.push_back(Int32Ty); // 1st field in struct is total DataLen
   ArgTypes.push_back(Int32Ty); // 2nd field in struct will be num args
   // An array of 4-byte keys that describe the arg type
   for (unsigned I = 0; I < NumArgs; ++I)
@@ -250,7 +284,7 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
     structOffset += (size_t)DL.getTypeAllocSize(ArgType);
   }
 
-  // ---  Generate call to __llvm_omp_emissary_premalloc to get data pointer
+  // ---  Generate call to __llvm_emissary_premalloc to get data pointer
   if (hasVarStrings)
     TotalVarStrsLength = Builder.CreateAdd(
         TotalVarStrsLength,
@@ -270,7 +304,6 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
   llvm::Value *BufferPtr = Builder.CreatePointerCast(
       DataStructPtr, llvm::PointerType::get(CGM.getLLVMContext(), AS),
       "varfn_args_store_casted");
-
   // ---  Header of struct contains length and NumArgs ---
   llvm::Value *DataLenField = llvm::ConstantInt::get(Int32Ty, DataLen_CT);
   llvm::Value *P = Builder.CreateStructGEP(DataStructTy, BufferPtr, 0);
@@ -286,6 +319,7 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
     llvm::Type *ty = Args[I].getRValue(*this).getScalarVal()->getType();
     llvm::Type::TypeID argtypeid =
         Args[I].getRValue(*this).getScalarVal()->getType()->getTypeID();
+    EmisTyID emis_tyid = getEmisTyID(argtypeid);
 
     // Get type size in bits. Usually 64 or 32.
     uint32_t numbits = 0;
@@ -299,7 +333,7 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
       numbits = ty->getScalarSizeInBits();
     // Create a key that combines llvm typeID and size
     llvm::Value *Key =
-        llvm::ConstantInt::get(Int32Ty, _PACK_TY_BITLEN(argtypeid, numbits));
+        llvm::ConstantInt::get(Int32Ty, _PACK_TY_BITLEN(emis_tyid, numbits));
     P = Builder.CreateStructGEP(DataStructTy, BufferPtr, I + 2);
     Builder.CreateAlignedStore(Key, P, DL.getPrefTypeAlign(Key->getType()));
   }
@@ -308,10 +342,15 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
   unsigned varstring_index = 0;
   unsigned structIndex = 2 + NumArgs;
   structOffset = 4 * structIndex;
+  bool hasXfers;
   for (unsigned I = 0; I < NumArgs; I++) {
     llvm::Value *Arg = nullptr;
     if (I == 0) {
       Arg = Args[I].getKnownRValue().getScalarVal();
+      llvm::ConstantInt *CI = llvm::dyn_cast<llvm::ConstantInt>(Arg);
+      uint64_t uint64value = CI->getZExtValue();
+      uint32_t lower_32 = (uint32_t)(uint64value & 0xFFFFFFFF);
+      hasXfers = lower_32 ? true : false;
     } else {
       const Expr *argX = E->getArg(I - AOE)->IgnoreParenCasts();
       auto *argXTy = argX->getType().getTypePtr();
@@ -384,8 +423,12 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
       }
     }
   }
-  // --- Generate call to __llvm_omp_emissary_rpc and return RValue
-  llvm::Value *EmisIds = Args[0].getRValue(*this).getScalarVal();
-  return RValue::get(Builder.CreateCall(
-      GetEmissaryExecDeclaration(CGM), {EmisIds, DataStructPtr}));
+  // --- Generate call to __llvm_emissary_rpc and return RValue
+  llvm::Value *emis_rc = Builder.CreateCall(
+      GetEmissaryExecDeclaration(CGM, hasXfers), {BufferLen, DataStructPtr});
+  // truncate long long int to int for printf return value.
+  if ((E->getDirectCallee()->getNameAsString() == "fprintf") ||
+      (E->getDirectCallee()->getNameAsString() == "printf"))
+    emis_rc = Builder.CreateTrunc(emis_rc, CGM.Int32Ty, "emis_rc");
+  return RValue::get(emis_rc);
 }
