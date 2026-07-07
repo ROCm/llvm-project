@@ -165,7 +165,7 @@ static bool decodeKernelEntryStub(ArrayRef<uint8_t> Bytes, const LLVMState &LS,
 
 static bool startsWithBytes(ArrayRef<uint8_t> Bytes, ArrayRef<uint8_t> Prefix) {
   return Bytes.size() >= Prefix.size() &&
-         std::equal(Prefix.begin(), Prefix.end(), Bytes.begin());
+         Bytes.take_front(Prefix.size()).equals(Prefix);
 }
 
 static SmallVector<uint8_t> buildEntryStubBytePrefix(const LLVMState &LS) {

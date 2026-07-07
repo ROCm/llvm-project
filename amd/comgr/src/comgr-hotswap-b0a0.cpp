@@ -200,79 +200,18 @@ LLVM_ATTRIBUTE_WEAK void patchDebugFrame(uint8_t *, size_t, uint64_t, uint64_t,
 
 // -- NOP sled scanning --------------------------------------------------------
 
-struct FunctionTextRange {
-  uint64_t Begin = 0;
-  uint64_t End = 0;
-};
+static std::vector<ElfView::FunctionTextRange>
+buildMergedFunctionTextRanges(const ElfView &Elf) {
+  std::vector<ElfView::FunctionTextRange> Ranges = Elf.functionTextRanges();
+  llvm::sort(Ranges, [](const ElfView::FunctionTextRange &L,
+                        const ElfView::FunctionTextRange &R) {
+    if (L.Begin != R.Begin)
+      return L.Begin < R.Begin;
+    return L.End < R.End;
+  });
 
-static std::vector<FunctionTextRange>
-buildFunctionTextRanges(const ElfView &Elf) {
-  std::vector<FunctionTextRange> Ranges;
-  uint64_t TextBegin = Elf.textAddr();
-  uint64_t TextSize = Elf.textSize();
-  if (TextSize > std::numeric_limits<uint64_t>::max() - TextBegin) {
-    log() << "hotswap: error: function text range scan: .text virtual "
-          << "address range overflows uint64_t.\n";
-    return Ranges;
-  }
-  uint64_t TextEnd = TextBegin + TextSize;
-  for (const ElfView::ELFT::Shdr &SymShdr : Elf.sections()) {
-    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
-        SymShdr.sh_type != ELF::SHT_DYNSYM)
-      continue;
-
-    Expected<ElfView::ELFT::SymRange> SymsOrErr = Elf.file().symbols(&SymShdr);
-    if (!SymsOrErr) {
-      consumeError(SymsOrErr.takeError());
-      continue;
-    }
-
-    std::vector<const ElfView::ELFT::Sym *> FuncSyms;
-    for (const ElfView::ELFT::Sym &Sym : *SymsOrErr) {
-      if (Sym.getType() != ELF::STT_FUNC && Sym.getType() != ELF::STT_GNU_IFUNC)
-        continue;
-      if (Sym.st_shndx != Elf.textSectionIndex())
-        continue;
-      FuncSyms.push_back(&Sym);
-    }
-    llvm::sort(FuncSyms,
-               [](const ElfView::ELFT::Sym *A, const ElfView::ELFT::Sym *B) {
-                 if (A->st_value != B->st_value)
-                   return A->st_value < B->st_value;
-                 return A->st_size > B->st_size;
-               });
-
-    for (size_t I = 0, E = FuncSyms.size(); I != E; ++I) {
-      const ElfView::ELFT::Sym &Sym = *FuncSyms[I];
-      uint64_t BeginVA = Sym.st_value;
-      if (BeginVA < TextBegin || BeginVA >= TextEnd)
-        continue;
-      uint64_t EndVA = TextEnd;
-      if (Sym.st_size != 0) {
-        EndVA = Sym.st_value + Sym.st_size;
-        if (EndVA < BeginVA)
-          EndVA = TextEnd;
-        EndVA = std::min(EndVA, TextEnd);
-      } else {
-        for (size_t J = I + 1; J != E; ++J) {
-          if (FuncSyms[J]->st_value > BeginVA) {
-            EndVA =
-                std::min(static_cast<uint64_t>(FuncSyms[J]->st_value), TextEnd);
-            break;
-          }
-        }
-      }
-      Ranges.push_back({BeginVA - TextBegin, EndVA - TextBegin});
-    }
-  }
-  llvm::sort(Ranges,
-             [](const FunctionTextRange &L, const FunctionTextRange &R) {
-               if (L.Begin != R.Begin)
-                 return L.Begin < R.Begin;
-               return L.End < R.End;
-             });
-  std::vector<FunctionTextRange> MergedRanges;
-  for (const FunctionTextRange &Range : Ranges) {
+  std::vector<ElfView::FunctionTextRange> MergedRanges;
+  for (const ElfView::FunctionTextRange &Range : Ranges) {
     if (Range.Begin >= Range.End)
       continue;
     if (MergedRanges.empty() || Range.Begin > MergedRanges.back().End) {
@@ -284,25 +223,27 @@ buildFunctionTextRanges(const ElfView &Elf) {
   return MergedRanges;
 }
 
-static bool isInFunctionTextRange(ArrayRef<FunctionTextRange> Ranges,
-                                  uint64_t Offset) {
-  ArrayRef<FunctionTextRange>::iterator It =
-      std::upper_bound(Ranges.begin(), Ranges.end(), Offset,
-                       [](uint64_t Value, const FunctionTextRange &R) {
+static bool isInFunctionTextRange(ArrayRef<ElfView::FunctionTextRange> Ranges,
+                                  uint64_t TextAddress) {
+  ArrayRef<ElfView::FunctionTextRange>::iterator It =
+      std::upper_bound(Ranges.begin(), Ranges.end(), TextAddress,
+                       [](uint64_t Value, const ElfView::FunctionTextRange &R) {
                          return Value < R.Begin;
                        });
   if (It == Ranges.begin())
     return false;
   --It;
-  return Offset < It->End;
+  return TextAddress < It->End;
 }
 
-static bool isZeroFillDword(const uint8_t *Text, uint64_t TextSize,
-                            const InternalDecodedInst &DI,
-                            ArrayRef<FunctionTextRange> FunctionRanges) {
+static bool
+isZeroFillDword(const uint8_t *Text, uint64_t TextSize,
+                const InternalDecodedInst &DI, uint64_t TextAddr,
+                ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
   if (FunctionRanges.empty() || DI.Size != MinInstSize ||
       DI.Offset > TextSize || MinInstSize > TextSize - DI.Offset ||
-      isInFunctionTextRange(FunctionRanges, DI.Offset))
+      DI.Offset > std::numeric_limits<uint64_t>::max() - TextAddr ||
+      isInFunctionTextRange(FunctionRanges, TextAddr + DI.Offset))
     return false;
   return std::all_of(Text + DI.Offset, Text + DI.Offset + MinInstSize,
                      [](uint8_t B) { return B == 0; });
@@ -322,19 +263,20 @@ static std::vector<NopSled>
 buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const uint8_t *Text,
                 uint64_t TextSize, const LLVMState &LS, const ElfView &Elf) {
   std::vector<NopSled> Sleds;
-  std::vector<FunctionTextRange> FunctionRanges = buildFunctionTextRanges(Elf);
+  std::vector<ElfView::FunctionTextRange> FunctionRanges =
+      buildMergedFunctionTextRanges(Elf);
   const size_t N = Decoded.size();
   size_t I = 0;
   while (I < N) {
     bool IsSledInst = Decoded[I].Inst.getOpcode() == LS.SNopOpcode;
-    bool IsZeroFill =
-        isZeroFillDword(Text, TextSize, Decoded[I], FunctionRanges);
+    bool IsZeroFill = isZeroFillDword(Text, TextSize, Decoded[I],
+                                      Elf.textAddr(), FunctionRanges);
     if (IsSledInst || IsZeroFill) {
       uint64_t Start = Decoded[I].Offset;
       uint64_t End = Start;
-      while (I < N &&
-             (Decoded[I].Inst.getOpcode() == LS.SNopOpcode ||
-              isZeroFillDword(Text, TextSize, Decoded[I], FunctionRanges))) {
+      while (I < N && (Decoded[I].Inst.getOpcode() == LS.SNopOpcode ||
+                       isZeroFillDword(Text, TextSize, Decoded[I],
+                                       Elf.textAddr(), FunctionRanges))) {
         End = Decoded[I].Offset + Decoded[I].Size;
         ++I;
       }

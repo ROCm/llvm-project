@@ -283,7 +283,7 @@ NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
       continue;
     uint64_t Dist = Sled.WritePos > Offset ? Sled.WritePos - Offset
                                            : Offset - Sled.WritePos;
-    if (Dist < static_cast<uint64_t>(MaxSledDistance) && Dist < BestDist) {
+    if (Dist < MaxSledDistance && Dist < BestDist) {
       Best = &Sled;
       BestDist = Dist;
     }
@@ -333,20 +333,18 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
   return ElfView(std::move(*FileOrErr), Sections, Text, TextIdx);
 }
 
-// -- ElfView::findKernelAtAddress ---------------------------------------------
+// -- ElfView::functionTextRanges ---------------------------------------------
 
-std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
+std::vector<ElfView::FunctionTextRange> ElfView::functionTextRanges() const {
+  std::vector<FunctionTextRange> Ranges;
   uint64_t TextBegin = textAddr();
   uint64_t TextSizeValue = textSize();
   if (TextSizeValue > std::numeric_limits<uint64_t>::max() - TextBegin) {
-    log() << "hotswap: error: findKernelAtAddress: .text virtual address "
-          << "range overflows uint64_t.\n";
-    return "";
+    log() << "hotswap: error: function text range scan: .text virtual "
+          << "address range overflows uint64_t.\n";
+    return Ranges;
   }
   uint64_t TextEnd = TextBegin + TextSizeValue;
-  bool Found = false;
-  uint64_t BestValue = 0;
-  std::string BestName;
 
   for (const ELFT::Shdr &SymShdr : Sections) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
@@ -356,12 +354,6 @@ std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
     Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
     if (!SymsOrErr) {
       consumeError(SymsOrErr.takeError());
-      continue;
-    }
-    Expected<StringRef> StrTabOrErr =
-        File.getStringTableForSymtab(SymShdr, Sections);
-    if (!StrTabOrErr) {
-      consumeError(StrTabOrErr.takeError());
       continue;
     }
 
@@ -399,22 +391,47 @@ std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
           }
         }
       }
-      if (TextAddress < Begin || TextAddress >= End)
-        continue;
-      if (Found && Sym.st_value <= BestValue)
-        continue;
-      Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
-      if (!NameOrErr) {
-        log() << "hotswap: error: findKernelAtAddress: function symbol "
-              << "covering address 0x" << utohexstr(TextAddress)
-              << " has unreadable name: " << toString(NameOrErr.takeError())
-              << "\n";
-        return "";
-      }
-      Found = true;
-      BestValue = Sym.st_value;
-      BestName = NameOrErr->str();
+      Ranges.push_back({Begin, End, &Sym, &SymShdr});
     }
+  }
+
+  return Ranges;
+}
+
+// -- ElfView::findKernelAtAddress ---------------------------------------------
+
+std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
+  bool Found = false;
+  uint64_t BestValue = 0;
+  std::string BestName;
+
+  std::vector<FunctionTextRange> Ranges = functionTextRanges();
+  for (const FunctionTextRange &Range : Ranges) {
+    if (TextAddress < Range.Begin || TextAddress >= Range.End)
+      continue;
+
+    const ELFT::Sym &Sym = *Range.Symbol;
+    if (Found && Sym.st_value <= BestValue)
+      continue;
+
+    Expected<StringRef> StrTabOrErr =
+        File.getStringTableForSymtab(*Range.Symtab, Sections);
+    if (!StrTabOrErr) {
+      consumeError(StrTabOrErr.takeError());
+      continue;
+    }
+
+    Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
+    if (!NameOrErr) {
+      log() << "hotswap: error: findKernelAtAddress: function symbol "
+            << "covering address 0x" << utohexstr(TextAddress)
+            << " has unreadable name: " << toString(NameOrErr.takeError())
+            << "\n";
+      return "";
+    }
+    Found = true;
+    BestValue = Sym.st_value;
+    BestName = NameOrErr->str();
   }
 
   if (Found) {
