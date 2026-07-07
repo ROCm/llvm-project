@@ -532,14 +532,16 @@ entry:
 define amdgpu_kernel void @fptoui_f16_to_i1(ptr addrspace(1) %out, half %in) {
 ; SI-LABEL: fptoui_f16_to_i1:
 ; SI:       ; %bb.0: ; %entry
-; SI-NEXT:    s_load_dword s6, s[4:5], 0xb
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
+; SI-NEXT:    s_load_dword s4, s[4:5], 0xb
 ; SI-NEXT:    s_mov_b32 s3, 0xf000
 ; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_cvt_f32_f16_e32 v0, s6
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, s4
 ; SI-NEXT:    v_cmp_eq_f32_e32 vcc, 1.0, v0
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
+; SI-NEXT:    s_and_b64 s[4:5], vcc, exec
+; SI-NEXT:    s_cselect_b32 s4, 1, 0
+; SI-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-NEXT:    buffer_store_byte v0, off, s[0:3], 0
 ; SI-NEXT:    s_endpgm
 ;
@@ -551,35 +553,41 @@ define amdgpu_kernel void @fptoui_f16_to_i1(ptr addrspace(1) %out, half %in) {
 ; VI-NEXT:    s_mov_b32 s2, -1
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    v_cmp_eq_f16_e64 s[4:5], 1.0, s4
-; VI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[4:5]
+; VI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; VI-NEXT:    s_cselect_b32 s4, 1, 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    buffer_store_byte v0, off, s[0:3], 0
 ; VI-NEXT:    s_endpgm
 ;
 ; GFX11-TRUE16-LABEL: fptoui_f16_to_i1:
 ; GFX11-TRUE16:       ; %bb.0: ; %entry
 ; GFX11-TRUE16-NEXT:    s_clause 0x1
+; GFX11-TRUE16-NEXT:    s_load_b32 s2, s[4:5], 0x2c
 ; GFX11-TRUE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24
-; GFX11-TRUE16-NEXT:    s_load_b32 s4, s[4:5], 0x2c
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s3, 0x31016000
-; GFX11-TRUE16-NEXT:    s_mov_b32 s2, -1
 ; GFX11-TRUE16-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_cmp_eq_f16_e64 s4, 1.0, s4
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s4
+; GFX11-TRUE16-NEXT:    v_cmp_eq_f16_e64 s4, 1.0, s2
+; GFX11-TRUE16-NEXT:    s_mov_b32 s2, -1
+; GFX11-TRUE16-NEXT:    s_and_b32 s4, s4, exec_lo
+; GFX11-TRUE16-NEXT:    s_cselect_b32 s4, 1, 0
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX11-TRUE16-NEXT:    buffer_store_b8 v0, off, s[0:3], 0
 ; GFX11-TRUE16-NEXT:    s_endpgm
 ;
 ; GFX11-FAKE16-LABEL: fptoui_f16_to_i1:
 ; GFX11-FAKE16:       ; %bb.0: ; %entry
 ; GFX11-FAKE16-NEXT:    s_clause 0x1
+; GFX11-FAKE16-NEXT:    s_load_b32 s2, s[4:5], 0x2c
 ; GFX11-FAKE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24
-; GFX11-FAKE16-NEXT:    s_load_b32 s4, s[4:5], 0x2c
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s3, 0x31016000
-; GFX11-FAKE16-NEXT:    s_mov_b32 s2, -1
 ; GFX11-FAKE16-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX11-FAKE16-NEXT:    v_cmp_eq_f16_e64 s4, 1.0, s4
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-FAKE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s4
+; GFX11-FAKE16-NEXT:    v_cmp_eq_f16_e64 s4, 1.0, s2
+; GFX11-FAKE16-NEXT:    s_mov_b32 s2, -1
+; GFX11-FAKE16-NEXT:    s_and_b32 s4, s4, exec_lo
+; GFX11-FAKE16-NEXT:    s_cselect_b32 s4, 1, 0
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX11-FAKE16-NEXT:    buffer_store_b8 v0, off, s[0:3], 0
 ; GFX11-FAKE16-NEXT:    s_endpgm
 entry:
