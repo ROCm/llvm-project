@@ -57,6 +57,20 @@ llvm::Value *readOptionalOpSelF16(RaiseContext &Ctx, const DecodedInst &Di,
 bool readVOP3F16DstHigh(const DecodedInst &Di, HandlerResult &Hr,
                         llvm::StringRef OpName, bool &DstHigh);
 
+// Merge a raw i16 result into the selected destination half using the same IR
+// name for either half. The unselected half is preserved by reading the old
+// destination VGPR value.
+void writeSelectedI16Bits(RaiseContext &Ctx, ParsedReg Dst,
+                          llvm::Value *Result, bool DstHigh,
+                          llvm::StringRef MergeName);
+// Merge a raw i16 result into the selected destination half, using
+// half-specific IR names for the low/high merge sites. The unselected half is
+// preserved by reading the old destination VGPR value.
+void writeSelectedI16Bits(RaiseContext &Ctx, ParsedReg Dst,
+                          llvm::Value *Result, bool DstHigh,
+                          llvm::StringRef MergeLoName,
+                          llvm::StringRef MergeHiName);
+
 // Merge the F16 result into the selected destination half. The unselected half
 // is preserved by reading the old destination VGPR value.
 void writeOpSelF16(RaiseContext &Ctx, OpResolver &Op, llvm::Value *Result,

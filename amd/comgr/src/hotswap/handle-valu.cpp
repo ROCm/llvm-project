@@ -120,23 +120,6 @@ Value *extractU16Half(RaiseContext &Ctx, Value *Bits, bool HighHalf) {
   return Ctx.B.CreateTrunc(Bits, Type::getInt16Ty(Ctx.C));
 }
 
-// Merge the 16-bit result into the selected half, preserving the other half.
-void writeSelectedU16Half(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
-                          bool HighHalf, StringRef MergeName) {
-  Value *ResultZ = Ctx.B.CreateZExt(Result, Ctx.I32Ty);
-  Value *Old = Ctx.Regs.readReg32(Ctx.B, Dst);
-  if (!HighHalf) {
-    Value *High =
-        Ctx.B.CreateAnd(Old, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000u));
-    Ctx.writeReg32(Dst, Ctx.B.CreateOr(High, ResultZ, MergeName));
-    return;
-  }
-
-  Value *Low = Ctx.B.CreateAnd(Old, ConstantInt::get(Ctx.I32Ty, 0x0000FFFFu));
-  Value *Shifted = Ctx.B.CreateShl(ResultZ, 16);
-  Ctx.writeReg32(Dst, Ctx.B.CreateOr(Low, Shifted, MergeName));
-}
-
 const char *true16AddSubOpName(bool IsSub, bool IsSigned) {
   if (IsSub)
     return IsSigned ? "v_sub_nc_i16" : "v_sub_nc_u16";
@@ -593,7 +576,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
   //     (LLVM mirrors the subreg into the register slot and the op_sel into
   //     the modifier), so reading both and OR-ing is safe across forms.
   // The other half of the dst dword must be preserved (RDNA3+ ISA), so the
-  // result goes through writeSelectedU16Half. Source neg/abs are not
+  // result goes through writeSelectedI16Bits. Source neg/abs are not
   // meaningful for a bit-pattern move and are refused loudly.
   if (Sop == CanonicalOp::V_MOV_B16) {
     if (Op.nSrcs() < 1) {
@@ -620,7 +603,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     if (Di.isReg(Src0Idx) && AMDGPU::isHi16Reg(Di.getReg(Src0Idx), MRI))
       Src0Hi = true;
     Value *Half = extractU16Half(Ctx, Op.src(0), Src0Hi);
-    writeSelectedU16Half(Ctx, Op.dst(), Half, DstHi, "v_mov_b16_merge");
+    writeSelectedI16Bits(Ctx, Op.dst(), Half, DstHi, "v_mov_b16_merge");
     Hr.Handled = true;
     return Hr;
   }
@@ -2036,7 +2019,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     }
 
     StringRef MergeName = true16AddSubMergeName(IsSub, IsSigned, Sel->DstHi);
-    writeSelectedU16Half(Ctx, Op.dst(), Result, Sel->DstHi, MergeName);
+    writeSelectedI16Bits(Ctx, Op.dst(), Result, Sel->DstHi, MergeName);
     Hr.Handled = true;
     return Hr;
   }
@@ -2055,7 +2038,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Result =
         emitU16Mad(Ctx, A, B, C, *Clamp, Ctx.I32Ty,
                    ConstantInt::get(Ctx.I32Ty, 0xFFFFu), "mad_u16");
-    writeSelectedU16Half(Ctx, Op.dst(), Result, Sel->DstHi,
+    writeSelectedI16Bits(Ctx, Op.dst(), Result, Sel->DstHi,
                          Sel->DstHi ? "mad_u16_merge_hi"
                                     : "mad_u16_merge_lo");
     Hr.Handled = true;
@@ -2182,7 +2165,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
         Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::smax, {I16Ty});
     Value *M01 = Ctx.B.CreateCall(SmaxFn, {S0, S1}, "vmax3_i16_m01");
     Value *M = Ctx.B.CreateCall(SmaxFn, {M01, S2}, "vmax3_i16");
-    writeSelectedU16Half(Ctx, Op.dst(), M, Sel->DstHi,
+    writeSelectedI16Bits(Ctx, Op.dst(), M, Sel->DstHi,
                          Sel->DstHi ? "vmax3_i16_merge_hi"
                                     : "vmax3_i16_merge_lo");
     Hr.Handled = true;

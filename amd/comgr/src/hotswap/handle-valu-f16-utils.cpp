@@ -129,6 +129,28 @@ bool readVOP3F16DstHigh(const DecodedInst &Di, HandlerResult &Hr,
   return true;
 }
 
+void writeSelectedI16Bits(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
+                          bool DstHigh, StringRef MergeName) {
+  writeSelectedI16Bits(Ctx, Dst, Result, DstHigh, MergeName, MergeName);
+}
+
+void writeSelectedI16Bits(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
+                          bool DstHigh, StringRef MergeLoName,
+                          StringRef MergeHiName) {
+  Value *Bits = Ctx.B.CreateZExt(Result, Ctx.I32Ty);
+  Value *Old = Ctx.Regs.readReg32(Ctx.B, Dst);
+  if (!DstHigh) {
+    Value *High =
+        Ctx.B.CreateAnd(Old, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000u));
+    Ctx.writeReg32(Dst, Ctx.B.CreateOr(High, Bits, MergeLoName));
+    return;
+  }
+
+  Value *Low = Ctx.B.CreateAnd(Old, ConstantInt::get(Ctx.I32Ty, 0x0000FFFFu));
+  Value *Shifted = Ctx.B.CreateShl(Bits, 16);
+  Ctx.writeReg32(Dst, Ctx.B.CreateOr(Low, Shifted, MergeHiName));
+}
+
 void writeOpSelF16(RaiseContext &Ctx, OpResolver &Op, Value *Result,
                    bool DstHigh, StringRef MergeLoName,
                    StringRef MergeHiName) {
@@ -137,18 +159,8 @@ void writeOpSelF16(RaiseContext &Ctx, OpResolver &Op, Value *Result,
   // preserve the old opposite half and OR in the new result bits.
   Type *I16Ty = Type::getInt16Ty(Ctx.C);
   Value *Bits =
-      Ctx.B.CreateZExt(Ctx.B.CreateBitCast(Result, I16Ty), Ctx.I32Ty);
-  Value *Old = Ctx.Regs.readReg32(Ctx.B, Op.dst());
-  if (!DstHigh) {
-    Value *High =
-        Ctx.B.CreateAnd(Old, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000u));
-    Ctx.writeReg32(Op.dst(), Ctx.B.CreateOr(High, Bits, MergeLoName));
-    return;
-  }
-
-  Value *Low = Ctx.B.CreateAnd(Old, ConstantInt::get(Ctx.I32Ty, 0x0000FFFFu));
-  Value *Shifted = Ctx.B.CreateShl(Bits, 16);
-  Ctx.writeReg32(Op.dst(), Ctx.B.CreateOr(Low, Shifted, MergeHiName));
+      Ctx.B.CreateBitCast(Result, I16Ty);
+  writeSelectedI16Bits(Ctx, Op.dst(), Bits, DstHigh, MergeLoName, MergeHiName);
 }
 
 } // namespace COMGR::hotswap
