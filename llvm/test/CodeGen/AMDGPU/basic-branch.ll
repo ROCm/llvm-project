@@ -1,14 +1,15 @@
-; RUN: llc -O0 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -enable-var-scope -check-prefix=GCNNOOPT -check-prefix=GCN %s
-; RUN: llc -O0 -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -enable-var-scope  -check-prefix=GCNNOOPT -check-prefix=GCN %s
-; RUN: llc -O0 -mtriple=amdgcn -mcpu=gfx1010 -mattr=-flat-for-global,+wavefrontsize64 < %s | FileCheck -enable-var-scope -check-prefix=GCNNOOPT -check-prefix=GCN %s
-; RUN: llc -O0 -mtriple=amdgcn -mcpu=gfx1100 -mattr=-flat-for-global,+wavefrontsize64 < %s | FileCheck -enable-var-scope -check-prefix=GCNNOOPT -check-prefix=GCN %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -enable-var-scope -check-prefix=GCNOPT -check-prefix=GCN %s
-; RUN: llc -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -enable-var-scope -check-prefix=GCNOPT -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -enable-var-scope -check-prefix=GCNNOOPT -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -enable-var-scope  -check-prefix=GCNNOOPT -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn -mcpu=gfx1010 -mattr=-flat-for-global,+wavefrontsize64 < %s | FileCheck -enable-var-scope -check-prefix=GCNNOOPT -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn -mcpu=gfx1100 -mattr=-flat-for-global,+wavefrontsize64 < %s | FileCheck -enable-var-scope -check-prefix=GCNNOOPT -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -enable-var-scope -check-prefix=GCNOPT -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -enable-var-scope -check-prefix=GCNOPT -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}test_branch:
 ; GCNNOOPT: v_writelane_b32
 ; GCNNOOPT: v_writelane_b32
-; GCNNOOPT: s_cbranch_vccnz [[END:.LBB[0-9]+_[0-9]+]]
+; GCNNOOPT: s_cbranch_scc1
+; GCNNOOPT: s_branch [[END:.LBB[0-9]+_[0-9]+]]
 ; GCNOPT: s_cbranch_scc1 [[END:.LBB[0-9]+_[0-9]+]]
 
 ; GCNNOOPT: v_readlane_b32
@@ -33,10 +34,11 @@ end:
 ; GCN-LABEL: {{^}}test_brcc_i1:
 ; GCN: s_load_{{dword|b32}} [[VAL:s[0-9]+]]
 ; GCNNOOPT: s_and_b32 s{{[0-9]+}}, 1, [[VAL]]
-; GCNOPT:   s_bitcmp0_b32 [[VAL]], 0
+; GCNOPT:   s_bitcmp1_b32 [[VAL]], 0
 ; GCNNOOPT: s_cmp_{{eq|lg}}_u32
-; GCNNOOPT: s_cbranch_vccnz [[END:.LBB[0-9]+_[0-9]+]]
-; GCNOPT: s_cbranch_scc1 [[END:.LBB[0-9]+_[0-9]+]]
+; GCNNOOPT: s_cbranch_scc1
+; GCNNOOPT: s_branch [[END:.LBB[0-9]+_[0-9]+]]
+; GCNOPT: s_cbranch_vccz [[END:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: buffer_store_{{dword|b32}}
 
