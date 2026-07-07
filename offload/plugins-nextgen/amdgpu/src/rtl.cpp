@@ -864,14 +864,11 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   /// Print more elaborate kernel launch info for AMDGPU
   Error printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
                                KernelArgsTy &KernelArgs, uint32_t NumThreads[3],
-                               uint32_t NumBlocks[3], int64_t MultiDeviceLB,
-                               int64_t MultiDeviceUB) const override;
+                               uint32_t NumBlocks[3]) const override;
   /// Print the "old" AMD KernelTrace single-line format
   void printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
                                   KernelArgsTy &KernelArgs,
-                                  uint32_t NumThreads[3], uint32_t NumBlocks[3],
-                                  int64_t MultiDeviceLB,
-                                  int64_t MultiDeviceUB) const;
+                                  uint32_t NumThreads[3], uint32_t NumBlocks[3]) const;
 
   /// Get group and private segment kernel size.
   uint32_t getGroupSize() const { return GroupSize; }
@@ -3646,10 +3643,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       return Err;
     ODBG(ODT_Tool) << "The number of XGMI Engines: " << NumXGmiEngines;
 
-    // Detect if we are in Multi-Device mode
-    if (OMPX_NumMultiDevices > 0)
-      IsMultiDeviceEnabled = true;
-
     // Detect if XNACK is enabled
     SmallVector<SmallString<32>> Targets;
     if (auto Err = hsa_utils::getTargetTripleAndFeatures(Agent, Targets))
@@ -5482,9 +5475,6 @@ private:
   // If set, TARGET_ALLOC_SHARED is allocated on coarse grain memory on MI200
   bool EnableGFX90ACoarseGrainSharedAlloc = false;
 
-  /// True if in multi-device mode.
-  bool IsMultiDeviceEnabled = false;
-
   /// Arguments for device memory initialization.
   void *DMHeapPtr = nullptr;
   void *DMSlabPtr = nullptr;
@@ -5627,10 +5617,12 @@ private:
     Args.HeapAddr = reinterpret_cast<uint64_t>(DMHeapPtr);
     Args.SlabAddr = reinterpret_cast<uint64_t>(DMSlabPtr);
 
+    void *ArgPtrs[] = {&Args.HeapAddr, &Args.SlabAddr};
+
     KernelArgsTy KernelArgs;
     KernelLaunchParamsTy LaunchParams;
-    LaunchParams.Data = &Args;
-    LaunchParams.Size = sizeof(Args);
+    LaunchParams.NumArgs = 2;
+    LaunchParams.Args = ArgPtrs;
 
     AsyncInfoWrapperTy AsyncInfo(*this, nullptr);
 
@@ -6258,36 +6250,25 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
 
   // Copy explicit arguments.
   size_t ExplicitEnd = 0;
-  if (KernelArgs.Flags.IsPtrArgs) {
-    if (KernelArgs.ArgPtrs) {
-      const auto &ArgMDs = KernelInfo.ArgMDs;
+  if (LaunchParams.Args) {
+    const auto &ArgMDs = KernelInfo.ArgMDs;
+    uint32_t NumArgs = LaunchParams.NumArgs;
 
-      // ArgMDs might also contain hidden implicit arguments, so we can't check
-      // if user-provided NumArgs matches exactly.
-      if (KernelArgs.NumArgs > ArgMDs.size())
-        return Plugin::error(
-            ErrorCode::INVALID_ARGUMENT,
-            "number of arguments (%u) exceeds the number of arguments "
-            "expected by the kernel (%zu)",
-            KernelArgs.NumArgs, ArgMDs.size());
+    if (NumArgs > ArgMDs.size())
+      return Plugin::error(
+          ErrorCode::INVALID_ARGUMENT,
+          "number of arguments (%u) exceeds the number of arguments "
+          "expected by the kernel (%zu)",
+          NumArgs, ArgMDs.size());
 
-      for (size_t I = 0; I < KernelArgs.NumArgs; I++) {
-        auto [Offset, Size] = ArgMDs[I];
-        std::memcpy(utils::advancePtr(AllArgs, Offset), KernelArgs.ArgPtrs[I],
-                    Size);
-      }
-
-      if (KernelArgs.NumArgs) {
-        auto [Offset, Size] = ArgMDs[KernelArgs.NumArgs - 1];
-        ExplicitEnd = Offset + Size;
-      }
+    for (size_t I = 0; I < NumArgs; I++) {
+      auto [Offset, Size] = ArgMDs[I];
+      std::memcpy(utils::advancePtr(AllArgs, Offset), LaunchParams.Args[I],
+                  Size);
     }
-  } else {
-    // TODO: We should expose the args memory manager alloc to the common part
-    // as alternative to copying them twice.
-    if (LaunchParams.Size)
-      std::memcpy(AllArgs, LaunchParams.Data, LaunchParams.Size);
-    ExplicitEnd = LaunchParams.Size;
+
+    auto [Offset, Size] = ArgMDs[NumArgs - 1];
+    ExplicitEnd = Offset + Size;
   }
 
   AMDGPUDeviceTy &AMDGPUDevice = static_cast<AMDGPUDeviceTy &>(GenericDevice);
@@ -6346,9 +6327,7 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
 void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
                                                 KernelArgsTy &KernelArgs,
                                                 uint32_t NumThreads[3],
-                                                uint32_t NumBlocks[3],
-                                                int64_t MultiDeviceLB,
-                                                int64_t MultiDeviceUB) const {
+                                                uint32_t NumBlocks[3]) const {
   auto GroupSegmentSize = (KernelInfo).GroupSegmentList;
   auto SGPRCount = (KernelInfo).SGPRCount;
   auto VGPRCount = (KernelInfo).VGPRCount;
@@ -6369,14 +6348,13 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
         "reqd:(%4dX%4d) lds_usage:%uB scratch:%uB sgpr_count:%u vgpr_count:%u "
         "agpr_count:%u "
         "sgpr_spill_count:%u vgpr_spill_count:%u tripcount:%lu rpc:%d "
-        "md:%d md_LB:%ld md_UB:%ld Max Occupancy: %u Achieved Occupancy: "
+        "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
         GenericDevice.getDeviceId(), LaunchId, getExecutionModeFlags(),
         ConstWGSize, KernelArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0,
         GroupSegmentSize, getPrivateSize(), SGPRCount, VGPRCount, AGPRCount,
         SGPRSpillCount, VGPRSpillCount, KernelArgs.Tripcount, HasRPC,
-        isMultiDeviceKernel(), MultiDeviceLB, MultiDeviceUB, MaxOccupancy,
-        AchievedOccupancy, getName());
+        MaxOccupancy, AchievedOccupancy, getName());
   } else {
 
     // This line should print exactly as the one in the old plugin.
@@ -6386,13 +6364,12 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
         "reqd:(%4dX%4d) lds_usage:%uB scratch:%uB sgpr_count:%u vgpr_count:%u "
         "agpr_count:%u "
         "sgpr_spill_count:%u vgpr_spill_count:%u tripcount:%lu rpc:%d "
-        "md:%d md_LB:%ld md_UB:%ld Max Occupancy: %u Achieved Occupancy: "
+        "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
         GenericDevice.getDeviceId(), getExecutionModeFlags(), ConstWGSize,
         KernelArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0, GroupSegmentSize,
         getPrivateSize(), SGPRCount, VGPRCount, AGPRCount, SGPRSpillCount,
-        VGPRSpillCount, KernelArgs.Tripcount, HasRPC, isMultiDeviceKernel(),
-        MultiDeviceLB, MultiDeviceUB, MaxOccupancy, AchievedOccupancy,
+        VGPRSpillCount, KernelArgs.Tripcount, HasRPC, MaxOccupancy, AchievedOccupancy,
         getName());
   }
 }
@@ -6400,16 +6377,13 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
 Error AMDGPUKernelTy::printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
                                              KernelArgsTy &KernelArgs,
                                              uint32_t NumThreads[3],
-                                             uint32_t NumBlocks[3],
-                                             int64_t MultiDeviceLB,
-                                             int64_t MultiDeviceUB) const {
+                                             uint32_t NumBlocks[3]) const {
   // When LIBOMPTARGET_KERNEL_TRACE is set, print the single-line kernel trace
   // info present in the old ASO plugin, and continue with the upstream 2-line
   // info, should LIBOMPTARGET_INFO be a meaningful value, otherwise return.
   if ((getInfoLevel() & OMP_INFOTYPE_AMD_KERNEL_TRACE) ||
       GenericDevice.enableKernelDurationTracing())
-    printAMDOneLineKernelTrace(GenericDevice, KernelArgs, NumThreads, NumBlocks,
-                               MultiDeviceLB, MultiDeviceUB);
+    printAMDOneLineKernelTrace(GenericDevice, KernelArgs, NumThreads, NumBlocks);
 
   // Only do all this when the output is requested
   if (!(getInfoLevel() & OMP_INFOTYPE_PLUGIN_KERNEL))
@@ -6631,6 +6605,10 @@ getCopyStartAndEndTime(const ProfilingInfoTy *Args) {
 void AMDGPUQueueTy::callbackError(hsa_status_t Status, hsa_queue_t *Source,
                                   void *Data) {
   auto &AMDGPUDevice = *reinterpret_cast<AMDGPUDeviceTy *>(Data);
+
+  // Drain any pending RPC work the device pushed before its queue died.
+  if (RPCServerTy *RPCServer = AMDGPUDevice.getRPCServer())
+    RPCServer->flushDevice(AMDGPUDevice);
 
   if (Status == HSA_STATUS_ERROR_EXCEPTION) {
     auto KernelTraceInfoRecord =
