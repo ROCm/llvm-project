@@ -384,6 +384,7 @@ jobs:
           if [[ "${{ github.ref }}" == "refs/heads/amd/dev/kirthana14m/wavetransform-psdb" ]] || \
              [[ "${{ github.head_ref }}" == "amd/dev/kirthana14m/wavetransform-psdb" ]]; then
                 export LIT_XFAIL_NOT='CodeGen/AMDGPU/ds-read2-write2-debug-info.ll;CodeGen/AMDGPU/llvm.dbg.value.ll;DebugInfo/AMDGPU/dbg-value-sched-crash.ll;CodeGen/AMDGPU/debug-independence-adjustSchedDependency.ll'
+
           fi
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-llvm
 
