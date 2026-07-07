@@ -28,29 +28,9 @@ namespace {
 // not collect log output emitted by an unrelated API on another thread.
 thread_local raw_ostream *ThreadCaptureStream = nullptr;
 
-// Resolve the configured level from the environment. Delegates the mapping to
-// the testable parseLogLevel(); kept separate so the Logger constructor reads
-// the (cached) environment exactly once.
-LogLevel resolveLevel() {
-  return parseLogLevel(env::getLogLevel(), env::shouldEmitVerboseLogs());
-}
-
 } // namespace
 
-LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
-  // When the variable is unset or not a valid integer, default to the most
-  // verbose level if verbose logs are requested for back-compat with
-  // AMD_COMGR_EMIT_VERBOSE_LOGS, otherwise to a low level that still shows
-  // errors.
-  unsigned Numeric;
-  if (Requested.getAsInteger(10, Numeric))
-    return VerboseFallback ? LogLevel::Debug : LogLevel::Error;
-
-  unsigned Max = static_cast<unsigned>(LogLevel::Debug);
-  return static_cast<LogLevel>(Numeric > Max ? Max : Numeric);
-}
-
-Logger::Logger() : Level(resolveLevel()), Sink(nullptr) {
+Logger::Logger() : Level(env::resolveLevel()), Sink(nullptr) {
   std::optional<StringRef> RedirectLogs = env::getRedirectLogs();
   if (!RedirectLogs)
     return;

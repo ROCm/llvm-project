@@ -14,6 +14,32 @@
 namespace COMGR {
 namespace env {
 
+/// Severity of a log message, and the logger's configured threshold. The
+/// underlying values form a 0-to-4 scale where None silences logging and higher
+/// values are more verbose. A message is emitted only when its severity is not
+/// None and does not exceed the configured level (see Logger::isEnabled).
+/// Callers choose the severity passed to Logger::emit; more detailed
+/// diagnostics use the higher levels.
+enum class LogLevel {
+  None = 0,
+  Error,
+  Warning,
+  Info,
+  Debug,
+};
+
+/// Parse @p Requested (the value of AMD_COMGR_LOG_LEVEL, which may be empty)
+/// into a threshold. The value must be a bare integer; it is clamped to [None,
+/// Debug]. When @p Requested is empty or is not a valid integer, returns Debug
+/// if @p VerboseFallback is set (back-compat with AMD_COMGR_EMIT_VERBOSE_LOGS),
+/// otherwise Error. Exposed for testing.
+LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
+
+/// Resolve the configured log level from the environment, reading
+/// AMD_COMGR_LOG_LEVEL and the AMD_COMGR_EMIT_VERBOSE_LOGS back-compat fallback
+/// and delegating to the two-argument parseLogLevel() above.
+LogLevel resolveLevel();
+
 /// Return whether the environment requests temps be saved.
 bool shouldSaveTemps();
 bool shouldSaveLLVMTemps();
@@ -25,11 +51,6 @@ std::optional<llvm::StringRef> getRedirectLogs();
 
 /// Return whether the environment requests verbose logging.
 bool shouldEmitVerboseLogs();
-
-/// Return the raw value of AMD_COMGR_LOG_LEVEL (an integer in [0, 4]), or an
-/// empty string if unset. The Logger parses this into a numeric severity
-/// threshold; see COMGR::parseLogLevel.
-llvm::StringRef getLogLevel();
 
 /// Return whether the environment requests time statistics collection.
 bool needTimeStatistics();

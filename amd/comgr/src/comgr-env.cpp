@@ -84,9 +84,23 @@ bool shouldEmitVerboseLogs() {
   return VerboseLogs && StringRef(VerboseLogs) != "0";
 }
 
-StringRef getLogLevel() {
+LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
+  // When the variable is unset or not a valid integer, default to the most
+  // verbose level if verbose logs are requested for back-compat with
+  // AMD_COMGR_EMIT_VERBOSE_LOGS, otherwise to a low level that still shows
+  // errors.
+  unsigned Numeric;
+  if (Requested.getAsInteger(10, Numeric))
+    return VerboseFallback ? LogLevel::Debug : LogLevel::Error;
+
+  unsigned Max = static_cast<unsigned>(LogLevel::Debug);
+  return static_cast<LogLevel>(Numeric > Max ? Max : Numeric);
+}
+
+LogLevel resolveLevel() {
   static const char *LogLevel = getenv("AMD_COMGR_LOG_LEVEL");
-  return LogLevel ? StringRef(LogLevel) : StringRef();
+  StringRef Requested = LogLevel ? StringRef(LogLevel) : StringRef();
+  return parseLogLevel(Requested, shouldEmitVerboseLogs());
 }
 
 llvm::StringRef getLLVMPath() {

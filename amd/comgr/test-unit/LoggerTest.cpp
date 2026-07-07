@@ -58,32 +58,32 @@ TEST(Logger, NeverEmitsZeroSeverity) {
 // -- parseLogLevel (AMD_COMGR_LOG_LEVEL mapping) -----------------------------
 
 TEST(Logger, ParseLogLevelNumericValues) {
-  EXPECT_EQ(parseLogLevel("0", false), LogLevel::None);
-  EXPECT_EQ(parseLogLevel("2", false), LogLevel::Warning);
-  EXPECT_EQ(parseLogLevel("4", false), LogLevel::Debug);
+  EXPECT_EQ(env::parseLogLevel("0", false), LogLevel::None);
+  EXPECT_EQ(env::parseLogLevel("2", false), LogLevel::Warning);
+  EXPECT_EQ(env::parseLogLevel("4", false), LogLevel::Debug);
 }
 
 TEST(Logger, ParseLogLevelClampsAboveMax) {
-  EXPECT_EQ(parseLogLevel("5", false), LogLevel::Debug);
-  EXPECT_EQ(parseLogLevel("1000", false), LogLevel::Debug);
+  EXPECT_EQ(env::parseLogLevel("5", false), LogLevel::Debug);
+  EXPECT_EQ(env::parseLogLevel("1000", false), LogLevel::Debug);
 }
 
 TEST(Logger, ParseLogLevelEmptyUsesVerboseFallback) {
   // Unset variable: low level normally, max level when verbose logs requested.
-  EXPECT_EQ(parseLogLevel("", false), LogLevel::Error);
-  EXPECT_EQ(parseLogLevel("", true), LogLevel::Debug);
+  EXPECT_EQ(env::parseLogLevel("", false), LogLevel::Error);
+  EXPECT_EQ(env::parseLogLevel("", true), LogLevel::Debug);
 }
 
 TEST(Logger, ParseLogLevelNonNumericUsesVerboseFallback) {
   // A non-integer value falls back to the same default as an unset variable.
-  EXPECT_EQ(parseLogLevel("foo", false), LogLevel::Error);
-  EXPECT_EQ(parseLogLevel("bar", true), LogLevel::Debug);
+  EXPECT_EQ(env::parseLogLevel("foo", false), LogLevel::Error);
+  EXPECT_EQ(env::parseLogLevel("bar", true), LogLevel::Debug);
 }
 
 TEST(Logger, ParseLogLevelExplicitWinsOverVerbose) {
-  EXPECT_EQ(parseLogLevel("0", true), LogLevel::None);
-  EXPECT_EQ(parseLogLevel("2", true), LogLevel::Warning);
-  EXPECT_EQ(parseLogLevel("4", true), LogLevel::Debug);
+  EXPECT_EQ(env::parseLogLevel("0", true), LogLevel::None);
+  EXPECT_EQ(env::parseLogLevel("2", true), LogLevel::Warning);
+  EXPECT_EQ(env::parseLogLevel("4", true), LogLevel::Debug);
 }
 
 // -- Sink output and prefixes ------------------------------------------------

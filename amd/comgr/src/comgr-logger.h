@@ -20,12 +20,14 @@
 ///
 /// All writes are guarded by a mutex, so concurrent callers share the sink
 /// safely. The severity threshold is configured via AMD_COMGR_LOG_LEVEL; see
-/// COMGR::env::getLogLevel().
+/// COMGR::env::resolveLevel().
 ///
 //===----------------------------------------------------------------------===//
 
 #ifndef COMGR_LOGGER_H
 #define COMGR_LOGGER_H
+
+#include "comgr-env.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
@@ -37,26 +39,9 @@
 
 namespace COMGR {
 
-/// Severity of a log message, and the logger's configured threshold. The
-/// underlying values form a 0-to-4 scale where None silences logging and higher
-/// values are more verbose. A message is emitted only when its severity is not
-/// None and does not exceed the configured level (see Logger::isEnabled).
-/// Callers choose the severity passed to Logger::emit; more detailed
-/// diagnostics use the higher levels.
-enum class LogLevel {
-  None = 0,
-  Error,
-  Warning,
-  Info,
-  Debug,
-};
-
-/// Parse @p Requested (the value of AMD_COMGR_LOG_LEVEL, which may be empty)
-/// into a threshold. The value must be a bare integer; it is clamped to [None,
-/// Debug]. When @p Requested is empty or is not a valid integer, returns Debug
-/// if @p VerboseFallback is set (back-compat with AMD_COMGR_EMIT_VERBOSE_LOGS),
-/// otherwise Error. Exposed for testing.
-LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
+/// The severity type shared with the logger; defined in comgr-env alongside the
+/// AMD_COMGR_LOG_LEVEL parsing that produces it.
+using env::LogLevel;
 
 /// Process-global, thread-safe logging facility. Obtain the shared instance
 /// through getLogger(); do not construct directly except for tests.
