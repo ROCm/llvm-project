@@ -8,6 +8,7 @@
 
 #include "flat-addr.h"
 
+#include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -31,22 +32,6 @@ int64_t DecodeGlobalFlatOffset(int64_t RawOffset) {
   return SignExtend64<GlobalFlatOffsetBits>(static_cast<uint64_t>(RawOffset));
 }
 
-// Scan the operand tail (at and after `immStart`) for the first immediate
-// and return its value. Any later imms are encoding flags (cpol, th,
-// scope) and are ignored. GLOBAL/FLAT memory offsets are signed byte offsets,
-// but the MC operand can surface the encoded 24-bit field as an unsigned
-// bit-pattern (for example `offset:-19200` as `0xffb000`). Sign-extend here
-// before materialising the GEP; otherwise a negative source offset becomes a
-// huge positive target address and guarded loads can fault.
-int64_t firstImmOffset(const DecodedInst &Di, OpResolver &Op,
-                       unsigned ImmStart) {
-  for (unsigned K = ImmStart; K < Op.nSrcs(); ++K) {
-    if (Di.isImm(Op.srcIdx(K)))
-      return DecodeGlobalFlatOffset(Di.getImm(Op.srcIdx(K)));
-  }
-  return 0;
-}
-
 // Coerce an integer address into a global-AS pointer and apply a signed
 // byte offset via a plain (non-inbounds) GEP. The ISA's signed offset
 // can legitimately leave the base allocation (e.g. compiler-scheduled
@@ -60,6 +45,23 @@ Value *toGlobalPtr(RaiseContext &Ctx, Value *Addr, int64_t MemOffset) {
 }
 
 } // namespace
+
+int64_t getGlobalFlatOffset(const DecodedInst &Di) {
+  unsigned Opc = Di.Inst.getOpcode();
+  int OffsetIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::offset);
+  if (OffsetIdx >= 0 &&
+      static_cast<unsigned>(OffsetIdx) < Di.Inst.getNumOperands() &&
+      Di.Inst.getOperand(static_cast<unsigned>(OffsetIdx)).isImm())
+    return DecodeGlobalFlatOffset(
+        Di.Inst.getOperand(static_cast<unsigned>(OffsetIdx)).getImm());
+
+  std::string Msg;
+  raw_string_ostream Os(Msg);
+  Os << "transpiler: FLAT/GLOBAL opcode '" << Di.RawMnemonic
+     << "' (opcode=" << Opc
+     << ") is missing an immediate OpName::offset operand";
+  report_fatal_error(StringRef(Os.str()));
+}
 
 FlatAddr decodeGlobalLoadAddr(RaiseContext &Ctx, const DecodedInst &Di,
                                OpResolver &Op, int ElemBytes,
@@ -97,7 +99,7 @@ FlatAddr decodeGlobalLoadAddr(RaiseContext &Ctx, const DecodedInst &Di,
     report_fatal_error(StringRef(Os.str()));
   }
 
-  Out.MemOffset = firstImmOffset(Di, Op, Out.HasSaddr ? 2 : 1);
+  Out.MemOffset = getGlobalFlatOffset(Di);
   Out.Ptr = toGlobalPtr(Ctx, Addr, Out.MemOffset);
   return Out;
 }
@@ -136,7 +138,7 @@ FlatAddr decodeGlobalStoreAddr(RaiseContext &Ctx, const DecodedInst &Di,
     report_fatal_error(StringRef(Os.str()));
   }
 
-  Out.MemOffset = firstImmOffset(Di, Op, Out.HasSaddr ? 3 : 2);
+  Out.MemOffset = getGlobalFlatOffset(Di);
   Out.Ptr = toGlobalPtr(Ctx, Addr, Out.MemOffset);
   return Out;
 }

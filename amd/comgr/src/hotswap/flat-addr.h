@@ -60,6 +60,12 @@ FlatAddr decodeGlobalStoreAddr(RaiseContext &Ctx, const DecodedInst &Di,
                                 OpResolver &Op, int ElemBytes,
                                 llvm::StringRef DiagLabel);
 
+// Decode the first immediate in a GLOBAL/FLAT memory operand tail as the signed
+// byte offset. Later immediates are encoding flags (`cpol`, TH, scope) and are
+// deliberately ignored. MC may surface the signed 24-bit field as an unsigned
+// bit pattern, so the helper sign-extends before callers materialise a GEP.
+int64_t getGlobalFlatOffset(const DecodedInst &Di);
+
 } // namespace COMGR::hotswap
 
 #endif

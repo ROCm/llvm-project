@@ -967,6 +967,8 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
         Sop == CanonicalOp::GLOBAL_ATOMIC_CMPSWAP ||
         Sop == CanonicalOp::FLAT_ATOMIC_SWAP ||
         Sop == CanonicalOp::FLAT_ATOMIC_CMPSWAP ||
+        Sop == CanonicalOp::FLAT_ATOMIC_SWAP_X2 ||
+        Sop == CanonicalOp::FLAT_ATOMIC_CMPSWAP_X2 ||
         Sop == CanonicalOp::BUFFER_ATOMIC_SWAP ||
         Sop == CanonicalOp::BUFFER_ATOMIC_CMPSWAP) {
       ObstructionSite Site;

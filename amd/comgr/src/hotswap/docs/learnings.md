@@ -436,10 +436,10 @@ CMPSWAP branch still increments `baseIdx` on `fa.stData` to reach
 the newVal half of the cmp/new pair.
 
 Element size for `scale_offset` is 4 for every atomic in the
-`[GLOBAL_ATOMIC_ADD, GLOBAL_ATOMIC_PK_ADD_F16]` range -- the 64-bit
-`_X2` variants are outside this range, so a single `elemBytes=4`
-covers ADD/SUB/AND/OR/XOR/MIN/MAX/SWAP/ADD_F32/PK_ADD_{BF16,F16}/
-CMPSWAP uniformly.
+`[GLOBAL_ATOMIC_ADD, GLOBAL_ATOMIC_PK_ADD_F16]` range that fix covered:
+ADD/SUB/AND/OR/XOR/MIN/MAX/SWAP/ADD_F32/PK_ADD_{BF16,F16}/CMPSWAP.
+`GLOBAL_ATOMIC_ADD_X2` uses the same decoder with `elemBytes=8`,
+matching its 64-bit data/address stride.
 
 **After the fix:**
 

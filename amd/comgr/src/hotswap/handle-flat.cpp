@@ -1557,20 +1557,10 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     //              backend re-emit `global_atomic_*` with matching
     //              scale-offset arithmetic.
     //
-    // Before this split, the handler hard-coded the plain shape and
-    // used a "first non-zero imm wins" scan that misidentified the
-    // CPol operand (packed scale_offset + scope bits) as the signed
-    // offset field.  The bug is DORMANT today -- no recipe in the
-    // compare_correctness Triton corpus emits gfx12+ `flat_atomic_*`
-    // (Triton's gfx1250 codegen prefers `global_atomic_*` whenever it
-    // knows the buffer lives in global) -- but it's the identical
-    // class that bit GLOBAL_ATOMIC (see that block's comment for the
-    // `sum_bitmatrix_rows_u32` failure and the
-    // sum-bitmatrix-rows regression gate).  Fixed here
-    // for symmetry to close the "handler assumes operand shape that
-    // varies by subtarget" bug class across FLAT_LOAD / FLAT_STORE /
-    // FLAT_ATOMIC / GLOBAL_LOAD / GLOBAL_STORE / GLOBAL_ATOMIC -- all
-    // six now route SADDR through the shared decoder.
+    // The signed byte offset is the first immediate operand; later immediates
+    // are cache-policy bits (TH / scope / nv) and must not be folded into the
+    // address. Keep that rule tied to LLVM's named `$offset` operand through
+    // `getGlobalFlatOffset`.
     Value *Addr = nullptr;
     ParsedReg StData;
     const bool IsSaddr = Op.nSrcs() >= 3 && Op.isSrcReg(0) &&
@@ -1578,9 +1568,12 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
                          Op.srcReg(0).RegKind == ParsedReg::VGPR &&
                          Op.srcReg(1).RegKind == ParsedReg::VGPR &&
                          Op.srcReg(2).RegKind == ParsedReg::SGPR;
+    const bool IsI64 = Sop >= CanonicalOp::FLAT_ATOMIC_ADD_X2 &&
+                       Sop <= CanonicalOp::FLAT_ATOMIC_CMPSWAP_X2;
     const bool IsF64 = Sop == CanonicalOp::FLAT_ATOMIC_ADD_F64 ||
                        Sop == CanonicalOp::FLAT_ATOMIC_MIN_NUM_F64 ||
                        Sop == CanonicalOp::FLAT_ATOMIC_MAX_NUM_F64;
+    const bool Is64 = IsI64 || IsF64;
     const bool IsNumMinMaxF64 = Sop == CanonicalOp::FLAT_ATOMIC_MIN_NUM_F64 ||
                                 Sop == CanonicalOp::FLAT_ATOMIC_MAX_NUM_F64;
     if (IsNumMinMaxF64 && !Ctx.Isa.HasIeeeNumMinMaxAtomics) {
@@ -1591,7 +1584,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     }
     if (IsSaddr) {
       FlatAddr Fa = decodeGlobalStoreAddr(Ctx, Di, Op,
-                                           /*elemBytes=*/IsF64 ? 8 : 4,
+                                           /*elemBytes=*/Is64 ? 8 : 4,
                                            "FLAT_ATOMIC (SADDR)");
       Addr = Fa.Ptr;
       StData = Fa.StData;
@@ -1599,44 +1592,44 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       ParsedReg AddrReg = Op.srcReg(0);
       Addr = Ctx.Regs.readReg64(Ctx.B, AddrReg);
       Type *PtrFlatTy = PointerType::get(Ctx.C, 0);
-      if (Addr->getType() != PtrFlatTy) Addr = Ctx.B.CreateIntToPtr(Addr, PtrFlatTy);
-      int64_t MemOffset = 0;
-      unsigned DataIdx = 1;
-      for (unsigned K = 1; K < Op.nSrcs(); K++) {
-        if (Di.isImm(Op.srcIdx(K)) && Di.getImm(Op.srcIdx(K)) != 0)
-          MemOffset = Di.getImm(Op.srcIdx(K));
-        else if (Di.isReg(Op.srcIdx(K)))
-          DataIdx = K;
-      }
-      if (MemOffset != 0) Addr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Addr, Ctx.B.getInt64(MemOffset));
-      StData = Op.srcReg(DataIdx);
+      if (Addr->getType() != PtrFlatTy)
+        Addr = Ctx.B.CreateIntToPtr(Addr, PtrFlatTy);
+      int64_t MemOffset = getGlobalFlatOffset(Di);
+      if (MemOffset != 0)
+        Addr = Ctx.B.CreateGEP(Ctx.I8Ty, Addr, Ctx.B.getInt64(MemOffset));
+      StData = Op.srcReg(1);
     }
-    Value *Data = IsF64 ? Ctx.Regs.readReg64(Ctx.B, StData)
+    Value *Data = Is64 ? Ctx.Regs.readReg64(Ctx.B, StData)
                         : Ctx.Regs.readReg32(Ctx.B, StData);
 
-    if (Sop == CanonicalOp::FLAT_ATOMIC_CMPSWAP) {
-      // CMPSWAP's vdata is a 2-vgpr pair (cmp, new); read low half as
-      // cmpVal and the adjacent baseIdx+1 as newVal.
+    if (Sop == CanonicalOp::FLAT_ATOMIC_CMPSWAP ||
+        Sop == CanonicalOp::FLAT_ATOMIC_CMPSWAP_X2) {
+      // CMPSWAP's vdata is a pair of values: (cmp, new). For the 64-bit
+      // `_X2` form each value occupies two VGPRs.
       Value *CmpVal = Data;
       ParsedReg NewReg = StData;
-      NewReg.BaseIdx += 1;
-      NewReg.WidthInDwords = 1;
-      Value *NewVal = Ctx.Regs.readReg32(Ctx.B, NewReg);
+      NewReg.BaseIdx += IsI64 ? 2 : 1;
+      NewReg.WidthInDwords = IsI64 ? 2 : 1;
+      Value *NewVal = IsI64 ? Ctx.Regs.readReg64(Ctx.B, NewReg)
+                            : Ctx.Regs.readReg32(Ctx.B, NewReg);
       Ctx.emitUnderExec([&] {
         auto *Cas = Ctx.B.CreateAtomicCmpXchg(
             Addr, CmpVal, NewVal, MaybeAlign(),
             AtomicOrdering::SequentiallyConsistent,
             AtomicOrdering::SequentiallyConsistent);
-        if (Di.NumDefs > 0)
-          Ctx.Regs.writeReg32(Ctx.B, Op.dst(),
-                              Ctx.B.CreateExtractValue(Cas, 0));
+        if (Di.NumDefs > 0) {
+          Value *OldVal = Ctx.B.CreateExtractValue(Cas, 0);
+          if (IsI64)
+            Ctx.Regs.writeReg64(Ctx.B, Op.dst(), OldVal);
+          else
+            Ctx.Regs.writeReg32(Ctx.B, Op.dst(), OldVal);
+        }
       });
       Hr.Handled = true;
-    return Hr;
+      return Hr;
     }
 
     AtomicRMWInst::BinOp AtomicOp;
-    Type *AtomicTy = Ctx.I32Ty;
     bool IsFp = false;
     switch (Sop) {
     case CanonicalOp::FLAT_ATOMIC_ADD:  AtomicOp = AtomicRMWInst::Add; break;
@@ -1649,20 +1642,50 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     case CanonicalOp::FLAT_ATOMIC_UMIN: AtomicOp = AtomicRMWInst::UMin; break;
     case CanonicalOp::FLAT_ATOMIC_UMAX: AtomicOp = AtomicRMWInst::UMax; break;
     case CanonicalOp::FLAT_ATOMIC_SWAP: AtomicOp = AtomicRMWInst::Xchg; break;
+    case CanonicalOp::FLAT_ATOMIC_ADD_X2:
+      AtomicOp = AtomicRMWInst::Add;
+      break;
+    case CanonicalOp::FLAT_ATOMIC_SUB_X2:
+      AtomicOp = AtomicRMWInst::Sub;
+      break;
+    case CanonicalOp::FLAT_ATOMIC_AND_X2:
+      AtomicOp = AtomicRMWInst::And;
+      break;
+    case CanonicalOp::FLAT_ATOMIC_OR_X2:
+      AtomicOp = AtomicRMWInst::Or;
+      break;
+    case CanonicalOp::FLAT_ATOMIC_XOR_X2:
+      AtomicOp = AtomicRMWInst::Xor;
+      break;
+    case CanonicalOp::FLAT_ATOMIC_SMIN_X2:
+      AtomicOp = AtomicRMWInst::Min;
+      break;
+    case CanonicalOp::FLAT_ATOMIC_SMAX_X2:
+      AtomicOp = AtomicRMWInst::Max;
+      break;
+    case CanonicalOp::FLAT_ATOMIC_UMIN_X2:
+      AtomicOp = AtomicRMWInst::UMin;
+      break;
+    case CanonicalOp::FLAT_ATOMIC_UMAX_X2:
+      AtomicOp = AtomicRMWInst::UMax;
+      break;
+    case CanonicalOp::FLAT_ATOMIC_SWAP_X2:
+      AtomicOp = AtomicRMWInst::Xchg;
+      break;
     case CanonicalOp::FLAT_ATOMIC_ADD_F32:
       AtomicOp = AtomicRMWInst::FAdd; IsFp = true;
-      Data = Ctx.B.CreateBitCast(Data, Ctx.F32Ty); AtomicTy = Ctx.F32Ty; break;
+      Data = Ctx.B.CreateBitCast(Data, Ctx.F32Ty); break;
     // MIN/MAX_F64 use `fminimumnum`/`fmaximumnum` (IEEE 754-2019);
     // bit-exact for gfx1250 `_min/_max_num_f64`.
     case CanonicalOp::FLAT_ATOMIC_ADD_F64:
       AtomicOp = AtomicRMWInst::FAdd; IsFp = true;
-      Data = Ctx.B.CreateBitCast(Data, Ctx.F64Ty); AtomicTy = Ctx.F64Ty; break;
+      Data = Ctx.B.CreateBitCast(Data, Ctx.F64Ty); break;
     case CanonicalOp::FLAT_ATOMIC_MIN_NUM_F64:
       AtomicOp = AtomicRMWInst::FMinimumNum; IsFp = true;
-      Data = Ctx.B.CreateBitCast(Data, Ctx.F64Ty); AtomicTy = Ctx.F64Ty; break;
+      Data = Ctx.B.CreateBitCast(Data, Ctx.F64Ty); break;
     case CanonicalOp::FLAT_ATOMIC_MAX_NUM_F64:
       AtomicOp = AtomicRMWInst::FMaximumNum; IsFp = true;
-      Data = Ctx.B.CreateBitCast(Data, Ctx.F64Ty); AtomicTy = Ctx.F64Ty; break;
+      Data = Ctx.B.CreateBitCast(Data, Ctx.F64Ty); break;
     default:
       llvm::errs() << "transpiler: Unhandled flat atomic: " << Mn << "\n";
       Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "FLAT",
@@ -1675,7 +1698,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
           AtomicOrdering::SequentiallyConsistent);
       if (Di.NumDefs > 0) {
         Value *RetVal = Rmw;
-        if (IsF64) {
+        if (Is64) {
           if (IsFp) RetVal = Ctx.B.CreateBitCast(RetVal, Ctx.I64Ty);
           Ctx.Regs.writeReg64(Ctx.B, Op.dst(), RetVal);
         } else {
@@ -1726,15 +1749,17 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     // access)` on every launch of `sum_bitmatrix_rows_u32` (and the
     // `_nw4` variant) -- the atomic fired at the wrong address with
     // the wrong value.  `decodeGlobalStoreAddr` handles the shape
-    // discriminator and uses `firstImmOffset` (FIRST imm, regardless
-    // of value) for the offset field, so CPol no longer leaks into
+    // discriminator and uses `getGlobalFlatOffset` (the named
+    // OpName::offset operand) for the offset field, so CPol no longer leaks into
     // the offset lookup.  See `hotswap/docs/learnings.md` entry
     // "2026-04-23 -- global_atomic SADDR form silently miscompiled"
     // for the full investigation and the regression gate.
     //
+    const bool IsI64 = Sop == CanonicalOp::GLOBAL_ATOMIC_ADD_X2;
     const bool IsF64 = Sop == CanonicalOp::GLOBAL_ATOMIC_ADD_F64 ||
                        Sop == CanonicalOp::GLOBAL_ATOMIC_MIN_NUM_F64 ||
                        Sop == CanonicalOp::GLOBAL_ATOMIC_MAX_NUM_F64;
+    const bool Is64 = IsI64 || IsF64;
     const bool IsNumMinMaxF64 = Sop == CanonicalOp::GLOBAL_ATOMIC_MIN_NUM_F64 ||
                                 Sop == CanonicalOp::GLOBAL_ATOMIC_MAX_NUM_F64;
     if (IsNumMinMaxF64 && !Ctx.Isa.HasIeeeNumMinMaxAtomics) {
@@ -1744,10 +1769,10 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       return Hr;
     }
     FlatAddr Fa = decodeGlobalStoreAddr(Ctx, Di, Op,
-                                         /*elemBytes=*/IsF64 ? 8 : 4,
+                                         /*elemBytes=*/Is64 ? 8 : 4,
                                          "GLOBAL_ATOMIC");
     Value *Addr = Fa.Ptr;
-    Value *Data = IsF64 ? Ctx.Regs.readReg64(Ctx.B, Fa.StData)
+    Value *Data = Is64 ? Ctx.Regs.readReg64(Ctx.B, Fa.StData)
                         : Ctx.Regs.readReg32(Ctx.B, Fa.StData);
 
     if (Sop == CanonicalOp::GLOBAL_ATOMIC_CMPSWAP) {
@@ -1776,6 +1801,9 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     bool IsFp = false;
     switch (Sop) {
     case CanonicalOp::GLOBAL_ATOMIC_ADD:  AtomicOp = AtomicRMWInst::Add; break;
+    case CanonicalOp::GLOBAL_ATOMIC_ADD_X2:
+      AtomicOp = AtomicRMWInst::Add;
+      break;
     case CanonicalOp::GLOBAL_ATOMIC_SUB:  AtomicOp = AtomicRMWInst::Sub; break;
     case CanonicalOp::GLOBAL_ATOMIC_AND:  AtomicOp = AtomicRMWInst::And; break;
     case CanonicalOp::GLOBAL_ATOMIC_OR:   AtomicOp = AtomicRMWInst::Or; break;
@@ -1810,7 +1838,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       Value *Prev = Ctx.B.CreateAtomicRMW(AtomicOp, Addr, Data, MaybeAlign(),
                                           AtomicOrdering::Monotonic);
       if (Di.NumDefs > 0) {
-        if (IsF64) {
+        if (Is64) {
           if (IsFp) Prev = Ctx.B.CreateBitCast(Prev, Ctx.I64Ty);
           Ctx.Regs.writeReg64(Ctx.B, Op.dst(), Prev);
         } else {
