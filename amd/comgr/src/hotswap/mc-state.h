@@ -57,7 +57,7 @@ inline constexpr llvm::StringLiteral kAMDGPUTriple = "amdgcn-amd-amdhsa";
 /// hotswap-originated `HotswapError` (Target lookup, MCSubtargetInfo /
 /// MCAsmInfo / MCDisassembler / MCInstPrinter creation failures) or
 /// forwards an upstream LLVM ErrorInfo unchanged.
-llvm::Error initMCState(MCState &State, llvm::StringRef TargetIsa);
+llvm::Expected<MCState> initMCState(llvm::StringRef TargetIsa);
 
 /// Thin wrapper around `Target::createMCSubtargetInfo` for the AMDGPU
 /// triple. Returns a fully populated MCSubtargetInfo (feature bits honor

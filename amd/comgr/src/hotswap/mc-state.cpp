@@ -10,6 +10,7 @@
 #include "hotswap-error.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCInstrInfo.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 
 using namespace llvm;
@@ -28,7 +29,7 @@ buildSubtargetInfo(const Target &Target, StringRef Isa) {
   return STI;
 }
 
-Error initMCState(MCState &State, StringRef TargetIsa) {
+llvm::Expected<MCState> initMCState(StringRef TargetIsa) {
   LLVMInitializeAMDGPUTargetInfo();
   LLVMInitializeAMDGPUTarget();
   LLVMInitializeAMDGPUTargetMC();
@@ -38,10 +39,11 @@ Error initMCState(MCState &State, StringRef TargetIsa) {
 
   Triple Triple(kAMDGPUTriple);
   std::string LookupError;
+  MCState State;
   State.Target = TargetRegistry::lookupTarget(Triple, LookupError);
   if (!State.Target)
-    return makeHotswapError(Twine("initMCState: Target lookup for '") +
-                            kAMDGPUTriple + "' failed: " + LookupError);
+    return makeHotswapError("initMCState: Target lookup for '" + kAMDGPUTriple +
+                            "' failed: " + LookupError);
 
   State.InstrInfo.reset(State.Target->createMCInstrInfo());
   State.RegInfo.reset(State.Target->createMCRegInfo(Triple));
@@ -49,11 +51,13 @@ Error initMCState(MCState &State, StringRef TargetIsa) {
       buildSubtargetInfo(*State.Target, TargetIsa);
   if (!STIOrErr)
     return STIOrErr.takeError();
+
   State.SubtargetInfo = std::move(*STIOrErr);
   State.AsmInfo.reset(State.Target->createMCAsmInfo(
       *State.RegInfo, Triple, MCTargetOptions()));
   if (!State.AsmInfo)
     return makeHotswapError("initMCState: createMCAsmInfo returned null");
+
   State.Ctx = std::make_unique<MCContext>(Triple, *State.AsmInfo,
                                          *State.RegInfo,
                                          *State.SubtargetInfo);
@@ -78,12 +82,15 @@ Error initMCState(MCState &State, StringRef TargetIsa) {
       State.Target->createMCDisassembler(*State.SubtargetInfo, *State.Ctx));
   if (!State.Disasm)
     return makeHotswapError("initMCState: createMCDisassembler returned null");
+
   State.Printer.reset(State.Target->createMCInstPrinter(
       Triple, 0, *State.AsmInfo, *State.InstrInfo, *State.RegInfo));
   if (!State.Printer)
     return makeHotswapError("initMCState: createMCInstPrinter returned null");
+
   State.Printer->setPrintImmHex(true);
-  return Error::success();
+
+  return State;
 }
 
 std::string getMnemonic(const MCState &State, const MCInst &Inst) {

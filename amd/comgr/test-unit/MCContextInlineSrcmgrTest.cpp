@@ -59,13 +59,14 @@ void ensureAMDGPURegistered() {
 TEST(MCContextInlineSrcMgr, HotswapInitMCStateAttachesInlineSourceManager) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::Error InitErr = COMGR::hotswap::initMCState(State, "gfx942");
-  ASSERT_FALSE(static_cast<bool>(InitErr))
+  llvm::Expected<COMGR::hotswap::MCState> StateOrErr =
+      COMGR::hotswap::initMCState("gfx942");
+  ASSERT_TRUE(static_cast<bool>(StateOrErr))
       << "initMCState('gfx942') must succeed on an AMDGPU-enabled LLVM "
          "build (InitializeAllTargetMCs was just run above): "
-      << llvm::toString(std::move(InitErr));
+      << llvm::toString(std::move(StateOrErr.takeError()));
 
+  COMGR::hotswap::MCState State = std::move(*StateOrErr);
   ASSERT_NE(State.Ctx, nullptr) << "initMCState must construct an MCContext";
 
   EXPECT_NE(State.Ctx->getInlineSourceManager(), nullptr)
@@ -80,16 +81,18 @@ TEST(MCContextInlineSrcMgr, HotswapInitMCStateAttachesInlineSourceManager) {
 TEST(MCContextInlineSrcMgr, SecondMCStateAlsoGetsInlineSourceManager) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState First;
-  llvm::Error FirstErr = COMGR::hotswap::initMCState(First, "gfx942");
-  ASSERT_FALSE(static_cast<bool>(FirstErr))
-      << llvm::toString(std::move(FirstErr));
+  llvm::Expected<COMGR::hotswap::MCState> FirstOrErr =
+      COMGR::hotswap::initMCState("gfx942");
+  ASSERT_TRUE(static_cast<bool>(FirstOrErr))
+      << llvm::toString(FirstOrErr.takeError());
+  COMGR::hotswap::MCState First = std::move(*FirstOrErr);
   EXPECT_NE(First.Ctx->getInlineSourceManager(), nullptr);
 
-  COMGR::hotswap::MCState Second;
-  llvm::Error SecondErr = COMGR::hotswap::initMCState(Second, "gfx942");
-  ASSERT_FALSE(static_cast<bool>(SecondErr))
-      << llvm::toString(std::move(SecondErr));
+  llvm::Expected<COMGR::hotswap::MCState> SecondOrErr =
+      COMGR::hotswap::initMCState("gfx942");
+  ASSERT_TRUE(static_cast<bool>(SecondOrErr))
+      << llvm::toString(SecondOrErr.takeError());
+  COMGR::hotswap::MCState Second = std::move(*SecondOrErr);
   EXPECT_NE(Second.Ctx->getInlineSourceManager(), nullptr)
       << "Second initMCState on the same target must also produce an "
          "MCContext with a non-null InlineSrcMgr.";

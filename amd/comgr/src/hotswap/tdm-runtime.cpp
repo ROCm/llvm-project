@@ -59,10 +59,10 @@ llvm::FunctionType *tdmHelperFnTy(llvm::LLVMContext &C) {
                            /*isVarArg=*/false);
 }
 
-bool inlineTDMHelperCallSites(llvm::Module &M, llvm::StringRef Name) {
+llvm::Error inlineTDMHelperCallSites(llvm::Module &M, llvm::StringRef Name) {
   llvm::Function *F = M.getFunction(Name);
   if (!F || F->isDeclaration())
-    return true;
+    return llvm::Error::success();
 
   llvm::SmallVector<llvm::CallBase *, 8> Calls;
   for (llvm::User *U : F->users()) {
@@ -76,12 +76,12 @@ bool inlineTDMHelperCallSites(llvm::Module &M, llvm::StringRef Name) {
     llvm::InlineFunctionInfo IFI;
     llvm::InlineResult Inlined = llvm::InlineFunction(*CB, IFI);
     if (!Inlined.isSuccess()) {
-      llvm::errs() << "transpiler: failed to inline TDM helper '" << Name
-                   << "': " << Inlined.getFailureReason() << "\n";
-      return false;
+      return llvm::createStringError(
+          "transpiler: failed to inline TDM helper '" + Name +
+          "': " + Inlined.getFailureReason());
     }
   }
-  return true;
+  return llvm::Error::success();
 }
 
 } // namespace
@@ -101,14 +101,13 @@ bool moduleUsesTDMRuntime(const llvm::Module &M) {
          M.getFunction(kTDMStoreSymbol) != nullptr;
 }
 
-bool linkTDMRuntime(llvm::Module &M, llvm::StringRef /*targetISA*/) {
+llvm::Error linkTDMRuntime(llvm::Module &M, llvm::StringRef /*targetISA*/) {
   if (!tdmRuntimeAvailable()) {
-    llvm::errs()
-        << "transpiler: TDM runtime requested but unavailable "
-           "(transpiler was built without hipcc -- re-run CMake with "
-           "hipcc on PATH to enable cross-target gfx1250->gfx942 TDM "
-           "emulation).\n";
-    return false;
+    return llvm::createStringError(
+        "transpiler: TDM runtime requested but unavailable "
+        "(transpiler was built without hipcc -- re-run CMake with "
+        "hipcc on PATH to enable cross-target gfx1250->gfx942 TDM "
+        "emulation).");
   }
 
   auto Buf = llvm::MemoryBuffer::getMemBuffer(
@@ -120,9 +119,7 @@ bool linkTDMRuntime(llvm::Module &M, llvm::StringRef /*targetISA*/) {
   auto ModOrErr =
       llvm::parseBitcodeFile(Buf->getMemBufferRef(), M.getContext());
   if (!ModOrErr) {
-    llvm::errs() << "transpiler: failed to parse embedded TDM bitcode: "
-                 << llvm::toString(ModOrErr.takeError()) << "\n";
-    return false;
+    return ModOrErr.takeError();
   }
   std::unique_ptr<llvm::Module> Rt = std::move(*ModOrErr);
 
@@ -135,9 +132,9 @@ bool linkTDMRuntime(llvm::Module &M, llvm::StringRef /*targetISA*/) {
   Rt->setDataLayout(M.getDataLayout());
 
   if (llvm::Linker::linkModules(M, std::move(Rt))) {
-    llvm::errs() << "transpiler: failed to link TDM runtime into module '"
-                 << M.getName() << "'\n";
-    return false;
+    return llvm::createStringError(
+        "transpiler: failed to link TDM runtime into module '" + M.getName() +
+        "'");
   }
 
   // The helper bitcode is a semantic lowering aid, not a device-call ABI
@@ -145,11 +142,15 @@ bool linkTDMRuntime(llvm::Module &M, llvm::StringRef /*targetISA*/) {
   // LLVM lowers the calls through a private-segment/dynamic-stack path that the
   // original gfx1250 kernel did not require, and large Triton TensorDescriptor
   // kernels can fault before any useful numerical comparison.
-  if (!inlineTDMHelperCallSites(M, kTDMLoadSymbol) ||
-      !inlineTDMHelperCallSites(M, kTDMStoreSymbol))
-    return false;
+  if (llvm::Error Err = inlineTDMHelperCallSites(M, kTDMLoadSymbol)) {
+    return Err;
+  }
 
-  return true;
+  if (llvm::Error Err = inlineTDMHelperCallSites(M, kTDMStoreSymbol)) {
+    return Err;
+  }
+
+  return llvm::Error::success();
 }
 
 } // namespace COMGR::hotswap

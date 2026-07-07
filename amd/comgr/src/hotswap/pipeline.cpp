@@ -61,38 +61,44 @@ double timingElapsed(bool CollectTimings, TimingClock::time_point Start) {
   return CollectTimings ? secondsBetween(Start, TimingClock::now()) : 0.0;
 }
 
-bool writeFile(llvm::StringRef Path, llvm::StringRef Contents) {
+llvm::Error writeFile(llvm::StringRef Path, llvm::StringRef Bytes,
+                      llvm::sys::fs::OpenFlags Flags) {
   std::error_code EC;
-  llvm::raw_fd_ostream Out(Path, EC, llvm::sys::fs::OF_Text);
-  if (EC) {
-    llvm::errs() << "transpiler: Cannot write file: " << Path << ": "
-                 << EC.message() << "\n";
-    return false;
-  }
-  Out.write(Contents.data(), Contents.size());
+  llvm::raw_fd_ostream Out(Path, EC, Flags);
+
+  if (EC)
+    return llvm::createFileError(Path, EC);
+
+  Out.write(Bytes.data(), Bytes.size());
   Out.flush();
-  if (Out.has_error()) {
-    llvm::errs() << "transpiler: write failed for: " << Path << "\n";
-    return false;
-  }
-  return true;
+
+  if (Out.has_error())
+    return llvm::createFileError(Path, Out.error());
+
+  return llvm::Error::success();
 }
 
-bool writeFile(llvm::StringRef Path, llvm::ArrayRef<uint8_t> Data) {
-  std::error_code EC;
-  llvm::raw_fd_ostream Out(Path, EC, llvm::sys::fs::OF_None);
-  if (EC) {
-    llvm::errs() << "transpiler: Cannot write file: " << Path << ": "
-                 << EC.message() << "\n";
-    return false;
-  }
-  Out.write(reinterpret_cast<const char *>(Data.data()), Data.size());
-  Out.flush();
-  if (Out.has_error()) {
-    llvm::errs() << "transpiler: write failed for: " << Path << "\n";
-    return false;
-  }
-  return true;
+llvm::Error writeFile(llvm::StringRef Path, llvm::StringRef Contents) {
+  return writeFile(Path, Contents, llvm::sys::fs::OF_Text);
+}
+
+llvm::Error writeFile(llvm::StringRef Path, llvm::ArrayRef<uint8_t> Data) {
+  return writeFile(
+      Path,
+      llvm::StringRef(reinterpret_cast<const char *>(Data.data()), Data.size()),
+      llvm::sys::fs::OF_None);
+}
+
+// Best-effort write of a debug artifact: log and swallow any failure so a dump
+// error never aborts the raise/compile pipeline.
+void writeDebugFile(llvm::StringRef Path, llvm::StringRef Contents) {
+  llvm::logAllUnhandledErrors(writeFile(Path, Contents), llvm::errs(),
+                              "transpiler: ");
+}
+
+void writeDebugFile(llvm::StringRef Path, llvm::ArrayRef<uint8_t> Data) {
+  llvm::logAllUnhandledErrors(writeFile(Path, Data), llvm::errs(),
+                              "transpiler: ");
 }
 
 // Derive a filesystem-safe basename for an arbitrarily long kernel name.
@@ -183,6 +189,7 @@ llvm::Error emitCodeGen(llvm::Module &M, llvm::TargetMachine &TM,
   if (TM.addPassesToEmitFile(PM, OS, /*DwoOut=*/nullptr, FileType))
     return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                    "target cannot emit requested file type");
+
   PM.run(M);
   return llvm::Error::success();
 }
@@ -375,10 +382,12 @@ static bool raiseAndCompileKernel(
   // non-persistent temp dir is deleted on exit, taking the dumps with it).
   auto WriteIrStart = timingStart(Options.CollectTimings);
   if (TmpDir.Persistent) {
-    writeFile(TmpDir.filePath(FileStem + ".ll"), Raised.IrText);
+    writeDebugFile(TmpDir.filePath(FileStem + ".ll"), Raised.IrText);
+
     static const char *DumpInput = std::getenv("HSA_HOTSWAP_DUMP_INPUT");
-    if (DumpInput && DumpInput[0] == '1' && !Raised.DisasmText.empty())
-      writeFile(TmpDir.filePath(FileStem + ".dis"), Raised.DisasmText);
+    if (DumpInput && DumpInput[0] == '1' && !Raised.DisasmText.empty()) {
+      writeDebugFile(TmpDir.filePath(FileStem + ".dis"), Raised.DisasmText);
+    }
   }
   Result.Timings.writeIrSeconds +=
       timingElapsed(Options.CollectTimings, WriteIrStart);
@@ -422,22 +431,25 @@ static bool raiseAndCompileKernel(
     return false;
   }
 
-  if (!writeFile(ObjPath,
-                 llvm::ArrayRef<uint8_t>(
-                     reinterpret_cast<const uint8_t *>(ObjBytes.data()),
-                     ObjBytes.size())))
+  if (llvm::Error WriteErr = writeFile(
+          ObjPath, llvm::ArrayRef<uint8_t>(
+                       reinterpret_cast<const uint8_t *>(ObjBytes.data()),
+                       ObjBytes.size()))) {
+    llvm::logAllUnhandledErrors(std::move(WriteErr), llvm::errs());
     return false;
+  }
 
   // Textual assembly is a debug-only artifact emitted from the clone so the
   // object codegen above stays the canonical lowering.
   if (AsmModule) {
     llvm::SmallString<4096> AsmText;
     llvm::raw_svector_ostream OS(AsmText);
-    if (llvm::Error Err = emitCodeGen(*AsmModule, *TM,
-                                      llvm::CodeGenFileType::AssemblyFile, OS))
-      llvm::consumeError(std::move(Err));
-    else
-      writeFile(TmpDir.filePath(FileStem + ".s"), AsmText);
+    if (llvm::Error Err = emitCodeGen(
+            *AsmModule, *TM, llvm::CodeGenFileType::AssemblyFile, OS)) {
+      llvm::logAllUnhandledErrors(std::move(Err), llvm::errs());
+    } else {
+      writeDebugFile(TmpDir.filePath(FileStem + ".s"), AsmText);
+    }
   }
 
   return true;
@@ -445,8 +457,8 @@ static bool raiseAndCompileKernel(
 
 // Link one or more relocatable .o files into a shared HSACO using the
 // in-process LLD ELF driver.
-static bool linkObjects(llvm::ArrayRef<std::string> ObjPaths,
-                        llvm::StringRef HsacoPath) {
+static llvm::Error linkObjects(llvm::ArrayRef<std::string> ObjPaths,
+                               llvm::StringRef HsacoPath) {
   std::string HsacoPathStr = HsacoPath.str();
   llvm::SmallVector<const char *, 16> Args;
   Args.push_back("ld.lld");
@@ -461,14 +473,21 @@ static bool linkObjects(llvm::ArrayRef<std::string> ObjPaths,
   // re-entrant nor thread-safe; serialize all in-process links.
   static std::mutex LldMutex;
   std::lock_guard<std::mutex> LldLock(LldMutex);
-  lld::Result Ret = lld::lldMain(Args, llvm::outs(), llvm::errs(),
-                                 {{lld::Gnu, &lld::elf::link}});
+  std::string OutString;
+  std::string ErrString;
+  llvm::raw_string_ostream OutStream(OutString);
+  llvm::raw_string_ostream ErrStream(ErrString);
+  lld::Result Ret =
+      lld::lldMain(Args, OutStream, ErrStream, {{lld::Gnu, &lld::elf::link}});
   lld::CommonLinkerContext::destroy();
   if (Ret.retCode != 0 || !Ret.canRunAgain) {
-    llvm::errs() << "transpiler: ld.lld failed\n";
-    return false;
+    ErrStream.flush();
+    return llvm::createStringError(
+        "ld.lld failed return code: " + llvm::Twine(Ret.retCode) +
+        " stderr: " + ErrString);
   }
-  return true;
+
+  return llvm::Error::success();
 }
 
 void collectTargetPrivateSegmentMetadata(
@@ -529,11 +548,12 @@ PipelineResult runPipeline(llvm::MemoryBufferRef CodeObjectData,
 
   {
     static const char *DumpInput = std::getenv("HSA_HOTSWAP_DUMP_INPUT");
-    if (DumpInput && DumpInput[0] == '1')
-      writeFile(TmpDir.filePath("input.co"),
-                llvm::ArrayRef(reinterpret_cast<const uint8_t *>(
-                                   CodeObjectData.getBufferStart()),
-                               CodeObjectData.getBufferSize()));
+    if (DumpInput && DumpInput[0] == '1') {
+      writeDebugFile(TmpDir.filePath("input.co"),
+                     llvm::ArrayRef(reinterpret_cast<const uint8_t *>(
+                                        CodeObjectData.getBufferStart()),
+                                    CodeObjectData.getBufferSize()));
+    }
   }
 
   std::string ObjPath = TmpDir.filePath("kernel.o");
@@ -544,8 +564,10 @@ PipelineResult runPipeline(llvm::MemoryBufferRef CodeObjectData,
     return finish();
 
   auto LinkStart = timingStart(Options.CollectTimings);
-  if (!linkObjects({ObjPath}, HsacoPath))
+  if (llvm::Error Err = linkObjects({ObjPath}, HsacoPath)) {
+    Result.FailDetail = llvm::toString(std::move(Err));
     return finish();
+  }
   Result.Timings.linkSeconds +=
       timingElapsed(Options.CollectTimings, LinkStart);
 
@@ -626,11 +648,12 @@ PipelineResult runPipelineAllKernels(llvm::MemoryBufferRef CodeObjectData,
     return finish();
 
   static const char *DumpInput = std::getenv("HSA_HOTSWAP_DUMP_INPUT");
-  if (DumpInput && DumpInput[0] == '1')
-    writeFile(TmpDir.filePath("input.co"),
-              llvm::ArrayRef(reinterpret_cast<const uint8_t *>(
-                                 CodeObjectData.getBufferStart()),
-                             CodeObjectData.getBufferSize()));
+  if (DumpInput && DumpInput[0] == '1') {
+    writeDebugFile(TmpDir.filePath("input.co"),
+                   llvm::ArrayRef(reinterpret_cast<const uint8_t *>(
+                                      CodeObjectData.getBufferStart()),
+                                  CodeObjectData.getBufferSize()));
+  }
 
   std::vector<std::string> ObjPaths;
   for (size_t I = 0; I < KernelNames.size(); ++I) {
@@ -652,8 +675,10 @@ PipelineResult runPipelineAllKernels(llvm::MemoryBufferRef CodeObjectData,
 
   std::string HsacoPath = TmpDir.filePath("merged.Hsaco");
   auto LinkStart = timingStart(Options.CollectTimings);
-  if (!linkObjects(ObjPaths, HsacoPath))
+  if (llvm::Error Err = linkObjects(ObjPaths, HsacoPath)) {
+    Result.FailDetail = llvm::toString(std::move(Err));
     return finish();
+  }
   Result.Timings.linkSeconds +=
       timingElapsed(Options.CollectTimings, LinkStart);
 

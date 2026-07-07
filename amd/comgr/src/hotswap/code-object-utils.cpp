@@ -128,8 +128,8 @@ llvm::Error readKernelDescriptorBytes(llvm::object::ObjectFile &Obj,
 void populateKernelDescriptorFields(llvm::object::ObjectFile &Obj,
                                     KernelMeta &Meta) {
   KernelDescriptorBuffer KdBytes{};
-  if (llvm::Error E = readKernelDescriptorBytes(Obj, Meta.Name, KdBytes)) {
-    llvm::logAllUnhandledErrors(std::move(E), llvm::errs(), "transpiler: ");
+  if (llvm::Error Err = readKernelDescriptorBytes(Obj, Meta.Name, KdBytes)) {
+    llvm::logAllUnhandledErrors(std::move(Err), llvm::errs(), "transpiler: ");
     Meta.HasKernelDescriptor = false;
     return;
   }
@@ -254,7 +254,9 @@ llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
   MetaDoc.DocNode = MetaDoc.MetaDoc->Document.getRoot();
   if (COMGR::metadata::getMetadataRoot(ElfData, &MetaDoc) !=
       AMD_COMGR_STATUS_SUCCESS)
-    return makeHotswapError("extractKernelMeta: no AMDGPU metadata note");
+    return makeHotswapError(
+        "extractKernelMeta: no AMDGPU metadata note for kernel '" + KernelName +
+        "'");
 
   KernelMeta Meta;
   bool MatchedKernel = false;
@@ -354,28 +356,32 @@ findKernelSymbolExtent(llvm::MemoryBufferRef ElfData,
     TextSec = Sec;
     TextBase = Sec.getAddress();
     if (Sec.getSize() > UINT64_MAX - TextBase)
-      return makeHotswapError(
-          "findKernelSymbolExtent: .text address range overflows");
+      return makeHotswapError("findKernelSymbolExtent: kernel '" + KernelName +
+                              "' .text address range overflows");
     TextEnd = TextBase + Sec.getSize();
     break;
   }
   if (TextBase == UINT64_MAX)
-    return makeHotswapError("findKernelSymbolExtent: no .text section in ELF");
+    return makeHotswapError("findKernelSymbolExtent: kernel '" + KernelName +
+                            "' no .text section in ELF");
 
   llvm::Expected<llvm::object::SymbolRef> SymOrErr =
       COMGR::lookupSymbolByName(**ObjOrErr, KernelName);
   if (!SymOrErr)
     return SymOrErr.takeError();
+
   llvm::Expected<llvm::object::section_iterator> SymSecOrErr =
       SymOrErr->getSection();
   if (!SymSecOrErr)
     return SymSecOrErr.takeError();
+
   if (*SymSecOrErr == (*ObjOrErr)->section_end() || **SymSecOrErr != *TextSec)
     return makeHotswapError("findKernelSymbolExtent: symbol '" + KernelName +
                             "' is not in .text");
   llvm::Expected<uint64_t> AddrOrErr = SymOrErr->getAddress();
   if (!AddrOrErr)
     return AddrOrErr.takeError();
+
   if (*AddrOrErr < TextBase || *AddrOrErr >= TextEnd)
     return makeHotswapError("findKernelSymbolExtent: symbol '" + KernelName +
                             "' address is outside .text");

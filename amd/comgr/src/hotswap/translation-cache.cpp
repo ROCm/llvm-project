@@ -80,7 +80,7 @@ bool readElfHeaderFields(llvm::MemoryBufferRef buffer, uint16_t &machine,
                          uint32_t &flags) {
   auto objOrErr = llvm::object::ObjectFile::createELFObjectFile(buffer);
   if (!objOrErr) {
-    (void)llvm::toString(objOrErr.takeError());
+    llvm::consumeError(objOrErr.takeError());
     return false;
   }
   const auto *elf =

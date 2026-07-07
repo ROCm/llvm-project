@@ -64,10 +64,6 @@ llvm::FunctionType *ocmlTanhF16FnTy(llvm::LLVMContext &C) {
   return llvm::FunctionType::get(F16, {F16}, /*isVarArg=*/false);
 }
 
-void setFailure(std::string &FailureDetail, const llvm::Twine &Detail) {
-  FailureDetail = Detail.str();
-}
-
 std::optional<DeviceLibRef> findDeviceLibrary(llvm::StringRef Name) {
   for (const auto &Lib : COMGR::getDeviceLibraries()) {
     if (std::get<0>(Lib) == Name)
@@ -76,21 +72,13 @@ std::optional<DeviceLibRef> findDeviceLibrary(llvm::StringRef Name) {
   return std::nullopt;
 }
 
-bool linkDeviceLibrary(llvm::Module &M, DeviceLibRef Lib,
-                       llvm::StringRef Purpose,
-                       DeviceLibLinkState &State,
-                       std::string &FailureDetail) {
+llvm::Error linkDeviceLibrary(llvm::Module &M, DeviceLibRef Lib,
+                              DeviceLibLinkState &State) {
   llvm::MemoryBufferRef Buf(Lib.Contents, Lib.Name);
   llvm::Expected<std::unique_ptr<llvm::Module>> ModOrErr =
       llvm::parseBitcodeFile(Buf, M.getContext());
   if (!ModOrErr) {
-    std::string Detail = (llvm::Twine("failed to parse embedded ") + Purpose +
-                          " device library '" + Lib.Name + "': " +
-                          llvm::toString(ModOrErr.takeError()))
-                             .str();
-    setFailure(FailureDetail, Detail);
-    llvm::errs() << "transpiler: " << Detail << "\n";
-    return false;
+    return ModOrErr.takeError();
   }
 
   std::unique_ptr<llvm::Module> LibModule = std::move(*ModOrErr);
@@ -109,48 +97,34 @@ bool linkDeviceLibrary(llvm::Module &M, DeviceLibRef Lib,
                          LinkedSymbols.count(GV.getName()) == 0;
                 });
           })) {
-    setFailure(FailureDetail,
-               llvm::Twine("failed to link embedded ") + Purpose +
-                   " device library '" + Lib.Name + "' into module '" +
-                   M.getName() + "'");
-    llvm::errs() << "transpiler: " << FailureDetail << "\n";
-    return false;
+    return llvm::createStringError("failed to link embedded device library '" +
+                                   Lib.Name + "' into module '" + M.getName() +
+                                   "'");
   }
 
-  return true;
+  return llvm::Error::success();
 }
 
-bool linkOCMLAndSupportLibraries(llvm::Module &M,
-                                 llvm::StringRef TargetProcessor,
-                                 unsigned TargetWaveSize,
-                                 DeviceLibLinkState &State,
-                                 std::string &FailureDetail) {
+llvm::Error linkOCMLAndSupportLibraries(llvm::Module &M,
+                                        llvm::StringRef TargetProcessor,
+                                        unsigned TargetWaveSize,
+                                        DeviceLibLinkState &State) {
   const bool NeedsTanhF32 = M.getFunction(kOCMLTanhF32Symbol) != nullptr;
   const bool NeedsTanhF16 = M.getFunction(kOCMLTanhF16Symbol) != nullptr;
 
   llvm::SmallVector<std::string, 8> DeviceLibNames;
-  std::string SelectionError;
-  if (!COMGR::getOCMLDeviceLibraryNames(TargetProcessor, TargetWaveSize,
-                                        DeviceLibNames, SelectionError)) {
-    setFailure(FailureDetail, SelectionError);
-    llvm::errs() << "transpiler: " << FailureDetail << "\n";
-    return false;
-  }
+  if (llvm::Error LibNameErr = COMGR::getOCMLDeviceLibraryNames(
+          TargetProcessor, TargetWaveSize, DeviceLibNames))
+    return LibNameErr;
 
   for (llvm::StringRef Name : DeviceLibNames) {
     std::optional<DeviceLibRef> Lib = findDeviceLibrary(Name);
-    if (!Lib) {
-      setFailure(FailureDetail,
-                 llvm::Twine("required OCML device library '") + Name +
-                     "' is not embedded in this COMGR build");
-      llvm::errs() << "transpiler: " << FailureDetail << "\n";
-      return false;
-    }
+    if (!Lib)
+      return llvm::createStringError("required OCML device library '" + Name +
+                                     "' is not embedded in this COMGR build");
 
-    if (!linkDeviceLibrary(M, *Lib, Name == "ocml.bc" ? "OCML"
-                                                      : "OCML support",
-                           State, FailureDetail))
-      return false;
+    if (llvm::Error LinkErr = linkDeviceLibrary(M, *Lib, State))
+      return LinkErr;
   }
 
   auto CheckResolved = [&](llvm::StringRef Symbol) {
@@ -160,20 +134,16 @@ bool linkOCMLAndSupportLibraries(llvm::Module &M,
 
   if ((NeedsTanhF32 && !CheckResolved(kOCMLTanhF32Symbol)) ||
       (NeedsTanhF16 && !CheckResolved(kOCMLTanhF16Symbol))) {
-    llvm::StringRef Missing =
-        NeedsTanhF32 && !CheckResolved(kOCMLTanhF32Symbol)
-            ? kOCMLTanhF32Symbol
-            : kOCMLTanhF16Symbol;
-    setFailure(FailureDetail,
-               llvm::Twine("embedded OCML bitcode does not define ") +
-                   Missing +
-                   "; cannot lower requested OCML helper without a resolved "
-                   "device-library body");
-    llvm::errs() << "transpiler: " << FailureDetail << "\n";
-    return false;
+    llvm::StringRef Missing = NeedsTanhF32 && !CheckResolved(kOCMLTanhF32Symbol)
+                                  ? kOCMLTanhF32Symbol
+                                  : kOCMLTanhF16Symbol;
+    return llvm::createStringError(
+        "embedded OCML bitcode does not define " + Missing +
+        "; cannot lower requested OCML helper without a resolved "
+        "device-library body");
   }
 
-  return true;
+  return llvm::Error::success();
 }
 
 bool isKernel(const llvm::Function &F) {
@@ -188,9 +158,8 @@ bool isInlineableDeviceLibCallee(llvm::Function &F,
          State.LinkedSymbols.count(F.getName()) != 0;
 }
 
-bool inlineDeviceLibraryCallSites(llvm::Module &M,
-                                  const DeviceLibLinkState &State,
-                                  std::string &FailureDetail) {
+llvm::Error inlineDeviceLibraryCallSites(llvm::Module &M,
+                                         const DeviceLibLinkState &State) {
   // Inline imported helper calls explicitly instead of relying on a later
   // optimizer pipeline: HotSwap needs a hard failure if a device-library call
   // would remain in final IR, and `State` scopes the transformation to symbols
@@ -221,18 +190,15 @@ bool inlineDeviceLibraryCallSites(llvm::Module &M,
       llvm::InlineFunctionInfo IFI;
       llvm::InlineResult Inlined = llvm::InlineFunction(*CB, IFI);
       if (!Inlined.isSuccess()) {
-        setFailure(FailureDetail,
-                   llvm::Twine("failed to inline OCML device-library helper '") +
-                       Callee->getName() + "': " +
-                       Inlined.getFailureReason());
-        llvm::errs() << "transpiler: " << FailureDetail << "\n";
-        return false;
+        return llvm::createStringError(
+            "failed to inline OCML device-library helper '" +
+            Callee->getName() + "': " + Inlined.getFailureReason());
       }
       Changed = true;
     }
   }
 
-  return true;
+  return llvm::Error::success();
 }
 
 bool hasDirectCallTo(llvm::Module &M, llvm::StringRef Name) {
@@ -252,17 +218,16 @@ bool isDeviceLibrarySymbol(llvm::StringRef Name) {
          Name.starts_with("__oclc_");
 }
 
-bool hasUnresolvedDeviceLibraryReference(llvm::Module &M, std::string &Detail) {
+llvm::Error verifyDeviceLibraryReferences(llvm::Module &M) {
   for (llvm::GlobalValue &GV : M.global_values()) {
     if (!GV.isDeclaration() || GV.use_empty() || !GV.hasName() ||
         !isDeviceLibrarySymbol(GV.getName()))
       continue;
-    llvm::raw_string_ostream Os(Detail);
-    Os << "unresolved device-library symbol '" << GV.getName()
-       << "' remains referenced after OCML linking";
-    return true;
+    return llvm::createStringError("unresolved device-library symbol '" +
+                                   GV.getName() +
+                                   "' remains referenced after OCML linking");
   }
-  return false;
+  return llvm::Error::success();
 }
 
 void runGlobalDCE(llvm::Module &M) {
@@ -288,37 +253,28 @@ bool moduleUsesOCMLRuntime(const llvm::Module &M) {
          M.getFunction(kOCMLTanhF16Symbol) != nullptr;
 }
 
-bool linkOCMLRuntime(llvm::Module &M, llvm::StringRef TargetProcessor,
-                     unsigned TargetWaveSize, std::string &FailureDetail) {
+llvm::Error linkOCMLRuntime(llvm::Module &M, llvm::StringRef TargetProcessor,
+                            unsigned TargetWaveSize) {
   DeviceLibLinkState State;
-  if (!linkOCMLAndSupportLibraries(M, TargetProcessor, TargetWaveSize, State,
-                                   FailureDetail))
-    return false;
+  if (llvm::Error LinkErr = linkOCMLAndSupportLibraries(M, TargetProcessor,
+                                                        TargetWaveSize, State))
+    return LinkErr;
 
-  if (!inlineDeviceLibraryCallSites(M, State, FailureDetail))
-    return false;
+  if (llvm::Error InlineError = inlineDeviceLibraryCallSites(M, State))
+    return InlineError;
 
   runGlobalDCE(M);
 
   if (hasDirectCallTo(M, kOCMLTanhF32Symbol) ||
       hasDirectCallTo(M, kOCMLTanhF16Symbol)) {
-    setFailure(FailureDetail,
-               "OCML helper call remained after inlining; refusing to leave a "
-               "device-call ABI");
-    llvm::errs() << "transpiler: " << FailureDetail << "\n";
-    return false;
+    return llvm::createStringError("OCML helper call remained after inlining; "
+                                   "refusing to leave a device-call ABI");
   }
 
-  std::string Detail;
-  if (hasUnresolvedDeviceLibraryReference(M, Detail)) {
-    setFailure(FailureDetail,
-               llvm::Twine(Detail) +
-                   "; refusing to leave a device-library ABI");
-    llvm::errs() << "transpiler: " << FailureDetail << "\n";
-    return false;
-  }
+  if (llvm::Error LibRefErr = verifyDeviceLibraryReferences(M))
+    return LibRefErr;
 
-  return true;
+  return llvm::Error::success();
 }
 
 } // namespace COMGR::hotswap

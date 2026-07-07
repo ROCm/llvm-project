@@ -63,53 +63,46 @@ bool hasEmbeddedDeviceLibrary(llvm::StringRef Name) {
   return false;
 }
 
-bool validateSelectedDeviceLibraries(llvm::ArrayRef<llvm::StringRef> Names,
-                                     std::string &Error) {
+llvm::Error
+validateSelectedDeviceLibraries(llvm::ArrayRef<llvm::StringRef> Names) {
   for (llvm::StringRef Name : Names) {
     if (hasEmbeddedDeviceLibrary(Name))
       continue;
-    Error = (Twine("selected OCML device library '") + Name +
-             "' is not embedded in this COMGR build")
-                .str();
-    return false;
+
+    return llvm::createStringError("selected OCML device library '" + Name +
+                                   "' is not embedded in this COMGR build");
   }
-  return true;
+  return llvm::Error::success();
 }
 
 } // namespace
 
-bool getOCMLDeviceLibraryNames(llvm::StringRef TargetProcessor,
-                               unsigned TargetWaveSize,
-                               llvm::SmallVectorImpl<std::string> &Names,
-                               std::string &Error) {
+llvm::Error
+getOCMLDeviceLibraryNames(llvm::StringRef TargetProcessor,
+                          unsigned TargetWaveSize,
+                          llvm::SmallVectorImpl<std::string> &Names) {
   Names.clear();
 
   AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(TargetProcessor);
-  if (Kind == AMDGPU::GK_NONE) {
-    Error = (Twine("target processor '") + TargetProcessor +
-             "' does not name a known AMDGPU processor").str();
-    return false;
-  }
+  if (Kind == AMDGPU::GK_NONE)
+    return createStringError("target processor '" + TargetProcessor +
+                             "' does not name a known AMDGPU processor");
 
   StringRef CanonicalProcessor = AMDGPU::getArchNameAMDGCN(Kind);
-  if (!CanonicalProcessor.consume_front("gfx")) {
-    Error = (Twine("LLVM returned non-gfx AMDGPU processor name '") +
-             AMDGPU::getArchNameAMDGCN(Kind) + "'")
-                .str();
-    return false;
-  }
+  if (!CanonicalProcessor.consume_front("gfx"))
+    return createStringError("LLVM returned non-gfx AMDGPU processor name '" +
+                             AMDGPU::getArchNameAMDGCN(Kind) + "'");
+
   std::string IsaSuffix = CanonicalProcessor.str();
   for (char &C : IsaSuffix)
     if (C == '-')
       C = '_';
   std::string IsaLibraryName = "oclc_isa_version_" + IsaSuffix + ".bc";
 
-  if (TargetWaveSize != 32 && TargetWaveSize != 64) {
-    Error = (Twine("cannot select OCML wavefront-size control library for "
-                   "target wave size ") +
-             Twine(TargetWaveSize)).str();
-    return false;
-  }
+  if (TargetWaveSize != 32 && TargetWaveSize != 64)
+    return createStringError("cannot select OCML wavefront-size control "
+                             "library for target wave size " +
+                             Twine(TargetWaveSize));
 
   llvm::SmallVector<llvm::StringRef, 8> Selected = {
       "ocml.bc",
@@ -121,12 +114,14 @@ bool getOCMLDeviceLibraryNames(llvm::StringRef TargetProcessor,
       TargetWaveSize == 64 ? "oclc_wavefrontsize64_on.bc"
                            : "oclc_wavefrontsize64_off.bc",
   };
-  if (!validateSelectedDeviceLibraries(Selected, Error))
-    return false;
+
+  if (auto Error = validateSelectedDeviceLibraries(Selected))
+    return Error;
 
   for (llvm::StringRef Name : Selected)
     Names.push_back(Name.str());
-  return true;
+
+  return llvm::Error::success();
 }
 
 } // namespace COMGR

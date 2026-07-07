@@ -424,9 +424,8 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
     if (Pr.RegKind == ParsedReg::OTHER) {
       recordReadFailure(RaiseFailure::unsupportedInstructionForm(
           Di, "operand-read",
-          (Twine("readOp32 saw unmodeled register '") +
-           Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " + Di.Mnemonic)
-              .str()));
+          Twine("readOp32 saw unmodeled register '") +
+              Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " + Di.Mnemonic));
       return UndefValue::get(I32Ty);
     }
     Value *V = Regs.readReg32(B, Pr);
@@ -512,9 +511,8 @@ Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
     if (Pr.RegKind == ParsedReg::OTHER) {
       recordReadFailure(RaiseFailure::unsupportedInstructionForm(
           Di, "operand-read",
-          (Twine("readOp64 saw unmodeled register '") +
-           Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " + Di.Mnemonic)
-              .str()));
+          Twine("readOp64 saw unmodeled register '") +
+              Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " + Di.Mnemonic));
       return UndefValue::get(I64Ty);
     }
     Value *V = Regs.readReg64(B, Pr);

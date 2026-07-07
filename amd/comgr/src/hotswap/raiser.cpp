@@ -61,6 +61,7 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
@@ -849,13 +850,14 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   // future evidence needs a global toggle, add a proper
   // `PipelineConfig` field rather than re-introducing the env var.
 
-  MCState Mc;
-  if (Error E = initMCState(Mc, SourceCpu)) {
+  Expected<MCState> McOrErr = initMCState(SourceCpu);
+  if (!McOrErr) {
     Result.Failure.Reason = RaiseFailureReason::BadInput;
-    Result.Failure.Detail = toString(std::move(E));
+    Result.Failure.Detail = toString(std::move(McOrErr.takeError()));
     return Result;
   }
 
+  MCState Mc = std::move(*McOrErr);
   ISAProfile Isa = ISAProfile::fromSubtarget(*Mc.SubtargetInfo);
   // When the caller does not specify a distinct compilation target we raise
   // in place and reuse the source profile; otherwise we spin up a throwaway
@@ -2041,11 +2043,12 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   if (moduleUsesOCMLRuntime(M)) {
     StringRef OCMLTargetCpu = TargetCpu.empty() ? SourceCpu : TargetCpu;
     std::string OCMLLinkErr;
-    if (!linkOCMLRuntime(M, OCMLTargetCpu, TargetIsa.WaveSize, OCMLLinkErr)) {
+    if (llvm::Error Err =
+            linkOCMLRuntime(M, OCMLTargetCpu, TargetIsa.WaveSize)) {
       errs() << "transpiler: OCML device-library link failed for kernel '"
              << KernelName << "'\n";
-      Result.Failure =
-          RaiseFailure::deviceLibraryLinkFailed(KernelName, OCMLLinkErr);
+      Result.Failure = RaiseFailure::deviceLibraryLinkFailed(
+          KernelName, toString(std::move(Err)));
       return Result;
     }
   }
@@ -2344,8 +2347,9 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   // calls at codegen time. No-op when the handler did not emit any
   // helper calls.
   if (moduleUsesTDMRuntime(M)) {
-    if (!linkTDMRuntime(M, CompilationTargetIsa)) {
-      errs() << "transpiler: TDM runtime link failed for kernel '" << KernelName << "'\n";
+    if (llvm::Error Err = linkTDMRuntime(M, CompilationTargetIsa)) {
+      errs() << "transpiler: TDM runtime link failed for kernel '" << KernelName
+             << "': " << toString(std::move(Err)) << "\n";
       Result.Failure = RaiseFailure::irVerificationFailed("TDM runtime bitcode link failed");
       return Result;
     }

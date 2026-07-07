@@ -12,6 +12,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Error.h"
 #include <string>
 #include <tuple>
 
@@ -36,10 +37,10 @@ getDeviceLibraries();
 // and the target wavefront-size control library. Callers that need different
 // math controls must add explicit parameters here rather than selecting OCLC
 // modules ad hoc at the call site.
-bool getOCMLDeviceLibraryNames(llvm::StringRef TargetProcessor,
-                               unsigned TargetWaveSize,
-                               llvm::SmallVectorImpl<std::string> &Names,
-                               std::string &Error);
+llvm::Error
+getOCMLDeviceLibraryNames(llvm::StringRef TargetProcessor,
+                          unsigned TargetWaveSize,
+                          llvm::SmallVectorImpl<std::string> &Names);
 
 } // namespace COMGR
 

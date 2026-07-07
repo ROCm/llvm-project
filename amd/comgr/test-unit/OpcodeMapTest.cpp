@@ -38,8 +38,8 @@ void ensureAMDGPURegistered() {
 TEST(DeviceLibs, SelectOCMLSupportLibrariesForGfx942) {
   llvm::SmallVector<std::string, 8> Names;
   std::string Error;
-  ASSERT_TRUE(COMGR::getOCMLDeviceLibraryNames("gfx942", 64, Names, Error))
-      << Error;
+  if (llvm::Error E = COMGR::getOCMLDeviceLibraryNames("gfx942", 64, Names))
+    FAIL() << llvm::toString(std::move(E));
 
   llvm::SmallVector<llvm::StringRef, 8> Expected = {
       "ocml.bc",
@@ -69,9 +69,9 @@ TEST(DeviceLibs, SelectOCMLSupportLibrariesForGfx942) {
 TEST(DeviceLibs, SelectOCMLSupportLibrariesForGenericGfx) {
   llvm::SmallVector<std::string, 8> Names;
   std::string Error;
-  ASSERT_TRUE(
-      COMGR::getOCMLDeviceLibraryNames("gfx9-generic", 64, Names, Error))
-      << Error;
+  if (llvm::Error E =
+          COMGR::getOCMLDeviceLibraryNames("gfx9-generic", 64, Names))
+    FAIL() << llvm::toString(std::move(E));
 
   ASSERT_EQ(Names.size(), 7u);
   EXPECT_EQ(Names[3], "oclc_isa_version_9_generic.bc");
@@ -80,18 +80,14 @@ TEST(DeviceLibs, SelectOCMLSupportLibrariesForGenericGfx) {
 TEST(DeviceLibs, SelectOCMLSupportLibrariesRejectsInvalidInputs) {
   llvm::SmallVector<std::string, 8> Names;
   std::string Error;
-  EXPECT_FALSE(COMGR::getOCMLDeviceLibraryNames("amdgcn-amd-amdhsa--gfx942",
-                                                64, Names, Error));
-  EXPECT_NE(Error.find("known AMDGPU processor"), std::string::npos)
-      << Error;
+  Error = llvm::toString(
+      COMGR::getOCMLDeviceLibraryNames("amdgcn-amd-amdhsa--gfx942", 64, Names));
+  EXPECT_NE(Error.find("known AMDGPU processor"), std::string::npos) << Error;
 
-  Error.clear();
-  EXPECT_FALSE(COMGR::getOCMLDeviceLibraryNames("gfx999", 64, Names, Error));
-  EXPECT_NE(Error.find("known AMDGPU processor"), std::string::npos)
-      << Error;
+  Error = llvm::toString(COMGR::getOCMLDeviceLibraryNames("gfx999", 64, Names));
+  EXPECT_NE(Error.find("known AMDGPU processor"), std::string::npos) << Error;
 
-  Error.clear();
-  EXPECT_FALSE(COMGR::getOCMLDeviceLibraryNames("gfx942", 96, Names, Error));
+  Error = llvm::toString(COMGR::getOCMLDeviceLibraryNames("gfx942", 96, Names));
   EXPECT_NE(Error.find("wave size 96"), std::string::npos) << Error;
 }
 
@@ -105,8 +101,8 @@ TEST(OpcodeMap, UnknownLookupBeforeBuild) {
 
 TEST(OpcodeMap, BuildOnGfx942IsBenign) {
   ensureAMDGPURegistered();
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx942"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx942"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -119,8 +115,8 @@ TEST(OpcodeMap, BuildOnGfx942IsBenign) {
 TEST(OpcodeMap, Gfx1250AddMinRealOpcodeMapsToSemOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -132,8 +128,8 @@ TEST(OpcodeMap, Gfx1250AddMinRealOpcodeMapsToSemOp) {
 TEST(OpcodeMap, Gfx1250SubNcU16RealOpcodeMapsToSemOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -151,8 +147,8 @@ TEST(OpcodeMap, Gfx1250SubNcU16RealOpcodeMapsToSemOp) {
 TEST(OpcodeMap, Gfx1250ScalarF16ToF32RealOpcodesMapToCanonicalOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -168,8 +164,8 @@ TEST(OpcodeMap, Gfx1250ScalarF16ToF32RealOpcodesMapToCanonicalOps) {
 TEST(OpcodeMap, Gfx1250VectorF32F64RealOpcodesMapToCanonicalOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -212,8 +208,8 @@ TEST(OpcodeMap, Gfx1250F64TransBothEncodingsMapToCanonicalOps) {
 TEST(OpcodeMap, Gfx1250TanhF32RealOpcodeMapsToCanonicalOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -225,8 +221,8 @@ TEST(OpcodeMap, Gfx1250TanhF32RealOpcodeMapsToCanonicalOp) {
 TEST(OpcodeMap, Gfx1250TanhF16RealOpcodeMapsToCanonicalOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -240,8 +236,8 @@ TEST(OpcodeMap, Gfx1250TanhF16RealOpcodeMapsToCanonicalOp) {
 TEST(OpcodeMap, Gfx1250AddSubNcI16RealOpcodesMapToSemOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -272,8 +268,8 @@ TEST(OpcodeMap, Gfx1250AddSubNcI16RealOpcodesMapToSemOps) {
 TEST(OpcodeMap, Gfx1250Min3RealOpcodeMapsToSemOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -285,8 +281,8 @@ TEST(OpcodeMap, Gfx1250Min3RealOpcodeMapsToSemOp) {
 TEST(OpcodeMap, Gfx1250Dot4I32IU8RealOpcodeMapsToSemOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -300,8 +296,8 @@ TEST(OpcodeMap, Gfx1250Dot4I32IU8RealOpcodeMapsToSemOp) {
 TEST(OpcodeMap, Gfx1250PkFmaF16RealOpcodeMapsToSemOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -313,8 +309,8 @@ TEST(OpcodeMap, Gfx1250PkFmaF16RealOpcodeMapsToSemOp) {
 TEST(OpcodeMap, Gfx1250PkAddF16RealOpcodeMapsToSemOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -326,8 +322,8 @@ TEST(OpcodeMap, Gfx1250PkAddF16RealOpcodeMapsToSemOp) {
 TEST(OpcodeMap, Gfx1250PkAddBF16RealOpcodeMapsToSemOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -339,8 +335,8 @@ TEST(OpcodeMap, Gfx1250PkAddBF16RealOpcodeMapsToSemOp) {
 TEST(OpcodeMap, Gfx1250PkFmaBF16RealOpcodeMapsToSemOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -352,8 +348,8 @@ TEST(OpcodeMap, Gfx1250PkFmaBF16RealOpcodeMapsToSemOp) {
 TEST(OpcodeMap, Gfx1250PkBF16SiblingsRealOpcodesMapToSemOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -369,8 +365,8 @@ TEST(OpcodeMap, Gfx1250PkBF16SiblingsRealOpcodesMapToSemOps) {
 TEST(OpcodeMap, Gfx1250FmaMixF16HalfResultRealOpcodesMapToSemOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -388,8 +384,8 @@ TEST(OpcodeMap, Gfx1250FmaMixF16HalfResultRealOpcodesMapToSemOps) {
 TEST(OpcodeMap, Gfx1250FmaMixBF16HalfResultRealOpcodesMapToSemOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -407,8 +403,8 @@ TEST(OpcodeMap, Gfx1250FmaMixBF16HalfResultRealOpcodesMapToSemOps) {
 TEST(OpcodeMap, Gfx1250MadI32I24RealOpcodeMapsToSemOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -420,8 +416,8 @@ TEST(OpcodeMap, Gfx1250MadI32I24RealOpcodeMapsToSemOp) {
 TEST(OpcodeMap, Gfx1250CvtScalef32Pk8Fp8F32RealOpcodeMapsToCanonicalOp) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -436,8 +432,8 @@ TEST(OpcodeMap, Gfx1250CvtScalef32Pk8Fp8F32RealOpcodeMapsToCanonicalOp) {
 TEST(OpcodeMap, Gfx1250Maximum3Minimum3F32RealOpcodesMapToCanonicalOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -453,8 +449,8 @@ TEST(OpcodeMap, Gfx1250Maximum3Minimum3F32RealOpcodesMapToCanonicalOps) {
 TEST(OpcodeMap, Gfx1250ScalarF32RoundingOpcodesMapToCanonicalOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -475,8 +471,8 @@ TEST(OpcodeMap, Gfx1250ScalarF32RoundingOpcodesMapToCanonicalOps) {
 TEST(OpcodeMap, Gfx1250MaximumMinimumF32RealOpcodesMapToCanonicalOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -492,8 +488,8 @@ TEST(OpcodeMap, Gfx1250MaximumMinimumF32RealOpcodesMapToCanonicalOps) {
 TEST(OpcodeMap, Gfx1250RelatedMinimumMaximumOpcodesMapToCanonicalOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);
