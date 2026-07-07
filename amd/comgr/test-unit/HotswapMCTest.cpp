@@ -305,6 +305,64 @@ TEST(AssembleDecode, CvtPkFp8LiteralSourcesDecodeAsTwelveBytes) {
   EXPECT_EQ(Inst.getOperand(5).getImm(), 1);
 }
 
+TEST(AssembleDecode, CvtPkFp8MixedLiteralSourcesDecodeAsTwelveBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Src0LiteralBytes =
+      assembleSingleInst("v_cvt_pk_fp8_f32 v4, 0x477f0000, v5 clamp", S);
+  ASSERT_EQ(Src0LiteralBytes.size(), 3u * MinInstSize);
+
+  std::vector<InternalDecodedInst> Src0LiteralDecoded;
+  ASSERT_TRUE(decodeTextSection(
+      Src0LiteralBytes.data(), Src0LiteralBytes.size(), S, Src0LiteralDecoded));
+  ASSERT_EQ(Src0LiteralDecoded.size(), 1u);
+  const llvm::MCInst &Src0LiteralInst = Src0LiteralDecoded[0].Inst;
+  ASSERT_GE(Src0LiteralInst.getNumOperands(), 7u);
+  ASSERT_TRUE(Src0LiteralInst.getOperand(2).isImm());
+  EXPECT_EQ(Src0LiteralInst.getOperand(2).getImm(), 0x477f0000);
+  EXPECT_TRUE(Src0LiteralInst.getOperand(4).isReg());
+
+  llvm::SmallVector<uint8_t> Src1LiteralBytes = assembleSingleInst(
+      "v_cvt_pk_fp8_f32 v4, v5, 0.3333333432674408 clamp", S);
+  ASSERT_EQ(Src1LiteralBytes.size(), 3u * MinInstSize);
+
+  std::vector<InternalDecodedInst> Src1LiteralDecoded;
+  ASSERT_TRUE(decodeTextSection(
+      Src1LiteralBytes.data(), Src1LiteralBytes.size(), S, Src1LiteralDecoded));
+  ASSERT_EQ(Src1LiteralDecoded.size(), 1u);
+  const llvm::MCInst &Src1LiteralInst = Src1LiteralDecoded[0].Inst;
+  ASSERT_GE(Src1LiteralInst.getNumOperands(), 7u);
+  EXPECT_TRUE(Src1LiteralInst.getOperand(2).isReg());
+  ASSERT_TRUE(Src1LiteralInst.getOperand(4).isImm());
+  EXPECT_EQ(Src1LiteralInst.getOperand(4).getImm(), 0x3eaaaaab);
+}
+
+TEST(AssembleDecode, CvtPkFp8InlineConstantsDecodeAsEightBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("v_cvt_pk_fp8_f32 v4, 1.0, 0.5 clamp", S);
+  ASSERT_EQ(Bytes.size(), 2u * MinInstSize);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  const InternalDecodedInst &DI = Decoded[0];
+  EXPECT_EQ(DI.Size, 2u * MinInstSize);
+  EXPECT_EQ(DI.Mnemonic, "v_cvt_pk_fp8_f32");
+
+  const llvm::MCInst &Inst = DI.Inst;
+  ASSERT_GE(Inst.getNumOperands(), 7u);
+  ASSERT_TRUE(Inst.getOperand(2).isImm());
+  EXPECT_EQ(Inst.getOperand(2).getImm(), 0x3f800000);
+  ASSERT_TRUE(Inst.getOperand(4).isImm());
+  EXPECT_EQ(Inst.getOperand(4).getImm(), 0x3f000000);
+  ASSERT_TRUE(Inst.getOperand(5).isImm());
+  EXPECT_EQ(Inst.getOperand(5).getImm(), 1);
+}
+
 TEST(AssembleDecode, RejectsGarbageAsm) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

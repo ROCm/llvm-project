@@ -3,7 +3,9 @@
 // COM: Creates a minimal gfx1250 code object containing v_cvt_pk_fp8_f32
 // COM: with clamp (E5M3 mode), runs the hotswap rewrite, and verifies the
 // COM: replacement sequence covers: NaN detection, base F32->F16->UE5M3
-// COM: conversion, RTE rounding, overflow clamping, and NaN override.
+// COM: conversion, RTE rounding, overflow clamping, NaN override, literal
+// COM: sources, mixed literal/register sources, non-inline fractional
+// COM: literals, and inline F32 constants.
 // COM:
 // COM: Companion tests:
 // COM:   hotswap-cvt-fp8-modifiers.s - source modifier variants
@@ -25,6 +27,9 @@
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=HIGH %s
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NOCLAMP %s
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=LITERAL %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=MIXED0 %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=MIXED1 %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=INLINE %s
 
 // ---- Kernel 1: CLAMP=1, low half (should be patched) --------------------------
 //
@@ -221,6 +226,72 @@ test_cvt_pk_fp8_literal:
 .Ltest_cvt_pk_fp8_literal_end:
 .size test_cvt_pk_fp8_literal, .Ltest_cvt_pk_fp8_literal_end-test_cvt_pk_fp8_literal
 
+// ---- Kernel 5: 12-byte literal src0, register src1 --------------------------
+
+// MIXED0-LABEL: <test_cvt_pk_fp8_literal_src0>:
+// MIXED0-NEXT:  s_branch
+// MIXED0-NEXT:  s_nop
+// MIXED0-NEXT:  s_nop
+// MIXED0-NEXT:  s_endpgm
+// MIXED0:       v_mov_b32{{.*}}0x477f0000
+// MIXED0:       v_and_b32{{.*}}0x7fffffff
+// MIXED0:       v_and_b32{{.*}}0x7fffffff, v17
+// MIXED0:       v_bfi_b32 v16,
+// MIXED0:       s_branch{{.*}}<test_cvt_pk_fp8_literal_src0+0xc>
+
+.globl test_cvt_pk_fp8_literal_src0
+.p2align 8
+.type test_cvt_pk_fp8_literal_src0,@function
+test_cvt_pk_fp8_literal_src0:
+  v_cvt_pk_fp8_f32 v16, 0x477f0000, v17 clamp
+  s_endpgm
+.Ltest_cvt_pk_fp8_literal_src0_end:
+.size test_cvt_pk_fp8_literal_src0, .Ltest_cvt_pk_fp8_literal_src0_end-test_cvt_pk_fp8_literal_src0
+
+// ---- Kernel 6: register src0, 12-byte literal src1 --------------------------
+
+// MIXED1-LABEL: <test_cvt_pk_fp8_literal_src1>:
+// MIXED1-NEXT:  s_branch
+// MIXED1-NEXT:  s_nop
+// MIXED1-NEXT:  s_nop
+// MIXED1-NEXT:  s_endpgm
+// MIXED1:       v_mov_b32{{.*}}0x3eaaaaab
+// MIXED1:       v_and_b32{{.*}}0x7fffffff, v21
+// MIXED1:       v_and_b32{{.*}}0x7fffffff
+// MIXED1:       v_bfi_b32 v20,
+// MIXED1:       s_branch{{.*}}<test_cvt_pk_fp8_literal_src1+0xc>
+
+.globl test_cvt_pk_fp8_literal_src1
+.p2align 8
+.type test_cvt_pk_fp8_literal_src1,@function
+test_cvt_pk_fp8_literal_src1:
+  v_cvt_pk_fp8_f32 v20, v21, 0.3333333432674408 clamp
+  s_endpgm
+.Ltest_cvt_pk_fp8_literal_src1_end:
+.size test_cvt_pk_fp8_literal_src1, .Ltest_cvt_pk_fp8_literal_src1_end-test_cvt_pk_fp8_literal_src1
+
+// ---- Kernel 7: inline fractional constants (8-byte encoding) ----------------
+
+// INLINE-LABEL: <test_cvt_pk_fp8_inline_constants>:
+// INLINE-NEXT:  s_branch
+// INLINE-NEXT:  s_nop
+// INLINE-NEXT:  s_endpgm
+// INLINE:       v_mov_b32{{.*}}1.0
+// INLINE-NEXT:  v_mov_b32{{.*}}0.5
+// INLINE-NEXT:  v_and_b32{{.*}}0x7fffffff
+// INLINE:       v_lshl_or_b32
+// INLINE-NEXT:  v_bfi_b32 v24,
+// INLINE:       s_branch{{.*}}<test_cvt_pk_fp8_inline_constants+0x8>
+
+.globl test_cvt_pk_fp8_inline_constants
+.p2align 8
+.type test_cvt_pk_fp8_inline_constants,@function
+test_cvt_pk_fp8_inline_constants:
+  v_cvt_pk_fp8_f32 v24, 1.0, 0.5 clamp
+  s_endpgm
+.Ltest_cvt_pk_fp8_inline_constants_end:
+.size test_cvt_pk_fp8_inline_constants, .Ltest_cvt_pk_fp8_inline_constants_end-test_cvt_pk_fp8_inline_constants
+
 .rodata
 .p2align 8
 .amdhsa_kernel test_cvt_pk_fp8_low
@@ -237,5 +308,17 @@ test_cvt_pk_fp8_literal:
 .end_amdhsa_kernel
 .amdhsa_kernel test_cvt_pk_fp8_literal
   .amdhsa_next_free_vgpr 5
+  .amdhsa_next_free_sgpr 2
+.end_amdhsa_kernel
+.amdhsa_kernel test_cvt_pk_fp8_literal_src0
+  .amdhsa_next_free_vgpr 18
+  .amdhsa_next_free_sgpr 2
+.end_amdhsa_kernel
+.amdhsa_kernel test_cvt_pk_fp8_literal_src1
+  .amdhsa_next_free_vgpr 22
+  .amdhsa_next_free_sgpr 2
+.end_amdhsa_kernel
+.amdhsa_kernel test_cvt_pk_fp8_inline_constants
+  .amdhsa_next_free_vgpr 25
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel
