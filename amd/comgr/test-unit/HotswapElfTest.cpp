@@ -190,6 +190,118 @@ TEST(ElfView, GrowWithTrampolinesShiftsAllocSectionSymbols) {
   EXPECT_EQ(KDs[0].VAddr, Obj.RodataAddr + GrowthBytes);
 }
 
+// gfx1250 "address of a global" idiom, as emitted for e.g. `x++` on a
+// __managed__/__device__ global and observed in GPU_func of the
+// Unit_hipModuleGetGlobal_Functional reproducer:
+//
+//   s_get_pc_i64 s[0:1]                         ; s[0:1] = addr of next insn
+//   s_add_nc_u64 s[0:1], s[0:1], lit64(delta)   ; s[0:1] = that addr + delta
+//
+// The 64-bit literal is baked at link time (no relocation) and encodes the
+// distance from the s_add instruction to the referenced symbol. Reading it back
+// out of .text is exactly how the hardware resolves the global's address, so it
+// is the ground truth any rewrite must keep consistent with the symbol table.
+namespace {
+constexpr uint8_t SGetPcI64SS01[4] = {0xBE, 0x80, 0x47, 0x00};
+constexpr uint8_t SAddNcU64Lit[4] = {0xA9, 0x80, 0xFE, 0x00};
+constexpr size_t GetPcOffset = 0;
+constexpr size_t AddOpOffset = 4;  // s_get_pc_i64 is one dword
+constexpr size_t Lit64Offset = 8;  // + s_add_nc_u64 opcode dword
+constexpr size_t RefSeqSize = 16;  // + 8-byte lit64
+
+// Build a .text image containing the reference idiom. The literal is computed
+// so that, loaded at TextAddr, the ISA resolves the reference to TargetVAddr.
+std::vector<uint8_t> makeTextReferencing(uint64_t TextAddr,
+                                         uint64_t TargetVAddr) {
+  std::vector<uint8_t> Text(RefSeqSize, 0);
+  std::memcpy(Text.data() + GetPcOffset, SGetPcI64SS01, sizeof(SGetPcI64SS01));
+  std::memcpy(Text.data() + AddOpOffset, SAddNcU64Lit, sizeof(SAddNcU64Lit));
+  // s_get_pc_i64 returns the address of the *following* instruction (the
+  // s_add), so the PC base the add works from is TextAddr + AddOpOffset.
+  const uint64_t PcBase = TextAddr + AddOpOffset;
+  const uint64_t Lit = TargetVAddr - PcBase;  // two's-complement; forward here
+  std::memcpy(Text.data() + Lit64Offset, &Lit, sizeof(Lit));
+  return Text;
+}
+
+// Decode the reference idiom out of a .text image loaded at TextAddr and return
+// the virtual address the ISA resolves it to.
+uint64_t decodeReferencedVAddr(const uint8_t *Text, uint64_t TextAddr) {
+  uint64_t Lit = 0;
+  std::memcpy(&Lit, Text + Lit64Offset, sizeof(Lit));
+  return TextAddr + AddOpOffset + Lit;
+}
+}  // namespace
+
+// The real invariant: after appending trampolines, the address the *ISA*
+// resolves a global reference to (decoded from the PC-relative literal in .text)
+// must equal the address the *symbol table* reports for that global. How the
+// rewrite achieves this is deliberately not constrained -- it may leave both
+// untouched, relocate the whole image uniformly, or analyze the code and patch
+// the literal to follow a moved symbol. The test only checks the end state.
+//
+// This is the ELF-layer reproduction of Unit_hipModuleGetGlobal_Functional: the
+// entry-trampoline rewrite grew .text, which shifted the referenced symbol by
+// the trampoline size while leaving the baked literal pointing at the old
+// location, so the ISA and the symbol table disagreed and the kernel
+// dereferenced the wrong address. Here the descriptor symbol lives in .rodata
+// (after .text), standing in for a global in a post-.text data section.
+//
+// This FAILS against the current implementation (ISA resolves to RodataAddr, the
+// symbol reports RodataAddr + GrowthBytes) and is expected to pass once
+// growWithTrampolines stops moving the symbol out from under the reference. It
+// is the counterpart of GrowWithTrampolinesShiftsAllocSectionSymbols above,
+// which pins the buggy shifting behavior and should be removed when the fix
+// lands.
+TEST(ElfView, GrowWithTrampolinesKeepsIsaReferenceConsistentWithSymbol) {
+  // One 256-byte entry stub (KernelEntryStubStride), matching the real
+  // Unit_hipModuleGetGlobal_Functional reproducer's 0x100 shift.
+  static constexpr uint64_t GrowthBytes = 0x100;
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  // .text (at TextAddr) references the descriptor symbol in .rodata (at
+  // RodataAddr), which sits after .text -- like a kernel referencing a global
+  // in a post-.text data section.
+  std::vector<uint8_t> Text =
+      makeTextReferencing(Opts.TextAddr, Opts.RodataAddr);
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  // Sanity: before the rewrite, the ISA reference and the symbol agree.
+  ASSERT_EQ(decodeReferencedVAddr(ViewOrErr->textData(), ViewOrErr->textAddr()),
+            Obj.RodataAddr);
+
+  Trampoline T;
+  T.Bytes.assign(GrowthBytes, 0);
+  std::vector<Trampoline> Trampolines{T};
+  const uint8_t SNop[4] = {};
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out =
+      ViewOrErr->growWithTrampolines(Trampolines, SNop);
+  ASSERT_NE(Out, nullptr);
+
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  // Decode whatever is now in .text -- the original literal, or one the rewrite
+  // patched to follow a moved symbol -- into the address the ISA resolves the
+  // reference to...
+  const uint64_t IsaResolved =
+      decodeReferencedVAddr(OutView->textData(), OutView->textAddr());
+  // ...vs. the address the symbol table now reports for the same global.
+  std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
+  ASSERT_EQ(KDs.size(), 1u);
+  const uint64_t SymbolVAddr = KDs[0].VAddr;
+
+  EXPECT_EQ(IsaResolved, SymbolVAddr);
+}
+
 TEST(ElfView, UpdateKernelDescriptorSgprCountUpdatesMetadataAndDescriptor) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
