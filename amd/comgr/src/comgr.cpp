@@ -1447,11 +1447,11 @@ amd_comgr_status_t AMD_COMGR_API
         return Status;
       }
       ScopedDataObjectReleaser LogSDOR(LogT);
-      DataObject *Log = DataObject::convert(LogT);
-      if (auto Status = Log->setName("comgr.log")) {
+      DataObject *LogData = DataObject::convert(LogT);
+      if (auto Status = LogData->setName("comgr.log")) {
         return Status;
       }
-      if (auto Status = Log->setData(LogS.str())) {
+      if (auto Status = LogData->setData(LogS.str())) {
         return Status;
       }
       if (auto Status = amd_comgr_data_set_add(ResultSet, LogT)) {

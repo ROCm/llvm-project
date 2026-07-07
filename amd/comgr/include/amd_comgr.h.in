@@ -164,10 +164,10 @@ extern "C" {
  *   by the underlying compiler and tools are always returned to the caller (and
  *   redirected when AMD_COMGR_REDIRECT_LOGS is set) regardless of this level, so
  *   a level of 0 does not necessarily produce empty output.
- *   Values outside the range are clamped to it;
- *   non-integer values are ignored. Takes precedence over
- *   AMD_COMGR_EMIT_VERBOSE_LOGS; if unset (or not an integer), defaults to 4
- *   when AMD_COMGR_EMIT_VERBOSE_LOGS is enabled, else 1.
+ *   Integers above the range are clamped to 4. Negative and non-integer values
+ *   are invalid and not supported. Takes precedence over
+ *   AMD_COMGR_EMIT_VERBOSE_LOGS; if unset (or invalid), defaults to 4 when
+ *   AMD_COMGR_EMIT_VERBOSE_LOGS is enabled, else 1.
  */
 
 /** \defgroup symbol_versions_group Symbol Versions
