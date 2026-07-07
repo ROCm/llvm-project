@@ -69,8 +69,8 @@ jobs:
           "build_variant_cmake_preset": "",
           "expect_failure": false,
           "build_pytorch": true,
-          "prebuilt_stages": "all",
-          "baseline_run_id": "28848678674"
+          "prebuilt_stages": "",
+          "baseline_run_id": ""
         }
       windows_build_config: >-
         {
@@ -84,8 +84,8 @@ jobs:
           "build_variant_cmake_preset": "windows-release",
           "expect_failure": false,
           "build_pytorch": true,
-          "prebuilt_stages": "all",
-          "baseline_run_id": "28848678674"
+          "prebuilt_stages": "",
+          "baseline_run_id": ""
         }      
       test_type: 'quick'        
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
