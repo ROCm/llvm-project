@@ -25,7 +25,7 @@
 
 namespace llvm {
 
-class GCNLaneMaskAnalysis;
+class AMDGPULaneMaskAnalysis;
 class GCNSubtarget;
 class MachineFunction;
 
@@ -106,14 +106,14 @@ inline const LaneMaskConstants &LaneMaskConstants::get(const GCNSubtarget &ST) {
 } // end namespace AMDGPU
 
 /// \brief Helper class for lane-mask related tasks.
-class GCNLaneMaskUtils {
+class AMDGPULaneMaskUtils {
 private:
   MachineFunction &MF;
   const AMDGPU::LaneMaskConstants &LMC;
 
 public:
-  GCNLaneMaskUtils() = delete;
-  explicit GCNLaneMaskUtils(MachineFunction &MF)
+  AMDGPULaneMaskUtils() = delete;
+  explicit AMDGPULaneMaskUtils(MachineFunction &MF)
       : MF(MF),
         LMC(AMDGPU::LaneMaskConstants::get(MF.getSubtarget<GCNSubtarget>())) {}
 
@@ -132,17 +132,17 @@ public:
   void buildMergeLaneMasks(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator I, const DebugLoc &DL,
                            Register DstReg, Register PrevReg, Register CurReg,
-                           GCNLaneMaskAnalysis *LMA = nullptr,
+                           AMDGPULaneMaskAnalysis *LMA = nullptr,
                            bool isPrevZeroReg = false) const;
 };
 
 /// Lazy analyses of lane masks.
-class GCNLaneMaskAnalysis {
+class AMDGPULaneMaskAnalysis {
 private:
-  GCNLaneMaskUtils LMU;
+  AMDGPULaneMaskUtils LMU;
 
 public:
-  GCNLaneMaskAnalysis(MachineFunction &MF) : LMU(MF) {}
+  AMDGPULaneMaskAnalysis(MachineFunction &MF) : LMU(MF) {}
 
   bool isSubsetOfExec(Register Reg, MachineBasicBlock &UseBlock,
                       MachineBasicBlock::iterator I,
@@ -167,7 +167,7 @@ public:
 ///    \ref getValueAtEndOfBlock. Use \ref getValueAfterMerge to query the
 ///    value just after contribution of the reset block's available value.
 ///
-class GCNLaneMaskUpdater {
+class AMDGPULaneMaskUpdater {
 public:
   enum ResetFlags {
     ResetInMiddle = (1 << 0),
@@ -175,8 +175,8 @@ public:
   };
 
 private:
-  GCNLaneMaskUtils LMU;
-  GCNLaneMaskAnalysis *LMA = nullptr;
+  AMDGPULaneMaskUtils LMU;
+  AMDGPULaneMaskAnalysis *LMA = nullptr;
 
   bool Processed = false;
 
@@ -212,9 +212,9 @@ public:
 
   SmallDenseSet<Register, 4> &getAllAccumulators() { return AllAccumulators; }
 
-  GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
+  AMDGPULaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
 
-  void setLaneMaskAnalysis(GCNLaneMaskAnalysis *Analysis) { LMA = Analysis; }
+  void setLaneMaskAnalysis(AMDGPULaneMaskAnalysis *Analysis) { LMA = Analysis; }
 
   void init();
   void cleanup();

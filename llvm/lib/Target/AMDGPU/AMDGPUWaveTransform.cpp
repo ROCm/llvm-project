@@ -1676,7 +1676,7 @@ private:
 
   MachineFunction &Function;
   ReconvergeCFGHelper &ReconvergeCfg;
-  GCNLaneMaskUtils LMU;
+  AMDGPULaneMaskUtils LMU;
   MachineRegisterInfo &MRI;
   const SIInstrInfo &TII;
 
@@ -1922,7 +1922,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
 /// establishing wave-level control flow and insert instructions for EXEC mask
 /// manipulation.
 void ControlFlowRewriter::rewrite() {
-  GCNLaneMaskAnalysis LMA(Function);
+  AMDGPULaneMaskAnalysis LMA(Function);
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
 
   Register RegAllOnes;
@@ -2069,7 +2069,7 @@ void ControlFlowRewriter::rewrite() {
   DenseMap<std::pair<MachineBasicBlock *, Register>,
            std::pair<Register, Register>>
       RegMap;
-  GCNLaneMaskUpdater Updater(Function);
+  AMDGPULaneMaskUpdater Updater(Function);
   Updater.setLaneMaskAnalysis(&LMA);
 
   for (WaveNode *LaneTarget : NodeOrder) {
@@ -2111,10 +2111,10 @@ void ControlFlowRewriter::rewrite() {
     if (!HasSingleDomOrigin) {
       // FIXME: we are creating a register here only to initialize the updater
       Updater.init();
-      Updater.addReset(*LaneTarget->Block, GCNLaneMaskUpdater::ResetInMiddle);
+      Updater.addReset(*LaneTarget->Block, AMDGPULaneMaskUpdater::ResetInMiddle);
       for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
         Updater.addReset(*NodeDivergentPair.getPointer()->Block,
-                         GCNLaneMaskUpdater::ResetAtEnd);
+                         AMDGPULaneMaskUpdater::ResetAtEnd);
       }
     }
 
@@ -2327,7 +2327,7 @@ void ControlFlowRewriter::rewrite() {
     if (!HasSingleDivergentPred) {
       // FIXME: we are creating a register here only to initialize the updater
       Updater.init();
-      Updater.addReset(*Secondary->Block, GCNLaneMaskUpdater::ResetAtEnd);
+      Updater.addReset(*Secondary->Block, AMDGPULaneMaskUpdater::ResetAtEnd);
     }
 
     Register DirectRejoin;
