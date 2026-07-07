@@ -391,37 +391,36 @@ define amdgpu_kernel void @illegal_mfma_after_rewrite() #1 {
 ; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[4:7], v[24:25], v[24:25], v[4:7]
 ; CHECK-NEXT:    v_mov_b64_e32 v[28:29], s[0:1]
 ; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[6:9], v[24:25], v[26:27], v[0:3]
-; CHECK-NEXT:    s_nop 0
-; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[0:3], v[24:25], v[28:29], v[0:3]
 ; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[6:9], v[24:25], v[24:25], v[6:9]
+; CHECK-NEXT:    s_nop 3
+; CHECK-NEXT:    v_cvt_f16_f32_e32 v23, v4
+; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[0:3], v[24:25], v[28:29], v[0:3]
 ; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[12:15], v[24:25], v[24:25], v[0:3]
-; CHECK-NEXT:    ;;#ASMSTART
-; CHECK-NEXT:    ; def v[14:17]
-; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    s_nop 5
 ; CHECK-NEXT:    v_mov_b32_e32 v8, 0x7fc00000
 ; CHECK-NEXT:    v_mov_b32_e32 v9, v8
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v8
-; CHECK-NEXT:    v_mov_b32_e32 v11, v8
+; CHECK-NEXT:    s_nop 2
 ; CHECK-NEXT:    v_cvt_f16_f32_e32 v2, v6
-; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[18:21], v[24:25], v[24:25], v[14:17]
-; CHECK-NEXT:    v_cvt_f16_f32_e32 v22, v12
+; CHECK-NEXT:    v_mov_b32_e32 v11, v8
 ; CHECK-NEXT:    v_mov_b64_e32 v[0:1], 0
+; CHECK-NEXT:    ;;#ASMSTART
+; CHECK-NEXT:    ; def v[14:17]
+; CHECK-NEXT:    ;;#ASMEND
 ; CHECK-NEXT:    global_store_short v[0:1], v2, off
 ; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[8:11], v[24:25], v[24:25], v[8:11]
+; CHECK-NEXT:    v_cvt_f16_f32_e32 v22, v12
 ; CHECK-NEXT:    buffer_wbl2 sc0 sc1
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    buffer_inv sc0 sc1
-; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[12:15], v[24:25], v[26:27], v[14:17]
+; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[2:5], v[24:25], v[26:27], v[14:17]
+; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[18:21], v[24:25], v[24:25], v[14:17]
 ; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[6:9], v[24:25], v[24:25], v[8:11]
-; CHECK-NEXT:    s_nop 1
-; CHECK-NEXT:    v_cvt_f16_f32_e32 v16, v4
-; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[2:5], v[24:25], v[24:25], v[18:21]
-; CHECK-NEXT:    s_nop 2
-; CHECK-NEXT:    v_cvt_f16_f32_e32 v10, v6
-; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[6:9], v[24:25], v[24:25], v[12:15]
-; CHECK-NEXT:    global_store_short v[0:1], v10, off
-; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[6:9], v[26:27], v[24:25], v[6:9]
+; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[2:5], v[24:25], v[24:25], v[2:5]
+; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[12:15], v[24:25], v[24:25], v[18:21]
+; CHECK-NEXT:    s_nop 4
+; CHECK-NEXT:    v_cvt_f16_f32_e32 v6, v6
+; CHECK-NEXT:    global_store_short v[0:1], v6, off
+; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[2:5], v[26:27], v[24:25], v[2:5]
 ; CHECK-NEXT:    buffer_wbl2 sc0 sc1
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    buffer_inv sc0 sc1
@@ -429,18 +428,18 @@ define amdgpu_kernel void @illegal_mfma_after_rewrite() #1 {
 ; CHECK-NEXT:    buffer_wbl2 sc0 sc1
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    buffer_inv sc0 sc1
-; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[2:5], v[28:29], v[24:25], v[2:5]
-; CHECK-NEXT:    global_store_short v[0:1], v16, off
-; CHECK-NEXT:    v_cvt_f16_f32_e32 v6, v6
+; CHECK-NEXT:    global_store_short v[0:1], v23, off
 ; CHECK-NEXT:    buffer_wbl2 sc0 sc1
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    buffer_inv sc0 sc1
+; CHECK-NEXT:    v_cvt_f16_f32_e32 v6, v2
+; CHECK-NEXT:    v_mfma_f32_16x16x16_f16 v[2:5], v[28:29], v[24:25], v[12:15]
 ; CHECK-NEXT:    global_store_short v[0:1], v6, off
-; CHECK-NEXT:    s_nop 0
-; CHECK-NEXT:    v_cvt_f16_f32_e32 v2, v2
 ; CHECK-NEXT:    buffer_wbl2 sc0 sc1
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    buffer_inv sc0 sc1
+; CHECK-NEXT:    s_nop 2
+; CHECK-NEXT:    v_cvt_f16_f32_e32 v2, v2
 ; CHECK-NEXT:    global_store_short v[0:1], v2, off
 ; CHECK-NEXT:    s_endpgm
 entry:

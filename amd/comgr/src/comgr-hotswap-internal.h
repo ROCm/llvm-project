@@ -79,6 +79,21 @@ struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
+  // When set, both edges use an s_add_pc_i64 long branch instead of s_branch
+  // (reaches anywhere, no scratch reg, no SCC). Set when the appended pool is
+  // beyond s_branch's +-128 KB reach; widens the reserved branch-back slot.
+  bool Long = false;
+};
+
+// Kernel-entry stubs are appended as normal .text growth. Keep each entry on
+// the same 256-byte alignment expected by AMDGPU kernel descriptors.
+static constexpr uint64_t KernelEntryStubStride = 256;
+static constexpr uint64_t KernelEntryInstPrefUnitBytes = 128;
+
+struct KernelDescriptorInfo {
+  std::string KernelName;
+  uint64_t VAddr = 0;
+  int64_t EntryOffset = 0;
 };
 
 struct NopSled {
@@ -111,6 +126,14 @@ static constexpr uint64_t MinNopSledSize = 8;
 
 // Minimum AMDGPU instruction size (one dword).
 static constexpr uint32_t MinInstSize = 4;
+
+// s_add_pc_i64 long-branch encoded sizes: 8 bytes for a forward (32-bit
+// literal) offset, 12 for a backward (64-bit literal) one. The back slot
+// reserves the max; unused tail bytes are s_nop-padded. emitToTrampoline picks
+// the long path only when a short s_branch cannot reach the site's exact pool
+// offset on either edge (computed from the already-queued trampolines).
+static constexpr uint32_t LongBranchFwdBytes = 8;
+static constexpr uint32_t LongBranchMaxBytes = 12;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
 // LLVMState::encodeSBranch to reject out-of-range branches before handing
@@ -189,6 +212,28 @@ public:
   /// or nullptr if not found.
   uint8_t *findKernelDescriptor(llvm::StringRef KernelName);
 
+  /// Enumerate kernel descriptor symbols named "<kernel>.kd" and read their
+  /// current kernel_code_entry_byte_offset values.
+  std::vector<KernelDescriptorInfo> kernelDescriptors() const;
+
+  /// Return the virtual address of the kernel descriptor symbol for
+  /// \p KernelName, or std::nullopt when the descriptor is not present.
+  std::optional<uint64_t>
+  getKernelDescriptorVAddr(llvm::StringRef KernelName) const;
+
+  /// Rewrite kernel_code_entry_byte_offset for \p KernelName.
+  bool updateKernelDescriptorEntryOffset(llvm::StringRef KernelName,
+                                         int64_t NewEntryOffset);
+
+  /// Ensure the kernel descriptor reserves at least \p RequiredSgprs SGPRs.
+  bool updateKernelDescriptorSgprCount(llvm::StringRef KernelName,
+                                       unsigned RequiredSgprs);
+
+  /// Read COMPUTE_PGM_RSRC3.INST_PREF_SIZE for \p KernelName.
+  std::optional<uint32_t>
+  getKernelDescriptorInstPrefSize(llvm::StringRef KernelName,
+                                  llvm::StringRef TargetCpu) const;
+
   /// Read the VGPR count from the kernel descriptor for \p KernelName.
   /// Returns std::nullopt if the descriptor is not found.
   std::optional<unsigned> getKernelVgprCount(llvm::StringRef KernelName,
@@ -213,11 +258,12 @@ public:
   getKernelStaticLdsSize(llvm::StringRef KernelName) const;
 
   /// Read the SGPR count for \p KernelName from the \c amdhsa.kernels
-  /// msgpack metadata note (\c .sgpr_count key). On GFX10+ the kernel
+  /// msgpack metadata note (\c .sgpr_count key), falling back to the kernel
+  /// descriptor when the metadata note is absent. On GFX10+ the kernel
   /// descriptor's \c GRANULATED_WAVEFRONT_SGPR_COUNT is architecturally
-  /// reserved, so this is the only reliable source.
-  /// Returns std::nullopt if the metadata note is missing or the kernel
-  /// is not found.
+  /// reserved, so metadata is the only reliable source when present.
+  /// Returns std::nullopt if the matching metadata is malformed, the kernel is
+  /// missing from present metadata, or the descriptor fallback is unavailable.
   std::optional<unsigned> getKernelSgprCount(llvm::StringRef KernelName) const;
 
   /// Update the RSRC1 VGPR granule count in the kernel descriptor for
@@ -336,6 +382,16 @@ struct LLVMState {
   /// round-trips.
   llvm::MCInst VNopInst;
 
+  /// MC opcodes for the kernel-entry stub sequence, resolved once at
+  /// initLLVM() time by parsing representative asm snippets. The idempotency
+  /// matcher compares decoded opcodes against these cached values instead of
+  /// matching disassembled mnemonic strings.
+  unsigned GlobalWbOpcode = 0;
+  unsigned SGetPcI64Opcode = 0;
+  unsigned SAddU32Opcode = 0;
+  unsigned SAddcU32Opcode = 0;
+  unsigned SSetPcI64Opcode = 0;
+
   bool Valid = false;
 
   /// Encode a relative `s_branch` from \p FromOffset to \p ToOffset and
@@ -380,10 +436,18 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 llvm::SmallVector<uint8_t> assembleSingleInst(llvm::StringRef AsmStr,
                                               const LLVMState &LS);
 
+/// Join \p AsmLines into a single newline-terminated assembly source string,
+/// as expected by assembleSingleInst (which accepts multiple instructions).
+std::string joinAsmLines(llvm::ArrayRef<std::string> AsmLines);
+
 /// Assemble \p AsmLines and append a branch-back to the next instruction
 /// after the original (\p OriginalOffset + \p OriginalSize). The branch-back
 /// is encoded via LLVMState::encodeSBranch, so no ISA-specific opcode needs
 /// to flow in from the caller.
+///
+/// NOTE: no production caller remains (WMMA-split now defers edge encoding to
+/// emitToTrampoline / fixupTrampolineBranches). Kept only as a self-contained
+/// helper exercised by the unit tests; prefer emitToTrampoline for new code.
 Trampoline buildTrampoline(llvm::ArrayRef<std::string> AsmLines,
                            uint64_t OriginalOffset, uint32_t OriginalSize,
                            uint64_t TrampolineTextOffset, const LLVMState &LS);
@@ -563,6 +627,13 @@ struct PatchContext {
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     llvm::ArrayRef<uint8_t> Replacement);
+
+// Encode an s_add_pc_i64 PC-relative long branch from \p FromOffset to
+// \p TargetOffset (.text byte offsets). Exposed for unit testing the offset
+// math / encoding. Returns empty on failure.
+llvm::SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS,
+                                            uint64_t FromOffset,
+                                            uint64_t TargetOffset);
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement);
@@ -630,20 +701,65 @@ HotswapPatchVTable &getHotswapPatchVTable();
 #include "comgr-hotswap-patches.def"
 #undef HOTSWAP_PATCH
 
-// -- Function declarations (B0-to-A0 policy layer) ----------------------------
+// -- Function declarations (kernel-entry trampoline pass) ---------------------
 
-/// Run the full GFX1250 B0-to-A0 rewrite pipeline on \p ElfData / \p ElfSize.
+struct KernelEntryTrampolineFixup {
+  std::string KernelName;
+  uint64_t StubTextOffset = 0;
+  unsigned RequiredSgprs = 0;
+};
+
+/// Build a 256-byte, entry-aligned HotSwap kernel-entry stub at
+/// \p StubVAddr that jumps to \p EntryVAddr using PC-relative address
+/// materialization. Returns an empty vector if MC assembly fails.
+llvm::SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
+                                                      uint64_t EntryVAddr,
+                                                      unsigned ScratchSgpr,
+                                                      const LLVMState &LS);
+
+/// Structural matcher for the entry stubs produced by
+/// buildKernelEntryTrampoline, used to keep the rewrite idempotent.
+bool isKernelEntryTrampoline(llvm::ArrayRef<uint8_t> Bytes,
+                             const LLVMState &LS);
+
+/// Compute the trailing readable guard needed after an appended kernel-entry
+/// stub pool so CP instruction prefetches from the last stub cannot run past
+/// mapped .text bytes.
+uint64_t computeKernelEntryPrefetchGuardBytes(uint32_t InstPrefLines);
+
+/// Append one entry stub per kernel descriptor that does not already target a
+/// HotSwap entry stub. The stubs are appended to \p Growth and descriptor
+/// rewrites are recorded in \p OutFixups for application after ELF growth.
+std::optional<uint32_t> appendKernelEntryTrampolines(
+    const ElfView &Elf, const LLVMState &LS, unsigned MaxSgprs,
+    std::vector<Trampoline> &Growth,
+    std::vector<KernelEntryTrampolineFixup> &OutFixups);
+
+/// Apply descriptor entry-offset rewrites recorded by
+/// appendKernelEntryTrampolines after the ELF has been grown.
+bool rewriteKernelEntryDescriptorOffsets(
+    llvm::WritableMemoryBuffer &OutBuf, uint64_t OldTextSize,
+    llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
+
+// -- Function declarations (GFX1250 hotswap policy layer) ---------------------
+
+struct Gfx1250RewriteOptions {
+  bool RunB0A0Patches = true;
+  bool RunEntryTrampolines = false;
+};
+
+/// Run the selected GFX1250 hotswap rewrite passes on \p ElfData / \p ElfSize.
 /// \p TargetIdent is the parsed target ISA (produced upstream by Comgr's
-/// parseTargetIdentifier()); it is threaded into the MC init so the subtarget
-/// triple and feature flags are preserved rather than being reconstructed
-/// from just the processor name. On success \p Out is populated with an owned
-/// buffer containing the rewritten code object. The caller can transfer the
-/// buffer directly to a comgr DataObject via
-/// DataObject::setData(std::unique_ptr<MemoryBuffer>).
-amd_comgr_status_t
-retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
-                       const TargetIdentifier &TargetIdent,
-                       std::unique_ptr<llvm::MemoryBuffer> &Out);
+/// parseTargetIdentifier() or the hotswap-local stepping parser); it is
+/// threaded into the MC init so the subtarget triple and feature flags are
+/// preserved rather than being reconstructed from just the processor name. On
+/// success \p Out is populated with an owned buffer containing the rewritten
+/// code object. The caller can transfer the buffer directly to a comgr
+/// DataObject via DataObject::setData(std::unique_ptr<MemoryBuffer>).
+amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
+                                      const TargetIdentifier &TargetIdent,
+                                      const Gfx1250RewriteOptions &Options,
+                                      std::unique_ptr<llvm::MemoryBuffer> &Out);
 
 } // namespace hotswap
 } // namespace COMGR

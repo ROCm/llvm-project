@@ -58,14 +58,16 @@ define amdgpu_kernel void @zextload_i1_to_i32_trunc_cmp_eq_0(ptr addrspace(1) %o
 ; SI-NEXT:    s_mov_b32 s4, s2
 ; SI-NEXT:    s_mov_b32 s5, s3
 ; SI-NEXT:    buffer_load_ubyte v0, off, s[4:7], 0
-; SI-NEXT:    s_mov_b32 s4, s0
-; SI-NEXT:    s_mov_b32 s5, s1
+; SI-NEXT:    s_mov_b32 s2, s6
+; SI-NEXT:    s_mov_b32 s3, s7
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_and_b32_e32 v0, 1, v0
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; SI-NEXT:    s_xor_b64 s[0:1], vcc, -1
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[0:1]
-; SI-NEXT:    buffer_store_byte v0, off, s[4:7], 0
+; SI-NEXT:    s_xor_b64 s[4:5], vcc, -1
+; SI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; SI-NEXT:    s_cselect_b32 s4, 1, 0
+; SI-NEXT:    v_mov_b32_e32 v0, s4
+; SI-NEXT:    buffer_store_byte v0, off, s[0:3], 0
 ; SI-NEXT:    s_endpgm
 ;
 ; VI-LABEL: zextload_i1_to_i32_trunc_cmp_eq_0:
@@ -77,14 +79,16 @@ define amdgpu_kernel void @zextload_i1_to_i32_trunc_cmp_eq_0(ptr addrspace(1) %o
 ; VI-NEXT:    s_mov_b32 s4, s2
 ; VI-NEXT:    s_mov_b32 s5, s3
 ; VI-NEXT:    buffer_load_ubyte v0, off, s[4:7], 0
-; VI-NEXT:    s_mov_b32 s4, s0
-; VI-NEXT:    s_mov_b32 s5, s1
+; VI-NEXT:    s_mov_b32 s2, s6
+; VI-NEXT:    s_mov_b32 s3, s7
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    v_and_b32_e32 v0, 1, v0
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; VI-NEXT:    s_xor_b64 s[0:1], vcc, -1
-; VI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[0:1]
-; VI-NEXT:    buffer_store_byte v0, off, s[4:7], 0
+; VI-NEXT:    s_xor_b64 s[4:5], vcc, -1
+; VI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; VI-NEXT:    s_cselect_b32 s4, 1, 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
+; VI-NEXT:    buffer_store_byte v0, off, s[0:3], 0
 ; VI-NEXT:    s_endpgm
   %load = load i1, ptr addrspace(1) %in
   %ext = zext i1 %load to i32
@@ -341,14 +345,16 @@ define amdgpu_kernel void @zextload_i1_to_i32_trunc_cmp_ne_1(ptr addrspace(1) %o
 ; SI-NEXT:    s_mov_b32 s4, s2
 ; SI-NEXT:    s_mov_b32 s5, s3
 ; SI-NEXT:    buffer_load_ubyte v0, off, s[4:7], 0
-; SI-NEXT:    s_mov_b32 s4, s0
-; SI-NEXT:    s_mov_b32 s5, s1
+; SI-NEXT:    s_mov_b32 s2, s6
+; SI-NEXT:    s_mov_b32 s3, s7
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_and_b32_e32 v0, 1, v0
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; SI-NEXT:    s_xor_b64 s[0:1], vcc, -1
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[0:1]
-; SI-NEXT:    buffer_store_byte v0, off, s[4:7], 0
+; SI-NEXT:    s_xor_b64 s[4:5], vcc, -1
+; SI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; SI-NEXT:    s_cselect_b32 s4, 1, 0
+; SI-NEXT:    v_mov_b32_e32 v0, s4
+; SI-NEXT:    buffer_store_byte v0, off, s[0:3], 0
 ; SI-NEXT:    s_endpgm
 ;
 ; VI-LABEL: zextload_i1_to_i32_trunc_cmp_ne_1:
@@ -360,14 +366,16 @@ define amdgpu_kernel void @zextload_i1_to_i32_trunc_cmp_ne_1(ptr addrspace(1) %o
 ; VI-NEXT:    s_mov_b32 s4, s2
 ; VI-NEXT:    s_mov_b32 s5, s3
 ; VI-NEXT:    buffer_load_ubyte v0, off, s[4:7], 0
-; VI-NEXT:    s_mov_b32 s4, s0
-; VI-NEXT:    s_mov_b32 s5, s1
+; VI-NEXT:    s_mov_b32 s2, s6
+; VI-NEXT:    s_mov_b32 s3, s7
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    v_and_b32_e32 v0, 1, v0
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; VI-NEXT:    s_xor_b64 s[0:1], vcc, -1
-; VI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[0:1]
-; VI-NEXT:    buffer_store_byte v0, off, s[4:7], 0
+; VI-NEXT:    s_xor_b64 s[4:5], vcc, -1
+; VI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; VI-NEXT:    s_cselect_b32 s4, 1, 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
+; VI-NEXT:    buffer_store_byte v0, off, s[0:3], 0
 ; VI-NEXT:    s_endpgm
   %load = load i1, ptr addrspace(1) %in
   %ext = zext i1 %load to i32

@@ -143,7 +143,9 @@ define amdgpu_kernel void @test_vopc_class(ptr addrspace(1) %out, float %x) #0 {
 ; GFX1032-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX1032-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX1032-NEXT:    v_cmp_class_f32_e64 s2, s2, 0x204
-; GFX1032-NEXT:    v_cndmask_b32_e64 v1, 0, 1, s2
+; GFX1032-NEXT:    s_and_b32 s2, s2, exec_lo
+; GFX1032-NEXT:    s_cselect_b32 s2, 1, 0
+; GFX1032-NEXT:    v_mov_b32_e32 v1, s2
 ; GFX1032-NEXT:    global_store_dword v0, v1, s[0:1]
 ; GFX1032-NEXT:    s_endpgm
 ;
@@ -155,7 +157,9 @@ define amdgpu_kernel void @test_vopc_class(ptr addrspace(1) %out, float %x) #0 {
 ; GFX1064-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX1064-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX1064-NEXT:    v_cmp_class_f32_e64 s[2:3], s2, 0x204
-; GFX1064-NEXT:    v_cndmask_b32_e64 v1, 0, 1, s[2:3]
+; GFX1064-NEXT:    s_and_b64 s[2:3], s[2:3], exec
+; GFX1064-NEXT:    s_cselect_b32 s2, 1, 0
+; GFX1064-NEXT:    v_mov_b32_e32 v1, s2
 ; GFX1064-NEXT:    global_store_dword v0, v1, s[0:1]
 ; GFX1064-NEXT:    s_endpgm
   %fabs = tail call float @llvm.fabs.f32(float %x)
