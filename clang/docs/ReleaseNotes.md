@@ -299,6 +299,9 @@ latest release, please see the [Clang Web Site](https://clang.llvm.org) or the
 - Clang now recognizes the C23 `H`, `D`, and `DD` length modifiers in
   format strings and diagnoses their use because Clang does not yet support
   the corresponding decimal floating-point types, `_Decimal32`, `_Decimal64`, and `_Decimal128`. (#GH116962)
+- Fixed a bug with deducing qualified inferred types with `auto`. `auto` can now
+  be combined with `restrict` or `_Atomic` to form a properly-qualified type. (#GH207466)
+
 
 ### Objective-C Language Changes
 
@@ -622,6 +625,10 @@ latest release, please see the [Clang Web Site](https://clang.llvm.org) or the
   ```
 
 - Improved `-Wassign-enum` performance by caching enum enumerator values. (#GH176454)
+
+- Clang now emits `-Wpsabi` diagnostics for externally visible x86-64
+  function definitions that return or take AVX or AVX-512 vector types without
+  enabling the corresponding target feature.
 
 - Fixed a false negative in `-Warray-bounds` where the warning was suppressed
   when accessing a member function on a past-the-end array element.
