@@ -60,12 +60,24 @@ concurrency:
   # queued and in-progress runs for the same PR (presubmit) or commit
   # (postsubmit). The workflow name is prepended to avoid conflicts between
   # different workflows.
-  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   setup:
-    # Temporary remove of the CI skip for LLVM revision update
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request &&
+       !(
+         contains(github.event.pull_request.labels.*.name, 'ci:skip') &&
+         (
+           contains(github.event.pull_request.title, 'Update LLVM_MAIN_REVISION') ||
+           (
+             contains(github.event.pull_request.body, 'Automated update of') &&
+             contains(github.event.pull_request.body, 'LLVM_MAIN_REVISION')
+           )
+         )
+       ))    
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
