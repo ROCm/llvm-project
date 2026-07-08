@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 --stress-regalloc=10 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 --stress-regalloc=10 < %s | FileCheck -check-prefix=GCN %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 --stress-regalloc=10 < %s | FileCheck -check-prefix=GCN %s
 
 ; Rematerialization test for fp64 constants (w/ intentionally high register pressure).
