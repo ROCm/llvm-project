@@ -255,6 +255,12 @@ extern "C" {
  */
 #define AMD_COMGR_VERSION_3_4
 
+/**
+ * The function was introduced or changed in version 3.5 of the interface
+ * and has the symbol version string of ``"@amd_comgr_NAME@_3.5"``.
+ */
+#define AMD_COMGR_VERSION_3_5
+
 /** @} */
 
 /**
@@ -1491,11 +1497,10 @@ typedef struct {
  * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES
  * Unable to update action info object as out of resources.
  */
-amd_comgr_status_t AMD_COMGR_API
-amd_comgr_action_info_set_package_entry_ids(
-  amd_comgr_action_info_t action_info,
-  const amd_comgr_target_id_t package_entry_ids[],
-  size_t count) AMD_COMGR_VERSION_3_1;
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_set_package_entry_ids(
+    amd_comgr_action_info_t action_info,
+    const amd_comgr_target_id_t package_entry_ids[],
+    size_t count) AMD_COMGR_VERSION_3_5;
 
 /**
  * @brief Get number of package entry IDs
@@ -1517,8 +1522,7 @@ amd_comgr_action_info_set_package_entry_ids(
  */
 amd_comgr_status_t AMD_COMGR_API
 amd_comgr_action_info_get_package_entry_id_count(
-  amd_comgr_action_info_t action_info,
-  size_t *count) AMD_COMGR_VERSION_3_1;
+    amd_comgr_action_info_t action_info, size_t *count) AMD_COMGR_VERSION_3_5;
 
 /**
  * @brief Fetch the Nth package entry ID (its triple and arch) or their lengths.
@@ -1552,14 +1556,9 @@ amd_comgr_action_info_get_package_entry_id_count(
  * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES
  * Unable to update the data object as out of resources.
  */
-amd_comgr_status_t AMD_COMGR_API
-amd_comgr_action_info_get_package_entry_id(
-  amd_comgr_action_info_t action_info,
-  size_t index,
-  size_t *triple_size,
-  char *triple,
-  size_t *arch_size,
-  char *arch) AMD_COMGR_VERSION_3_1;
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_package_entry_id(
+    amd_comgr_action_info_t action_info, size_t index, size_t *triple_size,
+    char *triple, size_t *arch_size, char *arch) AMD_COMGR_VERSION_3_5;
 
 /**
  * @brief Set whether the specified action should use an 
