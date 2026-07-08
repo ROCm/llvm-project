@@ -212,7 +212,10 @@ jobs:
       - name: Generate failed log summaries
         if: ${{ !cancelled() }}
         run: |
+<<<<<<< HEAD
           python3 build_tools/github_actions/detect_failed_logs.py
+=======
+>>>>>>> 538b84730ebc (Just to check the other ci)
           if [[ "${{ github.ref }}" == "refs/heads/amd-feature/wave-transform" ]] || \
              [[ "${{ github.head_ref }}" == "amd-feature/wave-transform" ]] || \
              [[ "${{ github.base_ref }}" == "amd-feature/wave-transform" ]]; then
