@@ -662,8 +662,8 @@ define amdgpu_kernel void @s_and_multi_use_constant_i64(ptr addrspace(1) %out, i
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    s_mov_b32 s4, s0
 ; GFX6-NEXT:    s_mov_b32 s5, s1
-; GFX6-NEXT:    s_movk_i32 s1, 0x80
 ; GFX6-NEXT:    s_mov_b32 s0, 0x80000
+; GFX6-NEXT:    s_movk_i32 s1, 0x80
 ; GFX6-NEXT:    s_and_b64 s[2:3], s[2:3], s[0:1]
 ; GFX6-NEXT:    v_mov_b32_e32 v0, s2
 ; GFX6-NEXT:    s_and_b64 s[0:1], s[8:9], s[0:1]
@@ -685,8 +685,8 @@ define amdgpu_kernel void @s_and_multi_use_constant_i64(ptr addrspace(1) %out, i
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-NEXT:    s_mov_b32 s4, s0
 ; GFX8-NEXT:    s_mov_b32 s5, s1
-; GFX8-NEXT:    s_movk_i32 s1, 0x80
 ; GFX8-NEXT:    s_mov_b32 s0, 0x80000
+; GFX8-NEXT:    s_movk_i32 s1, 0x80
 ; GFX8-NEXT:    s_and_b64 s[2:3], s[2:3], s[0:1]
 ; GFX8-NEXT:    v_mov_b32_e32 v0, s2
 ; GFX8-NEXT:    s_and_b64 s[0:1], s[8:9], s[0:1]

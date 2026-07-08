@@ -1964,10 +1964,17 @@ define amdgpu_ps half @test_fmax_f16_v_ieee_off(half %a, half %b) #0 {
 ; GFX9-NEXT:    v_max_f16_e32 v0, v0, v1
 ; GFX9-NEXT:    ; return to shader part epilog
 ;
-; GFX12-LABEL: test_fmax_f16_v_ieee_off:
-; GFX12:       ; %bb.0:
-; GFX12-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v1.l
-; GFX12-NEXT:    ; return to shader part epilog
+; GFX12-SDAG-LABEL: test_fmax_f16_v_ieee_off:
+; GFX12-SDAG:       ; %bb.0:
+; GFX12-SDAG-NEXT:    v_mov_b16_e32 v0.h, v1.l
+; GFX12-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-SDAG-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-SDAG-NEXT:    ; return to shader part epilog
+;
+; GFX12-GISEL-LABEL: test_fmax_f16_v_ieee_off:
+; GFX12-GISEL:       ; %bb.0:
+; GFX12-GISEL-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v1.l
+; GFX12-GISEL-NEXT:    ; return to shader part epilog
   %val = call half @llvm.maxnum.f16(half %a, half %b)
   ret half %val
 }

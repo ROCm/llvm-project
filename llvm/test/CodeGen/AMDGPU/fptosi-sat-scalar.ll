@@ -1068,8 +1068,8 @@ define i64 @test_signed_i64_f64(double %f) nounwind {
 ; GFX7-ISEL-NEXT:    s_mov_b32 s8, 0
 ; GFX7-ISEL-NEXT:    s_mov_b32 s9, 0xc1f00000
 ; GFX7-ISEL-NEXT:    s_mov_b32 s5, 0xc3e00000
-; GFX7-ISEL-NEXT:    s_mov_b32 s7, 0x43dfffff
 ; GFX7-ISEL-NEXT:    s_mov_b32 s6, -1
+; GFX7-ISEL-NEXT:    s_mov_b32 s7, 0x43dfffff
 ; GFX7-ISEL-NEXT:    v_bfrev_b32_e32 v6, 1
 ; GFX7-ISEL-NEXT:    v_ldexp_f64 v[4:5], v[2:3], s4
 ; GFX7-ISEL-NEXT:    s_mov_b32 s4, 0
@@ -1127,8 +1127,8 @@ define i64 @test_signed_i64_f64(double %f) nounwind {
 ; GFX9-NEXT:    s_mov_b32 s8, 0
 ; GFX9-NEXT:    s_mov_b32 s9, 0xc1f00000
 ; GFX9-NEXT:    s_mov_b32 s5, 0xc3e00000
-; GFX9-NEXT:    s_mov_b32 s7, 0x43dfffff
 ; GFX9-NEXT:    s_mov_b32 s6, -1
+; GFX9-NEXT:    s_mov_b32 s7, 0x43dfffff
 ; GFX9-NEXT:    v_bfrev_b32_e32 v6, 1
 ; GFX9-NEXT:    v_ldexp_f64 v[4:5], v[2:3], s4
 ; GFX9-NEXT:    s_mov_b32 s4, 0

@@ -388,7 +388,6 @@
 ; GCN-O3-NEXT:        Rename Disconnected Subregister Components
 ; GCN-O3-NEXT:        Rewrite Partial Register Uses
 ; GCN-O3-NEXT:        Machine Instruction Scheduler
-; GCN-O3-NEXT:        AMDGPU Pre-RA optimizations
 ; GCN-O3-NEXT:        SI Form memory clauses
 ; GCN-O3-NEXT:        AMDGPU Pre-RA Long Branch Reg
 ; GCN-O3-NEXT:        AMDGPU Lower Strict WQM Operations
@@ -416,6 +415,7 @@
 ; GCN-O3-NEXT:        SI optimize exec mask operations pre-RA
 ; GCN-O3-NEXT:        Machine Natural Loop Construction
 ; GCN-O3-NEXT:        Register Coalescer
+; GCN-O3-NEXT:        AMDGPU Pre-RA optimizations
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        Debug Variable Analysis
 ; GCN-O3-NEXT:        Live Stack Slot Analysis
