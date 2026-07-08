@@ -6363,18 +6363,20 @@ define float @v_log10_f32_from_fpext_math_f16(i16 %src0.i, i16 %src1.i) {
 ; GFX1100-SDAG-TRUE16-LABEL: v_log10_f32_from_fpext_math_f16:
 ; GFX1100-SDAG-TRUE16:       ; %bb.0:
 ; GFX1100-SDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1100-SDAG-TRUE16-NEXT:    v_add_f16_e32 v0.l, v0.l, v1.l
+; GFX1100-SDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
 ; GFX1100-SDAG-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1100-SDAG-TRUE16-NEXT:    v_add_f16_e32 v0.l, v0.l, v0.h
 ; GFX1100-SDAG-TRUE16-NEXT:    v_cvt_f32_f16_e32 v0, v0.l
+; GFX1100-SDAG-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_2)
 ; GFX1100-SDAG-TRUE16-NEXT:    v_log_f32_e32 v0, v0
 ; GFX1100-SDAG-TRUE16-NEXT:    s_waitcnt_depctr depctr_va_vdst(0)
 ; GFX1100-SDAG-TRUE16-NEXT:    v_mul_f32_e32 v1, 0x3e9a209a, v0
 ; GFX1100-SDAG-TRUE16-NEXT:    v_cmp_gt_f32_e64 vcc_lo, 0x7f800000, |v0|
-; GFX1100-SDAG-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1100-SDAG-TRUE16-NEXT:    v_fma_f32 v2, 0x3e9a209a, v0, -v1
-; GFX1100-SDAG-TRUE16-NEXT:    v_fmamk_f32 v2, v0, 0x3284fbcf, v2
 ; GFX1100-SDAG-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1100-SDAG-TRUE16-NEXT:    v_fmamk_f32 v2, v0, 0x3284fbcf, v2
 ; GFX1100-SDAG-TRUE16-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX1100-SDAG-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1100-SDAG-TRUE16-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc_lo
 ; GFX1100-SDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;

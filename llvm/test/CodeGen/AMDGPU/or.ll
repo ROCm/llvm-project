@@ -265,8 +265,8 @@ define amdgpu_kernel void @scalar_or_literal_multi_use_i64(ptr addrspace(1) %out
 ; GFX6-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; GFX6-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x13
 ; GFX6-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x1d
-; GFX6-NEXT:    s_mov_b32 s9, 0xf237b
 ; GFX6-NEXT:    s_movk_i32 s8, 0x3039
+; GFX6-NEXT:    s_mov_b32 s9, 0xf237b
 ; GFX6-NEXT:    s_mov_b32 s3, 0xf000
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
@@ -288,8 +288,8 @@ define amdgpu_kernel void @scalar_or_literal_multi_use_i64(ptr addrspace(1) %out
 ; GFX8-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX8-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x4c
 ; GFX8-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x74
-; GFX8-NEXT:    s_mov_b32 s9, 0xf237b
 ; GFX8-NEXT:    s_movk_i32 s8, 0x3039
+; GFX8-NEXT:    s_mov_b32 s9, 0xf237b
 ; GFX8-NEXT:    s_mov_b32 s3, 0xf000
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]

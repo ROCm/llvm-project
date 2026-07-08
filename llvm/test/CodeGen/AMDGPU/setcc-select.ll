@@ -177,8 +177,8 @@ define i32 @select.bad.vgpr.ule(i64 %mask, i32 %a, i32 %b) {
 ; CHECK-LABEL: select.bad.vgpr.ule:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    s_mov_b32 s5, 0xaaaaaaaa
 ; CHECK-NEXT:    s_mov_b32 s4, 1
+; CHECK-NEXT:    s_mov_b32 s5, 0xaaaaaaaa
 ; CHECK-NEXT:    v_cmp_gt_u64_e32 vcc, s[4:5], v[0:1]
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
@@ -191,8 +191,8 @@ define i32 @select.bad.vgpr.ult(i64 %mask, i32 %a, i32 %b) {
 ; CHECK-LABEL: select.bad.vgpr.ult:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    s_mov_b32 s5, 0xaaaaaaaa
 ; CHECK-NEXT:    s_mov_b32 s4, -1
+; CHECK-NEXT:    s_mov_b32 s5, 0xaaaaaaaa
 ; CHECK-NEXT:    v_cmp_gt_u64_e32 vcc, s[4:5], v[0:1]
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]

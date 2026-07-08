@@ -4585,7 +4585,9 @@ define half @v_clamp_f16_minimumnum_maximumnum_foldable_source(half %a, half %b)
 ; GFX11-TRUE16-LABEL: v_clamp_f16_minimumnum_maximumnum_foldable_source:
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_add_f16_e64 v0.l, v0.l, v1.l clamp
+; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-TRUE16-NEXT:    v_add_f16_e64 v0.l, v0.l, v0.h clamp
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_clamp_f16_minimumnum_maximumnum_foldable_source:
@@ -4601,7 +4603,9 @@ define half @v_clamp_f16_minimumnum_maximumnum_foldable_source(half %a, half %b)
 ; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_add_f16_e64 v0.l, v0.l, v1.l clamp
+; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
+; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-TRUE16-NEXT:    v_add_f16_e64 v0.l, v0.l, v0.h clamp
 ; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: v_clamp_f16_minimumnum_maximumnum_foldable_source:
@@ -4650,7 +4654,9 @@ define half @v_clamp_f16_minimumnum_maximumnum_no_ieee_foldable_source(half %a, 
 ; GFX11-TRUE16-LABEL: v_clamp_f16_minimumnum_maximumnum_no_ieee_foldable_source:
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_add_f16_e64 v0.l, v0.l, v1.l clamp
+; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-TRUE16-NEXT:    v_add_f16_e64 v0.l, v0.l, v0.h clamp
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_clamp_f16_minimumnum_maximumnum_no_ieee_foldable_source:
@@ -4666,7 +4672,9 @@ define half @v_clamp_f16_minimumnum_maximumnum_no_ieee_foldable_source(half %a, 
 ; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_add_f16_e64 v0.l, v0.l, v1.l clamp
+; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
+; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-TRUE16-NEXT:    v_add_f16_e64 v0.l, v0.l, v0.h clamp
 ; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: v_clamp_f16_minimumnum_maximumnum_no_ieee_foldable_source:

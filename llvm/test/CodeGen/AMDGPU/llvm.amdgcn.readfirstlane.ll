@@ -366,8 +366,7 @@ define amdgpu_kernel void @test_readfirstlane_imm_i32(ptr addrspace(1) %out) #0 
 define amdgpu_kernel void @test_readfirstlane_imm_i64(ptr addrspace(1) %out) #0 {
 ; CHECK-SDAG-LABEL: test_readfirstlane_imm_i64:
 ; CHECK-SDAG:       ; %bb.0:
-; CHECK-SDAG-NEXT:    s_mov_b32 s1, 0
-; CHECK-SDAG-NEXT:    s_mov_b32 s0, 32
+; CHECK-SDAG-NEXT:    s_mov_b64 s[0:1], 32
 ; CHECK-SDAG-NEXT:    ;;#ASMSTART
 ; CHECK-SDAG-NEXT:    ; use s[0:1]
 ; CHECK-SDAG-NEXT:    ;;#ASMEND
@@ -388,8 +387,8 @@ define amdgpu_kernel void @test_readfirstlane_imm_i64(ptr addrspace(1) %out) #0 
 define amdgpu_kernel void @test_readfirstlane_imm_f64(ptr addrspace(1) %out) #0 {
 ; CHECK-SDAG-LABEL: test_readfirstlane_imm_f64:
 ; CHECK-SDAG:       ; %bb.0:
-; CHECK-SDAG-NEXT:    s_mov_b32 s1, 0x40400000
 ; CHECK-SDAG-NEXT:    s_mov_b32 s0, 0
+; CHECK-SDAG-NEXT:    s_mov_b32 s1, 0x40400000
 ; CHECK-SDAG-NEXT:    ;;#ASMSTART
 ; CHECK-SDAG-NEXT:    ; use s[0:1]
 ; CHECK-SDAG-NEXT:    ;;#ASMEND

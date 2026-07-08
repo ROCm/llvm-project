@@ -1111,10 +1111,10 @@ define double @fmul_pow_shl_cnt_fail_maybe_bad_exp(i64 %cnt) nounwind {
 ; VI:       ; %bb.0:
 ; VI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; VI-NEXT:    v_lshlrev_b64 v[0:1], v0, 1
-; VI-NEXT:    s_mov_b32 s5, 0x7befffff
+; VI-NEXT:    s_mov_b32 s4, 0xff5f3992
 ; VI-NEXT:    v_cvt_f64_u32_e32 v[1:2], v1
 ; VI-NEXT:    v_cvt_f64_u32_e32 v[3:4], v0
-; VI-NEXT:    s_mov_b32 s4, 0xff5f3992
+; VI-NEXT:    s_mov_b32 s5, 0x7befffff
 ; VI-NEXT:    v_ldexp_f64 v[1:2], v[1:2], 32
 ; VI-NEXT:    v_add_f64 v[0:1], v[1:2], v[3:4]
 ; VI-NEXT:    v_mul_f64 v[0:1], v[0:1], s[4:5]
@@ -1160,8 +1160,8 @@ define double @fmul_pow_shl_cnt_safe(i16 %cnt) nounwind {
 ; VI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; VI-NEXT:    v_lshlrev_b16_e64 v0, v0, 1
 ; VI-NEXT:    v_cvt_f64_u32_e32 v[0:1], v0
-; VI-NEXT:    s_mov_b32 s5, 0x7befffff
 ; VI-NEXT:    s_mov_b32 s4, 0xff5f3992
+; VI-NEXT:    s_mov_b32 s5, 0x7befffff
 ; VI-NEXT:    v_mul_f64 v[0:1], v[0:1], s[4:5]
 ; VI-NEXT:    s_setpc_b64 s[30:31]
 ;

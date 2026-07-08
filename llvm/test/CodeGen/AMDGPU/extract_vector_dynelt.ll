@@ -362,8 +362,8 @@ define amdgpu_kernel void @half4_extelt(ptr addrspace(1) %out, i32 %sel) {
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GCN-NEXT:    s_load_dword s4, s[4:5], 0x2c
-; GCN-NEXT:    s_mov_b32 s3, 0x44004200
 ; GCN-NEXT:    s_mov_b32 s2, 0x40003c00
+; GCN-NEXT:    s_mov_b32 s3, 0x44004200
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    s_lshl_b32 s4, s4, 4
@@ -1851,8 +1851,8 @@ define amdgpu_kernel void @byte8_extelt(ptr addrspace(1) %out, i32 %sel) {
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_load_dword s6, s[4:5], 0x2c
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; GCN-NEXT:    s_mov_b32 s3, 0x8070605
 ; GCN-NEXT:    s_mov_b32 s2, 0x4030201
+; GCN-NEXT:    s_mov_b32 s3, 0x8070605
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_lshl_b32 s4, s6, 3
 ; GCN-NEXT:    s_lshr_b64 s[2:3], s[2:3], s4

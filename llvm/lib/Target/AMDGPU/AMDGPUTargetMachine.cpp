@@ -1815,7 +1815,8 @@ void GCNPassConfig::addOptimizedRegAlloc() {
   if (EnableRewritePartialRegUses)
     insertPass(&RenameIndependentSubregsID, &GCNRewritePartialRegUsesID);
 
-  if (isPassEnabled(EnablePreRAOptimizations))
+  // LWT runs pre-RA opts later, before SGPR alloc.
+  if (isPassEnabled(EnablePreRAOptimizations) && !LateWaveTransform)
     insertPass(&MachineSchedulerID, &GCNPreRAOptimizationsID);
 
   // Allow the scheduler to run before SIWholeQuadMode inserts exec manipulation
@@ -2029,6 +2030,11 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     // Now we can perform register-coalescing on remaining copies,
     // mainly sgpr copies and wwm-vgpr copies.
     addPass(&RegisterCoalescerID);
+
+    // SGPR copies are coalesced here in LWT; fuse split 64-bit constants
+    // into a rematerializable S_MOV_B64_IMM_PSEUDO so they aren't spilled.
+    if (isPassEnabled(EnablePreRAOptimizations))
+      addPass(&GCNPreRAOptimizationsID);
   }
   
   addPass(createSGPRAllocPass(true));

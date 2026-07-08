@@ -10,54 +10,54 @@ define double @v_exp_f64(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_f64:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -147,47 +147,47 @@ define double @v_exp_f64(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_f64:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -265,47 +265,47 @@ define double @v_exp_f64(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_f64:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -387,26 +387,26 @@ define <2 x double> @v_exp_v2f64(<2 x double> %in) #0 {
 ; SI-SDAG-LABEL: v_exp_v2f64:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[4:5], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s28, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v16, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v7, s28, v16, v5
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[8:9], v[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s7, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s6, -1
+; SI-SDAG-NEXT:    s_mov_b32 s7, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[7:8], v[8:9], -v[6:7]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[4:5]|, s[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s8, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v5, v8, v5, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v4, v7, v4, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s8, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[7:8], v[4:5], s[8:9], v[0:1]
 ; SI-SDAG-NEXT:    v_mul_f64 v[14:15], v[2:3], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s11, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s10, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s11, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[10:11], v[7:8]
 ; SI-SDAG-NEXT:    v_bfi_b32 v7, s28, v16, v15
 ; SI-SDAG-NEXT:    v_add_f64 v[16:17], v[14:15], v[6:7]
@@ -417,41 +417,41 @@ define <2 x double> @v_exp_v2f64(<2 x double> %in) #0 {
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v10, s12
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v7, v7, v15, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v6, v6, v14, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s14, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v11, s13
 ; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], s[8:9], v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], s[14:15], v[10:11]
-; SI-SDAG-NEXT:    s_mov_b32 s13, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s12, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s13, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], s[10:11], v[14:15]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], v[12:13], s[12:13]
-; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s16, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[14:15], s[14:15], v[10:11]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], v[12:13], s[16:17]
-; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s18, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[14:15], v[10:11], s[12:13]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], v[12:13], s[18:19]
-; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s20, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[14:15], v[10:11], s[16:17]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], v[12:13], s[20:21]
-; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s22, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[14:15], v[10:11], s[18:19]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], v[12:13], s[22:23]
-; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s24, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[14:15], v[10:11], s[20:21]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], v[12:13], s[24:25]
-; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s26, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[14:15], v[10:11], s[22:23]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], v[12:13], s[26:27]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v16, v[4:5]
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[14:15], v[10:11], s[24:25]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], v[12:13], s[4:5]
@@ -583,14 +583,14 @@ define <2 x double> @v_exp_v2f64(<2 x double> %in) #0 {
 ; VI-SDAG-LABEL: v_exp_v2f64:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[4:5], v[0:1], s[4:5]
 ; VI-SDAG-NEXT:    v_mul_f64 v[6:7], v[2:3], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
-; VI-SDAG-NEXT:    s_mov_b32 s7, 0xbc7abc9e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s7, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s8, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[4:5], v[4:5]
@@ -601,8 +601,8 @@ define <2 x double> @v_exp_v2f64(<2 x double> %in) #0 {
 ; VI-SDAG-NEXT:    s_mov_b32 s9, 0xc090cc00
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[4:5], v[0:1]
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], s[4:5], v[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[6:7], v[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], s[6:7], v[10:11]
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v4, v[4:5]
@@ -613,36 +613,36 @@ define <2 x double> @v_exp_v2f64(<2 x double> %in) #0 {
 ; VI-SDAG-NEXT:    v_cmp_nlt_f64_e64 s[6:7], s[6:7], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], s[4:5], v[12:13]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], s[4:5], v[12:13]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
 ; VI-SDAG-NEXT:    v_cmp_ngt_f64_e64 s[4:5], s[8:9], v[0:1]
@@ -749,14 +749,14 @@ define <2 x double> @v_exp_v2f64(<2 x double> %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_v2f64:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[4:5], v[0:1], s[4:5]
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[6:7], v[2:3], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
-; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xbc7abc9e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s8, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[4:5], v[4:5]
@@ -767,8 +767,8 @@ define <2 x double> @v_exp_v2f64(<2 x double> %in) #0 {
 ; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[4:5], v[0:1]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], s[4:5], v[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[6:7], v[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], s[6:7], v[10:11]
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v4, v[4:5]
@@ -779,36 +779,36 @@ define <2 x double> @v_exp_v2f64(<2 x double> %in) #0 {
 ; GFX900-SDAG-NEXT:    v_cmp_nlt_f64_e64 s[6:7], s[6:7], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], s[4:5], v[12:13]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], s[4:5], v[12:13]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], v[14:15], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[4:5]
 ; GFX900-SDAG-NEXT:    v_cmp_ngt_f64_e64 s[4:5], s[8:9], v[0:1]
@@ -919,56 +919,56 @@ define <3 x double> @v_exp_v3f64(<3 x double> %in) #0 {
 ; SI-SDAG-LABEL: v_exp_v3f64:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s7, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s6, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s7, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[8:9], v[0:1], s[6:7]
 ; SI-SDAG-NEXT:    s_brev_b32 s46, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v10, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v7, s46, v10, v9
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[11:12], v[8:9], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s9, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s8, -1
+; SI-SDAG-NEXT:    s_mov_b32 s9, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[11:12], v[11:12], -v[6:7]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[8:9]|, s[8:9]
-; SI-SDAG-NEXT:    s_mov_b32 s11, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s10, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v12, v12, v9, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v11, v11, v8, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s10, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s11, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[7:8], v[11:12], s[10:11], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s13, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s12, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s13, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e928af3
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[11:12], s[12:13], v[7:8]
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v9, s5
-; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s14, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v8, s4
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], s[14:15], v[8:9]
-; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s16, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], v[15:16], s[16:17]
-; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s18, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], v[15:16], s[18:19]
-; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s20, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], v[15:16], s[20:21]
-; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s22, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], v[15:16], s[22:23]
-; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s24, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], v[15:16], s[24:25]
-; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s26, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], v[15:16], s[26:27]
-; SI-SDAG-NEXT:    s_mov_b32 s29, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s28, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s29, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], v[15:16], s[28:29]
-; SI-SDAG-NEXT:    s_mov_b32 s41, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s40, 11
+; SI-SDAG-NEXT:    s_mov_b32 s41, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], v[15:16], s[40:41]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v7, v[11:12]
 ; SI-SDAG-NEXT:    v_fma_f64 v[15:16], v[13:14], v[15:16], 1.0
@@ -1172,43 +1172,43 @@ define <3 x double> @v_exp_v3f64(<3 x double> %in) #0 {
 ; VI-SDAG-LABEL: v_exp_v3f64:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[6:7], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mul_f64 v[8:9], v[2:3], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s8, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s11, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s10, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[6:7], v[6:7]
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v13, s11
-; VI-SDAG-NEXT:    s_mov_b32 s13, 0x3e5ade15
-; VI-SDAG-NEXT:    v_rndne_f64_e32 v[8:9], v[8:9]
 ; VI-SDAG-NEXT:    s_mov_b32 s12, 0x6a5dcb37
+; VI-SDAG-NEXT:    v_rndne_f64_e32 v[8:9], v[8:9]
+; VI-SDAG-NEXT:    s_mov_b32 s13, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v12, s10
-; VI-SDAG-NEXT:    s_mov_b32 s11, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s10, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s11, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], s[6:7], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s15, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s14, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s15, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], s[6:7], v[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s17, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s16, 0x14761f6e
-; VI-SDAG-NEXT:    s_mov_b32 s19, 0x3f56c16c
+; VI-SDAG-NEXT:    s_mov_b32 s17, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s18, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s19, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], s[8:9], v[10:11]
-; VI-SDAG-NEXT:    s_mov_b32 s21, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s20, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s21, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], s[8:9], v[14:15]
-; VI-SDAG-NEXT:    s_mov_b32 s23, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s22, 0x555502a1
-; VI-SDAG-NEXT:    s_mov_b32 s25, 0x3fc55555
+; VI-SDAG-NEXT:    s_mov_b32 s23, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s24, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s25, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[16:17], v[10:11], s[12:13], v[12:13]
-; VI-SDAG-NEXT:    s_mov_b32 s27, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s26, 11
+; VI-SDAG-NEXT:    s_mov_b32 s27, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[18:19], v[14:15], s[12:13], v[12:13]
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v20, v[6:7]
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v21, v[8:9]
@@ -1384,43 +1384,43 @@ define <3 x double> @v_exp_v3f64(<3 x double> %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_v3f64:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[6:7], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[8:9], v[2:3], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s8, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s11, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s10, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[6:7], v[6:7]
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v13, s11
-; GFX900-SDAG-NEXT:    s_mov_b32 s13, 0x3e5ade15
-; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[8:9], v[8:9]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s12, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[8:9], v[8:9]
+; GFX900-SDAG-NEXT:    s_mov_b32 s13, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v12, s10
-; GFX900-SDAG-NEXT:    s_mov_b32 s11, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s10, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s11, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], s[6:7], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s15, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s14, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s15, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], s[6:7], v[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s17, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s16, 0x14761f6e
-; GFX900-SDAG-NEXT:    s_mov_b32 s19, 0x3f56c16c
+; GFX900-SDAG-NEXT:    s_mov_b32 s17, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s18, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s19, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], s[8:9], v[10:11]
-; GFX900-SDAG-NEXT:    s_mov_b32 s21, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s20, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s21, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[8:9], s[8:9], v[14:15]
-; GFX900-SDAG-NEXT:    s_mov_b32 s23, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s22, 0x555502a1
-; GFX900-SDAG-NEXT:    s_mov_b32 s25, 0x3fc55555
+; GFX900-SDAG-NEXT:    s_mov_b32 s23, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s24, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s25, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[16:17], v[10:11], s[12:13], v[12:13]
-; GFX900-SDAG-NEXT:    s_mov_b32 s27, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s26, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s27, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[18:19], v[14:15], s[12:13], v[12:13]
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v20, v[6:7]
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v21, v[8:9]
@@ -1600,16 +1600,16 @@ define <4 x double> @v_exp_v4f64(<4 x double> %in) #0 {
 ; SI-SDAG-LABEL: v_exp_v4f64:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s7, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s6, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s7, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[10:11], v[0:1], s[6:7]
 ; SI-SDAG-NEXT:    s_brev_b32 s46, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v18, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v9, s46, v18, v11
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v8, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[12:13], v[10:11], v[8:9]
-; SI-SDAG-NEXT:    s_mov_b32 s9, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s8, -1
+; SI-SDAG-NEXT:    s_mov_b32 s9, 0x432fffff
 ; SI-SDAG-NEXT:    v_mul_f64 v[14:15], v[2:3], s[6:7]
 ; SI-SDAG-NEXT:    v_add_f64 v[12:13], v[12:13], -v[8:9]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[10:11]|, s[8:9]
@@ -1619,51 +1619,51 @@ define <4 x double> @v_exp_v4f64(<4 x double> %in) #0 {
 ; SI-SDAG-NEXT:    v_add_f64 v[12:13], v[14:15], v[8:9]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[14:15]|, s[8:9]
 ; SI-SDAG-NEXT:    v_add_f64 v[12:13], v[12:13], -v[8:9]
-; SI-SDAG-NEXT:    s_mov_b32 s11, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s10, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v13, v13, v15, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v12, v12, v14, vcc
 ; SI-SDAG-NEXT:    v_mul_f64 v[14:15], v[4:5], s[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s10, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s11, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_bfi_b32 v9, s46, v18, v15
 ; SI-SDAG-NEXT:    v_add_f64 v[16:17], v[14:15], v[8:9]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[14:15]|, s[8:9]
 ; SI-SDAG-NEXT:    v_add_f64 v[16:17], v[16:17], -v[8:9]
-; SI-SDAG-NEXT:    s_mov_b32 s13, 0xbc7abc9e
+; SI-SDAG-NEXT:    s_mov_b32 s12, 0x3b39803f
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v15, v17, v15, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v14, v16, v14, vcc
 ; SI-SDAG-NEXT:    v_fma_f64 v[16:17], v[10:11], s[10:11], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s12, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s13, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e928af3
 ; SI-SDAG-NEXT:    v_fma_f64 v[19:20], v[10:11], s[12:13], v[16:17]
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v17, s5
-; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
-; SI-SDAG-NEXT:    s_mov_b32 s14, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s16, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v16, s4
-; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], s[14:15], v[16:17]
-; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3ec71dee
-; SI-SDAG-NEXT:    s_mov_b32 s16, 0x623fde64
-; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], s[16:17]
-; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3efa0199
+; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], s[16:17], v[16:17]
+; SI-SDAG-NEXT:    s_mov_b32 s14, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3ec71dee
+; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], s[14:15]
 ; SI-SDAG-NEXT:    s_mov_b32 s18, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], s[18:19]
-; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s20, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], s[20:21]
-; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s22, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], s[22:23]
-; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s24, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], s[24:25]
-; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s26, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], s[26:27]
-; SI-SDAG-NEXT:    s_mov_b32 s29, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s28, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s29, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], s[28:29]
-; SI-SDAG-NEXT:    s_mov_b32 s41, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s40, 11
+; SI-SDAG-NEXT:    s_mov_b32 s41, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], s[40:41]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v9, v[10:11]
 ; SI-SDAG-NEXT:    v_fma_f64 v[21:22], v[19:20], v[21:22], 1.0
@@ -1679,9 +1679,9 @@ define <4 x double> @v_exp_v4f64(<4 x double> %in) #0 {
 ; SI-SDAG-NEXT:    v_fma_f64 v[0:1], v[12:13], s[12:13], v[0:1]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v19, 0x7ff00000
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v20, v19, v10, vcc
-; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], s[14:15], v[16:17]
+; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], s[16:17], v[16:17]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v12, v[12:13]
-; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], v[10:11], s[16:17]
+; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], v[10:11], s[14:15]
 ; SI-SDAG-NEXT:    s_and_b64 vcc, s[4:5], vcc
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], v[10:11], s[18:19]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], v[10:11], s[20:21]
@@ -1709,16 +1709,16 @@ define <4 x double> @v_exp_v4f64(<4 x double> %in) #0 {
 ; SI-SDAG-NEXT:    v_add_f64 v[14:15], v[12:13], v[8:9]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[12:13]|, s[8:9]
 ; SI-SDAG-NEXT:    v_add_f64 v[8:9], v[14:15], -v[8:9]
-; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[10:11], s[14:15], v[16:17]
+; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[10:11], s[16:17], v[16:17]
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v9, v9, v13, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v8, v8, v12, vcc
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], s[10:11], v[6:7]
-; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[10:11], v[14:15], s[16:17]
+; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[10:11], v[14:15], s[14:15]
 ; SI-SDAG-NEXT:    v_fma_f64 v[12:13], v[8:9], s[12:13], v[12:13]
 ; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[10:11], v[14:15], s[18:19]
-; SI-SDAG-NEXT:    v_fma_f64 v[16:17], v[12:13], s[14:15], v[16:17]
+; SI-SDAG-NEXT:    v_fma_f64 v[16:17], v[12:13], s[16:17], v[16:17]
 ; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[10:11], v[14:15], s[20:21]
-; SI-SDAG-NEXT:    v_fma_f64 v[16:17], v[12:13], v[16:17], s[16:17]
+; SI-SDAG-NEXT:    v_fma_f64 v[16:17], v[12:13], v[16:17], s[14:15]
 ; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[10:11], v[14:15], s[22:23]
 ; SI-SDAG-NEXT:    v_fma_f64 v[16:17], v[12:13], v[16:17], s[18:19]
 ; SI-SDAG-NEXT:    v_fma_f64 v[14:15], v[10:11], v[14:15], s[24:25]
@@ -1910,38 +1910,38 @@ define <4 x double> @v_exp_v4f64(<4 x double> %in) #0 {
 ; VI-SDAG-LABEL: v_exp_v4f64:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s17, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s16, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s17, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[8:9], v[0:1], s[16:17]
-; VI-SDAG-NEXT:    s_mov_b32 s19, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s18, 0xfefa39ef
-; VI-SDAG-NEXT:    s_mov_b32 s21, 0xbc7abc9e
+; VI-SDAG-NEXT:    s_mov_b32 s19, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s20, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s21, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfca7ab0c
-; VI-SDAG-NEXT:    s_mov_b32 s23, 0x3e5ade15
-; VI-SDAG-NEXT:    v_rndne_f64_e32 v[10:11], v[8:9]
 ; VI-SDAG-NEXT:    s_mov_b32 s22, 0x6a5dcb37
-; VI-SDAG-NEXT:    s_mov_b32 s25, 0x3ec71dee
+; VI-SDAG-NEXT:    v_rndne_f64_e32 v[10:11], v[8:9]
+; VI-SDAG-NEXT:    s_mov_b32 s23, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s24, 0x623fde64
-; VI-SDAG-NEXT:    s_mov_b32 s27, 0x3efa0199
+; VI-SDAG-NEXT:    s_mov_b32 s25, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s26, 0x7c89e6b0
-; VI-SDAG-NEXT:    s_mov_b32 s29, 0x3f2a01a0
+; VI-SDAG-NEXT:    s_mov_b32 s27, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s28, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s29, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[10:11], s[18:19], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s41, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s40, 0x1852b7b0
-; VI-SDAG-NEXT:    s_mov_b32 s43, 0x3f811111
+; VI-SDAG-NEXT:    s_mov_b32 s41, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s42, 0x11122322
-; VI-SDAG-NEXT:    s_mov_b32 s45, 0x3fa55555
+; VI-SDAG-NEXT:    s_mov_b32 s43, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s44, 0x555502a1
-; VI-SDAG-NEXT:    s_mov_b32 s47, 0x3fc55555
+; VI-SDAG-NEXT:    s_mov_b32 s45, 0x3fa55555
+; VI-SDAG-NEXT:    s_mov_b32 s46, 0x55555511
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], s[20:21], v[8:9]
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v9, s5
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v8, s4
-; VI-SDAG-NEXT:    s_mov_b32 s46, 0x55555511
-; VI-SDAG-NEXT:    s_mov_b32 s57, 0x3fe00000
+; VI-SDAG-NEXT:    s_mov_b32 s47, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s56, 11
+; VI-SDAG-NEXT:    s_mov_b32 s57, 0x3fe00000
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v10, v[10:11]
 ; VI-SDAG-NEXT:    s_mov_b32 s58, 0
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[12:13], s[22:23], v[8:9]
@@ -2168,38 +2168,38 @@ define <4 x double> @v_exp_v4f64(<4 x double> %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_v4f64:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s17, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s16, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s17, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[8:9], v[0:1], s[16:17]
-; GFX900-SDAG-NEXT:    s_mov_b32 s19, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s18, 0xfefa39ef
-; GFX900-SDAG-NEXT:    s_mov_b32 s21, 0xbc7abc9e
+; GFX900-SDAG-NEXT:    s_mov_b32 s19, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s20, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s21, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfca7ab0c
-; GFX900-SDAG-NEXT:    s_mov_b32 s23, 0x3e5ade15
-; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[10:11], v[8:9]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s22, 0x6a5dcb37
-; GFX900-SDAG-NEXT:    s_mov_b32 s25, 0x3ec71dee
+; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[10:11], v[8:9]
+; GFX900-SDAG-NEXT:    s_mov_b32 s23, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s24, 0x623fde64
-; GFX900-SDAG-NEXT:    s_mov_b32 s27, 0x3efa0199
+; GFX900-SDAG-NEXT:    s_mov_b32 s25, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s26, 0x7c89e6b0
-; GFX900-SDAG-NEXT:    s_mov_b32 s29, 0x3f2a01a0
+; GFX900-SDAG-NEXT:    s_mov_b32 s27, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s28, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s29, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[10:11], s[18:19], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s41, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s40, 0x1852b7b0
-; GFX900-SDAG-NEXT:    s_mov_b32 s43, 0x3f811111
+; GFX900-SDAG-NEXT:    s_mov_b32 s41, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s42, 0x11122322
-; GFX900-SDAG-NEXT:    s_mov_b32 s45, 0x3fa55555
+; GFX900-SDAG-NEXT:    s_mov_b32 s43, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s44, 0x555502a1
-; GFX900-SDAG-NEXT:    s_mov_b32 s47, 0x3fc55555
+; GFX900-SDAG-NEXT:    s_mov_b32 s45, 0x3fa55555
+; GFX900-SDAG-NEXT:    s_mov_b32 s46, 0x55555511
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], s[20:21], v[8:9]
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v9, s5
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v8, s4
-; GFX900-SDAG-NEXT:    s_mov_b32 s46, 0x55555511
-; GFX900-SDAG-NEXT:    s_mov_b32 s57, 0x3fe00000
+; GFX900-SDAG-NEXT:    s_mov_b32 s47, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s56, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s57, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v10, v[10:11]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s58, 0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[12:13], s[22:23], v[8:9]
@@ -2437,48 +2437,48 @@ define amdgpu_ps <2 x i32> @s_exp_f64(double inreg %in) #0 {
 ; SI-SDAG-NEXT:    v_bfi_b32 v3, s2, v2, v1
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v2, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[0:1], v[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s2, -1
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[2:3], v[4:5], -v[2:3]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[0:1]|, s[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s2, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v1, v3, v1, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v3, s1
-; SI-SDAG-NEXT:    s_mov_b32 s2, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v2, s0
 ; SI-SDAG-NEXT:    v_fma_f64 v[2:3], v[0:1], s[2:3], v[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[2:3], v[0:1], s[2:3], v[2:3]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v5, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s2, 11
+; SI-SDAG-NEXT:    s_mov_b32 s3, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v6, v[0:1]
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], 1.0
@@ -2584,44 +2584,44 @@ define amdgpu_ps <2 x i32> @s_exp_f64(double inreg %in) #0 {
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v1, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[0:1], s[0:1], v[0:1]
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v3, s1
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v4, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v5, 0x3e928af3
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0x7ff00000
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[0:1], v[0:1]
 ; VI-SDAG-NEXT:    v_fma_f64 v[2:3], v[0:1], s[2:3], v[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[2:3], v[0:1], s[2:3], v[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v0, v[0:1]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[2:3], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s2, 11
+; VI-SDAG-NEXT:    s_mov_b32 s3, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], 1.0
 ; VI-SDAG-NEXT:    v_fma_f64 v[2:3], v[2:3], v[4:5], 1.0
@@ -2707,44 +2707,44 @@ define amdgpu_ps <2 x i32> @s_exp_f64(double inreg %in) #0 {
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v1, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[0:1], s[0:1], v[0:1]
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v3, s1
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v4, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v5, 0x3e928af3
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0x7ff00000
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[0:1], v[0:1]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[2:3], v[0:1], s[2:3], v[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[2:3], v[0:1], s[2:3], v[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v0, v[0:1]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[2:3], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
-; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s2, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s3, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], s[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], v[4:5], 1.0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[2:3], v[2:3], v[4:5], 1.0
@@ -2836,27 +2836,27 @@ define amdgpu_ps <4 x i32> @s_exp_v2f64(<2 x double> inreg %in) #0 {
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v1, s5
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], s[2:3], v[0:1]
-; SI-SDAG-NEXT:    s_brev_b32 s26, -2
+; SI-SDAG-NEXT:    s_brev_b32 s28, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v12, 0x43300000
-; SI-SDAG-NEXT:    v_bfi_b32 v5, s26, v12, v3
+; SI-SDAG-NEXT:    v_bfi_b32 v5, s28, v12, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[5:6], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s6, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v6, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v5, v2, vcc
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, s3
-; SI-SDAG-NEXT:    s_mov_b32 s6, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v5, s2
 ; SI-SDAG-NEXT:    v_fma_f64 v[5:6], v[2:3], s[6:7], v[5:6]
 ; SI-SDAG-NEXT:    v_mul_f64 v[0:1], s[0:1], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s8, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[2:3], s[8:9], v[5:6]
-; SI-SDAG-NEXT:    v_bfi_b32 v5, s26, v12, v1
+; SI-SDAG-NEXT:    v_bfi_b32 v5, s28, v12, v1
 ; SI-SDAG-NEXT:    v_add_f64 v[12:13], v[0:1], v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[0:1]|, s[4:5]
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[12:13], -v[4:5]
@@ -2868,42 +2868,42 @@ define amdgpu_ps <4 x i32> @s_exp_v2f64(<2 x double> inreg %in) #0 {
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[0:1], s[6:7], v[4:5]
 ; SI-SDAG-NEXT:    s_mov_b32 s11, 0x3e928af3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v8, s10
-; SI-SDAG-NEXT:    s_mov_b32 s13, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s12, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s13, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v9, s11
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[0:1], s[8:9], v[4:5]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], s[12:13], v[8:9]
-; SI-SDAG-NEXT:    s_mov_b32 s11, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s10, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s11, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[12:13], v[8:9]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], v[10:11], s[10:11]
-; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s14, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], v[8:9], s[10:11]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], v[10:11], s[14:15]
-; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s16, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], v[8:9], s[14:15]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], v[10:11], s[16:17]
-; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s18, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v12, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[2:3], v[4:5], v[8:9], s[16:17]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], v[10:11], s[18:19]
-; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s20, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[2:3], v[4:5], v[2:3], s[18:19]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], v[10:11], s[20:21]
-; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s22, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[2:3], v[4:5], v[2:3], s[20:21]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], v[10:11], s[22:23]
-; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s24, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[2:3], v[4:5], v[2:3], s[22:23]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], v[10:11], s[24:25]
-; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s26, 11
+; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[2:3], v[4:5], v[2:3], s[24:25]
 ; SI-SDAG-NEXT:    v_fma_f64 v[10:11], v[6:7], v[10:11], s[26:27]
 ; SI-SDAG-NEXT:    v_fma_f64 v[2:3], v[4:5], v[2:3], s[26:27]
@@ -3063,24 +3063,24 @@ define amdgpu_ps <4 x i32> @s_exp_v2f64(<2 x double> inreg %in) #0 {
 ; VI-SDAG-NEXT:    v_mul_f64 v[0:1], s[0:1], v[0:1]
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v5, s3
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, s1
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v4, s2
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, s0
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[0:1], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s7, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0x3b39803f
-; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3e5ade15
+; VI-SDAG-NEXT:    s_mov_b32 s7, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s8, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[0:1], s[4:5], v[6:7]
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v9, s5
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v8, s4
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[6:7], v[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[0:1], s[6:7], v[6:7]
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
@@ -3089,32 +3089,32 @@ define amdgpu_ps <4 x i32> @s_exp_v2f64(<2 x double> inreg %in) #0 {
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], s[8:9], v[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], 1.0
@@ -3242,24 +3242,24 @@ define amdgpu_ps <4 x i32> @s_exp_v2f64(<2 x double> inreg %in) #0 {
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[0:1], s[0:1], v[0:1]
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, s1
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v4, s2
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, s0
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[0:1], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0x3b39803f
-; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3e5ade15
+; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s8, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[0:1], s[4:5], v[6:7]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v9, s5
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v8, s4
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[6:7], v[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[0:1], s[6:7], v[6:7]
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
@@ -3268,32 +3268,32 @@ define amdgpu_ps <4 x i32> @s_exp_v2f64(<2 x double> inreg %in) #0 {
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], s[8:9], v[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[6:7], v[8:9], s[4:5]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[4:5], v[10:11], 1.0
@@ -3428,50 +3428,50 @@ define amdgpu_ps <6 x i32> @s_exp_v3f64(<3 x double> inreg %in) #0 {
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s33, v15, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s11, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s10, -1
+; SI-SDAG-NEXT:    s_mov_b32 s11, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[5:6], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[10:11]
-; SI-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s8, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v6, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v5, v2, vcc
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, s5
-; SI-SDAG-NEXT:    s_mov_b32 s8, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v5, s4
 ; SI-SDAG-NEXT:    v_fma_f64 v[5:6], v[2:3], s[8:9], v[5:6]
-; SI-SDAG-NEXT:    s_mov_b32 s13, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s12, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s13, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s7, 0x3e928af3
 ; SI-SDAG-NEXT:    v_fma_f64 v[5:6], v[2:3], s[12:13], v[5:6]
 ; SI-SDAG-NEXT:    s_mov_b32 s6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v8, s7
-; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s14, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, s6
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], s[14:15], v[7:8]
-; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s16, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], v[9:10], s[16:17]
-; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s18, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], v[9:10], s[18:19]
-; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s20, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], v[9:10], s[20:21]
-; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s22, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], v[9:10], s[22:23]
-; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s24, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], v[9:10], s[24:25]
-; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s26, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], v[9:10], s[26:27]
-; SI-SDAG-NEXT:    s_mov_b32 s29, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s28, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s29, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], v[9:10], s[28:29]
-; SI-SDAG-NEXT:    s_mov_b32 s31, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s30, 11
+; SI-SDAG-NEXT:    s_mov_b32 s31, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], v[9:10], s[30:31]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v11, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[9:10], v[5:6], v[9:10], 1.0
@@ -3720,8 +3720,8 @@ define amdgpu_ps <6 x i32> @s_exp_v3f64(<3 x double> inreg %in) #0 {
 ; VI-SDAG-NEXT:    v_mul_f64 v[0:1], s[0:1], v[0:1]
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, s5
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v9, s3
-; VI-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, s4
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[4:5], v[4:5]
@@ -3729,57 +3729,57 @@ define amdgpu_ps <6 x i32> @s_exp_v3f64(<3 x double> inreg %in) #0 {
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v8, s2
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v11, s1
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v10, s0
-; VI-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s8, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[2:3], s[6:7], v[6:7]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[6:7], v[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], s[6:7], v[10:11]
 ; VI-SDAG-NEXT:    s_mov_b32 s11, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s10, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v13, s11
-; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[2:3], s[8:9], v[6:7]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[8:9], v[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], s[8:9], v[10:11]
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v12, s10
-; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s8, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], s[6:7], v[12:13]
 ; VI-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], s[6:7], v[12:13]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], s[6:7], v[12:13]
-; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[8:9]
-; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s8, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[6:7]
 ; VI-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[6:7]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[8:9]
-; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s8, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[6:7]
 ; VI-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[6:7]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[8:9]
-; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s8, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s9, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[6:7]
 ; VI-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[6:7]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 11
+; VI-SDAG-NEXT:    s_mov_b32 s7, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[8:9]
 ; VI-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[8:9]
@@ -3951,8 +3951,8 @@ define amdgpu_ps <6 x i32> @s_exp_v3f64(<3 x double> inreg %in) #0 {
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[0:1], s[0:1], v[0:1]
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, s5
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v9, s3
-; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, s4
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[4:5], v[4:5]
@@ -3960,57 +3960,57 @@ define amdgpu_ps <6 x i32> @s_exp_v3f64(<3 x double> inreg %in) #0 {
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v8, s2
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v11, s1
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v10, s0
-; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s8, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[2:3], s[6:7], v[6:7]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[6:7], v[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], s[6:7], v[10:11]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s11, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s10, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v13, s11
-; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[2:3], s[8:9], v[6:7]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[8:9], v[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[10:11], v[0:1], s[8:9], v[10:11]
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v12, s10
-; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s8, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], s[6:7], v[12:13]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], s[6:7], v[12:13]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], s[6:7], v[12:13]
-; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[8:9]
-; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s8, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[6:7]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[6:7]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[8:9]
-; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s8, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[6:7]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[6:7]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[8:9]
-; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s8, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[6:7]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[6:7]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[14:15], v[6:7], v[14:15], s[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[16:17], v[8:9], v[16:17], s[8:9]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[12:13], v[10:11], v[12:13], s[8:9]
@@ -4188,20 +4188,20 @@ define amdgpu_ps <8 x i32> @s_exp_v4f64(<4 x double> inreg %in) #0 {
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s33, v19, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s15, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s14, -1
+; SI-SDAG-NEXT:    s_mov_b32 s15, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[5:6], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[14:15]
-; SI-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s8, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v6, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v5, v2, vcc
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v5, s6
-; SI-SDAG-NEXT:    s_mov_b32 s8, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, s7
 ; SI-SDAG-NEXT:    v_fma_f64 v[5:6], v[2:3], s[8:9], v[5:6]
 ; SI-SDAG-NEXT:    v_mul_f64 v[8:9], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s11, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s10, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s11, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[2:3], s[10:11], v[5:6]
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s33, v19, v9
 ; SI-SDAG-NEXT:    v_add_f64 v[10:11], v[8:9], v[4:5]
@@ -4217,38 +4217,38 @@ define amdgpu_ps <8 x i32> @s_exp_v4f64(<4 x double> inreg %in) #0 {
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v15, s16
 ; SI-SDAG-NEXT:    v_add_f64 v[13:14], v[13:14], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[11:12]|, s[14:15]
-; SI-SDAG-NEXT:    s_mov_b32 s13, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s12, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s13, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v16, s17
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v12, v14, v12, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v11, v13, v11, vcc
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[6:7], s[12:13], v[15:16]
-; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s16, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s17, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[6:7], v[13:14], s[16:17]
-; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s18, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s19, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[6:7], v[13:14], s[18:19]
-; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s20, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s21, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[6:7], v[13:14], s[20:21]
-; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s22, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s23, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[6:7], v[13:14], s[22:23]
-; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s24, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s25, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[6:7], v[13:14], s[24:25]
-; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s26, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s27, 0x3fa55555
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v18, s5
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[6:7], v[13:14], s[26:27]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v17, s4
-; SI-SDAG-NEXT:    s_mov_b32 s29, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s28, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s29, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[17:18], v[8:9], s[8:9], v[17:18]
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[6:7], v[13:14], s[28:29]
-; SI-SDAG-NEXT:    s_mov_b32 s31, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s30, 11
+; SI-SDAG-NEXT:    s_mov_b32 s31, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[17:18], v[8:9], s[10:11], v[17:18]
 ; SI-SDAG-NEXT:    v_fma_f64 v[13:14], v[6:7], v[13:14], s[30:31]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v10, v[2:3]
@@ -4546,42 +4546,42 @@ define amdgpu_ps <8 x i32> @s_exp_v4f64(<4 x double> inreg %in) #0 {
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v1, s9
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], s[6:7], v[0:1]
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v4, s6
-; VI-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s8, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v5, s7
-; VI-SDAG-NEXT:    s_mov_b32 s11, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s10, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s11, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s12, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    s_mov_b32 s13, 0x3e928af3
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, s12
-; VI-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s14, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, s13
-; VI-SDAG-NEXT:    s_mov_b32 s13, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s12, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s13, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[8:9], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s17, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s16, 0x7c89e6b0
-; VI-SDAG-NEXT:    s_mov_b32 s19, 0x3f2a01a0
+; VI-SDAG-NEXT:    s_mov_b32 s17, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s18, 0x14761f6e
-; VI-SDAG-NEXT:    s_mov_b32 s21, 0x3f56c16c
+; VI-SDAG-NEXT:    s_mov_b32 s19, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s20, 0x1852b7b0
-; VI-SDAG-NEXT:    s_mov_b32 s23, 0x3f811111
-; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[10:11], v[4:5]
+; VI-SDAG-NEXT:    s_mov_b32 s21, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s22, 0x11122322
-; VI-SDAG-NEXT:    s_mov_b32 s25, 0x3fa55555
+; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[10:11], v[4:5]
+; VI-SDAG-NEXT:    s_mov_b32 s23, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s24, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s25, 0x3fa55555
 ; VI-SDAG-NEXT:    v_mul_f64 v[10:11], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s27, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s26, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s27, 0x3fc55555
 ; VI-SDAG-NEXT:    v_mul_f64 v[12:13], s[2:3], v[0:1]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[14:15], v[6:7]
 ; VI-SDAG-NEXT:    v_mul_f64 v[0:1], s[0:1], v[0:1]
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v15, s5
-; VI-SDAG-NEXT:    s_mov_b32 s29, 0x3fe00000
-; VI-SDAG-NEXT:    v_rndne_f64_e32 v[10:11], v[10:11]
 ; VI-SDAG-NEXT:    s_mov_b32 s28, 11
+; VI-SDAG-NEXT:    v_rndne_f64_e32 v[10:11], v[10:11]
+; VI-SDAG-NEXT:    s_mov_b32 s29, 0x3fe00000
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v14, s4
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[12:13], v[12:13]
 ; VI-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], v[8:9], s[12:13]
@@ -4829,42 +4829,42 @@ define amdgpu_ps <8 x i32> @s_exp_v4f64(<4 x double> inreg %in) #0 {
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v1, s9
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], s[6:7], v[0:1]
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v4, s6
-; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s8, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s9, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v5, s7
-; GFX900-SDAG-NEXT:    s_mov_b32 s11, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s10, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s11, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s12, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s13, 0x3e928af3
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, s12
-; GFX900-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s14, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s15, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, s13
-; GFX900-SDAG-NEXT:    s_mov_b32 s13, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s12, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s13, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[8:9], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s17, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s16, 0x7c89e6b0
-; GFX900-SDAG-NEXT:    s_mov_b32 s19, 0x3f2a01a0
+; GFX900-SDAG-NEXT:    s_mov_b32 s17, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s18, 0x14761f6e
-; GFX900-SDAG-NEXT:    s_mov_b32 s21, 0x3f56c16c
+; GFX900-SDAG-NEXT:    s_mov_b32 s19, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s20, 0x1852b7b0
-; GFX900-SDAG-NEXT:    s_mov_b32 s23, 0x3f811111
-; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[10:11], v[4:5]
+; GFX900-SDAG-NEXT:    s_mov_b32 s21, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s22, 0x11122322
-; GFX900-SDAG-NEXT:    s_mov_b32 s25, 0x3fa55555
+; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[10:11], v[4:5]
+; GFX900-SDAG-NEXT:    s_mov_b32 s23, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s24, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s25, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[10:11], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s27, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s26, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s27, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[12:13], s[2:3], v[0:1]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], s[14:15], v[6:7]
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[0:1], s[0:1], v[0:1]
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v15, s5
-; GFX900-SDAG-NEXT:    s_mov_b32 s29, 0x3fe00000
-; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[10:11], v[10:11]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s28, 11
+; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[10:11], v[10:11]
+; GFX900-SDAG-NEXT:    s_mov_b32 s29, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v14, s4
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[12:13], v[12:13]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[8:9], v[4:5], v[8:9], s[12:13]
@@ -5112,54 +5112,54 @@ define double @v_exp_fabs_f64(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_fabs_f64:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], |v[0:1]|, s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], |v[0:1]|
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -5249,47 +5249,47 @@ define double @v_exp_fabs_f64(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_fabs_f64:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], |v[0:1]|, s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], |v[0:1]|
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -5367,47 +5367,47 @@ define double @v_exp_fabs_f64(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_fabs_f64:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], |v[0:1]|, s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], |v[0:1]|
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -5490,54 +5490,54 @@ define double @v_exp_fneg_fabs_f64(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_fneg_fabs_f64:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], |v[0:1]|, s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], -|v[0:1]|
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -5627,47 +5627,47 @@ define double @v_exp_fneg_fabs_f64(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_fneg_fabs_f64:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], |v[0:1]|, s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0x4090cc00
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], -|v[0:1]|
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0xc0900000
@@ -5745,47 +5745,47 @@ define double @v_exp_fneg_fabs_f64(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_fneg_fabs_f64:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], |v[0:1]|, s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x4090cc00
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], -|v[0:1]|
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xc0900000
@@ -5869,54 +5869,54 @@ define double @v_exp_fneg_f64(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_fneg_f64:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], -v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -6006,47 +6006,47 @@ define double @v_exp_fneg_f64(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_fneg_f64:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0x4090cc00
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], -v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0xc0900000
@@ -6124,47 +6124,47 @@ define double @v_exp_fneg_f64(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_fneg_f64:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0x4090cc00
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], -v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xc0900000
@@ -6247,54 +6247,54 @@ define double @v_exp_f64_fast(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_f64_fast:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -6372,45 +6372,45 @@ define double @v_exp_f64_fast(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_f64_fast:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0xc090cc00
@@ -6478,45 +6478,45 @@ define double @v_exp_f64_fast(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_f64_fast:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xc090cc00
@@ -6588,54 +6588,54 @@ define double @v_exp_f64_afn(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_f64_afn:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -6725,47 +6725,47 @@ define double @v_exp_f64_afn(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_f64_afn:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -6843,47 +6843,47 @@ define double @v_exp_f64_afn(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_f64_afn:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -6965,54 +6965,54 @@ define double @v_exp_f64_ninf(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_f64_ninf:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -7090,45 +7090,45 @@ define double @v_exp_f64_ninf(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_f64_ninf:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0xc090cc00
@@ -7196,45 +7196,45 @@ define double @v_exp_f64_ninf(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_f64_ninf:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xc090cc00
@@ -7306,54 +7306,54 @@ define double @v_exp_f64_nnan(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_f64_nnan:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -7443,47 +7443,47 @@ define double @v_exp_f64_nnan(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_f64_nnan:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -7561,47 +7561,47 @@ define double @v_exp_f64_nnan(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_f64_nnan:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -7683,54 +7683,54 @@ define double @v_fabs_exp_f64_afn(double %in) #0 {
 ; SI-SDAG-LABEL: v_fabs_exp_f64_afn:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], |v[0:1]|, s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], |v[0:1]|
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -7820,47 +7820,47 @@ define double @v_fabs_exp_f64_afn(double %in) #0 {
 ; VI-SDAG-LABEL: v_fabs_exp_f64_afn:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], |v[0:1]|, s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], |v[0:1]|
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -7938,47 +7938,47 @@ define double @v_fabs_exp_f64_afn(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_fabs_exp_f64_afn:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], |v[0:1]|, s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], |v[0:1]|
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -8061,54 +8061,54 @@ define double @v_exp_f64_nnan_ninf(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_f64_nnan_ninf:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -8186,45 +8186,45 @@ define double @v_exp_f64_nnan_ninf(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_f64_nnan_ninf:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0xc090cc00
@@ -8292,45 +8292,45 @@ define double @v_exp_f64_nnan_ninf(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_f64_nnan_ninf:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xc090cc00
@@ -8429,12 +8429,12 @@ define double @v_exp_f64_from_fpext_f16(half %src) #0 {
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-SDAG-NEXT:    v_cvt_f32_f16_e32 v0, v0
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
-; SI-SDAG-NEXT:    s_mov_b32 s7, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s6, -1
+; SI-SDAG-NEXT:    s_mov_b32 s7, 0x432fffff
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
@@ -8442,42 +8442,42 @@ define double @v_exp_f64_from_fpext_f16(half %src) #0 {
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[6:7]
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -8570,48 +8570,48 @@ define double @v_exp_f64_from_fpext_f16(half %src) #0 {
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_cvt_f32_f16_e32 v0, v0
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -8692,48 +8692,48 @@ define double @v_exp_f64_from_fpext_f16(half %src) #0 {
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX900-SDAG-NEXT:    v_cvt_f32_f16_e32 v0, v0
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -8819,54 +8819,54 @@ define double @v_exp_f64_from_fpext_f32(float %src) #0 {
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_brev_b32 s6, -2
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s6, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -8958,47 +8958,47 @@ define double @v_exp_f64_from_fpext_f32(float %src) #0 {
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -9078,47 +9078,47 @@ define double @v_exp_f64_from_fpext_f32(float %src) #0 {
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX900-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -9204,58 +9204,58 @@ define double @v_exp_f64_from_fpext_math_f16(half %src0, half %src1) #0 {
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-SDAG-NEXT:    v_cvt_f32_f16_e32 v1, v1
 ; SI-SDAG-NEXT:    v_cvt_f32_f16_e32 v0, v0
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_brev_b32 s8, -2
 ; SI-SDAG-NEXT:    v_add_f32_e32 v0, v0, v1
 ; SI-SDAG-NEXT:    v_cvt_f16_f32_e32 v0, v0
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0x43300000
-; SI-SDAG-NEXT:    s_mov_b32 s7, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s6, -1
+; SI-SDAG-NEXT:    s_mov_b32 s7, 0x432fffff
 ; SI-SDAG-NEXT:    v_cvt_f32_f16_e32 v1, v0
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v0, 0
 ; SI-SDAG-NEXT:    v_cvt_f64_f32_e32 v[2:3], v1
 ; SI-SDAG-NEXT:    v_mul_f64 v[4:5], v[2:3], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_bfi_b32 v1, s8, v6, v5
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[4:5], v[0:1]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[4:5]|, s[6:7]
 ; SI-SDAG-NEXT:    v_add_f64 v[0:1], v[6:7], -v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v1, v1, v5, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v0, v0, v4, vcc
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[0:1], s[4:5], v[2:3]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[0:1], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[0:1]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -9353,48 +9353,48 @@ define double @v_exp_f64_from_fpext_math_f16(half %src0, half %src1) #0 {
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_add_f16_e32 v0, v0, v1
 ; VI-SDAG-NEXT:    v_cvt_f32_f16_e32 v0, v0
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -9477,48 +9477,48 @@ define double @v_exp_f64_from_fpext_math_f16(half %src0, half %src1) #0 {
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX900-SDAG-NEXT:    v_add_f16_e32 v0, v0, v1
 ; GFX900-SDAG-NEXT:    v_cvt_f32_f16_e32 v0, v0
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -9605,54 +9605,54 @@ define double @v_exp_f64_contract(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_f64_contract:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -9742,47 +9742,47 @@ define double @v_exp_f64_contract(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_f64_contract:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    s_mov_b32 s6, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -9860,47 +9860,47 @@ define double @v_exp_f64_contract(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_f64_contract:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    s_mov_b32 s6, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s7, 0xc090cc00
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x40900000
@@ -9982,54 +9982,54 @@ define double @v_exp_f64_contract_nnan_ninf(double %in) #0 {
 ; SI-SDAG-LABEL: v_exp_f64_contract_nnan_ninf:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; SI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
 ; SI-SDAG-NEXT:    s_brev_b32 s4, -2
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0x43300000
 ; SI-SDAG-NEXT:    v_bfi_b32 v5, s4, v4, v3
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; SI-SDAG-NEXT:    v_add_f64 v[6:7], v[2:3], v[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    s_mov_b32 s4, -1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x432fffff
 ; SI-SDAG-NEXT:    v_add_f64 v[4:5], v[6:7], -v[4:5]
 ; SI-SDAG-NEXT:    v_cmp_gt_f64_e64 vcc, |v[2:3]|, s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
+; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v3, v5, v3, vcc
 ; SI-SDAG-NEXT:    v_cndmask_b32_e32 v2, v4, v2, vcc
-; SI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; SI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    s_mov_b32 s4, 11
+; SI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; SI-SDAG-NEXT:    v_cvt_i32_f64_e32 v8, v[2:3]
 ; SI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], 1.0
@@ -10107,45 +10107,45 @@ define double @v_exp_f64_contract_nnan_ninf(double %in) #0 {
 ; VI-SDAG-LABEL: v_exp_f64_contract_nnan_ninf:
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; VI-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; VI-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; VI-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; VI-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 11
+; VI-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; VI-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; VI-SDAG-NEXT:    s_mov_b32 s4, 0
 ; VI-SDAG-NEXT:    s_mov_b32 s5, 0xc090cc00
@@ -10213,45 +10213,45 @@ define double @v_exp_f64_contract_nnan_ninf(double %in) #0 {
 ; GFX900-SDAG-LABEL: v_exp_f64_contract_nnan_ninf:
 ; GFX900-SDAG:       ; %bb.0:
 ; GFX900-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x652b82fe
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ff71547
 ; GFX900-SDAG-NEXT:    v_mul_f64 v[2:3], v[0:1], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0xfefa39ef
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbfe62e42
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v6, 0xfca7ab0c
 ; GFX900-SDAG-NEXT:    v_mov_b32_e32 v7, 0x3e928af3
 ; GFX900-SDAG-NEXT:    v_rndne_f64_e32 v[2:3], v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[0:1]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x3b39803f
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xbc7abc9e
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[4:5], v[2:3], s[4:5], v[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x6a5dcb37
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3e5ade15
 ; GFX900-SDAG-NEXT:    v_cvt_i32_f64_e32 v2, v[2:3]
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], s[4:5], v[6:7]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x623fde64
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3ec71dee
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x7c89e6b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3efa0199
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x14761f6e
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f2a01a0
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x1852b7b0
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f56c16c
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x11122322
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3f811111
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x555502a1
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fa55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0x55555511
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fc55555
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
-; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 11
+; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0x3fe00000
 ; GFX900-SDAG-NEXT:    v_fma_f64 v[6:7], v[4:5], v[6:7], s[4:5]
 ; GFX900-SDAG-NEXT:    s_mov_b32 s4, 0
 ; GFX900-SDAG-NEXT:    s_mov_b32 s5, 0xc090cc00

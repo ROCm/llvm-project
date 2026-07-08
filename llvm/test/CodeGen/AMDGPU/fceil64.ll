@@ -15,11 +15,11 @@ define amdgpu_kernel void @fceil_f64(ptr addrspace(1) %out, double %x) {
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s4, -1
+; SI-NEXT:    s_mov_b32 s5, 0xfffff
 ; SI-NEXT:    s_mov_b32 s10, 0xf000
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    s_bfe_u32 s5, s3, 0xb0014
-; SI-NEXT:    s_add_i32 s8, s5, 0xfffffc01
-; SI-NEXT:    s_mov_b32 s5, 0xfffff
+; SI-NEXT:    s_bfe_u32 s6, s3, 0xb0014
+; SI-NEXT:    s_add_i32 s8, s6, 0xfffffc01
 ; SI-NEXT:    s_lshr_b64 s[6:7], s[4:5], s8
 ; SI-NEXT:    s_andn2_b64 s[6:7], s[2:3], s[6:7]
 ; SI-NEXT:    s_and_b32 s5, s3, 0x80000000

@@ -1016,20 +1016,36 @@ define void @void_func_v3i8(<3 x i8> %arg0) #0 {
 ; GFX89-NEXT:    s_waitcnt vmcnt(0)
 ; GFX89-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX11-LABEL: void_func_v3i8:
-; GFX11:       ; %bb.0:
-; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-NEXT:    v_perm_b32 v0, v0, v1, 0xc0c0004
-; GFX11-NEXT:    s_mov_b32 s3, 0x31016000
-; GFX11-NEXT:    s_mov_b32 s2, -1
-; GFX11-NEXT:    s_mov_b64 s[0:1], 2
-; GFX11-NEXT:    s_mov_b64 s[4:5], 0
-; GFX11-NEXT:    s_mov_b32 s6, s2
-; GFX11-NEXT:    s_mov_b32 s7, s3
-; GFX11-NEXT:    s_clause 0x1
-; GFX11-NEXT:    buffer_store_b8 v2, off, s[0:3], 0
-; GFX11-NEXT:    buffer_store_b16 v0, off, s[4:7], 0
-; GFX11-NEXT:    s_setpc_b64 s[30:31]
+; GFX11-TRUE16-LABEL: void_func_v3i8:
+; GFX11-TRUE16:       ; %bb.0:
+; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-NEXT:    v_perm_b32 v1, v0, v1, 0xc0c0004
+; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v2.l
+; GFX11-TRUE16-NEXT:    s_mov_b32 s3, 0x31016000
+; GFX11-TRUE16-NEXT:    s_mov_b32 s2, -1
+; GFX11-TRUE16-NEXT:    s_mov_b64 s[0:1], 2
+; GFX11-TRUE16-NEXT:    s_mov_b64 s[4:5], 0
+; GFX11-TRUE16-NEXT:    s_mov_b32 s6, s2
+; GFX11-TRUE16-NEXT:    s_mov_b32 s7, s3
+; GFX11-TRUE16-NEXT:    s_clause 0x1
+; GFX11-TRUE16-NEXT:    buffer_store_b8 v0, off, s[0:3], 0
+; GFX11-TRUE16-NEXT:    buffer_store_b16 v1, off, s[4:7], 0
+; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX11-FAKE16-LABEL: void_func_v3i8:
+; GFX11-FAKE16:       ; %bb.0:
+; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-FAKE16-NEXT:    v_perm_b32 v0, v0, v1, 0xc0c0004
+; GFX11-FAKE16-NEXT:    s_mov_b32 s3, 0x31016000
+; GFX11-FAKE16-NEXT:    s_mov_b32 s2, -1
+; GFX11-FAKE16-NEXT:    s_mov_b64 s[0:1], 2
+; GFX11-FAKE16-NEXT:    s_mov_b64 s[4:5], 0
+; GFX11-FAKE16-NEXT:    s_mov_b32 s6, s2
+; GFX11-FAKE16-NEXT:    s_mov_b32 s7, s3
+; GFX11-FAKE16-NEXT:    s_clause 0x1
+; GFX11-FAKE16-NEXT:    buffer_store_b8 v2, off, s[0:3], 0
+; GFX11-FAKE16-NEXT:    buffer_store_b16 v0, off, s[4:7], 0
+; GFX11-FAKE16-NEXT:    s_setpc_b64 s[30:31]
   store <3 x i8> %arg0, ptr addrspace(1) null
   ret void
 }
@@ -1154,22 +1170,40 @@ define void @void_func_v5i8(<5 x i8> %arg0) #0 {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX11-LABEL: void_func_v5i8:
-; GFX11:       ; %bb.0:
-; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-NEXT:    v_perm_b32 v0, v0, v1, 0xc0c0004
-; GFX11-NEXT:    v_perm_b32 v1, v2, v3, 0xc0c0004
-; GFX11-NEXT:    s_mov_b32 s3, 0x31016000
-; GFX11-NEXT:    s_mov_b32 s2, -1
-; GFX11-NEXT:    s_mov_b64 s[0:1], 4
-; GFX11-NEXT:    s_mov_b64 s[4:5], 0
-; GFX11-NEXT:    v_lshl_or_b32 v0, v1, 16, v0
-; GFX11-NEXT:    s_mov_b32 s6, s2
-; GFX11-NEXT:    s_mov_b32 s7, s3
-; GFX11-NEXT:    s_clause 0x1
-; GFX11-NEXT:    buffer_store_b8 v4, off, s[0:3], 0
-; GFX11-NEXT:    buffer_store_b32 v0, off, s[4:7], 0
-; GFX11-NEXT:    s_setpc_b64 s[30:31]
+; GFX11-TRUE16-LABEL: void_func_v5i8:
+; GFX11-TRUE16:       ; %bb.0:
+; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-NEXT:    v_perm_b32 v0, v0, v1, 0xc0c0004
+; GFX11-TRUE16-NEXT:    v_perm_b32 v1, v2, v3, 0xc0c0004
+; GFX11-TRUE16-NEXT:    s_mov_b32 s3, 0x31016000
+; GFX11-TRUE16-NEXT:    s_mov_b32 s2, -1
+; GFX11-TRUE16-NEXT:    s_mov_b64 s[0:1], 4
+; GFX11-TRUE16-NEXT:    s_mov_b64 s[4:5], 0
+; GFX11-TRUE16-NEXT:    v_lshl_or_b32 v1, v1, 16, v0
+; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v4.l
+; GFX11-TRUE16-NEXT:    s_mov_b32 s6, s2
+; GFX11-TRUE16-NEXT:    s_mov_b32 s7, s3
+; GFX11-TRUE16-NEXT:    s_clause 0x1
+; GFX11-TRUE16-NEXT:    buffer_store_b8 v0, off, s[0:3], 0
+; GFX11-TRUE16-NEXT:    buffer_store_b32 v1, off, s[4:7], 0
+; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX11-FAKE16-LABEL: void_func_v5i8:
+; GFX11-FAKE16:       ; %bb.0:
+; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-FAKE16-NEXT:    v_perm_b32 v0, v0, v1, 0xc0c0004
+; GFX11-FAKE16-NEXT:    v_perm_b32 v1, v2, v3, 0xc0c0004
+; GFX11-FAKE16-NEXT:    s_mov_b32 s3, 0x31016000
+; GFX11-FAKE16-NEXT:    s_mov_b32 s2, -1
+; GFX11-FAKE16-NEXT:    s_mov_b64 s[0:1], 4
+; GFX11-FAKE16-NEXT:    s_mov_b64 s[4:5], 0
+; GFX11-FAKE16-NEXT:    v_lshl_or_b32 v0, v1, 16, v0
+; GFX11-FAKE16-NEXT:    s_mov_b32 s6, s2
+; GFX11-FAKE16-NEXT:    s_mov_b32 s7, s3
+; GFX11-FAKE16-NEXT:    s_clause 0x1
+; GFX11-FAKE16-NEXT:    buffer_store_b8 v4, off, s[0:3], 0
+; GFX11-FAKE16-NEXT:    buffer_store_b32 v0, off, s[4:7], 0
+; GFX11-FAKE16-NEXT:    s_setpc_b64 s[30:31]
   store <5 x i8> %arg0, ptr addrspace(1) null
   ret void
 }
