@@ -60,8 +60,9 @@ concurrency:
   # queued and in-progress runs for the same PR (presubmit) or commit
   # (postsubmit). The workflow name is prepended to avoid conflicts between
   # different workflows.
+
   group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
-  cancel-in-progress: false #Just temp false unti github support helps us on this
+  cancel-in-progress: true
 
 jobs:
   setup:
