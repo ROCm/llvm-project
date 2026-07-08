@@ -121,6 +121,7 @@ protected: // Can only create subclasses.
 
   unsigned RequireStructuredCFG : 1;
   unsigned O0WantsFastISel : 1;
+  unsigned EnableNewPMForBackend : 1;
 
   // PGO related tunables.
   std::optional<PGOOptions> PGOOption;
@@ -260,6 +261,9 @@ public:
 
   bool requiresStructuredCFG() const { return RequireStructuredCFG; }
   void setRequiresStructuredCFG(bool Value) { RequireStructuredCFG = Value; }
+
+  bool getEnableNewPMForBackend() const { return EnableNewPMForBackend; }
+  void setEnableNewPMForBackend(bool Value) { EnableNewPMForBackend = Value; }
 
   /// Returns the code generation relocation model. The choices are static, PIC,
   /// and dynamic-no-pic, and target default.

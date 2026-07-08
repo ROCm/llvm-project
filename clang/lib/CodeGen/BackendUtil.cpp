@@ -1247,7 +1247,7 @@ void EmitAssemblyHelper::RunCodegenPipeline(
       return;
   }
 
-  if (CodeGenOpts.EnableNewPMCodeGen) {
+  if (CodeGenOpts.EnableNewPMCodeGen && TM && TM->getEnableNewPMForBackend()) {
     RunCodegenPipelineNewPM(Action, OS, DwoOS, CGFT);
   } else {
     RunCodegenPipelineLegacy(Action, OS, DwoOS, CGFT);
