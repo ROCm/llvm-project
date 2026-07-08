@@ -51,6 +51,18 @@ ArrayRef<CanonicalOpAttrSpec> getHandlerSOP2Attrs() {
       {CanonicalOp::S_ABSDIFF_I32, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_LSHL_B32, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_LSHL_B64, {/*routesExecThroughStoreExec=*/true}},
+      // s_lshl{1,2,3,4}_add_u32: dst = (src0 << N) + src1. Same SPE shape as
+      // the plain shift/bitwise routers above -- the handler computes the
+      // scalar result and dispatches via writeReg32(), which routes to
+      // storeExec when the destination operand is EXEC. Autotuned Triton
+      // kernels emit these as address/mask scalar math that can land in EXEC;
+      // without these entries the SPE A-level gate aborts with
+      // SPE-unmodeled-EXEC-writer. See the S_LSHL{1,2,3,4}_ADD_U32 handlers
+      // below (all use writeReg32) and SOPInstructions.td:S_LSHLn_ADD_U32.
+      {CanonicalOp::S_LSHL1_ADD_U32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_LSHL2_ADD_U32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_LSHL3_ADD_U32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_LSHL4_ADD_U32, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_LSHR_B32, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_LSHR_B64, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_ASHR_I64, {/*routesExecThroughStoreExec=*/true}},
@@ -212,6 +224,34 @@ static void storeSccFromWaveMaskI1(RaiseContext &Ctx, llvm::Value *I1,
   Ctx.Regs.storeSCC(
       Ctx.B, Ctx.B.CreateICmpNE(Mask, Constant::getNullValue(Mask->getType()),
                                 Name + "_nonzero"));
+}
+
+// s_lshl{1,2,3,4}_add_u32: `D.u = (S0.u << N) + S1.u`, with
+// `SCC = unsigned carry-out of the full sum`. The left shift can push
+// significant bits past bit 31, so the destination truncation to i32
+// loses carry information -- deriving `SCC = (D != 0)` from the truncated
+// result is wrong (e.g. S0=0x80000000, N=1, S1=0 truncates D to 0 while
+// SCC must be 1). Compute the shift-add once in i64, truncate for the
+// destination, and set SCC from bits [63:32] being nonzero (equivalently
+// the unbounded result exceeding 0xFFFFFFFF). See instruction_manual.pdf
+// §S_LSHLn_ADD_U32 and the S_ADD_U32 handler above for the sibling
+// carry-out pattern.
+static void handleLshlAddU32(RaiseContext &Ctx, OpResolver &Op, unsigned ShAmt,
+                             const Twine &Name, HandlerResult &Hr) {
+  Value *Src0 = Ctx.B.CreateZExt(Op.src(0), Ctx.I64Ty, Name + "_s0");
+  Value *Src1 = Ctx.B.CreateZExt(Op.src(1), Ctx.I64Ty, Name + "_s1");
+  Value *Wide = Ctx.B.CreateAdd(
+      Ctx.B.CreateShl(Src0, ConstantInt::get(Ctx.I64Ty, ShAmt)), Src1,
+      Name + "_wide");
+  Value *Res = Ctx.B.CreateTrunc(Wide, Ctx.I32Ty, Name);
+  Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Res);
+  // SCC = carry-out = (wide >> 32) != 0.
+  Value *Carry = Ctx.B.CreateICmpUGT(
+      Wide, ConstantInt::get(Ctx.I64Ty, 0xFFFFFFFFull), Name + "_scc");
+  Ctx.Regs.storeSCC(Ctx.B, Carry);
+  Hr.SccResult = Res;
+  Hr.SccHandled = true;
+  Hr.Handled = true;
 }
 
 HandlerResult handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
@@ -582,31 +622,19 @@ HandlerResult handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_LSHL1_ADD_U32) {
-    Hr.SccResult =
-        Ctx.B.CreateAdd(Ctx.B.CreateShl(Op.src(0), 1), Op.src(1), "lshl1add");
-    Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Hr.SccResult);
-    Hr.Handled = true;
+    handleLshlAddU32(Ctx, Op, 1, "lshl1add", Hr);
     return Hr;
   }
   if (Sop == CanonicalOp::S_LSHL2_ADD_U32) {
-    Hr.SccResult =
-        Ctx.B.CreateAdd(Ctx.B.CreateShl(Op.src(0), 2), Op.src(1), "lshl2add");
-    Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Hr.SccResult);
-    Hr.Handled = true;
+    handleLshlAddU32(Ctx, Op, 2, "lshl2add", Hr);
     return Hr;
   }
   if (Sop == CanonicalOp::S_LSHL3_ADD_U32) {
-    Hr.SccResult =
-        Ctx.B.CreateAdd(Ctx.B.CreateShl(Op.src(0), 3), Op.src(1), "lshl3add");
-    Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Hr.SccResult);
-    Hr.Handled = true;
+    handleLshlAddU32(Ctx, Op, 3, "lshl3add", Hr);
     return Hr;
   }
   if (Sop == CanonicalOp::S_LSHL4_ADD_U32) {
-    Hr.SccResult =
-        Ctx.B.CreateAdd(Ctx.B.CreateShl(Op.src(0), 4), Op.src(1), "lshl4add");
-    Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Hr.SccResult);
-    Hr.Handled = true;
+    handleLshlAddU32(Ctx, Op, 4, "lshl4add", Hr);
     return Hr;
   }
   if (Sop == CanonicalOp::S_XOR_B32) {

@@ -239,6 +239,21 @@ target_include_directories(MCContextInlineSrcmgrTests PRIVATE
 
 comgr_configure_test_target(MCContextInlineSrcmgrTests)
 
+# -- CanonicalOpAttrsTests ----------------------------------------------------------
+
+add_executable(CanonicalOpAttrsTests
+  CanonicalOpAttrsTest.cpp)
+
+target_link_libraries(CanonicalOpAttrsTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  ${LLVM_PTHREAD_LIB})
+comgr_link_hotswap_transpiler(CanonicalOpAttrsTests)
+
+target_include_directories(CanonicalOpAttrsTests PRIVATE
+  ${COMGR_GTEST_INCLUDE_DIRS})
+
+comgr_configure_test_target(CanonicalOpAttrsTests)
+
 # -- OpcodeMapTests -----------------------------------------------------------------
 
 add_executable(OpcodeMapTests
@@ -351,6 +366,7 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:CodeObjectUtilsTests>
   COMMAND $<TARGET_FILE:MCContextInlineSrcmgrTests>
   COMMAND $<TARGET_FILE:OpcodeMapTests>
+  COMMAND $<TARGET_FILE:CanonicalOpAttrsTests>
   COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
   COMMAND $<TARGET_FILE:KernargLayoutTests>
   COMMAND $<TARGET_FILE:WaveProjectionTests>
@@ -363,6 +379,7 @@ add_dependencies(test-unit HotswapElfTests HotswapMCTests
   CodeObjectUtilsTests
   MCContextInlineSrcmgrTests
   OpcodeMapTests
+  CanonicalOpAttrsTests
   KernargLayoutTests
   WaveProjectionTests
   SourceHiddenArgsTests
