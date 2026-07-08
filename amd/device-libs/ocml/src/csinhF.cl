@@ -21,8 +21,10 @@ MATH_MANGLE(csinh)(float2 z)
     er = ldx(er, -4);
     float2 cx = fadd(e, er);
     float2 sx = fsub(e, er);
-    float cy;
-    float sy = MATH_MANGLE(sincos)(z.y, &cy);
+
+    __ocml_sincos_f32_result scy = MATH_MANGLE(sincos_stret)(z.y);
+    float sy = scy.__sin;
+    float cy = scy.__cos;
 
     float cxhi = cx.hi;
     float sxhi = sx.hi;

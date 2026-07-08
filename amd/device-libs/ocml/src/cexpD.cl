@@ -12,8 +12,11 @@ MATH_MANGLE(cexp)(double2 z)
 {
     double x = z.s0;
     double y = z.s1;
-    double cy;
-    double sy = MATH_MANGLE(sincos)(y, &cy);
+
+    __ocml_sincos_f64_result scy = MATH_MANGLE(sincos_stret)(y);
+    double sy = scy.__sin;
+    double cy = scy.__cos;
+
     bool g = x > 709.0;
     double ex = MATH_MANGLE(exp)(x - (g ? 1.0f : 0.0f));
     const double e1 =  0x1.5bf0a8b145769p+1;
