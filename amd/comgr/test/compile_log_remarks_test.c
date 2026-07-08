@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
 
   Status = amd_comgr_create_data_set(&DataSetAsm);
   checkError(Status, "amd_comgr_create_data_set");
-  const char *Options[] = {"-Rpass-analysis=prolog"};
+  const char *Options[] = {"-Rpass-analysis=prolog-epilog"};
   size_t Count = sizeof(Options) / sizeof(Options[0]);
   Status = amd_comgr_action_info_set_option_list(DataAction, Options, Count);
   checkError(Status, "amd_comgr_action_info_set_option_list");
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
 
   checkLogs("AMD_COMGR_ACTION_CODEGEN_BC_TO_ASSEMBLY", DataSetAsm,
             "remark: <unknown>:0:0: 8 stack bytes in function 'f' "
-            "[-Rpass-analysis=prologepilog]");
+            "[-Rpass-analysis=prolog-epilog]");
 
   Status = amd_comgr_destroy_data_set(DataSetCl);
   checkError(Status, "amd_comgr_destroy_data_set");
