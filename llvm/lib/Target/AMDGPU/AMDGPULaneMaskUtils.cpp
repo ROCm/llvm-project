@@ -1,4 +1,4 @@
-//===- GCNLaneMaskUtils.cpp --------------------------------------*- C++ -*-==//
+//===- AMDGPULaneMaskUtils.cpp -----------------------------------*- C++ -*-==//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "GCNLaneMaskUtils.h"
+#include "AMDGPULaneMaskUtils.h"
 
 #include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
@@ -16,7 +16,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "gcn-lane-mask-utils"
+#define DEBUG_TYPE "amdgpu-lane-mask-utils"
 
 using namespace llvm;
 
@@ -24,7 +24,7 @@ using namespace llvm;
 ///
 /// It does not distinguish between lane-masks and scalar registers that happen
 /// to have the right bitsize.
-bool GCNLaneMaskUtils::maybeLaneMask(Register Reg) const {
+bool AMDGPULaneMaskUtils::maybeLaneMask(Register Reg) const {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   const SIInstrInfo *TII = ST.getInstrInfo();
@@ -35,14 +35,14 @@ bool GCNLaneMaskUtils::maybeLaneMask(Register Reg) const {
 
 /// Determine whether the lane-mask register \p Reg is a wave-wide constant.
 /// If so, the value is stored in \p Val.
-bool GCNLaneMaskUtils::isConstantLaneMask(
+bool AMDGPULaneMaskUtils::isConstantLaneMask(
     Register Reg, bool &Val, MachineBasicBlock &MBB,
     MachineBasicBlock::iterator MBBIter) const {
   MachineInstr *MI = nullptr;
   for (;;) {
     MI = getRegisterInfo().getDomVRegDefInBasicBlock(Reg, MBB, MBBIter);
     if (!MI) {
-      // This can happen when called from GCNLaneMaskUpdater, where Reg can
+      // This can happen when called from AMDGPULaneMaskUpdater, where Reg can
       // be a placeholder that has not yet been filled in.
       return false;
     }
@@ -81,7 +81,7 @@ bool GCNLaneMaskUtils::isConstantLaneMask(
 }
 
 /// Create a virtual lanemask register.
-Register GCNLaneMaskUtils::createLaneMaskReg() const {
+Register AMDGPULaneMaskUtils::createLaneMaskReg() const {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   return MRI.createVirtualRegister(LMC.LaneMaskRC);
 }
@@ -101,11 +101,11 @@ Register GCNLaneMaskUtils::createLaneMaskReg() const {
 /// \param LMA If non-null, used to test whether CurReg may already be a subset
 ///            of EXEC.
 /// \param isPrevZeroReg Indicates that PrevReg is a zero register.
-void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
+void AMDGPULaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
                                            MachineBasicBlock::iterator I,
                                            const DebugLoc &DL, Register DstReg,
                                            Register PrevReg, Register CurReg,
-                                           GCNLaneMaskAnalysis *LMA,
+                                           AMDGPULaneMaskAnalysis *LMA,
                                            bool isPrevZeroReg) const {
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   const SIInstrInfo *TII = ST.getInstrInfo();
@@ -178,7 +178,7 @@ void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
 /// Conservatively determine whether the \p Reg is a subset of EXEC for
 /// \p UseBlock, i.e. it returns true if it can statically prove that
 /// (Reg & EXEC) == Reg when used in \p UseBlock.
-bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
+bool AMDGPULaneMaskAnalysis::isSubsetOfExec(Register Reg,
                                          MachineBasicBlock &UseBlock,
                                          MachineBasicBlock::iterator I,
                                          unsigned RemainingDepth) {
@@ -257,7 +257,7 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
 }
 
 /// Initialize the updater.
-void GCNLaneMaskUpdater::init() {
+void AMDGPULaneMaskUpdater::init() {
   Processed = false;
   Blocks.clear();
   // SSAUpdater.Initialize(LMU.getLaneMaskConsts().LaneMaskRC);
@@ -265,7 +265,7 @@ void GCNLaneMaskUpdater::init() {
 }
 
 /// Optional cleanup, may remove stray instructions.
-void GCNLaneMaskUpdater::cleanup() {
+void AMDGPULaneMaskUpdater::cleanup() {
   Processed = false;
   Blocks.clear();
   Accumulator = AMDGPU::NoRegister;
@@ -287,7 +287,7 @@ void GCNLaneMaskUpdater::cleanup() {
 /// Indicate that a reset should occur in the given block.
 ///
 /// Can be called multiple times for the same block, flags accumulate.
-void GCNLaneMaskUpdater::addReset(MachineBasicBlock &Block, ResetFlags Flags) {
+void AMDGPULaneMaskUpdater::addReset(MachineBasicBlock &Block, ResetFlags Flags) {
   assert(!Processed);
 
   auto BlockIt = findBlockInfo(Block);
@@ -304,7 +304,7 @@ void GCNLaneMaskUpdater::addReset(MachineBasicBlock &Block, ResetFlags Flags) {
 ///
 /// \param Value A virtual lane mask register; the lane bits are masked by the
 ///              block's effective EXEC.
-void GCNLaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
+void AMDGPULaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
                                       Register Value) {
   assert(!Processed);
 
@@ -320,7 +320,7 @@ void GCNLaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
 
 /// Return the value in the middle of the block, i.e. before any change that
 /// was registered via \ref addAvailable.
-Register GCNLaneMaskUpdater::getValueInMiddleOfBlock(MachineBasicBlock &Block) {
+Register AMDGPULaneMaskUpdater::getValueInMiddleOfBlock(MachineBasicBlock &Block) {
   if (!Processed)
     process();
   return Accumulator;
@@ -332,14 +332,14 @@ Register GCNLaneMaskUpdater::getValueInMiddleOfBlock(MachineBasicBlock &Block) {
 /// Note: If \p Block is the reset block with ResetAtEnd
 ///       reset mode, then this value will be 0. You likely want
 ///       \ref getPreReset instead.
-Register GCNLaneMaskUpdater::getValueAtEndOfBlock(MachineBasicBlock &Block) {
+Register AMDGPULaneMaskUpdater::getValueAtEndOfBlock(MachineBasicBlock &Block) {
   if (!Processed)
     process();
   return Accumulator;
 }
 
 /// Return the value in \p Block after the value merge (if any).
-Register GCNLaneMaskUpdater::getValueAfterMerge(MachineBasicBlock &Block) {
+Register AMDGPULaneMaskUpdater::getValueAfterMerge(MachineBasicBlock &Block) {
   if (!Processed)
     process();
 
@@ -409,7 +409,7 @@ getSaluInsertionAtEnd(MachineBasicBlock &MBB) {
 }
 
 /// Internal method to insert merge instructions.
-void GCNLaneMaskUpdater::process() {
+void AMDGPULaneMaskUpdater::process() {
   const SIInstrInfo *TII =
       LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
   MachineBasicBlock &Entry = LMU.function()->front();
@@ -459,13 +459,13 @@ void GCNLaneMaskUpdater::process() {
 }
 
 /// Find a block in the \ref Blocks structure.
-SmallVectorImpl<GCNLaneMaskUpdater::BlockInfo>::iterator
-GCNLaneMaskUpdater::findBlockInfo(MachineBasicBlock &Block) {
+SmallVectorImpl<AMDGPULaneMaskUpdater::BlockInfo>::iterator
+AMDGPULaneMaskUpdater::findBlockInfo(MachineBasicBlock &Block) {
   return llvm::find_if(
       Blocks, [&](const auto &Entry) { return Entry.Block == &Block; });
 }
 
-void GCNLaneMaskUpdater::insertAccumulatorResets() {
+void AMDGPULaneMaskUpdater::insertAccumulatorResets() {
   const SIInstrInfo *TII =
       LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
   for (auto &[B, AccFlagPairs] : AccumulatorResetBlocks) {
