@@ -194,7 +194,7 @@ class EmitAssemblyHelper {
                                 std::unique_ptr<raw_pwrite_stream> &OS,
                                 std::unique_ptr<llvm::ToolOutputFile> &DwoOS,
                                 CodeGenFileType CGFT);
-  void RunCodegenPipelineNewPM(BackendAction Action,
+  Error RunCodegenPipelineNewPM(BackendAction Action,
                                std::unique_ptr<raw_pwrite_stream> &OS,
                                std::unique_ptr<llvm::ToolOutputFile> &DwoOS,
                                CodeGenFileType CGFT);
@@ -1246,12 +1246,16 @@ void EmitAssemblyHelper::RunCodegenPipeline(
     if (!DwoOS)
       return;
   }
+  // TODO: Remove the fallback path once all targets have ported to new PM.
+  if (CodeGenOpts.EnableNewPMCodeGen) {
+    if (!RunCodegenPipelineNewPM(Action, OS, DwoOS, CGFT))
+      return;
 
-  if (CodeGenOpts.EnableNewPMCodeGen && TM && TM->getEnableNewPMForBackend()) {
-    RunCodegenPipelineNewPM(Action, OS, DwoOS, CGFT);
-  } else {
-    RunCodegenPipelineLegacy(Action, OS, DwoOS, CGFT);
+    Diags.Report(diag::warn_fe_failed_new_pass_manager);
   }
+  
+  // NPM path (if enabled) failed to construct pipeline. retry with legacy PM.
+  RunCodegenPipelineLegacy(Action, OS, DwoOS, CGFT);
 }
 
 void EmitAssemblyHelper::RunCodegenPipelineLegacy(
@@ -1291,7 +1295,7 @@ void EmitAssemblyHelper::RunCodegenPipelineLegacy(
   TimeCodegenPasses([&] { CodeGenPasses.run(*TheModule); });
 }
 
-void EmitAssemblyHelper::RunCodegenPipelineNewPM(
+Error EmitAssemblyHelper::RunCodegenPipelineNewPM(
     BackendAction Action, std::unique_ptr<raw_pwrite_stream> &OS,
     std::unique_ptr<llvm::ToolOutputFile> &DwoOS, CodeGenFileType CGFT) {
   ModulePassManager MPM;
@@ -1307,24 +1311,46 @@ void EmitAssemblyHelper::RunCodegenPipelineNewPM(
   TargetMachine *TMPointer = TM.get();
   PassBuilder PB(TMPointer, PTOptions, std::nullopt, &PIC,
                  CI.getVirtualFileSystemPtr());
+
+  StandardInstrumentations SI(TheModule->getContext(), CodeGenOpts.DebugPassManager, 
+                 CodeGenOpts.VerifyEach);
+  SI.registerCallbacks(PIC, &MAM);
+
   PB.registerModuleAnalyses(MAM);
   PB.registerCGSCCAnalyses(CGAM);
   PB.registerFunctionAnalyses(FAM);
   PB.registerLoopAnalyses(LAM);
   PB.registerMachineFunctionAnalyses(MFAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM, &MFAM);
-
+  
+  TargetLibraryInfoImpl TLII(TheModule->getTargetTriple());
+  FAM.registerPass([&] { return TargetLibraryAnalysis(TLII); });
   MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
+  MAM.registerPass([&] {
+    const llvm::TargetOptions &Options = TM->Options;
+    return RuntimeLibraryAnalysis(
+      TargetTriple, Options.ExceptionModel, Options.FloatABIType,
+      Options.EABIVersion, Options.MCOptions.ABIName, Options.VecLib);
+  });
 
-  Error BuildPipelineError =
+  if (Error BuildPipelineError =
       TM->buildCodeGenPipeline(MPM, MAM, *OS, DwoOS ? &DwoOS->os() : nullptr,
-                               CGFT, Opt, MMI.getContext(), &PIC);
-  if (BuildPipelineError) {
-    Diags.Report(diag::err_fe_unable_to_interface_with_target);
-    return;
+                               CGFT, Opt, MMI.getContext(), &PIC))
+      return BuildPipelineError;
+
+  if (PrintPipelinePasses) {
+    std::string PipelineStr;
+    raw_string_ostream OutS(PipelineStr);
+    MPM.printPipeline(OutS, [&PIC](StringRef ClassName) {
+      auto PassName = PIC.getPassNameForClassName(ClassName);
+      return PassName.empty() ? ClassName : PassName;
+    });
+    outs() << PipelineStr << '\n';
+    return Error::success();
   }
 
   TimeCodegenPasses([&] { MPM.run(*TheModule, MAM); });
+  return Error::success();
 }
 
 void EmitAssemblyHelper::TimeCodegenPasses(
