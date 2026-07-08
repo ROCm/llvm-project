@@ -1,5 +1,5 @@
-; RUN: llc < %s -mtriple=amdgcn -mcpu=verde | FileCheck --check-prefix=GCN %s
-; RUN: llc < %s -mtriple=amdgcn -mcpu=tonga | FileCheck --check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -mtriple=amdgcn -mcpu=verde | FileCheck --check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -mtriple=amdgcn -mcpu=tonga | FileCheck --check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}icmp_2_users:
 ; GCN: s_cmp_lt_i32 s{{[0-9]+}}, 1
@@ -21,7 +21,7 @@ ENDIF:                                            ; preds = %IF, %main_body
 }
 
 ; GCN-LABEL: {{^}}fix_sgpr_live_ranges_crash:
-; GCN: s_cbranch_scc1 [[BB0:.L[A-Z0-9_]+]]
+; GCN: s_cbranch_vccz [[BB0:.L[A-Z0-9_]+]]
 ; GCN: {{^}}[[LOOP:.L[A-Z0-9_]+]]:
 ; GCN: s_cbranch_scc1 [[LOOP]]
 ; GCN: {{^}}[[BB0]]:
