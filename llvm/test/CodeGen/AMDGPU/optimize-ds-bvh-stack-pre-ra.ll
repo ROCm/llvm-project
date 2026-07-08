@@ -16,18 +16,17 @@ define amdgpu_gs void @test_ds_bvh_stack_push4_pop1(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %if
 ; CHECK-NEXT:    global_load_b64 v[6:7], v[12:13], off
-; CHECK-NEXT:    s_wait_bvhcnt 0x0
-; CHECK-NEXT:    global_load_b64 v[25:26], v[14:15], off
-; CHECK-NEXT:    global_load_b64 v[27:28], v[16:17], off
-; CHECK-NEXT:    global_load_b64 v[29:30], v[18:19], off
+; CHECK-NEXT:    global_load_b64 v[34:35], v[14:15], off
+; CHECK-NEXT:    global_load_b64 v[36:37], v[16:17], off
+; CHECK-NEXT:    global_load_b64 v[38:39], v[18:19], off
 ; CHECK-NEXT:    s_wait_loadcnt 0x2
-; CHECK-NEXT:    v_add_nc_u32_e32 v1, v7, v26
+; CHECK-NEXT:    v_add_nc_u32_e32 v1, v7, v35
 ; CHECK-NEXT:    s_wait_loadcnt 0x1
-; CHECK-NEXT:    v_add3_u32 v6, v6, v25, v27
+; CHECK-NEXT:    v_add3_u32 v6, v6, v34, v36
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
-; CHECK-NEXT:    v_add3_u32 v1, v1, v28, v30
-; CHECK-NEXT:    v_add3_u32 v1, v6, v29, v1
+; CHECK-NEXT:    v_add3_u32 v1, v1, v37, v39
+; CHECK-NEXT:    v_add3_u32 v1, v6, v38, v1
 ; CHECK-NEXT:  .LBB0_2: ; %end
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; CHECK-NEXT:    s_wait_bvhcnt 0x0
@@ -112,18 +111,17 @@ define amdgpu_gs void @test_ds_bvh_stack_push8_pop1(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_2
 ; CHECK-NEXT:  .LBB1_1: ; %if
 ; CHECK-NEXT:    global_load_b64 v[6:7], v[12:13], off
-; CHECK-NEXT:    s_wait_bvhcnt 0x0
-; CHECK-NEXT:    global_load_b64 v[29:30], v[14:15], off
-; CHECK-NEXT:    global_load_b64 v[34:35], v[16:17], off
-; CHECK-NEXT:    global_load_b64 v[36:37], v[18:19], off
+; CHECK-NEXT:    global_load_b64 v[34:35], v[14:15], off
+; CHECK-NEXT:    global_load_b64 v[36:37], v[16:17], off
+; CHECK-NEXT:    global_load_b64 v[38:39], v[18:19], off
 ; CHECK-NEXT:    s_wait_loadcnt 0x2
-; CHECK-NEXT:    v_add_nc_u32_e32 v1, v7, v30
+; CHECK-NEXT:    v_add_nc_u32_e32 v1, v7, v35
 ; CHECK-NEXT:    s_wait_loadcnt 0x1
-; CHECK-NEXT:    v_add3_u32 v6, v6, v29, v34
+; CHECK-NEXT:    v_add3_u32 v6, v6, v34, v36
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
-; CHECK-NEXT:    v_add3_u32 v1, v1, v35, v37
-; CHECK-NEXT:    v_add3_u32 v1, v6, v36, v1
+; CHECK-NEXT:    v_add3_u32 v1, v1, v37, v39
+; CHECK-NEXT:    v_add3_u32 v1, v6, v38, v1
 ; CHECK-NEXT:  .LBB1_2: ; %end
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; CHECK-NEXT:    s_wait_bvhcnt 0x0
@@ -216,18 +214,17 @@ define amdgpu_gs void @test_ds_bvh_stack_push8_pop2(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    s_cbranch_execz .LBB2_2
 ; CHECK-NEXT:  .LBB2_1: ; %if
 ; CHECK-NEXT:    global_load_b64 v[6:7], v[12:13], off
-; CHECK-NEXT:    s_wait_bvhcnt 0x0
-; CHECK-NEXT:    global_load_b64 v[29:30], v[14:15], off
-; CHECK-NEXT:    global_load_b64 v[34:35], v[16:17], off
-; CHECK-NEXT:    global_load_b64 v[36:37], v[18:19], off
+; CHECK-NEXT:    global_load_b64 v[34:35], v[14:15], off
+; CHECK-NEXT:    global_load_b64 v[36:37], v[16:17], off
+; CHECK-NEXT:    global_load_b64 v[38:39], v[18:19], off
 ; CHECK-NEXT:    s_wait_loadcnt 0x2
-; CHECK-NEXT:    v_add_nc_u32_e32 v1, v7, v30
+; CHECK-NEXT:    v_add_nc_u32_e32 v1, v7, v35
 ; CHECK-NEXT:    s_wait_loadcnt 0x1
-; CHECK-NEXT:    v_add3_u32 v6, v6, v29, v34
+; CHECK-NEXT:    v_add3_u32 v6, v6, v34, v36
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
-; CHECK-NEXT:    v_add3_u32 v1, v1, v35, v37
-; CHECK-NEXT:    v_add3_u32 v1, v6, v36, v1
+; CHECK-NEXT:    v_add3_u32 v1, v1, v37, v39
+; CHECK-NEXT:    v_add3_u32 v1, v6, v38, v1
 ; CHECK-NEXT:  .LBB2_2: ; %end
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; CHECK-NEXT:    s_wait_bvhcnt 0x0
