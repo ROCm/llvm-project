@@ -306,6 +306,11 @@ def __builtin_amdgcn_wait_asyncmark : AMDGPUBuiltin<"void(_Constant unsigned sho
 def __builtin_amdgcn_global_load_b128 : AMDGPUBuiltin<"_ExtVector<4, unsigned int>(_ExtVector<4, unsigned int address_space<1> *>, char const *)", [], "gfx9-insts">;
 def __builtin_amdgcn_global_store_b128 : AMDGPUBuiltin<"void(_ExtVector<4, unsigned int address_space<1> *>, _ExtVector<4, unsigned int>, char const *)", [], "gfx9-insts">;
 
+// Non-atomic, system-scope-coherent (sc0 sc1) narrow 64-bit global load/store.
+// Coherence is baked in; there is no scope/policy argument.
+def __builtin_amdgcn_global_load_coherent_b64 : AMDGPUBuiltin<"long int(long int address_space<1> *)", [], "gfx9-insts">;
+def __builtin_amdgcn_global_store_coherent_b64 : AMDGPUBuiltin<"void(long int address_space<1> *, long int)", [], "gfx9-insts">;
+
 //===----------------------------------------------------------------------===//
 // Ballot builtins.
 //===----------------------------------------------------------------------===//

@@ -953,6 +953,34 @@ class AMDGPUAVLoad : Intrinsic <
 def int_amdgcn_global_load_b128 : AMDGPUGlobalLoad;
 def int_amdgcn_av_load_b128 : AMDGPUAVLoad;
 
+// System-scope *coherent* narrow (64-bit) global load/store.
+//
+// Unlike the b128 family above, these are modeled as plain, NON-atomic memory
+// accesses (no AtomicOrdering on the MMO). System-scope coherence (sc0 sc1) is
+// carried by an explicit cache-policy immediate baked onto the selected
+// instruction, not derived by SIMemoryLegalizer from an atomic scope. Keeping
+// the access non-atomic and narrow lets the mid-end vectorizers leave the value
+// narrow (no wide <2 x i64> to deinterleave) while SILoadStoreOptimizer is still
+// free to re-merge two adjacent ones into a single coherent global_*_dwordx4.
+def int_amdgcn_global_load_coherent_b64 : Intrinsic <
+  [llvm_i64_ty],
+  [global_ptr_ty],
+  [ IntrReadMem, ReadOnly<ArgIndex<0>>, NoCapture<ArgIndex<0>>, IntrWillReturn,
+    IntrNoCallback, IntrNoFree ],
+  "",
+  [SDNPMemOperand, SDNPMayLoad]
+>;
+
+def int_amdgcn_global_store_coherent_b64 : Intrinsic <
+  [],
+  [global_ptr_ty,          // Base global pointer to store to
+   llvm_i64_ty],           // Data to store
+  [ IntrWriteMem, WriteOnly<ArgIndex<0>>, NoCapture<ArgIndex<0>>, IntrWillReturn,
+    IntrNoCallback, IntrNoFree ],
+  "",
+  [SDNPMemOperand, SDNPMayStore]
+>;
+
 } // TargetPrefix = "amdgcn"
 
 // New-style image intrinsics

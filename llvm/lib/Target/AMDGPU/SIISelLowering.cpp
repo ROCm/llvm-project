@@ -1765,6 +1765,21 @@ void SITargetLowering::getTgtMemIntrinsic(SmallVectorImpl<IntrinsicInfo> &Infos,
     Infos.push_back(Info);
     return;
   }
+  case Intrinsic::amdgcn_global_load_coherent_b64:
+  case Intrinsic::amdgcn_global_store_coherent_b64: {
+    bool IsStore = IntrID == Intrinsic::amdgcn_global_store_coherent_b64;
+    Info.opc = IsStore ? ISD::INTRINSIC_VOID : ISD::INTRINSIC_W_CHAIN;
+    Info.memVT = EVT::getIntegerVT(CI.getContext(), 64);
+    Info.ptrVal = CI.getArgOperand(0);
+    Info.align.reset();
+    Info.flags |=
+        IsStore ? MachineMemOperand::MOStore : MachineMemOperand::MOLoad;
+    // Intentionally leave Info.order == NotAtomic. Coherence (sc0 sc1) is set by
+    // the explicit cpol immediate on the selected instruction, so this stays a
+    // plain, mergeable, non-atomic access (see IntrinsicsAMDGPU.td).
+    Infos.push_back(Info);
+    return;
+  }
   case Intrinsic::amdgcn_global_load_b128:
   case Intrinsic::amdgcn_global_store_b128: {
     bool IsStore = IntrID == Intrinsic::amdgcn_global_store_b128;

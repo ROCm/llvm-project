@@ -1030,6 +1030,18 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
                                  : Intrinsic::amdgcn_global_load_b128);
     return Builder.CreateCall(F, Args);
   }
+  case AMDGPU::BI__builtin_amdgcn_global_load_coherent_b64:
+  case AMDGPU::BI__builtin_amdgcn_global_store_coherent_b64: {
+    const bool IsStore =
+        BuiltinID == AMDGPU::BI__builtin_amdgcn_global_store_coherent_b64;
+    SmallVector<Value *, 2> Args = {EmitScalarExpr(E->getArg(0))}; // addr
+    if (IsStore)
+      Args.push_back(EmitScalarExpr(E->getArg(1))); // data
+    llvm::Function *F = CGM.getIntrinsic(
+        IsStore ? Intrinsic::amdgcn_global_store_coherent_b64
+                : Intrinsic::amdgcn_global_load_coherent_b64);
+    return Builder.CreateCall(F, Args);
+  }
   case AMDGPU::BI__builtin_amdgcn_av_load_b128:
   case AMDGPU::BI__builtin_amdgcn_av_store_b128: {
     const bool IsStore = BuiltinID == AMDGPU::BI__builtin_amdgcn_av_store_b128;

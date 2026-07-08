@@ -1841,6 +1841,31 @@ defm : GlobalFLATLoadPats <GLOBAL_LOAD_DWORDX4, global_load_b128_intrin_pat, v4i
 defm : GlobalFLATStorePats <GLOBAL_STORE_DWORDX4, global_store_b128_intrin_pat, v4i32>;
 }
 
+// Non-atomic, system-scope-coherent narrow (64-bit) global load/store. Selected
+// to plain GLOBAL_LOAD/STORE_DWORDX2 with cpol hardcoded to SC0|SC1 (= 17), so
+// coherence rides on the instruction, not on an atomic MMO. Two adjacent ones
+// are re-merged into a coherent dwordx4 by the stock SILoadStoreOptimizer.
+def global_load_coherent_b64_pat : PatFrag<
+  (ops node:$ptr),
+  (int_amdgcn_global_load_coherent_b64 $ptr)>;
+
+def global_store_coherent_b64_pat : PatFrag<
+  (ops node:$data, node:$ptr),
+  (int_amdgcn_global_store_coherent_b64 $ptr, $data)>;
+
+let SubtargetPredicate = HasFlatGlobalInsts in {
+def : GCNPat <
+  (i64 (global_load_coherent_b64_pat (GlobalOffset (i64 VReg_64:$vaddr), i32:$offset))),
+  (GLOBAL_LOAD_DWORDX2 $vaddr, $offset, (i32 17))> {
+  let AddedComplexity = 10;
+}
+def : GCNPat <
+  (global_store_coherent_b64_pat i64:$data, (GlobalOffset (i64 VReg_64:$vaddr), i32:$offset)),
+  (GLOBAL_STORE_DWORDX2 $vaddr, getVregSrcForVT<i64>.ret:$data, $offset, (i32 17))> {
+  let AddedComplexity = 10;
+}
+}
+
 multiclass GlobalFLATStorePats_D16_t16<string inst, SDPatternOperator node, ValueType vt> {
   def : FlatStoreSignedPat<!cast<FLAT_Pseudo>(inst#"_t16"), node, vt> {
     let AddedComplexity = 10;
