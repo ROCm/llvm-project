@@ -65,6 +65,7 @@ concurrency:
 
 jobs:
   setup:
+    if: >-    
       contains(fromJSON('["push","workflow_dispatch"]'), github.event_name) ||
       (
         github.event_name == 'pull_request' &&
