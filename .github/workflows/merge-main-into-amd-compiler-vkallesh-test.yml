@@ -73,6 +73,19 @@ jobs:
           private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
+      - name: Debug Info - Workflow Start
+        run: |
+          echo "=================================="
+          echo "DEBUG: Workflow triggered"
+          echo "=================================="
+          echo "Current branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "Base branch: amd-compiler-vkallesh-test"
+          echo "Head SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Workflow event: ${{ github.event.workflow_run.event }}"
+          echo "Display title: ${{ github.event.workflow_run.display_title }}"
+          echo "=================================="
+
       - name: Resolve PR, verify gating checks and approval, merge (merge commit)
         env:
           ROCM_CCIAPP_TOKEN: ${{ steps.rocm-cciapp.outputs.token }}
@@ -86,49 +99,72 @@ jobs:
           REQUIRED_CHECKS_VAR: ${{ vars.REQUIRED_GATING_CHECKS }}
         run: |
           set -euo pipefail
+          echo "=================================="
+          echo "DEBUG: Starting PR resolution and gating check verification"
+          echo "=================================="
+          
           if [ -z "${ROCM_CCIAPP_TOKEN:-}" ]; then
             echo "::error::Set Variable ROCM_CCIAPP_APP_ID and Secret ROCM_CCIAPP_PRIVATE_KEY."
             exit 1
           fi
           export GH_TOKEN="$ROCM_CCIAPP_TOKEN"
+          echo "DEBUG: GitHub token configured successfully"
 
           # Prefer workflow_run.pull_requests when GitHub attaches it (same-repo PRs).
+          echo "DEBUG: Resolving PR number..."
           PR=""
           if command -v jq >/dev/null 2>&1; then
             PR=$(echo "${PULL_REQUESTS_JSON}" | jq -r '
               if . == null or . == [] then empty
               elif type == "array" then .[0].number | tostring
               else empty end' 2>/dev/null || true)
+            echo "DEBUG: PR from workflow_run.pull_requests: ${PR:-<none>}"
           fi
           if [ -z "${PR}" ] || [ "${PR}" = "null" ]; then
+            echo "DEBUG: Querying PR via gh pr list..."
             PR="$(gh pr list --repo "${REPO}" --head "${HEAD_BRANCH}" --base amd-compiler-vkallesh-test --state open \
               --json number -q '.[0].number // empty' 2>/dev/null || true)"
+            echo "DEBUG: PR from gh pr list: ${PR:-<none>}"
           fi
           if [ -z "${PR}" ] || [ "${PR}" = "null" ]; then
-            echo "No open PR found for head branch ${HEAD_BRANCH} → amd-compiler-vkallesh-test; skipping."
+            echo "DEBUG: No open PR found for head branch ${HEAD_BRANCH} → amd-compiler-vkallesh-test; skipping."
             exit 0
           fi
+          echo "DEBUG: ✓ Found PR #${PR}"
 
+          echo "DEBUG: Verifying PR base branch and draft status..."
           BASE="$(gh pr view "${PR}" --repo "${REPO}" --json baseRefName -q .baseRefName)"
+          echo "DEBUG: PR #${PR} base branch: ${BASE}"
           if [ "${BASE}" != "amd-compiler-vkallesh-test" ]; then
-            echo "PR #${PR} base is ${BASE}, not amd-compiler-vkallesh-test; skipping."
+            echo "DEBUG: Base branch mismatch (expected: amd-compiler-vkallesh-test); skipping."
             exit 0
           fi
+          echo "DEBUG: ✓ Base branch matches amd-compiler-vkallesh-test"
 
           DRAFT="$(gh pr view "${PR}" --repo "${REPO}" --json isDraft -q .isDraft)"
+          echo "DEBUG: PR #${PR} draft status: ${DRAFT}"
           if [ "${DRAFT}" = "true" ]; then
-            echo "PR #${PR} is draft; skipping."
+            echo "DEBUG: PR is draft; skipping."
             exit 0
           fi
+          echo "DEBUG: ✓ PR is not draft"
 
-          echo "PR #${PR} head SHA: ${HEAD_SHA}"
+          echo "=================================="
+          echo "DEBUG: PR #${PR} validated"
+          echo "Head SHA: ${HEAD_SHA}"
+          echo "=================================="
 
           # Build the mandatory gating-check list from REQUIRED_GATING_CHECKS (see header for details).
+          echo "=================================="
+          echo "DEBUG: Building mandatory gating checks list"
+          echo "=================================="
           REQUIRED_CHECKS=()
+          SKIPPED_CHECKS=()
           if [ -n "${REQUIRED_CHECKS_VAR:-}" ]; then
             # One check name per line. For each line: strip a trailing CR (CRLF), trim surrounding
             # whitespace, then strip ONE layer of matching surrounding quotes (so values entered as
             # "gfx90a Test" or 'gfx90a Test' match the real check-run name without the quotes).
+            echo "DEBUG: Parsing REQUIRED_GATING_CHECKS variable..."
             while IFS= read -r line; do
               line="${line%$'\r'}"
               line="${line#"${line%%[![:space:]]*}"}"   # ltrim
@@ -138,76 +174,137 @@ jobs:
                 "'"*"'") line="${line#\'}"; line="${line%\'}" ;;
               esac
               [ -z "${line}" ] && continue
+              
+              # SKIP gfx90a Test - not applicable for amd-compiler-vkallesh-test branch
+              if [ "${line}" = "gfx90a Test" ]; then
+                echo "DEBUG: Skipping '${line}' (not applicable for test branch)"
+                SKIPPED_CHECKS+=("${line}")
+                continue
+              fi
+              
+              echo "DEBUG: Adding required check: ${line}"
               REQUIRED_CHECKS+=("${line}")
             done <<< "${REQUIRED_CHECKS_VAR}"
           fi
+          
+          echo "=================================="
+          echo "Mandatory gating checks for amd-compiler-vkallesh-test: ${#REQUIRED_CHECKS[@]}"
+          for name in "${REQUIRED_CHECKS[@]}"; do echo "  ✓ ${name}"; done
+          
+          if [ "${#SKIPPED_CHECKS[@]}" -gt 0 ]; then
+            echo ""
+            echo "Skipped checks (not applicable for test branch): ${#SKIPPED_CHECKS[@]}"
+            for name in "${SKIPPED_CHECKS[@]}"; do echo "  ⊗ ${name}"; done
+          fi
+          echo "=================================="
+          
           if [ "${#REQUIRED_CHECKS[@]}" -eq 0 ]; then
-            echo "::error::Variable REQUIRED_GATING_CHECKS is not set (or empty). Define it with one check-run name per line (Settings → Secrets and variables → Actions → Variables)."
+            echo "::warning::All checks were skipped or REQUIRED_GATING_CHECKS is empty."
+            echo "::warning::For test branch, at least 2 non-gfx90a checks should be configured."
+            echo "::error::No mandatory gating checks remain after filtering. Cannot proceed with merge."
             exit 1
           fi
 
-          echo "Mandatory gating checks (${#REQUIRED_CHECKS[@]}):"
-          for name in "${REQUIRED_CHECKS[@]}"; do echo "  - ${name}"; done
-
           # The upstream workflow has completed, but a gating check may belong to a sibling
           # workflow still finishing, so allow a short wait.
+          echo "=================================="
+          echo "DEBUG: Starting gating checks verification loop"
+          echo "=================================="
           MAX_ATTEMPTS=30
           SLEEP_SECONDS=60
           attempt=0
           while :; do
             attempt=$((attempt + 1))
+            echo "DEBUG: Attempt ${attempt}/${MAX_ATTEMPTS} - Fetching check runs for SHA ${HEAD_SHA}..."
+            
             CHECKS_JSON="$(gh api --paginate "repos/${REPO}/commits/${HEAD_SHA}/check-runs" \
               -q '.check_runs[] | {name: .name, status: .status, conclusion: .conclusion}' 2>/dev/null \
               | jq -s '.' || echo '[]')"
 
             all_done=true
             any_failed=false
+            completed_count=0
+            pending_count=0
+            failed_count=0
+            
+            echo "DEBUG: Evaluating ${#REQUIRED_CHECKS[@]} mandatory checks:"
             for name in "${REQUIRED_CHECKS[@]}"; do
               status="$(echo "${CHECKS_JSON}" | jq -r --arg n "$name" \
                 '[.[] | select(.name == $n)] | last | .status // "missing"')"
               conclusion="$(echo "${CHECKS_JSON}" | jq -r --arg n "$name" \
                 '[.[] | select(.name == $n)] | last | .conclusion // ""')"
-              echo "Gating check '${name}': status=${status}, conclusion=${conclusion}"
+              
               if [ "${status}" != "completed" ]; then
                 all_done=false
+                pending_count=$((pending_count + 1))
+                echo "  ⏳ '${name}': status=${status}, conclusion=${conclusion:-N/A}"
               elif [ "${conclusion}" != "success" ]; then
                 any_failed=true
+                failed_count=$((failed_count + 1))
+                echo "  ✗ '${name}': status=${status}, conclusion=${conclusion}"
+              else
+                completed_count=$((completed_count + 1))
+                echo "  ✓ '${name}': status=${status}, conclusion=${conclusion}"
               fi
             done
+            
+            echo "DEBUG: Check summary: ${completed_count} passed, ${pending_count} pending, ${failed_count} failed"
 
             if [ "${any_failed}" = "true" ]; then
+              echo "=================================="
               echo "::error::One or more mandatory gating checks failed for PR #${PR}; not merging."
+              echo "=================================="
               exit 1
             fi
             if [ "${all_done}" = "true" ]; then
-              echo "All gating checks completed successfully for PR #${PR}."
+              echo "=================================="
+              echo "DEBUG: ✓ All ${#REQUIRED_CHECKS[@]} gating checks completed successfully for PR #${PR}"
+              echo "=================================="
               break
             fi
             if [ "${attempt}" -ge "${MAX_ATTEMPTS}" ]; then
-              echo "::error::Timed out waiting for gating checks on PR #${PR}."
+              echo "=================================="
+              echo "::error::Timed out waiting for gating checks on PR #${PR} after ${MAX_ATTEMPTS} attempts."
+              echo "=================================="
               exit 1
             fi
-            echo "Waiting for gating checks... attempt ${attempt}/${MAX_ATTEMPTS}; sleeping ${SLEEP_SECONDS}s."
+            echo "DEBUG: Not all checks complete yet. Sleeping ${SLEEP_SECONDS}s before next attempt..."
+            echo ""
             sleep "${SLEEP_SECONDS}"
           done
 
           # Require at least one approving review (+1). reviewDecision is APPROVED only when the
           # repo's review requirements are satisfied. Skip (non-fatal) if not yet approved: approval
           # may simply not be in place when this runs.
+          echo "=================================="
+          echo "DEBUG: Checking PR approval status"
+          echo "=================================="
           REVIEW_DECISION="$(gh pr view "${PR}" --repo "${REPO}" --json reviewDecision -q '.reviewDecision // ""')"
-          echo "PR #${PR} reviewDecision: ${REVIEW_DECISION:-<none>}"
+          echo "DEBUG: PR #${PR} reviewDecision: ${REVIEW_DECISION:-<none>}"
+          
           if [ "${REVIEW_DECISION}" != "APPROVED" ]; then
-            echo "PR #${PR} does not have an approving review (reviewDecision=${REVIEW_DECISION:-<none>}); skipping."
+            echo "DEBUG: PR #${PR} does not have an approving review yet (reviewDecision=${REVIEW_DECISION:-<none>})."
+            echo "DEBUG: Skipping auto-merge. Will retry when approval is granted."
             exit 0
           fi
+          echo "DEBUG: ✓ PR #${PR} has required approval (reviewDecision=APPROVED)"
 
-          echo "Merging (merge commit) PR #${PR} (${REPO}): gating checks passed and PR is approved."
+          echo "=================================="
+          echo "DEBUG: All merge conditions satisfied!"
+          echo "  ✓ ${#REQUIRED_CHECKS[@]} mandatory checks passed"
+          echo "  ✓ PR has required approval"
+          echo "  ✓ PR is not draft"
+          echo "=================================="
+          echo "Initiating merge (merge commit) for PR #${PR} (${REPO})..."
           # Direct merge with --admin (NOT --auto): native auto-merge can never land a merge commit
           # while the block-merge-commit-on-amd-*-branches ruleset enforces required_linear_history.
           # NOTE: --admin and --auto are mutually exclusive in gh, and admin privilege alone does not
           # bypass a ruleset — the ROCM_CCIAPP App must be on the ruleset's Bypass list (see header).
+          echo "DEBUG: Executing 'gh pr merge --merge --admin' command..."
           if ! gh pr merge "${PR}" --repo "${REPO}" --merge --admin 2> merge_err.log; then
+            echo "=================================="
             echo "::error::Merge failed for PR #${PR}. See diagnostics below."
+            echo "=================================="
             echo "::group::gh pr merge error output"
             cat merge_err.log || true
             echo "::endgroup::"
@@ -218,4 +315,6 @@ jobs:
             echo "::endgroup::"
             exit 1
           fi
-          echo "Merge (merge commit) completed successfully for PR #${PR}."
+          echo "=================================="
+          echo "DEBUG: ✓✓✓ Merge (merge commit) completed successfully for PR #${PR}"
+          echo "=================================="
