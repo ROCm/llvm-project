@@ -33,6 +33,15 @@ __attribute((weak)) EmissaryReturn_t EmissaryHDF5(char *data, emisArgBuf_t *ab,
 __attribute((weak)) EmissaryReturn_t EmissaryReserve(char *data,
                                                      emisArgBuf_t *ab,
                                                      emis_argptr_t *arg[]);
+/// Optional FORCE_OPT=1 SDMA path for device MPI Put/Get (libemissary_mpi).
+/// Weak stub: libLLVMOffload links without libemissary_mpi; the app overrides
+/// with a strong definition from libemissary_mpi when FORCE_OPT SDMA is used.
+__attribute__((weak)) int emissary_mpi_sdma_try_dm_buffer(
+    char *rpc_buffer, unsigned long long *out_result) {
+  (void)rpc_buffer;
+  (void)out_result;
+  return -1;
+}
 /// Called by EmissaryTop to support Fortran IO runtime
 __attribute((weak)) EmissaryReturn_t EmissaryFortrt(char *data,
                                                     emisArgBuf_t *ab,
@@ -257,7 +266,7 @@ static service_rc emissary_pfBuildValist(emissary_ValistExt_t *valist,
       if (numbits == 1) { // This is a pointer to string
         num_bytes = 4;
         bytes_consumed = num_bytes;
-        strsz = (size_t)*(unsigned int *)dataptr;
+        strsz = (size_t) * (unsigned int *)dataptr;
         if ((*data_not_used) < bytes_consumed)
           return _ERC_DATA_USED_ERROR;
         if (strsz == 0) {
@@ -302,7 +311,7 @@ static service_rc emissary_printf(uint *rc, emisArgBuf_t *ab) {
   // Skip past the format string
   ab->NumArgs--;
   ab->keyptr += 4;
-  size_t abstrsz = (size_t)*(unsigned int *)ab->argptr;
+  size_t abstrsz = (size_t) * (unsigned int *)ab->argptr;
 
   ab->strptr += abstrsz;
   ab->argptr += 4;
@@ -500,7 +509,7 @@ static service_rc emissary_fprintf(uint *rc, emisArgBuf_t *ab) {
   // Skip past the format string
   ab->NumArgs--;
   ab->keyptr += 4;
-  size_t abstrsz = (size_t)*(unsigned int *)ab->argptr;
+  size_t abstrsz = (size_t) * (unsigned int *)ab->argptr;
   ab->strptr += abstrsz;
   ab->argptr += 4;
   ab->data_not_used -= 4;
@@ -625,6 +634,7 @@ EmissaryTop(char *data, emisArgBuf_t *ab,
 template <uint32_t NumLanes>
 inline RPCStatus handle_emissary_impl(Server::Port &port) {
 
+
   switch (port.get_opcode()) {
 
   // This case handles the device function __llvm_emissary_rpc for emissary
@@ -668,6 +678,7 @@ inline RPCStatus handle_emissary_impl(Server::Port &port) {
     void *Xfers[NumLanes] = {nullptr};
     void *devXfers[NumLanes] = {nullptr};
     uint64_t XferSzs[NumLanes] = {0};
+    bool sdma_handled[NumLanes] = {false};
     uint32_t numSendXfers = 0;
     id = 0;
 
@@ -676,17 +687,26 @@ inline RPCStatus handle_emissary_impl(Server::Port &port) {
 
         emisArgBuf_t *ab = &AB[id];
         emisExtractArgBuf((char *)buffer_ptr, ab);
+        unsigned long long sdma_result = 0;
+        if (emissary_mpi_sdma_try_dm_buffer((char *)buffer_ptr, &sdma_result) ==
+            0) {
+          Results[id] = sdma_result;
+          sdma_handled[id] = true;
+          id++;
+          continue;
+        }
         for (uint32_t idx = 0; idx < ab->NumSendXfers; idx++) {
           numSendXfers++;
           devXfers[id] = (void *)*((uint64_t *)ab->argptr);
-          XferSzs[id] = (size_t)*((size_t *)(ab->argptr + sizeof(void *)));
+          XferSzs[id] = (size_t) * ((size_t *)(ab->argptr + sizeof(void *)));
           emisSkipXferArgSet(ab);
         }
         // Allocate the host space for the receive Xfers
         for (uint32_t idx = 0; idx < ab->NumRecvXfers; idx++) {
           void *devAddr = (void *)*((uint64_t *)ab->argptr);
-          size_t devSz = (((size_t)*((size_t *)(ab->argptr + sizeof(void *)))) &
-                          0x00000000FFFFFFFF);
+          size_t devSz =
+              (((size_t) * ((size_t *)(ab->argptr + sizeof(void *)))) &
+               0x00000000FFFFFFFF);
           void *hostAddr = new char[devSz];
           D2HAddrList.insert(std::pair<void *, void *>(devAddr, hostAddr));
           emisSkipXferArgSet(ab);
@@ -715,6 +735,10 @@ inline RPCStatus handle_emissary_impl(Server::Port &port) {
     id = 0;
     for (void *buffer_ptr : buf_ptrs) {
       if (buffer_ptr) {
+        if (sdma_handled[id]) {
+          id++;
+          continue;
+        }
         emisArgBuf_t *ab = &AB[id];
         emisExtractArgBuf((char *)buffer_ptr, ab);
         for (uint32_t idx = 0; idx < ab->NumSendXfers; idx++)
@@ -733,6 +757,10 @@ inline RPCStatus handle_emissary_impl(Server::Port &port) {
     uint32_t numRecvXfers = 0;
     for (void *buffer_ptr : buf_ptrs) {
       if (buffer_ptr) {
+        if (sdma_handled[id]) {
+          id++;
+          continue;
+        }
         emisArgBuf_t *ab = &AB[id];
         // Reset ArgBuf tracker
         emisExtractArgBuf((char *)buffer_ptr, ab);
@@ -743,7 +771,7 @@ inline RPCStatus handle_emissary_impl(Server::Port &port) {
           void *devAddr = (void *)*((uint64_t *)ab->argptr);
           recvXfers[id] = D2HAddrList[devAddr];
           recvXferSzs[id] =
-              (((uint64_t)*((size_t *)(ab->argptr + sizeof(void *)))) &
+              (((uint64_t) * ((size_t *)(ab->argptr + sizeof(void *)))) &
                0x00000000FFFFFFFF);
           emisSkipXferArgSet(ab);
         }
@@ -757,6 +785,10 @@ inline RPCStatus handle_emissary_impl(Server::Port &port) {
     id = 0;
     for (void *buffer_ptr : buf_ptrs) {
       if (buffer_ptr) {
+        if (sdma_handled[id]) {
+          id++;
+          continue;
+        }
         emisArgBuf_t *ab = &AB[id];
         // Reset the ArgBuf tracker ab
         emisExtractArgBuf((char *)buffer_ptr, ab);

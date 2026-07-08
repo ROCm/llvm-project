@@ -38,13 +38,13 @@ enum EmisTyID {
   EmisPointerTy,
 };
 
-/// The various Emissary APIs that are currently externally defined or
-/// reserved are MPI, HDF5, and, RESERVE. Library maintainers provide an
-/// emissary library definition source file that contains device stubs
-/// and the host selector function.  The device stubs typically call
-/// _emissary_exec. The host selector function makes the call to the
-/// actual host function which are often platform specific and thus only
-/// linkable by an application.
+/// These are the various Emissary APIs currently defined.
+/// MPI, HDF5, and, RESERVE are "external" Emissary APIs whose device stubs and
+/// host runtime support are provided by library maintainers typically in the
+/// form of a header such as "EmissaryMPI.h". The stubs call _emissary_exec.
+/// The host runtime support will call functions from the actual host library
+/// which are often platform specific and thus only linkable by an application.
+/// A small demo of an external Emissary API (EmissaryMPI.h) is found in docs.
 
 typedef enum {
   EMIS_ID_INVALID,

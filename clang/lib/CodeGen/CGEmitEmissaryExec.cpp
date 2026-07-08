@@ -157,8 +157,7 @@ static EmisTyID getEmisTyID(llvm::Type::TypeID tyid) {
   // Derived types... see DerivedTypes.h file.
   case llvm::Type::IntegerTyID: ///< Arbitrary bit width integers
     return EmisIntegerTy;
-  // case llvm::Type::ByteTyID:     ///< Arbitrary bit width bytes  FIXME put
-  // back on next upstream merge.
+  // case llvm::Type::ByteTyID:     ///< Arbitrary bit width bytes  FIXME put back on next upstream merge.
   case llvm::Type::FunctionTyID: ///< Functions
     return EmisInvalidTy;
   case llvm::Type::PointerTyID: ///< Pointers

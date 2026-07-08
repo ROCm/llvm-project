@@ -6850,8 +6850,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     if (getTarget().getTriple().isNVPTX())
       return EmitNVPTXDevicePrintfCallExpr(E, ReturnValue);
     if (getTarget().getTriple().isAMDGCN() &&
-        CGM.getLangOpts().UseEmissaryPrint)
-      return EmitEmissaryExec(E);
+         CGM.getLangOpts().UseEmissaryPrint)
+       return EmitEmissaryExec(E);
     if (getTarget().getTriple().isAMDGCN() ||
        (getTarget().getTriple().isSPIRV() &&
         getTarget().getTriple().getVendor() == Triple::VendorType::AMD)) {

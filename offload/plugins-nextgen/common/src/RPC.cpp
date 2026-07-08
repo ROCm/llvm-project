@@ -17,6 +17,7 @@
 #include "shared/rpc.h"
 #include "shared/rpc_opcodes.h"
 #include "shared/rpc_server.h"
+#include "shared/emissary_rpc_server.h"
 
 using namespace llvm;
 using namespace omp;
