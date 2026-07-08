@@ -101,22 +101,6 @@ set(SOURCES
   src/comgr-diagnostic-handler.cpp
   src/comgr-disassembly.cpp
   src/comgr-env.cpp
-  src/comgr-hotswap.cpp
-  src/comgr-hotswap-b0a0.cpp
-  src/comgr-hotswap-profile.cpp
-  src/comgr-hotswap-displacement.cpp
-  src/comgr-hotswap-entry-trampoline.cpp
-  src/comgr-hotswap-entry-trampoline-fast.cpp
-  src/comgr-hotswap-occupancy.cpp
-  src/comgr-hotswap-patch-trampoline.cpp
-  src/comgr-hotswap-elf.cpp
-  src/comgr-hotswap-llvm.cpp
-  src/comgr-hotswap-patch-f32-to-e5m3.cpp
-  src/comgr-hotswap-patch-inplace.cpp
-  src/comgr-hotswap-patch-vop3px2-src2.cpp
-  src/comgr-hotswap-patch-wmma-hazard.cpp
-  src/comgr-hotswap-patch-wmma-scale16.cpp
-  src/comgr-hotswap-patch-wmma-split.cpp
   src/comgr-libcxx-headers.cpp
   src/comgr-logger.cpp
   src/comgr-metadata.cpp
@@ -128,15 +112,14 @@ set(SOURCES
   src/comgr-unpackage-command.cpp
   src/time-stat/time-stat.cpp)
 
-# Hotswap binary transpiler, opt-in. The hotswap project lives under
-# amd/comgr/src/hotswap as a private COMGR subproject. When enabled, we
-# link the hotswap OBJECT library into amd_comgr (its TUs land directly
+# Hotswap IR transpiler (raiser), opt-in. The raiser lives under
+# amd/comgr/src/hotswap/raiser as a private COMGR subproject. When enabled, we
+# link the hotswap::raiser OBJECT library into amd_comgr (its TUs land directly
 # in amd_comgr.so so hotswap files can call comgr-metadata helpers
-# without a layering inversion) and compile the
-# comgr-hotswap-transpile.cpp entry point. When disabled, the
-# amd_comgr_hotswap_transpile API is simply not provided.
+# without a layering inversion) and compile the transpile entry point. When
+# disabled, the amd_comgr_hotswap_transpile API is simply not provided.
 option(COMGR_ENABLE_HOTSWAP_TRANSPILE
-  "Build the hotswap-transpiler-backed amd_comgr_hotswap_transpile entry point" OFF)
+  "Build the hotswap-raiser-backed amd_comgr_hotswap_transpile entry point" OFF)
 
 # Add Windows resource file for version info
 if(WIN32)
@@ -217,11 +200,11 @@ target_include_directories(amd_comgr
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # The hotswap subdirectory is added unconditionally below (around the
-# add_subdirectory(src/hotswap) line) so the OBJECT library is available
+# add_subdirectory(src/hotswap) line) so the OBJECT libraries are available
 # to the test-unit suite; here we opt amd_comgr into exposing the
-# `amd_comgr_hotswap_transpile` entry point. The transpiler link edge is
-# added after the curated LLVM/LLD link block below (see "hotswap transpiler
-# link edge"), not here.
+# `amd_comgr_hotswap_transpile` entry point. The hotswap link edges are
+# added after the curated LLVM/LLD link block below (see "hotswap link
+# edges"), not here.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   target_compile_definitions(amd_comgr PRIVATE COMGR_ENABLE_HOTSWAP_TRANSPILE=1)
 endif()
@@ -609,11 +592,16 @@ target_link_libraries(amd_comgr
     ${LLVM_LIBS}
     ${CLANG_LIBS})
 
-# hotswap transpiler link edge — must come after the curated LLVM set above so
+# hotswap link edges — must come after the curated LLVM set above so
 # static-archive resolution pulls in the full set (incl. LLVMCodeGen's -mcpu
-# registration) before the transpiler's partial LLVM deps.
+# registration) before the hotswap libraries' partial LLVM deps.
+#
+# The rewriter (byte-level rewrite path) backs the always-on
+# amd_comgr_hotswap_rewrite API, so it is linked unconditionally. The raiser
+# (IR transpiler path) is opt-in behind COMGR_ENABLE_HOTSWAP_TRANSPILE.
+target_link_libraries(amd_comgr PRIVATE hotswap::rewriter)
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
-  target_link_libraries(amd_comgr PRIVATE hotswap::transpiler)
+  target_link_libraries(amd_comgr PRIVATE hotswap::raiser)
 endif()
 
 if(TARGET embedded-resource-dir)
@@ -641,10 +629,11 @@ if (NOT WIN32)
       ${CMAKE_DL_LIBS})
 endif()
 
-# Hotswap subproject — IR-level transpiler library + supporting tools.
-# Always added so the static library is available to the test-unit suite;
-# linking into amd_comgr happens in a later patch via the
-# COMGR_ENABLE_HOTSWAP_TRANSPILE option.
+# Hotswap subproject — rewriter (byte-level) and raiser (IR transpiler)
+# OBJECT libraries. Always added so the libraries are available to the
+# test-unit suite. The rewriter is linked into amd_comgr unconditionally; the
+# raiser link edge is gated on COMGR_ENABLE_HOTSWAP_TRANSPILE (see the hotswap
+# link edges above).
 add_subdirectory(src/hotswap)
 
 include(CTest)
