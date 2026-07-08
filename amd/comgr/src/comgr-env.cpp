@@ -85,21 +85,19 @@ bool shouldEmitVerboseLogs() {
 }
 
 LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
-  // When the variable is unset or not a valid integer, default to the most
-  // verbose level if verbose logs are requested for back-compat with
-  // AMD_COMGR_EMIT_VERBOSE_LOGS, otherwise to a low level that still shows
-  // errors.
+  // Unset or non-integer: default to Debug when verbose logs are requested
+  // (back-compat with AMD_COMGR_EMIT_VERBOSE_LOGS), else Error so errors show.
   unsigned Numeric;
   if (Requested.getAsInteger(10, Numeric))
     return VerboseFallback ? LogLevel::Debug : LogLevel::Error;
 
   unsigned Max = static_cast<unsigned>(LogLevel::Debug);
-  return static_cast<LogLevel>(Numeric > Max ? Max : Numeric);
+  return static_cast<LogLevel>(std::min(Numeric, Max));
 }
 
 LogLevel resolveLevel() {
-  static const char *LogLevel = getenv("AMD_COMGR_LOG_LEVEL");
-  StringRef Requested = LogLevel ? StringRef(LogLevel) : StringRef();
+  static const char *LogThreshold = getenv("AMD_COMGR_LOG_LEVEL");
+  StringRef Requested = LogThreshold ? StringRef(LogThreshold) : StringRef();
   return parseLogLevel(Requested, shouldEmitVerboseLogs());
 }
 

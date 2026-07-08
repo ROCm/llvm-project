@@ -55,10 +55,8 @@ using namespace COMGR;
 using namespace COMGR::TimeStatistics;
 
 namespace {
-// A raw_ostream that forwards writes to both the in-memory comgr.log buffer and
-// the global redirect sink, keeping the returned log object and the redirect
-// destination consistent. The sink write goes through Logger::writeToSink so it
-// holds the logger's mutex and never races a concurrent Logger::emit.
+// Forwards writes to both the in-memory comgr.log buffer and the redirect sink.
+// The sink write goes through Logger::writeToSink to hold the mutex vs emit().
 class TeeStream : public raw_ostream {
 public:
   explicit TeeStream(raw_ostream &Buffer, Logger &Log)
@@ -1338,39 +1336,29 @@ amd_comgr_status_t AMD_COMGR_API
     // Pointer to the currently selected log stream.
     raw_ostream *LogP = &LogS;
 
-    // Tee Logger output emitted during this action into the in-memory buffer
-    // backing the AMD_COMGR_DATA_KIND_LOG data object, so emit() calls are
-    // collected for the caller.
+    // Capture emit() output from this action into LogS (the buffer backing the
+    // AMD_COMGR_DATA_KIND_LOG object) so it reaches the caller.
     LogCaptureScope LogCapture(LogS);
     Logger &Log = getLogger();
 
-    // When logs are redirected, the compiler-diagnostic stream is teed to both
-    // LogS and the redirect sink so the returned comgr.log object and the
-    // redirect destination receive the same content, consistent with how
-    // Logger messages already reach both (see LogCaptureScope above).
-    // AMD_COMGR_REDIRECT_LOGS copies logs to the extra destination and
-    // does not move them away from the caller's comgr.log object.
+    // On redirect, tee the compiler-diagnostic stream to both LogS and the
+    // sink so comgr.log and the redirect destination get the same content.
     std::optional<TeeStream> RedirectTee;
     if (env::getRedirectLogs()) {
-      // The global Logger already resolved and opened the redirect destination
-      // (see Logger::Logger), recording any file-open failure in
-      // getSinkError(). Reuse its sink rather than opening the same target a
-      // second time. A null sink means the file failed to open (handled below);
-      // we then keep writing only to the in-memory LogS.
+      // The Logger already resolved and opened the destination (see
+      // Logger::Logger); reuse its sink. A null sink means the open failed.
       if (Log.hasSink()) {
         RedirectTee.emplace(LogS, Log);
         LogP = &RedirectTee.value();
-        // Reuse the destination the Logger already resolved to a file. Empty
-        // when the sink is a stream (stdout/stderr/"-"), so time statistics
-        // stay off in that case.
+        // Empty when the sink is a stream (stdout/stderr/"-"), so time
+        // statistics stay off in that case.
         StringRef RedirectFile = Log.getRedirectFilename();
         if (!RedirectFile.empty())
           PerfLog = RedirectFile.str();
       } else if (StringRef SinkError = Log.getSinkError(); !SinkError.empty()) {
-        // Redirect was requested but the Logger could not open the destination.
-        // Surface its diagnostic into the returned comgr.log (the sink is null
-        // here).
-        Log.emit(LogLevel::Error, SinkError);
+        // Redirect open failed: surface the diagnostic into comgr.log
+        // unconditionally (emit() would gate it behind AMD_COMGR_LOG_LEVEL).
+        LogS << "comgr: " << SinkError << '\n';
       }
     }
 

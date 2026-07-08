@@ -24,8 +24,8 @@ namespace COMGR {
 
 namespace {
 
-// The capture stream is per-thread so that a captured Action on one thread does
-// not collect log output emitted by an unrelated API on another thread.
+// Per-thread so a captured Action on one thread does not collect log output
+// emitted by an unrelated API on another thread.
 thread_local raw_ostream *ThreadCaptureStream = nullptr;
 
 } // namespace
@@ -54,10 +54,8 @@ void Logger::openSink(StringRef RedirectLog) {
         RedirectLog, EC, sys::fs::OF_Text | sys::fs::OF_Append);
     if (EC) {
       SinkFile.reset();
-      // Record the failure rather than writing it to stderr here. The Logger is
-      // constructed before any action's log buffer exists; the action layer
-      // surfaces this message into the returned comgr.log via getSinkError(),
-      // restoring the pre-Logger behavior of reporting it to the caller.
+      // Record rather than print: the action layer surfaces this into the
+      // returned comgr.log via getSinkError().
       SinkError = (Twine("unable to redirect log to file '") + RedirectLog +
                    "': " + EC.message())
                       .str();
@@ -98,8 +96,7 @@ void Logger::emit(LogLevel Severity, const Twine &Message) {
     *Sink << Prefix << Text << '\n';
     Sink->flush();
   }
-  // Guard against double-emission if a capture stream happens to alias the
-  // sink.
+  // Avoid double-emission if the capture stream aliases the sink.
   if (Capture && Capture != Sink) {
     *Capture << Prefix << Text << '\n';
     Capture->flush();

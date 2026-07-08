@@ -25,9 +25,8 @@ using llvm::StringRef;
 
 // -- isEnabled / level filtering ---------------------------------------------
 //
-// Severities and levels range over LogLevel (None..Debug) where higher is more
-// verbose; a message is emitted when its severity is not None and does not
-// exceed the configured level.
+// LogLevel ranges None..Debug (higher is more verbose). A message is emitted
+// when its severity is not None and does not exceed the configured level.
 
 TEST(Logger, ZeroLevelDisablesEverything) {
   Logger Log(LogLevel::None, nullptr);
@@ -71,15 +70,26 @@ TEST(Logger, ParseLogLevelClampsAboveMax) {
 }
 
 TEST(Logger, ParseLogLevelEmptyUsesVerboseFallback) {
-  // Unset variable: low level normally, max level when verbose logs requested.
+  // Unset: low level normally, max level when verbose logs requested.
   EXPECT_EQ(env::parseLogLevel("", false), LogLevel::Error);
   EXPECT_EQ(env::parseLogLevel("", true), LogLevel::Debug);
 }
 
 TEST(Logger, ParseLogLevelNonNumericUsesVerboseFallback) {
-  // A non-integer value falls back to the same default as an unset variable.
+  // Non-integer falls back to the same default as an unset variable.
   EXPECT_EQ(env::parseLogLevel("foo", false), LogLevel::Error);
   EXPECT_EQ(env::parseLogLevel("bar", true), LogLevel::Debug);
+}
+
+TEST(Logger, ParseLogLevelNegativeAndInvalidFailSafely) {
+  // Negative and malformed values fall back to the safe default rather than
+  // wrapping around or yielding an out-of-range level.
+  for (StringRef Bad : {"-1", "-1000", "12abc", "3.5", "0x4", " 4"}) {
+    EXPECT_EQ(env::parseLogLevel(Bad, false), LogLevel::Error)
+        << "input: " << Bad;
+    EXPECT_EQ(env::parseLogLevel(Bad, true), LogLevel::Debug)
+        << "input: " << Bad;
+  }
 }
 
 TEST(Logger, ParseLogLevelExplicitWinsOverVerbose) {
@@ -208,8 +218,8 @@ TEST(Logger, ConcurrentEmitsAreNotInterleaved) {
     Th.join();
   OS.flush();
 
-  // Every write is atomic under the logger mutex, so each line must be the
-  // exact, intact message and the total count must match.
+  // Each write is atomic under the mutex, so every line is intact and the
+  // total count must match.
   int Lines = 0;
   StringRef Remaining(Out);
   while (!Remaining.empty()) {
@@ -226,10 +236,9 @@ TEST(Logger, ConcurrentEmitsAreNotInterleaved) {
 }
 
 TEST(Logger, ConcurrentEmitAndSinkWritesAreSerialized) {
-  // emit() and writeToSink() share the logger mutex so that a TeeStream teeing
-  // compiler diagnostics into the redirect sink cannot interleave with a
-  // concurrent emit() on the same Logger. Drive both against one shared sink
-  // and require every chunk to land intact.
+  // emit() and writeToSink() share the mutex, so a TeeStream teeing compiler
+  // diagnostics into the sink cannot interleave with a concurrent emit().
+  // Drive both against one sink and require every chunk to land intact.
   std::string Out;
   raw_string_ostream OS(Out);
   Logger Log(LogLevel::Debug, &OS);
@@ -242,8 +251,7 @@ TEST(Logger, ConcurrentEmitAndSinkWritesAreSerialized) {
       for (int I = 0; I < PerThread; ++I)
         Log.emit(LogLevel::Error, "line");
     });
-    // writeToSink writes verbatim (no prefix/newline added), so the payload
-    // carries its own newline to make each teed chunk a distinct line.
+    // writeToSink writes verbatim, so the payload carries its own newline.
     Threads.emplace_back([&Log, PerThread]() {
       for (int I = 0; I < PerThread; ++I)
         Log.writeToSink("tee\n");
@@ -253,8 +261,8 @@ TEST(Logger, ConcurrentEmitAndSinkWritesAreSerialized) {
     Th.join();
   OS.flush();
 
-  // Each emit() and each writeToSink() is atomic under the mutex, so every line
-  // is one intact chunk and both counts must match.
+  // Each emit() and writeToSink() is atomic, so every line is one intact
+  // chunk and both counts must match.
   int EmitLines = 0;
   int TeeLines = 0;
   StringRef Remaining(Out);
@@ -302,19 +310,17 @@ TEST(Logger, CaptureStreamIsThreadLocal) {
 
 // -- Environment-configured constructor --------------------------------------
 //
-// comgr-env.cpp caches getenv() results in function-local statics, so the
-// environment is read only once per process. This must therefore be the ONLY
-// test that constructs an environment-configured Logger; a second one with
-// different values would not observe them. setenv/unsetenv are POSIX-only.
+// comgr-env.cpp caches getenv() in function-local statics, so the environment
+// is read only once per process. This must be the ONLY test constructing an
+// environment-configured Logger; a second one would not observe new values.
+// setenv/unsetenv are POSIX-only.
 
 TEST(Logger, RedirectToFileWritesEmittedMessages) {
-  // Redirect to a real, writable file via the explicit-target constructor,
-  // which runs the same sink resolution as the environment path without
-  // touching the process-global AMD_COMGR_REDIRECT_LOGS cache (so this stays
-  // deterministic alongside RedirectOpenFailureIsRecorded). The Logger must
-  // install a file sink (hasSink()), expose the resolved path via
-  // getRedirectFilename(), record no open error, and route emitted messages
-  // into the file.
+  // Use the explicit-target constructor, which runs the same sink resolution
+  // as the environment path without touching the AMD_COMGR_REDIRECT_LOGS cache
+  // (keeping this deterministic alongside RedirectOpenFailureIsRecorded). The
+  // Logger must install a file sink, expose the path, record no error, and
+  // route emitted messages into the file.
   llvm::SmallString<128> Path;
   ASSERT_FALSE(llvm::sys::fs::createTemporaryFile("comgr-logger", "log", Path));
 
@@ -340,9 +346,9 @@ TEST(Logger, RedirectToFileWritesEmittedMessages) {
 
 #ifndef _WIN32
 TEST(Logger, RedirectOpenFailureIsRecorded) {
-  // Point the redirect at a path inside a directory that does not exist, so the
-  // sink cannot be opened. The Logger must record the failure (for the action
-  // layer to surface into comgr.log) rather than installing a sink.
+  // Redirect to a path in a nonexistent directory so the sink cannot open. The
+  // Logger must record the failure (for the action layer to surface into
+  // comgr.log) rather than installing a sink.
   setenv("AMD_COMGR_REDIRECT_LOGS",
          "comgr_logger_nonexistent_dir_a1b2c3/redirect.log", /*overwrite=*/1);
   Logger Log;

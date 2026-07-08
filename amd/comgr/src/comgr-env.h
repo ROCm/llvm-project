@@ -14,12 +14,6 @@
 namespace COMGR {
 namespace env {
 
-/// Severity of a log message, and the logger's configured threshold. The
-/// underlying values form a 0-to-4 scale where None silences logging and higher
-/// values are more verbose. A message is emitted only when its severity is not
-/// None and does not exceed the configured level (see Logger::isEnabled).
-/// Callers choose the severity passed to Logger::emit; more detailed
-/// diagnostics use the higher levels.
 enum class LogLevel {
   None = 0,
   Error,
@@ -28,16 +22,12 @@ enum class LogLevel {
   Debug,
 };
 
-/// Parse @p Requested (the value of AMD_COMGR_LOG_LEVEL, which may be empty)
-/// into a threshold. The value must be a bare integer; it is clamped to [None,
-/// Debug]. When @p Requested is empty or is not a valid integer, returns Debug
-/// if @p VerboseFallback is set (back-compat with AMD_COMGR_EMIT_VERBOSE_LOGS),
-/// otherwise Error. Exposed for testing.
+/// Parse @p Requested (AMD_COMGR_LOG_LEVEL, may be empty) into a threshold.
+/// When empty or not an integer, returns Debug if @p VerboseFallback is set.
 LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
 
-/// Resolve the configured log level from the environment, reading
-/// AMD_COMGR_LOG_LEVEL and the AMD_COMGR_EMIT_VERBOSE_LOGS back-compat fallback
-/// and delegating to the two-argument parseLogLevel() above.
+/// Resolve the log level from AMD_COMGR_LOG_LEVEL, using the
+/// AMD_COMGR_EMIT_VERBOSE_LOGS back-compat fallback via parseLogLevel().
 LogLevel resolveLevel();
 
 /// Return whether the environment requests temps be saved.

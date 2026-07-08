@@ -6,12 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-// Driver for exercising AMD_COMGR_REDIRECT_LOGS end-to-end: it enables
-// per-action logging and, after a single compile-to-BC action, writes the
-// comgr.log returned to the caller to a file. Paired with AMD_COMGR_REDIRECT_
-// LOGS (set on the environment by the test), this lets a test confirm that
-// redirection copies logs to the extra destination without moving them away
-// from the caller's returned log.
+// Driver for AMD_COMGR_REDIRECT_LOGS: enables per-action logging, runs one
+// compile-to-BC action, and writes the caller's returned comgr.log to a file.
+// With AMD_COMGR_REDIRECT_LOGS set by the test, this confirms redirection
+// copies logs to the extra destination without moving them away from the
+// caller's returned log.
 //
 // Usage: logger-redirect <source.cl> <ocl-version> <returned-log-outfile>
 
@@ -53,7 +52,7 @@ int main(int argc, char *argv[]) {
   amd_comgr_(create_action_info(&DataAction));
   amd_comgr_(action_info_set_language(DataAction, OpenCLVersion));
   amd_comgr_(action_info_set_isa_name(DataAction, "amdgcn-amd-amdhsa--gfx900"));
-  // Enable per-action logging so a comgr.log object is returned to the caller
+  // Enable per-action logging so a comgr.log is returned to the caller
   // alongside whatever AMD_COMGR_REDIRECT_LOGS copies to its destination.
   amd_comgr_(action_info_set_logging(DataAction, true));
 
