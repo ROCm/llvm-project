@@ -2467,7 +2467,7 @@ bool TargetLowering::SimplifyDemandedBits(
     SDValue Op0 = Op.getOperand(0);
     SDValue Op1 = Op.getOperand(1);
 
-    unsigned DemandedBitsLZ = OriginalDemandedBits.countl_zero();
+    unsigned DemandedBitsLZ = DemandedBits.countl_zero();
     APInt LoMask = APInt::getLowBitsSet(BitWidth, BitWidth - DemandedBitsLZ);
 
     // If the demanded bits has leading zeroes, we don't demand those from the
@@ -3831,7 +3831,9 @@ bool TargetLowering::SimplifyDemandedVectorElts(
   case ISD::FSUB:
   case ISD::FMUL:
   case ISD::FDIV:
-  case ISD::FREM: {
+  case ISD::FREM:
+  case ISD::PSEUDO_FMIN:
+  case ISD::PSEUDO_FMAX: {
     SDValue Op0 = Op.getOperand(0);
     SDValue Op1 = Op.getOperand(1);
 
