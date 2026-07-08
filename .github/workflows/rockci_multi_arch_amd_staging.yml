@@ -77,7 +77,7 @@ jobs:
              contains(github.event.pull_request.body, 'LLVM_MAIN_REVISION')
            )
          )
-       ))      
+       ))
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
