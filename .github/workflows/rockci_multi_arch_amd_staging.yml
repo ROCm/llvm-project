@@ -65,7 +65,7 @@ concurrency:
 
 jobs:
   setup:
-    # Temporary remove of the CI setup
+    # Temporary remove of the CI skip for LLVM revision update
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
