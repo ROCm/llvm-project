@@ -5358,6 +5358,14 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
+  if (getToolChain().getTriple().isAMDGCN()) {
+    if (Args.hasFlag(options::OPT_fenable_new_pm_codegen,
+                     options::OPT_fno_enable_new_pm_codegen,
+                     true)) {
+      CmdArgs.push_back(Args.MakeArgString("-fenable-new-pm-codegen"));
+    }
+  }
+
   if (IsCuda && !IsCudaDevice) {
     // We need to figure out which CUDA version we're compiling for, as that
     // determines how we load and launch GPU kernels.
@@ -10133,9 +10141,19 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
 
       // Forward the LTO mode for this toolchain.
       auto DeviceLTOMode = TC->getLTOMode(ToolChainArgs, Kind);
-      if (DeviceLTOMode == LTOK_Full)
+      if (DeviceLTOMode == LTOK_Full) {
         CmdArgs.push_back(Args.MakeArgString(
             "--device-compiler=" + TC->getTripleString() + "=-flto=full"));
+
+        if (TC->getTriple().isAMDGCN() &&
+            Args.hasFlag(options::OPT_fenable_new_pm_codegen,
+                         options::OPT_fno_enable_new_pm_codegen,
+                         true)) {
+          CmdArgs.push_back(Args.MakeArgString(
+              "--device-linker=" + TC->getTripleString() +
+              "=-plugin-opt=-enable-npm-for-backend"));
+        }
+      }
       else if (DeviceLTOMode == LTOK_Thin) {
         CmdArgs.push_back(Args.MakeArgString(
             "--device-compiler=" + TC->getTripleString() + "=-flto=thin"));
