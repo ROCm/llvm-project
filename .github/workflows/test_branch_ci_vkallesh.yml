@@ -56,12 +56,19 @@ permissions:
   contents: read
 
 concurrency:
+  # TEST BRANCH DEMONSTRATION WORKFLOW
+  # This is a simplified CI workflow for amd-compiler-vkallesh-test branch
+  # to demonstrate selective gating checks for auto-merge behavior.
   # A PR number if a pull request and otherwise the commit hash. This cancels
   # queued and in-progress runs for the same PR (presubmit) or commit
   # (postsubmit). The workflow name is prepended to avoid conflicts between
   # different workflows.
-  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  group: test-branch-vkallesh-${{ github.event.number || github.sha }}
   cancel-in-progress: true
+
+env:
+  WORKFLOW_TYPE: "test-branch-demonstration"
+  BRANCH_NAME: "amd-compiler-vkallesh-test"
 
 jobs:
   setup:
