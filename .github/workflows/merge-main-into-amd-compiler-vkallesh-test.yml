@@ -2,12 +2,16 @@
 # merges "merge main into amd-compiler-vkallesh-test" sync PRs as a merge commit, once this job has confirmed
 # the mandatory gating checks passed AND the PR has at least one approving review.
 #
+# DEMONSTRATION PURPOSE:
+# This workflow demonstrates the merge behavior where:
+#   - Mandatory gating checks pass + 1 approval → PR merges
+#   - Non-mandatory tests can fail without blocking merge
+#
 # NOTE on "wait for only the gating tests": GitHub's `workflow_run` trigger only supports the fixed
 # `types:` values (requested / in_progress / completed), so the TRIGGER must stay `completed`.
 # The "only the gating tests" requirement is enforced inside the job instead: rather than requiring
-# the whole upstream workflow to succeed, we only require the configured gating checks (see
-# REQUIRED_GATING_CHECKS below) to have passed (other test failures are ignored for the merge
-# decision).
+# the whole upstream workflow to succeed, we only require the HARD-CODED gating checks to have
+# passed (other test failures are ignored for the merge decision).
 #
 # Upstream workflow name must match exactly (see `name:` in that file):
 #   .github/workflows/rockci_multi_arch_amd_compiler_vkallesh_test.yml → "Multi-Arch CI amd-compiler-vkallesh-test"
@@ -27,16 +31,12 @@
 #
 # Requires: Variable ROCM_CCIAPP_APP_ID + Secret ROCM_CCIAPP_PRIVATE_KEY (same as other automerge).
 #
-# CONFIGURABLE GATING CHECKS:
-#   The mandatory gating checks are NOT hard-coded as the source of truth — they are read from the
-#   repository Variable REQUIRED_GATING_CHECKS (Settings → Secrets and variables → Actions →
-#   Variables). Put ONE check-run name per line, e.g.:
-#       gfx90a Test
-#       Linux::release / Build Multi-Arch Stages / math-libs (...) / Stage - Math Libs (gfx94X-dcgpu)
-#   Surrounding double or single quotes around a line are optional and are stripped, so
-#   "gfx90a Test" and gfx90a Test are treated the same. Blank lines are ignored.
-#   This lets the team change the required tests without editing this workflow. The Variable is
-#   mandatory: if it is empty/unset the job fails with an error (no merge is attempted).
+# HARD-CODED GATING CHECKS (for amd-compiler-vkallesh-test demonstration):
+#   The mandatory gating checks are HARD-CODED in this workflow (not read from REQUIRED_GATING_CHECKS).
+#   This ensures reproducible behavior for the demonstration:
+#     - Mandatory checks: setup/setup, compiler-runtime build stage
+#     - Excluded checks: gfx90a Test (intentionally fails to show non-mandatory tests don't block merge)
+#   When mandatory checks pass + approval, the PR merges regardless of other test failures.
 
 name: Auto-merge main-to-amd-compiler-vkallesh-test after Multi-Arch CI
 
@@ -93,10 +93,6 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           REPO: ${{ github.repository }}
           PULL_REQUESTS_JSON: ${{ toJSON(github.event.workflow_run.pull_requests) }}
-          # Repository Variable holding the mandatory gating checks (one check name per line),
-          # so the team can change the required tests without editing this workflow. It is
-          # required: the job fails below if it is empty/unset.
-          REQUIRED_CHECKS_VAR: ${{ vars.REQUIRED_GATING_CHECKS }}
         run: |
           set -euo pipefail
           echo "=================================="
@@ -154,56 +150,39 @@ jobs:
           echo "Head SHA: ${HEAD_SHA}"
           echo "=================================="
 
-          # Build the mandatory gating-check list from REQUIRED_GATING_CHECKS (see header for details).
+          # HARD-CODED mandatory gating checks for amd-compiler-vkallesh-test branch
+          # This demonstrates merge behavior: mandatory tests pass + approval = merge
+          # even if non-mandatory tests (like gfx90a Test) fail.
           echo "=================================="
-          echo "DEBUG: Building mandatory gating checks list"
+          echo "DEBUG: Building HARD-CODED mandatory gating checks list"
           echo "=================================="
-          REQUIRED_CHECKS=()
-          SKIPPED_CHECKS=()
-          if [ -n "${REQUIRED_CHECKS_VAR:-}" ]; then
-            # One check name per line. For each line: strip a trailing CR (CRLF), trim surrounding
-            # whitespace, then strip ONE layer of matching surrounding quotes (so values entered as
-            # "gfx90a Test" or 'gfx90a Test' match the real check-run name without the quotes).
-            echo "DEBUG: Parsing REQUIRED_GATING_CHECKS variable..."
-            while IFS= read -r line; do
-              line="${line%$'\r'}"
-              line="${line#"${line%%[![:space:]]*}"}"   # ltrim
-              line="${line%"${line##*[![:space:]]}"}"   # rtrim
-              case "${line}" in
-                '"'*'"') line="${line#\"}"; line="${line%\"}" ;;
-                "'"*"'") line="${line#\'}"; line="${line%\'}" ;;
-              esac
-              [ -z "${line}" ] && continue
-              
-              # SKIP gfx90a Test - not applicable for amd-compiler-vkallesh-test branch
-              if [ "${line}" = "gfx90a Test" ]; then
-                echo "DEBUG: Skipping '${line}' (not applicable for test branch)"
-                SKIPPED_CHECKS+=("${line}")
-                continue
-              fi
-              
-              echo "DEBUG: Adding required check: ${line}"
-              REQUIRED_CHECKS+=("${line}")
-            done <<< "${REQUIRED_CHECKS_VAR}"
-          fi
+          
+          # Define the mandatory checks for this test branch
+          # These are the minimum checks that MUST pass for merge
+          REQUIRED_CHECKS=(
+            "Linux::release / Build Multi-Arch Stages / compiler-runtime / Stage - Compiler Runtime"
+            "setup / setup"
+          )
+          
+          # Define checks that are intentionally excluded (will fail but won't block merge)
+          SKIPPED_CHECKS=(
+            "gfx90a Test"
+          )
           
           echo "=================================="
           echo "Mandatory gating checks for amd-compiler-vkallesh-test: ${#REQUIRED_CHECKS[@]}"
+          echo ""
+          echo "These checks MUST pass for merge:"
           for name in "${REQUIRED_CHECKS[@]}"; do echo "  ✓ ${name}"; done
           
-          if [ "${#SKIPPED_CHECKS[@]}" -gt 0 ]; then
-            echo ""
-            echo "Skipped checks (not applicable for test branch): ${#SKIPPED_CHECKS[@]}"
-            for name in "${SKIPPED_CHECKS[@]}"; do echo "  ⊗ ${name}"; done
-          fi
+          echo ""
+          echo "Non-mandatory checks (ignored for merge decision): ${#SKIPPED_CHECKS[@]}"
+          echo "These can fail without blocking merge:"
+          for name in "${SKIPPED_CHECKS[@]}"; do echo "  ⊗ ${name}"; done
+          echo ""
+          echo "DEMONSTRATION: When mandatory checks pass + 1 approval,"
+          echo "the PR will merge even if other tests fail."
           echo "=================================="
-          
-          if [ "${#REQUIRED_CHECKS[@]}" -eq 0 ]; then
-            echo "::warning::All checks were skipped or REQUIRED_GATING_CHECKS is empty."
-            echo "::warning::For test branch, at least 2 non-gfx90a checks should be configured."
-            echo "::error::No mandatory gating checks remain after filtering. Cannot proceed with merge."
-            exit 1
-          fi
 
           # The upstream workflow has completed, but a gating check may belong to a sibling
           # workflow still finishing, so allow a short wait.
