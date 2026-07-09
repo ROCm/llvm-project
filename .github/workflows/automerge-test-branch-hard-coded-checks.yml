@@ -2,6 +2,10 @@
 # merges "merge main into amd-compiler-vkallesh-test" sync PRs as a merge commit, once this job has confirmed
 # the mandatory gating checks passed AND the PR has at least one approving review.
 #
+# NOTE: This workflow file is UNIQUELY NAMED (automerge-test-branch-hard-coded-checks.yml) to prevent
+# GitHub from running the similarly-named workflow from amd-staging. The unique filename ensures only
+# this version (with hard-coded gating checks) runs for the test branch.
+#
 # DEMONSTRATION PURPOSE:
 # This workflow demonstrates the merge behavior where:
 #   - Mandatory gating checks pass + 1 approval → PR merges
