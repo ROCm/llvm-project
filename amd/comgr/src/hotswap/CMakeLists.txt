@@ -262,11 +262,12 @@ if(NOT TARGET lldELF OR NOT TARGET lldCommon)
 endif()
 if(LLD_INCLUDE_DIRS)
   target_include_directories(hotswap-transpiler PRIVATE ${LLD_INCLUDE_DIRS})
+elseif(TARGET lldELF AND TARGET lldCommon AND LLVM_MAIN_SRC_DIR)
+  # In an in-tree LLVM_ENABLE_PROJECTS=lld build, the LLD targets already exist
+  # before the install-tree LLDConfig.cmake has populated LLD_INCLUDE_DIRS.
+  target_include_directories(hotswap-transpiler PRIVATE
+    ${LLVM_MAIN_SRC_DIR}/../lld/include)
 else()
-  # LLD_INCLUDE_DIRS is set by find_package(LLD), which is how comgr is built
-  # (the LLVM external-projects mechanism). It is not expected to be unset; an
-  # in-tree LLVM_ENABLE_PROJECTS build is not a supported configuration here, so
-  # error out and debug rather than guessing at the include paths.
   message(FATAL_ERROR
     "hotswap-transpiler needs the LLD headers, but LLD_INCLUDE_DIRS is unset.")
 endif()
