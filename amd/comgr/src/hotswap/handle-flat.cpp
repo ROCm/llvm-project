@@ -183,9 +183,8 @@ std::string formatScratchAbiDetail(RaiseContext &Ctx, const Twine &Why) {
   return Detail;
 }
 
-AllocaInst *getOrCreateSourcePrivateSegment(RaiseContext &Ctx,
-                                            const DecodedInst &Di,
-                                            HandlerResult &Hr) {
+Expected<AllocaInst *> getOrCreateSourcePrivateSegment(RaiseContext &Ctx,
+                                                       const DecodedInst &Di) {
   if (Ctx.SourcePrivateSegmentFixedSize == 0) {
     std::string Detail = formatScratchAbiDetail(
         Ctx,
@@ -194,9 +193,7 @@ AllocaInst *getOrCreateSourcePrivateSegment(RaiseContext &Ctx,
         "refusing rather than inventing scratch backing.");
     errs() << "transpiler: FLAT scratch refused: " << Di.Mnemonic
            << " -- " << Detail << "\n";
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-        Di, "FLAT", Detail);
-    return nullptr;
+    return RaiseFailure::unsupportedInstructionForm(Di, "FLAT", Detail);
   }
 
   if (Ctx.ScratchPrivateSegmentAlloca)
@@ -223,10 +220,9 @@ AllocaInst *getOrCreateSourcePrivateSegment(RaiseContext &Ctx,
   return Alloca;
 }
 
-Value *decodeScratchOffset(RaiseContext &Ctx, const DecodedInst &Di,
-                           OpResolver &Op, unsigned AddrStart,
-                           unsigned ElemBytes, StringRef Label,
-                           HandlerResult &Hr) {
+Expected<Value *> decodeScratchOffset(RaiseContext &Ctx, const DecodedInst &Di,
+                                      OpResolver &Op, unsigned AddrStart,
+                                      unsigned ElemBytes, StringRef Label) {
   Value *Offset = ConstantInt::get(Ctx.I32Ty, 0);
   unsigned Idx = AddrStart;
 
@@ -241,10 +237,8 @@ Value *decodeScratchOffset(RaiseContext &Ctx, const DecodedInst &Di,
   } else if (Idx < Op.nSrcs() && Op.isSrcReg(Idx) &&
              Op.srcReg(Idx).RegKind != ParsedReg::SGPR &&
              Op.srcReg(Idx).RegKind != ParsedReg::NOREG) {
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-        Di, "FLAT",
-        (Twine(Label) + ": expected VGPR or off/null for VADDR"));
-    return nullptr;
+    return RaiseFailure::unsupportedInstructionForm(
+        Di, "FLAT", Label + ": expected VGPR or off/null for VADDR");
   }
 
   if (Idx < Op.nSrcs() && Op.isSrcReg(Idx) &&
@@ -254,10 +248,8 @@ Value *decodeScratchOffset(RaiseContext &Ctx, const DecodedInst &Di,
                              "scratch_soff");
   } else if (Idx < Op.nSrcs() && Op.isSrcReg(Idx) &&
              Op.srcReg(Idx).RegKind != ParsedReg::NOREG) {
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-        Di, "FLAT",
-        (Twine(Label) + ": expected SGPR or off/null for SADDR"));
-    return nullptr;
+    return RaiseFailure::unsupportedInstructionForm(
+        Di, "FLAT", Label + ": expected SGPR or off/null for SADDR");
   }
 
   int64_t Imm = firstScratchImm(Di, Op, Idx);
@@ -266,16 +258,17 @@ Value *decodeScratchOffset(RaiseContext &Ctx, const DecodedInst &Di,
         Offset, ConstantInt::get(Ctx.I32Ty, static_cast<uint32_t>(Imm)),
         "scratch_iadd");
 
-  AllocaInst *Frame = getOrCreateSourcePrivateSegment(Ctx, Di, Hr);
+  Expected<AllocaInst *> Frame = getOrCreateSourcePrivateSegment(Ctx, Di);
   if (!Frame)
-    return nullptr;
-  return Ctx.B.CreateGEP(Ctx.I8Ty, Frame, Offset, "scratch_ptr");
+    return Frame.takeError();
+
+  return Ctx.B.CreateGEP(Ctx.I8Ty, *Frame, Offset, "scratch_ptr");
 }
 
 } // namespace
 
-HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
-                        OpResolver &Op) {
+Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OpResolver &Op) {
   HandlerResult Hr;
   StringRef Mn(Di.Mnemonic);
   CanonicalOp Sop = Di.CanonOp;
@@ -284,18 +277,16 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     std::optional<int64_t> Cpol =
         readNamedImmOperand(Di, AMDGPU::OpName::cpol);
     if (!Cpol) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT", "global_wb missing immediate cpol/scope operand");
-      return Hr;
     }
 
     uint64_t RawCpol = static_cast<uint64_t>(*Cpol);
     uint64_t Scope = RawCpol & AMDGPU::CPol::SCOPE;
     if ((RawCpol & ~static_cast<uint64_t>(AMDGPU::CPol::SCOPE)) != 0) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           "global_wb cache-policy bits outside SCOPE are not modelled");
-      return Hr;
     }
 
     // CU-scope writeback is a no-op that still returns "done"; there is no
@@ -318,10 +309,9 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       return Hr;
     }
 
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "FLAT",
         "global_wb SCOPE_SE cannot be represented by gfx942 writeback fences");
-    return Hr;
   }
 
   // ---------------------------------------------------------------------
@@ -369,14 +359,12 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
 
     unsigned AccessBytes = ScratchAccessBytes();
     if (AccessBytes == 0) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           formatScratchAbiDetail(
-              Ctx,
-              Twine("scratch_* opcode is not a load/store shape Hotswap "
-                    "models yet: ") +
-                  Di.Mnemonic));
-      return Hr;
+              Ctx, "scratch_* opcode is not a load/store shape Hotswap "
+                   "models yet: " +
+                       Di.Mnemonic));
     }
 
     if (Sop == CanonicalOp::SCRATCH_LOAD_DWORD ||
@@ -384,16 +372,16 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
         Sop == CanonicalOp::SCRATCH_LOAD_DWORDX3 ||
         Sop == CanonicalOp::SCRATCH_LOAD_DWORDX4) {
       if (Op.nSrcs() < 2) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        return RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT", "scratch_load_* expected address/cpol operands");
-        return Hr;
       }
 
-      Value *Addr = decodeScratchOffset(Ctx, Di, Op, /*addrStart=*/0,
-                                        AccessBytes, "scratch_load", Hr);
-      if (Hr.Failure.hasFailed())
-        return Hr;
+      Expected<Value *> AddrOr = decodeScratchOffset(
+          Ctx, Di, Op, /*addrStart=*/0, AccessBytes, "scratch_load");
+      if (!AddrOr)
+        return AddrOr.takeError();
 
+      Value *Addr = *AddrOr;
       ParsedReg Dest = Op.dst();
       Type *LoadTy = nullptr;
       switch (Sop) {
@@ -439,22 +427,21 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
         Sop == CanonicalOp::SCRATCH_STORE_DWORDX3 ||
         Sop == CanonicalOp::SCRATCH_STORE_DWORDX4) {
       if (Op.nSrcs() < 3) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        return RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT",
             "scratch_store_* expected data plus address/cpol operands");
-        return Hr;
       }
 
-      Value *Addr = decodeScratchOffset(Ctx, Di, Op, /*addrStart=*/1,
-                                        AccessBytes, "scratch_store", Hr);
-      if (Hr.Failure.hasFailed())
-        return Hr;
+      Expected<Value *> AddrOr = decodeScratchOffset(
+          Ctx, Di, Op, /*addrStart=*/1, AccessBytes, "scratch_store");
+      if (!AddrOr)
+        return AddrOr.takeError();
 
+      Value *Addr = *AddrOr;
       ParsedReg StData = Op.srcReg(0);
       if (StData.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        return RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT", "scratch_store_* expected VGPR data operand");
-        return Hr;
       }
 
       Ctx.emitUnderExec([&] {
@@ -471,13 +458,11 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       return Hr;
     }
 
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "FLAT",
         formatScratchAbiDetail(
             Ctx,
-            Twine("scratch_* shape reached unreachable dispatch: ") +
-                Di.Mnemonic));
-    return Hr;
+            "scratch_* shape reached unreachable dispatch: " + Di.Mnemonic));
   }
 
   if (Sop == CanonicalOp::GLOBAL_LOAD_USHORT || Sop == CanonicalOp::GLOBAL_LOAD_SHORT_D16_HI ||
@@ -751,20 +736,18 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     if (Op.nSrcs() == 5) {
       IsSaddr = true;
     } else if (Op.nSrcs() != 4) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           "global_load_async_to_lds_b*: expected 4 srcs (plain) or "
           "5 srcs (SADDR) per FLAT_Global_Load_LDS_Pseudo<IsAsync=1>");
-      return Hr;
     }
 
     ParsedReg VdstPr = Op.srcReg(0);
     if (VdstPr.RegKind != ParsedReg::VGPR) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           "global_load_async_to_lds_b*: vdst (LDS-base operand) is "
           "not a VGPR");
-      return Hr;
     }
     Value *LdsOff = Ctx.Regs.readReg32(Ctx.B, VdstPr);
     Type *PtrLdsTy = PointerType::get(Ctx.C, /*addrspace=*/3);
@@ -777,11 +760,10 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       ParsedReg VaddrPr = Op.srcReg(2);
       if (SaddrPr.RegKind != ParsedReg::SGPR ||
           VaddrPr.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        return RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT",
             "global_load_async_to_lds_b* SADDR: expected "
             "(SGPR_64, VGPR_32) for (saddr, vaddr)");
-        return Hr;
       }
       Value *Saddr = Ctx.Regs.readReg64(Ctx.B, SaddrPr);
       // `zext` (not `sext`): the ISA programming manual §4.9.9
@@ -846,11 +828,10 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     } else {
       ParsedReg VaddrPr = Op.srcReg(1);
       if (VaddrPr.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        return RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT",
             "global_load_async_to_lds_b* plain: expected VGPR_64 "
             "for vaddr");
-        return Hr;
       }
       GlobalAddr = Ctx.Regs.readReg64(Ctx.B, VaddrPr);
       ImmStart = 2;
@@ -1204,7 +1185,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
           << "VGPR address used here without divergence "
           << "analysis -- refusing to emit a fallback or silently "
           << "drop the hint.\n";
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           "gfx1250-only VMEM prefetch (HasVmemPrefInsts); no "
           "equivalent on non-gfx1250 compilation target. The "
@@ -1212,19 +1193,16 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
           "pointer (the VMEM prefetch is divergent), and a silent "
           "drop would mask both the cross-target capability gap "
           "and any pipeline-tuning regression downstream.");
-      return Hr;
     }
 
     bool IsSaddr = false;
     if (Op.nSrcs() == 4) {
       IsSaddr = true;
     } else if (Op.nSrcs() != 3) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
-          Twine(Di.Mnemonic)
-              + ": expected 3 srcs (plain) or 4 srcs (SADDR) per "
-                "FLAT_Prefetch_Pseudo");
-      return Hr;
+          Di.Mnemonic + ": expected 3 srcs (plain) or 4 srcs (SADDR) per "
+                        "FLAT_Prefetch_Pseudo");
     }
 
     Value *PrefetchAddr = nullptr;
@@ -1234,11 +1212,10 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       ParsedReg VaddrPr = Op.srcReg(1);
       if (SaddrPr.RegKind != ParsedReg::SGPR ||
           VaddrPr.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        return RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT",
-            Twine(Di.Mnemonic)
-                + " SADDR: expected (SGPR_64, VGPR_32) for (saddr, vaddr)");
-        return Hr;
+            Di.Mnemonic +
+                " SADDR: expected (SGPR_64, VGPR_32) for (saddr, vaddr)");
       }
       Value *Saddr = Ctx.Regs.readReg64(Ctx.B, SaddrPr);
       Value *Voff = Ctx.B.CreateZExt(
@@ -1248,10 +1225,8 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     } else {
       ParsedReg VaddrPr = Op.srcReg(0);
       if (VaddrPr.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-            Di, "FLAT",
-            Twine(Di.Mnemonic) + " plain: expected VGPR_64 for vaddr");
-        return Hr;
+        return RaiseFailure::unsupportedInstructionForm(
+            Di, "FLAT", Di.Mnemonic + " plain: expected VGPR_64 for vaddr");
       }
       PrefetchAddr = Ctx.Regs.readReg64(Ctx.B, VaddrPr);
       ImmStart = 1;
@@ -1565,10 +1540,10 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     const bool IsNumMinMaxF64 = Sop == CanonicalOp::FLAT_ATOMIC_MIN_NUM_F64 ||
                                 Sop == CanonicalOp::FLAT_ATOMIC_MAX_NUM_F64;
     if (IsNumMinMaxF64 && !Ctx.Isa.HasIeeeNumMinMaxAtomics) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-          Di, "FLAT", "f64 atomic min/max from a pre-gfx12 source uses raw "
-                      "compare semantics, not minimumNumber");
-      return Hr;
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "FLAT",
+          "f64 atomic min/max from a pre-gfx12 source uses raw "
+          "compare semantics, not minimumNumber");
     }
     if (IsSaddr) {
       FlatAddr Fa = decodeGlobalStoreAddr(Ctx, Di, Op,
@@ -1675,10 +1650,8 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       AtomicOp = AtomicRMWInst::FMaximumNum; IsFp = true;
       Data = Ctx.B.CreateBitCast(Data, Ctx.F64Ty); break;
     default:
-      llvm::errs() << "transpiler: Unhandled flat atomic: " << Mn << "\n";
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "FLAT",
-                                                   "unhandled flat atomic");
-      return Hr;
+      return RaiseFailure::unsupportedInstructionForm(Di, "FLAT",
+                                                      "unhandled flat atomic");
     }
     Ctx.emitUnderExec([&] {
       auto *Rmw = Ctx.B.CreateAtomicRMW(
@@ -1751,10 +1724,10 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     const bool IsNumMinMaxF64 = Sop == CanonicalOp::GLOBAL_ATOMIC_MIN_NUM_F64 ||
                                 Sop == CanonicalOp::GLOBAL_ATOMIC_MAX_NUM_F64;
     if (IsNumMinMaxF64 && !Ctx.Isa.HasIeeeNumMinMaxAtomics) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-          Di, "FLAT", "f64 atomic min/max from a pre-gfx12 source uses raw "
-                      "compare semantics, not minimumNumber");
-      return Hr;
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "FLAT",
+          "f64 atomic min/max from a pre-gfx12 source uses raw "
+          "compare semantics, not minimumNumber");
     }
     FlatAddr Fa = decodeGlobalStoreAddr(Ctx, Di, Op,
                                          /*elemBytes=*/Is64 ? 8 : 4,
@@ -1816,10 +1789,8 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     case CanonicalOp::GLOBAL_ATOMIC_MAX_NUM_F64:
       AtomicOp = AtomicRMWInst::FMaximumNum; AtomicTy = Ctx.F64Ty; IsFp = true; break;
     default:
-      llvm::errs() << "transpiler: Unsupported global atomic variant: " << Mn << "\n";
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT", "unsupported global atomic variant");
-      return Hr;
     }
     if (IsFp) Data = Ctx.B.CreateBitCast(Data, AtomicTy);
     Ctx.emitUnderExec([&] {

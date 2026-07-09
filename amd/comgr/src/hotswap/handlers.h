@@ -11,6 +11,8 @@
 
 #include "raise-context.h"
 
+#include "llvm/Support/Error.h"
+
 namespace llvm {
 class MCInstrInfo;
 } // namespace llvm
@@ -21,34 +23,35 @@ class OpcodeMap;
 
 // Asserts every MFMA-format opcode the disassembler can decode has a CanonicalOp
 // handler entry. See `handle-mfma.cpp` for details.
-void verifyMFMACoverage(const llvm::MCInstrInfo &MCII, const OpcodeMap &OpcMap);
+llvm::Error verifyMFMACoverage(const llvm::MCInstrInfo &MCII,
+                               const OpcodeMap &OpcMap);
 
-HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
-                       OpResolver &Op);
-HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
-                          OpResolver &Op);
-HandlerResult handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleVOPD(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op);
-HandlerResult handleVIMAGE(RaiseContext &Ctx, const DecodedInst &Di,
-                           OpResolver &Op);
+llvm::Expected<HandlerResult> handleSOPP(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleSMEM(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleSOPC(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleSOP1(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleSOPK(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleSOP2(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleVALU(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleFLAT(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
+                                       OpResolver &Op);
+llvm::Expected<HandlerResult>
+handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleMFMA(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult> handleVOPD(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op);
+llvm::Expected<HandlerResult>
+handleVIMAGE(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op);
 
 } // namespace COMGR::hotswap
 

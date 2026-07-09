@@ -6,8 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "handlers.h"
 #include "canonical-op-attrs.h"
+#include "handlers.h"
+#include "hotswap/raise-failure.h"
 
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/Intrinsics.h"
@@ -254,8 +255,8 @@ static void handleLshlAddU32(RaiseContext &Ctx, OpResolver &Op, unsigned ShAmt,
   Hr.Handled = true;
 }
 
-HandlerResult handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op) {
+Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
 
@@ -761,11 +762,13 @@ HandlerResult handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
           CtrlImm == 0x50019) {
         unsigned SrcWaveBits = Ctx.Isa.WaveSize;
         if (SrcWaveBits != 32 && SrcWaveBits != 64)
-          report_fatal_error(
+          return RaiseFailure::unsupportedInstructionForm(
+              Di, "SOP2",
               "S_BFE_U32 wave_id lift: unsupported source wave size " +
-              Twine(SrcWaveBits) +
-              " (expected 32 or 64); extend the shift-amount dispatch "
-              "before using this path on a new source ISA.");
+                  Twine(SrcWaveBits) +
+                  " (expected 32 or 64); extend the shift-amount dispatch "
+                  "before using this path on a new source ISA.");
+
         unsigned LogWs = (SrcWaveBits == 64) ? 6 : 5;
         Value *Tid = Ctx.Projection.emitWorkitemIdX(Ctx.B);
         Tid->setName("wave_id_lift_tid");

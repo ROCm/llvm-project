@@ -35,8 +35,8 @@ ArrayRef<CanonicalOpAttrSpec> getHandlerValuVcmpAttrs() {
   return kAttrs;
 }
 
-HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
-                               OpResolver &Op) {
+Expected<HandlerResult> handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
+                                       OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
   switch (Sop) {
@@ -60,9 +60,8 @@ HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
     errs() << "transpiler: " << Mn
            << ": V_CMP/V_CMPX reached handler without VCmpMeta "
               "(OpcodeMap::build should have populated it)\n";
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "VALU", "V_CMP/V_CMPX reached handler without VCmpMeta");
-    return Hr;
   }
 
   // ---- v_cmp_class_f<bits> / v_cmpx_class_f<bits> ----
@@ -160,9 +159,8 @@ HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
   }
   if (!M->IsClass && (!S0 || !S1)) {
     errs() << "transpiler: " << Mn << ": missing operand\n";
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "VALU", "V_CMP/V_CMPX missing operand");
-    return Hr;
   }
 
   if (!M->IsClass)

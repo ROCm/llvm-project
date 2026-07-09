@@ -178,8 +178,8 @@ ArrayRef<CanonicalOpAttrSpec> getHandlerSOP1Attrs() {
   return kAttrs;
 }
 
-HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op) {
+Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
 
@@ -383,18 +383,15 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     // already promoted the next linear offset to a leader so subsequent
     // instructions land in their own BBs.
     if (!Ctx.SetpcAnalysis) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_set_pc_i64 reached without a SetPcAnalysis "
           "(raiser pipeline is missing the Phase 1.1 step)");
-      return Hr;
     }
     auto It = Ctx.SetpcAnalysis->SetpcSites.find(Di.Offset);
     if (It == Ctx.SetpcAnalysis->SetpcSites.end()) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-          Di, "SOP1",
-          "s_set_pc_i64 site not classified by SetPcAnalysis");
-      return Hr;
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "SOP1", "s_set_pc_i64 site not classified by SetPcAnalysis");
     }
     const SetPcSiteInfo &Info = It->second;
     switch (Info.SiteKind) {
@@ -425,13 +422,11 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
       return Hr;
     }
     case SetPcSiteInfo::Kind::Unresolvable:
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "SOP1",
-                                                  Info.RefusalReason);
-      return Hr;
+      return RaiseFailure::unsupportedInstructionForm(Di, "SOP1",
+                                                      Info.RefusalReason);
     }
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "SOP1", "s_set_pc_i64 SetPcSiteInfo::Kind not handled");
-    return Hr;
   }
   if (Sop == CanonicalOp::S_SWAP_PC_I64) {
     // Branch-and-link. setpc_analysis classifies the call-target
@@ -467,24 +462,20 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     // Unresolvable is refused loudly with the analysis's diagnostic.
     // See canonical-op.h's S_SWAP_PC_I64 doc for the lowering contract.
     if (!Ctx.SetpcAnalysis) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_swap_pc_i64 reached without a SetPcAnalysis "
           "(raiser pipeline is missing the Phase 1.1 step)");
-      return Hr;
     }
     auto It = Ctx.SetpcAnalysis->SetpcSites.find(Di.Offset);
     if (It == Ctx.SetpcAnalysis->SetpcSites.end()) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-          Di, "SOP1",
-          "s_swap_pc_i64 site not classified by SetPcAnalysis");
-      return Hr;
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "SOP1", "s_swap_pc_i64 site not classified by SetPcAnalysis");
     }
     const SetPcSiteInfo &Info = It->second;
     if (Info.SiteKind == SetPcSiteInfo::Kind::Unresolvable) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "SOP1",
-                                                  Info.RefusalReason);
-      return Hr;
+      return RaiseFailure::unsupportedInstructionForm(Di, "SOP1",
+                                                      Info.RefusalReason);
     }
     if (Info.SiteKind == SetPcSiteInfo::Kind::IndirectB) {
       // Defensive: the analysis should never produce IndirectB for
@@ -492,13 +483,12 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
       // not a return slot -- IndirectB is the return-side use of
       // such a pair). If it ever does, refuse loudly so the
       // mismatch surfaces rather than silently mis-lowering.
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_swap_pc_i64 classified as IndirectB by setpc_analysis "
           "(unexpected -- IndirectB is the return-side classification "
           "for s_set_pc_i64; a swap_pc reaching this code path "
           "indicates an analysis invariant violation)");
-      return Hr;
     }
     // Materialise the return address marker (the offset of the BB
     // immediately after the swap) into sdst on both DirectA and
@@ -539,10 +529,9 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop == CanonicalOp::S_ADD_PC_I64) {
     std::optional<int64_t> ConstOpt = evalOperandAsConst(Di.Inst, 0);
     if (!ConstOpt) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_add_pc_i64 with non-literal source (SGPR-pair form unsupported)");
-      return Hr;
     }
     uint64_t Target = Di.Offset + Di.Size + static_cast<uint64_t>(*ConstOpt);
     Ctx.B.CreateBr(Ctx.lookupBB(Target));

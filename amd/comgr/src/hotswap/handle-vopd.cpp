@@ -158,9 +158,9 @@ Value *readVopdSource(RaiseContext &Ctx, const DecodedInst::VopdSource &Src,
   return applyVopdSourceModifiers(Ctx, V, Src.Modifiers);
 }
 
-Value *readVopdSource64(RaiseContext &Ctx, const DecodedInst::VopdSource &Src,
-                        unsigned SrcSlot, const DecodedInst &Di,
-                        HandlerResult &Hr) {
+Expected<Value *> readVopdSource64(RaiseContext &Ctx,
+                                   const DecodedInst::VopdSource &Src,
+                                   unsigned SrcSlot, const DecodedInst &Di) {
   Value *V = nullptr;
   auto Parsed = [&](ParsedReg::Kind Kind) {
     ParsedReg Pr;
@@ -186,16 +186,16 @@ Value *readVopdSource64(RaiseContext &Ctx, const DecodedInst::VopdSource &Src,
     V = Ctx.Regs.loadSGPR64(Ctx.B, Src.BaseIdx);
     break;
   default:
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-        Di, "VOPD", "VOPD f64 component source is not a 64-bit scalar/vector source");
-    return nullptr;
+    return RaiseFailure::unsupportedInstructionForm(
+        Di, "VOPD",
+        "VOPD f64 component source is not a 64-bit scalar/vector source");
   }
 
   return applyVopdSourceModifiers(Ctx, V, Src.Modifiers);
 }
 
-Value *readVopdCond(RaiseContext &Ctx, const DecodedInst &Di,
-                    const DecodedInst::VopdSource &Src, HandlerResult &Hr) {
+Expected<Value *> readVopdCond(RaiseContext &Ctx, const DecodedInst &Di,
+                               const DecodedInst::VopdSource &Src) {
   // On a wave32 source both vcc_hi and exec_hi are free scratch scalars the
   // compiler may name as the condition (vcc_hi decodes as Kind::VCC, exec_hi
   // as Kind::EXEC). Route both through their scratch slot and project
@@ -211,9 +211,8 @@ Value *readVopdCond(RaiseContext &Ctx, const DecodedInst &Di,
 
   if (Src.SrcKind != DecodedInst::VopdSource::Kind::VCC &&
       Src.SrcKind != DecodedInst::VopdSource::Kind::SGPR) {
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "VOPD", "VOPD cndmask explicit condition is neither VCC nor SGPR");
-    return nullptr;
   }
   if (Src.SrcKind == DecodedInst::VopdSource::Kind::VCC)
     return Ctx.Regs.loadVCC(Ctx.B);
@@ -235,31 +234,28 @@ Value *readVopdCond(RaiseContext &Ctx, const DecodedInst &Di,
   return Fallback;
 }
 
-bool requireVopdSources(const DecodedInst::VopdHalf &Half, unsigned N,
-                        const DecodedInst &Di, HandlerResult &Hr) {
+Error requireVopdSources(const DecodedInst::VopdHalf &Half, unsigned N,
+                         const DecodedInst &Di) {
   if (Half.NumSrcs >= N)
-    return true;
-  Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return Error::success();
+
+  return RaiseFailure::unsupportedInstructionForm(
       Di, "VOPD", "VOPD component has too few decoded sources");
-  return false;
 }
 
-bool requireVopdRegWidth(const DecodedInst &Di, const char *What,
-                         unsigned Width, unsigned MinWidth,
-                         HandlerResult &Hr) {
+Error requireVopdRegWidth(const DecodedInst &Di, const Twine &What,
+                          unsigned Width, unsigned MinWidth) {
   if (Width >= MinWidth)
-    return true;
-  Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-      Di, "VOPD", (Twine("VOPD ") + What + " is narrower than " +
-                   Twine(MinWidth) + " dwords")
-                      .str());
-  return false;
+    return Error::success();
+
+  return RaiseFailure::unsupportedInstructionForm(
+      Di, "VOPD",
+      "VOPD " + What + " is narrower than " + Twine(MinWidth) + " dwords");
 }
 
-bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
-                   const DecodedInst::VopdHalf &Half,
-                   SmallVectorImpl<PendingVopdWrite> &Writes,
-                   HandlerResult &Hr) {
+Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
+                    const DecodedInst::VopdHalf &Half,
+                    SmallVectorImpl<PendingVopdWrite> &Writes) {
   ParsedReg Dst = applyVopdVGPRMsb(
       Ctx, Ctx.parseReg(Half.DstReg, /*mciOpIdx=*/-1),
       /*slot=*/3);
@@ -268,10 +264,12 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
     // components. A 64-bit commit writes [baseIdx, baseIdx+1] through the
     // register file helper below, so dst.width is not a reliable arity check.
     Writes.push_back(PendingVopdWrite{Dst, V});
-    return true;
+    return Error::success();
   };
-  auto LowerBitOp3 = [&]() {
-    if (!requireVopdSources(Half, 2, Di, Hr)) return false;
+  auto LowerBitOp3 = [&]() -> Error {
+    if (Error Err = requireVopdSources(Half, 2, Di))
+      return Err;
+
     Value *A = readVopdSource(Ctx, Half.Src[0], 0);
     Value *B = readVopdSource(Ctx, Half.Src[1], 1);
     Value *C = ConstantInt::get(Ctx.I32Ty, 0);
@@ -304,23 +302,35 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
 
   switch (Half.CanonOp) {
   case CanonicalOp::V_MOV_B32: {
-    if (!requireVopdSources(Half, 1, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, 1, Di))
+      return Err;
+
     return Queue(readVopdSource(Ctx, Half.Src[0], 0));
   }
   case CanonicalOp::V_CNDMASK_B32: {
-    if (!requireVopdSources(Half, 2, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, 2, Di))
+      return Err;
     Value *S0 = readVopdSource(Ctx, Half.Src[0], 0);
     Value *S1 = readVopdSource(Ctx, Half.Src[1], 1);
-    Value *Cond = Half.NumSrcs >= 3 ? readVopdCond(Ctx, Di, Half.Src[2], Hr)
-                                    : Ctx.Regs.loadVCC(Ctx.B);
-    if (!Cond) return false;
+    Value *Cond;
+    if (Half.NumSrcs >= 3) {
+      Expected<Value *> C = readVopdCond(Ctx, Di, Half.Src[2]);
+      if (!C)
+        return C.takeError();
+
+      Cond = *C;
+    } else {
+      Cond = Ctx.Regs.loadVCC(Ctx.B);
+    }
     return Queue(Ctx.B.CreateSelect(Cond, S1, S0, "vopd_cndmask"));
   }
   case CanonicalOp::V_ADD_F32:
   case CanonicalOp::V_MUL_F32:
   case CanonicalOp::V_SUB_F32:
   case CanonicalOp::V_SUBREV_F32: {
-    if (!requireVopdSources(Half, 2, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, 2, Di))
+      return Err;
+
     Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
                                     Ctx.F32Ty);
     Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
@@ -337,7 +347,9 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
     return Queue(Ctx.B.CreateBitCast(Res, Ctx.I32Ty));
   }
   case CanonicalOp::V_FMAC_F32: {
-    if (!requireVopdSources(Half, 2, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, 2, Di))
+      return Err;
+
     Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
                                     Ctx.F32Ty);
     Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
@@ -352,7 +364,9 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.B.CreateCall(Fma, {S0, S1, Acc}, "vopd_fmac"), Ctx.I32Ty));
   }
   case CanonicalOp::V_FMA_F32: {
-    if (!requireVopdSources(Half, 3, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, 3, Di))
+      return Err;
+
     Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
                                     Ctx.F32Ty);
     Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
@@ -371,19 +385,26 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_MIN_NUM_F64:
   case CanonicalOp::V_FMA_F64: {
     unsigned NumSrcs = Half.CanonOp == CanonicalOp::V_FMA_F64 ? 3 : 2;
-    if (!requireVopdSources(Half, NumSrcs, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, NumSrcs, Di))
+      return Err;
+
     for (unsigned I = 0; I < NumSrcs; ++I) {
-      if (Half.Src[I].SrcKind != DecodedInst::VopdSource::Kind::Imm &&
-          !requireVopdRegWidth(Di, "f64 source", Half.Src[I].Width, 2, Hr))
-        return false;
+      if (Half.Src[I].SrcKind != DecodedInst::VopdSource::Kind::Imm)
+        if (Error Err =
+                requireVopdRegWidth(Di, "f64 source", Half.Src[I].Width, 2))
+          return Err;
     }
     auto *F64Ty = Type::getDoubleTy(Ctx.C);
-    Value *S0 = readVopdSource64(Ctx, Half.Src[0], 0, Di, Hr);
-    if (!S0) return false;
-    Value *S1 = readVopdSource64(Ctx, Half.Src[1], 1, Di, Hr);
-    if (!S1) return false;
-    S0 = Ctx.B.CreateBitCast(S0, F64Ty);
-    S1 = Ctx.B.CreateBitCast(S1, F64Ty);
+    Expected<Value *> S0E = readVopdSource64(Ctx, Half.Src[0], 0, Di);
+    if (!S0E)
+      return S0E.takeError();
+
+    Expected<Value *> S1E = readVopdSource64(Ctx, Half.Src[1], 1, Di);
+    if (!S1E)
+      return S1E.takeError();
+
+    Value *S0 = Ctx.B.CreateBitCast(*S0E, F64Ty);
+    Value *S1 = Ctx.B.CreateBitCast(*S1E, F64Ty);
 
     Value *Res = nullptr;
     if (Half.CanonOp == CanonicalOp::V_MUL_F64) {
@@ -401,9 +422,11 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
                              : "vopd_fminnum_f64";
       Res = Ctx.B.CreateCall(Fn, {S0, S1}, Name);
     } else {
-      Value *S2 = readVopdSource64(Ctx, Half.Src[2], 2, Di, Hr);
-      if (!S2) return false;
-      S2 = Ctx.B.CreateBitCast(S2, F64Ty);
+      Expected<Value *> S2E = readVopdSource64(Ctx, Half.Src[2], 2, Di);
+      if (!S2E)
+        return S2E.takeError();
+
+      Value *S2 = Ctx.B.CreateBitCast(*S2E, F64Ty);
       Function *Fma = Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma,
                                                         {F64Ty});
       Res = Ctx.B.CreateCall(Fma, {S0, S1, S2}, "vopd_fma_f64");
@@ -412,7 +435,9 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
   }
   case CanonicalOp::V_FMAMK_F32:
   case CanonicalOp::V_FMAAK_F32: {
-    if (!requireVopdSources(Half, 3, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, 3, Di))
+      return Err;
+
     Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
                                     Ctx.F32Ty);
     Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
@@ -440,7 +465,9 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_AND_B32:
   case CanonicalOp::V_OR_B32:
   case CanonicalOp::V_XOR_B32: {
-    if (!requireVopdSources(Half, 2, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, 2, Di))
+      return Err;
+
     Value *S0 = readVopdSource(Ctx, Half.Src[0], 0);
     Value *S1 = readVopdSource(Ctx, Half.Src[1], 1);
     Value *Res = nullptr;
@@ -462,7 +489,9 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_MIN_I32:
   case CanonicalOp::V_MAX_U32:
   case CanonicalOp::V_MIN_U32: {
-    if (!requireVopdSources(Half, 2, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, 2, Di))
+      return Err;
+
     Value *S0 = readVopdSource(Ctx, Half.Src[0], 0);
     Value *S1 = readVopdSource(Ctx, Half.Src[1], 1);
     Intrinsic::ID Id = Intrinsic::smax;
@@ -478,7 +507,9 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
   }
   case CanonicalOp::V_MAX_NUM_F32:
   case CanonicalOp::V_MIN_NUM_F32: {
-    if (!requireVopdSources(Half, 2, Di, Hr)) return false;
+    if (Error Err = requireVopdSources(Half, 2, Di))
+      return Err;
+
     Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
                                     Ctx.F32Ty);
     Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
@@ -493,40 +524,36 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.B.CreateCall(Fn, {S0, S1}, Name), Ctx.I32Ty));
   }
   case CanonicalOp::V_BITOP3_B32: {
-    if (!Half.HasBitOp3) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    if (!Half.HasBitOp3)
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "VOPD", "VOPD bitop component missing bitop3 immediate");
-      return false;
-    }
+
     return LowerBitOp3();
   }
   default:
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "VOPD", "unhandled structural VOPD component CanonicalOp");
-    return false;
   }
 }
 
 } // namespace
 
-HandlerResult handleVOPD(RaiseContext &Ctx, const DecodedInst &Di,
-                        OpResolver &Op) {
+Expected<HandlerResult> handleVOPD(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OpResolver &Op) {
   HandlerResult Hr;
   (void)Op;
-  if (!Di.HasVopd) {
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+  if (!Di.HasVopd)
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "VOPD", "VOPD instruction reached handler without sidecar");
-    return Hr;
-  }
 
   SmallVector<PendingVopdWrite, 4> PendingVgprWrites;
-  bool XOk = lowerVopdHalf(Ctx, Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::X],
-                           PendingVgprWrites, Hr);
-  bool YOk = XOk && lowerVopdHalf(
-                        Ctx, Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::Y],
-                        PendingVgprWrites, Hr);
-  if (!XOk || !YOk)
-    return Hr;
+  if (Error Err = lowerVopdHalf(
+          Ctx, Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::X], PendingVgprWrites))
+    return Err;
+
+  if (Error Err = lowerVopdHalf(
+          Ctx, Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::Y], PendingVgprWrites))
+    return Err;
 
   // VOPD executes as a paired issue packet: both halves read pre-instruction
   // register state. Commit writes only after both halves are decoded/lifted.

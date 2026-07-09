@@ -212,19 +212,15 @@ static unsigned extractHwregId(int64_t Simm16) {
   return static_cast<unsigned>(Simm16 & 0x3f);
 }
 
-static Value *getSimm16(RaiseContext &Ctx, const DecodedInst &Di,
-                        unsigned OperandIdx, HandlerResult &Hr) {
-  if (OperandIdx >= Di.Inst.getNumOperands() || !Di.isImm(OperandIdx)) {
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+static Expected<Value *> getSimm16(RaiseContext &Ctx, const DecodedInst &Di,
+                                   unsigned OperandIdx) {
+  if (OperandIdx >= Di.Inst.getNumOperands() || !Di.isImm(OperandIdx))
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "SOPK", "expected signed 16-bit immediate operand");
-    return nullptr;
-  }
   int64_t Raw = Di.getImm(OperandIdx);
-  if (Raw < -32768 || Raw > 65535) {
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+  if (Raw < -32768 || Raw > 65535)
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "SOPK", "signed 16-bit immediate operand out of range");
-    return nullptr;
-  }
   uint32_t Bits = static_cast<uint32_t>(Raw) & 0xffffu;
   int32_t Simm16 = (Bits & 0x8000u)
                        ? static_cast<int32_t>(Bits) - 0x10000
@@ -232,8 +228,8 @@ static Value *getSimm16(RaiseContext &Ctx, const DecodedInst &Di,
   return ConstantInt::get(Ctx.I32Ty, Simm16, true);
 }
 
-HandlerResult handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op) {
+Expected<HandlerResult> handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
 
@@ -264,32 +260,37 @@ HandlerResult handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
   //   kernel.  `s_mulk_i32` had the same latent bug (no kernel in
   //   the corpus exercised it).
   if (Sop == CanonicalOp::S_MOVK_I32) {
-    Value *Imm = getSimm16(Ctx, Di, Op.srcIdx(0), Hr);
-    if (!Imm) return Hr;
-    Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Imm);
+    Expected<Value *> Imm = getSimm16(Ctx, Di, Op.srcIdx(0));
+    if (!Imm)
+      return Imm.takeError();
+
+    Ctx.Regs.writeReg32(Ctx.B, Op.dst(), *Imm);
     Hr.Handled = true;
     return Hr;
   }
   if (Sop == CanonicalOp::S_MULK_I32) {
     Value *Dst = Ctx.Regs.readReg32(Ctx.B, Op.dst());
-    Value *Imm = getSimm16(Ctx, Di, Op.srcIdx(1), Hr);
-    if (!Imm) return Hr;
-    Ctx.Regs.writeReg32(Ctx.B, Op.dst(),
-                        Ctx.B.CreateMul(Dst, Imm, "mulk"));
+    Expected<Value *> Imm = getSimm16(Ctx, Di, Op.srcIdx(1));
+    if (!Imm)
+      return Imm.takeError();
+
+    Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Ctx.B.CreateMul(Dst, *Imm, "mulk"));
     Hr.Handled = true;
     return Hr;
   }
   if (Sop == CanonicalOp::S_ADDK_I32) {
     Value *Dst = Ctx.Regs.readReg32(Ctx.B, Op.dst());
-    Value *Imm = getSimm16(Ctx, Di, Op.srcIdx(1), Hr);
-    if (!Imm) return Hr;
-    Value *Res = Ctx.B.CreateAdd(Dst, Imm, "addk");
+    Expected<Value *> Imm = getSimm16(Ctx, Di, Op.srcIdx(1));
+    if (!Imm)
+      return Imm.takeError();
+
+    Value *Res = Ctx.B.CreateAdd(Dst, *Imm, "addk");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Res);
     // SCC holds the signed carry-out/overflow bit. Gfx12+ names this
     // spelling `s_addk_co_i32`; use the signed overflow intrinsic so
     // consumers of SCC observe the same flag as the source instruction.
     auto *Ov = Ctx.B.CreateIntrinsic(Intrinsic::sadd_with_overflow, {Ctx.I32Ty},
-                                     {Dst, Imm});
+                                     {Dst, *Imm});
     Ctx.Regs.storeSCC(Ctx.B, Ctx.B.CreateExtractValue(Ov, 1));
     Hr.SccHandled = true;
     Hr.Handled = true;
@@ -324,7 +325,7 @@ HandlerResult handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
       Sop == CanonicalOp::S_CMPK_LG_I32 || Sop == CanonicalOp::S_CMPK_LG_U32 ||
       (Sop >= CanonicalOp::S_CMPK_GE_I32 && Sop <= CanonicalOp::S_CMPK_LT_U32)) {
     Value *Sdst = Ctx.Regs.readReg32(Ctx.B, Op.dst());
-    Value *Imm = Op.src(1);  // $simm16; op.src(0) aliases sdst
+    Value *Imm = Op.src(1); // $simm16; op.src(0) aliases sdst
     Value *Cmp = nullptr;
     if (Sop == CanonicalOp::S_CMPK_EQ_I32 || Sop == CanonicalOp::S_CMPK_EQ_U32)
       Cmp = Ctx.B.CreateICmpEQ(Sdst, Imm, "scmpk");
@@ -486,18 +487,11 @@ HandlerResult handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
       // existing GPU tests that emit `s_setreg_imm32_b32 mode, imm`
       // and pass bit-exactly continue to pass.
       if (isStrictMode()) {
-        errs() << "transpiler: " << Di.Mnemonic
-               << " writes HWREG id=" << HwregId
-               << " (MODE / FP-state-bearing register) -- refusing under "
-                  "HSA_HOTSWAP_STRICT. Dropping the write would silently "
-                  "change FP rounding / denormal / IEEE / FTZ semantics if "
-                  "downstream compute consumes those bits.\n";
-        Hr.Failure = RaiseFailure::strictUnsafeLowering(
+        return RaiseFailure::strictUnsafeLowering(
             Di, "HWREG_MODE_write",
             "hotswap (strict): MODE-register write would be silently "
             "dropped; kernel may rely on FP rounding / denormal / IEEE / "
             "FTZ bits being changed");
-        return Hr;
       }
       errs() << "transpiler: WARNING: " << Di.Mnemonic
              << " writes HWREG id=" << HwregId

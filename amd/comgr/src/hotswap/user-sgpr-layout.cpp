@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "user-sgpr-layout.h"
+#include "hotswap/raise-failure.h"
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
@@ -146,23 +147,14 @@ std::string formatMetadataMismatch(const KernelMeta &Meta,
 
 } // namespace
 
-bool UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
-                                       const ISAProfile &SourceProfile,
-                                       llvm::StringRef SourceIsa,
-                                       UserSgprLayout &Layout,
-                                       std::string &FailureDetail) {
+llvm::Error UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
+                                              const ISAProfile &SourceProfile,
+                                              llvm::StringRef SourceIsa,
+                                              UserSgprLayout &Layout) {
   Layout = UserSgprLayout();
-  FailureDetail.clear();
 
-  if (!Meta.HasKernelDescriptor) {
-    FailureDetail =
-        (llvm::Twine("transpiler: UserSgprLayout::fromKernelMeta: kernel '") +
-         Meta.Name +
-         "' has no parsed kernel descriptor. Cannot derive user-SGPR ABI; "
-         "refuse the lift instead of guessing a hardcoded layout.")
-            .str();
-    return false;
-  }
+  if (!Meta.HasKernelDescriptor)
+    return RaiseFailure::missingKernelDescriptor(Meta.Name);
 
   using namespace llvm::amdhsa;
 
@@ -229,13 +221,11 @@ bool UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
   const unsigned UserSgprCountWidth = userSgprCountFieldWidth(SourceProfile);
   const unsigned PgmRsrc2UserSgprCount =
       decodeUserSgprCount(Meta.ComputePgmRsrc2, SourceProfile);
-  if (PgmRsrc2UserSgprCount != Layout.UserSgprCount) {
-    FailureDetail =
-        formatMetadataMismatch(Meta, SourceIsa, Layout, PgmRsrc2UserSgprCount,
-                               UserSgprCountWidth, PreloadLen,
-                               PreloadOffsetDwords);
-    return false;
-  }
+  if (PgmRsrc2UserSgprCount != Layout.UserSgprCount)
+    return RaiseFailure::userSgprLayoutMismatch(
+        Meta.Name, formatMetadataMismatch(
+                       Meta, SourceIsa, Layout, PgmRsrc2UserSgprCount,
+                       UserSgprCountWidth, PreloadLen, PreloadOffsetDwords));
 
   // Workgroup ID SGPRs sit immediately above the user-SGPR region.
   if (Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_X)
@@ -251,17 +241,7 @@ bool UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
     Layout.WorkgroupInfoSgpr =
         appendSource(Layout.Entries, Source::WorkgroupInfo, 1);
 
-  return true;
-}
-
-UserSgprLayout UserSgprLayout::fromKernelMeta(const KernelMeta &Meta,
-                                              const ISAProfile &SourceProfile,
-                                              llvm::StringRef SourceIsa) {
-  UserSgprLayout Layout;
-  std::string FailureDetail;
-  if (!tryFromKernelMeta(Meta, SourceProfile, SourceIsa, Layout, FailureDetail))
-    llvm::report_fatal_error(llvm::StringRef(FailureDetail));
-  return Layout;
+  return llvm::Error::success();
 }
 
 std::string UserSgprLayout::toString() const {

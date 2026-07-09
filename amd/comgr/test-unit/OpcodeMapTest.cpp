@@ -37,7 +37,6 @@ void ensureAMDGPURegistered() {
 
 TEST(DeviceLibs, SelectOCMLSupportLibrariesForGfx942) {
   llvm::SmallVector<std::string, 8> Names;
-  std::string Error;
   if (llvm::Error E = COMGR::getOCMLDeviceLibraryNames("gfx942", 64, Names))
     FAIL() << llvm::toString(std::move(E));
 
@@ -68,7 +67,6 @@ TEST(DeviceLibs, SelectOCMLSupportLibrariesForGfx942) {
 
 TEST(DeviceLibs, SelectOCMLSupportLibrariesForGenericGfx) {
   llvm::SmallVector<std::string, 8> Names;
-  std::string Error;
   if (llvm::Error E =
           COMGR::getOCMLDeviceLibraryNames("gfx9-generic", 64, Names))
     FAIL() << llvm::toString(std::move(E));
@@ -183,8 +181,8 @@ TEST(OpcodeMap, Gfx1250VectorF32F64RealOpcodesMapToCanonicalOps) {
 TEST(OpcodeMap, Gfx1250F64TransBothEncodingsMapToCanonicalOps) {
   ensureAMDGPURegistered();
 
-  COMGR::hotswap::MCState State;
-  llvm::cantFail(COMGR::hotswap::initMCState(State, "gfx1250"));
+  COMGR::hotswap::MCState State =
+      llvm::cantFail(COMGR::hotswap::initMCState("gfx1250"));
 
   COMGR::hotswap::OpcodeMap Map;
   Map.build(*State.InstrInfo);

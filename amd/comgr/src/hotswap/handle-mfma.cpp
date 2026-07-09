@@ -8,10 +8,11 @@
 
 #include "handlers.h"
 
-#include "amdgpu-formats.h" // SIInstrFlags
-#include "opcode-map.h"
-#include "canonical-op.h"
 #include "Utils/AMDGPUBaseInfo.h" // AMDGPU::getNamedOperandIdx, AMDGPU::OpName
+#include "amdgpu-formats.h"       // SIInstrFlags
+#include "canonical-op.h"
+#include "hotswap/raise-failure.h"
+#include "opcode-map.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
@@ -111,8 +112,8 @@ static Value *readNamedReg32(RaiseContext &Ctx, const DecodedInst &Di,
   return Ctx.Regs.readReg32(Ctx.B, Pr);
 }
 
-HandlerResult handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
-                        OpResolver &Op) {
+Expected<HandlerResult> handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
 
@@ -127,10 +128,8 @@ HandlerResult handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
   const auto &Table = mfmaIntrinsicTable();
   auto It = Table.find(Sop);
   if (It == Table.end()) {
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "MFMA", "no intrinsic mapping for this MFMA CanonicalOp");
-    errs() << "transpiler: Unknown MFMA: " << Di.Mnemonic << "\n";
-    return Hr;
   }
   const Intrinsic::ID IntrId = It->second;
 
@@ -156,8 +155,10 @@ HandlerResult handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
   FunctionType *FT = Intrinsic::getType(Ctx.C, IntrId, Overloads);
   const bool IsScaled = FT->getNumParams() == 9;
   if (!IsScaled && FT->getNumParams() != 6)
-    report_fatal_error(Twine("transpiler: unexpected MFMA intrinsic arity ") +
-                       Twine(FT->getNumParams()) + " for " + Di.Mnemonic);
+    return RaiseFailure::unsupportedInstructionForm(
+        Di, "MFMA",
+        "unexpected MFMA intrinsic arity " + Twine(FT->getNumParams()) +
+            " for " + Di.Mnemonic);
 
   Type *SrcTy = FT->getParamType(0);
   Type *AccumTy = FT->getReturnType();
@@ -167,11 +168,8 @@ HandlerResult handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
   // The accumulator (src2) may be tied to the destination in some encodings.
   ParsedReg SrcC = Op.isSrcReg(2) ? Op.srcReg(2) : Dest;
   if (SrcA.RegKind == ParsedReg::OTHER || SrcB.RegKind == ParsedReg::OTHER) {
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+    return RaiseFailure::unsupportedInstructionForm(
         Di, "MFMA", "cannot classify MFMA source registers");
-    errs() << "transpiler: MFMA " << Di.Mnemonic
-           << ": cannot read source registers\n";
-    return Hr;
   }
 
   Value *A = Ctx.Regs.readRegVec(Ctx.B, SrcA, SrcTy);
@@ -226,7 +224,8 @@ HandlerResult handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
 // canon table and the handler table disagree. This is the same
 // discipline `initMCState`'s `KMaxSrcs` check uses -- run once, fail
 // loudly, no per-kernel surprises.
-void verifyMFMACoverage(const MCInstrInfo &MCII, const OpcodeMap &OpcMap) {
+llvm::Error verifyMFMACoverage(const MCInstrInfo &MCII,
+                               const OpcodeMap &OpcMap) {
   const auto &Table = mfmaIntrinsicTable();
   for (unsigned Opc = 0, End = MCII.getNumOpcodes(); Opc < End; ++Opc) {
     const MCInstrDesc &Desc = MCII.get(Opc);
@@ -240,12 +239,15 @@ void verifyMFMACoverage(const MCInstrInfo &MCII, const OpcodeMap &OpcMap) {
         Sop == CanonicalOp::V_ACCVGPR_READ_B32)
       continue; // Handled specially above; no intrinsic entry needed.
     if (Table.find(Sop) == Table.end())
-      report_fatal_error(
-          Twine("transpiler: MFMA-format opcode #") + Twine(Opc) +
+      return RaiseFailure::internalFailure(
+          "transpiler: MFMA-format opcode #" + Twine(Opc) +
           " maps to CanonicalOp " + Twine(static_cast<int>(Sop)) +
           " but `mfmaIntrinsicTable` has no entry for it. Either add the "
-          "Intrinsic::ID row or remove the CanonicalOp from `kCanonTable`.");
+          "Intrinsic::ID row or remove the CanonicalOp from "
+          "`kCanonTable`.");
   }
+
+  return llvm::Error::success();
 }
 
 } // namespace COMGR::hotswap

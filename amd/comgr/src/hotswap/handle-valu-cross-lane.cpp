@@ -89,10 +89,10 @@ namespace COMGR::hotswap {
 // is a classifier check that proves EXEC=full at the swap site
 // and refuses otherwise.  Today's corpus invariant makes both
 // deferrable.
-static HandlerResult
+static Expected<HandlerResult>
 emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
-                           OpResolver &Op, uint32_t PartnerXorMask,
-                           const char *SsaPrefix) {
+                          OpResolver &Op, uint32_t PartnerXorMask,
+                          const char *SsaPrefix) {
   HandlerResult Hr;
 
   // Operand-table contract (same for every `VOP_PERMLANE_SWAP`
@@ -109,13 +109,12 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
   if (Src0OutIdx < 0 ||
       static_cast<unsigned>(Src0OutIdx) >= Di.Inst.getNumOperands() ||
       !Di.Inst.getOperand(static_cast<unsigned>(Src0OutIdx)).isReg()) {
-    std::string Msg = std::string(Di.Mnemonic) +
-                      " missing OpName::src0_out register operand -- "
+    return RaiseFailure::unsupportedInstructionForm(
+        Di, "VALU",
+        Di.Mnemonic + " missing OpName::src0_out register operand -- "
                       "operand-table mismatch (expected the "
                       "VOP_PERMLANE_SWAP profile's second-output "
-                      "operand-table slot to be a register)";
-    Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "VALU", Msg);
-    return Hr;
+                      "operand-table slot to be a register)");
   }
   ParsedReg VdstReg = Op.dst();
   // src0_out is the second output but is tied to src0: it must land in src0's
@@ -275,8 +274,8 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
   Hr.Handled = true;
   return Hr;
 }
-HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
-                                    OpResolver &Op) {
+Expected<HandlerResult>
+handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
 
@@ -377,8 +376,7 @@ HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
       Os << "permlane16 / permlanex16 emulation supports only "
             "op_sel:[1,0] (fi=1, bc=0); saw fi="
          << (Fi ? 1 : 0) << ", bc=" << (Bc ? 1 : 0);
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "VALU", Detail);
-      return Hr;
+      return RaiseFailure::unsupportedInstructionForm(Di, "VALU", Detail);
     }
     Value *Src0 = Op.src(0);
     Value *Sel1 = Op.src(1);
@@ -565,7 +563,7 @@ HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
     // because its partner stays within each 32-lane half
     // regardless of wave size.
     if (Ctx.TargetIsa.isWave32()) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "VALU",
           "v_permlane32_swap_b32 lift refused: target is wave32, "
           "but the instruction's XOR-32 partner has no wave32 "
@@ -573,10 +571,9 @@ HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
           "wave).  See the P4 permlane32_swap entry in the "
           "pending-rewrite table of "
           "hotswap/docs/wave-size-translation.md \u00a75.3.");
-      return Hr;
     }
     if (Ctx.Isa.isWave32()) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "VALU",
           "v_permlane32_swap_b32 in a wave32 source kernel -- no "
           "wave32 ISA enables FeaturePermlane32Swap (see "
@@ -585,7 +582,6 @@ HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
           "as wave32 upstream.  Refusing rather than silently "
           "emitting an XOR-32 partner that cannot exist in the "
           "source's wave topology.");
-      return Hr;
     }
     return emitPermLaneSwapEmulation(Ctx, Di, Op, /*partnerXorMask=*/32,
                                       /*ssaPrefix=*/"pls32");

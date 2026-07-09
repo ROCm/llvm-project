@@ -9,9 +9,27 @@
 #include "raise-failure.h"
 
 #include "decoded-inst.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace COMGR::hotswap {
+
+char RaiseFailure::ID = 0;
+
+void RaiseFailure::log(llvm::raw_ostream &OS) const {
+  OS << reasonString(Reason);
+  if (!Mnemonic.empty()) {
+    OS << ": " << Mnemonic;
+    if (!Format.empty())
+      OS << " [" << Format << "]";
+    OS << " @offset=0x";
+    OS.write_hex(Offset);
+  } else if (!Format.empty()) {
+    OS << ": [" << Format << "]";
+  }
+  if (!Detail.empty())
+    OS << " :: " << Detail;
+}
 
 // Stable diagnostic token for each structured raise-failure category.
 const char *reasonString(RaiseFailureReason R) {
@@ -62,116 +80,88 @@ const char *reasonString(RaiseFailureReason R) {
   llvm_unreachable("unhandled RaiseFailureReason");
 }
 
-// Emit the canonical diagnostic spelling without forcing callers to allocate.
-void printRaiseFailure(llvm::raw_ostream &OS, const RaiseFailure &F) {
-  OS << reasonString(F.Reason);
-  if (!F.Mnemonic.empty()) {
-    OS << ": " << F.Mnemonic;
-    if (!F.Format.empty())
-      OS << " [" << F.Format << "]";
-    OS << " @offset=0x";
-    OS.write_hex(F.Offset);
-  } else if (!F.Format.empty()) {
-    OS << ": [" << F.Format << "]";
-  }
-  if (!F.Detail.empty())
-    OS << " :: " << F.Detail;
+namespace {
+
+// Build a kernel-scoped failure: fixed pseudo-mnemonic tag, `reasonString` as
+// the format field, and a `kernel '<name>': <detail>` message.
+llvm::Error makeKernelScopedFailure(RaiseFailureReason Reason,
+                                    llvm::StringRef Mnemonic,
+                                    llvm::StringRef KernelName,
+                                    const llvm::Twine &Detail,
+                                    uint64_t Offset = 0) {
+  return llvm::make_error<RaiseFailure>(
+      Reason, Mnemonic.str(), reasonString(Reason), Offset,
+      ("kernel '" + KernelName + "': " + Detail).str());
 }
 
-// Return the canonical diagnostic spelling for APIs that need an owned string.
-std::string formatRaiseFailure(const RaiseFailure &F) {
-  std::string Result;
-  llvm::raw_string_ostream OS(Result);
-  printRaiseFailure(OS, F);
-  OS.flush();
-  return Result;
-}
+} // namespace
 
-RaiseFailure RaiseFailure::unsupportedInstructionForm(
+llvm::Error RaiseFailure::unsupportedInstructionForm(
     const DecodedInst &Di, llvm::StringRef Format, const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::UnsupportedInstructionForm;
-  F.Mnemonic = Di.Mnemonic;
-  F.Format = Format.str();
-  F.Offset = Di.Offset;
-  F.Detail = Detail.str();
-  return F;
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::UnsupportedInstructionForm, Di.Mnemonic, Format.str(),
+      Di.Offset, Detail.str());
 }
 
-RaiseFailure RaiseFailure::unsupportedSourceHiddenArg(
-    const DecodedInst &Di, llvm::StringRef Format, const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::UnsupportedSourceHiddenArg;
-  F.Mnemonic = Di.Mnemonic;
-  F.Format = Format.str();
-  F.Offset = Di.Offset;
-  F.Detail = Detail.str();
-  return F;
+llvm::Error RaiseFailure::unsupportedSourceHiddenArg(const DecodedInst &Di,
+                                                     llvm::StringRef Format,
+                                                     llvm::StringRef Detail) {
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::UnsupportedSourceHiddenArg, Di.Mnemonic, Format.str(),
+      Di.Offset, Detail.str());
 }
 
-RaiseFailure RaiseFailure::unsupportedOpcode(const DecodedInst &Di,
-                                             llvm::StringRef Format) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::UnsupportedOpcode;
-  F.Mnemonic = Di.Mnemonic;
-  F.Format = Format.str();
-  F.Offset = Di.Offset;
-  return F;
+llvm::Error RaiseFailure::unsupportedOpcode(const DecodedInst &Di,
+                                            llvm::StringRef Format) {
+  return llvm::make_error<RaiseFailure>(RaiseFailureReason::UnsupportedOpcode,
+                                        Di.Mnemonic, Format.str(), Di.Offset,
+                                        std::string());
 }
 
-RaiseFailure RaiseFailure::speUnsafeExecWriter(const DecodedInst &Di) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::SPEUnsafeExecWriter;
-  F.Mnemonic = Di.Mnemonic;
-  F.Format = "SPE-unmodeled-EXEC-writer";
-  F.Offset = Di.Offset;
-  return F;
+llvm::Error RaiseFailure::speUnsafeExecWriter(const DecodedInst &Di,
+                                              const llvm::Twine &Detail) {
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::SPEUnsafeExecWriter, Di.Mnemonic,
+      "SPE-unmodeled-EXEC-writer", Di.Offset, Detail.str());
 }
 
-RaiseFailure RaiseFailure::targetMachineCreationFailed() {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::TargetMachineCreationFailed;
-  F.Format = reasonString(RaiseFailureReason::TargetMachineCreationFailed);
-  F.Detail = "createTargetMachine returned null";
-  return F;
+llvm::Error RaiseFailure::targetMachineCreationFailed() {
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::TargetMachineCreationFailed, std::string(),
+      reasonString(RaiseFailureReason::TargetMachineCreationFailed), 0,
+      "createTargetMachine returned null");
 }
 
-RaiseFailure RaiseFailure::internalFailure(const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::InternalError;
-  F.Format = reasonString(RaiseFailureReason::InternalError);
-  F.Detail = Detail.str();
-  return F;
+llvm::Error RaiseFailure::internalFailure(const llvm::Twine &Detail) {
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::InternalError, std::string(),
+      reasonString(RaiseFailureReason::InternalError), 0, Detail.str());
 }
 
-RaiseFailure RaiseFailure::irVerificationFailed(const llvm::Twine &Err) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::IRVerificationFailed;
-  F.Format = reasonString(RaiseFailureReason::IRVerificationFailed);
-  F.Detail = Err.str();
-  return F;
+llvm::Error RaiseFailure::badInput(const llvm::Twine &Detail) {
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::BadInput, std::string(),
+      reasonString(RaiseFailureReason::BadInput), 0, Detail.str());
 }
 
-RaiseFailure RaiseFailure::kernelBoundaryViolation(
-    llvm::StringRef KernelName, uint64_t TargetOffset,
-    const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::KernelBoundaryViolation;
-  F.Mnemonic = "<kernel-boundary>";
-  F.Format = reasonString(RaiseFailureReason::KernelBoundaryViolation);
-  F.Offset = TargetOffset;
-  F.Detail = ("kernel '" + KernelName + "': " + Detail).str();
-  return F;
+llvm::Error RaiseFailure::irVerificationFailed(llvm::StringRef Err) {
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::IRVerificationFailed, std::string(),
+      reasonString(RaiseFailureReason::IRVerificationFailed), 0, Err.str());
 }
 
-RaiseFailure RaiseFailure::deviceLibraryLinkFailed(
-    llvm::StringRef KernelName, const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::DeviceLibraryLinkFailed;
-  F.Mnemonic = "<device-library-link>";
-  F.Format = reasonString(RaiseFailureReason::DeviceLibraryLinkFailed);
-  F.Detail = ("kernel '" + KernelName + "': " + Detail).str();
-  return F;
+llvm::Error RaiseFailure::kernelBoundaryViolation(llvm::StringRef KernelName,
+                                                  uint64_t TargetOffset,
+                                                  const llvm::Twine &Detail) {
+  return makeKernelScopedFailure(RaiseFailureReason::KernelBoundaryViolation,
+                                 "<kernel-boundary>", KernelName, Detail,
+                                 TargetOffset);
+}
+
+llvm::Error RaiseFailure::deviceLibraryLinkFailed(llvm::StringRef KernelName,
+                                                  const llvm::Twine &Detail) {
+  return makeKernelScopedFailure(RaiseFailureReason::DeviceLibraryLinkFailed,
+                                 "<device-library-link>", KernelName, Detail);
 }
 
 // ----------------------------------------------------------------------------
@@ -182,45 +172,42 @@ RaiseFailure RaiseFailure::deviceLibraryLinkFailed(
 
 namespace {
 
-RaiseFailure makeCrossWaveFailure(RaiseFailureReason Reason,
-                                  const DecodedInst &Di,
-                                  const llvm::Twine &KindDetail) {
-  RaiseFailure F;
-  F.Reason = Reason;
-  F.Mnemonic = Di.Mnemonic;
-  F.Format = reasonString(Reason);
-  F.Offset = Di.Offset;
-  F.Detail = KindDetail.str();
-  return F;
+llvm::Error makeCrossWaveFailure(RaiseFailureReason Reason,
+                                 const DecodedInst &Di,
+                                 const llvm::Twine &KindDetail) {
+  return llvm::make_error<RaiseFailure>(
+      Reason, Di.Mnemonic, reasonString(Reason), Di.Offset, KindDetail.str());
 }
 
 } // namespace
 
-RaiseFailure RaiseFailure::crossWaveLaneIdLeak(const DecodedInst &Di,
-                                               const llvm::Twine &KindDetail) {
+llvm::Error RaiseFailure::crossWaveLaneIdLeak(const DecodedInst &Di,
+                                              const llvm::Twine &KindDetail) {
   return makeCrossWaveFailure(RaiseFailureReason::CrossWaveLaneIdLeak, Di,
                               KindDetail);
 }
 
-RaiseFailure RaiseFailure::crossWaveUnrewritableShuffle(
-    const DecodedInst &Di, const llvm::Twine &KindDetail) {
+llvm::Error
+RaiseFailure::crossWaveUnrewritableShuffle(const DecodedInst &Di,
+                                           const llvm::Twine &KindDetail) {
   return makeCrossWaveFailure(
       RaiseFailureReason::CrossWaveUnrewritableShuffle, Di, KindDetail);
 }
 
-RaiseFailure RaiseFailure::crossWaveShuffleRewritePending(
-    const DecodedInst &Di, const llvm::Twine &KindDetail) {
+llvm::Error
+RaiseFailure::crossWaveShuffleRewritePending(const DecodedInst &Di,
+                                             const llvm::Twine &KindDetail) {
   return makeCrossWaveFailure(
       RaiseFailureReason::CrossWaveShuffleRewritePending, Di, KindDetail);
 }
 
-RaiseFailure RaiseFailure::crossWaveReplicaRace(const DecodedInst &Di,
-                                                const llvm::Twine &KindDetail) {
+llvm::Error RaiseFailure::crossWaveReplicaRace(const DecodedInst &Di,
+                                               const llvm::Twine &KindDetail) {
   return makeCrossWaveFailure(RaiseFailureReason::CrossWaveReplicaRace, Di,
                               KindDetail);
 }
 
-RaiseFailure
+llvm::Error
 RaiseFailure::crossWaveLanePredicatedExec(const DecodedInst &Di,
                                           const llvm::Twine &KindDetail) {
   return makeCrossWaveFailure(RaiseFailureReason::CrossWaveLanePredicatedExec,
@@ -228,70 +215,73 @@ RaiseFailure::crossWaveLanePredicatedExec(const DecodedInst &Di,
 }
 
 // see hotswap/docs/modrep-predicate-chain.md §5 (narrow-O1)
-RaiseFailure RaiseFailure::crossWavePredicateChain(
-    llvm::StringRef KernelName, const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::CrossWavePredicateChain;
-  F.Mnemonic = "workitem.id.x-predicate-chain-classifier";
-  F.Format = reasonString(RaiseFailureReason::CrossWavePredicateChain);
-  F.Offset = 0;
-  F.Detail = ("kernel '" + KernelName + "': " + Detail).str();
-  return F;
+llvm::Error RaiseFailure::crossWavePredicateChain(llvm::StringRef KernelName,
+                                                  const llvm::Twine &Detail) {
+  return makeKernelScopedFailure(RaiseFailureReason::CrossWavePredicateChain,
+                                 "workitem.id.x-predicate-chain-classifier",
+                                 KernelName, Detail);
 }
 
-RaiseFailure RaiseFailure::strictUnsafeLowering(const DecodedInst &Di,
-                                                llvm::StringRef Site,
-                                                const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::StrictUnsafeLowering;
-  F.Mnemonic = Di.Mnemonic;
-  F.Format = Site.str();
-  F.Offset = Di.Offset;
-  F.Detail = Detail.str();
-  return F;
+llvm::Error RaiseFailure::strictUnsafeLowering(const DecodedInst &Di,
+                                               llvm::StringRef Site,
+                                               llvm::StringRef Detail) {
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::StrictUnsafeLowering, Di.Mnemonic, Site.str(),
+      Di.Offset, Detail.str());
 }
 
-RaiseFailure RaiseFailure::missingKernelDescriptor(llvm::StringRef KernelName) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::MissingKernelDescriptor;
-  F.Mnemonic = "<kernel-descriptor>";
-  F.Format = reasonString(RaiseFailureReason::MissingKernelDescriptor);
-  F.Offset = 0;
-  F.Detail = ("kernel '" + KernelName + "': .kd symbol not parsed").str();
-  return F;
+llvm::Error RaiseFailure::preloadedHiddenArgFailure(llvm::StringRef KernelName,
+                                                    int ByteOffset,
+                                                    const llvm::Twine &Detail) {
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::UnsupportedSourceHiddenArg,
+      "<preloaded-hidden-kernarg>", "KernargPreload",
+      static_cast<uint64_t>(ByteOffset),
+      ("kernel '" + KernelName + "': preloaded hidden kernarg at byte offset " +
+       llvm::Twine(ByteOffset) + ": " + Detail)
+          .str());
 }
 
-RaiseFailure RaiseFailure::userSgprLayoutMismatch(
-    llvm::StringRef KernelName, const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::UserSgprLayoutMismatch;
-  F.Mnemonic = "<user-sgpr-layout>";
-  F.Format = reasonString(RaiseFailureReason::UserSgprLayoutMismatch);
-  F.Offset = 0;
-  F.Detail = ("kernel '" + KernelName + "': " + Detail).str();
-  return F;
+llvm::Error
+RaiseFailure::preloadedImplicitArgFailure(llvm::StringRef KernelName,
+                                          int ByteOffset) {
+  return llvm::make_error<RaiseFailure>(
+      RaiseFailureReason::StrictUnsafeLowering, "<preloaded-hidden-kernarg>",
+      "implicitarg.ptr", static_cast<uint64_t>(ByteOffset),
+      ("kernel '" + KernelName + "': preloaded kernarg byte offset " +
+       llvm::Twine(ByteOffset) +
+       " is in the source implicit-arg range but does not map to source "
+       "hidden-arg metadata; refusing target hidden-block fallback in strict "
+       "mode")
+          .str());
 }
 
-RaiseFailure RaiseFailure::unsupportedSourceClusterDims(
-    llvm::StringRef KernelName, const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::UnsupportedSourceClusterDims;
-  F.Mnemonic = "<source-cluster-dims>";
-  F.Format = reasonString(RaiseFailureReason::UnsupportedSourceClusterDims);
-  F.Offset = 0;
-  F.Detail = ("kernel '" + KernelName + "': " + Detail).str();
-  return F;
+llvm::Error RaiseFailure::missingKernelDescriptor(llvm::StringRef KernelName) {
+  return makeKernelScopedFailure(RaiseFailureReason::MissingKernelDescriptor,
+                                 "<kernel-descriptor>", KernelName,
+                                 ".kd symbol not parsed");
 }
 
-RaiseFailure RaiseFailure::crossWaveRewriteOracleDisagreement(
-    llvm::StringRef KernelName, const llvm::Twine &Detail) {
-  RaiseFailure F;
-  F.Reason = RaiseFailureReason::CrossWaveLaneIdLeak;
-  F.Mnemonic = "writelane/readlane-post-raise-safety-net";
-  F.Format = reasonString(RaiseFailureReason::CrossWaveLaneIdLeak);
-  F.Offset = 0;
-  F.Detail = ("kernel '" + KernelName + "': " + Detail).str();
-  return F;
+llvm::Error RaiseFailure::userSgprLayoutMismatch(llvm::StringRef KernelName,
+                                                 const llvm::Twine &Detail) {
+  return makeKernelScopedFailure(RaiseFailureReason::UserSgprLayoutMismatch,
+                                 "<user-sgpr-layout>", KernelName, Detail);
+}
+
+llvm::Error
+RaiseFailure::unsupportedSourceClusterDims(llvm::StringRef KernelName,
+                                           const llvm::Twine &Detail) {
+  return makeKernelScopedFailure(
+      RaiseFailureReason::UnsupportedSourceClusterDims, "<source-cluster-dims>",
+      KernelName, Detail);
+}
+
+llvm::Error
+RaiseFailure::crossWaveRewriteOracleDisagreement(llvm::StringRef KernelName,
+                                                 const llvm::Twine &Detail) {
+  return makeKernelScopedFailure(RaiseFailureReason::CrossWaveLaneIdLeak,
+                                 "writelane/readlane-post-raise-safety-net",
+                                 KernelName, Detail);
 }
 
 } // namespace COMGR::hotswap

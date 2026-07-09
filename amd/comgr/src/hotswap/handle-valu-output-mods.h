@@ -42,30 +42,27 @@ enum class VOP3OutputModDiag {
 /// Refuse non-default VOP3 output modifiers (clamp / omod).
 ///
 /// \p DiagnosticName is printed in errors (mnemonic string or canonicalOpName).
-bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,
-                                  llvm::StringRef DiagnosticName,
-                                  VOP3OutputModPresence Presence,
-                                  VOP3OutputModDiag Diag);
+llvm::Error requireDefaultVOP3OutputMods(const DecodedInst &Di,
+                                         llvm::StringRef DiagnosticName,
+                                         VOP3OutputModPresence Presence,
+                                         VOP3OutputModDiag Diag);
 
-inline bool requireDefaultOutputModsIfPresent(const DecodedInst &Di,
-                                              HandlerResult &Hr) {
-  return requireDefaultVOP3OutputMods(Di, Hr, canonicalOpName(Di.CanonOp),
+inline llvm::Error requireDefaultOutputModsIfPresent(const DecodedInst &Di) {
+  return requireDefaultVOP3OutputMods(Di, canonicalOpName(Di.CanonOp),
                                       VOP3OutputModPresence::IfPresent,
                                       VOP3OutputModDiag::Combined);
 }
 
-inline bool requireDefaultPseudoScalarOutputMods(const DecodedInst &Di,
-                                                 HandlerResult &Hr) {
-  return requireDefaultVOP3OutputMods(Di, Hr, canonicalOpName(Di.CanonOp),
+inline llvm::Error requireDefaultPseudoScalarOutputMods(const DecodedInst &Di) {
+  return requireDefaultVOP3OutputMods(Di, canonicalOpName(Di.CanonOp),
                                       VOP3OutputModPresence::Required,
                                       VOP3OutputModDiag::PseudoScalar);
 }
 
 /// VOP3-only FP VALU (e.g. min/max clamp). Used by handle-valu.cpp.
-inline bool requireDefaultVOP3FpValuOutputMods(const DecodedInst &Di,
-                                               HandlerResult &Hr,
-                                               llvm::StringRef OpName) {
-  return requireDefaultVOP3OutputMods(Di, Hr, OpName,
+inline llvm::Error requireDefaultVOP3FpValuOutputMods(const DecodedInst &Di,
+                                                      llvm::StringRef OpName) {
+  return requireDefaultVOP3OutputMods(Di, OpName,
                                       VOP3OutputModPresence::Required,
                                       VOP3OutputModDiag::FpValuSplit);
 }

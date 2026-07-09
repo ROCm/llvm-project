@@ -1206,7 +1206,7 @@ std::string renderObstructionTrace(const ObstructionReport &Report,
 // it as a RaiseFailure for raiser.cpp to propagate.
 // ----------------------------------------------------------------------------
 
-RaiseFailure selectFailureFromReport(const ObstructionReport &Report) {
+llvm::Error selectFailureFromReport(const ObstructionReport &Report) {
   // Prefer unrewritable over pending -- the caller should see the
   // strongest refusal reason first. Ties broken by decoded order (the
   // `sites` vector is in decoded order, so `firstUnrewritable` /
@@ -1277,7 +1277,7 @@ RaiseFailure selectFailureFromReport(const ObstructionReport &Report) {
             rewriteIdName(Site->Rewrite) + " pending]");
   }
   // Oblivious / fully-rewritten: no failure.
-  return RaiseFailure();
+  return llvm::Error::success();
 }
 
 } // namespace COMGR::hotswap

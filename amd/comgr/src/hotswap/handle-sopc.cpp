@@ -14,8 +14,8 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-HandlerResult handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op) {
+Expected<HandlerResult> handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
 

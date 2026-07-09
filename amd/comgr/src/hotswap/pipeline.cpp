@@ -322,31 +322,53 @@ static bool raiseAndCompileKernel(
              << llvm::utohexstr(KernelOffset) << " size 0x"
              << llvm::utohexstr(KernelSize) << "\n");
 
-  auto Raised =
+  llvm::Expected<RaiseResult> RaisedOrErr =
       raiseToIR(Text.Bytes, SourceISA, KernelName, Meta, KernelOffset,
                 KernelSize, TargetISA, Options.EnableWritelaneRewrite,
                 Options.EnableWaveNative, Options.AssumeHipGlobalOffsetZero);
-  if (!Raised.Success) {
+  if (!RaisedOrErr) {
     llvm::errs() << "transpiler: Raising '" << KernelName
                  << "' to LLVM IR failed";
     Result.FailKernel = KernelName;
-    RaiseFailure Failure =
-        Raised.Failure.hasFailed()
-            ? Raised.Failure
-            : RaiseFailure::internalFailure(
-                  "raiseToIR returned failure without a structured reason");
-    std::string RenderedFailure = formatRaiseFailure(Failure);
-    llvm::errs() << " (" << RenderedFailure << ")";
-    Result.FailMnemonic = Failure.Mnemonic;
-    Result.FailReason = reasonString(Failure.Reason);
-    Result.FailFormat = Failure.Format;
-    Result.FailDetail = RenderedFailure;
-    Result.FailOffset = Failure.Offset;
-    llvm::errs() << "\n";
+    bool IsFirstFailure = true;
+
+    llvm::handleAllErrors(
+        RaisedOrErr.takeError(),
+        [&](RaiseFailure &Failure) {
+          std::string RenderedFailure = Failure.message();
+          llvm::errs() << " (" << RenderedFailure << ")";
+          if (IsFirstFailure) {
+            Result.FailMnemonic = Failure.Mnemonic;
+            Result.FailReason = reasonString(Failure.Reason);
+            Result.FailFormat = Failure.Format;
+            Result.FailDetail = RenderedFailure;
+            Result.FailOffset = Failure.Offset;
+          }
+          llvm::errs() << "\n";
+          IsFirstFailure = false;
+        },
+        [&](const llvm::ErrorInfoBase &Err) {
+          std::string RenderedFailure =
+              "raiseToIR returned failure without a structured reason: " +
+              Err.message();
+          llvm::errs() << " (" << RenderedFailure << ")";
+          if (IsFirstFailure) {
+            Result.FailMnemonic = "";
+            Result.FailReason = reasonString(RaiseFailureReason::InternalError);
+            Result.FailFormat = "";
+            Result.FailDetail = RenderedFailure;
+            Result.FailOffset = 0;
+          }
+          llvm::errs() << "\n";
+          IsFirstFailure = false;
+        });
+
     Result.Timings.raiseSeconds +=
         timingElapsed(Options.CollectTimings, RaiseStart);
     return false;
   }
+
+  RaiseResult Raised = std::move(*RaisedOrErr);
   Result.LiftedCount += Raised.LiftedCount;
   Result.TotalCount += Raised.TotalCount;
   if (Raised.UsesScratchPrivateSegment) {
@@ -473,12 +495,10 @@ static llvm::Error linkObjects(llvm::ArrayRef<std::string> ObjPaths,
   // re-entrant nor thread-safe; serialize all in-process links.
   static std::mutex LldMutex;
   std::lock_guard<std::mutex> LldLock(LldMutex);
-  std::string OutString;
   std::string ErrString;
-  llvm::raw_string_ostream OutStream(OutString);
   llvm::raw_string_ostream ErrStream(ErrString);
-  lld::Result Ret =
-      lld::lldMain(Args, OutStream, ErrStream, {{lld::Gnu, &lld::elf::link}});
+  lld::Result Ret = lld::lldMain(Args, llvm::nulls(), ErrStream,
+                                 {{lld::Gnu, &lld::elf::link}});
   lld::CommonLinkerContext::destroy();
   if (Ret.retCode != 0 || !Ret.canRunAgain) {
     ErrStream.flush();

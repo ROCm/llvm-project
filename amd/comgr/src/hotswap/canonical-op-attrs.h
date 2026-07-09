@@ -12,6 +12,7 @@
 #include "canonical-op.h"
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/Support/Error.h"
 
 namespace llvm {
 class MCInstrInfo;
@@ -77,9 +78,9 @@ const CanonicalOpAttrs &getCanonicalOpAttrs(CanonicalOp Op);
 // runtime operand values.
 //
 // Called once at raiser init from the same slot that runs
-// `verifyMFMACoverage`. Fails loudly via `report_fatal_error`.
-void verifyExecAttrCoverage(const llvm::MCInstrInfo &MCII,
-                             const OpcodeMap &OpcMap);
+// `verifyMFMACoverage`.
+llvm::Error verifyExecAttrCoverage(const llvm::MCInstrInfo &MCII,
+                                   const OpcodeMap &OpcMap);
 
 } // namespace COMGR::hotswap
 

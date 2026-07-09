@@ -27,8 +27,8 @@
 using namespace llvm;
 
 namespace COMGR::hotswap {
-HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
-                        OpResolver &Op) {
+Expected<HandlerResult> handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
+                                    OpResolver &Op) {
   HandlerResult Hr;
   StringRef Mn(Di.Mnemonic);
   CanonicalOp Sop = Di.CanonOp;
@@ -492,9 +492,8 @@ HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
     // above the switch; they never reach this default.
     default:
       llvm::errs() << "transpiler: Unsupported buffer atomic: " << Mn << "\n";
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "MUBUF",
-                                                   "unsupported buffer atomic");
-      return Hr;
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "MUBUF", "unsupported buffer atomic");
     }
     if (IsFp) Data = Ctx.B.CreateBitCast(Data, AtomicTy);
     Function *AtomicFn = Intrinsic::getOrInsertDeclaration(

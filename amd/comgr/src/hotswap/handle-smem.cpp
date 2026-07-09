@@ -250,8 +250,8 @@ Value *emitTargetBufferResource(RaiseContext &Ctx,
 
 } // namespace
 
-HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
-                         OpResolver &Op) {
+Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
 
@@ -320,20 +320,18 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         IsSourceImplicitArgOffset && BaseIsLiveEntry;
     if (IsSourceImplicitArgOffset && !IsEntryImplicitArgLoad &&
         isStrictMode()) {
-      Hr.Failure = RaiseFailure::strictUnsafeLowering(
+      return RaiseFailure::strictUnsafeLowering(
           Di, "implicitarg.ptr",
           "cross-arch implicitarg.ptr lowering is unresolved: source "
           "implicit-arg offsets may be applied to the target runtime "
           "hidden-arg block on some CFG paths");
-      return Hr;
     }
     if (BaseIsKernargPair && !BaseIsKnownNonEntry && !ImmOffset &&
         Ctx.Kernargs.ImplicitArgsBase > 0 && isStrictMode()) {
-      Hr.Failure = RaiseFailure::strictUnsafeLowering(
+      return RaiseFailure::strictUnsafeLowering(
           Di, "implicitarg.ptr",
           "cross-arch implicitarg.ptr lowering is unresolved: dynamic source "
           "kernarg offsets may reach the source implicit-arg range");
-      return Hr;
     }
     if (IsEntryImplicitArgLoad) {
       SourceHiddenArgContext HiddenCtx{Ctx.C,
@@ -349,12 +347,11 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
           emitSourceHiddenDword(HiddenCtx, SourceByteOffset);
       if (!HiddenBase.Matched) {
         if (isStrictMode()) {
-          Hr.Failure = RaiseFailure::strictUnsafeLowering(
+          return RaiseFailure::strictUnsafeLowering(
               Di, "implicitarg.ptr",
               "cross-arch implicitarg.ptr lowering is unresolved: source "
               "implicit-arg offsets are being applied to the target runtime "
               "hidden-arg block");
-          return Hr;
         }
         Function *FnImplicitArgPtr = Intrinsic::getOrInsertDeclaration(
             &Ctx.M, Intrinsic::amdgcn_implicitarg_ptr);
@@ -380,9 +377,8 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         return Hr;
       }
       if (!HiddenBase.Value) {
-        Hr.Failure = RaiseFailure::unsupportedSourceHiddenArg(
+        return RaiseFailure::unsupportedSourceHiddenArg(
             Di, "SMEM", HiddenBase.FailureDetail);
-        return Hr;
       }
       for (int D = 0; D < LoadDwords; D++) {
         SourceHiddenArgValue Dw =
@@ -390,14 +386,12 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
                    : emitSourceHiddenDword(HiddenCtx,
                                            SourceByteOffset + D * 4);
         if (!Dw.Matched) {
-          Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          return RaiseFailure::unsupportedInstructionForm(
               Di, "SMEM", "source hidden-arg SMEM load spans non-hidden bytes");
-          return Hr;
         }
         if (!Dw.Value) {
-          Hr.Failure = RaiseFailure::unsupportedSourceHiddenArg(
-              Di, "SMEM", Dw.FailureDetail);
-          return Hr;
+          return RaiseFailure::unsupportedSourceHiddenArg(Di, "SMEM",
+                                                          Dw.FailureDetail);
         }
         Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + D, Dw.Value);
       }
@@ -452,26 +446,23 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
     ParsedReg Base = Op.srcReg(0);
 
     if (Dest.RegKind != ParsedReg::SGPR || Dest.BaseIdx < 0) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SMEM", "S_BUFFER_LOAD expects an SGPR destination");
-      return Hr;
     }
     // The payload width is encoded in the TableGen destination operand class.
     unsigned LoadDwords = defRegClassDwordCount(Ctx, Di, /*DefIdx=*/0);
     if (Base.RegKind != ParsedReg::SGPR || Base.BaseIdx < 0 ||
         (Base.BaseIdx % 4) != 0 ||
         static_cast<size_t>(Base.BaseIdx + 3) >= Ctx.Regs.Sgpr.size()) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SMEM",
           "S_BUFFER_LOAD expects a four-SGPR resource descriptor in sbase");
-      return Hr;
     }
     if (Di.HasScaleOffset) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SMEM",
           "S_BUFFER_LOAD does not support scale_offset; refusing malformed "
           "or unmodelled SMEM buffer offset semantics");
-      return Hr;
     }
     if (std::optional<int64_t> CPol =
             readNamedImmOperand(Di, AMDGPU::OpName::cpol);
@@ -480,10 +471,9 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       // access through raw-pointer buffer loads with a default target
       // cachepolicy would silently change those semantics, so reject until
       // there is an explicit source->target cache-policy table.
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SMEM",
           "S_BUFFER_LOAD cache-policy/scope bits are not modelled");
-      return Hr;
     }
 
     unsigned OffIdx = Op.srcIdx(1);
@@ -491,19 +481,17 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
     if (Di.isImm(OffIdx)) {
       int64_t Imm = Op.srcImm(1);
       if (Imm < 0) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        return RaiseFailure::unsupportedInstructionForm(
             Di, "SMEM",
             "S_BUFFER_LOAD negative static offset would MEMVIOL on source");
-        return Hr;
       }
       Offset =
           ConstantInt::get(Ctx.I32Ty, static_cast<uint32_t>(Imm) & ~3u);
     } else if (Di.isReg(OffIdx)) {
       if (Di.StaticOffset && *Di.StaticOffset < 0) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        return RaiseFailure::unsupportedInstructionForm(
             Di, "SMEM",
             "S_BUFFER_LOAD negative static offset would MEMVIOL on source");
-        return Hr;
       }
       Offset = alignDwordOffset32(Ctx, Op.src(1), "sbuf_soffset_aligned");
       if (Di.StaticOffset && *Di.StaticOffset != 0)
@@ -513,9 +501,8 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
                              static_cast<uint32_t>(*Di.StaticOffset) & ~3u),
             "sbuf_offset_plus_imm");
     } else {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SMEM", "S_BUFFER_LOAD offset must be an immediate or SGPR");
-      return Hr;
     }
 
     SourceScalarBufferResource Resource =
@@ -631,12 +618,11 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
           IsSourceImplicitArgOffset && BaseIsLiveEntry;
       if (IsSourceImplicitArgOffset && !IsEntryImplicitArgLoad &&
           isStrictMode()) {
-        Hr.Failure = RaiseFailure::strictUnsafeLowering(
+        return RaiseFailure::strictUnsafeLowering(
             Di, "implicitarg.ptr",
             "cross-arch implicitarg.ptr lowering is unresolved: source "
             "implicit-arg offsets may be applied to the target runtime "
             "hidden-arg block on some CFG paths");
-        return Hr;
       }
       if (IsEntryImplicitArgLoad) {
         SourceHiddenArgContext HiddenCtx{Ctx.C,
@@ -656,17 +642,15 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
           return Hr;
         }
         if (Hidden.Matched) {
-          Hr.Failure = RaiseFailure::unsupportedSourceHiddenArg(
-              Di, "SMEM", Hidden.FailureDetail);
-          return Hr;
+          return RaiseFailure::unsupportedSourceHiddenArg(Di, "SMEM",
+                                                          Hidden.FailureDetail);
         }
         if (isStrictMode()) {
-          Hr.Failure = RaiseFailure::strictUnsafeLowering(
+          return RaiseFailure::strictUnsafeLowering(
               Di, "implicitarg.ptr",
               "cross-arch implicitarg.ptr lowering is unresolved: source "
               "implicit-arg offsets are being applied to the target runtime "
               "hidden-arg block");
-          return Hr;
         }
       }
       if (Off != 0)
@@ -675,11 +659,10 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       if ((BaseIsKernargPair && !BaseIsKnownNonEntry) &&
           Ctx.Kernargs.ImplicitArgsBase > 0 &&
           isStrictMode()) {
-        Hr.Failure = RaiseFailure::strictUnsafeLowering(
+        return RaiseFailure::strictUnsafeLowering(
             Di, "implicitarg.ptr",
             "cross-arch implicitarg.ptr lowering is unresolved: dynamic source "
             "kernarg offsets may reach the source implicit-arg range");
-        return Hr;
       }
       // Narrow SMEM element size for `scale_offset`: 1B for byte,
       // 2B for halfword. Same SCAL-scales-the-SGPR-offset rule as
@@ -718,9 +701,8 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
     if (Data.RegKind != ParsedReg::SGPR || Base.RegKind != ParsedReg::SGPR) {
       llvm::errs() << "transpiler: " << Di.Mnemonic
                    << ": S_STORE expects SGPR data and base\n";
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "SMEM", "S_STORE expects SGPR data and base");
-      return Hr;
     }
     Value *BaseAddr = Ctx.Regs.loadSGPR64(Ctx.B, Base.BaseIdx);
     Value *Ptr = Ctx.B.CreateIntToPtr(BaseAddr, Ctx.PtrGlobalTy);

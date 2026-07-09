@@ -460,28 +460,32 @@ int main(int argc, char **argv) {
       }
       uint64_t kernelOffset = kernelExtentOrErr->Offset;
       uint64_t kernelSize = kernelExtentOrErr->Size;
-      auto raised = COMGR::hotswap::raiseToIR(text.Bytes, isa, Target, meta,
-                                          kernelOffset, kernelSize, targetIsa,
-                                          EnableWritelaneRewrite,
-                                          EnableWaveNative,
-                                          AssumeHipGlobalOffsetZeroOpt);
-      if (!raised.Success) {
+      llvm::Expected<COMGR::hotswap::RaiseResult> RaisedOrErr =
+          COMGR::hotswap::raiseToIR(text.Bytes, isa, Target, meta, kernelOffset,
+                                    kernelSize, targetIsa, EnableWritelaneRewrite,
+                                    EnableWaveNative, AssumeHipGlobalOffsetZeroOpt);
+      if (!RaisedOrErr) {
         // Contract: raiseToIR only populates RaiseResult::IrText on the
         // success path (the last write before setting `success = true`),
         // so we cannot dump partial IR here. Callers that need stderr
         // diagnostics (abort-gate lit tests, etc.) FileCheck the raiser's
         // stderr — we leave that untouched.
-        COMGR::hotswap::RaiseFailure Failure =
-            raised.Failure.hasFailed()
-                ? raised.Failure
-                : COMGR::hotswap::RaiseFailure::internalFailure(
-                      "raiseToIR returned failure without a structured reason");
-        llvm::errs() << "raise_cli: kernel '" << Target
-                     << "' failed to raise: "
-                     << COMGR::hotswap::formatRaiseFailure(Failure) << "\n";
+        llvm::handleAllErrors(
+            RaisedOrErr.takeError(),
+            [&](COMGR::hotswap::RaiseFailure &Failure) {
+              llvm::errs() << "raise_cli: kernel '" << Target
+                           << "' failed to raise: " << Failure.message() << "\n";
+            },
+            [&](const llvm::ErrorInfoBase &Err) {
+              llvm::errs() << "raise_cli: kernel '" << Target
+                           << "' failed to raise: raiseToIR returned failure "
+                              "without a structured reason: "
+                           << Err.message() << "\n";
+            });
         AnyFailed = true;
         continue;
       }
+      COMGR::hotswap::RaiseResult raised = std::move(*RaisedOrErr);
       if (Multi)
         llvm::outs() << "; === raise_cli kernel: " << Target << " ===\n";
       llvm::outs().write(raised.IrText.data(), raised.IrText.size());
@@ -622,21 +626,28 @@ int main(int argc, char **argv) {
       } else {
         llvm::consumeError(metaOrErr.takeError());
       }
-      auto raised = COMGR::hotswap::raiseToIR(text.Bytes, isa, kName, meta,
-                                          kernelOffset, kernelSize, targetIsa,
-                                          EnableWritelaneRewrite,
-                                          EnableWaveNative,
-                                          AssumeHipGlobalOffsetZeroOpt);
-      shm->done = true;
-      shm->success = raised.Success;
-      shm->lifted = raised.LiftedCount;
-      shm->total = raised.TotalCount;
-      shm->numDroppedFailures = 0;
+      llvm::Expected<COMGR::hotswap::RaiseResult> RaisedOrErr =
+          COMGR::hotswap::raiseToIR(text.Bytes, isa, kName, meta, kernelOffset,
+                                    kernelSize, targetIsa,
+                                    EnableWritelaneRewrite, EnableWaveNative,
+                                    AssumeHipGlobalOffsetZeroOpt);
+      if (RaisedOrErr) {
+        COMGR::hotswap::RaiseResult Raised = std::move(*RaisedOrErr);
+        shm->done = true;
+        shm->success = true;
+        shm->lifted = Raised.LiftedCount;
+        shm->total = Raised.TotalCount;
+        shm->numDroppedFailures = 0;
 
-      if (raised.Success) {
-        ChildOut << "OK " << kName << " (" << raised.LiftedCount << "/"
-                 << raised.TotalCount << ")\n";
+        ChildOut << "OK " << kName << " (" << Raised.LiftedCount << "/"
+                 << Raised.TotalCount << ")\n";
       } else {
+        shm->done = true;
+        shm->success = false;
+        shm->lifted = -1; // TOOD: fix this once Stats are separate
+        shm->total = -1;  // TOOD: fix this once Stats are separate
+        shm->numDroppedFailures = 0;
+
         llvm::SmallVector<FailureBucketKey> Seen;
         int NumEmittedFailures = 0;
         auto EmitFailure = [&](const COMGR::hotswap::RaiseFailure &Failure,
@@ -651,22 +662,26 @@ int main(int argc, char **argv) {
             return;
           }
           Seen.push_back(std::move(Key));
-          printBatchFailureLine(ChildOut, Prefix, kName, Failure,
-                                Prefix == "FAIL" ? raised.LiftedCount : -1,
-                                Prefix == "FAIL" ? raised.TotalCount : -1);
+          // TODO: collect stats independently of RaiseResult and report here
+          // again. int Lifted = Prefix == "FAIL" ? raised.LiftedCount : -1, int
+          // Total = Prefix == "FAIL" ? raised.TotalCount : -1;
+          printBatchFailureLine(ChildOut, Prefix, kName, Failure);
           ++NumEmittedFailures;
         };
 
-        for (const COMGR::hotswap::RaiseFailure &Failure : raised.AllFailures)
-          EmitFailure(Failure, NumEmittedFailures == 0 ? "FAIL" : "ALSO");
-
         if (NumEmittedFailures == 0) {
-          COMGR::hotswap::RaiseFailure Failure =
-              raised.Failure.hasFailed()
-                  ? raised.Failure
-                  : COMGR::hotswap::RaiseFailure::internalFailure(
-                        "raiseToIR returned failure without a structured reason");
-          EmitFailure(Failure, "FAIL");
+          llvm::handleAllErrors(
+              RaisedOrErr.takeError(),
+              [&](COMGR::hotswap::RaiseFailure &Failure) {
+                EmitFailure(Failure, NumEmittedFailures == 0 ? "FAIL" : "ALSO");
+              },
+              [&](const llvm::ErrorInfoBase &Err) {
+                std::string RenderedFailure =
+                    "FAIL: raiseToIR returned failure without a structured "
+                    "reason: " +
+                    Err.message();
+                llvm::errs() << " (" << RenderedFailure << ")\n";
+              });
         }
 
         if (shm->numDroppedFailures > 0) {

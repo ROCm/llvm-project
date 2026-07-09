@@ -26,10 +26,12 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCRegister.h"
+#include "llvm/Support/Error.h"
 
 #include <cassert>
 #include <map>
 #include <optional>
+#include <utility>
 
 namespace COMGR::hotswap {
 
@@ -625,38 +627,30 @@ struct RaiseContext {
   // register such as SRC_SHARED_BASE / SRC_FLAT_SCRATCH_BASE_LO).
   // Read paths cannot bail mid-handler -- they must return some
   // Value* -- so they record the failure here and the per-instruction
-  // dispatch loop in `raiser.cpp` checks `pendingFailure` after each
-  // handler returns and aborts the kernel raise. Set via
-  // `recordReadFailure`; cleared per instruction by the dispatch
-  // loop after consumption (or before the next instruction starts).
-  RaiseFailure PendingFailure;
+  // dispatch loop in `raiser.cpp` checks it after each handler returns
+  // and aborts the kernel raise. Set via `recordReadFailure`.
 
-  // Record an operand-read failure. Only the first failure per
-  // instruction is captured; subsequent reads of the same kernel
-  // simply return undef and let the dispatch loop bail on the
-  // first one we observed.
-  void recordReadFailure(RaiseFailure F) {
-    if (!PendingFailure.hasFailed())
-      PendingFailure = std::move(F);
-  }
+  // Record an operand-read failure so the dispatch loop can promote it to
+  // a structured kernel-raise failure at the next instruction boundary.
+  llvm::function_ref<void(llvm::Error Err)> recordReadFailure;
 };
 
-// Return value from every format handler.
+// Return value from every format handler, carried inside an
+// `llvm::Expected<HandlerResult>`.
 //
 // Handlers communicate back in three ways:
-//   * `handled = true` -> the handler fully lowered the instruction.
-//   * `handled = false`, `failure.reason = None` -> this handler does
-//     not claim the instruction; the main loop falls through to the
-//     generic `UnsupportedOpcode` diagnostic.
-//   * `handled = false`, `failure.reason != None` -> the handler
-//     recognised the instruction but refuses to lower it (e.g. operand
-//     shape unsupported); the main loop records the structured failure
-//     and aborts without consulting other handlers.
+//   * `Handled = true` -> the handler fully lowered the instruction.
+//   * `Handled = false` (no Error) -> this handler does not claim the
+//     instruction; the main loop falls through to the generic
+//     `UnsupportedOpcode` diagnostic.
+//   * an `llvm::Error` (a `RaiseFailure`) -> the handler recognised the
+//     instruction but refuses to lower it (e.g. operand shape
+//     unsupported); the main loop records the structured failure and
+//     aborts without consulting other handlers.
 struct HandlerResult {
   bool Handled = false;
   llvm::Value *SccResult = nullptr;
   bool SccHandled = false;
-  RaiseFailure Failure;
 };
 
 // Reads source operands via srcMap, skipping VOP3 modifiers. If the

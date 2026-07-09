@@ -15,6 +15,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Error.h"
 
 #include <cstdint>
 #include <string>
@@ -323,12 +324,12 @@ std::string renderObstructionTrace(const ObstructionReport &Report,
 
 // ----------------------------------------------------------------------------
 // Pick the first refusal-worthy site and package it into a structured
-// RaiseFailure. Returns a RaiseFailure with `reason = None` iff the
-// report is oblivious (no refusal needed). Caller's responsibility to
-// have routed the trace through LLVM_DEBUG / errs() before calling.
+// RaiseFailure error. Returns `Error::success()` iff the report is
+// oblivious (no refusal needed). Caller's responsibility to have routed
+// the trace through LLVM_DEBUG / errs() before calling.
 // ----------------------------------------------------------------------------
 
-RaiseFailure selectFailureFromReport(const ObstructionReport &Report);
+llvm::Error selectFailureFromReport(const ObstructionReport &Report);
 
 } // namespace COMGR::hotswap
 

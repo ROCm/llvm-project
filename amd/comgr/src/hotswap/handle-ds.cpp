@@ -27,8 +27,8 @@
 using namespace llvm;
 
 namespace COMGR::hotswap {
-HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
-                        OpResolver &Op) {
+Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
+                                 OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
 
@@ -487,11 +487,10 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
           static_cast<unsigned>(Off1Idx) >= Di.Inst.getNumOperands() ||
           !Di.Inst.getOperand(static_cast<unsigned>(Off0Idx)).isImm() ||
           !Di.Inst.getOperand(static_cast<unsigned>(Off1Idx)).isImm()) {
-        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        return RaiseFailure::unsupportedInstructionForm(
             Di, "DS",
             "DS_READ2/WRITE2 missing OpName::offset0 or OpName::offset1 "
             "immediate operand -- operand table mismatch");
-        return Hr;
       }
       int64_t RawOff0 =
           Di.Inst.getOperand(static_cast<unsigned>(Off0Idx)).getImm();
@@ -596,11 +595,10 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // vector-load path would otherwise produce a bogus
     // `FixedVectorType::get(i32, (unsigned)-1)` crash.
     if (dwords < 0) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "DS",
           "single-offset DS generic path reached with an unclassified "
           "CanonicalOp -- add a dsClassify entry or a dedicated handler block");
-      return Hr;
     }
 
     Value *Addr = Ctx.B.CreateZExt(Op.src(0), Ctx.I64Ty, "ds_addr");
@@ -938,11 +936,10 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // the classifier and still reaches us, so refuse loudly here too
     // for symmetry with the cross-wave path.
     if (!Di.HasDsSwizzleImm) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "DS",
           "ds_swizzle_b32 missing/invalid OpName::offset immediate "
           "operand -- decoder rejected the 16-bit imm");
-      return Hr;
     }
     // Read the data input via `OpName::addr` rather than positional
     // `op.src(0)`. ds_swizzle_b32's MCInst layout per
@@ -961,11 +958,10 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     if (AddrIdx < 0 ||
         static_cast<unsigned>(AddrIdx) >= Di.Inst.getNumOperands() ||
         !Di.Inst.getOperand(static_cast<unsigned>(AddrIdx)).isReg()) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      return RaiseFailure::unsupportedInstructionForm(
           Di, "DS",
           "ds_swizzle_b32 missing OpName::addr VGPR operand -- operand "
           "table mismatch");
-      return Hr;
     }
     Value *Src = Ctx.readOp32(Di, static_cast<unsigned>(AddrIdx));
     Function *Swiz = Intrinsic::getOrInsertDeclaration(

@@ -16,6 +16,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/Support/Error.h"
 
 #include <cassert>
 
@@ -34,25 +35,25 @@ namespace COMGR::hotswap {
 // V_PERMLANE{16,32}_SWAP_B32. Isolated because the cross-wave
 // strategy (hotswap/docs/wave-size-translation.md §§5.3 and 7) keeps
 // iterating on exactly this surface.
-HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
-                                    OpResolver &Op);
+llvm::Expected<HandlerResult>
+handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op);
 
 // "Small ops": type conversions, F16 arith, 16-bit shifts / min /
 // max, byte pack, V_BFREV_B32, V_NOT_B32, F32 single-src
 // transcendentals. See `handle-valu-small-ops.cpp` for the exact list.
-HandlerResult handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di,
-                                   OpResolver &Op);
+llvm::Expected<HandlerResult>
+handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op);
 
 // Vector compares (V_CMP / V_CMPX collapsed onto two SemOps with
 // VCmpMeta side-table lookup) including cross-wave projection of the
 // ballot result back to source-EXEC width.
-HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
-                               OpResolver &Op);
+llvm::Expected<HandlerResult>
+handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op);
 
 // VOP3P packed ops (V_PK_*_F32, V_PK_MOV_B32), WMMA (V_WMMA_F32_*),
 // v_fma_mix_f32, and v_cndmask_b32.
-HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
-                                OpResolver &Op);
+llvm::Expected<HandlerResult>
+handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op);
 
 // Emit unsigned i16 multiply-add for either `i16` or `<N x i16>` operands.
 // `A`, `B`, and `C` must have the same type; `WideTy` and `ClampMax` must be

@@ -14,6 +14,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Error.h"
 
 #include <cstdint>
 #include <string>
@@ -105,20 +106,14 @@ struct UserSgprLayout {
   uint8_t PreloadedKernargLength = 0;
   uint16_t PreloadedKernargByteOffset = 0;
 
-  // Build the layout from a parsed kernel descriptor. Returns false and fills
-  // `failureDetail` when the descriptor is missing or internally inconsistent.
+  // Build the layout from a parsed kernel descriptor. Returns llvm::Error
+  // when the descriptor is missing or internally inconsistent.
   // `sourceProfile` selects ABI-versioned fields such as gfx125's 6-bit
   // compute_pgm_rsrc2.USER_SGPR_COUNT. `sourceISA` is used only in diagnostics.
-  static bool tryFromKernelMeta(const KernelMeta &Meta,
-                                const ISAProfile &SourceProfile,
-                                llvm::StringRef SourceIsa,
-                                UserSgprLayout &Layout,
-                                std::string &FailureDetail);
-
-  // Fatal wrapper for callers that cannot return a structured RaiseFailure.
-  static UserSgprLayout fromKernelMeta(const KernelMeta &Meta,
+  static llvm::Error tryFromKernelMeta(const KernelMeta &Meta,
                                        const ISAProfile &SourceProfile,
-                                       llvm::StringRef SourceIsa);
+                                       llvm::StringRef SourceIsa,
+                                       UserSgprLayout &Layout);
 
   // Render a one-line debug summary: useful for HSA_HOTSWAP_DEBUG output
   // and for failure diagnostics. Format:

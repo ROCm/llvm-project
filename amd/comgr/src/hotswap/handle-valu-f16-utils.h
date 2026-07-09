@@ -30,32 +30,31 @@
 
 namespace COMGR::hotswap {
 
-bool readRequiredVOP3F16SrcMods(const DecodedInst &Di, HandlerResult &Hr,
-                                unsigned SrcIndex, llvm::StringRef OpName,
-                                unsigned &Mods);
+llvm::Error readRequiredVOP3F16SrcMods(const DecodedInst &Di, unsigned SrcIndex,
+                                       llvm::StringRef OpName, unsigned &Mods);
 
 // Like `readRequiredVOP3F16SrcMods`, but accepts an absent modifier operand as
 // the default VOP1/e32 shape (`Mods = 0`). This is for CanonicalOps that share a
 // handler across e32 and e64 encodings.
-bool readOptionalVOP3F16SrcMods(const DecodedInst &Di, HandlerResult &Hr,
-                                unsigned SrcIndex, llvm::StringRef OpName,
-                                unsigned &Mods);
+llvm::Error readOptionalVOP3F16SrcMods(const DecodedInst &Di, unsigned SrcIndex,
+                                       llvm::StringRef OpName, unsigned &Mods);
 
 // Read an F16 source selected by the required VOP3 modifier operand.
-llvm::Value *readOpSelF16(RaiseContext &Ctx, const DecodedInst &Di,
-                          OpResolver &Op, HandlerResult &Hr,
-                          unsigned SrcIndex, llvm::StringRef OpName);
+llvm::Expected<llvm::Value *> readOpSelF16(RaiseContext &Ctx,
+                                           const DecodedInst &Di,
+                                           OpResolver &Op, unsigned SrcIndex,
+                                           llvm::StringRef OpName);
 
 // Read an F16 source selected by an optional modifier operand. Missing modifier
 // operands select the low half with no abs/neg.
-llvm::Value *readOptionalOpSelF16(RaiseContext &Ctx, const DecodedInst &Di,
-                                  OpResolver &Op, HandlerResult &Hr,
-                                  unsigned SrcIndex, llvm::StringRef OpName);
+llvm::Expected<llvm::Value *>
+readOptionalOpSelF16(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
+                     unsigned SrcIndex, llvm::StringRef OpName);
 
 // Decode src0's true16 destination-half selector from the required VOP3
 // modifier operand.
-bool readVOP3F16DstHigh(const DecodedInst &Di, HandlerResult &Hr,
-                        llvm::StringRef OpName, bool &DstHigh);
+llvm::Error readVOP3F16DstHigh(const DecodedInst &Di, llvm::StringRef OpName,
+                               bool &DstHigh);
 
 // Merge a raw i16 result into the selected destination half using the same IR
 // name for either half. The unselected half is preserved by reading the old

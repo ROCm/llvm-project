@@ -115,7 +115,7 @@ getOCMLDeviceLibraryNames(llvm::StringRef TargetProcessor,
                            : "oclc_wavefrontsize64_off.bc",
   };
 
-  if (auto Error = validateSelectedDeviceLibraries(Selected))
+  if (llvm::Error Error = validateSelectedDeviceLibraries(Selected))
     return Error;
 
   for (llvm::StringRef Name : Selected)

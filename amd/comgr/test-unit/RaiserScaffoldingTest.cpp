@@ -28,6 +28,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "gtest/gtest.h"
@@ -45,35 +46,35 @@ COMGR::hotswap::KernelMeta makeKernelMeta(llvm::StringRef Name) {
 
 TEST(RaiserScaffolding, EmptyInputProducesValidModule) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
+  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
       COMGR::hotswap::raiseToIR({}, "gfx942", "kernel", Meta);
 
-  ASSERT_TRUE(Result.Success);
-  ASSERT_NE(Result.Ctx, nullptr);
-  ASSERT_NE(Result.Module, nullptr);
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  ASSERT_NE(Result->Ctx, nullptr);
+  ASSERT_NE(Result->Module, nullptr);
 
   std::string Err;
   llvm::raw_string_ostream ErrStream(Err);
-  EXPECT_FALSE(llvm::verifyModule(*Result.Module, &ErrStream)) << Err;
+  EXPECT_FALSE(llvm::verifyModule(*Result->Module, &ErrStream)) << Err;
 }
 
 TEST(RaiserScaffolding, ModuleAdvertisesAMDGPUTriple) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
+  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
       COMGR::hotswap::raiseToIR({}, "gfx942", "kernel", Meta);
 
-  ASSERT_TRUE(Result.Success);
-  ASSERT_NE(Result.Module, nullptr);
-  EXPECT_EQ(Result.Module->getTargetTriple().str(), "amdgcn-amd-amdhsa");
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  ASSERT_NE(Result->Module, nullptr);
+  EXPECT_EQ(Result->Module->getTargetTriple().str(), "amdgcn-amd-amdhsa");
 }
 
 TEST(RaiserScaffolding, KernelFunctionIsAMDGPUKernelWithRetVoid) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
+  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
       COMGR::hotswap::raiseToIR({}, "gfx942", "kernel", Meta);
 
-  ASSERT_TRUE(Result.Success);
-  llvm::Function *Fn = Result.Module->getFunction("kernel");
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  llvm::Function *Fn = Result->Module->getFunction("kernel");
   ASSERT_NE(Fn, nullptr);
   EXPECT_EQ(Fn->getCallingConv(), llvm::CallingConv::AMDGPU_KERNEL);
   ASSERT_EQ(Fn->size(), 1u);
@@ -86,29 +87,26 @@ TEST(RaiserScaffolding, MissingKernelDescriptorIsRejected) {
   COMGR::hotswap::KernelMeta Meta;
   Meta.Name = "kernel";
   Meta.HasKernelDescriptor = false;
-  COMGR::hotswap::RaiseResult Result =
+  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
       COMGR::hotswap::raiseToIR({}, "gfx942", "kernel", Meta);
 
-  EXPECT_FALSE(Result.Success);
-  EXPECT_TRUE(Result.Failure.hasFailed());
+  ASSERT_FALSE(static_cast<bool>(Result));
 }
 
 TEST(RaiserScaffolding, EmptyTargetIsaIsRejected) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
+  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
       COMGR::hotswap::raiseToIR({}, "", "kernel", Meta);
 
-  EXPECT_FALSE(Result.Success);
-  EXPECT_TRUE(Result.Failure.hasFailed());
+  ASSERT_FALSE(static_cast<bool>(Result));
 }
 
 TEST(RaiserScaffolding, MalformedTargetIsaIsRejected) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
+  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
       COMGR::hotswap::raiseToIR({}, "not-a-real-isa", "kernel", Meta);
 
-  EXPECT_FALSE(Result.Success);
-  EXPECT_TRUE(Result.Failure.hasFailed());
+  ASSERT_FALSE(static_cast<bool>(Result));
 }
 
 TEST(RaiserScaffolding,
@@ -124,7 +122,7 @@ TEST(RaiserScaffolding,
   Meta.ComputePgmRsrc2 =
       3u << llvm::amdhsa::COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
 
-  COMGR::hotswap::RaiseResult Result =
+  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
       COMGR::hotswap::raiseToIR({}, "gfx1250", "kernel", Meta,
                                 /*KernelOffset=*/0,
                                 /*KernelSize=*/0,
@@ -133,11 +131,17 @@ TEST(RaiserScaffolding,
                                 /*EnableWaveNative=*/true,
                                 /*AssumeHipGlobalOffsetZero=*/false);
 
-  EXPECT_FALSE(Result.Success);
-  ASSERT_TRUE(Result.Failure.hasFailed());
-  EXPECT_EQ(Result.Failure.Reason,
+  ASSERT_FALSE(static_cast<bool>(Result));
+
+  llvm::handleAllErrors(
+      std::move(Result.takeError()),
+      [&](const COMGR::hotswap::RaiseFailure &Failure) {
+        EXPECT_EQ(
+            Failure.Reason,
             COMGR::hotswap::RaiseFailureReason::UnsupportedSourceHiddenArg);
-  EXPECT_EQ(Result.Failure.Mnemonic, "<preloaded-hidden-kernarg>");
+        EXPECT_EQ(Failure.Mnemonic, "<preloaded-hidden-kernarg>");
+      },
+      [&](const llvm::ErrorInfoBase &) { FAIL() << "Wrong Error type"; });
 }
 
 TEST(RaiserScaffolding, PreloadedUnmatchedImplicitOffsetRefusesInStrictMode) {
@@ -153,7 +157,7 @@ TEST(RaiserScaffolding, PreloadedUnmatchedImplicitOffsetRefusesInStrictMode) {
       3u << llvm::amdhsa::COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
 
   COMGR::hotswap::ScopedStrictMode StrictMode(/*enabled=*/true);
-  COMGR::hotswap::RaiseResult Result =
+  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
       COMGR::hotswap::raiseToIR({}, "gfx1250", "kernel", Meta,
                                 /*KernelOffset=*/0,
                                 /*KernelSize=*/0,
@@ -162,12 +166,17 @@ TEST(RaiserScaffolding, PreloadedUnmatchedImplicitOffsetRefusesInStrictMode) {
                                 /*EnableWaveNative=*/true,
                                 /*AssumeHipGlobalOffsetZero=*/false);
 
-  EXPECT_FALSE(Result.Success);
-  ASSERT_TRUE(Result.Failure.hasFailed());
-  EXPECT_EQ(Result.Failure.Reason,
-            COMGR::hotswap::RaiseFailureReason::StrictUnsafeLowering);
-  EXPECT_EQ(Result.Failure.Format, "implicitarg.ptr");
-  EXPECT_EQ(Result.Failure.Mnemonic, "<preloaded-hidden-kernarg>");
+  ASSERT_FALSE(static_cast<bool>(Result));
+
+  llvm::handleAllErrors(
+      std::move(Result.takeError()),
+      [&](const COMGR::hotswap::RaiseFailure &Failure) {
+        EXPECT_EQ(Failure.Reason,
+                  COMGR::hotswap::RaiseFailureReason::StrictUnsafeLowering);
+        EXPECT_EQ(Failure.Format, "implicitarg.ptr");
+        EXPECT_EQ(Failure.Mnemonic, "<preloaded-hidden-kernarg>");
+      },
+      [&](const llvm::ErrorInfoBase &) { FAIL() << "Wrong Error type"; });
 }
 
 // s_add_pc_i64's successor is Offset + Size + displacement (byte units), not
