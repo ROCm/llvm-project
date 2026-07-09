@@ -2,7 +2,7 @@
 
 ; GCN-LABEL: {{^}}lower_control_flow_unreachable_terminator:
 ; GCN: v_cmp_ne_u32
-; GCN: s_xor_b64 exec
+; GCN: s_and_saveexec_b64
 ; GCN: s_cbranch_execz
 
 ; GCN: .LBB0_{{[0-9]+}}: ; %unreachable

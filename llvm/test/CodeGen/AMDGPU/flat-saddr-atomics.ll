@@ -590,7 +590,7 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB10_2
 ; GFX1250-SDAG-NEXT:  .LBB10_1: ; %atomicrmw.private
@@ -603,10 +603,8 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB10_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB10_4
 ; GFX1250-SDAG-NEXT:  .LBB10_3: ; %atomicrmw.global
@@ -619,7 +617,7 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB10_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -679,7 +677,7 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB10_2
 ; GFX950-SDAG-NEXT:  .LBB10_1: ; %atomicrmw.private
@@ -690,9 +688,8 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX950-SDAG-NEXT:    s_nop 0
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB10_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB10_4
 ; GFX950-SDAG-NEXT:  .LBB10_3: ; %atomicrmw.global
@@ -702,7 +699,7 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB10_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -768,7 +765,7 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB11_2
 ; GFX1250-SDAG-NEXT:  .LBB11_1: ; %atomicrmw.private
@@ -781,10 +778,8 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB11_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB11_4
 ; GFX1250-SDAG-NEXT:  .LBB11_3: ; %atomicrmw.global
@@ -797,7 +792,7 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB11_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -863,7 +858,7 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB11_2
 ; GFX950-SDAG-NEXT:  .LBB11_1: ; %atomicrmw.private
@@ -874,9 +869,8 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX950-SDAG-NEXT:    s_nop 0
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB11_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB11_4
 ; GFX950-SDAG-NEXT:  .LBB11_3: ; %atomicrmw.global
@@ -886,7 +880,7 @@ define amdgpu_ps <2 x float> @flat_xchg_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB11_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -954,7 +948,7 @@ define amdgpu_ps void @flat_xchg_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX1250-SDAG-NEXT:  .LBB12_1: ; %atomicrmw.private
@@ -965,10 +959,8 @@ define amdgpu_ps void @flat_xchg_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v0, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB12_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB12_4
 ; GFX1250-SDAG-NEXT:  .LBB12_3: ; %atomicrmw.global
@@ -1029,7 +1021,7 @@ define amdgpu_ps void @flat_xchg_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX950-SDAG-NEXT:  .LBB12_1: ; %atomicrmw.private
@@ -1038,9 +1030,8 @@ define amdgpu_ps void @flat_xchg_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, -1, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v0, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB12_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB12_4
 ; GFX950-SDAG-NEXT:  .LBB12_3: ; %atomicrmw.global
@@ -1105,7 +1096,7 @@ define amdgpu_ps void @flat_xchg_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB13_2
 ; GFX1250-SDAG-NEXT:  .LBB13_1: ; %atomicrmw.private
@@ -1116,10 +1107,8 @@ define amdgpu_ps void @flat_xchg_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v0, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB13_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB13_4
 ; GFX1250-SDAG-NEXT:  .LBB13_3: ; %atomicrmw.global
@@ -1186,7 +1175,7 @@ define amdgpu_ps void @flat_xchg_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB13_2
 ; GFX950-SDAG-NEXT:  .LBB13_1: ; %atomicrmw.private
@@ -1195,9 +1184,8 @@ define amdgpu_ps void @flat_xchg_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, -1, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v0, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB13_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB13_4
 ; GFX950-SDAG-NEXT:  .LBB13_3: ; %atomicrmw.global
@@ -1453,7 +1441,7 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB18_2
 ; GFX1250-SDAG-NEXT:  .LBB18_1: ; %atomicrmw.private
@@ -1467,10 +1455,8 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB18_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB18_4
 ; GFX1250-SDAG-NEXT:  .LBB18_3: ; %atomicrmw.global
@@ -1482,7 +1468,7 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB18_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_add_saddr_i64_rtn:
@@ -1541,7 +1527,7 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB18_2
 ; GFX950-SDAG-NEXT:  .LBB18_1: ; %atomicrmw.private
@@ -1553,9 +1539,8 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[2:3], v[0:1], 0, v[2:3]
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB18_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB18_4
 ; GFX950-SDAG-NEXT:  .LBB18_3: ; %atomicrmw.global
@@ -1565,7 +1550,7 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB18_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -1634,7 +1619,7 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB19_2
 ; GFX1250-SDAG-NEXT:  .LBB19_1: ; %atomicrmw.private
@@ -1648,10 +1633,8 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB19_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB19_4
 ; GFX1250-SDAG-NEXT:  .LBB19_3: ; %atomicrmw.global
@@ -1663,7 +1646,7 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB19_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_add_saddr_i64_rtn_neg128:
@@ -1728,7 +1711,7 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB19_2
 ; GFX950-SDAG-NEXT:  .LBB19_1: ; %atomicrmw.private
@@ -1740,9 +1723,8 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[2:3], v[0:1], 0, v[2:3]
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB19_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB19_4
 ; GFX950-SDAG-NEXT:  .LBB19_3: ; %atomicrmw.global
@@ -1752,7 +1734,7 @@ define amdgpu_ps <2 x float> @flat_add_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB19_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -1823,7 +1805,7 @@ define amdgpu_ps void @flat_add_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB20_2
 ; GFX1250-SDAG-NEXT:  .LBB20_1: ; %atomicrmw.private
@@ -1837,10 +1819,8 @@ define amdgpu_ps void @flat_add_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB20_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB20_4
 ; GFX1250-SDAG-NEXT:  .LBB20_3: ; %atomicrmw.global
@@ -1904,7 +1884,7 @@ define amdgpu_ps void @flat_add_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB20_2
 ; GFX950-SDAG-NEXT:  .LBB20_1: ; %atomicrmw.private
@@ -1916,9 +1896,8 @@ define amdgpu_ps void @flat_add_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, v[2:3]
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB20_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB20_4
 ; GFX950-SDAG-NEXT:  .LBB20_3: ; %atomicrmw.global
@@ -1988,7 +1967,7 @@ define amdgpu_ps void @flat_add_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB21_2
 ; GFX1250-SDAG-NEXT:  .LBB21_1: ; %atomicrmw.private
@@ -2002,10 +1981,8 @@ define amdgpu_ps void @flat_add_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB21_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB21_4
 ; GFX1250-SDAG-NEXT:  .LBB21_3: ; %atomicrmw.global
@@ -2075,7 +2052,7 @@ define amdgpu_ps void @flat_add_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB21_2
 ; GFX950-SDAG-NEXT:  .LBB21_1: ; %atomicrmw.private
@@ -2087,9 +2064,8 @@ define amdgpu_ps void @flat_add_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, v[2:3]
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB21_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB21_4
 ; GFX950-SDAG-NEXT:  .LBB21_3: ; %atomicrmw.global
@@ -2350,7 +2326,7 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB26_2
 ; GFX1250-SDAG-NEXT:  .LBB26_1: ; %atomicrmw.private
@@ -2364,10 +2340,8 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB26_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB26_4
 ; GFX1250-SDAG-NEXT:  .LBB26_3: ; %atomicrmw.global
@@ -2379,7 +2353,7 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB26_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_sub_saddr_i64_rtn:
@@ -2438,7 +2412,7 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB26_2
 ; GFX950-SDAG-NEXT:  .LBB26_1: ; %atomicrmw.private
@@ -2452,9 +2426,8 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_subb_co_u32_e32 v3, vcc, v1, v3, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB26_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB26_4
 ; GFX950-SDAG-NEXT:  .LBB26_3: ; %atomicrmw.global
@@ -2464,7 +2437,7 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB26_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -2533,7 +2506,7 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB27_2
 ; GFX1250-SDAG-NEXT:  .LBB27_1: ; %atomicrmw.private
@@ -2547,10 +2520,8 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB27_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB27_4
 ; GFX1250-SDAG-NEXT:  .LBB27_3: ; %atomicrmw.global
@@ -2562,7 +2533,7 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB27_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_sub_saddr_i64_rtn_neg128:
@@ -2627,7 +2598,7 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB27_2
 ; GFX950-SDAG-NEXT:  .LBB27_1: ; %atomicrmw.private
@@ -2641,9 +2612,8 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_subb_co_u32_e32 v3, vcc, v1, v3, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB27_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB27_4
 ; GFX950-SDAG-NEXT:  .LBB27_3: ; %atomicrmw.global
@@ -2653,7 +2623,7 @@ define amdgpu_ps <2 x float> @flat_sub_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB27_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -2724,7 +2694,7 @@ define amdgpu_ps void @flat_sub_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB28_2
 ; GFX1250-SDAG-NEXT:  .LBB28_1: ; %atomicrmw.private
@@ -2738,10 +2708,8 @@ define amdgpu_ps void @flat_sub_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB28_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB28_4
 ; GFX1250-SDAG-NEXT:  .LBB28_3: ; %atomicrmw.global
@@ -2805,7 +2773,7 @@ define amdgpu_ps void @flat_sub_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB28_2
 ; GFX950-SDAG-NEXT:  .LBB28_1: ; %atomicrmw.private
@@ -2819,9 +2787,8 @@ define amdgpu_ps void @flat_sub_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_subb_co_u32_e32 v1, vcc, v1, v3, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB28_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB28_4
 ; GFX950-SDAG-NEXT:  .LBB28_3: ; %atomicrmw.global
@@ -2891,7 +2858,7 @@ define amdgpu_ps void @flat_sub_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB29_2
 ; GFX1250-SDAG-NEXT:  .LBB29_1: ; %atomicrmw.private
@@ -2905,10 +2872,8 @@ define amdgpu_ps void @flat_sub_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB29_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB29_4
 ; GFX1250-SDAG-NEXT:  .LBB29_3: ; %atomicrmw.global
@@ -2978,7 +2943,7 @@ define amdgpu_ps void @flat_sub_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB29_2
 ; GFX950-SDAG-NEXT:  .LBB29_1: ; %atomicrmw.private
@@ -2992,9 +2957,8 @@ define amdgpu_ps void @flat_sub_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_subb_co_u32_e32 v1, vcc, v1, v3, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB29_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB29_4
 ; GFX950-SDAG-NEXT:  .LBB29_3: ; %atomicrmw.global
@@ -3255,7 +3219,7 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB34_2
 ; GFX1250-SDAG-NEXT:  .LBB34_1: ; %atomicrmw.private
@@ -3270,10 +3234,8 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB34_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB34_4
 ; GFX1250-SDAG-NEXT:  .LBB34_3: ; %atomicrmw.global
@@ -3285,7 +3247,7 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB34_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_and_saddr_i64_rtn:
@@ -3345,7 +3307,7 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB34_2
 ; GFX950-SDAG-NEXT:  .LBB34_1: ; %atomicrmw.private
@@ -3358,9 +3320,8 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_and_b32_e32 v2, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB34_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB34_4
 ; GFX950-SDAG-NEXT:  .LBB34_3: ; %atomicrmw.global
@@ -3370,7 +3331,7 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB34_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -3438,7 +3399,7 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB35_2
 ; GFX1250-SDAG-NEXT:  .LBB35_1: ; %atomicrmw.private
@@ -3453,10 +3414,8 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB35_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB35_4
 ; GFX1250-SDAG-NEXT:  .LBB35_3: ; %atomicrmw.global
@@ -3468,7 +3427,7 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB35_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_and_saddr_i64_rtn_neg128:
@@ -3534,7 +3493,7 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB35_2
 ; GFX950-SDAG-NEXT:  .LBB35_1: ; %atomicrmw.private
@@ -3547,9 +3506,8 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_and_b32_e32 v2, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB35_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB35_4
 ; GFX950-SDAG-NEXT:  .LBB35_3: ; %atomicrmw.global
@@ -3559,7 +3517,7 @@ define amdgpu_ps <2 x float> @flat_and_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB35_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -3629,7 +3587,7 @@ define amdgpu_ps void @flat_and_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB36_2
 ; GFX1250-SDAG-NEXT:  .LBB36_1: ; %atomicrmw.private
@@ -3644,10 +3602,8 @@ define amdgpu_ps void @flat_and_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB36_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB36_4
 ; GFX1250-SDAG-NEXT:  .LBB36_3: ; %atomicrmw.global
@@ -3712,7 +3668,7 @@ define amdgpu_ps void @flat_and_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB36_2
 ; GFX950-SDAG-NEXT:  .LBB36_1: ; %atomicrmw.private
@@ -3725,9 +3681,8 @@ define amdgpu_ps void @flat_and_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_and_b32_e32 v0, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB36_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB36_4
 ; GFX950-SDAG-NEXT:  .LBB36_3: ; %atomicrmw.global
@@ -3796,7 +3751,7 @@ define amdgpu_ps void @flat_and_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB37_2
 ; GFX1250-SDAG-NEXT:  .LBB37_1: ; %atomicrmw.private
@@ -3811,10 +3766,8 @@ define amdgpu_ps void @flat_and_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB37_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB37_4
 ; GFX1250-SDAG-NEXT:  .LBB37_3: ; %atomicrmw.global
@@ -3885,7 +3838,7 @@ define amdgpu_ps void @flat_and_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB37_2
 ; GFX950-SDAG-NEXT:  .LBB37_1: ; %atomicrmw.private
@@ -3898,9 +3851,8 @@ define amdgpu_ps void @flat_and_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_and_b32_e32 v0, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB37_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB37_4
 ; GFX950-SDAG-NEXT:  .LBB37_3: ; %atomicrmw.global
@@ -4160,7 +4112,7 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn(ptr inreg %sbase, i32 %voffs
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB42_2
 ; GFX1250-SDAG-NEXT:  .LBB42_1: ; %atomicrmw.private
@@ -4175,10 +4127,8 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn(ptr inreg %sbase, i32 %voffs
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB42_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB42_4
 ; GFX1250-SDAG-NEXT:  .LBB42_3: ; %atomicrmw.global
@@ -4190,7 +4140,7 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn(ptr inreg %sbase, i32 %voffs
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB42_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_or_saddr_i64_rtn:
@@ -4250,7 +4200,7 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn(ptr inreg %sbase, i32 %voffs
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB42_2
 ; GFX950-SDAG-NEXT:  .LBB42_1: ; %atomicrmw.private
@@ -4263,9 +4213,8 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn(ptr inreg %sbase, i32 %voffs
 ; GFX950-SDAG-NEXT:    v_or_b32_e32 v2, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB42_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB42_4
 ; GFX950-SDAG-NEXT:  .LBB42_3: ; %atomicrmw.global
@@ -4275,7 +4224,7 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn(ptr inreg %sbase, i32 %voffs
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB42_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -4343,7 +4292,7 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn_neg128(ptr inreg %sbase, i32
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB43_2
 ; GFX1250-SDAG-NEXT:  .LBB43_1: ; %atomicrmw.private
@@ -4358,10 +4307,8 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn_neg128(ptr inreg %sbase, i32
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB43_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB43_4
 ; GFX1250-SDAG-NEXT:  .LBB43_3: ; %atomicrmw.global
@@ -4373,7 +4320,7 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn_neg128(ptr inreg %sbase, i32
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB43_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_or_saddr_i64_rtn_neg128:
@@ -4439,7 +4386,7 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn_neg128(ptr inreg %sbase, i32
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB43_2
 ; GFX950-SDAG-NEXT:  .LBB43_1: ; %atomicrmw.private
@@ -4452,9 +4399,8 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn_neg128(ptr inreg %sbase, i32
 ; GFX950-SDAG-NEXT:    v_or_b32_e32 v2, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB43_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB43_4
 ; GFX950-SDAG-NEXT:  .LBB43_3: ; %atomicrmw.global
@@ -4464,7 +4410,7 @@ define amdgpu_ps <2 x float> @flat_or_saddr_i64_rtn_neg128(ptr inreg %sbase, i32
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB43_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -4534,7 +4480,7 @@ define amdgpu_ps void @flat_or_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, i
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB44_2
 ; GFX1250-SDAG-NEXT:  .LBB44_1: ; %atomicrmw.private
@@ -4549,10 +4495,8 @@ define amdgpu_ps void @flat_or_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, i
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB44_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB44_4
 ; GFX1250-SDAG-NEXT:  .LBB44_3: ; %atomicrmw.global
@@ -4617,7 +4561,7 @@ define amdgpu_ps void @flat_or_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, i
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB44_2
 ; GFX950-SDAG-NEXT:  .LBB44_1: ; %atomicrmw.private
@@ -4630,9 +4574,8 @@ define amdgpu_ps void @flat_or_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, i
 ; GFX950-SDAG-NEXT:    v_or_b32_e32 v0, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB44_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB44_4
 ; GFX950-SDAG-NEXT:  .LBB44_3: ; %atomicrmw.global
@@ -4701,7 +4644,7 @@ define amdgpu_ps void @flat_or_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vof
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB45_2
 ; GFX1250-SDAG-NEXT:  .LBB45_1: ; %atomicrmw.private
@@ -4716,10 +4659,8 @@ define amdgpu_ps void @flat_or_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vof
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB45_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB45_4
 ; GFX1250-SDAG-NEXT:  .LBB45_3: ; %atomicrmw.global
@@ -4790,7 +4731,7 @@ define amdgpu_ps void @flat_or_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vof
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB45_2
 ; GFX950-SDAG-NEXT:  .LBB45_1: ; %atomicrmw.private
@@ -4803,9 +4744,8 @@ define amdgpu_ps void @flat_or_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vof
 ; GFX950-SDAG-NEXT:    v_or_b32_e32 v0, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB45_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB45_4
 ; GFX950-SDAG-NEXT:  .LBB45_3: ; %atomicrmw.global
@@ -5065,7 +5005,7 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB50_2
 ; GFX1250-SDAG-NEXT:  .LBB50_1: ; %atomicrmw.private
@@ -5080,10 +5020,8 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB50_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB50_4
 ; GFX1250-SDAG-NEXT:  .LBB50_3: ; %atomicrmw.global
@@ -5095,7 +5033,7 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB50_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_xor_saddr_i64_rtn:
@@ -5155,7 +5093,7 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB50_2
 ; GFX950-SDAG-NEXT:  .LBB50_1: ; %atomicrmw.private
@@ -5168,9 +5106,8 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_xor_b32_e32 v2, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB50_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB50_4
 ; GFX950-SDAG-NEXT:  .LBB50_3: ; %atomicrmw.global
@@ -5180,7 +5117,7 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB50_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -5248,7 +5185,7 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB51_2
 ; GFX1250-SDAG-NEXT:  .LBB51_1: ; %atomicrmw.private
@@ -5263,10 +5200,8 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB51_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB51_4
 ; GFX1250-SDAG-NEXT:  .LBB51_3: ; %atomicrmw.global
@@ -5278,7 +5213,7 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB51_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_xor_saddr_i64_rtn_neg128:
@@ -5344,7 +5279,7 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB51_2
 ; GFX950-SDAG-NEXT:  .LBB51_1: ; %atomicrmw.private
@@ -5357,9 +5292,8 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_xor_b32_e32 v2, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB51_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB51_4
 ; GFX950-SDAG-NEXT:  .LBB51_3: ; %atomicrmw.global
@@ -5369,7 +5303,7 @@ define amdgpu_ps <2 x float> @flat_xor_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc1
 ; GFX950-SDAG-NEXT:  .LBB51_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -5439,7 +5373,7 @@ define amdgpu_ps void @flat_xor_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB52_2
 ; GFX1250-SDAG-NEXT:  .LBB52_1: ; %atomicrmw.private
@@ -5454,10 +5388,8 @@ define amdgpu_ps void @flat_xor_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB52_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB52_4
 ; GFX1250-SDAG-NEXT:  .LBB52_3: ; %atomicrmw.global
@@ -5522,7 +5454,7 @@ define amdgpu_ps void @flat_xor_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB52_2
 ; GFX950-SDAG-NEXT:  .LBB52_1: ; %atomicrmw.private
@@ -5535,9 +5467,8 @@ define amdgpu_ps void @flat_xor_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_xor_b32_e32 v0, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB52_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB52_4
 ; GFX950-SDAG-NEXT:  .LBB52_3: ; %atomicrmw.global
@@ -5606,7 +5537,7 @@ define amdgpu_ps void @flat_xor_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB53_2
 ; GFX1250-SDAG-NEXT:  .LBB53_1: ; %atomicrmw.private
@@ -5621,10 +5552,8 @@ define amdgpu_ps void @flat_xor_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB53_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB53_4
 ; GFX1250-SDAG-NEXT:  .LBB53_3: ; %atomicrmw.global
@@ -5695,7 +5624,7 @@ define amdgpu_ps void @flat_xor_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB53_2
 ; GFX950-SDAG-NEXT:  .LBB53_1: ; %atomicrmw.private
@@ -5708,9 +5637,8 @@ define amdgpu_ps void @flat_xor_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_xor_b32_e32 v0, v0, v2
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB53_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB53_4
 ; GFX950-SDAG-NEXT:  .LBB53_3: ; %atomicrmw.global
@@ -5924,7 +5852,7 @@ define amdgpu_ps <2 x float> @flat_max_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB58_2
 ; GFX1250-SDAG-NEXT:  .LBB58_1: ; %atomicrmw.private
@@ -5938,17 +5866,15 @@ define amdgpu_ps <2 x float> @flat_max_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB58_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB58_4
 ; GFX1250-SDAG-NEXT:  .LBB58_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_max_i64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN
 ; GFX1250-SDAG-NEXT:  .LBB58_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -6006,7 +5932,7 @@ define amdgpu_ps <2 x float> @flat_max_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB58_2
 ; GFX950-SDAG-NEXT:  .LBB58_1: ; %atomicrmw.private
@@ -6021,15 +5947,14 @@ define amdgpu_ps <2 x float> @flat_max_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB58_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB58_4
 ; GFX950-SDAG-NEXT:  .LBB58_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_smax_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB58_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -6097,7 +6022,7 @@ define amdgpu_ps <2 x float> @flat_max_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB59_2
 ; GFX1250-SDAG-NEXT:  .LBB59_1: ; %atomicrmw.private
@@ -6111,17 +6036,15 @@ define amdgpu_ps <2 x float> @flat_max_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB59_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB59_4
 ; GFX1250-SDAG-NEXT:  .LBB59_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_max_i64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN
 ; GFX1250-SDAG-NEXT:  .LBB59_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -6185,7 +6108,7 @@ define amdgpu_ps <2 x float> @flat_max_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB59_2
 ; GFX950-SDAG-NEXT:  .LBB59_1: ; %atomicrmw.private
@@ -6200,15 +6123,14 @@ define amdgpu_ps <2 x float> @flat_max_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB59_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB59_4
 ; GFX950-SDAG-NEXT:  .LBB59_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_smax_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB59_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -6278,7 +6200,7 @@ define amdgpu_ps void @flat_max_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB60_2
 ; GFX1250-SDAG-NEXT:  .LBB60_1: ; %atomicrmw.private
@@ -6292,10 +6214,8 @@ define amdgpu_ps void @flat_max_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB60_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB60_4
 ; GFX1250-SDAG-NEXT:  .LBB60_3: ; %atomicrmw.global
@@ -6349,7 +6269,7 @@ define amdgpu_ps void @flat_max_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB60_2
 ; GFX950-SDAG-NEXT:  .LBB60_1: ; %atomicrmw.private
@@ -6364,9 +6284,8 @@ define amdgpu_ps void @flat_max_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB60_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB60_4
 ; GFX950-SDAG-NEXT:  .LBB60_3: ; %atomicrmw.global
@@ -6429,7 +6348,7 @@ define amdgpu_ps void @flat_max_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB61_2
 ; GFX1250-SDAG-NEXT:  .LBB61_1: ; %atomicrmw.private
@@ -6443,10 +6362,8 @@ define amdgpu_ps void @flat_max_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB61_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB61_4
 ; GFX1250-SDAG-NEXT:  .LBB61_3: ; %atomicrmw.global
@@ -6506,7 +6423,7 @@ define amdgpu_ps void @flat_max_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB61_2
 ; GFX950-SDAG-NEXT:  .LBB61_1: ; %atomicrmw.private
@@ -6521,9 +6438,8 @@ define amdgpu_ps void @flat_max_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB61_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB61_4
 ; GFX950-SDAG-NEXT:  .LBB61_3: ; %atomicrmw.global
@@ -6731,7 +6647,7 @@ define amdgpu_ps <2 x float> @flat_min_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB66_2
 ; GFX1250-SDAG-NEXT:  .LBB66_1: ; %atomicrmw.private
@@ -6745,17 +6661,15 @@ define amdgpu_ps <2 x float> @flat_min_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB66_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB66_4
 ; GFX1250-SDAG-NEXT:  .LBB66_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_min_i64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN
 ; GFX1250-SDAG-NEXT:  .LBB66_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -6813,7 +6727,7 @@ define amdgpu_ps <2 x float> @flat_min_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB66_2
 ; GFX950-SDAG-NEXT:  .LBB66_1: ; %atomicrmw.private
@@ -6828,15 +6742,14 @@ define amdgpu_ps <2 x float> @flat_min_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB66_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB66_4
 ; GFX950-SDAG-NEXT:  .LBB66_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_smin_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB66_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -6904,7 +6817,7 @@ define amdgpu_ps <2 x float> @flat_min_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB67_2
 ; GFX1250-SDAG-NEXT:  .LBB67_1: ; %atomicrmw.private
@@ -6918,17 +6831,15 @@ define amdgpu_ps <2 x float> @flat_min_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB67_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB67_4
 ; GFX1250-SDAG-NEXT:  .LBB67_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_min_i64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN
 ; GFX1250-SDAG-NEXT:  .LBB67_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -6992,7 +6903,7 @@ define amdgpu_ps <2 x float> @flat_min_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB67_2
 ; GFX950-SDAG-NEXT:  .LBB67_1: ; %atomicrmw.private
@@ -7007,15 +6918,14 @@ define amdgpu_ps <2 x float> @flat_min_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB67_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB67_4
 ; GFX950-SDAG-NEXT:  .LBB67_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_smin_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB67_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -7085,7 +6995,7 @@ define amdgpu_ps void @flat_min_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB68_2
 ; GFX1250-SDAG-NEXT:  .LBB68_1: ; %atomicrmw.private
@@ -7099,10 +7009,8 @@ define amdgpu_ps void @flat_min_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB68_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB68_4
 ; GFX1250-SDAG-NEXT:  .LBB68_3: ; %atomicrmw.global
@@ -7156,7 +7064,7 @@ define amdgpu_ps void @flat_min_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB68_2
 ; GFX950-SDAG-NEXT:  .LBB68_1: ; %atomicrmw.private
@@ -7171,9 +7079,8 @@ define amdgpu_ps void @flat_min_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB68_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB68_4
 ; GFX950-SDAG-NEXT:  .LBB68_3: ; %atomicrmw.global
@@ -7236,7 +7143,7 @@ define amdgpu_ps void @flat_min_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB69_2
 ; GFX1250-SDAG-NEXT:  .LBB69_1: ; %atomicrmw.private
@@ -7250,10 +7157,8 @@ define amdgpu_ps void @flat_min_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB69_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB69_4
 ; GFX1250-SDAG-NEXT:  .LBB69_3: ; %atomicrmw.global
@@ -7313,7 +7218,7 @@ define amdgpu_ps void @flat_min_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB69_2
 ; GFX950-SDAG-NEXT:  .LBB69_1: ; %atomicrmw.private
@@ -7328,9 +7233,8 @@ define amdgpu_ps void @flat_min_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB69_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB69_4
 ; GFX950-SDAG-NEXT:  .LBB69_3: ; %atomicrmw.global
@@ -7538,7 +7442,7 @@ define amdgpu_ps <2 x float> @flat_umax_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB74_2
 ; GFX1250-SDAG-NEXT:  .LBB74_1: ; %atomicrmw.private
@@ -7552,17 +7456,15 @@ define amdgpu_ps <2 x float> @flat_umax_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB74_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB74_4
 ; GFX1250-SDAG-NEXT:  .LBB74_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_max_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN
 ; GFX1250-SDAG-NEXT:  .LBB74_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -7620,7 +7522,7 @@ define amdgpu_ps <2 x float> @flat_umax_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB74_2
 ; GFX950-SDAG-NEXT:  .LBB74_1: ; %atomicrmw.private
@@ -7635,15 +7537,14 @@ define amdgpu_ps <2 x float> @flat_umax_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB74_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB74_4
 ; GFX950-SDAG-NEXT:  .LBB74_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_umax_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB74_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -7711,7 +7612,7 @@ define amdgpu_ps <2 x float> @flat_umax_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB75_2
 ; GFX1250-SDAG-NEXT:  .LBB75_1: ; %atomicrmw.private
@@ -7725,17 +7626,15 @@ define amdgpu_ps <2 x float> @flat_umax_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB75_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB75_4
 ; GFX1250-SDAG-NEXT:  .LBB75_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_max_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN
 ; GFX1250-SDAG-NEXT:  .LBB75_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -7799,7 +7698,7 @@ define amdgpu_ps <2 x float> @flat_umax_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB75_2
 ; GFX950-SDAG-NEXT:  .LBB75_1: ; %atomicrmw.private
@@ -7814,15 +7713,14 @@ define amdgpu_ps <2 x float> @flat_umax_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB75_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB75_4
 ; GFX950-SDAG-NEXT:  .LBB75_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_umax_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB75_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -7892,7 +7790,7 @@ define amdgpu_ps void @flat_umax_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB76_2
 ; GFX1250-SDAG-NEXT:  .LBB76_1: ; %atomicrmw.private
@@ -7906,10 +7804,8 @@ define amdgpu_ps void @flat_umax_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB76_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB76_4
 ; GFX1250-SDAG-NEXT:  .LBB76_3: ; %atomicrmw.global
@@ -7963,7 +7859,7 @@ define amdgpu_ps void @flat_umax_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB76_2
 ; GFX950-SDAG-NEXT:  .LBB76_1: ; %atomicrmw.private
@@ -7978,9 +7874,8 @@ define amdgpu_ps void @flat_umax_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB76_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB76_4
 ; GFX950-SDAG-NEXT:  .LBB76_3: ; %atomicrmw.global
@@ -8043,7 +7938,7 @@ define amdgpu_ps void @flat_umax_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB77_2
 ; GFX1250-SDAG-NEXT:  .LBB77_1: ; %atomicrmw.private
@@ -8057,10 +7952,8 @@ define amdgpu_ps void @flat_umax_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB77_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB77_4
 ; GFX1250-SDAG-NEXT:  .LBB77_3: ; %atomicrmw.global
@@ -8120,7 +8013,7 @@ define amdgpu_ps void @flat_umax_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB77_2
 ; GFX950-SDAG-NEXT:  .LBB77_1: ; %atomicrmw.private
@@ -8135,9 +8028,8 @@ define amdgpu_ps void @flat_umax_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB77_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB77_4
 ; GFX950-SDAG-NEXT:  .LBB77_3: ; %atomicrmw.global
@@ -8345,7 +8237,7 @@ define amdgpu_ps <2 x float> @flat_umin_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB82_2
 ; GFX1250-SDAG-NEXT:  .LBB82_1: ; %atomicrmw.private
@@ -8359,17 +8251,15 @@ define amdgpu_ps <2 x float> @flat_umin_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB82_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB82_4
 ; GFX1250-SDAG-NEXT:  .LBB82_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_min_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN
 ; GFX1250-SDAG-NEXT:  .LBB82_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -8427,7 +8317,7 @@ define amdgpu_ps <2 x float> @flat_umin_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB82_2
 ; GFX950-SDAG-NEXT:  .LBB82_1: ; %atomicrmw.private
@@ -8442,15 +8332,14 @@ define amdgpu_ps <2 x float> @flat_umin_saddr_i64_rtn(ptr inreg %sbase, i32 %vof
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB82_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB82_4
 ; GFX950-SDAG-NEXT:  .LBB82_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_umin_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB82_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -8518,7 +8407,7 @@ define amdgpu_ps <2 x float> @flat_umin_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB83_2
 ; GFX1250-SDAG-NEXT:  .LBB83_1: ; %atomicrmw.private
@@ -8532,17 +8421,15 @@ define amdgpu_ps <2 x float> @flat_umin_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB83_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB83_4
 ; GFX1250-SDAG-NEXT:  .LBB83_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_min_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN
 ; GFX1250-SDAG-NEXT:  .LBB83_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -8606,7 +8493,7 @@ define amdgpu_ps <2 x float> @flat_umin_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB83_2
 ; GFX950-SDAG-NEXT:  .LBB83_1: ; %atomicrmw.private
@@ -8621,15 +8508,14 @@ define amdgpu_ps <2 x float> @flat_umin_saddr_i64_rtn_neg128(ptr inreg %sbase, i
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB83_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB83_4
 ; GFX950-SDAG-NEXT:  .LBB83_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_umin_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB83_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -8699,7 +8585,7 @@ define amdgpu_ps void @flat_umin_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB84_2
 ; GFX1250-SDAG-NEXT:  .LBB84_1: ; %atomicrmw.private
@@ -8713,10 +8599,8 @@ define amdgpu_ps void @flat_umin_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB84_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB84_4
 ; GFX1250-SDAG-NEXT:  .LBB84_3: ; %atomicrmw.global
@@ -8770,7 +8654,7 @@ define amdgpu_ps void @flat_umin_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB84_2
 ; GFX950-SDAG-NEXT:  .LBB84_1: ; %atomicrmw.private
@@ -8785,9 +8669,8 @@ define amdgpu_ps void @flat_umin_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset,
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB84_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB84_4
 ; GFX950-SDAG-NEXT:  .LBB84_3: ; %atomicrmw.global
@@ -8850,7 +8733,7 @@ define amdgpu_ps void @flat_umin_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB85_2
 ; GFX1250-SDAG-NEXT:  .LBB85_1: ; %atomicrmw.private
@@ -8864,10 +8747,8 @@ define amdgpu_ps void @flat_umin_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB85_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB85_4
 ; GFX1250-SDAG-NEXT:  .LBB85_3: ; %atomicrmw.global
@@ -8927,7 +8808,7 @@ define amdgpu_ps void @flat_umin_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB85_2
 ; GFX950-SDAG-NEXT:  .LBB85_1: ; %atomicrmw.private
@@ -8942,9 +8823,8 @@ define amdgpu_ps void @flat_umin_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %v
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB85_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB85_4
 ; GFX950-SDAG-NEXT:  .LBB85_3: ; %atomicrmw.global
@@ -9209,7 +9089,7 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn(ptr inreg %sbase, i32 %
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v2
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB90_2
 ; GFX1250-SDAG-NEXT:  .LBB90_1: ; %atomicrmw.private
@@ -9224,10 +9104,8 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn(ptr inreg %sbase, i32 %
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v8, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB90_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB90_4
 ; GFX1250-SDAG-NEXT:  .LBB90_3: ; %atomicrmw.global
@@ -9239,7 +9117,7 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn(ptr inreg %sbase, i32 %
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_SYS
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB90_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_cmpxchg_saddr_i64_rtn:
@@ -9302,7 +9180,7 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn(ptr inreg %sbase, i32 %
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v7, v2
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB90_2
 ; GFX950-SDAG-NEXT:  .LBB90_1: ; %atomicrmw.private
@@ -9317,9 +9195,8 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn(ptr inreg %sbase, i32 %
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v0, v4, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v8, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB90_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB90_4
 ; GFX950-SDAG-NEXT:  .LBB90_3: ; %atomicrmw.global
@@ -9329,7 +9206,7 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn(ptr inreg %sbase, i32 %
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc0 sc1
 ; GFX950-SDAG-NEXT:  .LBB90_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -9403,7 +9280,7 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn_neg128(ptr inreg %sbase
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v2, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v2
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB91_2
 ; GFX1250-SDAG-NEXT:  .LBB91_1: ; %atomicrmw.private
@@ -9418,10 +9295,8 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn_neg128(ptr inreg %sbase
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v8, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB91_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB91_4
 ; GFX1250-SDAG-NEXT:  .LBB91_3: ; %atomicrmw.global
@@ -9433,7 +9308,7 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn_neg128(ptr inreg %sbase
 ; GFX1250-SDAG-NEXT:    global_inv scope:SCOPE_SYS
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:  .LBB91_4: ; %atomicrmw.phi
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX1250-GISEL-LABEL: flat_cmpxchg_saddr_i64_rtn_neg128:
@@ -9502,7 +9377,7 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn_neg128(ptr inreg %sbase
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v7, v2
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB91_2
 ; GFX950-SDAG-NEXT:  .LBB91_1: ; %atomicrmw.private
@@ -9517,9 +9392,8 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn_neg128(ptr inreg %sbase
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v0, v4, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v8, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB91_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB91_4
 ; GFX950-SDAG-NEXT:  .LBB91_3: ; %atomicrmw.global
@@ -9529,7 +9403,7 @@ define amdgpu_ps <2 x float> @flat_cmpxchg_saddr_i64_rtn_neg128(ptr inreg %sbase
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    buffer_inv sc0 sc1
 ; GFX950-SDAG-NEXT:  .LBB91_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -9605,7 +9479,7 @@ define amdgpu_ps void @flat_cmpxchg_saddr_i64_nortn(ptr inreg %sbase, i32 %voffs
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v2
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB92_2
 ; GFX1250-SDAG-NEXT:  .LBB92_1: ; %atomicrmw.private
@@ -9620,10 +9494,8 @@ define amdgpu_ps void @flat_cmpxchg_saddr_i64_nortn(ptr inreg %sbase, i32 %voffs
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v2, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB92_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB92_4
 ; GFX1250-SDAG-NEXT:  .LBB92_3: ; %atomicrmw.global
@@ -9691,7 +9563,7 @@ define amdgpu_ps void @flat_cmpxchg_saddr_i64_nortn(ptr inreg %sbase, i32 %voffs
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v7, v2
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB92_2
 ; GFX950-SDAG-NEXT:  .LBB92_1: ; %atomicrmw.private
@@ -9706,9 +9578,8 @@ define amdgpu_ps void @flat_cmpxchg_saddr_i64_nortn(ptr inreg %sbase, i32 %voffs
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v0, v4, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v2, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB92_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB92_4
 ; GFX950-SDAG-NEXT:  .LBB92_3: ; %atomicrmw.global
@@ -9782,7 +9653,7 @@ define amdgpu_ps void @flat_cmpxchg_saddr_i64_nortn_neg128(ptr inreg %sbase, i32
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v2, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v2
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB93_2
 ; GFX1250-SDAG-NEXT:  .LBB93_1: ; %atomicrmw.private
@@ -9797,10 +9668,8 @@ define amdgpu_ps void @flat_cmpxchg_saddr_i64_nortn_neg128(ptr inreg %sbase, i32
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v2, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB93_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB93_4
 ; GFX1250-SDAG-NEXT:  .LBB93_3: ; %atomicrmw.global
@@ -9874,7 +9743,7 @@ define amdgpu_ps void @flat_cmpxchg_saddr_i64_nortn_neg128(ptr inreg %sbase, i32
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v7, v2
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB93_2
 ; GFX950-SDAG-NEXT:  .LBB93_1: ; %atomicrmw.private
@@ -9889,9 +9758,8 @@ define amdgpu_ps void @flat_cmpxchg_saddr_i64_nortn_neg128(ptr inreg %sbase, i32
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v0, v4, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v2, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB93_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB93_4
 ; GFX950-SDAG-NEXT:  .LBB93_3: ; %atomicrmw.global
@@ -10109,7 +9977,7 @@ define amdgpu_ps <2 x float> @flat_inc_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB98_2
 ; GFX1250-SDAG-NEXT:  .LBB98_1: ; %atomicrmw.private
@@ -10125,17 +9993,15 @@ define amdgpu_ps <2 x float> @flat_inc_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB98_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB98_4
 ; GFX1250-SDAG-NEXT:  .LBB98_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_inc_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:  .LBB98_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -10197,7 +10063,7 @@ define amdgpu_ps <2 x float> @flat_inc_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB98_2
 ; GFX950-SDAG-NEXT:  .LBB98_1: ; %atomicrmw.private
@@ -10213,15 +10079,14 @@ define amdgpu_ps <2 x float> @flat_inc_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, 0, v4, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v6, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB98_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB98_4
 ; GFX950-SDAG-NEXT:  .LBB98_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_inc_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB98_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -10292,7 +10157,7 @@ define amdgpu_ps <2 x float> @flat_inc_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB99_2
 ; GFX1250-SDAG-NEXT:  .LBB99_1: ; %atomicrmw.private
@@ -10308,17 +10173,15 @@ define amdgpu_ps <2 x float> @flat_inc_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB99_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB99_4
 ; GFX1250-SDAG-NEXT:  .LBB99_3: ; %atomicrmw.global
 ; GFX1250-SDAG-NEXT:    flat_atomic_inc_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-SDAG-NEXT:  .LBB99_4: ; %atomicrmw.phi
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -10386,7 +10249,7 @@ define amdgpu_ps <2 x float> @flat_inc_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB99_2
 ; GFX950-SDAG-NEXT:  .LBB99_1: ; %atomicrmw.private
@@ -10402,15 +10265,14 @@ define amdgpu_ps <2 x float> @flat_inc_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, 0, v4, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v6, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB99_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB99_4
 ; GFX950-SDAG-NEXT:  .LBB99_3: ; %atomicrmw.global
 ; GFX950-SDAG-NEXT:    flat_atomic_inc_x2 v[0:1], v[0:1], v[2:3] sc0
 ; GFX950-SDAG-NEXT:  .LBB99_4: ; %atomicrmw.phi
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    ; return to shader part epilog
 ;
@@ -10483,7 +10345,7 @@ define amdgpu_ps void @flat_inc_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB100_2
 ; GFX1250-SDAG-NEXT:  .LBB100_1: ; %atomicrmw.private
@@ -10499,10 +10361,8 @@ define amdgpu_ps void @flat_inc_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v6, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB100_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB100_4
 ; GFX1250-SDAG-NEXT:  .LBB100_3: ; %atomicrmw.global
@@ -10560,7 +10420,7 @@ define amdgpu_ps void @flat_inc_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB100_2
 ; GFX950-SDAG-NEXT:  .LBB100_1: ; %atomicrmw.private
@@ -10576,9 +10436,8 @@ define amdgpu_ps void @flat_inc_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, 0, v4, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v6, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB100_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB100_4
 ; GFX950-SDAG-NEXT:  .LBB100_3: ; %atomicrmw.global
@@ -10644,7 +10503,7 @@ define amdgpu_ps void @flat_inc_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB101_2
 ; GFX1250-SDAG-NEXT:  .LBB101_1: ; %atomicrmw.private
@@ -10660,10 +10519,8 @@ define amdgpu_ps void @flat_inc_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v6, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB101_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB101_4
 ; GFX1250-SDAG-NEXT:  .LBB101_3: ; %atomicrmw.global
@@ -10727,7 +10584,7 @@ define amdgpu_ps void @flat_inc_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB101_2
 ; GFX950-SDAG-NEXT:  .LBB101_1: ; %atomicrmw.private
@@ -10743,9 +10600,8 @@ define amdgpu_ps void @flat_inc_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, 0, v4, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v6, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB101_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB101_4
 ; GFX950-SDAG-NEXT:  .LBB101_3: ; %atomicrmw.global
@@ -10957,7 +10813,7 @@ define amdgpu_ps <2 x float> @flat_dec_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s2, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB106_2
 ; GFX1250-SDAG-NEXT:  .LBB106_1: ; %atomicrmw.private
@@ -10975,10 +10831,8 @@ define amdgpu_ps <2 x float> @flat_dec_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB106_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s1
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB106_4
 ; GFX1250-SDAG-NEXT:  .LBB106_3: ; %atomicrmw.global
@@ -11047,7 +10901,7 @@ define amdgpu_ps <2 x float> @flat_dec_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[4:5], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB106_2
 ; GFX950-SDAG-NEXT:  .LBB106_1: ; %atomicrmw.private
@@ -11066,9 +10920,8 @@ define amdgpu_ps <2 x float> @flat_dec_saddr_i64_rtn(ptr inreg %sbase, i32 %voff
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v5, v2, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB106_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB106_4
 ; GFX950-SDAG-NEXT:  .LBB106_3: ; %atomicrmw.global
@@ -11146,7 +10999,7 @@ define amdgpu_ps <2 x float> @flat_dec_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s2, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB107_2
 ; GFX1250-SDAG-NEXT:  .LBB107_1: ; %atomicrmw.private
@@ -11164,10 +11017,8 @@ define amdgpu_ps <2 x float> @flat_dec_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-SDAG-NEXT:  .LBB107_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s1
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB107_4
 ; GFX1250-SDAG-NEXT:  .LBB107_3: ; %atomicrmw.global
@@ -11242,7 +11093,7 @@ define amdgpu_ps <2 x float> @flat_dec_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[4:5], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB107_2
 ; GFX950-SDAG-NEXT:  .LBB107_1: ; %atomicrmw.private
@@ -11261,9 +11112,8 @@ define amdgpu_ps <2 x float> @flat_dec_saddr_i64_rtn_neg128(ptr inreg %sbase, i3
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v2, v5, v2, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX950-SDAG-NEXT:  .LBB107_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB107_4
 ; GFX950-SDAG-NEXT:  .LBB107_3: ; %atomicrmw.global
@@ -11343,7 +11193,7 @@ define amdgpu_ps void @flat_dec_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s2, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB108_2
 ; GFX1250-SDAG-NEXT:  .LBB108_1: ; %atomicrmw.private
@@ -11361,10 +11211,8 @@ define amdgpu_ps void @flat_dec_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB108_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s1
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB108_4
 ; GFX1250-SDAG-NEXT:  .LBB108_3: ; %atomicrmw.global
@@ -11422,7 +11270,7 @@ define amdgpu_ps void @flat_dec_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], s[2:3], 0, v[0:1]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[4:5], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB108_2
 ; GFX950-SDAG-NEXT:  .LBB108_1: ; %atomicrmw.private
@@ -11441,9 +11289,8 @@ define amdgpu_ps void @flat_dec_saddr_i64_nortn(ptr inreg %sbase, i32 %voffset, 
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v5, v2, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB108_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB108_4
 ; GFX950-SDAG-NEXT:  .LBB108_3: ; %atomicrmw.global
@@ -11510,7 +11357,7 @@ define amdgpu_ps void @flat_dec_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s2, vcc_lo
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB109_2
 ; GFX1250-SDAG-NEXT:  .LBB109_1: ; %atomicrmw.private
@@ -11528,10 +11375,8 @@ define amdgpu_ps void @flat_dec_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX1250-SDAG-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX1250-SDAG-NEXT:  .LBB109_2:
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX1250-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s0, s1
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB109_4
 ; GFX1250-SDAG-NEXT:  .LBB109_3: ; %atomicrmw.global
@@ -11595,7 +11440,7 @@ define amdgpu_ps void @flat_dec_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
 ; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[4:5], vcc
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB109_2
 ; GFX950-SDAG-NEXT:  .LBB109_1: ; %atomicrmw.private
@@ -11614,9 +11459,8 @@ define amdgpu_ps void @flat_dec_saddr_i64_nortn_neg128(ptr inreg %sbase, i32 %vo
 ; GFX950-SDAG-NEXT:    v_cndmask_b32_e32 v0, v5, v2, vcc
 ; GFX950-SDAG-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX950-SDAG-NEXT:  .LBB109_2:
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execz .LBB109_4
 ; GFX950-SDAG-NEXT:  .LBB109_3: ; %atomicrmw.global
@@ -12652,11 +12496,10 @@ define float @flat_atomic_fmax_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB118_1
 ; GFX950-SDAG-NEXT:  .LBB118_2: ; %atomicrmw.end
@@ -12716,11 +12559,10 @@ define void @flat_atomic_fmax_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB119_1
 ; GFX950-SDAG-NEXT:  .LBB119_2: ; %atomicrmw.end
@@ -12780,11 +12622,10 @@ define float @flat_atomic_fmin_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB120_1
 ; GFX950-SDAG-NEXT:  .LBB120_2: ; %atomicrmw.end
@@ -12844,11 +12685,10 @@ define void @flat_atomic_fmin_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB121_1
 ; GFX950-SDAG-NEXT:  .LBB121_2: ; %atomicrmw.end
@@ -12970,9 +12810,8 @@ define <2 x half> @flat_atomic_fmax_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v5
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s3, s3
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB124_1
 ; GFX1250-SDAG-NEXT:  .LBB124_2: ; %atomicrmw.end
@@ -13025,11 +12864,10 @@ define <2 x half> @flat_atomic_fmax_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB124_1
 ; GFX950-SDAG-NEXT:  .LBB124_2: ; %atomicrmw.end
@@ -13088,9 +12926,8 @@ define void @flat_atomic_fmax_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s3, s3
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB125_1
 ; GFX1250-SDAG-NEXT:  .LBB125_2: ; %atomicrmw.end
@@ -13142,11 +12979,10 @@ define void @flat_atomic_fmax_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB125_1
 ; GFX950-SDAG-NEXT:  .LBB125_2: ; %atomicrmw.end
@@ -13206,9 +13042,8 @@ define <2 x half> @flat_atomic_fmin_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v5
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s3, s3
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB126_1
 ; GFX1250-SDAG-NEXT:  .LBB126_2: ; %atomicrmw.end
@@ -13261,11 +13096,10 @@ define <2 x half> @flat_atomic_fmin_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB126_1
 ; GFX950-SDAG-NEXT:  .LBB126_2: ; %atomicrmw.end
@@ -13324,9 +13158,8 @@ define void @flat_atomic_fmin_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s3, s3
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB127_1
 ; GFX1250-SDAG-NEXT:  .LBB127_2: ; %atomicrmw.end
@@ -13378,11 +13211,10 @@ define void @flat_atomic_fmin_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB127_1
 ; GFX950-SDAG-NEXT:  .LBB127_2: ; %atomicrmw.end
@@ -13487,9 +13319,8 @@ define <2 x bfloat> @flat_atomic_fmax_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v5
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s3, s3
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB130_1
 ; GFX1250-SDAG-NEXT:  .LBB130_2: ; %atomicrmw.end
@@ -13544,11 +13375,10 @@ define <2 x bfloat> @flat_atomic_fmax_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB130_1
 ; GFX950-SDAG-NEXT:  .LBB130_2: ; %atomicrmw.end
@@ -13607,9 +13437,8 @@ define void @flat_atomic_fmax_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s3, s3
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB131_1
 ; GFX1250-SDAG-NEXT:  .LBB131_2: ; %atomicrmw.end
@@ -13661,11 +13490,10 @@ define void @flat_atomic_fmax_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB131_1
 ; GFX950-SDAG-NEXT:  .LBB131_2: ; %atomicrmw.end
@@ -13725,9 +13553,8 @@ define <2 x bfloat> @flat_atomic_fmin_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v5
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s3, s3
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB132_1
 ; GFX1250-SDAG-NEXT:  .LBB132_2: ; %atomicrmw.end
@@ -13782,11 +13609,10 @@ define <2 x bfloat> @flat_atomic_fmin_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB132_1
 ; GFX950-SDAG-NEXT:  .LBB132_2: ; %atomicrmw.end
@@ -13845,9 +13671,8 @@ define void @flat_atomic_fmin_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-SDAG-NEXT:    s_and_saveexec_b32 s3, s3
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB133_1
 ; GFX1250-SDAG-NEXT:  .LBB133_2: ; %atomicrmw.end
@@ -13899,11 +13724,10 @@ define void @flat_atomic_fmin_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-SDAG-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB133_1
 ; GFX950-SDAG-NEXT:  .LBB133_2: ; %atomicrmw.end

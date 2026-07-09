@@ -17,7 +17,7 @@ define amdgpu_ps void @return_void(float %0) #0 {
 ; CHECK-NEXT:    v_cmp_gt_f32_e32 vcc, s2, v0
 ; CHECK-NEXT:    s_mov_b64 s[0:1], exec
 ; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_and_saveexec_b64 s[4:5], vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %end
@@ -26,9 +26,8 @@ define amdgpu_ps void @return_void(float %0) #0 {
 ; CHECK-NEXT:    exp mrt0, v1, v1, v1, v0 done vm
 ; CHECK-NEXT:  .LBB0_2:
 ; CHECK-NEXT:    s_waitcnt expcnt(0)
-; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
+; CHECK-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_5
 ; CHECK-NEXT:  .LBB0_3: ; %loop
@@ -65,7 +64,7 @@ define amdgpu_ps void @return_void_compr(float %0) #0 {
 ; CHECK-NEXT:    v_cmp_gt_f32_e32 vcc, s2, v0
 ; CHECK-NEXT:    s_mov_b64 s[0:1], exec
 ; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_and_saveexec_b64 s[4:5], vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_2
 ; CHECK-NEXT:  .LBB1_1: ; %end
@@ -73,9 +72,8 @@ define amdgpu_ps void @return_void_compr(float %0) #0 {
 ; CHECK-NEXT:    exp mrt0, v0, off, v0, off done compr vm
 ; CHECK-NEXT:  .LBB1_2:
 ; CHECK-NEXT:    s_waitcnt expcnt(0)
-; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
+; CHECK-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_5
 ; CHECK-NEXT:  .LBB1_3: ; %loop
@@ -136,23 +134,23 @@ loop:
 define amdgpu_ps float @return_nonvoid(float %0) #0 {
 ; CHECK-LABEL: return_nonvoid:
 ; CHECK:       ; %bb.0: ; %main_body
-; CHECK-NEXT:    s_mov_b32 s0, 0x41200000
-; CHECK-NEXT:    v_cmp_gt_f32_e64 s[0:1], s0, v0
-; CHECK-NEXT:    s_mov_b64 s[2:3], exec
-; CHECK-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    s_mov_b32 s2, 0x41200000
+; CHECK-NEXT:    v_cmp_gt_f32_e32 vcc, s2, v0
+; CHECK-NEXT:    s_mov_b64 s[0:1], exec
+; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB3_3
 ; CHECK-NEXT:  .LBB3_1: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    s_andn2_b64 s[2:3], s[2:3], exec
+; CHECK-NEXT:    s_andn2_b64 s[0:1], s[0:1], exec
 ; CHECK-NEXT:    s_cbranch_scc0 .LBB3_4
 ; CHECK-NEXT:  ; %bb.2: ; %loop
 ; CHECK-NEXT:    ; in Loop: Header=BB3_1 Depth=1
 ; CHECK-NEXT:    s_mov_b64 exec, 0
 ; CHECK-NEXT:    s_cbranch_execnz .LBB3_1
 ; CHECK-NEXT:  .LBB3_3: ; %UnifiedReturnBlock
-; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0
 ; CHECK-NEXT:    s_branch .LBB3_5
 ; CHECK-NEXT:  .LBB3_4:

@@ -12,9 +12,10 @@ define void @quux(i32 %arg, i1 %arg1, i1 %arg2) {
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v1, 1, v1
-; CHECK-NEXT:    v_cmp_eq_u32_e64 s4, 1, v1
+; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 0
-; CHECK-NEXT:    s_xor_b32 exec_lo, s4, exec_lo
+; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
+; CHECK-NEXT:    s_and_saveexec_b32 s4, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %bb3

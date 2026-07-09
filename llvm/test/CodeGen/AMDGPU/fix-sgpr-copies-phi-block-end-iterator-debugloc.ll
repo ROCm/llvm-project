@@ -19,9 +19,8 @@ define i32 @rocrand_regression(ptr addrspace(1) %arg, i32 %arg0, i1 %cmp7) {
 ; CHECK-NEXT:    ; Parent Loop BB0_1 Depth=1
 ; CHECK-NEXT:    ; => This Inner Loop Header: Depth=2
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
+; CHECK-NEXT:    s_and_saveexec_b64 s[10:11], vcc
 ; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_2
 ; CHECK-NEXT:  .LBB0_3: ; %do.cond

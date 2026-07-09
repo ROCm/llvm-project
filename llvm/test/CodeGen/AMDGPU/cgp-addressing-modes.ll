@@ -40,7 +40,7 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_global_small_max_i32_ds_offset:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; SICIVI: buffer_load_sbyte {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, s{{[0-9]+$}}
 
@@ -71,7 +71,7 @@ done:
 }
 
 ; GCN-LABEL: {{^}}test_sink_global_small_max_mubuf_offset:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; SICIVI: buffer_load_sbyte {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4095{{$}}
 ; GFX9: v_mov_b32_e32 [[ZERO:v[0-9]+]], 0{{$}}
@@ -101,7 +101,7 @@ done:
 }
 
 ; GCN-LABEL: {{^}}test_sink_global_small_max_plus_1_mubuf_offset:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; SICIVI: buffer_load_sbyte {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, s{{[0-9]+$}}
 ; GFX9: v_mov_b32_e32 [[VOFFSET:v[0-9]+]], 0x1000{{$}}
@@ -136,7 +136,7 @@ done:
 ; OPT: getelementptr i8,
 
 ; GCN-LABEL: {{^}}test_sink_scratch_small_offset_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN: buffer_store_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4088{{$}}
 ; GCN: buffer_load_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4088 glc{{$}}
@@ -176,7 +176,7 @@ done:
 ; OPT: getelementptr i8,
 
 ; GCN-LABEL: {{^}}test_sink_scratch_small_offset_i32_reserved:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN: buffer_store_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4092{{$}}
 ; GCN: buffer_load_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4092 glc{{$}}
@@ -215,7 +215,7 @@ done:
 ; OPT-NOT: ptrtoint
 
 ; GCN-LABEL: {{^}}test_no_sink_scratch_large_offset_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN: buffer_store_dword {{v[0-9]+}}, {{v[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0 offen{{$}}
 ; GCN: buffer_load_dword {{v[0-9]+}}, {{v[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0 offen glc{{$}}
@@ -248,7 +248,7 @@ done:
 }
 
 ; GCN-LABEL: {{^}}test_sink_global_vreg_sreg_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; CI: buffer_load_dword {{v[0-9]+}}, {{v\[[0-9]+:[0-9]+\]}}, {{s\[[0-9]+:[0-9]+\]}}, 0 addr64{{$}}
 ; VI: flat_load_dword v{{[0-9]+}}, v[{{[0-9]+:[0-9]+}}]
@@ -280,7 +280,7 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_small_offset_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0x7{{$}}
 ; GCN: s_or_b64 exec, exec
@@ -310,7 +310,7 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_8_bit_offset_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0xff{{$}}
 ; GCN: s_or_b64 exec, exec
@@ -342,7 +342,7 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_8_bit_offset_p1_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; SI: s_movk_i32 [[OFFSET:s[0-9]+]], 0x400
 
@@ -375,7 +375,7 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_32_bit_offset_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; SI: s_add_u32 s{{[0-9]+}}, s{{[0-9]+}}, -4{{$}}
 ; SI: s_addc_u32 s{{[0-9]+}}, s{{[0-9]+}}, 3{{$}}
@@ -414,7 +414,7 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_32_bit_offset_p1_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN: s_add_u32
 ; GCN: s_addc_u32
@@ -442,7 +442,7 @@ done:
 }
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_20_bit_byte_offset_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; SI: s_mov_b32 [[OFFSET:s[0-9]+]], 0xffffc{{$}}
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, [[OFFSET]]{{$}}
@@ -479,7 +479,7 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_20_bit_byte_offset_p1_i32:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_and_saveexec_b64
 ; GCN-NEXT: ; divergent control-flow edge
 ; SI: s_mov_b32 [[OFFSET:s[0-9]+]], 0x100000{{$}}
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, [[OFFSET]]{{$}}

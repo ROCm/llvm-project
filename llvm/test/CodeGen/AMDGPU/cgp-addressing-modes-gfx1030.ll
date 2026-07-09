@@ -28,7 +28,8 @@ define amdgpu_kernel void @test_sink_small_offset_global_atomic_csub_i32(ptr add
 ; GCN-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
+; GCN-NEXT:    s_and_saveexec_b32 s4, s4
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %if
@@ -40,7 +41,7 @@ define amdgpu_kernel void @test_sink_small_offset_global_atomic_csub_i32(ptr add
 ; GCN-NEXT:    buffer_gl1_inv
 ; GCN-NEXT:    buffer_gl0_inv
 ; GCN-NEXT:  .LBB0_2: ; %endif
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; GCN-NEXT:    v_mov_b32_e32 v1, 0x3d0800
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    global_store_dword v1, v0, s[0:1] offset:252

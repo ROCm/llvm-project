@@ -674,7 +674,6 @@ define void @test_indirect_call_vgpr_ptr_in_branch(ptr %fptr, i1 %cond) #0 {
 ; GCN-NEXT:    v_writelane_b32 v40, s30, 18
 ; GCN-NEXT:    v_writelane_b32 v40, s31, 19
 ; GCN-NEXT:    v_and_b32_e32 v2, 1, v2
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v2
 ; GCN-NEXT:    s_mov_b32 s50, s15
 ; GCN-NEXT:    s_mov_b32 s51, s14
 ; GCN-NEXT:    s_mov_b32 s52, s13
@@ -683,8 +682,8 @@ define void @test_indirect_call_vgpr_ptr_in_branch(ptr %fptr, i1 %cond) #0 {
 ; GCN-NEXT:    s_mov_b64 s[36:37], s[8:9]
 ; GCN-NEXT:    s_mov_b64 s[38:39], s[6:7]
 ; GCN-NEXT:    s_mov_b64 s[48:49], s[4:5]
-; GCN-NEXT:    s_xor_b64 s[54:55], exec, vcc
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v2
+; GCN-NEXT:    s_and_saveexec_b64 s[54:55], vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB5_4
 ; GCN-NEXT:  .LBB5_1: ; %bb1

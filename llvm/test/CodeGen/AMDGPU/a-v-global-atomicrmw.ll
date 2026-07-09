@@ -986,11 +986,10 @@ define void @global_atomic_xor_expansion_i32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB21_1
 ; GFX90A-NEXT:  .LBB21_2: ; %atomicrmw.end
@@ -1020,11 +1019,10 @@ define void @global_atomic_xor_expansion_i32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB21_1
 ; GFX950-NEXT:  .LBB21_2: ; %atomicrmw.end
@@ -1063,11 +1061,10 @@ define void @global_atomic_xor_expansion_i32_ret_a_v(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB22_1
 ; GFX90A-NEXT:  .LBB22_2: ; %atomicrmw.end
@@ -1096,11 +1093,10 @@ define void @global_atomic_xor_expansion_i32_ret_a_v(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB22_1
 ; GFX950-NEXT:  .LBB22_2: ; %atomicrmw.end
@@ -1137,11 +1133,10 @@ define void @global_atomic_xor_expansion_i32_ret_v_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB23_1
 ; GFX90A-NEXT:  .LBB23_2: ; %atomicrmw.end
@@ -1170,11 +1165,10 @@ define void @global_atomic_xor_expansion_i32_ret_v_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB23_1
 ; GFX950-NEXT:  .LBB23_2: ; %atomicrmw.end
@@ -1212,11 +1206,10 @@ define void @global_atomic_xor_expansion_i32_ret_av_av(ptr addrspace(1) %ptr) #0
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB24_1
 ; GFX90A-NEXT:  .LBB24_2: ; %atomicrmw.end
@@ -1244,11 +1237,10 @@ define void @global_atomic_xor_expansion_i32_ret_av_av(ptr addrspace(1) %ptr) #0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB24_1
 ; GFX950-NEXT:  .LBB24_2: ; %atomicrmw.end
@@ -1285,11 +1277,10 @@ define void @global_atomic_xor_expansion_i32_ret_av_v(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB25_1
 ; GFX90A-NEXT:  .LBB25_2: ; %atomicrmw.end
@@ -1317,11 +1308,10 @@ define void @global_atomic_xor_expansion_i32_ret_av_v(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB25_1
 ; GFX950-NEXT:  .LBB25_2: ; %atomicrmw.end
@@ -1358,11 +1348,10 @@ define void @global_atomic_xor_expansion_i32_ret_av_a(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB26_1
 ; GFX90A-NEXT:  .LBB26_2: ; %atomicrmw.end
@@ -1391,11 +1380,10 @@ define void @global_atomic_xor_expansion_i32_ret_av_a(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB26_1
 ; GFX950-NEXT:  .LBB26_2: ; %atomicrmw.end
@@ -1434,11 +1422,10 @@ define void @global_atomic_xor_expansion_i32_ret_a_av(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB27_1
 ; GFX90A-NEXT:  .LBB27_2: ; %atomicrmw.end
@@ -1467,11 +1454,10 @@ define void @global_atomic_xor_expansion_i32_ret_a_av(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB27_1
 ; GFX950-NEXT:  .LBB27_2: ; %atomicrmw.end
@@ -1508,11 +1494,10 @@ define void @global_atomic_xor_expansion_i32_ret_v_av(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB28_1
 ; GFX90A-NEXT:  .LBB28_2: ; %atomicrmw.end
@@ -1540,11 +1525,10 @@ define void @global_atomic_xor_expansion_i32_ret_v_av(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB28_1
 ; GFX950-NEXT:  .LBB28_2: ; %atomicrmw.end
@@ -1631,11 +1615,10 @@ define void @global_atomic_xor_expansion_i32_ret_av_av_no_agprs(ptr addrspace(1)
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB29_1
 ; GFX90A-NEXT:  .LBB29_2: ; %atomicrmw.end
@@ -1766,11 +1749,10 @@ define void @global_atomic_xor_expansion_i32_ret_av_av_no_agprs(ptr addrspace(1)
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB29_1
 ; GFX950-NEXT:  .LBB29_2: ; %atomicrmw.end
@@ -1863,11 +1845,10 @@ define void @global_atomic_xor_expansion_i32_noret_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB30_1
 ; GFX90A-NEXT:  .LBB30_2: ; %atomicrmw.end
@@ -1893,11 +1874,10 @@ define void @global_atomic_xor_expansion_i32_noret_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB30_1
 ; GFX950-NEXT:  .LBB30_2: ; %atomicrmw.end
@@ -1929,11 +1909,10 @@ define void @global_atomic_xor_expansion_i32_noret_av(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB31_1
 ; GFX90A-NEXT:  .LBB31_2: ; %atomicrmw.end
@@ -1958,11 +1937,10 @@ define void @global_atomic_xor_expansion_i32_noret_av(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB31_1
 ; GFX950-NEXT:  .LBB31_2: ; %atomicrmw.end
@@ -2002,11 +1980,10 @@ define void @global_atomic_xor_expansion_i64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB32_1
 ; GFX90A-NEXT:  .LBB32_2: ; %atomicrmw.end
@@ -2039,11 +2016,10 @@ define void @global_atomic_xor_expansion_i64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB32_1
 ; GFX950-NEXT:  .LBB32_2: ; %atomicrmw.end
@@ -2085,11 +2061,10 @@ define void @global_atomic_xor_expansion_i64_ret_a_v(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB33_1
 ; GFX90A-NEXT:  .LBB33_2: ; %atomicrmw.end
@@ -2120,11 +2095,10 @@ define void @global_atomic_xor_expansion_i64_ret_a_v(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB33_1
 ; GFX950-NEXT:  .LBB33_2: ; %atomicrmw.end
@@ -2162,11 +2136,10 @@ define void @global_atomic_xor_expansion_i64_ret_v_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB34_1
 ; GFX90A-NEXT:  .LBB34_2: ; %atomicrmw.end
@@ -2197,11 +2170,10 @@ define void @global_atomic_xor_expansion_i64_ret_v_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB34_1
 ; GFX950-NEXT:  .LBB34_2: ; %atomicrmw.end
@@ -2241,11 +2213,10 @@ define void @global_atomic_xor_expansion_i64_ret_av_av(ptr addrspace(1) %ptr) #0
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB35_1
 ; GFX90A-NEXT:  .LBB35_2: ; %atomicrmw.end
@@ -2274,11 +2245,10 @@ define void @global_atomic_xor_expansion_i64_ret_av_av(ptr addrspace(1) %ptr) #0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB35_1
 ; GFX950-NEXT:  .LBB35_2: ; %atomicrmw.end
@@ -2316,11 +2286,10 @@ define void @global_atomic_xor_expansion_i64_ret_av_v(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB36_1
 ; GFX90A-NEXT:  .LBB36_2: ; %atomicrmw.end
@@ -2349,11 +2318,10 @@ define void @global_atomic_xor_expansion_i64_ret_av_v(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB36_1
 ; GFX950-NEXT:  .LBB36_2: ; %atomicrmw.end
@@ -2391,11 +2359,10 @@ define void @global_atomic_xor_expansion_i64_ret_av_a(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB37_1
 ; GFX90A-NEXT:  .LBB37_2: ; %atomicrmw.end
@@ -2426,11 +2393,10 @@ define void @global_atomic_xor_expansion_i64_ret_av_a(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB37_1
 ; GFX950-NEXT:  .LBB37_2: ; %atomicrmw.end
@@ -2472,11 +2438,10 @@ define void @global_atomic_xor_expansion_i64_ret_a_av(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB38_1
 ; GFX90A-NEXT:  .LBB38_2: ; %atomicrmw.end
@@ -2507,11 +2472,10 @@ define void @global_atomic_xor_expansion_i64_ret_a_av(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB38_1
 ; GFX950-NEXT:  .LBB38_2: ; %atomicrmw.end
@@ -2549,11 +2513,10 @@ define void @global_atomic_xor_expansion_i64_ret_v_av(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB39_1
 ; GFX90A-NEXT:  .LBB39_2: ; %atomicrmw.end
@@ -2582,11 +2545,10 @@ define void @global_atomic_xor_expansion_i64_ret_v_av(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB39_1
 ; GFX950-NEXT:  .LBB39_2: ; %atomicrmw.end
@@ -2625,11 +2587,10 @@ define void @global_atomic_xor_expansion_i64_noret_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB40_1
 ; GFX90A-NEXT:  .LBB40_2: ; %atomicrmw.end
@@ -2657,11 +2618,10 @@ define void @global_atomic_xor_expansion_i64_noret_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB40_1
 ; GFX950-NEXT:  .LBB40_2: ; %atomicrmw.end
@@ -2694,11 +2654,10 @@ define void @global_atomic_xor_expansion_i64_noret_av(ptr addrspace(1) %ptr) #0 
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB41_1
 ; GFX90A-NEXT:  .LBB41_2: ; %atomicrmw.end
@@ -2724,11 +2683,10 @@ define void @global_atomic_xor_expansion_i64_noret_av(ptr addrspace(1) %ptr) #0 
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    buffer_inv sc0 sc1
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB41_1
 ; GFX950-NEXT:  .LBB41_2: ; %atomicrmw.end
@@ -3870,11 +3828,10 @@ define void @global_atomic_nand_i32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB69_1
 ; GFX90A-NEXT:  .LBB69_2: ; %atomicrmw.end
@@ -3902,11 +3859,10 @@ define void @global_atomic_nand_i32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB69_1
 ; GFX950-NEXT:  .LBB69_2: ; %atomicrmw.end
@@ -3940,11 +3896,10 @@ define void @global_atomic_nand_i32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB70_1
 ; GFX90A-NEXT:  .LBB70_2: ; %atomicrmw.end
@@ -3970,11 +3925,10 @@ define void @global_atomic_nand_i32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB70_1
 ; GFX950-NEXT:  .LBB70_2: ; %atomicrmw.end
@@ -4506,11 +4460,10 @@ define void @global_atomic_usub_cond_i32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB85_1
 ; GFX90A-NEXT:  .LBB85_2: ; %atomicrmw.end
@@ -4540,11 +4493,10 @@ define void @global_atomic_usub_cond_i32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB85_1
 ; GFX950-NEXT:  .LBB85_2: ; %atomicrmw.end
@@ -4579,11 +4531,10 @@ define void @global_atomic_usub_cond_i32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB86_1
 ; GFX90A-NEXT:  .LBB86_2: ; %atomicrmw.end
@@ -4611,11 +4562,10 @@ define void @global_atomic_usub_cond_i32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB86_1
 ; GFX950-NEXT:  .LBB86_2: ; %atomicrmw.end
@@ -4648,11 +4598,10 @@ define void @global_atomic_usub_sat_i32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB87_1
 ; GFX90A-NEXT:  .LBB87_2: ; %atomicrmw.end
@@ -4680,11 +4629,10 @@ define void @global_atomic_usub_sat_i32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB87_1
 ; GFX950-NEXT:  .LBB87_2: ; %atomicrmw.end
@@ -4717,11 +4665,10 @@ define void @global_atomic_usub_sat_i32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB88_1
 ; GFX90A-NEXT:  .LBB88_2: ; %atomicrmw.end
@@ -4747,11 +4694,10 @@ define void @global_atomic_usub_sat_i32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB88_1
 ; GFX950-NEXT:  .LBB88_2: ; %atomicrmw.end
@@ -5017,11 +4963,10 @@ define void @global_atomic_nand_i64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB95_1
 ; GFX90A-NEXT:  .LBB95_2: ; %atomicrmw.end
@@ -5053,11 +4998,10 @@ define void @global_atomic_nand_i64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB95_1
 ; GFX950-NEXT:  .LBB95_2: ; %atomicrmw.end
@@ -5094,11 +5038,10 @@ define void @global_atomic_nand_i64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB96_1
 ; GFX90A-NEXT:  .LBB96_2: ; %atomicrmw.end
@@ -5126,11 +5069,10 @@ define void @global_atomic_nand_i64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB96_1
 ; GFX950-NEXT:  .LBB96_2: ; %atomicrmw.end
@@ -5693,11 +5635,10 @@ define void @global_atomic_usub_cond_i64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB111_1
 ; GFX90A-NEXT:  .LBB111_2: ; %atomicrmw.end
@@ -5732,11 +5673,10 @@ define void @global_atomic_usub_cond_i64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB111_1
 ; GFX950-NEXT:  .LBB111_2: ; %atomicrmw.end
@@ -5774,11 +5714,10 @@ define void @global_atomic_usub_cond_i64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB112_1
 ; GFX90A-NEXT:  .LBB112_2: ; %atomicrmw.end
@@ -5809,11 +5748,10 @@ define void @global_atomic_usub_cond_i64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB112_1
 ; GFX950-NEXT:  .LBB112_2: ; %atomicrmw.end
@@ -5850,11 +5788,10 @@ define void @global_atomic_usub_sat_i64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB113_1
 ; GFX90A-NEXT:  .LBB113_2: ; %atomicrmw.end
@@ -5888,11 +5825,10 @@ define void @global_atomic_usub_sat_i64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB113_1
 ; GFX950-NEXT:  .LBB113_2: ; %atomicrmw.end
@@ -5929,11 +5865,10 @@ define void @global_atomic_usub_sat_i64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB114_1
 ; GFX90A-NEXT:  .LBB114_2: ; %atomicrmw.end
@@ -5963,11 +5898,10 @@ define void @global_atomic_usub_sat_i64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB114_1
 ; GFX950-NEXT:  .LBB114_2: ; %atomicrmw.end
@@ -6075,11 +6009,10 @@ define void @global_atomic_fsub_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB117_1
 ; GFX90A-NEXT:  .LBB117_2: ; %atomicrmw.end
@@ -6106,11 +6039,10 @@ define void @global_atomic_fsub_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB117_1
 ; GFX950-NEXT:  .LBB117_2: ; %atomicrmw.end
@@ -6143,11 +6075,10 @@ define void @global_atomic_fsub_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB118_1
 ; GFX90A-NEXT:  .LBB118_2: ; %atomicrmw.end
@@ -6172,11 +6103,10 @@ define void @global_atomic_fsub_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB118_1
 ; GFX950-NEXT:  .LBB118_2: ; %atomicrmw.end
@@ -6211,11 +6141,10 @@ define void @global_atomic_fmax_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB119_1
 ; GFX90A-NEXT:  .LBB119_2: ; %atomicrmw.end
@@ -6244,11 +6173,10 @@ define void @global_atomic_fmax_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB119_1
 ; GFX950-NEXT:  .LBB119_2: ; %atomicrmw.end
@@ -6283,11 +6211,10 @@ define void @global_atomic_fmax_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB120_1
 ; GFX90A-NEXT:  .LBB120_2: ; %atomicrmw.end
@@ -6314,11 +6241,10 @@ define void @global_atomic_fmax_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB120_1
 ; GFX950-NEXT:  .LBB120_2: ; %atomicrmw.end
@@ -6353,11 +6279,10 @@ define void @global_atomic_fmin_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB121_1
 ; GFX90A-NEXT:  .LBB121_2: ; %atomicrmw.end
@@ -6386,11 +6311,10 @@ define void @global_atomic_fmin_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB121_1
 ; GFX950-NEXT:  .LBB121_2: ; %atomicrmw.end
@@ -6425,11 +6349,10 @@ define void @global_atomic_fmin_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB122_1
 ; GFX90A-NEXT:  .LBB122_2: ; %atomicrmw.end
@@ -6456,11 +6379,10 @@ define void @global_atomic_fmin_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB122_1
 ; GFX950-NEXT:  .LBB122_2: ; %atomicrmw.end
@@ -6496,11 +6418,10 @@ define void @global_atomic_fmaximum_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB123_1
 ; GFX90A-NEXT:  .LBB123_2: ; %atomicrmw.end
@@ -6528,11 +6449,10 @@ define void @global_atomic_fmaximum_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB123_1
 ; GFX950-NEXT:  .LBB123_2: ; %atomicrmw.end
@@ -6568,11 +6488,10 @@ define void @global_atomic_fmaximum_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB124_1
 ; GFX90A-NEXT:  .LBB124_2: ; %atomicrmw.end
@@ -6598,11 +6517,10 @@ define void @global_atomic_fmaximum_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB124_1
 ; GFX950-NEXT:  .LBB124_2: ; %atomicrmw.end
@@ -6638,11 +6556,10 @@ define void @global_atomic_fminimum_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB125_1
 ; GFX90A-NEXT:  .LBB125_2: ; %atomicrmw.end
@@ -6670,11 +6587,10 @@ define void @global_atomic_fminimum_f32_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB125_1
 ; GFX950-NEXT:  .LBB125_2: ; %atomicrmw.end
@@ -6710,11 +6626,10 @@ define void @global_atomic_fminimum_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB126_1
 ; GFX90A-NEXT:  .LBB126_2: ; %atomicrmw.end
@@ -6740,11 +6655,10 @@ define void @global_atomic_fminimum_f32_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB126_1
 ; GFX950-NEXT:  .LBB126_2: ; %atomicrmw.end
@@ -6857,11 +6771,10 @@ define void @global_atomic_fsub_f64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB129_1
 ; GFX90A-NEXT:  .LBB129_2: ; %atomicrmw.end
@@ -6891,11 +6804,10 @@ define void @global_atomic_fsub_f64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB129_1
 ; GFX950-NEXT:  .LBB129_2: ; %atomicrmw.end
@@ -6929,11 +6841,10 @@ define void @global_atomic_fsub_f64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB130_1
 ; GFX90A-NEXT:  .LBB130_2: ; %atomicrmw.end
@@ -6959,11 +6870,10 @@ define void @global_atomic_fsub_f64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB130_1
 ; GFX950-NEXT:  .LBB130_2: ; %atomicrmw.end
@@ -7151,11 +7061,10 @@ define void @global_atomic_fmaximum_f64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB135_1
 ; GFX90A-NEXT:  .LBB135_2: ; %atomicrmw.end
@@ -7190,11 +7099,10 @@ define void @global_atomic_fmaximum_f64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB135_1
 ; GFX950-NEXT:  .LBB135_2: ; %atomicrmw.end
@@ -7232,11 +7140,10 @@ define void @global_atomic_fmaximum_f64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB136_1
 ; GFX90A-NEXT:  .LBB136_2: ; %atomicrmw.end
@@ -7267,11 +7174,10 @@ define void @global_atomic_fmaximum_f64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB136_1
 ; GFX950-NEXT:  .LBB136_2: ; %atomicrmw.end
@@ -7309,11 +7215,10 @@ define void @global_atomic_fminimum_f64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB137_1
 ; GFX90A-NEXT:  .LBB137_2: ; %atomicrmw.end
@@ -7348,11 +7253,10 @@ define void @global_atomic_fminimum_f64_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB137_1
 ; GFX950-NEXT:  .LBB137_2: ; %atomicrmw.end
@@ -7390,11 +7294,10 @@ define void @global_atomic_fminimum_f64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[4:5], v[2:3], v[2:3] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB138_1
 ; GFX90A-NEXT:  .LBB138_2: ; %atomicrmw.end
@@ -7425,11 +7328,10 @@ define void @global_atomic_fminimum_f64_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[2:3], v[0:1], v[2:5], off offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[4:5]
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b64_e32 v[4:5], v[2:3]
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB138_1
 ; GFX950-NEXT:  .LBB138_2: ; %atomicrmw.end
@@ -7537,11 +7439,10 @@ define void @global_atomic_fsub_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB141_1
 ; GFX90A-NEXT:  .LBB141_2: ; %atomicrmw.end
@@ -7569,11 +7470,10 @@ define void @global_atomic_fsub_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB141_1
 ; GFX950-NEXT:  .LBB141_2: ; %atomicrmw.end
@@ -7606,11 +7506,10 @@ define void @global_atomic_fsub_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB142_1
 ; GFX90A-NEXT:  .LBB142_2: ; %atomicrmw.end
@@ -7636,11 +7535,10 @@ define void @global_atomic_fsub_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB142_1
 ; GFX950-NEXT:  .LBB142_2: ; %atomicrmw.end
@@ -7675,11 +7573,10 @@ define void @global_atomic_fmax_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB143_1
 ; GFX90A-NEXT:  .LBB143_2: ; %atomicrmw.end
@@ -7710,11 +7607,10 @@ define void @global_atomic_fmax_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB143_1
 ; GFX950-NEXT:  .LBB143_2: ; %atomicrmw.end
@@ -7749,11 +7645,10 @@ define void @global_atomic_fmax_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB144_1
 ; GFX90A-NEXT:  .LBB144_2: ; %atomicrmw.end
@@ -7782,11 +7677,10 @@ define void @global_atomic_fmax_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB144_1
 ; GFX950-NEXT:  .LBB144_2: ; %atomicrmw.end
@@ -7821,11 +7715,10 @@ define void @global_atomic_fmin_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB145_1
 ; GFX90A-NEXT:  .LBB145_2: ; %atomicrmw.end
@@ -7856,11 +7749,10 @@ define void @global_atomic_fmin_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB145_1
 ; GFX950-NEXT:  .LBB145_2: ; %atomicrmw.end
@@ -7895,11 +7787,10 @@ define void @global_atomic_fmin_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB146_1
 ; GFX90A-NEXT:  .LBB146_2: ; %atomicrmw.end
@@ -7928,11 +7819,10 @@ define void @global_atomic_fmin_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB146_1
 ; GFX950-NEXT:  .LBB146_2: ; %atomicrmw.end
@@ -7972,11 +7862,10 @@ define void @global_atomic_fmaximum_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB147_1
 ; GFX90A-NEXT:  .LBB147_2: ; %atomicrmw.end
@@ -8004,11 +7893,10 @@ define void @global_atomic_fmaximum_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB147_1
 ; GFX950-NEXT:  .LBB147_2: ; %atomicrmw.end
@@ -8048,11 +7936,10 @@ define void @global_atomic_fmaximum_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB148_1
 ; GFX90A-NEXT:  .LBB148_2: ; %atomicrmw.end
@@ -8078,11 +7965,10 @@ define void @global_atomic_fmaximum_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB148_1
 ; GFX950-NEXT:  .LBB148_2: ; %atomicrmw.end
@@ -8122,11 +8008,10 @@ define void @global_atomic_fminimum_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB149_1
 ; GFX90A-NEXT:  .LBB149_2: ; %atomicrmw.end
@@ -8154,11 +8039,10 @@ define void @global_atomic_fminimum_v2f16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB149_1
 ; GFX950-NEXT:  .LBB149_2: ; %atomicrmw.end
@@ -8198,11 +8082,10 @@ define void @global_atomic_fminimum_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB150_1
 ; GFX90A-NEXT:  .LBB150_2: ; %atomicrmw.end
@@ -8228,11 +8111,10 @@ define void @global_atomic_fminimum_v2f16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB150_1
 ; GFX950-NEXT:  .LBB150_2: ; %atomicrmw.end
@@ -8287,11 +8169,10 @@ define void @global_atomic_fadd_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB151_1
 ; GFX90A-NEXT:  .LBB151_2: ; %atomicrmw.end
@@ -8358,11 +8239,10 @@ define void @global_atomic_fadd_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB152_1
 ; GFX90A-NEXT:  .LBB152_2: ; %atomicrmw.end
@@ -8426,11 +8306,10 @@ define void @global_atomic_fsub_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB153_1
 ; GFX90A-NEXT:  .LBB153_2: ; %atomicrmw.end
@@ -8464,11 +8343,10 @@ define void @global_atomic_fsub_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB153_1
 ; GFX950-NEXT:  .LBB153_2: ; %atomicrmw.end
@@ -8519,11 +8397,10 @@ define void @global_atomic_fsub_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB154_1
 ; GFX90A-NEXT:  .LBB154_2: ; %atomicrmw.end
@@ -8555,11 +8432,10 @@ define void @global_atomic_fsub_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB154_1
 ; GFX950-NEXT:  .LBB154_2: ; %atomicrmw.end
@@ -8610,11 +8486,10 @@ define void @global_atomic_fmax_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB155_1
 ; GFX90A-NEXT:  .LBB155_2: ; %atomicrmw.end
@@ -8648,11 +8523,10 @@ define void @global_atomic_fmax_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB155_1
 ; GFX950-NEXT:  .LBB155_2: ; %atomicrmw.end
@@ -8703,11 +8577,10 @@ define void @global_atomic_fmax_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB156_1
 ; GFX90A-NEXT:  .LBB156_2: ; %atomicrmw.end
@@ -8739,11 +8612,10 @@ define void @global_atomic_fmax_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB156_1
 ; GFX950-NEXT:  .LBB156_2: ; %atomicrmw.end
@@ -8794,11 +8666,10 @@ define void @global_atomic_fmin_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB157_1
 ; GFX90A-NEXT:  .LBB157_2: ; %atomicrmw.end
@@ -8832,11 +8703,10 @@ define void @global_atomic_fmin_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB157_1
 ; GFX950-NEXT:  .LBB157_2: ; %atomicrmw.end
@@ -8887,11 +8757,10 @@ define void @global_atomic_fmin_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB158_1
 ; GFX90A-NEXT:  .LBB158_2: ; %atomicrmw.end
@@ -8923,11 +8792,10 @@ define void @global_atomic_fmin_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB158_1
 ; GFX950-NEXT:  .LBB158_2: ; %atomicrmw.end
@@ -8983,11 +8851,10 @@ define void @global_atomic_fmaximum_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB159_1
 ; GFX90A-NEXT:  .LBB159_2: ; %atomicrmw.end
@@ -9021,11 +8888,10 @@ define void @global_atomic_fmaximum_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB159_1
 ; GFX950-NEXT:  .LBB159_2: ; %atomicrmw.end
@@ -9081,11 +8947,10 @@ define void @global_atomic_fmaximum_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB160_1
 ; GFX90A-NEXT:  .LBB160_2: ; %atomicrmw.end
@@ -9117,11 +8982,10 @@ define void @global_atomic_fmaximum_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB160_1
 ; GFX950-NEXT:  .LBB160_2: ; %atomicrmw.end
@@ -9177,11 +9041,10 @@ define void @global_atomic_fminimum_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB161_1
 ; GFX90A-NEXT:  .LBB161_2: ; %atomicrmw.end
@@ -9215,11 +9078,10 @@ define void @global_atomic_fminimum_v2bf16_ret_a_a(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB161_1
 ; GFX950-NEXT:  .LBB161_2: ; %atomicrmw.end
@@ -9275,11 +9137,10 @@ define void @global_atomic_fminimum_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX90A-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB162_1
 ; GFX90A-NEXT:  .LBB162_2: ; %atomicrmw.end
@@ -9311,11 +9172,10 @@ define void @global_atomic_fminimum_v2bf16_ret_av_av(ptr addrspace(1) %ptr) #0 {
 ; GFX950-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX950-NEXT:    v_mov_b32_e32 v3, v2
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB162_1
 ; GFX950-NEXT:  .LBB162_2: ; %atomicrmw.end
@@ -9654,11 +9514,10 @@ define void @global_atomic_nand_i32_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB171_1
 ; GFX90A-NEXT:  .LBB171_2: ; %atomicrmw.end
@@ -9687,11 +9546,10 @@ define void @global_atomic_nand_i32_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB171_1
 ; GFX950-NEXT:  .LBB171_2: ; %atomicrmw.end
@@ -9726,11 +9584,10 @@ define void @global_atomic_nand_i32_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB172_1
 ; GFX90A-NEXT:  .LBB172_2: ; %atomicrmw.end
@@ -9757,11 +9614,10 @@ define void @global_atomic_nand_i32_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB172_1
 ; GFX950-NEXT:  .LBB172_2: ; %atomicrmw.end
@@ -10397,11 +10253,10 @@ define void @global_atomic_usub_cond_i32_saddr_ret_a_a(ptr addrspace(1) inreg %p
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB189_1
 ; GFX90A-NEXT:  .LBB189_2: ; %atomicrmw.end
@@ -10432,11 +10287,10 @@ define void @global_atomic_usub_cond_i32_saddr_ret_a_a(ptr addrspace(1) inreg %p
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB189_1
 ; GFX950-NEXT:  .LBB189_2: ; %atomicrmw.end
@@ -10472,11 +10326,10 @@ define void @global_atomic_usub_cond_i32_saddr_ret_av_av(ptr addrspace(1) inreg 
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB190_1
 ; GFX90A-NEXT:  .LBB190_2: ; %atomicrmw.end
@@ -10505,11 +10358,10 @@ define void @global_atomic_usub_cond_i32_saddr_ret_av_av(ptr addrspace(1) inreg 
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB190_1
 ; GFX950-NEXT:  .LBB190_2: ; %atomicrmw.end
@@ -10543,11 +10395,10 @@ define void @global_atomic_usub_sat_i32_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB191_1
 ; GFX90A-NEXT:  .LBB191_2: ; %atomicrmw.end
@@ -10576,11 +10427,10 @@ define void @global_atomic_usub_sat_i32_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB191_1
 ; GFX950-NEXT:  .LBB191_2: ; %atomicrmw.end
@@ -10614,11 +10464,10 @@ define void @global_atomic_usub_sat_i32_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB192_1
 ; GFX90A-NEXT:  .LBB192_2: ; %atomicrmw.end
@@ -10645,11 +10494,10 @@ define void @global_atomic_usub_sat_i32_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB192_1
 ; GFX950-NEXT:  .LBB192_2: ; %atomicrmw.end
@@ -11003,11 +10851,10 @@ define void @global_atomic_nand_i64_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB201_1
 ; GFX90A-NEXT:  .LBB201_2: ; %atomicrmw.end
@@ -11040,11 +10887,10 @@ define void @global_atomic_nand_i64_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB201_1
 ; GFX950-NEXT:  .LBB201_2: ; %atomicrmw.end
@@ -11082,11 +10928,10 @@ define void @global_atomic_nand_i64_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB202_1
 ; GFX90A-NEXT:  .LBB202_2: ; %atomicrmw.end
@@ -11115,11 +10960,10 @@ define void @global_atomic_nand_i64_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB202_1
 ; GFX950-NEXT:  .LBB202_2: ; %atomicrmw.end
@@ -11782,11 +11626,10 @@ define void @global_atomic_usub_cond_i64_saddr_ret_a_a(ptr addrspace(1) inreg %p
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB219_1
 ; GFX90A-NEXT:  .LBB219_2: ; %atomicrmw.end
@@ -11822,11 +11665,10 @@ define void @global_atomic_usub_cond_i64_saddr_ret_a_a(ptr addrspace(1) inreg %p
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB219_1
 ; GFX950-NEXT:  .LBB219_2: ; %atomicrmw.end
@@ -11865,11 +11707,10 @@ define void @global_atomic_usub_cond_i64_saddr_ret_av_av(ptr addrspace(1) inreg 
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB220_1
 ; GFX90A-NEXT:  .LBB220_2: ; %atomicrmw.end
@@ -11901,11 +11742,10 @@ define void @global_atomic_usub_cond_i64_saddr_ret_av_av(ptr addrspace(1) inreg 
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB220_1
 ; GFX950-NEXT:  .LBB220_2: ; %atomicrmw.end
@@ -11943,11 +11783,10 @@ define void @global_atomic_usub_sat_i64_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB221_1
 ; GFX90A-NEXT:  .LBB221_2: ; %atomicrmw.end
@@ -11982,11 +11821,10 @@ define void @global_atomic_usub_sat_i64_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB221_1
 ; GFX950-NEXT:  .LBB221_2: ; %atomicrmw.end
@@ -12024,11 +11862,10 @@ define void @global_atomic_usub_sat_i64_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB222_1
 ; GFX90A-NEXT:  .LBB222_2: ; %atomicrmw.end
@@ -12059,11 +11896,10 @@ define void @global_atomic_usub_sat_i64_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB222_1
 ; GFX950-NEXT:  .LBB222_2: ; %atomicrmw.end
@@ -12176,11 +12012,10 @@ define void @global_atomic_fsub_f32_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB225_1
 ; GFX90A-NEXT:  .LBB225_2: ; %atomicrmw.end
@@ -12208,11 +12043,10 @@ define void @global_atomic_fsub_f32_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB225_1
 ; GFX950-NEXT:  .LBB225_2: ; %atomicrmw.end
@@ -12246,11 +12080,10 @@ define void @global_atomic_fsub_f32_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB226_1
 ; GFX90A-NEXT:  .LBB226_2: ; %atomicrmw.end
@@ -12276,11 +12109,10 @@ define void @global_atomic_fsub_f32_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB226_1
 ; GFX950-NEXT:  .LBB226_2: ; %atomicrmw.end
@@ -12316,11 +12148,10 @@ define void @global_atomic_fmax_f32_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB227_1
 ; GFX90A-NEXT:  .LBB227_2: ; %atomicrmw.end
@@ -12350,11 +12181,10 @@ define void @global_atomic_fmax_f32_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB227_1
 ; GFX950-NEXT:  .LBB227_2: ; %atomicrmw.end
@@ -12390,11 +12220,10 @@ define void @global_atomic_fmax_f32_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB228_1
 ; GFX90A-NEXT:  .LBB228_2: ; %atomicrmw.end
@@ -12422,11 +12251,10 @@ define void @global_atomic_fmax_f32_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB228_1
 ; GFX950-NEXT:  .LBB228_2: ; %atomicrmw.end
@@ -12462,11 +12290,10 @@ define void @global_atomic_fmin_f32_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB229_1
 ; GFX90A-NEXT:  .LBB229_2: ; %atomicrmw.end
@@ -12496,11 +12323,10 @@ define void @global_atomic_fmin_f32_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB229_1
 ; GFX950-NEXT:  .LBB229_2: ; %atomicrmw.end
@@ -12536,11 +12362,10 @@ define void @global_atomic_fmin_f32_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB230_1
 ; GFX90A-NEXT:  .LBB230_2: ; %atomicrmw.end
@@ -12568,11 +12393,10 @@ define void @global_atomic_fmin_f32_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB230_1
 ; GFX950-NEXT:  .LBB230_2: ; %atomicrmw.end
@@ -12609,11 +12433,10 @@ define void @global_atomic_fmaximum_f32_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB231_1
 ; GFX90A-NEXT:  .LBB231_2: ; %atomicrmw.end
@@ -12642,11 +12465,10 @@ define void @global_atomic_fmaximum_f32_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB231_1
 ; GFX950-NEXT:  .LBB231_2: ; %atomicrmw.end
@@ -12683,11 +12505,10 @@ define void @global_atomic_fmaximum_f32_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB232_1
 ; GFX90A-NEXT:  .LBB232_2: ; %atomicrmw.end
@@ -12714,11 +12535,10 @@ define void @global_atomic_fmaximum_f32_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB232_1
 ; GFX950-NEXT:  .LBB232_2: ; %atomicrmw.end
@@ -12755,11 +12575,10 @@ define void @global_atomic_fminimum_f32_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB233_1
 ; GFX90A-NEXT:  .LBB233_2: ; %atomicrmw.end
@@ -12788,11 +12607,10 @@ define void @global_atomic_fminimum_f32_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB233_1
 ; GFX950-NEXT:  .LBB233_2: ; %atomicrmw.end
@@ -12829,11 +12647,10 @@ define void @global_atomic_fminimum_f32_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB234_1
 ; GFX90A-NEXT:  .LBB234_2: ; %atomicrmw.end
@@ -12860,11 +12677,10 @@ define void @global_atomic_fminimum_f32_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB234_1
 ; GFX950-NEXT:  .LBB234_2: ; %atomicrmw.end
@@ -12981,11 +12797,10 @@ define void @global_atomic_fsub_f64_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB237_1
 ; GFX90A-NEXT:  .LBB237_2: ; %atomicrmw.end
@@ -13016,11 +12831,10 @@ define void @global_atomic_fsub_f64_saddr_ret_a_a(ptr addrspace(1) inreg %ptr) #
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB237_1
 ; GFX950-NEXT:  .LBB237_2: ; %atomicrmw.end
@@ -13055,11 +12869,10 @@ define void @global_atomic_fsub_f64_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB238_1
 ; GFX90A-NEXT:  .LBB238_2: ; %atomicrmw.end
@@ -13086,11 +12899,10 @@ define void @global_atomic_fsub_f64_saddr_ret_av_av(ptr addrspace(1) inreg %ptr)
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB238_1
 ; GFX950-NEXT:  .LBB238_2: ; %atomicrmw.end
@@ -13285,11 +13097,10 @@ define void @global_atomic_fmaximum_f64_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB243_1
 ; GFX90A-NEXT:  .LBB243_2: ; %atomicrmw.end
@@ -13325,11 +13136,10 @@ define void @global_atomic_fmaximum_f64_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB243_1
 ; GFX950-NEXT:  .LBB243_2: ; %atomicrmw.end
@@ -13368,11 +13178,10 @@ define void @global_atomic_fmaximum_f64_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB244_1
 ; GFX90A-NEXT:  .LBB244_2: ; %atomicrmw.end
@@ -13404,11 +13213,10 @@ define void @global_atomic_fmaximum_f64_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB244_1
 ; GFX950-NEXT:  .LBB244_2: ; %atomicrmw.end
@@ -13447,11 +13255,10 @@ define void @global_atomic_fminimum_f64_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB245_1
 ; GFX90A-NEXT:  .LBB245_2: ; %atomicrmw.end
@@ -13487,11 +13294,10 @@ define void @global_atomic_fminimum_f64_saddr_ret_a_a(ptr addrspace(1) inreg %pt
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB245_1
 ; GFX950-NEXT:  .LBB245_2: ; %atomicrmw.end
@@ -13530,11 +13336,10 @@ define void @global_atomic_fminimum_f64_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX90A-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[16:17] offset:80 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[0:1], v[0:1] op_sel:[0,1]
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB246_1
 ; GFX90A-NEXT:  .LBB246_2: ; %atomicrmw.end
@@ -13566,11 +13371,10 @@ define void @global_atomic_fminimum_f64_saddr_ret_av_av(ptr addrspace(1) inreg %
 ; GFX950-NEXT:    global_atomic_cmpswap_x2 v[0:1], v6, v[0:3], s[0:1] offset:80 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], v[0:1]
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB246_1
 ; GFX950-NEXT:  .LBB246_2: ; %atomicrmw.end
@@ -13683,11 +13487,10 @@ define void @global_atomic_fsub_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr)
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB249_1
 ; GFX90A-NEXT:  .LBB249_2: ; %atomicrmw.end
@@ -13716,11 +13519,10 @@ define void @global_atomic_fsub_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr)
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB249_1
 ; GFX950-NEXT:  .LBB249_2: ; %atomicrmw.end
@@ -13754,11 +13556,10 @@ define void @global_atomic_fsub_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg %pt
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB250_1
 ; GFX90A-NEXT:  .LBB250_2: ; %atomicrmw.end
@@ -13785,11 +13586,10 @@ define void @global_atomic_fsub_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg %pt
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB250_1
 ; GFX950-NEXT:  .LBB250_2: ; %atomicrmw.end
@@ -13825,11 +13625,10 @@ define void @global_atomic_fmax_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr)
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB251_1
 ; GFX90A-NEXT:  .LBB251_2: ; %atomicrmw.end
@@ -13861,11 +13660,10 @@ define void @global_atomic_fmax_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr)
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB251_1
 ; GFX950-NEXT:  .LBB251_2: ; %atomicrmw.end
@@ -13901,11 +13699,10 @@ define void @global_atomic_fmax_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg %pt
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB252_1
 ; GFX90A-NEXT:  .LBB252_2: ; %atomicrmw.end
@@ -13935,11 +13732,10 @@ define void @global_atomic_fmax_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg %pt
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB252_1
 ; GFX950-NEXT:  .LBB252_2: ; %atomicrmw.end
@@ -13975,11 +13771,10 @@ define void @global_atomic_fmin_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr)
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB253_1
 ; GFX90A-NEXT:  .LBB253_2: ; %atomicrmw.end
@@ -14011,11 +13806,10 @@ define void @global_atomic_fmin_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr)
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB253_1
 ; GFX950-NEXT:  .LBB253_2: ; %atomicrmw.end
@@ -14051,11 +13845,10 @@ define void @global_atomic_fmin_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg %pt
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB254_1
 ; GFX90A-NEXT:  .LBB254_2: ; %atomicrmw.end
@@ -14085,11 +13878,10 @@ define void @global_atomic_fmin_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg %pt
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB254_1
 ; GFX950-NEXT:  .LBB254_2: ; %atomicrmw.end
@@ -14130,11 +13922,10 @@ define void @global_atomic_fmaximum_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB255_1
 ; GFX90A-NEXT:  .LBB255_2: ; %atomicrmw.end
@@ -14163,11 +13954,10 @@ define void @global_atomic_fmaximum_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB255_1
 ; GFX950-NEXT:  .LBB255_2: ; %atomicrmw.end
@@ -14208,11 +13998,10 @@ define void @global_atomic_fmaximum_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB256_1
 ; GFX90A-NEXT:  .LBB256_2: ; %atomicrmw.end
@@ -14239,11 +14028,10 @@ define void @global_atomic_fmaximum_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB256_1
 ; GFX950-NEXT:  .LBB256_2: ; %atomicrmw.end
@@ -14284,11 +14072,10 @@ define void @global_atomic_fminimum_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB257_1
 ; GFX90A-NEXT:  .LBB257_2: ; %atomicrmw.end
@@ -14317,11 +14104,10 @@ define void @global_atomic_fminimum_v2f16_saddr_ret_a_a(ptr addrspace(1) inreg %
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB257_1
 ; GFX950-NEXT:  .LBB257_2: ; %atomicrmw.end
@@ -14362,11 +14148,10 @@ define void @global_atomic_fminimum_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB258_1
 ; GFX90A-NEXT:  .LBB258_2: ; %atomicrmw.end
@@ -14393,11 +14178,10 @@ define void @global_atomic_fminimum_v2f16_saddr_ret_av_av(ptr addrspace(1) inreg
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB258_1
 ; GFX950-NEXT:  .LBB258_2: ; %atomicrmw.end
@@ -14453,11 +14237,10 @@ define void @global_atomic_fadd_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB259_1
 ; GFX90A-NEXT:  .LBB259_2: ; %atomicrmw.end
@@ -14526,11 +14309,10 @@ define void @global_atomic_fadd_v2bf16_saddr_ret_av_av(ptr addrspace(1) inreg %p
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB260_1
 ; GFX90A-NEXT:  .LBB260_2: ; %atomicrmw.end
@@ -14596,11 +14378,10 @@ define void @global_atomic_fsub_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB261_1
 ; GFX90A-NEXT:  .LBB261_2: ; %atomicrmw.end
@@ -14635,11 +14416,10 @@ define void @global_atomic_fsub_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB261_1
 ; GFX950-NEXT:  .LBB261_2: ; %atomicrmw.end
@@ -14691,11 +14471,10 @@ define void @global_atomic_fsub_v2bf16_saddr_ret_av_av(ptr addrspace(1) inreg %p
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB262_1
 ; GFX90A-NEXT:  .LBB262_2: ; %atomicrmw.end
@@ -14728,11 +14507,10 @@ define void @global_atomic_fsub_v2bf16_saddr_ret_av_av(ptr addrspace(1) inreg %p
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB262_1
 ; GFX950-NEXT:  .LBB262_2: ; %atomicrmw.end
@@ -14784,11 +14562,10 @@ define void @global_atomic_fmax_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB263_1
 ; GFX90A-NEXT:  .LBB263_2: ; %atomicrmw.end
@@ -14823,11 +14600,10 @@ define void @global_atomic_fmax_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB263_1
 ; GFX950-NEXT:  .LBB263_2: ; %atomicrmw.end
@@ -14879,11 +14655,10 @@ define void @global_atomic_fmax_v2bf16_saddr_ret_av_av(ptr addrspace(1) inreg %p
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB264_1
 ; GFX90A-NEXT:  .LBB264_2: ; %atomicrmw.end
@@ -14916,11 +14691,10 @@ define void @global_atomic_fmax_v2bf16_saddr_ret_av_av(ptr addrspace(1) inreg %p
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB264_1
 ; GFX950-NEXT:  .LBB264_2: ; %atomicrmw.end
@@ -14972,11 +14746,10 @@ define void @global_atomic_fmin_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB265_1
 ; GFX90A-NEXT:  .LBB265_2: ; %atomicrmw.end
@@ -15011,11 +14784,10 @@ define void @global_atomic_fmin_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg %ptr
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB265_1
 ; GFX950-NEXT:  .LBB265_2: ; %atomicrmw.end
@@ -15067,11 +14839,10 @@ define void @global_atomic_fmin_v2bf16_saddr_ret_av_av(ptr addrspace(1) inreg %p
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB266_1
 ; GFX90A-NEXT:  .LBB266_2: ; %atomicrmw.end
@@ -15104,11 +14875,10 @@ define void @global_atomic_fmin_v2bf16_saddr_ret_av_av(ptr addrspace(1) inreg %p
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB266_1
 ; GFX950-NEXT:  .LBB266_2: ; %atomicrmw.end
@@ -15165,11 +14935,10 @@ define void @global_atomic_fmaximum_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg 
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB267_1
 ; GFX90A-NEXT:  .LBB267_2: ; %atomicrmw.end
@@ -15204,11 +14973,10 @@ define void @global_atomic_fmaximum_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg 
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB267_1
 ; GFX950-NEXT:  .LBB267_2: ; %atomicrmw.end
@@ -15265,11 +15033,10 @@ define void @global_atomic_fmaximum_v2bf16_saddr_ret_av_av(ptr addrspace(1) inre
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB268_1
 ; GFX90A-NEXT:  .LBB268_2: ; %atomicrmw.end
@@ -15302,11 +15069,10 @@ define void @global_atomic_fmaximum_v2bf16_saddr_ret_av_av(ptr addrspace(1) inre
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB268_1
 ; GFX950-NEXT:  .LBB268_2: ; %atomicrmw.end
@@ -15363,11 +15129,10 @@ define void @global_atomic_fminimum_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg 
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB269_1
 ; GFX90A-NEXT:  .LBB269_2: ; %atomicrmw.end
@@ -15402,11 +15167,10 @@ define void @global_atomic_fminimum_v2bf16_saddr_ret_a_a(ptr addrspace(1) inreg 
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB269_1
 ; GFX950-NEXT:  .LBB269_2: ; %atomicrmw.end
@@ -15463,11 +15227,10 @@ define void @global_atomic_fminimum_v2bf16_saddr_ret_av_av(ptr addrspace(1) inre
 ; GFX90A-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[16:17] offset:40 glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX90A-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB270_1
 ; GFX90A-NEXT:  .LBB270_2: ; %atomicrmw.end
@@ -15500,11 +15263,10 @@ define void @global_atomic_fminimum_v2bf16_saddr_ret_av_av(ptr addrspace(1) inre
 ; GFX950-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX950-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX950-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX950-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB270_1
 ; GFX950-NEXT:  .LBB270_2: ; %atomicrmw.end

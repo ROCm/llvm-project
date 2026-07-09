@@ -13,15 +13,14 @@ define half @swap(half %a, half %b, i32 %i) {
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:  .LBB0_1: ; %loop
 ; GFX11-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX11-TRUE16-NEXT:    v_add_nc_u32_e32 v2, -1, v2
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_3)
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.l
 ; GFX11-TRUE16-NEXT:    v_swap_b16 v0.l, v0.h
-; GFX11-TRUE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX11-TRUE16-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-TRUE16-NEXT:    v_add_nc_u32_e32 v2, -1, v2
+; GFX11-TRUE16-NEXT:    s_mov_b32 s1, exec_lo
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-TRUE16-NEXT:    v_cmpx_ne_u32_e32 0, v2
 ; GFX11-TRUE16-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-TRUE16-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX11-TRUE16-NEXT:  .LBB0_2: ; %ret
@@ -34,13 +33,12 @@ define half @swap(half %a, half %b, i32 %i) {
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-FAKE16-NEXT:  .LBB0_1: ; %loop
 ; GFX11-FAKE16-NEXT:    ; =>This Inner Loop Header: Depth=1
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX11-FAKE16-NEXT:    v_dual_mov_b32 v3, v1 :: v_dual_add_nc_u32 v2, -1, v2
 ; GFX11-FAKE16-NEXT:    v_swap_b32 v1, v0
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX11-FAKE16-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    s_mov_b32 s1, exec_lo
+; GFX11-FAKE16-NEXT:    v_cmpx_ne_u32_e32 0, v2
 ; GFX11-FAKE16-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-FAKE16-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX11-FAKE16-NEXT:  .LBB0_2: ; %ret
@@ -60,15 +58,15 @@ define half @swap(half %a, half %b, i32 %i) {
 ; GFX12-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX12-TRUE16-NEXT:  .LBB0_1: ; %loop
 ; GFX12-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX12-TRUE16-NEXT:    v_add_nc_u32_e32 v2, -1, v2
-; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_3)
+; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.l
 ; GFX12-TRUE16-NEXT:    v_swap_b16 v0.l, v0.h
-; GFX12-TRUE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX12-TRUE16-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-TRUE16-NEXT:    v_add_nc_u32_e32 v2, -1, v2
+; GFX12-TRUE16-NEXT:    s_mov_b32 s1, exec_lo
+; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-TRUE16-NEXT:    v_cmpx_ne_u32_e32 0, v2
 ; GFX12-TRUE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-TRUE16-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX12-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX12-TRUE16-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX12-TRUE16-NEXT:  .LBB0_2: ; %ret
@@ -88,12 +86,11 @@ define half @swap(half %a, half %b, i32 %i) {
 ; GFX12-FAKE16-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-FAKE16-NEXT:    v_dual_mov_b32 v3, v1 :: v_dual_add_nc_u32 v2, -1, v2
 ; GFX12-FAKE16-NEXT:    v_swap_b32 v1, v0
+; GFX12-FAKE16-NEXT:    s_mov_b32 s1, exec_lo
 ; GFX12-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX12-FAKE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX12-FAKE16-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-FAKE16-NEXT:    v_cmpx_ne_u32_e32 0, v2
 ; GFX12-FAKE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-FAKE16-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX12-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX12-FAKE16-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX12-FAKE16-NEXT:  .LBB0_2: ; %ret
@@ -128,14 +125,13 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:  .LBB1_1: ; %loop
 ; GFX11-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX11-TRUE16-NEXT:    v_add_nc_u32_e32 v3, -1, v3
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_3)
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.l
 ; GFX11-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX11-TRUE16-NEXT:    ; use v0.h
 ; GFX11-TRUE16-NEXT:    ;;#ASMEND
 ; GFX11-TRUE16-NEXT:    v_swap_b16 v0.l, v0.h
-; GFX11-TRUE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
+; GFX11-TRUE16-NEXT:    v_add_nc_u32_e32 v3, -1, v3
 ; GFX11-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX11-TRUE16-NEXT:    ; use v1.l
 ; GFX11-TRUE16-NEXT:    ;;#ASMEND
@@ -143,10 +139,9 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-TRUE16-NEXT:    ; use v2.l
 ; GFX11-TRUE16-NEXT:    ;;#ASMEND
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v2.l, v1.l
-; GFX11-TRUE16-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-TRUE16-NEXT:    s_mov_b32 s1, exec_lo
+; GFX11-TRUE16-NEXT:    v_cmpx_ne_u32_e32 0, v3
 ; GFX11-TRUE16-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-TRUE16-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX11-TRUE16-NEXT:  .LBB1_2: ; %ret
@@ -167,15 +162,13 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX11-FAKE16-NEXT:    ; use v4
 ; GFX11-FAKE16-NEXT:    ;;#ASMEND
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_3) | instid1(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
 ; GFX11-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX11-FAKE16-NEXT:    ; use v2
 ; GFX11-FAKE16-NEXT:    ;;#ASMEND
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v2, v4
-; GFX11-FAKE16-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    s_mov_b32 s1, exec_lo
+; GFX11-FAKE16-NEXT:    v_cmpx_ne_u32_e32 0, v3
 ; GFX11-FAKE16-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-FAKE16-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX11-FAKE16-NEXT:  .LBB1_2: ; %ret
@@ -195,14 +188,13 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX12-TRUE16-NEXT:  .LBB1_1: ; %loop
 ; GFX12-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX12-TRUE16-NEXT:    v_add_nc_u32_e32 v3, -1, v3
-; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_3)
+; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.l
 ; GFX12-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX12-TRUE16-NEXT:    ; use v0.h
 ; GFX12-TRUE16-NEXT:    ;;#ASMEND
 ; GFX12-TRUE16-NEXT:    v_swap_b16 v0.l, v0.h
-; GFX12-TRUE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
+; GFX12-TRUE16-NEXT:    v_add_nc_u32_e32 v3, -1, v3
 ; GFX12-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX12-TRUE16-NEXT:    ; use v1.l
 ; GFX12-TRUE16-NEXT:    ;;#ASMEND
@@ -210,10 +202,10 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-TRUE16-NEXT:    ; use v2.l
 ; GFX12-TRUE16-NEXT:    ;;#ASMEND
 ; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v2.l, v1.l
-; GFX12-TRUE16-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-TRUE16-NEXT:    s_mov_b32 s1, exec_lo
+; GFX12-TRUE16-NEXT:    v_cmpx_ne_u32_e32 0, v3
 ; GFX12-TRUE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-TRUE16-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX12-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX12-TRUE16-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX12-TRUE16-NEXT:  .LBB1_2: ; %ret
@@ -239,16 +231,14 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX12-FAKE16-NEXT:    ; use v4
 ; GFX12-FAKE16-NEXT:    ;;#ASMEND
-; GFX12-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX12-FAKE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
 ; GFX12-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX12-FAKE16-NEXT:    ; use v2
 ; GFX12-FAKE16-NEXT:    ;;#ASMEND
 ; GFX12-FAKE16-NEXT:    v_mov_b32_e32 v2, v4
-; GFX12-FAKE16-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-FAKE16-NEXT:    s_mov_b32 s1, exec_lo
+; GFX12-FAKE16-NEXT:    v_cmpx_ne_u32_e32 0, v3
 ; GFX12-FAKE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-FAKE16-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX12-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX12-FAKE16-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX12-FAKE16-NEXT:  .LBB1_2: ; %ret

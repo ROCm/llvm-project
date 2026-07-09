@@ -30,7 +30,8 @@ define amdgpu_kernel void @test_sink_small_offset_global_atomic_fadd_f32(ptr add
 ; GCN-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %if
@@ -43,7 +44,7 @@ define amdgpu_kernel void @test_sink_small_offset_global_atomic_fadd_f32(ptr add
 ; GCN-NEXT:    global_load_dword v0, v[0:1], off glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:  .LBB0_2: ; %endif
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    v_mov_b32_e32 v1, 0x3d0000
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    global_store_dword v1, v0, s[0:1] offset:2300

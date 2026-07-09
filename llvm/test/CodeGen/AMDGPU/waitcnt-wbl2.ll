@@ -11,10 +11,9 @@ define void @global_store_different_block(ptr addrspace(1) %data_ptr, ptr addrsp
 ; GFX950-NEXT:    v_and_b32_e32 v4, 1, v4
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
 ; GFX950-NEXT:    v_mov_b32_e32 v4, 42
-; GFX950-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; GFX950-NEXT:    global_store_dword v[0:1], v4, off
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-NEXT:    s_mov_b64 exec, vcc
+; GFX950-NEXT:    s_and_saveexec_b64 s[0:1], vcc
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX950-NEXT:  .LBB0_1: ; %do_atomic

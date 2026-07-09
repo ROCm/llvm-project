@@ -13,14 +13,14 @@ define amdgpu_ps float @uniform_kill(float %a, i32 %b, float %c) {
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
 ; SI-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; SI-NEXT:    s_mov_b64 exec, s[2:3]
+; SI-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB0_2
 ; SI-NEXT:  .LBB0_1: ; %if1
-; SI-NEXT:    s_mov_b64 s[2:3], 0
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
+; SI-NEXT:    s_mov_b64 s[4:5], 0
+; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
 ; SI-NEXT:  .LBB0_2: ; %endif1
-; SI-NEXT:    s_or_b64 exec, exec, vcc
+; SI-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; SI-NEXT:    s_wqm_b64 s[2:3], vcc
 ; SI-NEXT:    s_andn2_b64 s[2:3], exec, s[2:3]
@@ -30,8 +30,7 @@ define amdgpu_ps float @uniform_kill(float %a, i32 %b, float %c) {
 ; SI-NEXT:    s_and_b64 exec, exec, s[0:1]
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; SI-NEXT:    v_mov_b32_e32 v0, 0
-; SI-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    s_and_saveexec_b64 s[0:1], vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB0_5
 ; SI-NEXT:  .LBB0_4: ; %if2
@@ -64,14 +63,14 @@ define amdgpu_ps float @uniform_kill(float %a, i32 %b, float %c) {
 ; FLAT-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
 ; FLAT-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; FLAT-NEXT:    s_mov_b64 exec, s[2:3]
+; FLAT-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
 ; FLAT-NEXT:    ; divergent control-flow edge
 ; FLAT-NEXT:    s_cbranch_execz .LBB0_2
 ; FLAT-NEXT:  .LBB0_1: ; %if1
-; FLAT-NEXT:    s_mov_b64 s[2:3], 0
-; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
+; FLAT-NEXT:    s_mov_b64 s[4:5], 0
+; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
 ; FLAT-NEXT:  .LBB0_2: ; %endif1
-; FLAT-NEXT:    s_or_b64 exec, exec, vcc
+; FLAT-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; FLAT-NEXT:    s_wqm_b64 s[2:3], vcc
 ; FLAT-NEXT:    s_andn2_b64 s[2:3], exec, s[2:3]
@@ -81,8 +80,7 @@ define amdgpu_ps float @uniform_kill(float %a, i32 %b, float %c) {
 ; FLAT-NEXT:    s_and_b64 exec, exec, s[0:1]
 ; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; FLAT-NEXT:    v_mov_b32_e32 v0, 0
-; FLAT-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; FLAT-NEXT:    s_mov_b64 exec, vcc
+; FLAT-NEXT:    s_and_saveexec_b64 s[0:1], vcc
 ; FLAT-NEXT:    ; divergent control-flow edge
 ; FLAT-NEXT:    s_cbranch_execz .LBB0_5
 ; FLAT-NEXT:  .LBB0_4: ; %if2

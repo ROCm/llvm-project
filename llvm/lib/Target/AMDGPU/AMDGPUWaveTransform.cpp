@@ -2346,21 +2346,16 @@ void ControlFlowRewriter::rewrite() {
       // the pred's CFGNodeInfo.
       Register Rejoin = PredInfo.SavedExec;
 
-      if (HasSingleDivergentPred) {
+      // Demote the pred's S_AND_SAVEEXEC_TERM to S_AND_SAVEEXEC
+      if (PredInfo.SavedExecMI &&
+        PredInfo.SavedExecMI->getOpcode() == LMC.AndSaveExecTermOpc)
+      PredInfo.SavedExecMI->setDesc(TII.get(LMC.AndSaveExecOpc));
+
+      if (HasSingleDivergentPred)
         DirectRejoin = Rejoin;
-      } else {
-        // The _term form of S_AND_SAVEEXEC is required while building the
-        // primary exec mask: it lets the updater machinery insert instructions
-        // at the terminator. For the secondary (rejoin) exec mask, however, the
-        // inserted instructions must land *after* the S_AND_SAVEEXEC since they
-        // consume its def. Demote the pred's terminator to its non-terminator
-        // form in place so getFirstTerminator() points past it, and subsequent
-        // rejoin-mask building iterations insert at the correct place.
-        if (PredInfo.SavedExecMI &&
-            PredInfo.SavedExecMI->getOpcode() == LMC.AndSaveExecTermOpc)
-          PredInfo.SavedExecMI->setDesc(TII.get(LMC.AndSaveExecOpc));
+      else
         Updater.addAvailable(*Pred->Block, Rejoin);
-      }
+      
     }
 
     Register RejoinMask =

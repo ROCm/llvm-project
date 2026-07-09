@@ -104,7 +104,8 @@ define void @i1_arg_i1_use(i1 %arg) #0 {
 ; CIGFX89-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CIGFX89-NEXT:    v_and_b32_e32 v0, 1, v0
 ; CIGFX89-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; CIGFX89-NEXT:    s_xor_b64 exec, vcc, exec
+; CIGFX89-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CIGFX89-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; CIGFX89-NEXT:    ; divergent control-flow edge
 ; CIGFX89-NEXT:    s_cbranch_execz .LBB3_2
 ; CIGFX89-NEXT:  .LBB3_1: ; %bb1
@@ -114,16 +115,17 @@ define void @i1_arg_i1_use(i1 %arg) #0 {
 ; CIGFX89-NEXT:    buffer_store_dword v0, off, s[4:7], 0
 ; CIGFX89-NEXT:    s_waitcnt vmcnt(0)
 ; CIGFX89-NEXT:  .LBB3_2: ; %bb2
-; CIGFX89-NEXT:    s_or_b64 exec, exec, vcc
+; CIGFX89-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; CIGFX89-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: i1_arg_i1_use:
 ; GFX11:       ; %bb.0: ; %bb
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_and_b32_e32 v0, 1, v0
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v0
-; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; GFX11-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX11-NEXT:  .LBB3_1: ; %bb1
@@ -133,7 +135,7 @@ define void @i1_arg_i1_use(i1 %arg) #0 {
 ; GFX11-NEXT:    buffer_store_b32 v0, off, s[0:3], 0 dlc
 ; GFX11-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX11-NEXT:  .LBB3_2: ; %bb2
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
 bb:
   br i1 %arg, label %bb2, label %bb1

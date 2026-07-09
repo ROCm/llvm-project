@@ -162,7 +162,8 @@ define amdgpu_kernel void @min_long_forward_vbranch(ptr addrspace(1) %arg) #0 {
 ; GCN-NEXT:    v_add_i32_e64 v0, s[0:1], s0, v0
 ; GCN-NEXT:    v_addc_u32_e64 v1, s[0:1], 0, v1, s[0:1]
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; GCN-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB3_1
 ; GCN-NEXT:  .LBB3_3: ; %bb
@@ -180,7 +181,7 @@ define amdgpu_kernel void @min_long_forward_vbranch(ptr addrspace(1) %arg) #0 {
 ; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:  .LBB3_2: ; %bb3
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GCN-NEXT:    s_mov_b32 s0, s2
 ; GCN-NEXT:    s_mov_b32 s1, s2
 ; GCN-NEXT:    buffer_store_dword v2, v[0:1], s[0:3], 0 addr64

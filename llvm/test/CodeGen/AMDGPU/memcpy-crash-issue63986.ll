@@ -19,8 +19,8 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    s_mov_b64 s[6:7], -1
 ; CHECK-NEXT:    s_mov_b64 s[14:15], 0
 ; CHECK-NEXT:    s_mov_b64 s[10:11], 0
-; CHECK-NEXT:    s_mov_b64 s[22:23], 0
 ; CHECK-NEXT:    s_mov_b64 s[20:21], 0
+; CHECK-NEXT:    s_mov_b64 s[22:23], 0
 ; CHECK-NEXT:    s_mov_b64 s[18:19], 0
 ; CHECK-NEXT:    s_mov_b64 s[12:13], 0
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB0_2
@@ -80,17 +80,15 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    ; =>This Loop Header: Depth=1
 ; CHECK-NEXT:    ; Child Loop BB0_8 Depth 2
 ; CHECK-NEXT:    ; Child Loop BB0_15 Depth 2
-; CHECK-NEXT:    s_or_b64 exec, exec, s[22:23]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[20:21]
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
 ; CHECK-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; CHECK-NEXT:    s_or_b64 s[14:15], s[14:15], s[4:5]
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[4:5], s[8:9]
 ; CHECK-NEXT:    s_or_b64 s[18:19], s[18:19], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    s_mov_b64 s[8:9], 0
-; CHECK-NEXT:    s_mov_b64 s[22:23], 0
+; CHECK-NEXT:    s_mov_b64 s[20:21], 0
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_12
 ; CHECK-NEXT:  .LBB0_7: ; %dynamic-memcpy-expansion-main-body2.preheader
@@ -118,12 +116,10 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    ; in Loop: Header=BB0_8 Depth=2
 ; CHECK-NEXT:    s_nop 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v10, 0, -1, s[4:5]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
-; CHECK-NEXT:    s_xor_b64 s[24:25], exec, vcc
-; CHECK-NEXT:    s_and_b64 s[24:25], s[24:25], exec
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
-; CHECK-NEXT:    s_or_b64 s[20:21], s[20:21], s[24:25]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
+; CHECK-NEXT:    s_and_saveexec_b64 s[24:25], vcc
+; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], s[24:25]
 ; CHECK-NEXT:    s_mov_b64 s[24:25], 0
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_8
@@ -132,30 +128,26 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    s_mov_b64 s[4:5], -1
 ; CHECK-NEXT:  .LBB0_11: ; %loop.exit.guard
 ; CHECK-NEXT:    ; in Loop: Header=BB0_6 Depth=1
-; CHECK-NEXT:    s_or_b64 exec, exec, s[20:21]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[22:23]
 ; CHECK-NEXT:    s_and_b64 vcc, exec, s[4:5]
 ; CHECK-NEXT:    s_and_b64 vcc, vcc, vcc
 ; CHECK-NEXT:    s_cselect_b64 s[4:5], 0, exec
 ; CHECK-NEXT:    s_or_b64 s[14:15], s[14:15], s[4:5]
-; CHECK-NEXT:    s_mov_b64 s[20:21], 0
+; CHECK-NEXT:    s_mov_b64 s[22:23], 0
 ; CHECK-NEXT:  .LBB0_12: ; in Loop: Header=BB0_6 Depth=1
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[18:19]
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[14:15]
-; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[4:5], s[14:15]
 ; CHECK-NEXT:    s_or_b64 s[12:13], s[12:13], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, s[14:15]
 ; CHECK-NEXT:    s_mov_b64 s[18:19], 0
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_16
 ; CHECK-NEXT:  .LBB0_13: ; %dynamic-memcpy-expansion-residual-cond5
 ; CHECK-NEXT:    ; in Loop: Header=BB0_6 Depth=1
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v9
-; CHECK-NEXT:    s_or_b64 s[10:11], s[10:11], vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[10:11]
-; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_mov_b64 s[14:15], 0
-; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, s[10:11]
+; CHECK-NEXT:    s_or_b64 s[10:11], s[10:11], vcc
+; CHECK-NEXT:    s_and_saveexec_b64 s[4:5], s[10:11]
+; CHECK-NEXT:    s_or_b64 s[20:21], s[20:21], s[4:5]
 ; CHECK-NEXT:    s_mov_b64 s[10:11], 0
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_6
@@ -176,11 +168,10 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    s_addc_u32 s17, s5, 0
 ; CHECK-NEXT:    v_cmp_lt_u64_e32 vcc, s[16:17], v[2:3]
 ; CHECK-NEXT:    s_mov_b64 s[4:5], s[16:17]
-; CHECK-NEXT:    s_xor_b64 s[16:17], exec, vcc
-; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], s[16:17]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    flat_store_byte v[10:11], v13
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_and_saveexec_b64 s[16:17], vcc
+; CHECK-NEXT:    s_or_b64 s[20:21], s[20:21], s[16:17]
 ; CHECK-NEXT:    s_mov_b64 s[16:17], 0
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_15

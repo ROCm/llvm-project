@@ -55,9 +55,8 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX11-TRUE16-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX11-TRUE16-NEXT:    s_or_b32 s4, s4, s6
-; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s5
+; GFX11-TRUE16-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX11-TRUE16-NEXT:    s_or_b32 s4, s4, s5
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-TRUE16-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX11-TRUE16-NEXT:  .LBB0_2: ; %atomicrmw.end
@@ -112,9 +111,8 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX11-FAKE16-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
 ; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX11-FAKE16-NEXT:    s_or_b32 s4, s4, s6
-; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s5
+; GFX11-FAKE16-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX11-FAKE16-NEXT:    s_or_b32 s4, s4, s5
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-FAKE16-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX11-FAKE16-NEXT:  .LBB0_2: ; %atomicrmw.end

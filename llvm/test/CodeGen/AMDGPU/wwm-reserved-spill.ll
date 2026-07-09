@@ -178,13 +178,12 @@ define amdgpu_gfx void @strict_wwm_cfg(ptr addrspace(8) inreg %tmp14, i32 %arg) 
 ; GFX9-O0-NEXT:    v_cmp_eq_u32_e64 s[34:35], v0, s36
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v0, s36
 ; GFX9-O0-NEXT:    buffer_store_dword v0, off, s[0:3], s32 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_xor_b64 s[36:37], exec, s[34:35]
-; GFX9-O0-NEXT:    v_writelane_b32 v5, s36, 4
-; GFX9-O0-NEXT:    v_writelane_b32 v5, s37, 5
+; GFX9-O0-NEXT:    s_and_saveexec_b64 s[34:35], s[34:35]
+; GFX9-O0-NEXT:    v_writelane_b32 v5, s34, 4
+; GFX9-O0-NEXT:    v_writelane_b32 v5, s35, 5
 ; GFX9-O0-NEXT:    s_or_saveexec_b64 s[46:47], -1
 ; GFX9-O0-NEXT:    buffer_store_dword v5, off, s[0:3], s32 offset:16 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_mov_b64 exec, s[46:47]
-; GFX9-O0-NEXT:    s_mov_b64 exec, s[34:35]
 ; GFX9-O0-NEXT:    ; divergent control-flow edge
 ; GFX9-O0-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX9-O0-NEXT:  .LBB1_1: ; %if
@@ -262,20 +261,21 @@ define amdgpu_gfx void @strict_wwm_cfg(ptr addrspace(8) inreg %tmp14, i32 %arg) 
 ; GFX9-O3-NEXT:    s_mov_b64 exec, s[34:35]
 ; GFX9-O3-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-O3-NEXT:    v_mov_b32_e32 v0, v1
-; GFX9-O3-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-O3-NEXT:    s_xor_b64 s[34:35], vcc, exec
+; GFX9-O3-NEXT:    s_and_saveexec_b64 s[34:35], s[34:35]
 ; GFX9-O3-NEXT:    ; divergent control-flow edge
 ; GFX9-O3-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX9-O3-NEXT:  .LBB1_1: ; %if
-; GFX9-O3-NEXT:    s_or_saveexec_b64 s[34:35], -1
+; GFX9-O3-NEXT:    s_or_saveexec_b64 s[36:37], -1
 ; GFX9-O3-NEXT:    v_mov_b32_e32 v1, 0
-; GFX9-O3-NEXT:    v_cndmask_b32_e64 v2, 0, v4, s[34:35]
+; GFX9-O3-NEXT:    v_cndmask_b32_e64 v2, 0, v4, s[36:37]
 ; GFX9-O3-NEXT:    s_nop 1
 ; GFX9-O3-NEXT:    v_mov_b32_dpp v1, v2 row_bcast:31 row_mask:0xc bank_mask:0xf
 ; GFX9-O3-NEXT:    v_add_u32_e32 v1, v2, v1
-; GFX9-O3-NEXT:    s_mov_b64 exec, s[34:35]
+; GFX9-O3-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-O3-NEXT:    v_mov_b32_e32 v5, v1
 ; GFX9-O3-NEXT:  .LBB1_2: ; %merge
-; GFX9-O3-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-O3-NEXT:    s_or_b64 exec, exec, s[34:35]
 ; GFX9-O3-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v5
 ; GFX9-O3-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
 ; GFX9-O3-NEXT:    v_lshlrev_b32_e32 v0, 1, v0

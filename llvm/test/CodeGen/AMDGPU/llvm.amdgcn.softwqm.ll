@@ -225,11 +225,11 @@ END:
 define amdgpu_ps float @test_control_flow_1(<8 x i32> inreg %rsrc, <4 x i32> inreg %sampler, i32 inreg %idx0, i32 inreg %idx1, i32 %c, i32 %z, float %data) {
 ; CHECK-LABEL: test_control_flow_1:
 ; CHECK:       ; %bb.0: ; %main_body
-; CHECK-NEXT:    s_mov_b64 s[14:15], exec
-; CHECK-NEXT:    s_wqm_b64 exec, exec
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
+; CHECK-NEXT:    s_mov_b64 s[14:15], exec
 ; CHECK-NEXT:    s_xor_b64 s[16:17], vcc, exec
 ; CHECK-NEXT:    s_and_saveexec_b64 s[16:17], s[16:17]
+; CHECK-NEXT:    s_wqm_b64 exec, exec
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_2
 ; CHECK-NEXT:  .LBB7_1: ; %IF
