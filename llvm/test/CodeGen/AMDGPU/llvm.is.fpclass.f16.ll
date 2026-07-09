@@ -306,8 +306,7 @@ define i1 @snan_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 1
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -381,8 +380,7 @@ define i1 @qnan_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 2
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -457,8 +455,7 @@ define i1 @posinf_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x200
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -531,8 +528,7 @@ define i1 @neginf_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 4
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -618,8 +614,7 @@ define i1 @posnormal_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x100
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -703,8 +698,7 @@ define i1 @negnormal_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 8
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -781,8 +775,7 @@ define i1 @possubnormal_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x80
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -865,8 +858,7 @@ define i1 @negsubnormal_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 16
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -929,8 +921,7 @@ define i1 @poszero_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 64
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1003,8 +994,7 @@ define i1 @negzero_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 32
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1079,8 +1069,7 @@ define i1 @posfinite_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x1c0
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1160,8 +1149,7 @@ define i1 @negfinite_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 56
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1235,8 +1223,7 @@ define i1 @isnan_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 3
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1312,8 +1299,7 @@ define i1 @not_isnan_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x3fc
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1892,8 +1878,7 @@ define i1 @isnan_f16_strictfp(half %x) strictfp nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 3
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1969,8 +1954,7 @@ define i1 @isinf_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x204
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2047,8 +2031,7 @@ define i1 @isfinite_f16(half %x) nounwind {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x1f8
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2122,8 +2105,7 @@ define i1 @issubnormal_or_zero_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0xf0
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2204,8 +2186,7 @@ define i1 @not_issubnormal_or_zero_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x30f
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2285,8 +2266,7 @@ define i1 @isnormal_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x108
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2370,8 +2350,7 @@ define i1 @not_isnormal_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x2f7
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2466,8 +2445,7 @@ define i1 @not_is_plus_normal_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x2ff
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2562,8 +2540,7 @@ define i1 @not_is_neg_normal_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x3f7
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2641,8 +2618,7 @@ define i1 @issubnormal_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x90
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2728,8 +2704,7 @@ define i1 @not_issubnormal_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x36f
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2803,8 +2778,7 @@ define i1 @iszero_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x60
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2891,8 +2865,7 @@ define i1 @not_iszero_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x39f
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2967,8 +2940,7 @@ define i1 @ispositive_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x3c0
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3059,8 +3031,7 @@ define i1 @not_ispositive_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 63
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3147,8 +3118,7 @@ define i1 @isnegative_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 60
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3232,8 +3202,7 @@ define i1 @not_isnegative_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0:
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x3c3
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3312,8 +3281,7 @@ define i1 @iszero_or_nan_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x63
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3393,8 +3361,7 @@ define i1 @iszero_or_nan_f_daz(half %x) #0 {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x63
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3474,8 +3441,7 @@ define i1 @iszero_or_nan_f_maybe_daz(half %x) #1 {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x63
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3564,8 +3530,7 @@ define i1 @not_iszero_or_nan_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x39c
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3654,8 +3619,7 @@ define i1 @not_iszero_or_nan_f_daz(half %x) #0 {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x39c
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3744,8 +3708,7 @@ define i1 @not_iszero_or_nan_f_maybe_daz(half %x) #1 {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x39c
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3825,8 +3788,7 @@ define i1 @iszero_or_qnan_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x62
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3911,8 +3873,7 @@ define i1 @iszero_or_snan_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x61
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4017,8 +3978,7 @@ define i1 @not_iszero_or_qnan_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x39d
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4120,8 +4080,7 @@ define i1 @not_iszero_or_snan_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x39e
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4199,8 +4158,7 @@ define i1 @isinf_or_nan_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x207
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4278,8 +4236,7 @@ define i1 @not_isinf_or_nan_f16(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x1f8
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4356,8 +4313,7 @@ define i1 @isfinite_or_nan_f(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x1fb
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4434,8 +4390,7 @@ define i1 @not_isfinite_or_nan_f(half %x) {
 ; GFX11SELDAG-TRUE16:       ; %bb.0: ; %entry
 ; GFX11SELDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11SELDAG-TRUE16-NEXT:    v_mov_b32_e32 v1, 0x204
-; GFX11SELDAG-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v0.h
+; GFX11SELDAG-TRUE16-NEXT:    v_cmp_class_f16_e32 vcc_lo, v0.l, v1.l
 ; GFX11SELDAG-TRUE16-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
 ; GFX11SELDAG-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;

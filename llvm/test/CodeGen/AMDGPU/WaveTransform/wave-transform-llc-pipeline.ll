@@ -395,6 +395,7 @@
 ; GCN-O3-NEXT:        Live Register Matrix
 ; GCN-O3-NEXT:        SI Pre-allocate WWM Registers
 ; GCN-O3-NEXT:        AMDGPU Partition VGPRs for RA
+; GCN-O3-NEXT:        AMDGPU Pre-RA Vector Register Hints
 ; GCN-O3-NEXT:        Debug Variable Analysis
 ; GCN-O3-NEXT:        Live Stack Slot Analysis
 ; GCN-O3-NEXT:        Bundle Machine CFG Edges
@@ -415,7 +416,7 @@
 ; GCN-O3-NEXT:        SI optimize exec mask operations pre-RA
 ; GCN-O3-NEXT:        Machine Natural Loop Construction
 ; GCN-O3-NEXT:        Register Coalescer
-; GCN-O3-NEXT:        AMDGPU Pre-RA optimizations
+; GCN-O3-NEXT:        AMDGPU Pre-RA SGPR Optimizations
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        Debug Variable Analysis
 ; GCN-O3-NEXT:        Live Stack Slot Analysis

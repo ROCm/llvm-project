@@ -10,33 +10,33 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1170 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-FAKE16,GFX1170-SDAG,GFX1170-FAKE16-SDAG %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-TRUE16,GFX12-SDAG,GFX12-TRUE16-SDAG %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-FAKE16,GFX12-SDAG,GFX12-FAKE16-SDAG %s
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx700 < %s | FileCheck -check-prefixes=GFX7,GFX7-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx700 < %s | FileCheck -check-prefixes=GFX7,GFX7-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx803 < %s | FileCheck -check-prefixes=GFX8,GFX8-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx803 < %s | FileCheck -check-prefixes=GFX8,GFX8-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 < %s | FileCheck -check-prefixes=GFX9,GFX900,GFX9-GISEL,GFX900-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 < %s | FileCheck -check-prefixes=GFX9,GFX900,GFX9-GISEL,GFX900-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 < %s | FileCheck -check-prefixes=GFX9,GFX950,GFX9-GISEL,GFX950-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 < %s | FileCheck -check-prefixes=GFX9,GFX950,GFX9-GISEL,GFX950-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1030 < %s | FileCheck -check-prefixes=GFX10,GFX10-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1030 < %s | FileCheck -check-prefixes=GFX10,GFX10-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX11,GFX11-TRUE16,GFX11-GISEL,GFX11-TRUE16-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX11,GFX11-TRUE16,GFX11-GISEL,GFX11-TRUE16-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX11,GFX11-FAKE16,GFX11-GISEL,GFX11-FAKE16-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX11,GFX11-FAKE16,GFX11-GISEL,GFX11-FAKE16-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1170 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-TRUE16,GFX1170-GISEL,GFX1170-TRUE16-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1170 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-TRUE16,GFX1170-GISEL,GFX1170-TRUE16-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1170 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-FAKE16,GFX1170-GISEL,GFX1170-FAKE16-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1170 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-FAKE16,GFX1170-GISEL,GFX1170-FAKE16-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-TRUE16,GFX12-GISEL,GFX12-TRUE16-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-TRUE16,GFX12-GISEL,GFX12-TRUE16-GISEL %s
 
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-FAKE16,GFX12-GISEL,GFX12-FAKE16-GISEL %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-FAKE16,GFX12-GISEL,GFX12-FAKE16-GISEL %s
 
-; RUN: llc -global-isel=0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1251 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1251,GFX1251-TRUE16,GFX1251-SDAG,GFX1251-TRUE16-SDAG %s
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1251 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1251,GFX1251-TRUE16,GFX1251-GISEL,GFX1251-TRUE16-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1251 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1251,GFX1251-TRUE16,GFX1251-SDAG,GFX1251-TRUE16-SDAG %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1251 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1251,GFX1251-TRUE16,GFX1251-GISEL,GFX1251-TRUE16-GISEL %s
 
-; RUN: llc -global-isel=0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1251 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1251,GFX1251-FAKE16,GFX1251-SDAG,GFX1251-FAKE16-SDAG %s
-; xUN: llc -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1251 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1251,GFX1251-FAKE16,GFX1251-GISEL,GFX1251-FAKE16-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1251 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1251,GFX1251-FAKE16,GFX1251-SDAG,GFX1251-FAKE16-SDAG %s
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1251 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1251,GFX1251-FAKE16,GFX1251-GISEL,GFX1251-FAKE16-GISEL %s
 
 define half @v_maximumnum_f16(half %x, half %y) #1 {
 ; GFX7-LABEL: v_maximumnum_f16:
@@ -291,9 +291,7 @@ define half @v_maximumnum_f16_nnan(half %x, half %y) #1 {
 ; GFX11-TRUE16-LABEL: v_maximumnum_f16_nnan:
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_max_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-NEXT:    v_max_f16_e32 v0.l, v0.l, v1.l
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_maximumnum_f16_nnan:
@@ -305,9 +303,7 @@ define half @v_maximumnum_f16_nnan(half %x, half %y) #1 {
 ; GFX1170-TRUE16-LABEL: v_maximumnum_f16_nnan:
 ; GFX1170-TRUE16:       ; %bb.0:
 ; GFX1170-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1170-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX1170-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX1170-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.h
+; GFX1170-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v1.l
 ; GFX1170-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-LABEL: v_maximumnum_f16_nnan:
@@ -323,9 +319,7 @@ define half @v_maximumnum_f16_nnan(half %x, half %y) #1 {
 ; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v1.l
 ; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: v_maximumnum_f16_nnan:
@@ -10239,9 +10233,7 @@ define half @v_maximumnum_f16_no_ieee(half %x, half %y) #0 {
 ; GFX11-TRUE16-LABEL: v_maximumnum_f16_no_ieee:
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_max_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-NEXT:    v_max_f16_e32 v0.l, v0.l, v1.l
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_maximumnum_f16_no_ieee:
@@ -10414,9 +10406,7 @@ define half @v_maximumnum_f16_nan_no_ieee(half %x, half %y) #0 {
 ; GFX11-TRUE16-LABEL: v_maximumnum_f16_nan_no_ieee:
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_max_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-NEXT:    v_max_f16_e32 v0.l, v0.l, v1.l
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_maximumnum_f16_nan_no_ieee:
@@ -10428,9 +10418,7 @@ define half @v_maximumnum_f16_nan_no_ieee(half %x, half %y) #0 {
 ; GFX1170-TRUE16-LABEL: v_maximumnum_f16_nan_no_ieee:
 ; GFX1170-TRUE16:       ; %bb.0:
 ; GFX1170-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1170-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX1170-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX1170-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.h
+; GFX1170-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v1.l
 ; GFX1170-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-LABEL: v_maximumnum_f16_nan_no_ieee:
@@ -10446,9 +10434,7 @@ define half @v_maximumnum_f16_nan_no_ieee(half %x, half %y) #0 {
 ; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
-; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v1.l
 ; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: v_maximumnum_f16_nan_no_ieee:

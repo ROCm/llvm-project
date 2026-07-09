@@ -3611,10 +3611,8 @@ define half @buffer_fat_ptr_agent_atomic_fmax_ret_f16__offset__waterfall__amdgpu
 ; GFX12-TRUE16-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX12-TRUE16-NEXT:  ; %bb.2:
 ; GFX12-TRUE16-NEXT:    s_mov_b32 exec_lo, s6
-; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v4.l, v5.l
+; GFX12-TRUE16-NEXT:    v_max_num_f16_e32 v4.l, v5.l, v5.l
 ; GFX12-TRUE16-NEXT:    s_and_b32 s0, s5, exec_lo
-; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12-TRUE16-NEXT:    v_max_num_f16_e32 v4.l, v4.l, v4.l
 ; GFX12-TRUE16-NEXT:  .LBB12_3: ; %atomicrmw.start
 ; GFX12-TRUE16-NEXT:    ; =>This Loop Header: Depth=1
 ; GFX12-TRUE16-NEXT:    ; Child Loop BB12_4 Depth 2
@@ -3875,10 +3873,8 @@ define half @buffer_fat_ptr_agent_atomic_fmax_ret_f16__offset__waterfall__amdgpu
 ; GFX11-TRUE16-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX11-TRUE16-NEXT:  ; %bb.2:
 ; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s6
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v4.l, v5.l
+; GFX11-TRUE16-NEXT:    v_max_f16_e32 v4.l, v5.l, v5.l
 ; GFX11-TRUE16-NEXT:    s_and_b32 s0, s5, exec_lo
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_max_f16_e32 v4.l, v4.l, v4.l
 ; GFX11-TRUE16-NEXT:    .p2align 6
 ; GFX11-TRUE16-NEXT:  .LBB12_3: ; %atomicrmw.start
 ; GFX11-TRUE16-NEXT:    ; =>This Loop Header: Depth=1
