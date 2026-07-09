@@ -1,7 +1,10 @@
 # Copyright Advanced Micro Devices, Inc.
 # SPDX-License-Identifier: MIT
 
-# Multi-Arch CI for amd-compiler-vkallesh-test branch
+# Test Branch CI for amd-compiler-vkallesh-test branch
+#
+# CRITICAL: This file has a unique path (test_branch_ci_vkallesh.yml) to ensure
+# GitHub assigns a new workflow_id, avoiding cached metadata from the old file.
 #
 # DEMONSTRATION WORKFLOW: Simplified to show merge policy
 # Only 2 mandatory tests required: setup + compiler-runtime build
