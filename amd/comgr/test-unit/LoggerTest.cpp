@@ -86,9 +86,9 @@ TEST(Logger, ParseLogLevelNegativeAndInvalidFailSafely) {
   // wrapping around or yielding an out-of-range level.
   for (StringRef Bad : {"-1", "-1000", "12abc", "3.5", "0x4", " 4"}) {
     EXPECT_EQ(env::parseLogLevel(Bad, false), LogLevel::Error)
-        << "input: " << Bad;
+        << "input: " << Bad.str();
     EXPECT_EQ(env::parseLogLevel(Bad, true), LogLevel::Debug)
-        << "input: " << Bad;
+        << "input: " << Bad.str();
   }
 }
 
