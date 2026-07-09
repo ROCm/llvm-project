@@ -44,6 +44,8 @@ on:
   workflow_run:
     workflows: ["Multi-Arch CI amd-compiler-vkallesh-test"]
     types: [completed]
+    branches:
+      - amd-compiler-vkallesh-test
 
 permissions:
   contents: write
