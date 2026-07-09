@@ -3,11 +3,10 @@
 
 # Multi-Arch CI for amd-compiler-vkallesh-test branch
 #
-# This is a test workflow for validating changes to the merge-main-into-amd-staging.yml workflow.
-# It mirrors rockci_multi_arch_amd_staging.yml but targets the amd-compiler-vkallesh-test branch.
-#
-# Same `ci:skip` rules as rockci-amd-staging.yml: only automated LLVM_MAIN_REVISION PRs
-# (matching title/body) skip presubmit; label alone is not enough.
+# DEMONSTRATION WORKFLOW: Simplified to show merge policy
+# Only 2 mandatory tests required: setup + compiler-runtime build
+# All other tests are optional and can fail without blocking merge
+# Merge criteria: 2 mandatory tests pass + 1 approval = auto-merge
 
 name: Multi-Arch CI amd-compiler-vkallesh-test
 
@@ -80,79 +79,95 @@ jobs:
     with:
       build_variant: "release"
 
-  linux_build_and_test:
-    name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
+  # MANDATORY TEST 2: Compiler Runtime Build
+  # This is one of the 2 required tests for auto-merge
+  compiler_runtime_build:
+    name: Linux::release / Build Multi-Arch Stages / compiler-runtime / Stage - Compiler Runtime
+    runs-on: ubuntu-24.04
     needs: setup
-    if: >-
-      ${{
-        needs.setup.outputs.linux_build_config != '' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
-      }}      
-    uses: ./.github/workflows/multi_arch_ci_linux.yml
-    secrets: inherit
-    with:
-      build_config: ${{ needs.setup.outputs.linux_build_config }}
-      test_labels: ${{ needs.setup.outputs.linux_test_labels }}
-      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: ${{ needs.setup.outputs.test_type }}
-    permissions:
-      contents: read
-      id-token: write
+    if: needs.setup.outputs.enable_build_jobs == 'true'
+    steps:
+      - name: Simulate compiler-runtime build
+        run: |
+          echo "============================================================"
+          echo "MANDATORY TEST 2: Compiler Runtime Build"
+          echo "============================================================"
+          echo "This is a mandatory test for auto-merge"
+          echo "Simulating compiler-runtime build stage..."
+          sleep 5
+          echo "Build completed successfully!"
+          echo "============================================================"
 
-  windows_build_and_test:
-    name: Windows::${{ fromJSON(needs.setup.outputs.windows_build_config || '{}').build_variant_label || 'skip' }}
-    needs: setup
-    if: >-
-      ${{
-        needs.setup.outputs.windows_build_config != '' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
-      }}
-    uses: ./.github/workflows/multi_arch_ci_windows.yml
-    secrets: inherit
-    with:
-      build_config: ${{ needs.setup.outputs.windows_build_config }}
-      test_labels: ${{ needs.setup.outputs.windows_test_labels }}
-      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: 'smoke'
-    permissions:
-      contents: read
-      id-token: write
-
-  # Dedicated gfx90a Test job for demonstration purposes
-  # This job intentionally fails immediately on the test branch to demonstrate
-  # that non-mandatory tests do not block merge when mandatory tests pass + approval.
+  # NON-MANDATORY TEST: gfx90a Test (intentionally fails)
+  # This job demonstrates that non-mandatory tests can fail without blocking merge
   gfx90a_test:
     name: gfx90a Test
     runs-on: ubuntu-24.04
     needs: setup
     if: needs.setup.outputs.enable_build_jobs == 'true'
     steps:
-      - name: Fail gfx90a Test immediately on test branch
+      - name: Fail gfx90a Test to demonstrate non-blocking behavior
         run: |
           echo "============================================================"
-          echo "gfx90a Test: Intentionally failing on amd-compiler-vkallesh-test"
+          echo "NON-MANDATORY TEST: gfx90a Test"
           echo "============================================================"
-          echo "Branch: ${{ github.ref }}"
-          echo "This is a demonstration that non-mandatory tests can fail"
-          echo "without blocking merge when mandatory tests pass + approval."
+          echo "This test intentionally fails to demonstrate that"
+          echo "non-mandatory tests do not block merge when:"
+          echo "  - 2 mandatory tests pass"
+          echo "  - PR has 1 approval"
           echo "============================================================"
           exit 1
 
+  # NON-MANDATORY TEST: Optional extra build (can fail)
+  optional_extra_build:
+    name: Optional Extra Build Test
+    runs-on: ubuntu-24.04
+    needs: setup
+    if: needs.setup.outputs.enable_build_jobs == 'true'
+    steps:
+      - name: Optional test that can fail
+        run: |
+          echo "============================================================"
+          echo "NON-MANDATORY TEST: Optional Extra Build"
+          echo "============================================================"
+          echo "This is an optional test that may fail without blocking merge"
+          echo "Current time: $(date)"
+          echo "Simulating an optional build step..."
+          # Randomly succeed or fail to show both scenarios work
+          if [ $((RANDOM % 2)) -eq 0 ]; then
+            echo "This run: SUCCESS (but could fail without blocking merge)"
+            exit 0
+          else
+            echo "This run: FAILED (demonstrating non-blocking behavior)"
+            exit 1
+          fi
+
+  # CI Summary always runs to report results
   ci_summary:
     name: CI Summary
     if: always()
     needs:
       - setup
-      - linux_build_and_test
+      - compiler_runtime_build
+      - gfx90a_test
+      - optional_extra_build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
-      - name: Evaluate workflow results
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Report workflow results
         run: |
-          python build_tools/github_actions/workflow_summary.py \
-            --needs-json '${{ toJSON(needs) }}'
+          echo "============================================================"
+          echo "CI SUMMARY FOR amd-compiler-vkallesh-test"
+          echo "============================================================"
+          echo ""
+          echo "Mandatory Tests (required for merge):"
+          echo "  1. setup / setup: ${{ needs.setup.result }}"
+          echo "  2. compiler-runtime build: ${{ needs.compiler_runtime_build.result }}"
+          echo ""
+          echo "Non-Mandatory Tests (informational only):"
+          echo "  - gfx90a Test: ${{ needs.gfx90a_test.result }}"
+          echo "  - Optional Extra Build: ${{ needs.optional_extra_build.result }}"
+          echo ""
+          echo "Merge Policy:"
+          echo "  If mandatory tests PASS + 1 approval → Auto-merge"
+          echo "  Non-mandatory tests can fail without blocking"
+          echo "============================================================"
