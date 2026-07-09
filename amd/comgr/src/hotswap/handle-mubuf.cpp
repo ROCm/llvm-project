@@ -90,84 +90,98 @@ HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
     };
 
     if (isLoad) {
-      if (isSubDword) {
-        // Load the sub-dword datum and zero/sign-extend to i32. For
-        // plain ushort/sbyte/etc. (`d16Half == 0`) we then write the
-        // whole VGPR; for D16 partial-write loads we merge with the
-        // prior dst (see comment block above mubufClassify).
-        Type *MemTy = (loadBits == 8) ? Type::getInt8Ty(Ctx.C)
-                                      : Type::getInt16Ty(Ctx.C);
-        Value *Loaded = nullptr;
-        if (Ctx.TargetIsa.WaveSize > Ctx.Isa.WaveSize) {
-          Loaded = RawPtrBufferLoad(MemTy);
-        } else {
-          Function *BufLd = Intrinsic::getOrInsertDeclaration(
-              &Ctx.M, Intrinsic::amdgcn_raw_buffer_load, {MemTy});
-          Loaded = Ctx.B.CreateCall(BufLd,
-              {Srd, Voffset, Soffset, AuxFlags}, "buf_ld");
-        }
-        if (d16Half == 0) {
-          Value *Ext = isBufSigned ? Ctx.B.CreateSExt(Loaded, Ctx.I32Ty)
-                                   : Ctx.B.CreateZExt(Loaded, Ctx.I32Ty);
-          Ctx.writeReg32(Vdata, Ext);
-        } else {
-          // Partial-write: extend to i16 (sign for `_SBYTE_D16*`,
-          // zero for `_UBYTE_D16*` / `_SHORT_D16*`), zext to i32 so
-          // the high half of the i32 is exactly zero before merging.
-          Value *Ext16 = Loaded;
-          if (loadBits == 8) {
-            Ext16 = isBufSigned
-                        ? Ctx.B.CreateSExt(Loaded, Type::getInt16Ty(Ctx.C))
-                        : Ctx.B.CreateZExt(Loaded, Type::getInt16Ty(Ctx.C));
-          }
-          Value *Ext32 = Ctx.B.CreateZExt(Ext16, Ctx.I32Ty);
-          Value *Prior = Ctx.Regs.readReg32(Ctx.B, Vdata);
-          Value *Merged;
-          if (d16Half == 1) {
-            // _D16: place datum in lo 16, preserve hi 16 of prior.
-            Value *PriorHi =
-                Ctx.B.CreateAnd(Prior, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000));
-            Merged = Ctx.B.CreateOr(PriorHi, Ext32, "d16_lo_merge");
+      // EXEC-gate the load itself, not just the VGPR write-back: a
+      // WaveNative "phantom" lane (no source-wave workitem at this
+      // position) can hold a stale per-lane offset that, after the
+      // NUM_RECORDS remap in `mubuf-addr.cpp`, lands in-bounds and
+      // dereferences a wild address. Gating a load is always safe -- the
+      // masked-out lane's result is discarded -- unlike the masked store
+      // below, whose per-lane OOB-offset predicate needs full-wave issue.
+      // Same fix and rationale as the GLOBAL_LOAD path in `handle-flat.cpp`.
+      //
+      // Write the destination with `Ctx.Regs.write*` (the low-level
+      // reg-file path) inside the body; `Ctx.writeReg*` would wrap it in a
+      // second, redundant `emitUnderExec` diamond.
+      Ctx.emitUnderExec([&] {
+        if (isSubDword) {
+          // Load the sub-dword datum and zero/sign-extend to i32. For
+          // plain ushort/sbyte/etc. (`d16Half == 0`) we then write the
+          // whole VGPR; for D16 partial-write loads we merge with the
+          // prior dst (see comment block above mubufClassify).
+          Type *MemTy = (loadBits == 8) ? Type::getInt8Ty(Ctx.C)
+                                        : Type::getInt16Ty(Ctx.C);
+          Value *Loaded = nullptr;
+          if (Ctx.TargetIsa.WaveSize > Ctx.Isa.WaveSize) {
+            Loaded = RawPtrBufferLoad(MemTy);
           } else {
-            // _D16_HI: place datum in hi 16, preserve lo 16 of prior.
-            Value *PriorLo =
-                Ctx.B.CreateAnd(Prior, ConstantInt::get(Ctx.I32Ty, 0x0000FFFF));
-            Value *Shifted =
-                Ctx.B.CreateShl(Ext32, ConstantInt::get(Ctx.I32Ty, 16));
-            Merged = Ctx.B.CreateOr(PriorLo, Shifted, "d16_hi_merge");
+            Function *BufLd = Intrinsic::getOrInsertDeclaration(
+                &Ctx.M, Intrinsic::amdgcn_raw_buffer_load, {MemTy});
+            Loaded = Ctx.B.CreateCall(BufLd,
+                {Srd, Voffset, Soffset, AuxFlags}, "buf_ld");
           }
-          Ctx.writeReg32(Vdata, Merged);
-        }
-      } else if (dwords == 1) {
-        Value *Loaded = nullptr;
-        if (Ctx.TargetIsa.WaveSize > Ctx.Isa.WaveSize) {
-          Loaded = RawPtrBufferLoad(Ctx.I32Ty);
+          if (d16Half == 0) {
+            Value *Ext = isBufSigned ? Ctx.B.CreateSExt(Loaded, Ctx.I32Ty)
+                                     : Ctx.B.CreateZExt(Loaded, Ctx.I32Ty);
+            Ctx.Regs.writeReg32(Ctx.B, Vdata, Ext);
+          } else {
+            // Partial-write: extend to i16 (sign for `_SBYTE_D16*`,
+            // zero for `_UBYTE_D16*` / `_SHORT_D16*`), zext to i32 so
+            // the high half of the i32 is exactly zero before merging.
+            Value *Ext16 = Loaded;
+            if (loadBits == 8) {
+              Ext16 = isBufSigned
+                          ? Ctx.B.CreateSExt(Loaded, Type::getInt16Ty(Ctx.C))
+                          : Ctx.B.CreateZExt(Loaded, Type::getInt16Ty(Ctx.C));
+            }
+            Value *Ext32 = Ctx.B.CreateZExt(Ext16, Ctx.I32Ty);
+            Value *Prior = Ctx.Regs.readReg32(Ctx.B, Vdata);
+            Value *Merged;
+            if (d16Half == 1) {
+              // _D16: place datum in lo 16, preserve hi 16 of prior.
+              Value *PriorHi = Ctx.B.CreateAnd(
+                  Prior, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000));
+              Merged = Ctx.B.CreateOr(PriorHi, Ext32, "d16_lo_merge");
+            } else {
+              // _D16_HI: place datum in hi 16, preserve lo 16 of prior.
+              Value *PriorLo = Ctx.B.CreateAnd(
+                  Prior, ConstantInt::get(Ctx.I32Ty, 0x0000FFFF));
+              Value *Shifted =
+                  Ctx.B.CreateShl(Ext32, ConstantInt::get(Ctx.I32Ty, 16));
+              Merged = Ctx.B.CreateOr(PriorLo, Shifted, "d16_hi_merge");
+            }
+            Ctx.Regs.writeReg32(Ctx.B, Vdata, Merged);
+          }
+        } else if (dwords == 1) {
+          Value *Loaded = nullptr;
+          if (Ctx.TargetIsa.WaveSize > Ctx.Isa.WaveSize) {
+            Loaded = RawPtrBufferLoad(Ctx.I32Ty);
+          } else {
+            Function *BufLd = Intrinsic::getOrInsertDeclaration(
+                &Ctx.M,
+                Intrinsic::amdgcn_raw_buffer_load,
+                {Ctx.I32Ty});
+            Loaded = Ctx.B.CreateCall(BufLd,
+                {Srd, Voffset, Soffset, AuxFlags}, "buf_ld");
+          }
+          Ctx.Regs.writeReg32(Ctx.B, Vdata, Loaded);
         } else {
-          Function *BufLd = Intrinsic::getOrInsertDeclaration(
-              &Ctx.M,
-              Intrinsic::amdgcn_raw_buffer_load,
-              {Ctx.I32Ty});
-          Loaded = Ctx.B.CreateCall(BufLd,
-              {Srd, Voffset, Soffset, AuxFlags}, "buf_ld");
+          auto *VecTy = FixedVectorType::get(Ctx.I32Ty, dwords);
+          Value *Loaded = nullptr;
+          if (Ctx.TargetIsa.WaveSize > Ctx.Isa.WaveSize) {
+            Loaded = RawPtrBufferLoad(VecTy);
+          } else {
+            Function *BufLd = Intrinsic::getOrInsertDeclaration(
+                &Ctx.M,
+                Intrinsic::amdgcn_raw_buffer_load,
+                {VecTy});
+            Loaded = Ctx.B.CreateCall(BufLd,
+                {Srd, Voffset, Soffset, AuxFlags}, "buf_ld");
+          }
+          Ctx.Regs.writeRegVec(Ctx.B, Vdata, Loaded);
         }
-        Ctx.writeReg32(Vdata, Loaded);
-      } else {
-        auto *VecTy = FixedVectorType::get(Ctx.I32Ty, dwords);
-        Value *Loaded = nullptr;
-        if (Ctx.TargetIsa.WaveSize > Ctx.Isa.WaveSize) {
-          Loaded = RawPtrBufferLoad(VecTy);
-        } else {
-          Function *BufLd = Intrinsic::getOrInsertDeclaration(
-              &Ctx.M,
-              Intrinsic::amdgcn_raw_buffer_load,
-              {VecTy});
-          Loaded = Ctx.B.CreateCall(BufLd,
-              {Srd, Voffset, Soffset, AuxFlags}, "buf_ld");
-        }
-        Ctx.writeRegVec(Vdata, Loaded);
-      }
+      });
       Hr.Handled = true;
-    return Hr;
+      return Hr;
     }
     if (isStore) {
       // Use the gfx942 buffer-store intrinsic directly, exactly
