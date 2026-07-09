@@ -42,7 +42,7 @@
 #     - Excluded checks: gfx90a Test (intentionally fails to show non-mandatory tests don't block merge)
 #   When mandatory checks pass + approval, the PR merges regardless of other test failures.
 
-name: Auto-merge main-to-amd-compiler-vkallesh-test after Multi-Arch CI
+name: Test Branch Auto-merge (Hard-coded Checks)
 
 on:
   workflow_run:
