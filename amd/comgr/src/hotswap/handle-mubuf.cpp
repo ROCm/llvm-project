@@ -277,22 +277,31 @@ HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
     MubufAddr Mbuf = decodeMubufAddr(Ctx, Di, Op, /*isStore=*/false,
                                       "MUBUF_LDS");
 
-    // Load from buffer into a temp value.
     Type *LdTy = (Dwords == 1)
                      ? Ctx.I32Ty
                      : FixedVectorType::get(Ctx.I32Ty, Dwords);
     Function *BufLd = Intrinsic::getOrInsertDeclaration(
         &Ctx.M, Intrinsic::amdgcn_raw_buffer_load, {LdTy});
-    Value *Loaded = Ctx.B.CreateCall(
-        BufLd, {Mbuf.Srd, Mbuf.Voffset, Mbuf.Soffset, Mbuf.AuxFlags},
-        "lds_buf_ld");
 
-    // Store to LDS at address from M0.
+    // LDS destination address comes from M0, which is wave-uniform; read it
+    // once outside the diamond.
     ParsedReg M0Reg; M0Reg.RegKind = ParsedReg::M0; M0Reg.BaseIdx = 0;
     Value *LdsAddr = Ctx.Regs.readReg32(Ctx.B, M0Reg);
     auto *LdsPtrTy = PointerType::get(Ctx.C, 3);
     Value *LdsPtr = Ctx.B.CreateIntToPtr(LdsAddr, LdsPtrTy);
-    Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Loaded, LdsPtr); });
+
+    // EXEC-gate the buffer load together with its LDS store. As on the
+    // VGPR-dest MUBUF load path, a WaveNative phantom / source-inactive
+    // lane must not issue the load: its per-lane offset can be stale and,
+    // after the NUM_RECORDS remap in `mubuf-addr.cpp`, land in-bounds on
+    // the target and fault. Gating a load is always safe (the value is
+    // discarded on masked-out lanes).
+    Ctx.emitUnderExec([&] {
+      Value *Loaded = Ctx.B.CreateCall(
+          BufLd, {Mbuf.Srd, Mbuf.Voffset, Mbuf.Soffset, Mbuf.AuxFlags},
+          "lds_buf_ld");
+      Ctx.B.CreateStore(Loaded, LdsPtr);
+    });
 
     Hr.Handled = true;
     return Hr;
