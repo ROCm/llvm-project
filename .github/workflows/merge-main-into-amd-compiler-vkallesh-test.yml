@@ -62,7 +62,10 @@ jobs:
     runs-on: ubuntu-latest
     # Do NOT gate on workflow_run.conclusion == 'success': we only require the configured gating
     # checks (enforced in the step below), not the full test matrix.
+    # IMPORTANT: github.ref ensures this workflow only runs when the workflow file itself is
+    # from the amd-compiler-vkallesh-test branch (not from amd-staging or other branches)
     if: >-
+      github.ref == 'refs/heads/amd-compiler-vkallesh-test' &&
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.head_repository.full_name == github.repository &&
       contains(github.event.workflow_run.display_title, 'merge main into amd-compiler-vkallesh-test')
