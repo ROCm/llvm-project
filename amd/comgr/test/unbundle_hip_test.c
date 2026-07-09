@@ -63,7 +63,7 @@ int main(int Argc, char *Argv[]) {
   checkError(Status, "amd_comgr_create_data_set");
 
   // Bitcode
-  Status = amd_comgr_create_data(AMD_COMGR_DATA_KIND_BC_BUNDLE, &DataBitcode);
+  Status = amd_comgr_create_data(AMD_COMGR_DATA_KIND_BUNDLE, &DataBitcode);
   checkError(Status, "amd_comgr_create_data");
   Status = amd_comgr_set_data(DataBitcode, SizeBitcode, BufBitcode);
   checkError(Status, "amd_comgr_set_data");
@@ -73,8 +73,7 @@ int main(int Argc, char *Argv[]) {
   checkError(Status, "amd_comgr_data_set_add");
 
   // ObjectFile
-  Status =
-      amd_comgr_create_data(AMD_COMGR_DATA_KIND_OBJ_BUNDLE, &DataObjectFile);
+  Status = amd_comgr_create_data(AMD_COMGR_DATA_KIND_BUNDLE, &DataObjectFile);
   checkError(Status, "amd_comgr_create_data");
   Status = amd_comgr_set_data(DataObjectFile, SizeObjectFile, BufObjectFile);
   checkError(Status, "amd_comgr_set_data");

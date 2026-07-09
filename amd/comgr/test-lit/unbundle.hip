@@ -11,12 +11,18 @@
 // RUN:    --offload-compress \
 // RUN:    %s -o %t.compressed-bundle.bc
 //
-// Extract using Comgr
-// RUN: unbundle %t.bundle.bc hip-amdgcn-amd-amdhsa-unknown-gfx900 %t.gfx900.bc
-// RUN: %llvm-dis %t.gfx900.bc -o - | %FileCheck --check-prefixes=BOTH,GFX9 %s
+// Extract using Comgr's generic BUNDLE unbundle (kind detected from bytes)
+// RUN: unbundle %t.bundle.bc %t \
+// RUN:    hip-amdgcn-amd-amdhsa-unknown-gfx900 \
+// RUN:    hip-amdgcn-amd-amdhsa-unknown-gfx1030
+// RUN: %llvm-dis %t-hip-amdgcn-amd-amdhsa-unknown-gfx900.bc -o - | %FileCheck --check-prefixes=BOTH,GFX9 %s
+// RUN: %llvm-dis %t-hip-amdgcn-amd-amdhsa-unknown-gfx1030.bc -o - | %FileCheck --check-prefixes=BOTH,GFX10 %s
 //
-// RUN: unbundle %t.compressed-bundle.bc hip-amdgcn-amd-amdhsa-unknown-gfx1030 %t.compressed.gfx1030.bc
-// RUN: %llvm-dis %t.compressed.gfx1030.bc -o - | %FileCheck --check-prefixes=BOTH,GFX10 %s
+// RUN: unbundle %t.compressed-bundle.bc %t.compressed \
+// RUN:    hip-amdgcn-amd-amdhsa-unknown-gfx900 \
+// RUN:    hip-amdgcn-amd-amdhsa-unknown-gfx1030
+// RUN: %llvm-dis %t.compressed-hip-amdgcn-amd-amdhsa-unknown-gfx900.bc -o - | %FileCheck --check-prefixes=BOTH,GFX9 %s
+// RUN: %llvm-dis %t.compressed-hip-amdgcn-amd-amdhsa-unknown-gfx1030.bc -o - | %FileCheck --check-prefixes=BOTH,GFX10 %s
 //
 // BOTH: target triple = "amdgcn-amd-amdhsa"
 // GFX9: "target-cpu"="gfx900"
