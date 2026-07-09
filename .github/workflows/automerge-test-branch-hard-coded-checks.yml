@@ -1,10 +1,11 @@
-# Runs after rockci_multi_arch_amd_compiler_vkallesh_test.yml ("Multi-Arch CI amd-compiler-vkallesh-test") completes, then
+# Runs after rockci_multi_arch_amd_compiler_vkallesh_test.yml ("Test Branch CI (vkallesh)") completes, then
 # merges "merge main into amd-compiler-vkallesh-test" sync PRs as a merge commit, once this job has confirmed
 # the mandatory gating checks passed AND the PR has at least one approving review.
 #
-# NOTE: This workflow file is UNIQUELY NAMED (automerge-test-branch-hard-coded-checks.yml) to prevent
-# GitHub from running the similarly-named workflow from amd-staging. The unique filename ensures only
-# this version (with hard-coded gating checks) runs for the test branch.
+# CRITICAL: The upstream workflow has a UNIQUE NAME "Test Branch CI (vkallesh)" that only exists on
+# amd-compiler-vkallesh-test branch. This ensures GitHub's workflow_run trigger (which always runs from
+# the default branch) will ONLY find and execute this automerge workflow when the uniquely-named CI completes.
+# The workflow on amd-staging listens for "Multi-Arch CI amd-compiler-vkallesh-test" so it won't be triggered.
 #
 # DEMONSTRATION PURPOSE:
 # This workflow demonstrates the merge behavior where:
@@ -18,7 +19,7 @@
 # passed (other test failures are ignored for the merge decision).
 #
 # Upstream workflow name must match exactly (see `name:` in that file):
-#   .github/workflows/rockci_multi_arch_amd_compiler_vkallesh_test.yml → "Multi-Arch CI amd-compiler-vkallesh-test"
+#   .github/workflows/rockci_multi_arch_amd_compiler_vkallesh_test.yml → "Test Branch CI (vkallesh)"
 #
 # IMPORTANT — why we do a direct merge here (NOT native `gh pr merge --auto`):
 # The branch ruleset `block-merge-commit-on-amd-*-branches` enforces required_linear_history on
@@ -46,7 +47,7 @@ name: Test Branch Auto-merge (Hard-coded Checks)
 
 on:
   workflow_run:
-    workflows: ["Multi-Arch CI amd-compiler-vkallesh-test"]
+    workflows: ["Test Branch CI (vkallesh)"]
     types: [completed]
     branches:
       - amd-compiler-vkallesh-test

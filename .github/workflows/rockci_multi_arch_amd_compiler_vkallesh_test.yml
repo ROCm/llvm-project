@@ -8,7 +8,7 @@
 # All other tests are optional and can fail without blocking merge
 # Merge criteria: 2 mandatory tests pass + 1 approval = auto-merge
 
-name: Multi-Arch CI amd-compiler-vkallesh-test
+name: Test Branch CI (vkallesh)
 
 on:
   push:
