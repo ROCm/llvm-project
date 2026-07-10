@@ -182,7 +182,8 @@
 #else
 #define RT_NOINLINE_ATTR
 #endif
-#if (defined(__CUDACC__) || defined(__CUDA__)) && defined(__CUDA_ARCH__)
+#if ((defined(__CUDACC__) || defined(__CUDA__)) && defined(__CUDA_ARCH__)) || \
+    defined(__AMDGCN__)
 #define RT_DEVICE_NOINLINE RT_NOINLINE_ATTR
 #define RT_DEVICE_NOINLINE_HOST_INLINE
 #else

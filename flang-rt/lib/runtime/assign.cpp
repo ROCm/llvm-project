@@ -852,8 +852,8 @@ void RTDEF(AssignExplicitLengthCharacter)(Descriptor &to,
           ExplicitLengthCharacterLHS);
 }
 
-void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
-    const char *sourceFile, int sourceLine) {
+RT_DEVICE_NOINLINE void RTDEF(AssignSimple)(Descriptor &to,
+    const Descriptor &from, const char *sourceFile, int sourceLine) {
   Terminator terminator{sourceFile, sourceLine};
   // AssignSimple: fast path for intrinsic type assignments (integer, real,
   // complex, logical). The compiler routes here only when:
