@@ -552,7 +552,7 @@ jobs:
   test_rocm_examples:
     name: Test rocm-examples
     needs: build
-    runs-on: [self-hosted, linux, gfx942]
+    runs-on: linux-gfx942-1gpu-ccs-csp-ossci-rocm-zxjvm-runner-g559z
     timeout-minutes: 45
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
