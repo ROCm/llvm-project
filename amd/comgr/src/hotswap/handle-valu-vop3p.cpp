@@ -233,6 +233,69 @@ Expected<Value *> readWMMAAccumC(RaiseContext &Ctx, const DecodedInst &Di,
 
 } // namespace
 
+Value *raiseCndmaskWaveCondition(RaiseContext &Ctx, const DecodedInst &Di,
+                                 OpResolver &Op) {
+  Value *Cond = nullptr;
+  if (Op.nSrcs() >= 3 && Di.isReg(Op.srcIdx(2))) {
+    ParsedReg CondReg = Ctx.parseReg(Di.getReg(Op.srcIdx(2)), Op.srcIdx(2));
+    if (CondReg.RegKind == ParsedReg::SGPR) {
+      // Preferred path: a V_CMP_*_e64 in the current BB wrote this
+      // SGPR and no intervening scalar write has invalidated the
+      // cached per-lane `i1`. Use the `i1` directly -- it carries
+      // the full target-hardware ballot without the cross-widening
+      // narrow-write information loss (the SGPR itself holds only
+      // the source-width-truncated 32-bit projection). See
+      // hotswap/docs/sgpr-wave-mask-translation.md section 3.1 for
+      // the full contract and
+      // `RaiseContext::lastSgprWaveMaskI1` for the invariants that
+      // make this lookup sound.
+      if (Value *FreshCmp = Ctx.lookupSgprWaveMaskI1(CondReg.BaseIdx)) {
+        Cond = FreshCmp;
+      } else {
+        // Fallback: no fresh V_CMP writer in this BB (or the cache
+        // was invalidated by a scalar SGPR write, or we crossed a
+        // BB boundary). Route through the projection's per-lane
+        // extractor, mirroring `readVCCAsWaveMask`'s consumer
+        // symmetry. This path is correct for same-wave and
+        // modulo-replication same-width cases, and lossy only in
+        // the documented wave32 -> wave64 cross-widening narrow-
+        // write case (where recovering the upper-half lanes'
+        // compare results is impossible from the 32-bit SGPR --
+        // those bits were destroyed at the writer's truncate).
+        Value *CondVal = Ctx.Isa.isWave32()
+                             ? Ctx.Regs.loadSGPR32(Ctx.B, CondReg.BaseIdx)
+                             : Ctx.Regs.loadSGPR64(Ctx.B, CondReg.BaseIdx);
+        Value *Fallback =
+            Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, CondVal);
+        // Cross-BB path: prefer the memory-backed shadow if valid.
+        // This avoids carrying non-dominating `i1` SSA values across
+        // blocks while still preserving the full EXEC-width compare mask.
+        if (Value *ShadowValid = Ctx.loadSgprWaveMaskValid(CondReg.BaseIdx)) {
+          Value *ShadowExec = Ctx.loadSgprWaveMaskExec(CondReg.BaseIdx);
+          Value *ShadowI1 =
+              Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, ShadowExec);
+          Cond = Ctx.B.CreateSelect(ShadowValid, ShadowI1, Fallback,
+                                    "sgpr_mask_shadow_sel");
+        } else {
+          Cond = Fallback;
+        }
+      }
+    } else if (CondReg.RegKind == ParsedReg::VCC_HI_SCRATCH ||
+               CondReg.RegKind == ParsedReg::EXEC_HI_SCRATCH) {
+      // Wave32-source vcc_hi / exec_hi are free general-purpose scalars
+      // (see ParsedReg::VCC_HI_SCRATCH). Read the scratch slot and project
+      // per-lane, not loadVCC (which would read the real VCC).
+      Value *CondVal = Ctx.Regs.readReg32(Ctx.B, CondReg);
+      Cond = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, CondVal);
+    } else {
+      Cond = Ctx.Regs.loadVCC(Ctx.B);
+    }
+  }
+  if (!Cond)
+    Cond = Ctx.Regs.loadVCC(Ctx.B);
+  return Cond;
+}
+
 Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
                                         const DecodedInst &Di, OpResolver &Op) {
   HandlerResult Hr;
@@ -1433,64 +1496,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       Src0 = Ctx.B.CreateBitCast(Src0, Ctx.I32Ty);
     if (Src1->getType() == Ctx.F32Ty)
       Src1 = Ctx.B.CreateBitCast(Src1, Ctx.I32Ty);
-    Value *Cond = nullptr;
-    if (Op.nSrcs() >= 3 && Di.isReg(Op.srcIdx(2))) {
-      ParsedReg CondReg =
-          Ctx.parseReg(Di.getReg(Op.srcIdx(2)), Op.srcIdx(2));
-      if (CondReg.RegKind == ParsedReg::SGPR) {
-        // Preferred path: a V_CMP_*_e64 in the current BB wrote this
-        // SGPR and no intervening scalar write has invalidated the
-        // cached per-lane `i1`. Use the `i1` directly -- it carries
-        // the full target-hardware ballot without the cross-widening
-        // narrow-write information loss (the SGPR itself holds only
-        // the source-width-truncated 32-bit projection). See
-        // hotswap/docs/sgpr-wave-mask-translation.md section 3.1 for
-        // the full contract and
-        // `RaiseContext::lastSgprWaveMaskI1` for the invariants that
-        // make this lookup sound.
-        if (Value *FreshCmp = Ctx.lookupSgprWaveMaskI1(CondReg.BaseIdx)) {
-          Cond = FreshCmp;
-        } else {
-          // Fallback: no fresh V_CMP writer in this BB (or the cache
-          // was invalidated by a scalar SGPR write, or we crossed a
-          // BB boundary). Route through the projection's per-lane
-          // extractor, mirroring `readVCCAsWaveMask`'s consumer
-          // symmetry. This path is correct for same-wave and
-          // modulo-replication same-width cases, and lossy only in
-          // the documented wave32 -> wave64 cross-widening narrow-
-          // write case (where recovering the upper-half lanes'
-          // compare results is impossible from the 32-bit SGPR --
-          // those bits were destroyed at the writer's truncate).
-          Value *CondVal = Ctx.Isa.isWave32()
-                               ? Ctx.Regs.loadSGPR32(Ctx.B, CondReg.BaseIdx)
-                               : Ctx.Regs.loadSGPR64(Ctx.B, CondReg.BaseIdx);
-          Value *Fallback =
-              Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, CondVal);
-          // Cross-BB path: prefer the memory-backed shadow if valid.
-          // This avoids carrying non-dominating `i1` SSA values across
-          // blocks while still preserving the full EXEC-width compare mask.
-          if (Value *ShadowValid = Ctx.loadSgprWaveMaskValid(CondReg.BaseIdx)) {
-            Value *ShadowExec = Ctx.loadSgprWaveMaskExec(CondReg.BaseIdx);
-            Value *ShadowI1 =
-                Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, ShadowExec);
-            Cond = Ctx.B.CreateSelect(ShadowValid, ShadowI1, Fallback,
-                                      "sgpr_mask_shadow_sel");
-          } else {
-            Cond = Fallback;
-          }
-        }
-      } else if (CondReg.RegKind == ParsedReg::VCC_HI_SCRATCH ||
-                 CondReg.RegKind == ParsedReg::EXEC_HI_SCRATCH) {
-        // Wave32-source vcc_hi / exec_hi are free general-purpose scalars
-        // (see ParsedReg::VCC_HI_SCRATCH). Read the scratch slot and project
-        // per-lane, not loadVCC (which would read the real VCC).
-        Value *CondVal = Ctx.Regs.readReg32(Ctx.B, CondReg);
-        Cond = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, CondVal);
-      } else {
-        Cond = Ctx.Regs.loadVCC(Ctx.B);
-      }
-    }
-    if (!Cond) Cond = Ctx.Regs.loadVCC(Ctx.B);
+    Value *Cond = raiseCndmaskWaveCondition(Ctx, Di, Op);
     Ctx.writeReg32(Dest, Ctx.B.CreateSelect(Cond, Src1, Src0, "cndmask"));
     Hr.Handled = true;
     return Hr;

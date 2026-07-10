@@ -462,6 +462,10 @@ enum class CanonicalOp : uint16_t {
   V_AND_B32, V_OR_B32, V_XOR_B32, V_XNOR_B32,
   V_LSHLREV_B32, V_LSHRREV_B32, V_ASHRREV_I32,
   V_CNDMASK_B32,
+  // gfx11+ true16 16-bit conditional select (VOP3-only). op_sel selects the
+  // src0/src1/dst halves; the wave-mask condition is read exactly as for
+  // V_CNDMASK_B32 via raiseCndmaskWaveCondition().
+  V_CNDMASK_B16,
   V_MUL_LO_U32, V_MUL_HI_U32, V_MUL_HI_I32,
   V_MUL_I32_I24, V_MUL_U32_U24, V_MUL_HI_U32_U24, V_MUL_HI_I32_I24,
   V_MAD_I32_I24, V_MAD_U32_U24, V_MAD_U32,

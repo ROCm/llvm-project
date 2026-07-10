@@ -55,6 +55,13 @@ handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op);
 llvm::Expected<HandlerResult>
 handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op);
 
+// Read the per-lane wave-mask condition operand (src2) shared by the
+// V_CNDMASK_B32 (VOP3P handler) and V_CNDMASK_B16 (true16 handler) lifts.
+// Handles the SGPR fresh-compare / shadow fallback, wave32 vcc_hi/exec_hi
+// scratch, and default-VCC routing; always returns a non-null per-lane `i1`.
+llvm::Value *raiseCndmaskWaveCondition(RaiseContext &Ctx, const DecodedInst &Di,
+                                       OpResolver &Op);
+
 // Emit unsigned i16 multiply-add for either `i16` or `<N x i16>` operands.
 // `A`, `B`, and `C` must have the same type; `WideTy` and `ClampMax` must be
 // the matching scalar/vector i32 shape used for the exact widened sum.

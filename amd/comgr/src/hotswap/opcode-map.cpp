@@ -529,6 +529,12 @@ static const Entry kCanonTable[] = {
     E(V_LSHRREV_B32_e64, V_LSHRREV_B32),
     E(V_ASHRREV_I32_e64, V_ASHRREV_I32),
     E(V_CNDMASK_B32_e64, V_CNDMASK_B32),
+    // V_CNDMASK_B16 is gfx11+ true16 / fake16 and is VOP3-only, so -- unlike
+    // V_MOV_B16 -- LLVM has NO bare `V_CNDMASK_B16_e64` pseudo for the
+    // `_t16_`/`_fake16_` alias-strip pass to collapse onto. Map both encoding
+    // pseudos directly to the shared 16-bit cndmask handler.
+    E(V_CNDMASK_B16_t16_e64, V_CNDMASK_B16),
+    E(V_CNDMASK_B16_fake16_e64, V_CNDMASK_B16),
     E(V_MUL_LO_U32_e64, V_MUL_LO_U32),
     E(V_MUL_HI_U32_e64, V_MUL_HI_U32),
     E(V_MUL_HI_I32_e64, V_MUL_HI_I32),
