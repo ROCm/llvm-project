@@ -24,7 +24,17 @@
 // API: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// RUN: %llvm-objdump -s -j .rodata %t.out.elf | %FileCheck --check-prefix=RODATA %s
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=METADATA %s
+
+// COM: Entry trampolines are independent of the B0-to-A0 patch policy, so an
+// COM: explicit B0->A0 rewrite should still redirect the descriptor to a stub.
+// RUN: hotswap-rewrite %t.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
+// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
+// RUN:   --entry-trampolines --output %t.b0a0.elf \
+// RUN:   | %FileCheck --check-prefix=API %s
+// RUN: %llvm-objdump -d %t.b0a0.elf | %FileCheck --check-prefix=DISASM %s
 
 // DISASM-LABEL: <entry_tramp_kernel>:
 // DISASM: s_endpgm
@@ -38,6 +48,9 @@
 // DISASM-NEXT: s_add_co_u32 s8
 // DISASM-NEXT: s_add_co_ci_u32 s9
 // DISASM-NEXT: s_set_pc_i64 s[8:9]
+
+// RODATA: Contents of section .rodata
+// RODATA: {{[0-9a-f]+}} {{[0-9a-f]+}} {{[0-9a-f]+}} {{[0-9a-f]+}} 20000000
 
 // METADATA: .name:           entry_tramp_kernel
 // METADATA: .sgpr_count:     10

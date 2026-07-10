@@ -84,6 +84,15 @@ inline std::optional<uint64_t> checkedAddUint64(uint64_t LHS, uint64_t RHS,
   return std::nullopt;
 }
 
+inline std::optional<uint64_t> checkedSubUint64(uint64_t LHS, uint64_t RHS,
+                                                llvm::StringRef Context) {
+  if (LHS < RHS) {
+    log() << "hotswap: error: " << Context << " underflows uint64_t.\n";
+    return std::nullopt;
+  }
+  return LHS - RHS;
+}
+
 // -- Trampoline and NOP sled --------------------------------------------------
 
 struct Trampoline {
@@ -100,6 +109,10 @@ struct Trampoline {
 // the same 256-byte alignment expected by AMDGPU kernel descriptors.
 static constexpr uint64_t KernelEntryStubStride = 256;
 static constexpr uint64_t KernelEntryInstPrefUnitBytes = 128;
+static_assert(KernelEntryStubStride % KernelEntryInstPrefUnitBytes == 0,
+              "entry-stub stride must be an integral prefetch span");
+static constexpr uint32_t KernelEntryStubInstPrefLines =
+    KernelEntryStubStride / KernelEntryInstPrefUnitBytes;
 
 struct KernelDescriptorInfo {
   std::string KernelName;
@@ -111,6 +124,8 @@ struct NopSled {
   uint64_t Start = 0;
   uint64_t End = 0;
   uint64_t WritePos = 0;
+  uint64_t FunctionStart = 0;
+  uint64_t FunctionEnd = 0;
 };
 
 // -- Rewrite rule -------------------------------------------------------------
@@ -130,7 +145,7 @@ static constexpr uint64_t KdSize = sizeof(llvm::amdhsa::kernel_descriptor_t);
 
 // Maximum distance (bytes) between an instruction and a NOP sled for the
 // sled to be considered reachable by a single s_branch.
-static constexpr int64_t MaxSledDistance = 131072;
+static constexpr uint64_t MaxSledDistance = 131072;
 
 // Minimum size (bytes) of a consecutive NOP run to be usable as a sled.
 static constexpr uint64_t MinNopSledSize = 8;
@@ -175,6 +190,13 @@ public:
   using ELFT = llvm::object::ELF64LE;
   using ELFFileT = llvm::object::ELFFile<ELFT>;
 
+  struct FunctionTextRange {
+    uint64_t Begin = 0;
+    uint64_t End = 0;
+    const ELFT::Sym *Symbol = nullptr;
+    const ELFT::Shdr *Symtab = nullptr;
+  };
+
   /// Parse \p Data / \p Size into an ElfView. Fails if the bytes are not a
   /// valid ELF64 or if no `.text` section is found.
   static llvm::Expected<ElfView> create(uint8_t *Data, size_t Size);
@@ -215,9 +237,24 @@ public:
   uint8_t *textData() { return data() + textOffset(); }
   const uint8_t *textData() const { return data() + textOffset(); }
 
-  /// Find the kernel function symbol whose range includes \p TextOffset.
+  /// Enumerate function symbol ranges in `.text` using virtual addresses.
+  /// Zero-size symbols extend to the next function symbol or `.text` end.
+  std::vector<FunctionTextRange> functionTextRanges() const;
+
+  /// Find the kernel function symbol whose range includes \p TextAddress.
   /// Returns "" if no matching function symbol exists.
-  std::string findKernelAtOffset(uint64_t TextOffset) const;
+  std::string findKernelAtAddress(uint64_t TextAddress) const;
+
+  /// Find the section-relative `.text` range of the function containing
+  /// \p TextOffset, or std::nullopt if no sized function symbol covers it.
+  std::optional<FunctionTextRange>
+  findFunctionTextRangeAtOffset(uint64_t TextOffset) const;
+
+  /// Return a pointer to \p Len bytes at virtual address \p VAddr, resolved
+  /// through the allocatable section that contains it (any section, not just
+  /// `.text` -- e.g. the appended trampoline pool). Returns nullptr if no
+  /// section covers the range or it falls outside the buffer.
+  const uint8_t *dataAtVAddr(uint64_t VAddr, uint64_t Len) const;
 
   /// Pointer to the kernel_descriptor for \p KernelName inside the buffer,
   /// or nullptr if not found.
@@ -244,6 +281,11 @@ public:
   std::optional<uint32_t>
   getKernelDescriptorInstPrefSize(llvm::StringRef KernelName,
                                   llvm::StringRef TargetCpu) const;
+
+  /// Rewrite COMPUTE_PGM_RSRC3.INST_PREF_SIZE for \p KernelName.
+  bool updateKernelDescriptorInstPrefSize(llvm::StringRef KernelName,
+                                          llvm::StringRef TargetCpu,
+                                          uint32_t InstPrefLines);
 
   /// Read the VGPR count from the kernel descriptor for \p KernelName.
   /// Returns std::nullopt if the descriptor is not found.
@@ -283,13 +325,22 @@ public:
   void updateKernelDescriptor(llvm::StringRef KernelName, unsigned ExtraVgprs,
                               unsigned VgprGranuleSize);
 
-  /// Grow the ELF by inserting trampoline bytes after `.text` and adjusting
-  /// all section and program headers. Returns a null unique_ptr on failure.
+  /// Virtual address at which growWithTrampolines appends the trampoline pool:
+  /// the first page-aligned address above every existing allocatable section.
+  /// Callers that pre-compute branch/stub targets (B0-to-A0 trampolines,
+  /// kernel-entry stubs) must resolve pool positions against this value so the
+  /// baked branches land on the pool's final location. Single source of truth
+  /// shared with growWithTrampolines. std::nullopt on sh_addr+sh_size overflow.
+  std::optional<uint64_t> trampolinePoolVAddr() const;
+
+  /// Grow the ELF by appending the trampoline pool at a fresh virtual address
+  /// (trampolinePoolVAddr()) in a new PT_LOAD segment, leaving every existing
+  /// section, symbol, and segment in place. Returns a null unique_ptr on
+  /// failure.
   ///
-  /// SHF_ALLOC sections after `.text` (e.g. `.dynamic` in clang/lld-produced
-  /// HSACOs) are handled: their file offsets, virtual addresses (sh_addr,
-  /// p_vaddr, p_paddr), and segment sizes are shifted by the total
-  /// trampoline size to keep the ELF layout consistent.
+  /// Appending (rather than growing `.text` and shifting everything after it)
+  /// preserves the absolute/PC-relative addresses baked into a fully-linked
+  /// AMDGPU code object, which carries no relocations to fix up.
   std::unique_ptr<llvm::WritableMemoryBuffer>
   growWithTrampolines(llvm::ArrayRef<Trampoline> Trampolines,
                       llvm::ArrayRef<uint8_t> SNopBytes) const;
@@ -621,6 +672,11 @@ struct PatchContext {
   std::vector<InternalDecodedInst> &Decoded;
   uint8_t *Text = nullptr;
   uint64_t TextSize = 0;
+  // .text-relative offset at which the appended trampoline pool begins
+  // (trampolinePoolVAddr() - textAddr()). Trampoline branch offsets are
+  // computed against this, not TextSize, since the pool no longer sits
+  // immediately after .text.
+  uint64_t PoolBaseOffset = 0;
   const LLVMState &LS;
   std::vector<Trampoline> &OutTrampolines;
   std::vector<NopSled> &NopSleds;
@@ -718,6 +774,7 @@ struct KernelEntryTrampolineFixup {
   std::string KernelName;
   uint64_t StubTextOffset = 0;
   unsigned RequiredSgprs = 0;
+  uint32_t InstPrefLines = 0;
 };
 
 /// Build a 256-byte, entry-aligned HotSwap kernel-entry stub at
@@ -753,10 +810,11 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     std::vector<Trampoline> &Growth,
     std::vector<KernelEntryTrampolineFixup> &OutFixups);
 
-/// Apply descriptor entry-offset rewrites recorded by
-/// appendKernelEntryTrampolines after the ELF has been grown.
+/// Apply descriptor rewrites recorded by appendKernelEntryTrampolines after
+/// the ELF has been grown.
 bool rewriteKernelEntryDescriptorOffsets(
-    llvm::WritableMemoryBuffer &OutBuf, uint64_t OldTextSize,
+    llvm::WritableMemoryBuffer &OutBuf, uint64_t PoolVAddr,
+    llvm::StringRef TargetCpu,
     llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------

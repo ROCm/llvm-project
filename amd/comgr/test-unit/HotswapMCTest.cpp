@@ -24,7 +24,9 @@
 #include "gtest/gtest.h"
 
 #include <cstring>
+#include <limits>
 #include <mutex>
+#include <vector>
 
 using namespace COMGR;
 using namespace COMGR::hotswap;
@@ -151,6 +153,30 @@ TEST(EncodeSBranch, OutOfRangeFails) {
   EXPECT_TRUE(S.encodeSBranch(0, 500000).empty());
 }
 
+TEST(EncodeSBranch, PositiveBoundaryRoundTrip) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  constexpr uint64_t To =
+      static_cast<uint64_t>(BranchOffsetMax + 1) * MinInstSize;
+  llvm::SmallVector<uint8_t> Out = S.encodeSBranch(0, To);
+  ASSERT_EQ(Out.size(), MinInstSize);
+  uint32_t Encoded = readDword(Out.data());
+  EXPECT_EQ(static_cast<int16_t>(Encoded & 0xFFFFu), BranchOffsetMax);
+  EXPECT_TRUE(S.encodeSBranch(0, To + MinInstSize).empty());
+}
+
+TEST(EncodeSBranch, NegativeBoundaryRoundTrip) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  constexpr uint64_t From =
+      static_cast<uint64_t>(-(BranchOffsetMin + 1)) * MinInstSize;
+  llvm::SmallVector<uint8_t> Out = S.encodeSBranch(From, 0);
+  ASSERT_EQ(Out.size(), MinInstSize);
+  uint32_t Encoded = readDword(Out.data());
+  EXPECT_EQ(static_cast<int16_t>(Encoded & 0xFFFFu), BranchOffsetMin);
+  EXPECT_TRUE(S.encodeSBranch(From + MinInstSize, 0).empty());
+}
+
 TEST(EncodeSBranch, FailsOnInvalidState) {
   LLVMState S; // default-constructed, Valid = false
   EXPECT_TRUE(S.encodeSBranch(0, 8).empty());
@@ -216,6 +242,27 @@ TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
   EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
 }
 
+TEST(FindNearestSled, RejectsOverflowingHeadroom) {
+  std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64},
+                                {100, 128, 100, 100, 128}};
+  EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max()),
+            nullptr);
+}
+
+TEST(FindNearestSled, HandlesLargeUnsignedOffsets) {
+  std::vector<NopSled> Sleds = {{100, 128, 100, 100, 128},
+                                {std::numeric_limits<uint64_t>::max() - 32,
+                                 std::numeric_limits<uint64_t>::max(),
+                                 std::numeric_limits<uint64_t>::max() - 32,
+                                 std::numeric_limits<uint64_t>::max() - 64,
+                                 std::numeric_limits<uint64_t>::max()}};
+  NopSled *Sled =
+      findNearestSled(Sleds, std::numeric_limits<uint64_t>::max() - 40,
+                      /*Needed=*/8);
+  ASSERT_NE(Sled, nullptr);
+  EXPECT_EQ(Sled, &Sleds[1]);
+}
+
 // -- assembleSingleInst / decodeTextSection round-trip ------------------------
 
 TEST(AssembleDecode, SNopRoundTrip) {
@@ -233,6 +280,90 @@ TEST(AssembleDecode, SNopRoundTrip) {
   ASSERT_EQ(Decoded.size(), 1u);
   EXPECT_EQ(Decoded[0].Size, MinInstSize);
   EXPECT_EQ(Decoded[0].Mnemonic, "s_nop");
+}
+
+TEST(AssembleDecode, CvtPkFp8LiteralSourcesDecodeAsTwelveBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(
+      "v_cvt_pk_fp8_f32 v4, 0x477f0000, 0x477f0000 clamp", S);
+  ASSERT_EQ(Bytes.size(), 3u * MinInstSize);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  const InternalDecodedInst &DI = Decoded[0];
+  EXPECT_EQ(DI.Size, 3u * MinInstSize);
+  EXPECT_EQ(DI.Mnemonic, "v_cvt_pk_fp8_f32");
+
+  const llvm::MCInst &Inst = DI.Inst;
+  ASSERT_GE(Inst.getNumOperands(), 7u);
+  EXPECT_TRUE(Inst.getOperand(0).isReg());
+  ASSERT_TRUE(Inst.getOperand(2).isImm());
+  EXPECT_EQ(Inst.getOperand(2).getImm(), 0x477f0000);
+  ASSERT_TRUE(Inst.getOperand(4).isImm());
+  EXPECT_EQ(Inst.getOperand(4).getImm(), 0x477f0000);
+  ASSERT_TRUE(Inst.getOperand(5).isImm());
+  EXPECT_EQ(Inst.getOperand(5).getImm(), 1);
+}
+
+TEST(AssembleDecode, CvtPkFp8MixedLiteralSourcesDecodeAsTwelveBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Src0LiteralBytes =
+      assembleSingleInst("v_cvt_pk_fp8_f32 v4, 0x477f0000, v5 clamp", S);
+  ASSERT_EQ(Src0LiteralBytes.size(), 3u * MinInstSize);
+
+  std::vector<InternalDecodedInst> Src0LiteralDecoded;
+  ASSERT_TRUE(decodeTextSection(
+      Src0LiteralBytes.data(), Src0LiteralBytes.size(), S, Src0LiteralDecoded));
+  ASSERT_EQ(Src0LiteralDecoded.size(), 1u);
+  const llvm::MCInst &Src0LiteralInst = Src0LiteralDecoded[0].Inst;
+  ASSERT_GE(Src0LiteralInst.getNumOperands(), 7u);
+  ASSERT_TRUE(Src0LiteralInst.getOperand(2).isImm());
+  EXPECT_EQ(Src0LiteralInst.getOperand(2).getImm(), 0x477f0000);
+  EXPECT_TRUE(Src0LiteralInst.getOperand(4).isReg());
+
+  llvm::SmallVector<uint8_t> Src1LiteralBytes = assembleSingleInst(
+      "v_cvt_pk_fp8_f32 v4, v5, 0.3333333432674408 clamp", S);
+  ASSERT_EQ(Src1LiteralBytes.size(), 3u * MinInstSize);
+
+  std::vector<InternalDecodedInst> Src1LiteralDecoded;
+  ASSERT_TRUE(decodeTextSection(
+      Src1LiteralBytes.data(), Src1LiteralBytes.size(), S, Src1LiteralDecoded));
+  ASSERT_EQ(Src1LiteralDecoded.size(), 1u);
+  const llvm::MCInst &Src1LiteralInst = Src1LiteralDecoded[0].Inst;
+  ASSERT_GE(Src1LiteralInst.getNumOperands(), 7u);
+  EXPECT_TRUE(Src1LiteralInst.getOperand(2).isReg());
+  ASSERT_TRUE(Src1LiteralInst.getOperand(4).isImm());
+  EXPECT_EQ(Src1LiteralInst.getOperand(4).getImm(), 0x3eaaaaab);
+}
+
+TEST(AssembleDecode, CvtPkFp8InlineConstantsDecodeAsEightBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("v_cvt_pk_fp8_f32 v4, 1.0, 0.5 clamp", S);
+  ASSERT_EQ(Bytes.size(), 2u * MinInstSize);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  const InternalDecodedInst &DI = Decoded[0];
+  EXPECT_EQ(DI.Size, 2u * MinInstSize);
+  EXPECT_EQ(DI.Mnemonic, "v_cvt_pk_fp8_f32");
+
+  const llvm::MCInst &Inst = DI.Inst;
+  ASSERT_GE(Inst.getNumOperands(), 7u);
+  ASSERT_TRUE(Inst.getOperand(2).isImm());
+  EXPECT_EQ(Inst.getOperand(2).getImm(), 0x3f800000);
+  ASSERT_TRUE(Inst.getOperand(4).isImm());
+  EXPECT_EQ(Inst.getOperand(4).getImm(), 0x3f000000);
+  ASSERT_TRUE(Inst.getOperand(5).isImm());
+  EXPECT_EQ(Inst.getOperand(5).getImm(), 1);
 }
 
 TEST(AssembleDecode, RejectsGarbageAsm) {
@@ -328,15 +459,13 @@ static void expectSameOperands(const llvm::MCInst &Actual,
 }
 
 static void expectInstMatchesAsm(const llvm::MCInst &Actual,
-                                 llvm::StringRef Asm,
-                                 const LLVMState &S) {
+                                 llvm::StringRef Asm, const LLVMState &S) {
   llvm::MCInst Expected = assembleOne(Asm, S);
   expectSameOperands(Actual, Expected, Asm);
 }
 
 static bool appendSingleInstBytes(llvm::SmallVectorImpl<uint8_t> &Bytes,
-                                  llvm::StringRef Asm,
-                                  const LLVMState &S) {
+                                  llvm::StringRef Asm, const LLVMState &S) {
   llvm::SmallVector<uint8_t> Inst = assembleSingleInst(Asm, S);
   if (Inst.empty()) {
     ADD_FAILURE() << "failed to assemble: " << Asm.str();
@@ -563,7 +692,7 @@ TEST(BuildKernelEntryTrampoline, MatcherRejectsWrongOperandShape) {
   EXPECT_FALSE(isKernelEntryTrampoline(Bytes, S));
 }
 
-TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
+TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   namespace hsa = llvm::amdhsa;
 
   LLVMState S = initLLVM(makeGfx1250Ident());
@@ -575,6 +704,8 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
   uint32_t Rsrc3 = 0;
   AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE, 7);
   Rsrc3 |= hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_GLG_EN;
+  AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX125_NAMED_BAR_CNT, 3);
+  AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX125_TCP_SPLIT, 5);
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.ComputePgmRsrc3 = Rsrc3;
   comgr_test::KernelDescriptorElf Obj =
@@ -593,19 +724,22 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
   ASSERT_TRUE(Count.has_value());
   EXPECT_EQ(*Count, 1u);
   ASSERT_EQ(Fixups.size(), 1u);
+  EXPECT_EQ(Fixups[0].InstPrefLines, KernelEntryStubInstPrefLines);
 
-  const uint64_t ExpectedGuard = computeKernelEntryPrefetchGuardBytes(7);
-  EXPECT_EQ(ExpectedGuard,
-            7u * KernelEntryInstPrefUnitBytes - KernelEntryStubStride);
+  const uint64_t ExpectedGuard =
+      computeKernelEntryPrefetchGuardBytes(KernelEntryStubInstPrefLines);
+  EXPECT_EQ(ExpectedGuard, 0u);
   ASSERT_FALSE(Growth.empty());
-  EXPECT_EQ(Growth.back().Bytes.size(), ExpectedGuard);
 
-  const uint64_t OldTextSize = ViewOrErr->textSize();
-  const uint64_t TextEndVAddr = ViewOrErr->textAddr() + OldTextSize;
+  // Stubs live in the appended pool at trampolinePoolVAddr(); the first stub's
+  // offset is the padding needed to reach a KernelEntryStubStride boundary from
+  // the pool base.
+  std::optional<uint64_t> PoolVAddrOr = ViewOrErr->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddrOr.has_value());
+  const uint64_t PoolVAddr = *PoolVAddrOr;
   const uint64_t ExpectedStubOffset =
-      ((TextEndVAddr + KernelEntryStubStride - 1) &
-       ~(KernelEntryStubStride - 1)) -
-      TextEndVAddr;
+      ((PoolVAddr + KernelEntryStubStride - 1) & ~(KernelEntryStubStride - 1)) -
+      PoolVAddr;
   EXPECT_EQ(Fixups[0].StubTextOffset, ExpectedStubOffset);
 
   uint64_t GrowthTotal = 0;
@@ -618,7 +752,8 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
       ViewOrErr->growWithTrampolines(Growth, S.SNopBytes);
   ASSERT_NE(Out, nullptr);
 
-  ASSERT_TRUE(rewriteKernelEntryDescriptorOffsets(*Out, OldTextSize, Fixups));
+  ASSERT_TRUE(
+      rewriteKernelEntryDescriptorOffsets(*Out, PoolVAddr, S.Cpu, Fixups));
 
   uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
   llvm::Expected<ElfView> OutView =
@@ -631,9 +766,14 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
   std::memcpy(&OutRsrc3,
               OutKd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc3),
               sizeof(OutRsrc3));
+  uint32_t ExpectedRsrc3 = Rsrc3;
+  AMDHSA_BITS_SET(ExpectedRsrc3,
+                  hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE,
+                  KernelEntryStubInstPrefLines);
+  EXPECT_EQ(OutRsrc3, ExpectedRsrc3);
   EXPECT_EQ(AMDHSA_BITS_GET(OutRsrc3,
                             hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE),
-            7u);
+            KernelEntryStubInstPrefLines);
   EXPECT_NE(OutRsrc3 & hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_GLG_EN, 0u);
   EXPECT_EQ(Fixups[0].RequiredSgprs, 10u);
   uint32_t OutRsrc1 = 0;
@@ -651,8 +791,7 @@ TEST(KernelEntryTrampoline, PreservesInstPrefSizeAndAddsPrefetchGuard) {
   ASSERT_EQ(KDs.size(), 1u);
   std::optional<uint64_t> KdVAddr = OutView->getKernelDescriptorVAddr("kernel");
   ASSERT_TRUE(KdVAddr.has_value());
-  const uint64_t StubVAddr =
-      ViewOrErr->textAddr() + OldTextSize + Fixups[0].StubTextOffset;
+  const uint64_t StubVAddr = PoolVAddr + Fixups[0].StubTextOffset;
   EXPECT_EQ(KDs[0].EntryOffset, static_cast<int64_t>(StubVAddr - *KdVAddr));
 }
 
@@ -679,12 +818,12 @@ TEST(KernelEntryTrampoline, AlignsStubByVirtualAddress) {
   ASSERT_TRUE(Count.has_value());
   EXPECT_EQ(*Count, 1u);
   ASSERT_EQ(Fixups.size(), 1u);
-  const uint64_t StubVAddr =
-      ViewOrErr->textAddr() + ViewOrErr->textSize() + Fixups[0].StubTextOffset;
+  // The stub is aligned by its virtual address: the pool base plus the stub's
+  // offset lands on a KernelEntryStubStride boundary.
+  std::optional<uint64_t> PoolVAddrOr = ViewOrErr->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddrOr.has_value());
+  const uint64_t StubVAddr = *PoolVAddrOr + Fixups[0].StubTextOffset;
   EXPECT_EQ(StubVAddr % KernelEntryStubStride, 0u);
-  EXPECT_NE((ViewOrErr->textSize() + Fixups[0].StubTextOffset) %
-                KernelEntryStubStride,
-            0u);
 }
 
 TEST(KernelEntryTrampoline, AppendReturnsZeroWhenNoDescriptorsExist) {
