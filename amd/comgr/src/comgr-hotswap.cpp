@@ -9,7 +9,7 @@
 #include "comgr-hotswap-internal.h"
 #include "comgr.h"
 
-#include "llvm/TargetParser/AMDGPUTargetParser.h"
+#include "llvm/TargetParser/TargetParser.h"
 
 #include <optional>
 #include <string>
