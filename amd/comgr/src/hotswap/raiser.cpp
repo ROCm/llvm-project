@@ -47,6 +47,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
@@ -1979,19 +1980,23 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     assert(false && "unhandled read failure after raise loop");
   }
 
-  // Ensure all BBs have terminators. An empty kernel (no decoded
-  // instructions) leaves only the entry block with no terminator;
-  // emit `ret void` so the lifted module behaves as a no-op kernel
-  // rather than aborting on unreachable. Other unterminated blocks
-  // (typically dead-fallthrough bytes after a recovered branch) keep
-  // their defensive `unreachable`.
+  // Ensure all BBs have terminators.  Reachable unterminated blocks arise
+  // when a kernel falls off its symbol boundary without an explicit
+  // s_endpgm -- emit `ret void` (or branch to the thread-loop latch)
+  // so the lifted kernel terminates cleanly.  Blocks with no predecessors
+  // that are not the entry block are dead fallthrough bytes after a
+  // recovered branch; keep their defensive `unreachable`.
   for (auto &BB : *F) {
     if (!BB.hasTerminator()) {
       B.SetInsertPoint(&BB);
-      if (&BB == &F->getEntryBlock() && F->size() == 1)
-        B.CreateRetVoid();
-      else
+      if (!pred_empty(&BB) || &BB == &F->getEntryBlock()) {
+        if (Ctx.ThreadLoopLatch)
+          B.CreateBr(Ctx.ThreadLoopLatch);
+        else
+          B.CreateRetVoid();
+      } else {
         B.CreateUnreachable();
+      }
     }
   }
 
