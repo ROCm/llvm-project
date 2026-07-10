@@ -549,10 +549,41 @@ jobs:
   # Test - rocm-examples
   # =====================================================================
 
+  # Select the gfx942 test runner the same way TheRock CI does.
+  pick_runner:
+    name: Select gfx942 test runner
+    runs-on: azure-linux-scale-rocm
+    timeout-minutes: 5
+    outputs:
+      test_runs_on: ${{ steps.pick.outputs.label }}
+    steps:
+      - name: Checkout TheRock build_tools
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/TheRock
+          ref: compiler/amd-staging
+          sparse-checkout: build_tools
+          persist-credentials: false
+
+      - name: Weighted runner selection (gfx94X-dcgpu)
+        id: pick
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import sys
+          sys.path.insert(0, "build_tools/github_actions")
+          from amdgpu_family_matrix import (
+              amdgpu_family_info_matrix_presubmit as M,
+              select_weighted_label,
+          )
+          info = M["gfx94x"]["linux"]
+          label = select_weighted_label(info["test-runs-on-labels"], "gfx94X-dcgpu")
+          print(f"label={label}")
+          PY
+
   test_rocm_examples:
     name: Test rocm-examples
-    needs: build
-    runs-on: linux-gfx942-1gpu-ccs-csp-ossci-rocm-zxjvm-runner-g559z
+    needs: [build, pick_runner]
+    runs-on: ${{ needs.pick_runner.outputs.test_runs_on }}
     timeout-minutes: 45
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
@@ -601,7 +632,7 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/${{ env.STAGING }}/lib
         run: |
           ctest --test-dir examples-build-hip-basic --output-on-failure -j $(nproc) \
-            -E '^hip_cooperative_groups$' # TODO: ISSUE #3048
+            -E '^hip_cooperative_groups$' # TODO: ISSUE #3143
 
       # Applications.
       - name: ROCm Examples build Applications
