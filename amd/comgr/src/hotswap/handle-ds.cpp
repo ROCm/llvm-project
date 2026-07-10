@@ -764,13 +764,26 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // `amdgcn.ds_bpermute` intrinsic so the backend emits the real
     // cross-lane gather on the target ISA.
     //
-    // Wave32-source selectors are source-wave-local byte offsets. Under
-    // WaveNative cross-widening, one wave64 target wave carries two source
-    // wave32 instances (lanes 0..31 and 32..63). A raw target `ds_bpermute`
-    // would interpret selector 0 from lane 32 as "read hardware lane 0",
-    // but source gfx1250 semantics mean "read lane 0 of this source wave",
-    // i.e. hardware lane 32. Rebase the selector into the current source-wave
-    // half before calling the wave64 intrinsic.
+    // Wave32-source selectors are source-wave-local byte offsets. Under any
+    // wave32->wave64 cross-widening, one wave64 target wave carries two source
+    // wave32 instances (lanes 0..31 and 32..63):
+    //   * WaveNative -- the two halves are two *distinct* source waves.
+    //   * ModuloReplication -- lane L behaves as source lane `L mod 32`
+    //     (see `ModuloReplicationProjection::emitLaneActiveBit`), so the two
+    //     halves are *replicas* of the one source wave.
+    // In BOTH cases a raw target `ds_bpermute` would interpret selector 0 from
+    // lane 32 as "read hardware lane 0", but source gfx1250 semantics mean
+    // "read lane 0 of *this* source wave", i.e. hardware lane 32. Rebasing the
+    // selector into the current source-wave half is therefore the correct
+    // projection under WaveNative *and* MODREP -- for a real MODREP lane the
+    // `laneId & ~31` base is 0 for the lower half and 32 for the replica half,
+    // and clamping the selector to the source-wave byte range (`& 127`) keeps a
+    // phantom/undef-derived selector from indexing out of bounds. Gating this on
+    // the projection's source-wave *count* was the T1 bug: MODREP reports
+    // `numSourceWavesPerTarget() == 1`, so phantom-lane attention kernels (forced
+    // onto MODREP by the phantom-lane regime in `raiseToIR`) skipped the rebase
+    // and fed a raw, unclamped selector to the wave64 gather -> OOB fault. Gate
+    // on the cross-widening direction instead.
     //
     // EXEC gating. We emit the intrinsic *outside* `emitUnderExec`.
     // `amdgcn.ds_bpermute` is convergent -- all lanes of the hardware
@@ -785,8 +798,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // `readfirstlane` / explicit VGPR move outside the diamond,
     // otherwise the cross-lane read will pick up `undef`.
     Value *Index = Op.src(0);
-    if (Ctx.Projection.numSourceWavesPerTarget() > 1 &&
-        Ctx.Isa.isWave32() && !Ctx.TargetIsa.isWave32()) {
+    if (Ctx.Isa.isWave32() && !Ctx.TargetIsa.isWave32()) {
       constexpr uint32_t kSourceWaveLanes = 32;
       constexpr uint32_t kDwordBytes = 4;
       constexpr uint32_t kSourceWaveBytes = kSourceWaveLanes * kDwordBytes;
