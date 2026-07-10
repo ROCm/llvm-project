@@ -37,14 +37,20 @@ struct LLCDiagnosticHandler : public DiagnosticHandler {
   bool handleDiagnostics(const DiagnosticInfo &DI) override;
 };
 
-int compileModuleWithNewPM(StringRef Arg0, std::unique_ptr<Module> M,
-                           std::unique_ptr<MIRParser> MIR,
-                           std::unique_ptr<TargetMachine> Target,
-                           std::unique_ptr<ToolOutputFile> Out,
-                           std::unique_ptr<ToolOutputFile> DwoOut,
+enum LLCExitState {
+  LLC_Success = 0,
+  LLC_Error = 1,
+  LLC_Retry = 2,
+};
+
+LLCExitState compileModuleWithNewPM(StringRef Arg0, std::unique_ptr<Module> &M,
+                           std::unique_ptr<MIRParser> &MIR,
+                           std::unique_ptr<TargetMachine> &Target,
+                           std::unique_ptr<ToolOutputFile> &Out,
+                           std::unique_ptr<ToolOutputFile> &DwoOut,
                            LLVMContext &Context,
                            const TargetLibraryInfoImpl &TLII, VerifierKind VK,
-                           StringRef PassPipeline, CodeGenFileType FileType);
+                           StringRef PassPipeline, CodeGenFileType FileType, bool RetryWithLegacyPM);
 } // namespace llvm
 
 #endif

@@ -87,18 +87,18 @@ bool LLCDiagnosticHandler::handleDiagnostics(const DiagnosticInfo &DI) {
 
 static llvm::ExitOnError ExitOnErr;
 
-int llvm::compileModuleWithNewPM(
-    StringRef Arg0, std::unique_ptr<Module> M, std::unique_ptr<MIRParser> MIR,
-    std::unique_ptr<TargetMachine> Target, std::unique_ptr<ToolOutputFile> Out,
-    std::unique_ptr<ToolOutputFile> DwoOut, LLVMContext &Context,
+LLCExitState llvm::compileModuleWithNewPM(
+    StringRef Arg0, std::unique_ptr<Module> &M, std::unique_ptr<MIRParser> &MIR,
+    std::unique_ptr<TargetMachine> &Target, std::unique_ptr<ToolOutputFile> &Out,
+    std::unique_ptr<ToolOutputFile> &DwoOut, LLVMContext &Context,
     const TargetLibraryInfoImpl &TLII, VerifierKind VK, StringRef PassPipeline,
-    CodeGenFileType FileType) {
+    CodeGenFileType FileType, bool RetryWithLegacyPM) {
 
   if (!PassPipeline.empty() && TargetPassConfig::hasLimitedCodeGenPipeline()) {
     WithColor::error(errs(), Arg0)
         << "--passes cannot be used with "
         << TargetPassConfig::getLimitedCodeGenPipelineReason() << ".\n";
-    return 1;
+    return LLC_Error;
   }
 
   raw_pwrite_stream *OS = &Out->os();
@@ -159,7 +159,7 @@ int llvm::compileModuleWithNewPM(
 
     if (!MIR) {
       WithColor::error(errs(), Arg0) << "-passes is for .mir file only.\n";
-      return 1;
+      return LLC_Error;
     }
 
     // FIXME: verify that there are no IR passes.
@@ -173,9 +173,14 @@ int llvm::compileModuleWithNewPM(
     MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
 
   } else {
-    ExitOnErr(Target->buildCodeGenPipeline(
-        MPM, MAM, *OS, DwoOut ? &DwoOut->os() : nullptr, FileType, Opt,
-        MMI.getContext(), &PIC));
+    Error Err = Target->buildCodeGenPipeline(
+              MPM, MAM, *OS, DwoOut ? &DwoOut->os() : nullptr, FileType, Opt,
+            MMI.getContext(), &PIC);
+        if (Err && RetryWithLegacyPM) {
+          consumeError(std::move(Err));
+          return LLC_Retry;
+        }
+        ExitOnErr(std::move(Err));
   }
 
   // If user only wants to print the pipeline, print it before parsing the MIR.
@@ -188,11 +193,11 @@ int llvm::compileModuleWithNewPM(
     });
     printFormattedPipelinePasses(outs(), PipelineStr, *PrintPipelinePasses);
     outs() << '\n';
-    return 0;
+    return LLC_Success;
   }
 
   if (MIR && MIR->parseMachineFunctions(*M, MAM))
-    return 1;
+    return LLC_Error;
 
   // Before executing passes, print the final values of the LLVM options.
   cl::PrintOptionValues();
@@ -200,12 +205,12 @@ int llvm::compileModuleWithNewPM(
   MPM.run(*M, MAM);
 
   if (Context.getDiagHandlerPtr()->HasErrors)
-    return 1;
+    return LLC_Error;
 
   // Declare success.
   Out->keep();
   if (DwoOut)
     DwoOut->keep();
 
-  return 0;
+  return LLC_Success;
 }
