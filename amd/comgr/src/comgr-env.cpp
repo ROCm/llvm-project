@@ -95,7 +95,7 @@ LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
   return static_cast<LogLevel>(std::min(Numeric, Max));
 }
 
-LogLevel resolveLevel() {
+LogLevel resolveLogLevel() {
   static const char *LogThreshold = getenv("AMD_COMGR_LOG_LEVEL");
   StringRef Requested = LogThreshold ? StringRef(LogThreshold) : StringRef();
   return parseLogLevel(Requested, shouldEmitVerboseLogs());

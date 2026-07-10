@@ -9,7 +9,8 @@
 /// \file
 /// Declares COMGR::Logger, a process-global, thread-safe logging facility
 /// shared by every Comgr API. APIs emit diagnostics via Logger::emit at a
-/// configurable severity (AMD_COMGR_LOG_LEVEL; see COMGR::env::resolveLevel()).
+/// configurable severity (AMD_COMGR_LOG_LEVEL; see
+/// COMGR::env::resolveLogLevel()).
 ///
 /// Output goes to two independent destinations:
 ///   - The global "sink": resolved once from AMD_COMGR_REDIRECT_LOGS (stdout,

@@ -1336,8 +1336,6 @@ amd_comgr_status_t AMD_COMGR_API
     // Pointer to the currently selected log stream.
     raw_ostream *LogP = &LogS;
 
-    // Capture emit() output from this action into LogS (the buffer backing the
-    // AMD_COMGR_DATA_KIND_LOG object) so it reaches the caller.
     LogCaptureScope LogCapture(LogS);
     Logger &Log = getLogger();
 

@@ -28,7 +28,7 @@ LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
 
 /// Resolve the log level from AMD_COMGR_LOG_LEVEL, using the
 /// AMD_COMGR_EMIT_VERBOSE_LOGS back-compat fallback via parseLogLevel().
-LogLevel resolveLevel();
+LogLevel resolveLogLevel();
 
 /// Return whether the environment requests temps be saved.
 bool shouldSaveTemps();

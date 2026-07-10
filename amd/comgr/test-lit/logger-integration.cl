@@ -13,16 +13,28 @@
 // RUN: FileCheck %s < %t.debug.returned.log
 // CHECK: amd_comgr_do_action:
 
-// COM: Error level (1): the debug header is suppressed from both destinations,
-// COM: but the compiler diagnostic still reaches both (proving the sink is
-// COM: live at level 1, not merely empty).
+// COM: Non-debug levels info (3), warning (2), and error (1): the debug header
+// COM: is suppressed from both destinations, but the compiler diagnostic still
+// COM: reaches both (proving the sink is live below level 4, not merely empty).
+// RUN: AMD_COMGR_LOG_LEVEL=3 AMD_COMGR_REDIRECT_LOGS=%t.info.log \
+// RUN:   logger-redirect %s 1.2 %t.info.returned.log
+// RUN: FileCheck --check-prefix=SUPPRESSED --implicit-check-not='amd_comgr_do_action:' \
+// RUN:   %s < %t.info.log
+// RUN: FileCheck --check-prefix=SUPPRESSED --implicit-check-not='amd_comgr_do_action:' \
+// RUN:   %s < %t.info.returned.log
+// RUN: AMD_COMGR_LOG_LEVEL=2 AMD_COMGR_REDIRECT_LOGS=%t.warning.log \
+// RUN:   logger-redirect %s 1.2 %t.warning.returned.log
+// RUN: FileCheck --check-prefix=SUPPRESSED --implicit-check-not='amd_comgr_do_action:' \
+// RUN:   %s < %t.warning.log
+// RUN: FileCheck --check-prefix=SUPPRESSED --implicit-check-not='amd_comgr_do_action:' \
+// RUN:   %s < %t.warning.returned.log
 // RUN: AMD_COMGR_LOG_LEVEL=1 AMD_COMGR_REDIRECT_LOGS=%t.error.log \
 // RUN:   logger-redirect %s 1.2 %t.error.returned.log
-// RUN: FileCheck --check-prefix=ERROR --implicit-check-not='amd_comgr_do_action:' \
+// RUN: FileCheck --check-prefix=SUPPRESSED --implicit-check-not='amd_comgr_do_action:' \
 // RUN:   %s < %t.error.log
-// RUN: FileCheck --check-prefix=ERROR --implicit-check-not='amd_comgr_do_action:' \
+// RUN: FileCheck --check-prefix=SUPPRESSED --implicit-check-not='amd_comgr_do_action:' \
 // RUN:   %s < %t.error.returned.log
-// ERROR: comgr-logger-integration-marker
+// SUPPRESSED: comgr-logger-integration-marker
 
 // COM: Redirect open failure: when AMD_COMGR_REDIRECT_LOGS names an unopenable
 // COM: destination, the diagnostic must reach the caller's returned comgr.log

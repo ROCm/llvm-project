@@ -30,7 +30,7 @@ thread_local raw_ostream *ThreadCaptureStream = nullptr;
 
 } // namespace
 
-Logger::Logger() : Level(env::resolveLevel()), Sink(nullptr) {
+Logger::Logger() : Level(env::resolveLogLevel()), Sink(nullptr) {
   std::optional<StringRef> RedirectLogs = env::getRedirectLogs();
   if (RedirectLogs)
     openSink(*RedirectLogs);
