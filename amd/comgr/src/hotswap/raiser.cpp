@@ -1980,6 +1980,17 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     assert(false && "unhandled read failure after raise loop");
   }
 
+  // If the function's entry block has predecessors (e.g. a backward
+  // branch targeting the kernel's first instruction), LLVM's verifier
+  // rejects the IR.  Insert an empty prolog block that falls through to
+  // the original entry so the entry becomes predecessor-free.
+  if (!pred_empty(&F->getEntryBlock())) {
+    BasicBlock *OldEntry = &F->getEntryBlock();
+    BasicBlock *Prolog = BasicBlock::Create(C, "prolog", F, OldEntry);
+    B.SetInsertPoint(Prolog);
+    B.CreateBr(OldEntry);
+  }
+
   // Ensure all BBs have terminators.  Reachable unterminated blocks arise
   // when a kernel falls off its symbol boundary without an explicit
   // s_endpgm -- emit `ret void` (or branch to the thread-loop latch)
