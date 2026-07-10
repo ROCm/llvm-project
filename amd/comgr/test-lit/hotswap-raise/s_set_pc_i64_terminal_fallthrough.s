@@ -10,6 +10,8 @@
 	.p2align	8
 	.type	setpc_terminal_fallthrough_kernel,@function
 ; CHECK-LABEL: define amdgpu_kernel void @setpc_terminal_fallthrough_kernel(
+; CHECK: br label %[[TGT:bb_0x.+]]
+; CHECK: [[TGT]]:
 setpc_terminal_fallthrough_kernel:
 	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
 	s_load_b64 s[0:1], s[0:1], 0x0
@@ -21,7 +23,6 @@ setpc_terminal_fallthrough_kernel:
 .Lpost:
 	s_add_co_u32 s10, s10, (.Ltarget - .Lpost)
 	s_add_co_ci_u32 s11, s11, ((.Ltarget - .Lpost) >> 32)
-; CHECK: [[TGT:bb_0x[0-9a-f]+]]:
 	s_set_pc_i64 s[10:11]
 ; CHECK: br label %[[TGT]]
 ; CHECK-NOT: unreachable
