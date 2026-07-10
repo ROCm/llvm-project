@@ -87,6 +87,13 @@ ArrayRef<CanonicalOpAttrSpec> getHandlerSOP2Attrs() {
       {CanonicalOp::S_BFE_I64, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_CSELECT_B32, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_CSELECT_B64, {/*routesExecThroughStoreExec=*/true}},
+      // s_{min,max}_{i,u}32 write an ordinary 32-bit scalar result. This
+      // handler commits that result through writeReg32(), which routes explicit
+      // EXEC destinations through storeExec.
+      {CanonicalOp::S_MIN_I32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_MIN_U32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_MAX_I32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_MAX_U32, {/*routesExecThroughStoreExec=*/true}},
   };
   return kAttrs;
 }
