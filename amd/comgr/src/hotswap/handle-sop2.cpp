@@ -51,6 +51,16 @@ ArrayRef<CanonicalOpAttrSpec> getHandlerSOP2Attrs() {
       // storeExec for safety.
       {CanonicalOp::S_ABSDIFF_I32, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_LSHL_B32, {/*routesExecThroughStoreExec=*/true}},
+      // s_lshl{1,2,3,4}_add_u32 write their i32 (shift-then-add) result
+      // through writeReg32(), which routes an explicit EXEC destination
+      // through storeExec (see reg-file.cpp). Triton's gfx12 divergent-
+      // region exit emits `s_lshl2_add_u32 exec_lo, exec_lo, sMASK` as a
+      // fused EXEC update; declare the attr so the SPE gate accepts it
+      // (the handler already lowers it correctly).
+      {CanonicalOp::S_LSHL1_ADD_U32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_LSHL2_ADD_U32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_LSHL3_ADD_U32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_LSHL4_ADD_U32, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_LSHL_B64, {/*routesExecThroughStoreExec=*/true}},
       // s_lshl{1,2,3,4}_add_u32: dst = (src0 << N) + src1. Same SPE shape as
       // the plain shift/bitwise routers above -- the handler computes the

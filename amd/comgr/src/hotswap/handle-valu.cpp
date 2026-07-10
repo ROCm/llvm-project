@@ -1390,6 +1390,21 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  if (Sop == CanonicalOp::V_MUL_LEGACY_F32) {
+    // v_mul_dx9_zero_f32 / v_mul_legacy_f32: DX9 multiply where 0*x == 0
+    // even for x = inf/nan (differs from IEEE fmul only on those inputs).
+    // Lower to the dedicated @llvm.amdgcn.fmul.legacy intrinsic to preserve
+    // the exact semantics rather than approximating with fmul.
+    Value *S0 = Op.srcF(0), *S1 = Op.srcF(1);
+    if (S0->getType() != Ctx.F32Ty) S0 = Ctx.B.CreateBitCast(S0, Ctx.F32Ty);
+    if (S1->getType() != Ctx.F32Ty) S1 = Ctx.B.CreateBitCast(S1, Ctx.F32Ty);
+    Function *FmulLegacy = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_fmul_legacy);
+    Value *R = Ctx.B.CreateCall(FmulLegacy, {S0, S1}, "fmul_legacy");
+    Ctx.writeReg32(Op.dst(), Ctx.B.CreateBitCast(R, Ctx.I32Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
   if (Sop == CanonicalOp::V_SUB_F32) {
     Value *S0 = Op.srcF(0), *S1 = Op.srcF(1);
     if (S0->getType() != Ctx.F32Ty) S0 = Ctx.B.CreateBitCast(S0, Ctx.F32Ty);

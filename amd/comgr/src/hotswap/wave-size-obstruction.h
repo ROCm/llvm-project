@@ -190,9 +190,10 @@ enum class ObstructionKind : uint8_t {
 };
 
 // Identifier for the rewrite rule that would discharge an obstruction
-// site. Names follow the "P-item" convention enumerated in the
-// cross-lane rewrite table at hotswap/docs/wave-size-translation.md
-// §5.3 (and partitioned into landed / pending / unrewritable in §7).
+// site. See the cross-lane rewrite table at
+// hotswap/docs/wave-size-translation.md.
+class WaveProjection;
+
 enum class RewriteId : uint8_t {
   None = 0,                 // no rewrite available (outcome-c class).
   P1_DsBpermute,            // llvm.amdgcn.ds.bpermute lift.
@@ -202,6 +203,19 @@ enum class RewriteId : uint8_t {
   P5_DppModifier,           // llvm.amdgcn.update.dpp lift.
   P6_DsSwizzle,             // llvm.amdgcn.ds.swizzle lift.
   LaneOpBoundsValidator,    // raise-time operand-range check for readlane/writelane.
+  SaveExecLaneRelative,    // saveexec mask is source-wave-relative via
+                           // the mbcnt lift (mbcnt_hi pass-through +
+                           // mbcnt_lo mod W_s); MODREP replicate handles it.
+  AtomicOneReplica,        // store-only (non-returning) vector atomic:
+                           // under MODREP the source wave is projected
+                           // onto two wave32 replicas, so lanes i and
+                           // i+W_s would double-issue against the same
+                           // slot. The handler predicates the atomic on
+                           // `lane_id < W_s` so only replica-0 issues --
+                           // exactly one atomic per source lane, matching
+                           // native wave32. Requires numDefs==0 (dead
+                           // return; a returned `old` would need a
+                           // replica-0 -> replica-1 broadcast, not done here).
   PostRaiseCrossLaneRewrite,// post-mem2reg rewrite of cross-widen-divergent
                             // writelane/readlane sites into select / ds.bpermute
                             // (rewrite_cross_lane_divergent.{hpp,cpp}, flagged on

@@ -7,6 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "wave-size-obstruction.h"
+#include "wave-projection.h"
+
+#include <cstdlib>
 
 #include "decoded-inst.h"
 #include "isa-profile.h"
@@ -94,6 +97,10 @@ const char *rewriteIdName(RewriteId R) {
     return "P6 (llvm.amdgcn.ds.swizzle)";
   case RewriteId::LaneOpBoundsValidator:
     return "raise-time readlane/writelane bounds validator";
+  case RewriteId::SaveExecLaneRelative:
+    return "saveexec source-wave-relative";
+  case RewriteId::AtomicOneReplica:
+    return "store-only atomic gated to one MODREP replica";
   case RewriteId::PostRaiseCrossLaneRewrite:
     return "post-raise cross-lane rewrite (writelane -> select, "
            "readlane -> ds.bpermute)";
@@ -978,6 +985,32 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
       Site.RewriteImplemented = false;
       Site.Detail = "non-commutative vector atomic races target lanes "
                     "i and i+W_s under modulo-replication";
+      // Rescue: a *store-only* (non-returning, numDefs==0) SWAP under a
+      // one-source-wave-per-target MODREP projection has no cross-lane
+      // race that survives predication -- lanes i and i+W_s are redundant
+      // copies of the same source lane, so gating the atomic to replica-0
+      // (`lane_id < W_s`, emitted in handle-flat.cpp) leaves
+      // exactly one issue per source lane, identical to native wave32.
+      // A *returning* swap (numDefs>0) is NOT rescued here: replica-1
+      // lanes would lose the returned `old` value, which needs an
+      // explicit replica-0 -> replica-1 broadcast we do not emit.
+      // CMPSWAP is likewise left to refuse (returning form / compare
+      // semantics). The projection must be MODREP (numSourceWavesPerTarget
+      // ==1); WaveNative (==2) keeps lanes 32..63 as distinct real work
+      // and must not be gated.
+      const bool StoreOnly = Di.NumDefs == 0;
+      const bool IsSwap = Sop == CanonicalOp::GLOBAL_ATOMIC_SWAP ||
+                          Sop == CanonicalOp::FLAT_ATOMIC_SWAP ||
+                          Sop == CanonicalOp::BUFFER_ATOMIC_SWAP;
+      const bool ModRepOneWave =
+          Projection.numSourceWavesPerTarget() == 1 &&
+          !Projection.providesFullWaveExecInvariant();
+      if (StoreOnly && IsSwap && ModRepOneWave) {
+        Site.Rewrite = RewriteId::AtomicOneReplica;
+        Site.RewriteImplemented = true;
+        Site.Detail = "store-only vector atomic swap gated to MODREP "
+                      "replica-0 (lane_id < W_s); one issue per source lane";
+      }
       Report.Sites.push_back(std::move(Site));
       continue;
     }
@@ -1143,6 +1176,14 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
     Site.Kind = Pw.Kind;
     Site.Rewrite = Pw.Rewrite;
     Site.RewriteImplemented = Pw.RewriteImplemented;
+    // mbcnt lifting already makes lane-id source-wave-relative
+    // (handle-valu-cross-lane.cpp: mbcnt_hi pass-through + mbcnt_lo mod W_s),
+    // so a saveexec mask derived from lane-id is already correct per MODREP
+    // replica and needs no further rewrite.
+    if (Pw.Kind == ObstructionKind::SaveExecFromLaneId) {
+      Site.Rewrite = RewriteId::SaveExecLaneRelative;
+      Site.RewriteImplemented = true;
+    }
     Site.Detail = Pw.Detail;
     Report.Sites.push_back(std::move(Site));
   }

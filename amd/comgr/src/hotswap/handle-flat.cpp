@@ -10,6 +10,7 @@
 #include "handlers.h"
 
 #include "canonical-op.h"
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h" // AMDGPU:: instruction opcodes
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/SmallVector.h"
@@ -1732,8 +1733,19 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     FlatAddr Fa = decodeGlobalStoreAddr(Ctx, Di, Op,
                                          /*elemBytes=*/Is64 ? 8 : 4,
                                          "GLOBAL_ATOMIC");
+    // b64 integer swap (`global_atomic_swap_x2`, collapsed to
+    // GLOBAL_ATOMIC_SWAP in opcode-map): read/atomic/write at 64-bit width
+    // like the F64 path but as a plain integer (no fp bitcast). Detect by
+    // MC opcode rather than mnemonic string or vdata width (the latter is
+    // unreliable for tuple VGPRs on gfx1250).
+    const unsigned Opc = Di.Inst.getOpcode();
+    const bool IsB64IntSwap =
+        Sop == CanonicalOp::GLOBAL_ATOMIC_SWAP &&
+        (Opc == AMDGPU::GLOBAL_ATOMIC_SWAP_X2 ||
+         Opc == AMDGPU::GLOBAL_ATOMIC_SWAP_X2_SADDR);
+    const bool Use64 = Is64 || IsB64IntSwap;
     Value *Addr = Fa.Ptr;
-    Value *Data = Is64 ? Ctx.Regs.readReg64(Ctx.B, Fa.StData)
+    Value *Data = Use64 ? Ctx.Regs.readReg64(Ctx.B, Fa.StData)
                         : Ctx.Regs.readReg32(Ctx.B, Fa.StData);
 
     if (Sop == CanonicalOp::GLOBAL_ATOMIC_CMPSWAP) {
@@ -1773,7 +1785,10 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     case CanonicalOp::GLOBAL_ATOMIC_SMAX: AtomicOp = AtomicRMWInst::Max; break;
     case CanonicalOp::GLOBAL_ATOMIC_UMIN: AtomicOp = AtomicRMWInst::UMin; break;
     case CanonicalOp::GLOBAL_ATOMIC_UMAX: AtomicOp = AtomicRMWInst::UMax; break;
-    case CanonicalOp::GLOBAL_ATOMIC_SWAP: AtomicOp = AtomicRMWInst::Xchg; break;
+    case CanonicalOp::GLOBAL_ATOMIC_SWAP:
+      AtomicOp = AtomicRMWInst::Xchg;
+      if (IsB64IntSwap) AtomicTy = Ctx.I64Ty;
+      break;
     case CanonicalOp::GLOBAL_ATOMIC_ADD_F32:
       AtomicOp = AtomicRMWInst::FAdd; AtomicTy = Ctx.F32Ty; IsFp = true; break;
     case CanonicalOp::GLOBAL_ATOMIC_PK_ADD_BF16:
@@ -1793,19 +1808,49 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
           Di, "FLAT", "unsupported global atomic variant");
     }
     if (IsFp) Data = Ctx.B.CreateBitCast(Data, AtomicTy);
-    Ctx.emitUnderExec([&] {
-      Value *Prev = Ctx.B.CreateAtomicRMW(AtomicOp, Addr, Data, MaybeAlign(),
-                                          AtomicOrdering::Monotonic);
-      if (Di.NumDefs > 0) {
-        if (Is64) {
-          if (IsFp) Prev = Ctx.B.CreateBitCast(Prev, Ctx.I64Ty);
-          Ctx.Regs.writeReg64(Ctx.B, Op.dst(), Prev);
-        } else {
-          if (IsFp) Prev = Ctx.B.CreateBitCast(Prev, Ctx.I32Ty);
-          Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Prev);
+    auto EmitSwapRMW = [&] {
+      Ctx.emitUnderExec([&] {
+        Value *Prev = Ctx.B.CreateAtomicRMW(AtomicOp, Addr, Data, MaybeAlign(),
+                                            AtomicOrdering::Monotonic);
+        if (Di.NumDefs > 0) {
+          // writeReg32/64 bitcast fp results to i32/i64 internally
+          // (storeVGPR32/64), so no manual cast is needed here.
+          if (Use64)
+            Ctx.Regs.writeReg64(Ctx.B, Op.dst(), Prev);
+          else
+            Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Prev);
         }
-      }
-    });
+      });
+    };
+    // Gate a store-only (numDefs==0) SWAP to one MODREP replica: without
+    // this, target lanes `i` and `i+W_s` both pass the emitUnderExec mask
+    // and double-issue the atomic. Predicating on `lane_id < W_s` issues
+    // exactly one atomic per source lane, matching native wave32. Returning
+    // swaps and non-MODREP projections are refused in wave-size-obstruction.cpp.
+    const bool GateOneReplica =
+        Sop == CanonicalOp::GLOBAL_ATOMIC_SWAP && Di.NumDefs == 0 &&
+        Ctx.TargetIsa.WaveSize > Ctx.Isa.WaveSize &&
+        Ctx.Projection.numSourceWavesPerTarget() == 1 &&
+        !Ctx.Projection.providesFullWaveExecInvariant();
+    if (GateOneReplica) {
+      Value *LaneId = Ctx.emitLaneIdx();
+      Value *WsC = ConstantInt::get(LaneId->getType(), Ctx.Isa.WaveSize);
+      Value *IsRep0 = Ctx.B.CreateICmpULT(LaneId, WsC, "one_replica");
+      BasicBlock *PreBb = Ctx.B.GetInsertBlock();
+      Function *Fn = PreBb->getParent();
+      BasicBlock *DoBb = BasicBlock::Create(Ctx.C, "atomic_do", Fn);
+      BasicBlock *SkipBb = BasicBlock::Create(Ctx.C, "atomic_skip", Fn);
+      Ctx.B.CreateCondBr(IsRep0, DoBb, SkipBb);
+      Ctx.B.SetInsertPoint(DoBb);
+      EmitSwapRMW();
+      Ctx.B.CreateBr(SkipBb);
+      Ctx.B.SetInsertPoint(SkipBb);
+      // The manual EXEC-narrowing branch invalidates the memoised
+      // lane-active bit for any subsequent emission of this instruction.
+      Ctx.resetLaneActiveCache();
+    } else {
+      EmitSwapRMW();
+    }
     Hr.Handled = true;
     return Hr;
   }
