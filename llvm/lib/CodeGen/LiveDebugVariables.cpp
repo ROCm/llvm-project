@@ -1869,6 +1869,11 @@ void LiveDebugVariables::LDVImpl::revertCollection(VirtRegMap *VRM) {
   if (!MF || !ModifiedMF)
     return;
 
+  // Re-inserting a second time would duplicate every DBG_VALUE, label and
+  // stashed debug instruction. Reverting once is the only supported use.
+  if (EmitDone)
+    return;
+
   LLVM_DEBUG(dbgs() << "********** REVERTING LDV COLLECTION **********\n");
 
   BlockSkipInstsMap BBSkipInstsMap;
@@ -1891,14 +1896,22 @@ void LiveDebugVariables::LDVImpl::revertCollection(VirtRegMap *VRM) {
   emitDebugPHIs(VRM);
   emitStashedDebugInstrs();
 
-  ModifiedMF = false;
-  EmitDone = false;
+  // The collected debug data is now materialized back into MIR (with
+  // KeepUnassigned virtual registers where no physreg was assigned yet).
+  EmitDone = true;
 }
 
 void LiveDebugVariables::LDVImpl::emitDebugValues(VirtRegMap *VRM) {
   LLVM_DEBUG(dbgs() << "********** EMITTING LIVE DEBUG VARIABLES **********\n");
   if (!MF)
     return;
+
+  // A reverted instance already wrote its (now stale) collection back into MIR.
+  // Emitting again here would double-insert; the design re-collects with a
+  // fresh instance instead, so reaching this point means LDV was wrongly reused
+  // without being invalidated.
+  assert(!EmitDone &&
+         "emitDebugValues called on an instance already emitted");
 
   BlockSkipInstsMap BBSkipInstsMap;
   const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
