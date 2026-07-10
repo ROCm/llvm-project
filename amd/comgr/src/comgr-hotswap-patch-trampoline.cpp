@@ -248,19 +248,76 @@ splitDstPair(MCRegister CompoundReg, bool IsB64, const MCRegisterInfo &MRI) {
 }
 
 // Expand a DS 2-address load into two single-address loads (dst, addr).
+//
+// Register-overlap hazard: the source address (Regs[1]) may alias ANY register
+// in the destination window (Regs[0]) -- e.g. any of v2..v5 in
+// `ds_load_2addr_b64 v[2:5], vX`. The original single 2-addr instruction is
+// safe because it reads the address once before writing the destination. The
+// naive split into two loads is not: whichever half executes first writes its
+// destination, and if that write lands on the address register, the second load
+// then computes its LDS location from a corrupted address.
+//
+// Fix: scan the whole destination window, determine which half carries the
+// address, and emit that half LAST. A single DS load reads its address before
+// writing its own destination, so the address-carrying half is safe as the
+// final use; the other (disjoint) half, emitted first, never touches the
+// address. This covers every position of the address within the window (low or
+// high half) and the no-overlap case. Only loads have this hazard (only loads
+// write the destination); the (dst-half, offset) pairing is preserved
+// regardless of emission order.
 std::vector<std::string> expandDs2AddrLoad(const DsOperands &Ops,
                                            StringRef ToMnem) {
   if (Ops.Regs.size() < 2)
     return {};
+  const MCRegisterInfo &MRI = *Ops.MRI;
   std::pair<std::string, std::string> Dst =
-      splitDstPair(Ops.Regs[0], Ops.IsB64, *Ops.MRI);
+      splitDstPair(Ops.Regs[0], Ops.IsB64, MRI);
   if (Dst.first.empty())
     return {};
-  std::string Addr = toAsmRegName(*Ops.MRI, Ops.Regs[1]);
-  return {
-      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1),
-  };
+  std::string Addr = toAsmRegName(MRI, Ops.Regs[1]);
+  std::string LoadLow =
+      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0);
+  std::string LoadHigh =
+      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1);
+
+  // Scan the ENTIRE destination window and classify which half the address
+  // aliases. The 32-bit fragments are ordered low->high; the first half
+  // (Subs[0 .. Half-1]) backs Dst.first and the rest back Dst.second, matching
+  // splitDstPair. b64: Half == 2 (window v2..v5); b32: Half == 1 (window
+  // v2,v3).
+  SmallVector<MCRegister, 4> Subs = getDirectSubRegs(Ops.Regs[0], MRI);
+  unsigned Half = Subs.size() / 2;
+  bool AddrInLow = false, AddrInHigh = false;
+  for (unsigned I = 0; I < Subs.size(); ++I) {
+    if (!MRI.regsOverlap(Ops.Regs[1], Subs[I]))
+      continue;
+    if (I < Half)
+      AddrInLow = true;
+    else
+      AddrInHigh = true;
+  }
+
+  if (AddrInLow && AddrInHigh) {
+    // Unreachable for real DS loads: the address is a single 32-bit VGPR, so it
+    // can alias at most one half. If it somehow spanned both, no reordering is
+    // safe (either half's load clobbers the address the other still needs), so
+    // skip the patch and leave the atomic original in place rather than emit
+    // code that corrupts the address.
+    log() << "hotswap: error: ds_2addr load: address " << Addr
+          << " overlaps both destination halves; cannot reorder safely, "
+             "leaving original instruction in place\n";
+    return {};
+  }
+  if (AddrInLow) {
+    // Address in the low half: emit the (disjoint) high half first so the
+    // address survives until the low-half load reads-then-overwrites it.
+    log() << "hotswap: ds_2addr load: address " << Addr
+          << " aliases low destination half; emitting high half first\n";
+    return {LoadHigh, LoadLow};
+  }
+  // Address in the high half, or no overlap at all: the default low-then-high
+  // order already places the address-carrying half (if any) last.
+  return {LoadLow, LoadHigh};
 }
 
 // Expand a DS 2-address store into two single-address stores (addr, data).
