@@ -394,6 +394,144 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
   return {};
 }
 
+static std::optional<SmallVector<uint8_t>>
+buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
+                   uint64_t BackStart) {
+  std::string KernelName =
+      Ctx.Elf.findKernelAtAddress(InstOffset + Ctx.Elf.textAddr());
+  if (KernelName.empty()) {
+    log() << "hotswap: error: safe far return: no kernel owns site 0x"
+          << utohexstr(InstOffset) << "\n";
+    return std::nullopt;
+  }
+
+  std::optional<unsigned> TotalSgprCount =
+      Ctx.Elf.getKernelSgprCount(KernelName);
+  if (!TotalSgprCount) {
+    log() << "hotswap: error: safe far return: invalid SGPR count for kernel "
+          << KernelName << "\n";
+    return std::nullopt;
+  }
+
+  // LLVM metadata counts two implicit SGPRs when a kernel uses VCC, but those
+  // are not part of the numbered s0-s105 register space. Inspect the owning
+  // function so scratch allocation starts above numbered SGPRs rather than
+  // above the metadata total. If VCC is only used by a callee, retaining the
+  // total as the allocation base is conservative; the call flag below keeps
+  // two implicit slots in the updated metadata.
+  bool UsesVcc = false;
+  bool HasCall = false;
+  std::optional<ElfView::FunctionTextRange> FunctionRange =
+      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
+  if (!FunctionRange) {
+    log() << "hotswap: error: safe far return: no function owns site 0x"
+          << utohexstr(InstOffset) << "\n";
+    return std::nullopt;
+  }
+
+  auto IsVcc = [&](MCRegister Reg) {
+    return Reg.isValid() &&
+           StringRef(Ctx.LS.MRI->getName(Reg)).starts_with("VCC");
+  };
+  auto InstUsesVcc = [&](const InternalDecodedInst &DI) {
+    for (const MCOperand &Op : DI.Inst)
+      if (Op.isReg() && Op.getReg() && IsVcc(MCRegister(Op.getReg())))
+        return true;
+    const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
+    for (MCPhysReg Reg : Desc.implicit_uses())
+      if (IsVcc(MCRegister(Reg)))
+        return true;
+    for (MCPhysReg Reg : Desc.implicit_defs())
+      if (IsVcc(MCRegister(Reg)))
+        return true;
+    return false;
+  };
+
+  for (const InternalDecodedInst &DI : Ctx.Decoded) {
+    if (DI.Offset < FunctionRange->Begin || DI.Offset >= FunctionRange->End)
+      continue;
+    UsesVcc |= InstUsesVcc(DI);
+    HasCall |= Ctx.LS.MIA && Ctx.LS.MIA->isCall(DI.Inst);
+  }
+
+  constexpr unsigned VccSgprs = 2;
+  if (UsesVcc && *TotalSgprCount < VccSgprs) {
+    log() << "hotswap: error: safe far return: VCC-using kernel " << KernelName
+          << " has invalid SGPR count " << *TotalSgprCount << "\n";
+    return std::nullopt;
+  }
+  unsigned NumberedSgprCount = *TotalSgprCount - (UsesVcc ? VccSgprs : 0);
+  if (NumberedSgprCount > Ctx.Config.MaxSgprs) {
+    log() << "hotswap: error: safe far return: numbered SGPR count for kernel "
+          << KernelName << " exceeds " << Ctx.Config.MaxSgprs << "\n";
+    return std::nullopt;
+  }
+
+  // s_get_pc_i64/s_set_pc_i64 require an aligned pair. A third scalar saves
+  // SCC across the add/addc sequence. All three come from above the kernel's
+  // declared allocation, so no live program register is repurposed.
+  unsigned ScratchPair = (NumberedSgprCount + 1) & ~1u;
+  unsigned SccScratch = ScratchPair + 2;
+  if (ScratchPair >= Ctx.Config.MaxSgprs || SccScratch >= Ctx.Config.MaxSgprs) {
+    log() << "hotswap: error: safe far return: kernel " << KernelName
+          << " has no aligned SGPR pair plus SCC scratch below s"
+          << Ctx.Config.MaxSgprs << "\n";
+    return std::nullopt;
+  }
+
+  std::string Pair = "s[" + std::to_string(ScratchPair) + ":" +
+                     std::to_string(ScratchPair + 1) + "]";
+  std::string Lo = "s" + std::to_string(ScratchPair);
+  std::string Hi = "s" + std::to_string(ScratchPair + 1);
+  std::string SavedScc = "s" + std::to_string(SccScratch);
+  SmallVector<uint8_t> Bytes;
+  auto Append = [&](const std::string &Asm) {
+    SmallVector<uint8_t> Inst = assembleSingleInst(Asm, Ctx.LS);
+    if (Inst.empty()) {
+      log() << "hotswap: error: safe far return assembly failed: " << Asm
+            << "\n";
+      return false;
+    }
+    Bytes.append(Inst.begin(), Inst.end());
+    return true;
+  };
+
+  if (!Append("s_cselect_b32 " + SavedScc + ", 1, 0") ||
+      !Append("s_get_pc_i64 " + Pair))
+    return std::nullopt;
+
+  // s_get_pc_i64 returns the address of the following instruction.
+  std::optional<uint64_t> PcBase = checkedAddUint64(
+      BackStart, static_cast<uint64_t>(Bytes.size()), "safe far return PC");
+  if (!PcBase)
+    return std::nullopt;
+  uint64_t ReturnTo = InstOffset + InstSize;
+  uint64_t Delta = ReturnTo - *PcBase;
+  uint32_t DeltaLo = static_cast<uint32_t>(Delta);
+  uint32_t DeltaHi = static_cast<uint32_t>(Delta >> 32);
+
+  if (!Append("s_add_u32 " + Lo + ", " + Lo + ", 0x" + utohexstr(DeltaLo)) ||
+      !Append("s_addc_u32 " + Hi + ", " + Hi + ", 0x" + utohexstr(DeltaHi)) ||
+      !Append("s_cmp_lg_u32 " + SavedScc + ", 0") ||
+      !Append("s_set_pc_i64 " + Pair))
+    return std::nullopt;
+
+  unsigned RequiredNumberedSgprs = SccScratch + 1;
+  unsigned PreservedImplicitSgprs = (UsesVcc || HasCall) ? VccSgprs : 0;
+  unsigned RequiredSgprs = RequiredNumberedSgprs + PreservedImplicitSgprs;
+  if (RequiredSgprs < *TotalSgprCount) {
+    log() << "hotswap: error: safe far return: SGPR accounting underflow for "
+          << KernelName << "\n";
+    return std::nullopt;
+  }
+  KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
+  Stats.ExtraSgprs =
+      std::max(Stats.ExtraSgprs, RequiredSgprs - *TotalSgprCount);
+  log() << "hotswap: safe far return at 0x" << utohexstr(InstOffset) << " via "
+        << Pair << ", SCC via " << SavedScc << "\n";
+  return Bytes;
+}
+
 /// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
 /// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
 /// the pool layout is known. A site beyond s_branch reach of the appended pool
@@ -402,7 +540,8 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
 /// declines rather than clobbering the next instruction.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
-                                    ArrayRef<uint8_t> Replacement) {
+                                    ArrayRef<uint8_t> Replacement,
+                                    bool AllowSafeFarReturn) {
   // This trampoline lands at the appended pool base and after every trampoline
   // already queued -- later ones are appended behind it and cannot shift it,
   // and fixupTrampolineBranches walks the same list in the same order -- so its
@@ -433,14 +572,24 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
 
   if (Far) {
     // HSV-009: the far pool's backward s_add_pc_i64 branch corrupts wave state
-    // on gfx1250 A0 (forward is fine). Decline the site (keep the original
-    // instruction) instead of emitting the crashing redirect; in-place and
-    // near-sled patches are unaffected. TODO: patch via an s_getpc/s_setpc
-    // backward branch once SGPR-liveness can supply the scratch registers.
-    log() << "hotswap: far trampoline at 0x" << utohexstr(InstOffset)
-          << " declined (backward s_add_pc_i64 unreliable on gfx1250 A0, "
-          << "HSV-009); site left unpatched\n";
-    return false;
+    // on gfx1250 A0 (forward is fine). Optional transformations decline the
+    // site; required transformations use the SGPR-backed safe return below.
+    if (!AllowSafeFarReturn) {
+      log() << "hotswap: far trampoline at 0x" << utohexstr(InstOffset)
+            << " declined (backward s_add_pc_i64 unreliable on gfx1250 A0, "
+            << "HSV-009); site left unpatched\n";
+      return false;
+    }
+
+    std::optional<SmallVector<uint8_t>> Back = buildSafeFarReturn(
+        Ctx, InstOffset, InstSize, PoolStart + Replacement.size());
+    if (!Back)
+      return false;
+    T.Bytes.append(Back->begin(), Back->end());
+    T.Long = true;
+    T.PreEncodedBack = true;
+    Ctx.OutTrampolines.emplace_back(std::move(T));
+    return true;
   }
   {
     // Reserve the short branch-back slot; fixupTrampolineBranches fills it in.
@@ -456,7 +605,8 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
 /// deferred trampoline.
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
-                                       ArrayRef<uint8_t> Replacement) {
+                                       ArrayRef<uint8_t> Replacement,
+                                       bool AllowSafeFarReturn) {
   // findNearestSled enforces sled headroom. emitToNopSled still validates
   // exact branch reachability because branch-back distance includes the
   // replacement size, not just the original instruction offset.
@@ -468,7 +618,8 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
           << utohexstr(Sled->WritePos)
           << " is not branch-reachable after assembly; using trampoline.\n";
   }
-  return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement);
+  return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement,
+                          AllowSafeFarReturn);
 }
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
@@ -610,7 +761,9 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
         return std::nullopt;
       }
       unsigned RequiredSgprs = *SgprsBefore + Stats.ExtraSgprs;
-      if (!Elf.updateKernelDescriptorSgprCount(KName, RequiredSgprs)) {
+      bool UpdateDescriptor = !StringRef(Config.TargetCpu).starts_with("gfx1");
+      if (!Elf.updateKernelDescriptorSgprCount(KName, RequiredSgprs,
+                                               UpdateDescriptor)) {
         log() << "hotswap: error: failed to update SGPR count for kernel "
               << KName << "\n";
         return std::nullopt;
@@ -656,28 +809,30 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
-    // Long trampolines reserve a wider branch-back slot and use s_add_pc_i64
-    // on both edges; short ones use s_branch. Both slots are s_nop-padded to
-    // their reserved size after the branch is written. (Long/far sites are
-    // currently declined in emitToTrampoline on gfx1250 A0 -- HSV-009.)
-    const uint32_t BackReserve = T.Long ? LongBranchMaxBytes : MinInstSize;
-    const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
-    const uint64_t ReturnTo = T.OriginalOffset + T.OriginalSize;
+    // Required far patches carry an SCC-preserving s_get_pc_i64/s_set_pc_i64
+    // return assembled when the trampoline is queued. Other long returns are
+    // never queued on gfx1250 A0 because backward s_add_pc_i64 is unsafe.
+    if (!T.PreEncodedBack) {
+      const uint32_t BackReserve = T.Long ? LongBranchMaxBytes : MinInstSize;
+      const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
+      const uint64_t ReturnTo = T.OriginalOffset + T.OriginalSize;
 
-    SmallVector<uint8_t> BrBack = T.Long
-                                      ? encodeLongBranch(LS, BackSlot, ReturnTo)
-                                      : LS.encodeSBranch(BackSlot, ReturnTo);
-    if (BrBack.empty() || BrBack.size() > BackReserve) {
-      log() << "hotswap: error: trampoline branch-back encoding failed at 0x"
-            << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
-      return false;
+      SmallVector<uint8_t> BrBack =
+          T.Long ? encodeLongBranch(LS, BackSlot, ReturnTo)
+                 : LS.encodeSBranch(BackSlot, ReturnTo);
+      if (BrBack.empty() || BrBack.size() > BackReserve) {
+        log() << "hotswap: error: trampoline branch-back encoding failed at "
+                 "0x"
+              << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
+        return false;
+      }
+      std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve, BrBack.data(),
+                  BrBack.size());
+      for (uint32_t I = BrBack.size(); I + MinInstSize <= BackReserve;
+           I += MinInstSize)
+        std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve + I,
+                    LS.SNopBytes.data(), MinInstSize);
     }
-    std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve, BrBack.data(),
-                BrBack.size());
-    for (uint32_t I = BrBack.size(); I + MinInstSize <= BackReserve;
-         I += MinInstSize)
-      std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve + I,
-                  LS.SNopBytes.data(), MinInstSize);
 
     SmallVector<uint8_t> BrFwd =
         T.Long ? encodeLongBranch(LS, T.OriginalOffset, TP)
