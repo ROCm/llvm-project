@@ -394,6 +394,73 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
   return {};
 }
 
+SmallVector<uint8_t> encodeSccNeutralLongBranch(const LLVMState &LS,
+                                                uint64_t FromOffset,
+                                                uint64_t TargetOffset,
+                                                unsigned SgprBase) {
+  if ((SgprBase & 1u) != 0 ||
+      SgprBase == std::numeric_limits<unsigned>::max()) {
+    log() << "hotswap: error: SCC-neutral long branch requires an aligned "
+             "SGPR pair, got s"
+          << SgprBase << "\n";
+    return {};
+  }
+
+  const std::string Pair = "s[" + std::to_string(SgprBase) + ":" +
+                           std::to_string(SgprBase + 1) + "]";
+  SmallVector<uint8_t> GetPc = assembleSingleInst("s_get_pc_i64 " + Pair, LS);
+  if (GetPc.empty()) {
+    log() << "hotswap: error: SCC-neutral long branch failed to assemble "
+             "s_get_pc_i64 for "
+          << Pair << "\n";
+    return {};
+  }
+
+  std::optional<uint64_t> PcBase = checkedAddUint64(
+      FromOffset, GetPc.size(), "SCC-neutral long branch PC base");
+  if (!PcBase)
+    return {};
+
+  // Unsigned subtraction intentionally materializes the two's-complement
+  // delta for backward branches.
+  const uint64_t Delta = TargetOffset - *PcBase;
+  SmallVector<uint8_t> Add = assembleSingleInst(
+      "s_add_nc_u64 " + Pair + ", " + Pair + ", 0x" + utohexstr(Delta), LS);
+  SmallVector<uint8_t> SetPc = assembleSingleInst("s_set_pc_i64 " + Pair, LS);
+  if (Add.empty() || SetPc.empty()) {
+    log() << "hotswap: error: SCC-neutral long branch failed to assemble "
+             "add/set-PC sequence for "
+          << Pair << "\n";
+    return {};
+  }
+
+  SmallVector<uint8_t> Bytes;
+  Bytes.append(GetPc.begin(), GetPc.end());
+  Bytes.append(Add.begin(), Add.end());
+  Bytes.append(SetPc.begin(), SetPc.end());
+  return Bytes;
+}
+
+static bool isVccRegister(const LLVMState &LS, MCRegister Reg) {
+  return Reg.isValid() && StringRef(LS.MRI->getName(Reg)).starts_with("VCC");
+}
+
+static bool instructionUsesVcc(const LLVMState &LS,
+                               const InternalDecodedInst &DI) {
+  for (const MCOperand &Op : DI.Inst)
+    if (Op.isReg() && Op.getReg() && isVccRegister(LS, MCRegister(Op.getReg())))
+      return true;
+
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  for (MCPhysReg Reg : Desc.implicit_uses())
+    if (isVccRegister(LS, MCRegister(Reg)))
+      return true;
+  for (MCPhysReg Reg : Desc.implicit_defs())
+    if (isVccRegister(LS, MCRegister(Reg)))
+      return true;
+  return false;
+}
+
 static std::optional<SmallVector<uint8_t>>
 buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
                    uint64_t BackStart) {
@@ -429,28 +496,10 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
     return std::nullopt;
   }
 
-  auto IsVcc = [&](MCRegister Reg) {
-    return Reg.isValid() &&
-           StringRef(Ctx.LS.MRI->getName(Reg)).starts_with("VCC");
-  };
-  auto InstUsesVcc = [&](const InternalDecodedInst &DI) {
-    for (const MCOperand &Op : DI.Inst)
-      if (Op.isReg() && Op.getReg() && IsVcc(MCRegister(Op.getReg())))
-        return true;
-    const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
-    for (MCPhysReg Reg : Desc.implicit_uses())
-      if (IsVcc(MCRegister(Reg)))
-        return true;
-    for (MCPhysReg Reg : Desc.implicit_defs())
-      if (IsVcc(MCRegister(Reg)))
-        return true;
-    return false;
-  };
-
   for (const InternalDecodedInst &DI : Ctx.Decoded) {
     if (DI.Offset < FunctionRange->Begin || DI.Offset >= FunctionRange->End)
       continue;
-    UsesVcc |= InstUsesVcc(DI);
+    UsesVcc |= instructionUsesVcc(Ctx.LS, DI);
     HasCall |= Ctx.LS.MIA && Ctx.LS.MIA->isCall(DI.Inst);
   }
 
@@ -473,39 +522,17 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
   unsigned ScratchPair = (NumberedSgprCount + 1) & ~1u;
   if (ScratchPair + 1 >= Ctx.Config.MaxSgprs) {
     log() << "hotswap: error: safe far return: kernel " << KernelName
-          << " has no aligned SGPR pair below s" << Ctx.Config.MaxSgprs
-          << "\n";
+          << " has no aligned SGPR pair below s" << Ctx.Config.MaxSgprs << "\n";
     return std::nullopt;
   }
 
-  std::string Pair = "s[" + std::to_string(ScratchPair) + ":" +
-                     std::to_string(ScratchPair + 1) + "]";
-  SmallVector<uint8_t> Bytes;
-  auto Append = [&](const std::string &Asm) {
-    SmallVector<uint8_t> Inst = assembleSingleInst(Asm, Ctx.LS);
-    if (Inst.empty()) {
-      log() << "hotswap: error: safe far return assembly failed: " << Asm
-            << "\n";
-      return false;
-    }
-    Bytes.append(Inst.begin(), Inst.end());
-    return true;
-  };
-
-  if (!Append("s_get_pc_i64 " + Pair))
+  std::optional<uint64_t> ReturnTo =
+      checkedAddUint64(InstOffset, InstSize, "safe far return target offset");
+  if (!ReturnTo)
     return std::nullopt;
-
-  // s_get_pc_i64 returns the address of the following instruction.
-  std::optional<uint64_t> PcBase = checkedAddUint64(
-      BackStart, static_cast<uint64_t>(Bytes.size()), "safe far return PC");
-  if (!PcBase)
-    return std::nullopt;
-  uint64_t ReturnTo = InstOffset + InstSize;
-  uint64_t Delta = ReturnTo - *PcBase;
-
-  if (!Append("s_add_nc_u64 " + Pair + ", " + Pair + ", 0x" +
-              utohexstr(Delta)) ||
-      !Append("s_set_pc_i64 " + Pair))
+  SmallVector<uint8_t> Bytes =
+      encodeSccNeutralLongBranch(Ctx.LS, BackStart, *ReturnTo, ScratchPair);
+  if (Bytes.empty())
     return std::nullopt;
 
   unsigned RequiredNumberedSgprs = ScratchPair + 2;
@@ -519,6 +546,8 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
   KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
   Stats.ExtraSgprs =
       std::max(Stats.ExtraSgprs, RequiredSgprs - *TotalSgprCount);
+  const std::string Pair = "s[" + std::to_string(ScratchPair) + ":" +
+                           std::to_string(ScratchPair + 1) + "]";
   log() << "hotswap: safe far return at 0x" << utohexstr(InstOffset) << " via "
         << Pair << "\n";
   return Bytes;
@@ -573,9 +602,20 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
             << "HSV-009); site left unpatched\n";
       return false;
     }
+    if (InstSize < LongBranchFwdBytes) {
+      log() << "hotswap: error: safe far trampoline site 0x"
+            << utohexstr(InstOffset) << " is " << InstSize
+            << " B, smaller than " << LongBranchFwdBytes
+            << " B forward branch\n";
+      return false;
+    }
 
-    std::optional<SmallVector<uint8_t>> Back = buildSafeFarReturn(
-        Ctx, InstOffset, InstSize, PoolStart + Replacement.size());
+    std::optional<uint64_t> BackStart = checkedAddUint64(
+        PoolStart, Replacement.size(), "safe far return start offset");
+    if (!BackStart)
+      return false;
+    std::optional<SmallVector<uint8_t>> Back =
+        buildSafeFarReturn(Ctx, InstOffset, InstSize, *BackStart);
     if (!Back)
       return false;
     T.Bytes.append(Back->begin(), Back->end());
@@ -754,9 +794,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
         return std::nullopt;
       }
       unsigned RequiredSgprs = *SgprsBefore + Stats.ExtraSgprs;
-      bool UpdateDescriptor = !StringRef(Config.TargetCpu).starts_with("gfx1");
       if (!Elf.updateKernelDescriptorSgprCount(KName, RequiredSgprs,
-                                               UpdateDescriptor)) {
+                                               /*UpdateDescriptor=*/false)) {
         log() << "hotswap: error: failed to update SGPR count for kernel "
               << KName << "\n";
         return std::nullopt;
