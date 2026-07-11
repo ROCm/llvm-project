@@ -567,6 +567,11 @@ void AMDGPUDisassembler::decodeImmOperands(MCInst &MI,
 
     if (Imm == AMDGPU::EncValues::LITERAL_CONST) {
       Op = decodeLiteralConstant(Desc, OpDesc);
+      // S_ADD_PC_I64 is the one i64 SALU operation whose literal32 is
+      // explicitly sign-extended by the hardware. Preserve that semantic in
+      // the decoded MC operand so disassembly and reassembly round-trip.
+      if (MI.getOpcode() == AMDGPU::S_ADD_PC_I64_gfx12 && Op.isImm())
+        Op.setImm(SignExtend64<32>(Op.getImm()));
       continue;
     }
 

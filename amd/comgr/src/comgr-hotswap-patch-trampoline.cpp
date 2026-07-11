@@ -730,8 +730,7 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
   Replacement.append(PackBytes.begin(), PackBytes.end());
   Replacement.append(OrigInst, OrigInst + DI.Size);
 
-  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
-                           /*AllowSafeFarReturn=*/true))
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
     return failRequiredPatch(Ctx);
 
   log() << "hotswap: tensor_load_to_lds: persistently cleared multicast bits "

@@ -184,19 +184,14 @@ TEST(EncodeSBranch, FailsOnInvalidState) {
 
 // -- encodeLongBranch (s_add_pc_i64) -----------------------------------------
 //
-// The long branch reaches anywhere via s_add_pc_i64, which adds a signed
-// literal to the PC of the next instruction: landing PC == From + size + imm.
-// A positive (forward) offset fits a 32-bit literal (8 bytes); a negative
-// (backward) offset needs a 64-bit literal (12 bytes). These verify the offset
-// math and encoding structurally rather than pinning exact bytes.
+// The long branch uses s_add_pc_i64, which adds a sign-extended literal32 to
+// the PC of the next instruction: landing PC == From + 8 + imm. Both forward
+// and backward forms are 8 bytes. These verify the offset math and encoding
+// structurally rather than pinning exact bytes.
 
 // Read the signed literal that follows the 4-byte opcode dword.
 static int64_t longBranchLiteral(llvm::ArrayRef<uint8_t> Out) {
-  if (Out.size() == LongBranchFwdBytes)
-    return static_cast<int32_t>(readDword(Out.data() + MinInstSize));
-  int64_t V = 0;
-  std::memcpy(&V, Out.data() + MinInstSize, sizeof(V));
-  return V;
+  return static_cast<int32_t>(readDword(Out.data() + MinInstSize));
 }
 
 TEST(EncodeLongBranch, ForwardLandsOnTarget) {
@@ -205,7 +200,7 @@ TEST(EncodeLongBranch, ForwardLandsOnTarget) {
   // ~512 KB forward -- well beyond s_branch's +-128 KB reach.
   const uint64_t From = 0x1000, To = 0x81000;
   llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchFwdBytes);
+  ASSERT_EQ(Out.size(), LongBranchBytes);
   EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
 
   std::vector<InternalDecodedInst> Dec;
@@ -214,13 +209,13 @@ TEST(EncodeLongBranch, ForwardLandsOnTarget) {
   EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
 }
 
-TEST(EncodeLongBranch, BackwardUsesWideLiteralAndLandsOnTarget) {
+TEST(EncodeLongBranch, BackwardUsesSignedLiteral32AndLandsOnTarget) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
   // Backward jump (trampoline tail -> earlier return point).
   const uint64_t From = 0x81000, To = 0x1004;
   llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchMaxBytes);
+  ASSERT_EQ(Out.size(), LongBranchBytes);
   EXPECT_EQ(static_cast<int64_t>(From) + static_cast<int64_t>(Out.size()) +
                 longBranchLiteral(Out),
             static_cast<int64_t>(To));
@@ -229,6 +224,8 @@ TEST(EncodeLongBranch, BackwardUsesWideLiteralAndLandsOnTarget) {
   ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
   ASSERT_EQ(Dec.size(), 1u);
   EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
+  EXPECT_EQ(Dec[0].Size, LongBranchBytes);
+  EXPECT_EQ(Dec[0].Inst.getOperand(0).getImm(), longBranchLiteral(Out));
 }
 
 TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
@@ -242,73 +239,13 @@ TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
   EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
 }
 
-// -- encodeSccNeutralLongBranch ----------------------------------------------
-
-static uint64_t
-decodeSccNeutralLongBranchTarget(uint64_t From,
-                                 llvm::ArrayRef<InternalDecodedInst> Decoded) {
-  const uint64_t PcBase = From + Decoded[0].Size;
-  const uint64_t Delta =
-      static_cast<uint64_t>(Decoded[1].Inst.getOperand(2).getImm());
-  return PcBase + Delta;
-}
-
-TEST(EncodeSccNeutralLongBranch, BackwardLandsOnTargetWithoutDefiningScc) {
+TEST(EncodeLongBranch, RejectsOutOfSignedLiteral32RangeAndPcOverflow) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
-  constexpr uint64_t From = 0x81000;
-  constexpr uint64_t To = 0x1008;
-  llvm::SmallVector<uint8_t> Out =
-      encodeSccNeutralLongBranch(S, From, To, /*SgprBase=*/12);
-  ASSERT_FALSE(Out.empty());
-
-  std::vector<InternalDecodedInst> Decoded;
-  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 3u);
-  EXPECT_EQ(Decoded[0].Mnemonic, "s_get_pc_i64");
-  EXPECT_EQ(Decoded[1].Mnemonic, "s_add_nc_u64");
-  EXPECT_EQ(Decoded[2].Mnemonic, "s_set_pc_i64");
-  EXPECT_EQ(decodeSccNeutralLongBranchTarget(From, Decoded), To);
-
-  const llvm::MCRegister Pair = Decoded[0].Inst.getOperand(0).getReg();
-  EXPECT_EQ(Decoded[1].Inst.getOperand(0).getReg(), Pair);
-  EXPECT_EQ(Decoded[1].Inst.getOperand(1).getReg(), Pair);
-  EXPECT_EQ(Decoded[2].Inst.getOperand(0).getReg(), Pair);
-  for (const InternalDecodedInst &DI : Decoded) {
-    const llvm::MCInstrDesc &Desc = S.MCII->get(DI.Inst.getOpcode());
-    for (llvm::MCPhysReg Reg : Desc.implicit_defs())
-      EXPECT_NE(llvm::StringRef(S.MRI->getName(Reg)), "SCC");
-  }
-}
-
-TEST(EncodeSccNeutralLongBranch, ForwardLandsOnTarget) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  constexpr uint64_t From = 0x1000;
-  constexpr uint64_t To = 0x81000;
-  llvm::SmallVector<uint8_t> Out =
-      encodeSccNeutralLongBranch(S, From, To, /*SgprBase=*/12);
-  ASSERT_FALSE(Out.empty());
-
-  std::vector<InternalDecodedInst> Decoded;
-  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 3u);
-  EXPECT_EQ(decodeSccNeutralLongBranchTarget(From, Decoded), To);
-}
-
-TEST(EncodeSccNeutralLongBranch, RejectsUnalignedPairAndPcOverflow) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  EXPECT_TRUE(encodeSccNeutralLongBranch(S, 0x1000, 0x2000,
-                                         /*SgprBase=*/13)
-                  .empty());
+  EXPECT_TRUE(encodeLongBranch(S, 0, (uint64_t{1} << 31) + 8).empty());
   EXPECT_TRUE(
-      encodeSccNeutralLongBranch(S, std::numeric_limits<uint64_t>::max() - 1, 0,
-                                 /*SgprBase=*/12)
-          .empty());
+      encodeLongBranch(S, std::numeric_limits<uint64_t>::max() - 1, 0).empty());
 }
 
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {

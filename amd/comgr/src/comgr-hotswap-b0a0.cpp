@@ -363,207 +363,47 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
 
 // s_add_pc_i64 long branch from \p FromOffset to \p TargetOffset (.text
 // offsets). It adds a signed literal to the next instruction's PC, so the
-// offset is TargetOffset - (FromOffset + size); size is 8 (forward, 32-bit
-// literal) or 12 (backward, 64-bit literal), resolved by trying each. Encoded
-// via the MC assembler. Returns empty on failure.
+// offset is TargetOffset - (FromOffset + 8). MI400 sign-extends literal32 for
+// this instruction, giving the same 8-byte encoding in either direction.
 //
-// Precondition: callers only long-branch *far* sites, so the target is far
-// enough that s_add_pc_i64 always needs a real (>= 32-bit) literal. A tiny
-// offset would instead assemble to the 4-byte inline-constant form, match
-// neither candidate size, and yield empty. That is asserted here (assert
-// liberally); the empty return is kept as a release-build safety net so a
-// stray near target degrades to the unpatched-object fallback rather than
-// crashing the loader.
+// Callers use this only outside s_branch range, so the displacement requires a
+// literal rather than a 4-byte inline constant. Returns empty when the target
+// is outside signed literal32 range or encoding fails.
 SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
                                       uint64_t TargetOffset) {
-  [[maybe_unused]] const int64_t Distance =
-      static_cast<int64_t>(TargetOffset) - static_cast<int64_t>(FromOffset);
-  [[maybe_unused]] const int64_t MinLongDistance = LongBranchMaxBytes;
-  assert((Distance > MinLongDistance || Distance < -MinLongDistance) &&
-         "encodeLongBranch: target is not a far site; the long-branch path is "
-         "only valid for offsets beyond an s_add_pc_i64 instruction's reach");
-
-  for (uint32_t Size : {LongBranchFwdBytes, LongBranchMaxBytes}) {
-    int64_t Off = static_cast<int64_t>(TargetOffset) -
-                  static_cast<int64_t>(FromOffset + Size);
-    SmallVector<uint8_t> Bytes =
-        assembleSingleInst("s_add_pc_i64 " + std::to_string(Off), LS);
-    if (Bytes.size() == Size)
-      return Bytes;
-  }
-  return {};
-}
-
-SmallVector<uint8_t> encodeSccNeutralLongBranch(const LLVMState &LS,
-                                                uint64_t FromOffset,
-                                                uint64_t TargetOffset,
-                                                unsigned SgprBase) {
-  if ((SgprBase & 1u) != 0 ||
-      SgprBase == std::numeric_limits<unsigned>::max()) {
-    log() << "hotswap: error: SCC-neutral long branch requires an aligned "
-             "SGPR pair, got s"
-          << SgprBase << "\n";
-    return {};
-  }
-
-  const std::string Pair = "s[" + std::to_string(SgprBase) + ":" +
-                           std::to_string(SgprBase + 1) + "]";
-  SmallVector<uint8_t> GetPc = assembleSingleInst("s_get_pc_i64 " + Pair, LS);
-  if (GetPc.empty()) {
-    log() << "hotswap: error: SCC-neutral long branch failed to assemble "
-             "s_get_pc_i64 for "
-          << Pair << "\n";
-    return {};
-  }
-
-  std::optional<uint64_t> PcBase = checkedAddUint64(
-      FromOffset, GetPc.size(), "SCC-neutral long branch PC base");
+  std::optional<uint64_t> PcBase =
+      checkedAddUint64(FromOffset, LongBranchBytes, "s_add_pc_i64 PC base");
   if (!PcBase)
     return {};
 
-  // Unsigned subtraction intentionally materializes the two's-complement
-  // delta for backward branches.
-  const uint64_t Delta = TargetOffset - *PcBase;
-  SmallVector<uint8_t> Add = assembleSingleInst(
-      "s_add_nc_u64 " + Pair + ", " + Pair + ", 0x" + utohexstr(Delta), LS);
-  SmallVector<uint8_t> SetPc = assembleSingleInst("s_set_pc_i64 " + Pair, LS);
-  if (Add.empty() || SetPc.empty()) {
-    log() << "hotswap: error: SCC-neutral long branch failed to assemble "
-             "add/set-PC sequence for "
-          << Pair << "\n";
-    return {};
+  int64_t Offset;
+  if (TargetOffset >= *PcBase) {
+    uint64_t Delta = TargetOffset - *PcBase;
+    if (Delta > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()))
+      return {};
+    Offset = static_cast<int64_t>(Delta);
+  } else {
+    uint64_t Delta = *PcBase - TargetOffset;
+    constexpr uint64_t MinInt32Magnitude = uint64_t{1} << 31;
+    if (Delta > MinInt32Magnitude)
+      return {};
+    Offset = -static_cast<int64_t>(Delta);
   }
 
-  SmallVector<uint8_t> Bytes;
-  Bytes.append(GetPc.begin(), GetPc.end());
-  Bytes.append(Add.begin(), Add.end());
-  Bytes.append(SetPc.begin(), SetPc.end());
-  return Bytes;
-}
-
-static bool isVccRegister(const LLVMState &LS, MCRegister Reg) {
-  return Reg.isValid() && StringRef(LS.MRI->getName(Reg)).starts_with("VCC");
-}
-
-static bool instructionUsesVcc(const LLVMState &LS,
-                               const InternalDecodedInst &DI) {
-  for (const MCOperand &Op : DI.Inst)
-    if (Op.isReg() && Op.getReg() && isVccRegister(LS, MCRegister(Op.getReg())))
-      return true;
-
-  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
-  for (MCPhysReg Reg : Desc.implicit_uses())
-    if (isVccRegister(LS, MCRegister(Reg)))
-      return true;
-  for (MCPhysReg Reg : Desc.implicit_defs())
-    if (isVccRegister(LS, MCRegister(Reg)))
-      return true;
-  return false;
-}
-
-static std::optional<SmallVector<uint8_t>>
-buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
-                   uint64_t BackStart) {
-  std::string KernelName =
-      Ctx.Elf.findKernelAtAddress(InstOffset + Ctx.Elf.textAddr());
-  if (KernelName.empty()) {
-    log() << "hotswap: error: safe far return: no kernel owns site 0x"
-          << utohexstr(InstOffset) << "\n";
-    return std::nullopt;
-  }
-
-  std::optional<unsigned> TotalSgprCount =
-      Ctx.Elf.getKernelSgprCount(KernelName);
-  if (!TotalSgprCount) {
-    log() << "hotswap: error: safe far return: invalid SGPR count for kernel "
-          << KernelName << "\n";
-    return std::nullopt;
-  }
-
-  // LLVM metadata counts two implicit SGPRs when a kernel uses VCC, but those
-  // are not part of the numbered s0-s105 register space. Inspect the owning
-  // function so scratch allocation starts above numbered SGPRs rather than
-  // above the metadata total. If VCC is only used by a callee, retaining the
-  // total as the allocation base is conservative; the call flag below keeps
-  // two implicit slots in the updated metadata.
-  bool UsesVcc = false;
-  bool HasCall = false;
-  std::optional<ElfView::FunctionTextRange> FunctionRange =
-      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
-  if (!FunctionRange) {
-    log() << "hotswap: error: safe far return: no function owns site 0x"
-          << utohexstr(InstOffset) << "\n";
-    return std::nullopt;
-  }
-
-  for (const InternalDecodedInst &DI : Ctx.Decoded) {
-    if (DI.Offset < FunctionRange->Begin || DI.Offset >= FunctionRange->End)
-      continue;
-    UsesVcc |= instructionUsesVcc(Ctx.LS, DI);
-    HasCall |= Ctx.LS.MIA && Ctx.LS.MIA->isCall(DI.Inst);
-  }
-
-  constexpr unsigned VccSgprs = 2;
-  if (UsesVcc && *TotalSgprCount < VccSgprs) {
-    log() << "hotswap: error: safe far return: VCC-using kernel " << KernelName
-          << " has invalid SGPR count " << *TotalSgprCount << "\n";
-    return std::nullopt;
-  }
-  unsigned NumberedSgprCount = *TotalSgprCount - (UsesVcc ? VccSgprs : 0);
-  if (NumberedSgprCount > Ctx.Config.MaxSgprs) {
-    log() << "hotswap: error: safe far return: numbered SGPR count for kernel "
-          << KernelName << " exceeds " << Ctx.Config.MaxSgprs << "\n";
-    return std::nullopt;
-  }
-
-  // s_get_pc_i64/s_set_pc_i64 require an aligned pair. Allocate it above the
-  // kernel's declared registers so no live program register is repurposed.
-  // s_add_nc_u64 adjusts the captured PC without reading or writing SCC.
-  unsigned ScratchPair = (NumberedSgprCount + 1) & ~1u;
-  if (ScratchPair + 1 >= Ctx.Config.MaxSgprs) {
-    log() << "hotswap: error: safe far return: kernel " << KernelName
-          << " has no aligned SGPR pair below s" << Ctx.Config.MaxSgprs << "\n";
-    return std::nullopt;
-  }
-
-  std::optional<uint64_t> ReturnTo =
-      checkedAddUint64(InstOffset, InstSize, "safe far return target offset");
-  if (!ReturnTo)
-    return std::nullopt;
   SmallVector<uint8_t> Bytes =
-      encodeSccNeutralLongBranch(Ctx.LS, BackStart, *ReturnTo, ScratchPair);
-  if (Bytes.empty())
-    return std::nullopt;
-
-  unsigned RequiredNumberedSgprs = ScratchPair + 2;
-  unsigned PreservedImplicitSgprs = (UsesVcc || HasCall) ? VccSgprs : 0;
-  unsigned RequiredSgprs = RequiredNumberedSgprs + PreservedImplicitSgprs;
-  if (RequiredSgprs < *TotalSgprCount) {
-    log() << "hotswap: error: safe far return: SGPR accounting underflow for "
-          << KernelName << "\n";
-    return std::nullopt;
-  }
-  KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
-  Stats.ExtraSgprs =
-      std::max(Stats.ExtraSgprs, RequiredSgprs - *TotalSgprCount);
-  const std::string Pair = "s[" + std::to_string(ScratchPair) + ":" +
-                           std::to_string(ScratchPair + 1) + "]";
-  log() << "hotswap: safe far return at 0x" << utohexstr(InstOffset) << " via "
-        << Pair << "\n";
-  return Bytes;
+      assembleSingleInst("s_add_pc_i64 " + std::to_string(Offset), LS);
+  return Bytes.size() == LongBranchBytes ? Bytes : SmallVector<uint8_t>{};
 }
 
 /// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
 /// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
 /// the pool layout is known. A site beyond s_branch reach of the appended pool
-/// uses s_add_pc_i64 on the forward edge. Required rewrites return through an
-/// SGPR pair with an SCC-neutral get-PC/add/set-PC sequence; optional rewrites
-/// decline. The 8-byte forward branch overwrites the site in place, so a
-/// smaller site declines rather than clobbering the next instruction.
+/// uses an 8-byte, signed-literal32 s_add_pc_i64 on both edges. The forward
+/// branch overwrites the site in place, so a smaller site declines rather than
+/// clobbering the next instruction.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
-                                    ArrayRef<uint8_t> Replacement,
-                                    bool AllowSafeFarReturn) {
+                                    ArrayRef<uint8_t> Replacement) {
   // This trampoline lands at the appended pool base and after every trampoline
   // already queued -- later ones are appended behind it and cannot shift it,
   // and fixupTrampolineBranches walks the same list in the same order -- so its
@@ -593,34 +433,14 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
   T.Bytes.insert(T.Bytes.end(), Replacement.begin(), Replacement.end());
 
   if (Far) {
-    // HSV-009: the far pool's backward s_add_pc_i64 branch corrupts wave state
-    // on gfx1250 A0 (forward is fine). Optional transformations decline the
-    // site; required transformations use the SGPR-backed safe return below.
-    if (!AllowSafeFarReturn) {
-      log() << "hotswap: far trampoline at 0x" << utohexstr(InstOffset)
-            << " declined (backward s_add_pc_i64 unreliable on gfx1250 A0, "
-            << "HSV-009); site left unpatched\n";
+    if (InstSize < LongBranchBytes) {
+      log() << "hotswap: far trampoline site 0x" << utohexstr(InstOffset)
+            << " declined: " << InstSize << " B, smaller than "
+            << LongBranchBytes << " B forward branch\n";
       return false;
     }
-    if (InstSize < LongBranchFwdBytes) {
-      log() << "hotswap: error: safe far trampoline site 0x"
-            << utohexstr(InstOffset) << " is " << InstSize
-            << " B, smaller than " << LongBranchFwdBytes
-            << " B forward branch\n";
-      return false;
-    }
-
-    std::optional<uint64_t> BackStart = checkedAddUint64(
-        PoolStart, Replacement.size(), "safe far return start offset");
-    if (!BackStart)
-      return false;
-    std::optional<SmallVector<uint8_t>> Back =
-        buildSafeFarReturn(Ctx, InstOffset, InstSize, *BackStart);
-    if (!Back)
-      return false;
-    T.Bytes.append(Back->begin(), Back->end());
+    T.Bytes.insert(T.Bytes.end(), LongBranchBytes, uint8_t{0});
     T.Long = true;
-    T.PreEncodedBack = true;
     Ctx.OutTrampolines.emplace_back(std::move(T));
     return true;
   }
@@ -638,8 +458,7 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
 /// deferred trampoline.
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
-                                       ArrayRef<uint8_t> Replacement,
-                                       bool AllowSafeFarReturn) {
+                                       ArrayRef<uint8_t> Replacement) {
   // findNearestSled enforces sled headroom. emitToNopSled still validates
   // exact branch reachability because branch-back distance includes the
   // replacement size, not just the original instruction offset.
@@ -651,8 +470,7 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
           << utohexstr(Sled->WritePos)
           << " is not branch-reachable after assembly; using trampoline.\n";
   }
-  return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement,
-                          AllowSafeFarReturn);
+  return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement);
 }
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
@@ -840,31 +658,20 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
-    // Required far patches carry an SCC-neutral s_get_pc_i64/s_add_nc_u64/
-    // s_set_pc_i64 return assembled when the trampoline is queued. Other long
-    // returns are never queued on gfx1250 A0 because backward s_add_pc_i64 is
-    // unsafe.
-    if (!T.PreEncodedBack) {
-      const uint32_t BackReserve = T.Long ? LongBranchMaxBytes : MinInstSize;
-      const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
-      const uint64_t ReturnTo = T.OriginalOffset + T.OriginalSize;
+    const uint32_t BackReserve = T.Long ? LongBranchBytes : MinInstSize;
+    const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
+    const uint64_t ReturnTo = T.OriginalOffset + T.OriginalSize;
 
-      SmallVector<uint8_t> BrBack =
-          T.Long ? encodeLongBranch(LS, BackSlot, ReturnTo)
-                 : LS.encodeSBranch(BackSlot, ReturnTo);
-      if (BrBack.empty() || BrBack.size() > BackReserve) {
-        log() << "hotswap: error: trampoline branch-back encoding failed at "
-                 "0x"
-              << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
-        return false;
-      }
-      std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve, BrBack.data(),
-                  BrBack.size());
-      for (uint32_t I = BrBack.size(); I + MinInstSize <= BackReserve;
-           I += MinInstSize)
-        std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve + I,
-                    LS.SNopBytes.data(), MinInstSize);
+    SmallVector<uint8_t> BrBack = T.Long
+                                      ? encodeLongBranch(LS, BackSlot, ReturnTo)
+                                      : LS.encodeSBranch(BackSlot, ReturnTo);
+    if (BrBack.empty() || BrBack.size() > BackReserve) {
+      log() << "hotswap: error: trampoline branch-back encoding failed at 0x"
+            << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
+      return false;
     }
+    std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve, BrBack.data(),
+                BrBack.size());
 
     SmallVector<uint8_t> BrFwd =
         T.Long ? encodeLongBranch(LS, T.OriginalOffset, TP)

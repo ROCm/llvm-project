@@ -1,9 +1,9 @@
-// COM: HSV-009 / PLAT-205406: on gfx1250 A0 a backward s_add_pc_i64 corrupts
-// COM: wave state. Required far tensor patches use a forward s_add_pc_i64 and
-// COM: an SCC-neutral s_get_pc_i64/s_add_nc_u64/s_set_pc_i64 return instead.
-// COM:
-// COM: Optional far trampoline rewrites are still allowed to decline;
-// COM: hotswap-trampoline-ds-long-branch.s covers that behavior.
+// COM: HSV-009 / PLAT-205406: LLVM used to encode a modest negative
+// COM: s_add_pc_i64 displacement with a 64-bit literal, while the equivalent
+// COM: positive displacement used a 32-bit literal. The 64-bit-literal return
+// COM: corrupts wave state on gfx1250 A0. MI400 defines the literal32 form as
+// COM: sign-extended, so both trampoline edges can use the safe 8-byte form
+// COM: without scratch SGPRs.
 // COM: A large .rept filler (~160 KB, non-NOP so it forms no usable sled)
 // COM: pushes the pool past s_branch's reach to force the far case.
 
@@ -24,13 +24,10 @@
 // DISASM-NOT: s_add_pc_i64
 // DISASM: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
-// DISASM-NEXT: s_get_pc_i64 s[12:13]
-// DISASM-NEXT: s_add_nc_u64 s[12:13]
-// DISASM-NEXT: s_set_pc_i64 s[12:13]
-// DISASM-NOT: s_add_pc_i64
+// DISASM-NEXT: s_add_pc_i64 0xffff{{[0-9a-f]+}}
 
 // METADATA: .name:           test_far
-// METADATA: .sgpr_count:     16
+// METADATA: .sgpr_count:     14
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -38,34 +35,32 @@
 // RUN:   | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES
 
-// COM: The far return still needs an aligned SGPR pair. Exhausting all 106
-// COM: numbered SGPRs must fail instead of clobbering a program register.
+// COM: A kernel using all 106 numbered SGPRs still patches: control flow needs
+// COM: no register and metadata remains unchanged.
 // RUN: sed -e 's/s_mov_b64 vcc, -1/s_mov_b32 s105, 0/' \
 // RUN:   -e 's/\.amdhsa_next_free_sgpr 12/.amdhsa_next_free_sgpr 106/' \
-// RUN:   -e 's/\.sgpr_count: 14/.sgpr_count: 106/' %s > %t.no-pair.s
+// RUN:   -e 's/\.sgpr_count: 14/.sgpr_count: 106/' %s > %t.full-sgpr.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
-// RUN:   %t.no-pair.s -o %t.no-pair.elf
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.no-pair.elf \
+// RUN:   %t.full-sgpr.s -o %t.full-sgpr.elf
+// RUN: hotswap-rewrite %t.full-sgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --expect-status ERROR 2>&1 \
-// RUN:   | %FileCheck --check-prefix=NO-PAIR %s
-// NO-PAIR: hotswap: error: safe far return: kernel test_far has no aligned SGPR pair below s106
-// NO-PAIR: RESULT: ERROR
+// RUN:   --output %t.full-sgpr.out.elf | %FileCheck --check-prefix=API %s
+// RUN: %llvm-objdump -d %t.full-sgpr.out.elf \
+// RUN:   | %FileCheck --check-prefix=FULL-SGPR %s
+// FULL-SGPR-LABEL: <test_far>:
+// FULL-SGPR: s_add_pc_i64
+// FULL-SGPR: tensor_load_to_lds
+// FULL-SGPR-NEXT: s_add_pc_i64 0xffff{{[0-9a-f]+}}
 
-// COM: gfx10+ cannot represent an increased SGPR count in the kernel
-// COM: descriptor because that field is reserved. A metadata-less object must
-// COM: therefore fail rather than emit an under-declared far-return scratch
-// COM: allocation or write the reserved descriptor field.
+// COM: A metadata-less object also patches because no resource count changes.
 // RUN: sed '/^.amdgpu_metadata$/,/^.end_amdgpu_metadata$/d' %s > %t.nometa.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
 // RUN:   %t.nometa.s -o %t.nometa.elf
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.nometa.elf \
+// RUN: hotswap-rewrite %t.nometa.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --expect-status ERROR 2>&1 \
-// RUN:   | %FileCheck --check-prefix=NO-METADATA %s
-// NO-METADATA: hotswap: error: updateKernelDescriptorSgprCount: kernel 'test_far' requires
-// NO-METADATA: descriptor SGPR-count field is reserved
-// NO-METADATA: RESULT: ERROR
+// RUN:   --output %t.nometa.out.elf | %FileCheck --check-prefix=API %s
+// RUN: %llvm-objdump -d %t.nometa.out.elf \
+// RUN:   | %FileCheck --check-prefix=FULL-SGPR %s
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

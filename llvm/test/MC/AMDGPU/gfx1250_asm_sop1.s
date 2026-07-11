@@ -15,6 +15,10 @@ s_add_pc_i64 100
 // GFX12-ERR: :[[@LINE-1]]:1: error: instruction not supported on this GPU (gfx1200): s_add_pc_i64
 // GFX1250: s_add_pc_i64 0x64                       ; encoding: [0xff,0x4b,0x80,0xbe,0x64,0x00,0x00,0x00]
 
+s_add_pc_i64 -160000
+// GFX12-ERR: :[[@LINE-1]]:1: error: instruction not supported on this GPU (gfx1200): s_add_pc_i64
+// GFX1250: s_add_pc_i64 0xfffffffffffd8f00         ; encoding: [0xff,0x4b,0x80,0xbe,0x00,0x8f,0xfd,0xff]
+
 s_add_pc_i64 0x12345678abcd0
 // GFX12-ERR: :[[@LINE-1]]:1: error: instruction not supported on this GPU (gfx1200): s_add_pc_i64
 // GFX1250: s_add_pc_i64 0x12345678abcd0            ; encoding: [0xfe,0x4b,0x80,0xbe,0xd0,0xbc,0x8a,0x67,0x45,0x23,0x01,0x00]
