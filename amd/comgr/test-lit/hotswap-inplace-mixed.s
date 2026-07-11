@@ -1,5 +1,5 @@
-// COM: Test HotSwap in-place patches: cluster_load -> global_load and
-// COM: s_clause -> s_nop replacements on a kernel containing both.
+// COM: Test HotSwap in-place patches: cluster_load -> global_load and a
+// COM: mixed-cache-scope s_clause -> s_nop replacement in one kernel.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -15,7 +15,8 @@
 // DISASM-NOT: cluster_load_b32
 // DISASM-NOT: cluster_load_b128
 
-// COM: s_clause should be gone, replaced by s_nop
+// COM: The clause switches from device to system scope, which gfx1250 A0
+// COM: cannot safely execute. Its marker should be gone, replaced by s_nop.
 // DISASM-NOT: s_clause
 
 // COM: Replacement global_load instructions should be present
@@ -49,8 +50,8 @@ test_inplace_kernel:
   cluster_load_b128 v[4:7], v[8:9], off
   s_wait_loadcnt 0x0
   s_clause 0x1
-  global_load_b32 v10, v[2:3], off
-  global_load_b32 v11, v[2:3], off offset:4
+  global_load_b32 v10, v[2:3], off scope:SCOPE_DEV
+  global_load_b32 v11, v[2:3], off offset:4 scope:SCOPE_SYS
   s_wait_loadcnt 0x0
   s_endpgm
 .Ltest_inplace_kernel_end:

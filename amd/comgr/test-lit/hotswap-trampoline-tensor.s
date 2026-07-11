@@ -37,8 +37,9 @@
 // COM: (s_endpgm follows immediately).
 // DISASM-LABEL: <test_tensor_dead>:
 // DISASM-NOT: v_writelane_b32
+// DISASM-NEXT: s_nop 0
+// DISASM-NEXT: s_branch
 // DISASM-NOT: v_readlane_b32
-// DISASM: s_branch
 // DISASM: s_endpgm
 // DISASM: s_pack_hh_b32_b16
 // DISASM: tensor_load_to_lds
@@ -119,6 +120,7 @@
 .p2align 8
 .type test_tensor_dead,@function
 test_tensor_dead:
+  s_clause 0x0
   tensor_load_to_lds s[0:3], s[4:11]
   s_endpgm
   s_nop 0

@@ -714,6 +714,13 @@ struct PatchContext {
   bool RequiredPatchApplied = false;
 };
 
+/// Return whether the per-instruction trampoline pass can replace the
+/// instruction at \p Idx with a branch or an in-body trampoline sequence.
+/// Clause validation uses this before the trampoline pass runs so an s_clause
+/// is never retained around an instruction whose slot will stop being memory.
+[[nodiscard]] bool requiresPerInstTrampoline(const PatchContext &Ctx,
+                                             size_t Idx);
+
 // -- Trampoline emission helpers (defined in comgr-hotswap-b0a0.cpp) ----------
 
 [[nodiscard]] bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,

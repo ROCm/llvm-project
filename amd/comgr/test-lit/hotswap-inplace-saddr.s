@@ -17,11 +17,13 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: The original _SADDR site is redirected to a sled/trampoline. The
-// COM: remaining cluster_load body is bracketed by M0 save, M0 wg_mask
-// COM: clear, and M0 restore.
+// COM: The original _SADDR site is covered by an explicit clause and then
+// COM: redirected to a sled/trampoline. The clause must become s_nop before
+// COM: its member becomes a branch. The remaining cluster_load body is
+// COM: bracketed by M0 save, M0 wg_mask clear, and M0 restore.
 // DISASM-LABEL: <test_saddr_kernel>:
-// DISASM: s_branch
+// DISASM-NEXT: s_nop 0
+// DISASM-NEXT: s_branch
 // DISASM-NOT: cluster_load_b32 {{.*}}, off
 // COM: The saddr=off site that followed is rewritten to global_load_b32,
 // COM: proving the skip is specific to the _SADDR form, not a blanket opt-out.
@@ -47,6 +49,7 @@
 .type test_saddr_kernel,@function
 test_saddr_kernel:
   // SGPR-relative (SADDR) form -- must be left unchanged.
+  s_clause 0x0
   cluster_load_b32 v4, v1, s[2:3]
   s_wait_loadcnt 0x0
   // saddr=off form -- must be swapped to global_load_b32.

@@ -11,7 +11,7 @@
 ///
 ///   - cluster_load             -> global_load    (opcode swap via MCInst +
 ///                                                 MCCodeEmitter)
-///   - s_clause                 -> s_nop          (byte-level overwrite via
+///   - mixed-scope s_clause     -> s_nop          (byte-level overwrite via
 ///                                                 applyByteReplace)
 ///   - s_barrier_signal_isfirst -> s_barrier_signal
 ///                                                (opcode swap; same operand
@@ -23,12 +23,14 @@
 
 #include "comgr-hotswap-internal.h"
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
@@ -113,6 +115,111 @@ bool swapOpcode(InternalDecodedInst &DI, uint8_t *Text, const LLVMState &LS,
   return true;
 }
 
+enum class ClauseScope {
+  CU,
+  SE,
+  Device,
+  System,
+};
+
+enum class ClauseFamily {
+  VMEM,
+  Flat,
+  SMEM,
+};
+
+std::optional<ClauseFamily> getClauseFamily(StringRef Mnemonic) {
+  if (Mnemonic.starts_with("buffer_") || Mnemonic.starts_with("tbuffer_") ||
+      Mnemonic.starts_with("global_") || Mnemonic.starts_with("scratch_") ||
+      Mnemonic.starts_with("image_") || Mnemonic.starts_with("cluster_") ||
+      Mnemonic.starts_with("tensor_"))
+    return ClauseFamily::VMEM;
+  if (Mnemonic.starts_with("flat_"))
+    return ClauseFamily::Flat;
+  if (Mnemonic.starts_with("s_load") || Mnemonic.starts_with("s_buffer_load"))
+    return ClauseFamily::SMEM;
+  return std::nullopt;
+}
+
+/// Return the gfx1250 cache scope printed for \p Inst. MC operand names are
+/// backend-private, so use the target's canonical printer as the semantic
+/// interface. The printer omits the default CU scope.
+std::optional<ClauseScope> getClauseScope(const MCInst &Inst,
+                                          const LLVMState &LS) {
+  if (!LS.MCIP)
+    return std::nullopt;
+
+  SmallString<256> PrintedBuf;
+  raw_svector_ostream OS(PrintedBuf);
+  LS.MCIP->printInst(&Inst, /*Address=*/0, /*Annot=*/"", *LS.STI, OS);
+  StringRef Printed(PrintedBuf);
+  constexpr StringLiteral ScopePrefix("scope:");
+  size_t ScopePos = Printed.find(ScopePrefix);
+  if (ScopePos == StringRef::npos)
+    return ClauseScope::CU;
+
+  StringRef Scope = Printed.drop_front(ScopePos + ScopePrefix.size());
+  Scope = Scope.take_while([](char C) { return llvm::isAlnum(C) || C == '_'; });
+  return StringSwitch<std::optional<ClauseScope>>(Scope)
+      .Case("SCOPE_CU", ClauseScope::CU)
+      .Case("SCOPE_SE", ClauseScope::SE)
+      .Case("SCOPE_DEV", ClauseScope::Device)
+      .Case("SCOPE_SYS", ClauseScope::System)
+      .Default(std::nullopt);
+}
+
+/// gfx1250 A0 only rejects hard clauses whose memory operations switch cache
+/// scope (SWDEV-546277). Validate the encoded clause and retain it when every
+/// memory member has the same scope. Unknown or malformed clauses are removed
+/// conservatively.
+bool clauseHasUniformScope(const PatchContext &Ctx, size_t Idx) {
+  const InternalDecodedInst &Clause = Ctx.Decoded[Idx];
+  if (Clause.Inst.getNumOperands() == 0 || !Clause.Inst.getOperand(0).isImm())
+    return false;
+
+  uint64_t MemberCount =
+      (static_cast<uint64_t>(Clause.Inst.getOperand(0).getImm()) & 63) + 1;
+  if (MemberCount > 63 || MemberCount > Ctx.Decoded.size() - Idx - 1)
+    return false;
+
+  std::optional<ClauseScope> Scope;
+  std::optional<ClauseFamily> Family;
+  bool SawMemory = false;
+  for (size_t I = Idx + 1; I <= Idx + MemberCount; ++I) {
+    const InternalDecodedInst &Member = Ctx.Decoded[I];
+    if (Member.Inst.getOpcode() == Ctx.LS.SNopOpcode)
+      continue;
+
+    if (requiresPerInstTrampoline(Ctx, I)) {
+      StringRef Mnemonic(Member.Mnemonic);
+      bool WillBeRewrittenInPlace =
+          !getClusterLoadReplacementAsm(Mnemonic).empty() &&
+          !usesSgprBaseAddress(Member.Inst, *Ctx.LS.MRI);
+      if (!WillBeRewrittenInPlace)
+        return false;
+    }
+
+    const MCInstrDesc &Desc = Ctx.LS.MCII->get(Member.Inst.getOpcode());
+    if (!Desc.mayLoad() && !Desc.mayStore())
+      return false;
+
+    std::optional<ClauseFamily> MemberFamily = getClauseFamily(Member.Mnemonic);
+    if (!MemberFamily || (Family && *Family != *MemberFamily))
+      return false;
+    Family = MemberFamily;
+
+    std::optional<ClauseScope> MemberScope =
+        getClauseScope(Member.Inst, Ctx.LS);
+    if (!MemberScope)
+      return false;
+    if (Scope && *Scope != *MemberScope)
+      return false;
+    Scope = MemberScope;
+    SawMemory = true;
+  }
+  return SawMemory;
+}
+
 } // anonymous namespace
 
 static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
@@ -144,11 +251,15 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
   }
 
   if (Mnemonic == "s_clause") {
+    if (clauseHasUniformScope(Ctx, Idx))
+      return 0;
+
     RewriteRule Rule;
     Rule.ReplaceBytes.assign(Ctx.LS.SNopBytes.begin(), Ctx.LS.SNopBytes.end());
     if (applyByteReplace(Rule, DI.Offset, DI.Size, Ctx.Text, Ctx.TextSize,
                          Ctx.LS)) {
-      log() << "hotswap: inplace: s_clause -> s_nop at 0x"
+      log() << "hotswap: inplace: mixed/unsupported-scope s_clause -> s_nop "
+               "at 0x"
             << utohexstr(DI.Offset) << "\n";
       return 1;
     }

@@ -1287,7 +1287,34 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
   return true;
 }
 
+enum class PerInstTrampolineKind {
+  None,
+  Ds2Addr,
+  TensorLoadToLds,
+  ClusterLoad,
+  DsAddtid,
+};
+
+PerInstTrampolineKind getPerInstTrampolineKind(const PatchContext &Ctx,
+                                               size_t Idx) {
+  StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
+  if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty())
+    return PerInstTrampolineKind::Ds2Addr;
+  if (Mnem == "tensor_load_to_lds" &&
+      Ctx.Config.MaskPolicy != MaskWorkaroundPolicy::None)
+    return PerInstTrampolineKind::TensorLoadToLds;
+  if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0 && isClusterLoad(Mnem))
+    return PerInstTrampolineKind::ClusterLoad;
+  if (Ctx.Config.RunB0A0Patches && !getAddtidReplacement(Mnem).empty())
+    return PerInstTrampolineKind::DsAddtid;
+  return PerInstTrampolineKind::None;
+}
+
 } // anonymous namespace
+
+bool requiresPerInstTrampoline(const PatchContext &Ctx, size_t Idx) {
+  return getPerInstTrampolineKind(Ctx, Idx) != PerInstTrampolineKind::None;
+}
 
 // -- applyTrampolinePatches -------------------------------------------------
 //
@@ -1303,24 +1330,20 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
 //   ds_*_addtid_b32        -> materialise lane-id math in ALU, then ds_*_b32
 
 static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
-  StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
-
-  if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty())
+  switch (getPerInstTrampolineKind(Ctx, Idx)) {
+  case PerInstTrampolineKind::Ds2Addr:
     return patchDs2Addr(Ctx, Idx) ? 1 : 0;
-
-  if (Mnem == "tensor_load_to_lds") {
+  case PerInstTrampolineKind::TensorLoadToLds:
     if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0)
       return patchTensorLoadToLdsA0(Ctx, Idx) ? 1 : 0;
-    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::B0)
-      return patchTensorLoadToLdsB0(Ctx, Idx) ? 1 : 0;
-  }
-
-  if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0 && isClusterLoad(Mnem))
+    return patchTensorLoadToLdsB0(Ctx, Idx) ? 1 : 0;
+  case PerInstTrampolineKind::ClusterLoad:
     return patchClusterLoadMaskA0(Ctx, Idx) ? 1 : 0;
-
-  if (Ctx.Config.RunB0A0Patches && !getAddtidReplacement(Mnem).empty())
+  case PerInstTrampolineKind::DsAddtid:
     return patchDsAddtid(Ctx, Idx) ? 1 : 0;
-
+  case PerInstTrampolineKind::None:
+    return 0;
+  }
   return 0;
 }
 
