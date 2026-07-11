@@ -622,9 +622,9 @@ bool rewriteKernelEntryDescriptorOffsets(
     }
     bool UpdatedEntry =
         OutElf.updateKernelDescriptorEntryOffset(Fixup.KernelName, *NewOffset);
-    bool UpdateDescriptor = !TargetCpu.starts_with("gfx1");
     bool UpdatedSgprs = OutElf.updateKernelDescriptorSgprCount(
-        Fixup.KernelName, Fixup.RequiredSgprs, UpdateDescriptor);
+        Fixup.KernelName, Fixup.RequiredSgprs,
+        /*UpdateDescriptor=*/false);
     bool UpdatedInstPref = OutElf.updateKernelDescriptorInstPrefSize(
         Fixup.KernelName, TargetCpu, Fixup.InstPrefLines);
     Ok = UpdatedEntry && UpdatedSgprs && UpdatedInstPref && Ok;

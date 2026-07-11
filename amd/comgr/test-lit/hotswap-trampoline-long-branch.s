@@ -21,14 +21,22 @@
 // DISASM-LABEL: <test_far>:
 // DISASM-NEXT: s_mov_b64 vcc, -1
 // DISASM-NEXT: s_add_pc_i64
+// DISASM-NOT: s_add_pc_i64
 // DISASM: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
 // DISASM-NEXT: s_get_pc_i64 s[12:13]
 // DISASM-NEXT: s_add_nc_u64 s[12:13]
 // DISASM-NEXT: s_set_pc_i64 s[12:13]
+// DISASM-NOT: s_add_pc_i64
 
 // METADATA: .name:           test_far
 // METADATA: .sgpr_count:     16
+
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
+// IDEM: IDEMPOTENT: YES
 
 // COM: The far return still needs an aligned SGPR pair. Exhausting all 106
 // COM: numbered SGPRs must fail instead of clobbering a program register.

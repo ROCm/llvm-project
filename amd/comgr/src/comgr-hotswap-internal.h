@@ -288,7 +288,9 @@ public:
   bool updateKernelDescriptorEntryOffset(llvm::StringRef KernelName,
                                          int64_t NewEntryOffset);
 
-  /// Ensure the kernel descriptor reserves at least \p RequiredSgprs SGPRs.
+  /// Ensure kernel metadata reserves at least \p RequiredSgprs SGPRs. When
+  /// \p UpdateDescriptor is true, also update the pre-gfx10 kernel descriptor
+  /// field; it is reserved and must remain unchanged on gfx10+.
   bool updateKernelDescriptorSgprCount(llvm::StringRef KernelName,
                                        unsigned RequiredSgprs,
                                        bool UpdateDescriptor = true);
@@ -730,6 +732,16 @@ struct PatchContext {
 llvm::SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS,
                                             uint64_t FromOffset,
                                             uint64_t TargetOffset);
+
+// Encode an SCC-neutral PC-relative long branch through an aligned SGPR pair.
+// s_get_pc_i64 captures the next instruction's PC, s_add_nc_u64 applies the
+// two's-complement delta without reading or writing SCC, and s_set_pc_i64
+// transfers control. Exposed for unit testing the offset math and register
+// constraints. Returns empty on failure.
+llvm::SmallVector<uint8_t> encodeSccNeutralLongBranch(const LLVMState &LS,
+                                                      uint64_t FromOffset,
+                                                      uint64_t TargetOffset,
+                                                      unsigned SgprBase);
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement,
