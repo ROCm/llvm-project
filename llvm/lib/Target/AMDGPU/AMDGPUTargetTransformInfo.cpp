@@ -1016,6 +1016,17 @@ InstructionCost GCNTTIImpl::getVectorInstrCost(
                                        VIC);
     }
 
+    // Gfx9 packed <2 x f32> pair formation for v_pk_*_f32: lanes must occupy an
+    // aligned VGPR pair. A load-fed insert can be allocated into its slot for
+    // free; a compute-fed insert typically needs an alignment move, so charge 1.
+    // f32-only on gfx9 targets with packed FP32 ops.
+    if (Opcode == Instruction::InsertElement && EltSize == 32 &&
+        ST->hasPackedFP32Ops() && ST->getGeneration() == AMDGPUSubtarget::GFX9)
+      if (auto *VecTy = dyn_cast<FixedVectorType>(ValTy))
+        if (VecTy->getNumElements() == 2 &&
+            VecTy->getElementType()->isFloatTy())
+          return (Op1 && isa<LoadInst>(Op1)) ? 0 : 1;
+
     // Extracts are just reads of a subregister, so are free. Inserts are
     // considered free because we don't want to have any cost for scalarizing
     // operations, and we don't have to copy into a different register class.
@@ -1320,6 +1331,15 @@ InstructionCost GCNTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
   Kind = improveShuffleKindFromMask(Kind, Mask, SrcTy, Index, SubTp);
 
   unsigned ScalarSize = DL.getTypeSizeInBits(SrcTy->getElementType());
+
+  // Gfx9 packed FP32 shuffles are free. InsertElement above already taxes
+  // assembling <2 x f32> pairs, and a per-lane shuffle cost stacks on top and
+  // over-penalizes SLP. f32-only on gfx9 targets with packed FP32 ops.
+  if (ScalarSize == 32 && SrcTy->getElementType()->isFloatTy() &&
+      ST->hasPackedFP32Ops() && ST->getGeneration() == AMDGPUSubtarget::GFX9) {
+    return 0;
+  }
+
   if (ST->getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS &&
       (ScalarSize == 16 || ScalarSize == 8)) {
     // Larger vector widths may require additional instructions, but are
