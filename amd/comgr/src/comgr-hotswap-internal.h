@@ -90,10 +90,43 @@ struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
-  // When set, both edges use an s_add_pc_i64 long branch instead of s_branch
-  // (reaches anywhere, no scratch reg, no SCC). Set when the appended pool is
-  // beyond s_branch's +-128 KB reach; widens the reserved branch-back slot.
+  // When set, this is a far trampoline whose edges use a PC-relative long
+  // branch instead of s_branch (reaches anywhere). Set when the appended pool
+  // is beyond s_branch's +-128 KB reach; widens the reserved branch-back slot.
+  // The backward edge (pool -> site) always uses the legacy set-pc expansion
+  // (see UsesSetPCBack) because the backward 64-bit-literal s_add_pc_i64 form
+  // triggers the gfx1250 A0 HSV-009 erratum. The forward edge (site -> pool)
+  // uses an 8-byte forward s_add_pc_i64 UNLESS it was upgraded to the set-pc
+  // expansion by expandForwardSetPc (see UsesSetPCFwd) -- the forward
+  // s_add_pc_i64 hits the same HSV-009 erratum in aggregate, so the upgrade
+  // eliminates it wherever the site can make room via instruction stealing.
   bool Long = false;
+  // When set, the backward edge is encoded with the s_get_pc_i64 / s_add_u32 /
+  // s_addc_u32 / s_set_pc_i64 sequence (SCC-preserving) instead of a backward
+  // s_add_pc_i64. This is the default on gfx1250 A0; the legacy s_add_pc_i64
+  // backward path is kept behind HOTSWAP_BACK_ADDPC for A/B testing.
+  bool UsesSetPCBack = false;
+  // When set, the FORWARD edge (site -> pool) is also encoded with the
+  // SCC-preserving set-pc expansion instead of a forward s_add_pc_i64. Set by
+  // expandForwardSetPc after all patch passes run: the forward set-pc sequence
+  // is larger than the original instruction slot, so the site "steals" the
+  // bytes of following instructions (relocating them -- fixed -- into this
+  // trampoline body, see StolenBytes). Reuses LongBranchSgprBase (the forward
+  // and backward edges of one trampoline never execute concurrently).
+  bool UsesSetPCFwd = false;
+  // For a UsesSetPCFwd trampoline, the total number of .text bytes overwritten
+  // at the site by the forward set-pc sequence: the original instruction plus
+  // all stolen following instructions. The forward set-pc is written at
+  // OriginalOffset and s_nop-padded out to StolenBytes; the backward edge
+  // returns to OriginalOffset + StolenBytes (the first byte past the stolen
+  // window). Zero when UsesSetPCFwd is false (the site footprint is then just
+  // OriginalSize).
+  uint32_t StolenBytes = 0;
+  // For a UsesSetPCBack / UsesSetPCFwd trampoline, the even-aligned scratch
+  // SGPR block reserved above the owning kernel's .sgpr_count:
+  // s[Base:Base+1] holds the computed target PC and s[Base+2] preserves the
+  // caller's SCC across the s_add_u32 / s_addc_u32 pair. Shared by both edges.
+  unsigned LongBranchSgprBase = 0;
 };
 
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
@@ -145,6 +178,21 @@ static constexpr uint32_t MinInstSize = 4;
 // offset on either edge (computed from the already-queued trampolines).
 static constexpr uint32_t LongBranchFwdBytes = 8;
 static constexpr uint32_t LongBranchMaxBytes = 12;
+
+// Backward long branch via the legacy set-pc expansion used on gfx1250 A0,
+// where the backward 64-bit-literal s_add_pc_i64 form triggers the HSV-009
+// erratum. The sequence is s_cselect_b32 (save SCC) + s_get_pc_i64 +
+// s_add_u32 + s_addc_u32 + s_cmp_lg_u32 (restore SCC) + s_set_pc_i64. This is
+// the worst-case encoded size (both adds taking 32-bit literals); the reserved
+// backward slot is s_nop-padded out to this width.
+static constexpr uint32_t LongBranchBackSeqBytes = 32;
+
+// Minimum number of .text bytes a UsesSetPCFwd site must free up (via
+// instruction stealing) to hold the forward set-pc expansion. Same worst-case
+// encoded size as the backward sequence; expandForwardSetPc steals whole
+// following instructions until the site footprint reaches this width, then the
+// forward set-pc is s_nop-padded out to the exact stolen footprint.
+static constexpr uint32_t LongBranchFwdSeqBytes = LongBranchBackSeqBytes;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
 // LLVMState::encodeSBranch to reject out-of-range branches before handing
@@ -656,6 +704,20 @@ struct PatchContext {
 llvm::SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS,
                                             uint64_t FromOffset,
                                             uint64_t TargetOffset);
+
+// Encode a backward PC-relative long branch from \p FromOffset to
+// \p TargetOffset (.text byte offsets) using the legacy set-pc expansion
+// (s_get_pc_i64 / s_add_u32 / s_addc_u32 / s_set_pc_i64), bracketed by
+// s_cselect_b32 / s_cmp_lg_u32 to preserve the caller's SCC. This avoids the
+// backward s_add_pc_i64 form that triggers the gfx1250 A0 HSV-009 erratum.
+// \p SgprBase is an even-aligned scratch block above the kernel's .sgpr_count:
+// s[SgprBase:SgprBase+1] for the PC pair, s[SgprBase+2] for the SCC save.
+// Exposed for unit testing the offset math / encoding. Returns empty on
+// failure.
+llvm::SmallVector<uint8_t> encodeSetPCLongBranch(const LLVMState &LS,
+                                                 uint64_t FromOffset,
+                                                 uint64_t TargetOffset,
+                                                 unsigned SgprBase);
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement);
@@ -729,6 +791,10 @@ struct KernelEntryTrampolineFixup {
   std::string KernelName;
   uint64_t StubTextOffset = 0;
   unsigned RequiredSgprs = 0;
+  // Original kernel entry virtual address (before redirection). Recorded so the
+  // post-growth descriptor rewrite can self-check that the installed stub
+  // actually jumps back here.
+  uint64_t OrigEntryVAddr = 0;
 };
 
 /// Build a 256-byte, entry-aligned HotSwap kernel-entry stub at
@@ -768,7 +834,7 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
 /// appendKernelEntryTrampolines after the ELF has been grown.
 bool rewriteKernelEntryDescriptorOffsets(
     llvm::WritableMemoryBuffer &OutBuf, uint64_t OldTextSize,
-    llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
+    llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups, const LLVMState &LS);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------
 

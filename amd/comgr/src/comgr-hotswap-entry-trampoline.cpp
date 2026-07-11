@@ -502,6 +502,14 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     return std::nullopt;
   AppendOffset = StubStart;
 
+  log() << "hotswap: trace: entry-trampoline pool: text_addr=0x"
+        << utohexstr(Elf.textAddr()) << " text_size=0x"
+        << utohexstr(Elf.textSize()) << " text_end=0x"
+        << utohexstr(*TextEndVAddr) << " existing_growth=0x"
+        << utohexstr(*ExistingGrowthBytes) << " stub_pool_base=0x"
+        << utohexstr(*AlignedStubPoolBaseVAddr) << " stub_start_off=0x"
+        << utohexstr(StubStart) << " kernels=" << Work.size() << "\n";
+
   for (const KernelDescriptorInfo &KD : Work) {
     std::optional<uint64_t> StubTextEnd = checkedAddUint64(
         Elf.textSize(), AppendOffset,
@@ -530,10 +538,38 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
       return std::nullopt;
     }
 
+    // Instrumentation: trace the geometry that decides where the GPU will jump,
+    // and self-check the freshly built stub's PC-relative target against the
+    // original entry (validates the s_get_pc + delta materialization).
+    log() << "hotswap: trace: kernel '" << KD.KernelName << "' kd_vaddr=0x"
+          << utohexstr(KD.VAddr) << " entry_off=" << KD.EntryOffset
+          << " entry_vaddr=0x" << utohexstr(*Entry) << " stub_vaddr=0x"
+          << utohexstr(*StubVAddr) << " append_off=0x" << utohexstr(AppendOffset)
+          << " scratch_sgpr=" << *ScratchSgpr
+          << " req_sgprs=" << (*ScratchSgpr + 2) << "\n";
+    {
+      std::vector<InternalDecodedInst> DecodedStub;
+      if (decodeKernelEntryStub(Stub, LS, DecodedStub,
+                                "entry trampoline build self-check") &&
+          hasEntryStubOperandShape(DecodedStub, LS)) {
+        std::optional<uint64_t> DecodedTarget =
+            decodeEntryStubTargetVAddr(DecodedStub, *StubVAddr);
+        if (!DecodedTarget || *DecodedTarget != *Entry) {
+          log() << "hotswap: SELFCHECK-MISMATCH (build): kernel '"
+                << KD.KernelName << "' stub decodes target 0x"
+                << (DecodedTarget ? utohexstr(*DecodedTarget) : "none")
+                << " but original entry is 0x" << utohexstr(*Entry) << "\n";
+        }
+      } else {
+        log() << "hotswap: SELFCHECK-MISMATCH (build): kernel '" << KD.KernelName
+              << "' freshly built stub failed to decode as an entry stub\n";
+      }
+    }
+
     Trampoline T;
     T.Bytes.assign(Stub.begin(), Stub.end());
     LocalGrowth.push_back(std::move(T));
-    LocalFixups.push_back({KD.KernelName, AppendOffset, *ScratchSgpr + 2});
+    LocalFixups.push_back({KD.KernelName, AppendOffset, *ScratchSgpr + 2, *Entry});
     std::optional<uint64_t> NewAppendOffset = checkedAddUint64(
         AppendOffset, KernelEntryStubStride,
         (Twine("entry trampoline append offset after '") + KD.KernelName + "'")
@@ -573,7 +609,7 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
 
 bool rewriteKernelEntryDescriptorOffsets(
     WritableMemoryBuffer &OutBuf, uint64_t OldTextSize,
-    ArrayRef<KernelEntryTrampolineFixup> Fixups) {
+    ArrayRef<KernelEntryTrampolineFixup> Fixups, const LLVMState &LS) {
   if (Fixups.empty())
     return true;
 
@@ -625,6 +661,53 @@ bool rewriteKernelEntryDescriptorOffsets(
     bool UpdatedSgprs = OutElf.updateKernelDescriptorSgprCount(
         Fixup.KernelName, Fixup.RequiredSgprs);
     Ok = UpdatedEntry && UpdatedSgprs && Ok;
+
+    // Instrumentation + end-to-end self-check on the GROWN ELF: the descriptor
+    // now points at *StubVAddr; decode the bytes actually living there and
+    // confirm the stub's PC-relative target is the original kernel entry. A
+    // mismatch here is exactly what sends the GPU PC to an unmapped address.
+    log() << "hotswap: trace: fixup kernel '" << Fixup.KernelName
+          << "' out_text_addr=0x" << utohexstr(OutElf.textAddr())
+          << " old_text_size=0x" << utohexstr(OldTextSize)
+          << " stub_text_off=0x" << utohexstr(Fixup.StubTextOffset)
+          << " stub_vaddr=0x" << utohexstr(*StubVAddr) << " kd_vaddr=0x"
+          << utohexstr(*KdVAddr) << " new_entry_off=" << *NewOffset
+          << " orig_entry_vaddr=0x" << utohexstr(Fixup.OrigEntryVAddr) << "\n";
+
+    std::optional<uint64_t> OutTextEnd = checkedAddUint64(
+        OutElf.textAddr(), OutElf.textSize(), "self-check out text end");
+    if (!OutTextEnd || *StubVAddr < OutElf.textAddr() ||
+        *StubVAddr + KernelEntryStubStride > *OutTextEnd) {
+      log() << "hotswap: SELFCHECK-MISMATCH (grown): kernel '" << Fixup.KernelName
+            << "' stub_vaddr=0x" << utohexstr(*StubVAddr)
+            << " is outside grown .text [0x" << utohexstr(OutElf.textAddr())
+            << ", 0x" << (OutTextEnd ? utohexstr(*OutTextEnd) : "?") << ")\n";
+    } else {
+      const uint64_t StubTextOff = *StubVAddr - OutElf.textAddr();
+      ArrayRef<uint8_t> StubBytes(OutElf.textData() + StubTextOff,
+                                  KernelEntryStubStride);
+      std::vector<InternalDecodedInst> DecodedStub;
+      if (decodeKernelEntryStub(StubBytes, LS, DecodedStub,
+                                "entry trampoline grown self-check") &&
+          hasEntryStubOperandShape(DecodedStub, LS)) {
+        std::optional<uint64_t> DecodedTarget =
+            decodeEntryStubTargetVAddr(DecodedStub, *StubVAddr);
+        if (!DecodedTarget || *DecodedTarget != Fixup.OrigEntryVAddr) {
+          log() << "hotswap: SELFCHECK-MISMATCH (grown): kernel '"
+                << Fixup.KernelName << "' installed stub at 0x"
+                << utohexstr(*StubVAddr) << " decodes target 0x"
+                << (DecodedTarget ? utohexstr(*DecodedTarget) : "none")
+                << " but original entry is 0x"
+                << utohexstr(Fixup.OrigEntryVAddr) << "\n";
+        }
+      } else {
+        log() << "hotswap: SELFCHECK-MISMATCH (grown): kernel '"
+              << Fixup.KernelName << "' bytes at stub_vaddr 0x"
+              << utohexstr(*StubVAddr)
+              << " do not decode as an entry stub (descriptor points to the "
+                 "wrong place)\n";
+      }
+    }
   }
   return Ok;
 }

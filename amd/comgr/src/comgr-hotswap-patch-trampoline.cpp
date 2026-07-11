@@ -26,6 +26,8 @@
 
 #include "comgr-hotswap-internal.h"
 
+#include "comgr-env.h"
+
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -359,6 +361,16 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
     return false;
 
+  if (COMGR::env::shouldEmitVerboseLogs()) {
+    uint64_t SiteVA = Ctx.Elf.textAddr() + DI.Offset;
+    std::string K = Ctx.Elf.findKernelAtAddress(SiteVA);
+    if (K.empty())
+      K = "<unknown>";
+    log() << "hotswap-map: kind=ds2addr kernel='" << K << "' site=0x"
+          << utohexstr(SiteVA) << " orig=" << DI.Mnemonic
+          << " repl=split+drain\n";
+  }
+
   DI.Mnemonic = "<replaced>";
   return true;
 }
@@ -616,6 +628,15 @@ bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
           << " dead, no save/restore needed\n";
   }
 
+  if (COMGR::env::shouldEmitVerboseLogs()) {
+    uint64_t SiteVA = Ctx.Elf.textAddr() + DI.Offset;
+    std::string K = Ctx.Elf.findKernelAtAddress(SiteVA);
+    if (K.empty())
+      K = "<unknown>";
+    log() << "hotswap-map: kind=tensor_load kernel='" << K << "' site=0x"
+          << utohexstr(SiteVA) << " orig=tensor_load_to_lds repl=pack_hh\n";
+  }
+
   DI.Mnemonic = "<replaced>";
   return true;
 }
@@ -862,6 +883,17 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
   log() << "hotswap: trampoline: " << DI.Mnemonic << " -> " << ToMnem
         << " at 0x" << utohexstr(DI.Offset) << " (offset=" << Offset << ", "
         << RegName << ")\n";
+
+  if (COMGR::env::shouldEmitVerboseLogs()) {
+    uint64_t SiteVA = Ctx.Elf.textAddr() + DI.Offset;
+    std::string K = Ctx.Elf.findKernelAtAddress(SiteVA);
+    if (K.empty())
+      K = "<unknown>";
+    log() << "hotswap-map: kind=addtid kernel='" << K << "' site=0x"
+          << utohexstr(SiteVA) << " orig=" << DI.Mnemonic
+          << " repl=alu+ds\n";
+  }
+
   DI.Mnemonic = "<replaced>";
   return true;
 }

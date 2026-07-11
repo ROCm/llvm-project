@@ -23,6 +23,8 @@
 
 #include "comgr-hotswap-internal.h"
 
+#include "comgr-env.h"
+
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -113,6 +115,21 @@ bool swapOpcode(InternalDecodedInst &DI, uint8_t *Text, const LLVMState &LS,
   return true;
 }
 
+// Verbose-only diagnostics: record which kernel + original instruction this
+// in-place patch rewrote, so a runtime fault address can be traced back.
+void logInPlaceMap(PatchContext &Ctx, const InternalDecodedInst &DI,
+                   StringRef Kind, StringRef Repl) {
+  if (!COMGR::env::shouldEmitVerboseLogs())
+    return;
+  uint64_t SiteVA = Ctx.Elf.textAddr() + DI.Offset;
+  std::string K = Ctx.Elf.findKernelAtAddress(SiteVA);
+  if (K.empty())
+    K = "<unknown>";
+  log() << "hotswap-map: kind=" << Kind << " kernel='" << K << "' site=0x"
+        << utohexstr(SiteVA) << " orig=" << DI.Mnemonic << " repl=" << Repl
+        << "\n";
+}
+
 } // anonymous namespace
 
 static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
@@ -139,6 +156,7 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
       if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
         log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << *NewOpcode
               << " at 0x" << utohexstr(DI.Offset) << "\n";
+        logInPlaceMap(Ctx, DI, "cluster_load", "global_load");
         return 1;
       }
     }
@@ -151,6 +169,7 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
                          Ctx.LS)) {
       log() << "hotswap: inplace: s_clause -> s_nop at 0x"
             << utohexstr(DI.Offset) << "\n";
+      logInPlaceMap(Ctx, DI, "s_clause", "s_nop");
       return 1;
     }
   }
@@ -186,6 +205,7 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
     if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
       log() << "hotswap: inplace: s_barrier_signal_isfirst -> opcode "
             << *NewOpcode << " at 0x" << utohexstr(DI.Offset) << "\n";
+      logInPlaceMap(Ctx, DI, "barrier_isfirst", "barrier_signal");
       return 1;
     }
   }

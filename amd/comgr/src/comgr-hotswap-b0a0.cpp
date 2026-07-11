@@ -29,11 +29,18 @@
 
 #include "comgr-hotswap-internal.h"
 
+#include "comgr-env.h"
+
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Compiler.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
+#include <cstdlib>
 #include <limits>
 
 using namespace llvm;
@@ -368,12 +375,111 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
   return {};
 }
 
+// Backward long branch via the legacy set-pc expansion. Used on gfx1250 A0
+// where the backward (64-bit-literal) s_add_pc_i64 form triggers HSV-009. This
+// mirrors the pre-s_add_pc_i64 sequence upstream emits in
+// SIInstrInfo::insertIndirectBranch and the entry-stub materialization in
+// buildKernelEntryTrampoline:
+//
+//   s_cselect_b32 sT, 1, 0        ; sT = caller SCC (SCC unchanged)
+//   s_get_pc_i64  s[N:N+1]        ; pair = PC of the following s_add_u32
+//   s_add_u32     sN,  sN,  lo32  ; pair += (target - post_getpc); clobbers SCC
+//   s_addc_u32    sN1, sN1, hi32  ; carry from the add
+//   s_cmp_lg_u32  sT, 0           ; SCC = (sT != 0), restoring caller SCC
+//   s_set_pc_i64  s[N:N+1]        ; jump to the materialized target
+//
+// s_get_pc_i64 captures the address of the *next* instruction, so the delta is
+// measured from the s_add_u32 slot (FromOffset + the 8-byte cselect+getpc
+// prefix). The add/addc pair is the only SCC writer, so it is bracketed by the
+// cselect (save) / cmp (restore) pair because a far trampoline sits in the
+// middle of straight-line code where the caller's SCC may be live across the
+// relocated site. Assembled via the MC layer; empty on failure.
+SmallVector<uint8_t> encodeSetPCLongBranch(const LLVMState &LS,
+                                           uint64_t FromOffset,
+                                           uint64_t TargetOffset,
+                                           unsigned SgprBase) {
+  const std::string Lo = "s" + std::to_string(SgprBase);
+  const std::string Hi = "s" + std::to_string(SgprBase + 1);
+  const std::string Tmp = "s" + std::to_string(SgprBase + 2);
+  const std::string Pair = "s[" + std::to_string(SgprBase) + ":" +
+                           std::to_string(SgprBase + 1) + "]";
+
+  // Fixed-size prefix ahead of the s_add_u32: s_cselect_b32 (4) +
+  // s_get_pc_i64 (4). s_get_pc_i64 returns the PC of the s_add_u32, so the
+  // PC-relative delta is measured from there.
+  constexpr uint32_t PrefixBytes = 8;
+  const int64_t Delta = static_cast<int64_t>(TargetOffset) -
+                        static_cast<int64_t>(FromOffset + PrefixBytes);
+  const uint32_t OffLo = static_cast<uint32_t>(static_cast<uint64_t>(Delta));
+  const uint32_t OffHi =
+      static_cast<uint32_t>(static_cast<uint64_t>(Delta) >> 32);
+
+  std::string Asm = joinAsmLines({
+      "s_cselect_b32 " + Tmp + ", 1, 0",
+      "s_get_pc_i64 " + Pair,
+      "s_add_u32 " + Lo + ", " + Lo + ", 0x" + utohexstr(OffLo),
+      "s_addc_u32 " + Hi + ", " + Hi + ", 0x" + utohexstr(OffHi),
+      "s_cmp_lg_u32 " + Tmp + ", 0",
+      "s_set_pc_i64 " + Pair,
+  });
+  SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, LS);
+  if (Bytes.empty() || Bytes.size() > LongBranchBackSeqBytes) {
+    log() << "hotswap: error: set-pc long branch encoding failed (size "
+          << Bytes.size() << ", max " << LongBranchBackSeqBytes << ")\n";
+    return {};
+  }
+  return Bytes;
+}
+
+// Read once: HOTSWAP_BACK_ADDPC=1 forces the legacy backward s_add_pc_i64 path
+// (pre-fix behavior) instead of the SCC-preserving set-pc expansion, so the two
+// backward-edge encodings can be A/B compared on hardware without a rebuild.
+static bool useLegacyBackAddPC() {
+  static const bool V = [] {
+    const char *E = getenv("HOTSWAP_BACK_ADDPC");
+    return E && strtol(E, nullptr, 0) != 0;
+  }();
+  return V;
+}
+
+// Reserve an even-aligned 3-SGPR scratch block above the owning kernel's
+// declared .sgpr_count for a far trampoline's backward set-pc long branch:
+// s[Base:Base+1] (PC pair) + s[Base+2] (SCC save). SGPRs above .sgpr_count are
+// never used by the kernel, and GFX10+ waves always carry the full SGPR file,
+// so no liveness analysis or kernel-descriptor bump is required (the SGPR
+// granule field is architecturally reserved on GFX10+). Records the reservation
+// in per-kernel stats. Returns the aligned base, or nullopt if the kernel is
+// too SGPR-saturated to fit the block below MaxSgprs.
+static std::optional<unsigned>
+tryReserveLongBranchSgprs(PatchContext &Ctx, uint64_t InstOffset) {
+  std::string KernelName =
+      Ctx.Elf.findKernelAtAddress(InstOffset + Ctx.Elf.textAddr());
+  std::optional<unsigned> KdSgprs = Ctx.Elf.getKernelSgprCount(KernelName);
+  // Unknown count -> assume saturated so we decline rather than risk clobbering
+  // a live SGPR.
+  unsigned SgprCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
+
+  const unsigned Base = (SgprCount + 1) & ~1u;
+  constexpr unsigned NeededRegs = 3; // even-aligned PC pair + SCC temp
+  if (Base > Ctx.Config.MaxSgprs || Ctx.Config.MaxSgprs - Base < NeededRegs)
+    return std::nullopt;
+
+  if (!KernelName.empty()) {
+    KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
+    Stats.ExtraSgprs = std::max(Stats.ExtraSgprs, (Base + NeededRegs) - SgprCount);
+  }
+  return Base;
+}
+
 /// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
 /// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
 /// the pool layout is known. A site beyond s_branch reach of the appended pool
-/// uses an s_add_pc_i64 long branch (no scratch reg, no SCC) on both edges; its
-/// 8-byte forward branch overwrites the site in place, so a smaller site
-/// declines rather than clobbering the next instruction.
+/// uses a PC-relative long branch on both edges: an 8-byte forward
+/// s_add_pc_i64 (32-bit literal) that overwrites the site in place -- so a
+/// site smaller than that declines rather than clobbering the next instruction
+/// -- and, on the backward edge, the SCC-preserving set-pc expansion (see
+/// encodeSetPCLongBranch), which needs an even-aligned scratch SGPR block. A
+/// far site whose owning kernel has no room for that block also declines.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     ArrayRef<uint8_t> Replacement) {
@@ -406,6 +512,28 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
   T.Bytes.insert(T.Bytes.end(), Replacement.begin(), Replacement.end());
 
   if (Far) {
+    // HSV-009 bisection instrument. HOTSWAP_FAR_KEEP controls how many far
+    // sites (in object scan order) still get a real long-branch trampoline;
+    // the rest are DECLINED (original instruction left in place).
+    //   unset / <0  -> keep all far sites (pre-fix behavior, reproduces fault)
+    //   0           -> decline all far sites (the HSV-009 "fix")
+    //   N > 0       -> keep the first N far sites, decline the rest
+    // Lets us sweep N across GPUs to find whether a count threshold or a
+    // specific site triggers the crash, without editing/rebuilding per point.
+    static const long FarKeep = [] {
+      const char *E = getenv("HOTSWAP_FAR_KEEP");
+      return E ? strtol(E, nullptr, 0) : -1;
+    }();
+    static std::atomic<long> FarSeen{0};
+    const long Idx = FarSeen.fetch_add(1);
+    const bool Decline = (FarKeep >= 0 && Idx >= FarKeep);
+    if (Decline) {
+      log() << "hotswap: far trampoline #" << Idx << " at 0x"
+            << utohexstr(InstOffset) << " declined (HOTSWAP_FAR_KEEP=" << FarKeep
+            << ", HSV-009); site left unpatched\n";
+      return false;
+      
+    }
     if (InstSize < LongBranchFwdBytes) {
       log() << "hotswap: long trampoline: site 0x" << utohexstr(InstOffset)
             << " is " << InstSize << " B < " << LongBranchFwdBytes
@@ -413,8 +541,28 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
       return false;
     }
     T.Long = true;
-    // Reserve the long branch-back slot (worst-case 64-bit-literal size).
-    T.Bytes.insert(T.Bytes.end(), LongBranchMaxBytes, uint8_t{0});
+    if (useLegacyBackAddPC()) {
+      // A/B path: legacy backward s_add_pc_i64 (reproduces the HSV-009 fault).
+      T.Bytes.insert(T.Bytes.end(), LongBranchMaxBytes, uint8_t{0});
+    } else {
+      // Default fix: the backward edge uses the SCC-preserving set-pc
+      // expansion, which needs an even-aligned scratch SGPR block above the
+      // owning kernel's .sgpr_count. Decline the site if none fits.
+      std::optional<unsigned> SgprBase =
+          tryReserveLongBranchSgprs(Ctx, InstOffset);
+      if (!SgprBase) {
+        log() << "hotswap: far trampoline at 0x" << utohexstr(InstOffset)
+              << ": no aligned scratch SGPR block for backward set-pc branch; "
+              << "declining (site left unpatched)\n";
+        return false;
+      }
+      T.UsesSetPCBack = true;
+      T.LongBranchSgprBase = *SgprBase;
+      T.Bytes.insert(T.Bytes.end(), LongBranchBackSeqBytes, uint8_t{0});
+    }
+    log() << "hotswap: far trampoline #" << Idx << " at 0x"
+          << utohexstr(InstOffset) << " kept (HOTSWAP_FAR_KEEP=" << FarKeep
+          << (T.UsesSetPCBack ? ", set-pc back)\n" : ", addpc back)\n");
   } else {
     // Reserve the short branch-back slot; fixupTrampolineBranches fills it in.
     T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
@@ -442,6 +590,403 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
           << " is not branch-reachable after assembly; using trampoline.\n";
   }
   return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement);
+}
+
+// -- Forward-edge set-pc upgrade (instruction stealing) -----------------------
+
+// Read once: HOTSWAP_FWD_ADDPC=1 keeps the legacy forward s_add_pc_i64 edge
+// (pre-fix behavior) instead of upgrading it to the SCC-preserving set-pc
+// expansion, so the forward-edge fix can be A/B compared without a rebuild.
+static bool useLegacyFwdAddPC() {
+  static const bool V = [] {
+    const char *E = getenv("HOTSWAP_FWD_ADDPC");
+    return E && strtol(E, nullptr, 0) != 0;
+  }();
+  return V;
+}
+
+// Mnemonics of B0-incompatible instructions handled by the trampoline patch
+// family. If one still carries its original mnemonic in the decoded stream it
+// was NOT patched (its trampoline was declined), so its .text bytes are the
+// broken-on-A0 B0 encoding. Such an instruction must never be stolen verbatim
+// into a trampoline body -- that would reintroduce the hazard the pool exists
+// to remove. Instructions rewritten in place (e.g. s_clause -> s_nop) keep
+// their original mnemonic too, but their .text bytes are already the A0-safe
+// encoding, so this check is intentionally limited to the trampoline-family
+// hazards (a strict superset check is harmless: it only declines a steal).
+static bool looksLikeUnpatchedB0Hazard(StringRef Mnemonic) {
+  if (Mnemonic == "tensor_load_to_lds")
+    return true;
+  if (Mnemonic.starts_with("ds_") &&
+      (Mnemonic.contains("_2addr") || Mnemonic.contains("_addtid")))
+    return true;
+  return false;
+}
+
+/// Post-process the deferred far trampolines to replace their forward
+/// s_add_pc_i64 edge (site -> pool) with the SCC-preserving set-pc expansion,
+/// eliminating the HSV-009-triggering instruction on the forward edge as well
+/// as the backward. The forward set-pc sequence (LongBranchFwdSeqBytes) is
+/// larger than the original instruction it overwrites, so the site "steals"
+/// the bytes of the instructions that follow it:
+///
+///   - A following instruction that is itself a far trampoline site is MERGED:
+///     its already-built (A0-fixed) replacement body is relocated into this
+///     trampoline and the separate trampoline is dropped, so consecutive
+///     patch sites collapse into one trampoline with one forward + one
+///     backward set-pc.
+///   - A following normal instruction is relocated verbatim from the
+///     (post-patch) .text bytes, provided it is safe to move.
+///
+/// The steal window grows one whole instruction at a time until it can hold
+/// the forward set-pc sequence. A trampoline whose window cannot be filled
+/// safely is left on the legacy forward s_add_pc_i64 path (correct, but still
+/// hits the erratum for that one site) -- far below the site-count threshold
+/// that triggers the erratum, so this is safe. Reuses each trampoline's
+/// existing backward-edge SGPR block; no additional SGPRs are reserved.
+///
+/// Only instructions AFTER the site are stolen (forward). A backward-steal
+/// fallback (stealing preceding instructions) exists behind
+/// HOTSWAP_FWD_STEAL_MODE>=2 but is off by default: it tended to relocate an
+/// s_delay_alu hazard hint out of its scheduling context and fault (see the
+/// StealMode comment below).
+///
+/// Runs after every patch pass, so OutTrampolines holds every far site's
+/// finished (A0-fixed) body and the decoded stream is complete. Only mutates
+/// the trampoline list; the site .text bytes and pool layout are materialized
+/// later by fixupTrampolineBranches.
+static void expandForwardSetPc(PatchContext &Ctx) {
+  // A/B gates: the legacy backward-addpc path keeps the whole pre-fix long
+  // branch shape for comparison, and HOTSWAP_FWD_ADDPC keeps just the forward
+  // edge legacy. In both cases leave the forward edge as s_add_pc_i64.
+  if (useLegacyBackAddPC() || useLegacyFwdAddPC())
+    return;
+
+  // Forward-steal aggressiveness. Backward stealing (mode >= 2) is DISABLED by
+  // default: it relocates the instructions PRECEDING a site into the trampoline,
+  // and those commonly include an address computation guarded by an s_delay_alu
+  // hazard hint whose meaning is tied to the preceding instruction stream. Moved
+  // into the pool the hint applies the wrong stall and a dependent VALU reads a
+  // stale operand -> garbage store/load address -> GPU page fault (root-caused
+  // on rocsparse spgemm/csrgemm). Forward stealing does not hit this because the
+  // s_delay_alu sits ahead of the site, not among the following instructions it
+  // relocates. isUnsafeToRelocate() also refuses to move any s_delay_alu, so
+  // even the gated-on backward path is hazard-safe; the gate stays for A/B.
+  //   HOTSWAP_FWD_STEAL_MODE=0  merge adjacent patch sites only (never relocate
+  //                             a non-site instruction, no backward steal)
+  //   HOTSWAP_FWD_STEAL_MODE=1  merge + forward-steal normal instructions, no
+  //                             backward steal (default)
+  //   HOTSWAP_FWD_STEAL_MODE>=2 also enable the backward-steal fallback
+  static const long StealMode = [] {
+    const char *E = getenv("HOTSWAP_FWD_STEAL_MODE");
+    return E ? strtol(E, nullptr, 0) : 1;
+  }();
+
+  std::vector<Trampoline> &Tramps = Ctx.OutTrampolines;
+  const LLVMState &LS = Ctx.LS;
+  if (Tramps.empty() || !LS.MCII || !LS.MRI)
+    return;
+
+  // Instruction-boundary index: a steal may only consume whole instructions,
+  // so every candidate offset must start a decoded instruction.
+  DenseMap<uint64_t, size_t> OffToInst;
+  for (size_t I = 0, E = Ctx.Decoded.size(); I < E; ++I)
+    OffToInst[Ctx.Decoded[I].Offset] = I;
+
+  // Direct branch/call target offsets. Decode used .text-relative offsets as
+  // the instruction address (see decodeTextSection), so evaluateBranch yields
+  // targets in the same .text-offset space as OriginalOffset / the steal
+  // cursor. An interior offset of a steal window must not be a branch target,
+  // or a jump would land in the middle of the forward set-pc / nop padding.
+  DenseSet<uint64_t> BranchTargets;
+  if (LS.MIA) {
+    for (const InternalDecodedInst &DI : Ctx.Decoded) {
+      const MCInst &Inst = DI.Inst;
+      if (LS.MIA->isCall(Inst) || LS.MIA->isUnconditionalBranch(Inst) ||
+          LS.MIA->isConditionalBranch(Inst)) {
+        uint64_t Target = 0;
+        if (LS.MIA->evaluateBranch(Inst, DI.Offset, DI.Size, Target))
+          BranchTargets.insert(Target);
+      }
+    }
+  }
+
+  // Site offset -> trampoline index, so a steal cursor landing on a patch site
+  // can merge that site's trampoline instead of stealing broken B0 bytes.
+  DenseMap<uint64_t, size_t> OffToTramp;
+  for (size_t I = 0, E = Tramps.size(); I < E; ++I)
+    OffToTramp[Tramps[I].OriginalOffset] = I;
+
+  // Reserved back-edge slot width for a trampoline in its current state.
+  auto backReserve = [](const Trampoline &T) -> uint32_t {
+    if (T.UsesSetPCBack)
+      return LongBranchBackSeqBytes;
+    if (T.Long)
+      return LongBranchMaxBytes;
+    return MinInstSize;
+  };
+
+  // An instruction that cannot be relocated verbatim into a trampoline body.
+  // Two classes:
+  //   1. PC-reading/writing or control-flow instructions -- their encoded
+  //      target/PC is position-dependent, so moving them changes where they go.
+  //   2. Context-dependent hazard hints -- s_delay_alu encodes a VALU
+  //      dependency/latency relative to the PRECEDING instruction stream. Once
+  //      relocated into a trampoline the preceding instructions differ, so the
+  //      hint silently applies the wrong stall and a later VALU can read a stale
+  //      operand (observed as a GPU page fault when a stolen address-compute's
+  //      s_delay_alu moved with it). Never relocate these.
+  auto isUnsafeToRelocate = [&](const InternalDecodedInst &DI) -> bool {
+    const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+    if (Desc.mayAffectControlFlow(DI.Inst, *LS.MRI))
+      return true;
+    StringRef M(DI.Mnemonic);
+    return M.contains("get_pc") || M.contains("getpc") || M.contains("set_pc") ||
+           M.contains("setpc") || M.contains("add_pc") || M.contains("addpc") ||
+           M.starts_with("s_delay");
+  };
+
+  std::vector<bool> Removed(Tramps.size(), false);
+  unsigned Upgraded = 0, Merged = 0, Kept = 0;
+  // Decline-reason tally (only for sites that fell short of the required
+  // footprint), to explain residual forward s_add_pc_i64 edges in the log.
+  unsigned RsnBoundary = 0, RsnTarget = 0, RsnEndUnknown = 0, RsnPcRel = 0,
+           RsnHazard = 0, RsnMergedOrder = 0, RsnBounds = 0, RsnBackExhausted = 0,
+           RsnStealDisabled = 0;
+
+  // Process sites in ascending .text offset. Forward stealing extends a site's
+  // window into following instructions; backward stealing (the fallback below)
+  // extends it into preceding ones. HighWater is the highest .text offset any
+  // already-finalized trampoline's window occupies (its forward set-pc region
+  // or its original slot). Backward stealing must not cross it -- those bytes
+  // are owned by an earlier trampoline, and an earlier trampoline's (indirect,
+  // set-pc) backward edge returns exactly to HighWater, so keeping the new
+  // window at or above HighWater keeps that return landing on this site's
+  // forward edge rather than inside its interior.
+  std::vector<size_t> Order(Tramps.size());
+  for (size_t I = 0, E = Tramps.size(); I < E; ++I)
+    Order[I] = I;
+  llvm::sort(Order, [&](size_t A, size_t B) {
+    return Tramps[A].OriginalOffset < Tramps[B].OriginalOffset;
+  });
+  uint64_t HighWater = 0;
+
+  for (size_t OI = 0, OE = Order.size(); OI < OE; ++OI) {
+    const size_t I = Order[OI];
+    if (Removed[I])
+      continue;
+    Trampoline &T = Tramps[I];
+    // Only far trampolines carry the erratum instruction; near ones use
+    // s_branch (no erratum) and are left untouched. The backward edge must
+    // already be the set-pc form (its SGPR block is what the forward edge
+    // reuses); the legacy backward-addpc path was excluded above.
+    if (!T.Long || !T.UsesSetPCBack) {
+      HighWater = std::max(HighWater, T.OriginalOffset + T.OriginalSize);
+      continue;
+    }
+
+    // Strip T's own reserved back slot to recover its A0-fixed replacement.
+    const uint32_t TBack = backReserve(T);
+    if (T.Bytes.size() < TBack) {
+      HighWater = std::max(HighWater, T.OriginalOffset + T.OriginalSize);
+      continue;
+    }
+    SmallVector<uint8_t> Body(T.Bytes.begin(), T.Bytes.end() - TBack);
+
+    uint64_t Footprint = T.OriginalSize;
+    uint64_t StealAt = T.OriginalOffset + T.OriginalSize;
+    uint64_t WindowStart = T.OriginalOffset;
+    SmallVector<uint8_t> Stolen;   // bytes stolen AFTER the site
+    SmallVector<uint8_t> Prefix;   // bytes stolen BEFORE the site
+    SmallVector<size_t, 4> MergedIdx;
+    unsigned *DeclineRsn = nullptr;
+
+    // Forward steal: consume following instructions until the site can hold the
+    // forward set-pc sequence. Keep going past that point while the next
+    // instruction is itself a patch site, so a run of consecutive sites
+    // collapses into one trampoline instead of stranding its tail.
+    while (true) {
+      DenseMap<uint64_t, size_t>::iterator InstIt = OffToInst.find(StealAt);
+      if (InstIt == OffToInst.end()) {
+        DeclineRsn = &RsnBoundary; // cursor not on an instruction boundary
+        break;
+      }
+      DenseMap<uint64_t, size_t>::iterator TrampIt = OffToTramp.find(StealAt);
+      const bool NextIsSite = TrampIt != OffToTramp.end();
+      const bool HaveRoom = Footprint >= LongBranchFwdSeqBytes;
+      // Enough room and the next instruction is not a strandable patch site:
+      // stop (a successful upgrade).
+      if (HaveRoom && !NextIsSite) {
+        DeclineRsn = nullptr;
+        break;
+      }
+      if (BranchTargets.count(StealAt)) {
+        DeclineRsn = &RsnTarget; // would relocate the target of a branch
+        break;
+      }
+      const InternalDecodedInst &DN = Ctx.Decoded[InstIt->second];
+      if (DN.Mnemonic == "<unknown>" || DN.Mnemonic == "s_endpgm") {
+        DeclineRsn = &RsnEndUnknown; // padding or a wave terminator: stop
+        break;
+      }
+
+      if (NextIsSite) {
+        // A following patch site: merge its fixed replacement (drop its edges).
+        const size_t J = TrampIt->second;
+        if (Removed[J] || Tramps[J].OriginalOffset <= T.OriginalOffset) {
+          DeclineRsn = &RsnMergedOrder;
+          break;
+        }
+        const Trampoline &T2 = Tramps[J];
+        const uint32_t T2Back = backReserve(T2);
+        if (T2.Bytes.size() < T2Back) {
+          DeclineRsn = &RsnMergedOrder;
+          break;
+        }
+        Stolen.append(T2.Bytes.begin(), T2.Bytes.end() - T2Back);
+        Footprint += T2.OriginalSize;
+        StealAt += T2.OriginalSize;
+        MergedIdx.push_back(J);
+      } else {
+        // A normal instruction: relocate its (post-patch) .text bytes verbatim.
+        if (StealMode < 1) {
+          DeclineRsn = &RsnStealDisabled;
+          break;
+        }
+        if (isUnsafeToRelocate(DN)) {
+          DeclineRsn = &RsnPcRel;
+          break;
+        }
+        if (looksLikeUnpatchedB0Hazard(DN.Mnemonic)) {
+          DeclineRsn = &RsnHazard;
+          break;
+        }
+        if (DN.Offset + DN.Size > Ctx.TextSize) {
+          DeclineRsn = &RsnBounds;
+          break;
+        }
+        log() << "hotswap: fwd-steal-normal: off=0x" << utohexstr(DN.Offset)
+              << " mn=" << DN.Mnemonic << "\n";
+        const uint8_t *P = Ctx.Text + DN.Offset;
+        Stolen.append(P, P + DN.Size);
+        Footprint += DN.Size;
+        StealAt += DN.Size;
+      }
+    }
+
+    // Backward steal fallback: when forward stealing was blocked short (most
+    // commonly by a branch a few instructions after the site), extend the
+    // window into the PRECEDING instructions instead. The forward set-pc then
+    // starts at WindowStart (< the original site) and those preceding
+    // instructions run -- in original order -- ahead of the site's replacement
+    // in the trampoline body. Only normal, relocatable instructions above
+    // HighWater are eligible, and the site itself must not be a branch target
+    // (it becomes an interior offset once the window starts before it).
+    if (Footprint < LongBranchFwdSeqBytes && StealMode >= 2) {
+      DenseMap<uint64_t, size_t>::iterator SiteIt =
+          OffToInst.find(T.OriginalOffset);
+      size_t K =
+          (SiteIt != OffToInst.end()) ? SiteIt->second : Ctx.Decoded.size();
+      const std::string SiteKernel =
+          Ctx.Elf.findKernelAtAddress(T.OriginalOffset + Ctx.Elf.textAddr());
+      while (Footprint < LongBranchFwdSeqBytes && K > 0) {
+        // WindowStart becomes an interior offset once we prepend before it, so
+        // nothing may branch to it (the very first check covers the site).
+        if (BranchTargets.count(WindowStart)) {
+          DeclineRsn = &RsnBackExhausted;
+          break;
+        }
+        const InternalDecodedInst &DP = Ctx.Decoded[K - 1];
+        const uint64_t POff = DP.Offset;
+        if (POff < HighWater || POff + DP.Size != WindowStart) {
+          DeclineRsn = &RsnBackExhausted; // owned by an earlier tramp / gap
+          break;
+        }
+        if (OffToTramp.count(POff)) {
+          DeclineRsn = &RsnBackExhausted; // don't overlap a preceding site
+          break;
+        }
+        if (DP.Mnemonic == "<unknown>" || DP.Mnemonic == "s_endpgm") {
+          DeclineRsn = &RsnBackExhausted;
+          break;
+        }
+        // Never relocate across a kernel boundary (the s_endpgm/PC-relative
+        // barriers above usually stop first; this is defense-in-depth).
+        if (Ctx.Elf.findKernelAtAddress(POff + Ctx.Elf.textAddr()) != SiteKernel) {
+          DeclineRsn = &RsnBackExhausted;
+          break;
+        }
+        if (isUnsafeToRelocate(DP)) {
+          DeclineRsn = &RsnPcRel;
+          break;
+        }
+        if (looksLikeUnpatchedB0Hazard(DP.Mnemonic)) {
+          DeclineRsn = &RsnHazard;
+          break;
+        }
+        if (POff + DP.Size > Ctx.TextSize) {
+          DeclineRsn = &RsnBounds;
+          break;
+        }
+        const uint8_t *P = Ctx.Text + POff;
+        Prefix.insert(Prefix.begin(), P, P + DP.Size);
+        Footprint += DP.Size;
+        WindowStart = POff;
+        --K;
+      }
+    }
+
+    if (Footprint < LongBranchFwdSeqBytes) {
+      if (DeclineRsn)
+        ++*DeclineRsn;
+      ++Kept; // leave T on the legacy forward s_add_pc_i64 edge
+      HighWater = std::max(HighWater, T.OriginalOffset + T.OriginalSize);
+      continue;
+    }
+
+    // Commit: rebuild T as [prefix...][replacement][stolen...][back slot] and
+    // move the site to WindowStart (where the forward set-pc is written).
+    SmallVector<uint8_t> NewBytes;
+    NewBytes.reserve(Prefix.size() + Body.size() + Stolen.size() +
+                     LongBranchBackSeqBytes);
+    NewBytes.append(Prefix.begin(), Prefix.end());
+    NewBytes.append(Body.begin(), Body.end());
+    NewBytes.append(Stolen.begin(), Stolen.end());
+    NewBytes.append(LongBranchBackSeqBytes, uint8_t{0});
+    T.Bytes = std::move(NewBytes);
+    T.OriginalOffset = WindowStart;
+    T.UsesSetPCFwd = true;
+    T.StolenBytes = static_cast<uint32_t>(Footprint);
+    for (size_t J : MergedIdx)
+      Removed[J] = true;
+    ++Upgraded;
+    Merged += MergedIdx.size();
+    HighWater = std::max(HighWater, StealAt);
+    if (!Prefix.empty())
+      log() << "hotswap: fwd set-pc backward-stolen: window_start=0x"
+            << utohexstr(WindowStart) << " site_end=0x" << utohexstr(StealAt)
+            << " footprint=" << Footprint << " prefix_bytes=" << Prefix.size()
+            << " merged=" << MergedIdx.size() << "\n";
+  }
+
+  if (Merged) {
+    std::vector<Trampoline> Compact;
+    Compact.reserve(Tramps.size() - Merged);
+    for (size_t I = 0, E = Tramps.size(); I < E; ++I)
+      if (!Removed[I])
+        Compact.push_back(std::move(Tramps[I]));
+    Tramps.swap(Compact);
+  }
+
+  log() << "hotswap: forward set-pc: upgraded " << Upgraded
+        << " far trampoline(s) (merged " << Merged
+        << " adjacent site(s)); " << Kept
+        << " left on legacy forward s_add_pc_i64 (decline reasons:"
+        << " branch_target=" << RsnTarget << " end/unknown=" << RsnEndUnknown
+        << " pc_relative=" << RsnPcRel << " unpatched_hazard=" << RsnHazard
+        << " boundary=" << RsnBoundary << " merge_order=" << RsnMergedOrder
+        << " bounds=" << RsnBounds << " back_exhausted=" << RsnBackExhausted
+        << " steal_disabled=" << RsnStealDisabled << ")\n";
 }
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
@@ -543,6 +1088,14 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
   if (VT.applyVop3px2Src2Fix)
     Patched += VT.applyVop3px2Src2Fix(Ctx);
 
+  // Upgrade far trampolines' forward edge from s_add_pc_i64 to the
+  // SCC-preserving set-pc expansion via instruction stealing. Runs after all
+  // patch passes so every far site's finished body is present and adjacent
+  // sites can be merged. Reuses the backward edge's SGPR block, so it must run
+  // before the per-kernel SGPR accounting below (which is already charged for
+  // that block at emit time); it never reserves new SGPRs.
+  expandForwardSetPc(Ctx);
+
   for (const llvm::StringMapEntry<KernelPatchStats> &KV : KernelStats) {
     StringRef KName = KV.first();
     const KernelPatchStats &Stats = KV.second;
@@ -608,16 +1161,29 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
-    // Long trampolines reserve a wider branch-back slot and use s_add_pc_i64
-    // on both edges; short ones use s_branch. Both slots are s_nop-padded to
-    // their reserved size after the branch is written.
-    const uint32_t BackReserve = T.Long ? LongBranchMaxBytes : MinInstSize;
+    // Long trampolines reserve a wider branch-back slot; short ones use
+    // s_branch. The backward edge of a long trampoline uses the SCC-preserving
+    // set-pc expansion by default (UsesSetPCBack) and only the legacy backward
+    // s_add_pc_i64 under HOTSWAP_BACK_ADDPC. The forward edge uses an 8-byte
+    // forward s_add_pc_i64 unless expandForwardSetPc upgraded it to the set-pc
+    // expansion (UsesSetPCFwd), in which case the site footprint is the stolen
+    // window (StolenBytes) and the backward edge returns past it. Every slot is
+    // s_nop-padded out to its reserved size after the branch is written.
+    const uint32_t BackReserve =
+        T.Long ? (T.UsesSetPCBack ? LongBranchBackSeqBytes : LongBranchMaxBytes)
+               : MinInstSize;
     const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
-    const uint64_t ReturnTo = T.OriginalOffset + T.OriginalSize;
+    // The site footprint is the original slot, or the full stolen window when
+    // the forward edge was upgraded to set-pc.
+    const uint32_t SiteFootprint =
+        T.UsesSetPCFwd ? T.StolenBytes : T.OriginalSize;
+    const uint64_t ReturnTo = T.OriginalOffset + SiteFootprint;
 
-    SmallVector<uint8_t> BrBack = T.Long
-                                      ? encodeLongBranch(LS, BackSlot, ReturnTo)
-                                      : LS.encodeSBranch(BackSlot, ReturnTo);
+    SmallVector<uint8_t> BrBack =
+        !T.Long ? LS.encodeSBranch(BackSlot, ReturnTo)
+                : (T.UsesSetPCBack ? encodeSetPCLongBranch(LS, BackSlot, ReturnTo,
+                                                           T.LongBranchSgprBase)
+                                   : encodeLongBranch(LS, BackSlot, ReturnTo));
     if (BrBack.empty() || BrBack.size() > BackReserve) {
       log() << "hotswap: error: trampoline branch-back encoding failed at 0x"
             << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
@@ -631,16 +1197,21 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
                   LS.SNopBytes.data(), MinInstSize);
 
     SmallVector<uint8_t> BrFwd =
-        T.Long ? encodeLongBranch(LS, T.OriginalOffset, TP)
-               : LS.encodeSBranch(T.OriginalOffset, TP);
-    if (BrFwd.empty() || BrFwd.size() > T.OriginalSize) {
+        T.UsesSetPCFwd
+            ? encodeSetPCLongBranch(LS, T.OriginalOffset, TP,
+                                    T.LongBranchSgprBase)
+            : (T.Long ? encodeLongBranch(LS, T.OriginalOffset, TP)
+                      : LS.encodeSBranch(T.OriginalOffset, TP));
+    if (BrFwd.empty() || BrFwd.size() > SiteFootprint) {
       log() << "hotswap: error: trampoline branch-fwd encoding failed at 0x"
-            << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
+            << utohexstr(T.OriginalOffset)
+            << (T.UsesSetPCFwd ? " (long, set-pc fwd)\n"
+                               : (T.Long ? " (long)\n" : "\n"));
       return false;
     }
     std::memcpy(Text + T.OriginalOffset, BrFwd.data(), BrFwd.size());
-    // Pad the tail of the replaced slot with cached s_nop bytes.
-    for (uint32_t I = BrFwd.size(); I + MinInstSize <= T.OriginalSize;
+    // Pad the tail of the site footprint with cached s_nop bytes.
+    for (uint32_t I = BrFwd.size(); I + MinInstSize <= SiteFootprint;
          I += MinInstSize)
       std::memcpy(Text + T.OriginalOffset + I, LS.SNopBytes.data(),
                   MinInstSize);
@@ -659,6 +1230,25 @@ static void patchDebugSections(WritableMemoryBuffer &ElfBuf,
                                const ElfView &Elf, size_t GrowthTotal) {
   uint8_t *Data = reinterpret_cast<uint8_t *>(ElfBuf.getBufferStart());
   size_t Size = ElfBuf.getBufferSize();
+  if (COMGR::env::shouldEmitVerboseLogs()) {
+    // Trampolines are appended contiguously right after the original .text,
+    // in array order. Their virtual address is textAddr + original textSize +
+    // cumulative body bytes. Emit a map line per trampoline so a fault PC in
+    // the trampoline region can be traced to its origin kernel + site.
+    uint64_t Pos = Elf.textSize();
+    for (const Trampoline &T : Trampolines) {
+      uint64_t TrampVA = Elf.textAddr() + Pos;
+      uint64_t SiteVA = Elf.textAddr() + T.OriginalOffset;
+      std::string K = Elf.findKernelAtAddress(SiteVA);
+      if (K.empty())
+        K = "<unknown>";
+      log() << "hotswap-map: tramp kernel='" << K << "' tramp_vaddr=0x"
+            << utohexstr(TrampVA) << " site_vaddr=0x" << utohexstr(SiteVA)
+            << " orig_off=0x" << utohexstr(T.OriginalOffset)
+            << " bytes=" << T.Bytes.size() << "\n";
+      Pos += T.Bytes.size();
+    }
+  }
   if (!addTrampolineSymbols(ElfBuf, Trampolines, Elf.textSize(),
                             Elf.textSectionIndex()))
     log() << "hotswap: error: addTrampolineSymbols failed\n";
@@ -842,7 +1432,7 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     }
     patchDebugSections(*Result, Deferred, Elf, GrowthTotal);
     if (!rewriteKernelEntryDescriptorOffsets(*Result, Elf.textSize(),
-                                             EntryFixups))
+                                             EntryFixups, LS))
       return AMD_COMGR_STATUS_ERROR;
   } else {
     Result = copyOutputBuffer(Buf.data(), ElfSize, "patched");
@@ -852,6 +1442,31 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
 
   if (!ScratchPatches.empty())
     runScratchVerification(*Result, LS, ScratchPatches, Config.MaxVgprs);
+
+  // Debug dump: when HOTSWAP_DUMP_DIR is set, write the input (pre) and patched
+  // (post) code objects to disk so the exact bytes the loader ships can be
+  // disassembled and diffed against a synthetic repro. Files are keyed by a
+  // per-process index plus the input size so multiple transpiles are
+  // distinguishable and matchable across runs.
+  if (const char *DumpDir = getenv("HOTSWAP_DUMP_DIR")) {
+    static std::atomic<unsigned> DumpIdx{0};
+    unsigned Idx = DumpIdx.fetch_add(1);
+    auto WriteFile = [&](const char *Tag, const void *Data, size_t Sz) {
+      char Path[4096];
+      snprintf(Path, sizeof(Path), "%s/co_%03u_in%zu_%s.elf", DumpDir, Idx,
+               ElfSize, Tag);
+      if (FILE *F = fopen(Path, "wb")) {
+        fwrite(Data, 1, Sz, F);
+        fclose(F);
+        log() << "hotswap: dumped " << Tag << " -> " << Path << " (" << Sz
+              << " B)\n";
+      } else {
+        log() << "hotswap: error: could not open dump file " << Path << "\n";
+      }
+    };
+    WriteFile("pre", ElfData, ElfSize);
+    WriteFile("post", Result->getBufferStart(), Result->getBufferSize());
+  }
 
   Out = std::move(Result);
   return AMD_COMGR_STATUS_SUCCESS;
