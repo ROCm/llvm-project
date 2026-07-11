@@ -775,8 +775,13 @@ public:
       return flags;
     }
 
+#if 0//<<<<<<< HEAD
     flags |= mapFlags::to | mapFlags::descriptor | mapFlags::always |
-             (mapTypeFlag & mapFlags::implicit);
+             (mapTypeFlag & mapFlags::impliciti | MapFlags::present);
+#else//=======
+    flags |=
+        MapFlags::to | (mapTypeFlag & (MapFlags::implicit | MapFlags::present));
+#endif//>>>>>>> 8e955ee22fbd1bd41e8adb9a0c333113824f1dfe
 
     if (moduleRequiresUSM(target->getParentOfType<mlir::ModuleOp>()))
       flags |= mapFlags::close;

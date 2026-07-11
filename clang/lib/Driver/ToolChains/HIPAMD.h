@@ -52,6 +52,7 @@ private:
 
 namespace toolchains {
 
+#if 0//<<<<<<< HEAD
 class LLVM_LIBRARY_VISIBILITY HIPAMDToolChain final : public ROCMToolChain {
 public:
   HIPAMDToolChain(const Driver &D, const llvm::Triple &Triple,
@@ -112,6 +113,9 @@ protected:
 };
 
 class LLVM_LIBRARY_VISIBILITY SPIRVAMDToolChain final : public ROCMToolChain {
+#else//=======
+class LLVM_LIBRARY_VISIBILITY SPIRVAMDToolChain final : public AMDGPUToolChain {
+#endif//>>>>>>> 8e955ee22fbd1bd41e8adb9a0c333113824f1dfe
 public:
   SPIRVAMDToolChain(const Driver &D, const llvm::Triple &Triple,
                     const llvm::opt::ArgList &Args);

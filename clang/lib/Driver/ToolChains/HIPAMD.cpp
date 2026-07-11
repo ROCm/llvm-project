@@ -234,6 +234,7 @@ void AMDGCN::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   return constructLldCommand(C, JA, Inputs, Output, Args);
 }
 
+#if 0//<<<<<<< HEAD
 HIPAMDToolChain::HIPAMDToolChain(const Driver &D, const llvm::Triple &Triple,
                                  const ToolChain &HostTC, const ArgList &Args)
     : ROCMToolChain(D, Triple, Args), HostTC(HostTC) {
@@ -445,14 +446,12 @@ HIPAMDToolChain::checkTargetID(const llvm::opt::ArgList &DriverArgs) const {
   return PTID;
 }
 
+#endif//>>>>>>> 8e955ee22fbd1bd41e8adb9a0c333113824f1dfe
 SPIRVAMDToolChain::SPIRVAMDToolChain(const Driver &D,
                                      const llvm::Triple &Triple,
-                                     const ArgList &Args)
-    : ROCMToolChain(D, Triple, Args) {
-  getProgramPaths().push_back(getDriver().Dir);
-}
+                                     const llvm::opt::ArgList &Args)
+    : AMDGPUToolChain(D, Triple, Args) {}
 
 Tool *SPIRVAMDToolChain::buildLinker() const {
-  assert(getTriple().getArch() == llvm::Triple::spirv64);
   return new tools::AMDGCN::Linker(*this);
 }
