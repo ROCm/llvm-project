@@ -467,23 +467,19 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
     return std::nullopt;
   }
 
-  // s_get_pc_i64/s_set_pc_i64 require an aligned pair. A third scalar saves
-  // SCC across the add/addc sequence. All three come from above the kernel's
-  // declared allocation, so no live program register is repurposed.
+  // s_get_pc_i64/s_set_pc_i64 require an aligned pair. Allocate it above the
+  // kernel's declared registers so no live program register is repurposed.
+  // s_add_nc_u64 adjusts the captured PC without reading or writing SCC.
   unsigned ScratchPair = (NumberedSgprCount + 1) & ~1u;
-  unsigned SccScratch = ScratchPair + 2;
-  if (ScratchPair >= Ctx.Config.MaxSgprs || SccScratch >= Ctx.Config.MaxSgprs) {
+  if (ScratchPair + 1 >= Ctx.Config.MaxSgprs) {
     log() << "hotswap: error: safe far return: kernel " << KernelName
-          << " has no aligned SGPR pair plus SCC scratch below s"
-          << Ctx.Config.MaxSgprs << "\n";
+          << " has no aligned SGPR pair below s" << Ctx.Config.MaxSgprs
+          << "\n";
     return std::nullopt;
   }
 
   std::string Pair = "s[" + std::to_string(ScratchPair) + ":" +
                      std::to_string(ScratchPair + 1) + "]";
-  std::string Lo = "s" + std::to_string(ScratchPair);
-  std::string Hi = "s" + std::to_string(ScratchPair + 1);
-  std::string SavedScc = "s" + std::to_string(SccScratch);
   SmallVector<uint8_t> Bytes;
   auto Append = [&](const std::string &Asm) {
     SmallVector<uint8_t> Inst = assembleSingleInst(Asm, Ctx.LS);
@@ -496,8 +492,7 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
     return true;
   };
 
-  if (!Append("s_cselect_b32 " + SavedScc + ", 1, 0") ||
-      !Append("s_get_pc_i64 " + Pair))
+  if (!Append("s_get_pc_i64 " + Pair))
     return std::nullopt;
 
   // s_get_pc_i64 returns the address of the following instruction.
@@ -507,16 +502,13 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
     return std::nullopt;
   uint64_t ReturnTo = InstOffset + InstSize;
   uint64_t Delta = ReturnTo - *PcBase;
-  uint32_t DeltaLo = static_cast<uint32_t>(Delta);
-  uint32_t DeltaHi = static_cast<uint32_t>(Delta >> 32);
 
-  if (!Append("s_add_u32 " + Lo + ", " + Lo + ", 0x" + utohexstr(DeltaLo)) ||
-      !Append("s_addc_u32 " + Hi + ", " + Hi + ", 0x" + utohexstr(DeltaHi)) ||
-      !Append("s_cmp_lg_u32 " + SavedScc + ", 0") ||
+  if (!Append("s_add_nc_u64 " + Pair + ", " + Pair + ", 0x" +
+              utohexstr(Delta)) ||
       !Append("s_set_pc_i64 " + Pair))
     return std::nullopt;
 
-  unsigned RequiredNumberedSgprs = SccScratch + 1;
+  unsigned RequiredNumberedSgprs = ScratchPair + 2;
   unsigned PreservedImplicitSgprs = (UsesVcc || HasCall) ? VccSgprs : 0;
   unsigned RequiredSgprs = RequiredNumberedSgprs + PreservedImplicitSgprs;
   if (RequiredSgprs < *TotalSgprCount) {
@@ -528,16 +520,17 @@ buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
   Stats.ExtraSgprs =
       std::max(Stats.ExtraSgprs, RequiredSgprs - *TotalSgprCount);
   log() << "hotswap: safe far return at 0x" << utohexstr(InstOffset) << " via "
-        << Pair << ", SCC via " << SavedScc << "\n";
+        << Pair << "\n";
   return Bytes;
 }
 
 /// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
 /// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
 /// the pool layout is known. A site beyond s_branch reach of the appended pool
-/// uses an s_add_pc_i64 long branch (no scratch reg, no SCC) on both edges; its
-/// 8-byte forward branch overwrites the site in place, so a smaller site
-/// declines rather than clobbering the next instruction.
+/// uses s_add_pc_i64 on the forward edge. Required rewrites return through an
+/// SGPR pair with an SCC-neutral get-PC/add/set-PC sequence; optional rewrites
+/// decline. The 8-byte forward branch overwrites the site in place, so a
+/// smaller site declines rather than clobbering the next instruction.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     ArrayRef<uint8_t> Replacement,
@@ -802,16 +795,16 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
   // rewrite, so there is nothing useful to recover beyond it.
   //
   // Offsets are .text-relative; the pool begins at PoolBaseOffset
-  // (trampolinePoolVAddr() - textAddr()), which is far past .text, so both
-  // edges route through the s_add_pc_i64 long branch.
+  // (trampolinePoolVAddr() - textAddr()), which can be far past .text.
   uint64_t TrampOffset = PoolBaseOffset;
   for (Trampoline &T : Trampolines) {
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
-    // Required far patches carry an SCC-preserving s_get_pc_i64/s_set_pc_i64
-    // return assembled when the trampoline is queued. Other long returns are
-    // never queued on gfx1250 A0 because backward s_add_pc_i64 is unsafe.
+    // Required far patches carry an SCC-neutral s_get_pc_i64/s_add_nc_u64/
+    // s_set_pc_i64 return assembled when the trampoline is queued. Other long
+    // returns are never queued on gfx1250 A0 because backward s_add_pc_i64 is
+    // unsafe.
     if (!T.PreEncodedBack) {
       const uint32_t BackReserve = T.Long ? LongBranchMaxBytes : MinInstSize;
       const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
