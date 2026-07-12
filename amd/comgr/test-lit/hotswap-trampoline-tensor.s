@@ -95,6 +95,11 @@
 // DISASM: s_branch
 // DISASM: s_mov_b32 s0, s4
 // DISASM-NEXT: s_endpgm
+// DISASM: s_mov_b32 [[ZERO_SCRATCH:s[0-9]+]], s4
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
+// DISASM-NEXT: s_mov_b32 s4, [[ZERO_SCRATCH]]
+// DISASM-NEXT: s_branch
 
 // COM: Kernel 6 (four-group tensor): operand 1 is D# Group 1, so the
 // COM: patch must clear s4 even though additional SGPR tuple operands follow.
@@ -103,12 +108,6 @@
 // DISASM: s_endpgm
 // DISASM: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11], s[12:15], s[16:19]
-// DISASM-NEXT: s_branch
-
-// DISASM: s_mov_b32 [[ZERO_SCRATCH:s[0-9]+]], s4
-// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
-// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
-// DISASM-NEXT: s_mov_b32 s4, [[ZERO_SCRATCH]]
 // DISASM-NEXT: s_branch
 
 // COM: Idempotency: rewriting the output again should produce identical bytes.

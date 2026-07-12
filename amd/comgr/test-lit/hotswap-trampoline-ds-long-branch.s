@@ -33,9 +33,9 @@
 // DISASM-NOT: ds_store_2addr
 // DISASM: ds_load_b64 v[0:1], v4 offset:512
 // DISASM-NEXT: ds_load_b64 v[2:3], v4 offset:1024
-// DISASM: s_get_pc_i64 s[0:1]
-// DISASM-NEXT: s_add_nc_u64 s[0:1]
-// DISASM-NEXT: s_set_pc_i64 s[0:1]
+// DISASM: s_get_pc_i64 s[2:3]
+// DISASM-NEXT: s_add_nc_u64 s[2:3]
+// DISASM-NEXT: s_set_pc_i64 s[2:3]
 // DISASM: ds_store_b32 v2, v0 offset:256
 // DISASM-NEXT: ds_store_b32 v2, v1 offset:768
 // DISASM: s_get_pc_i64 s[2:3]
@@ -43,7 +43,7 @@
 // DISASM-NEXT: s_set_pc_i64 s[2:3]
 
 // METADATA: .name:           test_ds2addr_far_load
-// METADATA: .sgpr_count:     4
+// METADATA: .sgpr_count:     6
 // METADATA: .name:           test_ds2addr_far_store
 // METADATA: .sgpr_count:     6
 
