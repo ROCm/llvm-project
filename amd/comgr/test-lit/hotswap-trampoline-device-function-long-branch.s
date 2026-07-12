@@ -1,7 +1,6 @@
 // COM: A far patch can live in an ordinary device function shared by multiple
-// COM: kernels. The sign-extended literal32 s_add_pc_i64 return itself uses no
-// COM: SGPR. The tensor workaround still saves its live descriptor word, so
-// COM: that separate scratch allocation is charged to both possible callers.
+// COM: kernels. The tensor descriptor save and set-PC return safely reuse one
+// COM: global scratch block, charged to both possible callers.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
@@ -18,12 +17,17 @@
 // DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
 // DISASM-NEXT: s_mov_b32 s4, s66
-// DISASM-NEXT: s_add_pc_i64 0xffff{{[0-9a-f]+}}
+// DISASM-NEXT: s_cselect_b32 s68, 1, 0
+// DISASM-NEXT: s_get_pc_i64 s[66:67]
+// DISASM-NEXT: s_add_co_u32 s66, s66,
+// DISASM-NEXT: s_add_co_ci_u32 s67, s67,
+// DISASM-NEXT: s_cmp_lg_u32 s68, 0
+// DISASM-NEXT: s_set_pc_i64 s[66:67]
 
 // META: .name:           kernel_a
-// META: .sgpr_count:     69
+// META: .sgpr_count:     71
 // META: .name:           kernel_b
-// META: .sgpr_count:     69
+// META: .sgpr_count:     71
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

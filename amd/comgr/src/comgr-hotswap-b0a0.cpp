@@ -395,6 +395,50 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
   return Bytes.size() == LongBranchBytes ? Bytes : SmallVector<uint8_t>{};
 }
 
+SmallVector<uint8_t> encodeSetPCLongBranch(const LLVMState &LS,
+                                           uint64_t FromOffset,
+                                           uint64_t TargetOffset,
+                                           unsigned SgprBase) {
+  if ((SgprBase & 1u) != 0 ||
+      SgprBase > std::numeric_limits<unsigned>::max() - 2) {
+    log() << "hotswap: error: set-PC long branch requires an aligned "
+             "three-SGPR block, got s"
+          << SgprBase << "\n";
+    return {};
+  }
+
+  const std::string Lo = "s" + std::to_string(SgprBase);
+  const std::string Hi = "s" + std::to_string(SgprBase + 1);
+  const std::string Pair = "s[" + std::to_string(SgprBase) + ":" +
+                           std::to_string(SgprBase + 1) + "]";
+  const std::string SccSave = "s" + std::to_string(SgprBase + 2);
+
+  // s_get_pc_i64 is the second 4-byte instruction and captures the address
+  // immediately after itself.
+  std::optional<uint64_t> PcBase = checkedAddUint64(
+      FromOffset, 2 * MinInstSize, "set-PC long branch PC base");
+  if (!PcBase)
+    return {};
+  uint64_t Delta = TargetOffset - *PcBase;
+  uint32_t LoDelta = static_cast<uint32_t>(Delta);
+  uint32_t HiDelta = static_cast<uint32_t>(Delta >> 32);
+
+  SmallVector<std::string, 6> AsmLines;
+  AsmLines.push_back("s_cselect_b32 " + SccSave + ", 1, 0");
+  AsmLines.push_back("s_get_pc_i64 " + Pair);
+  AsmLines.push_back("s_add_u32 " + Lo + ", " + Lo + ", 0x" +
+                     utohexstr(LoDelta));
+  AsmLines.push_back("s_addc_u32 " + Hi + ", " + Hi + ", 0x" +
+                     utohexstr(HiDelta));
+  AsmLines.push_back("s_cmp_lg_u32 " + SccSave + ", 0");
+  AsmLines.push_back("s_set_pc_i64 " + Pair);
+  SmallVector<uint8_t> Bytes = assembleSingleInst(joinAsmLines(AsmLines), LS);
+  if (Bytes.empty())
+    log() << "hotswap: error: failed to assemble set-PC long branch via "
+          << Pair << "\n";
+  return Bytes;
+}
+
 static std::optional<unsigned> numberedSgprIndex(const MCRegisterInfo &MRI,
                                                  MCRegister Reg) {
   if (!Reg.isValid())
@@ -600,12 +644,34 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
   return true;
 }
 
+static std::optional<SmallVector<uint8_t>>
+buildSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
+                   uint64_t BackStart) {
+  std::optional<SafeSgprScratchBlock> Scratch = findSafeSgprScratchBlock(
+      Ctx, InstOffset, /*Count=*/3, /*Alignment=*/2, "safe far return");
+  if (!Scratch)
+    return std::nullopt;
+
+  std::optional<uint64_t> ReturnTo =
+      checkedAddUint64(InstOffset, InstSize, "safe far return target");
+  if (!ReturnTo)
+    return std::nullopt;
+  SmallVector<uint8_t> Bytes =
+      encodeSetPCLongBranch(Ctx.LS, BackStart, *ReturnTo, Scratch->Base);
+  if (Bytes.empty())
+    return std::nullopt;
+  if (!commitSafeSgprScratchBlock(Ctx, InstOffset, *Scratch, "safe far return"))
+    return std::nullopt;
+  return Bytes;
+}
+
 /// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
 /// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
 /// the pool layout is known. A site beyond s_branch reach of the appended pool
-/// uses an 8-byte, signed-literal32 s_add_pc_i64 on both edges. The forward
-/// branch overwrites the site in place, so a smaller site declines rather than
-/// clobbering the next instruction.
+/// uses an 8-byte signed-literal32 s_add_pc_i64 on the forward edge and an
+/// SCC-preserving get-PC/add/set-PC sequence on the backward edge. Keeping
+/// s_add_pc_i64 off the hot return path avoids gfx1250 A0's execution-count
+/// erratum without relocating neighboring instructions.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     ArrayRef<uint8_t> Replacement) {
@@ -644,8 +710,17 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
             << LongBranchBytes << " B forward branch\n";
       return false;
     }
-    T.Bytes.insert(T.Bytes.end(), LongBranchBytes, uint8_t{0});
+    std::optional<uint64_t> BackStart = checkedAddUint64(
+        PoolStart, Replacement.size(), "safe far return start");
+    if (!BackStart)
+      return false;
+    std::optional<SmallVector<uint8_t>> Back =
+        buildSafeFarReturn(Ctx, InstOffset, InstSize, *BackStart);
+    if (!Back)
+      return false;
+    T.Bytes.append(Back->begin(), Back->end());
     T.Long = true;
+    T.PreEncodedBack = true;
     Ctx.OutTrampolines.emplace_back(std::move(T));
     return true;
   }
@@ -863,20 +938,23 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
-    const uint32_t BackReserve = T.Long ? LongBranchBytes : MinInstSize;
+    const uint32_t BackReserve =
+        T.PreEncodedBack ? 0 : (T.Long ? LongBranchBytes : MinInstSize);
     const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
     const uint64_t ReturnTo = T.OriginalOffset + T.OriginalSize;
 
-    SmallVector<uint8_t> BrBack = T.Long
-                                      ? encodeLongBranch(LS, BackSlot, ReturnTo)
-                                      : LS.encodeSBranch(BackSlot, ReturnTo);
-    if (BrBack.empty() || BrBack.size() > BackReserve) {
-      log() << "hotswap: error: trampoline branch-back encoding failed at 0x"
-            << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
-      return false;
+    if (!T.PreEncodedBack) {
+      SmallVector<uint8_t> BrBack =
+          T.Long ? encodeLongBranch(LS, BackSlot, ReturnTo)
+                 : LS.encodeSBranch(BackSlot, ReturnTo);
+      if (BrBack.empty() || BrBack.size() > BackReserve) {
+        log() << "hotswap: error: trampoline branch-back encoding failed at 0x"
+              << utohexstr(T.OriginalOffset) << (T.Long ? " (long)\n" : "\n");
+        return false;
+      }
+      std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve, BrBack.data(),
+                  BrBack.size());
     }
-    std::memcpy(T.Bytes.data() + T.Bytes.size() - BackReserve, BrBack.data(),
-                BrBack.size());
 
     SmallVector<uint8_t> BrFwd =
         T.Long ? encodeLongBranch(LS, T.OriginalOffset, TP)

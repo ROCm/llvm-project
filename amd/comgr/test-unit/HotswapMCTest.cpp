@@ -248,6 +248,43 @@ TEST(EncodeLongBranch, RejectsOutOfSignedLiteral32RangeAndPcOverflow) {
       encodeLongBranch(S, std::numeric_limits<uint64_t>::max() - 1, 0).empty());
 }
 
+// -- encodeSetPCLongBranch ---------------------------------------------------
+
+TEST(EncodeSetPCLongBranch, UsesSccPreservingSequenceWithoutAddPc) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const uint64_t From = 0x81000;
+  const uint64_t To = 0x1004;
+  llvm::SmallVector<uint8_t> Out =
+      encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
+  ASSERT_FALSE(Out.empty());
+
+  std::vector<InternalDecodedInst> Dec;
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
+  ASSERT_EQ(Dec.size(), 6u);
+  EXPECT_EQ(Dec[0].Mnemonic, "s_cselect_b32");
+  EXPECT_EQ(Dec[1].Mnemonic, "s_get_pc_i64");
+  EXPECT_EQ(Dec[2].Mnemonic, "s_add_co_u32");
+  EXPECT_EQ(Dec[3].Mnemonic, "s_add_co_ci_u32");
+  EXPECT_EQ(Dec[4].Mnemonic, "s_cmp_lg_u32");
+  EXPECT_EQ(Dec[5].Mnemonic, "s_set_pc_i64");
+  for (const InternalDecodedInst &DI : Dec)
+    EXPECT_NE(DI.Mnemonic, "s_add_pc_i64");
+
+  // s_get_pc_i64 is the second dword and captures From + 8. The two add
+  // immediates materialize this exact two's-complement displacement.
+  uint64_t Delta = To - (From + 2 * MinInstSize);
+  EXPECT_EQ(static_cast<uint32_t>(Delta), 0xFFF7FFFCu);
+  EXPECT_EQ(static_cast<uint32_t>(Delta >> 32), 0xFFFFFFFFu);
+}
+
+TEST(EncodeSetPCLongBranch, RejectsMisalignedScratchPair) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  EXPECT_TRUE(encodeSetPCLongBranch(S, 0, 0x1000, /*SgprBase=*/3).empty());
+}
+
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {
   std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64},
                                 {100, 128, 100, 100, 128}};

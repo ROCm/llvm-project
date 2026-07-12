@@ -99,10 +99,11 @@ struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
-  // When set, both edges use a signed-literal32 s_add_pc_i64 long branch
-  // instead of s_branch. Set when the appended pool is beyond s_branch's
-  // +-128 KB reach.
+  // When set, the forward edge uses a signed-literal32 s_add_pc_i64 instead
+  // of s_branch. The backward edge is pre-encoded with the scratch-backed
+  // set-PC sequence below, avoiding gfx1250 A0's s_add_pc_i64 threshold.
   bool Long = false;
+  bool PreEncodedBack = false;
 };
 
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
@@ -753,6 +754,15 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
 llvm::SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS,
                                             uint64_t FromOffset,
                                             uint64_t TargetOffset);
+
+/// Encode an SCC-preserving indirect long branch using three numbered SGPRs:
+/// an aligned PC pair at \p SgprBase and an SCC-save temporary at Base + 2.
+/// The displacement is materialized as two 32-bit literals; no
+/// s_add_pc_i64 or 64-bit literal is emitted.
+llvm::SmallVector<uint8_t> encodeSetPCLongBranch(const LLVMState &LS,
+                                                 uint64_t FromOffset,
+                                                 uint64_t TargetOffset,
+                                                 unsigned SgprBase);
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
