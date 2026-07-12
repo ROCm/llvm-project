@@ -3,12 +3,13 @@
 // COM: device functions (e.g. runTreeUpDown) contain ds_*_2addr sites that sit
 // COM: far (> s_branch's +-128 KB reach) from the appended trampoline pool in
 // COM: the ~225 MB fatbin. Taking the far path emitted an s_add_pc_i64 long
-// COM: branch whose BACKWARD branch-back corrupts wave state on gfx1250 A0,
-// COM: producing a GPU memory fault in ncclDevKernel_Generic_4 (0/10 runs).
+// COM: branch whose 64-bit-literal BACKWARD branch-back corrupts wave state on
+// COM: gfx1250 A0, producing a GPU memory fault in ncclDevKernel_Generic_4
+// COM: (0/10 runs).
 // COM:
-// COM: Required DS2 rewrites use the safe SCC-neutral scratch-SGPR return. The
-// COM: two kernels below force the far path for a 2-address load and store and
-// COM: verify both are split instead of returning unsafe B0 instructions.
+// COM: Fix: encode negative displacements with MI400's sign-extended
+// COM: literal32 form. The two kernels below force the far path for a 2-address
+// COM: load and store and verify both complete without scratch registers.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -33,21 +34,19 @@
 // DISASM-NOT: ds_store_2addr
 // DISASM: ds_load_b64 v[0:1], v4 offset:512
 // DISASM-NEXT: ds_load_b64 v[2:3], v4 offset:1024
-// DISASM: s_get_pc_i64 s[2:3]
-// DISASM-NEXT: s_add_nc_u64 s[2:3]
-// DISASM-NEXT: s_set_pc_i64 s[2:3]
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_add_pc_i64 0xffff{{[0-9a-f]+}}
 // DISASM: ds_store_b32 v2, v0 offset:256
 // DISASM-NEXT: ds_store_b32 v2, v1 offset:768
-// DISASM: s_get_pc_i64 s[2:3]
-// DISASM-NEXT: s_add_nc_u64 s[2:3]
-// DISASM-NEXT: s_set_pc_i64 s[2:3]
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_add_pc_i64 0xffff{{[0-9a-f]+}}
 
 // METADATA: .name:           test_ds2addr_far_load
-// METADATA: .sgpr_count:     6
+// METADATA: .sgpr_count:     1
 // METADATA: .name:           test_ds2addr_far_store
-// METADATA: .sgpr_count:     6
+// METADATA: .sgpr_count:     1
 
-// COM: Idempotency: rewriting the declined output again is a no-op.
+// COM: Idempotency: rewriting the patched output again is a no-op.
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent \
@@ -75,7 +74,7 @@ test_ds2addr_far_store:
   s_endpgm
   // ~160 KB of non-NOP filler (forms no usable sled) so the appended trampoline
   // pool is beyond s_branch's +-128 KB reach from both kernels above, forcing
-  // the far (long-branch) path -- which is declined on gfx1250 A0.
+  // the far (long-branch) path.
   .rept 40000
     s_mov_b32 s0, s1
   .endr

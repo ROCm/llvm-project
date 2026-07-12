@@ -1,10 +1,8 @@
 // COM: HSV-009 / PLAT-205406: WMMA-split shares emitToTrampoline with the other
-// COM: patch families, so a split site beyond s_branch's +-128 KB reach of the
-// COM: appended pool takes the far path -- which on gfx1250 A0 is DECLINED
-// COM: (left unpatched) because the backward s_add_pc_i64 branch-back corrupts
-// COM: wave state at runtime. The original v_wmma_f32_16x16x128_fp8_fp8 stays at
-// COM: the site; it is neither split into two K=64 halves nor redirected. A
-// COM: large .rept filler (~160 KB, non-NOP) forces the far case.
+// COM: patch families. A split site beyond s_branch's +-128 KB reach uses the
+// COM: same sign-extended literal32 return as DS and tensor patches, avoiding
+// COM: the 64-bit-literal form that corrupts wave state on gfx1250 A0. A large
+// COM: .rept filler (~160 KB, non-NOP) forces the far case.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -16,13 +14,13 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: Declined: the site keeps its original K=128 WMMA (it is NOT overwritten
-// COM: with an s_add_pc_i64 forward branch), and no split halves
-// COM: (v_wmma_f32_16x16x64_fp8_fp8) or long-branch redirect are emitted.
+// COM: The site redirects to two K=64 halves and returns with the 8-byte
+// COM: negative literal32 form.
 // DISASM-LABEL: <test_wsplit_far>:
-// DISASM-NEXT: v_wmma_f32_16x16x128_fp8_fp8
-// DISASM-NOT: s_add_pc_i64
-// DISASM-NOT: v_wmma_f32_16x16x64_fp8_fp8
+// DISASM-NEXT: s_add_pc_i64
+// DISASM: v_wmma_f32_16x16x64_fp8_fp8
+// DISASM-NEXT: v_wmma_f32_16x16x64_fp8_fp8
+// DISASM-NEXT: s_add_pc_i64 0xffff{{[0-9a-f]+}}
 
 // COM: Idempotency: rewriting the output again must be a no-op.
 // RUN: hotswap-rewrite %t.out.elf \

@@ -314,8 +314,17 @@ std::optional<uint64_t> AMDGPUMCCodeEmitter::getLitEncoding(
 
   case AMDGPU::OPERAND_REG_IMM_INT64:
   case AMDGPU::OPERAND_REG_INLINE_C_INT64:
-  case AMDGPU::OPERAND_REG_IMM_V2INT64:
-    return getLit64Encoding(Desc, static_cast<uint64_t>(Imm), STI, false);
+  case AMDGPU::OPERAND_REG_IMM_V2INT64: {
+    uint64_t Encoding =
+        getLit64Encoding(Desc, static_cast<uint64_t>(Imm), STI, false);
+    // S_ADD_PC_I64 sign-extends a literal32. Prefer that shorter encoding for
+    // signed 32-bit displacements, including backward branches. Other i64
+    // operands do not have uniform literal32 extension semantics.
+    if (Desc.getOpcode() == AMDGPU::S_ADD_PC_I64_gfx12 && isInt<32>(Imm) &&
+        Encoding == AMDGPU::EncValues::LITERAL64_CONST)
+      return AMDGPU::EncValues::LITERAL_CONST;
+    return Encoding;
+  }
 
   case AMDGPU::OPERAND_REG_INLINE_C_FP64:
   case AMDGPU::OPERAND_REG_INLINE_AC_FP64:
