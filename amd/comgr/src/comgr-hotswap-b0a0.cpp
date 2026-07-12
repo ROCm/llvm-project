@@ -673,14 +673,61 @@ static void expandForwardSetPc(PatchContext &Ctx) {
   // relocates. isUnsafeToRelocate() also refuses to move any s_delay_alu, so
   // even the gated-on backward path is hazard-safe; the gate stays for A/B.
   //   HOTSWAP_FWD_STEAL_MODE=0  merge adjacent patch sites only (never relocate
-  //                             a non-site instruction, no backward steal)
+  //                             a non-site instruction, no backward steal) -- DEFAULT
   //   HOTSWAP_FWD_STEAL_MODE=1  merge + forward-steal normal instructions, no
-  //                             backward steal (default)
+  //                             backward steal (EXPERIMENTAL: see BUG-2 below)
   //   HOTSWAP_FWD_STEAL_MODE>=2 also enable the backward-steal fallback
+  //
+  // Default is MERGE-ONLY (0). Forward-stealing *normal* instructions is unsafe:
+  // it can relocate an instruction that is the branch-back / resume target of
+  // another trampoline (those synthetic targets are not in BranchTargets), which
+  // moves a control-flow re-entry point and faults/hangs the GPU (BUG-2 on
+  // rocsparse csrgemm f64, and a second instance on spgemm). Merging adjacent
+  // patch sites only relocates code that was already being relocated, so it is
+  // safe and validated (rocsparse csrgemm + spgemm pass). The forward edge does
+  // not itself trip HSV-009 (only the backward 64-bit-literal s_add_pc_i64 does,
+  // per PR ROCm/llvm-project#3323), so leaving non-merged far sites on the legacy
+  // forward s_add_pc_i64 is safe. Normal-instruction stealing stays behind the
+  // flag for experimentation only, pending a correct resume-target guard (I1).
   static const long StealMode = [] {
     const char *E = getenv("HOTSWAP_FWD_STEAL_MODE");
-    return E ? strtol(E, nullptr, 0) : 1;
+    return E ? strtol(E, nullptr, 0) : 0;
   }();
+
+  // Diagnostic bisection gates for BUG-2 (root-causing which forward-stolen
+  // normal instruction corrupts execution). Neither is needed in production;
+  // they let the offender be isolated on-GPU without a rebuild per hypothesis.
+  //   HOTSWAP_FWD_STEAL_SKIP=substr[,substr...]  decline forward-stealing any
+  //       normal instruction whose mnemonic contains one of the substrings
+  //       (e.g. "cmpx,saveexec" or "s_wait_kmcnt"). Class-level bisection.
+  //   HOTSWAP_FWD_STEAL_MAX=N  allow at most N COMMITTED normal forward-steals
+  //       globally (in ascending site order); decline the rest. Binary-search N
+  //       to isolate the single offending steal. -1 (default) = unlimited.
+  static const std::vector<std::string> FwdStealSkip = [] {
+    std::vector<std::string> V;
+    if (const char *E = getenv("HOTSWAP_FWD_STEAL_SKIP")) {
+      StringRef S(E);
+      while (!S.empty()) {
+        auto Split = S.split(',');
+        if (!Split.first.empty())
+          V.push_back(Split.first.str());
+        S = Split.second;
+      }
+    }
+    return V;
+  }();
+  static const long FwdStealMax = [] {
+    const char *E = getenv("HOTSWAP_FWD_STEAL_MAX");
+    return E ? strtol(E, nullptr, 0) : -1;
+  }();
+  auto matchesSkip = [&](StringRef Mnemonic) -> bool {
+    for (const std::string &Sub : FwdStealSkip)
+      if (Mnemonic.contains(Sub))
+        return true;
+    return false;
+  };
+  // Count of committed normal forward-steals so far (for HOTSWAP_FWD_STEAL_MAX).
+  unsigned NormalStealsCommitted = 0;
 
   std::vector<Trampoline> &Tramps = Ctx.OutTrampolines;
   const LLVMState &LS = Ctx.LS;
@@ -737,6 +784,26 @@ static void expandForwardSetPc(PatchContext &Ctx) {
   //      operand (observed as a GPU page fault when a stolen address-compute's
   //      s_delay_alu moved with it). Never relocate these.
   auto isUnsafeToRelocate = [&](const InternalDecodedInst &DI) -> bool {
+    // A "<replaced>" slot is a hazard site that was already rewritten by a
+    // patch pass (ds_*_2addr split+drain, tensor pack, addtid alu+ds -- see
+    // patch-trampoline.cpp). It must never be stolen verbatim as a "normal"
+    // instruction. Two independent reasons, either fatal:
+    //   1. Its decode metadata (DI.Size / DI.Inst) describes the ORIGINAL B0
+    //      instruction, not the (often multi-instruction, different-length)
+    //      A0 replacement now in .text, so relocating DI.Size bytes copies a
+    //      truncated/misaligned sequence.
+    //   2. An in-place-replaced site (one with no trampoline of its own, so it
+    //      is not in OffToTramp and is not merged) can be the branch-back /
+    //      resume target of ANOTHER far trampoline. Those synthetic resume
+    //      targets are not in BranchTargets, so relocating the slot silently
+    //      moves a control-flow re-entry point and the other trampoline returns
+    //      into the overwritten forward set-pc region -> page fault / hang.
+    //      (Root cause of BUG-2: csrgemm f64, a <replaced> ds split at 0x1678C
+    //      that was also the branch-back target of the trampoline at 0x36790.)
+    // Far <replaced> sites are still MERGED (that path never reaches here); only
+    // normal/backward steals of a <replaced> slot are declined.
+    if (DI.Mnemonic == "<replaced>")
+      return true;
     const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
     if (Desc.mayAffectControlFlow(DI.Inst, *LS.MRI))
       return true;
@@ -800,6 +867,7 @@ static void expandForwardSetPc(PatchContext &Ctx) {
     SmallVector<uint8_t> Prefix;   // bytes stolen BEFORE the site
     SmallVector<size_t, 4> MergedIdx;
     unsigned *DeclineRsn = nullptr;
+    unsigned ThisSiteNormal = 0;   // normal steals tentatively taken by this site
 
     // Forward steal: consume following instructions until the site can hold the
     // forward set-pc sequence. Keep going past that point while the next
@@ -861,6 +929,18 @@ static void expandForwardSetPc(PatchContext &Ctx) {
           DeclineRsn = &RsnHazard;
           break;
         }
+        // Diagnostic bisection: decline this normal steal if its mnemonic is on
+        // the skip list, or if the global committed-steal cap is reached.
+        if (matchesSkip(DN.Mnemonic)) {
+          DeclineRsn = &RsnHazard;
+          break;
+        }
+        if (FwdStealMax >= 0 &&
+            NormalStealsCommitted + ThisSiteNormal >=
+                static_cast<unsigned>(FwdStealMax)) {
+          DeclineRsn = &RsnStealDisabled;
+          break;
+        }
         if (DN.Offset + DN.Size > Ctx.TextSize) {
           DeclineRsn = &RsnBounds;
           break;
@@ -871,6 +951,7 @@ static void expandForwardSetPc(PatchContext &Ctx) {
         Stolen.append(P, P + DN.Size);
         Footprint += DN.Size;
         StealAt += DN.Size;
+        ++ThisSiteNormal;
       }
     }
 
@@ -961,6 +1042,7 @@ static void expandForwardSetPc(PatchContext &Ctx) {
       Removed[J] = true;
     ++Upgraded;
     Merged += MergedIdx.size();
+    NormalStealsCommitted += ThisSiteNormal;
     HighWater = std::max(HighWater, StealAt);
     if (!Prefix.empty())
       log() << "hotswap: fwd set-pc backward-stolen: window_start=0x"
@@ -986,7 +1068,9 @@ static void expandForwardSetPc(PatchContext &Ctx) {
         << " pc_relative=" << RsnPcRel << " unpatched_hazard=" << RsnHazard
         << " boundary=" << RsnBoundary << " merge_order=" << RsnMergedOrder
         << " bounds=" << RsnBounds << " back_exhausted=" << RsnBackExhausted
-        << " steal_disabled=" << RsnStealDisabled << ")\n";
+        << " steal_disabled=" << RsnStealDisabled << "); normal_steals_committed="
+        << NormalStealsCommitted << " (max=" << FwdStealMax << " skip="
+        << FwdStealSkip.size() << ")\n";
 }
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
