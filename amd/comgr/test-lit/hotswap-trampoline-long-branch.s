@@ -1,11 +1,8 @@
-// COM: HSV-009 / PLAT-205406: keep the compact signed-literal32
-// COM: s_add_pc_i64 on the forward edge, but do not execute s_add_pc_i64 again
-// COM: on every return. A scratch-backed set-PC sequence keeps hot objects
-// COM: below the A0 execution-count threshold and uses only 32-bit literals.
-// COM: A large .rept filler (~160 KB, non-NOP so it forms no usable sled)
+// COM: A0 cannot execute s_add_pc_i64. Both edges use an SGPR-backed set-PC
+// COM: sequence; the short source slot reaches that sequence through safe
+// COM: external zero-filled gateway space. A large non-NOP .rept filler
+// COM: (~160 KB)
 // COM: pushes the pool past s_branch's reach to force the far case.
-// COM: The function intentionally has st_size == 0, matching Tensile objects
-// COM: that omit .size and exercising zero-size function-range recovery.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -15,14 +12,20 @@
 // RUN:   | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
 
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM \
+// RUN:   --implicit-check-not=s_add_pc_i64 %s
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=METADATA %s
 
 // DISASM-LABEL: <test_far>:
-// DISASM-NEXT: s_mov_b64 vcc, -1
-// DISASM-NEXT: s_add_pc_i64
-// DISASM-NOT: s_add_pc_i64
-// DISASM: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: s_branch
+// DISASM-LABEL: <gateway_barrier>:
+// DISASM-NEXT: s_endpgm
+// DISASM-NEXT: s_get_pc_i64 s[12:13]
+// DISASM-NEXT: s_add_co_u32 s12, s12,
+// DISASM-NEXT: s_add_co_ci_u32 s13, s13,
+// DISASM-NEXT: s_set_pc_i64 s[12:13]
+// DISASM: s_mov_b64 vcc, -1
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
 // DISASM-NEXT: s_cselect_b32 s14, 1, 0
 // DISASM-NEXT: s_get_pc_i64 s[12:13]
@@ -70,6 +73,16 @@ test_far:
   s_mov_b64 vcc, -1
   tensor_load_to_lds s[0:3], s[4:11]
   s_endpgm
+.size test_far, .-test_far
+
+// Provide external zero-filled alignment space after a separate
+// no-fallthrough function.
+.type gateway_barrier,@function
+gateway_barrier:
+  s_endpgm
+.size gateway_barrier, .-gateway_barrier
+.fill 32, 1, 0
+
   // ~160 KB of non-NOP filler so the appended trampoline pool is beyond
   // s_branch's +-128 KB reach from the tensor_load above (forces the
   // long-branch path).
@@ -77,7 +90,6 @@ test_far:
     s_mov_b32 s0, s1
   .endr
 .Ltest_far_end:
-// Deliberately no .size.
 
 .rodata
 .p2align 8

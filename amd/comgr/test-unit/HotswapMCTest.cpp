@@ -182,72 +182,6 @@ TEST(EncodeSBranch, FailsOnInvalidState) {
   EXPECT_TRUE(S.encodeSBranch(0, 8).empty());
 }
 
-// -- encodeLongBranch (s_add_pc_i64) -----------------------------------------
-//
-// The long branch uses s_add_pc_i64, which adds a sign-extended literal32 to
-// the PC of the next instruction: landing PC == From + 8 + imm. Both forward
-// and backward forms are 8 bytes. These verify the offset math and encoding
-// structurally rather than pinning exact bytes.
-
-// Read the signed literal that follows the 4-byte opcode dword.
-static int64_t longBranchLiteral(llvm::ArrayRef<uint8_t> Out) {
-  return static_cast<int32_t>(readDword(Out.data() + MinInstSize));
-}
-
-TEST(EncodeLongBranch, ForwardLandsOnTarget) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-  // ~512 KB forward -- well beyond s_branch's +-128 KB reach.
-  const uint64_t From = 0x1000, To = 0x81000;
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchBytes);
-  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
-
-  std::vector<InternalDecodedInst> Dec;
-  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
-  ASSERT_EQ(Dec.size(), 1u);
-  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
-}
-
-TEST(EncodeLongBranch, BackwardUsesSignedLiteral32AndLandsOnTarget) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-  // Backward jump (trampoline tail -> earlier return point).
-  const uint64_t From = 0x81000, To = 0x1004;
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchBytes);
-  EXPECT_EQ(static_cast<int64_t>(From) + static_cast<int64_t>(Out.size()) +
-                longBranchLiteral(Out),
-            static_cast<int64_t>(To));
-
-  std::vector<InternalDecodedInst> Dec;
-  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
-  ASSERT_EQ(Dec.size(), 1u);
-  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
-  EXPECT_EQ(Dec[0].Size, LongBranchBytes);
-  EXPECT_EQ(Dec[0].Inst.getOperand(0).getImm(), longBranchLiteral(Out));
-}
-
-TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-  // 4 MB: s_branch rejects it, the long branch encodes it.
-  const uint64_t From = 0, To = 0x400000;
-  EXPECT_TRUE(S.encodeSBranch(From, To).empty());
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_FALSE(Out.empty());
-  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
-}
-
-TEST(EncodeLongBranch, RejectsOutOfSignedLiteral32RangeAndPcOverflow) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  EXPECT_TRUE(encodeLongBranch(S, 0, (uint64_t{1} << 31) + 8).empty());
-  EXPECT_TRUE(
-      encodeLongBranch(S, std::numeric_limits<uint64_t>::max() - 1, 0).empty());
-}
-
 // -- encodeSetPCLongBranch ---------------------------------------------------
 
 TEST(EncodeSetPCLongBranch, UsesSccPreservingSequenceWithoutAddPc) {
@@ -286,8 +220,7 @@ TEST(EncodeSetPCLongBranch, RejectsMisalignedScratchPair) {
 }
 
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {
-  std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64},
-                                {100, 128, 100, 100, 128}};
+  std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64}, {100, 128, 100, 100, 128}};
   EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max()),
             nullptr);
 }
@@ -659,10 +592,9 @@ TEST(BuildKernelEntryTrampoline, PrefixPrefiltersHipblasltSmokeEntryBytes) {
   // idempotency path should reject this by raw prefix before classifying it as
   // a possible appended entry stub.
   const uint8_t EntryBytes[] = {
-      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
-      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
-      0xff, 0x02, 0x3f, 0x8b, 0xff, 0xff, 0xff, 0x3f,
-      0x02, 0x9e, 0x40, 0x85, 0x03, 0x00, 0xc1, 0xbe,
+      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00, 0x1a, 0x08, 0x80,
+      0xb9, 0x02, 0x00, 0x00, 0x00, 0xff, 0x02, 0x3f, 0x8b, 0xff, 0xff,
+      0xff, 0x3f, 0x02, 0x9e, 0x40, 0x85, 0x03, 0x00, 0xc1, 0xbe,
   };
 
   llvm::SmallVector<uint8_t> Candidate;
@@ -672,8 +604,8 @@ TEST(BuildKernelEntryTrampoline, PrefixPrefiltersHipblasltSmokeEntryBytes) {
   ASSERT_EQ(Candidate.size(), KernelEntryStubStride);
 
   std::vector<InternalDecodedInst> Decoded;
-  ASSERT_TRUE(decodeTextSection(Candidate.data(), sizeof(EntryBytes), S,
-                                Decoded));
+  ASSERT_TRUE(
+      decodeTextSection(Candidate.data(), sizeof(EntryBytes), S, Decoded));
   ASSERT_GE(Decoded.size(), 5u);
   EXPECT_EQ(Decoded[0].Mnemonic, "s_setreg_imm32_b32");
   EXPECT_EQ(Decoded[1].Mnemonic, "s_setreg_imm32_b32");
@@ -846,9 +778,9 @@ static unsigned countSymtabSymbolsNamed(llvm::WritableMemoryBuffer &Buf,
                                         llvm::StringRef Name) {
   using ELFT = llvm::object::ELF64LE;
   llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
-      llvm::object::ELFFile<ELFT>::create(llvm::StringRef(
-          reinterpret_cast<const char *>(Buf.getBufferStart()),
-          Buf.getBufferSize()));
+      llvm::object::ELFFile<ELFT>::create(
+          llvm::StringRef(reinterpret_cast<const char *>(Buf.getBufferStart()),
+                          Buf.getBufferSize()));
   if (!FileOrErr) {
     llvm::consumeError(FileOrErr.takeError());
     return ~0u;

@@ -99,11 +99,27 @@ struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
-  // When set, the forward edge uses a signed-literal32 s_add_pc_i64 instead
-  // of s_branch. The backward edge is pre-encoded with the scratch-backed
-  // set-PC sequence below, avoiding gfx1250 A0's s_add_pc_i64 threshold.
+  // When set, the pool is beyond s_branch reach. The source site branches to a
+  // nearby NOP gateway, which uses the scratch-backed pre-Gen5 set-PC sequence
+  // to reach the pool without executing s_add_pc_i64.
   bool Long = false;
-  bool PreEncodedBack = false;
+  bool UsesSetPCBack = false;
+  unsigned LongBranchSgprBase = 0;
+  bool HasPoolBranchIsland = false;
+  uint64_t PoolBranchIslandOffset = 0;
+  bool UsesShortBranchForward = false;
+  bool UsesDirectSetPCForward = false;
+  llvm::SmallVector<uint8_t> DirectSetPCForwardBytes;
+  llvm::SmallVector<uint64_t, 4> ForwardBranchIslands;
+  uint64_t ForwardBranchTargetOffset = 0;
+  bool HasForwardGateway = false;
+  uint64_t ForwardGatewayOffset = 0;
+  llvm::SmallVector<uint8_t> ForwardGatewayBytes;
+  // A far-site run may only be coalesced within one known function. Unknown
+  // ranges stay unmerged because adjacent symbols are independent entries.
+  bool HasFunctionRange = false;
+  uint64_t FunctionStart = 0;
+  uint64_t FunctionEnd = 0;
 };
 
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
@@ -166,10 +182,15 @@ static constexpr uint64_t MinNopSledSize = 8;
 // Minimum AMDGPU instruction size (one dword).
 static constexpr uint32_t MinInstSize = 4;
 
-// s_add_pc_i64 with a signed, sign-extended literal32 is 8 bytes in either
-// direction. emitToTrampoline picks the long path only when a short s_branch
-// cannot reach the site's exact pool offset on either edge.
-static constexpr uint32_t LongBranchBytes = 8;
+// Fixed reservation for the SCC-preserving set-PC return. The assembled
+// sequence is 28 bytes for a same-object forward or backward delta.
+static constexpr uint32_t SetPcReturnReserveBytes = 28;
+
+// A gateway needs at least 20 bytes when incoming SCC is proven dead. Live SCC
+// uses the 28-byte preserving sequence.
+static constexpr uint32_t SetPcMinGatewayBytes = 20;
+static constexpr uint32_t SetPcForwardSequenceBytes = 28;
+static constexpr uint32_t PoolBranchIslandBytes = MinInstSize;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
 // LLVMState::encodeSBranch to reject out-of-range branches before handing
@@ -747,13 +768,6 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     llvm::ArrayRef<uint8_t> Replacement);
-
-// Encode an s_add_pc_i64 PC-relative long branch from \p FromOffset to
-// \p TargetOffset (.text byte offsets). Exposed for unit testing the offset
-// math / encoding. Returns empty on failure.
-llvm::SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS,
-                                            uint64_t FromOffset,
-                                            uint64_t TargetOffset);
 
 /// Encode an SCC-preserving indirect long branch using three numbered SGPRs:
 /// an aligned PC pair at \p SgprBase and an SCC-save temporary at Base + 2.

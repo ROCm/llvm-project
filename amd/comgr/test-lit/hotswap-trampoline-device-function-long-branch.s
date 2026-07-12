@@ -8,11 +8,22 @@
 // RUN:   --output %t.out.elf | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
 
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM \
+// RUN:   --implicit-check-not=s_add_pc_i64 %s
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=META %s
 
 // DISASM-LABEL: <device_tensor>:
-// DISASM-NEXT: s_add_pc_i64
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_nop
+// DISASM-NEXT: s_nop
+// DISASM-LABEL: <kernel_b>:
+// DISASM: s_endpgm
+// DISASM-NEXT: s_cselect_b32 s68, 1, 0
+// DISASM-NEXT: s_get_pc_i64 s[66:67]
+// DISASM-NEXT: s_add_co_u32 s66, s66,
+// DISASM-NEXT: s_add_co_ci_u32 s67, s67,
+// DISASM-NEXT: s_cmp_lg_u32 s68, 0
+// DISASM-NEXT: s_set_pc_i64 s[66:67]
 // DISASM: s_mov_b32 s66, s4
 // DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
@@ -59,6 +70,12 @@ kernel_b:
   s_endpgm
 .Lkernel_b_end:
 .size kernel_b, .Lkernel_b_end-kernel_b
+
+// Safe external gateway space: it follows a no-fallthrough instruction and is
+// outside every function range, so it cannot be executed by fallthrough.
+.rept 8
+  s_nop 0
+.endr
 
 // Push the appended trampoline pool beyond s_branch reach without extending
 // any function symbol range.
