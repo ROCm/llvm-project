@@ -257,10 +257,29 @@ std::vector<std::string> expandDs2AddrLoad(const DsOperands &Ops,
   if (Dst.first.empty())
     return {};
   std::string Addr = toAsmRegName(*Ops.MRI, Ops.Regs[1]);
-  return {
-      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1),
-  };
+  std::string First =
+      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0);
+  std::string Second =
+      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1);
+
+  // A compound DS load reads its address once before writing either half of
+  // the destination. After splitting, the first single-address load must not
+  // overwrite the address needed by the second. If the address overlaps the
+  // first destination half, issue the independent second half first and put
+  // the self-overlapping load last. (If it overlaps the second half, the
+  // natural order is already safe.)
+  SmallVector<MCRegister, 4> DstSubs =
+      getDirectSubRegs(Ops.Regs[0], *Ops.MRI);
+  const unsigned FirstHalfWidth = Ops.IsB64 ? 2 : 1;
+  bool AddrOverlapsFirst =
+      DstSubs.size() >= FirstHalfWidth &&
+      llvm::any_of(ArrayRef(DstSubs).take_front(FirstHalfWidth),
+                   [&](MCRegister Reg) {
+                     return Ops.MRI->regsOverlap(Reg.id(), Ops.Regs[1].id());
+                   });
+  if (AddrOverlapsFirst)
+    return {std::move(Second), std::move(First)};
+  return {std::move(First), std::move(Second)};
 }
 
 // Expand a DS 2-address store into two single-address stores (addr, data).
