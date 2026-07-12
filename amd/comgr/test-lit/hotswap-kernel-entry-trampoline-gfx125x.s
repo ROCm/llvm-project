@@ -24,10 +24,10 @@
 // DISASM: s_endpgm
 // DISASM: global_wb
 // DISASM-NEXT: v_nop
-// DISASM-NEXT: s_get_pc_i64 s[8:9]
-// DISASM-NEXT: s_add_co_u32 s8
-// DISASM-NEXT: s_add_co_ci_u32 s9
-// DISASM-NEXT: s_set_pc_i64 s[8:9]
+// DISASM-NEXT: s_get_pc_i64 s[2:3]
+// DISASM-NEXT: s_add_co_u32 s2
+// DISASM-NEXT: s_add_co_ci_u32 s3
+// DISASM-NEXT: s_set_pc_i64 s[2:3]
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1251"
 .text
