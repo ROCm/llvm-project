@@ -461,34 +461,18 @@ std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
 
 std::optional<ElfView::FunctionTextRange>
 ElfView::findFunctionTextRangeAtOffset(uint64_t TextOffset) const {
-  for (const ELFT::Shdr &SymShdr : Sections) {
-    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
-        SymShdr.sh_type != ELF::SHT_DYNSYM)
+  std::optional<FunctionTextRange> Best;
+  for (const FunctionTextRange &Range : functionTextRanges()) {
+    if (Range.Begin < textAddr() || Range.End < textAddr())
       continue;
-
-    Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
-    if (!SymsOrErr) {
-      consumeError(SymsOrErr.takeError());
+    uint64_t Begin = Range.Begin - textAddr();
+    uint64_t End = Range.End - textAddr();
+    if (TextOffset < Begin || TextOffset >= End)
       continue;
-    }
-
-    for (const ELFT::Sym &Sym : *SymsOrErr) {
-      if (Sym.getType() != ELF::STT_FUNC && Sym.getType() != ELF::STT_GNU_IFUNC)
-        continue;
-      if (Sym.st_shndx != TextSectionIndex || Sym.st_size == 0)
-        continue;
-      if (Sym.st_value < textAddr())
-        continue;
-
-      uint64_t Start = Sym.st_value - textAddr();
-      if (Sym.st_size > std::numeric_limits<uint64_t>::max() - Start)
-        continue;
-      uint64_t End = Start + Sym.st_size;
-      if (TextOffset >= Start && TextOffset < End)
-        return ElfView::FunctionTextRange{Start, End};
-    }
+    if (!Best || Begin > Best->Begin)
+      Best = FunctionTextRange{Begin, End};
   }
-  return std::nullopt;
+  return Best;
 }
 
 // -- ElfView::findKernelDescriptor --------------------------------------------
@@ -1190,8 +1174,7 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
   SmallVector<uint8_t> StrBlob, SymBlob;
   for (const KernelEntryTrampolineFixup &F : Fixups) {
     std::string Name = F.KernelName + ".stub";
-    uint32_t NameOff =
-        static_cast<uint32_t>(StrShdr.sh_size + StrBlob.size());
+    uint32_t NameOff = static_cast<uint32_t>(StrShdr.sh_size + StrBlob.size());
     StrBlob.append(Name.begin(), Name.end());
     StrBlob.push_back(0);
 

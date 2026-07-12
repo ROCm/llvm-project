@@ -716,6 +716,29 @@ struct PatchContext {
   bool RequiredPatchApplied = false;
 };
 
+/// A block of numbered SGPRs that is not referenced in the function being
+/// patched, or anywhere in the code object when the site may be reached by a
+/// call whose register requirements cannot be bounded locally.
+struct SafeSgprScratchBlock {
+  unsigned Base = 0;
+  unsigned Count = 0;
+};
+
+/// Find an aligned block of unused numbered SGPRs for \p TextOffset. Returns
+/// nullopt after logging when no block fits below RewriteConfig::MaxSgprs.
+std::optional<SafeSgprScratchBlock>
+findSafeSgprScratchBlock(const PatchContext &Ctx, uint64_t TextOffset,
+                         unsigned Count, unsigned Alignment,
+                         llvm::StringRef Context);
+
+/// Charge a previously selected global block to the kernel owning \p
+/// TextOffset. If the site is in an ordinary device function, conservatively
+/// charge every kernel descriptor because the ELF does not carry a complete
+/// call graph.
+bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
+                                const SafeSgprScratchBlock &Block,
+                                llvm::StringRef Context);
+
 // -- Trampoline emission helpers (defined in comgr-hotswap-b0a0.cpp) ----------
 
 [[nodiscard]] bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,
@@ -872,8 +895,9 @@ bool rewriteKernelEntryDescriptorOffsets(
 /// virtual addresses, program headers, or relocations change; `.dynsym` (used
 /// by the loader) is left untouched.
 std::unique_ptr<llvm::WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
-    llvm::WritableMemoryBuffer &In, unsigned TextSectionIndex, uint64_t TextAddr,
-    uint64_t OldTextSize, llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
+    llvm::WritableMemoryBuffer &In, unsigned TextSectionIndex,
+    uint64_t TextAddr, uint64_t OldTextSize,
+    llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------
 
