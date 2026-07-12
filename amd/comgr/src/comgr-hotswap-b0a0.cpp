@@ -477,6 +477,26 @@ static bool updateNumberedSgprHighWatermark(const MCRegisterInfo &MRI,
   return true;
 }
 
+static bool isVccRegister(const LLVMState &LS, MCRegister Reg) {
+  return Reg.isValid() && StringRef(LS.MRI->getName(Reg)).starts_with("VCC");
+}
+
+static bool instructionUsesVcc(const LLVMState &LS,
+                               const InternalDecodedInst &DI) {
+  for (const MCOperand &Op : DI.Inst)
+    if (Op.isReg() && Op.getReg() && isVccRegister(LS, MCRegister(Op.getReg())))
+      return true;
+
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  for (MCPhysReg Reg : Desc.implicit_uses())
+    if (isVccRegister(LS, MCRegister(Reg)))
+      return true;
+  for (MCPhysReg Reg : Desc.implicit_defs())
+    if (isVccRegister(LS, MCRegister(Reg)))
+      return true;
+  return false;
+}
+
 std::optional<SafeSgprScratchBlock>
 findSafeSgprScratchBlock(const PatchContext &Ctx, uint64_t TextOffset,
                          unsigned Count, unsigned Alignment,
@@ -504,11 +524,13 @@ findSafeSgprScratchBlock(const PatchContext &Ctx, uint64_t TextOffset,
     }
   }
 
+  bool UsesVcc = false;
   unsigned HighWatermark = 0;
   for (const InternalDecodedInst &DI : Ctx.Decoded) {
     if (!ScanWholeObject &&
         (DI.Offset < FunctionRange->Begin || DI.Offset >= FunctionRange->End))
       continue;
+    UsesVcc |= instructionUsesVcc(Ctx.LS, DI);
     for (const MCOperand &Op : DI.Inst) {
       if (!Op.isReg() || !Op.getReg())
         continue;
@@ -529,6 +551,38 @@ findSafeSgprScratchBlock(const PatchContext &Ctx, uint64_t TextOffset,
                                            Ctx.Config.MaxSgprs, HighWatermark,
                                            Context))
         return std::nullopt;
+  }
+
+  constexpr unsigned VccSgprs = 2;
+  if (!Owner.empty()) {
+    std::optional<unsigned> Declared = Ctx.Elf.getKernelSgprCount(Owner);
+    if (!Declared) {
+      log() << "hotswap: error: " << Context
+            << ": failed to read SGPR count for kernel " << Owner << "\n";
+      return std::nullopt;
+    }
+    if (UsesVcc && *Declared < VccSgprs) {
+      log() << "hotswap: error: " << Context << ": VCC-using kernel " << Owner
+            << " has invalid SGPR count " << *Declared << "\n";
+      return std::nullopt;
+    }
+    unsigned DeclaredNumbered = *Declared - (UsesVcc ? VccSgprs : 0);
+    HighWatermark = std::max(HighWatermark, DeclaredNumbered);
+  } else {
+    // A device function can be reached from kernels with different declared
+    // register footprints. Without a complete call graph, keep the block above
+    // every declaration and charge every kernel in the commit step.
+    for (const KernelDescriptorInfo &KD : Ctx.Elf.kernelDescriptors()) {
+      std::optional<unsigned> Declared =
+          Ctx.Elf.getKernelSgprCount(KD.KernelName);
+      if (!Declared) {
+        log() << "hotswap: error: " << Context
+              << ": failed to read SGPR count for kernel " << KD.KernelName
+              << "\n";
+        return std::nullopt;
+      }
+      HighWatermark = std::max(HighWatermark, *Declared);
+    }
   }
 
   if (HighWatermark > std::numeric_limits<unsigned>::max() - (Alignment - 1)) {
