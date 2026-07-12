@@ -315,12 +315,39 @@ std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
                                 : toAsmRegName(MRI, Ops.Regs[2]);
   std::string Data1 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[3])
                                 : toAsmRegName(MRI, Ops.Regs[3]);
-  return {
-      ToMnem.str() + " " + Dst.first + ", " + Addr + ", " + Data0 +
-          fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + Dst.second + ", " + Addr + ", " + Data1 +
-          fmtOffset(Ops.Off1),
+  std::string First = ToMnem.str() + " " + Dst.first + ", " + Addr + ", " +
+                      Data0 + fmtOffset(Ops.Off0);
+  std::string Second = ToMnem.str() + " " + Dst.second + ", " + Addr + ", " +
+                       Data1 + fmtOffset(Ops.Off1);
+
+  SmallVector<MCRegister, 4> DstSubs = getDirectSubRegs(Ops.Regs[0], MRI);
+  const unsigned HalfWidth = Ops.IsB64 ? 2 : 1;
+  if (DstSubs.size() < 2 * HalfWidth)
+    return {};
+  auto HalfOverlaps = [&](unsigned Begin, MCRegister Reg) {
+    return llvm::any_of(
+        ArrayRef(DstSubs).slice(Begin, HalfWidth), [&](MCRegister DstReg) {
+          return MRI.regsOverlap(DstReg.id(), Reg.id());
+        });
   };
+
+  // Op0 writes the first destination half and op1 still needs addr + data1;
+  // op1 writes the second half and op0 still needs addr + data0. Pick the safe
+  // order when only one direction has a dependency. If both directions do,
+  // neither ordering preserves the compound instruction's read-before-write
+  // semantics without a scratch VGPR, so decline the rewrite.
+  const bool FirstClobbersSecond = HalfOverlaps(0, Ops.Regs[1]) ||
+                                   HalfOverlaps(0, Ops.Regs[3]);
+  const bool SecondClobbersFirst = HalfOverlaps(HalfWidth, Ops.Regs[1]) ||
+                                   HalfOverlaps(HalfWidth, Ops.Regs[2]);
+  if (FirstClobbersSecond && SecondClobbersFirst) {
+    log() << "hotswap: ds_storexchg_2addr has cyclic destination/source "
+             "overlap; leaving original instruction in place\n";
+    return {};
+  }
+  if (FirstClobbersSecond)
+    return {std::move(Second), std::move(First)};
+  return {std::move(First), std::move(Second)};
 }
 
 // -- expandDs2Addr ----------------------------------------------------------
