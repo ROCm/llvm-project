@@ -1143,6 +1143,13 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     log() << "hotswap: instruction patches disabled for this rewrite\n";
   }
 
+  // gfx1250 revision is recorded per kernel in the AMDGPU metadata note.
+  // Running a B0 object on A0 requires retagging that metadata even when no
+  // machine instruction needed rewriting. Native A0 code generation preserves
+  // s_clause and emits the same instructions as B0 for valid clauses.
+  if (Options.RunB0A0Patches && !Elf.updateGfx1250RevisionMetadata("A0"))
+    return AMD_COMGR_STATUS_ERROR;
+
   std::unique_ptr<WritableMemoryBuffer> Result;
   std::vector<Trampoline> Growth = Deferred;
   // The appended pool's fresh virtual address is the single reference point for

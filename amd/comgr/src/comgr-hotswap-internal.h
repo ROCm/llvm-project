@@ -295,6 +295,11 @@ public:
                                        unsigned RequiredSgprs,
                                        bool UpdateDescriptor = true);
 
+  /// Retag every gfx1250 kernel in the AMDGPU metadata note with \p Revision.
+  /// The revision strings used by gfx1250 ("A0" and "B0") have equal encoded
+  /// size, so this preserves the ELF layout.
+  bool updateGfx1250RevisionMetadata(llvm::StringRef Revision);
+
   /// Read COMPUTE_PGM_RSRC3.INST_PREF_SIZE for \p KernelName.
   std::optional<uint32_t>
   getKernelDescriptorInstPrefSize(llvm::StringRef KernelName,

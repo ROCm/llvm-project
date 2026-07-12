@@ -238,6 +238,110 @@ updateKernelMetadataSgprCount(uint8_t *Elf, const ELFFileT &File,
   return MetadataSgprUpdateStatus::NotFound;
 }
 
+bool ElfView::updateGfx1250RevisionMetadata(StringRef Revision) {
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (!PhdrsOrErr) {
+    log() << "hotswap: error: updateGfx1250RevisionMetadata: failed to read "
+          << "program headers: " << toString(PhdrsOrErr.takeError()) << "\n";
+    return false;
+  }
+
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_type != ELF::PT_NOTE)
+      continue;
+
+    Error Err = Error::success();
+    for (ELFT::Note Note : File.notes(Phdr, Err)) {
+      if (Note.getName() != "AMDGPU" ||
+          Note.getType() != ELF::NT_AMDGPU_METADATA)
+        continue;
+
+      ArrayRef<uint8_t> Desc = Note.getDesc(4);
+      if (Desc.empty()) {
+        log() << "hotswap: error: updateGfx1250RevisionMetadata: AMDGPU "
+              << "metadata note has an empty descriptor.\n";
+        return false;
+      }
+
+      StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
+      msgpack::Document Doc;
+      if (!Doc.readFromBlob(Blob, false)) {
+        log() << "hotswap: error: updateGfx1250RevisionMetadata: failed to "
+              << "parse AMDGPU metadata note.\n";
+        return false;
+      }
+
+      msgpack::DocNode Root = Doc.getRoot();
+      if (!Root.isMap()) {
+        log() << "hotswap: error: updateGfx1250RevisionMetadata: AMDGPU "
+              << "metadata root is not a map.\n";
+        return false;
+      }
+
+      msgpack::MapDocNode &RootMap = Root.getMap();
+      msgpack::DocNode::MapTy::iterator KernelsIt =
+          RootMap.find("amdhsa.kernels");
+      if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
+        continue;
+
+      bool Changed = false;
+      for (msgpack::DocNode &KNode : KernelsIt->second.getArray()) {
+        if (!KNode.isMap())
+          continue;
+        msgpack::MapDocNode &KMap = KNode.getMap();
+        msgpack::DocNode::MapTy::iterator RevisionIt =
+            KMap.find(".gfx1250_revision");
+        if (RevisionIt == KMap.end())
+          continue;
+        if (!RevisionIt->second.isString()) {
+          log() << "hotswap: error: updateGfx1250RevisionMetadata: "
+                << ".gfx1250_revision is not a string.\n";
+          return false;
+        }
+        if (RevisionIt->second.getString() == Revision)
+          continue;
+        RevisionIt->second = Doc.getNode(Revision, /*Copy=*/true);
+        Changed = true;
+      }
+
+      if (!Changed)
+        continue;
+
+      std::string NewBlob;
+      Doc.writeToBlob(NewBlob);
+      if (NewBlob.size() != Blob.size()) {
+        log() << "hotswap: error: updateGfx1250RevisionMetadata: updating "
+              << ".gfx1250_revision changes metadata note size from "
+              << Blob.size() << " to " << NewBlob.size()
+              << " bytes; in-place rewrite cannot preserve ELF layout.\n";
+        return false;
+      }
+
+      const uint8_t *DescBegin = Desc.data();
+      if (DescBegin < File.base() || DescBegin >= File.end()) {
+        log() << "hotswap: error: updateGfx1250RevisionMetadata: metadata "
+              << "descriptor pointer is outside the ELF buffer.\n";
+        return false;
+      }
+      size_t DescOffset = DescBegin - File.base();
+      if (Desc.size() > File.getBufSize() ||
+          DescOffset > File.getBufSize() - Desc.size()) {
+        log() << "hotswap: error: updateGfx1250RevisionMetadata: metadata "
+              << "descriptor extends past the ELF buffer.\n";
+        return false;
+      }
+      std::memcpy(data() + DescOffset, NewBlob.data(), NewBlob.size());
+    }
+
+    if (Err) {
+      log() << "hotswap: error: updateGfx1250RevisionMetadata: failed to "
+            << "iterate AMDGPU notes: " << toString(std::move(Err)) << "\n";
+      return false;
+    }
+  }
+  return true;
+}
+
 // -- applyByteReplace ---------------------------------------------------------
 
 bool applyByteReplace(const RewriteRule &Rule, uint64_t InstOffset,
