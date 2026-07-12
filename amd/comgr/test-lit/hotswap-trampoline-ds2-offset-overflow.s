@@ -8,9 +8,9 @@
 // COM:   raw 128 * 512 = 65536  -- one past the limit
 // COM:   raw 255 * 512 = 130560 -- worst case
 // COM:
-// COM: When that happens the patch is not representable, so the trampoline
-// COM: must leave the original (broken-on-A0) instruction in place rather
-// COM: than emit a silently-truncated single-address replacement.
+// COM: When that happens the required A0 patch is not representable. The
+// COM: rewrite must fail closed rather than return the original B0-only
+// COM: instruction or emit a silently truncated single-address replacement.
 // COM:
 // COM: Coverage:
 // COM:   test_ds_load_b64_overflow : raw 128/255 -> scaled 65536/130560
@@ -26,7 +26,7 @@
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 \
 // RUN:   hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out.elf 2>&1 \
+// RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefix=LOG %s
 // COM: Pin the message shape (mnemonic, both raw + scaled values, the
 // COM: 16-bit limit, and the "leaving original instruction in place"
@@ -35,18 +35,15 @@
 // COM: generic "ds_2addr expansion failed" line is the patchDs2Addr-level
 // COM: error that follows naturally from the overflow guard returning
 // COM: an empty expansion; pin it too so a refactor that reroutes the
-// COM: error path is caught. RESULT: SUCCESS comes last because the
-// COM: rewrite as a whole succeeds (the in-range kernel is patched).
+// COM: required-failure path is caught.
 // LOG:      hotswap: error: ds_load_2addr_stride64_b64 scaled offsets exceed
 // LOG-SAME: the single-address DS 16-bit field
 // LOG-SAME: off0=raw 128 * scale 512 = 65536
 // LOG-SAME: off1=raw 255 * scale 512 = 130560
 // LOG-SAME: max 65535
-// LOG-SAME: leaving original instruction in place
+// LOG-SAME: required rewrite is not representable
 // LOG:      hotswap: error: ds_2addr expansion failed for: ds_load_2addr_stride64_b64
-// LOG:      RESULT: SUCCESS
-
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// LOG:      RESULT: ERROR
 
 // ---- Kernel 1: out-of-range -- patch must NOT fire --------------------------
 // COM: Both per-operand indices scale past 0xFFFF (off0:128 -> 65536,
@@ -127,19 +124,6 @@ test_ds_load_b64_inrange:
   s_nop 0
 .Ltest_ds_load_b64_inrange_end:
 .size test_ds_load_b64_inrange, .Ltest_ds_load_b64_inrange_end-test_ds_load_b64_inrange
-
-// COM: Idempotency. For the overflow kernel the original instruction is
-// COM: still a ds_*_2addr_*, so the second pass would attempt to patch
-// COM: it again, hit the same overflow, and again leave it alone. For
-// COM: the in-range kernel the body now uses plain ds_load_b64, which
-// COM: the dispatcher does not recognise, so it is also untouched. Net:
-// COM: byte-identical output between passes.
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 \
-// RUN:   hotswap-rewrite %t.out.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --check-idempotent \
-// RUN:   | %FileCheck --check-prefix=IDEM %s
-// IDEM: IDEMPOTENT: YES
 
 .rodata
 .p2align 8

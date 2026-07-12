@@ -1,6 +1,6 @@
 // COM: Test persistent tensor_load_to_lds descriptor normalization across a
 // COM: control-flow edge. The descriptor remains masked on either successor,
-// COM: so the rewrite needs no liveness-dependent save/restore sequence.
+// COM: so the in-place rewrite needs no liveness-dependent save/restore.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -15,12 +15,12 @@
 // COM: Kernel 1 (branch guard): s_cbranch_scc1 sits between tensor_load and
 // COM: s_mov (which reads s4). The later read sees the normalized descriptor.
 // DISASM-LABEL: <test_tensor_branch_guard>:
-// DISASM: s_branch
-// DISASM: s_cbranch_scc1
-// DISASM: s_endpgm
-// DISASM: s_pack_hh_b32_b16 s4, 0, s4
-// DISASM-NEXT: tensor_load_to_lds
-// DISASM-NEXT: s_branch
+// DISASM-NOT: s_branch
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
+// DISASM-NEXT: s_cbranch_scc1
+// DISASM-NEXT: s_mov_b32 s0, s4
+// DISASM-NEXT: s_endpgm
 
 // COM: Idempotency
 // RUN: hotswap-rewrite %t.out.elf \
@@ -35,6 +35,7 @@
 .p2align 8
 .type test_tensor_branch_guard,@function
 test_tensor_branch_guard:
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[4:11]
   s_cbranch_scc1 .Lskip
   s_mov_b32 s0, s4

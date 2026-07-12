@@ -50,6 +50,93 @@ TEST(ElfView, RejectsNonElfInput) {
   llvm::consumeError(ViewOrErr.takeError());
 }
 
+TEST(ElfView, TrampolinePoolVAddrAccountsForLoadSegmentMemSize) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::ELF::Elf64_Ehdr Ehdr{};
+  std::memcpy(&Ehdr, Obj.Bytes.data(), sizeof(Ehdr));
+  ASSERT_EQ(Ehdr.e_phnum, 1u);
+  llvm::ELF::Elf64_Phdr Load{};
+  Load.p_type = llvm::ELF::PT_LOAD;
+  Load.p_vaddr = 0x8000;
+  Load.p_memsz = 0x2345;
+  Load.p_align = 1;
+  std::memcpy(Obj.Bytes.data() + Ehdr.e_phoff, &Load, sizeof(Load));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->trampolinePoolVAddr(), 0xB000u);
+}
+
+TEST(ElfView, TrampolinePoolVAddrRejectsLoadSegmentEndOverflow) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::ELF::Elf64_Ehdr Ehdr{};
+  std::memcpy(&Ehdr, Obj.Bytes.data(), sizeof(Ehdr));
+  ASSERT_EQ(Ehdr.e_phnum, 1u);
+  llvm::ELF::Elf64_Phdr Load{};
+  Load.p_type = llvm::ELF::PT_LOAD;
+  Load.p_vaddr = std::numeric_limits<uint64_t>::max() - 15;
+  Load.p_memsz = 16;
+  Load.p_align = 1;
+  std::memcpy(Obj.Bytes.data() + Ehdr.e_phoff, &Load, sizeof(Load));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->trampolinePoolVAddr(), std::nullopt);
+}
+
+TEST(ElfView, TrampolinePoolVAddrRejectsSectionEndOverflow) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+
+  llvm::ELF::Elf64_Ehdr Ehdr{};
+  std::memcpy(&Ehdr, Obj.Bytes.data(), sizeof(Ehdr));
+  ASSERT_GT(Ehdr.e_shnum, 2u);
+  llvm::ELF::Elf64_Shdr Rodata{};
+  const uint64_t RodataShdrOffset =
+      Ehdr.e_shoff + 2 * static_cast<uint64_t>(Ehdr.e_shentsize);
+  std::memcpy(&Rodata, Obj.Bytes.data() + RodataShdrOffset, sizeof(Rodata));
+  Rodata.sh_addr = std::numeric_limits<uint64_t>::max() - 7;
+  Rodata.sh_size = 8;
+  std::memcpy(Obj.Bytes.data() + RodataShdrOffset, &Rodata, sizeof(Rodata));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->trampolinePoolVAddr(), std::nullopt);
+}
+
+TEST(ElfView, TrampolinePoolVAddrRejectsAlignmentOverflow) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::ELF::Elf64_Ehdr Ehdr{};
+  std::memcpy(&Ehdr, Obj.Bytes.data(), sizeof(Ehdr));
+  ASSERT_EQ(Ehdr.e_phnum, 1u);
+  llvm::ELF::Elf64_Phdr Load{};
+  Load.p_type = llvm::ELF::PT_LOAD;
+  Load.p_vaddr = std::numeric_limits<uint64_t>::max() - 2;
+  Load.p_memsz = 1;
+  Load.p_align = 1;
+  std::memcpy(Obj.Bytes.data() + Ehdr.e_phoff, &Load, sizeof(Load));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->trampolinePoolVAddr(), std::nullopt);
+}
+
 // -- ElfView::findKernelAtAddress ---------------------------------------------
 
 TEST(ElfView, FindKernelAtAddressResolvesNearestPrecedingForZeroSizeSymbol) {
@@ -76,6 +163,87 @@ TEST(ElfView, FindKernelAtAddressResolvesNearestPrecedingForZeroSizeSymbol) {
   EXPECT_EQ(ViewOrErr->findKernelAtAddress(0x0FF0), "");
 }
 
+TEST(ElfView, FindFunctionTextRangePrefersNearestCoveringStart) {
+  using namespace llvm::ELF;
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  std::vector<uint8_t> Text = makeText(32);
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+
+  Elf64_Ehdr Ehdr{};
+  std::memcpy(&Ehdr, Obj.Bytes.data(), sizeof(Ehdr));
+  Elf64_Shdr Symtab{};
+  std::memcpy(&Symtab,
+              Obj.Bytes.data() + Ehdr.e_shoff +
+                  4 * static_cast<uint64_t>(Ehdr.e_shentsize),
+              sizeof(Symtab));
+  ASSERT_GE(Symtab.sh_size, 3 * sizeof(Elf64_Sym));
+
+  // Reuse the descriptor-symbol slot as a nested function alias. The outer
+  // function appears first in the table, so a first-match scan gets this
+  // ownership decision wrong.
+  Elf64_Sym Nested{};
+  Nested.setBindingAndType(STB_GLOBAL, STT_FUNC);
+  Nested.st_shndx = 1;
+  Nested.st_value = Opts.TextAddr + 4;
+  Nested.st_size = 8;
+  std::memcpy(Obj.Bytes.data() + Symtab.sh_offset + 2 * sizeof(Elf64_Sym),
+              &Nested, sizeof(Nested));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  std::optional<ElfView::FunctionTextRange> Range =
+      ViewOrErr->findFunctionTextRangeAtOffset(6);
+  ASSERT_TRUE(Range.has_value());
+  EXPECT_EQ(Range->Begin, 4u);
+  EXPECT_EQ(Range->End, 12u);
+}
+
+TEST(ElfView, FindFunctionTextRangeUnionsSameStartAliases) {
+  using namespace llvm::ELF;
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  std::vector<uint8_t> Text = makeText(32);
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+
+  Elf64_Ehdr Ehdr{};
+  std::memcpy(&Ehdr, Obj.Bytes.data(), sizeof(Ehdr));
+  Elf64_Shdr Symtab{};
+  std::memcpy(&Symtab,
+              Obj.Bytes.data() + Ehdr.e_shoff +
+                  4 * static_cast<uint64_t>(Ehdr.e_shentsize),
+              sizeof(Symtab));
+  ASSERT_GE(Symtab.sh_size, 3 * sizeof(Elf64_Sym));
+
+  Elf64_Sym ShortAlias{};
+  std::memcpy(&ShortAlias,
+              Obj.Bytes.data() + Symtab.sh_offset + sizeof(Elf64_Sym),
+              sizeof(ShortAlias));
+  ShortAlias.st_size = 8;
+  std::memcpy(Obj.Bytes.data() + Symtab.sh_offset + sizeof(Elf64_Sym),
+              &ShortAlias, sizeof(ShortAlias));
+
+  Elf64_Sym LongAlias{};
+  LongAlias.setBindingAndType(STB_GLOBAL, STT_FUNC);
+  LongAlias.st_shndx = 1;
+  LongAlias.st_value = Opts.TextAddr;
+  LongAlias.st_size = 16;
+  std::memcpy(Obj.Bytes.data() + Symtab.sh_offset + 2 * sizeof(Elf64_Sym),
+              &LongAlias, sizeof(LongAlias));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  std::optional<ElfView::FunctionTextRange> Range =
+      ViewOrErr->findFunctionTextRangeAtOffset(4);
+  ASSERT_TRUE(Range.has_value());
+  EXPECT_EQ(Range->Begin, 0u);
+  EXPECT_EQ(Range->End, 16u);
+}
+
 // -- findNearestSled ----------------------------------------------------------
 
 TEST(FindNearestSled, SkipsSledsOutsideInstructionFunctionRange) {
@@ -86,11 +254,11 @@ TEST(FindNearestSled, SkipsSledsOutsideInstructionFunctionRange) {
   Sleds.push_back({/*Start=*/96, /*End=*/128, /*WritePos=*/96,
                    /*FunctionStart=*/96, /*FunctionEnd=*/160});
 
-  NopSled *Sled = findNearestSled(Sleds, 108, 8);
+  NopSled *Sled = findNearestSled(Sleds, 108, 8, 4, 112);
   ASSERT_NE(Sled, nullptr);
   EXPECT_EQ(Sled->Start, 96u);
 
-  EXPECT_EQ(findNearestSled(Sleds, 64, 8), nullptr);
+  EXPECT_EQ(findNearestSled(Sleds, 64, 8, 4, 68), nullptr);
 }
 
 // -- ElfView::getKernelStaticLdsSize ------------------------------------------
@@ -210,6 +378,58 @@ TEST(ElfView, GrowWithTrampolinesKeepsAllocSectionSymbols) {
   std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
   ASSERT_EQ(KDs.size(), 1u);
   EXPECT_EQ(KDs[0].VAddr, Obj.RodataAddr);
+}
+
+TEST(ElfView, GrowWithTrampolinesRelocatesAndMapsProgramHeaders) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::ELF::Elf64_Ehdr InEhdr{};
+  std::memcpy(&InEhdr, Obj.Bytes.data(), sizeof(InEhdr));
+  ASSERT_EQ(InEhdr.e_phnum, 1u);
+  llvm::ELF::Elf64_Phdr OldPhdr{};
+  OldPhdr.p_type = llvm::ELF::PT_PHDR;
+  OldPhdr.p_offset = InEhdr.e_phoff;
+  OldPhdr.p_vaddr = InEhdr.e_phoff;
+  OldPhdr.p_paddr = InEhdr.e_phoff;
+  OldPhdr.p_filesz = InEhdr.e_phnum * InEhdr.e_phentsize;
+  OldPhdr.p_memsz = OldPhdr.p_filesz;
+  OldPhdr.p_align = alignof(llvm::ELF::Elf64_Phdr);
+  std::memcpy(Obj.Bytes.data() + InEhdr.e_phoff, &OldPhdr,
+              sizeof(OldPhdr));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  Trampoline T;
+  T.Bytes.assign(32, 0);
+  const uint8_t SNop[4] = {};
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out =
+      ViewOrErr->growWithTrampolines(std::vector<Trampoline>{T}, SNop);
+  ASSERT_NE(Out, nullptr);
+
+  const uint8_t *Bytes =
+      reinterpret_cast<const uint8_t *>(Out->getBufferStart());
+  llvm::ELF::Elf64_Ehdr Ehdr{};
+  std::memcpy(&Ehdr, Bytes, sizeof(Ehdr));
+  ASSERT_EQ(Ehdr.e_phnum, 2u);
+  llvm::ELF::Elf64_Phdr PhdrTable{};
+  llvm::ELF::Elf64_Phdr PoolLoad{};
+  std::memcpy(&PhdrTable, Bytes + Ehdr.e_phoff, sizeof(PhdrTable));
+  std::memcpy(&PoolLoad, Bytes + Ehdr.e_phoff + Ehdr.e_phentsize,
+              sizeof(PoolLoad));
+  ASSERT_EQ(PhdrTable.p_type, llvm::ELF::PT_PHDR);
+  ASSERT_EQ(PoolLoad.p_type, llvm::ELF::PT_LOAD);
+  EXPECT_EQ(PhdrTable.p_offset, Ehdr.e_phoff);
+  EXPECT_EQ(PhdrTable.p_filesz,
+            static_cast<uint64_t>(Ehdr.e_phnum) * Ehdr.e_phentsize);
+  EXPECT_LE(PoolLoad.p_offset, Ehdr.e_phoff);
+  EXPECT_GE(PoolLoad.p_offset + PoolLoad.p_filesz,
+            Ehdr.e_phoff + PhdrTable.p_filesz);
+  EXPECT_EQ(PhdrTable.p_vaddr,
+            PoolLoad.p_vaddr + Ehdr.e_phoff - PoolLoad.p_offset);
 }
 
 // gfx1250 "address of a global" idiom, as emitted for e.g. `x++` on a

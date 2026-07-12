@@ -1,6 +1,6 @@
-// COM: A0 descriptor multicast bits stay clear after normalization. Even a
-// COM: kernel declaring all user-addressable SGPRs therefore needs no scratch
-// COM: register and must rewrite successfully without changing SGPR metadata.
+// COM: Replacing the canonical delay in place needs no scratch register. A
+// COM: kernel declaring all user-addressable SGPRs must therefore rewrite
+// COM: successfully without changing SGPR metadata.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -14,10 +14,11 @@
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=METADATA %s
 
 // DISASM-LABEL: <test_tensor_no_scratch>:
-// DISASM: s_branch
-// DISASM: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NOT: s_branch
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_mov_b32 s0, s4
+// DISASM-NEXT: s_endpgm
 
 // METADATA: .name:           test_tensor_no_scratch
 // METADATA: .sgpr_count:     106
@@ -28,6 +29,7 @@
 .p2align 8
 .type test_tensor_no_scratch,@function
 test_tensor_no_scratch:
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[4:11]
   s_mov_b32 s0, s4
   s_endpgm

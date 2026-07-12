@@ -84,6 +84,14 @@ WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
   if (!IsWmma && !IsSwmmac)
     return {4, 4};
 
+  // The backend's sparse SWMMAC category needs four VALU slots on A0; dense
+  // SWMMAC needs only two. A valid B0 object already has four, so neither
+  // category requires HotSwap padding.
+  if (IsSwmmac)
+    return Mnemonic.contains("_iu8") || Mnemonic.contains("_iu4")
+               ? WmmaNopReq{4, 4}
+               : WmmaNopReq{2, 4};
+
   if (Mnemonic.contains("_iu8") || Mnemonic.contains("_iu4"))
     return {8, 4};
 
@@ -140,7 +148,7 @@ std::vector<WmmaHazard> findWmmaCoexecHazards(const PatchContext &Ctx) {
       }
 
       if (isCoexecutableVALU(Candidate, MCII)) {
-        if (!checkVgprOverlap(WmmaDI.Inst, Candidate.Inst, MRI)) {
+        if (!checkVgprOverlap(WmmaDI.Inst, Candidate.Inst, MCII, MRI)) {
           ++SafeSlots;
           if (SafeSlots >= Req.A0Nops)
             break;
@@ -179,23 +187,59 @@ static uint32_t applyWmmaHazardPatchImpl(PatchContext &Ctx) {
   for (const WmmaHazard &H : Hazards) {
     const InternalDecodedInst &ValuDI = Ctx.Decoded[H.ValuIdx];
 
-    uint64_t TrampolineTextOffset = Ctx.TextSize;
-    for (const Trampoline &T : Ctx.OutTrampolines)
-      TrampolineTextOffset += T.Bytes.size();
-
-    SmallVector<MCInst> Insts;
+    SmallVector<uint8_t> Padding;
     for (int I = 0; I < H.Deficit; ++I)
-      Insts.push_back(Ctx.LS.VNopInst);
-    Insts.push_back(ValuDI.Inst);
-
-    Trampoline T = buildTrampoline(Insts, ValuDI.Offset, ValuDI.Size,
-                                   TrampolineTextOffset, Ctx.LS);
-    if (T.Bytes.empty()) {
-      log() << "hotswap: error: WMMA hazard: buildTrampoline failed at 0x"
+      Padding.append(encodeInstructionBytes(Ctx.LS.VNopInst, Ctx.LS));
+    if (Padding.size() != static_cast<size_t>(H.Deficit) * MinInstSize) {
+      log() << "hotswap: error: WMMA hazard: v_nop encoding failed at 0x"
             << utohexstr(ValuDI.Offset) << "\n";
+      Ctx.RequiredPatchFailed = true;
       continue;
     }
-    Ctx.OutTrampolines.push_back(std::move(T));
+
+    auto Existing = llvm::find_if(Ctx.OutTrampolines, [&](const Trampoline &T) {
+      return T.OriginalOffset == ValuDI.Offset;
+    });
+    if (Existing != Ctx.OutTrampolines.end()) {
+      Existing->Bytes.insert(Existing->Bytes.begin(), Padding.begin(),
+                             Padding.end());
+      auto Recorded = Ctx.ReplacementCodeBySite.find(ValuDI.Offset);
+      if (Recorded != Ctx.ReplacementCodeBySite.end())
+        Recorded->second.insert(Recorded->second.begin(), Padding.begin(),
+                                Padding.end());
+    } else {
+      SmallVector<uint8_t> Replacement = Padding;
+      if (Ctx.MutatedOffsets.contains(ValuDI.Offset)) {
+        auto Recorded = Ctx.ReplacementCodeBySite.find(ValuDI.Offset);
+        if (Recorded == Ctx.ReplacementCodeBySite.end()) {
+          log() << "hotswap: error: WMMA hazard: site 0x"
+                << utohexstr(ValuDI.Offset)
+                << " was mutated without a semantic replacement; refusing "
+                   "to relocate raw control-flow bytes\n";
+          Ctx.RequiredPatchFailed = true;
+          continue;
+        }
+        Replacement.append(Recorded->second.begin(), Recorded->second.end());
+      } else {
+        SmallVector<uint8_t> Original =
+            encodeInstructionBytes(ValuDI.Inst, Ctx.LS);
+        if (Original.size() != ValuDI.Size) {
+          log() << "hotswap: error: WMMA hazard: VALU encoding failed at 0x"
+                << utohexstr(ValuDI.Offset) << "\n";
+          Ctx.RequiredPatchFailed = true;
+          continue;
+        }
+        Replacement.append(Original.begin(), Original.end());
+      }
+      if (!emitReplacementCode(Ctx, ValuDI.Offset, ValuDI.Size, Replacement,
+                               /*AllowSafeFarReturn=*/true)) {
+        log() << "hotswap: error: WMMA hazard: emission failed at 0x"
+              << utohexstr(ValuDI.Offset) << "\n";
+        Ctx.RequiredPatchFailed = true;
+        continue;
+      }
+    }
+    Ctx.MutatedOffsets.insert(ValuDI.Offset);
 
     log() << "hotswap: WMMA hazard fix at 0x" << utohexstr(ValuDI.Offset)
           << ": inserted " << H.Deficit << " v_nop(s)\n";

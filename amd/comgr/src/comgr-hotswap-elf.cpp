@@ -266,20 +266,59 @@ bool applyByteReplace(const RewriteRule &Rule, uint64_t InstOffset,
 // -- findNearestSled ----------------------------------------------------------
 
 NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
-                         uint64_t Needed) {
+                         uint64_t Needed, uint64_t ReplacementSize,
+                         uint64_t ReturnOffset, bool AllowTailPadding) {
   NopSled *Best = nullptr;
   uint64_t BestDist = std::numeric_limits<uint64_t>::max();
+  bool BestIsOwner = false;
+  auto WithinSBranch = [](uint64_t From, uint64_t To) {
+    if (From > std::numeric_limits<uint64_t>::max() - MinInstSize)
+      return false;
+    const uint64_t Pc = From + MinInstSize;
+    if (To >= Pc) {
+      const uint64_t Delta = To - Pc;
+      return Delta % MinInstSize == 0 &&
+             Delta / MinInstSize <= static_cast<uint64_t>(BranchOffsetMax);
+    }
+
+    const uint64_t Delta = Pc - To;
+    return Delta % MinInstSize == 0 &&
+           Delta / MinInstSize <=
+               static_cast<uint64_t>(-static_cast<int64_t>(BranchOffsetMin));
+  };
   for (NopSled &Sled : Sleds) {
-    if (Offset < Sled.FunctionStart || Offset >= Sled.FunctionEnd)
+    if (Sled.IsTailPadding && !AllowTailPadding)
       continue;
-    uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
-    if (Sled.WritePos > UsableEnd || Needed > UsableEnd - Sled.WritePos)
+    // Interior sleds are reachable fallthrough code and therefore remain
+    // private to their owning function. A tail-padding sled is separately
+    // proven anonymous and unreachable, so a required rewrite in any nearby
+    // function may borrow it when both short branches fit.
+    if (!Sled.IsTailPadding &&
+        (Offset < Sled.FunctionStart || Offset >= Sled.FunctionEnd))
       continue;
-    uint64_t Dist = Sled.WritePos > Offset ? Sled.WritePos - Offset
-                                           : Offset - Sled.WritePos;
-    if (Dist < MaxSledDistance && Dist < BestDist) {
+    // FunctionStart/FunctionEnd scope the source instruction. Sled storage may
+    // also be anonymous alignment immediately following that function.
+    uint64_t GuardSize = Sled.IsTailPadding ? 0 : MinInstSize;
+    uint64_t UsableEnd = Sled.End;
+    if (Sled.WritePos > UsableEnd ||
+        GuardSize > UsableEnd - Sled.WritePos)
+      continue;
+    uint64_t PayloadOffset = Sled.WritePos + GuardSize;
+    if (Needed > UsableEnd - PayloadOffset ||
+        ReplacementSize > UsableEnd - PayloadOffset)
+      continue;
+    const uint64_t BackFrom = PayloadOffset + ReplacementSize;
+    if (!WithinSBranch(Offset, PayloadOffset) ||
+        !WithinSBranch(BackFrom, ReturnOffset))
+      continue;
+    uint64_t Dist = PayloadOffset > Offset ? PayloadOffset - Offset
+                                           : Offset - PayloadOffset;
+    bool IsOwner = Offset >= Sled.FunctionStart && Offset < Sled.FunctionEnd;
+    if ((!BestIsOwner && IsOwner) ||
+        (BestIsOwner == IsOwner && Dist < BestDist)) {
       Best = &Sled;
       BestDist = Dist;
+      BestIsOwner = IsOwner;
     }
   }
   return Best;
@@ -450,6 +489,7 @@ std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
 
 std::optional<ElfView::FunctionTextRange>
 ElfView::findFunctionTextRangeAtOffset(uint64_t TextOffset) const {
+  std::optional<FunctionTextRange> Best;
   for (const ELFT::Shdr &SymShdr : Sections) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
         SymShdr.sh_type != ELF::SHT_DYNSYM)
@@ -473,11 +513,14 @@ ElfView::findFunctionTextRangeAtOffset(uint64_t TextOffset) const {
       if (Sym.st_size > std::numeric_limits<uint64_t>::max() - Start)
         continue;
       uint64_t End = Start + Sym.st_size;
-      if (TextOffset >= Start && TextOffset < End)
-        return ElfView::FunctionTextRange{Start, End};
+      if (TextOffset < Start || TextOffset >= End)
+        continue;
+      if (!Best || Start > Best->Begin ||
+          (Start == Best->Begin && End > Best->End))
+        Best = FunctionTextRange{Start, End, &Sym, &SymShdr};
     }
   }
-  return std::nullopt;
+  return Best;
 }
 
 // -- ElfView::findKernelDescriptor --------------------------------------------
@@ -1108,7 +1151,29 @@ std::optional<uint64_t> ElfView::trampolinePoolVAddr() const {
       return std::nullopt;
     MaxAllocEnd = std::max(MaxAllocEnd, *End);
   }
-  return alignTo(MaxAllocEnd, TrampolinePoolAlign);
+
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (!PhdrsOrErr) {
+    log() << "hotswap: error: trampolinePoolVAddr: failed to read program "
+             "headers: "
+          << toString(PhdrsOrErr.takeError()) << "\n";
+    return std::nullopt;
+  }
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_type != ELF::PT_LOAD)
+      continue;
+    std::optional<uint64_t> End = checkedAddUint64(
+        Phdr.p_vaddr, Phdr.p_memsz, "load segment end for pool vaddr");
+    if (!End)
+      return std::nullopt;
+    MaxAllocEnd = std::max(MaxAllocEnd, *End);
+  }
+
+  const uint64_t Remainder = MaxAllocEnd % TrampolinePoolAlign;
+  if (Remainder == 0)
+    return MaxAllocEnd;
+  return checkedAddUint64(MaxAllocEnd, TrampolinePoolAlign - Remainder,
+                          "trampoline pool vaddr alignment");
 }
 
 // -- ElfView::growWithTrampolines ---------------------------------------------
@@ -1260,14 +1325,43 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
   if (HasPhdrs) {
     std::memcpy(Out + NewPhoff, Input + Phoff,
                 static_cast<size_t>(Phnum) * Phentsize);
+    const uint64_t PhdrTableSize = NewPhnum * Phentsize;
+    std::optional<uint64_t> PhdrTableEnd = checkedAddUint64(
+        NewPhoff, PhdrTableSize, "relocated runtime phdr table end");
+    std::optional<uint64_t> PhdrVAddr = checkedAddUint64(
+        PoolVAddr, NewPhoff - PoolFileOff,
+        "relocated runtime phdr table vaddr");
+    if (!PhdrTableEnd || !PhdrVAddr || *PhdrTableEnd < PoolFileOff)
+      return nullptr;
+
+    // PT_PHDR describes the table used by runtime phdr consumers. It must
+    // follow e_phoff and include the newly appended PT_LOAD entry.
+    for (uint16_t I = 0; I < Phnum; ++I) {
+      uint8_t *Entry = Out + NewPhoff + static_cast<uint64_t>(I) * Phentsize;
+      Phdr Existing{};
+      std::memcpy(&Existing, Entry, sizeof(Existing));
+      if (Existing.p_type != ELF::PT_PHDR)
+        continue;
+      Existing.p_offset = NewPhoff;
+      Existing.p_vaddr = *PhdrVAddr;
+      Existing.p_paddr = *PhdrVAddr;
+      Existing.p_filesz = PhdrTableSize;
+      Existing.p_memsz = PhdrTableSize;
+      Existing.p_align = alignof(Phdr);
+      std::memcpy(Entry, &Existing, sizeof(Existing));
+    }
+
     Phdr PoolPhdr{};
     PoolPhdr.p_type = ELF::PT_LOAD;
     PoolPhdr.p_flags = ELF::PF_R | ELF::PF_X;
     PoolPhdr.p_offset = PoolFileOff;
     PoolPhdr.p_vaddr = PoolVAddr;
     PoolPhdr.p_paddr = PoolVAddr;
-    PoolPhdr.p_filesz = TrampTotal;
-    PoolPhdr.p_memsz = TrampTotal;
+    // Mapping the relocated phdr table as part of this segment keeps e_phoff
+    // and PT_PHDR backed by runtime-visible memory. Section headers remain
+    // file-only metadata and need not be mapped.
+    PoolPhdr.p_filesz = *PhdrTableEnd - PoolFileOff;
+    PoolPhdr.p_memsz = PoolPhdr.p_filesz;
     PoolPhdr.p_align = TrampolinePoolAlign;
     std::memcpy(Out + NewPhoff + static_cast<uint64_t>(Phnum) * Phentsize,
                 &PoolPhdr, sizeof(PoolPhdr));

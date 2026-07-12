@@ -1,5 +1,7 @@
 // COM: Test HotSwap B0 tensor_load_to_lds masking when fixed .cluster_dims
-// COM: metadata proves the dispatch is non-cluster or size-one.
+// COM: metadata proves the dispatch is non-cluster or size-one. The known
+// COM: non-cluster case uses the in-place canonical-delay rewrite; a clustered
+// COM: dispatch retains the B0 conditional trampoline.
 
 // RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 \
 // RUN:   --amdhsa-code-object-version=6 -filetype=obj %s -o %t.o
@@ -30,12 +32,11 @@
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=METADATA %s
 
 // DISASM-LABEL: <test_tensor_b0_known_noncluster>:
-// DISASM: s_branch
-// DISASM: s_endpgm
 // DISASM-NOT: s_getreg_b32
-// DISASM: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NOT: s_branch
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_endpgm
 // DISASM-LABEL: <test_tensor_b0_known_cluster>:
 // DISASM: s_branch
 // DISASM: s_endpgm
@@ -73,6 +74,7 @@
 .p2align 8
 .type test_tensor_b0_known_noncluster,@function
 test_tensor_b0_known_noncluster:
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[4:11]
   s_endpgm
   s_nop 0

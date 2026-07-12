@@ -15,31 +15,36 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: Kernel 1 (single split): one DS2 -> two single-address loads followed
-// COM: by an s_wait_dscnt 0x0 drain; the downstream s_wait_dscnt 0x1 is left
-// COM: unchanged.
+// COM: Kernel 1 (single split): the split's drain occupies the original DS2
+// COM: second dword. The compact sled returns to it, then execution reaches the
+// COM: unchanged downstream s_wait_dscnt 0x1.
 // DISASM-LABEL: <test_ds_pipelined_single>:
-// DISASM-NOT: ds_load_2addr_stride64_b32
-// DISASM: s_branch
-// DISASM: s_wait_dscnt 0x1
-// DISASM: ds_load_b32 v0
-// DISASM: ds_load_b32 v1
-// DISASM: s_wait_dscnt 0x0
-// DISASM: s_branch
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_wait_dscnt 0x1
+// DISASM-NEXT: s_endpgm
+// DISASM:      ds_load_b32 v0
+// DISASM-NEXT: ds_load_b32 v1
+// DISASM-NEXT: s_branch
 
-// COM: Kernel 2 (two splits): each split lands its own s_wait_dscnt 0x0 drain;
-// COM: the shared downstream s_wait_dscnt 0x1 is left unchanged.
+// COM: Kernel 2 (two adjacent splits): each eight-byte source is a branch plus
+// COM: padding. The deferred bodies keep their own drains, and the shared
+// COM: downstream s_wait_dscnt 0x1 is left unchanged.
 // DISASM-LABEL: <test_ds_pipelined_multi>:
-// DISASM-NOT: ds_load_2addr_stride64_b32
-// DISASM: s_branch
-// DISASM: s_branch
-// DISASM: s_wait_dscnt 0x1
-// DISASM: ds_load_b32 v0
-// DISASM: ds_load_b32 v1
-// DISASM: s_wait_dscnt 0x0
-// DISASM: ds_load_b32 v2
-// DISASM: ds_load_b32 v3
-// DISASM: s_wait_dscnt 0x0
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_nop 0
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_nop 0
+// DISASM-NEXT: s_wait_dscnt 0x1
+// DISASM-NEXT: s_endpgm
+// DISASM:      ds_load_b32 v0
+// DISASM-NEXT: ds_load_b32 v1
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: ds_load_b32 v2
+// DISASM-NEXT: ds_load_b32 v3
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_branch
 
 // COM: Idempotency: a second rewrite produces identical bytes (the 2-addr
 // COM: forms are gone, so there is nothing left to split).

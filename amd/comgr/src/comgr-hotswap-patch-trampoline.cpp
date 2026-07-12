@@ -30,6 +30,7 @@
 
 #include "comgr-hotswap-internal.h"
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -222,7 +223,7 @@ extractDsOperands(const MCInst &Inst, StringRef FromMnem, const LLVMState &LS) {
           << RawOff0 << " * scale " << Scale << " = " << Scaled0
           << ", off1=raw " << RawOff1 << " * scale " << Scale << " = "
           << Scaled1 << ", max " << Ds1AddrOffsetMax
-          << "); leaving original instruction in place\n";
+          << "); required rewrite is not representable\n";
     return std::nullopt;
   }
   Ops.Off0 = static_cast<uint32_t>(Scaled0);
@@ -252,15 +253,38 @@ std::vector<std::string> expandDs2AddrLoad(const DsOperands &Ops,
                                            StringRef ToMnem) {
   if (Ops.Regs.size() < 2)
     return {};
+  const MCRegisterInfo &MRI = *Ops.MRI;
   std::pair<std::string, std::string> Dst =
-      splitDstPair(Ops.Regs[0], Ops.IsB64, *Ops.MRI);
+      splitDstPair(Ops.Regs[0], Ops.IsB64, MRI);
   if (Dst.first.empty())
     return {};
-  std::string Addr = toAsmRegName(*Ops.MRI, Ops.Regs[1]);
-  return {
-      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1),
-  };
+  std::string Addr = toAsmRegName(MRI, Ops.Regs[1]);
+  std::string First =
+      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0);
+  std::string Second =
+      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1);
+
+  // A 2-address load samples Addr once, before either destination is written.
+  // Preserve that lifetime after splitting: if the first destination half
+  // contains Addr, emitting it first can replace Addr before the second load
+  // samples it. Emit the aliasing half last instead. If Addr belongs to the
+  // second half, the natural order already has the required property.
+  SmallVector<MCRegister, 4> DstRegs = getDirectSubRegs(Ops.Regs[0], MRI);
+  unsigned FirstHalfWidth = Ops.IsB64 ? 2 : 1;
+  bool AddrOverlapsFirst = false;
+  for (unsigned I = 0; I < FirstHalfWidth && I < DstRegs.size(); ++I) {
+    // regsOverlap does not report every scalar VGPR alias carried by the
+    // gfx1250 DS2 MC operands (notably b32 tuple components). The canonical
+    // assembler names identify those physical aliases without depending on
+    // the register-class wrapper used by the decoded operand.
+    AddrOverlapsFirst |=
+        MRI.regsOverlap(Ops.Regs[1], DstRegs[I]) ||
+        toAsmRegName(MRI, Ops.Regs[1]) == toAsmRegName(MRI, DstRegs[I]);
+  }
+
+  if (AddrOverlapsFirst)
+    return {std::move(Second), std::move(First)};
+  return {std::move(First), std::move(Second)};
 }
 
 // Expand a DS 2-address store into two single-address stores (addr, data).
@@ -329,6 +353,95 @@ std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
   return {};
 }
 
+// A non-stride store with adjacent offsets and consecutive data VGPRs is one
+// store of twice the width. Keeping it as one DS instruction preserves the DS
+// counter and lets the rewrite stay in place, which is important when the
+// source site is a branch target with no safe trampoline window.
+std::optional<std::pair<std::string, bool>>
+getContiguousDs2AddrStore(const LLVMState &LS,
+                          const InternalDecodedInst &DI) {
+  if (DI.Mnemonic != "ds_store_2addr_b32" &&
+      DI.Mnemonic != "ds_store_2addr_b64")
+    return std::nullopt;
+
+  std::optional<DsOperands> Ops =
+      extractDsOperands(DI.Inst, DI.Mnemonic, LS);
+  const uint32_t ElementBytes = Ops && Ops->IsB64 ? 8 : 4;
+  if (!Ops || Ops->Regs.size() < 3 ||
+      Ops->Off1 != Ops->Off0 + ElementBytes)
+    return std::nullopt;
+
+  const MCRegisterInfo &MRI = *Ops->MRI;
+  auto VgprIndex = [&](MCRegister Reg) -> std::optional<unsigned> {
+    std::string NameStorage = toAsmRegName(MRI, Reg);
+    StringRef Name(NameStorage);
+    if (!Name.consume_front("v") || Name.contains('['))
+      return std::nullopt;
+    unsigned Index = 0;
+    if (Name.getAsInteger(10, Index))
+      return std::nullopt;
+    return Index;
+  };
+  SmallVector<unsigned, 4> DataIndices;
+  auto AppendData = [&](MCRegister Reg) {
+    SmallVector<MCRegister, 4> Components =
+        Ops->IsB64 ? getDirectSubRegs(Reg, MRI)
+                   : SmallVector<MCRegister, 4>{Reg};
+    const unsigned Width = Ops->IsB64 ? 2 : 1;
+    if (Components.size() < Width)
+      return false;
+    for (unsigned I = 0; I < Width; ++I) {
+      std::optional<unsigned> Index = VgprIndex(Components[I]);
+      if (!Index)
+        return false;
+      DataIndices.push_back(*Index);
+    }
+    return true;
+  };
+  if (!AppendData(Ops->Regs[1]) || !AppendData(Ops->Regs[2]))
+    return std::nullopt;
+  for (unsigned I = 1; I < DataIndices.size(); ++I)
+    if (DataIndices[I] != DataIndices[0] + I)
+      return std::nullopt;
+
+  // gfx1250 A0's single-address B64/B128 DS operands use the aligned
+  // load/store register class, while DS2 data operands do not. An odd DS2
+  // base such as v19 is therefore legal in the input but cannot be folded to
+  // v[19:20]. Leave it on the split path, which emits scalar B32 stores.
+  if (DataIndices.front() & 1)
+    return std::nullopt;
+
+  std::string Asm = (Ops->IsB64 ? "ds_store_b128 " : "ds_store_b64 ") +
+                    toAsmRegName(MRI, Ops->Regs[0]) + ", v[" +
+                    std::to_string(DataIndices.front()) + ":" +
+                    std::to_string(DataIndices.back()) + "]" +
+                    fmtOffset(Ops->Off0);
+  return std::pair<std::string, bool>{std::move(Asm), Ops->IsB64};
+}
+
+bool patchContiguousDs2AddrStore(PatchContext &Ctx,
+                                 const InternalDecodedInst &DI,
+                                 std::pair<std::string, bool> Fold) {
+  SmallVector<uint8_t> Bytes = assembleSingleInst(Fold.first, Ctx.LS);
+  if (Bytes.size() != DI.Size)
+    return false;
+
+  RewriteRule Rule;
+  Rule.ReplaceBytes = Bytes;
+  if (!applyByteReplace(Rule, DI.Offset, DI.Size, Ctx.Text, Ctx.TextSize,
+                        Ctx.LS))
+    return false;
+
+  Ctx.MutatedOffsets.insert(DI.Offset);
+  Ctx.ReplacementCodeBySite.insert_or_assign(
+      DI.Offset, SmallVector<uint8_t>(Bytes.begin(), Bytes.end()));
+  Ctx.RequiredPatchApplied = true;
+  log() << "hotswap: ds_2addr: folded contiguous "
+        << (Fold.second ? "b64 store to b128" : "b32 store to b64")
+        << " at 0x" << utohexstr(DI.Offset) << "\n";
+  return true;
+}
+
 // -- patchDs2Addr -----------------------------------------------------------
 //
 // Expand one ds_*_2addr_* instruction (stride64 or non-stride64) into two
@@ -343,39 +456,95 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   StringRef ToMnem = getDs2AddrReplacement(DI.Mnemonic);
   if (ToMnem.empty())
     return false;
-  std::vector<std::string> Expanded =
-      expandDs2Addr(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
-  if (Expanded.empty()) {
-    log() << "hotswap: error: ds_2addr expansion failed for: " << DI.Mnemonic
-          << "\n";
-    return false;
+  std::optional<std::pair<std::string, bool>> Fold =
+      getContiguousDs2AddrStore(Ctx.LS, DI);
+  bool HasAdjacentDeferredSite = llvm::any_of(
+      Ctx.OutTrampolines, [&](const Trampoline &T) {
+        return T.OriginalOffset + T.OriginalSize == DI.Offset;
+      });
+  bool NextSiteRequiresTrampoline = false;
+  if (Idx + 1 < Ctx.Decoded.size()) {
+    const InternalDecodedInst &Next = Ctx.Decoded[Idx + 1];
+    if (Next.Offset == DI.Offset + DI.Size &&
+        !getDs2AddrReplacement(Next.Mnemonic).empty()) {
+      std::optional<std::pair<std::string, bool>> NextFold =
+          getContiguousDs2AddrStore(Ctx.LS, Next);
+      // Let a non-foldable current site use a local cave when one exists. If
+      // it instead queues a trampoline, the next iteration observes that via
+      // HasAdjacentDeferredSite. A non-foldable next site must be deferred
+      // early so the current site cannot consume storage needed by the pair.
+      NextSiteRequiresTrampoline = !NextFold;
+    }
   }
+  const bool ForceDeferredTrampoline =
+      HasAdjacentDeferredSite || NextSiteRequiresTrampoline;
+  if (Fold && !ForceDeferredTrampoline &&
+      patchContiguousDs2AddrStore(Ctx, DI, std::move(*Fold)))
+    return true;
+  SmallVector<uint8_t> Replacement;
+  if (Fold && ForceDeferredTrampoline) {
+    SmallVector<uint8_t> Bytes = assembleSingleInst(Fold->first, Ctx.LS);
+    if (Bytes.size() != DI.Size)
+      return failRequiredPatch(Ctx);
+    Replacement.assign(Bytes.begin(), Bytes.end());
+    log() << "hotswap: ds_2addr: retained contiguous "
+          << (Fold->second ? "b128" : "b64")
+          << " fold in the deferred trampoline set at 0x"
+          << utohexstr(DI.Offset) << "\n";
+  } else {
+    std::vector<std::string> Expanded =
+        expandDs2Addr(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
+    if (Expanded.empty()) {
+      log() << "hotswap: error: ds_2addr expansion failed for: " << DI.Mnemonic
+            << "\n";
+      return failRequiredPatch(Ctx);
+    }
 
-  std::string Combined;
-  for (const std::string &Line : Expanded)
-    Combined += Line + "\n";
-  // Drain the DS counter right after the split pair so both halves are
-  // guaranteed complete before any downstream consumer. The original code
-  // tracked completion of the single 2-addr instruction via a later
-  // s_wait_dscnt whose immediate counts outstanding DS *instructions*;
-  // splitting one instruction into two perturbs that count. Adjusting the
-  // downstream wait by +1 (the previous bumpNextWaitDscnt approach) relaxes
-  // the wait (s_wait_dscnt K stalls until outstanding <= K, so a larger K
-  // waits for FEWER ops), which lets a consumer read the second half's LDS
-  // slot before it lands -- observed as NaN in MIOpen layernormbfp16. A
-  // local drain is unconditionally correct; a precise per-wait dataflow
-  // recomputation is the eventual optimization (tracked separately).
-  Combined += "s_wait_dscnt 0\n";
-  SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
-  if (Bytes.empty()) {
-    log() << "hotswap: error: ds_2addr: assembly failed: " << Combined << "\n";
-    return false;
+    std::string Combined;
+    for (const std::string &Line : Expanded)
+      Combined += Line + "\n";
+    // Drain the DS counter right after the split pair so both halves are
+    // guaranteed complete before any downstream consumer. The original code
+    // tracked completion of the single 2-addr instruction via a later
+    // s_wait_dscnt whose immediate counts outstanding DS *instructions*;
+    // splitting one instruction into two perturbs that count. Adjusting the
+    // downstream wait by +1 (the previous bumpNextWaitDscnt approach) relaxes
+    // the wait (s_wait_dscnt K stalls until outstanding <= K, so a larger K
+    // waits for FEWER ops), which lets a consumer read the second half's LDS
+    // slot before it lands -- observed as NaN in MIOpen layernormbfp16. A
+    // local drain is unconditionally correct; a precise per-wait dataflow
+    // recomputation is the eventual optimization (tracked separately).
+    Combined += "s_wait_dscnt 0\n";
+    SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
+    if (Bytes.empty()) {
+      log() << "hotswap: error: ds_2addr: assembly failed: " << Combined
+            << "\n";
+      return failRequiredPatch(Ctx);
+    }
+    Replacement.assign(Bytes.begin(), Bytes.end());
   }
+  // DS2 encodings require the B0-to-A0 split even when the appended pool is
+  // outside s_branch reach. Use the SCC-neutral SGPR-pair return rather than
+  // leaving the original B0 instruction executable on A0.
+  bool Emitted = false;
+  if (ForceDeferredTrampoline) {
+    Emitted = emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement,
+                               /*AllowSafeFarReturn=*/true);
+    if (Emitted) {
+      Ctx.ReplacementCodeBySite.insert_or_assign(
+          DI.Offset,
+          SmallVector<uint8_t>(Replacement.begin(), Replacement.end()));
+      log() << "hotswap: ds_2addr: kept adjacent mixed-width site 0x"
+            << utohexstr(DI.Offset) << " in the deferred trampoline set\n";
+    }
+  }
+  if (!Emitted)
+    Emitted = emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
+                                  /*AllowSafeFarReturn=*/true);
+  if (!Emitted)
+    return failRequiredPatch(Ctx);
 
-  SmallVector<uint8_t> Replacement(Bytes.begin(), Bytes.end());
-  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
-    return false;
-
+  Ctx.RequiredPatchApplied = true;
   DI.Mnemonic = "<replaced>";
   return true;
 }
@@ -454,12 +623,16 @@ bool isAlreadyTensorMaskPatched(const PatchContext &Ctx, size_t Idx,
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
   const InternalDecodedInst &Prev = Ctx.Decoded[Idx - 1];
   const MCInst &PI = Prev.Inst;
-  if (Prev.Mnemonic != "s_pack_hh_b32_b16" || PI.getNumOperands() < 3)
+  if (Prev.Offset + Prev.Size != Ctx.Decoded[Idx].Offset ||
+      Prev.Mnemonic != "s_pack_hh_b32_b16" || PI.getNumOperands() < 3)
     return false;
   if (!PI.getOperand(0).isReg() ||
       !MRI.regsOverlap(PI.getOperand(0).getReg(), BaseMCReg.id()))
     return false;
-  return PI.getOperand(1).isImm() && PI.getOperand(1).getImm() == 0;
+  if (!PI.getOperand(1).isImm() || PI.getOperand(1).getImm() != 0)
+    return false;
+  return PI.getOperand(2).isReg() &&
+         MRI.regsOverlap(PI.getOperand(2).getReg(), BaseMCReg.id());
 }
 
 bool isSccReg(MCRegister Reg, const MCRegisterInfo &MRI) {
@@ -694,12 +867,752 @@ void commitScratchSgpr(PatchContext &Ctx, const SgprScratchAlloc &Alloc) {
   Stats.ExtraSgprs = std::max(Stats.ExtraSgprs, Alloc.ExtraSgprsNeeded);
 }
 
+// -- tensor descriptor must analysis ---------------------------------------
+
+std::optional<uint64_t> applyTensorSignedPcDelta(uint64_t CapturedPc,
+                                                 int64_t Delta) {
+  if (Delta >= 0) {
+    uint64_t Magnitude = static_cast<uint64_t>(Delta);
+    if (CapturedPc > std::numeric_limits<uint64_t>::max() - Magnitude)
+      return std::nullopt;
+    return CapturedPc + Magnitude;
+  }
+
+  uint64_t Magnitude =
+      Delta == std::numeric_limits<int64_t>::min()
+          ? uint64_t{1} << 63
+          : static_cast<uint64_t>(-Delta);
+  if (CapturedPc < Magnitude)
+    return std::nullopt;
+  return CapturedPc - Magnitude;
+}
+
+std::optional<std::pair<MCRegister, int64_t>>
+getTensorHotswapAddSetPc(ArrayRef<InternalDecodedInst> Decoded,
+                         size_t SetPcIndex) {
+  if (SetPcIndex == 0 || SetPcIndex >= Decoded.size())
+    return std::nullopt;
+
+  const InternalDecodedInst &Add = Decoded[SetPcIndex - 1];
+  const InternalDecodedInst &SetPc = Decoded[SetPcIndex];
+  if (Add.Mnemonic != "s_add_nc_u64" ||
+      SetPc.Mnemonic != "s_set_pc_i64" ||
+      Add.Offset > std::numeric_limits<uint64_t>::max() - Add.Size ||
+      Add.Offset + Add.Size != SetPc.Offset ||
+      Add.Inst.getNumOperands() != 3 || SetPc.Inst.getNumOperands() != 1 ||
+      !Add.Inst.getOperand(0).isReg() ||
+      !Add.Inst.getOperand(1).isReg() ||
+      !Add.Inst.getOperand(2).isImm() ||
+      !SetPc.Inst.getOperand(0).isReg())
+    return std::nullopt;
+
+  MCRegister Pair = Add.Inst.getOperand(0).getReg();
+  if (!Pair.isValid() || Add.Inst.getOperand(1).getReg() != Pair.id() ||
+      SetPc.Inst.getOperand(0).getReg() != Pair.id())
+    return std::nullopt;
+  return std::pair<MCRegister, int64_t>{Pair,
+                                        Add.Inst.getOperand(2).getImm()};
+}
+
+std::optional<size_t>
+findTensorDecodedIndex(ArrayRef<InternalDecodedInst> Decoded,
+                       uint64_t Offset) {
+  auto It = llvm::lower_bound(
+      Decoded, Offset, [](const InternalDecodedInst &DI, uint64_t Value) {
+        return DI.Offset < Value;
+      });
+  if (It == Decoded.end() || It->Offset != Offset)
+    return std::nullopt;
+  return It - Decoded.begin();
+}
+
+std::optional<uint64_t>
+resolveTensorContiguousSetPc(ArrayRef<InternalDecodedInst> Decoded,
+                             size_t SetPcIndex) {
+  std::optional<std::pair<MCRegister, int64_t>> AddSet =
+      getTensorHotswapAddSetPc(Decoded, SetPcIndex);
+  if (!AddSet || SetPcIndex < 2)
+    return std::nullopt;
+
+  const InternalDecodedInst &GetPc = Decoded[SetPcIndex - 2];
+  const InternalDecodedInst &Add = Decoded[SetPcIndex - 1];
+  if (GetPc.Mnemonic != "s_get_pc_i64" ||
+      GetPc.Offset > std::numeric_limits<uint64_t>::max() - GetPc.Size ||
+      GetPc.Offset + GetPc.Size != Add.Offset ||
+      GetPc.Inst.getNumOperands() != 1 ||
+      !GetPc.Inst.getOperand(0).isReg() ||
+      GetPc.Inst.getOperand(0).getReg() != AddSet->first.id())
+    return std::nullopt;
+  return applyTensorSignedPcDelta(GetPc.Offset + GetPc.Size, AddSet->second);
+}
+
+std::optional<uint64_t>
+resolveTensorSetPcTarget(ArrayRef<InternalDecodedInst> AllDecoded,
+                         uint64_t SetPcOffset) {
+  std::optional<size_t> Index =
+      findTensorDecodedIndex(AllDecoded, SetPcOffset);
+  if (!Index)
+    return std::nullopt;
+  return resolveTensorContiguousSetPc(AllDecoded, *Index);
+}
+
+struct TensorTrampolinePath {
+  uint64_t ResumeOffset = 0;
+  SmallVector<size_t, 16> Instructions;
+};
+
+std::optional<TensorTrampolinePath> findTensorTrampolinePath(
+    ArrayRef<InternalDecodedInst> AllDecoded, uint64_t Target,
+    const KernelTextRange &Range, const LLVMState &LS) {
+  if (!LS.MIA)
+    return std::nullopt;
+
+  TensorTrampolinePath Result;
+  size_t RemainingInstructions = AllDecoded.size();
+  DenseSet<uint64_t> VisitedOffsets;
+  while (RemainingInstructions != 0) {
+    std::optional<size_t> Start =
+        findTensorDecodedIndex(AllDecoded, Target);
+    if (!Start)
+      return std::nullopt;
+
+    uint64_t ExpectedOffset = Target;
+    bool FollowedHop = false;
+    for (size_t I = *Start; I < AllDecoded.size(); ++I) {
+      const InternalDecodedInst &DI = AllDecoded[I];
+      if (RemainingInstructions == 0)
+        return std::nullopt;
+      --RemainingInstructions;
+      if (!VisitedOffsets.insert(DI.Offset).second ||
+          DI.Offset != ExpectedOffset || DI.Size == 0 ||
+          DI.Offset > std::numeric_limits<uint64_t>::max() - DI.Size)
+        return std::nullopt;
+      ExpectedOffset = DI.Offset + DI.Size;
+      Result.Instructions.push_back(I);
+      if (DI.Mnemonic == "<unknown>")
+        return std::nullopt;
+
+      if (DI.Mnemonic == "s_set_pc_i64") {
+        std::optional<uint64_t> Next =
+            resolveTensorContiguousSetPc(AllDecoded, I);
+        if (!Next)
+          return std::nullopt;
+        if (*Next >= Range.Begin && *Next < Range.End) {
+          Result.ResumeOffset = *Next;
+          return Result;
+        }
+        Target = *Next;
+        FollowedHop = true;
+        break;
+      }
+
+      const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+      const bool IsCall = LS.MIA->isCall(DI.Inst);
+      const bool IsReturn = LS.MIA->isReturn(DI.Inst);
+      const bool IsBranch = LS.MIA->isBranch(DI.Inst);
+      if (IsCall || IsReturn || Desc.isTrap())
+        return std::nullopt;
+      if (IsBranch) {
+        uint64_t Next = 0;
+        if (!LS.MIA->isUnconditionalBranch(DI.Inst) ||
+            LS.MIA->isIndirectBranch(DI.Inst) ||
+            !LS.MIA->evaluateBranch(DI.Inst, DI.Offset, DI.Size, Next))
+          return std::nullopt;
+        if (Next >= Range.Begin && Next < Range.End) {
+          Result.ResumeOffset = Next;
+          return Result;
+        }
+        Target = Next;
+        FollowedHop = true;
+        break;
+      }
+      if (Desc.isTerminator() ||
+          LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI))
+        return std::nullopt;
+    }
+    if (!FollowedHop)
+      return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+std::optional<std::pair<uint64_t, SmallVector<size_t, 2>>>
+resolveTensorRelayTarget(ArrayRef<InternalDecodedInst> AllDecoded,
+                         const InternalDecodedInst &GetPc,
+                         uint64_t RelayOffset) {
+  std::optional<size_t> AddIndex =
+      findTensorDecodedIndex(AllDecoded, RelayOffset);
+  if (!AddIndex || *AddIndex + 1 >= AllDecoded.size())
+    return std::nullopt;
+
+  const size_t SetPcIndex = *AddIndex + 1;
+  std::optional<std::pair<MCRegister, int64_t>> AddSet =
+      getTensorHotswapAddSetPc(AllDecoded, SetPcIndex);
+  if (!AddSet || GetPc.Mnemonic != "s_get_pc_i64" ||
+      GetPc.Inst.getNumOperands() != 1 ||
+      !GetPc.Inst.getOperand(0).isReg() ||
+      GetPc.Inst.getOperand(0).getReg() != AddSet->first.id() ||
+      GetPc.Offset > std::numeric_limits<uint64_t>::max() - GetPc.Size)
+    return std::nullopt;
+
+  std::optional<uint64_t> Target = applyTensorSignedPcDelta(
+      GetPc.Offset + GetPc.Size, AddSet->second);
+  if (!Target)
+    return std::nullopt;
+  return std::pair<uint64_t, SmallVector<size_t, 2>>{
+      *Target, SmallVector<size_t, 2>{*AddIndex, SetPcIndex}};
+}
+
+std::optional<unsigned> getNumberedRegFactIndex(MCRegister Reg,
+                                                 const MCRegisterInfo &MRI,
+                                                 unsigned MaxSgprs,
+                                                 unsigned MaxVgprs) {
+  const char *RawName = MRI.getName(Reg);
+  if (!RawName)
+    return std::nullopt;
+  StringRef Name(RawName);
+  if (Name.contains('_'))
+    return std::nullopt;
+
+  unsigned Index = 0;
+  if (Name.consume_front("SGPR")) {
+    if (Name.getAsInteger(10, Index) || Index >= MaxSgprs)
+      return std::nullopt;
+    return Index;
+  }
+  if (Name.consume_front("VGPR")) {
+    if (Name.getAsInteger(10, Index) || Index >= MaxVgprs)
+      return std::nullopt;
+    return MaxSgprs + Index;
+  }
+  return std::nullopt;
+}
+
+SmallVector<MCRegister, 4> getNumberedRegLeaves(MCRegister Reg,
+                                                const MCRegisterInfo &MRI,
+                                                unsigned MaxSgprs,
+                                                unsigned MaxVgprs) {
+  if (getNumberedRegFactIndex(Reg, MRI, MaxSgprs, MaxVgprs))
+    return {Reg};
+
+  SmallVector<MCRegister, 4> Leaves;
+  for (MCRegister Sub : getDirectSubRegs(Reg, MRI))
+    if (getNumberedRegFactIndex(Sub, MRI, MaxSgprs, MaxVgprs))
+      Leaves.push_back(Sub);
+  return Leaves;
+}
+
+bool operandLow16KnownZero(const MCOperand &Op, const BitVector &State,
+                           const MCRegisterInfo &MRI, unsigned MaxSgprs,
+                           unsigned MaxVgprs) {
+  if (Op.isImm())
+    return (static_cast<uint64_t>(Op.getImm()) & 0xffff) == 0;
+  if (!Op.isReg() || !Op.getReg())
+    return false;
+  std::optional<unsigned> Fact = getNumberedRegFactIndex(
+      MCRegister(Op.getReg()), MRI, MaxSgprs, MaxVgprs);
+  return Fact && State.test(*Fact);
+}
+
+void setRegLow16Fact(BitVector &State, MCRegister Reg, bool IsKnownZero,
+                     const MCRegisterInfo &MRI, unsigned MaxSgprs,
+                     unsigned MaxVgprs) {
+  for (MCRegister Leaf :
+       getNumberedRegLeaves(Reg, MRI, MaxSgprs, MaxVgprs)) {
+    std::optional<unsigned> Fact =
+        getNumberedRegFactIndex(Leaf, MRI, MaxSgprs, MaxVgprs);
+    if (!Fact)
+      continue;
+    if (IsKnownZero)
+      State.set(*Fact);
+    else
+      State.reset(*Fact);
+  }
+}
+
+BitVector transferTensorDescriptorFacts(const InternalDecodedInst &DI,
+                                        const BitVector &Input,
+                                        const LLVMState &LS,
+                                        unsigned MaxSgprs,
+                                        unsigned MaxVgprs) {
+  const MCInst &Inst = DI.Inst;
+  const MCInstrDesc &Desc = LS.MCII->get(Inst.getOpcode());
+  const MCRegisterInfo &MRI = *LS.MRI;
+  BitVector Output = Input;
+
+  const unsigned NumDefs =
+      std::min<unsigned>(Desc.getNumDefs(), Inst.getNumOperands());
+  for (unsigned I = 0; I < NumDefs; ++I) {
+    const MCOperand &Def = Inst.getOperand(I);
+    if (Def.isReg() && Def.getReg())
+      setRegLow16Fact(Output, MCRegister(Def.getReg()), false, MRI,
+                      MaxSgprs, MaxVgprs);
+  }
+  for (MCPhysReg Def : Desc.implicit_defs())
+    setRegLow16Fact(Output, MCRegister(Def), false, MRI, MaxSgprs,
+                    MaxVgprs);
+
+  auto CopyOne = [&](unsigned DefOp, unsigned SourceOp) {
+    if (DefOp >= Inst.getNumOperands() || SourceOp >= Inst.getNumOperands() ||
+        !Inst.getOperand(DefOp).isReg() ||
+        !Inst.getOperand(DefOp).getReg())
+      return;
+    bool Known = operandLow16KnownZero(Inst.getOperand(SourceOp), Input, MRI,
+                                      MaxSgprs, MaxVgprs);
+    setRegLow16Fact(Output, MCRegister(Inst.getOperand(DefOp).getReg()), Known,
+                    MRI, MaxSgprs, MaxVgprs);
+  };
+
+  if (DI.Mnemonic == "s_mov_b32" ||
+      StringRef(DI.Mnemonic).starts_with("v_mov_b32")) {
+    CopyOne(0, 1);
+  } else if (DI.Mnemonic == "s_mov_b64" && Inst.getNumOperands() >= 2 &&
+             Inst.getOperand(0).isReg() && Inst.getOperand(0).getReg()) {
+    SmallVector<MCRegister, 4> Dst = getNumberedRegLeaves(
+        MCRegister(Inst.getOperand(0).getReg()), MRI, MaxSgprs, MaxVgprs);
+    if (Inst.getOperand(1).isReg() && Inst.getOperand(1).getReg()) {
+      SmallVector<MCRegister, 4> Src = getNumberedRegLeaves(
+          MCRegister(Inst.getOperand(1).getReg()), MRI, MaxSgprs, MaxVgprs);
+      if (Dst.size() == Src.size()) {
+        for (unsigned I = 0; I < Dst.size(); ++I) {
+          std::optional<unsigned> SourceFact = getNumberedRegFactIndex(
+              Src[I], MRI, MaxSgprs, MaxVgprs);
+          setRegLow16Fact(Output, Dst[I],
+                          SourceFact && Input.test(*SourceFact), MRI,
+                          MaxSgprs, MaxVgprs);
+        }
+      }
+    }
+  } else if (StringRef(DI.Mnemonic).starts_with("v_dual_mov_b32") &&
+             NumDefs == 2 &&
+             Inst.getNumOperands() >= 4) {
+    CopyOne(0, 2);
+    CopyOne(1, 3);
+  } else if (DI.Mnemonic == "v_readfirstlane_b32") {
+    CopyOne(0, 1);
+  } else if (DI.Mnemonic == "s_pack_hh_b32_b16" &&
+             Inst.getNumOperands() >= 2 && Inst.getOperand(0).isReg() &&
+             Inst.getOperand(0).getReg() && Inst.getOperand(1).isImm() &&
+             Inst.getOperand(1).getImm() == 0) {
+    setRegLow16Fact(Output, MCRegister(Inst.getOperand(0).getReg()), true, MRI,
+                    MaxSgprs, MaxVgprs);
+  }
+
+  return Output;
+}
+
+static constexpr uint64_t TensorMaskDefTop =
+    std::numeric_limits<uint64_t>::max();
+static constexpr uint64_t TensorMaskDefUnknown = TensorMaskDefTop - 1;
+using TensorMaskDefState = SmallVector<uint64_t, 8>;
+
+TensorMaskDefState transferTensorMaskDefinitions(
+    const InternalDecodedInst &DI, const TensorMaskDefState &Input,
+    const DenseMap<unsigned, unsigned> &TrackedSgprs, const LLVMState &LS,
+    unsigned MaxSgprs, unsigned MaxVgprs) {
+  TensorMaskDefState Output = Input;
+  const MCInst &Inst = DI.Inst;
+  const MCInstrDesc &Desc = LS.MCII->get(Inst.getOpcode());
+  const MCRegisterInfo &MRI = *LS.MRI;
+
+  auto KillReg = [&](MCRegister Reg) {
+    for (MCRegister Leaf :
+         getNumberedRegLeaves(Reg, MRI, MaxSgprs, MaxVgprs)) {
+      std::optional<unsigned> Fact =
+          getNumberedRegFactIndex(Leaf, MRI, MaxSgprs, MaxVgprs);
+      if (!Fact)
+        continue;
+      auto Slot = TrackedSgprs.find(*Fact);
+      if (Slot != TrackedSgprs.end()) {
+        Output[Slot->second] = TensorMaskDefUnknown;
+      }
+    }
+  };
+
+  const unsigned NumDefs =
+      std::min<unsigned>(Desc.getNumDefs(), Inst.getNumOperands());
+  for (unsigned I = 0; I < NumDefs; ++I) {
+    const MCOperand &Def = Inst.getOperand(I);
+    if (Def.isReg() && Def.getReg())
+      KillReg(MCRegister(Def.getReg()));
+  }
+  for (MCPhysReg Def : Desc.implicit_defs())
+    KillReg(MCRegister(Def));
+
+  if (DI.Mnemonic == "v_readfirstlane_b32" &&
+      Inst.getNumOperands() >= 1 && Inst.getOperand(0).isReg() &&
+      Inst.getOperand(0).getReg()) {
+    std::optional<unsigned> Fact = getNumberedRegFactIndex(
+        MCRegister(Inst.getOperand(0).getReg()), MRI, MaxSgprs, MaxVgprs);
+    if (Fact) {
+      auto Slot = TrackedSgprs.find(*Fact);
+      if (Slot != TrackedSgprs.end())
+        Output[Slot->second] = DI.Offset;
+    }
+  }
+  return Output;
+}
+
+void meetTensorMaskDefinitions(TensorMaskDefState &Accumulator,
+                               const TensorMaskDefState &Candidate) {
+  assert(Accumulator.size() == Candidate.size());
+  for (unsigned I = 0; I < Accumulator.size(); ++I) {
+    if (Accumulator[I] == TensorMaskDefTop)
+      Accumulator[I] = Candidate[I];
+    else if (Accumulator[I] != Candidate[I])
+      Accumulator[I] = TensorMaskDefUnknown;
+  }
+}
+
+struct TensorCfgPredecessor {
+  unsigned From = 0;
+  SmallVector<size_t, 16> ExternalInstructions;
+};
+
+void addTensorCfgEdge(
+    unsigned From, unsigned To,
+    std::vector<SmallVector<unsigned, 2>> &Successors,
+    std::vector<SmallVector<TensorCfgPredecessor, 2>> &Predecessors,
+    ArrayRef<size_t> ExternalInstructions = {}) {
+  if (!llvm::is_contained(Successors[From], To))
+    Successors[From].push_back(To);
+  if (llvm::any_of(Predecessors[To], [&](const TensorCfgPredecessor &Pred) {
+        return Pred.From == From &&
+               llvm::equal(Pred.ExternalInstructions, ExternalInstructions);
+      }))
+    return;
+  TensorCfgPredecessor Pred;
+  Pred.From = From;
+  Pred.ExternalInstructions.append(ExternalInstructions.begin(),
+                                   ExternalInstructions.end());
+  Predecessors[To].push_back(std::move(Pred));
+}
+
+void analyzeTensorDescriptorRange(
+    ArrayRef<InternalDecodedInst> Decoded,
+    ArrayRef<InternalDecodedInst> AllDecoded,
+    const KernelTextRange &Range, const LLVMState &LS, unsigned MaxSgprs,
+    unsigned MaxVgprs, TensorDescriptorMustAnalysis &Result, BitVector &Seen) {
+  SmallVector<size_t> GlobalIndices;
+  auto First = llvm::lower_bound(
+      Decoded, Range.Begin,
+      [](const InternalDecodedInst &DI, uint64_t Offset) {
+        return DI.Offset < Offset;
+      });
+  auto Last = llvm::lower_bound(
+      Decoded, Range.End, [](const InternalDecodedInst &DI, uint64_t Offset) {
+        return DI.Offset < Offset;
+      });
+  for (auto It = First; It != Last; ++It)
+    GlobalIndices.push_back(It - Decoded.begin());
+  if (GlobalIndices.empty() ||
+      Decoded[GlobalIndices.front()].Offset != Range.Begin ||
+      !llvm::any_of(GlobalIndices, [&](size_t I) {
+        return Decoded[I].Mnemonic == "tensor_load_to_lds";
+      }))
+    return;
+
+  const unsigned Count = GlobalIndices.size();
+  DenseMap<uint64_t, unsigned> OffsetToLocal;
+  for (unsigned I = 0; I < Count; ++I)
+    OffsetToLocal.try_emplace(Decoded[GlobalIndices[I]].Offset, I);
+
+  DenseMap<unsigned, unsigned> TrackedSgprs;
+  for (size_t GlobalIdx : GlobalIndices) {
+    if (Decoded[GlobalIdx].Mnemonic != "tensor_load_to_lds")
+      continue;
+    MCRegister Base = getDescriptorBaseSgpr(Decoded[GlobalIdx].Inst, *LS.MRI);
+    std::optional<unsigned> Fact = getNumberedRegFactIndex(
+        Base, *LS.MRI, MaxSgprs, MaxVgprs);
+    if (Fact && *Fact < MaxSgprs && !TrackedSgprs.contains(*Fact))
+      TrackedSgprs.try_emplace(*Fact, TrackedSgprs.size());
+  }
+
+  std::vector<SmallVector<unsigned, 2>> Successors(Count);
+  std::vector<SmallVector<TensorCfgPredecessor, 2>> Predecessors(Count);
+  BitVector UnknownSuccessors(Count);
+  SmallVector<unsigned> HotswapSetPcCandidates;
+  for (unsigned I = 0; I < Count; ++I) {
+    const InternalDecodedInst &DI = Decoded[GlobalIndices[I]];
+    const bool HasFallthrough = I + 1 < Count;
+    if (DI.Mnemonic == "<unknown>" || !LS.MIA) {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+
+    const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+    const bool IsCall = LS.MIA->isCall(DI.Inst) || Desc.isCall();
+    const bool IsReturn = LS.MIA->isReturn(DI.Inst) || Desc.isReturn();
+    const bool IsBranch = LS.MIA->isBranch(DI.Inst) || Desc.isBranch();
+    if (IsReturn)
+      continue;
+    if (IsCall) {
+      UnknownSuccessors.set(I);
+      if (!Desc.isTerminator() && HasFallthrough)
+        addTensorCfgEdge(I, I + 1, Successors, Predecessors);
+      continue;
+    }
+    if (DI.Mnemonic == "s_set_pc_i64") {
+      HotswapSetPcCandidates.push_back(I);
+      continue;
+    }
+    if (Desc.isTrap()) {
+      if (HasFallthrough)
+        addTensorCfgEdge(I, I + 1, Successors, Predecessors);
+      continue;
+    }
+
+    if (IsBranch) {
+      const bool IsIndirect = LS.MIA->isIndirectBranch(DI.Inst) ||
+                              Desc.isIndirectBranch();
+      const bool IsConditional = LS.MIA->isConditionalBranch(DI.Inst) ||
+                                 Desc.isConditionalBranch();
+      const bool IsUnconditional = LS.MIA->isUnconditionalBranch(DI.Inst) ||
+                                   Desc.isUnconditionalBranch();
+      bool TargetKnown = false;
+      if (!IsIndirect) {
+        uint64_t Target = 0;
+        if (LS.MIA->evaluateBranch(DI.Inst, DI.Offset, DI.Size, Target)) {
+          TargetKnown = true;
+          if (Target >= Range.Begin && Target < Range.End) {
+            auto TargetIt = OffsetToLocal.find(Target);
+            if (TargetIt == OffsetToLocal.end()) {
+              UnknownSuccessors.set(I);
+              TargetKnown = false;
+            } else {
+              addTensorCfgEdge(I, TargetIt->second, Successors, Predecessors);
+            }
+          } else if (IsUnconditional) {
+            std::optional<TensorTrampolinePath> Path =
+                findTensorTrampolinePath(AllDecoded, Target, Range, LS);
+            bool RelayCandidate = false;
+            if (!Path && I != 0 && DI.Mnemonic == "s_branch") {
+              const InternalDecodedInst &GetPc =
+                  Decoded[GlobalIndices[I - 1]];
+              if (GetPc.Offset <=
+                      std::numeric_limits<uint64_t>::max() - GetPc.Size &&
+                  GetPc.Offset + GetPc.Size == DI.Offset &&
+                  GetPc.Mnemonic == "s_get_pc_i64") {
+                RelayCandidate = true;
+                auto Relay =
+                    resolveTensorRelayTarget(AllDecoded, GetPc, Target);
+                if (Relay) {
+                  Path = findTensorTrampolinePath(AllDecoded, Relay->first,
+                                                  Range, LS);
+                  if (Path)
+                    Path->Instructions.insert(Path->Instructions.begin(),
+                                              Relay->second.begin(),
+                                              Relay->second.end());
+                }
+              }
+            }
+            if (Path) {
+              auto ResumeIt = OffsetToLocal.find(Path->ResumeOffset);
+              if (ResumeIt == OffsetToLocal.end()) {
+                UnknownSuccessors.set(I);
+                TargetKnown = false;
+              } else {
+                addTensorCfgEdge(I, ResumeIt->second, Successors,
+                                 Predecessors, Path->Instructions);
+              }
+            } else if (RelayCandidate) {
+              UnknownSuccessors.set(I);
+              TargetKnown = false;
+            }
+          }
+        }
+      }
+      if (!TargetKnown)
+        UnknownSuccessors.set(I);
+      if (IsConditional && HasFallthrough)
+        addTensorCfgEdge(I, I + 1, Successors, Predecessors);
+      else if (!IsConditional && !IsUnconditional)
+        UnknownSuccessors.set(I);
+      continue;
+    }
+
+    if (Desc.isTerminator())
+      continue;
+    if (LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI)) {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+    if (HasFallthrough)
+      addTensorCfgEdge(I, I + 1, Successors, Predecessors);
+  }
+
+  for (unsigned I : HotswapSetPcCandidates) {
+    const InternalDecodedInst &SetPc = Decoded[GlobalIndices[I]];
+    std::optional<uint64_t> Target =
+        resolveTensorSetPcTarget(AllDecoded, SetPc.Offset);
+    if (!Target) {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+    if (*Target >= Range.Begin && *Target < Range.End) {
+      auto TargetIt = OffsetToLocal.find(*Target);
+      if (TargetIt == OffsetToLocal.end())
+        UnknownSuccessors.set(I);
+      else
+        addTensorCfgEdge(I, TargetIt->second, Successors, Predecessors);
+      continue;
+    }
+
+    std::optional<TensorTrampolinePath> Path =
+        findTensorTrampolinePath(AllDecoded, *Target, Range, LS);
+    if (!Path) {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+    auto ResumeIt = OffsetToLocal.find(Path->ResumeOffset);
+    if (ResumeIt == OffsetToLocal.end()) {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+    addTensorCfgEdge(I, ResumeIt->second, Successors, Predecessors,
+                     Path->Instructions);
+  }
+
+  BitVector Reachable(Count);
+  SmallVector<unsigned> Worklist{0};
+  Reachable.set(0);
+  for (size_t Next = 0; Next < Worklist.size(); ++Next) {
+    unsigned I = Worklist[Next];
+    if (UnknownSuccessors.test(I))
+      return;
+    for (unsigned Succ : Successors[I])
+      if (!Reachable.test(Succ)) {
+        Reachable.set(Succ);
+        Worklist.push_back(Succ);
+      }
+  }
+
+  const unsigned FactCount = MaxSgprs + MaxVgprs;
+  BitVector Top(FactCount, true);
+  BitVector Bottom(FactCount);
+  std::vector<BitVector> MustIn(Count, Top);
+  std::vector<BitVector> MustOut(Count, Top);
+  MustIn[0] = Bottom;
+  MustOut[0] = transferTensorDescriptorFacts(
+      Decoded[GlobalIndices[0]], Bottom, LS, MaxSgprs, MaxVgprs);
+
+  TensorMaskDefState DefTop(TrackedSgprs.size(), TensorMaskDefTop);
+  TensorMaskDefState DefUnknown(TrackedSgprs.size(), TensorMaskDefUnknown);
+  std::vector<TensorMaskDefState> DefIn(Count, DefTop);
+  std::vector<TensorMaskDefState> DefOut(Count, DefTop);
+  DefIn[0] = DefUnknown;
+  DefOut[0] = transferTensorMaskDefinitions(
+      Decoded[GlobalIndices[0]], DefUnknown, TrackedSgprs, LS, MaxSgprs,
+      MaxVgprs);
+
+  bool Changed = true;
+  unsigned Iterations = 0;
+  const unsigned IterationLimit = std::max(Count + 1, FactCount + 1);
+  while (Changed && Iterations++ < IterationLimit) {
+    Changed = false;
+    for (unsigned I = 0; I < Count; ++I) {
+      if (!Reachable.test(I))
+        continue;
+      BitVector NewIn = I == 0 ? Bottom : Top;
+      TensorMaskDefState NewDefIn = I == 0 ? DefUnknown : DefTop;
+      bool SawPredecessor = I == 0;
+      if (I != 0) {
+        for (const TensorCfgPredecessor &Pred : Predecessors[I]) {
+          if (!Reachable.test(Pred.From))
+            continue;
+          SawPredecessor = true;
+          BitVector EdgeOut = MustOut[Pred.From];
+          TensorMaskDefState EdgeDefOut = DefOut[Pred.From];
+          for (size_t ExternalIdx : Pred.ExternalInstructions) {
+            EdgeOut = transferTensorDescriptorFacts(
+                AllDecoded[ExternalIdx], EdgeOut, LS, MaxSgprs, MaxVgprs);
+            EdgeDefOut = transferTensorMaskDefinitions(
+                AllDecoded[ExternalIdx], EdgeDefOut, TrackedSgprs, LS,
+                MaxSgprs, MaxVgprs);
+          }
+          NewIn &= EdgeOut;
+          meetTensorMaskDefinitions(NewDefIn, EdgeDefOut);
+        }
+        if (!SawPredecessor) {
+          NewIn.reset();
+          NewDefIn = DefUnknown;
+        }
+      }
+      BitVector NewOut = transferTensorDescriptorFacts(
+          Decoded[GlobalIndices[I]], NewIn, LS, MaxSgprs, MaxVgprs);
+      TensorMaskDefState NewDefOut = transferTensorMaskDefinitions(
+          Decoded[GlobalIndices[I]], NewDefIn, TrackedSgprs, LS, MaxSgprs,
+          MaxVgprs);
+      if (NewIn != MustIn[I] || NewOut != MustOut[I] ||
+          NewDefIn != DefIn[I] || NewDefOut != DefOut[I]) {
+        MustIn[I] = std::move(NewIn);
+        MustOut[I] = std::move(NewOut);
+        DefIn[I] = std::move(NewDefIn);
+        DefOut[I] = std::move(NewDefOut);
+        Changed = true;
+      }
+    }
+  }
+  if (Changed)
+    return;
+
+  for (unsigned I = 0; I < Count; ++I) {
+    const size_t GlobalIdx = GlobalIndices[I];
+    if (!Reachable.test(I) ||
+        Decoded[GlobalIdx].Mnemonic != "tensor_load_to_lds")
+      continue;
+    MCRegister Base = getDescriptorBaseSgpr(Decoded[GlobalIdx].Inst, *LS.MRI);
+    std::optional<unsigned> Fact = getNumberedRegFactIndex(
+        Base, *LS.MRI, MaxSgprs, MaxVgprs);
+    const bool KnownZero = Fact && MustIn[I].test(*Fact);
+    uint64_t MaskDef = TensorMaskDefUnknown;
+    if (Fact) {
+      auto Slot = TrackedSgprs.find(*Fact);
+      if (Slot != TrackedSgprs.end())
+        MaskDef = DefIn[I][Slot->second];
+    }
+    if (MaskDef < Range.Begin || MaskDef >= Range.End)
+      MaskDef = TensorMaskDefUnknown;
+    if (Seen.test(GlobalIdx)) {
+      if (!KnownZero)
+        Result.Low16KnownZero.reset(GlobalIdx);
+      if (Result.MaskDefinitionOffsets[GlobalIdx] != MaskDef)
+        Result.MaskDefinitionOffsets[GlobalIdx] = TensorMaskDefUnknown;
+    } else {
+      Seen.set(GlobalIdx);
+      if (KnownZero)
+        Result.Low16KnownZero.set(GlobalIdx);
+      Result.MaskDefinitionOffsets[GlobalIdx] = MaskDef;
+    }
+  }
+}
+
+TensorDescriptorMustAnalysis computeTensorDescriptorMustAnalysisImpl(
+    ArrayRef<InternalDecodedInst> Decoded,
+    ArrayRef<InternalDecodedInst> AllDecoded,
+    ArrayRef<KernelTextRange> KernelRanges, const LLVMState &LS,
+    unsigned MaxSgprs, unsigned MaxVgprs) {
+  TensorDescriptorMustAnalysis Result{
+      BitVector(Decoded.size()),
+      std::vector<uint64_t>(Decoded.size(), TensorMaskDefUnknown)};
+  BitVector Seen(Decoded.size());
+  if (!LS.MCII || !LS.MRI || MaxSgprs == 0 || MaxVgprs == 0)
+    return Result;
+  for (const KernelTextRange &Range : KernelRanges)
+    analyzeTensorDescriptorRange(Decoded, AllDecoded, Range, LS, MaxSgprs,
+                                 MaxVgprs, Result, Seen);
+  return Result;
+}
+
 // -- patchTensorLoadToLdsA0 -------------------------------------------------
 //
-// Prepend s_pack_hh_b32_b16 to clear multicast routing bits in the group
-// descriptor's base SGPR. The A0 routing bits must remain clear for every
-// subsequent use of the descriptor, so normalize it persistently instead of
-// restoring the invalid B0 value after each tensor load.
+// Replace the canonical one-cycle scalar delay immediately before the tensor
+// load with s_pack_hh_b32_b16. Tensor loads are PC-sensitive on gfx1250 A0, so
+// they must remain at their linked address instead of executing in a sled or
+// appended trampoline. The replaced delay is a scheduling hint, not a
+// correctness wait: the pack occupies its issue slot and the hardware
+// interlock covers the new pack-to-tensor dependency. This clears the
+// descriptor's multicast bits without allocating a scratch register.
 
 bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
@@ -715,6 +1628,14 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
   if (isAlreadyTensorMaskPatched(Ctx, Idx, BaseMCReg))
     return false;
 
+  if (Idx < Ctx.TensorDescriptorAnalysis.Low16KnownZero.size() &&
+      Ctx.TensorDescriptorAnalysis.Low16KnownZero.test(Idx)) {
+    log() << "hotswap: tensor_load_to_lds: descriptor low16 already zero at 0x"
+          << utohexstr(DI.Offset) << "; tensor remains unchanged\n";
+    DI.Mnemonic = "<replaced>";
+    return false;
+  }
+
   std::string BaseSreg = toAsmRegName(MRI, BaseMCReg);
 
   std::string PackAsm = "s_pack_hh_b32_b16 " + BaseSreg + ", 0, " + BaseSreg;
@@ -725,18 +1646,85 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
     return failRequiredPatch(Ctx);
   }
 
-  const uint8_t *OrigInst = Ctx.Text + DI.Offset;
-  SmallVector<uint8_t> Replacement;
-  Replacement.append(PackBytes.begin(), PackBytes.end());
-  Replacement.append(OrigInst, OrigInst + DI.Size);
+  if (Idx < Ctx.TensorDescriptorAnalysis.MaskDefinitionOffsets.size()) {
+    uint64_t DefOffset =
+        Ctx.TensorDescriptorAnalysis.MaskDefinitionOffsets[Idx];
+    std::optional<size_t> DefIdx =
+        findTensorDecodedIndex(Ctx.Decoded, DefOffset);
+    if (DefIdx) {
+      InternalDecodedInst &Def = Ctx.Decoded[*DefIdx];
+      const MCInst &DefInst = Def.Inst;
+      const bool IsMatchingReadFirstLane =
+          (Def.Mnemonic == "v_readfirstlane_b32" ||
+           Def.Mnemonic == "<replaced>") &&
+          DefInst.getNumOperands() >= 1 && DefInst.getOperand(0).isReg() &&
+          DefInst.getOperand(0).getReg() == BaseMCReg.id();
+      auto Existing = Ctx.ReplacementCodeBySite.find(DefOffset);
+      const bool AlreadyMasked =
+          IsMatchingReadFirstLane && Def.Mnemonic == "<replaced>" &&
+          Existing != Ctx.ReplacementCodeBySite.end() &&
+          Existing->second.size() >= PackBytes.size() &&
+          ArrayRef<uint8_t>(Existing->second).take_back(PackBytes.size()) ==
+              ArrayRef<uint8_t>(PackBytes);
+      if (AlreadyMasked) {
+        log() << "hotswap: tensor_load_to_lds: reusing masked descriptor "
+                 "definition at 0x"
+              << utohexstr(Def.Offset) << "; tensor remains at 0x"
+              << utohexstr(DI.Offset) << "\n";
+        DI.Mnemonic = "<replaced>";
+        return false;
+      }
+      if (IsMatchingReadFirstLane && Def.Offset < DI.Offset &&
+          Def.Offset <= Ctx.TextSize && Def.Size <= Ctx.TextSize - Def.Offset) {
+        SmallVector<uint8_t> Replacement;
+        Replacement.append(Ctx.Text + Def.Offset,
+                           Ctx.Text + Def.Offset + Def.Size);
+        Replacement.append(PackBytes.begin(), PackBytes.end());
+        if (!emitReplacementCode(Ctx, Def.Offset, Def.Size, Replacement,
+                                 /*AllowSafeFarReturn=*/true))
+          return failRequiredPatch(Ctx);
 
-  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
-                           /*AllowSafeFarReturn=*/true))
+        log() << "hotswap: tensor_load_to_lds: masked unique descriptor "
+                 "definition at 0x"
+              << utohexstr(Def.Offset) << "; tensor remains at 0x"
+              << utohexstr(DI.Offset) << "\n";
+        Ctx.RequiredPatchApplied = true;
+        Def.Mnemonic = "<replaced>";
+        DI.Mnemonic = "<replaced>";
+        return true;
+      }
+    }
+  }
+
+  SmallVector<uint8_t> DelayBytes = assembleSingleInst(
+      "s_delay_alu instid0(SALU_CYCLE_1)", Ctx.LS);
+  if (DelayBytes.empty()) {
+    log() << "hotswap: tensor_load_to_lds delay assembly failed\n";
     return failRequiredPatch(Ctx);
+  }
 
-  log() << "hotswap: tensor_load_to_lds: persistently cleared multicast bits "
-           "in "
-        << BaseSreg << "\n";
+  if (Idx == 0) {
+    log() << "hotswap: error: tensor_load_to_lds at 0x"
+          << utohexstr(DI.Offset) << " has no preceding delay slot\n";
+    return failRequiredPatch(Ctx);
+  }
+
+  InternalDecodedInst &Prev = Ctx.Decoded[Idx - 1];
+  ArrayRef<uint8_t> PrevBytes(Ctx.Text + Prev.Offset, Prev.Size);
+  if (Prev.Mnemonic != "s_delay_alu" ||
+      Prev.Offset + Prev.Size != DI.Offset ||
+      PrevBytes != ArrayRef<uint8_t>(DelayBytes) ||
+      Prev.Size != PackBytes.size()) {
+    log() << "hotswap: error: tensor_load_to_lds at 0x"
+          << utohexstr(DI.Offset)
+          << " is not preceded by the canonical scalar delay\n";
+    return failRequiredPatch(Ctx);
+  }
+
+  std::memcpy(Ctx.Text + Prev.Offset, PackBytes.data(), PackBytes.size());
+  log() << "hotswap: tensor_load_to_lds: in-place descriptor mask at 0x"
+        << utohexstr(Prev.Offset) << "; tensor remains at 0x"
+        << utohexstr(DI.Offset) << "\n";
 
   Ctx.RequiredPatchApplied = true;
   DI.Mnemonic = "<replaced>";
@@ -1311,6 +2299,15 @@ PerInstTrampolineKind getPerInstTrampolineKind(const PatchContext &Ctx,
 }
 
 } // anonymous namespace
+
+TensorDescriptorMustAnalysis computeTensorDescriptorMustAnalysis(
+    ArrayRef<InternalDecodedInst> Decoded,
+    ArrayRef<InternalDecodedInst> AllDecoded,
+    ArrayRef<KernelTextRange> KernelRanges, const LLVMState &LS,
+    unsigned MaxSgprs, unsigned MaxVgprs) {
+  return computeTensorDescriptorMustAnalysisImpl(
+      Decoded, AllDecoded, KernelRanges, LS, MaxSgprs, MaxVgprs);
+}
 
 bool requiresPerInstTrampoline(const PatchContext &Ctx, size_t Idx) {
   return getPerInstTrampolineKind(Ctx, Idx) != PerInstTrampolineKind::None;

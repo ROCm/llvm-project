@@ -136,6 +136,11 @@ static SmallVector<uint8_t> encodeMCInst(const MCInst &Inst,
   return SmallVector<uint8_t>(Code.begin(), Code.end());
 }
 
+SmallVector<uint8_t> encodeInstructionBytes(const MCInst &Inst,
+                                            const LLVMState &S) {
+  return encodeMCInst(Inst, S);
+}
+
 /// Run the AMDGPU asm parser over \p AsmStr and return the captured MCInsts.
 /// Used by assembleSingleInst() for the full parse-and-encode path, and by
 /// initLLVM() / resolveOpcodeViaParse() for instructions where parsing the
@@ -466,6 +471,7 @@ Trampoline buildTrampoline(ArrayRef<std::string> AsmLines,
   Trampoline Result;
   Result.OriginalOffset = OriginalOffset;
   Result.OriginalSize = OriginalSize;
+  Result.SiteFootprint = OriginalSize;
 
   SmallVector<uint8_t> Bytes = assembleSingleInst(joinAsmLines(AsmLines), S);
   if (Bytes.empty()) {
@@ -502,6 +508,7 @@ Trampoline buildTrampoline(ArrayRef<MCInst> Insts, uint64_t OriginalOffset,
   Trampoline Result;
   Result.OriginalOffset = OriginalOffset;
   Result.OriginalSize = OriginalSize;
+  Result.SiteFootprint = OriginalSize;
 
   for (const MCInst &Inst : Insts) {
     SmallVector<uint8_t> InstBytes = encodeMCInst(Inst, S);
@@ -535,20 +542,35 @@ Trampoline buildTrampoline(ArrayRef<MCInst> Insts, uint64_t OriginalOffset,
 // -- WMMA co-execution hazard overlap check -----------------------------------
 
 bool checkVgprOverlap(const MCInst &WmmaInst, const MCInst &ValuInst,
+                      const MCInstrInfo &MCII,
                       const MCRegisterInfo &MRI) {
-  // Delegates register-aliasing to MCRegisterInfo::regsOverlap, which walks
-  // regunits and handles VGPR tuples, sub-registers, and alias classes. Mirrors
-  // the upstream pattern used by GCNHazardRecognizer::hasWMMAToVALURegOverlap.
-  static constexpr unsigned DestOperandIdx = 0;
-  if (ValuInst.getNumOperands() <= DestOperandIdx)
-    return false;
-  const MCOperand &DestOp = ValuInst.getOperand(DestOperandIdx);
-  if (!DestOp.isReg())
+  const MCInstrDesc &WmmaDesc = MCII.get(WmmaInst.getOpcode());
+  const MCInstrDesc &ValuDesc = MCII.get(ValuInst.getOpcode());
+  if (WmmaDesc.getNumDefs() == 0 || WmmaInst.getNumOperands() == 0 ||
+      !WmmaInst.getOperand(0).isReg())
     return false;
 
-  for (const MCOperand &Op : WmmaInst)
-    if (Op.isReg() && MRI.regsOverlap(Op.getReg(), DestOp.getReg()))
+  // WMMA writes D; VALU reads D (RAW).
+  MCRegister WmmaDest = WmmaInst.getOperand(0).getReg();
+  for (unsigned I = ValuDesc.getNumDefs(), E = ValuInst.getNumOperands();
+       I < E; ++I) {
+    const MCOperand &Use = ValuInst.getOperand(I);
+    if (Use.isReg() && MRI.regsOverlap(WmmaDest, Use.getReg()))
       return true;
+  }
+
+  // VALU writes any WMMA destination or source (WAW/WAR).
+  const unsigned ValuDefs =
+      std::min<unsigned>(ValuDesc.getNumDefs(), ValuInst.getNumOperands());
+  for (unsigned I = 0; I < ValuDefs; ++I) {
+    const MCOperand &Def = ValuInst.getOperand(I);
+    if (!Def.isReg())
+      continue;
+    for (const MCOperand &WmmaOp : WmmaInst)
+      if (WmmaOp.isReg() &&
+          MRI.regsOverlap(Def.getReg(), WmmaOp.getReg()))
+        return true;
+  }
   return false;
 }
 

@@ -10,6 +10,10 @@
 // RUN: cmp %t.elf %t.default.elf
 // RUN: %llvm-objdump -d %t.default.elf | %FileCheck --check-prefix=NO-TRAMP %s
 // NO-TRAMP-LABEL: <entry_tramp_kernel>:
+// NO-TRAMP: global_wb
+// NO-TRAMP-NEXT: v_nop
+// NO-TRAMP-NEXT: s_clause 0x0
+// NO-TRAMP-NEXT: global_load_b32 v0, v[2:3], off
 // NO-TRAMP: s_endpgm
 // NO-TRAMP-LABEL: <hipblaslt_entry_kernel>:
 // NO-TRAMP: s_setreg_imm32_b32
@@ -28,6 +32,10 @@
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=METADATA %s
 
 // DISASM-LABEL: <entry_tramp_kernel>:
+// DISASM-NEXT: global_wb
+// DISASM-NEXT: v_nop
+// DISASM-NEXT: s_clause 0x0
+// DISASM-NEXT: global_load_b32 v0, v[2:3], off
 // DISASM: s_endpgm
 // DISASM-LABEL: <hipblaslt_entry_kernel>:
 // DISASM: s_setreg_imm32_b32
@@ -70,7 +78,11 @@
 .p2align 8
 .type entry_tramp_kernel,@function
 entry_tramp_kernel:
-  v_mov_b32_e32 v0, 0
+  global_wb scope:SCOPE_CU
+  v_nop
+  s_clause 0x0
+  global_load_b32 v0, v[2:3], off
+  s_wait_loadcnt 0x0
   s_endpgm
 .Lentry_tramp_kernel_end:
 .size entry_tramp_kernel, .Lentry_tramp_kernel_end-entry_tramp_kernel
@@ -107,7 +119,7 @@ decoder_trip_kernel:
 .rodata
 .p2align 8
 .amdhsa_kernel entry_tramp_kernel
-  .amdhsa_next_free_vgpr 1
+  .amdhsa_next_free_vgpr 4
   .amdhsa_next_free_sgpr 1
   .amdhsa_inst_pref_size 7
 .end_amdhsa_kernel
@@ -130,7 +142,7 @@ decoder_trip_kernel:
     - .name: entry_tramp_kernel
       .symbol: entry_tramp_kernel.kd
       .sgpr_count: 8
-      .vgpr_count: 1
+      .vgpr_count: 4
       .kernarg_segment_size: 0
       .group_segment_fixed_size: 0
       .private_segment_fixed_size: 0

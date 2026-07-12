@@ -33,6 +33,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -99,13 +100,23 @@ struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
-  // When set, both edges use an s_add_pc_i64 long branch instead of s_branch
-  // (reaches anywhere, no scratch reg, no SCC). Set when the appended pool is
-  // beyond s_branch's +-128 KB reach; widens the reserved branch-back slot.
+  // A far trampoline uses an SCC-neutral get-PC/add/set-PC sequence on both
+  // edges. The forward sequence may overwrite a verified-safe window of whole
+  // following instructions, which are relocated into Bytes in original order.
   bool Long = false;
-  // The branch-back is already present at the end of Bytes. Used by required
-  // far patches whose backward edge cannot use s_add_pc_i64 on gfx1250 A0.
-  bool PreEncodedBack = false;
+  bool AllowSafeFarReturn = false;
+  bool UsesSetPcForward = false;
+  bool UsesSetPcRelay = false;
+  uint32_t SiteFootprint = 0;
+  uint32_t BackReserve = 4;
+  unsigned LongBranchSgprBase = 0;
+  // Absolute SGPR requirement for this edge's owning kernel. This is folded
+  // into KernelStats only after far-site compaction, so a removed/merged
+  // trampoline cannot leave stale descriptor growth behind.
+  unsigned LongBranchRequiredSgprs = 0;
+  std::string LongBranchKernelName;
+  uint64_t ForwardRelayOffset = 0;
+  uint32_t ForwardRelayReserve = 0;
 };
 
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
@@ -135,6 +146,9 @@ struct NopSled {
   uint64_t WritePos = 0;
   uint64_t FunctionStart = 0;
   uint64_t FunctionEnd = 0;
+  // Anonymous alignment after a proven function terminator. Required
+  // rewrites may borrow this storage across function boundaries.
+  bool IsTailPadding = false;
 };
 
 enum class MaskWorkaroundPolicy {
@@ -168,13 +182,13 @@ static constexpr uint64_t MinNopSledSize = 8;
 // Minimum AMDGPU instruction size (one dword).
 static constexpr uint32_t MinInstSize = 4;
 
-// s_add_pc_i64 long-branch encoded sizes: 8 bytes for a forward (32-bit
-// literal) offset, 12 for a backward (64-bit literal) one. The back slot
-// reserves the max; unused tail bytes are s_nop-padded. emitToTrampoline picks
-// the long path only when a short s_branch cannot reach the site's exact pool
-// offset on either edge (computed from the already-queued trampolines).
-static constexpr uint32_t LongBranchFwdBytes = 8;
-static constexpr uint32_t LongBranchMaxBytes = 12;
+// Maximum size of the SCC-neutral long edge used on gfx1250 A0:
+// s_get_pc_i64 (4) + s_add_nc_u64 with a 64-bit literal (12) +
+// s_set_pc_i64 (4). HSV-009 prohibits s_add_pc_i64 in either direction.
+static constexpr uint32_t LongSetPcMaxBytes = 20;
+// The forward relay omits s_get_pc_i64 because the original site captures its
+// PC before taking a short branch into the relay.
+static constexpr uint32_t LongSetPcRelayMaxBytes = 16;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
 // LLVMState::encodeSBranch to reject out-of-range branches before handing
@@ -261,7 +275,9 @@ public:
   std::string findKernelAtAddress(uint64_t TextAddress) const;
 
   /// Find the section-relative `.text` range of the function containing
-  /// \p TextOffset, or std::nullopt if no sized function symbol covers it.
+  /// \p TextOffset, preferring the covering symbol with the greatest start.
+  /// Same-start aliases are canonicalized to their greatest end. Returns
+  /// std::nullopt if no sized function symbol covers the offset.
   std::optional<FunctionTextRange>
   findFunctionTextRangeAtOffset(uint64_t TextOffset) const;
 
@@ -348,11 +364,12 @@ public:
                               unsigned VgprGranuleSize);
 
   /// Virtual address at which growWithTrampolines appends the trampoline pool:
-  /// the first page-aligned address above every existing allocatable section.
-  /// Callers that pre-compute branch/stub targets (B0-to-A0 trampolines,
-  /// kernel-entry stubs) must resolve pool positions against this value so the
-  /// baked branches land on the pool's final location. Single source of truth
-  /// shared with growWithTrampolines. std::nullopt on sh_addr+sh_size overflow.
+  /// the first page-aligned address above every existing allocatable section
+  /// and PT_LOAD segment. Callers that pre-compute branch/stub targets
+  /// (B0-to-A0 trampolines, kernel-entry stubs) must resolve pool positions
+  /// against this value so the baked branches land on the pool's final
+  /// location. Single source of truth shared with growWithTrampolines.
+  /// std::nullopt on malformed program headers or range/alignment overflow.
   std::optional<uint64_t> trampolinePoolVAddr() const;
 
   /// Grow the ELF by appending the trampoline pool at a fresh virtual address
@@ -392,9 +409,13 @@ struct LLVMState;
                                     const LLVMState &LS);
 
 /// Find the nearest NOP sled to \p Offset with at least \p Needed bytes of
-/// free space. Returns nullptr if none found within MaxSledDistance.
+/// free space and enough branch range for both the forward edge and the edge
+/// from the end of \p ReplacementSize bytes back to \p ReturnOffset. Returns
+/// nullptr if no exact-reachable sled is available.
 NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
-                         uint64_t Needed);
+                         uint64_t Needed, uint64_t ReplacementSize,
+                         uint64_t ReturnOffset,
+                         bool AllowTailPadding = false);
 
 // -- RewriteConfig ------------------------------------------------------------
 //
@@ -522,6 +543,10 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 llvm::SmallVector<uint8_t> assembleSingleInst(llvm::StringRef AsmStr,
                                               const LLVMState &LS);
 
+/// Encode one already-parsed MC instruction through the cached code emitter.
+llvm::SmallVector<uint8_t>
+encodeInstructionBytes(const llvm::MCInst &Inst, const LLVMState &LS);
+
 /// Join \p AsmLines into a single newline-terminated assembly source string,
 /// as expected by assembleSingleInst (which accepts multiple instructions).
 std::string joinAsmLines(llvm::ArrayRef<std::string> AsmLines);
@@ -544,13 +569,13 @@ Trampoline buildTrampoline(llvm::ArrayRef<llvm::MCInst> Insts,
                            uint64_t OriginalOffset, uint32_t OriginalSize,
                            uint64_t TrampolineTextOffset, const LLVMState &LS);
 
-/// Return true iff any register operand of \p WmmaInst overlaps the
-/// destination operand of \p ValuInst (for WMMA/VALU co-execution hazard
-/// detection). Delegates aliasing to MCRegisterInfo::regsOverlap so
-/// sub-registers and tuple aliases are handled without a manual range
-/// computation.
+/// Return true iff \p WmmaInst and \p ValuInst have a WMMA-to-VALU RAW, WAW,
+/// or WAR co-execution hazard. Delegates aliasing to
+/// MCRegisterInfo::regsOverlap so sub-registers and tuple aliases are handled
+/// without a manual range computation.
 bool checkVgprOverlap(const llvm::MCInst &WmmaInst,
                       const llvm::MCInst &ValuInst,
+                      const llvm::MCInstrInfo &MCII,
                       const llvm::MCRegisterInfo &MRI);
 
 /// WMMA/SWMMAC A0 vs B0 v_nop spacing requirement.
@@ -687,6 +712,50 @@ struct KernelPatchStats {
   unsigned ScratchAboveKd = 0;
 };
 
+struct KernelTextRange {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
+};
+
+/// Forward must-analysis used by the gfx1250 initial-VMEM workaround.
+/// The bitvectors are indexed like the flat decoded stream. DescriptorCovered
+/// distinguishes dead text inside a known kernel from a helper whose entry
+/// semantics are unknown.
+struct InitialVmemMustAnalysis {
+  llvm::BitVector DescriptorCovered;
+  llvm::BitVector Reachable;
+  llvm::BitVector MustHavePriorVmem;
+};
+
+/// Forward must-analysis for the low 16 bits of tensor group descriptors.
+/// A set bit means every path to that tensor instruction provides a group-1
+/// base SGPR whose low half is zero, so the A0 multicast workaround is already
+/// satisfied and the PC-sensitive instruction can remain byte-for-byte intact.
+struct TensorDescriptorMustAnalysis {
+  llvm::BitVector Low16KnownZero;
+  std::vector<uint64_t> MaskDefinitionOffsets;
+};
+
+struct FunctionSgprUsage {
+  llvm::BitVector Used;
+  unsigned ExistingLimit = 0;
+  int UnusedCallerClobberedPair = -1;
+  bool Complete = false;
+  bool StandardReturningAbi = false;
+};
+
+InitialVmemMustAnalysis
+computeInitialVmemMustAnalysis(llvm::ArrayRef<InternalDecodedInst> Decoded,
+                               llvm::ArrayRef<InternalDecodedInst> AllDecoded,
+                               llvm::ArrayRef<KernelTextRange> KernelRanges,
+                               const LLVMState &LS);
+
+TensorDescriptorMustAnalysis computeTensorDescriptorMustAnalysis(
+    llvm::ArrayRef<InternalDecodedInst> Decoded,
+    llvm::ArrayRef<InternalDecodedInst> AllDecoded,
+    llvm::ArrayRef<KernelTextRange> KernelRanges, const LLVMState &LS,
+    unsigned MaxSgprs, unsigned MaxVgprs);
+
 /// Mutable per-run context threaded through all patch passes. Bundles the
 /// input config, decoded instruction stream, raw .text bytes, MC state,
 /// output streams (trampolines / scratch info), and the shared ELF view +
@@ -705,9 +774,31 @@ struct PatchContext {
   std::vector<Trampoline> &OutTrampolines;
   std::vector<NopSled> &NopSleds;
   ElfView &Elf;
+  const InitialVmemMustAnalysis &InitialVmemAnalysis;
+  const TensorDescriptorMustAnalysis &TensorDescriptorAnalysis;
   const LivenessInfo &Liveness;
   llvm::StringMap<KernelPatchStats> &KernelStats;
   std::vector<ScratchPatchInfo> &OutScratchPatches;
+  // True only when every entry kernel's metadata already includes the VCC
+  // slots. Internal device functions may then reuse site-dead VCC without
+  // growing an unknown caller's allocation.
+  bool AllKernelsReserveVcc = false;
+  // Exact function range -> globally unused aligned SGPR pair, or -1 when no
+  // pair can be proven unused. Populated lazily only for max-SGPR kernels.
+  llvm::DenseMap<std::pair<uint64_t, uint64_t>, FunctionSgprUsage>
+      FunctionSgprUsageCache;
+  // Original instruction offsets changed by any per-instruction pass. A
+  // forward set-PC window must never relocate stale decode metadata for one of
+  // these sites.
+  llvm::DenseSet<uint64_t> MutatedOffsets;
+  // Semantic replacement bytes for sites emitted into an immediate NOP sled.
+  // Whole-function passes use these rather than relocating the raw s_branch
+  // that now occupies the original instruction slot.
+  llvm::DenseMap<uint64_t, llvm::SmallVector<uint8_t>> ReplacementCodeBySite;
+  // Branch-back destinations installed by immediate and routed code caves.
+  // A later set-PC source window must never cover one of these addresses,
+  // because the cave would then return into the middle of the new window.
+  llvm::DenseSet<uint64_t> ImmediateCaveResumeOffsets;
   // Required patches are transformations whose unpatched original code is
   // unsafe to return when the selected rewrite policy needs the patch.
   bool RequiredPatchFailed = false;
@@ -725,18 +816,28 @@ struct PatchContext {
 
 [[nodiscard]] bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,
                                  uint64_t InstOffset, uint32_t InstSize,
-                                 llvm::ArrayRef<uint8_t> Replacement);
+                                 llvm::ArrayRef<uint8_t> Replacement,
+                                 llvm::ArrayRef<uint8_t> OriginalTail = {});
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     llvm::ArrayRef<uint8_t> Replacement,
                                     bool AllowSafeFarReturn = false);
 
-// Encode an s_add_pc_i64 PC-relative long branch from \p FromOffset to
-// \p TargetOffset (.text byte offsets). Exposed for unit testing the offset
-// math / encoding. Returns empty on failure.
-llvm::SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS,
-                                            uint64_t FromOffset,
-                                            uint64_t TargetOffset);
+// Encode an SCC-neutral PC-relative set-PC edge without s_add_pc_i64. Exposed
+// for unit tests of forward/backward offset math and encoding.
+llvm::SmallVector<uint8_t> encodeSetPcLongBranch(const LLVMState &LS,
+                                                 uint64_t FromOffset,
+                                                 uint64_t TargetOffset,
+                                                 unsigned SgprBase);
+
+/// Resolve the exact compiler-emitted get-PC/add-with-carry/set-PC far-branch
+/// sequence ending at \p SetPcIndex. Returns a target only when every register
+/// and instruction matches and the target is an instruction boundary inside
+/// \p Function.
+std::optional<uint64_t>
+resolveStaticSetPcFarBranchTarget(
+    llvm::ArrayRef<InternalDecodedInst> Function, size_t SetPcIndex,
+    llvm::ArrayRef<uint8_t> Text, const LLVMState &LS);
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement,
@@ -826,6 +927,14 @@ llvm::SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
 /// buildKernelEntryTrampoline, used to keep the rewrite idempotent.
 bool isKernelEntryTrampoline(llvm::ArrayRef<uint8_t> Bytes,
                              const LLVMState &LS);
+
+/// Return the original kernel entry encoded by a structurally valid HotSwap
+/// entry stub at \p StubVAddr. Returns std::nullopt for a non-stub or malformed
+/// candidate.
+std::optional<uint64_t>
+getKernelEntryTrampolineTargetVAddr(llvm::ArrayRef<uint8_t> Bytes,
+                                    uint64_t StubVAddr,
+                                    const LLVMState &LS);
 
 /// Cheap raw-byte prefilter for the entry stubs produced by
 /// buildKernelEntryTrampoline. This is intentionally weaker than

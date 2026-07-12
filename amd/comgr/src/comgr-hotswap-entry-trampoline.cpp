@@ -267,6 +267,21 @@ bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
          hasEntryStubOperandShape(Decoded, LS);
 }
 
+std::optional<uint64_t>
+getKernelEntryTrampolineTargetVAddr(ArrayRef<uint8_t> Bytes,
+                                    uint64_t StubVAddr,
+                                    const LLVMState &LS) {
+  if (!hasKernelEntryTrampolinePrefix(Bytes, LS))
+    return std::nullopt;
+
+  std::vector<InternalDecodedInst> Decoded;
+  if (!decodeKernelEntryStub(Bytes, LS, Decoded,
+                             "kernel entry target matcher") ||
+      !hasEntryStubOperandShape(Decoded, LS))
+    return std::nullopt;
+  return decodeEntryStubTargetVAddr(Decoded, StubVAddr);
+}
+
 bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,
                                     const LLVMState &LS) {
   SmallVector<uint8_t> Prefix;
@@ -336,16 +351,10 @@ descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
   if (!startsWithBytes(Candidate, EntryStubPrefix))
     return false;
 
-  std::vector<InternalDecodedInst> Decoded;
-  if (!decodeKernelEntryStub(Candidate, LS,
-                             Decoded, "entry trampoline idempotency matcher"))
-    return false;
-  if (!hasEntryStubOperandShape(Decoded, LS))
-    return false;
-
-  std::optional<uint64_t> Target = decodeEntryStubTargetVAddr(Decoded, *Entry);
+  std::optional<uint64_t> Target =
+      getKernelEntryTrampolineTargetVAddr(Candidate, *Entry, LS);
   if (!Target)
-    return std::nullopt;
+    return false;
 
   // A genuine entry stub jumps back to the original kernel body in .text.
   return *Target >= Elf.textAddr() && *Target < *TextEnd;

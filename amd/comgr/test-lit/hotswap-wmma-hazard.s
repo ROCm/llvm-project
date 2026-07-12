@@ -39,8 +39,8 @@
 test_wmma_hazard:
   // WMMA integer instruction: A0 needs 8 nops, B0 needs 4
   v_wmma_i32_16x16x64_iu8 v[16:23], v[0:7], v[8:15], v[16:23]
-  // VALU that overlaps WMMA dest (writes v16) -- should trigger hazard
-  v_add_f32 v16, v0, v1
+  // RAW hazard: the VALU reads the WMMA destination tuple through v16.
+  v_add_f32 v24, v16, v1
   s_endpgm
 .Ltest_wmma_hazard_end:
 .size test_wmma_hazard, .Ltest_wmma_hazard_end-test_wmma_hazard
@@ -48,6 +48,6 @@ test_wmma_hazard:
 .rodata
 .p2align 8
 .amdhsa_kernel test_wmma_hazard
-  .amdhsa_next_free_vgpr 24
+  .amdhsa_next_free_vgpr 25
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel

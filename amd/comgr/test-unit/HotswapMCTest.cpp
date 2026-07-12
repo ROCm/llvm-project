@@ -182,70 +182,111 @@ TEST(EncodeSBranch, FailsOnInvalidState) {
   EXPECT_TRUE(S.encodeSBranch(0, 8).empty());
 }
 
-// -- encodeLongBranch (s_add_pc_i64) -----------------------------------------
+// -- encodeSetPcLongBranch ---------------------------------------------------
 //
-// The long branch reaches anywhere via s_add_pc_i64, which adds a signed
-// literal to the PC of the next instruction: landing PC == From + size + imm.
-// A positive (forward) offset fits a 32-bit literal (8 bytes); a negative
-// (backward) offset needs a 64-bit literal (12 bytes). These verify the offset
-// math and encoding structurally rather than pinning exact bytes.
+// gfx1250 A0 must not execute s_add_pc_i64. Far edges instead capture the PC,
+// add a literal delta without modifying SCC, and jump through an SGPR pair.
+// These tests pin the instruction shape and the PC-relative literal math
+// without depending on TableGen opcode numbers.
 
-// Read the signed literal that follows the 4-byte opcode dword.
-static int64_t longBranchLiteral(llvm::ArrayRef<uint8_t> Out) {
-  if (Out.size() == LongBranchFwdBytes)
-    return static_cast<int32_t>(readDword(Out.data() + MinInstSize));
-  int64_t V = 0;
-  std::memcpy(&V, Out.data() + MinInstSize, sizeof(V));
+static uint64_t setPcDelta(llvm::ArrayRef<uint8_t> Out,
+                           const std::vector<InternalDecodedInst> &Dec) {
+  const InternalDecodedInst &Add = Dec[1];
+  const uint8_t *Literal = Out.data() + Add.Offset + MinInstSize;
+  if (Add.Size == 2 * MinInstSize)
+    return readDword(Literal);
+  uint64_t V = 0;
+  std::memcpy(&V, Literal, sizeof(V));
   return V;
 }
 
-TEST(EncodeLongBranch, ForwardLandsOnTarget) {
+static void expectSetPcShape(const std::vector<InternalDecodedInst> &Dec) {
+  EXPECT_EQ(Dec[0].Mnemonic, "s_get_pc_i64");
+  EXPECT_EQ(Dec[1].Mnemonic, "s_add_nc_u64");
+  EXPECT_EQ(Dec[2].Mnemonic, "s_set_pc_i64");
+  for (const InternalDecodedInst &DI : Dec)
+    EXPECT_NE(DI.Mnemonic, "s_add_pc_i64");
+}
+
+TEST(EncodeSetPcLongBranch, ForwardLandsOnTarget) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
   // ~512 KB forward -- well beyond s_branch's +-128 KB reach.
   const uint64_t From = 0x1000, To = 0x81000;
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchFwdBytes);
-  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
+  llvm::SmallVector<uint8_t> Out = encodeSetPcLongBranch(S, From, To, 32);
+  ASSERT_FALSE(Out.empty());
+  EXPECT_LE(Out.size(), LongSetPcMaxBytes);
 
   std::vector<InternalDecodedInst> Dec;
   ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
-  ASSERT_EQ(Dec.size(), 1u);
-  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
+  ASSERT_EQ(Dec.size(), 3u);
+  ASSERT_TRUE(Dec[1].Size == 2 * MinInstSize ||
+              Dec[1].Size == 3 * MinInstSize);
+  expectSetPcShape(Dec);
+  // s_get_pc_i64 captures the address immediately following itself.
+  EXPECT_EQ(From + Dec[0].Size + setPcDelta(Out, Dec), To);
 }
 
-TEST(EncodeLongBranch, BackwardUsesWideLiteralAndLandsOnTarget) {
+TEST(EncodeSetPcLongBranch, BackwardUsesWideLiteralAndLandsOnTarget) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
   // Backward jump (trampoline tail -> earlier return point).
   const uint64_t From = 0x81000, To = 0x1004;
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchMaxBytes);
-  EXPECT_EQ(static_cast<int64_t>(From) + static_cast<int64_t>(Out.size()) +
-                longBranchLiteral(Out),
-            static_cast<int64_t>(To));
+  llvm::SmallVector<uint8_t> Out = encodeSetPcLongBranch(S, From, To, 104);
+  ASSERT_EQ(Out.size(), LongSetPcMaxBytes);
 
   std::vector<InternalDecodedInst> Dec;
   ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
-  ASSERT_EQ(Dec.size(), 1u);
-  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
+  ASSERT_EQ(Dec.size(), 3u);
+  ASSERT_TRUE(Dec[1].Size == 2 * MinInstSize ||
+              Dec[1].Size == 3 * MinInstSize);
+  expectSetPcShape(Dec);
+  EXPECT_EQ(From + Dec[0].Size + setPcDelta(Out, Dec), To);
 }
 
-TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
+TEST(EncodeSetPcLongBranch, ReachesBeyondSBranchRange) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  // 4 MB: s_branch rejects it, the long branch encodes it.
+  // 4 MB: s_branch rejects it, the set-PC sequence encodes it.
   const uint64_t From = 0, To = 0x400000;
   EXPECT_TRUE(S.encodeSBranch(From, To).empty());
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
+  llvm::SmallVector<uint8_t> Out = encodeSetPcLongBranch(S, From, To, 64);
   ASSERT_FALSE(Out.empty());
-  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
+  std::vector<InternalDecodedInst> Dec;
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
+  ASSERT_EQ(Dec.size(), 3u);
+  ASSERT_TRUE(Dec[1].Size == 2 * MinInstSize ||
+              Dec[1].Size == 3 * MinInstSize);
+  expectSetPcShape(Dec);
+  EXPECT_EQ(From + Dec[0].Size + setPcDelta(Out, Dec), To);
+}
+
+TEST(EncodeSetPcLongBranch, AcceptsVccScratchPair) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  const uint64_t From = 0x2000, To = 0x82000;
+  llvm::SmallVector<uint8_t> Out =
+      encodeSetPcLongBranch(S, From, To, /*VCC_LO=*/106);
+  ASSERT_FALSE(Out.empty());
+
+  std::vector<InternalDecodedInst> Dec;
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
+  ASSERT_EQ(Dec.size(), 3u);
+  expectSetPcShape(Dec);
+  EXPECT_EQ(From + Dec[0].Size + setPcDelta(Out, Dec), To);
 }
 
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {
   std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64},
                                 {100, 128, 100, 100, 128}};
-  EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max()),
+  EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max(),
+                            /*ReplacementSize=*/MinInstSize,
+                            /*ReturnOffset=*/MinInstSize),
+            nullptr);
+  EXPECT_EQ(findNearestSled(Sleds, 100, /*Needed=*/0,
+                            /*ReplacementSize=*/
+                                std::numeric_limits<uint64_t>::max(),
+                            /*ReturnOffset=*/104),
             nullptr);
 }
 
@@ -258,9 +299,65 @@ TEST(FindNearestSled, HandlesLargeUnsignedOffsets) {
                                  std::numeric_limits<uint64_t>::max()}};
   NopSled *Sled =
       findNearestSled(Sleds, std::numeric_limits<uint64_t>::max() - 40,
-                      /*Needed=*/8);
+                      /*Needed=*/8, /*ReplacementSize=*/MinInstSize,
+                      /*ReturnOffset=*/
+                          std::numeric_limits<uint64_t>::max() - 36);
   ASSERT_NE(Sled, nullptr);
   EXPECT_EQ(Sled, &Sleds[1]);
+}
+
+TEST(FindNearestSled, AcceptsExactForwardAndBackwardBoundaries) {
+  constexpr uint64_t SledOffset =
+      static_cast<uint64_t>(BranchOffsetMax + 1) * MinInstSize;
+  std::vector<NopSled> Sleds = {
+      {SledOffset, SledOffset + 16, SledOffset, 0, SledOffset + 16,
+       /*IsTailPadding=*/true}};
+  EXPECT_EQ(findNearestSled(Sleds, /*Offset=*/0, /*Needed=*/8,
+                            /*ReplacementSize=*/MinInstSize,
+                            /*ReturnOffset=*/2 * MinInstSize,
+                            /*AllowTailPadding=*/true),
+            &Sleds[0]);
+}
+
+TEST(FindNearestSled, RejectsOneDwordBeyondEitherBoundary) {
+  constexpr uint64_t ExactForward =
+      static_cast<uint64_t>(BranchOffsetMax + 1) * MinInstSize;
+  std::vector<NopSled> TooFarForward = {
+      {ExactForward + MinInstSize, ExactForward + 16,
+       ExactForward + MinInstSize, 0, ExactForward + 16}};
+  EXPECT_EQ(findNearestSled(TooFarForward, /*Offset=*/0, /*Needed=*/4,
+                            /*ReplacementSize=*/MinInstSize,
+                            /*ReturnOffset=*/3 * MinInstSize),
+            nullptr);
+
+  std::vector<NopSled> TooFarBack = {
+      {ExactForward, ExactForward + 16, ExactForward, 0, ExactForward + 16}};
+  EXPECT_EQ(findNearestSled(TooFarBack, /*Offset=*/0, /*Needed=*/4,
+                            /*ReplacementSize=*/MinInstSize,
+                            /*ReturnOffset=*/MinInstSize),
+            nullptr);
+}
+
+TEST(FindNearestSled, RejectsUnalignedForwardAndBackwardEdges) {
+  std::vector<NopSled> UnalignedForward = {
+      {/*Start=*/101, /*End=*/113, /*WritePos=*/101,
+       /*FunctionStart=*/0, /*FunctionEnd=*/113,
+       /*IsTailPadding=*/true}};
+  EXPECT_EQ(findNearestSled(UnalignedForward, /*Offset=*/96, /*Needed=*/8,
+                            /*ReplacementSize=*/MinInstSize,
+                            /*ReturnOffset=*/109,
+                            /*AllowTailPadding=*/true),
+            nullptr);
+
+  std::vector<NopSled> UnalignedBackward = {
+      {/*Start=*/100, /*End=*/112, /*WritePos=*/100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/112,
+       /*IsTailPadding=*/true}};
+  EXPECT_EQ(findNearestSled(UnalignedBackward, /*Offset=*/96, /*Needed=*/8,
+                            /*ReplacementSize=*/MinInstSize,
+                            /*ReturnOffset=*/107,
+                            /*AllowTailPadding=*/true),
+            nullptr);
 }
 
 // -- assembleSingleInst / decodeTextSection round-trip ------------------------
@@ -405,8 +502,7 @@ TEST(ApplyByteReplace, RejectsOutOfBounds) {
 
 // -- checkVgprOverlap ---------------------------------------------------------
 //
-// checkVgprOverlap checks whether any register operand of a "WMMA-like"
-// MCInst overlaps the destination (operand 0) of a "VALU-like" MCInst.
+// checkVgprOverlap checks WMMA-to-VALU RAW, WAW, and WAR overlap.
 // We drive it with real MCInsts produced by assembling + decoding simple
 // AMDGPU instructions so the register operands are populated the way the
 // production code sees them.
@@ -475,13 +571,95 @@ static bool appendSingleInstBytes(llvm::SmallVectorImpl<uint8_t> &Bytes,
   return true;
 }
 
+static std::vector<InternalDecodedInst>
+decodeStaticFarBranch(llvm::ArrayRef<llvm::StringRef> Instructions,
+                      const LLVMState &S,
+                      llvm::SmallVectorImpl<uint8_t> &Bytes) {
+  for (llvm::StringRef Inst : Instructions)
+    if (!appendSingleInstBytes(Bytes, Inst, S))
+      return {};
+  std::vector<InternalDecodedInst> Decoded;
+  EXPECT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  return Decoded;
+}
+
+TEST(ResolveStaticSetPcFarBranchTarget, ResolvesForwardInstructionBoundary) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes;
+  std::vector<InternalDecodedInst> Decoded = decodeStaticFarBranch(
+      {"s_get_pc_i64 s[34:35]", "s_add_co_u32 s34, s34, 0x10",
+       "s_add_co_ci_u32 s35, s35, lit(0x0)",
+       "s_set_pc_i64 s[34:35]", "s_nop 0"},
+      S, Bytes);
+  ASSERT_EQ(Decoded.size(), 5u);
+  ASSERT_EQ(Decoded[4].Offset, 20u);
+  EXPECT_EQ(resolveStaticSetPcFarBranchTarget(Decoded, 3, Bytes, S),
+            std::optional<uint64_t>(Decoded[4].Offset));
+}
+
+TEST(ResolveStaticSetPcFarBranchTarget, ResolvesBackwardInstructionBoundary) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes;
+  std::vector<InternalDecodedInst> Decoded = decodeStaticFarBranch(
+      {"s_nop 0", "s_get_pc_i64 s[34:35]",
+       "s_add_co_u32 s34, s34, 0xfffffff8",
+       "s_add_co_ci_u32 s35, s35, lit(0xffffffff)",
+       "s_set_pc_i64 s[34:35]"},
+      S, Bytes);
+  ASSERT_EQ(Decoded.size(), 5u);
+  EXPECT_EQ(resolveStaticSetPcFarBranchTarget(Decoded, 4, Bytes, S),
+            std::optional<uint64_t>(0));
+}
+
+TEST(ResolveStaticSetPcFarBranchTarget, RejectsRegisterMismatch) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes;
+  std::vector<InternalDecodedInst> Decoded = decodeStaticFarBranch(
+      {"s_get_pc_i64 s[34:35]", "s_add_co_u32 s34, s34, 0x14",
+       "s_add_co_ci_u32 s35, s34, lit(0x0)",
+       "s_set_pc_i64 s[34:35]", "s_nop 0"},
+      S, Bytes);
+  ASSERT_EQ(Decoded.size(), 5u);
+  EXPECT_EQ(resolveStaticSetPcFarBranchTarget(Decoded, 3, Bytes, S),
+            std::nullopt);
+}
+
+TEST(ResolveStaticSetPcFarBranchTarget, RejectsNonBoundaryAndNoncontiguous) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes;
+  std::vector<InternalDecodedInst> Decoded = decodeStaticFarBranch(
+      {"s_get_pc_i64 s[34:35]", "s_add_co_u32 s34, s34, 0x1",
+       "s_add_co_ci_u32 s35, s35, lit(0x0)",
+       "s_set_pc_i64 s[34:35]", "s_nop 0"},
+      S, Bytes);
+  ASSERT_EQ(Decoded.size(), 5u);
+  EXPECT_EQ(resolveStaticSetPcFarBranchTarget(Decoded, 3, Bytes, S),
+            std::nullopt);
+
+  Decoded[2].Offset += MinInstSize;
+  EXPECT_EQ(resolveStaticSetPcFarBranchTarget(Decoded, 3, Bytes, S),
+            std::nullopt);
+}
+
 TEST(CheckVgprOverlap, DetectsDirectOverlap) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
   // Wmma-like inst references v5 and v10; Valu-like inst writes v10.
   llvm::MCInst Wmma = assembleOne("v_mov_b32 v5, v10", S);
   llvm::MCInst Valu = assembleOne("v_mov_b32 v10, v20", S);
-  EXPECT_TRUE(checkVgprOverlap(Wmma, Valu, *S.MRI));
+  EXPECT_TRUE(checkVgprOverlap(Wmma, Valu, *S.MCII, *S.MRI));
+}
+
+TEST(CheckVgprOverlap, DetectsValuReadOfWmmaDestination) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::MCInst Wmma = assembleOne("v_mov_b32 v5, v10", S);
+  llvm::MCInst Valu = assembleOne("v_add_f32 v20, v5, v21", S);
+  EXPECT_TRUE(checkVgprOverlap(Wmma, Valu, *S.MCII, *S.MRI));
 }
 
 TEST(CheckVgprOverlap, NoOverlapForDisjointVgprs) {
@@ -490,7 +668,7 @@ TEST(CheckVgprOverlap, NoOverlapForDisjointVgprs) {
   // Wmma-like inst references v0, v1; Valu-like inst writes v10.
   llvm::MCInst Wmma = assembleOne("v_mov_b32 v0, v1", S);
   llvm::MCInst Valu = assembleOne("v_mov_b32 v10, v20", S);
-  EXPECT_FALSE(checkVgprOverlap(Wmma, Valu, *S.MRI));
+  EXPECT_FALSE(checkVgprOverlap(Wmma, Valu, *S.MCII, *S.MRI));
 }
 
 TEST(CheckVgprOverlap, HandlesEmptyValuInst) {
@@ -498,7 +676,7 @@ TEST(CheckVgprOverlap, HandlesEmptyValuInst) {
   ASSERT_TRUE(S.Valid);
   llvm::MCInst Wmma = assembleOne("v_mov_b32 v0, v1", S);
   llvm::MCInst Empty; // no operands
-  EXPECT_FALSE(checkVgprOverlap(Wmma, Empty, *S.MRI));
+  EXPECT_FALSE(checkVgprOverlap(Wmma, Empty, *S.MCII, *S.MRI));
 }
 
 // -- buildTrampoline ----------------------------------------------------------
@@ -557,6 +735,8 @@ TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
 
   ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
   EXPECT_TRUE(isKernelEntryTrampoline(Bytes, S));
+  EXPECT_EQ(getKernelEntryTrampolineTargetVAddr(Bytes, StubVAddr, S),
+            std::optional<uint64_t>(EntryVAddr));
 
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
@@ -603,6 +783,9 @@ TEST(BuildKernelEntryTrampoline, PrefixPrefiltersNonStubBytes) {
 
   EXPECT_FALSE(hasKernelEntryTrampolinePrefix(NonStub, S));
   EXPECT_FALSE(isKernelEntryTrampoline(NonStub, S));
+  EXPECT_EQ(getKernelEntryTrampolineTargetVAddr(
+                NonStub, /*StubVAddr=*/0x200000, S),
+            std::nullopt);
 
   llvm::ArrayRef<uint8_t> ShortCandidate(Stub.data(), MinInstSize);
   EXPECT_FALSE(hasKernelEntryTrampolinePrefix(ShortCandidate, S));
@@ -708,6 +891,9 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX125_TCP_SPLIT, 5);
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.ComputePgmRsrc3 = Rsrc3;
+  // gfx10+ stores the numbered SGPR count in metadata; the descriptor field
+  // is reserved and must remain untouched by the entry-stub fixup.
+  Opts.MetadataSgprCount = 8;
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(Text, Opts);
   llvm::Expected<ElfView> ViewOrErr =
@@ -780,12 +966,9 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   std::memcpy(&OutRsrc1,
               OutKd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
               sizeof(OutRsrc1));
-  unsigned ReservedSgprs =
-      (AMDHSA_BITS_GET(OutRsrc1,
-                       hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT) +
-       1) *
-      8;
-  EXPECT_GE(ReservedSgprs, Fixups[0].RequiredSgprs);
+  EXPECT_EQ(OutRsrc1, 0u);
+  EXPECT_EQ(OutView->getKernelSgprCount("kernel"),
+            std::optional<unsigned>(Fixups[0].RequiredSgprs));
 
   std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
   ASSERT_EQ(KDs.size(), 1u);
@@ -899,7 +1082,7 @@ TEST(ClassifyWmmaNops, CoversKnownMnemonics) {
       {"v_wmma_f32_16x16x32_fp8_fp8", 1, 4},
       {"v_wmma_f32_16x16x16_f16", 4, 4},
       {"v_wmma_f32_16x16x16_bf16", 4, 4},
-      {"v_swmmac_i32_16x16x64_iu8", 8, 4},
+      {"v_swmmac_i32_16x16x64_iu8", 4, 4},
       {"v_wmma_f32_16x16x4_f32", 4, 4},
       {"v_wmma_f16_something_iu8", 8, 4},
   };

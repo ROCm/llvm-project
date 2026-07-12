@@ -14,17 +14,16 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: The DS2 is expanded (replaced by s_branch to sled); the sled holds the
-// COM: two single-address loads followed by the split's own s_wait_dscnt 0x0
-// COM: drain. No downstream wait existed, so the only wait is the split drain.
+// COM: The DS2 is expanded into a short branch plus the split's drain in the
+// COM: original second dword. The compact sled holds only the two
+// COM: single-address loads and returns to that drain.
 // DISASM-LABEL: <test_ds_nowait>:
-// DISASM-NOT: ds_load_2addr_stride64_b32
-// DISASM: s_branch
-// DISASM: s_endpgm
-// DISASM: ds_load_b32 v0
-// DISASM: ds_load_b32 v1
-// DISASM: s_wait_dscnt 0x0
-// DISASM: s_branch
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_endpgm
+// DISASM:      ds_load_b32 v0
+// DISASM-NEXT: ds_load_b32 v1
+// DISASM-NEXT: s_branch
 
 // COM: Idempotency
 // RUN: hotswap-rewrite %t.out.elf \

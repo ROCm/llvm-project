@@ -431,6 +431,50 @@ std::string formatVgprRange(int Base, int Count) {
   return formatv("v[{0}:{1}]", Base, Base + Count - 1).str();
 }
 
+// Return the active VGPR-MSB mode when it is locally unambiguous. The late
+// VGPR lowering pass makes the mode persistent, so a trampoline that changes
+// it must restore the value that was active at the source instruction. Stop at
+// control flow rather than guessing across a predecessor merge; compiler-
+// generated straight-line blocks place the relevant s_set_vgpr_msb before the
+// first high-register instruction.
+std::optional<unsigned> findActiveVgprMsbMode(const PatchContext &Ctx,
+                                              size_t Idx) {
+  std::optional<ElfView::FunctionTextRange> Function =
+      Ctx.Elf.findFunctionTextRangeAtOffset(Ctx.Decoded[Idx].Offset);
+  if (!Function)
+    return std::nullopt;
+
+  for (size_t I = Idx; I-- > 0;) {
+    const InternalDecodedInst &DI = Ctx.Decoded[I];
+    if (DI.Offset < Function->Begin)
+      break;
+    if (DI.Mnemonic == "s_set_vgpr_msb") {
+      if (DI.Inst.getNumOperands() != 1 ||
+          !DI.Inst.getOperand(0).isImm())
+        return std::nullopt;
+      return static_cast<unsigned>(DI.Inst.getOperand(0).getImm()) & 0xff;
+    }
+    if (DI.Mnemonic == "<unknown>")
+      return std::nullopt;
+
+    const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
+    if (Desc.isTerminator() || Desc.isBranch() || Desc.isCall() ||
+        Desc.isReturn() ||
+        (Ctx.LS.MIA &&
+         Ctx.LS.MIA->mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI)))
+      return std::nullopt;
+  }
+
+  // The gfx1250 ABI and late VGPR-lowering convention require zero mode at a
+  // function entry.
+  return 0;
+}
+
+bool kSplitNeedsVgprMsbTransition(const WmmaOps &R) {
+  return R.Src0.first + R.Src0.second / 2 > 255 ||
+         R.Src1.first + R.Src1.second / 2 > 255;
+}
+
 // -- Operand validation -----------------------------------------------------
 
 bool validateSplitOperands(SplitKind Kind, const WmmaOps &R,
@@ -480,7 +524,9 @@ bool validateSplitOperands(SplitKind Kind, const WmmaOps &R,
 // second half, src2 = dst (the carry from the first half).
 std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
                                               const PrintedAsm &P,
-                                              const WmmaOps &R) {
+                                              const WmmaOps &R,
+                                              std::optional<unsigned>
+                                                  ActiveVgprMsbMode) {
   assert(R.Dst.second > 0 && (R.Src2IsImm || R.Src2.second == R.Dst.second));
   assert(R.Src0.second > 0 && R.Src0.second % 2 == 0);
   assert(R.Src1.second > 0 && R.Src1.second % 2 == 0);
@@ -497,17 +543,58 @@ std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
     return {};
 
   std::vector<std::string> Out;
-  Out.reserve(2);
+  Out.reserve(5);
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement, Dst,
                         formatVgprRange(R.Src0.first, AHalf),
                         formatVgprRange(R.Src1.first, BHalf), Src2Printed,
                         *ModFirst)
                     .str());
+
+  int Src0HiBase = R.Src0.first + AHalf;
+  int Src1HiBase = R.Src1.first + BHalf;
+  if (Src0HiBase > 255 || Src1HiBase > 255) {
+    if (!ActiveVgprMsbMode || R.Src0.first > 255 || R.Src1.first > 255)
+      return {};
+
+    unsigned OldMode = *ActiveVgprMsbMode;
+    unsigned NewMode = OldMode;
+    auto AdvanceOperandMode = [&](int &Base, unsigned Shift) {
+      unsigned OldMsbs = (OldMode >> Shift) & 0x3;
+      unsigned PhysicalBase = (OldMsbs << 8) + static_cast<unsigned>(Base);
+      unsigned NewMsbs = PhysicalBase >> 8;
+      if (NewMsbs > 3)
+        return false;
+      Base = static_cast<int>(PhysicalBase & 0xff);
+      NewMode = (NewMode & ~(0x3u << Shift)) | (NewMsbs << Shift);
+      return true;
+    };
+    if (!AdvanceOperandMode(Src0HiBase, /*src0=*/0) ||
+        !AdvanceOperandMode(Src1HiBase, /*src1=*/2))
+      return {};
+
+    // The second half threads the destination through the src2 slot. Its
+    // addressing mode must therefore match vdst rather than the original
+    // src2 operand.
+    unsigned DstMsbs = (OldMode >> 6) & 0x3;
+    NewMode = (NewMode & ~(0x3u << 4)) | (DstMsbs << 4);
+
+    // s_set_vgpr_msb encodes the new mode in bits [7:0] and the prior mode in
+    // bits [15:8]. Restore the incoming mode before the trampoline returns.
+    unsigned SetUpperMode = NewMode | (OldMode << 8);
+    unsigned RestoreMode = OldMode | (NewMode << 8);
+    Out.push_back(formatv("s_set_vgpr_msb {0}", SetUpperMode).str());
+    Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement, Dst,
+                          formatVgprRange(Src0HiBase, AHalf),
+                          formatVgprRange(Src1HiBase, BHalf), Dst, *ModSecond)
+                      .str());
+    Out.push_back(formatv("s_set_vgpr_msb {0}", RestoreMode).str());
+    return Out;
+  }
+
   // Second half: src2 = dst (the carry).
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement, Dst,
-                        formatVgprRange(R.Src0.first + AHalf, AHalf),
-                        formatVgprRange(R.Src1.first + BHalf, BHalf), Dst,
-                        *ModSecond)
+                        formatVgprRange(Src0HiBase, AHalf),
+                        formatVgprRange(Src1HiBase, BHalf), Dst, *ModSecond)
                     .str());
   return Out;
 }
@@ -561,33 +648,9 @@ std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
 
 } // anonymous namespace
 
-// Return-value semantics (current shared dispatcher API in b0a0.cpp):
-//   0  = either "this patch did not match the instruction" OR "matched
-//        but failed to apply" -- the dispatcher cannot distinguish the
-//        two and will fall through to the next patch class. For WMMA
-//        split mnemonics no other patch class will match, so a
-//        matched-but-failed case results in the rewriter returning
-//        SUCCESS at the API level with the original A0-incompatible
-//        opcode left in .text. The runtime will then fail to load (or
-//        worse, mis-execute) the kernel with no clear error attribution.
-//   N>0 = "matched, applied N patches" (this splitter only ever returns
-//        1 since it splits one source WMMA into one trampoline).
-//
-// chinmaydd flagged this on PR #2379 as a cross-cutting concern across
-// every patch in the hotswap subsystem: the shared `uint32_t (*)(
-// PatchContext&, size_t)` signature in b0a0.cpp's weak-stub dispatcher
-// has the same ambiguity for in-place patches (#2222), the WMMA hazard
-// patch (#2265), and any future patch. A proper fix is a separate
-// follow-up that changes the dispatcher's return type to an enum
-// (NoMatch / Patched / Failed) or threads a `bool *Aborted` through
-// PatchContext, with the dispatcher checking the failure flag and
-// short-circuiting the rewrite with AMD_COMGR_STATUS_ERROR rather than
-// silently leaving the original opcode in .text.
-//
-// For now: every "matched but failed" path below logs an error via
-// log() (so the failure is at least visible when AMD_COMGR_EMIT_VERBOSE_LOGS
-// is set) and returns 0. The early "did not match" path returns 0
-// without logging.
+// The shared pass ABI uses zero for both "no match" and "failed". A matched
+// WMMA split is mandatory on A0, so failure paths also set the context flag
+// that runPerInstPass checks before it permits dispatcher fall-through.
 static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
 
@@ -595,11 +658,10 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (!Match)
     return 0; // Did NOT match -- correct dispatcher fall-through.
 
-  // ----- All return-0 paths below are MATCHED-BUT-FAILED -----
-  // Until the dispatcher API is refactored to distinguish these cleanly,
-  // each of these is a silent miscompile risk for the runtime; the log()
-  // line is the only signal the user gets that a recognized opcode was
-  // left in .text.
+  auto FailRequiredPatch = [&]() -> uint32_t {
+    Ctx.RequiredPatchFailed = true;
+    return 0;
+  };
 
   // Structural sanity check against the opcode side. Every WMMA variant this
   // patch handles has exactly one destination operand at the MCInstrDesc
@@ -610,7 +672,7 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (MCID.getNumDefs() != 1) {
     log() << "hotswap: error: WMMA split: " << DI.Mnemonic << " has "
           << MCID.getNumDefs() << " defs, expected 1\n";
-    return 0; // matched-but-failed
+    return FailRequiredPatch();
   }
 
   std::optional<WmmaOps> Ops =
@@ -618,11 +680,11 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (!Ops) {
     log() << "hotswap: error: WMMA split: could not extract operands from "
           << DI.Mnemonic << "\n";
-    return 0; // matched-but-failed
+    return FailRequiredPatch();
   }
 
   if (!validateSplitOperands(Match->Kind, *Ops, DI.Mnemonic))
-    return 0; // matched-but-failed (validateSplitOperands logs the reason)
+    return FailRequiredPatch();
 
   // Print the source instruction in canonical asm form. The printer is the
   // authoritative source for src2 inline-immediate formatting (FP inline
@@ -637,35 +699,40 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (!P) {
     log() << "hotswap: error: WMMA split: could not parse printed form of "
           << DI.Mnemonic << ": " << StringRef(PrintedBuf).trim() << "\n";
-    return 0; // matched-but-failed
+    return FailRequiredPatch();
   }
 
   std::vector<std::string> AsmLines;
   switch (Match->Kind) {
   case SplitKind::Split128to64FP8BF8:
-    AsmLines = buildSplit128to64Asm(Match->Replacement, *P, *Ops);
+    AsmLines = buildSplit128to64Asm(
+        Match->Replacement, *P, *Ops,
+        kSplitNeedsVgprMsbTransition(*Ops)
+            ? findActiveVgprMsbMode(Ctx, Idx)
+            : std::optional<unsigned>());
     break;
   case SplitKind::Split32x16to16x16F4:
     AsmLines = buildSplit32x16Asm(Match->Replacement, *P, *Ops);
     break;
   }
   if (AsmLines.empty())
-    return 0; // matched-but-failed (build*Asm rejected an unsupported modifier)
+    return FailRequiredPatch();
 
   // Assemble the split sequence and defer trampoline emission to
-  // emitToTrampoline, which picks a short s_branch or an s_add_pc_i64 long
-  // branch based on the site's distance from the appended pool.
+  // emitToTrampoline, which picks a short s_branch or a set-PC long branch
+  // based on the site's distance from the appended pool.
   SmallVector<uint8_t> Replacement =
       assembleSingleInst(joinAsmLines(AsmLines), Ctx.LS);
   if (Replacement.empty()) {
     log() << "hotswap: error: WMMA split: trampoline assembly failed for "
           << DI.Mnemonic << "\n";
-    return 0; // matched-but-failed
+    return FailRequiredPatch();
   }
-  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement)) {
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
+                           /*AllowSafeFarReturn=*/true)) {
     log() << "hotswap: error: WMMA split: could not emit trampoline for "
           << DI.Mnemonic << "\n";
-    return 0; // matched-but-failed
+    return FailRequiredPatch();
   }
 
   log() << "hotswap: WMMA split: patched " << DI.Mnemonic << " at offset 0x"

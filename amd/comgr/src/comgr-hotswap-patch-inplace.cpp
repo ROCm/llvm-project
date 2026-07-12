@@ -23,6 +23,8 @@
 
 #include "comgr-hotswap-internal.h"
 
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -141,6 +143,16 @@ std::optional<ClauseFamily> getClauseFamily(StringRef Mnemonic) {
   return std::nullopt;
 }
 
+std::optional<ClauseFamily> getClauseFamily(const InternalDecodedInst &DI,
+                                            const LLVMState &LS) {
+  // The MC printer does not expose a stable mnemonic for every GLOBAL_WB
+  // encoding, but it is itself an unclaused VMEM operation and therefore
+  // satisfies the entrypoint requirement.
+  if (DI.Inst.getOpcode() == LS.GlobalWbOpcode)
+    return ClauseFamily::VMEM;
+  return getClauseFamily(DI.Mnemonic);
+}
+
 /// Return the gfx1250 cache scope printed for \p Inst. MC operand names are
 /// backend-private, so use the target's canonical printer as the semantic
 /// interface. The printer omits the default CU scope.
@@ -203,7 +215,7 @@ bool clauseHasUniformScope(const PatchContext &Ctx, size_t Idx) {
     if (!Desc.mayLoad() && !Desc.mayStore())
       return false;
 
-    std::optional<ClauseFamily> MemberFamily = getClauseFamily(Member.Mnemonic);
+    std::optional<ClauseFamily> MemberFamily = getClauseFamily(Member, Ctx.LS);
     if (!MemberFamily || (Family && *Family != *MemberFamily))
       return false;
     Family = MemberFamily;
@@ -220,7 +232,574 @@ bool clauseHasUniformScope(const PatchContext &Ctx, size_t Idx) {
   return SawMemory;
 }
 
+bool clauseContainsVmem(ArrayRef<InternalDecodedInst> Decoded, size_t Idx,
+                        const LLVMState &LS) {
+  const InternalDecodedInst &Clause = Decoded[Idx];
+  if (Clause.Inst.getNumOperands() == 0 || !Clause.Inst.getOperand(0).isImm())
+    return false;
+
+  uint64_t MemberCount =
+      (static_cast<uint64_t>(Clause.Inst.getOperand(0).getImm()) & 63) + 1;
+  if (MemberCount > 63 || MemberCount > Decoded.size() - Idx - 1)
+    return false;
+
+  for (size_t I = Idx + 1; I <= Idx + MemberCount; ++I) {
+    std::optional<ClauseFamily> Family =
+        getClauseFamily(Decoded[I], LS);
+    if (Family == ClauseFamily::VMEM || Family == ClauseFamily::Flat)
+      return true;
+  }
+  return false;
+}
+
+bool clauseContainsVmem(const PatchContext &Ctx, size_t Idx) {
+  return clauseContainsVmem(Ctx.Decoded, Idx, Ctx.LS);
+}
+
+bool isVmemOrFlat(const InternalDecodedInst &DI, const LLVMState &LS) {
+  std::optional<ClauseFamily> Family = getClauseFamily(DI, LS);
+  return Family == ClauseFamily::VMEM || Family == ClauseFamily::Flat;
+}
+
+void addCfgEdge(unsigned From, unsigned To,
+                std::vector<SmallVector<unsigned, 2>> &Successors,
+                std::vector<SmallVector<unsigned, 2>> &Predecessors) {
+  if (llvm::is_contained(Successors[From], To))
+    return;
+  Successors[From].push_back(To);
+  Predecessors[To].push_back(From);
+}
+
+std::optional<uint64_t> applySignedPcDelta(uint64_t CapturedPc,
+                                           int64_t Delta) {
+  if (Delta >= 0)
+    return checkedAddUint64(CapturedPc, static_cast<uint64_t>(Delta),
+                            "HotSwap set-PC target");
+
+  const uint64_t Magnitude =
+      Delta == std::numeric_limits<int64_t>::min()
+          ? uint64_t{1} << 63
+          : static_cast<uint64_t>(-Delta);
+  if (CapturedPc < Magnitude)
+    return std::nullopt;
+  return CapturedPc - Magnitude;
+}
+
+std::optional<std::pair<MCRegister, int64_t>>
+getHotswapAddSetPc(ArrayRef<InternalDecodedInst> Decoded,
+                   size_t SetPcGlobalIndex) {
+  if (SetPcGlobalIndex == 0 || SetPcGlobalIndex >= Decoded.size())
+    return std::nullopt;
+
+  const InternalDecodedInst &Add = Decoded[SetPcGlobalIndex - 1];
+  const InternalDecodedInst &SetPc = Decoded[SetPcGlobalIndex];
+  if (Add.Mnemonic != "s_add_nc_u64" ||
+      SetPc.Mnemonic != "s_set_pc_i64" ||
+      Add.Offset > std::numeric_limits<uint64_t>::max() - Add.Size ||
+      Add.Offset + Add.Size != SetPc.Offset ||
+      Add.Inst.getNumOperands() != 3 ||
+      SetPc.Inst.getNumOperands() != 1 ||
+      !Add.Inst.getOperand(0).isReg() ||
+      !Add.Inst.getOperand(1).isReg() ||
+      !Add.Inst.getOperand(2).isImm() ||
+      !SetPc.Inst.getOperand(0).isReg())
+    return std::nullopt;
+
+  MCRegister Pair = Add.Inst.getOperand(0).getReg();
+  if (!Pair.isValid() || Add.Inst.getOperand(1).getReg() != Pair.id() ||
+      SetPc.Inst.getOperand(0).getReg() != Pair.id())
+    return std::nullopt;
+  return std::pair<MCRegister, int64_t>{Pair,
+                                        Add.Inst.getOperand(2).getImm()};
+}
+
+std::optional<uint64_t> resolveContiguousHotswapSetPcTarget(
+    ArrayRef<InternalDecodedInst> Decoded, size_t SetPcGlobalIndex) {
+  std::optional<std::pair<MCRegister, int64_t>> AddSet =
+      getHotswapAddSetPc(Decoded, SetPcGlobalIndex);
+  if (!AddSet || SetPcGlobalIndex < 2)
+    return std::nullopt;
+
+  const InternalDecodedInst &GetPc = Decoded[SetPcGlobalIndex - 2];
+  const InternalDecodedInst &Add = Decoded[SetPcGlobalIndex - 1];
+  if (GetPc.Mnemonic != "s_get_pc_i64" ||
+      GetPc.Offset > std::numeric_limits<uint64_t>::max() - GetPc.Size ||
+      GetPc.Offset + GetPc.Size != Add.Offset ||
+      GetPc.Inst.getNumOperands() != 1 ||
+      !GetPc.Inst.getOperand(0).isReg() ||
+      GetPc.Inst.getOperand(0).getReg() != AddSet->first.id())
+    return std::nullopt;
+
+  return applySignedPcDelta(GetPc.Offset + GetPc.Size, AddSet->second);
+}
+
+std::optional<size_t>
+findDecodedIndexAtOffset(ArrayRef<InternalDecodedInst> Decoded,
+                         uint64_t Offset) {
+  auto It = llvm::lower_bound(
+      Decoded, Offset, [](const InternalDecodedInst &DI, uint64_t Value) {
+        return DI.Offset < Value;
+      });
+  if (It == Decoded.end() || It->Offset != Offset)
+    return std::nullopt;
+  return It - Decoded.begin();
+}
+
+std::optional<uint64_t>
+resolveHotswapSetPcTarget(ArrayRef<InternalDecodedInst> AllDecoded,
+                          uint64_t SetPcOffset) {
+  std::optional<size_t> Index =
+      findDecodedIndexAtOffset(AllDecoded, SetPcOffset);
+  if (!Index)
+    return std::nullopt;
+  return resolveContiguousHotswapSetPcTarget(AllDecoded, *Index);
+}
+
+/// Resolve the relay form emitted as in-range get-PC/s_branch followed by an
+/// out-of-range add/set-PC pair. The add's base is the PC captured at the
+/// original source, not the relay address.
+std::optional<uint64_t> resolveHotswapRelayTarget(
+    ArrayRef<InternalDecodedInst> AllDecoded,
+    const InternalDecodedInst &GetPc, uint64_t RelayOffset) {
+  std::optional<size_t> AddIndex =
+      findDecodedIndexAtOffset(AllDecoded, RelayOffset);
+  if (!AddIndex || *AddIndex + 1 >= AllDecoded.size())
+    return std::nullopt;
+
+  const size_t SetPcIndex = *AddIndex + 1;
+  std::optional<std::pair<MCRegister, int64_t>> AddSet =
+      getHotswapAddSetPc(AllDecoded, SetPcIndex);
+  if (!AddSet || GetPc.Mnemonic != "s_get_pc_i64" ||
+      GetPc.Inst.getNumOperands() != 1 ||
+      !GetPc.Inst.getOperand(0).isReg() ||
+      GetPc.Inst.getOperand(0).getReg() != AddSet->first.id() ||
+      GetPc.Offset > std::numeric_limits<uint64_t>::max() - GetPc.Size)
+    return std::nullopt;
+  return applySignedPcDelta(GetPc.Offset + GetPc.Size, AddSet->second);
+}
+
+struct HotswapTrampolineResume {
+  uint64_t Offset = 0;
+  bool HasVmem = false;
+};
+
+/// Follow the body emitted at an external HotSwap target to its branch back
+/// into the original function. Routed tail-cave bodies may use multiple direct
+/// branch hops in both directions, so follow those hops while rejecting cycles
+/// and every other kind of control transfer.
+std::optional<HotswapTrampolineResume> findHotswapTrampolineResume(
+    ArrayRef<InternalDecodedInst> Decoded, uint64_t Target,
+    const KernelTextRange &Range, const LLVMState &LS) {
+  if (!LS.MIA)
+    return std::nullopt;
+
+  size_t RemainingInstructions = Decoded.size();
+  bool HasVmem = false;
+  DenseSet<uint64_t> VisitedOffsets;
+
+  while (RemainingInstructions != 0) {
+    auto It = llvm::lower_bound(
+        Decoded, Target, [](const InternalDecodedInst &DI, uint64_t Offset) {
+          return DI.Offset < Offset;
+        });
+    if (It == Decoded.end() || It->Offset != Target)
+      return std::nullopt;
+
+    uint64_t ExpectedOffset = Target;
+    bool FollowedHop = false;
+    for (; It != Decoded.end(); ++It) {
+      if (RemainingInstructions == 0)
+        return std::nullopt;
+      --RemainingInstructions;
+      if (!VisitedOffsets.insert(It->Offset).second ||
+          It->Offset != ExpectedOffset || It->Size == 0 ||
+          It->Offset > std::numeric_limits<uint64_t>::max() - It->Size)
+        return std::nullopt;
+      ExpectedOffset = It->Offset + It->Size;
+      const size_t GlobalIndex = It - Decoded.begin();
+      if (It->Mnemonic == "<unknown>")
+        return std::nullopt;
+      HasVmem |= isVmemOrFlat(*It, LS);
+
+      if (It->Mnemonic == "s_set_pc_i64") {
+        std::optional<uint64_t> Next =
+            resolveContiguousHotswapSetPcTarget(Decoded, GlobalIndex);
+        if (!Next)
+          return std::nullopt;
+        if (*Next >= Range.Begin && *Next < Range.End)
+          return HotswapTrampolineResume{*Next, HasVmem};
+        Target = *Next;
+        FollowedHop = true;
+        break;
+      }
+
+      const MCInstrDesc &Desc = LS.MCII->get(It->Inst.getOpcode());
+      const bool IsCall = LS.MIA->isCall(It->Inst);
+      const bool IsReturn = LS.MIA->isReturn(It->Inst);
+      const bool IsBranch = LS.MIA->isBranch(It->Inst);
+      if (IsCall || IsReturn || Desc.isTrap())
+        return std::nullopt;
+      if (IsBranch) {
+        uint64_t Next = 0;
+        if (!LS.MIA->isUnconditionalBranch(It->Inst) ||
+            LS.MIA->isIndirectBranch(It->Inst) ||
+            !LS.MIA->evaluateBranch(It->Inst, It->Offset, It->Size, Next))
+          return std::nullopt;
+        if (Next >= Range.Begin && Next < Range.End)
+          return HotswapTrampolineResume{Next, HasVmem};
+        Target = Next;
+        FollowedHop = true;
+        break;
+      }
+      if (Desc.isTerminator() ||
+          LS.MIA->mayAffectControlFlow(It->Inst, *LS.MRI))
+        return std::nullopt;
+    }
+
+    if (!FollowedHop)
+      return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+/// Analyze one descriptor-backed kernel range. The graph is instruction-level
+/// so branch targets can be represented exactly without manufacturing basic
+/// blocks. Unknown or indirect control flow has an implicit edge to every
+/// instruction in the range; this is deliberately conservative but avoids an
+/// O(N^2) explicit edge set.
+void analyzeKernelRange(ArrayRef<InternalDecodedInst> Decoded,
+                        ArrayRef<InternalDecodedInst> AllDecoded,
+                        const KernelTextRange &Range, const LLVMState &LS,
+                        InitialVmemMustAnalysis &Result) {
+  SmallVector<size_t> GlobalIndices;
+  auto First = llvm::lower_bound(
+      Decoded, Range.Begin, [](const InternalDecodedInst &DI, uint64_t Offset) {
+        return DI.Offset < Offset;
+      });
+  auto Last = llvm::lower_bound(
+      Decoded, Range.End, [](const InternalDecodedInst &DI, uint64_t Offset) {
+        return DI.Offset < Offset;
+      });
+  for (auto It = First; It != Last; ++It)
+    GlobalIndices.push_back(It - Decoded.begin());
+  if (GlobalIndices.empty())
+    return;
+
+  for (size_t GlobalIdx : GlobalIndices)
+    Result.DescriptorCovered.set(GlobalIdx);
+
+  auto MergeConservativeRange = [&] {
+    for (size_t GlobalIdx : GlobalIndices) {
+      Result.Reachable.set(GlobalIdx);
+      Result.MustHavePriorVmem.reset(GlobalIdx);
+    }
+  };
+
+  // A descriptor entry must coincide with a decoded instruction. If it does
+  // not, retain no must fact for this range rather than guessing where control
+  // begins.
+  if (Decoded[GlobalIndices.front()].Offset != Range.Begin) {
+    MergeConservativeRange();
+    return;
+  }
+
+  const unsigned Count = GlobalIndices.size();
+  DenseMap<uint64_t, unsigned> OffsetToLocal;
+  for (unsigned I = 0; I < Count; ++I)
+    OffsetToLocal.try_emplace(Decoded[GlobalIndices[I]].Offset, I);
+
+  std::vector<SmallVector<unsigned, 2>> Successors(Count);
+  std::vector<SmallVector<unsigned, 2>> Predecessors(Count);
+  BitVector UnknownSuccessors(Count);
+  BitVector IsVmem(Count);
+  SmallVector<unsigned> HotswapSetPcCandidates;
+
+  for (unsigned I = 0; I < Count; ++I) {
+    const InternalDecodedInst &DI = Decoded[GlobalIndices[I]];
+    if (isVmemOrFlat(DI, LS))
+      IsVmem.set(I);
+
+    const bool HasFallthrough = I + 1 < Count;
+    if (DI.Mnemonic == "<unknown>") {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+
+    const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+    const bool IsCall = LS.MIA ? LS.MIA->isCall(DI.Inst) : Desc.isCall();
+    const bool IsReturn = LS.MIA ? LS.MIA->isReturn(DI.Inst) : Desc.isReturn();
+    const bool IsBranch = LS.MIA ? LS.MIA->isBranch(DI.Inst) : Desc.isBranch();
+
+    if (IsReturn)
+      continue;
+
+    // Debug traps may resume at the following instruction. Do not infer an
+    // exit merely from the MC trap flag.
+    if (Desc.isTrap()) {
+      if (HasFallthrough)
+        addCfgEdge(I, I + 1, Successors, Predecessors);
+      continue;
+    }
+
+    if (IsCall) {
+      // A returning call can continue at the next instruction, while its
+      // target may be anywhere in this range (AMDGPU call targets are not
+      // exposed uniformly through MCInstrAnalysis::evaluateBranch). Model both
+      // edges so a callee containing the entrypoint's first VMEM is analyzed.
+      if (!Desc.isTerminator() && HasFallthrough)
+        addCfgEdge(I, I + 1, Successors, Predecessors);
+      UnknownSuccessors.set(I);
+      continue;
+    }
+
+    if (DI.Mnemonic == "s_set_pc_i64") {
+      // Resolve these after all direct branch edges are present: the relay
+      // form recovers its captured PC from an incoming get-PC/s_branch pair.
+      HotswapSetPcCandidates.push_back(I);
+      continue;
+    }
+
+    if (IsBranch) {
+      const bool IsIndirect =
+          LS.MIA ? LS.MIA->isIndirectBranch(DI.Inst) : Desc.isIndirectBranch();
+      const bool IsConditional = LS.MIA ? LS.MIA->isConditionalBranch(DI.Inst)
+                                        : Desc.isConditionalBranch();
+      const bool IsUnconditional = LS.MIA
+                                       ? LS.MIA->isUnconditionalBranch(DI.Inst)
+                                       : Desc.isUnconditionalBranch();
+
+      bool TargetKnown = false;
+      if (!IsIndirect && LS.MIA) {
+        uint64_t Target = 0;
+        if (LS.MIA->evaluateBranch(DI.Inst, DI.Offset, DI.Size, Target)) {
+          TargetKnown = true;
+          if (Target >= Range.Begin && Target < Range.End) {
+            auto TargetIt = OffsetToLocal.find(Target);
+            if (TargetIt == OffsetToLocal.end()) {
+              UnknownSuccessors.set(I);
+              TargetKnown = false;
+            } else {
+              addCfgEdge(I, TargetIt->second, Successors, Predecessors);
+            }
+          } else if (IsUnconditional) {
+            std::optional<HotswapTrampolineResume> Resume =
+                findHotswapTrampolineResume(AllDecoded, Target, Range, LS);
+            bool RelayCandidate = false;
+            if (!Resume && I != 0 && DI.Mnemonic == "s_branch") {
+              const InternalDecodedInst &GetPc =
+                  Decoded[GlobalIndices[I - 1]];
+              if (GetPc.Offset <=
+                      std::numeric_limits<uint64_t>::max() - GetPc.Size &&
+                  GetPc.Offset + GetPc.Size == DI.Offset &&
+                  GetPc.Mnemonic == "s_get_pc_i64") {
+                RelayCandidate = true;
+                std::optional<uint64_t> PoolTarget =
+                    resolveHotswapRelayTarget(AllDecoded, GetPc, Target);
+                if (PoolTarget)
+                  Resume = findHotswapTrampolineResume(
+                      AllDecoded, *PoolTarget, Range, LS);
+              }
+            }
+            if (Resume) {
+              auto ResumeIt = OffsetToLocal.find(Resume->Offset);
+              if (ResumeIt == OffsetToLocal.end()) {
+                UnknownSuccessors.set(I);
+                TargetKnown = false;
+              } else {
+                addCfgEdge(I, ResumeIt->second, Successors, Predecessors);
+                if (Resume->HasVmem)
+                  IsVmem.set(I);
+              }
+            } else if (RelayCandidate) {
+              UnknownSuccessors.set(I);
+              TargetKnown = false;
+            }
+          }
+          // A direct target outside the kernel range that does not structurally
+          // return is a known exit edge.
+        }
+      }
+      if (!TargetKnown)
+        UnknownSuccessors.set(I);
+
+      if (IsConditional && HasFallthrough)
+        addCfgEdge(I, I + 1, Successors, Predecessors);
+      else if (!IsConditional && !IsUnconditional)
+        UnknownSuccessors.set(I);
+      continue;
+    }
+
+    if (Desc.isTerminator())
+      continue;
+
+    if (LS.MIA && LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI)) {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+
+    if (HasFallthrough)
+      addCfgEdge(I, I + 1, Successors, Predecessors);
+  }
+
+  for (unsigned I : HotswapSetPcCandidates) {
+    const InternalDecodedInst &SetPc = Decoded[GlobalIndices[I]];
+    std::optional<uint64_t> Target =
+        resolveHotswapSetPcTarget(AllDecoded, SetPc.Offset);
+    if (!Target) {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+
+    if (*Target >= Range.Begin && *Target < Range.End) {
+      auto TargetIt = OffsetToLocal.find(*Target);
+      if (TargetIt == OffsetToLocal.end())
+        UnknownSuccessors.set(I);
+      else
+        addCfgEdge(I, TargetIt->second, Successors, Predecessors);
+      continue;
+    }
+
+    std::optional<HotswapTrampolineResume> Resume =
+        findHotswapTrampolineResume(AllDecoded, *Target, Range, LS);
+    if (!Resume) {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+    auto ResumeIt = OffsetToLocal.find(Resume->Offset);
+    if (ResumeIt == OffsetToLocal.end()) {
+      UnknownSuccessors.set(I);
+      continue;
+    }
+    addCfgEdge(I, ResumeIt->second, Successors, Predecessors);
+    if (Resume->HasVmem)
+      IsVmem.set(I);
+  }
+
+  // Reachability excludes dead text. A reachable unknown-control instruction
+  // can target any instruction in this range, represented without materializing
+  // all of those edges.
+  BitVector Reachable(Count);
+  SmallVector<unsigned> Worklist;
+  Reachable.set(0);
+  Worklist.push_back(0);
+  for (size_t Next = 0; Next < Worklist.size(); ++Next) {
+    unsigned I = Worklist[Next];
+    if (UnknownSuccessors.test(I)) {
+      // One reachable unknown-control site reaches the entire range by
+      // definition; materializing N worklist entries only repeats scans.
+      Reachable.set();
+      break;
+    }
+    for (unsigned Target : Successors[I]) {
+      if (!Reachable.test(Target)) {
+        Reachable.set(Target);
+        Worklist.push_back(Target);
+      }
+    }
+  }
+
+  // Forward must analysis. The entry has no prior VMEM. All other reachable
+  // nodes begin at top and monotonically lose the fact through predecessor
+  // intersection. OUT becomes true after executing a VMEM/Flat instruction.
+  SmallVector<uint8_t> MustIn(Count, 1);
+  SmallVector<uint8_t> MustOut(Count, 1);
+  MustIn[0] = 0;
+  MustOut[0] = IsVmem.test(0);
+
+  bool Changed = true;
+  while (Changed) {
+    Changed = false;
+    bool HasReachableUnknown = false;
+    bool UnknownMustOut = true;
+    for (int Pred = UnknownSuccessors.find_first(); Pred != -1;
+         Pred = UnknownSuccessors.find_next(Pred)) {
+      if (!Reachable.test(Pred))
+        continue;
+      HasReachableUnknown = true;
+      UnknownMustOut &= MustOut[Pred] != 0;
+    }
+    for (unsigned I = 0; I < Count; ++I) {
+      if (!Reachable.test(I))
+        continue;
+
+      bool NewIn = I != 0;
+      bool SawPredecessor = I == 0;
+      if (I != 0) {
+        for (unsigned Pred : Predecessors[I]) {
+          if (!Reachable.test(Pred))
+            continue;
+          SawPredecessor = true;
+          NewIn &= MustOut[Pred] != 0;
+        }
+        if (HasReachableUnknown) {
+          SawPredecessor = true;
+          NewIn &= UnknownMustOut;
+        }
+        if (!SawPredecessor)
+          NewIn = false;
+      }
+
+      bool NewOut = NewIn || IsVmem.test(I);
+      if (MustIn[I] != NewIn || MustOut[I] != NewOut) {
+        MustIn[I] = NewIn;
+        MustOut[I] = NewOut;
+        Changed = true;
+      }
+    }
+  }
+
+  // Multiple descriptor ranges may overlap. A prior VMEM is guaranteed only
+  // if every reachable entry analysis agrees, so intersect overlapping facts.
+  for (unsigned I = 0; I < Count; ++I) {
+    if (!Reachable.test(I))
+      continue;
+    size_t GlobalIdx = GlobalIndices[I];
+    if (Result.Reachable.test(GlobalIdx)) {
+      if (!MustIn[I])
+        Result.MustHavePriorVmem.reset(GlobalIdx);
+    } else {
+      Result.Reachable.set(GlobalIdx);
+      Result.MustHavePriorVmem.set(GlobalIdx, MustIn[I]);
+    }
+  }
+}
+
+/// GFX1250 hardware entrypoints require their first VMEM operation to be
+/// unclaused. New native code starts every entrypoint with an unclaused
+/// global_wb/v_nop pair, but older B0 objects predate that workaround. If a
+/// retained clause would contain the kernel's first VMEM, removing the clause
+/// provides the equivalent in-place mitigation without moving the entrypoint.
+bool isInitialVmemClause(const PatchContext &Ctx, size_t Idx) {
+  if (!clauseContainsVmem(Ctx, Idx))
+    return false;
+  if (Idx >= Ctx.InitialVmemAnalysis.DescriptorCovered.size() ||
+      !Ctx.InitialVmemAnalysis.DescriptorCovered.test(Idx)) {
+    // A descriptor-uncovered helper has no proven entry fact. Treat its VMEM
+    // clauses as potentially initial rather than retaining them optimistically.
+    return true;
+  }
+  // Dead text inside a descriptor-backed kernel cannot contain the first
+  // dynamically reached VMEM. This also keeps the analysis stable after a
+  // HotSwap source branch makes the remainder of the original range dead.
+  if (!Ctx.InitialVmemAnalysis.Reachable.test(Idx))
+    return false;
+  return !Ctx.InitialVmemAnalysis.MustHavePriorVmem.test(Idx);
+}
+
 } // anonymous namespace
+
+InitialVmemMustAnalysis
+computeInitialVmemMustAnalysis(ArrayRef<InternalDecodedInst> Decoded,
+                               ArrayRef<InternalDecodedInst> AllDecoded,
+                               ArrayRef<KernelTextRange> KernelRanges,
+                               const LLVMState &LS) {
+  InitialVmemMustAnalysis Result{BitVector(Decoded.size()),
+                                 BitVector(Decoded.size()),
+                                 BitVector(Decoded.size())};
+  for (const KernelTextRange &Range : KernelRanges)
+    analyzeKernelRange(Decoded, AllDecoded, Range, LS, Result);
+  return Result;
+}
 
 static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
@@ -251,16 +830,17 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
   }
 
   if (Mnemonic == "s_clause") {
-    if (clauseHasUniformScope(Ctx, Idx))
+    bool InitialVmemClause = isInitialVmemClause(Ctx, Idx);
+    if (!InitialVmemClause && clauseHasUniformScope(Ctx, Idx))
       return 0;
 
     RewriteRule Rule;
     Rule.ReplaceBytes.assign(Ctx.LS.SNopBytes.begin(), Ctx.LS.SNopBytes.end());
     if (applyByteReplace(Rule, DI.Offset, DI.Size, Ctx.Text, Ctx.TextSize,
                          Ctx.LS)) {
-      log() << "hotswap: inplace: mixed/unsupported-scope s_clause -> s_nop "
-               "at 0x"
-            << utohexstr(DI.Offset) << "\n";
+      log() << "hotswap: inplace: "
+            << (InitialVmemClause ? "initial-VMEM" : "mixed/unsupported-scope")
+            << " s_clause -> s_nop at 0x" << utohexstr(DI.Offset) << "\n";
       return 1;
     }
   }
