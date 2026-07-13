@@ -595,6 +595,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   case CanonicalOp::V_PK_MAD_U16:
   case CanonicalOp::V_PK_ADD_U16:
   case CanonicalOp::V_PK_LSHLREV_B16:
+  case CanonicalOp::V_PK_LSHRREV_B16:
   case CanonicalOp::V_PK_ASHRREV_I16:
   case CanonicalOp::V_PK_MUL_LO_U16:
   case CanonicalOp::V_PK_MAX_I16:
@@ -691,6 +692,17 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
           ConstantInt::get(I16Ty, 15));
       Value *Amt = Ctx.B.CreateAnd(S0, Mask, "pk_lshlrev_amt");
       Res = Ctx.B.CreateShl(S1, Amt, "pk_lshlrev");
+      break;
+    }
+    case CanonicalOp::V_PK_LSHRREV_B16: {
+      // clshr_rev_16 SDAG: dst = src1 >>_logical (src0 & 15). Same
+      // reversed-operand convention and low-4-bit hardware shift-count
+      // clamp as V_PK_LSHLREV_B16 above.
+      Value *Mask = ConstantVector::getSplat(
+          ElementCount::getFixed(2),
+          ConstantInt::get(I16Ty, 15));
+      Value *Amt = Ctx.B.CreateAnd(S0, Mask, "pk_lshrrev_amt");
+      Res = Ctx.B.CreateLShr(S1, Amt, "pk_lshrrev");
       break;
     }
     case CanonicalOp::V_PK_ASHRREV_I16: {

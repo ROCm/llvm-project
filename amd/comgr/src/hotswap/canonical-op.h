@@ -760,7 +760,8 @@ enum class CanonicalOp : uint16_t {
   // op_sel / op_sel_hi modifiers select which i16 of each source feeds
   // each output lane (defaults: op_sel=[0,0,0], op_sel_hi=[1,1,1] --
   // natural lo->lo, hi->hi packing).
-  V_PK_MAD_U16, V_PK_ADD_U16, V_PK_LSHLREV_B16, V_PK_ASHRREV_I16,
+  V_PK_MAD_U16, V_PK_ADD_U16, V_PK_LSHLREV_B16, V_PK_LSHRREV_B16,
+  V_PK_ASHRREV_I16,
   V_PK_MUL_LO_U16, V_PK_MAX_I16, V_PK_MAX3_I16,
 
   V_BITOP3_B32, V_BITOP3_B16,
