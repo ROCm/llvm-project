@@ -2277,13 +2277,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
 
     if (PredReport.Refused) {
       auto HasMatrixOp = [&]() {
-        const auto First =
-            static_cast<uint16_t>(CanonicalOp::V_MFMA_F32_16x16x128_F8F6F4);
-        const auto Last =
-            static_cast<uint16_t>(CanonicalOp::V_WMMA_SCALE_F32_16x16x128_F8F6F4);
         for (const DecodedInst &Inst : Insts) {
-          const auto Op = static_cast<uint16_t>(Inst.CanonOp);
-          if (Op >= First && Op <= Last)
+          if (isMatrixCanonicalOp(Inst.CanonOp))
             return true;
         }
         return false;

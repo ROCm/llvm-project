@@ -993,11 +993,13 @@ enum class CanonicalOp : uint16_t {
   // gfx12 IEEE 754-2019 minimumNumber/maximumNumber form.
   BUFFER_ATOMIC_MIN_NUM_F64, BUFFER_ATOMIC_MAX_NUM_F64,
 
+  MATRIX_OP_BEGIN_SENTINEL,
   // -- MFMA --
   // gfx950 scaled F8F6F4 variants share a per-shape intrinsic but take 9
   // src-format sub-variants each; those are collapsed onto these four CanonicalOps
   // in kCanonTable.
-  V_MFMA_F32_16x16x128_F8F6F4, V_MFMA_SCALE_F32_16x16x128_F8F6F4,
+  V_MFMA_F32_16x16x128_F8F6F4 = MATRIX_OP_BEGIN_SENTINEL,
+  V_MFMA_SCALE_F32_16x16x128_F8F6F4,
   V_MFMA_F32_32x32x64_F8F6F4, V_MFMA_SCALE_F32_32x32x64_F8F6F4,
   // F32 <- F16/F32 (gfx908+). Each covers its pseudo's _e64/_vgprcd_/_mac_
   // variants via pseudoAlias stripping in OpcodeMap::canonicalize.
@@ -1147,6 +1149,7 @@ enum class CanonicalOp : uint16_t {
   // `RaiseFailure::unsupportedInstructionForm` to surface both the cross-target
   // capability gap and the missing scaled-WMMA decomposition path.
   V_WMMA_SCALE_F32_16x16x128_F8F6F4,
+  MATRIX_OP_END_SENTINEL = V_WMMA_SCALE_F32_16x16x128_F8F6F4,
 
   // -- VOPD -- (handled via string parsing of fullText, not opcode)
   VOPD_GENERIC,
@@ -1381,6 +1384,12 @@ enum class CanonicalOp : uint16_t {
 
   CanonicalOp_COUNT
 };
+
+inline bool isMatrixCanonicalOp(CanonicalOp Op) {
+  const uint16_t V = static_cast<uint16_t>(Op);
+  return V >= static_cast<uint16_t>(CanonicalOp::MATRIX_OP_BEGIN_SENTINEL) &&
+         V <= static_cast<uint16_t>(CanonicalOp::MATRIX_OP_END_SENTINEL);
+}
 
 // Stable human-readable identifier for a CanonicalOp (the enum's spelling,
 // e.g. `"V_CMPX"` for `CanonicalOp::V_CMPX`). Used in diagnostics -- prefer
