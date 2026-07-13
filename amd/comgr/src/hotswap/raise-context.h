@@ -23,6 +23,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCRegister.h"
@@ -98,10 +99,11 @@ struct RaiseContext {
   llvm::Function *Kernel;
   llvm::BasicBlock *ThreadLoopLatch = nullptr;
 
-  llvm::Type *I1Ty;
-  llvm::Type *I8Ty;
-  llvm::Type *I32Ty;
-  llvm::Type *I64Ty;
+  llvm::IntegerType *I1Ty;
+  llvm::IntegerType *I8Ty;
+  llvm::IntegerType *I16Ty;
+  llvm::IntegerType *I32Ty;
+  llvm::IntegerType *I64Ty;
   llvm::Type *F32Ty;
   llvm::Type *F16Ty;
   llvm::Type *F64Ty;
@@ -110,6 +112,15 @@ struct RaiseContext {
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb;
   uint64_t KernelStartOffset = 0;
   uint64_t KernelEndOffset = 0;
+
+  RaiseContext(llvm::LLVMContext &C, llvm::Module &M, llvm::IRBuilder<> &B,
+               AllocaRegFile &Regs, const WaveProjection &Projection,
+               const MCState &Mc, const ISAProfile &Isa, ISAProfile TargetIsa,
+               unsigned TargetCodeObjectVersion, KernargLayout &Kernargs,
+               const UserSgprLayout *Layout, llvm::Function *Kernel,
+               llvm::BasicBlock *ThreadLoopLatch,
+               llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb,
+               uint64_t KernelStartOffset, uint64_t KernelEndOffset);
 
   // Source KD private/scratch allocation. `handle-flat.cpp` sets
   // `usesScratchPrivateSegment` when it lowers a `scratch_*` instruction; the

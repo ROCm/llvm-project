@@ -278,7 +278,7 @@ Expected<HandlerResult> handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
                                       "MUBUF_LDS");
 
     Type *LdTy = (Dwords == 1)
-                     ? Ctx.I32Ty
+                     ? static_cast<Type *>(Ctx.I32Ty)
                      : FixedVectorType::get(Ctx.I32Ty, Dwords);
     Function *BufLd = Intrinsic::getOrInsertDeclaration(
         &Ctx.M, Intrinsic::amdgcn_raw_buffer_load, {LdTy});

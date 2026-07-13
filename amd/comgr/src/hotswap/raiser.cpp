@@ -1182,8 +1182,6 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   auto *VoidTy = Type::getVoidTy(C);
   auto *I1Ty = Type::getInt1Ty(C);
   auto *I8Ty = Type::getInt8Ty(C);
-  auto *F32Ty = Type::getFloatTy(C);
-  auto *PtrGlobalTy = PointerType::get(C, 1);
 
   // Build function signature: a single opaque
   // `ptr byref([N x i8]) align 16` placeholder whose only job is to
@@ -1650,15 +1648,11 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
 
   // ==== Phase 5: Raise each instruction; collect all failures in allFailures. ====
 
-  auto *F16Ty = Type::getHalfTy(C);
-  auto *F64Ty = Type::getDoubleTy(C);
   // `userSgprLayout` was built above before Phase 4 so entry SGPR seeding
   // and handler-side ABI decisions use the same descriptor-derived mapping.
   RaiseContext Ctx{C, M, B, Regs, Projection, Mc, Isa, TargetIsa,
                    TargetCodeObjectVersion, Kernargs, &UserSgprLayout, F,
-                   nullptr,
-                   I1Ty, I8Ty, I32Ty, I64Ty, F32Ty, F16Ty, F64Ty,
-                   PtrGlobalTy, OffsetToBb, KernelOffset, KernelEndOffset};
+                   nullptr, OffsetToBb, KernelOffset, KernelEndOffset};
   Ctx.SetpcAnalysis = &SetpcAnalysis;
   Ctx.SourcePrivateSegmentFixedSize = Meta.PrivateSegmentFixedSize;
   Ctx.SourceComputePgmRsrc2 = Meta.ComputePgmRsrc2;

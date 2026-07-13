@@ -30,6 +30,30 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
+RaiseContext::RaiseContext(
+    LLVMContext &C, Module &M, IRBuilder<> &B, AllocaRegFile &Regs,
+    const WaveProjection &Projection, const MCState &Mc, const ISAProfile &Isa,
+    ISAProfile TargetIsa, unsigned TargetCodeObjectVersion,
+    KernargLayout &Kernargs, const UserSgprLayout *Layout, Function *Kernel,
+    BasicBlock *ThreadLoopLatch,
+    DenseMap<uint64_t, BasicBlock *> &OffsetToBb, uint64_t KernelStartOffset,
+    uint64_t KernelEndOffset)
+    : C(C), M(M), B(B), Regs(Regs), Projection(Projection), Mc(Mc), Isa(Isa),
+      TargetIsa(TargetIsa), TargetCodeObjectVersion(TargetCodeObjectVersion),
+      Kernargs(Kernargs), Layout(Layout), Kernel(Kernel),
+      ThreadLoopLatch(ThreadLoopLatch), OffsetToBb(OffsetToBb),
+      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {
+  I1Ty = Type::getInt1Ty(C);
+  I8Ty = Type::getInt8Ty(C);
+  I16Ty = Type::getInt16Ty(C);
+  I32Ty = Type::getInt32Ty(C);
+  I64Ty = Type::getInt64Ty(C);
+  F32Ty = Type::getFloatTy(C);
+  F16Ty = Type::getHalfTy(C);
+  F64Ty = Type::getDoubleTy(C);
+  PtrGlobalTy = PointerType::get(C, 1);
+}
+
 BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
   auto It = OffsetToBb.find(Addr);
   if (It != OffsetToBb.end())
