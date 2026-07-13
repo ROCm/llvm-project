@@ -19,8 +19,8 @@
 ; DEFAULT-NEXT: GCN NSA Reassign
 ; DEFAULT-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; DEFAULT-NEXT: Virtual Register Rewriter
+; DEFAULT-NEXT: AMDGPU Emit Live Debug Variables
 ; DEFAULT-NEXT: AMDGPU Pre Wave Transform
-; DEFAULT-NEXT: AMDGPU Re-emit LiveDebugVariables Before Wave Transform
 ; DEFAULT-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-NEXT: AMDGPU Control Flow Wave Transform
 ; DEFAULT-NEXT: Slot index numbering
@@ -68,8 +68,8 @@
 ; BASIC-DEFAULT-NEXT: GCN NSA Reassign
 ; BASIC-DEFAULT-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; BASIC-DEFAULT-NEXT: Virtual Register Rewriter
+; BASIC-DEFAULT-NEXT: AMDGPU Emit Live Debug Variables
 ; BASIC-DEFAULT-NEXT: AMDGPU Pre Wave Transform
-; BASIC-DEFAULT-NEXT: AMDGPU Re-emit LiveDebugVariables Before Wave Transform
 ; BASIC-DEFAULT-NEXT: Machine Cycle Info Analysis
 ; BASIC-DEFAULT-NEXT: AMDGPU Control Flow Wave Transform
 ; BASIC-DEFAULT-NEXT: Slot index numbering
@@ -93,8 +93,8 @@
 ; DEFAULT-BASIC-NEXT: GCN NSA Reassign
 ; DEFAULT-BASIC-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; DEFAULT-BASIC-NEXT: Virtual Register Rewriter
+; DEFAULT-BASIC-NEXT: AMDGPU Emit Live Debug Variables
 ; DEFAULT-BASIC-NEXT: AMDGPU Pre Wave Transform
-; DEFAULT-BASIC-NEXT: AMDGPU Re-emit LiveDebugVariables Before Wave Transform
 ; DEFAULT-BASIC-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-BASIC-NEXT: AMDGPU Control Flow Wave Transform
 ; DEFAULT-BASIC-NEXT: Slot index numbering
@@ -120,8 +120,8 @@
 ; BASIC-BASIC-NEXT: GCN NSA Reassign
 ; BASIC-BASIC-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; BASIC-BASIC-NEXT: Virtual Register Rewriter
+; BASIC-BASIC-NEXT: AMDGPU Emit Live Debug Variables
 ; BASIC-BASIC-NEXT: AMDGPU Pre Wave Transform
-; BASIC-BASIC-NEXT: AMDGPU Re-emit LiveDebugVariables Before Wave Transform
 ; BASIC-BASIC-NEXT: Machine Cycle Info Analysis
 ; BASIC-BASIC-NEXT: AMDGPU Control Flow Wave Transform
 ; BASIC-BASIC-NEXT: Slot index numbering

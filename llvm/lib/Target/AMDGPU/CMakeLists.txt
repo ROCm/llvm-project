@@ -54,6 +54,7 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUCodeGenPrepare.cpp
   AMDGPUCombinerHelper.cpp
   AMDGPUCtorDtorLowering.cpp
+  AMDGPUEmitLiveDebugVars.cpp
   AMDGPUExportClustering.cpp
   AMDGPUExportKernelRuntimeHandles.cpp
   AMDGPUFrameLowering.cpp
@@ -105,7 +106,6 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUPrintfRuntimeBinding.cpp
   AMDGPUPromoteAlloca.cpp
   AMDGPUPromoteKernelArguments.cpp
-  AMDGPUReEmitLiveDebugVariables.cpp
   AMDGPURegBankCombiner.cpp
   AMDGPURegBankLegalize.cpp
   AMDGPURegBankLegalizeHelper.cpp

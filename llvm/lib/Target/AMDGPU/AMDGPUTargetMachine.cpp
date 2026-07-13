@@ -711,6 +711,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPULowerKernelArgumentsPass(*PR);
   initializeAMDGPUPromoteKernelArgumentsPass(*PR);
   initializeAMDGPULowerKernelAttributesPass(*PR);
+  initializeAMDGPUEmitLiveDebugVarsLegacyPass(*PR);
   initializeAMDGPUExportKernelRuntimeHandlesLegacyPass(*PR);
   initializeAMDGPUPostLegalizerCombinerPass(*PR);
   initializeAMDGPUPreLegalizerCombinerPass(*PR);
@@ -763,7 +764,6 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUWaitSGPRHazardsLegacyPass(*PR);
   initializeAMDGPUPreloadKernelArgumentsLegacyPass(*PR);
   initializeAMDGPUUniformIntrinsicCombineLegacyPass(*PR);
-  initializeAMDGPUReEmitLiveDebugVariablesLegacyPass(*PR);
   initializeAMDGPUWaveTransformPass(*PR);
   initializeAMDGPUPreWaveTransformLegacyPass(*PR);
   initializeAMDGPUFinalizeISelWaveTransformLegacyPass(*PR);
@@ -2027,13 +2027,13 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     addPreRewrite();
     addPass(createVirtRegRewriter(false, true));
 
+    // Emit debug values into MIR before WaveTransform invalidates LDV.
+    // This rewrites allocated VGPR locations to physical registers while
+    // keeping unallocated SGPR vregs for re-collection after WaveTransform.
+    addPass(createAMDGPUEmitLiveDebugVarsPass());
+
     // Prepare the machine function for WaveTransform.
     addPass(createAMDGPUPreWaveTransformPass());
-
-    // Re-emit debug values now, while VRM/LIS/SlotIndexes are consistent
-    // with the LDV stashed data. WaveTransform will modify the CFG,
-    // invalidating these relationships.
-    addPass(&AMDGPUReEmitLiveDebugVariablesLegacyID);
 
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
