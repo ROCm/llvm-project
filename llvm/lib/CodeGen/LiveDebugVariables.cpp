@@ -478,14 +478,11 @@ public:
   /// Rewrite virtual register locations according to the provided virtual
   /// register map. Record the stack slot offsets for the locations that
   /// were spilled.
-  /// \param [in] KeepUnassigned If true, virtual registers that are neither
-  /// assigned nor spilled are kept as-is (for intermediate RA stages where
-  /// VRM is incomplete); otherwise they are set to noreg.
   void rewriteLocations(VirtRegMap &VRM, const MachineFunction &MF,
                         const TargetInstrInfo &TII,
                         const TargetRegisterInfo &TRI,
                         SpillOffsetMap &SpillOffsets,
-                        bool KeepUnassigned = false);
+                        bool KeepUnassignedVRegs = false);
 
   /// Recreate DBG_VALUE instruction from data structures.
   void emitDebugValues(VirtRegMap *VRM, LiveIntervals &LIS,
@@ -673,16 +670,7 @@ public:
   void splitRegister(Register OldReg, ArrayRef<Register> NewRegs);
 
   /// Recreate DBG_VALUE instruction from data structures.
-  void emitDebugValues(VirtRegMap *VRM);
-
-  /// Emit DBG_PHI instructions from PHIValToPos and clear DebugPHIPositions.
-  void emitDebugPHIs(VirtRegMap *VRM);
-
-  /// Re-insert stashed debug instructions back into the MIR.
-  void emitStashedDebugInstrs();
-
-  /// Re-insert debug instructions into MIR.
-  void revertCollection(VirtRegMap *VRM);
+  void emitDebugValues(VirtRegMap *VRM, bool KeepUnassignedVRegs = false);
 
   void print(raw_ostream&);
 };
@@ -1569,7 +1557,7 @@ void UserValue::rewriteLocations(VirtRegMap &VRM, const MachineFunction &MF,
                                  const TargetInstrInfo &TII,
                                  const TargetRegisterInfo &TRI,
                                  SpillOffsetMap &SpillOffsets,
-                                 bool KeepUnassigned) {
+                                 bool KeepUnassignedVRegs) {
   // Build a set of new locations with new numbers so we can coalesce our
   // IntervalMap if two vreg intervals collapse to the same physical location.
   // Use MapVector instead of SetVector because MapVector::insert returns the
@@ -1605,7 +1593,7 @@ void UserValue::rewriteLocations(VirtRegMap &VRM, const MachineFunction &MF,
 
         Loc = MachineOperand::CreateFI(VRM.getStackSlot(VirtReg));
         Spilled = true;
-      } else if (!KeepUnassigned) {
+      } else if (!KeepUnassignedVRegs) {
         Loc.setReg(0);
         Loc.setSubReg(0);
       }
@@ -1865,60 +1853,19 @@ void UserLabel::emitDebugLabel(LiveIntervals &LIS, const TargetInstrInfo &TII,
   LLVM_DEBUG(dbgs() << '\n');
 }
 
-void LiveDebugVariables::LDVImpl::revertCollection(VirtRegMap *VRM) {
-  if (!MF || !ModifiedMF)
-    return;
-
-  // Re-inserting a second time would duplicate every DBG_VALUE, label and
-  // stashed debug instruction. Reverting once is the only supported use.
-  if (EmitDone)
-    return;
-
-  LLVM_DEBUG(dbgs() << "********** REVERTING LDV COLLECTION **********\n");
-
-  BlockSkipInstsMap BBSkipInstsMap;
-  const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
-  SpillOffsetMap SpillOffsets;
-
-  for (auto &UV : userValues) {
-    LLVM_DEBUG(UV->print(dbgs(), TRI));
-    UV->rewriteLocations(*VRM, *MF, *TII, *TRI, SpillOffsets,
-                         /*KeepUnassigned=*/true);
-    UV->emitDebugValues(VRM, *LIS, *TII, *TRI, SpillOffsets, BBSkipInstsMap);
-  }
-
-  LLVM_DEBUG(dbgs() << "********** EMITTING LIVE DEBUG LABELS **********\n");
-  for (auto &UL : userLabels) {
-    LLVM_DEBUG(UL->print(dbgs(), TRI));
-    UL->emitDebugLabel(*LIS, *TII, BBSkipInstsMap);
-  }
-
-  emitDebugPHIs(VRM);
-  emitStashedDebugInstrs();
-
-  // The collected debug data is now materialized back into MIR (with
-  // KeepUnassigned virtual registers where no physreg was assigned yet).
-  EmitDone = true;
-}
-
-void LiveDebugVariables::LDVImpl::emitDebugValues(VirtRegMap *VRM) {
+void LiveDebugVariables::LDVImpl::emitDebugValues(VirtRegMap *VRM,
+                                                  bool KeepUnassignedVRegs) {
   LLVM_DEBUG(dbgs() << "********** EMITTING LIVE DEBUG VARIABLES **********\n");
   if (!MF)
     return;
-
-  // A reverted instance already wrote its (now stale) collection back into MIR.
-  // Emitting again here would double-insert; the design re-collects with a
-  // fresh instance instead, so reaching this point means LDV was wrongly reused
-  // without being invalidated.
-  assert(!EmitDone &&
-         "emitDebugValues called on an instance already emitted");
 
   BlockSkipInstsMap BBSkipInstsMap;
   const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
   SpillOffsetMap SpillOffsets;
   for (auto &userValue : userValues) {
     LLVM_DEBUG(userValue->print(dbgs(), TRI));
-    userValue->rewriteLocations(*VRM, *MF, *TII, *TRI, SpillOffsets);
+    userValue->rewriteLocations(*VRM, *MF, *TII, *TRI, SpillOffsets,
+                                KeepUnassignedVRegs);
     userValue->emitDebugValues(VRM, *LIS, *TII, *TRI, SpillOffsets,
                                BBSkipInstsMap);
   }
@@ -1928,16 +1875,8 @@ void LiveDebugVariables::LDVImpl::emitDebugValues(VirtRegMap *VRM) {
     userLabel->emitDebugLabel(*LIS, *TII, BBSkipInstsMap);
   }
 
-  emitDebugPHIs(VRM);
-  emitStashedDebugInstrs();
-  EmitDone = true;
-  BBSkipInstsMap.clear();
-}
-
-void LiveDebugVariables::LDVImpl::emitDebugPHIs(VirtRegMap *VRM) {
   LLVM_DEBUG(dbgs() << "********** EMITTING DEBUG PHIS **********\n");
 
-  const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
   auto Slots = LIS->getSlotIndexes();
   for (auto &It : PHIValToPos) {
     // For each ex-PHI, identify its physreg location or stack slot, and emit
@@ -1946,6 +1885,13 @@ void LiveDebugVariables::LDVImpl::emitDebugPHIs(VirtRegMap *VRM) {
     auto Slot = It.second.SI;
     Register Reg = It.second.Reg;
     unsigned SubReg = It.second.SubReg;
+
+    // When keeping unallocated vregs, skip PHI entries for regs that are not
+    // yet allocated — they will be handled in the next LDV session.
+    if (KeepUnassignedVRegs && Reg.isVirtual() &&
+        !(VRM->isAssignedReg(Reg) && VRM->hasPhys(Reg)) &&
+        VRM->getStackSlot(Reg) == VirtRegMap::NO_STACK_SLOT)
+      continue;
 
     MachineBasicBlock *OrigMBB = Slots->getMBBFromIndex(Slot);
     if (VRM->isAssignedReg(Reg) && VRM->hasPhys(Reg)) {
@@ -1991,14 +1937,25 @@ void LiveDebugVariables::LDVImpl::emitDebugPHIs(VirtRegMap *VRM) {
     // If there was no mapping for a value ID, it's optimized out. Create no
     // DBG_PHI, and any variables using this value will become optimized out.
   }
-  MF->DebugPHIPositions.clear();
-}
 
-void LiveDebugVariables::LDVImpl::emitStashedDebugInstrs() {
+  if (KeepUnassignedVRegs) {
+    // Only clear PHI positions for regs that were emitted (allocated or
+    // spilled). Keep entries for unallocated vregs so the next LDV session
+    // can re-process them.
+    SmallVector<unsigned, 4> ToErase;
+    for (auto &Entry : MF->DebugPHIPositions) {
+      Register Reg = Entry.second.Reg;
+      if (!Reg.isVirtual() || (VRM->isAssignedReg(Reg) && VRM->hasPhys(Reg)) ||
+          VRM->getStackSlot(Reg) != VirtRegMap::NO_STACK_SLOT)
+        ToErase.push_back(Entry.first);
+    }
+    for (unsigned Key : ToErase)
+      MF->DebugPHIPositions.erase(Key);
+  } else {
+    MF->DebugPHIPositions.clear();
+  }
+
   LLVM_DEBUG(dbgs() << "********** EMITTING INSTR REFERENCES **********\n");
-  assert(LIS && "LiveIntervals must be valid when emitting stashed instrs");
-  BlockSkipInstsMap BBSkipInstsMap;
-  auto Slots = LIS->getSlotIndexes();
 
   // Re-insert any debug instrs back in the position they were. We must
   // re-insert in the same order to ensure that debug instructions don't swap,
@@ -2022,7 +1979,7 @@ void LiveDebugVariables::LDVImpl::emitStashedDebugInstrs() {
       auto NextItem = std::next(StashIt);
       while (NextItem != StashedDebugInstrs.end() && NextItem->Idx == Idx) {
         assert(NextItem->MBB == MBB && "Instrs with same slot index should be"
-               "in the same block");
+                                       "in the same block");
         MBB->insert(InsertPos, NextItem->MI);
         StashIt = NextItem;
         NextItem = std::next(StashIt);
@@ -2064,16 +2021,15 @@ void LiveDebugVariables::LDVImpl::emitStashedDebugInstrs() {
       }
     }
   }
+
+  EmitDone = true;
+  BBSkipInstsMap.clear();
 }
 
-void LiveDebugVariables::emitDebugValues(VirtRegMap *VRM) {
+void LiveDebugVariables::emitDebugValues(VirtRegMap *VRM,
+                                         bool KeepUnassignedVRegs) {
   if (PImpl)
-    PImpl->emitDebugValues(VRM);
-}
-
-void LiveDebugVariables::revertCollection(VirtRegMap *VRM) {
-  if (PImpl)
-    PImpl->revertCollection(VRM);
+    PImpl->emitDebugValues(VRM, KeepUnassignedVRegs);
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

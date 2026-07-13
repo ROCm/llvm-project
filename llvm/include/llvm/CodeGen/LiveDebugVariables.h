@@ -50,17 +50,14 @@ public:
   /// emitDebugValues - Emit new DBG_VALUE instructions reflecting the changes
   /// that happened during register allocation.
   /// @param VRM Rename virtual registers according to map.
-  LLVM_ABI void emitDebugValues(VirtRegMap *VRM);
-
-  /// revertCollection - Revert the effects of debug value collection by
-  /// re-inserting debug instructions into MIR. After this call, ModifiedMF is
-  /// reset so the teardown assertion in clear() will pass.
-  /// @note Use this at intermediate register allocation stages where VRM does
-  /// not yet cover all register classes.
-  /// @param VRM Virtual registers that have assignments are substituted with
-  /// their physical counterparts; unassigned virtual registers are kept as-is
-  /// for the next LiveDebugVariables instance to track.
-  void revertCollection(VirtRegMap *VRM);
+  /// @param KeepUnassignedVRegs When true, virtual registers that are not yet
+  /// allocated (not assigned and not spilled) are kept as-is in the emitted
+  /// debug values instead of being zeroed out. This is used for intermediate
+  /// emissions in phased register allocation (e.g., after VGPR alloc but before
+  /// SGPR alloc) so that unallocated SGPR vregs survive for re-collection in
+  /// the next allocation phase.
+  LLVM_ABI void emitDebugValues(VirtRegMap *VRM,
+                                bool KeepUnassignedVRegs = false);
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// dump - Print data structures to dbgs().
