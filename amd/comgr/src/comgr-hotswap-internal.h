@@ -747,6 +747,15 @@ llvm::SmallVector<uint8_t> encodeSccNeutralLongBranch(const LLVMState &LS,
                                        llvm::ArrayRef<uint8_t> Replacement,
                                        bool AllowSafeFarReturn = false);
 
+/// Expand one decoded gfx1250 DS two-address instruction into the ordered
+/// single-address instruction sequence used by the trampoline patch. Exposed
+/// from the internal interface so unit tests can verify read-before-write
+/// dependency handling without constructing a complete ELF rewrite.
+std::vector<std::string> expandDs2Addr(const llvm::MCInst &Inst,
+                                       llvm::StringRef FromMnem,
+                                       llvm::StringRef ToMnem,
+                                       const LLVMState &LS);
+
 // -- Patch dispatch vtable ----------------------------------------------------
 //
 // Function-pointer dispatch table that replaces the prior LLVM_ATTRIBUTE_WEAK

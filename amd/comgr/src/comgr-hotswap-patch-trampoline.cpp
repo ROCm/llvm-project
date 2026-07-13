@@ -257,10 +257,28 @@ std::vector<std::string> expandDs2AddrLoad(const DsOperands &Ops,
   if (Dst.first.empty())
     return {};
   std::string Addr = toAsmRegName(*Ops.MRI, Ops.Regs[1]);
-  return {
-      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1),
-  };
+  std::string First =
+      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0);
+  std::string Second =
+      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1);
+
+  // A compound DS load reads its address once before writing either half of
+  // the destination. After splitting, the first single-address load must not
+  // overwrite the address needed by the second. If the address overlaps the
+  // first destination half, issue the independent second half first and put
+  // the self-overlapping load last. (If it overlaps the second half, the
+  // natural order is already safe.)
+  SmallVector<MCRegister, 4> DstSubs = getDirectSubRegs(Ops.Regs[0], *Ops.MRI);
+  const unsigned FirstHalfWidth = Ops.IsB64 ? 2 : 1;
+  bool AddrOverlapsFirst =
+      DstSubs.size() >= FirstHalfWidth &&
+      llvm::any_of(ArrayRef(DstSubs).take_front(FirstHalfWidth),
+                   [&](MCRegister Reg) {
+                     return Ops.MRI->regsOverlap(Reg.id(), Ops.Regs[1].id());
+                   });
+  if (AddrOverlapsFirst)
+    return {std::move(Second), std::move(First)};
+  return {std::move(First), std::move(Second)};
 }
 
 // Expand a DS 2-address store into two single-address stores (addr, data).
@@ -296,12 +314,39 @@ std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
                                 : toAsmRegName(MRI, Ops.Regs[2]);
   std::string Data1 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[3])
                                 : toAsmRegName(MRI, Ops.Regs[3]);
-  return {
-      ToMnem.str() + " " + Dst.first + ", " + Addr + ", " + Data0 +
-          fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + Dst.second + ", " + Addr + ", " + Data1 +
-          fmtOffset(Ops.Off1),
+  std::string First = ToMnem.str() + " " + Dst.first + ", " + Addr + ", " +
+                      Data0 + fmtOffset(Ops.Off0);
+  std::string Second = ToMnem.str() + " " + Dst.second + ", " + Addr + ", " +
+                       Data1 + fmtOffset(Ops.Off1);
+
+  SmallVector<MCRegister, 4> DstSubs = getDirectSubRegs(Ops.Regs[0], MRI);
+  const unsigned HalfWidth = Ops.IsB64 ? 2 : 1;
+  if (DstSubs.size() < 2 * HalfWidth)
+    return {};
+  auto HalfOverlaps = [&](unsigned Begin, MCRegister Reg) {
+    return llvm::any_of(ArrayRef(DstSubs).slice(Begin, HalfWidth),
+                        [&](MCRegister DstReg) {
+                          return MRI.regsOverlap(DstReg.id(), Reg.id());
+                        });
   };
+
+  // Op0 writes the first destination half and op1 still needs addr + data1;
+  // op1 writes the second half and op0 still needs addr + data0. Pick the safe
+  // order when only one direction has a dependency. If both directions do,
+  // neither ordering preserves the compound instruction's read-before-write
+  // semantics without a scratch VGPR, so decline the rewrite.
+  const bool FirstClobbersSecond =
+      HalfOverlaps(0, Ops.Regs[1]) || HalfOverlaps(0, Ops.Regs[3]);
+  const bool SecondClobbersFirst = HalfOverlaps(HalfWidth, Ops.Regs[1]) ||
+                                   HalfOverlaps(HalfWidth, Ops.Regs[2]);
+  if (FirstClobbersSecond && SecondClobbersFirst) {
+    log() << "hotswap: ds_storexchg_2addr has cyclic destination/source "
+             "overlap; leaving original instruction in place\n";
+    return {};
+  }
+  if (FirstClobbersSecond)
+    return {std::move(Second), std::move(First)};
+  return {std::move(First), std::move(Second)};
 }
 
 // -- expandDs2Addr ----------------------------------------------------------
@@ -309,8 +354,9 @@ std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
 // Top-level expansion: extracts operands from the decoded MCInst, computes
 // scaled offsets, then dispatches to the appropriate layout-specific helper.
 
-std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
-                                       StringRef ToMnem, const LLVMState &LS) {
+std::vector<std::string> expandDs2AddrImpl(const MCInst &Inst,
+                                           StringRef FromMnem, StringRef ToMnem,
+                                           const LLVMState &LS) {
   std::optional<DsOperands> Ops = extractDsOperands(Inst, FromMnem, LS);
   if (!Ops)
     return {};
@@ -344,7 +390,7 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   if (ToMnem.empty())
     return false;
   std::vector<std::string> Expanded =
-      expandDs2Addr(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
+      expandDs2AddrImpl(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
   if (Expanded.empty()) {
     log() << "hotswap: error: ds_2addr expansion failed for: " << DI.Mnemonic
           << "\n";
@@ -1288,6 +1334,11 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
 }
 
 } // anonymous namespace
+
+std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
+                                       StringRef ToMnem, const LLVMState &LS) {
+  return expandDs2AddrImpl(Inst, FromMnem, ToMnem, LS);
+}
 
 // -- applyTrampolinePatches -------------------------------------------------
 //
