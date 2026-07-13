@@ -31,7 +31,8 @@ struct RaiseResult {
   std::unique_ptr<llvm::Module> Module;
   int LiftedCount = 0;
   int TotalCount = 0;
-  std::string IrText;
+  // Source disassembly, populated only when HSA_HOTSWAP_DUMP_INPUT=1 for the
+  // `.dis` debug dump; empty on the production path.
   std::string DisasmText;
   // Predicate-chain classifier observations that the cross-widening
   // analysis accepted (rather than refused) for this kernel. Surfaced

@@ -465,11 +465,10 @@ int main(int argc, char **argv) {
                                     kernelSize, targetIsa, EnableWritelaneRewrite,
                                     EnableWaveNative, AssumeHipGlobalOffsetZeroOpt);
       if (!RaisedOrErr) {
-        // Contract: raiseToIR only populates RaiseResult::IrText on the
-        // success path (the last write before setting `success = true`),
-        // so we cannot dump partial IR here. Callers that need stderr
-        // diagnostics (abort-gate lit tests, etc.) FileCheck the raiser's
-        // stderr — we leave that untouched.
+        // raiseToIR only returns a module on the success path, so we cannot
+        // dump partial IR here. Callers that need stderr diagnostics
+        // (abort-gate lit tests, etc.) FileCheck the raiser's stderr — we
+        // leave that untouched.
         llvm::handleAllErrors(
             RaisedOrErr.takeError(),
             [&](COMGR::hotswap::RaiseFailure &Failure) {
@@ -486,9 +485,15 @@ int main(int argc, char **argv) {
         continue;
       }
       COMGR::hotswap::RaiseResult raised = std::move(*RaisedOrErr);
+      if (!raised.Module) {
+        llvm::errs() << "raise_cli: kernel '" << Target
+                     << "' raised without a module\n";
+        AnyFailed = true;
+        continue;
+      }
       if (Multi)
         llvm::outs() << "; === raise_cli kernel: " << Target << " ===\n";
-      llvm::outs().write(raised.IrText.data(), raised.IrText.size());
+      raised.Module->print(llvm::outs(), nullptr);
     }
     return AnyFailed ? 1 : 0;
   }

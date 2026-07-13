@@ -38,7 +38,6 @@ struct PipelineOptions {
 
 struct PipelineResult {
   std::unique_ptr<llvm::MemoryBuffer> Hsaco;
-  std::string IrText;
   PipelineTimings Timings;
   std::string FailMnemonic;
   std::string FailKernel;
@@ -132,6 +131,12 @@ PipelineResult runPipelineAllKernels(llvm::MemoryBufferRef CodeObjectData,
 /// `HSA_HOTSWAP_STRICT=1`; `compare_correctness` and the gtest binary do
 /// not, so existing GPU tests stay passing.
 bool isStrictMode();
+
+/// Process-global `HSA_HOTSWAP_DUMP_INPUT` toggle (parsed once). When set to
+/// `1`, debug dumps additionally include the raw input code object and the
+/// per-kernel source disassembly. Shared by the pipeline and the raiser so
+/// both agree on when to produce those artifacts.
+bool wantDumpInput();
 
 class ScopedStrictMode {
 public:
