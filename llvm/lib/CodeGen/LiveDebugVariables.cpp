@@ -1979,7 +1979,7 @@ void LiveDebugVariables::LDVImpl::emitDebugValues(VirtRegMap *VRM,
       auto NextItem = std::next(StashIt);
       while (NextItem != StashedDebugInstrs.end() && NextItem->Idx == Idx) {
         assert(NextItem->MBB == MBB && "Instrs with same slot index should be"
-                                       "in the same block");
+               "in the same block");
         MBB->insert(InsertPos, NextItem->MI);
         StashIt = NextItem;
         NextItem = std::next(StashIt);

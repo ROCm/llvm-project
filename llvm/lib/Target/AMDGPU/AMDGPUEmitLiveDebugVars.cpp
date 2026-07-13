@@ -8,11 +8,9 @@
 //
 /// \file
 /// In the LWT (Late Wave Transform) pipeline, register allocation runs in
-/// multiple phases: VGPR alloc, then WaveTransform, then SGPR/WWM alloc.
+/// multiple phases: VGPR alloc, then WaveTransform, then SGPR, and WWM alloc.
 /// LiveDebugVariables (LDV) collects DBG_VALUE instructions during VGPR alloc
 /// and must emit them back into MIR before WaveTransform invalidates LDV.
-/// Without this intermediate emission, LDV's releaseMemory() would trigger an
-/// assertion because ModifiedMF=true but EmitDone=false.
 ///
 /// This pass calls emitDebugValues with KeepUnassignedVRegs=true, which:
 /// - Rewrites allocated VGPR locations to physical registers
