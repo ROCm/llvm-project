@@ -418,8 +418,7 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   }
 
   SmallVector<uint8_t> Replacement(Bytes.begin(), Bytes.end());
-  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
-                           /*AllowSafeFarReturn=*/true))
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
     return failRequiredPatch(Ctx);
 
   DI.Mnemonic = "<replaced>";
@@ -801,8 +800,7 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
     Replacement.append(PackBytes.begin(), PackBytes.end());
     Replacement.append(OrigInst, OrigInst + DI.Size);
     Replacement.append(Restore.begin(), Restore.end());
-    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
-                             /*AllowSafeFarReturn=*/true))
+    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
       return failRequiredPatch(Ctx);
 
     if (!commitSafeSgprScratchBlock(Ctx, DI.Offset, *Scratch,
@@ -814,8 +812,7 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
     SmallVector<uint8_t> Replacement;
     Replacement.append(PackBytes.begin(), PackBytes.end());
     Replacement.append(OrigInst, OrigInst + DI.Size);
-    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
-                             /*AllowSafeFarReturn=*/true))
+    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
       return failRequiredPatch(Ctx);
 
     log() << "hotswap: tensor_load_to_lds: " << BaseSreg
