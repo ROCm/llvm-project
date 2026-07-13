@@ -33,32 +33,28 @@ using Phdr = ELF::Elf64_Phdr;
 using ELFT = ElfView::ELFT;
 using ELFFileT = ElfView::ELFFileT;
 
+// This file depends on the COMPUTE_PGM_RSRC1_GRANULATED_* field layout below.
+// Assert it so the dependency is caught at compile time if it ever shifts.
+static_assert(
+    amdhsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT_SHIFT == 0 &&
+        amdhsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT_WIDTH == 6,
+    "GRANULATED_WORKITEM_VGPR_COUNT layout changed unexpectedly.");
+static_assert(
+    amdhsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT_SHIFT == 6 &&
+        amdhsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT_WIDTH == 4,
+    "GRANULATED_WAVEFRONT_SGPR_COUNT layout changed unexpectedly.");
+
 static constexpr unsigned SgprEncodingGranule = 8;
+
+// Page alignment for the appended trampoline pool's virtual address and file
+// offset, so its PT_LOAD segment maps consistently.
+static constexpr uint64_t TrampolinePoolAlign = 4096;
 
 enum class MetadataSgprUpdateStatus {
   NotFound,
   Found,
   Error,
 };
-
-static std::optional<size_t>
-checkedAlignToSize(size_t Value, uint64_t Alignment, StringRef Context) {
-  if (Alignment <= 1)
-    return Value;
-  uint64_t Value64 = static_cast<uint64_t>(Value);
-  uint64_t Remainder = Value64 % Alignment;
-  if (Remainder == 0)
-    return Value;
-  std::optional<uint64_t> Aligned =
-      checkedAddUint64(Value64, Alignment - Remainder, Context);
-  if (!Aligned)
-    return std::nullopt;
-  if (*Aligned > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
-    log() << "hotswap: error: " << Context << " exceeds size_t.\n";
-    return std::nullopt;
-  }
-  return static_cast<size_t>(*Aligned);
-}
 
 static std::optional<uint64_t> checkedSectionFileOffset(const ELFT::Shdr &Sec,
                                                         uint64_t VAddr,
@@ -88,32 +84,38 @@ static std::optional<uint64_t> checkedSectionFileOffset(const ELFT::Shdr &Sec,
 }
 
 static std::optional<unsigned>
-readSgprCountMetadataNode(const msgpack::DocNode &SgprNode,
-                          StringRef KernelName, StringRef Context) {
-  if (SgprNode.getKind() == msgpack::Type::UInt) {
-    uint64_t SgprCount = SgprNode.getUInt();
-    if (SgprCount > std::numeric_limits<unsigned>::max()) {
-      log() << "hotswap: error: " << Context << ": .sgpr_count for '"
+readUnsignedMetadataNode(const msgpack::DocNode &Node, StringRef KernelName,
+                         StringRef Key, StringRef Context) {
+  if (Node.getKind() == msgpack::Type::UInt) {
+    uint64_t Value = Node.getUInt();
+    if (Value > std::numeric_limits<unsigned>::max()) {
+      log() << "hotswap: error: " << Context << ": " << Key << " for '"
             << KernelName << "' exceeds unsigned.\n";
       return std::nullopt;
     }
-    return static_cast<unsigned>(SgprCount);
+    return static_cast<unsigned>(Value);
   }
 
-  if (SgprNode.getKind() == msgpack::Type::Int) {
-    int64_t SgprCount = SgprNode.getInt();
-    if (SgprCount < 0 || static_cast<uint64_t>(SgprCount) >
-                             std::numeric_limits<unsigned>::max()) {
-      log() << "hotswap: error: " << Context << ": .sgpr_count for '"
+  if (Node.getKind() == msgpack::Type::Int) {
+    int64_t Value = Node.getInt();
+    if (Value < 0 ||
+        static_cast<uint64_t>(Value) > std::numeric_limits<unsigned>::max()) {
+      log() << "hotswap: error: " << Context << ": " << Key << " for '"
             << KernelName << "' is outside unsigned range.\n";
       return std::nullopt;
     }
-    return static_cast<unsigned>(SgprCount);
+    return static_cast<unsigned>(Value);
   }
 
-  log() << "hotswap: error: " << Context << ": .sgpr_count for '" << KernelName
-        << "' is not an integer.\n";
+  log() << "hotswap: error: " << Context << ": " << Key << " for '"
+        << KernelName << "' is not an integer.\n";
   return std::nullopt;
+}
+
+static std::optional<unsigned>
+readSgprCountMetadataNode(const msgpack::DocNode &SgprNode,
+                          StringRef KernelName, StringRef Context) {
+  return readUnsignedMetadataNode(SgprNode, KernelName, ".sgpr_count", Context);
 }
 
 static MetadataSgprUpdateStatus
@@ -277,12 +279,15 @@ bool applyByteReplace(const RewriteRule &Rule, uint64_t InstOffset,
 NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
                          uint64_t Needed) {
   NopSled *Best = nullptr;
-  int64_t BestDist = INT64_MAX;
+  uint64_t BestDist = std::numeric_limits<uint64_t>::max();
   for (NopSled &Sled : Sleds) {
-    if (Sled.WritePos + Needed > Sled.End)
+    if (Offset < Sled.FunctionStart || Offset >= Sled.FunctionEnd)
       continue;
-    int64_t Dist = std::abs(static_cast<int64_t>(Sled.WritePos) -
-                            static_cast<int64_t>(Offset));
+    uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+    if (Sled.WritePos > UsableEnd || Needed > UsableEnd - Sled.WritePos)
+      continue;
+    uint64_t Dist = Sled.WritePos > Offset ? Sled.WritePos - Offset
+                                           : Offset - Sled.WritePos;
     if (Dist < MaxSledDistance && Dist < BestDist) {
       Best = &Sled;
       BestDist = Dist;
@@ -333,19 +338,18 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
   return ElfView(std::move(*FileOrErr), Sections, Text, TextIdx);
 }
 
-// -- ElfView::findKernelAtOffset ----------------------------------------------
+// -- ElfView::functionTextRanges ---------------------------------------------
 
-std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
-  // Select the nearest-preceding STT_FUNC symbol (greatest st_value <=
-  // TextOffset). AMDGPU kernel entry symbols often have st_size == 0, so an
-  // exact containment test never matches; honor st_size only when non-zero.
-  //
-  // The nearest-preceding function could be a non-kernel device function; the
-  // guard below rejects that case so callers never scratch-allocate against a
-  // non-kernel context.
-  bool Found = false;
-  uint64_t BestValue = 0;
-  std::string BestName;
+std::vector<ElfView::FunctionTextRange> ElfView::functionTextRanges() const {
+  std::vector<FunctionTextRange> Ranges;
+  uint64_t TextBegin = textAddr();
+  uint64_t TextSizeValue = textSize();
+  if (TextSizeValue > std::numeric_limits<uint64_t>::max() - TextBegin) {
+    log() << "hotswap: error: function text range scan: .text virtual "
+          << "address range overflows uint64_t.\n";
+    return Ranges;
+  }
+  uint64_t TextEnd = TextBegin + TextSizeValue;
 
   for (const ELFT::Shdr &SymShdr : Sections) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
@@ -357,34 +361,82 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
       consumeError(SymsOrErr.takeError());
       continue;
     }
-    Expected<StringRef> StrTabOrErr =
-        File.getStringTableForSymtab(SymShdr, Sections);
-    if (!StrTabOrErr) {
-      consumeError(StrTabOrErr.takeError());
-      continue;
-    }
 
+    std::vector<const ELFT::Sym *> FuncSyms;
     for (const ELFT::Sym &Sym : *SymsOrErr) {
       if (Sym.getType() != ELF::STT_FUNC && Sym.getType() != ELF::STT_GNU_IFUNC)
         continue;
       if (Sym.st_shndx != TextSectionIndex)
         continue;
-      if (TextOffset < Sym.st_value)
-        continue;
-      // Honor an explicit upper bound; skip it for zero-size symbols.
-      if (Sym.st_size != 0 && TextOffset >= Sym.st_value + Sym.st_size)
-        continue;
-      if (Found && Sym.st_value <= BestValue)
-        continue;
-      Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
-      if (!NameOrErr) {
-        consumeError(NameOrErr.takeError());
-        continue;
-      }
-      Found = true;
-      BestValue = Sym.st_value;
-      BestName = NameOrErr->str();
+      FuncSyms.push_back(&Sym);
     }
+    llvm::sort(FuncSyms, [](const ELFT::Sym *A, const ELFT::Sym *B) {
+      if (A->st_value != B->st_value)
+        return A->st_value < B->st_value;
+      return A->st_size > B->st_size;
+    });
+
+    for (size_t I = 0, E = FuncSyms.size(); I != E; ++I) {
+      const ELFT::Sym &Sym = *FuncSyms[I];
+      uint64_t Begin = Sym.st_value;
+      if (Begin < TextBegin || Begin >= TextEnd)
+        continue;
+      uint64_t End = TextEnd;
+      if (Sym.st_size != 0) {
+        End = Sym.st_value + Sym.st_size;
+        if (End < Begin)
+          End = TextEnd;
+        End = std::min(End, TextEnd);
+      } else {
+        for (size_t J = I + 1; J != E; ++J) {
+          if (FuncSyms[J]->st_value > Begin) {
+            End =
+                std::min(static_cast<uint64_t>(FuncSyms[J]->st_value), TextEnd);
+            break;
+          }
+        }
+      }
+      Ranges.push_back({Begin, End, &Sym, &SymShdr});
+    }
+  }
+
+  return Ranges;
+}
+
+// -- ElfView::findKernelAtAddress ---------------------------------------------
+
+std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
+  bool Found = false;
+  uint64_t BestValue = 0;
+  std::string BestName;
+
+  std::vector<FunctionTextRange> Ranges = functionTextRanges();
+  for (const FunctionTextRange &Range : Ranges) {
+    if (TextAddress < Range.Begin || TextAddress >= Range.End)
+      continue;
+
+    const ELFT::Sym &Sym = *Range.Symbol;
+    if (Found && Sym.st_value <= BestValue)
+      continue;
+
+    Expected<StringRef> StrTabOrErr =
+        File.getStringTableForSymtab(*Range.Symtab, Sections);
+    if (!StrTabOrErr) {
+      consumeError(StrTabOrErr.takeError());
+      continue;
+    }
+
+    Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
+    if (!NameOrErr) {
+      log() << "hotswap: error: findKernelAtAddress: function symbol "
+            << "covering address 0x" << utohexstr(TextAddress)
+            << " has unreadable name: " << toString(NameOrErr.takeError())
+            << "\n";
+      return "";
+    }
+    Found = true;
+    BestValue = Sym.st_value;
+    BestName = NameOrErr->str();
   }
 
   if (Found) {
@@ -396,15 +448,47 @@ std::string ElfView::findKernelAtOffset(uint64_t TextOffset) const {
     if (const_cast<ElfView *>(this)->findKernelDescriptor(BestName)) {
       return BestName;
     }
-    log() << "hotswap: findKernelAtOffset: nearest function symbol '"
-          << BestName << "' preceding offset 0x" << utohexstr(TextOffset)
+    log() << "hotswap: findKernelAtAddress: nearest function symbol '"
+          << BestName << "' preceding address 0x" << utohexstr(TextAddress)
           << " has no .kd descriptor (not a kernel); treating as no match.\n";
     return "";
   }
 
-  log() << "hotswap: findKernelAtOffset: no function symbol covers offset 0x"
-        << utohexstr(TextOffset) << " in .text.\n";
+  log() << "hotswap: findKernelAtAddress: no function symbol covers address 0x"
+        << utohexstr(TextAddress) << " in .text.\n";
   return "";
+}
+
+std::optional<ElfView::FunctionTextRange>
+ElfView::findFunctionTextRangeAtOffset(uint64_t TextOffset) const {
+  for (const ELFT::Shdr &SymShdr : Sections) {
+    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+
+    Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
+    if (!SymsOrErr) {
+      consumeError(SymsOrErr.takeError());
+      continue;
+    }
+
+    for (const ELFT::Sym &Sym : *SymsOrErr) {
+      if (Sym.getType() != ELF::STT_FUNC && Sym.getType() != ELF::STT_GNU_IFUNC)
+        continue;
+      if (Sym.st_shndx != TextSectionIndex || Sym.st_size == 0)
+        continue;
+      if (Sym.st_value < textAddr())
+        continue;
+
+      uint64_t Start = Sym.st_value - textAddr();
+      if (Sym.st_size > std::numeric_limits<uint64_t>::max() - Start)
+        continue;
+      uint64_t End = Start + Sym.st_size;
+      if (TextOffset >= Start && TextOffset < End)
+        return ElfView::FunctionTextRange{Start, End};
+    }
+  }
+  return std::nullopt;
 }
 
 // -- ElfView::findKernelDescriptor --------------------------------------------
@@ -636,6 +720,44 @@ ElfView::getKernelDescriptorInstPrefSize(StringRef KernelName,
   return std::nullopt;
 }
 
+bool ElfView::updateKernelDescriptorInstPrefSize(StringRef KernelName,
+                                                 StringRef TargetCpu,
+                                                 uint32_t InstPrefLines) {
+  namespace hsa = amdhsa;
+  uint8_t *Kd = findKernelDescriptor(KernelName);
+  if (!Kd) {
+    log() << "hotswap: error: updateKernelDescriptorInstPrefSize: kernel "
+          << "descriptor symbol '" << KernelName << ".kd' not found.\n";
+    return false;
+  }
+
+  if (!TargetCpu.starts_with("gfx12")) {
+    log() << "hotswap: error: updateKernelDescriptorInstPrefSize: unsupported "
+          << "target CPU '" << TargetCpu << "' for kernel '" << KernelName
+          << "'.\n";
+    return false;
+  }
+
+  uint32_t MaxInstPrefLines = static_cast<uint32_t>(
+      hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE >>
+      hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE_SHIFT);
+  if (InstPrefLines > MaxInstPrefLines) {
+    log() << "hotswap: error: updateKernelDescriptorInstPrefSize: value "
+          << InstPrefLines << " exceeds the gfx12 descriptor encoding limit.\n";
+    return false;
+  }
+
+  uint32_t Rsrc3 = 0;
+  std::memcpy(&Rsrc3,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc3),
+              sizeof(Rsrc3));
+  AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE,
+                  InstPrefLines);
+  std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc3),
+              &Rsrc3, sizeof(Rsrc3));
+  return true;
+}
+
 // -- ElfView::getKernelVgprCount ----------------------------------------------
 
 std::optional<unsigned>
@@ -813,6 +935,109 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
   return static_cast<unsigned>(SgprCount);
 }
 
+// -- ElfView::getKernelClusterDims --------------------------------------------
+//
+// Reads optional fixed .cluster_dims metadata from the amdhsa.kernels msgpack
+// note. Absence is expected for kernels with variable dispatch-time cluster
+// dimensions, so callers use std::nullopt as the dynamic fallback signal.
+
+std::optional<KernelClusterDims>
+ElfView::getKernelClusterDims(StringRef KernelName) const {
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (!PhdrsOrErr) {
+    log() << "hotswap: error: getKernelClusterDims: failed to read program "
+          << "headers: " << toString(PhdrsOrErr.takeError()) << "\n";
+    return std::nullopt;
+  }
+
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_type != ELF::PT_NOTE)
+      continue;
+
+    Error Err = Error::success();
+    for (ELFT::Note Note : File.notes(Phdr, Err)) {
+      if (Note.getName() != "AMDGPU" ||
+          Note.getType() != ELF::NT_AMDGPU_METADATA)
+        continue;
+
+      ArrayRef<uint8_t> Desc = Note.getDesc(4);
+      if (Desc.empty()) {
+        log() << "hotswap: error: getKernelClusterDims: AMDGPU metadata note "
+              << "has an empty descriptor.\n";
+        return std::nullopt;
+      }
+
+      StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
+      msgpack::Document Doc;
+      if (!Doc.readFromBlob(Blob, false)) {
+        log() << "hotswap: error: getKernelClusterDims: failed to parse "
+              << "AMDGPU metadata note.\n";
+        return std::nullopt;
+      }
+
+      msgpack::DocNode Root = Doc.getRoot();
+      if (!Root.isMap()) {
+        log() << "hotswap: error: getKernelClusterDims: AMDGPU metadata root "
+              << "is not a map.\n";
+        return std::nullopt;
+      }
+
+      msgpack::MapDocNode &RootMap = Root.getMap();
+      msgpack::DocNode::MapTy::iterator KernelsIt =
+          RootMap.find("amdhsa.kernels");
+      if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
+        continue;
+
+      msgpack::ArrayDocNode &KernelArray = KernelsIt->second.getArray();
+      for (msgpack::DocNode &KNode : KernelArray) {
+        if (!KNode.isMap())
+          continue;
+
+        msgpack::MapDocNode &KMap = KNode.getMap();
+        msgpack::DocNode::MapTy::iterator NameIt = KMap.find(".name");
+        if (NameIt == KMap.end() || !NameIt->second.isString() ||
+            NameIt->second.getString() != KernelName)
+          continue;
+
+        msgpack::DocNode::MapTy::iterator DimsIt = KMap.find(".cluster_dims");
+        if (DimsIt == KMap.end())
+          return std::nullopt;
+        if (!DimsIt->second.isArray()) {
+          log() << "hotswap: error: getKernelClusterDims: .cluster_dims for '"
+                << KernelName << "' is not an array.\n";
+          return std::nullopt;
+        }
+
+        msgpack::ArrayDocNode &Dims = DimsIt->second.getArray();
+        if (Dims.size() != 3) {
+          log() << "hotswap: error: getKernelClusterDims: .cluster_dims for '"
+                << KernelName << "' has " << Dims.size()
+                << " entries, expected 3.\n";
+          return std::nullopt;
+        }
+
+        std::optional<unsigned> X = readUnsignedMetadataNode(
+            Dims[0], KernelName, ".cluster_dims[0]", "getKernelClusterDims");
+        std::optional<unsigned> Y = readUnsignedMetadataNode(
+            Dims[1], KernelName, ".cluster_dims[1]", "getKernelClusterDims");
+        std::optional<unsigned> Z = readUnsignedMetadataNode(
+            Dims[2], KernelName, ".cluster_dims[2]", "getKernelClusterDims");
+        if (!X || !Y || !Z)
+          return std::nullopt;
+        return KernelClusterDims{*X, *Y, *Z};
+      }
+    }
+
+    if (Err) {
+      log() << "hotswap: error: getKernelClusterDims: failed to iterate "
+            << "AMDGPU notes: " << toString(std::move(Err)) << "\n";
+      return std::nullopt;
+    }
+  }
+
+  return std::nullopt;
+}
+
 // -- ElfView::updateKernelDescriptor ------------------------------------------
 
 void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
@@ -848,238 +1073,215 @@ void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
               &Rsrc1, sizeof(Rsrc1));
 }
 
-// -- Section/program header adjustment for trampoline growth ------------------
+// -- ElfView::dataAtVAddr -----------------------------------------------------
 
-static bool adjustSectionHeaders(uint8_t *Elf, size_t ElfSize,
-                                 uint64_t TextOffset, uint64_t TextSize,
-                                 size_t TrampTotal) {
-  if (ElfSize < sizeof(Ehdr))
-    return true;
-
-  std::optional<uint64_t> TextEnd =
-      checkedAddUint64(TextOffset, TextSize, "section header .text end");
-  if (!TextEnd)
-    return false;
-  uint64_t Shoff;
-  uint16_t Shentsize;
-  uint16_t Shnum;
-  std::memcpy(&Shoff, Elf + offsetof(Ehdr, e_shoff), sizeof(Shoff));
-  std::memcpy(&Shentsize, Elf + offsetof(Ehdr, e_shentsize), sizeof(Shentsize));
-  std::memcpy(&Shnum, Elf + offsetof(Ehdr, e_shnum), sizeof(Shnum));
-  if (Shentsize < sizeof(Shdr))
-    return true;
-
-  if (Shoff >= *TextEnd) {
-    std::optional<uint64_t> NewShoff =
-        checkedAddUint64(Shoff, TrampTotal, "section header table offset");
-    if (!NewShoff)
-      return false;
-    uint64_t NewShoffValue = *NewShoff;
-    std::memcpy(Elf + offsetof(Ehdr, e_shoff), &NewShoffValue,
-                sizeof(NewShoffValue));
-    Shoff = NewShoffValue;
+const uint8_t *ElfView::dataAtVAddr(uint64_t VAddr, uint64_t Len) const {
+  for (const ELFT::Shdr &Shdr : Sections) {
+    if (!(Shdr.sh_flags & ELF::SHF_ALLOC) || Shdr.sh_type == ELF::SHT_NOBITS)
+      continue;
+    if (VAddr < Shdr.sh_addr)
+      continue;
+    uint64_t Off = VAddr - Shdr.sh_addr;
+    if (Off > Shdr.sh_size || Len > Shdr.sh_size - Off)
+      continue;
+    if (Shdr.sh_offset > size() || Off > size() - Shdr.sh_offset ||
+        Len > size() - Shdr.sh_offset - Off)
+      continue;
+    return data() + Shdr.sh_offset + Off;
   }
-
-  for (uint16_t I = 0; I < Shnum; ++I) {
-    uint64_t ShTableDelta = static_cast<uint64_t>(I) * Shentsize;
-    std::optional<uint64_t> ShPos =
-        checkedAddUint64(Shoff, ShTableDelta, "section header entry offset");
-    if (!ShPos)
-      return false;
-    if (*ShPos > ElfSize || sizeof(Shdr) > ElfSize - *ShPos)
-      break;
-    uint8_t *Sh = Elf + *ShPos;
-    uint64_t ShOffset;
-    std::memcpy(&ShOffset, Sh + offsetof(Shdr, sh_offset), sizeof(ShOffset));
-
-    if (ShOffset == TextOffset) {
-      std::optional<uint64_t> NewTextSize =
-          checkedAddUint64(TextSize, TrampTotal, ".text section size");
-      if (!NewTextSize)
-        return false;
-      uint64_t NewTextSizeValue = *NewTextSize;
-      std::memcpy(Sh + offsetof(Shdr, sh_size), &NewTextSizeValue,
-                  sizeof(NewTextSizeValue));
-    } else if (ShOffset > TextOffset) {
-      std::optional<uint64_t> NewOffset =
-          checkedAddUint64(ShOffset, TrampTotal, "post-.text section offset");
-      if (!NewOffset)
-        return false;
-      uint64_t NewOffsetValue = *NewOffset;
-      std::memcpy(Sh + offsetof(Shdr, sh_offset), &NewOffsetValue,
-                  sizeof(NewOffsetValue));
-      uint64_t ShFlags;
-      std::memcpy(&ShFlags, Sh + offsetof(Shdr, sh_flags), sizeof(ShFlags));
-      if (ShFlags & ELF::SHF_ALLOC) {
-        uint64_t ShAddr;
-        std::memcpy(&ShAddr, Sh + offsetof(Shdr, sh_addr), sizeof(ShAddr));
-        std::optional<uint64_t> NewAddr =
-            checkedAddUint64(ShAddr, TrampTotal, "post-.text section address");
-        if (!NewAddr)
-          return false;
-        ShAddr = *NewAddr;
-        std::memcpy(Sh + offsetof(Shdr, sh_addr), &ShAddr, sizeof(ShAddr));
-      }
-    }
-  }
-  return true;
+  return nullptr;
 }
 
-static bool adjustProgramHeaders(uint8_t *Elf, size_t ElfSize,
-                                 uint64_t TextOffset, uint64_t TextSize,
-                                 size_t TrampTotal) {
-  if (ElfSize < sizeof(Ehdr))
-    return true;
+// -- ElfView::trampolinePoolVAddr ---------------------------------------------
 
-  std::optional<uint64_t> TextEnd =
-      checkedAddUint64(TextOffset, TextSize, "program header .text end");
-  if (!TextEnd)
-    return false;
-  uint64_t Phoff;
-  uint16_t Phentsize;
-  uint16_t Phnum;
-  std::memcpy(&Phoff, Elf + offsetof(Ehdr, e_phoff), sizeof(Phoff));
-  std::memcpy(&Phentsize, Elf + offsetof(Ehdr, e_phentsize), sizeof(Phentsize));
-  std::memcpy(&Phnum, Elf + offsetof(Ehdr, e_phnum), sizeof(Phnum));
-  if (Phentsize < sizeof(Phdr))
-    return true;
-
-  for (uint16_t I = 0; I < Phnum; ++I) {
-    uint64_t PhTableDelta = static_cast<uint64_t>(I) * Phentsize;
-    std::optional<uint64_t> PhPos =
-        checkedAddUint64(Phoff, PhTableDelta, "program header entry offset");
-    if (!PhPos)
-      return false;
-    if (*PhPos > ElfSize || sizeof(Phdr) > ElfSize - *PhPos)
-      break;
-    uint8_t *Ph = Elf + *PhPos;
-    uint64_t POffset;
-    uint64_t PFilesz;
-    uint64_t PMemsz;
-    std::memcpy(&POffset, Ph + offsetof(Phdr, p_offset), sizeof(POffset));
-    std::memcpy(&PFilesz, Ph + offsetof(Phdr, p_filesz), sizeof(PFilesz));
-    std::memcpy(&PMemsz, Ph + offsetof(Phdr, p_memsz), sizeof(PMemsz));
-
-    std::optional<uint64_t> PEnd =
-        checkedAddUint64(POffset, PFilesz, "program header file end");
-    if (!PEnd)
-      return false;
-    if (POffset <= TextOffset && *PEnd >= *TextEnd) {
-      std::optional<uint64_t> NewPFilesz =
-          checkedAddUint64(PFilesz, TrampTotal, "program header file size");
-      std::optional<uint64_t> NewPMemsz =
-          checkedAddUint64(PMemsz, TrampTotal, "program header memory size");
-      if (!NewPFilesz || !NewPMemsz)
-        return false;
-      PFilesz = *NewPFilesz;
-      PMemsz = *NewPMemsz;
-      std::memcpy(Ph + offsetof(Phdr, p_filesz), &PFilesz, sizeof(PFilesz));
-      std::memcpy(Ph + offsetof(Phdr, p_memsz), &PMemsz, sizeof(PMemsz));
-    } else if (POffset > TextOffset) {
-      std::optional<uint64_t> NewPOffset =
-          checkedAddUint64(POffset, TrampTotal, "post-.text program offset");
-      if (!NewPOffset)
-        return false;
-      POffset = *NewPOffset;
-      std::memcpy(Ph + offsetof(Phdr, p_offset), &POffset, sizeof(POffset));
-      uint64_t PVaddr;
-      std::memcpy(&PVaddr, Ph + offsetof(Phdr, p_vaddr), sizeof(PVaddr));
-      std::optional<uint64_t> NewPVaddr =
-          checkedAddUint64(PVaddr, TrampTotal, "post-.text program vaddr");
-      if (!NewPVaddr)
-        return false;
-      PVaddr = *NewPVaddr;
-      std::memcpy(Ph + offsetof(Phdr, p_vaddr), &PVaddr, sizeof(PVaddr));
-      uint64_t PPaddr;
-      std::memcpy(&PPaddr, Ph + offsetof(Phdr, p_paddr), sizeof(PPaddr));
-      std::optional<uint64_t> NewPPaddr =
-          checkedAddUint64(PPaddr, TrampTotal, "post-.text program paddr");
-      if (!NewPPaddr)
-        return false;
-      PPaddr = *NewPPaddr;
-      std::memcpy(Ph + offsetof(Phdr, p_paddr), &PPaddr, sizeof(PPaddr));
-    }
+std::optional<uint64_t> ElfView::trampolinePoolVAddr() const {
+  uint64_t MaxAllocEnd = 0;
+  for (const ELFT::Shdr &Shdr : Sections) {
+    if (!(Shdr.sh_flags & ELF::SHF_ALLOC))
+      continue;
+    // Overflow would collapse MaxAllocEnd and overlap the pool with existing
+    // sections.
+    std::optional<uint64_t> End = checkedAddUint64(
+        Shdr.sh_addr, Shdr.sh_size, "allocatable section end for pool vaddr");
+    if (!End)
+      return std::nullopt;
+    MaxAllocEnd = std::max(MaxAllocEnd, *End);
   }
-  return true;
+  return alignTo(MaxAllocEnd, TrampolinePoolAlign);
 }
 
-static bool adjustSymbolValues(uint8_t *Elf, size_t ElfSize,
-                               uint64_t TextOffset, size_t TrampTotal) {
-  if (TrampTotal == 0)
-    return true;
+// -- addKernelEntryTrampolineSymbols ------------------------------------------
+
+std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
+    WritableMemoryBuffer &In, unsigned TextSectionIndex, uint64_t TextAddr,
+    uint64_t OldTextSize, ArrayRef<KernelEntryTrampolineFixup> Fixups) {
+  if (Fixups.empty())
+    return nullptr;
+
+  const uint8_t *Data = reinterpret_cast<const uint8_t *>(In.getBufferStart());
+  const size_t Size = In.getBufferSize();
 
   Expected<ELFFileT> FileOrErr =
-      ELFFileT::create(StringRef(reinterpret_cast<const char *>(Elf), ElfSize));
+      ELFFileT::create(StringRef(reinterpret_cast<const char *>(Data), Size));
   if (!FileOrErr) {
-    log() << "hotswap: error: adjustSymbolValues: failed to parse grown ELF: "
-          << toString(FileOrErr.takeError()) << "\n";
-    return false;
+    log() << "hotswap: error: addKernelEntryTrampolineSymbols: failed to parse "
+          << "grown ELF: " << toString(FileOrErr.takeError()) << "\n";
+    return nullptr;
   }
   ELFFileT File = std::move(*FileOrErr);
-
-  if (File.getHeader().e_type == ELF::ET_REL)
-    return true;
-
-  Expected<ELFT::ShdrRange> SectionsOrErr = File.sections();
-  if (!SectionsOrErr) {
-    log() << "hotswap: error: adjustSymbolValues: failed to read section "
-          << "headers: " << toString(SectionsOrErr.takeError()) << "\n";
-    return false;
+  Expected<ELFT::ShdrRange> SecsOrErr = File.sections();
+  if (!SecsOrErr) {
+    consumeError(SecsOrErr.takeError());
+    return nullptr;
   }
-  ELFT::ShdrRange Sections = *SectionsOrErr;
+  ELFT::ShdrRange Secs = *SecsOrErr;
 
-  unsigned SectionIndex = 0;
-  for (const ELFT::Shdr &SymShdr : Sections) {
-    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
-        SymShdr.sh_type != ELF::SHT_DYNSYM) {
-      ++SectionIndex;
-      continue;
+  // Locate .symtab and its linked string table. Scan from the end, since the
+  // symbol table sits near the end of the section list in these code objects.
+  const ELFT::Shdr *SymShdr = nullptr;
+  unsigned SymIdx = 0;
+  for (unsigned I = Secs.size(); I-- > 0;)
+    if (Secs[I].sh_type == ELF::SHT_SYMTAB) {
+      SymShdr = &Secs[I];
+      SymIdx = I;
+      break;
     }
-
-    Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
-    if (!SymsOrErr) {
-      log() << "hotswap: error: adjustSymbolValues: failed to read symbol "
-            << "table section " << SectionIndex << ": "
-            << toString(SymsOrErr.takeError()) << "\n";
-      ++SectionIndex;
-      continue;
-    }
-
-    for (const ELFT::Sym &Sym : *SymsOrErr) {
-      if (Sym.st_shndx == ELF::SHN_UNDEF || Sym.st_shndx >= ELF::SHN_LORESERVE)
-        continue;
-
-      Expected<const ELFT::Shdr *> DefShdrOrErr = File.getSection(Sym.st_shndx);
-      if (!DefShdrOrErr) {
-        log() << "hotswap: error: adjustSymbolValues: symbol references "
-              << "missing section " << Sym.st_shndx << ": "
-              << toString(DefShdrOrErr.takeError()) << "\n";
-        continue;
-      }
-      const ELFT::Shdr &DefShdr = **DefShdrOrErr;
-      if (!(DefShdr.sh_flags & ELF::SHF_ALLOC) ||
-          DefShdr.sh_offset <= TextOffset)
-        continue;
-
-      const uint8_t *SymBytes = reinterpret_cast<const uint8_t *>(&Sym);
-      if (SymBytes < File.base() || SymBytes + sizeof(ELFT::Sym) > File.end()) {
-        log() << "hotswap: error: adjustSymbolValues: symbol table entry is "
-              << "outside the ELF buffer.\n";
-        continue;
-      }
-
-      uint64_t SymOffset = SymBytes - File.base();
-      std::optional<uint64_t> Value =
-          checkedAddUint64(Sym.st_value, TrampTotal, "post-.text symbol value");
-      if (!Value)
-        return false;
-      uint64_t Value64 = *Value;
-      std::memcpy(Elf + SymOffset + offsetof(ELFT::Sym, st_value), &Value64,
-                  sizeof(Value64));
-    }
-    ++SectionIndex;
+  if (!SymShdr) {
+    log() << "hotswap: addKernelEntryTrampolineSymbols: no .symtab present; "
+          << "skipping stub symbols.\n";
+    return nullptr;
   }
-  return true;
+  const unsigned StrIdx = SymShdr->sh_link;
+  if (StrIdx == 0 || StrIdx >= Secs.size()) {
+    log() << "hotswap: error: addKernelEntryTrampolineSymbols: .symtab has an "
+          << "invalid sh_link (" << StrIdx << ").\n";
+    return nullptr;
+  }
+  if (SymShdr->sh_entsize != sizeof(ELF::Elf64_Sym)) {
+    log() << "hotswap: error: addKernelEntryTrampolineSymbols: unexpected "
+          << ".symtab entry size " << SymShdr->sh_entsize << ".\n";
+    return nullptr;
+  }
+  const ELFT::Shdr &StrShdr = Secs[StrIdx];
+
+  const uint64_t SymOff = SymShdr->sh_offset;
+  const uint64_t SymEnd = SymOff + SymShdr->sh_size;
+  const uint64_t StrOff = StrShdr.sh_offset;
+  const uint64_t StrEnd = StrOff + StrShdr.sh_size;
+  if (SymEnd > Size || StrEnd > Size || SymEnd < SymOff || StrEnd < StrOff) {
+    log() << "hotswap: error: addKernelEntryTrampolineSymbols: symbol/string "
+          << "table extends past the ELF buffer.\n";
+    return nullptr;
+  }
+
+  // Build the appended string names and symbol entries.
+  SmallVector<uint8_t> StrBlob, SymBlob;
+  for (const KernelEntryTrampolineFixup &F : Fixups) {
+    std::string Name = F.KernelName + ".stub";
+    uint32_t NameOff =
+        static_cast<uint32_t>(StrShdr.sh_size + StrBlob.size());
+    StrBlob.append(Name.begin(), Name.end());
+    StrBlob.push_back(0);
+
+    std::optional<uint64_t> StubOff = checkedAddUint64(
+        OldTextSize, F.StubTextOffset, "stub symbol .text offset");
+    if (!StubOff)
+      return nullptr;
+    std::optional<uint64_t> StubVAddr =
+        checkedAddUint64(TextAddr, *StubOff, "stub symbol vaddr");
+    if (!StubVAddr)
+      return nullptr;
+
+    ELF::Elf64_Sym Sym{};
+    Sym.st_name = NameOff;
+    Sym.st_info = (ELF::STB_GLOBAL << 4) | ELF::STT_FUNC;
+    Sym.st_other = ELF::STV_DEFAULT;
+    Sym.st_shndx = static_cast<uint16_t>(TextSectionIndex);
+    Sym.st_value = *StubVAddr;
+    Sym.st_size = KernelEntryStubStride;
+    const uint8_t *P = reinterpret_cast<const uint8_t *>(&Sym);
+    SymBlob.append(P, P + sizeof(Sym));
+  }
+  // The section header table must stay 8-byte aligned (LLVM's ELF reader
+  // rejects a misaligned table). SymBlob is a multiple of 8 (24-byte entries),
+  // so pad the string blob up to a multiple of 8 with unreferenced NULs.
+  StrBlob.append((8 - (StrBlob.size() % 8)) % 8, 0);
+
+  const uint64_t SymDelta = SymBlob.size();
+  const uint64_t StrDelta = StrBlob.size();
+  const size_t NewSize = Size + SymDelta + StrDelta;
+
+  std::unique_ptr<WritableMemoryBuffer> Out =
+      WritableMemoryBuffer::getNewUninitMemBuffer(NewSize);
+  if (!Out) {
+    log() << "hotswap: error: addKernelEntryTrampolineSymbols: allocation of "
+          << NewSize << " bytes failed.\n";
+    return nullptr;
+  }
+  uint8_t *O = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+
+  // Insert the new symbol entries right after the existing .symtab contents and
+  // the new strings right after the existing .strtab contents. Both insertion
+  // points are expressed in original-file coordinates; copying in ascending
+  // order keeps the arithmetic order-independent (either table may come first).
+  struct Insertion {
+    uint64_t Pos;
+    const SmallVector<uint8_t> *Bytes;
+  };
+  Insertion A{SymEnd, &SymBlob}, B{StrEnd, &StrBlob};
+  if (A.Pos > B.Pos)
+    std::swap(A, B);
+
+  size_t OutPos = 0, InPos = 0;
+  auto CopyThrough = [&](uint64_t Upto) {
+    std::memcpy(O + OutPos, Data + InPos, Upto - InPos);
+    OutPos += Upto - InPos;
+    InPos = Upto;
+  };
+  CopyThrough(A.Pos);
+  std::memcpy(O + OutPos, A.Bytes->data(), A.Bytes->size());
+  OutPos += A.Bytes->size();
+  CopyThrough(B.Pos);
+  std::memcpy(O + OutPos, B.Bytes->data(), B.Bytes->size());
+  OutPos += B.Bytes->size();
+  std::memcpy(O + OutPos, Data + InPos, Size - InPos);
+
+  // Anything at or beyond an insertion point shifts by that insertion's size.
+  auto Shift = [&](uint64_t X) -> uint64_t {
+    return X + (X >= SymEnd ? SymDelta : 0) + (X >= StrEnd ? StrDelta : 0);
+  };
+
+  uint64_t Shoff;
+  uint16_t Shentsize, Shnum;
+  std::memcpy(&Shoff, O + offsetof(Ehdr, e_shoff), sizeof(Shoff));
+  std::memcpy(&Shentsize, O + offsetof(Ehdr, e_shentsize), sizeof(Shentsize));
+  std::memcpy(&Shnum, O + offsetof(Ehdr, e_shnum), sizeof(Shnum));
+  uint64_t NewShoff = Shift(Shoff);
+  std::memcpy(O + offsetof(Ehdr, e_shoff), &NewShoff, sizeof(NewShoff));
+  if (Shentsize < sizeof(Shdr))
+    return nullptr;
+
+  for (uint16_t I = 0; I < Shnum; ++I) {
+    uint64_t P = NewShoff + static_cast<uint64_t>(I) * Shentsize;
+    if (P + sizeof(Shdr) > NewSize)
+      break;
+    uint8_t *Sh = O + P;
+    uint64_t ShOffset;
+    std::memcpy(&ShOffset, Sh + offsetof(Shdr, sh_offset), sizeof(ShOffset));
+    uint64_t NewOff = Shift(ShOffset);
+    std::memcpy(Sh + offsetof(Shdr, sh_offset), &NewOff, sizeof(NewOff));
+
+    if (I == SymIdx || I == StrIdx) {
+      uint64_t ShSize;
+      std::memcpy(&ShSize, Sh + offsetof(Shdr, sh_size), sizeof(ShSize));
+      ShSize += (I == SymIdx) ? SymDelta : StrDelta;
+      std::memcpy(Sh + offsetof(Shdr, sh_size), &ShSize, sizeof(ShSize));
+    }
+  }
+
+  log() << "hotswap: added " << Fixups.size()
+        << " kernel-entry stub symbol(s) to .symtab\n";
+  return Out;
 }
 
 // -- ElfView::growWithTrampolines ---------------------------------------------
@@ -1087,8 +1289,19 @@ static bool adjustSymbolValues(uint8_t *Elf, size_t ElfSize,
 std::unique_ptr<WritableMemoryBuffer>
 ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
                              ArrayRef<uint8_t> SNopBytes) const {
+  // SNopBytes is unused in the append-at-end model: nothing between .text and
+  // the following sections moves, so there is no in-image gap to pad. It is
+  // retained in the signature for callers and for a future in-place variant.
+  (void)SNopBytes;
+
   const size_t InputSize = size();
   const uint8_t *Input = data();
+
+  if (InputSize < sizeof(Ehdr)) {
+    log() << "hotswap: error: growWithTrampolines: input (" << InputSize
+          << " bytes) is smaller than an ELF64 header.\n";
+    return nullptr;
+  }
 
   size_t TrampTotal = 0;
   for (const Trampoline &T : Trampolines) {
@@ -1104,83 +1317,163 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
           << "returning empty result.\n";
     return nullptr;
   }
-  if (TrampTotal > std::numeric_limits<size_t>::max() - InputSize) {
-    log() << "hotswap: error: growWithTrampolines: trampoline bytes ("
-          << TrampTotal << ") + existing ELF size (" << InputSize
-          << ") overflow size_t.\n";
-    return nullptr;
-  }
 
-  std::optional<uint64_t> TextEnd = checkedAddUint64(
-      textOffset(), textSize(), "growWithTrampolines .text end");
-  if (!TextEnd || *TextEnd > InputSize) {
-    log() << "hotswap: error: growWithTrampolines: .text range exceeds input "
-          << "ELF size.\n";
+  // Append the pool at a fresh virtual address above every existing
+  // allocatable section (trampolinePoolVAddr()). Because existing sections,
+  // symbols, and program headers keep their addresses, the baked PC-relative
+  // literals (and DWARF) that reference post-.text data stay valid. The
+  // previous scheme grew .text in place and shifted everything after it,
+  // silently corrupting those baked references (a fully-linked AMDGPU object
+  // carries no relocations) -- see
+  // ElfView.GrowWithTrampolinesKeepsIsaReferenceConsistentWithSymbol.
+  //
+  // The vaddr and file offset are page-aligned (equal modulo the alignment) so
+  // the appended PT_LOAD maps consistently.
+  std::optional<uint64_t> PoolVAddrOr = trampolinePoolVAddr();
+  if (!PoolVAddrOr) {
+    log() << "hotswap: error: growWithTrampolines: could not compute a "
+          << "trampoline pool virtual address.\n";
     return nullptr;
   }
+  const uint64_t PoolVAddr = *PoolVAddrOr;
+  const uint64_t PoolFileOff =
+      alignTo(static_cast<uint64_t>(InputSize), TrampolinePoolAlign);
 
-  // Pad TrampTotal to the maximum alignment of all post-.text sections so
-  // that shifting file offsets preserves sh_addralign invariants. The
-  // sh_addr update in adjustSectionHeaders is still gated on SHF_ALLOC.
-  uint64_t MaxPostTextAlign = 1;
-  for (const ELFT::Shdr &Shdr : Sections) {
-    if (Shdr.sh_offset <= textOffset())
-      continue;
-    if (Shdr.sh_addralign > MaxPostTextAlign)
-      MaxPostTextAlign = Shdr.sh_addralign;
-  }
-  std::optional<size_t> PaddedTrampTotalOrErr = checkedAlignToSize(
-      TrampTotal, MaxPostTextAlign, "padded trampoline byte count");
-  if (!PaddedTrampTotalOrErr)
-    return nullptr;
-  size_t PaddedTrampTotal = *PaddedTrampTotalOrErr;
-  if (PaddedTrampTotal > std::numeric_limits<size_t>::max() - InputSize) {
-    log() << "hotswap: error: growWithTrampolines: padded trampoline bytes ("
-          << PaddedTrampTotal << ") + ELF size (" << InputSize
-          << ") overflow size_t.\n";
-    return nullptr;
-  }
-  size_t PadBytes = PaddedTrampTotal - TrampTotal;
+  // Copy the program-header and section-header tables to the end of the file,
+  // each with one new entry for the pool (a PT_LOAD segment so the loader maps
+  // it, and an SHF_ALLOC|SHF_EXECINSTR section so objdump/tools and a
+  // subsequent rewrite can see it), then repoint e_phoff / e_shoff. Those
+  // tables are metadata addressed via the ELF header, so relocating them moves
+  // nothing a baked literal can reference.
+  uint64_t Phoff, Shoff;
+  uint16_t Phentsize, Phnum, Shentsize, Shnum;
+  std::memcpy(&Phoff, Input + offsetof(Ehdr, e_phoff), sizeof(Phoff));
+  std::memcpy(&Phentsize, Input + offsetof(Ehdr, e_phentsize),
+              sizeof(Phentsize));
+  std::memcpy(&Phnum, Input + offsetof(Ehdr, e_phnum), sizeof(Phnum));
+  std::memcpy(&Shoff, Input + offsetof(Ehdr, e_shoff), sizeof(Shoff));
+  std::memcpy(&Shentsize, Input + offsetof(Ehdr, e_shentsize),
+              sizeof(Shentsize));
+  std::memcpy(&Shnum, Input + offsetof(Ehdr, e_shnum), sizeof(Shnum));
 
-  const size_t NewSize = InputSize + PaddedTrampTotal;
+  const bool HasPhdrs =
+      Phnum > 0 && Phoff != 0 && Phentsize >= sizeof(Phdr) &&
+      Phoff <= InputSize &&
+      static_cast<uint64_t>(Phnum) * Phentsize <= InputSize - Phoff;
+  const bool HasShdrs =
+      Shnum > 0 && Shoff != 0 && Shentsize >= sizeof(Shdr) &&
+      Shoff <= InputSize &&
+      static_cast<uint64_t>(Shnum) * Shentsize <= InputSize - Shoff;
+
+  std::optional<uint64_t> PoolEnd =
+      checkedAddUint64(PoolFileOff, TrampTotal, "trampoline pool file end");
+  if (!PoolEnd)
+    return nullptr;
+
+  // Lay out the relocated tables after the pool: [pool][phdrs][shdrs].
+  uint64_t Cursor = *PoolEnd;
+  const uint64_t NewPhnum = HasPhdrs ? static_cast<uint64_t>(Phnum) + 1 : Phnum;
+  const uint64_t NewShnum = HasShdrs ? static_cast<uint64_t>(Shnum) + 1 : Shnum;
+  uint64_t NewPhoff = Phoff;
+  uint64_t NewShoff = Shoff;
+  if (HasPhdrs) {
+    if (static_cast<uint64_t>(Phnum) >= std::numeric_limits<uint16_t>::max()) {
+      log() << "hotswap: error: growWithTrampolines: program-header count "
+            << Phnum << " leaves no room to append a PT_LOAD.\n";
+      return nullptr;
+    }
+    NewPhoff = alignTo(Cursor, static_cast<uint64_t>(alignof(Phdr)));
+    std::optional<uint64_t> End = checkedAddUint64(
+        NewPhoff, NewPhnum * Phentsize, "relocated phdr table end");
+    if (!End)
+      return nullptr;
+    Cursor = *End;
+  }
+  if (HasShdrs) {
+    if (static_cast<uint64_t>(Shnum) >= std::numeric_limits<uint16_t>::max()) {
+      log() << "hotswap: error: growWithTrampolines: section-header count "
+            << Shnum << " leaves no room to append the pool section.\n";
+      return nullptr;
+    }
+    NewShoff = alignTo(Cursor, static_cast<uint64_t>(alignof(Shdr)));
+    std::optional<uint64_t> End = checkedAddUint64(
+        NewShoff, NewShnum * Shentsize, "relocated shdr table end");
+    if (!End)
+      return nullptr;
+    Cursor = *End;
+  }
+  if (Cursor > std::numeric_limits<size_t>::max()) {
+    log()
+        << "hotswap: error: growWithTrampolines: grown size exceeds size_t.\n";
+    return nullptr;
+  }
+  const size_t NewSize = static_cast<size_t>(Cursor);
+
+  // getNewMemBuffer zero-initializes, so the alignment gaps between regions are
+  // well-defined padding without extra memsets.
   std::unique_ptr<WritableMemoryBuffer> Buf =
-      WritableMemoryBuffer::getNewUninitMemBuffer(NewSize);
+      WritableMemoryBuffer::getNewMemBuffer(NewSize);
   if (!Buf) {
     log() << "hotswap: error: growWithTrampolines: "
-          << "WritableMemoryBuffer::getNewUninitMemBuffer(" << NewSize
+          << "WritableMemoryBuffer::getNewMemBuffer(" << NewSize
           << ") failed (out of memory).\n";
     return nullptr;
   }
 
   uint8_t *Out = reinterpret_cast<uint8_t *>(Buf->getBufferStart());
-  size_t TextEndSize = static_cast<size_t>(*TextEnd);
-  std::memcpy(Out, Input, TextEndSize);
-  size_t Pos = TextEndSize;
+  // 1. Original bytes verbatim -- nothing shifts.
+  std::memcpy(Out, Input, InputSize);
+  // 2. Trampoline pool at its fresh, page-aligned file offset / vaddr.
+  size_t Pos = static_cast<size_t>(PoolFileOff);
   for (const Trampoline &T : Trampolines) {
     std::memcpy(Out + Pos, T.Bytes.data(), T.Bytes.size());
     Pos += T.Bytes.size();
   }
-  if (PadBytes > 0 && SNopBytes.size() == MinInstSize) {
-    for (size_t I = 0; I < PadBytes; I += MinInstSize)
-      std::memcpy(Out + Pos + I, SNopBytes.data(), MinInstSize);
-    Pos += PadBytes;
-  } else if (PadBytes > 0) {
-    std::memset(Out + Pos, 0, PadBytes);
-    Pos += PadBytes;
+  // 3. Relocated program-header table + appended PT_LOAD for the pool.
+  if (HasPhdrs) {
+    std::memcpy(Out + NewPhoff, Input + Phoff,
+                static_cast<size_t>(Phnum) * Phentsize);
+    Phdr PoolPhdr{};
+    PoolPhdr.p_type = ELF::PT_LOAD;
+    PoolPhdr.p_flags = ELF::PF_R | ELF::PF_X;
+    PoolPhdr.p_offset = PoolFileOff;
+    PoolPhdr.p_vaddr = PoolVAddr;
+    PoolPhdr.p_paddr = PoolVAddr;
+    PoolPhdr.p_filesz = TrampTotal;
+    PoolPhdr.p_memsz = TrampTotal;
+    PoolPhdr.p_align = TrampolinePoolAlign;
+    std::memcpy(Out + NewPhoff + static_cast<uint64_t>(Phnum) * Phentsize,
+                &PoolPhdr, sizeof(PoolPhdr));
+    std::memcpy(Out + offsetof(Ehdr, e_phoff), &NewPhoff, sizeof(NewPhoff));
+    uint16_t NewPhnum16 = static_cast<uint16_t>(NewPhnum);
+    std::memcpy(Out + offsetof(Ehdr, e_phnum), &NewPhnum16, sizeof(NewPhnum16));
   }
-  if (TextEndSize < InputSize)
-    std::memcpy(Out + Pos, Input + TextEndSize, InputSize - TextEndSize);
+  // 4. Relocated section-header table + appended pool section. The section has
+  // an empty name (sh_name == 0): the loader ignores section headers and tools
+  // still disassemble it by flags, so no .shstrtab surgery is needed.
+  if (HasShdrs) {
+    std::memcpy(Out + NewShoff, Input + Shoff,
+                static_cast<size_t>(Shnum) * Shentsize);
+    Shdr PoolShdr{};
+    PoolShdr.sh_name = 0;
+    PoolShdr.sh_type = ELF::SHT_PROGBITS;
+    PoolShdr.sh_flags = ELF::SHF_ALLOC | ELF::SHF_EXECINSTR;
+    PoolShdr.sh_addr = PoolVAddr;
+    PoolShdr.sh_offset = PoolFileOff;
+    PoolShdr.sh_size = TrampTotal;
+    PoolShdr.sh_addralign = TrampolinePoolAlign;
+    std::memcpy(Out + NewShoff + static_cast<uint64_t>(Shnum) * Shentsize,
+                &PoolShdr, sizeof(PoolShdr));
+    std::memcpy(Out + offsetof(Ehdr, e_shoff), &NewShoff, sizeof(NewShoff));
+    uint16_t NewShnum16 = static_cast<uint16_t>(NewShnum);
+    std::memcpy(Out + offsetof(Ehdr, e_shnum), &NewShnum16, sizeof(NewShnum16));
+  }
 
-  if (!adjustSectionHeaders(Out, NewSize, textOffset(), textSize(),
-                            PaddedTrampTotal) ||
-      !adjustProgramHeaders(Out, NewSize, textOffset(), textSize(),
-                            PaddedTrampTotal) ||
-      !adjustSymbolValues(Out, NewSize, textOffset(), PaddedTrampTotal))
-    return nullptr;
-  log() << "hotswap: growWithTrampolines: grew ELF from " << InputSize << " to "
-        << NewSize << " bytes (" << Trampolines.size() << " trampoline"
-        << (Trampolines.size() == 1 ? "" : "s") << ", " << TrampTotal
-        << " trampoline bytes + " << PadBytes << " alignment padding).\n";
+  log() << "hotswap: growWithTrampolines: appended " << Trampolines.size()
+        << (Trampolines.size() == 1 ? " trampoline (" : " trampolines (")
+        << TrampTotal << " bytes) at vaddr 0x" << utohexstr(PoolVAddr)
+        << " (file 0x" << utohexstr(PoolFileOff) << "); grew ELF from "
+        << InputSize << " to " << NewSize << " bytes.\n";
   return Buf;
 }
 

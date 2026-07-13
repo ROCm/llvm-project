@@ -32,6 +32,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
 
+#include <algorithm>
 #include <cassert>
 #include <limits>
 
@@ -75,6 +76,67 @@ static RewriteConfig makeGfx1250B0A0Config() {
   Config.MaxSgprs = Gfx1250MaxSgprs;
   Config.VgprGranuleSize = Gfx1250VgprGranuleSize;
   return Config;
+}
+
+static bool appendCodeEndGuard(std::vector<Trampoline> &Growth,
+                               uint64_t GuardBytes, const LLVMState &LS) {
+  if (GuardBytes == 0)
+    return true;
+
+  SmallVector<uint8_t> CodeEnd = assembleSingleInst("s_code_end", LS);
+  if (CodeEnd.empty()) {
+    log() << "hotswap: error: failed to assemble s_code_end for trampoline "
+          << "prefetch guard.\n";
+    return false;
+  }
+  if (GuardBytes % CodeEnd.size() != 0) {
+    log() << "hotswap: error: trampoline prefetch guard size " << GuardBytes
+          << " is not a multiple of s_code_end size " << CodeEnd.size()
+          << ".\n";
+    return false;
+  }
+
+  Trampoline Guard;
+  while (static_cast<uint64_t>(Guard.Bytes.size()) < GuardBytes)
+    Guard.Bytes.append(CodeEnd.begin(), CodeEnd.end());
+  Growth.push_back(std::move(Guard));
+  return true;
+}
+
+static std::optional<uint32_t>
+getMaxOriginalKernelInstPrefSize(const ElfView &Elf, const LLVMState &LS) {
+  std::vector<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
+  uint32_t MaxOriginalInstPrefLines = 0;
+  for (const KernelDescriptorInfo &KD : Descriptors) {
+    std::optional<uint32_t> OriginalInstPrefLines =
+        Elf.getKernelDescriptorInstPrefSize(KD.KernelName, LS.Cpu);
+    if (!OriginalInstPrefLines)
+      return std::nullopt;
+    MaxOriginalInstPrefLines =
+        std::max(MaxOriginalInstPrefLines, *OriginalInstPrefLines);
+  }
+  return MaxOriginalInstPrefLines;
+}
+
+static bool
+appendDeferredTrampolinePrefetchGuard(const ElfView &Elf, const LLVMState &LS,
+                                      std::vector<Trampoline> &Growth) {
+  // Deferred instruction-rewrite trampolines are reached from the original
+  // kernel entries, so their trailing guard follows the original descriptor
+  // prefetch size. Kernel-entry stubs clamp their own descriptor prefetch.
+  std::optional<uint32_t> MaxOriginalInstPrefLines =
+      getMaxOriginalKernelInstPrefSize(Elf, LS);
+  if (!MaxOriginalInstPrefLines)
+    return false;
+
+  uint64_t GuardBytes = static_cast<uint64_t>(*MaxOriginalInstPrefLines) *
+                        KernelEntryInstPrefUnitBytes;
+  if (!appendCodeEndGuard(Growth, GuardBytes, LS))
+    return false;
+
+  log() << "hotswap: appended " << GuardBytes
+        << " trampoline prefetch guard bytes\n";
+  return true;
 }
 
 // -- Forward declarations for liveness/DWARF stubs ----------------------------
@@ -199,32 +261,57 @@ LLVM_ATTRIBUTE_WEAK void patchDebugFrame(uint8_t *, size_t, uint64_t, uint64_t,
 
 // -- NOP sled scanning --------------------------------------------------------
 
+static void appendNopSledIfLarge(std::vector<NopSled> &Sleds, uint64_t Start,
+                                 uint64_t End,
+                                 const ElfView::FunctionTextRange &Range) {
+  if (End - Start >= MinNopSledSize)
+    Sleds.push_back({Start, End, Start, Range.Begin, Range.End});
+}
+
 /// Scan \p Decoded for runs of consecutive `s_nop` instructions at least
-/// MinNopSledSize bytes long and return the resulting NopSled list (each
-/// sled records Start / End byte offsets in .text and the initial WritePos
-/// at Start). These sleds are the landing zones emitToNopSled targets for
-/// in-place rewrites. NOPs are identified by MC opcode (cached on \p LS at
-/// initLLVM() time) rather than mnemonic string, so the scanner is robust
-/// against printer aliasing / mnemonic formatting variations.
+/// MinNopSledSize bytes long and return the resulting NopSled list. Each sled
+/// records its owning function range so emitReplacementCode can only borrow
+/// padding from the same kernel as the instruction being patched. NOPs outside
+/// any sized function symbol are ignored.
 static std::vector<NopSled>
-buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
+buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+                const ElfView &Elf) {
   std::vector<NopSled> Sleds;
-  const size_t N = Decoded.size();
-  size_t I = 0;
-  while (I < N) {
-    if (Decoded[I].Inst.getOpcode() == LS.SNopOpcode) {
-      uint64_t Start = Decoded[I].Offset;
-      uint64_t End = Start;
-      while (I < N && Decoded[I].Inst.getOpcode() == LS.SNopOpcode) {
-        End = Decoded[I].Offset + Decoded[I].Size;
-        ++I;
-      }
-      if (End - Start >= MinNopSledSize)
-        Sleds.push_back({Start, End, Start});
-    } else {
-      ++I;
+  bool HasActiveRange = false;
+  ElfView::FunctionTextRange ActiveRange;
+  uint64_t Start = 0;
+  uint64_t End = 0;
+
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (DI.Inst.getOpcode() != LS.SNopOpcode) {
+      if (HasActiveRange)
+        appendNopSledIfLarge(Sleds, Start, End, ActiveRange);
+      HasActiveRange = false;
+      continue;
     }
+
+    std::optional<ElfView::FunctionTextRange> Range =
+        Elf.findFunctionTextRangeAtOffset(DI.Offset);
+    if (!Range || DI.Size > Range->End - DI.Offset) {
+      if (HasActiveRange)
+        appendNopSledIfLarge(Sleds, Start, End, ActiveRange);
+      HasActiveRange = false;
+      continue;
+    }
+
+    if (!HasActiveRange || ActiveRange.Begin != Range->Begin ||
+        ActiveRange.End != Range->End || DI.Offset != End) {
+      if (HasActiveRange)
+        appendNopSledIfLarge(Sleds, Start, End, ActiveRange);
+      ActiveRange = *Range;
+      HasActiveRange = true;
+      Start = DI.Offset;
+    }
+    End = DI.Offset + DI.Size;
   }
+
+  if (HasActiveRange)
+    appendNopSledIfLarge(Sleds, Start, End, ActiveRange);
   return Sleds;
 }
 
@@ -236,13 +323,12 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
 /// original site, overwrites the original site with a branch-forward to the
 /// sled, and pads the leftover bytes of the original slot with cached s_nop
 /// bytes. Advances \c Sled.WritePos by the amount consumed. Returns false if
-/// either branch encoding fails, leaving \c Ctx.Text partially written.
+/// either branch encoding fails. Branches are encoded before any bytes are
+/// written so a failure leaves \c Ctx.Text and \c Sled.WritePos unchanged.
 [[nodiscard]] bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,
                                  uint64_t InstOffset, uint32_t InstSize,
                                  ArrayRef<uint8_t> Replacement) {
   const LLVMState &LS = Ctx.LS;
-  std::memcpy(Ctx.Text + Sled.WritePos, Replacement.data(), Replacement.size());
-
   SmallVector<uint8_t> BrBack = LS.encodeSBranch(
       Sled.WritePos + Replacement.size(), InstOffset + InstSize);
   if (BrBack.empty()) {
@@ -252,8 +338,6 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
           << utohexstr(InstOffset + InstSize) << " failed.\n";
     return false;
   }
-  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack.data(),
-              BrBack.size());
 
   SmallVector<uint8_t> BrFwd = LS.encodeSBranch(InstOffset, Sled.WritePos);
   if (BrFwd.empty()) {
@@ -262,6 +346,10 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
           << utohexstr(Sled.WritePos) << " failed.\n";
     return false;
   }
+
+  std::memcpy(Ctx.Text + Sled.WritePos, Replacement.data(), Replacement.size());
+  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack.data(),
+              BrBack.size());
   std::memcpy(Ctx.Text + InstOffset, BrFwd.data(), BrFwd.size());
 
   // Pad the tail of the replaced instruction slot with cached s_nop bytes
@@ -315,11 +403,11 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     ArrayRef<uint8_t> Replacement) {
-  // This trampoline lands right after .text and after every trampoline already
-  // queued -- later ones are appended behind it and cannot shift it, and
-  // fixupTrampolineBranches walks the same list in the same order -- so its
-  // final pool offset is known exactly now.
-  uint64_t PoolStart = Ctx.TextSize;
+  // This trampoline lands at the appended pool base and after every trampoline
+  // already queued -- later ones are appended behind it and cannot shift it,
+  // and fixupTrampolineBranches walks the same list in the same order -- so its
+  // final pool offset (relative to .text) is known exactly now.
+  uint64_t PoolStart = Ctx.PoolBaseOffset;
   for (const Trampoline &Prev : Ctx.OutTrampolines)
     PoolStart += Prev.Bytes.size();
 
@@ -344,16 +432,17 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
   T.Bytes.insert(T.Bytes.end(), Replacement.begin(), Replacement.end());
 
   if (Far) {
-    if (InstSize < LongBranchFwdBytes) {
-      log() << "hotswap: long trampoline: site 0x" << utohexstr(InstOffset)
-            << " is " << InstSize << " B < " << LongBranchFwdBytes
-            << " B forward branch; declining (site left unpatched)\n";
-      return false;
-    }
-    T.Long = true;
-    // Reserve the long branch-back slot (worst-case 64-bit-literal size).
-    T.Bytes.insert(T.Bytes.end(), LongBranchMaxBytes, uint8_t{0});
-  } else {
+    // HSV-009: the far pool's backward s_add_pc_i64 branch corrupts wave state
+    // on gfx1250 A0 (forward is fine). Decline the site (keep the original
+    // instruction) instead of emitting the crashing redirect; in-place and
+    // near-sled patches are unaffected. TODO: patch via an s_getpc/s_setpc
+    // backward branch once SGPR-liveness can supply the scratch registers.
+    log() << "hotswap: far trampoline at 0x" << utohexstr(InstOffset)
+          << " declined (backward s_add_pc_i64 unreliable on gfx1250 A0, "
+          << "HSV-009); site left unpatched\n";
+    return false;
+  }
+  {
     // Reserve the short branch-back slot; fixupTrampolineBranches fills it in.
     T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
   }
@@ -368,12 +457,17 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        ArrayRef<uint8_t> Replacement) {
-  // findNearestSled already enforces that the returned sled has at least
-  // `Needed` bytes of headroom, so a non-null result is sufficient to take
-  // the in-place path.
+  // findNearestSled enforces sled headroom. emitToNopSled still validates
+  // exact branch reachability because branch-back distance includes the
+  // replacement size, not just the original instruction offset.
   uint64_t Needed = Replacement.size() + MinInstSize;
-  if (NopSled *Sled = findNearestSled(Ctx.NopSleds, InstOffset, Needed))
-    return emitToNopSled(Ctx, *Sled, InstOffset, InstSize, Replacement);
+  if (NopSled *Sled = findNearestSled(Ctx.NopSleds, InstOffset, Needed)) {
+    if (emitToNopSled(Ctx, *Sled, InstOffset, InstSize, Replacement))
+      return true;
+    log() << "hotswap: emitReplacementCode: NOP sled at offset 0x"
+          << utohexstr(Sled->WritePos)
+          << " is not branch-reachable after assembly; using trampoline.\n";
+  }
   return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement);
 }
 
@@ -381,11 +475,19 @@ SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS, uint64_t FromOffset,
 
 /// Per-instruction patch-pass trampoline: invokes \p Fn with (\p Ctx,
 /// \p Idx) if it is non-null, or returns 0 otherwise. nullptr means
-/// the corresponding pass family has no implementation linked in
-/// (e.g. scratch today), which the dispatcher treats as a no-op slot.
-static uint32_t runPerInstPass(uint32_t (*Fn)(PatchContext &, size_t),
-                               PatchContext &Ctx, size_t Idx) {
-  return Fn ? Fn(Ctx, Idx) : 0;
+/// the corresponding pass family has no implementation linked in,
+/// which the dispatcher treats as a no-op slot. std::nullopt means the
+/// pass found a required patch failure after logging a specific reason.
+static std::optional<uint32_t> runPerInstPass(uint32_t (*Fn)(PatchContext &,
+                                                             size_t),
+                                              PatchContext &Ctx, size_t Idx) {
+  if (!Fn)
+    return 0;
+
+  uint32_t PatchCount = Fn(Ctx, Idx);
+  if (Ctx.RequiredPatchFailed)
+    return std::nullopt;
+  return PatchCount;
 }
 
 /// Main per-instruction dispatcher for the GFX1250 B0-to-A0 rewrite.
@@ -396,14 +498,13 @@ static uint32_t runPerInstPass(uint32_t (*Fn)(PatchContext &, size_t),
 /// the whole-function WMMA-hazard pass after the per-instruction loop and
 /// records per-kernel stats via ElfView::updateKernelDescriptor.
 /// Returns the total number of applied patches across all passes.
-static uint32_t
-applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
-                        uint8_t *Text, uint64_t TextSize, const LLVMState &LS,
-                        std::vector<Trampoline> &OutTrampolines, ElfView &Elf,
-                        std::vector<ScratchPatchInfo> &OutScratchPatches,
-                        const RewriteConfig &Config) {
+static std::optional<uint32_t> applyGfx1250B0toA0Rules(
+    std::vector<InternalDecodedInst> &Decoded, uint8_t *Text, uint64_t TextSize,
+    const LLVMState &LS, std::vector<Trampoline> &OutTrampolines, ElfView &Elf,
+    std::vector<ScratchPatchInfo> &OutScratchPatches,
+    const RewriteConfig &Config, bool &OutRequiredPatchApplied) {
   uint32_t Patched = 0;
-  std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS);
+  std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS, Elf);
 
   CFG Cfg = buildCfg(Decoded, *LS.MCII);
   LivenessInfo Liveness =
@@ -421,9 +522,19 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
   }
 
   StringMap<KernelPatchStats> KernelStats;
-  PatchContext Ctx{Config,           Decoded, Text, TextSize, LS,
-                   OutTrampolines,   Sleds,   Elf,  Liveness, KernelStats,
-                   OutScratchPatches};
+  // Pool base as a .text-relative offset for trampoline branch math. The pool
+  // is always >= textAddr(); checkedSubUint64 guards a malformed object.
+  std::optional<uint64_t> PoolVAddr = Elf.trampolinePoolVAddr();
+  if (!PoolVAddr)
+    return std::nullopt;
+  std::optional<uint64_t> PoolBaseOffset = checkedSubUint64(
+      *PoolVAddr, Elf.textAddr(), "trampoline pool base offset");
+  if (!PoolBaseOffset)
+    return std::nullopt;
+  PatchContext Ctx{Config,         Decoded,         Text,
+                   TextSize,       *PoolBaseOffset, LS,
+                   OutTrampolines, Sleds,           Elf,
+                   Liveness,       KernelStats,     OutScratchPatches};
 
   const HotswapPatchVTable &VT = getHotswapPatchVTable();
 
@@ -431,31 +542,31 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
   // classify as a valid instruction; the dispatcher has nothing to match
   // against on these and we must not invoke the patch passes for them.
   constexpr StringLiteral UnknownMnemonic = "<unknown>";
+  using PerInstPatchFn = uint32_t (*)(PatchContext &, size_t);
+  SmallVector<PerInstPatchFn, 5> PerInstPasses;
+  if (Config.RunB0A0Patches) {
+    PerInstPasses.push_back(VT.applyInPlacePatches);
+    PerInstPasses.push_back(VT.applyTrampolinePatches);
+    PerInstPasses.push_back(VT.applyWmmaSplitPatches);
+    PerInstPasses.push_back(VT.applyScratchPatches);
+    PerInstPasses.push_back(VT.applyWmmaScale16Patches);
+  } else {
+    PerInstPasses.push_back(VT.applyTrampolinePatches);
+  }
 
   for (size_t Idx = 0, E = Decoded.size(); Idx < E; ++Idx) {
     const InternalDecodedInst &DI = Decoded[Idx];
     if (DI.Mnemonic == UnknownMnemonic)
       continue;
 
-    if (uint32_t P = runPerInstPass(VT.applyInPlacePatches, Ctx, Idx)) {
-      Patched += P;
-      continue;
-    }
-    if (uint32_t P = runPerInstPass(VT.applyTrampolinePatches, Ctx, Idx)) {
-      Patched += P;
-      continue;
-    }
-    if (uint32_t P = runPerInstPass(VT.applyWmmaSplitPatches, Ctx, Idx)) {
-      Patched += P;
-      continue;
-    }
-    if (uint32_t P = runPerInstPass(VT.applyScratchPatches, Ctx, Idx)) {
-      Patched += P;
-      continue;
-    }
-    if (uint32_t P = runPerInstPass(VT.applyWmmaScale16Patches, Ctx, Idx)) {
-      Patched += P;
-      continue;
+    for (PerInstPatchFn Fn : PerInstPasses) {
+      std::optional<uint32_t> P = runPerInstPass(Fn, Ctx, Idx);
+      if (!P)
+        return std::nullopt;
+      if (*P == 0)
+        continue;
+      Patched += *P;
+      break;
     }
   }
 
@@ -470,9 +581,9 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
   //    treat a branch as WMMA/VALU/VOP3PX2.
   // If a future patch family changes instruction boundaries, the Decoded
   // stream must be rebuilt before these passes run.
-  if (VT.applyWmmaHazardPatch)
+  if (Config.RunB0A0Patches && VT.applyWmmaHazardPatch)
     Patched += VT.applyWmmaHazardPatch(Ctx);
-  if (VT.applyVop3px2Src2Fix)
+  if (Config.RunB0A0Patches && VT.applyVop3px2Src2Fix)
     Patched += VT.applyVop3px2Src2Fix(Ctx);
 
   for (const llvm::StringMapEntry<KernelPatchStats> &KV : KernelStats) {
@@ -482,17 +593,41 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
       continue;
     std::optional<unsigned> VgprsBefore =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
+    std::optional<unsigned> SgprsBefore = Elf.getKernelSgprCount(KName);
     if (Stats.ExtraVgprs > 0)
       Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs,
                                  Config.VgprGranuleSize);
+    if (Stats.ExtraSgprs > 0) {
+      if (!SgprsBefore) {
+        log() << "hotswap: error: failed to read SGPR count for kernel "
+              << KName << "\n";
+        return std::nullopt;
+      }
+      if (Stats.ExtraSgprs >
+          std::numeric_limits<unsigned>::max() - *SgprsBefore) {
+        log() << "hotswap: error: SGPR count for kernel " << KName
+              << " overflows unsigned after hotswap scratch allocation\n";
+        return std::nullopt;
+      }
+      unsigned RequiredSgprs = *SgprsBefore + Stats.ExtraSgprs;
+      if (!Elf.updateKernelDescriptorSgprCount(KName, RequiredSgprs)) {
+        log() << "hotswap: error: failed to update SGPR count for kernel "
+              << KName << "\n";
+        return std::nullopt;
+      }
+    }
     std::optional<unsigned> VgprsAfter =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
+    std::optional<unsigned> SgprsAfter = Elf.getKernelSgprCount(KName);
     log() << "hotswap: liveness: kernel " << KName
           << ": vgprs_before=" << VgprsBefore.value_or(0)
           << ", vgprs_after=" << VgprsAfter.value_or(0)
+          << ", sgprs_before=" << SgprsBefore.value_or(0)
+          << ", sgprs_after=" << SgprsAfter.value_or(0)
           << ", scratch_reused=" << Stats.ScratchReused
           << ", scratch_above_kd=" << Stats.ScratchAboveKd << "\n";
   }
+  OutRequiredPatchApplied = Ctx.RequiredPatchApplied;
   return Patched;
 }
 
@@ -507,19 +642,24 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
 /// trampoline could not be fixed up.
 [[nodiscard]] static bool
 fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
-                        uint64_t TextSize, const LLVMState &LS) {
+                        uint64_t PoolBaseOffset, const LLVMState &LS) {
   // Fail-fast on the first encoding error: the position of later
   // trampolines depends on earlier ones, so a single bad branch would
   // cascade into incorrect layout. A single failure invalidates the whole
   // rewrite, so there is nothing useful to recover beyond it.
-  uint64_t TrampOffset = TextSize;
+  //
+  // Offsets are .text-relative; the pool begins at PoolBaseOffset
+  // (trampolinePoolVAddr() - textAddr()), which is far past .text, so both
+  // edges route through the s_add_pc_i64 long branch.
+  uint64_t TrampOffset = PoolBaseOffset;
   for (Trampoline &T : Trampolines) {
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
     // Long trampolines reserve a wider branch-back slot and use s_add_pc_i64
     // on both edges; short ones use s_branch. Both slots are s_nop-padded to
-    // their reserved size after the branch is written.
+    // their reserved size after the branch is written. (Long/far sites are
+    // currently declined in emitToTrampoline on gfx1250 A0 -- HSV-009.)
     const uint32_t BackReserve = T.Long ? LongBranchMaxBytes : MinInstSize;
     const uint64_t BackSlot = TP + T.Bytes.size() - BackReserve;
     const uint64_t ReturnTo = T.OriginalOffset + T.OriginalSize;
@@ -632,7 +772,10 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   // initializer binds every register*Patch slot on first access, so no
   // explicit install step is needed here.
 
-  if (!Options.RunB0A0Patches && !Options.RunEntryTrampolines) {
+  const bool RunInstructionPatches =
+      Options.RunB0A0Patches ||
+      Options.MaskPolicy != MaskWorkaroundPolicy::None;
+  if (!RunInstructionPatches && !Options.RunEntryTrampolines) {
     std::unique_ptr<WritableMemoryBuffer> Result =
         copyOutputBuffer(ElfData, ElfSize, "no-op");
     if (!Result)
@@ -667,12 +810,15 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   }
 
   RewriteConfig Config = makeGfx1250B0A0Config();
+  Config.RunB0A0Patches = Options.RunB0A0Patches;
+  Config.MaskPolicy = Options.MaskPolicy;
 
   uint8_t *Text = Elf.textData();
   uint64_t Count = 0;
   std::vector<Trampoline> Deferred;
   std::vector<ScratchPatchInfo> ScratchPatches;
-  if (Options.RunB0A0Patches) {
+  bool RequiredPatchApplied = false;
+  if (RunInstructionPatches) {
     std::vector<InternalDecodedInst> Decoded;
     if (!decodeTextSection(Text, Elf.textSize(), LS, Decoded)) {
       log() << "hotswap: error: retargetCodeObject: decodeTextSection "
@@ -680,17 +826,42 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
       return AMD_COMGR_STATUS_ERROR;
     }
 
-    Count = applyGfx1250B0toA0Rules(Decoded, Text, Elf.textSize(), LS, Deferred,
-                                    Elf, ScratchPatches, Config);
-    log() << "hotswap: applied " << Count << " B0-to-A0 patches\n";
+    std::optional<uint32_t> Patched = applyGfx1250B0toA0Rules(
+        Decoded, Text, Elf.textSize(), LS, Deferred, Elf, ScratchPatches,
+        Config, RequiredPatchApplied);
+    if (!Patched)
+      return AMD_COMGR_STATUS_ERROR;
+    Count = *Patched;
+    log() << "hotswap: applied " << Count << " instruction patches\n";
   } else {
-    log() << "hotswap: B0-to-A0 patches disabled for this rewrite\n";
+    log() << "hotswap: instruction patches disabled for this rewrite\n";
   }
 
   std::unique_ptr<WritableMemoryBuffer> Result;
   std::vector<Trampoline> Growth = Deferred;
+  // The appended pool's fresh virtual address is the single reference point for
+  // all trampoline branch/stub targets (growWithTrampolines places it there).
+  std::optional<uint64_t> PoolVAddrOr = Elf.trampolinePoolVAddr();
+  if (!PoolVAddrOr) {
+    log() << "hotswap: error: retargetCodeObject: could not compute trampoline "
+          << "pool virtual address.\n";
+    return AMD_COMGR_STATUS_ERROR;
+  }
+  const uint64_t PoolVAddr = *PoolVAddrOr;
+  // Pool is always >= textAddr(); checkedSubUint64 guards a malformed object.
+  std::optional<uint64_t> PoolBaseOffsetOr = checkedSubUint64(
+      PoolVAddr, Elf.textAddr(), "trampoline pool base offset");
+  if (!PoolBaseOffsetOr)
+    return AMD_COMGR_STATUS_ERROR;
+  const uint64_t PoolBaseOffset = *PoolBaseOffsetOr;
   if (!Deferred.empty()) {
-    if (!fixupTrampolineBranches(Deferred, Text, Elf.textSize(), LS)) {
+    if (!fixupTrampolineBranches(Deferred, Text, PoolBaseOffset, LS)) {
+      if (RequiredPatchApplied) {
+        log() << "hotswap: error: required patch trampoline branch fixup "
+                 "failed; refusing to return the original unsafe code "
+                 "object\n";
+        return AMD_COMGR_STATUS_ERROR;
+      }
       // A trampoline branch could not be encoded, so the local `Buf` copy
       // is half-redirected; shipping it would run corrupted code. Fall back
       // to the pristine input object (`ElfData`, untouched) so the loader
@@ -727,6 +898,10 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     log() << "hotswap: kernel-entry trampolines disabled for this rewrite\n";
   }
 
+  if (!Deferred.empty() &&
+      !appendDeferredTrampolinePrefetchGuard(Elf, LS, Growth))
+    return AMD_COMGR_STATUS_ERROR;
+
   if (!Growth.empty()) {
     Result = Elf.growWithTrampolines(Growth, LS.SNopBytes);
     if (!Result) {
@@ -746,9 +921,23 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
       GrowthTotal += T.Bytes.size();
     }
     patchDebugSections(*Result, Deferred, Elf, GrowthTotal);
-    if (!rewriteKernelEntryDescriptorOffsets(*Result, Elf.textSize(),
+    if (!rewriteKernelEntryDescriptorOffsets(*Result, PoolVAddr, LS.Cpu,
                                              EntryFixups))
       return AMD_COMGR_STATUS_ERROR;
+
+    // Give each appended entry stub a `<kernel>.stub` symbol so a dispatch
+    // whose entry now points at the stub still resolves to a name (e.g. rocgdb
+    // `info dispatches`). This grows only the non-alloc .symtab/.strtab and
+    // returns a new buffer; failure is non-fatal (the rewritten code object is
+    // still correct, just missing the debug-only symbol).
+    if (!EntryFixups.empty()) {
+      std::unique_ptr<WritableMemoryBuffer> WithSyms =
+          addKernelEntryTrampolineSymbols(*Result, Elf.textSectionIndex(),
+                                          Elf.textAddr(), Elf.textSize(),
+                                          EntryFixups);
+      if (WithSyms)
+        Result = std::move(WithSyms);
+    }
   } else {
     Result = copyOutputBuffer(Buf.data(), ElfSize, "patched");
     if (!Result)
