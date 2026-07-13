@@ -1,4 +1,4 @@
-// Test for optional vendor additonal distribution info in --version
+// Test for optional vendor additional distribution info in --version
 
 // UNSUPPORTED: system-windows
 
@@ -6,7 +6,7 @@
 // RUN: %clang --version  | FileCheck --check-prefix=CHECK-NO-DIST %s
 // CHECK-NO-DIST-NOT: AMD AFAR drop
 
-// Check that "--verison" can have extra output
+// Check that "--version" can have extra output
 // RUN: echo "AMD AFAR drop" > /tmp/$$vers ; \
 // RUN: export LLVM_VERSION_INFO_FILE=/tmp/$$vers; \
 // RUN: %clang --version  | FileCheck --check-prefix=CHECK-DIST %s

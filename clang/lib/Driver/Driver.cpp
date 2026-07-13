@@ -2498,7 +2498,6 @@ void Driver::PrintVersion(const Compilation &C, raw_ostream &OS) const {
     OS << "Configuration file: " << ConfigFile << '\n';
 
   PrintLocalVersionInfo(DriverExecutable, OS);
-
 }
 
 /// PrintDiagnosticCategories - Implement the --print-diagnostic-categories
