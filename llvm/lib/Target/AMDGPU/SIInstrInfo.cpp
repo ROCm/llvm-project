@@ -16,6 +16,7 @@
 #include "AMDGPUInstrInfo.h"
 #include "AMDGPULaneMaskUtils.h"
 #include "GCNHazardRecognizer.h"
+#include "GCNRegPressure.h"
 #include "GCNSubtarget.h"
 #include "SIMachineFunctionInfo.h"
 #include "Utils/AMDGPUBaseInfo.h"
@@ -3297,14 +3298,55 @@ private:
   const MachineInstr *CmpInst;
   /// The normalized condition used by createTripCountGreaterCondition()
   SmallVector<MachineOperand, 3> Cond;
+  MachineFunction *MF;
 
 public:
   AMDGPUPipelinerLoopInfo(MachineInstr *CmpInst,
                           const SmallVectorImpl<MachineOperand> &Cond)
-      : CmpInst(CmpInst), Cond(Cond.begin(), Cond.end()) {}
+      : CmpInst(CmpInst), Cond(Cond.begin(), Cond.end()),
+        MF(CmpInst->getParent()->getParent()) {}
 
   bool shouldIgnoreForPipelining(const MachineInstr *MI) const override {
     return CmpInst && MI == CmpInst;
+  }
+
+  bool shouldLimitRegPressure() const override { return true; }
+
+  // Reject a schedule needing more registers than the target occupancy allows.
+  std::optional<bool> isScheduleRegPressureTooHigh(
+      ArrayRef<unsigned> MaxSetPressure) const override {
+    const GCNSubtarget &ST = MF->getSubtarget<GCNSubtarget>();
+    const SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
+    unsigned TargetOcc = MFI->getOccupancy();
+
+    unsigned SGPRPressure =
+        MaxSetPressure[AMDGPU::RegisterPressureSets::SReg_32];
+    unsigned MaxSGPRs = ST.getMaxNumSGPRs(TargetOcc, /*Addressable=*/true);
+    if (SGPRPressure > MaxSGPRs)
+      return true;
+
+    unsigned VGPRPressure =
+        MaxSetPressure[AMDGPU::RegisterPressureSets::VGPR_32];
+    unsigned AGPRPressure =
+        MaxSetPressure[AMDGPU::RegisterPressureSets::AGPR_32];
+
+    // The maximum number of arch VGPRs on a non-unified register file, or the
+    // maximum VGPR + AGPR in the unified (gfx90a+) register file case.
+    unsigned MaxVGPRs =
+        ST.getMaxNumVGPRs(TargetOcc, MFI->getDynamicVGPRBlockSize());
+    unsigned CombinedVGPRs =
+        ST.hasGFX90AInsts()
+            ? GCNRegPressure::getUnifiedVGPRNum(VGPRPressure, AGPRPressure,
+                                                /*NumAVGPRs=*/0)
+            : std::max(VGPRPressure, AGPRPressure);
+    if (CombinedVGPRs > MaxVGPRs)
+      return true;
+
+    // The maximum number of arch VGPRs for both unified and non-unified
+    // register files. Each class must fit this cap, which is tighter than the
+    // combined budget at low occupancy.
+    unsigned MaxArchVGPRs = std::min(MaxVGPRs, ST.getAddressableNumArchVGPRs());
+    return VGPRPressure > MaxArchVGPRs || AGPRPressure > MaxArchVGPRs;
   }
 
   std::optional<bool> createTripCountGreaterCondition(
