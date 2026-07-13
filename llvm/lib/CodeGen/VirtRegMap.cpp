@@ -340,8 +340,11 @@ VirtRegRewriterPass::run(MachineFunction &MF,
   PA.preserve<LiveStacksAnalysis>();
   // LiveDebugVariables is preserved by default, so clear it
   // if this VRegRewriter is the last one in the pipeline.
-  if (ClearVirtRegs)
+  if (ClearVirtRegs) {
     PA.abandon<LiveDebugVariablesAnalysis>();
+  } else if (PreserveVRM) {
+    PA.preserve<VirtRegMapAnalysis>();
+  }
   return PA;
 }
 
