@@ -134,11 +134,13 @@ add_llvm_target(AMDGPUCodeGen
   GCNHazardRecognizer.cpp
   GCNILPSched.cpp
   GCNIterativeScheduler.cpp
-  GCNLaneMaskUtils.cpp
+  AMDGPULaneMaskUtils.cpp
   GCNMinRegStrategy.cpp
   GCNNSAReassign.cpp
   GCNPreRAOptimizations.cpp
   GCNPreRALongBranchReg.cpp
+  AMDGPUPreRAVectorRegHints.cpp
+  AMDGPUPreRASGPROptimizations.cpp
   AMDGPUPreWaveTransform.cpp
   AMDGPUFinalizeISelWaveTransform.cpp
   GCNRegPressure.cpp

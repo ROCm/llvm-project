@@ -121,8 +121,8 @@ define amdgpu_kernel void @s_ubfe_sub_i32(ptr addrspace(1) %out, i32 %src, i32 %
 ; SI-LABEL: s_ubfe_sub_i32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
-; SI-NEXT:    s_mov_b32 s5, 0xf000
 ; SI-NEXT:    s_mov_b32 s4, 0
+; SI-NEXT:    s_mov_b32 s5, 0xf000
 ; SI-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
@@ -326,8 +326,8 @@ define amdgpu_kernel void @s_sbfe_sub_i32(ptr addrspace(1) %out, i32 %src, i32 %
 ; SI-LABEL: s_sbfe_sub_i32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
-; SI-NEXT:    s_mov_b32 s5, 0xf000
 ; SI-NEXT:    s_mov_b32 s4, 0
+; SI-NEXT:    s_mov_b32 s5, 0xf000
 ; SI-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)

@@ -633,8 +633,8 @@ define amdgpu_kernel void @scalar_xor_literal_multi_use_i64(ptr addrspace(1) %ou
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; SI-NEXT:    s_load_dwordx4 s[4:7], s[4:5], 0x13
-; SI-NEXT:    s_mov_b32 s9, 0xf237b
 ; SI-NEXT:    s_movk_i32 s8, 0x3039
+; SI-NEXT:    s_mov_b32 s9, 0xf237b
 ; SI-NEXT:    s_mov_b32 s3, 0xf000
 ; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
@@ -655,8 +655,8 @@ define amdgpu_kernel void @scalar_xor_literal_multi_use_i64(ptr addrspace(1) %ou
 ; VI:       ; %bb.0:
 ; VI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x4c
 ; VI-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x24
-; VI-NEXT:    s_mov_b32 s7, 0xf237b
 ; VI-NEXT:    s_movk_i32 s6, 0x3039
+; VI-NEXT:    s_mov_b32 s7, 0xf237b
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    s_xor_b64 s[0:1], s[0:1], s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v0, s4

@@ -1585,8 +1585,8 @@ define <2 x i64> @test_unsigned_v2f64_v2i64(<2 x double> %f) {
 ; GFX7-ISEL-NEXT:    v_trunc_f64_e32 v[6:7], v[2:3]
 ; GFX7-ISEL-NEXT:    s_movk_i32 s4, 0xffe0
 ; GFX7-ISEL-NEXT:    s_mov_b32 s5, 0xc1f00000
-; GFX7-ISEL-NEXT:    s_mov_b32 s9, 0x43efffff
 ; GFX7-ISEL-NEXT:    s_mov_b32 s8, -1
+; GFX7-ISEL-NEXT:    s_mov_b32 s9, 0x43efffff
 ; GFX7-ISEL-NEXT:    v_cmp_nle_f64_e64 s[6:7], 0, v[2:3]
 ; GFX7-ISEL-NEXT:    v_cmp_nle_f64_e32 vcc, 0, v[0:1]
 ; GFX7-ISEL-NEXT:    v_ldexp_f64 v[8:9], v[4:5], s4
@@ -1654,8 +1654,8 @@ define <2 x i64> @test_unsigned_v2f64_v2i64(<2 x double> %f) {
 ; GFX9-NEXT:    v_trunc_f64_e32 v[6:7], v[2:3]
 ; GFX9-NEXT:    s_movk_i32 s4, 0xffe0
 ; GFX9-NEXT:    s_mov_b32 s5, 0xc1f00000
-; GFX9-NEXT:    s_mov_b32 s9, 0x43efffff
 ; GFX9-NEXT:    s_mov_b32 s8, -1
+; GFX9-NEXT:    s_mov_b32 s9, 0x43efffff
 ; GFX9-NEXT:    v_cmp_nle_f64_e64 s[6:7], 0, v[2:3]
 ; GFX9-NEXT:    v_cmp_nle_f64_e32 vcc, 0, v[0:1]
 ; GFX9-NEXT:    v_ldexp_f64 v[8:9], v[4:5], s4

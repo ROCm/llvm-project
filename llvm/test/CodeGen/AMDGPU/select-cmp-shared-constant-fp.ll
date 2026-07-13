@@ -349,8 +349,8 @@ define double @fcmp_select_fold_oeq_f64_imm(double %arg, double %other) {
 ; GFX900-LABEL: fcmp_select_fold_oeq_f64_imm:
 ; GFX900:       ; %bb.0: ; %entry
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    s_mov_b32 s4, 0x54442d18
+; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    v_cmp_eq_f64_e32 vcc, s[4:5], v[0:1]
 ; GFX900-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX900-NEXT:    v_cndmask_b32_e32 v1, v3, v1, vcc
@@ -375,8 +375,8 @@ define double @fcmp_select_fold_oeq_imm_f64(double %arg, double %other) {
 ; GFX900-LABEL: fcmp_select_fold_oeq_imm_f64:
 ; GFX900:       ; %bb.0: ; %entry
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    s_mov_b32 s4, 0x54442d18
+; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    v_cmp_eq_f64_e32 vcc, s[4:5], v[0:1]
 ; GFX900-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX900-NEXT:    v_cndmask_b32_e32 v1, v3, v1, vcc
@@ -402,8 +402,8 @@ define double @fcmp_select_fold_one_f64_imm(double %arg, double %other) {
 ; GFX900-LABEL: fcmp_select_fold_one_f64_imm:
 ; GFX900:       ; %bb.0: ; %entry
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    s_mov_b32 s5, 0x4005bf0a
 ; GFX900-NEXT:    s_mov_b32 s4, 0x8b145769
+; GFX900-NEXT:    s_mov_b32 s5, 0x4005bf0a
 ; GFX900-NEXT:    v_cmp_lg_f64_e32 vcc, s[4:5], v[0:1]
 ; GFX900-NEXT:    v_cndmask_b32_e32 v0, v0, v2, vcc
 ; GFX900-NEXT:    v_cndmask_b32_e32 v1, v1, v3, vcc
@@ -428,8 +428,8 @@ define double @fcmp_select_fold_one_imm_f64(double %arg, double %other) {
 ; GFX900-LABEL: fcmp_select_fold_one_imm_f64:
 ; GFX900:       ; %bb.0: ; %entry
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    s_mov_b32 s5, 0x4005bf0a
 ; GFX900-NEXT:    s_mov_b32 s4, 0x8b145769
+; GFX900-NEXT:    s_mov_b32 s5, 0x4005bf0a
 ; GFX900-NEXT:    v_cmp_lg_f64_e32 vcc, s[4:5], v[0:1]
 ; GFX900-NEXT:    v_cndmask_b32_e32 v0, v0, v2, vcc
 ; GFX900-NEXT:    v_cndmask_b32_e32 v1, v1, v3, vcc
@@ -455,8 +455,8 @@ define double @fcmp_select_no_fold_f64_other_pos(double %arg, double %other) {
 ; GFX900-LABEL: fcmp_select_no_fold_f64_other_pos:
 ; GFX900:       ; %bb.0: ; %entry
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    s_mov_b32 s4, 0x54442d18
+; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    v_cmp_eq_f64_e32 vcc, s[4:5], v[0:1]
 ; GFX900-NEXT:    v_mov_b32_e32 v4, 0x54442d18
 ; GFX900-NEXT:    v_mov_b32_e32 v1, 0x400921fb
@@ -484,8 +484,8 @@ define double @fcmp_select_no_fold_f64_unsupported_cmp(double %arg, double %othe
 ; GFX900-LABEL: fcmp_select_no_fold_f64_unsupported_cmp:
 ; GFX900:       ; %bb.0: ; %entry
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    s_mov_b32 s4, 0x54442d18
+; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    v_cmp_gt_f64_e32 vcc, s[4:5], v[0:1]
 ; GFX900-NEXT:    v_mov_b32_e32 v4, 0x54442d18
 ; GFX900-NEXT:    v_mov_b32_e32 v1, 0x400921fb
@@ -610,8 +610,8 @@ define double @fcmp_select_no_fold_f64_different_const(double %arg, double %othe
 ; GFX900-LABEL: fcmp_select_no_fold_f64_different_const:
 ; GFX900:       ; %bb.0: ; %entry
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    s_mov_b32 s4, 0x54442d18
+; GFX900-NEXT:    s_mov_b32 s5, 0x400921fb
 ; GFX900-NEXT:    v_cmp_neq_f64_e32 vcc, s[4:5], v[0:1]
 ; GFX900-NEXT:    v_mov_b32_e32 v4, 0x8b145769
 ; GFX900-NEXT:    v_mov_b32_e32 v1, 0x4005bf0a

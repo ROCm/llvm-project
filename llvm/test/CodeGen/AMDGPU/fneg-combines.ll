@@ -2127,8 +2127,8 @@ define amdgpu_kernel void @v_fneg_inv2pi_minnum_f64(ptr addrspace(1) %out, ptr a
 ; SI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; SI-NEXT:    flat_load_dwordx2 v[0:1], v[0:1] glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    s_mov_b32 s3, 0xbfc45f30
 ; SI-NEXT:    s_mov_b32 s2, 0x6dc9c882
+; SI-NEXT:    s_mov_b32 s3, 0xbfc45f30
 ; SI-NEXT:    v_mov_b32_e32 v3, s1
 ; SI-NEXT:    v_add_i32_e32 v2, vcc, s0, v2
 ; SI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
@@ -2177,8 +2177,8 @@ define amdgpu_kernel void @v_fneg_neg_inv2pi_minnum_f64(ptr addrspace(1) %out, p
 ; SI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; SI-NEXT:    flat_load_dwordx2 v[0:1], v[0:1] glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    s_mov_b32 s3, 0x3fc45f30
 ; SI-NEXT:    s_mov_b32 s2, 0x6dc9c882
+; SI-NEXT:    s_mov_b32 s3, 0x3fc45f30
 ; SI-NEXT:    v_mov_b32_e32 v3, s1
 ; SI-NEXT:    v_add_i32_e32 v2, vcc, s0, v2
 ; SI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc

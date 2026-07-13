@@ -728,32 +728,18 @@ define amdgpu_kernel void @fadd_v2_v_lit_hi0(ptr addrspace(1) %a) {
 ; GFX900-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
 ; GFX900-NEXT:    s_endpgm
 ;
-; PACKED-SDAG-LABEL: fadd_v2_v_lit_hi0:
-; PACKED-SDAG:       ; %bb.0:
-; PACKED-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; PACKED-SDAG-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; PACKED-SDAG-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
-; PACKED-SDAG-NEXT:    s_mov_b32 s3, 0
-; PACKED-SDAG-NEXT:    s_mov_b32 s2, 1.0
-; PACKED-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
-; PACKED-SDAG-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
-; PACKED-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; PACKED-SDAG-NEXT:    v_pk_add_f32 v[0:1], v[0:1], s[2:3]
-; PACKED-SDAG-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
-; PACKED-SDAG-NEXT:    s_endpgm
-;
-; PACKED-GISEL-LABEL: fadd_v2_v_lit_hi0:
-; PACKED-GISEL:       ; %bb.0:
-; PACKED-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; PACKED-GISEL-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; PACKED-GISEL-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
-; PACKED-GISEL-NEXT:    s_mov_b64 s[2:3], 0x3f800000
-; PACKED-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; PACKED-GISEL-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
-; PACKED-GISEL-NEXT:    s_waitcnt vmcnt(0)
-; PACKED-GISEL-NEXT:    v_pk_add_f32 v[0:1], v[0:1], s[2:3]
-; PACKED-GISEL-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
-; PACKED-GISEL-NEXT:    s_endpgm
+; PACKED-LABEL: fadd_v2_v_lit_hi0:
+; PACKED:       ; %bb.0:
+; PACKED-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; PACKED-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
+; PACKED-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
+; PACKED-NEXT:    s_mov_b64 s[2:3], 0x3f800000
+; PACKED-NEXT:    s_waitcnt lgkmcnt(0)
+; PACKED-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
+; PACKED-NEXT:    s_waitcnt vmcnt(0)
+; PACKED-NEXT:    v_pk_add_f32 v[0:1], v[0:1], s[2:3]
+; PACKED-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
+; PACKED-NEXT:    s_endpgm
 ;
 ; GFX1250-SDAG-LABEL: fadd_v2_v_lit_hi0:
 ; GFX1250-SDAG:       ; %bb.0:
@@ -803,33 +789,19 @@ define amdgpu_kernel void @fadd_v2_v_lit_lo0(ptr addrspace(1) %a) {
 ; GFX900-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
 ; GFX900-NEXT:    s_endpgm
 ;
-; PACKED-SDAG-LABEL: fadd_v2_v_lit_lo0:
-; PACKED-SDAG:       ; %bb.0:
-; PACKED-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; PACKED-SDAG-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; PACKED-SDAG-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
-; PACKED-SDAG-NEXT:    s_mov_b32 s3, 1.0
-; PACKED-SDAG-NEXT:    s_mov_b32 s2, 0
-; PACKED-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
-; PACKED-SDAG-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
-; PACKED-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; PACKED-SDAG-NEXT:    v_pk_add_f32 v[0:1], v[0:1], s[2:3]
-; PACKED-SDAG-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
-; PACKED-SDAG-NEXT:    s_endpgm
-;
-; PACKED-GISEL-LABEL: fadd_v2_v_lit_lo0:
-; PACKED-GISEL:       ; %bb.0:
-; PACKED-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; PACKED-GISEL-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; PACKED-GISEL-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
-; PACKED-GISEL-NEXT:    s_mov_b32 s2, 0
-; PACKED-GISEL-NEXT:    s_mov_b32 s3, 1.0
-; PACKED-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; PACKED-GISEL-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
-; PACKED-GISEL-NEXT:    s_waitcnt vmcnt(0)
-; PACKED-GISEL-NEXT:    v_pk_add_f32 v[0:1], v[0:1], s[2:3]
-; PACKED-GISEL-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
-; PACKED-GISEL-NEXT:    s_endpgm
+; PACKED-LABEL: fadd_v2_v_lit_lo0:
+; PACKED:       ; %bb.0:
+; PACKED-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; PACKED-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
+; PACKED-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
+; PACKED-NEXT:    s_mov_b32 s2, 0
+; PACKED-NEXT:    s_mov_b32 s3, 1.0
+; PACKED-NEXT:    s_waitcnt lgkmcnt(0)
+; PACKED-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
+; PACKED-NEXT:    s_waitcnt vmcnt(0)
+; PACKED-NEXT:    v_pk_add_f32 v[0:1], v[0:1], s[2:3]
+; PACKED-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
+; PACKED-NEXT:    s_endpgm
 ;
 ; GFX1250-SDAG-LABEL: fadd_v2_v_lit_lo0:
 ; GFX1250-SDAG:       ; %bb.0:
@@ -879,33 +851,19 @@ define amdgpu_kernel void @fadd_v2_v_unfoldable_lit(ptr addrspace(1) %a) {
 ; GFX900-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
 ; GFX900-NEXT:    s_endpgm
 ;
-; PACKED-SDAG-LABEL: fadd_v2_v_unfoldable_lit:
-; PACKED-SDAG:       ; %bb.0:
-; PACKED-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; PACKED-SDAG-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; PACKED-SDAG-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
-; PACKED-SDAG-NEXT:    s_mov_b32 s3, 2.0
-; PACKED-SDAG-NEXT:    s_mov_b32 s2, 1.0
-; PACKED-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
-; PACKED-SDAG-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
-; PACKED-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; PACKED-SDAG-NEXT:    v_pk_add_f32 v[0:1], v[0:1], s[2:3]
-; PACKED-SDAG-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
-; PACKED-SDAG-NEXT:    s_endpgm
-;
-; PACKED-GISEL-LABEL: fadd_v2_v_unfoldable_lit:
-; PACKED-GISEL:       ; %bb.0:
-; PACKED-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; PACKED-GISEL-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; PACKED-GISEL-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
-; PACKED-GISEL-NEXT:    s_mov_b32 s2, 1.0
-; PACKED-GISEL-NEXT:    s_mov_b32 s3, 2.0
-; PACKED-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; PACKED-GISEL-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
-; PACKED-GISEL-NEXT:    s_waitcnt vmcnt(0)
-; PACKED-GISEL-NEXT:    v_pk_add_f32 v[0:1], v[0:1], s[2:3]
-; PACKED-GISEL-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
-; PACKED-GISEL-NEXT:    s_endpgm
+; PACKED-LABEL: fadd_v2_v_unfoldable_lit:
+; PACKED:       ; %bb.0:
+; PACKED-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; PACKED-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
+; PACKED-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
+; PACKED-NEXT:    s_mov_b32 s2, 1.0
+; PACKED-NEXT:    s_mov_b32 s3, 2.0
+; PACKED-NEXT:    s_waitcnt lgkmcnt(0)
+; PACKED-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
+; PACKED-NEXT:    s_waitcnt vmcnt(0)
+; PACKED-NEXT:    v_pk_add_f32 v[0:1], v[0:1], s[2:3]
+; PACKED-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
+; PACKED-NEXT:    s_endpgm
 ;
 ; GFX1250-SDAG-LABEL: fadd_v2_v_unfoldable_lit:
 ; GFX1250-SDAG:       ; %bb.0:
@@ -2133,33 +2091,19 @@ define amdgpu_kernel void @fmul_v2_v_unfoldable_lit(ptr addrspace(1) %a) {
 ; GFX900-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
 ; GFX900-NEXT:    s_endpgm
 ;
-; PACKED-SDAG-LABEL: fmul_v2_v_unfoldable_lit:
-; PACKED-SDAG:       ; %bb.0:
-; PACKED-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; PACKED-SDAG-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; PACKED-SDAG-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
-; PACKED-SDAG-NEXT:    s_mov_b32 s3, 0x40400000
-; PACKED-SDAG-NEXT:    s_mov_b32 s2, 4.0
-; PACKED-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
-; PACKED-SDAG-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
-; PACKED-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; PACKED-SDAG-NEXT:    v_pk_mul_f32 v[0:1], v[0:1], s[2:3]
-; PACKED-SDAG-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
-; PACKED-SDAG-NEXT:    s_endpgm
-;
-; PACKED-GISEL-LABEL: fmul_v2_v_unfoldable_lit:
-; PACKED-GISEL:       ; %bb.0:
-; PACKED-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; PACKED-GISEL-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; PACKED-GISEL-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
-; PACKED-GISEL-NEXT:    s_mov_b32 s2, 4.0
-; PACKED-GISEL-NEXT:    s_mov_b32 s3, 0x40400000
-; PACKED-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; PACKED-GISEL-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
-; PACKED-GISEL-NEXT:    s_waitcnt vmcnt(0)
-; PACKED-GISEL-NEXT:    v_pk_mul_f32 v[0:1], v[0:1], s[2:3]
-; PACKED-GISEL-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
-; PACKED-GISEL-NEXT:    s_endpgm
+; PACKED-LABEL: fmul_v2_v_unfoldable_lit:
+; PACKED:       ; %bb.0:
+; PACKED-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; PACKED-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
+; PACKED-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
+; PACKED-NEXT:    s_mov_b32 s2, 4.0
+; PACKED-NEXT:    s_mov_b32 s3, 0x40400000
+; PACKED-NEXT:    s_waitcnt lgkmcnt(0)
+; PACKED-NEXT:    global_load_dwordx2 v[0:1], v2, s[0:1]
+; PACKED-NEXT:    s_waitcnt vmcnt(0)
+; PACKED-NEXT:    v_pk_mul_f32 v[0:1], v[0:1], s[2:3]
+; PACKED-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
+; PACKED-NEXT:    s_endpgm
 ;
 ; GFX1250-SDAG-LABEL: fmul_v2_v_unfoldable_lit:
 ; GFX1250-SDAG:       ; %bb.0:
@@ -3056,8 +3000,8 @@ define amdgpu_kernel void @fma_v2_v_unfoldable_lit(ptr addrspace(1) %a) {
 ; PACKED-SDAG-NEXT:    v_mov_b32_e32 v3, 2.0
 ; PACKED-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; PACKED-SDAG-NEXT:    global_load_dwordx2 v[0:1], v4, s[0:1]
-; PACKED-SDAG-NEXT:    s_mov_b32 s3, 0x40400000
 ; PACKED-SDAG-NEXT:    s_mov_b32 s2, 4.0
+; PACKED-SDAG-NEXT:    s_mov_b32 s3, 0x40400000
 ; PACKED-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; PACKED-SDAG-NEXT:    v_pk_fma_f32 v[0:1], v[0:1], s[2:3], v[2:3]
 ; PACKED-SDAG-NEXT:    global_store_dwordx2 v4, v[0:1], s[0:1]

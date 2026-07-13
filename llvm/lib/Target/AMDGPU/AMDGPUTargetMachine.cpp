@@ -33,6 +33,8 @@
 #include "AMDGPUNextUseAnalysis.h"
 #include "AMDGPUPartitionVGPRsForRA.h"
 #include "AMDGPUPerfHintAnalysis.h"
+#include "AMDGPUPreRASGPROptimizations.h"
+#include "AMDGPUPreRAVectorRegHints.h"
 #include "AMDGPUPreloadKernArgProlog.h"
 #include "AMDGPUPrepareAGPRAlloc.h"
 #include "AMDGPURemoveIncompatibleFunctions.h"
@@ -577,6 +579,16 @@ static cl::opt<bool> EnablePreRAOptimizations(
     cl::desc("Enable Pre-RA optimizations pass"), cl::init(true),
     cl::Hidden);
 
+static cl::opt<bool> EnablePreRASGPROptimizations(
+    "amdgpu-enable-pre-ra-sgpr-optimizations",
+    cl::desc("Enable Pre-RA SGPR optimizations pass"), cl::init(true),
+    cl::Hidden);
+
+static cl::opt<bool> EnablePreRAVectorRegHints(
+    "amdgpu-enable-pre-ra-vector-reg-hints",
+    cl::desc("Enable Pre-RA vector register hints pass"), cl::init(true),
+    cl::Hidden);
+
 static cl::opt<bool> EnablePromoteKernelArguments(
     "amdgpu-enable-promote-kernel-arguments",
     cl::desc("Enable promotion of flat kernel pointer arguments to global"),
@@ -741,6 +753,8 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUResourceUsageAnalysisWrapperPassPass(*PR);
   initializeGCNNSAReassignLegacyPass(*PR);
   initializeGCNPreRAOptimizationsLegacyPass(*PR);
+  initializeAMDGPUPreRAVectorRegHintsLegacyPass(*PR);
+  initializeAMDGPUPreRASGPROptimizationsLegacyPass(*PR);
   initializeGCNPreRALongBranchRegLegacyPass(*PR);
   initializeGCNRewritePartialRegUsesLegacyPass(*PR);
   initializeGCNRegPressurePrinterPass(*PR);
@@ -1815,7 +1829,8 @@ void GCNPassConfig::addOptimizedRegAlloc() {
   if (EnableRewritePartialRegUses)
     insertPass(&RenameIndependentSubregsID, &GCNRewritePartialRegUsesID);
 
-  if (isPassEnabled(EnablePreRAOptimizations))
+  // LWT runs pre-RA opts later, before SGPR alloc.
+  if (isPassEnabled(EnablePreRAOptimizations) && !LateWaveTransform)
     insertPass(&MachineSchedulerID, &GCNPreRAOptimizationsID);
 
   // Allow the scheduler to run before SIWholeQuadMode inserts exec manipulation
@@ -1999,6 +2014,12 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     // partition strategy has to be improved.
     addPass(&AMDGPUPartitionVGPRsForRALegacyID);
 
+    // Add True16 COPY hints, AGPR copy propagation, and BVH stack
+    // optimization before VGPR allocation so the hints are visible to
+    // the allocator.
+    if (isPassEnabled(EnablePreRAVectorRegHints))
+      addPass(&AMDGPUPreRAVectorRegHintsID);
+
     // Perlane VGPR allocation pipeline.
     addPass(createVGPRAllocPass(true));
     addPreRewrite();
@@ -2029,6 +2050,11 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     // Now we can perform register-coalescing on remaining copies,
     // mainly sgpr copies and wwm-vgpr copies.
     addPass(&RegisterCoalescerID);
+
+    // SGPR copies are coalesced here in LWT; fuse split 64-bit constants
+    // into a rematerializable S_MOV_B64_IMM_PSEUDO so they aren't spilled.
+    if (isPassEnabled(EnablePreRASGPROptimizations))
+      addPass(&AMDGPUPreRASGPROptimizationsID);
   }
   
   addPass(createSGPRAllocPass(true));
