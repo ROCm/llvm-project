@@ -27,16 +27,16 @@
 // DISASM: s_endpgm
 // DISASM: global_wb
 // DISASM-NEXT: v_nop
-// DISASM-NEXT: s_get_pc_i64 s[8:9]
-// DISASM-NEXT: s_add_co_u32 s8
-// DISASM-NEXT: s_add_co_ci_u32 s9
-// DISASM-NEXT: s_set_pc_i64 s[8:9]
+// DISASM-NEXT: s_get_pc_i64 s[100:101]
+// DISASM-NEXT: s_add_co_u32 s100
+// DISASM-NEXT: s_add_co_ci_u32 s101
+// DISASM-NEXT: s_set_pc_i64 s[100:101]
 
 // RODATA: Contents of section .rodata
 // RODATA: {{[0-9a-f]+}} {{[0-9a-f]+}} {{[0-9a-f]+}} {{[0-9a-f]+}} 20000000
 
 // METADATA: .name:           entry_tramp_kernel
-// METADATA: .sgpr_count:     10
+// METADATA: .sgpr_count:     8
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -45,16 +45,16 @@
 // API2: RESULT: SUCCESS
 // RUN: cmp %t.out.elf %t.out2.elf
 
-// COM: If the requested entry trampoline cannot allocate an aligned scratch
-// COM: SGPR pair, the rewrite fails instead of returning a partial output.
+// COM: The fixed physical scratch pair does not require increasing a kernel's
+// COM: logical SGPR count, including for kernels with a high existing count.
 // RUN: sed 's/.sgpr_count: 8/.sgpr_count: 105/' %s > %t.highsgpr.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
 // RUN:   %t.highsgpr.s -o %t.highsgpr.elf
 // RUN: hotswap-rewrite %t.highsgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --entry-trampolines --expect-status ERROR \
+// RUN:   --entry-trampolines --expect-status SUCCESS \
 // RUN:   | %FileCheck --check-prefix=NO-SCRATCH %s
-// NO-SCRATCH: RESULT: ERROR
+// NO-SCRATCH: RESULT: SUCCESS
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

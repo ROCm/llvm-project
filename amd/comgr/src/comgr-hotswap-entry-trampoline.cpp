@@ -27,22 +27,11 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
-static bool appendAsm(SmallVectorImpl<uint8_t> &Out, StringRef Asm,
-                      const LLVMState &LS) {
-  SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, LS);
-  if (Bytes.empty()) {
-    log() << "hotswap: error: failed to assemble entry-stub instruction: "
-          << Asm << "\n";
-    return false;
-  }
-  Out.append(Bytes.begin(), Bytes.end());
-  return true;
-}
-
 static SmallVector<uint8_t> getCodeEndBytes(const LLVMState &LS) {
-  SmallVector<uint8_t> CodeEnd = assembleSingleInst("s_code_end", LS);
+  SmallVector<uint8_t> CodeEnd(LS.SCodeEndBytes.begin(),
+                               LS.SCodeEndBytes.end());
   if (CodeEnd.empty())
-    log() << "hotswap: error: failed to assemble s_code_end for entry-stub "
+    log() << "hotswap: error: missing cached s_code_end for entry-stub "
           << "padding.\n";
   return CodeEnd;
 }
@@ -57,76 +46,167 @@ static std::optional<uint64_t> checkedAdd(uint64_t LHS, uint64_t RHS,
   return std::nullopt;
 }
 
+struct KernelEntryMCInstTemplate {
+  MCInst GetPc;
+  MCInst AddLo;
+  MCInst AddHi;
+  MCInst SetPc;
+};
+
+class KernelEntryTrampolineBuilder {
+public:
+  explicit KernelEntryTrampolineBuilder(const LLVMState &LS) : LS(LS) {}
+
+  bool prepare(ArrayRef<unsigned> ScratchSgprs) {
+    SmallVector<unsigned, 32> Missing;
+    for (unsigned ScratchSgpr : ScratchSgprs) {
+      if (ScratchSgpr == std::numeric_limits<unsigned>::max()) {
+        log() << "hotswap: error: kernel-entry stub scratch SGPR pair "
+              << "overflows unsigned.\n";
+        return false;
+      }
+      if (!Templates.contains(ScratchSgpr))
+        Missing.push_back(ScratchSgpr);
+    }
+    std::sort(Missing.begin(), Missing.end());
+    Missing.erase(std::unique(Missing.begin(), Missing.end()), Missing.end());
+    if (Missing.empty())
+      return true;
+
+    std::string Asm;
+    Asm.reserve(Missing.size() * 96);
+    for (unsigned ScratchSgpr : Missing)
+      appendTemplateAsm(Asm, ScratchSgpr);
+
+    SmallVector<MCInst, 8> Insts = parseMCInsts(Asm, LS);
+    if (Insts.size() != Missing.size() * 4) {
+      log() << "hotswap: error: failed to parse batched entry-stub MCInst "
+            << "templates: expected " << Missing.size() * 4
+            << " instructions, got " << Insts.size() << ".\n";
+      return false;
+    }
+
+    for (size_t I = 0; I < Missing.size(); ++I) {
+      const size_t Base = I * 4;
+      if (Insts[Base + 1].getNumOperands() <= 2 ||
+          !Insts[Base + 1].getOperand(2).isImm() ||
+          Insts[Base + 2].getNumOperands() <= 2 ||
+          !Insts[Base + 2].getOperand(2).isImm()) {
+        log() << "hotswap: error: malformed entry-stub MCInst template for "
+              << "scratch SGPR " << Missing[I] << ".\n";
+        return false;
+      }
+      KernelEntryMCInstTemplate Template{Insts[Base], Insts[Base + 1],
+                                         Insts[Base + 2], Insts[Base + 3]};
+      Templates.try_emplace(Missing[I], std::move(Template));
+    }
+    return true;
+  }
+
+  SmallVector<uint8_t> build(uint64_t StubVAddr, uint64_t EntryVAddr,
+                             unsigned ScratchSgpr) {
+    if (ScratchSgpr == std::numeric_limits<unsigned>::max()) {
+      log() << "hotswap: error: kernel-entry stub scratch SGPR pair overflows "
+            << "unsigned.\n";
+      return {};
+    }
+    if (LS.KernelEntryPrefixBytes.empty() || LS.SCodeEndBytes.empty()) {
+      log() << "hotswap: error: kernel-entry stub has no cached prefix or "
+            << "s_code_end encoding.\n";
+      return {};
+    }
+
+    KernelEntryMCInstTemplate *Template = getTemplate(ScratchSgpr);
+    if (!Template)
+      return {};
+
+    SmallVector<uint8_t> Bytes(LS.KernelEntryPrefixBytes.begin(),
+                               LS.KernelEntryPrefixBytes.end());
+    if (!appendEncoded(Bytes, Template->GetPc))
+      return {};
+
+    // s_get_pc_i64 returns the address of the following s_add_u32 instruction.
+    // Materialize the original entry with a 64-bit PC-relative add so the code
+    // object can be rewritten before ROCR knows final device addresses.
+    std::optional<uint64_t> PcBase =
+        checkedAdd(StubVAddr, static_cast<uint64_t>(Bytes.size()),
+                   "kernel-entry stub PC base");
+    if (!PcBase)
+      return {};
+    // Unsigned subtraction is intentional: the immediate pair materializes
+    // the 64-bit two's-complement delta, including backward jumps.
+    const uint64_t Delta = EntryVAddr - *PcBase;
+
+    MCInst AddLo = Template->AddLo;
+    MCInst AddHi = Template->AddHi;
+    AddLo.getOperand(2).setImm(static_cast<uint32_t>(Delta));
+    AddHi.getOperand(2).setImm(static_cast<uint32_t>(Delta >> 32));
+    if (!appendEncoded(Bytes, AddLo) || !appendEncoded(Bytes, AddHi) ||
+        !appendEncoded(Bytes, Template->SetPc))
+      return {};
+
+    if (Bytes.size() > KernelEntryStubStride) {
+      log() << "hotswap: error: kernel-entry stub grew past "
+            << KernelEntryStubStride << " bytes.\n";
+      return {};
+    }
+    while (Bytes.size() < KernelEntryStubStride) {
+      if (Bytes.size() + LS.SCodeEndBytes.size() > KernelEntryStubStride) {
+        log() << "hotswap: error: s_code_end padding does not evenly fill "
+              << "kernel-entry stub stride " << KernelEntryStubStride << ".\n";
+        return {};
+      }
+      Bytes.append(LS.SCodeEndBytes.begin(), LS.SCodeEndBytes.end());
+    }
+    return Bytes;
+  }
+
+private:
+  bool appendEncoded(SmallVectorImpl<uint8_t> &Out, const MCInst &Inst) const {
+    SmallVector<uint8_t> Encoded = encodeHotswapMCInst(Inst, LS);
+    if (Encoded.empty()) {
+      log() << "hotswap: error: failed to encode entry-stub MCInst opcode "
+            << Inst.getOpcode() << ".\n";
+      return false;
+    }
+    Out.append(Encoded.begin(), Encoded.end());
+    return true;
+  }
+
+  KernelEntryMCInstTemplate *getTemplate(unsigned ScratchSgpr) {
+    DenseMap<unsigned, KernelEntryMCInstTemplate>::iterator Existing =
+        Templates.find(ScratchSgpr);
+    if (Existing != Templates.end())
+      return &Existing->second;
+
+    const unsigned Scratch[] = {ScratchSgpr};
+    if (!prepare(Scratch))
+      return nullptr;
+    return &Templates.find(ScratchSgpr)->second;
+  }
+
+  static void appendTemplateAsm(std::string &Asm, unsigned ScratchSgpr) {
+    std::string ScratchPair =
+        (Twine("s[") + Twine(ScratchSgpr) + ":" + Twine(ScratchSgpr + 1) + "]")
+            .str();
+    std::string ScratchLo = (Twine("s") + Twine(ScratchSgpr)).str();
+    std::string ScratchHi = (Twine("s") + Twine(ScratchSgpr + 1)).str();
+    Asm += (Twine("s_get_pc_i64 ") + ScratchPair + "\n" + "s_add_u32 " +
+            ScratchLo + ", " + ScratchLo + ", 0\n" + "s_addc_u32 " + ScratchHi +
+            ", " + ScratchHi + ", 0\n" + "s_set_pc_i64 " + ScratchPair + "\n")
+               .str();
+  }
+
+  const LLVMState &LS;
+  DenseMap<unsigned, KernelEntryMCInstTemplate> Templates;
+};
+
 SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
                                                 uint64_t EntryVAddr,
                                                 unsigned ScratchSgpr,
                                                 const LLVMState &LS) {
-  if (ScratchSgpr == std::numeric_limits<unsigned>::max()) {
-    log() << "hotswap: error: kernel-entry stub scratch SGPR pair overflows "
-          << "unsigned.\n";
-    return {};
-  }
-
-  SmallVector<uint8_t> Bytes;
-  std::string ScratchPair =
-      (Twine("s[") + Twine(ScratchSgpr) + ":" + Twine(ScratchSgpr + 1) + "]")
-          .str();
-  std::string ScratchLo = (Twine("s") + Twine(ScratchSgpr)).str();
-  std::string ScratchHi = (Twine("s") + Twine(ScratchSgpr + 1)).str();
-
-  // Assemble through the MC layer instead of spelling encoded bytes; the LIT
-  // test pins the generated stub's disassembly.
-  if (!appendAsm(Bytes, "global_wb", LS))
-    return {};
-  if (!appendAsm(Bytes, "v_nop", LS))
-    return {};
-  if (!appendAsm(Bytes, "s_get_pc_i64 " + ScratchPair, LS))
-    return {};
-
-  // s_get_pc_i64 returns the address of the following s_add_u32 instruction.
-  // Materialize the original entry with a 64-bit PC-relative add so the code
-  // object can be rewritten before ROCR knows final device addresses.
-  std::optional<uint64_t> PcBase =
-      checkedAdd(StubVAddr, static_cast<uint64_t>(Bytes.size()),
-                 "kernel-entry stub PC base");
-  if (!PcBase)
-    return {};
-  // Unsigned subtraction is intentional: the immediate pair materializes the
-  // 64-bit two's-complement delta, including backward jumps.
-  const uint64_t Delta = EntryVAddr - *PcBase;
-  const uint32_t Lo = static_cast<uint32_t>(Delta);
-  const uint32_t Hi = static_cast<uint32_t>(Delta >> 32);
-
-  if (!appendAsm(Bytes,
-                 "s_add_u32 " + ScratchLo + ", " + ScratchLo + ", 0x" +
-                     utohexstr(Lo),
-                 LS))
-    return {};
-  if (!appendAsm(Bytes,
-                 "s_addc_u32 " + ScratchHi + ", " + ScratchHi + ", 0x" +
-                     utohexstr(Hi),
-                 LS))
-    return {};
-  if (!appendAsm(Bytes, "s_set_pc_i64 " + ScratchPair, LS))
-    return {};
-
-  SmallVector<uint8_t> CodeEnd = getCodeEndBytes(LS);
-  if (CodeEnd.empty())
-    return {};
-  if (Bytes.size() > KernelEntryStubStride) {
-    log() << "hotswap: error: kernel-entry stub grew past "
-          << KernelEntryStubStride << " bytes.\n";
-    return {};
-  }
-  while (Bytes.size() < KernelEntryStubStride) {
-    if (Bytes.size() + CodeEnd.size() > KernelEntryStubStride) {
-      log() << "hotswap: error: s_code_end padding does not evenly fill "
-            << "kernel-entry stub stride " << KernelEntryStubStride << ".\n";
-      return {};
-    }
-    Bytes.append(CodeEnd.begin(), CodeEnd.end());
-  }
-  return Bytes;
+  KernelEntryTrampolineBuilder Builder(LS);
+  return Builder.build(StubVAddr, EntryVAddr, ScratchSgpr);
 }
 
 uint64_t computeKernelEntryPrefetchGuardBytes(uint32_t InstPrefLines) {
@@ -260,14 +340,10 @@ bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
 
 bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,
                                     const LLVMState &LS) {
-  SmallVector<uint8_t> Prefix;
-  if (!appendAsm(Prefix, "global_wb", LS))
-    return false;
-  if (!appendAsm(Prefix, "v_nop", LS))
-    return false;
-
-  return Bytes.size() >= Prefix.size() &&
-         std::equal(Prefix.begin(), Prefix.end(), Bytes.begin());
+  return !LS.KernelEntryPrefixBytes.empty() &&
+         Bytes.size() >= LS.KernelEntryPrefixBytes.size() &&
+         std::equal(LS.KernelEntryPrefixBytes.begin(),
+                    LS.KernelEntryPrefixBytes.end(), Bytes.begin());
 }
 
 static std::optional<uint64_t>
@@ -299,10 +375,8 @@ static std::optional<uint64_t> entryVAddr(const KernelDescriptorInfo &KD) {
   return KD.VAddr - Magnitude;
 }
 
-static std::optional<bool>
-descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
-                                  const KernelDescriptorInfo &KD,
-                                  const LLVMState &LS) {
+static std::optional<bool> descriptorAlreadyTargetsEntryStub(
+    const ElfView &Elf, const KernelDescriptorInfo &KD, const LLVMState &LS) {
   std::optional<uint64_t> Entry = entryVAddr(KD);
   if (!Entry)
     return std::nullopt;
@@ -381,32 +455,6 @@ checkedSignedDifference(uint64_t LHS, uint64_t RHS, StringRef Context) {
   return -static_cast<int64_t>(Diff);
 }
 
-static std::optional<unsigned> allocateEntryStubScratchSgprs(
-    const ElfView &Elf, const KernelDescriptorInfo &KD, unsigned MaxSgprs) {
-  constexpr unsigned ScratchSgprs = 2;
-  std::optional<unsigned> SgprCount = Elf.getKernelSgprCount(KD.KernelName);
-  if (!SgprCount) {
-    log() << "hotswap: error: entry trampoline: failed to read SGPR count for '"
-          << KD.KernelName << "'.\n";
-    return std::nullopt;
-  }
-  if (*SgprCount > MaxSgprs) {
-    log() << "hotswap: error: entry trampoline: kernel '" << KD.KernelName
-          << "' uses " << *SgprCount << " SGPRs, above max " << MaxSgprs
-          << ".\n";
-    return std::nullopt;
-  }
-
-  unsigned ScratchBase = (*SgprCount + 1) & ~1u;
-  if (ScratchBase > MaxSgprs || MaxSgprs - ScratchBase < ScratchSgprs) {
-    log() << "hotswap: error: entry trampoline: kernel '" << KD.KernelName
-          << "' uses " << *SgprCount << " SGPRs; no aligned scratch pair fits "
-          << "below max " << MaxSgprs << ".\n";
-    return std::nullopt;
-  }
-  return ScratchBase;
-}
-
 static bool appendPaddingTrampoline(std::vector<Trampoline> &Out,
                                     uint64_t PadBytes, ArrayRef<uint8_t> Fill) {
   if (PadBytes == 0)
@@ -468,6 +516,18 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
   if (Work.empty())
     return 0;
 
+  if (KernelEntryScratchSgpr + 1 >= MaxSgprs) {
+    log() << "hotswap: error: entry trampoline: fixed scratch SGPR pair s["
+          << KernelEntryScratchSgpr << ":" << KernelEntryScratchSgpr + 1
+          << "] does not fit below max " << MaxSgprs << ".\n";
+    return std::nullopt;
+  }
+
+  KernelEntryTrampolineBuilder Builder(LS);
+  const unsigned ScratchSgprs[] = {KernelEntryScratchSgpr};
+  if (!Builder.prepare(ScratchSgprs))
+    return std::nullopt;
+
   std::optional<uint64_t> ExistingGrowthBytes = totalTrampolineBytes(Growth);
   if (!ExistingGrowthBytes)
     return std::nullopt;
@@ -476,8 +536,8 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
       checkedAdd(Elf.textAddr(), Elf.textSize(), "entry trampoline text end");
   if (!TextEndVAddr)
     return std::nullopt;
-  std::optional<uint64_t> StubPoolBaseVAddr =
-      checkedAdd(*TextEndVAddr, AppendOffset, "entry trampoline stub-pool base");
+  std::optional<uint64_t> StubPoolBaseVAddr = checkedAdd(
+      *TextEndVAddr, AppendOffset, "entry trampoline stub-pool base");
   if (!StubPoolBaseVAddr)
     return std::nullopt;
   std::optional<uint64_t> AlignedStubPoolBaseVAddr =
@@ -506,15 +566,11 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
         (Twine("entry trampoline vaddr for '") + KD.KernelName + "'").str());
     if (!StubVAddr)
       return std::nullopt;
-    std::optional<unsigned> ScratchSgpr =
-        allocateEntryStubScratchSgprs(Elf, KD, MaxSgprs);
-    if (!ScratchSgpr)
-      return std::nullopt;
     std::optional<uint64_t> Entry = entryVAddr(KD);
     if (!Entry)
       return std::nullopt;
     SmallVector<uint8_t> Stub =
-        buildKernelEntryTrampoline(*StubVAddr, *Entry, *ScratchSgpr, LS);
+        Builder.build(*StubVAddr, *Entry, KernelEntryScratchSgpr);
     if (Stub.empty()) {
       log() << "hotswap: error: failed to build kernel-entry trampoline for '"
             << KD.KernelName << "' at original entry vaddr 0x"
@@ -525,8 +581,7 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     Trampoline T;
     T.Bytes.assign(Stub.begin(), Stub.end());
     LocalGrowth.push_back(std::move(T));
-    LocalFixups.push_back(
-        {KD.KernelName, AppendOffset, *ScratchSgpr + 2, Item.InstPrefLines});
+    LocalFixups.push_back({KD.KernelName, AppendOffset, Item.InstPrefLines});
     std::optional<uint64_t> NewAppendOffset = checkedAdd(
         AppendOffset, KernelEntryStubStride,
         (Twine("entry trampoline append offset after '") + KD.KernelName + "'")
@@ -615,11 +670,9 @@ bool rewriteKernelEntryDescriptorOffsets(
     }
     bool UpdatedEntry =
         OutElf.updateKernelDescriptorEntryOffset(Fixup.KernelName, *NewOffset);
-    bool UpdatedSgprs = OutElf.updateKernelDescriptorSgprCount(
-        Fixup.KernelName, Fixup.RequiredSgprs);
     bool UpdatedInstPref = OutElf.updateKernelDescriptorInstPrefSize(
         Fixup.KernelName, TargetCpu, Fixup.InstPrefLines);
-    Ok = UpdatedEntry && UpdatedSgprs && UpdatedInstPref && Ok;
+    Ok = UpdatedEntry && UpdatedInstPref && Ok;
   }
   return Ok;
 }

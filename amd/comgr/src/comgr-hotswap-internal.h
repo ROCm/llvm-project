@@ -90,10 +90,21 @@ static_assert(KernelEntryStubStride % KernelEntryInstPrefUnitBytes == 0,
 static constexpr uint32_t KernelEntryStubInstPrefLines =
     KernelEntryStubStride / KernelEntryInstPrefUnitBytes;
 
+// GFX12.5 waves have 128 physical SGPRs, while the kernel-entry ABI preloads
+// only the low user/system SGPRs. Match the ROCR loader trampoline's fixed
+// scratch pair so entry redirection does not need to parse and rewrite every
+// kernel's metadata merely to reserve temporary address materialization.
+static constexpr unsigned KernelEntryScratchSgpr = 100;
+
 struct KernelDescriptorInfo {
   std::string KernelName;
   uint64_t VAddr = 0;
   int64_t EntryOffset = 0;
+};
+
+struct KernelSgprCountUpdate {
+  llvm::StringRef KernelName;
+  unsigned RequiredSgprs = 0;
 };
 
 struct NopSled {
@@ -275,6 +286,19 @@ public:
   /// missing from present metadata, or the descriptor fallback is unavailable.
   std::optional<unsigned> getKernelSgprCount(llvm::StringRef KernelName) const;
 
+  /// Read SGPR counts for all of \p KernelNames in one metadata pass. The
+  /// returned vector has the same order as \p KernelNames. This is the batched
+  /// form used by the entry-trampoline pass to avoid reparsing the complete
+  /// msgpack document once per kernel in monolithic code objects.
+  std::optional<std::vector<unsigned>>
+  getKernelSgprCounts(llvm::ArrayRef<llvm::StringRef> KernelNames) const;
+
+  /// Apply all SGPR reservations in one descriptor/metadata transaction. The
+  /// AMDGPU metadata document is parsed and serialized at most once per note,
+  /// and no bytes are modified unless every requested update validates.
+  bool updateKernelDescriptorSgprCounts(
+      llvm::ArrayRef<KernelSgprCountUpdate> Updates);
+
   /// Update the RSRC1 VGPR granule count in the kernel descriptor for
   /// \p KernelName by adding \p ExtraVgprs. The SGPR granule field is
   /// not updated because it is reserved on GFX10+.
@@ -293,15 +317,39 @@ public:
                       llvm::ArrayRef<uint8_t> SNopBytes) const;
 
 private:
+  struct KernelDescriptorLocation {
+    std::string KernelName;
+    uint64_t VAddr = 0;
+    uint64_t FileOffset = 0;
+  };
+
+  enum class KernelSgprIndexState {
+    Uninitialized,
+    NoMetadata,
+    Ready,
+    Error,
+  };
+
   ElfView(ELFFileT File, ELFT::ShdrRange Sections,
           const ELFT::Shdr *TextSection, unsigned TextSectionIndex)
       : File(std::move(File)), Sections(Sections), TextSection(TextSection),
         TextSectionIndex(TextSectionIndex) {}
 
+  void initializeKernelDescriptorIndex() const;
+  const KernelDescriptorLocation *
+  findKernelDescriptorLocation(llvm::StringRef KernelName) const;
+  void initializeKernelSgprCountIndex() const;
+
   ELFFileT File;
   ELFT::ShdrRange Sections;
   const ELFT::Shdr *TextSection;
   unsigned TextSectionIndex;
+  mutable bool KernelDescriptorIndexInitialized = false;
+  mutable std::vector<KernelDescriptorLocation> KernelDescriptorLocations;
+  mutable llvm::StringMap<size_t> KernelDescriptorByName;
+  mutable KernelSgprIndexState SgprIndexState =
+      KernelSgprIndexState::Uninitialized;
+  mutable llvm::StringMap<std::optional<unsigned>> KernelSgprCounts;
 };
 
 // -- Free-function ELF helpers (no ELF state required) ------------------------
@@ -391,6 +439,12 @@ struct LLVMState {
   /// round-trips.
   llvm::MCInst VNopInst;
 
+  /// Pre-encoded constant pieces of a kernel-entry trampoline. Keeping these
+  /// in the per-ISA state avoids constructing an asm parser for every kernel
+  /// merely to recognize or pad the same fixed instruction sequence.
+  llvm::SmallVector<uint8_t, 8> KernelEntryPrefixBytes;
+  llvm::SmallVector<uint8_t, 4> SCodeEndBytes;
+
   /// MC opcodes for the kernel-entry stub sequence, resolved once at
   /// initLLVM() time by parsing representative asm snippets. The idempotency
   /// matcher compares decoded opcodes against these cached values instead of
@@ -409,7 +463,7 @@ struct LLVMState {
   /// LLVMState is not valid / has no cached s_branch opcode. Uses
   /// MCCodeEmitter for the encoding so no hardcoded opcode bits appear in
   /// the hotswap code. Empty-on-failure matches the convention used by
-  /// encodeMCInst() and assembleSingleInst() so the same idiom applies
+  /// encodeHotswapMCInst() and assembleSingleInst() so the same idiom applies
   /// uniformly across the MC layer.
   [[nodiscard]] llvm::SmallVector<uint8_t>
   encodeSBranch(uint64_t FromOffset, uint64_t ToOffset) const;
@@ -444,6 +498,15 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 /// Assemble a single instruction string, returning its encoded bytes.
 llvm::SmallVector<uint8_t> assembleSingleInst(llvm::StringRef AsmStr,
                                               const LLVMState &LS);
+
+/// Parse assembly into MCInsts without encoding. Entry-stub construction uses
+/// this to cache register-specific templates and patch only their immediates.
+llvm::SmallVector<llvm::MCInst, 8> parseMCInsts(llvm::StringRef AsmStr,
+                                                const LLVMState &LS);
+
+/// Encode one MCInst through the target MCCodeEmitter.
+llvm::SmallVector<uint8_t> encodeHotswapMCInst(const llvm::MCInst &Inst,
+                                               const LLVMState &LS);
 
 /// Assemble \p AsmLines and append a branch-back to the next instruction
 /// after the original (\p OriginalOffset + \p OriginalSize). The branch-back
@@ -700,7 +763,6 @@ HotswapPatchVTable &getHotswapPatchVTable();
 struct KernelEntryTrampolineFixup {
   std::string KernelName;
   uint64_t StubTextOffset = 0;
-  unsigned RequiredSgprs = 0;
   uint32_t InstPrefLines = 0;
 };
 

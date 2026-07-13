@@ -128,7 +128,7 @@ private:
 /// Encode \p Inst to raw bytes via the cached MCCodeEmitter. This is the
 /// canonical "MCInst -> bytes" primitive; mirrors the encoding sequence used
 /// by AMDGPUMCInstLower and the MC object streamer.
-static SmallVector<uint8_t> encodeMCInst(const MCInst &Inst,
+SmallVector<uint8_t> encodeHotswapMCInst(const MCInst &Inst,
                                          const LLVMState &S) {
   SmallVector<char, 16> Code;
   SmallVector<MCFixup, 4> Fixups;
@@ -140,8 +140,7 @@ static SmallVector<uint8_t> encodeMCInst(const MCInst &Inst,
 /// Used by assembleSingleInst() for the full parse-and-encode path, and by
 /// initLLVM() / resolveOpcodeViaParse() for instructions where parsing the
 /// assembly mnemonic is the least fragile way to pick the target opcode.
-static SmallVector<MCInst, 2> parseAsmToMCInsts(StringRef AsmStr,
-                                                const LLVMState &S) {
+SmallVector<MCInst, 8> parseMCInsts(StringRef AsmStr, const LLVMState &S) {
   S.Ctx->reset();
 
   // Register the buffer with the context's inline SourceMgr so that
@@ -165,19 +164,19 @@ static SmallVector<MCInst, 2> parseAsmToMCInsts(StringRef AsmStr,
   std::unique_ptr<MCTargetAsmParser> TAP(
       S.Target->createMCAsmParser(*S.STI, *Parser, *S.MCII));
   if (!TAP) {
-    log() << "hotswap: error: parseAsmToMCInsts: createMCAsmParser returned "
+    log() << "hotswap: error: parseMCInsts: createMCAsmParser returned "
           << "null for asm:\n    " << AsmStr << "\n";
     return {};
   }
   Parser->setTargetParser(*TAP);
 
   if (Parser->Run(true)) {
-    log() << "hotswap: error: parseAsmToMCInsts: Parser->Run failed for "
+    log() << "hotswap: error: parseMCInsts: Parser->Run failed for "
           << "asm:\n    " << AsmStr << "\n";
     return {};
   }
 
-  SmallVector<MCInst, 2> Result;
+  SmallVector<MCInst, 8> Result;
   Result.reserve(Streamer.captured().size());
   for (const MCInst &Inst : Streamer.captured())
     Result.emplace_back(Inst);
@@ -190,7 +189,7 @@ static SmallVector<MCInst, 2> parseAsmToMCInsts(StringRef AsmStr,
 /// a "not found" sentinel.
 static unsigned resolveOpcodeViaParse(StringRef AsmSnippet,
                                       const LLVMState &S) {
-  SmallVector<MCInst, 2> Parsed = parseAsmToMCInsts(AsmSnippet, S);
+  SmallVector<MCInst, 8> Parsed = parseMCInsts(AsmSnippet, S);
   if (Parsed.size() != 1)
     return S.MCII->getNumOpcodes();
   return Parsed[0].getOpcode();
@@ -302,14 +301,14 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
     return S;
   }
 
-  SmallVector<MCInst, 2> NopInsts = parseAsmToMCInsts("s_nop 0", S);
+  SmallVector<MCInst, 8> NopInsts = parseMCInsts("s_nop 0", S);
   if (NopInsts.size() != 1) {
     log() << "hotswap: error: initLLVM: failed to parse 's_nop 0' for CPU '"
           << S.Cpu << "'.\n";
     return S;
   }
   S.SNopOpcode = NopInsts[0].getOpcode();
-  SmallVector<uint8_t> NopBytes = encodeMCInst(NopInsts[0], S);
+  SmallVector<uint8_t> NopBytes = encodeHotswapMCInst(NopInsts[0], S);
   if (NopBytes.size() != MinInstSize) {
     log() << "hotswap: error: initLLVM: 's_nop 0' encoded to "
           << NopBytes.size() << " bytes; expected " << MinInstSize
@@ -318,7 +317,7 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   }
   S.SNopBytes.assign(NopBytes.begin(), NopBytes.end());
 
-  SmallVector<MCInst, 2> VNopInsts = parseAsmToMCInsts("v_nop", S);
+  SmallVector<MCInst, 8> VNopInsts = parseMCInsts("v_nop", S);
   if (VNopInsts.size() != 1) {
     log() << "hotswap: error: initLLVM: failed to parse 'v_nop' for CPU '"
           << S.Cpu << "'.\n";
@@ -341,6 +340,32 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_set_pc_i64 s[0:1]", "s_set_pc_i64", S,
                                      S.SSetPcI64Opcode))
     return S;
+
+  SmallVector<MCInst, 8> EntryPrefix = parseMCInsts("global_wb\nv_nop", S);
+  if (EntryPrefix.size() != 2) {
+    log() << "hotswap: error: initLLVM: failed to parse kernel-entry prefix "
+          << "for CPU '" << S.Cpu << "'.\n";
+    return S;
+  }
+  for (const MCInst &Inst : EntryPrefix) {
+    SmallVector<uint8_t> Bytes = encodeHotswapMCInst(Inst, S);
+    S.KernelEntryPrefixBytes.append(Bytes.begin(), Bytes.end());
+  }
+
+  SmallVector<MCInst, 8> CodeEndInsts = parseMCInsts("s_code_end", S);
+  if (CodeEndInsts.size() != 1) {
+    log() << "hotswap: error: initLLVM: failed to parse 's_code_end' for CPU '"
+          << S.Cpu << "'.\n";
+    return S;
+  }
+  SmallVector<uint8_t> CodeEndBytes = encodeHotswapMCInst(CodeEndInsts[0], S);
+  if (CodeEndBytes.empty() ||
+      KernelEntryStubStride % CodeEndBytes.size() != 0) {
+    log() << "hotswap: error: initLLVM: invalid 's_code_end' size "
+          << CodeEndBytes.size() << " for CPU '" << S.Cpu << "'.\n";
+    return S;
+  }
+  S.SCodeEndBytes.assign(CodeEndBytes.begin(), CodeEndBytes.end());
 
   S.Valid = true;
   return S;
@@ -378,7 +403,7 @@ SmallVector<uint8_t> LLVMState::encodeSBranch(uint64_t FromOffset,
   MCInst Inst;
   Inst.setOpcode(SBranchOpcode);
   Inst.addOperand(MCOperand::createImm(DwordOffset));
-  SmallVector<uint8_t> Bytes = encodeMCInst(Inst, *this);
+  SmallVector<uint8_t> Bytes = encodeHotswapMCInst(Inst, *this);
   if (Bytes.size() != MinInstSize) {
     log() << "hotswap: error: encodeSBranch: MCCodeEmitter produced "
           << Bytes.size() << " bytes for s_branch (opcode index "
@@ -431,10 +456,10 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
 // -- assembleSingleInst -------------------------------------------------------
 
 SmallVector<uint8_t> assembleSingleInst(StringRef AsmStr, const LLVMState &S) {
-  // Parse \p AsmStr through the shared parseAsmToMCInsts helper, then encode
+  // Parse \p AsmStr through the shared parseMCInsts helper, then encode
   // each captured MCInst via the cached MCCodeEmitter. Avoids the old
   // createMCObjectStreamer -> ELF parse -> extract .text round trip.
-  SmallVector<MCInst, 2> Insts = parseAsmToMCInsts(AsmStr, S);
+  SmallVector<MCInst, 8> Insts = parseMCInsts(AsmStr, S);
   if (Insts.empty()) {
     log() << "hotswap: error: assembleSingleInst: parser produced no "
           << "instructions for asm:\n    " << AsmStr << "\n";
@@ -443,7 +468,7 @@ SmallVector<uint8_t> assembleSingleInst(StringRef AsmStr, const LLVMState &S) {
 
   SmallVector<uint8_t> Bytes;
   for (const MCInst &Inst : Insts) {
-    SmallVector<uint8_t> InstBytes = encodeMCInst(Inst, S);
+    SmallVector<uint8_t> InstBytes = encodeHotswapMCInst(Inst, S);
     Bytes.append(InstBytes.begin(), InstBytes.end());
   }
   return Bytes;
@@ -501,9 +526,10 @@ Trampoline buildTrampoline(ArrayRef<MCInst> Insts, uint64_t OriginalOffset,
   Result.OriginalSize = OriginalSize;
 
   for (const MCInst &Inst : Insts) {
-    SmallVector<uint8_t> InstBytes = encodeMCInst(Inst, S);
+    SmallVector<uint8_t> InstBytes = encodeHotswapMCInst(Inst, S);
     if (InstBytes.empty()) {
-      log() << "hotswap: error: buildTrampoline(MCInst): encodeMCInst failed "
+      log() << "hotswap: error: buildTrampoline(MCInst): "
+               "encodeHotswapMCInst failed "
             << "for opcode " << Inst.getOpcode() << " at trampoline for 0x"
             << utohexstr(OriginalOffset) << "\n";
       Result.Bytes.clear();

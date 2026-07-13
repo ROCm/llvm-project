@@ -606,7 +606,6 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
       AMDHSA_BITS_GET(OutRsrc3, hsa::COMPUTE_PGM_RSRC3_GFX11_INST_PREF_SIZE),
       KernelEntryStubInstPrefLines);
   EXPECT_NE(OutRsrc3 & hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_GLG_EN, 0u);
-  EXPECT_EQ(Fixups[0].RequiredSgprs, 10u);
   uint32_t OutRsrc1 = 0;
   std::memcpy(&OutRsrc1,
               OutKd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
@@ -616,7 +615,7 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
                        hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT) +
        1) *
       8;
-  EXPECT_GE(ReservedSgprs, Fixups[0].RequiredSgprs);
+  EXPECT_EQ(ReservedSgprs, 8u);
 
   std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
   ASSERT_EQ(KDs.size(), 1u);
@@ -684,7 +683,7 @@ TEST(KernelEntryTrampoline, AppendReturnsZeroWhenNoDescriptorsExist) {
   EXPECT_TRUE(Fixups.empty());
 }
 
-TEST(KernelEntryTrampoline, AppendFailsWithoutSgprScratchPair) {
+TEST(KernelEntryTrampoline, FixedScratchDoesNotGrowLogicalSgprCount) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
@@ -707,11 +706,12 @@ TEST(KernelEntryTrampoline, AppendFailsWithoutSgprScratchPair) {
   std::optional<uint32_t> Count = appendKernelEntryTrampolines(
       *ViewOrErr, S, /*MaxSgprs=*/106, Growth, Fixups);
 
-  EXPECT_FALSE(Count.has_value());
-  ASSERT_EQ(Growth.size(), 1u);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 1u);
+  ASSERT_GT(Growth.size(), 1u);
   EXPECT_EQ(llvm::ArrayRef<uint8_t>(Growth[0].Bytes),
             llvm::ArrayRef<uint8_t>(Existing.Bytes));
-  EXPECT_TRUE(Fixups.empty());
+  ASSERT_EQ(Fixups.size(), 1u);
 }
 
 // -- classifyWmmaNops ---------------------------------------------------------
