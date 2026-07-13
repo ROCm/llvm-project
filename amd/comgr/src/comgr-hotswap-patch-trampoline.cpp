@@ -222,7 +222,7 @@ extractDsOperands(const MCInst &Inst, StringRef FromMnem, const LLVMState &LS) {
           << RawOff0 << " * scale " << Scale << " = " << Scaled0
           << ", off1=raw " << RawOff1 << " * scale " << Scale << " = "
           << Scaled1 << ", max " << Ds1AddrOffsetMax
-          << "); leaving original instruction in place\n";
+          << "); required A0 rewrite cannot continue\n";
     return std::nullopt;
   }
   Ops.Off0 = static_cast<uint32_t>(Scaled0);
@@ -270,12 +270,9 @@ std::vector<std::string> expandDs2AddrLoad(const DsOperands &Ops,
   // natural order is already safe.)
   SmallVector<MCRegister, 4> DstSubs = getDirectSubRegs(Ops.Regs[0], *Ops.MRI);
   const unsigned FirstHalfWidth = Ops.IsB64 ? 2 : 1;
-  bool AddrOverlapsFirst =
-      DstSubs.size() >= FirstHalfWidth &&
-      llvm::any_of(ArrayRef(DstSubs).take_front(FirstHalfWidth),
-                   [&](MCRegister Reg) {
-                     return Ops.MRI->regsOverlap(Reg.id(), Ops.Regs[1].id());
-                   });
+  bool AddrOverlapsFirst = llvm::any_of(
+      ArrayRef(DstSubs).take_front(FirstHalfWidth),
+      [&](MCRegister Reg) { return Ops.MRI->regsOverlap(Reg, Ops.Regs[1]); });
   if (AddrOverlapsFirst)
     return {std::move(Second), std::move(First)};
   return {std::move(First), std::move(Second)};
@@ -300,6 +297,13 @@ std::vector<std::string> expandDs2AddrStore(const DsOperands &Ops,
 
 // Expand a DS 2-address exchange into two single-address exchanges
 // (dst, addr, data).
+bool halfOverlaps(ArrayRef<MCRegister> DstSubs, unsigned Begin, unsigned Width,
+                  MCRegister Reg, const MCRegisterInfo &MRI) {
+  return llvm::any_of(DstSubs.slice(Begin, Width), [&](MCRegister DstReg) {
+    return MRI.regsOverlap(DstReg, Reg);
+  });
+}
+
 std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
                                            StringRef ToMnem) {
   if (Ops.Regs.size() < 4)
@@ -321,14 +325,6 @@ std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
 
   SmallVector<MCRegister, 4> DstSubs = getDirectSubRegs(Ops.Regs[0], MRI);
   const unsigned HalfWidth = Ops.IsB64 ? 2 : 1;
-  if (DstSubs.size() < 2 * HalfWidth)
-    return {};
-  auto HalfOverlaps = [&](unsigned Begin, MCRegister Reg) {
-    return llvm::any_of(ArrayRef(DstSubs).slice(Begin, HalfWidth),
-                        [&](MCRegister DstReg) {
-                          return MRI.regsOverlap(DstReg.id(), Reg.id());
-                        });
-  };
 
   // Op0 writes the first destination half and op1 still needs addr + data1;
   // op1 writes the second half and op0 still needs addr + data0. Pick the safe
@@ -336,12 +332,15 @@ std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
   // neither ordering preserves the compound instruction's read-before-write
   // semantics without a scratch VGPR, so decline the rewrite.
   const bool FirstClobbersSecond =
-      HalfOverlaps(0, Ops.Regs[1]) || HalfOverlaps(0, Ops.Regs[3]);
-  const bool SecondClobbersFirst = HalfOverlaps(HalfWidth, Ops.Regs[1]) ||
-                                   HalfOverlaps(HalfWidth, Ops.Regs[2]);
+      halfOverlaps(DstSubs, 0, HalfWidth, Ops.Regs[1], MRI) ||
+      halfOverlaps(DstSubs, 0, HalfWidth, Ops.Regs[3], MRI);
+  const bool SecondClobbersFirst =
+      halfOverlaps(DstSubs, HalfWidth, HalfWidth, Ops.Regs[1], MRI) ||
+      halfOverlaps(DstSubs, HalfWidth, HalfWidth, Ops.Regs[2], MRI);
   if (FirstClobbersSecond && SecondClobbersFirst) {
-    log() << "hotswap: ds_storexchg_2addr has cyclic destination/source "
-             "overlap; leaving original instruction in place\n";
+    log() << "hotswap: error: ds_storexchg_2addr has cyclic "
+             "destination/source overlap and cannot be split without scratch "
+             "VGPRs\n";
     return {};
   }
   if (FirstClobbersSecond)
@@ -394,7 +393,7 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   if (Expanded.empty()) {
     log() << "hotswap: error: ds_2addr expansion failed for: " << DI.Mnemonic
           << "\n";
-    return false;
+    return failRequiredPatch(Ctx);
   }
 
   std::string Combined;
@@ -415,12 +414,13 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
   if (Bytes.empty()) {
     log() << "hotswap: error: ds_2addr: assembly failed: " << Combined << "\n";
-    return false;
+    return failRequiredPatch(Ctx);
   }
 
   SmallVector<uint8_t> Replacement(Bytes.begin(), Bytes.end());
-  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
-    return false;
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
+                           /*AllowSafeFarReturn=*/true))
+    return failRequiredPatch(Ctx);
 
   DI.Mnemonic = "<replaced>";
   return true;
@@ -743,9 +743,9 @@ void commitScratchSgpr(PatchContext &Ctx, const SgprScratchAlloc &Alloc) {
 // -- patchTensorLoadToLdsA0 -------------------------------------------------
 //
 // Prepend s_pack_hh_b32_b16 to clear multicast routing bits in the group
-// descriptor's base SGPR. The A0 routing bits must remain clear for every
-// subsequent use of the descriptor, so normalize it persistently instead of
-// restoring the invalid B0 value after each tensor load.
+// descriptor's base SGPR. Preserve the architectural SGPR value when it is live
+// after the tensor instruction: the descriptor is a source operand, so the
+// rewrite must not make its temporary normalization visible to later code.
 
 bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
@@ -771,18 +771,56 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
     return failRequiredPatch(Ctx);
   }
 
+  bool SgprLive = isSgprLiveAfter(Ctx, Idx, BaseMCReg);
   const uint8_t *OrigInst = Ctx.Text + DI.Offset;
-  SmallVector<uint8_t> Replacement;
-  Replacement.append(PackBytes.begin(), PackBytes.end());
-  Replacement.append(OrigInst, OrigInst + DI.Size);
 
-  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
-                           /*AllowSafeFarReturn=*/true))
-    return failRequiredPatch(Ctx);
+  if (SgprLive) {
+    std::optional<SafeSgprScratchBlock> Scratch =
+        findSafeSgprScratchBlock(Ctx, DI.Offset, /*Count=*/1, /*Alignment=*/1,
+                                 "tensor_load_to_lds descriptor save");
+    if (!Scratch) {
+      log() << "hotswap: error: tensor_load_to_lds: no scratch SGPR "
+               "available\n";
+      return failRequiredPatch(Ctx);
+    }
 
-  log() << "hotswap: tensor_load_to_lds: persistently cleared multicast bits "
-           "in "
-        << BaseSreg << "\n";
+    std::string ScratchName = "s" + std::to_string(Scratch->Base);
+    SmallVector<uint8_t> Save = assembleSingleInst(
+        "s_mov_b32 " + ScratchName + ", " + BaseSreg, Ctx.LS);
+    SmallVector<uint8_t> Restore = assembleSingleInst(
+        "s_mov_b32 " + BaseSreg + ", " + ScratchName, Ctx.LS);
+    if (Save.empty() || Restore.empty()) {
+      log() << "hotswap: error: tensor_load_to_lds: failed to assemble "
+               "descriptor save/restore through "
+            << ScratchName << "\n";
+      return failRequiredPatch(Ctx);
+    }
+
+    SmallVector<uint8_t> Replacement;
+    Replacement.append(Save.begin(), Save.end());
+    Replacement.append(PackBytes.begin(), PackBytes.end());
+    Replacement.append(OrigInst, OrigInst + DI.Size);
+    Replacement.append(Restore.begin(), Restore.end());
+    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
+                             /*AllowSafeFarReturn=*/true))
+      return failRequiredPatch(Ctx);
+
+    if (!commitSafeSgprScratchBlock(Ctx, DI.Offset, *Scratch,
+                                    "tensor_load_to_lds descriptor save"))
+      return failRequiredPatch(Ctx);
+    log() << "hotswap: tensor_load_to_lds: " << BaseSreg
+          << " live, save/restore via " << ScratchName << "\n";
+  } else {
+    SmallVector<uint8_t> Replacement;
+    Replacement.append(PackBytes.begin(), PackBytes.end());
+    Replacement.append(OrigInst, OrigInst + DI.Size);
+    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
+                             /*AllowSafeFarReturn=*/true))
+      return failRequiredPatch(Ctx);
+
+    log() << "hotswap: tensor_load_to_lds: " << BaseSreg
+          << " dead, no save/restore needed\n";
+  }
 
   Ctx.RequiredPatchApplied = true;
   DI.Mnemonic = "<replaced>";
