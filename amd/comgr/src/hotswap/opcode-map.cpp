@@ -535,6 +535,16 @@ static const Entry kCanonTable[] = {
     // pseudos directly to the shared 16-bit cndmask handler.
     E(V_CNDMASK_B16_t16_e64, V_CNDMASK_B16),
     E(V_CNDMASK_B16_fake16_e64, V_CNDMASK_B16),
+    // true16 16-bit bitwise ops. AND/OR/XOR are VOP3-only with no bare e64
+    // pseudo (map both encoding variants); V_NOT_B16 has a bare e64 form that
+    // the alias-strip pass collapses onto.
+    E(V_AND_B16_t16_e64, V_AND_B16),
+    E(V_AND_B16_fake16_e64, V_AND_B16),
+    E(V_OR_B16_t16_e64, V_OR_B16),
+    E(V_OR_B16_fake16_e64, V_OR_B16),
+    E(V_XOR_B16_t16_e64, V_XOR_B16),
+    E(V_XOR_B16_fake16_e64, V_XOR_B16),
+    E(V_NOT_B16_e64, V_NOT_B16),
     E(V_MUL_LO_U32_e64, V_MUL_LO_U32),
     E(V_MUL_HI_U32_e64, V_MUL_HI_U32),
     E(V_MUL_HI_I32_e64, V_MUL_HI_I32),

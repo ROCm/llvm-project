@@ -99,16 +99,18 @@ struct True16OpSel {
 
 Expected<True16OpSel> readTrue16OpSel(const DecodedInst &Di, OpResolver &Op,
                                       unsigned NumSrcs, StringRef OpName) {
-  assert(NumSrcs == 2 || NumSrcs == 3);
+  assert(NumSrcs >= 1 && NumSrcs <= 3);
   if (Op.nSrcs() < NumSrcs) {
-    const char *ExpectedSrcs = NumSrcs == 2 ? "src0/src1" : "src0/src1/src2";
+    const char *ExpectedSrcs = NumSrcs == 1   ? "src0"
+                               : NumSrcs == 2 ? "src0/src1"
+                                              : "src0/src1/src2";
     return RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3",
         OpName + " has too few source operands; expected " + ExpectedSrcs);
   }
 
   unsigned Src0Mods = Op.srcMod(0);
-  unsigned Src1Mods = Op.srcMod(1);
+  unsigned Src1Mods = NumSrcs >= 2 ? Op.srcMod(1) : 0;
   unsigned Src2Mods = NumSrcs == 3 ? Op.srcMod(2) : 0;
   constexpr unsigned AllowedSrc0Mods =
       SISrcMods::OP_SEL_0 | SISrcMods::DST_OP_SEL;
@@ -2108,6 +2110,47 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Result = Ctx.B.CreateSelect(Cond, RHS, LHS, "cndmask_b16");
     writeSelectedI16Bits(Ctx, Op.dst(), Result, DstHi,
                          "cndmask_b16_merge_lo", "cndmask_b16_merge_hi");
+    Hr.Handled = true;
+    return Hr;
+  }
+  // VOP3 true16 16-bit two-source bitwise AND/OR/XOR with op_sel half select
+  // on src0/src1/dst (unselected dst half preserved, RDNA3+ true16 ISA). No
+  // clamp/neg semantics apply to integer bitwise ops.
+  if (Sop == CanonicalOp::V_AND_B16 || Sop == CanonicalOp::V_OR_B16 ||
+      Sop == CanonicalOp::V_XOR_B16) {
+    const char *OpName = Sop == CanonicalOp::V_AND_B16   ? "v_and_b16"
+                         : Sop == CanonicalOp::V_OR_B16  ? "v_or_b16"
+                                                         : "v_xor_b16";
+    Expected<True16OpSel> Sel = readTrue16OpSel(Di, Op, 2, OpName);
+    if (!Sel)
+      return Sel.takeError();
+    Value *LHS = extractU16Half(Ctx, Op.src(0), Sel->Src0Hi);
+    Value *RHS = extractU16Half(Ctx, Op.src(1), Sel->Src1Hi);
+    Value *Result =
+        Sop == CanonicalOp::V_AND_B16  ? Ctx.B.CreateAnd(LHS, RHS, "and_b16")
+        : Sop == CanonicalOp::V_OR_B16 ? Ctx.B.CreateOr(LHS, RHS, "or_b16")
+                                       : Ctx.B.CreateXor(LHS, RHS, "xor_b16");
+    writeSelectedI16Bits(Ctx, Op.dst(), Result, Sel->DstHi,
+                         "logic_b16_merge_lo", "logic_b16_merge_hi");
+    Hr.Handled = true;
+    return Hr;
+  }
+  // VOP3 true16 16-bit bitwise NOT (single source). op_sel handling mirrors
+  // V_MOV_B16: the half is carried by src0 OP_SEL_0 / DST_OP_SEL or the
+  // _LO16/_HI16 subreg notation; isHi16Reg overrides the modifier bits.
+  if (Sop == CanonicalOp::V_NOT_B16) {
+    Expected<True16OpSel> Sel = readTrue16OpSel(Di, Op, 1, "v_not_b16");
+    if (!Sel)
+      return Sel.takeError();
+    const MCRegisterInfo &MRI = *Ctx.Mc.RegInfo;
+    if (Di.isReg(0) && AMDGPU::isHi16Reg(Di.getReg(0), MRI))
+      Sel->DstHi = true;
+    unsigned Src0Idx = Di.SrcMap[0];
+    if (Di.isReg(Src0Idx) && AMDGPU::isHi16Reg(Di.getReg(Src0Idx), MRI))
+      Sel->Src0Hi = true;
+    Value *Half = extractU16Half(Ctx, Op.src(0), Sel->Src0Hi);
+    writeSelectedI16Bits(Ctx, Op.dst(), Ctx.B.CreateNot(Half, "not_b16"),
+                         Sel->DstHi, "not_b16_merge");
     Hr.Handled = true;
     return Hr;
   }

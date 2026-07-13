@@ -466,6 +466,9 @@ enum class CanonicalOp : uint16_t {
   // src0/src1/dst halves; the wave-mask condition is read exactly as for
   // V_CNDMASK_B32 via raiseCndmaskWaveCondition().
   V_CNDMASK_B16,
+  // gfx11+ true16 16-bit bitwise ops (VOP3 true16 half-select on
+  // src0/src1/dst). V_NOT_B16 is single-source.
+  V_AND_B16, V_OR_B16, V_XOR_B16, V_NOT_B16,
   V_MUL_LO_U32, V_MUL_HI_U32, V_MUL_HI_I32,
   V_MUL_I32_I24, V_MUL_U32_U24, V_MUL_HI_U32_U24, V_MUL_HI_I32_I24,
   V_MAD_I32_I24, V_MAD_U32_U24, V_MAD_U32,
