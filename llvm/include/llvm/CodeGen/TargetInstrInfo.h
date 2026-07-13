@@ -841,6 +841,20 @@ public:
       return true;
     }
 
+    /// Return true to run the generic register-pressure detector for this loop
+    /// even without -pipeliner-register-pressure. A rejected schedule then
+    /// retries at a higher II instead of disabling pipelining.
+    virtual bool shouldLimitRegPressure() const { return false; }
+
+    /// Given the detector's per-pressure-set maxima \p MaxSetPressure for a
+    /// candidate schedule, return whether it uses too many registers, or
+    /// nullopt to defer to the detector's default per-set limit check. A
+    /// non-nullopt verdict takes precedence over that check (and its margin).
+    virtual std::optional<bool>
+    isScheduleRegPressureTooHigh(ArrayRef<unsigned> MaxSetPressure) const {
+      return std::nullopt;
+    }
+
     /// Create a condition to determine if the trip count of the loop is greater
     /// than TC, where TC is always one more than for the previous prologue or
     /// 0 if this is being called for the outermost prologue.
