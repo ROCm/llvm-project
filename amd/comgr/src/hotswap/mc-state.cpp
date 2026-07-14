@@ -53,14 +53,13 @@ llvm::Expected<MCState> initMCState(StringRef TargetIsa) {
     return STIOrErr.takeError();
 
   State.SubtargetInfo = std::move(*STIOrErr);
-  State.AsmInfo.reset(State.Target->createMCAsmInfo(
-      *State.RegInfo, Triple, MCTargetOptions()));
+  State.AsmInfo.reset(
+      State.Target->createMCAsmInfo(*State.RegInfo, Triple, MCTargetOptions()));
   if (!State.AsmInfo)
     return makeHotswapError("initMCState: createMCAsmInfo returned null");
 
   State.Ctx = std::make_unique<MCContext>(Triple, *State.AsmInfo,
-                                         *State.RegInfo,
-                                         *State.SubtargetInfo);
+                                          *State.RegInfo, *State.SubtargetInfo);
   // The MCContext ctor defaults `SourceMgr *Mgr = nullptr`, so any
   // MC-layer diagnostic that reaches `MCContext::reportCommon` or
   // `MCContext::diagnose` with a valid SMLoc and no SrcMgr trips an

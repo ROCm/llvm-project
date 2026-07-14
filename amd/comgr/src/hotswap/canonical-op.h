@@ -19,11 +19,22 @@ enum class CanonicalOp : uint16_t {
   Unknown = 0,
 
   // -- SOPP / control flow --
-  S_ENDPGM, S_NOP, S_BRANCH, S_CODE_END,
-  S_CBRANCH_SCC0, S_CBRANCH_SCC1,
-  S_CBRANCH_VCCZ, S_CBRANCH_VCCNZ,
-  S_CBRANCH_EXECZ, S_CBRANCH_EXECNZ,
-  S_WAITCNT, S_WAIT_LOADCNT, S_WAIT_STORECNT, S_WAIT_KMCNT, S_WAIT_DSCNT, S_WAIT_XCNT,
+  S_ENDPGM,
+  S_NOP,
+  S_BRANCH,
+  S_CODE_END,
+  S_CBRANCH_SCC0,
+  S_CBRANCH_SCC1,
+  S_CBRANCH_VCCZ,
+  S_CBRANCH_VCCNZ,
+  S_CBRANCH_EXECZ,
+  S_CBRANCH_EXECNZ,
+  S_WAITCNT,
+  S_WAIT_LOADCNT,
+  S_WAIT_STORECNT,
+  S_WAIT_KMCNT,
+  S_WAIT_DSCNT,
+  S_WAIT_XCNT,
   // gfx1250 async-memory wait counters. `S_WAIT_ASYNCCNT` is the
   // companion barrier for the `GLOBAL_LOAD_ASYNC_TO_LDS_B*` family
   // below (and `DS_ATOMIC_ASYNC_BARRIER_ARRIVE_B64`); `S_WAIT_TENSORCNT`
@@ -54,59 +65,129 @@ enum class CanonicalOp : uint16_t {
   // reviewer touching the async family can grep
   // `S_WAIT_ASYNCCNT` and find both the CanonicalOp, its opcode_map
   // entry, and the handler's no-op arm in one pass.
-  S_WAIT_ASYNCCNT, S_WAIT_TENSORCNT,
-  S_WAIT_LOADCNT_DSCNT, S_WAIT_ALU,
-  S_CLAUSE, S_DELAY_ALU, S_SET_GPR_IDX_ON, S_SET_GPR_IDX_OFF, S_SETVSKIP,
+  S_WAIT_ASYNCCNT,
+  S_WAIT_TENSORCNT,
+  S_WAIT_LOADCNT_DSCNT,
+  S_WAIT_ALU,
+  S_CLAUSE,
+  S_DELAY_ALU,
+  S_SET_GPR_IDX_ON,
+  S_SET_GPR_IDX_OFF,
+  S_SETVSKIP,
   // Barriers. GFX12+ splits s_barrier into signal + wait; earlier ISAs emit a
   // single s_barrier. Handlers model signal as a no-op and wait as a full
   // LLVM `amdgcn.s.barrier` call.
-  S_BARRIER, S_BARRIER_WAIT, S_BARRIER_SIGNAL,
+  S_BARRIER,
+  S_BARRIER_WAIT,
+  S_BARRIER_SIGNAL,
   // s_sendmsg / s_sendmsghalt. Only INTERRUPT and DEALLOC_VGPRS message
   // IDs are lifted; see handle-sopp.cpp for the dispatch and policy.
-  S_SENDMSG, S_SENDMSGHALT,
+  S_SENDMSG,
+  S_SENDMSGHALT,
 
   // -- SMEM --
-  S_LOAD_B32, S_LOAD_B64, S_LOAD_B96, S_LOAD_B128, S_LOAD_B256, S_LOAD_B512,
+  S_LOAD_B32,
+  S_LOAD_B64,
+  S_LOAD_B96,
+  S_LOAD_B128,
+  S_LOAD_B256,
+  S_LOAD_B512,
   // Scalar loads through a four-SGPR buffer resource descriptor.
-  S_BUFFER_LOAD_B32, S_BUFFER_LOAD_B64, S_BUFFER_LOAD_B96,
-  S_BUFFER_LOAD_B128, S_BUFFER_LOAD_B256, S_BUFFER_LOAD_B512,
+  S_BUFFER_LOAD_B32,
+  S_BUFFER_LOAD_B64,
+  S_BUFFER_LOAD_B96,
+  S_BUFFER_LOAD_B128,
+  S_BUFFER_LOAD_B256,
+  S_BUFFER_LOAD_B512,
   // gfx12+ scalar narrow loads: fetch 1 or 2 bytes from a uniform address and
   // zero/sign-extend into a 32-bit SGPR. Older ISAs have no equivalent; on a
   // cross-target lift to gfx942 the backend will lower the narrow `load iN`
   // to VMEM (per-lane global_load_{ubyte,sbyte,ushort,sshort}) -- semantically
   // correct but uniformity-lossy. See handle-smem.cpp for the design notes.
-  S_LOAD_U8, S_LOAD_I8, S_LOAD_U16, S_LOAD_I16,
-  S_STORE_B32, S_STORE_B64, S_STORE_B128,
+  S_LOAD_U8,
+  S_LOAD_I8,
+  S_LOAD_U16,
+  S_LOAD_I16,
+  S_STORE_B32,
+  S_STORE_B64,
+  S_STORE_B128,
 
   // -- SOPC --
-  S_CMP_EQ_U32, S_CMP_LG_U32, S_CMP_GT_U32, S_CMP_GE_U32,
-  S_CMP_LT_U32, S_CMP_LE_U32,
+  S_CMP_EQ_U32,
+  S_CMP_LG_U32,
+  S_CMP_GT_U32,
+  S_CMP_GE_U32,
+  S_CMP_LT_U32,
+  S_CMP_LE_U32,
   // gfx8+ 64-bit unsigned scalar compares (SOPC_CMP_64). Only EQ and
   // LG (not equal) are defined in SOPInstructions.td; there are no
   // ordered/strict 64-bit SOPC compares on any AMDGPU generation
   // because the .td record `SOPC_CMP_64` is reserved for these two.
-  S_CMP_EQ_U64, S_CMP_LG_U64,
-  S_CMP_EQ_I32, S_CMP_LG_I32, S_CMP_GT_I32, S_CMP_GE_I32,
-  S_CMP_LT_I32, S_CMP_LE_I32,
-  S_CMP_EQ_F32, S_CMP_LG_F32, S_CMP_GT_F32, S_CMP_GE_F32,
-  S_CMP_LT_F32, S_CMP_LE_F32, S_CMP_NEQ_F32,
-  S_CMP_NGT_F32, S_CMP_NGE_F32, S_CMP_NLT_F32, S_CMP_NLE_F32, S_CMP_NLG_F32,
-  S_CMP_O_F32, S_CMP_U_F32,
-  S_CMP_EQ_F16, S_CMP_LG_F16, S_CMP_GT_F16, S_CMP_GE_F16,
-  S_CMP_LT_F16, S_CMP_LE_F16, S_CMP_NEQ_F16,
-  S_CMP_NGT_F16, S_CMP_NGE_F16, S_CMP_NLT_F16, S_CMP_NLE_F16, S_CMP_NLG_F16,
-  S_CMP_O_F16, S_CMP_U_F16,
+  S_CMP_EQ_U64,
+  S_CMP_LG_U64,
+  S_CMP_EQ_I32,
+  S_CMP_LG_I32,
+  S_CMP_GT_I32,
+  S_CMP_GE_I32,
+  S_CMP_LT_I32,
+  S_CMP_LE_I32,
+  S_CMP_EQ_F32,
+  S_CMP_LG_F32,
+  S_CMP_GT_F32,
+  S_CMP_GE_F32,
+  S_CMP_LT_F32,
+  S_CMP_LE_F32,
+  S_CMP_NEQ_F32,
+  S_CMP_NGT_F32,
+  S_CMP_NGE_F32,
+  S_CMP_NLT_F32,
+  S_CMP_NLE_F32,
+  S_CMP_NLG_F32,
+  S_CMP_O_F32,
+  S_CMP_U_F32,
+  S_CMP_EQ_F16,
+  S_CMP_LG_F16,
+  S_CMP_GT_F16,
+  S_CMP_GE_F16,
+  S_CMP_LT_F16,
+  S_CMP_LE_F16,
+  S_CMP_NEQ_F16,
+  S_CMP_NGT_F16,
+  S_CMP_NGE_F16,
+  S_CMP_NLT_F16,
+  S_CMP_NLE_F16,
+  S_CMP_NLG_F16,
+  S_CMP_O_F16,
+  S_CMP_U_F16,
 
   // -- SOPK --
-  S_MOVK_I32, S_ADDK_I32, S_MULK_I32,
-  S_CMPK_GE_I32, S_CMPK_GT_I32, S_CMPK_LE_I32, S_CMPK_LT_I32,
-  S_CMPK_GE_U32, S_CMPK_GT_U32, S_CMPK_LE_U32, S_CMPK_LT_U32,
-  S_CMPK_EQ_I32, S_CMPK_EQ_U32, S_CMPK_LG_I32, S_CMPK_LG_U32,
-  S_GETREG_B32, S_SETREG_B32, S_SETREG_IMM32_B32,
+  S_MOVK_I32,
+  S_ADDK_I32,
+  S_MULK_I32,
+  S_CMPK_GE_I32,
+  S_CMPK_GT_I32,
+  S_CMPK_LE_I32,
+  S_CMPK_LT_I32,
+  S_CMPK_GE_U32,
+  S_CMPK_GT_U32,
+  S_CMPK_LE_U32,
+  S_CMPK_LT_U32,
+  S_CMPK_EQ_I32,
+  S_CMPK_EQ_U32,
+  S_CMPK_LG_I32,
+  S_CMPK_LG_U32,
+  S_GETREG_B32,
+  S_SETREG_B32,
+  S_SETREG_IMM32_B32,
 
   // -- SOP1 --
-  S_MOV_B32, S_MOV_B64, S_NOT_B32, S_NOT_B64,
-  S_BREV_B32, S_FF1_I32_B32, S_FF1_I32_B64,
+  S_MOV_B32,
+  S_MOV_B64,
+  S_NOT_B32,
+  S_NOT_B64,
+  S_BREV_B32,
+  S_FF1_I32_B32,
+  S_FF1_I32_B64,
   // s_bcnt1_i32_b{32,64}: scalar population count
   // (SOPInstructions.td:269-274). Both lower to llvm.ctpop on the
   // appropriately sized source; the B64 form truncates the ctpop result
@@ -114,7 +195,8 @@ enum class CanonicalOp : uint16_t {
   // derived automatically by the raiser from Hr.SccResult
   // (raiser.cpp:1202) since SOPInstructions.td wraps the defs in
   // `let Defs = [SCC]`.
-  S_BCNT1_I32_B32, S_BCNT1_I32_B64,
+  S_BCNT1_I32_B32,
+  S_BCNT1_I32_B64,
   // s_ff0_i32_b{32,64}: find first 0 bit (lowest position), returning
   // -1 when the source is all-ones. SOPInstructions.td:278-279 (no
   // LLVM ISel pattern is provided, so the instruction is only emitted
@@ -123,24 +205,39 @@ enum class CanonicalOp : uint16_t {
   // on the all-ones input path, mirroring the V_FFBL_B32 / V_FFBH_U32
   // shape (the AMDGPU instruction returns 0xFFFFFFFF in the no-bit
   // case rather than the LLVM intrinsic's bitwidth-wide return).
-  S_FF0_I32_B32, S_FF0_I32_B64,
-  S_FLBIT_I32_B32, S_FLBIT_I32_B64,
+  S_FF0_I32_B32,
+  S_FF0_I32_B64,
+  S_FLBIT_I32_B32,
+  S_FLBIT_I32_B64,
   // s_flbit_i32 / s_flbit_i32_i64: signed find-leading-bit-not-equal-to-
   // sign-bit. Lowers to llvm.amdgcn.sffbh, the dedicated AMDGPU
   // intrinsic that selects directly back to v_ffbh_i32_e32 (or its
   // i64-split lowering for the 64-bit variant). See
   // SOPInstructions.td:296-298 / VOP1Instructions.td:373.
-  S_FLBIT_I32, S_FLBIT_I32_I64,
-  S_SEXT_I32_I8, S_SEXT_I32_I16,
-  S_CVT_F16_F32, S_CVT_F32_F16, S_CVT_HI_F32_F16,
-  S_CVT_F32_U32, S_CVT_F32_I32, S_CVT_U32_F32, S_CVT_I32_F32,
+  S_FLBIT_I32,
+  S_FLBIT_I32_I64,
+  S_SEXT_I32_I8,
+  S_SEXT_I32_I16,
+  S_CVT_F16_F32,
+  S_CVT_F32_F16,
+  S_CVT_HI_F32_F16,
+  S_CVT_F32_U32,
+  S_CVT_F32_I32,
+  S_CVT_U32_F32,
+  S_CVT_I32_F32,
   // gfx11+ scalar F32-to-F32 integral rounding family. The AMD ISA manual
   // defines each as a 32-bit SGPR F32 input and F32 output; S_TRUNC_F32 in
   // particular stores the integer part using round-toward-zero semantics back
   // in floating-point format, not as an integer conversion.
-  S_CEIL_F32, S_FLOOR_F32, S_TRUNC_F32, S_RNDNE_F32,
-  S_AND_SAVEEXEC_B32, S_OR_SAVEEXEC_B32, S_XOR_SAVEEXEC_B32,
-  S_ANDN2_SAVEEXEC_B32, S_ORN2_SAVEEXEC_B32,
+  S_CEIL_F32,
+  S_FLOOR_F32,
+  S_TRUNC_F32,
+  S_RNDNE_F32,
+  S_AND_SAVEEXEC_B32,
+  S_OR_SAVEEXEC_B32,
+  S_XOR_SAVEEXEC_B32,
+  S_ANDN2_SAVEEXEC_B32,
+  S_ORN2_SAVEEXEC_B32,
   S_GETPC_B64,
   // SOP1 indirect set-PC. gfx1250 asm rename for `S_SETPC_B64`
   // (SOPInstructions.td:323 declares `isBranch + isIndirectBranch`,
@@ -259,8 +356,10 @@ enum class CanonicalOp : uint16_t {
   // Read-modify-write bit set/clear on an SGPR. Tied src keeps the
   // un-touched bits of the destination register alive across the op.
   // B64 variants index into 64 bits (bit index is still an SReg_32).
-  S_BITSET0_B32, S_BITSET1_B32,
-  S_BITSET0_B64, S_BITSET1_B64,
+  S_BITSET0_B32,
+  S_BITSET1_B32,
+  S_BITSET0_B64,
+  S_BITSET1_B64,
   // SOPC bit-test family (SOPInstructions.td:1411-1414; gfx6+ on every
   // AMDGPU generation, so fully cross-target viable).  Tests a single
   // bit of src0 selected by src1 (src1's lower 5 bits for _B32, lower
@@ -274,8 +373,10 @@ enum class CanonicalOp : uint16_t {
   // mask in IR to preserve that invariant exactly instead of relying
   // on undef-width behaviour).  The handler lives in handle-sopc.cpp
   // next to the SOPC compares it mirrors.
-  S_BITCMP0_B32, S_BITCMP1_B32,
-  S_BITCMP0_B64, S_BITCMP1_B64,
+  S_BITCMP0_B32,
+  S_BITCMP1_B32,
+  S_BITCMP0_B64,
+  S_BITCMP1_B64,
   // Conditional move on SCC. `if (SCC) sdst = src; else sdst stays
   // unchanged.` The dst-on-SCC=0 read-modify is NOT modeled by LLVM
   // as a tied sdst_in operand on the MCInst (SOP1_32/SOP1_64 just
@@ -283,7 +384,8 @@ enum class CanonicalOp : uint16_t {
   // explicitly read the prior dst value via
   // `ctx.Regs.readReg{32,64}(op.dst())`. SCC is read but not
   // written.
-  S_CMOV_B32, S_CMOV_B64,
+  S_CMOV_B32,
+  S_CMOV_B64,
 
   // -- SOP2 --
   // `S_ADD_U64` used to live here as a second CanonicalOp alongside the
@@ -299,24 +401,51 @@ enum class CanonicalOp : uint16_t {
   // `opcode-map.cpp`'s S_ADD_U64 block comment for the full audit.
   // `CanonicalOp::S_ADD_NC_U64` below is now the ONLY CanonicalOp for LLVM's
   // `S_ADD_U64` pseudo.
-  S_ADD_U32, S_ADDC_U32, S_SUB_U32, S_SUBB_U32,
-  S_AND_B32, S_AND_B64, S_OR_B32, S_OR_B64, S_XOR_B32, S_XOR_B64,
-  S_ANDN2_B32, S_ANDN2_B64, S_ORN2_B32, S_ORN2_B64,
+  S_ADD_U32,
+  S_ADDC_U32,
+  S_SUB_U32,
+  S_SUBB_U32,
+  S_AND_B32,
+  S_AND_B64,
+  S_OR_B32,
+  S_OR_B64,
+  S_XOR_B32,
+  S_XOR_B64,
+  S_ANDN2_B32,
+  S_ANDN2_B64,
+  S_ORN2_B32,
+  S_ORN2_B64,
   // SOP2 negated bitops (gfx7+). SOPInstructions.td:789-803 -- each
   // computes `dst = ~(src0 OP src1)` and sets SCC = (result != 0). These
   // are produced heavily by triton/tensilelite when constant-folding
   // bitfield masks (e.g. `s_nand_b32 sX, sY, 0xffff` to clear the low
   // 16 bits). All can target EXEC, so they must be marked
   // routesExecThroughStoreExec.
-  S_NAND_B32, S_NAND_B64, S_NOR_B32, S_NOR_B64, S_XNOR_B32, S_XNOR_B64,
+  S_NAND_B32,
+  S_NAND_B64,
+  S_NOR_B32,
+  S_NOR_B64,
+  S_XNOR_B32,
+  S_XNOR_B64,
   // SOP2 absolute-difference (gfx7+). SOPInstructions.td:886-888 --
   // `dst = |src0 - src1|` on signed i32, SCC = (result != 0). Lower
   // through llvm.abs.i32 with is_int_min_poison=false: hardware wraps
   // for INT_MIN (the only value whose negation equals itself), so we
   // mustn't poison there. Heavily used by tensilelite for stride math.
   S_ABSDIFF_I32,
-  S_LSHL_B32, S_LSHL_B64, S_LSHR_B32, S_LSHR_B64, S_ASHR_I32, S_ASHR_I64,
-  S_MUL_I32, S_MUL_HI_U32, S_MUL_HI_I32, S_MUL_U64, S_MUL_F32, S_ADD_F32, S_SUB_F32,
+  S_LSHL_B32,
+  S_LSHL_B64,
+  S_LSHR_B32,
+  S_LSHR_B64,
+  S_ASHR_I32,
+  S_ASHR_I64,
+  S_MUL_I32,
+  S_MUL_HI_U32,
+  S_MUL_HI_I32,
+  S_MUL_U64,
+  S_MUL_F32,
+  S_ADD_F32,
+  S_SUB_F32,
   // gfx11+ scalar fused multiply-accumulate. SOP2 encodes only two explicit
   // sources; OPF_DACCUM ties the old destination value as the third operand:
   //   sdst.f32 = fma(ssrc0.f32, ssrc1.f32, old sdst.f32)
@@ -325,7 +454,8 @@ enum class CanonicalOp : uint16_t {
   // third f32 operand from the instruction literal slot:
   //   s_fmaak_f32: sdst.f32 = fma(ssrc0.f32, ssrc1.f32, literal.f32)
   //   s_fmamk_f32: sdst.f32 = fma(ssrc0.f32, literal.f32, ssrc1.f32)
-  S_FMAAK_F32, S_FMAMK_F32,
+  S_FMAAK_F32,
+  S_FMAMK_F32,
   // Scalar IEEE-754-2019 maximumNumber/minimumNumber. LLVM's canonical pseudo
   // is `S_{MAX,MIN}_F32`; gfx12+ manuals name the real mnemonics
   // `s_{max,min}_num_f32` and keep `s_{max,min}_f32` as compatibility aliases.
@@ -333,52 +463,110 @@ enum class CanonicalOp : uint16_t {
   // raising invalid) and order signed zeros (+0 > -0 for max, -0 < +0 for min),
   // matching LLVM's `maximumnum` / `minimumnum` intrinsic contract without
   // fast-math flags.
-  S_MAX_NUM_F32, S_MIN_NUM_F32,
+  S_MAX_NUM_F32,
+  S_MIN_NUM_F32,
   // Scalar IEEE-754-2019 NaN-propagating f16 maximum/minimum (gfx12+). Low 16
   // bits of the 32-bit SGPRs hold the f16 operand. Map to `llvm.maximum.f16` /
   // `llvm.minimum.f16`, distinct from the non-propagating NUM family above.
-  S_MAXIMUM_F16, S_MINIMUM_F16,
+  S_MAXIMUM_F16,
+  S_MINIMUM_F16,
   // Scalar IEEE-754-2019 NaN-propagating f32 maximum/minimum (gfx12+). Map to
   // `llvm.maximum.f32` / `llvm.minimum.f32`, distinct from the NUM family.
-  S_MAXIMUM_F32, S_MINIMUM_F32,
-  S_BFE_U32, S_BFE_I32, S_BFE_I64, S_BFM_B32, S_BFM_B64,
-  S_CSELECT_B32, S_CSELECT_B64,
-  S_MIN_I32, S_MIN_U32, S_MAX_I32, S_MAX_U32,
-  S_PACK_LL_B32_B16, S_PACK_LH_B32_B16,
-  S_LSHL1_ADD_U32, S_LSHL2_ADD_U32, S_LSHL3_ADD_U32, S_LSHL4_ADD_U32,
-  S_ADD_NC_U64, S_SUB_NC_U64,
+  S_MAXIMUM_F32,
+  S_MINIMUM_F32,
+  S_BFE_U32,
+  S_BFE_I32,
+  S_BFE_I64,
+  S_BFM_B32,
+  S_BFM_B64,
+  S_CSELECT_B32,
+  S_CSELECT_B64,
+  S_MIN_I32,
+  S_MIN_U32,
+  S_MAX_I32,
+  S_MAX_U32,
+  S_PACK_LL_B32_B16,
+  S_PACK_LH_B32_B16,
+  S_LSHL1_ADD_U32,
+  S_LSHL2_ADD_U32,
+  S_LSHL3_ADD_U32,
+  S_LSHL4_ADD_U32,
+  S_ADD_NC_U64,
+  S_SUB_NC_U64,
 
   // -- VOP1 --
-  V_MOV_B32, V_MOV_B64, V_MOV_B16, V_NOP, V_NOT_B32, V_BFREV_B32,
+  V_MOV_B32,
+  V_MOV_B64,
+  V_MOV_B16,
+  V_NOP,
+  V_NOT_B32,
+  V_BFREV_B32,
   V_SWAP_B32,
-  V_CVT_F32_I32, V_CVT_F32_U32, V_CVT_I32_F32, V_CVT_U32_F32,
+  V_CVT_F32_I32,
+  V_CVT_F32_U32,
+  V_CVT_I32_F32,
+  V_CVT_U32_F32,
   V_CVT_U32_U16,
-  V_CVT_F16_F32, V_CVT_F32_F16, V_CVT_F32_BF16,
-  V_CVT_F32_UBYTE0, V_CVT_F32_UBYTE1, V_CVT_F32_UBYTE2, V_CVT_F32_UBYTE3,
-  V_CVT_F32_F64, V_CVT_F64_F32,
-  V_CVT_F64_U32, V_CVT_F64_I32, V_CVT_U32_F64, V_CVT_I32_F64,
-  V_RCP_IFLAG_F32, V_RCP_F32, V_RSQ_F32, V_SQRT_F32, V_EXP_F32, V_LOG_F32,
+  V_CVT_F16_F32,
+  V_CVT_F32_F16,
+  V_CVT_F32_BF16,
+  V_CVT_F32_UBYTE0,
+  V_CVT_F32_UBYTE1,
+  V_CVT_F32_UBYTE2,
+  V_CVT_F32_UBYTE3,
+  V_CVT_F32_F64,
+  V_CVT_F64_F32,
+  V_CVT_F64_U32,
+  V_CVT_F64_I32,
+  V_CVT_U32_F64,
+  V_CVT_I32_F64,
+  V_RCP_IFLAG_F32,
+  V_RCP_F32,
+  V_RSQ_F32,
+  V_SQRT_F32,
+  V_EXP_F32,
+  V_LOG_F32,
   // VOP1/VOP3 F32 trigonometric TRANS ops. The ISA defines these as
   // sin/cos(src * 2*pi), not generic radian-domain sin/cos; lower through
   // the AMDGPU intrinsics that select the hardware TRANS instructions.
-  V_SIN_F32, V_COS_F32,
+  V_SIN_F32,
+  V_COS_F32,
   V_FREXP_EXP_I32_F64,
   // Targets with native tanh support lower this through `llvm.amdgcn.tanh.*`;
   // other targets use OCML when a matching OCML entry point exists.
   V_TANH_F32,
   // bf16 single-source transcendentals; lifted through f32 intrinsics
   // (v_tanh_bf16 through __ocml_tanh_f32).
-  V_COS_BF16, V_EXP_BF16, V_LOG_BF16, V_RCP_BF16,
-  V_RSQ_BF16, V_SIN_BF16, V_SQRT_BF16, V_TANH_BF16,
+  V_COS_BF16,
+  V_EXP_BF16,
+  V_LOG_BF16,
+  V_RCP_BF16,
+  V_RSQ_BF16,
+  V_SIN_BF16,
+  V_SQRT_BF16,
+  V_TANH_BF16,
   // gfx12+ VOP3 pseudo-scalar f32 transcendentals: scalar input and scalar
   // output variants of the corresponding VOP1 special-function instructions.
   // The default clamp=0/omod=0 forms lower through AMDGPU hardware intrinsics;
   // non-default output modifiers are refused until modeled exactly.
-  V_S_EXP_F32, V_S_LOG_F32, V_S_RCP_F32, V_S_RSQ_F32, V_S_SQRT_F32,
+  V_S_EXP_F32,
+  V_S_LOG_F32,
+  V_S_RCP_F32,
+  V_S_RSQ_F32,
+  V_S_SQRT_F32,
   V_LDEXP_F32,
-  V_FLOOR_F32, V_CEIL_F32, V_TRUNC_F32, V_RNDNE_F32, V_FRACT_F32,
-  V_FLOOR_F64, V_CEIL_F64, V_TRUNC_F64, V_RNDNE_F64, V_FRACT_F64,
-  V_FREXP_MANT_F32, V_FREXP_MANT_F64,
+  V_FLOOR_F32,
+  V_CEIL_F32,
+  V_TRUNC_F32,
+  V_RNDNE_F32,
+  V_FRACT_F32,
+  V_FLOOR_F64,
+  V_CEIL_F64,
+  V_TRUNC_F64,
+  V_RNDNE_F64,
+  V_FRACT_F64,
+  V_FREXP_MANT_F32,
+  V_FREXP_MANT_F64,
   V_READFIRSTLANE_B32,
   // VOP1 packed FP8/BF8 -> 2x F32 expansion (VOP1Instructions.td:652-
   // 653, profile VOPProfileCVT_PK_F32_F8). Reads 16 bits of the i32
@@ -397,7 +585,8 @@ enum class CanonicalOp : uint16_t {
   // for the other op_sel handlers. The reverse direction
   // (V_CVT_PK_FP8_F32 / V_CVT_PK_BF8_F32) lives in the VOP3 block
   // below; this is the read-side companion.
-  V_CVT_PK_F32_FP8, V_CVT_PK_F32_BF8,
+  V_CVT_PK_F32_FP8,
+  V_CVT_PK_F32_BF8,
   // VOP1 single-lane FP8/BF8 -> F32 expansion (VOP1Instructions.td:650-
   // 651, profile VOPProfileCVT_F32_F8). Reads ONE 8-bit lane of the
   // i32 src -- selected by SDWA src0_sel / e64 op_sel byte_sel -- and
@@ -412,7 +601,8 @@ enum class CanonicalOp : uint16_t {
   // encodings refuse loudly via RaiseFailure::unsupportedInstructionForm so a
   // future corpus drift surfaces immediately rather than silently
   // collapsing to byte 0.
-  V_CVT_F32_FP8, V_CVT_F32_BF8,
+  V_CVT_F32_FP8,
+  V_CVT_F32_BF8,
   // VOP3 scaled packed-8 FP4 -> BF16 conversion (gfx1250 only,
   // VOP3Instructions.td:1788; LLVM opcode V_CVT_SCALE_PK8_BF16_FP4_e64,
   // real form `..._gfx1250`).  Reads 1 VGPR of packed 8xFP4 (4 bits
@@ -450,17 +640,37 @@ enum class CanonicalOp : uint16_t {
   //                returns -1 for input 0 or -1 (uniform sign). Lower
   //                via the dedicated llvm.amdgcn.sffbh intrinsic which
   //                selects directly back to v_ffbh_i32_e32.
-  V_FFBH_U32, V_FFBL_B32, V_FFBH_I32,
+  V_FFBH_U32,
+  V_FFBL_B32,
+  V_FFBH_I32,
   V_PRNG_B32,
 
   // -- VOP2 / VOP3 --
-  V_ADD_F32, V_SUB_F32, V_SUBREV_F32, V_MUL_F32, V_MUL_LEGACY_F32,
-  V_FMAC_F32, V_FMA_F32, V_FMAMK_F32, V_FMAAK_F32,
-  V_ADD_NC_U32, V_SUB_NC_U32, V_SUBREV_NC_U32,
-  V_ADD_CO_U32, V_ADD_CO_CI_U32,
-  V_SUB_CO_U32, V_SUBREV_CO_U32, V_SUB_CO_CI_U32, V_SUBREV_CO_CI_U32,
-  V_AND_B32, V_OR_B32, V_XOR_B32, V_XNOR_B32,
-  V_LSHLREV_B32, V_LSHRREV_B32, V_ASHRREV_I32,
+  V_ADD_F32,
+  V_SUB_F32,
+  V_SUBREV_F32,
+  V_MUL_F32,
+  V_MUL_LEGACY_F32,
+  V_FMAC_F32,
+  V_FMA_F32,
+  V_FMAMK_F32,
+  V_FMAAK_F32,
+  V_ADD_NC_U32,
+  V_SUB_NC_U32,
+  V_SUBREV_NC_U32,
+  V_ADD_CO_U32,
+  V_ADD_CO_CI_U32,
+  V_SUB_CO_U32,
+  V_SUBREV_CO_U32,
+  V_SUB_CO_CI_U32,
+  V_SUBREV_CO_CI_U32,
+  V_AND_B32,
+  V_OR_B32,
+  V_XOR_B32,
+  V_XNOR_B32,
+  V_LSHLREV_B32,
+  V_LSHRREV_B32,
+  V_ASHRREV_I32,
   V_CNDMASK_B32,
   // gfx11+ true16 16-bit conditional select (VOP3-only). op_sel selects the
   // src0/src1/dst halves; the wave-mask condition is read exactly as for
@@ -468,11 +678,27 @@ enum class CanonicalOp : uint16_t {
   V_CNDMASK_B16,
   // gfx11+ true16 16-bit bitwise ops (VOP3 true16 half-select on
   // src0/src1/dst). V_NOT_B16 is single-source.
-  V_AND_B16, V_OR_B16, V_XOR_B16, V_NOT_B16,
-  V_MUL_LO_U32, V_MUL_HI_U32, V_MUL_HI_I32,
-  V_MUL_I32_I24, V_MUL_U32_U24, V_MUL_HI_U32_U24, V_MUL_HI_I32_I24,
-  V_MAD_I32_I24, V_MAD_U32_U24, V_MAD_U32,
-  V_ADD3_U32, V_LSHL_ADD_U32, V_ADD_LSHL_U32, V_LSHL_OR_B32, V_AND_OR_B32, V_OR3_B32, V_XAD_U32,
+  V_AND_B16,
+  V_OR_B16,
+  V_XOR_B16,
+  V_NOT_B16,
+  V_MUL_LO_U32,
+  V_MUL_HI_U32,
+  V_MUL_HI_I32,
+  V_MUL_I32_I24,
+  V_MUL_U32_U24,
+  V_MUL_HI_U32_U24,
+  V_MUL_HI_I32_I24,
+  V_MAD_I32_I24,
+  V_MAD_U32_U24,
+  V_MAD_U32,
+  V_ADD3_U32,
+  V_LSHL_ADD_U32,
+  V_ADD_LSHL_U32,
+  V_LSHL_OR_B32,
+  V_AND_OR_B32,
+  V_OR3_B32,
+  V_XAD_U32,
   // VOP3 funnel-shift right: dst = ((src0:src1) >> src2[4:0])[31:0].
   // .td uses the SDAG `fshr` node directly (VOP3Instructions.td:222),
   // which maps to `llvm.fshr.i32` in IR. src2 is masked to 5 bits
@@ -492,18 +718,29 @@ enum class CanonicalOp : uint16_t {
   // RDNA3+ ISA. The handler must read the prior dst value when
   // dst op_sel is set so the preserved half survives the
   // read-modify-write.
-  V_ADD_NC_U16, V_SUB_NC_U16, V_ADD_NC_I16, V_SUB_NC_I16,
+  V_ADD_NC_U16,
+  V_SUB_NC_U16,
+  V_ADD_NC_I16,
+  V_SUB_NC_I16,
   V_MAD_U16,
-  // gfx1250 VOP3 add-then-min/max: (s/u)(min/max)((s/u)addsat(src0, src1), src2).
+  // gfx1250 VOP3 add-then-min/max: (s/u)(min/max)((s/u)addsat(src0, src1),
+  // src2).
   V_ADD_MIN_U32,
   V_ADD_MAX_U32,
   V_ADD_MIN_I32,
   V_ADD_MAX_I32,
-  V_BFE_U32, V_BFE_I32, V_BFI_B32, V_PERM_B32,
-  V_MBCNT_LO_U32_B32, V_MBCNT_HI_U32_B32,
-  V_READLANE_B32, V_WRITELANE_B32,
+  V_BFE_U32,
+  V_BFE_I32,
+  V_BFI_B32,
+  V_PERM_B32,
+  V_MBCNT_LO_U32_B32,
+  V_MBCNT_HI_U32_B32,
+  V_READLANE_B32,
+  V_WRITELANE_B32,
   // VOP3 ternary maximumNumber/minimumNumber
-  V_MED3_NUM_F32, V_MAX3_NUM_F32, V_MIN3_NUM_F32,
+  V_MED3_NUM_F32,
+  V_MAX3_NUM_F32,
+  V_MIN3_NUM_F32,
   // VOP3 IEEE-2019 ternary clamp `minnum(maxnum(s0, s1), s2)`.
   // gfx12 renamed gfx11's V_MINMAX_F32 (.td:1485, opcode 0x25f)
   // to V_MINMAX_NUM_F32 (.td:1696, opcode 0x268) when the .NUM
@@ -515,7 +752,11 @@ enum class CanonicalOp : uint16_t {
   //   V_MAXMIN_NUM_F32: minnum(maxnum(s0, s1), s2).
   V_MAXMIN_NUM_F32,
   // VOP3 integer 3-way max/min/median and ternary min/max.
-  V_MAX3_U32, V_MIN3_U32, V_MAX3_I32, V_MIN3_I32, V_MAX3_I16,
+  V_MAX3_U32,
+  V_MIN3_U32,
+  V_MAX3_I32,
+  V_MIN3_I32,
+  V_MAX3_I16,
   // VOP3 signed-integer median-of-three. Hardware semantic
   // (VOP3Instructions.td:1796 via AMDGPUsmed3 SDAG node):
   //   med3_i32(a, b, c) = smax(smin(a, b), smin(smax(a, b), c))
@@ -530,23 +771,35 @@ enum class CanonicalOp : uint16_t {
   // codegen quality loss.
   V_MED3_I32,
   // Ternary nested min/max family.
-  V_MINMAX_I32, V_MAXMIN_I32, V_MINMAX_U32, V_MAXMIN_U32,
-  // IEEE-754-2019 maximumNumber/minimumNumber: numeric operand preferred over NaN.
-  V_MAX_NUM_F32, V_MIN_NUM_F32,
+  V_MINMAX_I32,
+  V_MAXMIN_I32,
+  V_MINMAX_U32,
+  V_MAXMIN_U32,
+  // IEEE-754-2019 maximumNumber/minimumNumber: numeric operand preferred over
+  // NaN.
+  V_MAX_NUM_F32,
+  V_MIN_NUM_F32,
   // IEEE-754 2019 maximum/minimum: propagate NaN (distinct from maxnum/minnum).
-  V_MAXIMUM_F32, V_MINIMUM_F32,
+  V_MAXIMUM_F32,
+  V_MINIMUM_F32,
   // IEEE-754 2019 ternary maximum/minimum: NaN-propagating 3-source
   // reduction. gfx11+ (`HasMinimum3Maximum3F32`; VOP3 opcodes 0x22d/0x22e).
-  V_MAXIMUM3_F32, V_MINIMUM3_F32,
+  V_MAXIMUM3_F32,
+  V_MINIMUM3_F32,
   // IEEE-754 2019 ternary clamp pair, distinct from V_MINMAX_NUM_F32's
   // NaN-pruning `.NUM` semantics:
   //   V_MAXIMUMMINIMUM_F32: minimum(maximum(s0, s1), s2)
   //   V_MINIMUMMAXIMUM_F32: maximum(minimum(s0, s1), s2)
   // Both support source modifiers through OpResolver::srcF. Non-default VOP3
   // output modifiers (clamp / omod) are refused until modeled exactly.
-  V_MAXIMUMMINIMUM_F32, V_MINIMUMMAXIMUM_F32,
-  V_DIV_FIXUP_F32, V_DIV_FMAS_F32, V_DIV_SCALE_F32,
-  V_DIV_FIXUP_F64, V_DIV_FMAS_F64, V_DIV_SCALE_F64,
+  V_MAXIMUMMINIMUM_F32,
+  V_MINIMUMMAXIMUM_F32,
+  V_DIV_FIXUP_F32,
+  V_DIV_FMAS_F32,
+  V_DIV_SCALE_F32,
+  V_DIV_FIXUP_F64,
+  V_DIV_FMAS_F64,
+  V_DIV_SCALE_F64,
   // Mixed-precision FMA, VOP3P (VOP3PInstructions.td:109). Both
   // variants take three sources and reduce to
   //   fma(cvt_f32(src0_part), cvt_f32(src1_part), cvt_f32(src2_part))
@@ -563,7 +816,8 @@ enum class CanonicalOp : uint16_t {
   //                       float`, so no refusal is needed on gfx942)
   // Both CanonicalOps share the op_sel/op_sel_hi parser and write-back shape
   // in handle-valu-vop3p.cpp; only the narrow element type differs.
-  V_FMA_MIX_F32, V_FMA_MIX_F32_BF16,
+  V_FMA_MIX_F32,
+  V_FMA_MIX_F32_BF16,
   // VOP3P narrow-half destination mixed FMA. Compute
   //   fptrunc_narrow(fma(cvt_f32(src0_part),
   //                      cvt_f32(src1_part),
@@ -573,9 +827,16 @@ enum class CanonicalOp : uint16_t {
   // be preserved explicitly in IR; this is not a plain 32-bit f32 write.
   // V_FMA_MIX{LO,HI}_F16  : narrow result/source type = f16
   // V_FMA_MIX{LO,HI}_BF16 : narrow result/source type = bf16 (gfx1250)
-  V_FMA_MIXLO_F16, V_FMA_MIXHI_F16,
-  V_FMA_MIXLO_BF16, V_FMA_MIXHI_BF16,
-  V_ADD_F16, V_MUL_F16, V_SUB_F16, V_SUBREV_F16, V_MAC_F16, V_FMAC_F16,
+  V_FMA_MIXLO_F16,
+  V_FMA_MIXHI_F16,
+  V_FMA_MIXLO_BF16,
+  V_FMA_MIXHI_BF16,
+  V_ADD_F16,
+  V_MUL_F16,
+  V_SUB_F16,
+  V_SUBREV_F16,
+  V_MAC_F16,
+  V_FMAC_F16,
   // VOP2 F16 multiply-add-with-literal pseudos (mirror of
   // V_FMAMK_F32 / V_FMAAK_F32 for the f16 lane). Defined in
   // VOP2Instructions.td:1206-1210 -- both take a 16-bit constant K
@@ -585,7 +846,8 @@ enum class CanonicalOp : uint16_t {
   // Note: hardware uses the legacy "mad" name, but the lowered
   // semantics are fused-multiply-add (no rounding of the intermediate
   // product), matching the F32 FMAMK/FMAAK convention.
-  V_MADMK_F16, V_MADAK_F16,
+  V_MADMK_F16,
+  V_MADAK_F16,
   // VOP3 F16 fused multiply-add: dst = fma(src0, src1, src2). The gfx9+
   // pseudos (V_FMA_F16_gfx9_e64 and its t16/fake16 siblings) expose
   // per-source op_sel for half selection within the 32-bit VGPR, plus the
@@ -594,33 +856,56 @@ enum class CanonicalOp : uint16_t {
   // VOP3Instructions.td:453,2312,2601 (any_fma SDNode).
   V_FMA_F16,
   // VOP2 maximumNumber/minimumNumber
-  V_MAX_NUM_F16, V_MIN_NUM_F16,
+  V_MAX_NUM_F16,
+  V_MIN_NUM_F16,
   // F16 ternary clamp `.NUM` pair. Like the IEEE f16 forms below, these
   // preserve the unselected destination half and honor source/dst op_sel.
-  V_MINMAX_NUM_F16, V_MAXMIN_NUM_F16,
+  V_MINMAX_NUM_F16,
+  V_MAXMIN_NUM_F16,
   // IEEE-754 2019 f16 maximum/minimum: propagate NaN (`llvm.maximum` /
   // `llvm.minimum`)
-  V_MAXIMUM_F16, V_MINIMUM_F16,
+  V_MAXIMUM_F16,
+  V_MINIMUM_F16,
   // IEEE-754 2019 f16 ternary reductions and clamp pair. These handlers
   // honor source/destination op_sel and preserve the unselected destination
   // half.
-  V_MAXIMUM3_F16, V_MINIMUM3_F16,
-  V_MAXIMUMMINIMUM_F16, V_MINIMUMMAXIMUM_F16,
-  V_LDEXP_F16, V_FLOOR_F16, V_TANH_F16,
-  V_CVT_F16_U16, V_CVT_F16_I16, V_CVT_U16_F16, V_CVT_I16_F16,
-  V_ASHRREV_I16, V_LSHRREV_B16, V_LSHLREV_B16,
-  V_MAX_U16, V_MIN_U16, V_MAX_I16, V_MIN_I16,
+  V_MAXIMUM3_F16,
+  V_MINIMUM3_F16,
+  V_MAXIMUMMINIMUM_F16,
+  V_MINIMUMMAXIMUM_F16,
+  V_LDEXP_F16,
+  V_FLOOR_F16,
+  V_TANH_F16,
+  V_CVT_F16_U16,
+  V_CVT_F16_I16,
+  V_CVT_U16_F16,
+  V_CVT_I16_F16,
+  V_ASHRREV_I16,
+  V_LSHRREV_B16,
+  V_LSHLREV_B16,
+  V_MAX_U16,
+  V_MIN_U16,
+  V_MAX_I16,
+  V_MIN_I16,
   // 16-bit integer arith (gfx8+, VOP2Instructions.td). Plain i16
   // add/sub/subrev with wrapping overflow (no carry-out -- distinct
   // from the rarely-used v_add_co_u16). v_mul_lo_u16 returns the low
   // 16 bits of the multiply, naturally produced by `mul i16`.
-  V_ADD_U16, V_SUB_U16, V_SUBREV_U16, V_MUL_LO_U16,
-  V_DOT2C_I32_I16, V_DOT4C_I32_I8, V_DOT8C_I32_I4,
+  V_ADD_U16,
+  V_SUB_U16,
+  V_SUBREV_U16,
+  V_MUL_LO_U16,
+  V_DOT2C_I32_I16,
+  V_DOT4C_I32_I8,
+  V_DOT8C_I32_I4,
   V_DOT4_I32_IU8,
   V_PK_FMAC_F16,
   V_PACK_B32_F16,
-  V_CVT_PK_BF16_F32, V_CVT_PK_BF8_F32, V_CVT_PK_FP8_F32,
-  V_CVT_PKRTZ_F16_F32, V_CVT_PK_F16_F32,
+  V_CVT_PK_BF16_F32,
+  V_CVT_PK_BF8_F32,
+  V_CVT_PK_FP8_F32,
+  V_CVT_PKRTZ_F16_F32,
+  V_CVT_PK_F16_F32,
   V_CVT_SCALEF32_PK_FP4_F32,
   // gfx1250 packed-8 scaled FP8 conversion: 8x f32 in a Wave32 vector ->
   // 8x packed FP8 (2 dwords) with a scalar f32 scale multiplier.
@@ -631,18 +916,24 @@ enum class CanonicalOp : uint16_t {
   V_BFM_B32,
 
   // -- VOP2/VOP3 FP64 --
-  V_ADD_F64, V_MUL_F64, V_FMA_F64, V_FMAC_F64,
+  V_ADD_F64,
+  V_MUL_F64,
+  V_FMA_F64,
+  V_FMAC_F64,
   // gfx1250/gfx13 mandatory-literal FMA forms (VOP2-only, no e64). 64-bit K
   // immediate carried in the encoding; operand layout mirrors the F32 forms:
   //   v_fmamk_f64 vd, src0, K, src1 -> vd = fma(src0, K, src1)
   //   v_fmaak_f64 vd, src0, src1, K -> vd = fma(src0, src1, K)
-  V_FMAMK_F64, V_FMAAK_F64,
+  V_FMAMK_F64,
+  V_FMAAK_F64,
   // gfx12+ IEEE-754 maximumNumber/minimumNumber f64. LLVM names the pseudos
   // `V_{MAX,MIN}_NUM_F64`; assembler mnemonics are `v_{max,min}_f64` on
   // gfx12/gfx1250. Semantics prefer a numeric operand over NaN, matching
   // LLVM's `maxnum` / `minnum` intrinsic contract.
-  V_MAX_NUM_F64, V_MIN_NUM_F64,
-  V_MAXIMUM_F64, V_MINIMUM_F64,
+  V_MAX_NUM_F64,
+  V_MIN_NUM_F64,
+  V_MAXIMUM_F64,
+  V_MINIMUM_F64,
   // VOP1 FP64. v_rcp_f64 is a TRANS-class transcendental (see
   // VOP1Instructions.td: `let TRANS = 1, SchedRW = [WriteTrans64]`),
   // not a true reciprocal -- hardware returns a ~26-bit accurate
@@ -670,9 +961,15 @@ enum class CanonicalOp : uint16_t {
   // src1[4:0]. Lifted to llvm.amdgcn.trig.preop.f64.
   V_TRIG_PREOP_F64,
 
-  V_MAX_U32, V_MIN_U32, V_MAX_I32, V_MIN_I32,
-  V_PERMLANE16_B32, V_PERMLANEX16_B32, V_PERMLANE64_B32,
-  V_PERMLANE16_SWAP_B32, V_PERMLANE32_SWAP_B32,
+  V_MAX_U32,
+  V_MIN_U32,
+  V_MAX_I32,
+  V_MIN_I32,
+  V_PERMLANE16_B32,
+  V_PERMLANEX16_B32,
+  V_PERMLANE64_B32,
+  V_PERMLANE16_SWAP_B32,
+  V_PERMLANE32_SWAP_B32,
 
   // -- VOPC (V_CMP_* and V_CMPX_*) --
   //
@@ -681,11 +978,16 @@ enum class CanonicalOp : uint16_t {
   // width} triple is looked up from `VCmpMeta` keyed on the MC opcode.
   // `V_CMP`   writes an SGPR pair (or VCC, depending on the encoding).
   // `V_CMPX`  additionally ANDs the compare result into EXEC.
-  V_CMP, V_CMPX,
+  V_CMP,
+  V_CMPX,
 
   // -- VOP3P --
-  V_PK_ADD_F32, V_PK_MUL_F32, V_PK_FMA_F32,
-  V_PK_MAX_F32, V_PK_MIN_F32, V_PK_MOV_B32,
+  V_PK_ADD_F32,
+  V_PK_MUL_F32,
+  V_PK_FMA_F32,
+  V_PK_MAX_F32,
+  V_PK_MIN_F32,
+  V_PK_MOV_B32,
   // VOP3P packed fused FMA (VOP3PInstructions.td
   // `V_PK_FMA_F16`, profile VOP_V2F16_V2F16_V2F16_V2F16):
   //   dst = fma(src0_lane, src1_lane, src2_lane) per `<2 x half>` lane.
@@ -721,8 +1023,10 @@ enum class CanonicalOp : uint16_t {
   //   V_PK_FMA_BF16:     dst = fma(src0_lane, src1_lane, src2_lane)
   // per `<2 x bfloat>` lane. Source lane selection and per-lane negation use
   // the same packed `srcN_modifiers` contract as V_PK_FMA_F16.
-  V_PK_ADD_BF16, V_PK_MUL_BF16,
-  V_PK_MIN_NUM_BF16, V_PK_MAX_NUM_BF16,
+  V_PK_ADD_BF16,
+  V_PK_MUL_BF16,
+  V_PK_MIN_NUM_BF16,
+  V_PK_MAX_NUM_BF16,
   V_PK_FMA_BF16,
 
   // VOP3P packed-pair `<2 x i16>` int ops (gfx9+, available on both
@@ -760,15 +1064,22 @@ enum class CanonicalOp : uint16_t {
   // op_sel / op_sel_hi modifiers select which i16 of each source feeds
   // each output lane (defaults: op_sel=[0,0,0], op_sel_hi=[1,1,1] --
   // natural lo->lo, hi->hi packing).
-  V_PK_MAD_U16, V_PK_ADD_U16, V_PK_LSHLREV_B16, V_PK_LSHRREV_B16,
+  V_PK_MAD_U16,
+  V_PK_ADD_U16,
+  V_PK_LSHLREV_B16,
+  V_PK_LSHRREV_B16,
   V_PK_ASHRREV_I16,
-  V_PK_MUL_LO_U16, V_PK_MAX_I16, V_PK_MAX3_I16,
+  V_PK_MUL_LO_U16,
+  V_PK_MAX_I16,
+  V_PK_MAX3_I16,
 
-  V_BITOP3_B32, V_BITOP3_B16,
+  V_BITOP3_B32,
+  V_BITOP3_B16,
 
   // GFX9 VOP3-only v_add/sub_i32 -- plain add/sub when clamp=0,
   // saddsat/ssubsat when clamp=1.
-  V_ADD_I32, V_SUB_I32,
+  V_ADD_I32,
+  V_SUB_I32,
 
   // -- 64-bit vector ops --
   V_LSHLREV_B64,
@@ -781,19 +1092,26 @@ enum class CanonicalOp : uint16_t {
   // shifts >= bitwidth are poison, the hardware masks; we don't paper
   // over the difference because corpus shifts always carry a finite
   // immediate or a producer that already masks).
-  V_LSHRREV_B64, V_ASHRREV_I64,
-  V_LSHL_ADD_U64, V_ADD_NC_U64, V_SUB_NC_U64,
+  V_LSHRREV_B64,
+  V_ASHRREV_I64,
+  V_LSHL_ADD_U64,
+  V_ADD_NC_U64,
+  V_SUB_NC_U64,
   // gfx1250 VOP3 64-bit integer min/max.  These are pure per-lane
   // compare-and-select operations: signed forms use i64 ordering, unsigned
   // forms use u64 ordering.  They do not consult MODE and have no NaN,
   // signed-zero, denorm/FTZ, or rounding behaviour.
-  V_MAX_I64, V_MAX_U64, V_MIN_I64, V_MIN_U64,
+  V_MAX_I64,
+  V_MAX_U64,
+  V_MIN_I64,
+  V_MIN_U64,
   // gfx1250 VOP2 64-bit unsigned multiply (low 64 bits of s0 * s1).
   V_MUL_U64,
-  V_MAD_U64_U32, V_MAD_CO_U64_U32,
-  // gfx1250 no-carry 64-bit multiply-add VOP3 opcodes (VOP3Only_Realtriple_gfx1250,
-  // VOP3Instructions.td:2129 / 2130: encodings 0x2fa / 0x2fb).  Both widen
-  // two 32-bit sources into a 64-bit accumulator:
+  V_MAD_U64_U32,
+  V_MAD_CO_U64_U32,
+  // gfx1250 no-carry 64-bit multiply-add VOP3 opcodes
+  // (VOP3Only_Realtriple_gfx1250, VOP3Instructions.td:2129 / 2130: encodings
+  // 0x2fa / 0x2fb).  Both widen two 32-bit sources into a 64-bit accumulator:
   //     V_MAD_NC_U64_U32: D.u64 = zext(S0.u32)*zext(S1.u32) + S2.u64
   //     V_MAD_NC_I64_I32: D.i64 = sext(S0.i32)*sext(S1.i32) + S2.i64
   // Neither produces a carry/overflow output (hence the "nc" suffix).  The
@@ -803,37 +1121,81 @@ enum class CanonicalOp : uint16_t {
   // to -- identical to how V_MAD_U64_U32 lowers today (see handle-valu.cpp
   // v_mad_u64_u32 arm and opcode-map.cpp's "LLVM no longer exposes a
   // distinct carry-out variant" comment for historical context).
-  V_MAD_NC_U64_U32, V_MAD_NC_I64_I32,
+  V_MAD_NC_U64_U32,
+  V_MAD_NC_I64_I32,
 
   // -- FLAT / GLOBAL / SCRATCH memory --
-  FLAT_LOAD_UBYTE, FLAT_LOAD_SBYTE, FLAT_LOAD_USHORT, FLAT_LOAD_SSHORT,
-  FLAT_LOAD_DWORD, FLAT_LOAD_DWORDX2, FLAT_LOAD_DWORDX3, FLAT_LOAD_DWORDX4,
-  FLAT_STORE_BYTE, FLAT_STORE_SHORT, FLAT_STORE_SHORT_D16_HI,
-  FLAT_STORE_DWORD, FLAT_STORE_DWORDX2, FLAT_STORE_DWORDX3, FLAT_STORE_DWORDX4,
-  GLOBAL_LOAD_UBYTE, GLOBAL_LOAD_SBYTE, GLOBAL_LOAD_USHORT, GLOBAL_LOAD_SSHORT,
+  FLAT_LOAD_UBYTE,
+  FLAT_LOAD_SBYTE,
+  FLAT_LOAD_USHORT,
+  FLAT_LOAD_SSHORT,
+  FLAT_LOAD_DWORD,
+  FLAT_LOAD_DWORDX2,
+  FLAT_LOAD_DWORDX3,
+  FLAT_LOAD_DWORDX4,
+  FLAT_STORE_BYTE,
+  FLAT_STORE_SHORT,
+  FLAT_STORE_SHORT_D16_HI,
+  FLAT_STORE_DWORD,
+  FLAT_STORE_DWORDX2,
+  FLAT_STORE_DWORDX3,
+  FLAT_STORE_DWORDX4,
+  GLOBAL_LOAD_UBYTE,
+  GLOBAL_LOAD_SBYTE,
+  GLOBAL_LOAD_USHORT,
+  GLOBAL_LOAD_SSHORT,
   GLOBAL_LOAD_SHORT_D16_HI,
-  GLOBAL_LOAD_DWORD, GLOBAL_LOAD_DWORDX2, GLOBAL_LOAD_DWORDX3, GLOBAL_LOAD_DWORDX4,
-  GLOBAL_STORE_BYTE, GLOBAL_STORE_BYTE_D16_HI,
-  GLOBAL_STORE_SHORT, GLOBAL_STORE_SHORT_D16_HI,
-  GLOBAL_STORE_DWORD, GLOBAL_STORE_DWORDX2, GLOBAL_STORE_DWORDX3, GLOBAL_STORE_DWORDX4,
+  GLOBAL_LOAD_DWORD,
+  GLOBAL_LOAD_DWORDX2,
+  GLOBAL_LOAD_DWORDX3,
+  GLOBAL_LOAD_DWORDX4,
+  GLOBAL_STORE_BYTE,
+  GLOBAL_STORE_BYTE_D16_HI,
+  GLOBAL_STORE_SHORT,
+  GLOBAL_STORE_SHORT_D16_HI,
+  GLOBAL_STORE_DWORD,
+  GLOBAL_STORE_DWORDX2,
+  GLOBAL_STORE_DWORDX3,
+  GLOBAL_STORE_DWORDX4,
   GLOBAL_WB,
-  SCRATCH_LOAD_DWORD, SCRATCH_LOAD_DWORDX2, SCRATCH_LOAD_DWORDX3, SCRATCH_LOAD_DWORDX4,
-  SCRATCH_STORE_DWORD, SCRATCH_STORE_DWORDX2, SCRATCH_STORE_DWORDX3, SCRATCH_STORE_DWORDX4,
+  SCRATCH_LOAD_DWORD,
+  SCRATCH_LOAD_DWORDX2,
+  SCRATCH_LOAD_DWORDX3,
+  SCRATCH_LOAD_DWORDX4,
+  SCRATCH_STORE_DWORD,
+  SCRATCH_STORE_DWORDX2,
+  SCRATCH_STORE_DWORDX3,
+  SCRATCH_STORE_DWORDX4,
 
   // -- FLAT atomics --
-  FLAT_ATOMIC_ADD, FLAT_ATOMIC_SUB,
-  FLAT_ATOMIC_AND, FLAT_ATOMIC_OR, FLAT_ATOMIC_XOR,
-  FLAT_ATOMIC_SMIN, FLAT_ATOMIC_SMAX, FLAT_ATOMIC_UMIN, FLAT_ATOMIC_UMAX,
-  FLAT_ATOMIC_SWAP, FLAT_ATOMIC_CMPSWAP,
+  FLAT_ATOMIC_ADD,
+  FLAT_ATOMIC_SUB,
+  FLAT_ATOMIC_AND,
+  FLAT_ATOMIC_OR,
+  FLAT_ATOMIC_XOR,
+  FLAT_ATOMIC_SMIN,
+  FLAT_ATOMIC_SMAX,
+  FLAT_ATOMIC_UMIN,
+  FLAT_ATOMIC_UMAX,
+  FLAT_ATOMIC_SWAP,
+  FLAT_ATOMIC_CMPSWAP,
   // 64-bit integer RMW family (`*_X2` in LLVM TableGen, printed as
   // `flat_atomic_*_{u64,i64,b64}` on gfx11+ / gfx12+).
-  FLAT_ATOMIC_ADD_X2, FLAT_ATOMIC_SUB_X2,
-  FLAT_ATOMIC_AND_X2, FLAT_ATOMIC_OR_X2, FLAT_ATOMIC_XOR_X2,
-  FLAT_ATOMIC_SMIN_X2, FLAT_ATOMIC_SMAX_X2,
-  FLAT_ATOMIC_UMIN_X2, FLAT_ATOMIC_UMAX_X2,
-  FLAT_ATOMIC_SWAP_X2, FLAT_ATOMIC_CMPSWAP_X2,
+  FLAT_ATOMIC_ADD_X2,
+  FLAT_ATOMIC_SUB_X2,
+  FLAT_ATOMIC_AND_X2,
+  FLAT_ATOMIC_OR_X2,
+  FLAT_ATOMIC_XOR_X2,
+  FLAT_ATOMIC_SMIN_X2,
+  FLAT_ATOMIC_SMAX_X2,
+  FLAT_ATOMIC_UMIN_X2,
+  FLAT_ATOMIC_UMAX_X2,
+  FLAT_ATOMIC_SWAP_X2,
+  FLAT_ATOMIC_CMPSWAP_X2,
   FLAT_ATOMIC_ADD_F32,
-  FLAT_ATOMIC_ADD_F64, FLAT_ATOMIC_MIN_NUM_F64, FLAT_ATOMIC_MAX_NUM_F64,
+  FLAT_ATOMIC_ADD_F64,
+  FLAT_ATOMIC_MIN_NUM_F64,
+  FLAT_ATOMIC_MAX_NUM_F64,
 
   // -- GLOBAL atomics --
   GLOBAL_ATOMIC_ADD,
@@ -841,12 +1203,21 @@ enum class CanonicalOp : uint16_t {
   // printed as `global_atomic_add_u64` on gfx11+ / gfx12+).
   GLOBAL_ATOMIC_ADD_X2,
   GLOBAL_ATOMIC_SUB,
-  GLOBAL_ATOMIC_AND, GLOBAL_ATOMIC_OR, GLOBAL_ATOMIC_XOR,
-  GLOBAL_ATOMIC_SMIN, GLOBAL_ATOMIC_SMAX, GLOBAL_ATOMIC_UMIN, GLOBAL_ATOMIC_UMAX,
-  GLOBAL_ATOMIC_SWAP, GLOBAL_ATOMIC_CMPSWAP,
+  GLOBAL_ATOMIC_AND,
+  GLOBAL_ATOMIC_OR,
+  GLOBAL_ATOMIC_XOR,
+  GLOBAL_ATOMIC_SMIN,
+  GLOBAL_ATOMIC_SMAX,
+  GLOBAL_ATOMIC_UMIN,
+  GLOBAL_ATOMIC_UMAX,
+  GLOBAL_ATOMIC_SWAP,
+  GLOBAL_ATOMIC_CMPSWAP,
   GLOBAL_ATOMIC_ADD_F32,
-  GLOBAL_ATOMIC_PK_ADD_BF16, GLOBAL_ATOMIC_PK_ADD_F16,
-  GLOBAL_ATOMIC_ADD_F64, GLOBAL_ATOMIC_MIN_NUM_F64, GLOBAL_ATOMIC_MAX_NUM_F64,
+  GLOBAL_ATOMIC_PK_ADD_BF16,
+  GLOBAL_ATOMIC_PK_ADD_F16,
+  GLOBAL_ATOMIC_ADD_F64,
+  GLOBAL_ATOMIC_MIN_NUM_F64,
+  GLOBAL_ATOMIC_MAX_NUM_F64,
 
   // -- SMEM atomics --
   // gfx8+ scalar-cache atomics.  Lifted to `atomicrmw` IR via handle-smem.cpp;
@@ -886,7 +1257,8 @@ enum class CanonicalOp : uint16_t {
   // handle-ds.cpp because gfx942 (the transpiler's target ISA) has
   // neither isel pattern and no in-tree pre-isel emulation.
   DS_LOAD_TR8_B64,
-  DS_READ_B32, DS_READ_B64,
+  DS_READ_B32,
+  DS_READ_B64,
   // 96-bit (3 x i32) LDS load. LLVM MC opcode `DS_READ_B96`; gfx11+
   // (gfx1100/gfx1200/gfx1250) renames the asm spelling to
   // `ds_load_b96` (DSInstructions.td:1578 declares
@@ -903,7 +1275,8 @@ enum class CanonicalOp : uint16_t {
   // cover it without a special case.
   DS_READ_B96,
   DS_READ_B128,
-  DS_READ2_B32, DS_READ2_B64,
+  DS_READ2_B32,
+  DS_READ2_B64,
   // gfx11+ stride-64 two-address LDS load forms
   // (DSInstructions.td:1529,1542 -- `ds_load_2addr_stride64_b{32,64}`).
   // Semantics parallel DS_READ2_B{32,64}, but the per-access byte
@@ -915,9 +1288,14 @@ enum class CanonicalOp : uint16_t {
   // `sop >= DS_READ_B32 && sop <= DS_READ_I8` range check continues
   // to classify them as DS reads (the dedicated block intercepts
   // before the single-offset generic handler ever sees them).
-  DS_READ2ST64_B32, DS_READ2ST64_B64,
-  DS_READ_U16, DS_READ_I16, DS_READ_U8, DS_READ_I8,
-  DS_WRITE_B32, DS_WRITE_B64,
+  DS_READ2ST64_B32,
+  DS_READ2ST64_B64,
+  DS_READ_U16,
+  DS_READ_I16,
+  DS_READ_U8,
+  DS_READ_I8,
+  DS_WRITE_B32,
+  DS_WRITE_B64,
   // Symmetric write-side for `ds_load_b96`: gfx11+ asm spelling is
   // `ds_store_b96` (DSInstructions.td:1576); the LLVM MC opcode
   // remains `DS_WRITE_B96`. Lift is `store <3 x i32>` to
@@ -925,12 +1303,15 @@ enum class CanonicalOp : uint16_t {
   // for the same range-check reason as DS_READ_B96 above.
   DS_WRITE_B96,
   DS_WRITE_B128,
-  DS_WRITE2_B32, DS_WRITE2_B64,
+  DS_WRITE2_B32,
+  DS_WRITE2_B64,
   // gfx11+ stride-64 two-address LDS store forms (mirror the
   // DS_READ2ST64 block above; see the read-side comment for the
   // offset-scaling rationale and enum-placement reasoning).
-  DS_WRITE2ST64_B32, DS_WRITE2ST64_B64,
-  DS_WRITE_B16, DS_WRITE_B8,
+  DS_WRITE2ST64_B32,
+  DS_WRITE2ST64_B64,
+  DS_WRITE_B16,
+  DS_WRITE_B8,
   // D16_HI partial-store family (gfx8+ HasD16LoadStore):
   // store the upper 16 bits (B16_D16_HI) or bits [23:16] (B8_D16_HI)
   // of the source VGPR to LDS. The "D16_HI" suffix names the
@@ -939,7 +1320,8 @@ enum class CanonicalOp : uint16_t {
   // companion D16 reads (DS_READ_U/I8_D16{,_HI}, DS_READ_U16_D16{,_HI})
   // are not yet on the worklist; if they surface, add them here as
   // a separate set with their own tied-source dest_in handling.
-  DS_WRITE_B16_D16_HI, DS_WRITE_B8_D16_HI,
+  DS_WRITE_B16_D16_HI,
+  DS_WRITE_B8_D16_HI,
   DS_BPERMUTE_B32,
   // Class 2 DsSwizzle (hotswap/docs/wave-size-translation.md sec. 6).
   // Wave-width-specific cross-lane shuffle. The handler refuses with
@@ -954,21 +1336,36 @@ enum class CanonicalOp : uint16_t {
   DS_ADD_F64,
 
   // -- MUBUF --
-  BUFFER_LOAD_DWORD, BUFFER_LOAD_DWORDX2, BUFFER_LOAD_DWORDX3, BUFFER_LOAD_DWORDX4,
-  BUFFER_LOAD_UBYTE, BUFFER_LOAD_SBYTE, BUFFER_LOAD_USHORT, BUFFER_LOAD_SSHORT,
-  BUFFER_LOAD_SHORT_D16, BUFFER_LOAD_SHORT_D16_HI,
+  BUFFER_LOAD_DWORD,
+  BUFFER_LOAD_DWORDX2,
+  BUFFER_LOAD_DWORDX3,
+  BUFFER_LOAD_DWORDX4,
+  BUFFER_LOAD_UBYTE,
+  BUFFER_LOAD_SBYTE,
+  BUFFER_LOAD_USHORT,
+  BUFFER_LOAD_SSHORT,
+  BUFFER_LOAD_SHORT_D16,
+  BUFFER_LOAD_SHORT_D16_HI,
   // D16 byte variants -- gfx9+ partial-write loads. The 8-bit datum is
   // sign- or zero-extended to i16 and merged into the lo (`_D16`) or
   // hi (`_D16_HI`) half of the destination VGPR; the other 16 bits
   // are preserved (BUFInstructions.td:1155-1169, predicate
   // `D16PreservesUnusedBits`). Mnemonic on gfx11+/gfx1250 is
   // `buffer_load_d16_u8` / `_d16_i8` / `_d16_hi_u8` / `_d16_hi_i8`.
-  BUFFER_LOAD_UBYTE_D16, BUFFER_LOAD_UBYTE_D16_HI,
-  BUFFER_LOAD_SBYTE_D16, BUFFER_LOAD_SBYTE_D16_HI,
-  BUFFER_LOAD_DWORD_LDS, BUFFER_LOAD_DWORDX2_LDS,
-  BUFFER_LOAD_DWORDX4_LDS, BUFFER_STORE_DWORDX4_LDS,
-  BUFFER_STORE_DWORD, BUFFER_STORE_DWORDX2, BUFFER_STORE_DWORDX3, BUFFER_STORE_DWORDX4,
-  BUFFER_STORE_BYTE, BUFFER_STORE_SHORT,
+  BUFFER_LOAD_UBYTE_D16,
+  BUFFER_LOAD_UBYTE_D16_HI,
+  BUFFER_LOAD_SBYTE_D16,
+  BUFFER_LOAD_SBYTE_D16_HI,
+  BUFFER_LOAD_DWORD_LDS,
+  BUFFER_LOAD_DWORDX2_LDS,
+  BUFFER_LOAD_DWORDX4_LDS,
+  BUFFER_STORE_DWORDX4_LDS,
+  BUFFER_STORE_DWORD,
+  BUFFER_STORE_DWORDX2,
+  BUFFER_STORE_DWORDX3,
+  BUFFER_STORE_DWORDX4,
+  BUFFER_STORE_BYTE,
+  BUFFER_STORE_SHORT,
 
   // -- MUBUF atomics --
   // Order is significant: handle-mubuf.cpp dispatches via the range
@@ -977,53 +1374,79 @@ enum class CanonicalOp : uint16_t {
   // check picks them up; entries the handler does not explicitly
   // case-match are caught by the switch's default branch with a
   // `RaiseFailure::unsupportedInstructionForm("unsupported buffer atomic")`.
-  BUFFER_ATOMIC_ADD, BUFFER_ATOMIC_SUB,
-  BUFFER_ATOMIC_AND, BUFFER_ATOMIC_OR, BUFFER_ATOMIC_XOR,
+  BUFFER_ATOMIC_ADD,
+  BUFFER_ATOMIC_SUB,
+  BUFFER_ATOMIC_AND,
+  BUFFER_ATOMIC_OR,
+  BUFFER_ATOMIC_XOR,
   // Class 3 non-commutative atomics (NonCommutativeAtomic), see
   // hotswap/docs/wave-size-translation.md sec. 6.
   // The wave-size classifier flags these in the cross-wave case;
   // handle-mubuf.cpp models them with raw-buffer atomics so same-wave
   // and same-target lifts preserve descriptor-relative addressing.
-  BUFFER_ATOMIC_SWAP, BUFFER_ATOMIC_CMPSWAP,
+  BUFFER_ATOMIC_SWAP,
+  BUFFER_ATOMIC_CMPSWAP,
   BUFFER_ATOMIC_ADD_F32,
-  BUFFER_ATOMIC_PK_ADD_BF16, BUFFER_ATOMIC_PK_ADD_F16,
+  BUFFER_ATOMIC_PK_ADD_BF16,
+  BUFFER_ATOMIC_PK_ADD_F16,
   BUFFER_ATOMIC_ADD_F64,
   // gfx942 raw `<`/`>` comparator form (ISA manual 12.15.3 op 80/81).
-  BUFFER_ATOMIC_MIN_F64, BUFFER_ATOMIC_MAX_F64,
+  BUFFER_ATOMIC_MIN_F64,
+  BUFFER_ATOMIC_MAX_F64,
   // gfx12 IEEE 754-2019 minimumNumber/maximumNumber form.
-  BUFFER_ATOMIC_MIN_NUM_F64, BUFFER_ATOMIC_MAX_NUM_F64,
+  BUFFER_ATOMIC_MIN_NUM_F64,
+  BUFFER_ATOMIC_MAX_NUM_F64,
 
   MATRIX_OP_BEGIN_SENTINEL,
   // -- MFMA --
   // gfx950 scaled F8F6F4 variants share a per-shape intrinsic but take 9
-  // src-format sub-variants each; those are collapsed onto these four CanonicalOps
-  // in kCanonTable.
+  // src-format sub-variants each; those are collapsed onto these four
+  // CanonicalOps in kCanonTable.
   V_MFMA_F32_16x16x128_F8F6F4 = MATRIX_OP_BEGIN_SENTINEL,
   V_MFMA_SCALE_F32_16x16x128_F8F6F4,
-  V_MFMA_F32_32x32x64_F8F6F4, V_MFMA_SCALE_F32_32x32x64_F8F6F4,
+  V_MFMA_F32_32x32x64_F8F6F4,
+  V_MFMA_SCALE_F32_32x32x64_F8F6F4,
   // F32 <- F16/F32 (gfx908+). Each covers its pseudo's _e64/_vgprcd_/_mac_
   // variants via pseudoAlias stripping in OpcodeMap::canonicalize.
-  V_MFMA_F32_16x16x16_F16, V_MFMA_F32_32x32x8_F16,
-  V_MFMA_F32_16x16x4_F32, V_MFMA_F32_32x32x1_F32, V_MFMA_F32_32x32x2_F32,
-  V_MFMA_F32_4x4x1_F32, V_MFMA_F32_16x16x1_F32,
-  V_MFMA_F32_32x32x4_F16, V_MFMA_F32_16x16x4_F16, V_MFMA_F32_4x4x4_F16,
+  V_MFMA_F32_16x16x16_F16,
+  V_MFMA_F32_32x32x8_F16,
+  V_MFMA_F32_16x16x4_F32,
+  V_MFMA_F32_32x32x1_F32,
+  V_MFMA_F32_32x32x2_F32,
+  V_MFMA_F32_4x4x1_F32,
+  V_MFMA_F32_16x16x1_F32,
+  V_MFMA_F32_32x32x4_F16,
+  V_MFMA_F32_16x16x4_F16,
+  V_MFMA_F32_4x4x4_F16,
   // I32 <- I8.
-  V_MFMA_I32_16x16x32_I8, V_MFMA_I32_32x32x16_I8,
-  V_MFMA_I32_32x32x4_I8, V_MFMA_I32_16x16x4_I8, V_MFMA_I32_4x4x4_I8,
+  V_MFMA_I32_16x16x32_I8,
+  V_MFMA_I32_32x32x16_I8,
+  V_MFMA_I32_32x32x4_I8,
+  V_MFMA_I32_16x16x4_I8,
+  V_MFMA_I32_4x4x4_I8,
   // F32 <- XF32 (gfx940+).
-  V_MFMA_F32_16x16x8_XF32, V_MFMA_F32_32x32x4_XF32,
+  V_MFMA_F32_16x16x8_XF32,
+  V_MFMA_F32_32x32x4_XF32,
   // F32 <- BF16 (gfx908 2-byte variants).
-  V_MFMA_F32_32x32x2_BF16, V_MFMA_F32_16x16x2_BF16, V_MFMA_F32_4x4x2_BF16,
+  V_MFMA_F32_32x32x2_BF16,
+  V_MFMA_F32_16x16x2_BF16,
+  V_MFMA_F32_4x4x2_BF16,
   // F32 <- BF16 "1K" shapes (gfx90a+).
-  V_MFMA_F32_16x16x16_BF16_1K, V_MFMA_F32_32x32x8_BF16_1K,
+  V_MFMA_F32_16x16x16_BF16_1K,
+  V_MFMA_F32_32x32x8_BF16_1K,
   // F32 <- BF16/F16 wide shapes (gfx950).
-  V_MFMA_F32_16x16x32_BF16, V_MFMA_F32_32x32x16_BF16,
+  V_MFMA_F32_16x16x32_BF16,
+  V_MFMA_F32_32x32x16_BF16,
   V_MFMA_F32_16x16x32_F16,
   // F32 <- FP8/BF8 (gfx940+).
-  V_MFMA_F32_16x16x32_FP8_FP8, V_MFMA_F32_16x16x32_FP8_BF8,
-  V_MFMA_F32_16x16x32_BF8_FP8, V_MFMA_F32_16x16x32_BF8_BF8,
-  V_MFMA_F32_32x32x16_FP8_FP8, V_MFMA_F32_32x32x16_FP8_BF8,
-  V_MFMA_F32_32x32x16_BF8_FP8, V_MFMA_F32_32x32x16_BF8_BF8,
+  V_MFMA_F32_16x16x32_FP8_FP8,
+  V_MFMA_F32_16x16x32_FP8_BF8,
+  V_MFMA_F32_16x16x32_BF8_FP8,
+  V_MFMA_F32_16x16x32_BF8_BF8,
+  V_MFMA_F32_32x32x16_FP8_FP8,
+  V_MFMA_F32_32x32x16_FP8_BF8,
+  V_MFMA_F32_32x32x16_BF8_FP8,
+  V_MFMA_F32_32x32x16_BF8_BF8,
 
   // -- WMMA (gfx1250) --
   // 16x16x32 WMMA with f32 accumulator and 16-bit element types. Both
@@ -1380,7 +1803,8 @@ enum class CanonicalOp : uint16_t {
   FLAT_PREFETCH_B8,
 
   // -- AGPR --
-  V_ACCVGPR_READ_B32, V_ACCVGPR_WRITE_B32,
+  V_ACCVGPR_READ_B32,
+  V_ACCVGPR_WRITE_B32,
 
   CanonicalOp_COUNT
 };

@@ -57,30 +57,26 @@ struct MubufOps {
   bool HasSwz = false;
 };
 
-MubufOps classifyMubufOps(const DecodedInst &Di, OpResolver &Op,
-                           bool IsStore) {
+MubufOps classifyMubufOps(const DecodedInst &Di, OpResolver &Op, bool IsStore) {
   MubufOps Out;
 
   // Byte offset by name. Absent (-1) on encodings that don't carry it
   // (e.g. atomics with no immediate offset slot); the default `immOff
   // = 0` is correct for those -- the caller layers in `voffset` from
   // `vaddr` independently.
-  int OffIdx =
-      llvm::AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                       llvm::AMDGPU::OpName::offset);
-  if (OffIdx >= 0 &&
-      static_cast<unsigned>(OffIdx) < Di.Inst.getNumOperands() &&
+  int OffIdx = llvm::AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                llvm::AMDGPU::OpName::offset);
+  if (OffIdx >= 0 && static_cast<unsigned>(OffIdx) < Di.Inst.getNumOperands() &&
       Di.Inst.getOperand(static_cast<unsigned>(OffIdx)).isImm()) {
     Out.ImmOff = Di.Inst.getOperand(static_cast<unsigned>(OffIdx)).getImm();
   }
 
-  int SwzIdx =
-      llvm::AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                       llvm::AMDGPU::OpName::swz);
-  if (SwzIdx >= 0 &&
-      static_cast<unsigned>(SwzIdx) < Di.Inst.getNumOperands() &&
+  int SwzIdx = llvm::AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                llvm::AMDGPU::OpName::swz);
+  if (SwzIdx >= 0 && static_cast<unsigned>(SwzIdx) < Di.Inst.getNumOperands() &&
       Di.Inst.getOperand(static_cast<unsigned>(SwzIdx)).isImm()) {
-    Out.HasSwz = Di.Inst.getOperand(static_cast<unsigned>(SwzIdx)).getImm() != 0;
+    Out.HasSwz =
+        Di.Inst.getOperand(static_cast<unsigned>(SwzIdx)).getImm() != 0;
   }
 
   int VgprSrcCount = 0;
@@ -129,9 +125,12 @@ struct SRSRCDwords {
 
 SRSRCDwords readSRSRCDwords(RaiseContext &Ctx, ParsedReg Srsrc) {
   Value *Dw0 = Ctx.Regs.readReg32(Ctx.B, Srsrc);
-  ParsedReg Srsrc1 = Srsrc; Srsrc1.BaseIdx = Srsrc.BaseIdx + 1;
-  ParsedReg Srsrc2 = Srsrc; Srsrc2.BaseIdx = Srsrc.BaseIdx + 2;
-  ParsedReg Srsrc3 = Srsrc; Srsrc3.BaseIdx = Srsrc.BaseIdx + 3;
+  ParsedReg Srsrc1 = Srsrc;
+  Srsrc1.BaseIdx = Srsrc.BaseIdx + 1;
+  ParsedReg Srsrc2 = Srsrc;
+  Srsrc2.BaseIdx = Srsrc.BaseIdx + 2;
+  ParsedReg Srsrc3 = Srsrc;
+  Srsrc3.BaseIdx = Srsrc.BaseIdx + 3;
   Value *Dw1 = Ctx.Regs.readReg32(Ctx.B, Srsrc1);
   Value *Dw2 = Ctx.Regs.readReg32(Ctx.B, Srsrc2);
   Value *Dw3 = Ctx.Regs.readReg32(Ctx.B, Srsrc3);
@@ -224,31 +223,26 @@ Expected<Value *> buildMubufSRD(RaiseContext &Ctx, const SRSRCDwords &Dw) {
       return Word;
     return Ctx.B.CreateCall(Readfirstlane, {Word}, Name);
   };
-  Value *Dw1NonBaseBits =
-      Ctx.B.CreateAnd(Dw.Dw1, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000u),
-                      "srd_dw1_nonbase_bits");
-  Value *Dw1HasOnlyBase =
-      Ctx.B.CreateICmpEQ(Dw1NonBaseBits, ConstantInt::get(Ctx.I32Ty, 0),
-                         "srd_dw1_only_base");
-  Value *Dw1HasGfx125RawBits =
-      Ctx.B.CreateICmpEQ(Dw1NonBaseBits,
-                         ConstantInt::get(Ctx.I32Ty, kGfx1250RawPointerWord1Bits),
-                         "srd_dw1_gfx125_raw_bits");
+  Value *Dw1NonBaseBits = Ctx.B.CreateAnd(
+      Dw.Dw1, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000u), "srd_dw1_nonbase_bits");
+  Value *Dw1HasOnlyBase = Ctx.B.CreateICmpEQ(
+      Dw1NonBaseBits, ConstantInt::get(Ctx.I32Ty, 0), "srd_dw1_only_base");
+  Value *Dw1HasGfx125RawBits = Ctx.B.CreateICmpEQ(
+      Dw1NonBaseBits, ConstantInt::get(Ctx.I32Ty, kGfx1250RawPointerWord1Bits),
+      "srd_dw1_gfx125_raw_bits");
   Value *Dw1IsRawBase =
       Ctx.B.CreateOr(Dw1HasOnlyBase, Dw1HasGfx125RawBits, "srd_dw1_raw_base");
-  Value *Dw3IsZero =
-      Ctx.B.CreateICmpEQ(Dw.Dw3, ConstantInt::get(Ctx.I32Ty, 0), "srd_dw3_zero");
-  Value *Dw3IsFormat32 =
-      Ctx.B.CreateICmpEQ(Dw.Dw3, ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferFormat32),
-                         "srd_dw3_format32");
-  Value *Dw3IsFormat32Uint =
-      Ctx.B.CreateICmpEQ(Dw.Dw3,
-                         ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferFormat32Uint),
-                         "srd_dw3_format32_uint");
-  Value *Dw3IsFormat32Float =
-      Ctx.B.CreateICmpEQ(Dw.Dw3,
-                         ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferFormat32Float),
-                         "srd_dw3_format32_float");
+  Value *Dw3IsZero = Ctx.B.CreateICmpEQ(Dw.Dw3, ConstantInt::get(Ctx.I32Ty, 0),
+                                        "srd_dw3_zero");
+  Value *Dw3IsFormat32 = Ctx.B.CreateICmpEQ(
+      Dw.Dw3, ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferFormat32),
+      "srd_dw3_format32");
+  Value *Dw3IsFormat32Uint = Ctx.B.CreateICmpEQ(
+      Dw.Dw3, ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferFormat32Uint),
+      "srd_dw3_format32_uint");
+  Value *Dw3IsFormat32Float = Ctx.B.CreateICmpEQ(
+      Dw.Dw3, ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferFormat32Float),
+      "srd_dw3_format32_float");
   Value *Dw3IsRaw =
       Ctx.B.CreateOr(Ctx.B.CreateOr(Dw3IsZero, Dw3IsFormat32),
                      Ctx.B.CreateOr(Dw3IsFormat32Uint, Dw3IsFormat32Float),
@@ -274,17 +268,18 @@ Expected<Value *> buildMubufSRD(RaiseContext &Ctx, const SRSRCDwords &Dw) {
                              "FORMAT_32 descriptor shape");
   }
 
-  Value *CleanDw1 = Ctx.B.CreateAnd(Dw.Dw1,
-                                     ConstantInt::get(Ctx.I32Ty, 0xFFFF));
+  Value *CleanDw1 =
+      Ctx.B.CreateAnd(Dw.Dw1, ConstantInt::get(Ctx.I32Ty, 0xFFFF));
   Value *SrdW0 = ScalarizeDescriptorWord(Dw.Dw0, "srd_w0");
   Value *SrdW1 = ScalarizeDescriptorWord(CleanDw1, "srd_w1");
   Value *SourceMax = ConstantInt::get(Ctx.I32Ty, kGfx1250RawBufferMaxRecords);
   Value *TargetMax = ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferMaxRecords);
-  Value *IsSourceMax = Ctx.B.CreateICmpEQ(Dw.Dw2, SourceMax, "srd_is_gfx125_max");
+  Value *IsSourceMax =
+      Ctx.B.CreateICmpEQ(Dw.Dw2, SourceMax, "srd_is_gfx125_max");
   Value *ShouldMapMax =
       Ctx.B.CreateAnd(IsSourceMax, RawPointerShape, "srd_map_gfx125_max");
-  Value *MappedDw2 = Ctx.B.CreateSelect(ShouldMapMax, TargetMax, Dw.Dw2,
-                                        "srd_num_records");
+  Value *MappedDw2 =
+      Ctx.B.CreateSelect(ShouldMapMax, TargetMax, Dw.Dw2, "srd_num_records");
   Value *SrdW2 = ScalarizeDescriptorWord(MappedDw2, "srd_w2");
   Value *Word3 = ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferFormat32Float);
   Value *Srd = UndefValue::get(FixedVectorType::get(Ctx.I32Ty, 4));
@@ -328,8 +323,7 @@ Expected<MubufAddr> decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
     Voffset = Ctx.B.CreateAdd(Voffset, Ctx.Regs.readReg32(Ctx.B, M.Vaddr));
   if (M.ImmOff != 0)
     Voffset = Ctx.B.CreateAdd(
-        Voffset,
-        ConstantInt::get(Ctx.I32Ty, static_cast<int32_t>(M.ImmOff)));
+        Voffset, ConstantInt::get(Ctx.I32Ty, static_cast<int32_t>(M.ImmOff)));
   Out.Voffset = Voffset;
 
   Out.Soffset = M.HaveSoff ? Ctx.Regs.readReg32(Ctx.B, M.Soff)
@@ -338,8 +332,8 @@ Expected<MubufAddr> decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
   constexpr uint32_t kGfx942RawBufferMaxRecords = 0x7ffffffeu;
   Value *SourceMax = ConstantInt::get(Ctx.I32Ty, kGfx1250RawBufferMaxRecords);
   Value *TargetMax = ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferMaxRecords);
-  Value *IsSourceMax = Ctx.B.CreateICmpEQ(Dw.Dw2, SourceMax,
-                                          "mubuf_raw_is_gfx125_max");
+  Value *IsSourceMax =
+      Ctx.B.CreateICmpEQ(Dw.Dw2, SourceMax, "mubuf_raw_is_gfx125_max");
   Value *NumRecords = Ctx.B.CreateSelect(IsSourceMax, TargetMax, Dw.Dw2,
                                          "mubuf_raw_num_records");
   Value *CleanDw1 =
@@ -347,17 +341,17 @@ Expected<MubufAddr> decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
   Value *BaseLo = Ctx.B.CreateZExt(Dw.Dw0, Ctx.I64Ty);
   Value *BaseHi = Ctx.B.CreateShl(Ctx.B.CreateZExt(CleanDw1, Ctx.I64Ty), 32);
   Value *Base = Ctx.B.CreateOr(BaseLo, BaseHi, "mubuf_raw_base");
-  Value *BasePtr =
-      Ctx.B.CreateIntToPtr(Base, PointerType::get(Ctx.C, 1), "mubuf_raw_base_ptr");
+  Value *BasePtr = Ctx.B.CreateIntToPtr(Base, PointerType::get(Ctx.C, 1),
+                                        "mubuf_raw_base_ptr");
   Function *MakeRsrc = Intrinsic::getOrInsertDeclaration(
       &Ctx.M, Intrinsic::amdgcn_make_buffer_rsrc,
       {PointerType::get(Ctx.C, 8), PointerType::get(Ctx.C, 1)});
-  Out.RawPtrRsrc = Ctx.B.CreateCall(
-      MakeRsrc,
-      {BasePtr, ConstantInt::get(Type::getInt16Ty(Ctx.C), 0),
-       Ctx.B.CreateZExt(NumRecords, Ctx.I64Ty),
-       ConstantInt::get(Ctx.I32Ty, 0x27000)},
-      "mubuf_raw_ptr_rsrc");
+  Out.RawPtrRsrc =
+      Ctx.B.CreateCall(MakeRsrc,
+                       {BasePtr, ConstantInt::get(Type::getInt16Ty(Ctx.C), 0),
+                        Ctx.B.CreateZExt(NumRecords, Ctx.I64Ty),
+                        ConstantInt::get(Ctx.I32Ty, 0x27000)},
+                       "mubuf_raw_ptr_rsrc");
   Out.AuxFlags = ConstantInt::get(Ctx.I32Ty, 0);
   return Out;
 }

@@ -71,8 +71,9 @@ struct SourceHiddenArgByte {
 
 // Resolve a byte offset in the source ABI's flat kernarg/hidden-arg metadata
 // view. Unsupported hidden args are reported as matched-but-unsupported.
-std::optional<SourceHiddenArgByte> classifySourceHiddenArgByte(
-    llvm::ArrayRef<KernelArgMeta> Args, int64_t ByteOffset);
+std::optional<SourceHiddenArgByte>
+classifySourceHiddenArgByte(llvm::ArrayRef<KernelArgMeta> Args,
+                            int64_t ByteOffset);
 
 } // namespace COMGR::hotswap
 

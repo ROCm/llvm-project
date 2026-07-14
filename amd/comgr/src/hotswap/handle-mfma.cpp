@@ -42,46 +42,80 @@ namespace COMGR::hotswap {
 // =========================================================================
 static const DenseMap<CanonicalOp, Intrinsic::ID> &mfmaIntrinsicTable() {
   static const auto *Table = new DenseMap<CanonicalOp, Intrinsic::ID>({
-      {CanonicalOp::V_MFMA_F32_16x16x16_F16,     Intrinsic::amdgcn_mfma_f32_16x16x16f16},
-      {CanonicalOp::V_MFMA_F32_32x32x8_F16,      Intrinsic::amdgcn_mfma_f32_32x32x8f16},
-      {CanonicalOp::V_MFMA_F32_16x16x4_F32,      Intrinsic::amdgcn_mfma_f32_16x16x4f32},
-      {CanonicalOp::V_MFMA_F32_32x32x1_F32,      Intrinsic::amdgcn_mfma_f32_32x32x1f32},
-      {CanonicalOp::V_MFMA_F32_32x32x2_F32,      Intrinsic::amdgcn_mfma_f32_32x32x2f32},
-      {CanonicalOp::V_MFMA_F32_4x4x1_F32,        Intrinsic::amdgcn_mfma_f32_4x4x1f32},
-      {CanonicalOp::V_MFMA_F32_16x16x1_F32,      Intrinsic::amdgcn_mfma_f32_16x16x1f32},
-      {CanonicalOp::V_MFMA_F32_32x32x4_F16,      Intrinsic::amdgcn_mfma_f32_32x32x4f16},
-      {CanonicalOp::V_MFMA_F32_16x16x4_F16,      Intrinsic::amdgcn_mfma_f32_16x16x4f16},
-      {CanonicalOp::V_MFMA_F32_4x4x4_F16,        Intrinsic::amdgcn_mfma_f32_4x4x4f16},
-      {CanonicalOp::V_MFMA_I32_16x16x32_I8,      Intrinsic::amdgcn_mfma_i32_16x16x32_i8},
-      {CanonicalOp::V_MFMA_I32_32x32x16_I8,      Intrinsic::amdgcn_mfma_i32_32x32x16_i8},
-      {CanonicalOp::V_MFMA_F32_16x16x8_XF32,     Intrinsic::amdgcn_mfma_f32_16x16x8_xf32},
-      {CanonicalOp::V_MFMA_F32_32x32x4_XF32,     Intrinsic::amdgcn_mfma_f32_32x32x4_xf32},
-      {CanonicalOp::V_MFMA_I32_32x32x4_I8,       Intrinsic::amdgcn_mfma_i32_32x32x4i8},
-      {CanonicalOp::V_MFMA_I32_16x16x4_I8,       Intrinsic::amdgcn_mfma_i32_16x16x4i8},
-      {CanonicalOp::V_MFMA_I32_4x4x4_I8,         Intrinsic::amdgcn_mfma_i32_4x4x4i8},
-      {CanonicalOp::V_MFMA_F32_32x32x2_BF16,     Intrinsic::amdgcn_mfma_f32_32x32x2bf16},
-      {CanonicalOp::V_MFMA_F32_16x16x2_BF16,     Intrinsic::amdgcn_mfma_f32_16x16x2bf16},
-      {CanonicalOp::V_MFMA_F32_4x4x2_BF16,       Intrinsic::amdgcn_mfma_f32_4x4x2bf16},
-      {CanonicalOp::V_MFMA_F32_16x16x16_BF16_1K, Intrinsic::amdgcn_mfma_f32_16x16x16bf16_1k},
-      {CanonicalOp::V_MFMA_F32_32x32x8_BF16_1K,  Intrinsic::amdgcn_mfma_f32_32x32x8bf16_1k},
-      {CanonicalOp::V_MFMA_F32_16x16x32_BF16,    Intrinsic::amdgcn_mfma_f32_16x16x32_bf16},
-      {CanonicalOp::V_MFMA_F32_32x32x16_BF16,    Intrinsic::amdgcn_mfma_f32_32x32x16_bf16},
-      {CanonicalOp::V_MFMA_F32_16x16x32_F16,     Intrinsic::amdgcn_mfma_f32_16x16x32_f16},
-      {CanonicalOp::V_MFMA_F32_16x16x32_FP8_FP8, Intrinsic::amdgcn_mfma_f32_16x16x32_fp8_fp8},
-      {CanonicalOp::V_MFMA_F32_16x16x32_FP8_BF8, Intrinsic::amdgcn_mfma_f32_16x16x32_fp8_bf8},
-      {CanonicalOp::V_MFMA_F32_16x16x32_BF8_FP8, Intrinsic::amdgcn_mfma_f32_16x16x32_bf8_fp8},
-      {CanonicalOp::V_MFMA_F32_16x16x32_BF8_BF8, Intrinsic::amdgcn_mfma_f32_16x16x32_bf8_bf8},
-      {CanonicalOp::V_MFMA_F32_32x32x16_FP8_FP8, Intrinsic::amdgcn_mfma_f32_32x32x16_fp8_fp8},
-      {CanonicalOp::V_MFMA_F32_32x32x16_FP8_BF8, Intrinsic::amdgcn_mfma_f32_32x32x16_fp8_bf8},
-      {CanonicalOp::V_MFMA_F32_32x32x16_BF8_FP8, Intrinsic::amdgcn_mfma_f32_32x32x16_bf8_fp8},
-      {CanonicalOp::V_MFMA_F32_32x32x16_BF8_BF8, Intrinsic::amdgcn_mfma_f32_32x32x16_bf8_bf8},
+      {CanonicalOp::V_MFMA_F32_16x16x16_F16,
+       Intrinsic::amdgcn_mfma_f32_16x16x16f16},
+      {CanonicalOp::V_MFMA_F32_32x32x8_F16,
+       Intrinsic::amdgcn_mfma_f32_32x32x8f16},
+      {CanonicalOp::V_MFMA_F32_16x16x4_F32,
+       Intrinsic::amdgcn_mfma_f32_16x16x4f32},
+      {CanonicalOp::V_MFMA_F32_32x32x1_F32,
+       Intrinsic::amdgcn_mfma_f32_32x32x1f32},
+      {CanonicalOp::V_MFMA_F32_32x32x2_F32,
+       Intrinsic::amdgcn_mfma_f32_32x32x2f32},
+      {CanonicalOp::V_MFMA_F32_4x4x1_F32, Intrinsic::amdgcn_mfma_f32_4x4x1f32},
+      {CanonicalOp::V_MFMA_F32_16x16x1_F32,
+       Intrinsic::amdgcn_mfma_f32_16x16x1f32},
+      {CanonicalOp::V_MFMA_F32_32x32x4_F16,
+       Intrinsic::amdgcn_mfma_f32_32x32x4f16},
+      {CanonicalOp::V_MFMA_F32_16x16x4_F16,
+       Intrinsic::amdgcn_mfma_f32_16x16x4f16},
+      {CanonicalOp::V_MFMA_F32_4x4x4_F16, Intrinsic::amdgcn_mfma_f32_4x4x4f16},
+      {CanonicalOp::V_MFMA_I32_16x16x32_I8,
+       Intrinsic::amdgcn_mfma_i32_16x16x32_i8},
+      {CanonicalOp::V_MFMA_I32_32x32x16_I8,
+       Intrinsic::amdgcn_mfma_i32_32x32x16_i8},
+      {CanonicalOp::V_MFMA_F32_16x16x8_XF32,
+       Intrinsic::amdgcn_mfma_f32_16x16x8_xf32},
+      {CanonicalOp::V_MFMA_F32_32x32x4_XF32,
+       Intrinsic::amdgcn_mfma_f32_32x32x4_xf32},
+      {CanonicalOp::V_MFMA_I32_32x32x4_I8,
+       Intrinsic::amdgcn_mfma_i32_32x32x4i8},
+      {CanonicalOp::V_MFMA_I32_16x16x4_I8,
+       Intrinsic::amdgcn_mfma_i32_16x16x4i8},
+      {CanonicalOp::V_MFMA_I32_4x4x4_I8, Intrinsic::amdgcn_mfma_i32_4x4x4i8},
+      {CanonicalOp::V_MFMA_F32_32x32x2_BF16,
+       Intrinsic::amdgcn_mfma_f32_32x32x2bf16},
+      {CanonicalOp::V_MFMA_F32_16x16x2_BF16,
+       Intrinsic::amdgcn_mfma_f32_16x16x2bf16},
+      {CanonicalOp::V_MFMA_F32_4x4x2_BF16,
+       Intrinsic::amdgcn_mfma_f32_4x4x2bf16},
+      {CanonicalOp::V_MFMA_F32_16x16x16_BF16_1K,
+       Intrinsic::amdgcn_mfma_f32_16x16x16bf16_1k},
+      {CanonicalOp::V_MFMA_F32_32x32x8_BF16_1K,
+       Intrinsic::amdgcn_mfma_f32_32x32x8bf16_1k},
+      {CanonicalOp::V_MFMA_F32_16x16x32_BF16,
+       Intrinsic::amdgcn_mfma_f32_16x16x32_bf16},
+      {CanonicalOp::V_MFMA_F32_32x32x16_BF16,
+       Intrinsic::amdgcn_mfma_f32_32x32x16_bf16},
+      {CanonicalOp::V_MFMA_F32_16x16x32_F16,
+       Intrinsic::amdgcn_mfma_f32_16x16x32_f16},
+      {CanonicalOp::V_MFMA_F32_16x16x32_FP8_FP8,
+       Intrinsic::amdgcn_mfma_f32_16x16x32_fp8_fp8},
+      {CanonicalOp::V_MFMA_F32_16x16x32_FP8_BF8,
+       Intrinsic::amdgcn_mfma_f32_16x16x32_fp8_bf8},
+      {CanonicalOp::V_MFMA_F32_16x16x32_BF8_FP8,
+       Intrinsic::amdgcn_mfma_f32_16x16x32_bf8_fp8},
+      {CanonicalOp::V_MFMA_F32_16x16x32_BF8_BF8,
+       Intrinsic::amdgcn_mfma_f32_16x16x32_bf8_bf8},
+      {CanonicalOp::V_MFMA_F32_32x32x16_FP8_FP8,
+       Intrinsic::amdgcn_mfma_f32_32x32x16_fp8_fp8},
+      {CanonicalOp::V_MFMA_F32_32x32x16_FP8_BF8,
+       Intrinsic::amdgcn_mfma_f32_32x32x16_fp8_bf8},
+      {CanonicalOp::V_MFMA_F32_32x32x16_BF8_FP8,
+       Intrinsic::amdgcn_mfma_f32_32x32x16_bf8_fp8},
+      {CanonicalOp::V_MFMA_F32_32x32x16_BF8_BF8,
+       Intrinsic::amdgcn_mfma_f32_32x32x16_bf8_bf8},
       // gfx950 F8F6F4 scaled MFMAs. Intrinsic signature differs from the
       // non-scaled family (9 params instead of 6) and is overloaded on the
       // src AB type; the handler detects this via `FT->getNumParams() > 6`.
-      {CanonicalOp::V_MFMA_F32_16x16x128_F8F6F4,       Intrinsic::amdgcn_mfma_scale_f32_16x16x128_f8f6f4},
-      {CanonicalOp::V_MFMA_SCALE_F32_16x16x128_F8F6F4, Intrinsic::amdgcn_mfma_scale_f32_16x16x128_f8f6f4},
-      {CanonicalOp::V_MFMA_F32_32x32x64_F8F6F4,        Intrinsic::amdgcn_mfma_scale_f32_32x32x64_f8f6f4},
-      {CanonicalOp::V_MFMA_SCALE_F32_32x32x64_F8F6F4,  Intrinsic::amdgcn_mfma_scale_f32_32x32x64_f8f6f4},
+      {CanonicalOp::V_MFMA_F32_16x16x128_F8F6F4,
+       Intrinsic::amdgcn_mfma_scale_f32_16x16x128_f8f6f4},
+      {CanonicalOp::V_MFMA_SCALE_F32_16x16x128_F8F6F4,
+       Intrinsic::amdgcn_mfma_scale_f32_16x16x128_f8f6f4},
+      {CanonicalOp::V_MFMA_F32_32x32x64_F8F6F4,
+       Intrinsic::amdgcn_mfma_scale_f32_32x32x64_f8f6f4},
+      {CanonicalOp::V_MFMA_SCALE_F32_32x32x64_F8F6F4,
+       Intrinsic::amdgcn_mfma_scale_f32_32x32x64_f8f6f4},
   });
   return *Table;
 }
@@ -179,10 +213,13 @@ Expected<HandlerResult> handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
   // Immediate modifiers keyed off the authoritative named-operand table.
   // `cbsz` is common to both families; `abid` is non-scaled only; scaled
   // instead carries `blgp` + four scale control operands.
-  Value *Cbsz = ConstantInt::get(Ctx.I32Ty, readNamedImm(Di, AMDGPU::OpName::cbsz));
-  Value *Blgp = ConstantInt::get(Ctx.I32Ty, readNamedImm(Di, AMDGPU::OpName::blgp));
+  Value *Cbsz =
+      ConstantInt::get(Ctx.I32Ty, readNamedImm(Di, AMDGPU::OpName::cbsz));
+  Value *Blgp =
+      ConstantInt::get(Ctx.I32Ty, readNamedImm(Di, AMDGPU::OpName::blgp));
 
-  Function *MfmaFn = Intrinsic::getOrInsertDeclaration(&Ctx.M, IntrId, Overloads);
+  Function *MfmaFn =
+      Intrinsic::getOrInsertDeclaration(&Ctx.M, IntrId, Overloads);
 
   Value *CallRet;
   if (IsScaled) {
@@ -195,18 +232,15 @@ Expected<HandlerResult> handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.I32Ty, readNamedImm(Di, AMDGPU::OpName::src0_modifiers));
     Value *OpSelB = ConstantInt::get(
         Ctx.I32Ty, readNamedImm(Di, AMDGPU::OpName::src1_modifiers));
-    Value *ScaleA =
-        readNamedReg32(Ctx, Di, AMDGPU::OpName::scale_src0, Zero);
-    Value *ScaleB =
-        readNamedReg32(Ctx, Di, AMDGPU::OpName::scale_src1, Zero);
+    Value *ScaleA = readNamedReg32(Ctx, Di, AMDGPU::OpName::scale_src0, Zero);
+    Value *ScaleB = readNamedReg32(Ctx, Di, AMDGPU::OpName::scale_src1, Zero);
     CallRet = Ctx.B.CreateCall(
         MfmaFn, {A, B, C, Cbsz, Blgp, OpSelA, ScaleA, OpSelB, ScaleB},
         "mfma_scale");
   } else {
-    Value *Abid = ConstantInt::get(
-        Ctx.I32Ty, readNamedImm(Di, AMDGPU::OpName::abid));
-    CallRet =
-        Ctx.B.CreateCall(MfmaFn, {A, B, C, Cbsz, Abid, Blgp}, "mfma");
+    Value *Abid =
+        ConstantInt::get(Ctx.I32Ty, readNamedImm(Di, AMDGPU::OpName::abid));
+    CallRet = Ctx.B.CreateCall(MfmaFn, {A, B, C, Cbsz, Abid, Blgp}, "mfma");
   }
 
   Ctx.writeRegVec(Dest, CallRet);

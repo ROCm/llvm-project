@@ -326,11 +326,10 @@ static bool raiseAndCompileKernel(
              << llvm::utohexstr(KernelSize) << "\n");
 
   RaiseStats Stats;
-  llvm::Expected<RaiseResult> RaisedOrErr =
-      raiseToIR(Text.Bytes, SourceISA, KernelName, Meta, KernelOffset,
-                KernelSize, TargetISA, Options.EnableWritelaneRewrite,
-                Options.EnableWaveNative, Options.AssumeHipGlobalOffsetZero,
-                &Stats);
+  llvm::Expected<RaiseResult> RaisedOrErr = raiseToIR(
+      Text.Bytes, SourceISA, KernelName, Meta, KernelOffset, KernelSize,
+      TargetISA, Options.EnableWritelaneRewrite, Options.EnableWaveNative,
+      Options.AssumeHipGlobalOffsetZero, &Stats);
   if (!RaisedOrErr) {
     llvm::errs() << "transpiler: Raising '" << KernelName
                  << "' to LLVM IR failed";
@@ -587,8 +586,8 @@ static PipelineResult runPipelineImpl(llvm::MemoryBufferRef CodeObjectData,
     LLVM_DEBUG(llvm::dbgs() << "transpiler:   [" << (I + 1) << "/"
                             << KernelNames.size() << "] " << KName << " ... ");
 
-    if (!raiseAndCompileKernel(Text, CodeObjectData, KName, SourceISA, TargetISA,
-                               TmpDir, ObjPath, Result, Options)) {
+    if (!raiseAndCompileKernel(Text, CodeObjectData, KName, SourceISA,
+                               TargetISA, TmpDir, ObjPath, Result, Options)) {
       LLVM_DEBUG(llvm::dbgs() << "FAILED\n");
       Result.Success = false;
       return finish();

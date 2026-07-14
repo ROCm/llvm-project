@@ -108,33 +108,34 @@ enum class ObstructionKind : uint8_t {
   // The kernel exposes the absolute target-hardware lane position
   // through one of these constructs; under modulo-replication the
   // value diverges from what the wave32 source intended.
-  MbcntHiLaneIdLeak,        // v_mbcnt_hi_u32_b32 -- no rewrite.
-  OutOfRangeLaneOperand,    // v_readlane/writelane with static const operand >= W_s -- no rewrite.
-  TtmpWaveIdLeak,           // any source read of TTMP8 under cross-widening.
-                            // raiser.cpp seeds ttmp8 with `(workitem.id.x >> 5)
-                            // << 25` so bits [29:25] carry the per-lane
-                            // `wave_id_in_workgroup`. That value is a function
-                            // of the *target* absolute lane position, not of
-                            // `lane_id mod W_s` -- so any downstream computation
-                            // that reads ttmp8 and folds the result into an
-                            // address / EXEC mask / wave-uniform SGPR is a
-                            // Class 1 leak under modulo-replication and a
-                            // wave-id collision under wave-native. No rewrite.
-  WaveIdLiftScalarized,     // the canonical `s_bfe_u32 sDST, ttmp8, 0x50019`
-                            // wave_id extraction (normally rescued by the
-                            // handle-sop2.cpp pattern-lift into a per-lane
-                            // divergent VGPR value) flows into a
-                            // v_writelane_b32 / v_readlane_b32 scalar-source
-                            // operand in a kernel that ALSO contains WMMA.
-                            // The cross-lane primitives scalarise their
-                            // scalar operand via backend readfirstlane, which
-                            // collapses the per-source-wave distinction the
-                            // lift introduced (source_wave[k]'s wave_id=k
-                            // becomes uniform across the target wave = 0).
-                            // WMMA forecloses the ThreadLoopProjection escape
-                            // hatch (sec. 5.2 requires the full target wave
-                            // simultaneously), so there is no correct
-                            // projection today. No rewrite.
+  MbcntHiLaneIdLeak,     // v_mbcnt_hi_u32_b32 -- no rewrite.
+  OutOfRangeLaneOperand, // v_readlane/writelane with static const operand >=
+                         // W_s -- no rewrite.
+  TtmpWaveIdLeak,        // any source read of TTMP8 under cross-widening.
+                         // raiser.cpp seeds ttmp8 with `(workitem.id.x >> 5)
+                         // << 25` so bits [29:25] carry the per-lane
+                         // `wave_id_in_workgroup`. That value is a function
+                         // of the *target* absolute lane position, not of
+                         // `lane_id mod W_s` -- so any downstream computation
+                         // that reads ttmp8 and folds the result into an
+                         // address / EXEC mask / wave-uniform SGPR is a
+                         // Class 1 leak under modulo-replication and a
+                         // wave-id collision under wave-native. No rewrite.
+  WaveIdLiftScalarized,  // the canonical `s_bfe_u32 sDST, ttmp8, 0x50019`
+                         // wave_id extraction (normally rescued by the
+                         // handle-sop2.cpp pattern-lift into a per-lane
+                         // divergent VGPR value) flows into a
+                         // v_writelane_b32 / v_readlane_b32 scalar-source
+                         // operand in a kernel that ALSO contains WMMA.
+                         // The cross-lane primitives scalarise their
+                         // scalar operand via backend readfirstlane, which
+                         // collapses the per-source-wave distinction the
+                         // lift introduced (source_wave[k]'s wave_id=k
+                         // becomes uniform across the target wave = 0).
+                         // WMMA forecloses the ThreadLoopProjection escape
+                         // hatch (sec. 5.2 requires the full target wave
+                         // simultaneously), so there is no correct
+                         // projection today. No rewrite.
 
   WorkitemIdPredicateChain, // post-mem2reg IR-level class:
                             // `llvm.amdgcn.workitem.id.x()` flows into an
@@ -156,37 +157,44 @@ enum class ObstructionKind : uint8_t {
                             // NOT by the MC-level obstruction walk
                             // (`workitem.id.x` is emitted by the raiser's
                             // Phase-4 init + handler lifts, never as a
-                            // source-side CanonicalOp). `buildObstructionReport`
-                            // must never tag a `DecodedInst` with this kind.
-                            // See hotswap/docs/modrep-predicate-chain.md sec. 5
+                            // source-side CanonicalOp).
+                            // `buildObstructionReport` must never tag a
+                            // `DecodedInst` with this kind. See
+                            // hotswap/docs/modrep-predicate-chain.md sec. 5
                             // (narrow-O1) for the principled derivation and
-                            // sec. 5 O1 for the narrowing rationale that narrowed the
-                            // classifier from "any unmasked `tid -> icmp ->
-                            // side-effect`" to "compile-time K <= W_s-1" so
-                            // baseline Triton recipes
+                            // sec. 5 O1 for the narrowing rationale that
+                            // narrowed the classifier from "any unmasked `tid
+                            // -> icmp -> side-effect`" to "compile-time K <=
+                            // W_s-1" so baseline Triton recipes
                             // (`vecadd_f16`, `rope_fp32`,
                             // `canary_dpp_compound_add_fp32`) don't refuse.
 
   // -- Class 2 (wave-size-translation.md sec. 6): cross-lane shuffles whose
-  //                                            semantics bake in the wave width --
-  FullWaveRotate,           // v_permlane64_b32 -- no wave32 analogue, unrewritable.
-  LaneGroupShuffle,         // permlane16 / permlanex16 / permlane*_swap_b32 -- wave-size-translation.md sec. 5.3 rows P2 / P4 (and the pending-table P4 entry for permlane32_swap).
-  DsSwizzle,                // ds_swizzle_b32 -- wave-size-translation.md sec. 5.3 row P6.
-  DppCrossLane,             // any `_dpp` variant -- wave-size-translation.md sec. 5.3 row P5.
-  DsBpermuteGather,         // ds_bpermute_b32 -- wave-size-translation.md sec. 5.3 row P1 (handler landed).
+  //                                            semantics bake in the wave width
+  //                                            --
+  FullWaveRotate,   // v_permlane64_b32 -- no wave32 analogue, unrewritable.
+  LaneGroupShuffle, // permlane16 / permlanex16 / permlane*_swap_b32 --
+                    // wave-size-translation.md sec. 5.3 rows P2 / P4 (and the
+                    // pending-table P4 entry for permlane32_swap).
+  DsSwizzle,    // ds_swizzle_b32 -- wave-size-translation.md sec. 5.3 row P6.
+  DppCrossLane, // any `_dpp` variant -- wave-size-translation.md sec. 5.3 row
+                // P5.
+  DsBpermuteGather, // ds_bpermute_b32 -- wave-size-translation.md sec. 5.3 row
+                    // P1 (handler landed).
 
-  // -- Class 3 (wave-size-translation.md sec. 6): replica races on shared state --
-  // Modulo-replication introduces racers on the same address from
-  // target lanes i and i + W_s; for non-commutative atomics this
-  // produces an outcome the source program never expressed.
-  NonCommutativeAtomic,     // atomic_cmpswap / atomic_swap / atomic_xchg -- no rewrite.
+  // -- Class 3 (wave-size-translation.md sec. 6): replica races on shared state
+  // -- Modulo-replication introduces racers on the same address from target
+  // lanes i and i + W_s; for non-commutative atomics this produces an outcome
+  // the source program never expressed.
+  NonCommutativeAtomic, // atomic_cmpswap / atomic_swap / atomic_xchg -- no
+                        // rewrite.
 
-  // -- Class 4 (wave-size-translation.md sec. 6): lane-predicated EXEC writes --
-  // The EXEC mask the kernel writes depends on the absolute lane
-  // position; under modulo-replication the projection does not
-  // reproduce the source's intent.
-  CmpxFromLaneId,           // mbcnt-derived v_cmpx (WaveNative-only).
-  SaveExecFromLaneId,       // s_*_saveexec_b32 source mask is derived from v_mbcnt_*.
+  // -- Class 4 (wave-size-translation.md sec. 6): lane-predicated EXEC writes
+  // -- The EXEC mask the kernel writes depends on the absolute lane position;
+  // under modulo-replication the projection does not reproduce the source's
+  // intent.
+  CmpxFromLaneId,     // mbcnt-derived v_cmpx (WaveNative-only).
+  SaveExecFromLaneId, // s_*_saveexec_b32 source mask is derived from v_mbcnt_*.
 };
 
 // Identifier for the rewrite rule that would discharge an obstruction
@@ -195,35 +203,39 @@ enum class ObstructionKind : uint8_t {
 class WaveProjection;
 
 enum class RewriteId : uint8_t {
-  None = 0,                 // no rewrite available (outcome-c class).
-  P1_DsBpermute,            // llvm.amdgcn.ds.bpermute lift.
-  P2_PermLane16,            // llvm.amdgcn.permlane16 lift.
-  P3_PermLane64,            // (reserved; v_permlane64 has no rewrite, see C2_PermLane64).
-  P4_PermLaneSwap,          // LDS round-trip or permlane16-pair lowering for *_swap variants.
-  P5_DppModifier,           // llvm.amdgcn.update.dpp lift.
-  P6_DsSwizzle,             // llvm.amdgcn.ds.swizzle lift.
-  LaneOpBoundsValidator,    // raise-time operand-range check for readlane/writelane.
-  SaveExecLaneRelative,    // saveexec mask is source-wave-relative via
-                           // the mbcnt lift (mbcnt_hi pass-through +
-                           // mbcnt_lo mod W_s); MODREP replicate handles it.
-  AtomicOneReplica,        // store-only (non-returning) vector atomic:
-                           // under MODREP the source wave is projected
-                           // onto two wave32 replicas, so lanes i and
-                           // i+W_s would double-issue against the same
-                           // slot. The handler predicates the atomic on
-                           // `lane_id < W_s` so only replica-0 issues --
-                           // exactly one atomic per source lane, matching
-                           // native wave32. Requires numDefs==0 (dead
-                           // return; a returned `old` would need a
-                           // replica-0 -> replica-1 broadcast, not done here).
-  PostRaiseCrossLaneRewrite,// post-mem2reg rewrite of cross-widen-divergent
-                            // writelane/readlane sites into select / ds.bpermute
-                            // (rewrite_cross_lane_divergent.{hpp,cpp}, flagged on
-                            // via `--enable-writelane-rewrite`). Tags the
-                            // WaveIdLiftScalarized site as "implemented rewrite
-                            // available" instead of "refuse outright" so the
-                            // classifier lets the kernel through to Phase 6.5.
-  WaveNativeMbcntCmpx,      // source-wave mbcnt -> target-width V_CMPX EXEC.
+  None = 0,      // no rewrite available (outcome-c class).
+  P1_DsBpermute, // llvm.amdgcn.ds.bpermute lift.
+  P2_PermLane16, // llvm.amdgcn.permlane16 lift.
+  P3_PermLane64, // (reserved; v_permlane64 has no rewrite, see C2_PermLane64).
+  P4_PermLaneSwap, // LDS round-trip or permlane16-pair lowering for *_swap
+                   // variants.
+  P5_DppModifier,  // llvm.amdgcn.update.dpp lift.
+  P6_DsSwizzle,    // llvm.amdgcn.ds.swizzle lift.
+  LaneOpBoundsValidator, // raise-time operand-range check for
+                         // readlane/writelane.
+  SaveExecLaneRelative,  // saveexec mask is source-wave-relative via
+                         // the mbcnt lift (mbcnt_hi pass-through +
+                         // mbcnt_lo mod W_s); MODREP replicate handles it.
+  AtomicOneReplica,      // store-only (non-returning) vector atomic:
+                         // under MODREP the source wave is projected
+                         // onto two wave32 replicas, so lanes i and
+                         // i+W_s would double-issue against the same
+                         // slot. The handler predicates the atomic on
+                         // `lane_id < W_s` so only replica-0 issues --
+                         // exactly one atomic per source lane, matching
+                         // native wave32. Requires numDefs==0 (dead
+                         // return; a returned `old` would need a
+                         // replica-0 -> replica-1 broadcast, not done here).
+  PostRaiseCrossLaneRewrite, // post-mem2reg rewrite of cross-widen-divergent
+                             // writelane/readlane sites into select /
+                             // ds.bpermute
+                             // (rewrite_cross_lane_divergent.{hpp,cpp}, flagged
+                             // on via `--enable-writelane-rewrite`). Tags the
+                             // WaveIdLiftScalarized site as "implemented
+                             // rewrite available" instead of "refuse outright"
+                             // so the classifier lets the kernel through to
+                             // Phase 6.5.
+  WaveNativeMbcntCmpx,       // source-wave mbcnt -> target-width V_CMPX EXEC.
 };
 
 // Human-readable short label for an `ObstructionKind` -- used in the
@@ -309,9 +321,9 @@ struct ObstructionReport {
 // the `c1_wave_id_lift_scalarized` REFUSE sibling, etc.) pass `false`
 // explicitly. See wave-size-translation.md sec. 5.6.3.
 ObstructionReport buildObstructionReport(llvm::ArrayRef<DecodedInst> Insts,
-                                          const MCState &Mc,
-                                          const WaveProjection &Projection,
-                                          bool EnableWritelaneRewrite = true);
+                                         const MCState &Mc,
+                                         const WaveProjection &Projection,
+                                         bool EnableWritelaneRewrite = true);
 
 // ----------------------------------------------------------------------------
 // Render the report into a human-readable trace. Intended for
@@ -331,10 +343,10 @@ ObstructionReport buildObstructionReport(llvm::ArrayRef<DecodedInst> Insts,
 // ----------------------------------------------------------------------------
 
 std::string renderObstructionTrace(const ObstructionReport &Report,
-                                    llvm::StringRef KernelName,
-                                    llvm::StringRef SrcIsa,
-                                    llvm::StringRef TgtIsa,
-                                    unsigned SrcWaveSize, unsigned TgtWaveSize);
+                                   llvm::StringRef KernelName,
+                                   llvm::StringRef SrcIsa,
+                                   llvm::StringRef TgtIsa, unsigned SrcWaveSize,
+                                   unsigned TgtWaveSize);
 
 // ----------------------------------------------------------------------------
 // Pick the first refusal-worthy site and package it into a structured

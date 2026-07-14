@@ -85,8 +85,7 @@ Error requireDefaultVOP3OutputMods(const DecodedInst &Di,
               "for this opcode");
     }
 
-    std::optional<int64_t> Omod =
-        readNamedImmOperand(Di, AMDGPU::OpName::omod);
+    std::optional<int64_t> Omod = readNamedImmOperand(Di, AMDGPU::OpName::omod);
     if (!Omod) {
       return RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",

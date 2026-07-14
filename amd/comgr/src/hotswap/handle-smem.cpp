@@ -83,8 +83,7 @@ Value *zextToI64(RaiseContext &Ctx, Value *V, const Twine &Name = "") {
 // Sign-extend a low-bit address field after extracting it from a descriptor.
 Value *signExtendLowBitsI64(RaiseContext &Ctx, Value *V, unsigned Bits,
                             const Twine &Name) {
-  assert(Bits > 0 && Bits < 64 &&
-         "expected sign extension from sub-i64 width");
+  assert(Bits > 0 && Bits < 64 && "expected sign extension from sub-i64 width");
   unsigned Shift = 64 - Bits;
   Value *Shifted =
       Ctx.B.CreateShl(V, ConstantInt::get(Ctx.I64Ty, Shift), Name + ".shl");
@@ -105,14 +104,11 @@ Value *alignDwordOffset32(RaiseContext &Ctx, Value *Offset, const Twine &Name) {
 // Emit a branch to llvm.trap when a dynamic translation contract is violated.
 void emitTrapUnless(RaiseContext &Ctx, Value *Condition,
                     const Twine &ReasonName) {
-  Function *Trap =
-      Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::trap);
+  Function *Trap = Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::trap);
   BasicBlock *CurBB = Ctx.B.GetInsertBlock();
   Function *F = CurBB->getParent();
-  BasicBlock *TrapBB =
-      BasicBlock::Create(Ctx.C, ReasonName + ".trap", F);
-  BasicBlock *ContBB =
-      BasicBlock::Create(Ctx.C, ReasonName + ".cont", F);
+  BasicBlock *TrapBB = BasicBlock::Create(Ctx.C, ReasonName + ".trap", F);
+  BasicBlock *ContBB = BasicBlock::Create(Ctx.C, ReasonName + ".cont", F);
 
   Ctx.B.CreateCondBr(Condition, ContBB, TrapBB);
   Ctx.B.SetInsertPoint(TrapBB);
@@ -131,10 +127,10 @@ void emitBufferBaseRepresentabilityGuard(RaiseContext &Ctx, Value *BaseAddr) {
     return;
 
   auto *TargetBaseTy = IntegerType::get(Ctx.C, TargetBits);
-  Value *Narrow = Ctx.B.CreateTrunc(BaseAddr, TargetBaseTy,
-                                    "sbuf_base_target_bits");
-  Value *RoundTrip = Ctx.B.CreateSExt(Narrow, Ctx.I64Ty,
-                                      "sbuf_base_target_sext");
+  Value *Narrow =
+      Ctx.B.CreateTrunc(BaseAddr, TargetBaseTy, "sbuf_base_target_bits");
+  Value *RoundTrip =
+      Ctx.B.CreateSExt(Narrow, Ctx.I64Ty, "sbuf_base_target_sext");
   Value *Representable =
       Ctx.B.CreateICmpEQ(RoundTrip, BaseAddr, "sbuf_base_target_ok");
   // A gfx12 descriptor can carry a wider base than a gfx942 descriptor.
@@ -162,14 +158,14 @@ SourceScalarBufferResource decodeSourceScalarBufferResource(RaiseContext &Ctx,
   Value *NumRecords = nullptr;
 
   if (Ctx.Isa.Has45BitNumRecordsBufferResource) {
-    Value *Low64 = Ctx.B.CreateOr(
-        zextToI64(Ctx, Dw0),
-        Ctx.B.CreateShl(zextToI64(Ctx, Dw1), Ctx.B.getInt64(32)),
-        "sbuf_rsrc_lo");
-    Value *High64 = Ctx.B.CreateOr(
-        zextToI64(Ctx, Dw2),
-        Ctx.B.CreateShl(zextToI64(Ctx, Dw3), Ctx.B.getInt64(32)),
-        "sbuf_rsrc_hi");
+    Value *Low64 =
+        Ctx.B.CreateOr(zextToI64(Ctx, Dw0),
+                       Ctx.B.CreateShl(zextToI64(Ctx, Dw1), Ctx.B.getInt64(32)),
+                       "sbuf_rsrc_lo");
+    Value *High64 =
+        Ctx.B.CreateOr(zextToI64(Ctx, Dw2),
+                       Ctx.B.CreateShl(zextToI64(Ctx, Dw3), Ctx.B.getInt64(32)),
+                       "sbuf_rsrc_hi");
 
     // S_BUFFER_LOAD uses these gfx12+ buffer resource fields:
     //   base_address = resource[56:0]
@@ -182,26 +178,23 @@ SourceScalarBufferResource decodeSourceScalarBufferResource(RaiseContext &Ctx,
     Value *Base57 =
         Ctx.B.CreateAnd(Low64, Ctx.B.getInt64(Base57Mask), "sbuf_base57");
     BaseAddr = signExtendLowBitsI64(Ctx, Base57, 57, "sbuf_base64");
-    Value *NumLo = Ctx.B.CreateLShr(Low64, Ctx.B.getInt64(57),
-                                    "sbuf_num_records_lo");
-    Value *NumHi =
-        Ctx.B.CreateAnd(High64, Ctx.B.getInt64(NumRecordsHigh38Mask),
-                        "sbuf_num_records_hi");
+    Value *NumLo =
+        Ctx.B.CreateLShr(Low64, Ctx.B.getInt64(57), "sbuf_num_records_lo");
+    Value *NumHi = Ctx.B.CreateAnd(High64, Ctx.B.getInt64(NumRecordsHigh38Mask),
+                                   "sbuf_num_records_hi");
     NumRecords = Ctx.B.CreateOr(
-        NumLo, Ctx.B.CreateShl(NumHi, Ctx.B.getInt64(7)),
-        "sbuf_num_records");
+        NumLo, Ctx.B.CreateShl(NumHi, Ctx.B.getInt64(7)), "sbuf_num_records");
     Value *Stride64 =
         Ctx.B.CreateAnd(Ctx.B.CreateLShr(High64, Ctx.B.getInt64(44)),
                         Ctx.B.getInt64(0x3fffull), "sbuf_stride64");
-    Stride = Ctx.B.CreateTrunc(Stride64, Type::getInt16Ty(Ctx.C),
-                               "sbuf_stride");
+    Stride =
+        Ctx.B.CreateTrunc(Stride64, Type::getInt16Ty(Ctx.C), "sbuf_stride");
   } else {
     Value *BaseLo = zextToI64(Ctx, Dw0);
     Value *BaseHi16 =
         Ctx.B.CreateAnd(zextToI64(Ctx, Dw1), Ctx.B.getInt64(0xffff));
-    Value *Base48 =
-        Ctx.B.CreateOr(BaseLo, Ctx.B.CreateShl(BaseHi16, Ctx.B.getInt64(32)),
-                       "sbuf_base48");
+    Value *Base48 = Ctx.B.CreateOr(
+        BaseLo, Ctx.B.CreateShl(BaseHi16, Ctx.B.getInt64(32)), "sbuf_base48");
     BaseAddr = signExtendLowBitsI64(Ctx, Base48, 48, "sbuf_base64");
     Stride = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Dw1, Ctx.B.getInt32(16)),
                                Type::getInt16Ty(Ctx.C), "sbuf_stride");
@@ -217,9 +210,8 @@ SourceScalarBufferResource decodeSourceScalarBufferResource(RaiseContext &Ctx,
   Value *Stride64 = zextToI64(Ctx, Stride, "sbuf_stride_zext");
   Value *StrideIsZero =
       Ctx.B.CreateICmpEQ(Stride64, Ctx.B.getInt64(0), "sbuf_stride_zero");
-  Value *SizeStride =
-      Ctx.B.CreateSelect(StrideIsZero, Ctx.B.getInt64(1), Stride64,
-                         "sbuf_size_stride");
+  Value *SizeStride = Ctx.B.CreateSelect(StrideIsZero, Ctx.B.getInt64(1),
+                                         Stride64, "sbuf_size_stride");
   // Source S_BUFFER_LOAD bounds use:
   //   m_size = (stride == 0 ? 1 : stride) * num_records
   // Raw pointer buffer loads take the extent in bytes, so rebuild the target
@@ -316,8 +308,7 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         BaseIsKernargPair && !BaseIsKnownNonEntry && ImmOffset &&
         Ctx.Kernargs.ImplicitArgsBase > 0 &&
         SourceByteOffset >= Ctx.Kernargs.ImplicitArgsBase;
-    bool IsEntryImplicitArgLoad =
-        IsSourceImplicitArgOffset && BaseIsLiveEntry;
+    bool IsEntryImplicitArgLoad = IsSourceImplicitArgOffset && BaseIsLiveEntry;
     if (IsSourceImplicitArgOffset && !IsEntryImplicitArgLoad &&
         isStrictMode()) {
       return RaiseFailure::strictUnsafeLowering(
@@ -357,18 +348,16 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
             &Ctx.M, Intrinsic::amdgcn_implicitarg_ptr);
         Value *ImplPtr =
             Ctx.B.CreateCall(FnImplicitArgPtr, {}, "implicitarg_ptr");
-        int64_t ImplOffset =
-            SourceByteOffset - Ctx.Kernargs.ImplicitArgsBase;
-        Value *Gep =
-            (ImplOffset == 0)
+        int64_t ImplOffset = SourceByteOffset - Ctx.Kernargs.ImplicitArgsBase;
+        Value *Gep = (ImplOffset == 0)
                          ? ImplPtr
                          : Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, ImplPtr,
                                                    Ctx.B.getInt64(ImplOffset),
                                                    "impl_gep");
         for (int D = 0; D < LoadDwords; D++) {
           Value *Ep = (D == 0) ? Gep
-                               : Ctx.B.CreateInBoundsGEP(
-                                     Ctx.I8Ty, Gep, Ctx.B.getInt64(D * 4));
+                               : Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Gep,
+                                                         Ctx.B.getInt64(D * 4));
           Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + D,
                                Ctx.B.CreateLoad(Ctx.I32Ty, Ep, "impl_load"));
         }
@@ -383,8 +372,7 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       for (int D = 0; D < LoadDwords; D++) {
         SourceHiddenArgValue Dw =
             D == 0 ? HiddenBase
-                   : emitSourceHiddenDword(HiddenCtx,
-                                           SourceByteOffset + D * 4);
+                   : emitSourceHiddenDword(HiddenCtx, SourceByteOffset + D * 4);
         if (!Dw.Matched) {
           return RaiseFailure::unsupportedInstructionForm(
               Di, "SMEM", "source hidden-arg SMEM load spans non-hidden bytes");
@@ -407,7 +395,8 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       Value *Ptr = Ctx.B.CreateIntToPtr(BaseAddr, Ctx.PtrGlobalTy);
       if (ImmOffset) {
         if (ByteOffset != 0)
-          Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, Ctx.B.getInt64(ByteOffset));
+          Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr,
+                                        Ctx.B.getInt64(ByteOffset));
       } else {
         // gfx12+ SMEM: when the `scale_offset` (CPol::SCAL) bit is
         // set the SGPR offset is an element index, not a byte
@@ -421,11 +410,11 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         // `mask[blockIdx.x]`-style uses of a uniform SGPR index.
         Value *RegOff = Ctx.B.CreateZExt(Op.src(1), Ctx.I64Ty, "smem_roff");
         if (Di.HasScaleOffset)
-          RegOff = Ctx.B.CreateMul(RegOff,
-                                   ConstantInt::get(Ctx.I64Ty, LoadBytes),
-                                   "smem_roff_scaled");
-        RegOff = addStaticSmemByteOffset64(Ctx, Di, RegOff,
-                                           "smem_roff_plus_imm");
+          RegOff =
+              Ctx.B.CreateMul(RegOff, ConstantInt::get(Ctx.I64Ty, LoadBytes),
+                              "smem_roff_scaled");
+        RegOff =
+            addStaticSmemByteOffset64(Ctx, Di, RegOff, "smem_roff_plus_imm");
         Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, RegOff);
       }
       for (int D = 0; D < LoadDwords; D++) {
@@ -472,8 +461,7 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       // cachepolicy would silently change those semantics, so reject until
       // there is an explicit source->target cache-policy table.
       return RaiseFailure::unsupportedInstructionForm(
-          Di, "SMEM",
-          "S_BUFFER_LOAD cache-policy/scope bits are not modelled");
+          Di, "SMEM", "S_BUFFER_LOAD cache-policy/scope bits are not modelled");
     }
 
     unsigned OffIdx = Op.srcIdx(1);
@@ -485,8 +473,7 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
             Di, "SMEM",
             "S_BUFFER_LOAD negative static offset would MEMVIOL on source");
       }
-      Offset =
-          ConstantInt::get(Ctx.I32Ty, static_cast<uint32_t>(Imm) & ~3u);
+      Offset = ConstantInt::get(Ctx.I32Ty, static_cast<uint32_t>(Imm) & ~3u);
     } else if (Di.isReg(OffIdx)) {
       if (Di.StaticOffset && *Di.StaticOffset < 0) {
         return RaiseFailure::unsupportedInstructionForm(
@@ -535,25 +522,23 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         ChunkOffset = Ctx.B.CreateAdd(
             Offset, ConstantInt::get(Ctx.I32Ty, static_cast<uint32_t>(D * 4)),
             "sbuf_chunk_offset");
-      Value *Loaded =
-          Ctx.B.CreateCall(BufLd, {Rsrc, ChunkOffset, Soffset, AuxFlags},
-                           "sbuf_load");
+      Value *Loaded = Ctx.B.CreateCall(
+          BufLd, {Rsrc, ChunkOffset, Soffset, AuxFlags}, "sbuf_load");
 
       if (ChunkDwords == 1) {
-        Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + static_cast<int>(D),
-                             Loaded);
+        Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + static_cast<int>(D), Loaded);
       } else {
         for (unsigned I = 0; I < ChunkDwords; ++I) {
           Value *Dw = Ctx.B.CreateExtractElement(
               Loaded, ConstantInt::get(Ctx.I32Ty, I), "sbuf_load_dw");
-          Ctx.Regs.storeSGPR32(Ctx.B,
-                               Dest.BaseIdx + static_cast<int>(D + I), Dw);
+          Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + static_cast<int>(D + I),
+                               Dw);
         }
       }
       D += ChunkDwords;
     }
-    Ctx.noteSgprMemoryLoadForKernargProvenance(
-        Dest.BaseIdx, static_cast<int>(LoadDwords));
+    Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx,
+                                               static_cast<int>(LoadDwords));
     Hr.Handled = true;
     return Hr;
   }
@@ -657,8 +642,7 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, Ctx.B.getInt64(Off));
     } else {
       if ((BaseIsKernargPair && !BaseIsKnownNonEntry) &&
-          Ctx.Kernargs.ImplicitArgsBase > 0 &&
-          isStrictMode()) {
+          Ctx.Kernargs.ImplicitArgsBase > 0 && isStrictMode()) {
         return RaiseFailure::strictUnsafeLowering(
             Di, "implicitarg.ptr",
             "cross-arch implicitarg.ptr lowering is unresolved: dynamic source "
@@ -670,19 +654,18 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       int NarrowBytes = IsHalfWord ? 2 : 1;
       Value *RegOff = Ctx.B.CreateZExt(Op.src(1), Ctx.I64Ty, "smem_nroff");
       if (Di.HasScaleOffset && NarrowBytes != 1)
-        RegOff = Ctx.B.CreateMul(RegOff,
-                                 ConstantInt::get(Ctx.I64Ty, NarrowBytes),
+        RegOff =
+            Ctx.B.CreateMul(RegOff, ConstantInt::get(Ctx.I64Ty, NarrowBytes),
                             "smem_nroff_scaled");
-      RegOff = addStaticSmemByteOffset64(Ctx, Di, RegOff,
-                                         "smem_nroff_plus_imm");
+      RegOff =
+          addStaticSmemByteOffset64(Ctx, Di, RegOff, "smem_nroff_plus_imm");
       Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, RegOff);
     }
 
-    Value *Narrow = Ctx.B.CreateAlignedLoad(NarrowTy, Ptr, NarrowAlign,
-                                             NarrowLoadName);
-    Value *Ext = IsSigned
-                     ? Ctx.B.CreateSExt(Narrow, Ctx.I32Ty, ExtName)
-                     : Ctx.B.CreateZExt(Narrow, Ctx.I32Ty, ExtName);
+    Value *Narrow =
+        Ctx.B.CreateAlignedLoad(NarrowTy, Ptr, NarrowAlign, NarrowLoadName);
+    Value *Ext = IsSigned ? Ctx.B.CreateSExt(Narrow, Ctx.I32Ty, ExtName)
+                          : Ctx.B.CreateZExt(Narrow, Ctx.I32Ty, ExtName);
     Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx, Ext);
     Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx, 1);
     Hr.Handled = true;
@@ -693,7 +676,7 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
   // MC operand layout: (sdata, sbase, soffset/imm, cpol).
   if (Sop == CanonicalOp::S_STORE_B32 || Sop == CanonicalOp::S_STORE_B64 ||
       Sop == CanonicalOp::S_STORE_B128) {
-    int StoreDwords = (Sop == CanonicalOp::S_STORE_B32)  ? 1
+    int StoreDwords = (Sop == CanonicalOp::S_STORE_B32)   ? 1
                       : (Sop == CanonicalOp::S_STORE_B64) ? 2
                                                           : 4;
     ParsedReg Data = Op.srcReg(0);
@@ -719,11 +702,11 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         // data-type size (4/8/16B for B32/B64/B128).
         Value *RegOff = Ctx.B.CreateZExt(Op.src(2), Ctx.I64Ty, "smem_st_roff");
         if (Di.HasScaleOffset)
-          RegOff = Ctx.B.CreateMul(RegOff,
-                                   ConstantInt::get(Ctx.I64Ty, StoreBytes),
-                                   "smem_st_roff_scaled");
-        RegOff = addStaticSmemByteOffset64(Ctx, Di, RegOff,
-                                           "smem_st_roff_plus_imm");
+          RegOff =
+              Ctx.B.CreateMul(RegOff, ConstantInt::get(Ctx.I64Ty, StoreBytes),
+                              "smem_st_roff_scaled");
+        RegOff =
+            addStaticSmemByteOffset64(Ctx, Di, RegOff, "smem_st_roff_plus_imm");
         Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, RegOff);
       }
     }
@@ -830,7 +813,7 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
   ParsedReg Base;
   unsigned OffIdx;
   Value *Data = nullptr;
-  ParsedReg DataDst;  // Set only on the RTN arm.
+  ParsedReg DataDst; // Set only on the RTN arm.
   if (Di.NumDefs == 0) {
     // Non-RTN: (sdata, sbase, offset).  Read sdata as the atomic's
     // input value; the returned `old` is intentionally discarded
@@ -869,13 +852,13 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
     // Dword-width atomic, so the `scale_offset` (CPol::SCAL) bit
     // scales the SGPR element-index by 4 to recover the byte offset
     // -- same rule as the other SMEM paths.
-    Value *RegOff = Ctx.B.CreateZExt(Op.src(OffSrcPos), Ctx.I64Ty,
-                                      "smem_at_roff");
+    Value *RegOff =
+        Ctx.B.CreateZExt(Op.src(OffSrcPos), Ctx.I64Ty, "smem_at_roff");
     if (Di.HasScaleOffset)
       RegOff = Ctx.B.CreateMul(RegOff, ConstantInt::get(Ctx.I64Ty, 4),
                                "smem_at_roff_scaled");
-    RegOff = addStaticSmemByteOffset64(Ctx, Di, RegOff,
-                                       "smem_at_roff_plus_imm");
+    RegOff =
+        addStaticSmemByteOffset64(Ctx, Di, RegOff, "smem_at_roff_plus_imm");
     Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, RegOff);
   }
 

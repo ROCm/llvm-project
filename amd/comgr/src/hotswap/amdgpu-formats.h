@@ -39,24 +39,42 @@ constexpr unsigned OPERAND_INPUT_MODS = llvm::AMDGPU::OPERAND_INPUT_MODS;
 //   * VOPD has no dedicated TSFlags bit (LLVM's VOPD3 bit varies across
 //     versions); use `AMDGPU::isVOPD(opc)` instead.
 inline const char *formatName(uint64_t Flags, unsigned Opc) {
-  if (llvm::AMDGPU::isVOPD(Opc))     return "VOPD";
-  if (Flags & SIInstrFlags::IsMAI)   return "MFMA";
-  if (Flags & SIInstrFlags::DPP)     return "DPP";
-  if (Flags & SIInstrFlags::SDWA)    return "SDWA";
-  if (Flags & SIInstrFlags::SOPP)    return "SOPP";
-  if (Flags & SIInstrFlags::SOPC)    return "SOPC";
-  if (Flags & SIInstrFlags::SOP1)    return "SOP1";
-  if (Flags & SIInstrFlags::SOP2)    return "SOP2";
-  if (Flags & SIInstrFlags::SOPK)    return "SOPK";
-  if (Flags & SIInstrFlags::VOPC)    return "VOPC";
-  if (Flags & SIInstrFlags::VOP3P)   return "VOP3P";
-  if (Flags & SIInstrFlags::VOP3)    return "VOP3";
-  if (Flags & SIInstrFlags::VOP2)    return "VOP2";
-  if (Flags & SIInstrFlags::VOP1)    return "VOP1";
-  if (Flags & SIInstrFlags::SMRD)    return "SMEM";
-  if (Flags & SIInstrFlags::FLAT)    return "FLAT";
-  if (Flags & SIInstrFlags::MUBUF)   return "MUBUF";
-  if (Flags & SIInstrFlags::DS)      return "DS";
+  if (llvm::AMDGPU::isVOPD(Opc))
+    return "VOPD";
+  if (Flags & SIInstrFlags::IsMAI)
+    return "MFMA";
+  if (Flags & SIInstrFlags::DPP)
+    return "DPP";
+  if (Flags & SIInstrFlags::SDWA)
+    return "SDWA";
+  if (Flags & SIInstrFlags::SOPP)
+    return "SOPP";
+  if (Flags & SIInstrFlags::SOPC)
+    return "SOPC";
+  if (Flags & SIInstrFlags::SOP1)
+    return "SOP1";
+  if (Flags & SIInstrFlags::SOP2)
+    return "SOP2";
+  if (Flags & SIInstrFlags::SOPK)
+    return "SOPK";
+  if (Flags & SIInstrFlags::VOPC)
+    return "VOPC";
+  if (Flags & SIInstrFlags::VOP3P)
+    return "VOP3P";
+  if (Flags & SIInstrFlags::VOP3)
+    return "VOP3";
+  if (Flags & SIInstrFlags::VOP2)
+    return "VOP2";
+  if (Flags & SIInstrFlags::VOP1)
+    return "VOP1";
+  if (Flags & SIInstrFlags::SMRD)
+    return "SMEM";
+  if (Flags & SIInstrFlags::FLAT)
+    return "FLAT";
+  if (Flags & SIInstrFlags::MUBUF)
+    return "MUBUF";
+  if (Flags & SIInstrFlags::DS)
+    return "DS";
   // VIMAGE: gfx12+ vector image / tensor encoding family. Pure-image
   // members carry `SIInstrFlags::VIMAGE` directly; the gfx1250 TENSOR
   // pseudos (`tensor_load_to_lds_d{2,4}`,
@@ -70,8 +88,10 @@ inline const char *formatName(uint64_t Flags, unsigned Opc) {
   // `kerneldex`/`raise_cli` bucket the cross-target failures as
   // `[format=VIMAGE]` rather than `[format=Unknown]`, which is what
   // the handler refusal contract is keyed on.
-  if (Flags & SIInstrFlags::VIMAGE)     return "VIMAGE";
-  if (Flags & SIInstrFlags::TENSOR_CNT) return "VIMAGE";
+  if (Flags & SIInstrFlags::VIMAGE)
+    return "VIMAGE";
+  if (Flags & SIInstrFlags::TENSOR_CNT)
+    return "VIMAGE";
   return "Unknown";
 }
 

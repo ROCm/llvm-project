@@ -135,7 +135,7 @@ ArrayRef<CanonicalOpAttrSpec> getHandlerSOP2Attrs() {
 //   * `s_and_b32 s2, s2, vcc_lo` / `s_or_b32 s2, s2, vcc_lo` where
 //     one source is VCC.
 static llvm::Value *tryGetSrcWaveMaskI1(RaiseContext &Ctx, OpResolver &Op,
-                                         unsigned I) {
+                                        unsigned I) {
   if (!Op.isSrcReg(I)) {
     // Immediate / expr operands still denote source-width scalar wave masks in
     // SOP2 mask algebra (e.g. `s_xor_b32 sN, sMask, -1`). Lift them through
@@ -205,7 +205,7 @@ static llvm::Value *tryGetSrcWaveMaskI1(RaiseContext &Ctx, OpResolver &Op,
 // propagation addresses, or the earlier `writeReg32` already did the right
 // thing.
 static void recordDerivedWaveMaskI1(RaiseContext &Ctx, ParsedReg DstReg,
-                                     llvm::Value *I1) {
+                                    llvm::Value *I1) {
   if (!I1)
     return;
   switch (DstReg.RegKind) {
@@ -258,9 +258,9 @@ static void handleLshlAddU32(RaiseContext &Ctx, OpResolver &Op, unsigned ShAmt,
                              const Twine &Name, HandlerResult &Hr) {
   Value *Src0 = Ctx.B.CreateZExt(Op.src(0), Ctx.I64Ty, Name + "_s0");
   Value *Src1 = Ctx.B.CreateZExt(Op.src(1), Ctx.I64Ty, Name + "_s1");
-  Value *Wide = Ctx.B.CreateAdd(
-      Ctx.B.CreateShl(Src0, ConstantInt::get(Ctx.I64Ty, ShAmt)), Src1,
-      Name + "_wide");
+  Value *Wide =
+      Ctx.B.CreateAdd(Ctx.B.CreateShl(Src0, ConstantInt::get(Ctx.I64Ty, ShAmt)),
+                      Src1, Name + "_wide");
   Value *Res = Ctx.B.CreateTrunc(Wide, Ctx.I32Ty, Name);
   Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Res);
   // SCC = carry-out = (wide >> 32) != 0.
@@ -331,15 +331,28 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   // s_add_i32 / s_add_u32 (both CanonicalOp::S_ADD_U32)
-  if (Sop == CanonicalOp::S_ADD_U32) {                                                // Match by canonical semantic opcode, not raw mnemonic string
-    Value *Src0 = Op.src(0), *Src1 = Op.src(1);                                 // Read source operands -- resolves SGPR, VGPR, or immediate to LLVM Value*
-    Value *Res = Ctx.B.CreateAdd(Src0, Src1, "add");                             // Emit LLVM IR: %add = add i32 %src0, %src1
-    Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Res);                                   // Store result into destination register's alloca (later promoted to SSA)
-    auto *Ov = Ctx.B.CreateIntrinsic(Intrinsic::uadd_with_overflow, {Ctx.I32Ty}, // Compute carry-out using LLVM's uadd.with.overflow intrinsic
-                                     {Src0, Src1});
-    Ctx.Regs.storeSCC(Ctx.B, Ctx.B.CreateExtractValue(Ov, 1));                   // Extract the overflow bit and write it to SCC (Scalar Condition Code)
-    Hr.SccHandled = true;                                                        // Tell the dispatch loop: "I wrote SCC myself, don't auto-compute it"
-    Hr.Handled = true;                                                           // Tell the dispatch loop: "This instruction was successfully raised"
+  if (Sop == CanonicalOp::S_ADD_U32) { // Match by canonical semantic opcode,
+                                       // not raw mnemonic string
+    Value *Src0 = Op.src(0),
+          *Src1 = Op.src(1); // Read source operands -- resolves SGPR, VGPR, or
+                             // immediate to LLVM Value*
+    Value *Res = Ctx.B.CreateAdd(
+        Src0, Src1, "add"); // Emit LLVM IR: %add = add i32 %src0, %src1
+    Ctx.Regs.writeReg32(Ctx.B, Op.dst(),
+                        Res); // Store result into destination register's alloca
+                              // (later promoted to SSA)
+    auto *Ov =
+        Ctx.B.CreateIntrinsic(Intrinsic::uadd_with_overflow,
+                              {Ctx.I32Ty}, // Compute carry-out using LLVM's
+                                           // uadd.with.overflow intrinsic
+                              {Src0, Src1});
+    Ctx.Regs.storeSCC(Ctx.B, Ctx.B.CreateExtractValue(
+                                 Ov, 1)); // Extract the overflow bit and write
+                                          // it to SCC (Scalar Condition Code)
+    Hr.SccHandled = true; // Tell the dispatch loop: "I wrote SCC myself, don't
+                          // auto-compute it"
+    Hr.Handled = true;    // Tell the dispatch loop: "This instruction was
+                          // successfully raised"
     return Hr;
   }
   // s_sub_i32 / s_sub_u32 (both CanonicalOp::S_SUB_U32)
@@ -374,13 +387,12 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop == CanonicalOp::S_SUBB_U32) {
     Value *Src0 = Op.src(0), *Src1 = Op.src(1);
     Value *Borrow = Ctx.B.CreateZExt(Ctx.Regs.loadSCC(Ctx.B), Ctx.I32Ty);
-    Value *Res =
-        Ctx.B.CreateSub(Ctx.B.CreateSub(Src0, Src1), Borrow, "subb");
+    Value *Res = Ctx.B.CreateSub(Ctx.B.CreateSub(Src0, Src1), Borrow, "subb");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Res);
-    Ctx.Regs.storeSCC(Ctx.B,
-                       Ctx.B.CreateOr(Ctx.B.CreateICmpULT(Src0, Src1),
-                                      Ctx.B.CreateAnd(Ctx.B.CreateICmpEQ(Src0, Src1),
-                                                      Ctx.Regs.loadSCC(Ctx.B))));
+    Ctx.Regs.storeSCC(
+        Ctx.B, Ctx.B.CreateOr(Ctx.B.CreateICmpULT(Src0, Src1),
+                              Ctx.B.CreateAnd(Ctx.B.CreateICmpEQ(Src0, Src1),
+                                              Ctx.Regs.loadSCC(Ctx.B))));
     Hr.SccHandled = true;
     Hr.Handled = true;
     return Hr;
@@ -399,8 +411,8 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     Ctx.Regs.writeReg32(
         Ctx.B, Op.dst(),
         Ctx.B.CreateTrunc(
-            Ctx.B.CreateLShr(Ctx.B.CreateMul(A, B, "mulhi_wide"), 32), Ctx.I32Ty,
-            "mulhi"));
+            Ctx.B.CreateLShr(Ctx.B.CreateMul(A, B, "mulhi_wide"), 32),
+            Ctx.I32Ty, "mulhi"));
     Hr.Handled = true;
     return Hr;
   }
@@ -453,8 +465,7 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
-  if (Sop == CanonicalOp::S_FMAAK_F32 ||
-      Sop == CanonicalOp::S_FMAMK_F32) {
+  if (Sop == CanonicalOp::S_FMAAK_F32 || Sop == CanonicalOp::S_FMAMK_F32) {
     // Source order follows the MC operand order. For S_FMAAK this is
     // (src0, src1, literal); for S_FMAMK it is (src0, literal, src1), exactly
     // matching the manual's fma argument order.
@@ -479,8 +490,8 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     ParsedReg DstReg = Op.dst();
     Value *S0 = Ctx.B.CreateBitCast(Op.src(0), Ctx.F32Ty);
     Value *S1 = Ctx.B.CreateBitCast(Op.src(1), Ctx.F32Ty);
-    Value *Acc = Ctx.B.CreateBitCast(Ctx.Regs.readReg32(Ctx.B, DstReg),
-                                     Ctx.F32Ty);
+    Value *Acc =
+        Ctx.B.CreateBitCast(Ctx.Regs.readReg32(Ctx.B, DstReg), Ctx.F32Ty);
     Function *Fma =
         Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {Ctx.F32Ty});
     Ctx.Regs.writeReg32(
@@ -491,26 +502,27 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   // Scalar IEEE-754-2019 maximumNumber/minimumNumber. LLVM's canonical pseudo
-  // is `S_{MAX,MIN}_F32`; `instruction_manual.pdf` sec. 4.5.39/sec. 4.5.45 names the
-  // gfx12+ real mnemonics `s_max_num_f32` / `s_min_num_f32`, with `s_max_f32`
-  // / `s_min_f32` accepted as compatibility aliases. The manual's pseudocode
-  // favors a numeric operand over NaN (including signaling NaN after setting
-  // invalid), quiets all-NaN results, and orders signed zeros (+0 > -0 for
-  // max, -0 < +0 for min). LLVM's `maximumnum` / `minimumnum` intrinsics model
-  // that NUM family; the NaN-propagating
-  // `maximum` / `minimum` intrinsics are for the separate S_MAXIMUM_F32 /
-  // S_MINIMUM_F32 opcode family and must not be used here.
+  // is `S_{MAX,MIN}_F32`; `instruction_manual.pdf` sec. 4.5.39/sec. 4.5.45
+  // names the gfx12+ real mnemonics `s_max_num_f32` / `s_min_num_f32`, with
+  // `s_max_f32` / `s_min_f32` accepted as compatibility aliases. The manual's
+  // pseudocode favors a numeric operand over NaN (including signaling NaN after
+  // setting invalid), quiets all-NaN results, and orders signed zeros (+0 > -0
+  // for max, -0 < +0 for min). LLVM's `maximumnum` / `minimumnum` intrinsics
+  // model that NUM family; the NaN-propagating `maximum` / `minimum` intrinsics
+  // are for the separate S_MAXIMUM_F32 / S_MINIMUM_F32 opcode family and must
+  // not be used here.
   if (Sop == CanonicalOp::S_MAX_NUM_F32 || Sop == CanonicalOp::S_MIN_NUM_F32) {
     Value *S0 = Ctx.B.CreateBitCast(Op.src(0), Ctx.F32Ty);
     Value *S1 = Ctx.B.CreateBitCast(Op.src(1), Ctx.F32Ty);
-    Intrinsic::ID Iid = (Sop == CanonicalOp::S_MAX_NUM_F32) ? Intrinsic::maximumnum
-                                                      : Intrinsic::minimumnum;
-    const char *Name = (Sop == CanonicalOp::S_MAX_NUM_F32) ? "s_fmax_num"
-                                                     : "s_fmin_num";
+    Intrinsic::ID Iid = (Sop == CanonicalOp::S_MAX_NUM_F32)
+                            ? Intrinsic::maximumnum
+                            : Intrinsic::minimumnum;
+    const char *Name =
+        (Sop == CanonicalOp::S_MAX_NUM_F32) ? "s_fmax_num" : "s_fmin_num";
     Function *Fn = Intrinsic::getOrInsertDeclaration(&Ctx.M, Iid, {Ctx.F32Ty});
-    Ctx.Regs.writeReg32(Ctx.B, Op.dst(),
-                        Ctx.B.CreateBitCast(Ctx.B.CreateCall(Fn, {S0, S1}, Name),
-                                            Ctx.I32Ty));
+    Ctx.Regs.writeReg32(
+        Ctx.B, Op.dst(),
+        Ctx.B.CreateBitCast(Ctx.B.CreateCall(Fn, {S0, S1}, Name), Ctx.I32Ty));
     Hr.Handled = true;
     return Hr;
   }
@@ -547,8 +559,7 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
                             : Intrinsic::minimum;
     const char *Name =
         (Sop == CanonicalOp::S_MAXIMUM_F32) ? "s_fmaximum" : "s_fminimum";
-    Function *Fn =
-        Intrinsic::getOrInsertDeclaration(&Ctx.M, Iid, {Ctx.F32Ty});
+    Function *Fn = Intrinsic::getOrInsertDeclaration(&Ctx.M, Iid, {Ctx.F32Ty});
     Ctx.Regs.writeReg32(
         Ctx.B, Op.dst(),
         Ctx.B.CreateBitCast(Ctx.B.CreateCall(Fn, {S0, S1}, Name), Ctx.I32Ty));
@@ -570,8 +581,7 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   // mnemonic).  An earlier version of this handler also matched a
   // dead `CanonicalOp::S_ADD_U64`; that enum entry is gone, see
   // opcode-map.cpp's S_ADD_U64 comment for the audit trail.
-  if (Sop == CanonicalOp::S_ADD_NC_U64 ||
-      Sop == CanonicalOp::S_SUB_NC_U64) {
+  if (Sop == CanonicalOp::S_ADD_NC_U64 || Sop == CanonicalOp::S_SUB_NC_U64) {
     RaiseContext::KernargPtrProvenance PreKernargProvenance =
         Ctx.getKernargPtrProvenance();
     bool UpdatesEntryKernargOffset = false;
@@ -582,9 +592,8 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     };
     KernargPtrConstRebase Rebase =
         classifyKernargPtrConstRebase(Di, IsKernargPair);
-    if (Rebase.TouchesKernargPtr &&
-        (PreKernargProvenance.isLiveEntry() ||
-         PreKernargProvenance.isNonEntry())) {
+    if (Rebase.TouchesKernargPtr && (PreKernargProvenance.isLiveEntry() ||
+                                     PreKernargProvenance.isNonEntry())) {
       if (Rebase.Delta) {
         if (PreKernargProvenance.isLiveEntry()) {
           UpdatesEntryKernargOffset = true;
@@ -595,10 +604,9 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
         }
       }
     }
-    Value *Result =
-        Sop == CanonicalOp::S_ADD_NC_U64
-            ? Ctx.B.CreateAdd(Op.src64(0), Op.src64(1), "sadd64")
-            : Ctx.B.CreateSub(Op.src64(0), Op.src64(1), "ssub64");
+    Value *Result = Sop == CanonicalOp::S_ADD_NC_U64
+                        ? Ctx.B.CreateAdd(Op.src64(0), Op.src64(1), "sadd64")
+                        : Ctx.B.CreateSub(Op.src64(0), Op.src64(1), "ssub64");
     Ctx.Regs.writeReg64(Ctx.B, Op.dst(), Result);
     if (UpdatesEntryKernargOffset)
       Ctx.setKernargPtrLiveEntryByteOffset(NewEntryKernargOffset);
@@ -686,22 +694,25 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop == CanonicalOp::S_BFM_B64) {
     // s_bfm_b64 dst, width, offset: creates a 64-bit mask with `width` ones
     // starting at `offset`
-    Value *Width =
-        Ctx.B.CreateZExt(Ctx.B.CreateAnd(Op.src(0), ConstantInt::get(Ctx.I32Ty, 0x3F)),
-                         Ctx.I64Ty);
-    Value *Offset =
-        Ctx.B.CreateZExt(Ctx.B.CreateAnd(Op.src(1), ConstantInt::get(Ctx.I32Ty, 0x3F)),
-                         Ctx.I64Ty);
-    Value *Mask = Ctx.B.CreateSub(Ctx.B.CreateShl(ConstantInt::get(Ctx.I64Ty, 1), Width),
-                                  ConstantInt::get(Ctx.I64Ty, 1));
+    Value *Width = Ctx.B.CreateZExt(
+        Ctx.B.CreateAnd(Op.src(0), ConstantInt::get(Ctx.I32Ty, 0x3F)),
+        Ctx.I64Ty);
+    Value *Offset = Ctx.B.CreateZExt(
+        Ctx.B.CreateAnd(Op.src(1), ConstantInt::get(Ctx.I32Ty, 0x3F)),
+        Ctx.I64Ty);
+    Value *Mask =
+        Ctx.B.CreateSub(Ctx.B.CreateShl(ConstantInt::get(Ctx.I64Ty, 1), Width),
+                        ConstantInt::get(Ctx.I64Ty, 1));
     Hr.SccResult = Ctx.B.CreateShl(Mask, Offset, "bfm64");
     Ctx.Regs.writeReg64(Ctx.B, Op.dst(), Hr.SccResult);
     Hr.Handled = true;
     return Hr;
   }
   if (Sop == CanonicalOp::S_BFM_B32) {
-    Value *Width = Ctx.B.CreateAnd(Op.src(0), ConstantInt::get(Ctx.I32Ty, 0x1F));
-    Value *Offset = Ctx.B.CreateAnd(Op.src(1), ConstantInt::get(Ctx.I32Ty, 0x1F));
+    Value *Width =
+        Ctx.B.CreateAnd(Op.src(0), ConstantInt::get(Ctx.I32Ty, 0x1F));
+    Value *Offset =
+        Ctx.B.CreateAnd(Op.src(1), ConstantInt::get(Ctx.I32Ty, 0x1F));
     Value *Mask =
         Ctx.B.CreateSub(Ctx.B.CreateShl(ConstantInt::get(Ctx.I32Ty, 1), Width),
                         ConstantInt::get(Ctx.I32Ty, 1));
@@ -802,21 +813,20 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     // Generic scalar bitfield-extract.
     Value *Src = Op.src(0), *Ctrl = Op.src(1);
     Value *Offset = Ctx.B.CreateAnd(Ctrl, ConstantInt::get(Ctx.I32Ty, 0x1F));
-    Value *Width =
-        Ctx.B.CreateAnd(Ctx.B.CreateLShr(Ctrl, 16), ConstantInt::get(Ctx.I32Ty, 0x7F));
+    Value *Width = Ctx.B.CreateAnd(Ctx.B.CreateLShr(Ctrl, 16),
+                                   ConstantInt::get(Ctx.I32Ty, 0x7F));
     Value *SafeWidth =
         Ctx.B.CreateAnd(Width, ConstantInt::get(Ctx.I32Ty, 0x1F));
     Value *Shifted = Ctx.B.CreateLShr(Src, Offset);
     Value *Mask = Ctx.B.CreateSub(
         Ctx.B.CreateShl(ConstantInt::get(Ctx.I32Ty, 1), SafeWidth),
         ConstantInt::get(Ctx.I32Ty, 1));
-    Value *IsGE32 =
-        Ctx.B.CreateICmpUGE(Width, ConstantInt::get(Ctx.I32Ty, 32));
-    Mask = Ctx.B.CreateSelect(IsGE32, ConstantInt::getSigned(Ctx.I32Ty, -1), Mask);
+    Value *IsGE32 = Ctx.B.CreateICmpUGE(Width, ConstantInt::get(Ctx.I32Ty, 32));
+    Mask =
+        Ctx.B.CreateSelect(IsGE32, ConstantInt::getSigned(Ctx.I32Ty, -1), Mask);
     Value *IsZero = Ctx.B.CreateICmpEQ(Width, ConstantInt::get(Ctx.I32Ty, 0));
-    Hr.SccResult = Ctx.B.CreateSelect(
-        IsZero, ConstantInt::get(Ctx.I32Ty, 0),
-        Ctx.B.CreateAnd(Shifted, Mask, "bfe"));
+    Hr.SccResult = Ctx.B.CreateSelect(IsZero, ConstantInt::get(Ctx.I32Ty, 0),
+                                      Ctx.B.CreateAnd(Shifted, Mask, "bfe"));
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Hr.SccResult);
     Hr.Handled = true;
     return Hr;
@@ -857,11 +867,9 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     // `shift` gives "sign-extended src[31:shift]" in a single op.
     Value *Fallthrough = Ctx.B.CreateAShr(Src, Shift, "sbfe_i_sat");
     Value *Computed = Ctx.B.CreateSelect(IsShortEnough, Sx, Fallthrough);
-    Value *IsZero = Ctx.B.CreateICmpEQ(Length,
-                                       ConstantInt::get(Ctx.I32Ty, 0));
-    Value *Result = Ctx.B.CreateSelect(IsZero,
-                                       ConstantInt::get(Ctx.I32Ty, 0),
-                                       Computed);
+    Value *IsZero = Ctx.B.CreateICmpEQ(Length, ConstantInt::get(Ctx.I32Ty, 0));
+    Value *Result =
+        Ctx.B.CreateSelect(IsZero, ConstantInt::get(Ctx.I32Ty, 0), Computed);
     // sccResult is an i32; downstream code derives SCC as (sccResult != 0),
     // matching the ISA's "SCC = D != 0" for s_bfe_*.
     Hr.SccResult = Result;
@@ -901,11 +909,9 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     // `shift` gives "sign-extended src[63:shift]" in a single op.
     Value *Fallthrough = Ctx.B.CreateAShr(Src, Shift, "sbfe_i64_sat");
     Value *Computed = Ctx.B.CreateSelect(IsShortEnough, Sx, Fallthrough);
-    Value *IsZero = Ctx.B.CreateICmpEQ(Length,
-                                       ConstantInt::get(Ctx.I64Ty, 0));
-    Value *Result = Ctx.B.CreateSelect(IsZero,
-                                       ConstantInt::get(Ctx.I64Ty, 0),
-                                       Computed);
+    Value *IsZero = Ctx.B.CreateICmpEQ(Length, ConstantInt::get(Ctx.I64Ty, 0));
+    Value *Result =
+        Ctx.B.CreateSelect(IsZero, ConstantInt::get(Ctx.I64Ty, 0), Computed);
     // sccResult is i64; downstream code derives SCC as (sccResult != 0),
     // matching the ISA's "SCC = D != 0" for s_bfe_*.
     Hr.SccResult = Result;
@@ -930,18 +936,16 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_CSELECT_B32) {
-    Ctx.Regs.writeReg32(
-        Ctx.B, Op.dst(),
-        Ctx.B.CreateSelect(Ctx.Regs.loadSCC(Ctx.B), Op.src(0), Op.src(1),
-                           "csel"));
+    Ctx.Regs.writeReg32(Ctx.B, Op.dst(),
+                        Ctx.B.CreateSelect(Ctx.Regs.loadSCC(Ctx.B), Op.src(0),
+                                           Op.src(1), "csel"));
     Hr.Handled = true;
     return Hr;
   }
   if (Sop == CanonicalOp::S_CSELECT_B64) {
-    Ctx.Regs.writeReg64(
-        Ctx.B, Op.dst(),
-        Ctx.B.CreateSelect(Ctx.Regs.loadSCC(Ctx.B), Op.src64(0), Op.src64(1),
-                           "csel"));
+    Ctx.Regs.writeReg64(Ctx.B, Op.dst(),
+                        Ctx.B.CreateSelect(Ctx.Regs.loadSCC(Ctx.B), Op.src64(0),
+                                           Op.src64(1), "csel"));
     Hr.Handled = true;
     return Hr;
   }
@@ -1067,7 +1071,8 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop == CanonicalOp::S_ORN2_B32) {
     Value *S0I1 = tryGetSrcWaveMaskI1(Ctx, Op, 0);
     Value *S1I1 = tryGetSrcWaveMaskI1(Ctx, Op, 1);
-    Hr.SccResult = Ctx.B.CreateOr(Op.src(0), Ctx.B.CreateNot(Op.src(1)), "orn2");
+    Hr.SccResult =
+        Ctx.B.CreateOr(Op.src(0), Ctx.B.CreateNot(Op.src(1)), "orn2");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Hr.SccResult);
     if (S0I1 && S1I1) {
       Value *OrN2I1 =
@@ -1088,8 +1093,8 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop == CanonicalOp::S_NAND_B32) {
     Value *S0I1 = tryGetSrcWaveMaskI1(Ctx, Op, 0);
     Value *S1I1 = tryGetSrcWaveMaskI1(Ctx, Op, 1);
-    Hr.SccResult = Ctx.B.CreateNot(
-        Ctx.B.CreateAnd(Op.src(0), Op.src(1), "and"), "nand");
+    Hr.SccResult =
+        Ctx.B.CreateNot(Ctx.B.CreateAnd(Op.src(0), Op.src(1), "and"), "nand");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Hr.SccResult);
     if (S0I1 && S1I1) {
       Value *NandI1 =
@@ -1116,8 +1121,8 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop == CanonicalOp::S_NOR_B32) {
     Value *S0I1 = tryGetSrcWaveMaskI1(Ctx, Op, 0);
     Value *S1I1 = tryGetSrcWaveMaskI1(Ctx, Op, 1);
-    Hr.SccResult = Ctx.B.CreateNot(
-        Ctx.B.CreateOr(Op.src(0), Op.src(1), "or"), "nor");
+    Hr.SccResult =
+        Ctx.B.CreateNot(Ctx.B.CreateOr(Op.src(0), Op.src(1), "or"), "nor");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Hr.SccResult);
     if (S0I1 && S1I1) {
       Value *NorI1 =
@@ -1144,8 +1149,8 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop == CanonicalOp::S_XNOR_B32) {
     Value *S0I1 = tryGetSrcWaveMaskI1(Ctx, Op, 0);
     Value *S1I1 = tryGetSrcWaveMaskI1(Ctx, Op, 1);
-    Hr.SccResult = Ctx.B.CreateNot(
-        Ctx.B.CreateXor(Op.src(0), Op.src(1), "xor"), "xnor");
+    Hr.SccResult =
+        Ctx.B.CreateNot(Ctx.B.CreateXor(Op.src(0), Op.src(1), "xor"), "xnor");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Hr.SccResult);
     if (S0I1 && S1I1) {
       Value *XnorI1 =

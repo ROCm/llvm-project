@@ -241,9 +241,7 @@ struct CrossLaneDivergentRewriteReport {
   // When true, the rewrite pass performed zero rewrites and the
   // caller must surface `unsupportedDppDetail` as a raise-time
   // refusal diagnostic.
-  bool refusedUnsupportedDpp() const {
-    return !UnsupportedDppDetail.empty();
-  }
+  bool refusedUnsupportedDpp() const { return !UnsupportedDppDetail.empty(); }
 
   // True iff the pass refused the function for any reason.
   bool refused() const {

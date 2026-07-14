@@ -53,8 +53,8 @@
 namespace COMGR::hotswap {
 namespace mxfp4 {
 
-// Compute BF16 bit pattern for `fp4_e2m1_to_bf16(nibble) * 2^(scale_byte - 127)`
-// using per-field bit arithmetic (no fp multiply, no LUT).  Matches the
+// Compute BF16 bit pattern for `fp4_e2m1_to_bf16(nibble) * 2^(scale_byte -
+// 127)` using per-field bit arithmetic (no fp multiply, no LUT).  Matches the
 // IR emission in handle-valu.cpp::V_CVT_SCALE_PK8_BF16_FP4 step-for-step.
 //
 // Arguments

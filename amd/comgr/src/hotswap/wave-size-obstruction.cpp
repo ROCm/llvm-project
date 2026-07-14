@@ -11,14 +11,14 @@
 
 #include <cstdlib>
 
+#include "canonical-op.h"
 #include "decoded-inst.h"
 #include "isa-profile.h"
 #include "mc-state.h"
-#include "canonical-op.h"
 #include "wave-projection.h"
 
-#include "MCTargetDesc/AMDGPUMCTargetDesc.h" // AMDGPU::OpName, AMDGPU::TTMP_32RegClassID, AMDGPU::mc2PseudoReg
-#include "Utils/AMDGPUBaseInfo.h"             // AMDGPU::getNamedOperandIdx
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
@@ -49,20 +49,29 @@ const char *obstructionKindName(ObstructionKind K) {
   case ObstructionKind::None:
     return "None";
   case ObstructionKind::MbcntHiLaneIdLeak:
-    return "MbcntHiLaneIdLeak (\u00a73 Class 1: absolute lane-ID leak via v_mbcnt_hi)";
+    return "MbcntHiLaneIdLeak (\u00a73 Class 1: absolute lane-ID leak via "
+           "v_mbcnt_hi)";
   case ObstructionKind::OutOfRangeLaneOperand:
-    return "OutOfRangeLaneOperand (\u00a73 Class 1: readlane/writelane operand >= W_s)";
+    return "OutOfRangeLaneOperand (\u00a73 Class 1: readlane/writelane operand "
+           ">= W_s)";
   case ObstructionKind::TtmpWaveIdLeak:
-    return "TtmpWaveIdLeak (\u00a73 Class 1: source read of ttmp8 under cross-widening -- wave_id_in_wg field)";
+    return "TtmpWaveIdLeak (\u00a73 Class 1: source read of ttmp8 under "
+           "cross-widening -- wave_id_in_wg field)";
   case ObstructionKind::WaveIdLiftScalarized:
-    return "WaveIdLiftScalarized (\u00a73 Class 1: canonical wave_id BFE lift + v_writelane/v_readlane + WMMA -- cross-lane primitive scalarises the divergent lift, collapsing per-source-wave distinction)";
+    return "WaveIdLiftScalarized (\u00a73 Class 1: canonical wave_id BFE lift "
+           "+ v_writelane/v_readlane + WMMA -- cross-lane primitive scalarises "
+           "the divergent lift, collapsing per-source-wave distinction)";
   case ObstructionKind::WorkitemIdPredicateChain:
     // see hotswap/docs/modrep-predicate-chain.md sec. 5 (narrow-O1 classifier)
-    return "WorkitemIdPredicateChain (\u00a73 Class 5: workitem.id.x() feeds a lane-position-scoped icmp against compile-time constant K \u2264 W_s-1, gating a side effect \u2014 wave-size-sensitive predicate chain under modulo-replication)";
+    return "WorkitemIdPredicateChain (\u00a73 Class 5: workitem.id.x() feeds a "
+           "lane-position-scoped icmp against compile-time constant K \u2264 "
+           "W_s-1, gating a side effect \u2014 wave-size-sensitive predicate "
+           "chain under modulo-replication)";
   case ObstructionKind::FullWaveRotate:
     return "FullWaveRotate (\u00a73 Class 2: unrewritable v_permlane64)";
   case ObstructionKind::LaneGroupShuffle:
-    return "LaneGroupShuffle (\u00a73 Class 2: permlane16 / permlanex16 / permlane*_swap)";
+    return "LaneGroupShuffle (\u00a73 Class 2: permlane16 / permlanex16 / "
+           "permlane*_swap)";
   case ObstructionKind::DsSwizzle:
     return "DsSwizzle (\u00a73 Class 2: ds_swizzle_b32)";
   case ObstructionKind::DppCrossLane:
@@ -70,11 +79,13 @@ const char *obstructionKindName(ObstructionKind K) {
   case ObstructionKind::DsBpermuteGather:
     return "DsBpermuteGather (\u00a73 Class 2: ds_bpermute_b32)";
   case ObstructionKind::NonCommutativeAtomic:
-    return "NonCommutativeAtomic (\u00a73 Class 3: cmpswap/swap/xchg, replica race)";
+    return "NonCommutativeAtomic (\u00a73 Class 3: cmpswap/swap/xchg, replica "
+           "race)";
   case ObstructionKind::CmpxFromLaneId:
     return "CmpxFromLaneId (\u00a73 Class 4: lane-predicated v_cmpx)";
   case ObstructionKind::SaveExecFromLaneId:
-    return "SaveExecFromLaneId (\u00a73 Class 4: lane-predicated s_*_saveexec_b32)";
+    return "SaveExecFromLaneId (\u00a73 Class 4: lane-predicated "
+           "s_*_saveexec_b32)";
   }
   return "UnknownObstructionKind";
 }
@@ -263,9 +274,8 @@ bool dsSwizzleSafeForModRep(uint16_t Imm) {
   // is (ROTATE_SIZE_MASK << ROTATE_SIZE_SHIFT) | (ROTATE_DIR_MASK
   // << ROTATE_DIR_SHIFT) = 0x7E0; everything else (including
   // reserved bits 0..4 and 11) must match ROTATE_MODE_ENC exactly.
-  constexpr uint16_t ROTATE_VAR_MASK =
-      (ROTATE_SIZE_MASK << ROTATE_SIZE_SHIFT) |
-      (ROTATE_DIR_MASK << ROTATE_DIR_SHIFT);
+  constexpr uint16_t ROTATE_VAR_MASK = (ROTATE_SIZE_MASK << ROTATE_SIZE_SHIFT) |
+                                       (ROTATE_DIR_MASK << ROTATE_DIR_SHIFT);
   if ((Imm & static_cast<uint16_t>(~ROTATE_VAR_MASK)) == ROTATE_MODE_ENC)
     return true;
   // RESERVED top-nibble envelope, FFT/ROTATE with reserved bits
@@ -464,8 +474,8 @@ findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
     } else if (isSaveExecB32(Sop)) {
       if (SourceTainted) {
         Sites.push_back(
-            {&Di, ObstructionKind::SaveExecFromLaneId,
-             RewriteId::None, /*RewriteImplemented=*/false,
+            {&Di, ObstructionKind::SaveExecFromLaneId, RewriteId::None,
+             /*RewriteImplemented=*/false,
              "s_*_saveexec_b32 source mask dataflow is derived from "
              "v_mbcnt_*; no target-width source-wave mask projection is "
              "implemented for scalar saveexec masks"});
@@ -500,8 +510,7 @@ findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
 //      the pseudo from step 1. A tuple like `ttmp[8:9]` contributes
 //      sub0 = TTMP8, sub1 = TTMP9 -- we match on sub0.
 bool readsTtmp8Source(const DecodedInst &Di, const MCRegisterInfo &MRI) {
-  const MCRegisterClass &TTMP32 =
-      MRI.getRegClass(AMDGPU::TTMP_32RegClassID);
+  const MCRegisterClass &TTMP32 = MRI.getRegClass(AMDGPU::TTMP_32RegClassID);
   MCRegister Ttmp8Pseudo = TTMP32.getRegister(8);
   const llvm::MCInst &Inst = Di.Inst;
   for (unsigned I = Di.NumDefs, E = Inst.getNumOperands(); I < E; ++I) {
@@ -546,8 +555,7 @@ bool readsTtmp8Source(const DecodedInst &Di, const MCRegisterInfo &MRI) {
 // (each target lane gets its source-wave rank as a divergent VGPR),
 // so we must NOT refuse on this shape here. Any OTHER ttmp8 read
 // falls through to the `ttmp8ReadSites` path below.
-bool isCanonicalWaveIdBfe(const DecodedInst &Di,
-                           const MCRegisterInfo &MRI) {
+bool isCanonicalWaveIdBfe(const DecodedInst &Di, const MCRegisterInfo &MRI) {
   if (Di.CanonOp != CanonicalOp::S_BFE_U32)
     return false;
   // S_BFE_U32 canonically has one destination (sDST), one source reg
@@ -562,8 +570,7 @@ bool isCanonicalWaveIdBfe(const DecodedInst &Di,
     return false;
   if (Di.getImm(Src1Idx) != 0x50019)
     return false;
-  const MCRegisterClass &TTMP32 =
-      MRI.getRegClass(AMDGPU::TTMP_32RegClassID);
+  const MCRegisterClass &TTMP32 = MRI.getRegClass(AMDGPU::TTMP_32RegClassID);
   MCRegister Ttmp8Pseudo = TTMP32.getRegister(8);
   MCRegister Src0Reg = Di.Inst.getOperand(Src0Idx).getReg();
   if (!Src0Reg)
@@ -582,9 +589,9 @@ bool isCanonicalWaveIdBfe(const DecodedInst &Di,
 // ----------------------------------------------------------------------------
 
 ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
-                                          const MCState &Mc,
-                                          const WaveProjection &Projection,
-                                          bool EnableWritelaneRewrite) {
+                                         const MCState &Mc,
+                                         const WaveProjection &Projection,
+                                         bool EnableWritelaneRewrite) {
   ObstructionReport Report;
   const ISAProfile &Src = Projection.sourceIsa();
   const ISAProfile &Tgt = Projection.targetIsa();
@@ -752,7 +759,8 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
       // standalone lane-index probe is not an obstruction.
       continue;
     }
-    if (Sop == CanonicalOp::V_READLANE_B32 || Sop == CanonicalOp::V_WRITELANE_B32) {
+    if (Sop == CanonicalOp::V_READLANE_B32 ||
+        Sop == CanonicalOp::V_WRITELANE_B32) {
       // Track every readlane/writelane -- in-bounds or otherwise -- for
       // the WaveIdLiftScalarized post-loop check. Out-of-range static
       // lane operands additionally emit an OutOfRangeLaneOperand site
@@ -769,8 +777,7 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
       // lane indices are never in [0, W_s)) but is implicit in the
       // cast. Make it explicit so the intent survives a refactor.
       if (Imm.has_value() &&
-          (*Imm < 0 ||
-           static_cast<uint64_t>(*Imm) >= Src.WaveSize)) {
+          (*Imm < 0 || static_cast<uint64_t>(*Imm) >= Src.WaveSize)) {
         // Static constant operand provably out of source wave range.
         // No rewrite preserves the semantics on a wider target wave.
         ObstructionSite Site;
@@ -923,8 +930,9 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
       // representable by `llvm.amdgcn.update.dpp`, so it is treated as pending
       // too. The `tsFlags & SIInstrFlags::DPP` check still fires for all forms
       // -- all are Class-2 cross-lane sites by the hotswap/docs/wave-size-
-      // translation.md sec. 6 taxonomy; the flipped-by-form `rewriteImplemented`
-      // bit separates "handled" from "pending" without changing the taxonomy.
+      // translation.md sec. 6 taxonomy; the flipped-by-form
+      // `rewriteImplemented` bit separates "handled" from "pending" without
+      // changing the taxonomy.
       Site.RewriteImplemented = Di.HasDpp && !Di.DppFi;
       if (!Di.HasDpp)
         Site.Detail =
@@ -1002,9 +1010,8 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
       const bool IsSwap = Sop == CanonicalOp::GLOBAL_ATOMIC_SWAP ||
                           Sop == CanonicalOp::FLAT_ATOMIC_SWAP ||
                           Sop == CanonicalOp::BUFFER_ATOMIC_SWAP;
-      const bool ModRepOneWave =
-          Projection.numSourceWavesPerTarget() == 1 &&
-          !Projection.providesFullWaveExecInvariant();
+      const bool ModRepOneWave = Projection.numSourceWavesPerTarget() == 1 &&
+                                 !Projection.providesFullWaveExecInvariant();
       if (StoreOnly && IsSwap && ModRepOneWave) {
         Site.Rewrite = RewriteId::AtomicOneReplica;
         Site.RewriteImplemented = true;
@@ -1196,16 +1203,16 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
 // ----------------------------------------------------------------------------
 
 std::string renderObstructionTrace(const ObstructionReport &Report,
-                                    StringRef KernelName, StringRef SrcIsa,
-                                    StringRef TgtIsa, unsigned SrcWaveSize,
-                                    unsigned TgtWaveSize) {
+                                   StringRef KernelName, StringRef SrcIsa,
+                                   StringRef TgtIsa, unsigned SrcWaveSize,
+                                   unsigned TgtWaveSize) {
   std::string Out;
   raw_string_ostream Os(Out);
 
   Os << "transpiler: projection decision for kernel '" << KernelName << "':\n";
   Os << "  source: " << SrcIsa << " (wave" << SrcWaveSize
-     << ") -> target: " << TgtIsa << " (wave" << TgtWaveSize << "), R="
-     << (SrcWaveSize > 0 ? TgtWaveSize / SrcWaveSize : 0) << "\n";
+     << ") -> target: " << TgtIsa << " (wave" << TgtWaveSize
+     << "), R=" << (SrcWaveSize > 0 ? TgtWaveSize / SrcWaveSize : 0) << "\n";
 
   if (Report.Sites.empty()) {
     Os << "  obstructions found: none\n"
@@ -1313,9 +1320,8 @@ llvm::Error selectFailureFromReport(const ObstructionReport &Report) {
   }
   if (const ObstructionSite *Site = Report.firstPending()) {
     return RaiseFailure::crossWaveShuffleRewritePending(
-        *Site->Inst,
-        Twine(obstructionKindName(Site->Kind)) + " [rewrite " +
-            rewriteIdName(Site->Rewrite) + " pending]");
+        *Site->Inst, Twine(obstructionKindName(Site->Kind)) + " [rewrite " +
+                         rewriteIdName(Site->Rewrite) + " pending]");
   }
   // Oblivious / fully-rewritten: no failure.
   return llvm::Error::success();

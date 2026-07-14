@@ -11,8 +11,8 @@
 #include "canonical-op.h"
 #include "wmma-lowering.h"
 
-#include "Utils/AMDGPUBaseInfo.h" // AMDGPU::getNamedOperandIdx, AMDGPU::OpName
 #include "SIDefines.h"            // SISrcMods::NEG
+#include "Utils/AMDGPUBaseInfo.h" // AMDGPU::getNamedOperandIdx, AMDGPU::OpName
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
@@ -165,8 +165,8 @@ Value *readMixF32Src(RaiseContext &Ctx, OpResolver &Op, unsigned I,
   Value *Bits = nullptr;
   bool IsImmediateOperand = !Op.isSrcReg(I);
   if (!IsImmediateOperand && (Mods & SISrcMods::OP_SEL_0))
-    Bits = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Raw, 16),
-                              Type::getInt16Ty(Ctx.C));
+    Bits =
+        Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Raw, 16), Type::getInt16Ty(Ctx.C));
   else
     Bits = Ctx.B.CreateTrunc(Raw, Type::getInt16Ty(Ctx.C));
 
@@ -325,15 +325,15 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     return Hr;
   }
   case CanonicalOp::V_PK_FMA_F16: {
-    constexpr unsigned KnownPkF16Mods =
-        SISrcMods::NEG | SISrcMods::NEG_HI | SISrcMods::OP_SEL_0 |
-        SISrcMods::OP_SEL_1;
+    constexpr unsigned KnownPkF16Mods = SISrcMods::NEG | SISrcMods::NEG_HI |
+                                        SISrcMods::OP_SEL_0 |
+                                        SISrcMods::OP_SEL_1;
     unsigned Mods[3] = {};
     if (Error Err = readPackedSrcMods(Di, Op, 3, KnownPkF16Mods, Mods))
       return Err;
 
-    int ClampIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                              AMDGPU::OpName::clamp);
+    int ClampIdx =
+        AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::clamp);
     if (ClampIdx < 0 || !Di.isImm(static_cast<unsigned>(ClampIdx)))
       return RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P", "v_pk_fma_f16 missing immediate clamp operand");
@@ -354,21 +354,21 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     Value *S0 = readPacked2Src(Ctx, Op, 0, Ctx.F16Ty, Mods[0], Opts);
     Value *S1 = readPacked2Src(Ctx, Op, 1, Ctx.F16Ty, Mods[1], Opts);
     Value *S2 = readPacked2Src(Ctx, Op, 2, Ctx.F16Ty, Mods[2], Opts);
-    Function *FmaFn = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::fma, {V2f16});
+    Function *FmaFn =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {V2f16});
     Value *Res = Ctx.B.CreateCall(FmaFn, {S0, S1, S2}, "pk_fma_f16");
 
     if (ClampImm != 0) {
-      Function *MaxFn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, Intrinsic::maxnum, {V2f16});
-      Function *MinFn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, Intrinsic::minnum, {V2f16});
+      Function *MaxFn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::maxnum, {V2f16});
+      Function *MinFn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::minnum, {V2f16});
       // AMDGPU clamp is [0, 1] after the arithmetic result; maxnum/minnum
       // gives the target-independent IR shape used elsewhere in Hotswap.
-      Value *Zero = ConstantVector::getSplat(
-          ElementCount::getFixed(2), ConstantFP::get(Ctx.F16Ty, 0.0));
-      Value *One = ConstantVector::getSplat(
-          ElementCount::getFixed(2), ConstantFP::get(Ctx.F16Ty, 1.0));
+      Value *Zero = ConstantVector::getSplat(ElementCount::getFixed(2),
+                                             ConstantFP::get(Ctx.F16Ty, 0.0));
+      Value *One = ConstantVector::getSplat(ElementCount::getFixed(2),
+                                            ConstantFP::get(Ctx.F16Ty, 1.0));
       Res = Ctx.B.CreateCall(MaxFn, {Res, Zero}, "pk_fma_f16_clamp_lo");
       Res = Ctx.B.CreateCall(MinFn, {Res, One}, "pk_fma_f16_clamp");
     }
@@ -380,15 +380,15 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   }
   case CanonicalOp::V_PK_ADD_F16:
   case CanonicalOp::V_PK_MUL_F16: {
-    constexpr unsigned KnownPkF16Mods =
-        SISrcMods::NEG | SISrcMods::NEG_HI | SISrcMods::OP_SEL_0 |
-        SISrcMods::OP_SEL_1;
+    constexpr unsigned KnownPkF16Mods = SISrcMods::NEG | SISrcMods::NEG_HI |
+                                        SISrcMods::OP_SEL_0 |
+                                        SISrcMods::OP_SEL_1;
     unsigned Mods[3] = {};
     if (Error Err = readPackedSrcMods(Di, Op, 2, KnownPkF16Mods, Mods))
       return Err;
 
-    int ClampIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                              AMDGPU::OpName::clamp);
+    int ClampIdx =
+        AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::clamp);
     if (ClampIdx < 0 || !Di.isImm(static_cast<unsigned>(ClampIdx)))
       return RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
@@ -407,18 +407,18 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     Value *S1 = readPacked2Src(Ctx, Op, 1, Ctx.F16Ty, Mods[1], Opts);
     const bool IsAdd = Sop == CanonicalOp::V_PK_ADD_F16;
     const char *Name = IsAdd ? "pk_add_f16" : "pk_mul_f16";
-    Value *Res = IsAdd ? Ctx.B.CreateFAdd(S0, S1, Name)
-                       : Ctx.B.CreateFMul(S0, S1, Name);
+    Value *Res =
+        IsAdd ? Ctx.B.CreateFAdd(S0, S1, Name) : Ctx.B.CreateFMul(S0, S1, Name);
 
     if (ClampImm != 0) {
-      Function *MaxFn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, Intrinsic::maxnum, {V2f16});
-      Function *MinFn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, Intrinsic::minnum, {V2f16});
-      Value *Zero = ConstantVector::getSplat(
-          ElementCount::getFixed(2), ConstantFP::get(Ctx.F16Ty, 0.0));
-      Value *One = ConstantVector::getSplat(
-          ElementCount::getFixed(2), ConstantFP::get(Ctx.F16Ty, 1.0));
+      Function *MaxFn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::maxnum, {V2f16});
+      Function *MinFn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::minnum, {V2f16});
+      Value *Zero = ConstantVector::getSplat(ElementCount::getFixed(2),
+                                             ConstantFP::get(Ctx.F16Ty, 0.0));
+      Value *One = ConstantVector::getSplat(ElementCount::getFixed(2),
+                                            ConstantFP::get(Ctx.F16Ty, 1.0));
       Res = Ctx.B.CreateCall(MaxFn, {Res, Zero}, Twine(Name) + "_clamp_lo");
       Res = Ctx.B.CreateCall(MinFn, {Res, One}, Twine(Name) + "_clamp");
     }
@@ -433,9 +433,9 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   case CanonicalOp::V_PK_MIN_NUM_BF16:
   case CanonicalOp::V_PK_MAX_NUM_BF16:
   case CanonicalOp::V_PK_FMA_BF16: {
-    constexpr unsigned KnownPkBF16Mods =
-        SISrcMods::NEG | SISrcMods::NEG_HI | SISrcMods::OP_SEL_0 |
-        SISrcMods::OP_SEL_1;
+    constexpr unsigned KnownPkBF16Mods = SISrcMods::NEG | SISrcMods::NEG_HI |
+                                         SISrcMods::OP_SEL_0 |
+                                         SISrcMods::OP_SEL_1;
     const bool IsFMA = Sop == CanonicalOp::V_PK_FMA_BF16;
     const bool IsMinMax = Sop == CanonicalOp::V_PK_MIN_NUM_BF16 ||
                           Sop == CanonicalOp::V_PK_MAX_NUM_BF16;
@@ -444,8 +444,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
             readPackedSrcMods(Di, Op, IsFMA ? 3 : 2, KnownPkBF16Mods, Mods))
       return Err;
 
-    int ClampIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                              AMDGPU::OpName::clamp);
+    int ClampIdx =
+        AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::clamp);
     if (ClampIdx < 0 || !Di.isImm(static_cast<unsigned>(ClampIdx)))
       return RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
@@ -479,8 +479,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     Value *Res = nullptr;
     if (IsFMA) {
       Value *S2 = readPacked2Src(Ctx, Op, 2, Bf16Ty, Mods[2], Opts);
-      Function *FmaFn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, Intrinsic::fma, {V2BF16});
+      Function *FmaFn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {V2BF16});
       Res = Ctx.B.CreateCall(FmaFn, {S0, S1, S2}, "pk_fma_bf16");
     } else if (Sop == CanonicalOp::V_PK_ADD_BF16) {
       Res = Ctx.B.CreateFAdd(S0, S1, "pk_add_bf16");
@@ -502,10 +502,10 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
           &Ctx.M, Intrinsic::maximumnum, {V2BF16});
       Function *MinFn = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::minimumnum, {V2BF16});
-      Value *Zero = ConstantVector::getSplat(
-          ElementCount::getFixed(2), ConstantFP::get(Bf16Ty, 0.0));
-      Value *One = ConstantVector::getSplat(
-          ElementCount::getFixed(2), ConstantFP::get(Bf16Ty, 1.0));
+      Value *Zero = ConstantVector::getSplat(ElementCount::getFixed(2),
+                                             ConstantFP::get(Bf16Ty, 0.0));
+      Value *One = ConstantVector::getSplat(ElementCount::getFixed(2),
+                                            ConstantFP::get(Bf16Ty, 1.0));
       const char *Name = (Sop == CanonicalOp::V_PK_MIN_NUM_BF16)
                              ? "pk_min_num_bf16"
                              : "pk_max_num_bf16";
@@ -515,16 +515,23 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
 
     const char *PackName = "pk_bf16_pack";
     switch (Sop) {
-    case CanonicalOp::V_PK_ADD_BF16: PackName = "pk_add_bf16_pack"; break;
-    case CanonicalOp::V_PK_MUL_BF16: PackName = "pk_mul_bf16_pack"; break;
+    case CanonicalOp::V_PK_ADD_BF16:
+      PackName = "pk_add_bf16_pack";
+      break;
+    case CanonicalOp::V_PK_MUL_BF16:
+      PackName = "pk_mul_bf16_pack";
+      break;
     case CanonicalOp::V_PK_MIN_NUM_BF16:
       PackName = "pk_min_num_bf16_pack";
       break;
     case CanonicalOp::V_PK_MAX_NUM_BF16:
       PackName = "pk_max_num_bf16_pack";
       break;
-    case CanonicalOp::V_PK_FMA_BF16: PackName = "pk_fma_bf16_pack"; break;
-    default: llvm_unreachable("filtered by outer switch");
+    case CanonicalOp::V_PK_FMA_BF16:
+      PackName = "pk_fma_bf16_pack";
+      break;
+    default:
+      llvm_unreachable("filtered by outer switch");
     }
     Ctx.writeReg32(Op.dst(), Ctx.B.CreateBitCast(Res, Ctx.I32Ty, PackName));
     Hr.Handled = true;
@@ -537,9 +544,9 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   case CanonicalOp::V_PK_MIN_F32: {
     auto *V2f32 = FixedVectorType::get(Ctx.F32Ty, 2);
 
-    constexpr unsigned KnownPkF32Mods =
-        SISrcMods::NEG | SISrcMods::NEG_HI | SISrcMods::OP_SEL_0 |
-        SISrcMods::OP_SEL_1;
+    constexpr unsigned KnownPkF32Mods = SISrcMods::NEG | SISrcMods::NEG_HI |
+                                        SISrcMods::OP_SEL_0 |
+                                        SISrcMods::OP_SEL_1;
     unsigned Mods[3] = {};
     unsigned NumSrcs = (Sop == CanonicalOp::V_PK_FMA_F32) ? 3 : 2;
     if (Error Err = readPackedSrcMods(Di, Op, NumSrcs, KnownPkF32Mods, Mods))
@@ -577,25 +584,26 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       Res = Ctx.B.CreateFMul(S0, S1, "pk_mul");
       break;
     case CanonicalOp::V_PK_MAX_F32: {
-      Function *Fn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, Intrinsic::maxnum, {V2f32});
+      Function *Fn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::maxnum, {V2f32});
       Res = Ctx.B.CreateCall(Fn, {S0, S1}, "pk_max");
       break;
     }
     case CanonicalOp::V_PK_MIN_F32: {
-      Function *Fn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, Intrinsic::minnum, {V2f32});
+      Function *Fn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::minnum, {V2f32});
       Res = Ctx.B.CreateCall(Fn, {S0, S1}, "pk_min");
       break;
     }
     case CanonicalOp::V_PK_FMA_F32: {
       Value *S2 = readPacked2Src(Ctx, Op, 2, Ctx.F32Ty, Mods[2], Opts);
-      Function *Fn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, Intrinsic::fma, {V2f32});
+      Function *Fn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {V2f32});
       Res = Ctx.B.CreateCall(Fn, {S0, S1, S2}, "pk_fma");
       break;
     }
-    default: llvm_unreachable("filtered by outer switch");
+    default:
+      llvm_unreachable("filtered by outer switch");
     }
     Ctx.writeRegVec(Op.dst(), Res);
     Hr.Handled = true;
@@ -620,10 +628,10 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     constexpr unsigned KnownPkI16Mods =
         SISrcMods::OP_SEL_0 | SISrcMods::OP_SEL_1;
     unsigned Mods[3] = {};
-    const unsigned NumSrcs = (Sop == CanonicalOp::V_PK_MAD_U16 ||
-                              Sop == CanonicalOp::V_PK_MAX3_I16)
-                                 ? 3
-                                 : 2;
+    const unsigned NumSrcs =
+        (Sop == CanonicalOp::V_PK_MAD_U16 || Sop == CanonicalOp::V_PK_MAX3_I16)
+            ? 3
+            : 2;
     if (Error Err = readPackedSrcMods(Di, Op, NumSrcs, KnownPkI16Mods, Mods))
       return Err;
 
@@ -648,11 +656,10 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
             Di, "VOP3P", "v_pk_mad_u16 clamp operand is not 0 or 1");
 
       auto *V2I32 = FixedVectorType::get(Ctx.I32Ty, 2);
-      Constant *Max =
-          ConstantVector::getSplat(ElementCount::getFixed(2),
-                                   ConstantInt::get(Ctx.I32Ty, 0xFFFFu));
-      Res = emitU16Mad(Ctx, S0, S1, S2, ClampImm != 0, V2I32,
-                       Max, "pk_mad_u16");
+      Constant *Max = ConstantVector::getSplat(
+          ElementCount::getFixed(2), ConstantInt::get(Ctx.I32Ty, 0xFFFFu));
+      Res =
+          emitU16Mad(Ctx, S0, S1, S2, ClampImm != 0, V2I32, Max, "pk_mad_u16");
       break;
     }
     case CanonicalOp::V_PK_ADD_U16:
@@ -701,9 +708,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // every legal hardware input. For constant shift counts the
       // optimiser folds the AND away; for VGPR-sourced shift counts the
       // mask is mandatory to preserve the corpus shift semantics.
-      Value *Mask = ConstantVector::getSplat(
-          ElementCount::getFixed(2),
-          ConstantInt::get(I16Ty, 15));
+      Value *Mask = ConstantVector::getSplat(ElementCount::getFixed(2),
+                                             ConstantInt::get(I16Ty, 15));
       Value *Amt = Ctx.B.CreateAnd(S0, Mask, "pk_lshlrev_amt");
       Res = Ctx.B.CreateShl(S1, Amt, "pk_lshlrev");
       break;
@@ -712,9 +718,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // clshr_rev_16 SDAG: dst = src1 >>_logical (src0 & 15). Same
       // reversed-operand convention and low-4-bit hardware shift-count
       // clamp as V_PK_LSHLREV_B16 above.
-      Value *Mask = ConstantVector::getSplat(
-          ElementCount::getFixed(2),
-          ConstantInt::get(I16Ty, 15));
+      Value *Mask = ConstantVector::getSplat(ElementCount::getFixed(2),
+                                             ConstantInt::get(I16Ty, 15));
       Value *Amt = Ctx.B.CreateAnd(S0, Mask, "pk_lshrrev_amt");
       Res = Ctx.B.CreateLShr(S1, Amt, "pk_lshrrev");
       break;
@@ -723,14 +728,14 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // cashr_rev_16 SDAG: dst = src1 >>_arith (src0 & 15). Same
       // reversed-operand convention and low-4-bit hardware shift-count
       // clamp as V_PK_LSHLREV_B16 above.
-      Value *Mask = ConstantVector::getSplat(
-          ElementCount::getFixed(2),
-          ConstantInt::get(I16Ty, 15));
+      Value *Mask = ConstantVector::getSplat(ElementCount::getFixed(2),
+                                             ConstantInt::get(I16Ty, 15));
       Value *Amt = Ctx.B.CreateAnd(S0, Mask, "pk_ashrrev_amt");
       Res = Ctx.B.CreateAShr(S1, Amt, "pk_ashrrev");
       break;
     }
-    default: llvm_unreachable("filtered by outer switch");
+    default:
+      llvm_unreachable("filtered by outer switch");
     }
 
     Ctx.writeReg32(Op.dst(),
@@ -754,8 +759,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   // target-native optimisation can route supporting targets through
   // `llvm.amdgcn.sudot4`, but that should not be required for correctness.
   case CanonicalOp::V_DOT4_I32_IU8: {
-    int ClampIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                              AMDGPU::OpName::clamp);
+    int ClampIdx =
+        AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::clamp);
     bool Clamp = false;
     if (ClampIdx >= 0 && Di.isImm(static_cast<unsigned>(ClampIdx)))
       Clamp = Di.getImm(static_cast<unsigned>(ClampIdx)) != 0;
@@ -771,8 +776,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     auto ExtendByte = [&](Value *Packed, unsigned ByteIdx,
                           bool IsSigned) -> Value * {
       Value *Shift = ConstantInt::get(Ctx.I32Ty, ByteIdx * 8);
-      Value *Lo = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Packed, Shift), I8Ty,
-                                    "dot4_byte");
+      Value *Lo =
+          Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Packed, Shift), I8Ty, "dot4_byte");
       return IsSigned ? Ctx.B.CreateSExt(Lo, Ctx.I64Ty, "dot4_sext")
                       : Ctx.B.CreateZExt(Lo, Ctx.I64Ty, "dot4_zext");
     };
@@ -782,8 +787,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     for (unsigned I = 0; I < 4; ++I) {
       Value *A = ExtendByte(Src0, I, Src0Signed);
       Value *B = ExtendByte(Src1, I, Src1Signed);
-      Acc = Ctx.B.CreateAdd(Acc, Ctx.B.CreateMul(A, B, "dot4_mul"),
-                            "dot4_acc");
+      Acc = Ctx.B.CreateAdd(Acc, Ctx.B.CreateMul(A, B, "dot4_mul"), "dot4_acc");
     }
 
     if (Clamp) {
@@ -931,11 +935,10 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   case CanonicalOp::V_WMMA_F32_16x16x64_BF8_BF8:
   case CanonicalOp::V_WMMA_I32_16x16x64_IU8: {
     const bool IsIU8 = (Sop == CanonicalOp::V_WMMA_I32_16x16x64_IU8);
-    const bool IsFP8orBF8 =
-        (Sop == CanonicalOp::V_WMMA_F32_16x16x64_FP8_FP8) ||
-        (Sop == CanonicalOp::V_WMMA_F32_16x16x64_FP8_BF8) ||
-        (Sop == CanonicalOp::V_WMMA_F32_16x16x64_BF8_FP8) ||
-        (Sop == CanonicalOp::V_WMMA_F32_16x16x64_BF8_BF8);
+    const bool IsFP8orBF8 = (Sop == CanonicalOp::V_WMMA_F32_16x16x64_FP8_FP8) ||
+                            (Sop == CanonicalOp::V_WMMA_F32_16x16x64_FP8_BF8) ||
+                            (Sop == CanonicalOp::V_WMMA_F32_16x16x64_BF8_FP8) ||
+                            (Sop == CanonicalOp::V_WMMA_F32_16x16x64_BF8_BF8);
     const bool Is8bit = IsIU8 || IsFP8orBF8;
     const bool IsBF16 = (Sop == CanonicalOp::V_WMMA_F32_16x16x32_BF16);
 
@@ -943,8 +946,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     if (Is8bit) {
       AbIrTy = FixedVectorType::get(Ctx.I32Ty, 8);
     } else {
-      Type *ElemTy = IsBF16 ? Type::getBFloatTy(Ctx.C)
-                            : Type::getHalfTy(Ctx.C);
+      Type *ElemTy = IsBF16 ? Type::getBFloatTy(Ctx.C) : Type::getHalfTy(Ctx.C);
       AbIrTy = FixedVectorType::get(ElemTy, 16);
     }
     Type *CdIrTy = IsIU8 ? FixedVectorType::get(Ctx.I32Ty, 8)
@@ -1012,25 +1014,32 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       Intrinsic::ID WmmaId;
       switch (Sop) {
       case CanonicalOp::V_WMMA_F32_16x16x32_F16:
-        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x32_f16; break;
+        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x32_f16;
+        break;
       case CanonicalOp::V_WMMA_F32_16x16x32_BF16:
-        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x32_bf16; break;
+        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x32_bf16;
+        break;
       case CanonicalOp::V_WMMA_F32_16x16x64_FP8_FP8:
-        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x64_fp8_fp8; break;
+        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x64_fp8_fp8;
+        break;
       case CanonicalOp::V_WMMA_F32_16x16x64_FP8_BF8:
-        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x64_fp8_bf8; break;
+        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x64_fp8_bf8;
+        break;
       case CanonicalOp::V_WMMA_F32_16x16x64_BF8_FP8:
-        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x64_bf8_fp8; break;
+        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x64_bf8_fp8;
+        break;
       case CanonicalOp::V_WMMA_F32_16x16x64_BF8_BF8:
-        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x64_bf8_bf8; break;
+        WmmaId = Intrinsic::amdgcn_wmma_f32_16x16x64_bf8_bf8;
+        break;
       case CanonicalOp::V_WMMA_I32_16x16x64_IU8:
-        WmmaId = Intrinsic::amdgcn_wmma_i32_16x16x64_iu8; break;
+        WmmaId = Intrinsic::amdgcn_wmma_i32_16x16x64_iu8;
+        break;
       default:
         return RaiseFailure::internalFailure(
             "WMMA CanonicalOp not in gfx1250 K=32/K=64 dispatch");
       }
-      Function *WmmaFn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, WmmaId, {CdIrTy, AbIrTy});
+      Function *WmmaFn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, WmmaId, {CdIrTy, AbIrTy});
       if (IsIU8) {
         // AMDGPUWmmaIntrinsicModsABClamp:
         //   (A_mod, A, B_mod, B, C, reuse_a, reuse_b, clamp)
@@ -1167,7 +1176,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   //
   // Cross-target lowering of v_wmma_scale_f32_16x16x128_f8f6f4:
   //   * gfx1250 (hasTensorOps): native int_amdgcn_wmma_scale intrinsic.
-  //   * gfx950 (hasGfx950Insts): scaled MFMA via emitWMMAScaleF8F6F4toScaledMFMA.
+  //   * gfx950 (hasGfx950Insts): scaled MFMA via
+  //   emitWMMAScaleF8F6F4toScaledMFMA.
   //   * gfx942 (hasFP8Insts): K-decomposed unscaled FP8/BF8 MFMA + software
   //     scale via emitWMMAScaleF8F6F4toMFMA.
   //   * Otherwise: refuse.
@@ -1210,7 +1220,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     // free (mirrors the MFMA-scale handler).
     auto NamedImm = [&](AMDGPU::OpName Name) -> int64_t {
       int Idx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
-      if (Idx < 0 || !Di.isImm(Idx)) return 0;
+      if (Idx < 0 || !Di.isImm(Idx))
+        return 0;
       return Di.getImm(Idx);
     };
     // scale_src0 / scale_src1 carry packed scale bytes. An absent or inline-0
@@ -1243,19 +1254,20 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
         ConstantInt::get(Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_a_fmt));
     Value *MatrixBFmt =
         ConstantInt::get(Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_b_fmt));
-    Value *CMod = ConstantInt::get(
-        Type::getInt16Ty(Ctx.C),
-        NamedImm(AMDGPU::OpName::src2_modifiers));
-    Value *MatrixAScale = ConstantInt::get(
-        Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_a_scale));
+    Value *CMod = ConstantInt::get(Type::getInt16Ty(Ctx.C),
+                                   NamedImm(AMDGPU::OpName::src2_modifiers));
+    Value *MatrixAScale =
+        ConstantInt::get(Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_a_scale));
     int64_t AScaleFmtImm = NamedImm(AMDGPU::OpName::matrix_a_scale_fmt);
     Value *MatrixAScaleFmt = ConstantInt::get(Ctx.I32Ty, AScaleFmtImm);
-    Value *ScaleSrc0 = NamedScaleSrc32(AMDGPU::OpName::scale_src0, AScaleFmtImm);
-    Value *MatrixBScale = ConstantInt::get(
-        Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_b_scale));
+    Value *ScaleSrc0 =
+        NamedScaleSrc32(AMDGPU::OpName::scale_src0, AScaleFmtImm);
+    Value *MatrixBScale =
+        ConstantInt::get(Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_b_scale));
     int64_t BScaleFmtImm = NamedImm(AMDGPU::OpName::matrix_b_scale_fmt);
     Value *MatrixBScaleFmt = ConstantInt::get(Ctx.I32Ty, BScaleFmtImm);
-    Value *ScaleSrc1 = NamedScaleSrc32(AMDGPU::OpName::scale_src1, BScaleFmtImm);
+    Value *ScaleSrc1 =
+        NamedScaleSrc32(AMDGPU::OpName::scale_src1, BScaleFmtImm);
     if (ScaleSrcFailed)
       return RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
@@ -1266,11 +1278,9 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
           "constants have no documented WMMA-scale semantics.");
 
     Value *MatrixAReuse = ConstantInt::get(
-        Type::getInt1Ty(Ctx.C),
-        NamedImm(AMDGPU::OpName::matrix_a_reuse));
+        Type::getInt1Ty(Ctx.C), NamedImm(AMDGPU::OpName::matrix_a_reuse));
     Value *MatrixBReuse = ConstantInt::get(
-        Type::getInt1Ty(Ctx.C),
-        NamedImm(AMDGPU::OpName::matrix_b_reuse));
+        Type::getInt1Ty(Ctx.C), NamedImm(AMDGPU::OpName::matrix_b_reuse));
 
     Value *ResultVal = nullptr;
 
@@ -1399,8 +1409,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
                : (WritesHigh ? "fma_mixhi_f16" : "fma_mixlo_f16");
 
     bool ClampResult = false;
-    int ClampIndex = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                AMDGPU::OpName::clamp);
+    int ClampIndex =
+        AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::clamp);
     if (ClampIndex >= 0) {
       if (!Di.isImm(static_cast<unsigned>(ClampIndex)))
         return RaiseFailure::unsupportedInstructionForm(
@@ -1411,9 +1421,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
 
     Type *I16Ty = Type::getInt16Ty(Ctx.C);
 
-    constexpr unsigned KnownMixMods =
-        SISrcMods::NEG | SISrcMods::ABS | SISrcMods::OP_SEL_0 |
-        SISrcMods::OP_SEL_1;
+    constexpr unsigned KnownMixMods = SISrcMods::NEG | SISrcMods::ABS |
+                                      SISrcMods::OP_SEL_0 | SISrcMods::OP_SEL_1;
     unsigned Mods[3] = {};
     if (Error Err = readSourceMods(Di, Op, 3, KnownMixMods, Mods))
       return Err;
@@ -1421,8 +1430,8 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     Value *S0 = readMixF32Src(Ctx, Op, 0, NarrowTy, Mods[0], CvtName);
     Value *S1 = readMixF32Src(Ctx, Op, 1, NarrowTy, Mods[1], CvtName);
     Value *S2 = readMixF32Src(Ctx, Op, 2, NarrowTy, Mods[2], CvtName);
-    Function *FmaFn = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::fma, {Ctx.F32Ty});
+    Function *FmaFn =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {Ctx.F32Ty});
     Value *Fma = Ctx.B.CreateCall(FmaFn, {S0, S1, S2}, FMAName);
     Value *Rounded =
         Ctx.B.CreateFPTrunc(Fma, NarrowTy, (Twine(FMAName) + "_round").str());
@@ -1435,8 +1444,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
           &Ctx.M, Intrinsic::minnum, {NarrowTy});
       Rounded = Ctx.B.CreateCall(
           MinFn,
-          {Ctx.B.CreateCall(MaxFn,
-                            {Rounded, ConstantFP::get(NarrowTy, 0.0)},
+          {Ctx.B.CreateCall(MaxFn, {Rounded, ConstantFP::get(NarrowTy, 0.0)},
                             (Twine(FMAName) + "_clamp_lo").str()),
            ConstantFP::get(NarrowTy, 1.0)},
           (Twine(FMAName) + "_clamp").str());
@@ -1447,21 +1455,19 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     ParsedReg Dest = Op.dst();
     Value *OldDest = Ctx.Regs.readReg32(Ctx.B, Dest);
     if (WritesHigh) {
-      Value *OldLo = Ctx.B.CreateAnd(
-          OldDest, ConstantInt::get(Ctx.I32Ty, 0x0000FFFFu),
-          (Twine(FMAName) + "_old_lo").str());
-      Value *HiBits = Ctx.B.CreateShl(NarrowBits, 16,
-                                      (Twine(FMAName) + "_hi_bits").str());
-      Ctx.writeReg32(Dest,
-                     Ctx.B.CreateOr(OldLo, HiBits,
-                                    (Twine(FMAName) + "_pack").str()));
+      Value *OldLo =
+          Ctx.B.CreateAnd(OldDest, ConstantInt::get(Ctx.I32Ty, 0x0000FFFFu),
+                          (Twine(FMAName) + "_old_lo").str());
+      Value *HiBits =
+          Ctx.B.CreateShl(NarrowBits, 16, (Twine(FMAName) + "_hi_bits").str());
+      Ctx.writeReg32(Dest, Ctx.B.CreateOr(OldLo, HiBits,
+                                          (Twine(FMAName) + "_pack").str()));
     } else {
-      Value *OldHi = Ctx.B.CreateAnd(
-          OldDest, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000u),
-          (Twine(FMAName) + "_old_hi").str());
-      Ctx.writeReg32(Dest,
-                     Ctx.B.CreateOr(OldHi, NarrowBits,
-                                    (Twine(FMAName) + "_pack").str()));
+      Value *OldHi =
+          Ctx.B.CreateAnd(OldDest, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000u),
+                          (Twine(FMAName) + "_old_hi").str());
+      Ctx.writeReg32(Dest, Ctx.B.CreateOr(OldHi, NarrowBits,
+                                          (Twine(FMAName) + "_pack").str()));
     }
     Hr.Handled = true;
     return Hr;
@@ -1490,13 +1496,11 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     Type *NarrowTy = (Sop == CanonicalOp::V_FMA_MIX_F32_BF16)
                          ? Type::getBFloatTy(Ctx.C)
                          : Ctx.F16Ty;
-    const char *CvtName = (Sop == CanonicalOp::V_FMA_MIX_F32_BF16)
-                              ? "mix_cvt_bf16"
-                              : "mix_cvt";
+    const char *CvtName =
+        (Sop == CanonicalOp::V_FMA_MIX_F32_BF16) ? "mix_cvt_bf16" : "mix_cvt";
 
-    constexpr unsigned KnownMixMods =
-        SISrcMods::NEG | SISrcMods::ABS | SISrcMods::OP_SEL_0 |
-        SISrcMods::OP_SEL_1;
+    constexpr unsigned KnownMixMods = SISrcMods::NEG | SISrcMods::ABS |
+                                      SISrcMods::OP_SEL_0 | SISrcMods::OP_SEL_1;
     unsigned Mods[3] = {};
     if (Error Err = readSourceMods(Di, Op, 3, KnownMixMods, Mods))
       return Err;
@@ -1509,12 +1513,12 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     Value *S0 = readMixF32Src(Ctx, Op, 0, NarrowTy, Mods[0], CvtName);
     Value *S1 = readMixF32Src(Ctx, Op, 1, NarrowTy, Mods[1], CvtName);
     Value *S2 = readMixF32Src(Ctx, Op, 2, NarrowTy, Mods[2], CvtName);
-    Function *FmaFn = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::fma, {Ctx.F32Ty});
-    Ctx.writeReg32(Op.dst(),
-                   Ctx.B.CreateBitCast(
-                       Ctx.B.CreateCall(FmaFn, {S0, S1, S2}, "fma_mix"),
-                       Ctx.I32Ty));
+    Function *FmaFn =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {Ctx.F32Ty});
+    Ctx.writeReg32(
+        Op.dst(),
+        Ctx.B.CreateBitCast(Ctx.B.CreateCall(FmaFn, {S0, S1, S2}, "fma_mix"),
+                            Ctx.I32Ty));
     Hr.Handled = true;
     return Hr;
   }

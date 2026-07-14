@@ -35,24 +35,42 @@ namespace {
 // uglier diagnostic (`"?<9>"`) rather than a silent bug.
 const char *kindName(ParsedReg::Kind K) {
   switch (K) {
-  case ParsedReg::SGPR:       return "SGPR";
-  case ParsedReg::VGPR:       return "VGPR";
-  case ParsedReg::AGPR:       return "AGPR";
-  case ParsedReg::VCC:        return "VCC";
-  case ParsedReg::EXEC:       return "EXEC";
-  case ParsedReg::SCC:        return "SCC";
-  case ParsedReg::MODE:       return "MODE";
-  case ParsedReg::M0:         return "M0";
-  case ParsedReg::FLAT_SCR:   return "FLAT_SCR";
-  case ParsedReg::TTMP:       return "TTMP";
-  case ParsedReg::LDS_DIRECT: return "LDS_DIRECT";
-  case ParsedReg::SRC_VCCZ:   return "SRC_VCCZ";
-  case ParsedReg::SRC_EXECZ:  return "SRC_EXECZ";
-  case ParsedReg::SRC_SCC:    return "SRC_SCC";
-  case ParsedReg::VCC_HI_SCRATCH: return "VCC_HI_SCRATCH";
-  case ParsedReg::EXEC_HI_SCRATCH: return "EXEC_HI_SCRATCH";
-  case ParsedReg::NOREG:      return "NOREG";
-  case ParsedReg::OTHER:      return "OTHER";
+  case ParsedReg::SGPR:
+    return "SGPR";
+  case ParsedReg::VGPR:
+    return "VGPR";
+  case ParsedReg::AGPR:
+    return "AGPR";
+  case ParsedReg::VCC:
+    return "VCC";
+  case ParsedReg::EXEC:
+    return "EXEC";
+  case ParsedReg::SCC:
+    return "SCC";
+  case ParsedReg::MODE:
+    return "MODE";
+  case ParsedReg::M0:
+    return "M0";
+  case ParsedReg::FLAT_SCR:
+    return "FLAT_SCR";
+  case ParsedReg::TTMP:
+    return "TTMP";
+  case ParsedReg::LDS_DIRECT:
+    return "LDS_DIRECT";
+  case ParsedReg::SRC_VCCZ:
+    return "SRC_VCCZ";
+  case ParsedReg::SRC_EXECZ:
+    return "SRC_EXECZ";
+  case ParsedReg::SRC_SCC:
+    return "SRC_SCC";
+  case ParsedReg::VCC_HI_SCRATCH:
+    return "VCC_HI_SCRATCH";
+  case ParsedReg::EXEC_HI_SCRATCH:
+    return "EXEC_HI_SCRATCH";
+  case ParsedReg::NOREG:
+    return "NOREG";
+  case ParsedReg::OTHER:
+    return "OTHER";
   }
   return "<invalid>";
 }
@@ -70,8 +88,8 @@ const char *kindName(ParsedReg::Kind K) {
 } // namespace
 
 void AllocaRegFile::init(IRBuilder<> &B, Type *I32Ty, Type *I1Ty,
-                          const ISAProfile &Isa, const MCRegisterInfo &MRI,
-                          const WaveProjection &Proj) {
+                         const ISAProfile &Isa, const MCRegisterInfo &MRI,
+                         const WaveProjection &Proj) {
   Projection = &Proj;
   // EXEC storage width is chosen by the projection. Modulo-replication
   // keeps it at source wave width (the long-standing default); wave-
@@ -84,7 +102,8 @@ void AllocaRegFile::init(IRBuilder<> &B, Type *I32Ty, Type *I1Ty,
   // read `hasAGPR` from.
   ExecTy = Proj.execStorageTy();
 
-  const unsigned NSgpr = MRI.getRegClass(AMDGPU::SGPR_32RegClassID).getNumRegs();
+  const unsigned NSgpr =
+      MRI.getRegClass(AMDGPU::SGPR_32RegClassID).getNumRegs();
   Sgpr.assign(NSgpr, nullptr);
   for (unsigned I = 0; I < NSgpr; ++I)
     Sgpr[I] = B.CreateAlloca(I32Ty, nullptr, "Sgpr" + std::to_string(I));
@@ -140,7 +159,8 @@ void AllocaRegFile::init(IRBuilder<> &B, Type *I32Ty, Type *I1Ty,
   FlatScr[0] = B.CreateAlloca(I32Ty, nullptr, "flat_scr_lo");
   FlatScr[1] = B.CreateAlloca(I32Ty, nullptr, "flat_scr_hi");
 
-  const unsigned NTtmp = MRI.getRegClass(AMDGPU::TTMP_32RegClassID).getNumRegs();
+  const unsigned NTtmp =
+      MRI.getRegClass(AMDGPU::TTMP_32RegClassID).getNumRegs();
   Ttmp.assign(NTtmp, nullptr);
   for (unsigned I = 0; I < NTtmp; ++I)
     Ttmp[I] = B.CreateAlloca(I32Ty, nullptr, "ttmp" + std::to_string(I));
@@ -156,7 +176,8 @@ void AllocaRegFile::storeSGPR32(IRBuilder<> &B, int Idx, Value *V) {
   // after; callers that wrote a scalar leave the entry empty so the
   // next consumer falls back to the narrow-mask extract. See
   // RaiseContext::lastSgprWaveMaskI1 / onSgprWritten contract.
-  if (OnSgprWritten) OnSgprWritten(Idx);
+  if (OnSgprWritten)
+    OnSgprWritten(Idx);
 }
 
 namespace {
@@ -181,8 +202,8 @@ void assertInBank(const char *Fn, const BankT &Bank, int Idx) {
 // 64-bit reads touch idx and idx+1; both must be in range.
 template <typename BankT>
 void assertPairInBank(const char *Fn, const BankT &Bank, int Idx) {
-  if (Idx < 0 || static_cast<unsigned>(Idx + 1) >= Bank.size() ||
-      !Bank[Idx] || !Bank[Idx + 1])
+  if (Idx < 0 || static_cast<unsigned>(Idx + 1) >= Bank.size() || !Bank[Idx] ||
+      !Bank[Idx + 1])
     failOOB(Fn, Idx, Bank.size());
 }
 
@@ -315,14 +336,17 @@ void AllocaRegFile::storeExec(IRBuilder<> &B, Value *V) {
 
 Value *AllocaRegFile::readVCCAsWaveMask(IRBuilder<> &B, Type *ResultTy) {
   assert(Projection && "readVCCAsWaveMask requires a WaveProjection -- "
-                        "call init() before using this reg-file");
+                       "call init() before using this reg-file");
   return Projection->ballotI1ToWidth(B, loadVCC(B), ResultTy, "vcc_ballot");
 }
 
 Value *AllocaRegFile::readReg32(IRBuilder<> &B, ParsedReg Pr) {
-  if (Pr.RegKind == ParsedReg::SGPR) return loadSGPR32(B, Pr.BaseIdx);
-  if (Pr.RegKind == ParsedReg::VGPR) return loadVGPR32(B, Pr.BaseIdx);
-  if (Pr.RegKind == ParsedReg::AGPR) return loadAGPR32(B, Pr.BaseIdx);
+  if (Pr.RegKind == ParsedReg::SGPR)
+    return loadSGPR32(B, Pr.BaseIdx);
+  if (Pr.RegKind == ParsedReg::VGPR)
+    return loadVGPR32(B, Pr.BaseIdx);
+  if (Pr.RegKind == ParsedReg::AGPR)
+    return loadAGPR32(B, Pr.BaseIdx);
   if (Pr.RegKind == ParsedReg::VCC_HI_SCRATCH)
     return B.CreateLoad(B.getInt32Ty(), VccHiScratch, "vcc_hi_scratch");
   if (Pr.RegKind == ParsedReg::EXEC_HI_SCRATCH)
@@ -376,12 +400,16 @@ Value *AllocaRegFile::readReg32(IRBuilder<> &B, ParsedReg Pr) {
 }
 
 Value *AllocaRegFile::readReg64(IRBuilder<> &B, ParsedReg Pr) {
-  if (Pr.RegKind == ParsedReg::SGPR) return loadSGPR64(B, Pr.BaseIdx);
-  if (Pr.RegKind == ParsedReg::VGPR) return loadVGPR64(B, Pr.BaseIdx);
+  if (Pr.RegKind == ParsedReg::SGPR)
+    return loadSGPR64(B, Pr.BaseIdx);
+  if (Pr.RegKind == ParsedReg::VGPR)
+    return loadVGPR64(B, Pr.BaseIdx);
   if (Pr.RegKind == ParsedReg::VCC_HI_SCRATCH)
-    return B.CreateZExt(B.CreateLoad(B.getInt32Ty(), VccHiScratch), B.getInt64Ty());
+    return B.CreateZExt(B.CreateLoad(B.getInt32Ty(), VccHiScratch),
+                        B.getInt64Ty());
   if (Pr.RegKind == ParsedReg::EXEC_HI_SCRATCH)
-    return B.CreateZExt(B.CreateLoad(B.getInt32Ty(), ExecHiScratch), B.getInt64Ty());
+    return B.CreateZExt(B.CreateLoad(B.getInt32Ty(), ExecHiScratch),
+                        B.getInt64Ty());
   // VCC as a 64-bit scalar read: route through the wave-mask ballot.
   // Previous implementations used `SExt(i1 -> i64)`, which replicates
   // the CURRENT LANE's VCC bit across all 64 bits -- a silent lie when
@@ -418,8 +446,7 @@ Value *AllocaRegFile::readReg64(IRBuilder<> &B, ParsedReg Pr) {
     Type *I32Ty = B.getInt32Ty();
     Type *I64Ty = B.getInt64Ty();
     Value *Lo = B.CreateZExt(B.CreateLoad(I32Ty, Ttmp[Pr.BaseIdx]), I64Ty);
-    Value *Hi = B.CreateZExt(B.CreateLoad(I32Ty, Ttmp[Pr.BaseIdx + 1]),
-                              I64Ty);
+    Value *Hi = B.CreateZExt(B.CreateLoad(I32Ty, Ttmp[Pr.BaseIdx + 1]), I64Ty);
     return B.CreateOr(Lo, B.CreateShl(Hi, 32), "ttmp64");
   }
   failUnhandledKind("readReg64", Pr);
@@ -432,9 +459,18 @@ void AllocaRegFile::writeExecWidth(IRBuilder<> &B, Value *V) {
 }
 
 void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
-  if (Pr.RegKind == ParsedReg::SGPR) { storeSGPR32(B, Pr.BaseIdx, V); return; }
-  if (Pr.RegKind == ParsedReg::VGPR) { storeVGPR32(B, Pr.BaseIdx, V); return; }
-  if (Pr.RegKind == ParsedReg::AGPR) { storeAGPR32(B, Pr.BaseIdx, V); return; }
+  if (Pr.RegKind == ParsedReg::SGPR) {
+    storeSGPR32(B, Pr.BaseIdx, V);
+    return;
+  }
+  if (Pr.RegKind == ParsedReg::VGPR) {
+    storeVGPR32(B, Pr.BaseIdx, V);
+    return;
+  }
+  if (Pr.RegKind == ParsedReg::AGPR) {
+    storeAGPR32(B, Pr.BaseIdx, V);
+    return;
+  }
   if (Pr.RegKind == ParsedReg::VCC_HI_SCRATCH ||
       Pr.RegKind == ParsedReg::EXEC_HI_SCRATCH) {
     // Wave32-source VCC_HI / EXEC_HI are plain 32-bit data scalars (like an
@@ -442,14 +478,15 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
     // address/control-flow registers (EXEC, SGPR pairs). Coerce any non-i32
     // scalar width to i32.
     assert(!V->getType()->isPointerTy() &&
-           "VCC_HI_SCRATCH/EXEC_HI_SCRATCH is a data scalar; pointer writes are a raiser bug");
+           "VCC_HI_SCRATCH/EXEC_HI_SCRATCH is a data scalar; pointer writes "
+           "are a raiser bug");
     if (V->getType() != B.getInt32Ty()) {
       unsigned Bits = V->getType()->getPrimitiveSizeInBits();
       V = Bits > 32 ? B.CreateTrunc(V, B.getInt32Ty())
                     : B.CreateBitCast(V, B.getInt32Ty());
     }
     B.CreateStore(V, Pr.RegKind == ParsedReg::VCC_HI_SCRATCH ? VccHiScratch
-      : ExecHiScratch);
+                                                             : ExecHiScratch);
     return;
   }
   if (Pr.RegKind == ParsedReg::EXEC) {
@@ -462,8 +499,7 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
         V = B.CreatePtrToInt(V, B.getInt64Ty());
       if (V->getType() != I32Ty) {
         unsigned Bits = V->getType()->getPrimitiveSizeInBits();
-        V = Bits > 32 ? B.CreateTrunc(V, I32Ty)
-                       : B.CreateBitCast(V, I32Ty);
+        V = Bits > 32 ? B.CreateTrunc(V, I32Ty) : B.CreateBitCast(V, I32Ty);
       }
     }
     if (ExecTy == I32Ty || Pr.WidthInDwords >= 2) {
@@ -507,8 +543,8 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
     Value *Merged;
     if (Pr.BaseIdx == 1) {
       Value *Mask = ConstantInt::get(ExecTy, 0xFFFFFFFFULL);
-      Merged = B.CreateOr(B.CreateAnd(Cur, Mask),
-                           B.CreateShl(V64, 32), "exec_hi_write");
+      Merged = B.CreateOr(B.CreateAnd(Cur, Mask), B.CreateShl(V64, 32),
+                          "exec_hi_write");
     } else {
       Value *Mask = ConstantInt::get(ExecTy, 0xFFFFFFFF00000000ULL);
       Merged = B.CreateOr(B.CreateAnd(Cur, Mask), V64, "exec_lo_write");
@@ -522,26 +558,35 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
     return;
   }
   if (Pr.RegKind == ParsedReg::M0) {
-    if (V->getType() != B.getInt32Ty()) V = B.CreateBitCast(V, B.getInt32Ty());
+    if (V->getType() != B.getInt32Ty())
+      V = B.CreateBitCast(V, B.getInt32Ty());
     B.CreateStore(V, M0);
     return;
   }
   if (Pr.RegKind == ParsedReg::FLAT_SCR) {
-    if (V->getType() != B.getInt32Ty()) V = B.CreateBitCast(V, B.getInt32Ty());
+    if (V->getType() != B.getInt32Ty())
+      V = B.CreateBitCast(V, B.getInt32Ty());
     B.CreateStore(V, FlatScr[0]);
     return;
   }
   if (Pr.RegKind == ParsedReg::TTMP && Pr.BaseIdx >= 0 &&
       static_cast<unsigned>(Pr.BaseIdx) < Ttmp.size()) {
-    if (V->getType() != B.getInt32Ty()) V = B.CreateBitCast(V, B.getInt32Ty());
+    if (V->getType() != B.getInt32Ty())
+      V = B.CreateBitCast(V, B.getInt32Ty());
     B.CreateStore(V, Ttmp[Pr.BaseIdx]);
     return;
   }
 }
 
 void AllocaRegFile::writeReg64(IRBuilder<> &B, ParsedReg Pr, Value *V) {
-  if (Pr.RegKind == ParsedReg::SGPR) { storeSGPR64(B, Pr.BaseIdx, V); return; }
-  if (Pr.RegKind == ParsedReg::VGPR) { storeVGPR64(B, Pr.BaseIdx, V); return; }
+  if (Pr.RegKind == ParsedReg::SGPR) {
+    storeSGPR64(B, Pr.BaseIdx, V);
+    return;
+  }
+  if (Pr.RegKind == ParsedReg::VGPR) {
+    storeVGPR64(B, Pr.BaseIdx, V);
+    return;
+  }
   if (Pr.RegKind == ParsedReg::VCC) {
     assert(Projection && "writeReg64(VCC) requires a WaveProjection");
     storeVCC(B, Projection->extractLaneBitFromWaveMask(B, V));
@@ -554,7 +599,8 @@ void AllocaRegFile::writeReg64(IRBuilder<> &B, ParsedReg Pr, Value *V) {
   if (Pr.RegKind == ParsedReg::FLAT_SCR) {
     Type *I32Ty = B.getInt32Ty();
     Type *I64Ty = B.getInt64Ty();
-    if (V->getType() != I64Ty) V = B.CreateBitOrPointerCast(V, I64Ty);
+    if (V->getType() != I64Ty)
+      V = B.CreateBitOrPointerCast(V, I64Ty);
     B.CreateStore(B.CreateTrunc(V, I32Ty), FlatScr[0]);
     B.CreateStore(B.CreateTrunc(B.CreateLShr(V, 32), I32Ty), FlatScr[1]);
     return;
@@ -568,10 +614,11 @@ void AllocaRegFile::writeReg64(IRBuilder<> &B, ParsedReg Pr, Value *V) {
       static_cast<unsigned>(Pr.BaseIdx + 1) < Ttmp.size()) {
     Type *I32Ty = B.getInt32Ty();
     Type *I64Ty = B.getInt64Ty();
-    if (V->getType() != I64Ty) V = B.CreateBitOrPointerCast(V, I64Ty);
+    if (V->getType() != I64Ty)
+      V = B.CreateBitOrPointerCast(V, I64Ty);
     B.CreateStore(B.CreateTrunc(V, I32Ty), Ttmp[Pr.BaseIdx]);
     B.CreateStore(B.CreateTrunc(B.CreateLShr(V, 32), I32Ty),
-                   Ttmp[Pr.BaseIdx + 1]);
+                  Ttmp[Pr.BaseIdx + 1]);
     return;
   }
 }
@@ -626,26 +673,31 @@ void AllocaRegFile::writeRegExecWidth(IRBuilder<> &B, ParsedReg Pr, Value *V) {
 }
 
 Value *AllocaRegFile::readRegVec(IRBuilder<> &B, ParsedReg Pr, Type *VecTy) {
-  unsigned N = VecTy->isVectorTy()
-      ? cast<FixedVectorType>(VecTy)->getNumElements()
-      : 1;
+  unsigned N =
+      VecTy->isVectorTy() ? cast<FixedVectorType>(VecTy)->getNumElements() : 1;
   Type *ElemTy = VecTy->isVectorTy()
-      ? cast<FixedVectorType>(VecTy)->getElementType()
-      : VecTy;
+                     ? cast<FixedVectorType>(VecTy)->getElementType()
+                     : VecTy;
   unsigned DwordsPerElem = ElemTy->getPrimitiveSizeInBits() / 32;
-  if (DwordsPerElem == 0) DwordsPerElem = 1;
+  if (DwordsPerElem == 0)
+    DwordsPerElem = 1;
 
   if (N == 1 && !VecTy->isVectorTy() && VecTy->getPrimitiveSizeInBits() <= 32) {
     Value *V = readReg32(B, Pr);
-    if (V->getType() != VecTy) V = B.CreateBitCast(V, VecTy);
+    if (V->getType() != VecTy)
+      V = B.CreateBitCast(V, VecTy);
     return V;
   }
 
   unsigned TotalDwords = 0;
-  if (ElemTy->isFloatTy()) TotalDwords = N;
-  else if (ElemTy->isIntegerTy(32)) TotalDwords = N;
-  else if (ElemTy->isHalfTy()) TotalDwords = (N + 1) / 2;
-  else TotalDwords = (N * ElemTy->getPrimitiveSizeInBits() + 31) / 32;
+  if (ElemTy->isFloatTy())
+    TotalDwords = N;
+  else if (ElemTy->isIntegerTy(32))
+    TotalDwords = N;
+  else if (ElemTy->isHalfTy())
+    TotalDwords = (N + 1) / 2;
+  else
+    TotalDwords = (N * ElemTy->getPrimitiveSizeInBits() + 31) / 32;
 
   SmallVector<Value *> Dwords;
   for (unsigned I = 0; I < TotalDwords; I++) {
@@ -661,7 +713,8 @@ Value *AllocaRegFile::readRegVec(IRBuilder<> &B, ParsedReg Pr, Type *VecTy) {
   Value *Packed = ConstantInt::get(IntTy, 0);
   for (unsigned I = 0; I < TotalDwords; I++) {
     Value *Ext = B.CreateZExt(Dwords[I], IntTy);
-    if (I > 0) Ext = B.CreateShl(Ext, I * 32);
+    if (I > 0)
+      Ext = B.CreateShl(Ext, I * 32);
     Packed = B.CreateOr(Packed, Ext);
   }
   return B.CreateBitCast(Packed, VecTy);
@@ -690,22 +743,36 @@ void AllocaRegFile::writeRegVec(IRBuilder<> &B, ParsedReg Pr, Value *V) {
 }
 
 void AllocaRegFile::collectAllocas(SmallVectorImpl<AllocaInst *> &Out) {
-  for (auto *A : Sgpr) if (A) Out.push_back(A);
-  for (auto *A : Vgpr) if (A) Out.push_back(A);
-  for (auto *A : Agpr) if (A) Out.push_back(A);
-  if (Vcc) Out.push_back(Vcc);
+  for (auto *A : Sgpr)
+    if (A)
+      Out.push_back(A);
+  for (auto *A : Vgpr)
+    if (A)
+      Out.push_back(A);
+  for (auto *A : Agpr)
+    if (A)
+      Out.push_back(A);
+  if (Vcc)
+    Out.push_back(Vcc);
   // VccHiScratch (the wave32-source VCC_HI scratch scalar) must be promoted
   // too. As with the ttmps below, a surviving private alloca is moved to local
   // data share (LDS) by the AMDGPU backend's AMDGPUPromoteAllocaToLDS, where it
   // can alias the kernel's own LDS and be clobbered. Its dominating entry store
   // (init() above) lets PromoteMemToReg lift it cleanly.
-  if (VccHiScratch) Out.push_back(VccHiScratch);
+  if (VccHiScratch)
+    Out.push_back(VccHiScratch);
   // ExecHiScratch is promoted for the same reason as VccHiScratch above.
-  if (ExecHiScratch) Out.push_back(ExecHiScratch);
-  if (Scc) Out.push_back(Scc);
-  if (Exec) Out.push_back(Exec);
-  if (M0) Out.push_back(M0);
-  for (auto *A : FlatScr) if (A) Out.push_back(A);
+  if (ExecHiScratch)
+    Out.push_back(ExecHiScratch);
+  if (Scc)
+    Out.push_back(Scc);
+  if (Exec)
+    Out.push_back(Exec);
+  if (M0)
+    Out.push_back(M0);
+  for (auto *A : FlatScr)
+    if (A)
+      Out.push_back(A);
   // ttmps must be promoted too, otherwise they survive into the AMDGPU
   // backend and trigger AMDGPUPromoteAllocaToLDS, which inserts an
   // `amdgcn.dispatch.ptr` intrinsic *and* removes the kernel's
@@ -717,7 +784,9 @@ void AllocaRegFile::collectAllocas(SmallVectorImpl<AllocaInst *> &Out) {
   // Lifting these allocas requires a dominating defining store for
   // every read; raiser.cpp Phase 4 seeds every ttmp with `i32 0` in
   // the entry block so PromoteMemToReg can lift the rest cleanly.
-  for (auto *A : Ttmp) if (A) Out.push_back(A);
+  for (auto *A : Ttmp)
+    if (A)
+      Out.push_back(A);
 }
 
 } // namespace COMGR::hotswap

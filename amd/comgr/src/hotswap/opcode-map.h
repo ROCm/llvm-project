@@ -20,7 +20,8 @@ namespace COMGR::hotswap {
 
 // Side-table metadata for vector compare instructions (V_CMP_* / V_CMPX_*).
 //
-// The raiser collapses every V_CMP_* and V_CMPX_* MC opcode onto two CanonicalOps
+// The raiser collapses every V_CMP_* and V_CMPX_* MC opcode onto two
+// CanonicalOps
 // (`V_CMP`, `V_CMPX`) to avoid enumerating ~100 near-identical cases in
 // handlers. The actual predicate / element type / width carried in the
 // pseudo name (`v_cmp_EQ_U32_e64` -> EQ, unsigned 32-bit) is lifted here at

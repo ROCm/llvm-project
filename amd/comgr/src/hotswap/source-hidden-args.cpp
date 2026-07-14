@@ -104,8 +104,8 @@ void requireTargetImplicitArg(SourceHiddenArgContext &Ctx,
 // target ABI field. Offsets are relative to llvm.amdgcn.implicitarg.ptr in the
 // target code-object version; source metadata offsets are deliberately ignored.
 Value *loadTargetHiddenPointer(SourceHiddenArgContext &Ctx,
-                               unsigned TargetByteOffset,
-                               StringRef FieldNoAttr, const Twine &Name) {
+                               unsigned TargetByteOffset, StringRef FieldNoAttr,
+                               const Twine &Name) {
   requireTargetImplicitArg(Ctx, FieldNoAttr);
   Function *FnImplicitArgPtr = Intrinsic::getOrInsertDeclaration(
       &Ctx.M, Intrinsic::amdgcn_implicitarg_ptr);
@@ -198,15 +198,15 @@ SourceHiddenArgValue emitHiddenArgValue(SourceHiddenArgContext &Ctx,
     Result.Value = Ctx.B.getInt64(0);
   } else if (Kind == SourceHiddenArgKind::HiddenPrivateBase) {
     // Private/shared bases are real aperture state. Do not synthesize them
-    // until the translator has a target-capability proof that the source read is
-    // either unused or exactly reconstructed elsewhere.
+    // until the translator has a target-capability proof that the source read
+    // is either unused or exactly reconstructed elsewhere.
     return unsupportedHiddenKind("hidden_private_base");
   } else if (Kind == SourceHiddenArgKind::HiddenSharedBase) {
     return unsupportedHiddenKind("hidden_shared_base");
   } else if (Kind == SourceHiddenArgKind::HiddenDefaultQueue) {
     Result.Value = loadTargetHiddenPointer(
-        Ctx, AMDGPU::getDefaultQueueImplicitArgPosition(
-                 Ctx.TargetCodeObjectVersion),
+        Ctx,
+        AMDGPU::getDefaultQueueImplicitArgPosition(Ctx.TargetCodeObjectVersion),
         "amdgpu-no-default-queue", "source_hidden_default_queue");
   } else if (Kind == SourceHiddenArgKind::HiddenCompletionAction) {
     Result.Value = loadTargetHiddenPointer(
@@ -222,15 +222,15 @@ SourceHiddenArgValue emitHiddenArgValue(SourceHiddenArgContext &Ctx,
         "amdgpu-no-multigrid-sync-arg", "source_hidden_multigrid_sync_arg");
   } else if (Kind == SourceHiddenArgKind::HiddenHostcallBuffer) {
     Result.Value = loadTargetHiddenPointer(
-        Ctx, AMDGPU::getHostcallImplicitArgPosition(
-                 Ctx.TargetCodeObjectVersion),
+        Ctx,
+        AMDGPU::getHostcallImplicitArgPosition(Ctx.TargetCodeObjectVersion),
         "amdgpu-no-hostcall-ptr", "source_hidden_hostcall_buffer");
   } else if (Kind == SourceHiddenArgKind::HiddenHeapV1) {
     if (Ctx.TargetCodeObjectVersion < AMDGPU::AMDHSA_COV5)
       return unsupportedHiddenKind("hidden_heap_v1");
-    Result.Value = loadTargetHiddenPointer(
-        Ctx, AMDGPU::ImplicitArg::HEAP_PTR_OFFSET, "amdgpu-no-heap-ptr",
-        "source_hidden_heap_v1");
+    Result.Value =
+        loadTargetHiddenPointer(Ctx, AMDGPU::ImplicitArg::HEAP_PTR_OFFSET,
+                                "amdgpu-no-heap-ptr", "source_hidden_heap_v1");
   } else
     return unsupportedHiddenKind("<unknown>");
   return Result;
@@ -287,11 +287,10 @@ SourceHiddenArgValue emitSourceHiddenInteger(SourceHiddenArgContext &Ctx,
       if (I == 0)
         return {};
       Result.Matched = true;
-      Result.FailureDetail =
-          (Twine("source hidden dword at byte offset ") + Twine(ByteOffset) +
-           " spans non-hidden byte " +
-           Twine(ByteOffset + static_cast<int64_t>(I)))
-              .str();
+      Result.FailureDetail = (Twine("source hidden dword at byte offset ") +
+                              Twine(ByteOffset) + " spans non-hidden byte " +
+                              Twine(ByteOffset + static_cast<int64_t>(I)))
+                                 .str();
       return Result;
     }
     if (!Byte.Value)
@@ -307,9 +306,9 @@ SourceHiddenArgValue emitSourceHiddenInteger(SourceHiddenArgContext &Ctx,
   }
   if (IsSigned && ByteWidth < 4) {
     Type *NarrowTy = Type::getIntNTy(Ctx.C, ByteWidth * 8);
-    Result.Value =
-        Ctx.B.CreateSExt(Ctx.B.CreateTrunc(Acc, NarrowTy, "source_hidden_narrow"),
-                         Ctx.I32Ty, "source_hidden_sext");
+    Result.Value = Ctx.B.CreateSExt(
+        Ctx.B.CreateTrunc(Acc, NarrowTy, "source_hidden_narrow"), Ctx.I32Ty,
+        "source_hidden_sext");
   } else {
     Result.Value = Acc;
   }

@@ -8,8 +8,8 @@
 
 #include "handlers.h"
 
-#include "canonical-op.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "canonical-op.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/Constants.h"
@@ -51,13 +51,12 @@ Value *readVopdVCCAsSource(RaiseContext &Ctx) {
   if (Ctx.Projection.sourceWaveScopedLaneOps()) {
     Value *Mask = Ctx.Regs.readVCCAsWaveMask(Ctx.B, Ctx.Regs.ExecTy);
     Value *Lo = Ctx.B.CreateTrunc(Mask, Ctx.I32Ty, "vopd_vcc_lo_src");
-    Value *Hi = Ctx.B.CreateTrunc(
-        Ctx.B.CreateLShr(Mask, Ctx.Isa.WaveSize), Ctx.I32Ty,
-        "vopd_vcc_hi_src");
+    Value *Hi = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Mask, Ctx.Isa.WaveSize),
+                                  Ctx.I32Ty, "vopd_vcc_hi_src");
     Value *Lane = Ctx.Projection.emitLaneIdx(Ctx.B);
-    Value *Upper = Ctx.B.CreateICmpUGE(
-        Lane, ConstantInt::get(Ctx.I32Ty, Ctx.Isa.WaveSize),
-        "vopd_vcc_upper_src_wave");
+    Value *Upper =
+        Ctx.B.CreateICmpUGE(Lane, ConstantInt::get(Ctx.I32Ty, Ctx.Isa.WaveSize),
+                            "vopd_vcc_upper_src_wave");
     return Ctx.B.CreateSelect(Upper, Hi, Lo, "vopd_vcc_src_wave_mask");
   }
   return Ctx.Regs.readVCCAsWaveMask(Ctx.B, Ctx.I32Ty);
@@ -220,14 +219,13 @@ Expected<Value *> readVopdCond(RaiseContext &Ctx, const DecodedInst &Di,
   if (Value *FreshCmp = Ctx.lookupSgprWaveMaskI1(Src.BaseIdx))
     return FreshCmp;
 
-  Value *CondVal = Ctx.Isa.isWave32()
-                       ? Ctx.Regs.loadSGPR32(Ctx.B, Src.BaseIdx)
-                       : Ctx.Regs.loadSGPR64(Ctx.B, Src.BaseIdx);
+  Value *CondVal = Ctx.Isa.isWave32() ? Ctx.Regs.loadSGPR32(Ctx.B, Src.BaseIdx)
+                                      : Ctx.Regs.loadSGPR64(Ctx.B, Src.BaseIdx);
   Value *Fallback = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, CondVal);
   if (Value *ShadowValid = Ctx.loadSgprWaveMaskValid(Src.BaseIdx)) {
     Value *ShadowExec = Ctx.loadSgprWaveMaskExec(Src.BaseIdx);
-    Value *ShadowI1 = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B,
-                                                                 ShadowExec);
+    Value *ShadowI1 =
+        Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, ShadowExec);
     return Ctx.B.CreateSelect(ShadowValid, ShadowI1, Fallback,
                               "vopd_sgpr_mask_shadow_sel");
   }
@@ -256,9 +254,9 @@ Error requireVopdRegWidth(const DecodedInst &Di, const Twine &What,
 Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
                     const DecodedInst::VopdHalf &Half,
                     SmallVectorImpl<PendingVopdWrite> &Writes) {
-  ParsedReg Dst = applyVopdVGPRMsb(
-      Ctx, Ctx.parseReg(Half.DstReg, /*mciOpIdx=*/-1),
-      /*slot=*/3);
+  ParsedReg Dst =
+      applyVopdVGPRMsb(Ctx, Ctx.parseReg(Half.DstReg, /*mciOpIdx=*/-1),
+                       /*slot=*/3);
   auto Queue = [&](Value *V) {
     // VOPD destination operands name the low VGPR slot even for 64-bit
     // components. A 64-bit commit writes [baseIdx, baseIdx+1] through the
@@ -331,10 +329,10 @@ Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
     if (Error Err = requireVopdSources(Half, 2, Di))
       return Err;
 
-    Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
-                                    Ctx.F32Ty);
-    Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
-                                    Ctx.F32Ty);
+    Value *S0 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0), Ctx.F32Ty);
+    Value *S1 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1), Ctx.F32Ty);
     Value *Res = nullptr;
     if (Half.CanonOp == CanonicalOp::V_ADD_F32)
       Res = Ctx.B.CreateFAdd(S0, S1, "vopd_fadd");
@@ -350,16 +348,15 @@ Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
     if (Error Err = requireVopdSources(Half, 2, Di))
       return Err;
 
-    Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
-                                    Ctx.F32Ty);
-    Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
-                                    Ctx.F32Ty);
-    Value *Acc = Ctx.B.CreateBitCast(Ctx.Regs.readReg32(Ctx.B, Dst),
-                                     Ctx.F32Ty);
-    // llvm.fma (not llvm.fmuladd) -- v_dual_fmac_f32 is hardware-guaranteed fused; fmuladd may be split by middle-end passes.
+    Value *S0 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0), Ctx.F32Ty);
+    Value *S1 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1), Ctx.F32Ty);
+    Value *Acc = Ctx.B.CreateBitCast(Ctx.Regs.readReg32(Ctx.B, Dst), Ctx.F32Ty);
+    // llvm.fma (not llvm.fmuladd) -- v_dual_fmac_f32 is hardware-guaranteed
+    // fused; fmuladd may be split by middle-end passes.
     Function *Fma =
-        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma,
-                                          {Ctx.F32Ty});
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {Ctx.F32Ty});
     return Queue(Ctx.B.CreateBitCast(
         Ctx.B.CreateCall(Fma, {S0, S1, Acc}, "vopd_fmac"), Ctx.I32Ty));
   }
@@ -367,15 +364,14 @@ Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
     if (Error Err = requireVopdSources(Half, 3, Di))
       return Err;
 
-    Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
-                                    Ctx.F32Ty);
-    Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
-                                    Ctx.F32Ty);
-    Value *S2 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[2], 2),
-                                    Ctx.F32Ty);
+    Value *S0 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0), Ctx.F32Ty);
+    Value *S1 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1), Ctx.F32Ty);
+    Value *S2 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[2], 2), Ctx.F32Ty);
     Function *Fma =
-        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma,
-                                          {Ctx.F32Ty});
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {Ctx.F32Ty});
     return Queue(Ctx.B.CreateBitCast(
         Ctx.B.CreateCall(Fma, {S0, S1, S2}, "vopd_fma"), Ctx.I32Ty));
   }
@@ -427,8 +423,8 @@ Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
         return S2E.takeError();
 
       Value *S2 = Ctx.B.CreateBitCast(*S2E, F64Ty);
-      Function *Fma = Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma,
-                                                        {F64Ty});
+      Function *Fma =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {F64Ty});
       Res = Ctx.B.CreateCall(Fma, {S0, S1, S2}, "vopd_fma_f64");
     }
     return Queue(Ctx.B.CreateBitCast(Res, Ctx.I64Ty));
@@ -438,23 +434,21 @@ Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
     if (Error Err = requireVopdSources(Half, 3, Di))
       return Err;
 
-    Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
-                                    Ctx.F32Ty);
-    Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
-                                    Ctx.F32Ty);
+    Value *S0 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0), Ctx.F32Ty);
+    Value *S1 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1), Ctx.F32Ty);
     // MADK VOPD encodings have only src0/vsrc1 register fields; the mandatory
     // literal occupies a logical source slot but not a VGPR-MSB slot.
     unsigned S2Slot = Half.CanonOp == CanonicalOp::V_FMAMK_F32 ? 1 : 2;
-    Value *S2 =
-        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[2], S2Slot),
-                            Ctx.F32Ty);
+    Value *S2 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[2], S2Slot),
+                                    Ctx.F32Ty);
     Function *Fma =
-        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma,
-                                          {Ctx.F32Ty});
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::fma, {Ctx.F32Ty});
     const char *Name =
         Half.CanonOp == CanonicalOp::V_FMAMK_F32 ? "vopd_fmamk" : "vopd_fmaak";
-    return Queue(Ctx.B.CreateBitCast(
-        Ctx.B.CreateCall(Fma, {S0, S1, S2}, Name), Ctx.I32Ty));
+    return Queue(Ctx.B.CreateBitCast(Ctx.B.CreateCall(Fma, {S0, S1, S2}, Name),
+                                     Ctx.I32Ty));
   }
   case CanonicalOp::V_ADD_NC_U32:
   case CanonicalOp::V_SUB_NC_U32:
@@ -472,16 +466,35 @@ Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
     Value *S1 = readVopdSource(Ctx, Half.Src[1], 1);
     Value *Res = nullptr;
     switch (Half.CanonOp) {
-    case CanonicalOp::V_ADD_NC_U32:    Res = Ctx.B.CreateAdd(S0, S1, "vopd_add"); break;
-    case CanonicalOp::V_SUB_NC_U32:    Res = Ctx.B.CreateSub(S0, S1, "vopd_sub"); break;
-    case CanonicalOp::V_SUBREV_NC_U32: Res = Ctx.B.CreateSub(S1, S0, "vopd_subrev"); break;
-    case CanonicalOp::V_LSHLREV_B32:   Res = Ctx.B.CreateShl(S1, S0, "vopd_shl"); break;
-    case CanonicalOp::V_LSHRREV_B32:   Res = Ctx.B.CreateLShr(S1, S0, "vopd_lshr"); break;
-    case CanonicalOp::V_ASHRREV_I32:   Res = Ctx.B.CreateAShr(S1, S0, "vopd_ashr"); break;
-    case CanonicalOp::V_AND_B32:       Res = Ctx.B.CreateAnd(S0, S1, "vopd_and"); break;
-    case CanonicalOp::V_OR_B32:        Res = Ctx.B.CreateOr(S0, S1, "vopd_or"); break;
-    case CanonicalOp::V_XOR_B32:       Res = Ctx.B.CreateXor(S0, S1, "vopd_xor"); break;
-    default: llvm_unreachable("filtered by outer switch");
+    case CanonicalOp::V_ADD_NC_U32:
+      Res = Ctx.B.CreateAdd(S0, S1, "vopd_add");
+      break;
+    case CanonicalOp::V_SUB_NC_U32:
+      Res = Ctx.B.CreateSub(S0, S1, "vopd_sub");
+      break;
+    case CanonicalOp::V_SUBREV_NC_U32:
+      Res = Ctx.B.CreateSub(S1, S0, "vopd_subrev");
+      break;
+    case CanonicalOp::V_LSHLREV_B32:
+      Res = Ctx.B.CreateShl(S1, S0, "vopd_shl");
+      break;
+    case CanonicalOp::V_LSHRREV_B32:
+      Res = Ctx.B.CreateLShr(S1, S0, "vopd_lshr");
+      break;
+    case CanonicalOp::V_ASHRREV_I32:
+      Res = Ctx.B.CreateAShr(S1, S0, "vopd_ashr");
+      break;
+    case CanonicalOp::V_AND_B32:
+      Res = Ctx.B.CreateAnd(S0, S1, "vopd_and");
+      break;
+    case CanonicalOp::V_OR_B32:
+      Res = Ctx.B.CreateOr(S0, S1, "vopd_or");
+      break;
+    case CanonicalOp::V_XOR_B32:
+      Res = Ctx.B.CreateXor(S0, S1, "vopd_xor");
+      break;
+    default:
+      llvm_unreachable("filtered by outer switch");
     }
     return Queue(Res);
   }
@@ -495,14 +508,20 @@ Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
     Value *S0 = readVopdSource(Ctx, Half.Src[0], 0);
     Value *S1 = readVopdSource(Ctx, Half.Src[1], 1);
     Intrinsic::ID Id = Intrinsic::smax;
-    if (Half.CanonOp == CanonicalOp::V_MIN_I32) Id = Intrinsic::smin;
-    if (Half.CanonOp == CanonicalOp::V_MAX_U32) Id = Intrinsic::umax;
-    if (Half.CanonOp == CanonicalOp::V_MIN_U32) Id = Intrinsic::umin;
+    if (Half.CanonOp == CanonicalOp::V_MIN_I32)
+      Id = Intrinsic::smin;
+    if (Half.CanonOp == CanonicalOp::V_MAX_U32)
+      Id = Intrinsic::umax;
+    if (Half.CanonOp == CanonicalOp::V_MIN_U32)
+      Id = Intrinsic::umin;
     Function *Fn = Intrinsic::getOrInsertDeclaration(&Ctx.M, Id, {Ctx.I32Ty});
     const char *Name = "vopd_smax";
-    if (Half.CanonOp == CanonicalOp::V_MIN_I32) Name = "vopd_smin";
-    if (Half.CanonOp == CanonicalOp::V_MAX_U32) Name = "vopd_umax";
-    if (Half.CanonOp == CanonicalOp::V_MIN_U32) Name = "vopd_umin";
+    if (Half.CanonOp == CanonicalOp::V_MIN_I32)
+      Name = "vopd_smin";
+    if (Half.CanonOp == CanonicalOp::V_MAX_U32)
+      Name = "vopd_umax";
+    if (Half.CanonOp == CanonicalOp::V_MIN_U32)
+      Name = "vopd_umin";
     return Queue(Ctx.B.CreateCall(Fn, {S0, S1}, Name));
   }
   case CanonicalOp::V_MAX_NUM_F32:
@@ -510,18 +529,18 @@ Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
     if (Error Err = requireVopdSources(Half, 2, Di))
       return Err;
 
-    Value *S0 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0),
-                                    Ctx.F32Ty);
-    Value *S1 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1),
-                                    Ctx.F32Ty);
-    Intrinsic::ID Id =
-        Half.CanonOp == CanonicalOp::V_MAX_NUM_F32 ? Intrinsic::maximumnum
-                                                     : Intrinsic::minimumnum;
+    Value *S0 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0), Ctx.F32Ty);
+    Value *S1 =
+        Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1), Ctx.F32Ty);
+    Intrinsic::ID Id = Half.CanonOp == CanonicalOp::V_MAX_NUM_F32
+                           ? Intrinsic::maximumnum
+                           : Intrinsic::minimumnum;
     Function *Fn = Intrinsic::getOrInsertDeclaration(&Ctx.M, Id, {Ctx.F32Ty});
     const char *Name =
         Half.CanonOp == CanonicalOp::V_MAX_NUM_F32 ? "vopd_fmax" : "vopd_fmin";
-    return Queue(Ctx.B.CreateBitCast(
-        Ctx.B.CreateCall(Fn, {S0, S1}, Name), Ctx.I32Ty));
+    return Queue(
+        Ctx.B.CreateBitCast(Ctx.B.CreateCall(Fn, {S0, S1}, Name), Ctx.I32Ty));
   }
   case CanonicalOp::V_BITOP3_B32: {
     if (!Half.HasBitOp3)

@@ -136,7 +136,8 @@ Expected<FlatAddr> decodeGlobalStoreAddr(RaiseContext &Ctx,
     std::string Msg;
     raw_string_ostream Os(Msg);
     Os << "transpiler: unrecognized " << DiagLabel
-       << " operand shape (expected plain VGPR+VGPR or SADDR VGPR+VGPR+SGPR): \""
+       << " operand shape (expected plain VGPR+VGPR or SADDR VGPR+VGPR+SGPR): "
+          "\""
        << Di.FullText << "\" (mnemonic=" << Di.RawMnemonic << ")";
     return createStringError(Os.str());
   }

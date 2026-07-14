@@ -146,14 +146,12 @@ void writeSelectedI16Bits(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
 }
 
 void writeOpSelF16(RaiseContext &Ctx, OpResolver &Op, Value *Result,
-                   bool DstHigh, StringRef MergeLoName,
-                   StringRef MergeHiName) {
+                   bool DstHigh, StringRef MergeLoName, StringRef MergeHiName) {
   // True16 instructions write one 16-bit lane of a VGPR dword. LLVM IR has no
   // partial-register write, so model it explicitly as a read/modify/write:
   // preserve the old opposite half and OR in the new result bits.
   Type *I16Ty = Type::getInt16Ty(Ctx.C);
-  Value *Bits =
-      Ctx.B.CreateBitCast(Result, I16Ty);
+  Value *Bits = Ctx.B.CreateBitCast(Result, I16Ty);
   writeSelectedI16Bits(Ctx, Op.dst(), Bits, DstHigh, MergeLoName, MergeHiName);
 }
 

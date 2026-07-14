@@ -236,8 +236,8 @@ std::optional<uint32_t> imm32(const MCInst &Inst, unsigned OpIdx) {
 // already fired (a complete chain follows the strict order
 // getpc -> low-add -> high-add).
 struct PcChain {
-  uint64_t Value = 0;       // symbolic absolute kernel offset
-  uint64_t Terminator = 0;  // offset of the high-half s_add_co_ci_u32
+  uint64_t Value = 0;      // symbolic absolute kernel offset
+  uint64_t Terminator = 0; // offset of the high-half s_add_co_ci_u32
   bool LowAddDone = false;
 };
 
@@ -365,18 +365,13 @@ public:
   // pair `lowIdx`. Used by Phase 2 to decide whether a swap/set_pc
   // site may fall back on dataflow entry facts.
   bool isPairDirty(unsigned LowIdx) const {
-    return IntraDirtyHalf.count(LowIdx) ||
-           IntraDirtyHalf.count(LowIdx + 1);
+    return IntraDirtyHalf.count(LowIdx) || IntraDirtyHalf.count(LowIdx + 1);
   }
 
   // Accessors used by Phase 2 to construct the per-block transfer
   // summary at end-of-block.
-  const llvm::DenseMap<unsigned, PcChain> &pcChains() const {
-    return PcChains;
-  }
-  const llvm::DenseSet<unsigned> &dirtyHalves() const {
-    return IntraDirtyHalf;
-  }
+  const llvm::DenseMap<unsigned, PcChain> &pcChains() const { return PcChains; }
+  const llvm::DenseSet<unsigned> &dirtyHalves() const { return IntraDirtyHalf; }
 
 private:
   const MCRegisterInfo &Mri;
@@ -388,8 +383,8 @@ private:
 // Mark every SGPR-half written by `di` as dirty in `state` and drop
 // any tracked PC pair whose halves overlap. This is the generic
 // fallthrough for instructions whose semantics we did not model.
-void invalidateGeneralSgprDefs(const DecodedInst &Di,
-                               const MCRegisterInfo &MRI, State &State) {
+void invalidateGeneralSgprDefs(const DecodedInst &Di, const MCRegisterInfo &MRI,
+                               State &State) {
   for (unsigned I = 0; I < Di.NumDefs && I < Di.numOps(); ++I) {
     if (!Di.isReg(I))
       continue;
@@ -422,8 +417,8 @@ struct PairTransfer {
     Kill,
   };
   Kind TransferKind = Kind::Pass;
-  uint64_t Value = 0;       // when transferKind == Set
-  uint64_t Terminator = 0;  // when transferKind == Set
+  uint64_t Value = 0;      // when transferKind == Set
+  uint64_t Terminator = 0; // when transferKind == Set
 };
 
 // Per-block descriptor used by Phase 2 / 3 / 4. `lastIdx` is inclusive.
@@ -473,7 +468,7 @@ struct PendingB {
 // facts mention the pair; it then OR's in incomplete from any
 // predecessor that DIDN'T mention the pair.
 struct PcLatticeValue {
-  llvm::SmallVector<uint64_t, 8> Values;  // sorted, deduped
+  llvm::SmallVector<uint64_t, 8> Values; // sorted, deduped
   bool Incomplete = false;
 };
 
@@ -579,8 +574,8 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
     }
   }
   for (size_t Bi = 0; Bi < Blocks.size(); ++Bi) {
-    size_t End = (Bi + 1 < Blocks.size()) ? Blocks[Bi + 1].FirstIdx
-                                          : Insts.size();
+    size_t End =
+        (Bi + 1 < Blocks.size()) ? Blocks[Bi + 1].FirstIdx : Insts.size();
     Blocks[Bi].LastIdx = End - 1;
   }
 
@@ -694,8 +689,7 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
         auto Src1Imm = imm32(Di.Inst, S1);
         if (!Src1Imm)
           break;
-        State.finishHighAdd(LowIdx, Di.Offset,
-                            static_cast<uint64_t>(*Src1Imm));
+        State.finishHighAdd(LowIdx, Di.Offset, static_cast<uint64_t>(*Src1Imm));
         Result.ChainTerminators[Di.Offset] =
             SetPcCallSiteInfo{State.findPc(LowIdx)->Value, LowIdx};
         continue;
@@ -727,8 +721,7 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
         if (!Di.isReg(SrcOpIdx)) {
           SetPcSiteInfo Info;
           Info.SiteKind = SetPcSiteInfo::Kind::Unresolvable;
-          Info.RefusalReason =
-              "s_swap_pc_i64 source operand is not a register";
+          Info.RefusalReason = "s_swap_pc_i64 source operand is not a register";
           Result.SetpcSites[Di.Offset] = std::move(Info);
           if (DstLow) {
             State.invalidatePcAt(*DstLow);
@@ -806,8 +799,7 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
         if (!Di.isReg(SrcOpIdx)) {
           SetPcSiteInfo Info;
           Info.SiteKind = SetPcSiteInfo::Kind::Unresolvable;
-          Info.RefusalReason =
-              "s_set_pc_i64 source operand is not a register";
+          Info.RefusalReason = "s_set_pc_i64 source operand is not a register";
           Result.SetpcSites[Di.Offset] = std::move(Info);
           continue;
         }
@@ -974,24 +966,23 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
   // computeExit applies the per-block transfer to a given entry-fact
   // map and returns the exit-fact map. PASS pairs flow through; SET
   // and KILL pairs override.
-  auto ComputeExit =
-      [&](const llvm::DenseMap<unsigned, PcLatticeValue> &Entry,
-          const BlockData &Bd) {
-        llvm::DenseMap<unsigned, PcLatticeValue> Exit = Entry;
-        for (const auto &Kv : Bd.Transfers) {
-          if (Kv.second.TransferKind == PairTransfer::Kind::Set) {
-            PcLatticeValue V;
-            V.Values.push_back(Kv.second.Value);
-            V.Incomplete = false;
-            Exit[Kv.first] = std::move(V);
-          } else if (Kv.second.TransferKind == PairTransfer::Kind::Kill) {
-            PcLatticeValue V;
-            V.Incomplete = true;
-            Exit[Kv.first] = std::move(V);
-          }
-        }
-        return Exit;
-      };
+  auto ComputeExit = [&](const llvm::DenseMap<unsigned, PcLatticeValue> &Entry,
+                         const BlockData &Bd) {
+    llvm::DenseMap<unsigned, PcLatticeValue> Exit = Entry;
+    for (const auto &Kv : Bd.Transfers) {
+      if (Kv.second.TransferKind == PairTransfer::Kind::Set) {
+        PcLatticeValue V;
+        V.Values.push_back(Kv.second.Value);
+        V.Incomplete = false;
+        Exit[Kv.first] = std::move(V);
+      } else if (Kv.second.TransferKind == PairTransfer::Kind::Kill) {
+        PcLatticeValue V;
+        V.Incomplete = true;
+        Exit[Kv.first] = std::move(V);
+      }
+    }
+    return Exit;
+  };
 
   llvm::SmallVector<llvm::DenseMap<unsigned, PcLatticeValue>> EntryFacts(
       Blocks.size());
@@ -1049,8 +1040,7 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
       EntryFacts[Bi] = std::move(NewEntry);
       for (uint64_t SuccOff : Blocks[Bi].Successors) {
         auto Sit = OffsetToBlockIdx.find(SuccOff);
-        if (Sit != OffsetToBlockIdx.end() &&
-            !OnWorklist[Sit->second]) {
+        if (Sit != OffsetToBlockIdx.end() && !OnWorklist[Sit->second]) {
           Worklist.push_back(Sit->second);
           OnWorklist[Sit->second] = true;
         }
@@ -1067,10 +1057,9 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
       continue;
     const auto &Facts = EntryFacts[Bit->second];
     auto It = Facts.find(Pds.SrcPair);
-    bool Resolved =
-        (It != Facts.end()) && !It->second.Incomplete &&
-        !It->second.Values.empty() &&
-        It->second.Values.size() <= kMaxDispatchTargets;
+    bool Resolved = (It != Facts.end()) && !It->second.Incomplete &&
+                    !It->second.Values.empty() &&
+                    It->second.Values.size() <= kMaxDispatchTargets;
 
     if (!Resolved) {
       if (Pds.IsSwap) {
@@ -1173,7 +1162,7 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
   // Classify PendingB sites.
   for (const struct PendingB &Pb : PendingBs) {
     if (Result.SetpcSites.count(Pb.SetpcOffset))
-      continue;  // already classified by Phase 4 (e.g. DispatchSet)
+      continue; // already classified by Phase 4 (e.g. DispatchSet)
     auto It = TargetsByPair.find(Pb.RetPairLowReg);
     if (It == TargetsByPair.end() || It->second.empty()) {
       SetPcSiteInfo Info;

@@ -39,7 +39,7 @@ class Module;
 namespace COMGR::hotswap {
 
 // Stable C-linkage names emitted by `runtime/tdm.hip`.
-inline constexpr llvm::StringRef kTDMLoadSymbol  = "hotswap_tdm_load_to_lds";
+inline constexpr llvm::StringRef kTDMLoadSymbol = "hotswap_tdm_load_to_lds";
 inline constexpr llvm::StringRef kTDMStoreSymbol = "hotswap_tdm_store_from_lds";
 
 // Declare (without body) the helper functions in `M`. Signature carries

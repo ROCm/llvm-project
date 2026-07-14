@@ -34,8 +34,8 @@ llvm::Error readRequiredVOP3F16SrcMods(const DecodedInst &Di, unsigned SrcIndex,
                                        llvm::StringRef OpName, unsigned &Mods);
 
 // Like `readRequiredVOP3F16SrcMods`, but accepts an absent modifier operand as
-// the default VOP1/e32 shape (`Mods = 0`). This is for CanonicalOps that share a
-// handler across e32 and e64 encodings.
+// the default VOP1/e32 shape (`Mods = 0`). This is for CanonicalOps that share
+// a handler across e32 and e64 encodings.
 llvm::Error readOptionalVOP3F16SrcMods(const DecodedInst &Di, unsigned SrcIndex,
                                        llvm::StringRef OpName, unsigned &Mods);
 
@@ -59,15 +59,13 @@ llvm::Error readVOP3F16DstHigh(const DecodedInst &Di, llvm::StringRef OpName,
 // Merge a raw i16 result into the selected destination half using the same IR
 // name for either half. The unselected half is preserved by reading the old
 // destination VGPR value.
-void writeSelectedI16Bits(RaiseContext &Ctx, ParsedReg Dst,
-                          llvm::Value *Result, bool DstHigh,
-                          llvm::StringRef MergeName);
+void writeSelectedI16Bits(RaiseContext &Ctx, ParsedReg Dst, llvm::Value *Result,
+                          bool DstHigh, llvm::StringRef MergeName);
 // Merge a raw i16 result into the selected destination half, using
 // half-specific IR names for the low/high merge sites. The unselected half is
 // preserved by reading the old destination VGPR value.
-void writeSelectedI16Bits(RaiseContext &Ctx, ParsedReg Dst,
-                          llvm::Value *Result, bool DstHigh,
-                          llvm::StringRef MergeLoName,
+void writeSelectedI16Bits(RaiseContext &Ctx, ParsedReg Dst, llvm::Value *Result,
+                          bool DstHigh, llvm::StringRef MergeLoName,
                           llvm::StringRef MergeHiName);
 
 // Merge the F16 result into the selected destination half. The unselected half

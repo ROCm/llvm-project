@@ -9,7 +9,7 @@
 #include "raise-context.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h" // AMDGPU::VCC, AMDGPU::EXEC, ...
-#include "SIDefines.h"                        // AMDGPU::HWEncoding::*
+#include "SIDefines.h"                       // AMDGPU::HWEncoding::*
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
@@ -35,9 +35,8 @@ RaiseContext::RaiseContext(
     const WaveProjection &Projection, const MCState &Mc, const ISAProfile &Isa,
     ISAProfile TargetIsa, unsigned TargetCodeObjectVersion,
     KernargLayout &Kernargs, const UserSgprLayout *Layout, Function *Kernel,
-    BasicBlock *ThreadLoopLatch,
-    DenseMap<uint64_t, BasicBlock *> &OffsetToBb, uint64_t KernelStartOffset,
-    uint64_t KernelEndOffset)
+    BasicBlock *ThreadLoopLatch, DenseMap<uint64_t, BasicBlock *> &OffsetToBb,
+    uint64_t KernelStartOffset, uint64_t KernelEndOffset)
     : C(C), M(M), B(B), Regs(Regs), Projection(Projection), Mc(Mc), Isa(Isa),
       TargetIsa(TargetIsa), TargetCodeObjectVersion(TargetCodeObjectVersion),
       Kernargs(Kernargs), Layout(Layout), Kernel(Kernel),
@@ -120,8 +119,7 @@ Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   // directly via applyVopdVGPRMsb.
   unsigned Opc = Di.Inst.getOpcode();
   const MCInstrDesc &Desc = Mc.InstrInfo->get(Opc);
-  const AMDGPU::OpName *Ops =
-      AMDGPU::getVGPRLoweringOperandTables(Desc).first;
+  const AMDGPU::OpName *Ops = AMDGPU::getVGPRLoweringOperandTables(Desc).first;
   if (!Ops) {
     if (ignoresVGPRMsb(Opc) || !hasVectorRegOperand(Di, *Mc.RegInfo) ||
         Desc.isPseudo() || Desc.isMetaInstruction())
@@ -366,8 +364,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   // on gfx8), so we cannot use the raw encoding as the logical 0..15
   // index. Locate the lane inside TTMP_32RegClass instead; the class is
   // defined as `(add (sequence "TTMP%u", 0, 15))` so position == index.
-  const MCRegisterClass &TTMP32 =
-      MRI.getRegClass(AMDGPU::TTMP_32RegClassID);
+  const MCRegisterClass &TTMP32 = MRI.getRegClass(AMDGPU::TTMP_32RegClassID);
   if (int Idx = findIndexInClass(TTMP32, Lane); Idx >= 0) {
     Pr.RegKind = ParsedReg::TTMP;
     Pr.BaseIdx = Idx;
@@ -386,8 +383,8 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   }
 
   report_fatal_error(Twine("transpiler: parseReg could not classify '") +
-                     MRI.getName(Reg) + "' (enc=0x" +
-                     Twine::utohexstr(Enc) + ")");
+                     MRI.getName(Reg) + "' (enc=0x" + Twine::utohexstr(Enc) +
+                     ")");
 }
 
 Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
@@ -397,12 +394,11 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
       if (Projection.sourceWaveScopedLaneOps()) {
         Value *Mask = Regs.readVCCAsWaveMask(B, Regs.ExecTy);
         Value *Lo = B.CreateTrunc(Mask, I32Ty, "vcc_src_wave_lo");
-        Value *Hi = B.CreateTrunc(B.CreateLShr(Mask, Isa.WaveSize),
-                                  I32Ty, "vcc_src_wave_hi");
+        Value *Hi = B.CreateTrunc(B.CreateLShr(Mask, Isa.WaveSize), I32Ty,
+                                  "vcc_src_wave_hi");
         Value *Lane = Projection.emitLaneIdx(B);
-        Value *Upper =
-            B.CreateICmpUGE(Lane, ConstantInt::get(I32Ty, Isa.WaveSize),
-                            "vcc_src_wave_upper");
+        Value *Upper = B.CreateICmpUGE(
+            Lane, ConstantInt::get(I32Ty, Isa.WaveSize), "vcc_src_wave_upper");
         return B.CreateSelect(Upper, Hi, Lo, "vcc_src_wave_mask");
       }
       // Reading VCC as an i32 (wave32 wave-mask, or low 32 bits on
@@ -559,8 +555,8 @@ Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
 }
 
 Value *RaiseContext::emitUpdateDpp(Value *OldVal, Value *Src, uint16_t Ctrl,
-                                    uint8_t RowMask, uint8_t BankMask,
-                                    bool BoundCtrl) {
+                                   uint8_t RowMask, uint8_t BankMask,
+                                   bool BoundCtrl) {
   // P5 lowering -- see the DPP row of hotswap/docs/wave-size-
   // translation.md sec. 5.3: lift the DPP src-pathway modifier through
   // `llvm.amdgcn.update.dpp`. The intrinsic is type-overloaded
@@ -605,9 +601,9 @@ Value *RaiseContext::emitUpdateDpp(Value *OldVal, Value *Src, uint16_t Ctrl,
   Function *Fn = Intrinsic::getOrInsertDeclaration(
       &M, Intrinsic::amdgcn_update_dpp, {IntTy});
   Value *Result =
-      B.CreateCall(Fn, {OldInt, SrcInt, B.getInt32(Ctrl),
-                         B.getInt32(RowMask), B.getInt32(BankMask),
-                         B.getInt1(BoundCtrl)},
+      B.CreateCall(Fn,
+                   {OldInt, SrcInt, B.getInt32(Ctrl), B.getInt32(RowMask),
+                    B.getInt32(BankMask), B.getInt1(BoundCtrl)},
                    "dpp");
   if (Result->getType() != OrigTy)
     Result = B.CreateBitCast(Result, OrigTy);
@@ -744,7 +740,6 @@ void RaiseContext::emitUnderExec(llvm::function_ref<void()> Body) {
   B.SetInsertPoint(SkipBb);
 }
 
-
 Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
   // All callers expect the returned value at `regs.execTy` (the EXEC
   // alloca storage width). Under modulo-replication `execTy` matches
@@ -845,8 +840,7 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
   // (GPT-OSS `_bitmatrix_metadata_compute_stage2`'s `s_and_b32
   // sN, sM, 0xFFFF0000` sites) no longer traps here.
   Type *SrcTy = Isa.isWave32() ? I32Ty : I64Ty;
-  uint64_t SrcMask =
-      Isa.isWave32() ? 0xFFFFFFFFull : 0xFFFFFFFFFFFFFFFFull;
+  uint64_t SrcMask = Isa.isWave32() ? 0xFFFFFFFFull : 0xFFFFFFFFFFFFFFFFull;
   if (std::optional<int64_t> Val = evalOperandAsConst(Di.Inst, OpIdx)) {
     uint64_t Bits = static_cast<uint64_t>(*Val) & SrcMask;
     Value *Narrow = ConstantInt::get(SrcTy, Bits, /*IsSigned=*/false);

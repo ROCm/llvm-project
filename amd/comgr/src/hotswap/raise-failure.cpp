@@ -190,8 +190,8 @@ llvm::Error RaiseFailure::crossWaveLaneIdLeak(const DecodedInst &Di,
 llvm::Error
 RaiseFailure::crossWaveUnrewritableShuffle(const DecodedInst &Di,
                                            const llvm::Twine &KindDetail) {
-  return makeCrossWaveFailure(
-      RaiseFailureReason::CrossWaveUnrewritableShuffle, Di, KindDetail);
+  return makeCrossWaveFailure(RaiseFailureReason::CrossWaveUnrewritableShuffle,
+                              Di, KindDetail);
 }
 
 llvm::Error

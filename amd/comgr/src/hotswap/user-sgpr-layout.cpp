@@ -37,19 +37,32 @@ int appendSource(llvm::SmallVectorImpl<UserSgprLayout::Entry> &Entries,
 
 const char *sourceName(UserSgprLayout::Source S) {
   switch (S) {
-  case UserSgprLayout::Source::Unset:                return "Unset";
-  case UserSgprLayout::Source::PrivateSegmentBuffer: return "PrivateSegmentBuffer";
-  case UserSgprLayout::Source::DispatchPtr:          return "DispatchPtr";
-  case UserSgprLayout::Source::QueuePtr:             return "QueuePtr";
-  case UserSgprLayout::Source::KernargSegmentPtr:    return "KernargSegmentPtr";
-  case UserSgprLayout::Source::DispatchId:           return "DispatchId";
-  case UserSgprLayout::Source::FlatScratchInit:      return "FlatScratchInit";
-  case UserSgprLayout::Source::PrivateSegmentSize:   return "PrivateSegmentSize";
-  case UserSgprLayout::Source::PreloadedKernarg:     return "PreloadedKernarg";
-  case UserSgprLayout::Source::WorkgroupIdX:         return "WorkgroupIdX";
-  case UserSgprLayout::Source::WorkgroupIdY:         return "WorkgroupIdY";
-  case UserSgprLayout::Source::WorkgroupIdZ:         return "WorkgroupIdZ";
-  case UserSgprLayout::Source::WorkgroupInfo:        return "WorkgroupInfo";
+  case UserSgprLayout::Source::Unset:
+    return "Unset";
+  case UserSgprLayout::Source::PrivateSegmentBuffer:
+    return "PrivateSegmentBuffer";
+  case UserSgprLayout::Source::DispatchPtr:
+    return "DispatchPtr";
+  case UserSgprLayout::Source::QueuePtr:
+    return "QueuePtr";
+  case UserSgprLayout::Source::KernargSegmentPtr:
+    return "KernargSegmentPtr";
+  case UserSgprLayout::Source::DispatchId:
+    return "DispatchId";
+  case UserSgprLayout::Source::FlatScratchInit:
+    return "FlatScratchInit";
+  case UserSgprLayout::Source::PrivateSegmentSize:
+    return "PrivateSegmentSize";
+  case UserSgprLayout::Source::PreloadedKernarg:
+    return "PreloadedKernarg";
+  case UserSgprLayout::Source::WorkgroupIdX:
+    return "WorkgroupIdX";
+  case UserSgprLayout::Source::WorkgroupIdY:
+    return "WorkgroupIdY";
+  case UserSgprLayout::Source::WorkgroupIdZ:
+    return "WorkgroupIdZ";
+  case UserSgprLayout::Source::WorkgroupInfo:
+    return "WorkgroupInfo";
   }
   return "<invalid>";
 }
@@ -65,7 +78,8 @@ unsigned decodeUserSgprCount(uint32_t ComputePgmRsrc2,
                              const ISAProfile &SourceProfile) {
   using namespace llvm::amdhsa;
   const unsigned Width = userSgprCountFieldWidth(SourceProfile);
-  return (ComputePgmRsrc2 >> COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_SHIFT) &
+  return (ComputePgmRsrc2 >>
+          COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_SHIFT) &
          ((1u << Width) - 1u);
 }
 
@@ -81,10 +95,9 @@ std::string formatMetadataMismatch(const KernelMeta &Meta,
   std::string Detail;
   llvm::raw_string_ostream Os(Detail);
   Os << "transpiler: UserSgprLayout::fromKernelMeta: kernel '" << Meta.Name
-     << "' has compute_pgm_rsrc2.USER_SGPR_COUNT="
-     << DecodedUserSgprCount << " (decoded as " << UserSgprCountWidth
-     << "-bit field for source ISA '" << SourceIsa
-     << "') but kernel_code_properties + kernarg_preload imply "
+     << "' has compute_pgm_rsrc2.USER_SGPR_COUNT=" << DecodedUserSgprCount
+     << " (decoded as " << UserSgprCountWidth << "-bit field for source ISA '"
+     << SourceIsa << "') but kernel_code_properties + kernarg_preload imply "
      << static_cast<unsigned>(Layout.UserSgprCount)
      << ". KD is inconsistent -- refusing to guess the layout. Raw KD fields:"
      << " compute_pgm_rsrc1=0x" << llvm::utohexstr(Meta.ComputePgmRsrc1)

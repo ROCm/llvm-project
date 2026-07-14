@@ -59,7 +59,8 @@ public:
   }
 
 private:
-  CanonicalOpAttrs Entries[static_cast<std::size_t>(CanonicalOp::CanonicalOp_COUNT)] = {};
+  CanonicalOpAttrs
+      Entries[static_cast<std::size_t>(CanonicalOp::CanonicalOp_COUNT)] = {};
 };
 
 const AttrTable &theTable() {
@@ -70,8 +71,7 @@ const AttrTable &theTable() {
 static bool descImplicitlyDefinesEXEC(const MCInstrDesc &Desc) {
   for (MCPhysReg R : Desc.implicit_defs()) {
     MCRegister Reg = AMDGPU::mc2PseudoReg(R);
-    if (Reg == AMDGPU::EXEC || Reg == AMDGPU::EXEC_LO ||
-        Reg == AMDGPU::EXEC_HI)
+    if (Reg == AMDGPU::EXEC || Reg == AMDGPU::EXEC_LO || Reg == AMDGPU::EXEC_HI)
       return true;
   }
   return false;
@@ -79,7 +79,9 @@ static bool descImplicitlyDefinesEXEC(const MCInstrDesc &Desc) {
 
 } // namespace
 
-const CanonicalOpAttrs &getCanonicalOpAttrs(CanonicalOp Op) { return theTable()[Op]; }
+const CanonicalOpAttrs &getCanonicalOpAttrs(CanonicalOp Op) {
+  return theTable()[Op];
+}
 
 llvm::Error verifyExecAttrCoverage(const MCInstrInfo &MCII,
                                    const OpcodeMap &OpcMap) {

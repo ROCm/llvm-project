@@ -415,7 +415,7 @@ bool isRawBufferAtomic(Intrinsic::ID Id) {
 // instruction `CB` at operand index `operandIdx`. Returns the call
 // site's role for the purposes of the forward walk.
 IntrinsicRole classifyIntrinsicUse(CallBase *CB, Value *V,
-                                    unsigned OperandIdx) {
+                                   unsigned OperandIdx) {
   // Inline asm: we cannot audit the constraint letters cheaply here
   // (would need to walk InlineAsm::ParseConstraints and map the
   // physical arg index to the constraint tuple). Refuse -- this is
@@ -489,7 +489,7 @@ IntrinsicRole classifyIntrinsicUse(CallBase *CB, Value *V,
 }
 
 SgprForcedConsumerKind classifySgprForcedIntrinsicUse(CallBase *CB,
-                                                       unsigned OperandIdx) {
+                                                      unsigned OperandIdx) {
   if (CB->isInlineAsm())
     return SgprForcedConsumerKind::InlineAsm;
 
@@ -589,10 +589,9 @@ UseChainVerdict classifyForwardUseChain(
         continue; // br/switch/ret consume as i1/i32; AMDGPU handles via EXEC
 
       // Pure propagators: forward-walk the instruction's result.
-      if (isa<CastInst>(I) || isa<BinaryOperator>(I) ||
-          isa<UnaryOperator>(I) || isa<ICmpInst>(I) || isa<FCmpInst>(I) ||
-          isa<SelectInst>(I) || isa<PHINode>(I) ||
-          isa<GetElementPtrInst>(I) || isa<FreezeInst>(I) ||
+      if (isa<CastInst>(I) || isa<BinaryOperator>(I) || isa<UnaryOperator>(I) ||
+          isa<ICmpInst>(I) || isa<FCmpInst>(I) || isa<SelectInst>(I) ||
+          isa<PHINode>(I) || isa<GetElementPtrInst>(I) || isa<FreezeInst>(I) ||
           isa<ExtractElementInst>(I) || isa<InsertElementInst>(I) ||
           isa<ShuffleVectorInst>(I) || isa<ExtractValueInst>(I) ||
           isa<InsertValueInst>(I)) {
@@ -643,8 +642,8 @@ UseChainVerdict classifyForwardUseChain(
       if (auto *CB = dyn_cast<CallBase>(I)) {
         unsigned OperandIdx = U.getOperandNo();
         if (Function *Callee = CB->getCalledFunction();
-            Callee && Callee->getIntrinsicID() ==
-                          Intrinsic::amdgcn_readfirstlane) {
+            Callee &&
+            Callee->getIntrinsicID() == Intrinsic::amdgcn_readfirstlane) {
           if (auto *CI = dyn_cast<CallInst>(CB)) {
             if (SourceWaveReadFirstLaneSites)
               SourceWaveReadFirstLaneSites->insert(CI);
@@ -695,10 +694,10 @@ Value *buildTargetLaneId(Function &F) {
   LLVMContext &C = F.getContext();
   Type *I32Ty = Type::getInt32Ty(C);
   IRBuilder<> B(&*F.getEntryBlock().getFirstInsertionPt());
-  Function *MbcntLo = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_mbcnt_lo);
-  Function *MbcntHi = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_mbcnt_hi);
+  Function *MbcntLo =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_mbcnt_lo);
+  Function *MbcntHi =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_mbcnt_hi);
   // `ConstantInt::get(IntegerType*, uint64_t V, bool IsSigned=false)`
   // asserts `V < 2^BitWidth` when `!IsSigned`; implicit (int64_t)-1 ->
   // uint64_t produces `0xFFFF'FFFF'FFFF'FFFF` which blows that assert
@@ -708,10 +707,8 @@ Value *buildTargetLaneId(Function &F) {
   // construction.
   Value *MinusOne = ConstantInt::get(I32Ty, 0xFFFFFFFFu);
   Value *Zero = ConstantInt::get(I32Ty, 0);
-  Value *LaneLo = B.CreateCall(MbcntLo, {MinusOne, Zero},
-                                "cwd_lane_id_lo");
-  Value *LaneId = B.CreateCall(MbcntHi, {MinusOne, LaneLo},
-                                "cwd_lane_id");
+  Value *LaneLo = B.CreateCall(MbcntLo, {MinusOne, Zero}, "cwd_lane_id_lo");
+  Value *LaneId = B.CreateCall(MbcntHi, {MinusOne, LaneLo}, "cwd_lane_id");
   return LaneId;
 }
 
@@ -728,16 +725,15 @@ void rewriteWritelaneCall(CallInst *CI, Value *LaneId,
   Value *ModMask = ConstantInt::get(I32Ty, SourceWaveSize - 1);
   Value *LaneMod = B.CreateAnd(LaneId, ModMask, "cwd_wl_lane_mod");
   Value *SelMask = B.CreateICmpEQ(LaneMod, LaneIdx, "cwd_wl_mask");
-  Value *NewVal = B.CreateSelect(SelMask, Val, OldVal,
-                                  "cwd_writelane_rewritten");
+  Value *NewVal =
+      B.CreateSelect(SelMask, Val, OldVal, "cwd_writelane_rewritten");
   CI->replaceAllUsesWith(NewVal);
   CI->eraseFromParent();
 }
 
 // Rewrite one `amdgcn.readlane(src, lane)` call to
 // `ds_bpermute(((lane_id & ~(W_s-1)) | lane) << 2, src)`.
-void rewriteReadlaneCall(CallInst *CI, Value *LaneId,
-                         unsigned SourceWaveSize) {
+void rewriteReadlaneCall(CallInst *CI, Value *LaneId, unsigned SourceWaveSize) {
   IRBuilder<> B(CI);
   B.SetCurrentDebugLocation(CI->getDebugLoc());
   Module *M = CI->getModule();
@@ -745,19 +741,16 @@ void rewriteReadlaneCall(CallInst *CI, Value *LaneId,
   Value *Src = CI->getArgOperand(0);
   Value *LaneIdx = CI->getArgOperand(1);
 
-  uint32_t BaseMaskImm =
-      ~(static_cast<uint32_t>(SourceWaveSize) - 1u);
+  uint32_t BaseMaskImm = ~(static_cast<uint32_t>(SourceWaveSize) - 1u);
   Value *BaseMask = ConstantInt::get(I32Ty, BaseMaskImm);
-  Value *SrcWaveBase = B.CreateAnd(LaneId, BaseMask,
-                                    "cwd_rl_src_wave_base");
-  Value *BcastLane = B.CreateOr(SrcWaveBase, LaneIdx,
-                                 "cwd_rl_bcast_lane");
-  Value *Selector = B.CreateShl(BcastLane, ConstantInt::get(I32Ty, 2),
-                                 "cwd_rl_selector");
-  Function *Bpermute = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_ds_bpermute);
-  Value *Broadcast = B.CreateCall(Bpermute, {Selector, Src},
-                                   "cwd_readlane_rewritten");
+  Value *SrcWaveBase = B.CreateAnd(LaneId, BaseMask, "cwd_rl_src_wave_base");
+  Value *BcastLane = B.CreateOr(SrcWaveBase, LaneIdx, "cwd_rl_bcast_lane");
+  Value *Selector =
+      B.CreateShl(BcastLane, ConstantInt::get(I32Ty, 2), "cwd_rl_selector");
+  Function *Bpermute =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_ds_bpermute);
+  Value *Broadcast =
+      B.CreateCall(Bpermute, {Selector, Src}, "cwd_readlane_rewritten");
   CI->replaceAllUsesWith(Broadcast);
   CI->eraseFromParent();
 }
@@ -774,17 +767,15 @@ void rewriteReadfirstlaneCall(CallInst *CI, Value *LaneId,
   Type *I32Ty = B.getInt32Ty();
   Value *Src = CI->getArgOperand(0);
 
-  uint32_t BaseMaskImm =
-      ~(static_cast<uint32_t>(SourceWaveSize) - 1u);
+  uint32_t BaseMaskImm = ~(static_cast<uint32_t>(SourceWaveSize) - 1u);
   Value *BaseMask = ConstantInt::get(I32Ty, BaseMaskImm);
-  Value *SrcWaveBase = B.CreateAnd(LaneId, BaseMask,
-                                   "cwd_rfl_src_wave_base");
-  Value *Selector = B.CreateShl(SrcWaveBase, ConstantInt::get(I32Ty, 2),
-                                "cwd_rfl_selector");
-  Function *Bpermute = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_ds_bpermute);
-  Value *Broadcast = B.CreateCall(Bpermute, {Selector, Src},
-                                  "cwd_readfirstlane_rewritten");
+  Value *SrcWaveBase = B.CreateAnd(LaneId, BaseMask, "cwd_rfl_src_wave_base");
+  Value *Selector =
+      B.CreateShl(SrcWaveBase, ConstantInt::get(I32Ty, 2), "cwd_rfl_selector");
+  Function *Bpermute =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_ds_bpermute);
+  Value *Broadcast =
+      B.CreateCall(Bpermute, {Selector, Src}, "cwd_readfirstlane_rewritten");
   CI->replaceAllUsesWith(Broadcast);
   CI->eraseFromParent();
 }
@@ -935,15 +926,15 @@ Expected<DppLaneMap> buildDppLaneMap(IRBuilder<> &B, Value *WithinRow,
     // lives at bits `[2 * (withinRow & 3) .. 2 * (withinRow & 3) + 1]`
     // of `ctrl`.
     Value *QuadBase = B.CreateAnd(WithinRow, ConstantInt::get(I32Ty, ~3u),
-                                    "cwd_dpp_quad_base");
+                                  "cwd_dpp_quad_base");
     Value *QuadWithin = B.CreateAnd(WithinRow, ConstantInt::get(I32Ty, 3),
-                                     "cwd_dpp_quad_within");
+                                    "cwd_dpp_quad_within");
     Value *Shift = B.CreateShl(QuadWithin, ConstantInt::get(I32Ty, 1),
-                                "cwd_dpp_quad_shift");
+                               "cwd_dpp_quad_shift");
     Value *CtrlVal = ConstantInt::get(I32Ty, Ctrl);
-    Value *Selector = B.CreateAnd(B.CreateLShr(CtrlVal, Shift),
-                                   ConstantInt::get(I32Ty, 3),
-                                   "cwd_dpp_quad_sel");
+    Value *Selector =
+        B.CreateAnd(B.CreateLShr(CtrlVal, Shift), ConstantInt::get(I32Ty, 3),
+                    "cwd_dpp_quad_sel");
     Out.SrcWithinRow = B.CreateOr(QuadBase, Selector, "cwd_dpp_quad_src");
     Out.InRange = ConstantInt::getTrue(B.getContext());
     return Out;
@@ -957,9 +948,8 @@ Expected<DppLaneMap> buildDppLaneMap(IRBuilder<> &B, Value *WithinRow,
     unsigned N = Ctrl - ROW_SHL0;
     Value *NVal = ConstantInt::get(I32Ty, N);
     Out.SrcWithinRow = B.CreateAdd(WithinRow, NVal, "cwd_dpp_sl_src");
-    Out.InRange = B.CreateICmpULT(Out.SrcWithinRow,
-                                   ConstantInt::get(I32Ty, 16),
-                                   "cwd_dpp_sl_inrange");
+    Out.InRange = B.CreateICmpULT(Out.SrcWithinRow, ConstantInt::get(I32Ty, 16),
+                                  "cwd_dpp_sl_inrange");
     return Out;
   }
 
@@ -1097,8 +1087,8 @@ Error rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
   // is the and/lshr chain, which instcombine folds post-pass.
   Value *WithinRow =
       B.CreateAnd(LaneId, ConstantInt::get(I32Ty, 0xF), "cwd_dpp_within_row");
-  Value *RowBase = B.CreateAnd(LaneId, ConstantInt::get(I32Ty, ~0xFu),
-                                "cwd_dpp_row_base");
+  Value *RowBase =
+      B.CreateAnd(LaneId, ConstantInt::get(I32Ty, ~0xFu), "cwd_dpp_row_base");
 
   // Per-ctrl source mapping.  `isDppCtrlRewritable` gated the call
   // site -- `buildDppLaneMap` is guaranteed to return a valid map.
@@ -1112,26 +1102,24 @@ Error rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
   // `inRange` select below discards the bpermuted value for OOB
   // lanes, so the clamp is strictly for IR clarity -- lane 0's
   // selector reads row[0] instead of row[0xFFFF_FFF8 & 0x3F].
-  Value *SrcWithinRowSafe = B.CreateSelect(
-      LaneMap.InRange, LaneMap.SrcWithinRow, ConstantInt::get(I32Ty, 0),
-      "cwd_dpp_src_safe");
-  Value *SrcLaneAbs = B.CreateOr(RowBase, SrcWithinRowSafe,
-                                  "cwd_dpp_src_abs");
-  Value *ByteAddr = B.CreateShl(SrcLaneAbs, ConstantInt::get(I32Ty, 2),
-                                 "cwd_dpp_selector");
+  Value *SrcWithinRowSafe =
+      B.CreateSelect(LaneMap.InRange, LaneMap.SrcWithinRow,
+                     ConstantInt::get(I32Ty, 0), "cwd_dpp_src_safe");
+  Value *SrcLaneAbs = B.CreateOr(RowBase, SrcWithinRowSafe, "cwd_dpp_src_abs");
+  Value *ByteAddr =
+      B.CreateShl(SrcLaneAbs, ConstantInt::get(I32Ty, 2), "cwd_dpp_selector");
 
-  Function *Bpermute = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_ds_bpermute);
-  Value *Bperm = B.CreateCall(Bpermute, {ByteAddr, Src},
-                               "cwd_dpp_bperm");
+  Function *Bpermute =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_ds_bpermute);
+  Value *Bperm = B.CreateCall(Bpermute, {ByteAddr, Src}, "cwd_dpp_bperm");
 
   // Out-of-range disposition.  Per the AMDGPU ISA DPP spec: an active
   // target lane whose source lane is OOB receives `0` under
   // `bound_ctrl=1` or retains `old` under `bound_ctrl=0`.
-  Value *OobVal = BoundCtrl ? static_cast<Value *>(ConstantInt::get(I32Ty, 0))
-                             : OldVal;
-  Value *DppVal = B.CreateSelect(LaneMap.InRange, Bperm, OobVal,
-                                  "cwd_dpp_inrange");
+  Value *OobVal =
+      BoundCtrl ? static_cast<Value *>(ConstantInt::get(I32Ty, 0)) : OldVal;
+  Value *DppVal =
+      B.CreateSelect(LaneMap.InRange, Bperm, OobVal, "cwd_dpp_inrange");
 
   // row_mask / bank_mask gating.  Fold the select away when both
   // masks are 0xF (the common "every lane participates" case) --
@@ -1167,8 +1155,8 @@ Error rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
         B.CreateICmpNE(B.CreateAnd(B.CreateLShr(BankMaskVal, SourceBank),
                                    ConstantInt::get(I32Ty, 1)),
                        ConstantInt::get(I32Ty, 0), "cwd_dpp_bank_active");
-    Value *LaneActive = B.CreateAnd(RowActive, BankActive,
-                                     "cwd_dpp_lane_active");
+    Value *LaneActive =
+        B.CreateAnd(RowActive, BankActive, "cwd_dpp_lane_active");
     Result = B.CreateSelect(LaneActive, DppVal, OldVal, "cwd_dpp_gated");
   }
 
@@ -1236,8 +1224,7 @@ rewriteCrossLaneDivergent(Function &F, unsigned SourceWaveSize,
     }
   }
 
-  if (WritelaneSites.empty() && ReadlaneSites.empty() &&
-      DppI32Sites.empty())
+  if (WritelaneSites.empty() && ReadlaneSites.empty() && DppI32Sites.empty())
     return Report;
 
   // ==== Phase A: use-chain classification =================================
@@ -1252,8 +1239,7 @@ rewriteCrossLaneDivergent(Function &F, unsigned SourceWaveSize,
   // on shared VGPRs -- a mix of rewritten and preserved sites on one
   // VGPR recreates the Matmul128x128 aperture-violation pattern
   // (hotswap/docs/learnings.md 2026-04-21 entry).
-  auto ClassifySite = [&](CallInst *CI,
-                          const char *Kind) -> bool {
+  auto ClassifySite = [&](CallInst *CI, const char *Kind) -> bool {
     std::string Detail;
     SgprForcedConsumerKind ConsumerKind = SgprForcedConsumerKind::None;
     if (classifyForwardUseChain(CI, Detail, ConsumerKind,
@@ -1263,8 +1249,7 @@ rewriteCrossLaneDivergent(Function &F, unsigned SourceWaveSize,
     std::string Msg;
     raw_string_ostream Os(Msg);
     Os << "function '" << F.getName() << "' has a " << Kind
-       << " whose use chain reaches an SGPR-forced consumer ("
-       << Detail
+       << " whose use chain reaches an SGPR-forced consumer (" << Detail
        << "). Rewriting to `ds_bpermute` here would re-introduce "
           "`v_readfirstlane` at the SGPR boundary -- refusing rather "
           "than silently miscompiling. See "
@@ -1309,8 +1294,7 @@ rewriteCrossLaneDivergent(Function &F, unsigned SourceWaveSize,
   // implicit-constant-folding assumption about IRBuilder, and makes
   // the "supported families" contract unmistakably single-sourced.
   for (CallInst *CI : DppI32Sites) {
-    unsigned Ctrl =
-        cast<ConstantInt>(CI->getArgOperand(2))->getZExtValue();
+    unsigned Ctrl = cast<ConstantInt>(CI->getArgOperand(2))->getZExtValue();
     if (!isDppCtrlRewritable(Ctrl)) {
       std::string Msg;
       raw_string_ostream Os(Msg);

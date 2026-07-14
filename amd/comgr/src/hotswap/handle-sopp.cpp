@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "handlers.h"
 #include "decode.h"
+#include "handlers.h"
 
 #include "SIDefines.h"
 #include "llvm/ADT/Twine.h"
@@ -83,7 +83,8 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
-  if (Sop == CanonicalOp::S_CBRANCH_EXECZ || Sop == CanonicalOp::S_CBRANCH_EXECNZ) {
+  if (Sop == CanonicalOp::S_CBRANCH_EXECZ ||
+      Sop == CanonicalOp::S_CBRANCH_EXECNZ) {
     Expected<uint64_t> TargetOrErr =
         computeSoppBranchTarget(Di.Offset, Di.getImm(0));
     if (!TargetOrErr)
@@ -110,7 +111,8 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
-  if (Sop == CanonicalOp::S_CBRANCH_SCC0 || Sop == CanonicalOp::S_CBRANCH_SCC1) {
+  if (Sop == CanonicalOp::S_CBRANCH_SCC0 ||
+      Sop == CanonicalOp::S_CBRANCH_SCC1) {
     Expected<uint64_t> TargetOrErr =
         computeSoppBranchTarget(Di.Offset, Di.getImm(0));
     if (!TargetOrErr)
@@ -133,7 +135,8 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
-  if (Sop == CanonicalOp::S_CBRANCH_VCCNZ || Sop == CanonicalOp::S_CBRANCH_VCCZ) {
+  if (Sop == CanonicalOp::S_CBRANCH_VCCNZ ||
+      Sop == CanonicalOp::S_CBRANCH_VCCZ) {
     Expected<uint64_t> TargetOrErr =
         computeSoppBranchTarget(Di.Offset, Di.getImm(0));
     if (!TargetOrErr)
@@ -192,9 +195,9 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
   // flips after the LDS reshape.  Cross-target counter names do not map 1:1, so
   // use the conservative gfx942-compatible wait-all form.
   if (Sop == CanonicalOp::S_WAITCNT || Sop == CanonicalOp::S_WAIT_LOADCNT ||
-      Sop == CanonicalOp::S_WAIT_STORECNT ||
-      Sop == CanonicalOp::S_WAIT_KMCNT || Sop == CanonicalOp::S_WAIT_DSCNT ||
-      Sop == CanonicalOp::S_WAIT_XCNT || Sop == CanonicalOp::S_WAIT_LOADCNT_DSCNT) {
+      Sop == CanonicalOp::S_WAIT_STORECNT || Sop == CanonicalOp::S_WAIT_KMCNT ||
+      Sop == CanonicalOp::S_WAIT_DSCNT || Sop == CanonicalOp::S_WAIT_XCNT ||
+      Sop == CanonicalOp::S_WAIT_LOADCNT_DSCNT) {
     Function *WaitFn =
         Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_s_waitcnt);
     Ctx.B.CreateCall(WaitFn, {Ctx.B.getInt32(0)});
@@ -228,7 +231,8 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
   // relevant memory dependency.  Do not merge this arm with the ordinary
   // wait-counter branch above unless the async/tensor counter semantics have a
   // target-independent wait-all lowering too.
-  if (Sop == CanonicalOp::S_WAIT_ASYNCCNT || Sop == CanonicalOp::S_WAIT_TENSORCNT) {
+  if (Sop == CanonicalOp::S_WAIT_ASYNCCNT ||
+      Sop == CanonicalOp::S_WAIT_TENSORCNT) {
     Hr.Handled = true;
     return Hr;
   }

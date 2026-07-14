@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "handlers.h"
 #include "canonical-op-attrs.h"
+#include "handlers.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
@@ -97,23 +97,22 @@ namespace {
 // instruction; it is embedded in dispatch BB names to keep them
 // unique across multiple dispatch sites in the same kernel.
 void emitEnumeratedDispatch(RaiseContext &Ctx, Value *TargetInt,
-                            ArrayRef<uint64_t> Targets,
-                            uint64_t SiteOffset) {
+                            ArrayRef<uint64_t> Targets, uint64_t SiteOffset) {
   assert(!Targets.empty() && "enumerated dispatch needs >=1 target");
   assert(TargetInt->getType() == Ctx.I64Ty &&
          "enumerated dispatch expects i64 target marker");
 
   SmallString<32> SitePrefixStorage;
-  raw_svector_ostream(SitePrefixStorage) << "dispatch_0x"
-                                         << utohexstr(SiteOffset);
+  raw_svector_ostream(SitePrefixStorage)
+      << "dispatch_0x" << utohexstr(SiteOffset);
   StringRef SitePrefix = SitePrefixStorage;
 
   IRBuilder<> &B = Ctx.B;
 
   // Pre-create the unreachable trap block so we can name it
   // deterministically and reference it from the last cascade step.
-  BasicBlock *UnreachableBb = BasicBlock::Create(
-      Ctx.C, SitePrefix.str() + "_unreachable", Ctx.Kernel);
+  BasicBlock *UnreachableBb =
+      BasicBlock::Create(Ctx.C, SitePrefix.str() + "_unreachable", Ctx.Kernel);
 
   for (size_t I = 0; I < Targets.size(); ++I) {
     BasicBlock *TargetBb = Ctx.lookupBB(Targets[I]);
@@ -172,7 +171,8 @@ ArrayRef<CanonicalOpAttrSpec> getHandlerSOP1Attrs() {
       {CanonicalOp::S_AND_SAVEEXEC_B32, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_OR_SAVEEXEC_B32, {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_XOR_SAVEEXEC_B32, {/*routesExecThroughStoreExec=*/true}},
-      {CanonicalOp::S_ANDN2_SAVEEXEC_B32, {/*routesExecThroughStoreExec=*/true}},
+      {CanonicalOp::S_ANDN2_SAVEEXEC_B32,
+       {/*routesExecThroughStoreExec=*/true}},
       {CanonicalOp::S_ORN2_SAVEEXEC_B32, {/*routesExecThroughStoreExec=*/true}},
   };
   return kAttrs;
@@ -232,15 +232,15 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
       } else if (Value *ShadowValid =
                      Ctx.loadSgprWaveMaskValid(SrcReg.BaseIdx)) {
         Value *ShadowExec = Ctx.loadSgprWaveMaskExec(SrcReg.BaseIdx);
-        Value *ShadowI1 = Ctx.Projection.extractLaneBitFromWaveMask(
-            Ctx.B, ShadowExec);
+        Value *ShadowI1 =
+            Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, ShadowExec);
         Value *SgprMask = Ctx.Isa.isWave32()
                               ? Ctx.Regs.loadSGPR32(Ctx.B, SrcReg.BaseIdx)
                               : Ctx.Regs.loadSGPR64(Ctx.B, SrcReg.BaseIdx);
         Value *Fallback =
             Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, SgprMask);
         SrcWaveMaskI1 = Ctx.B.CreateSelect(ShadowValid, ShadowI1, Fallback,
-                                            "sgpr_mask_shadow_sel");
+                                           "sgpr_mask_shadow_sel");
       }
     }
 
@@ -416,8 +416,7 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
       Value *RetVal = Ctx.Regs.loadSGPR64(
           Ctx.B, static_cast<int>(Info.IndirectRetPairLowReg));
       RetVal->setName("ret_pc_marker");
-      emitEnumeratedDispatch(Ctx, RetVal, Info.IndirectTargets,
-                             Di.Offset);
+      emitEnumeratedDispatch(Ctx, RetVal, Info.IndirectTargets, Di.Offset);
       Hr.Handled = true;
       return Hr;
     }
@@ -521,8 +520,7 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Value *CallTarget = Ctx.Regs.loadSGPR64(
         Ctx.B, static_cast<int>(Info.IndirectRetPairLowReg));
     CallTarget->setName("swap_call_target_marker");
-    emitEnumeratedDispatch(Ctx, CallTarget, Info.IndirectTargets,
-                           Di.Offset);
+    emitEnumeratedDispatch(Ctx, CallTarget, Info.IndirectTargets, Di.Offset);
     Hr.Handled = true;
     return Hr;
   }
@@ -559,8 +557,8 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_FF1_I32_B32) {
-    Function *Cttz = Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::cttz,
-                                                       {Ctx.I32Ty});
+    Function *Cttz =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::cttz, {Ctx.I32Ty});
     Ctx.Regs.writeReg32(
         Ctx.B, Op.dst(),
         Ctx.B.CreateCall(Cttz, {Op.src(0), ConstantInt::getTrue(Ctx.I1Ty)},
@@ -586,8 +584,8 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_FF1_I32_B64) {
-    Function *Cttz64 = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::cttz, {Ctx.I64Ty});
+    Function *Cttz64 =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::cttz, {Ctx.I64Ty});
     Value *R = Ctx.B.CreateCall(
         Cttz64, {Op.src64(0), ConstantInt::getTrue(Ctx.I1Ty)}, "ff1_64");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Ctx.B.CreateTrunc(R, Ctx.I32Ty));
@@ -602,23 +600,22 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // is_zero_poison=false returns the bitwidth (32 / 64) for a zero
   // input rather than the AMDGPU's -1 sentinel.
   if (Sop == CanonicalOp::S_FF0_I32_B32) {
-    Function *Cttz = Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::cttz,
-                                                       {Ctx.I32Ty});
+    Function *Cttz =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::cttz, {Ctx.I32Ty});
     Value *Src = Op.src(0);
     Value *Inv = Ctx.B.CreateNot(Src, "ff0_inv");
-    Value *Raw = Ctx.B.CreateCall(
-        Cttz, {Inv, ConstantInt::getFalse(Ctx.I1Ty)}, "ff0_raw");
+    Value *Raw = Ctx.B.CreateCall(Cttz, {Inv, ConstantInt::getFalse(Ctx.I1Ty)},
+                                  "ff0_raw");
     Value *IsAllOnes = Ctx.B.CreateICmpEQ(
         Src, ConstantInt::getAllOnesValue(Ctx.I32Ty), "ff0_allones");
-    Value *Res = Ctx.B.CreateSelect(
-        IsAllOnes, Ctx.B.getInt32(-1), Raw, "ff0");
+    Value *Res = Ctx.B.CreateSelect(IsAllOnes, Ctx.B.getInt32(-1), Raw, "ff0");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Res);
     Hr.Handled = true;
     return Hr;
   }
   if (Sop == CanonicalOp::S_FF0_I32_B64) {
-    Function *Cttz64 = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::cttz, {Ctx.I64Ty});
+    Function *Cttz64 =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::cttz, {Ctx.I64Ty});
     Value *Src64 = Op.src64(0);
     Value *Inv = Ctx.B.CreateNot(Src64, "ff0_inv64");
     Value *Raw = Ctx.B.CreateCall(
@@ -626,15 +623,15 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Value *RawTrunc = Ctx.B.CreateTrunc(Raw, Ctx.I32Ty, "ff0_raw32");
     Value *IsAllOnes = Ctx.B.CreateICmpEQ(
         Src64, ConstantInt::getAllOnesValue(Ctx.I64Ty), "ff0_allones64");
-    Value *Res = Ctx.B.CreateSelect(
-        IsAllOnes, Ctx.B.getInt32(-1), RawTrunc, "ff0_64");
+    Value *Res =
+        Ctx.B.CreateSelect(IsAllOnes, Ctx.B.getInt32(-1), RawTrunc, "ff0_64");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Res);
     Hr.Handled = true;
     return Hr;
   }
   if (Sop == CanonicalOp::S_FLBIT_I32_B64) {
-    Function *Ctlz64 = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::ctlz, {Ctx.I64Ty});
+    Function *Ctlz64 =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::ctlz, {Ctx.I64Ty});
     Value *R = Ctx.B.CreateCall(
         Ctlz64, {Op.src64(0), ConstantInt::getTrue(Ctx.I1Ty)}, "flbit64");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Ctx.B.CreateTrunc(R, Ctx.I32Ty));
@@ -642,8 +639,8 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_FLBIT_I32_B32) {
-    Function *Ctlz = Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::ctlz,
-                                                      {Ctx.I32Ty});
+    Function *Ctlz =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::ctlz, {Ctx.I32Ty});
     Ctx.Regs.writeReg32(
         Ctx.B, Op.dst(),
         Ctx.B.CreateCall(Ctlz, {Op.src(0), ConstantInt::getTrue(Ctx.I1Ty)},
@@ -702,8 +699,8 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     if (Sop == CanonicalOp::S_CVT_HI_F32_F16)
       Src = Ctx.B.CreateLShr(Src, ConstantInt::get(Ctx.I32Ty, 16),
                              "s_cvt_hi_f16_bits32");
-    Value *Bits = Ctx.B.CreateTrunc(Src, Type::getInt16Ty(Ctx.C),
-                                    "s_cvt_f16_bits");
+    Value *Bits =
+        Ctx.B.CreateTrunc(Src, Type::getInt16Ty(Ctx.C), "s_cvt_f16_bits");
     Value *Half = Ctx.B.CreateBitCast(Bits, Ctx.F16Ty);
     Value *Result = Ctx.B.CreateFPExt(Half, Ctx.F32Ty, "s_cvt_f");
     Ctx.Regs.writeReg32(Ctx.B, Op.dst(),
@@ -786,21 +783,22 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // to come from the destination register itself.)
   if (Sop == CanonicalOp::S_BITSET0_B32 || Sop == CanonicalOp::S_BITSET1_B32 ||
       Sop == CanonicalOp::S_BITSET0_B64 || Sop == CanonicalOp::S_BITSET1_B64) {
-    bool Is64 = (Sop == CanonicalOp::S_BITSET0_B64 || Sop == CanonicalOp::S_BITSET1_B64);
-    bool IsSet = (Sop == CanonicalOp::S_BITSET1_B32 || Sop == CanonicalOp::S_BITSET1_B64);
+    bool Is64 = (Sop == CanonicalOp::S_BITSET0_B64 ||
+                 Sop == CanonicalOp::S_BITSET1_B64);
+    bool IsSet = (Sop == CanonicalOp::S_BITSET1_B32 ||
+                  Sop == CanonicalOp::S_BITSET1_B64);
     llvm::Type *Ty = Is64 ? Ctx.I64Ty : Ctx.I32Ty;
     // Hardware only consumes low log2(width) bits of the bit-index src;
     // mask explicitly so `shl 1, N` never becomes poison for N >= width.
-    Value *BitIdx = Ctx.B.CreateAnd(Op.src(0),
-                                    ConstantInt::get(Ctx.I32Ty,
-                                                     Is64 ? 0x3F : 0x1F));
-    if (Is64) BitIdx = Ctx.B.CreateZExt(BitIdx, Ctx.I64Ty);
+    Value *BitIdx = Ctx.B.CreateAnd(
+        Op.src(0), ConstantInt::get(Ctx.I32Ty, Is64 ? 0x3F : 0x1F));
+    if (Is64)
+      BitIdx = Ctx.B.CreateZExt(BitIdx, Ctx.I64Ty);
     Value *Mask = Ctx.B.CreateShl(ConstantInt::get(Ty, 1), BitIdx);
     Value *Old = Is64 ? Ctx.Regs.readReg64(Ctx.B, Op.dst())
                       : Ctx.Regs.readReg32(Ctx.B, Op.dst());
-    Value *Res = IsSet
-                     ? Ctx.B.CreateOr(Old, Mask, "bitset1")
-                     : Ctx.B.CreateAnd(Old, Ctx.B.CreateNot(Mask), "bitset0");
+    Value *Res = IsSet ? Ctx.B.CreateOr(Old, Mask, "bitset1")
+                       : Ctx.B.CreateAnd(Old, Ctx.B.CreateNot(Mask), "bitset0");
     if (Is64)
       Ctx.Regs.writeReg64(Ctx.B, Op.dst(), Res);
     else

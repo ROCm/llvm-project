@@ -8,9 +8,9 @@
 
 #include "handle-valu-internal.h"
 
-#include "opcode-map.h"
 #include "canonical-op-attrs.h"
 #include "canonical-op.h"
+#include "opcode-map.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -195,9 +195,8 @@ Expected<HandlerResult> handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
     // target-lane answer on lanes 32..63. See
     // `lit_tests/v_cmpx_ballot` for the pinned IR shape (MODREP)
     // and `lit_tests/v_cmpx_wave_native` for the wave-native shape.
-    Value *Mask = Ctx.Projection.ballotI1ToWidth(Ctx.B, Cmp,
-                                                  Ctx.Regs.ExecTy,
-                                                  "cmpx_ballot");
+    Value *Mask = Ctx.Projection.ballotI1ToWidth(Ctx.B, Cmp, Ctx.Regs.ExecTy,
+                                                 "cmpx_ballot");
     Value *CurExec = Ctx.Regs.loadExec(Ctx.B);
     Ctx.Regs.storeExec(Ctx.B, Ctx.B.CreateAnd(CurExec, Mask, "cmpx_exec"));
   } else {
@@ -233,8 +232,8 @@ Expected<HandlerResult> handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
             (Ctx.Projection.sourceWaveScopedLaneOps() && D.WidthInDwords >= 2)
                 ? Ctx.I64Ty
                 : Ctx.Projection.sourceWaveMaskTy();
-        Value *Mask = Ctx.Projection.ballotI1ToWidth(
-            Ctx.B, Cmp, SourceWidth, "vcmp_ballot");
+        Value *Mask = Ctx.Projection.ballotI1ToWidth(Ctx.B, Cmp, SourceWidth,
+                                                     "vcmp_ballot");
         Ctx.writeRegExecWidth(D, Mask);
 
         // Cache the per-lane `i1` alongside the narrow wave-mask

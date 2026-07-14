@@ -57,8 +57,7 @@ SourceHiddenArgValue emitSourceHiddenDword(SourceHiddenArgContext &Ctx,
 // Synthesize a 1-, 2-, or 4-byte source hidden integer at ByteOffset.
 SourceHiddenArgValue emitSourceHiddenInteger(SourceHiddenArgContext &Ctx,
                                              int64_t ByteOffset,
-                                             unsigned ByteWidth,
-                                             bool IsSigned);
+                                             unsigned ByteWidth, bool IsSigned);
 
 } // namespace COMGR::hotswap
 

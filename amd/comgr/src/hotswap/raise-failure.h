@@ -83,21 +83,23 @@ enum class RaiseFailureReason : uint16_t {
   // The Class 1..4 grouping from wave-size-translation.md sec. 6 is
   // preserved as cross-references in the comments below; it is not
   // part of the enum-value identity.
-  CrossWaveLaneIdLeak,             // Class 1: MbcntHiLaneIdLeak / OutOfRangeLaneOperand.
-  CrossWaveUnrewritableShuffle,    // Class 2: FullWaveRotate (no sec. 7 rewrite available).
-  CrossWaveShuffleRewritePending,  // Class 2: shuffle with a sec. 5.3 P-item whose handler has not landed.
-  CrossWaveReplicaRace,            // Class 3: NonCommutativeAtomic.
-  CrossWaveLanePredicatedExec,     // Class 4: CmpxFromLaneId / SaveExecFromLaneId.
-  CrossWavePredicateChain,         // Class 5: workitem.id.x() feeds a lane-
-                                   // position-scoped icmp (compile-time K
-                                   // <= W_s-1) that gates a side effect, and
-                                   // the chain was not AND-masked by W_s-1.
-                                   // Surfaced by the post-mem2reg classifier
-                                   // in `c5_predicate_chain_classifier.{hpp,cpp}`,
-                                   // not by the MC-level
-                                   // `buildObstructionReport` walk. See
-                                   // hotswap/docs/modrep-predicate-chain.md
-                                   // sec. 5 (narrow-O1).
+  CrossWaveLaneIdLeak, // Class 1: MbcntHiLaneIdLeak / OutOfRangeLaneOperand.
+  CrossWaveUnrewritableShuffle,   // Class 2: FullWaveRotate (no sec. 7 rewrite
+                                  // available).
+  CrossWaveShuffleRewritePending, // Class 2: shuffle with a sec. 5.3 P-item
+                                  // whose handler has not landed.
+  CrossWaveReplicaRace,           // Class 3: NonCommutativeAtomic.
+  CrossWaveLanePredicatedExec, // Class 4: CmpxFromLaneId / SaveExecFromLaneId.
+  CrossWavePredicateChain,     // Class 5: workitem.id.x() feeds a lane-
+                               // position-scoped icmp (compile-time K
+                               // <= W_s-1) that gates a side effect, and
+                               // the chain was not AND-masked by W_s-1.
+                               // Surfaced by the post-mem2reg classifier
+                               // in `c5_predicate_chain_classifier.{hpp,cpp}`,
+                               // not by the MC-level
+                               // `buildObstructionReport` walk. See
+                               // hotswap/docs/modrep-predicate-chain.md
+                               // sec. 5 (narrow-O1).
   // `HSA_HOTSWAP_STRICT=1`-only refusal (see `pipeline.h::isStrictMode`).
   // A handler recognised the CanonicalOp and *would* have lifted it under the
   // existing warn-and-continue policy, but strict mode requires the

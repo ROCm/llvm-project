@@ -57,14 +57,14 @@ Value *WaveProjection::emitLaneIdx(IRBuilder<> &B) const {
 
   Module *M = Entry.getModule();
   Type *I32Ty = EB.getInt32Ty();
-  Function *MbcntLo = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_mbcnt_lo);
+  Function *MbcntLo =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_mbcnt_lo);
   Value *AllOnes = ConstantInt::getSigned(I32Ty, -1);
   Value *Zero32 = ConstantInt::get(I32Ty, 0);
   Value *LaneId = EB.CreateCall(MbcntLo, {AllOnes, Zero32}, "lane_lo");
   if (WaveMaskTy != I32Ty) {
-    Function *MbcntHi = Intrinsic::getOrInsertDeclaration(
-        M, Intrinsic::amdgcn_mbcnt_hi);
+    Function *MbcntHi =
+        Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_mbcnt_hi);
     LaneId = EB.CreateCall(MbcntHi, {AllOnes, LaneId}, "lane_id");
   }
   CachedLaneIdx = LaneId;
@@ -73,8 +73,8 @@ Value *WaveProjection::emitLaneIdx(IRBuilder<> &B) const {
 
 Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   Module *M = B.GetInsertBlock()->getModule();
-  Function *Fn = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_workitem_id_x);
+  Function *Fn =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_x);
   return B.CreateCall(Fn, {}, "tid");
 }
 
@@ -186,7 +186,7 @@ Value *WaveProjection::emitInitialExec(IRBuilder<> &B) const {
 }
 
 Value *WaveProjection::wrapAsWWMValue(IRBuilder<> &B, Value *V,
-                                        const Twine &Name) const {
+                                      const Twine &Name) const {
   if (providesFullWaveExecInvariant())
     return V;
   // `@llvm.amdgcn.strict.wwm`'s overload set in IntrinsicsAMDGPU.td is
@@ -209,8 +209,8 @@ Value *WaveProjection::wrapAsWWMValue(IRBuilder<> &B, Value *V,
          "aggregate, etc. would produce a cryptic intrinsic-signature "
          "error).");
   Module *M = B.GetInsertBlock()->getModule();
-  Function *WwmFn = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_strict_wwm, {T});
+  Function *WwmFn =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_strict_wwm, {T});
   return B.CreateCall(WwmFn, {V}, Name);
 }
 
@@ -218,9 +218,8 @@ Value *WaveProjection::wrapAsWWMValue(IRBuilder<> &B, Value *V,
 // ModuloReplicationProjection.
 // ----------------------------------------------------------------------------
 
-Value *
-ModuloReplicationProjection::emitLaneActiveBit(IRBuilder<> &B,
-                                                Value *ExecVal) const {
+Value *ModuloReplicationProjection::emitLaneActiveBit(IRBuilder<> &B,
+                                                      Value *ExecVal) const {
   // Project the target-lane id onto the source EXEC mask under
   // modulo-replication: target lane L is active iff bit `L mod W_src` of
   // the source EXEC mask is set. Same-wave and narrowing cases collapse
@@ -238,13 +237,14 @@ ModuloReplicationProjection::emitLaneActiveBit(IRBuilder<> &B,
   Value *LaneMod = B.CreateAnd(
       LaneIdInExec, ConstantInt::get(ExecTy, ExecBits - 1), "spe_lane_mod");
   Value *Shifted = B.CreateLShr(ExecVal, LaneMod, "spe_exec_at_lane");
-  Value *Bit = B.CreateAnd(Shifted, ConstantInt::get(ExecTy, 1),
-                            "spe_exec_bit");
+  Value *Bit =
+      B.CreateAnd(Shifted, ConstantInt::get(ExecTy, 1), "spe_exec_bit");
   return B.CreateICmpNE(Bit, ConstantInt::get(ExecTy, 0), "spe_lane_active");
 }
 
-Value *ModuloReplicationProjection::ballotI1ToWidth(
-    IRBuilder<> &B, Value *Pred, Type *ResultTy, const Twine &Name) const {
+Value *ModuloReplicationProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
+                                                    Type *ResultTy,
+                                                    const Twine &Name) const {
   assert(Pred->getType() == B.getInt1Ty() &&
          "ballotI1ToWidth requires an i1 predicate");
   Module *M = B.GetInsertBlock()->getModule();
@@ -270,8 +270,8 @@ Value *ModuloReplicationProjection::ballotI1ToWidth(
   // rather than silently miscompiles.
 }
 
-Value *ModuloReplicationProjection::extractLaneBitFromWaveMask(
-    IRBuilder<> &B, Value *V) const {
+Value *ModuloReplicationProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
+                                                               Value *V) const {
   if (V->getType() == B.getInt1Ty())
     return V;
   Type *I64Ty = B.getInt64Ty();
@@ -307,8 +307,8 @@ Value *ModuloReplicationProjection::extractLaneBitFromWaveMask(
     // lane-id shift below then correctly selects the replicated bit
     // for every target lane.
     Value *Zext = B.CreateZExt(V, TargetTy);
-    Value *Shifted = B.CreateShl(
-        Zext, ConstantInt::get(TargetTy, SrcBits), "mask_widen_shl");
+    Value *Shifted = B.CreateShl(Zext, ConstantInt::get(TargetTy, SrcBits),
+                                 "mask_widen_shl");
     V = B.CreateOr(Zext, Shifted, "mask_widen_replicate");
   } else if (SrcBits > DstBits) {
     V = B.CreateTrunc(V, TargetTy);
@@ -325,8 +325,8 @@ Value *ModuloReplicationProjection::extractLaneBitFromWaveMask(
   // `%vcc_lane_idx` for reads of `s6`, which misleads.
   Value *LaneIdxExt = B.CreateZExtOrTrunc(LaneIdx, TargetTy, "mask_lane_idx");
   Value *Shifted = B.CreateLShr(V, LaneIdxExt, "mask_at_lane");
-  Value *Bit = B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1),
-                            "mask_lane_bit");
+  Value *Bit =
+      B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1), "mask_lane_bit");
   return B.CreateICmpNE(Bit, ConstantInt::get(TargetTy, 0), "mask_lane_i1");
 }
 
@@ -341,8 +341,8 @@ Value *ModuloReplicationProjection::extractLaneBitFromWaveMask(
 // ----------------------------------------------------------------------------
 
 WaveNativeProjection::WaveNativeProjection(const ISAProfile &SrcIsa,
-                                             const ISAProfile &TgtIsa,
-                                             Type *I32Ty, Type *I64Ty)
+                                           const ISAProfile &TgtIsa,
+                                           Type *I32Ty, Type *I64Ty)
     : WaveProjection(SrcIsa, TgtIsa, I32Ty, I64Ty) {
   // Restrict to the one translation direction where the wave-native
   // projection's extra invariants are well-defined. Same-wave paths
@@ -391,8 +391,8 @@ Value *WaveNativeProjection::emitInitialExec(IRBuilder<> &B) const {
   // physregs for every vreg inside a WWM bracket, which a 128x128
   // matmul tile cannot satisfy).
   Module *M = B.GetInsertBlock()->getModule();
-  Function *InitWw = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_init_whole_wave);
+  Function *InitWw =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_init_whole_wave);
   Value *OriginalActive = B.CreateCall(InitWw, {}, "orig_active");
   // Ballot the per-lane i1 back into a wave-width mask. Reuses the
   // projection's own ballot emission so the width selection matches
@@ -403,7 +403,7 @@ Value *WaveNativeProjection::emitInitialExec(IRBuilder<> &B) const {
 }
 
 Value *WaveNativeProjection::emitLaneActiveBit(IRBuilder<> &B,
-                                                 Value *ExecVal) const {
+                                               Value *ExecVal) const {
   // Target lane L is active iff bit L of the widened EXEC is set. The
   // widened EXEC storage is `WaveMaskTy` (i64 on wave64 target), so
   // the shift index is the full target lane id (0..63) with no modulo
@@ -419,14 +419,13 @@ Value *WaveNativeProjection::emitLaneActiveBit(IRBuilder<> &B,
          "execStorageTy()");
   Value *LaneIdInExec = B.CreateZExtOrTrunc(LaneId, ExecTy, "wn_lane_idx");
   Value *Shifted = B.CreateLShr(ExecVal, LaneIdInExec, "wn_exec_at_lane");
-  Value *Bit = B.CreateAnd(Shifted, ConstantInt::get(ExecTy, 1),
-                            "wn_exec_bit");
+  Value *Bit = B.CreateAnd(Shifted, ConstantInt::get(ExecTy, 1), "wn_exec_bit");
   return B.CreateICmpNE(Bit, ConstantInt::get(ExecTy, 0), "wn_lane_active");
 }
 
 Value *WaveNativeProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
-                                              Type *ResultTy,
-                                              const Twine &Name) const {
+                                             Type *ResultTy,
+                                             const Twine &Name) const {
   assert(Pred->getType() == B.getInt1Ty() &&
          "ballotI1ToWidth requires an i1 predicate");
   Module *M = B.GetInsertBlock()->getModule();
@@ -462,7 +461,7 @@ Value *WaveNativeProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
 }
 
 Value *WaveNativeProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
-                                                         Value *V) const {
+                                                        Value *V) const {
   if (V->getType() == B.getInt1Ty())
     return V;
   Type *I64Ty = B.getInt64Ty();
@@ -499,16 +498,17 @@ Value *WaveNativeProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
   // consumer), same reason to avoid the old `wn_vcc_*` identifiers
   // surfacing in raised-IR dumps for kernels whose mask source is a
   // plain SGPR.
-  Value *LaneIdxExt = B.CreateZExtOrTrunc(LaneIdx, TargetTy, "wn_mask_lane_idx");
+  Value *LaneIdxExt =
+      B.CreateZExtOrTrunc(LaneIdx, TargetTy, "wn_mask_lane_idx");
   Value *Shifted = B.CreateLShr(V, LaneIdxExt, "wn_mask_at_lane");
-  Value *Bit = B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1),
-                            "wn_mask_lane_bit");
+  Value *Bit =
+      B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1), "wn_mask_lane_bit");
   return B.CreateICmpNE(Bit, ConstantInt::get(TargetTy, 0), "wn_mask_lane_i1");
 }
 
-Value *WaveNativeProjection::emitCurrentSourceWaveMask(IRBuilder<> &B,
-                                                       Value *Mask,
-                                                       const Twine &Name) const {
+Value *
+WaveNativeProjection::emitCurrentSourceWaveMask(IRBuilder<> &B, Value *Mask,
+                                                const Twine &Name) const {
   assert(Mask->getType()->isIntegerTy() &&
          "emitCurrentSourceWaveMask expects an "
          "integer mask");
@@ -540,8 +540,8 @@ Value *WaveNativeProjection::emitCurrentSourceWaveMask(IRBuilder<> &B,
 // ----------------------------------------------------------------------------
 
 ThreadLoopProjection::ThreadLoopProjection(const ISAProfile &SrcIsa,
-                                            const ISAProfile &TgtIsa,
-                                            Type *I32Ty, Type *I64Ty)
+                                           const ISAProfile &TgtIsa,
+                                           Type *I32Ty, Type *I64Ty)
     : WaveProjection(SrcIsa, TgtIsa, I32Ty, I64Ty) {
   assert(TgtIsa.WaveSize > SrcIsa.WaveSize &&
          "ThreadLoopProjection is defined only for cross-widening "
@@ -558,15 +558,16 @@ Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
          "raiser must call setIterationAlloca before emitting source workitem "
          "ids");
   Module *M = B.GetInsertBlock()->getModule();
-  Function *Fn = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_workitem_id_x);
+  Function *Fn =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_x);
   Value *Tid = B.CreateCall(Fn, {}, "tl_hw_tid");
   Value *LaneId = emitLaneIdx(B);
   const unsigned SrcBits = Src.WaveSize;
   const unsigned TgtBits = Tgt.WaveSize;
   Value *Iter = B.CreateLoad(B.getInt32Ty(), IterationAlloca, "tl_iter");
   Value *Base = B.CreateAnd(Tid, B.getInt32(~(TgtBits - 1u)), "tl_tid_base");
-  Value *SourceLane = B.CreateAnd(LaneId, B.getInt32(SrcBits - 1u), "tl_source_lane");
+  Value *SourceLane =
+      B.CreateAnd(LaneId, B.getInt32(SrcBits - 1u), "tl_source_lane");
   Value *WaveOffset =
       B.CreateMul(Iter, B.getInt32(SrcBits), "tl_source_wave_off");
   return B.CreateAdd(B.CreateAdd(Base, WaveOffset, "tl_tid_wave_base"),
@@ -574,7 +575,7 @@ Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
 }
 
 Value *ThreadLoopProjection::emitLaneActiveBit(IRBuilder<> &B,
-                                                Value *ExecVal) const {
+                                               Value *ExecVal) const {
   Value *LaneId = emitLaneIdx(B);
   Type *ExecTy = ExecVal->getType();
   const unsigned SourceBits = sourceWaveMaskTy()->getPrimitiveSizeInBits();
@@ -582,14 +583,13 @@ Value *ThreadLoopProjection::emitLaneActiveBit(IRBuilder<> &B,
   Value *LaneMod = B.CreateAnd(
       LaneIdInExec, ConstantInt::get(ExecTy, SourceBits - 1), "tl_lane_mod");
   Value *Shifted = B.CreateLShr(ExecVal, LaneMod, "tl_exec_at_lane");
-  Value *Bit =
-      B.CreateAnd(Shifted, ConstantInt::get(ExecTy, 1), "tl_exec_bit");
+  Value *Bit = B.CreateAnd(Shifted, ConstantInt::get(ExecTy, 1), "tl_exec_bit");
   return B.CreateICmpNE(Bit, ConstantInt::get(ExecTy, 0), "tl_lane_active");
 }
 
 Value *ThreadLoopProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
-                                              Type *ResultTy,
-                                              const Twine &Name) const {
+                                             Type *ResultTy,
+                                             const Twine &Name) const {
   assert(Pred->getType() == B.getInt1Ty() &&
          "ballotI1ToWidth requires an i1 predicate");
   Module *M = B.GetInsertBlock()->getModule();
@@ -606,8 +606,8 @@ Value *ThreadLoopProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
   return B.CreateTrunc(WaveMask, ResultTy, Name + "_trunc");
 }
 
-Value *ThreadLoopProjection::extractLaneBitFromWaveMask(
-    IRBuilder<> &B, Value *V) const {
+Value *ThreadLoopProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
+                                                        Value *V) const {
   if (V->getType() == B.getInt1Ty())
     return V;
   Type *TargetTy = V->getType()->getPrimitiveSizeInBits() >
@@ -624,15 +624,16 @@ Value *ThreadLoopProjection::extractLaneBitFromWaveMask(
     V = B.CreateBitCast(V, TargetTy);
   }
   Value *LaneIdx = emitLaneIdx(B);
-  Value *LaneIdxExt = B.CreateZExtOrTrunc(LaneIdx, TargetTy, "tl_mask_lane_idx");
-  Value *ShiftIdx = (TargetTy == WaveMaskTy)
-                        ? LaneIdxExt
-                        : B.CreateAnd(LaneIdxExt,
-                                      ConstantInt::get(TargetTy, DstBits - 1),
-                                      "tl_mask_lane_mod");
+  Value *LaneIdxExt =
+      B.CreateZExtOrTrunc(LaneIdx, TargetTy, "tl_mask_lane_idx");
+  Value *ShiftIdx =
+      (TargetTy == WaveMaskTy)
+          ? LaneIdxExt
+          : B.CreateAnd(LaneIdxExt, ConstantInt::get(TargetTy, DstBits - 1),
+                        "tl_mask_lane_mod");
   Value *Shifted = B.CreateLShr(V, ShiftIdx, "tl_mask_at_lane");
-  Value *Bit = B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1),
-                           "tl_mask_lane_bit");
+  Value *Bit =
+      B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1), "tl_mask_lane_bit");
   return B.CreateICmpNE(Bit, ConstantInt::get(TargetTy, 0), "tl_mask_lane_i1");
 }
 

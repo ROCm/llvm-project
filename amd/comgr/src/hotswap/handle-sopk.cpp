@@ -222,9 +222,8 @@ static Expected<Value *> getSimm16(RaiseContext &Ctx, const DecodedInst &Di,
     return RaiseFailure::unsupportedInstructionForm(
         Di, "SOPK", "signed 16-bit immediate operand out of range");
   uint32_t Bits = static_cast<uint32_t>(Raw) & 0xffffu;
-  int32_t Simm16 = (Bits & 0x8000u)
-                       ? static_cast<int32_t>(Bits) - 0x10000
-                       : static_cast<int32_t>(Bits);
+  int32_t Simm16 = (Bits & 0x8000u) ? static_cast<int32_t>(Bits) - 0x10000
+                                    : static_cast<int32_t>(Bits);
   return ConstantInt::get(Ctx.I32Ty, Simm16, true);
 }
 
@@ -323,13 +322,15 @@ Expected<HandlerResult> handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
   // documented SOPK_SCC layout above.
   if (Sop == CanonicalOp::S_CMPK_EQ_I32 || Sop == CanonicalOp::S_CMPK_EQ_U32 ||
       Sop == CanonicalOp::S_CMPK_LG_I32 || Sop == CanonicalOp::S_CMPK_LG_U32 ||
-      (Sop >= CanonicalOp::S_CMPK_GE_I32 && Sop <= CanonicalOp::S_CMPK_LT_U32)) {
+      (Sop >= CanonicalOp::S_CMPK_GE_I32 &&
+       Sop <= CanonicalOp::S_CMPK_LT_U32)) {
     Value *Sdst = Ctx.Regs.readReg32(Ctx.B, Op.dst());
     Value *Imm = Op.src(1); // $simm16; op.src(0) aliases sdst
     Value *Cmp = nullptr;
     if (Sop == CanonicalOp::S_CMPK_EQ_I32 || Sop == CanonicalOp::S_CMPK_EQ_U32)
       Cmp = Ctx.B.CreateICmpEQ(Sdst, Imm, "scmpk");
-    else if (Sop == CanonicalOp::S_CMPK_LG_I32 || Sop == CanonicalOp::S_CMPK_LG_U32)
+    else if (Sop == CanonicalOp::S_CMPK_LG_I32 ||
+             Sop == CanonicalOp::S_CMPK_LG_U32)
       Cmp = Ctx.B.CreateICmpNE(Sdst, Imm, "scmpk");
     else if (Sop == CanonicalOp::S_CMPK_GT_I32)
       Cmp = Ctx.B.CreateICmpSGT(Sdst, Imm, "scmpk");
@@ -440,9 +441,9 @@ Expected<HandlerResult> handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
           // VgprMsbModeToSetregRotate to convert (inverse of the pass's
           // convertModeToSetregFormat, which rotates left).
           constexpr unsigned Rot = amdgpu::ModeReg::VgprMsbModeToSetregRotate;
-          uint8_t ModeFmt = static_cast<uint8_t>(
-              (ImmVal >> amdgpu::ModeReg::VgprMsbLowBit) &
-              amdgpu::ModeReg::VgprMsbByteMask);
+          uint8_t ModeFmt =
+              static_cast<uint8_t>((ImmVal >> amdgpu::ModeReg::VgprMsbLowBit) &
+                                   amdgpu::ModeReg::VgprMsbByteMask);
           Ctx.VgprMsBs = llvm::rotr<uint8_t>(ModeFmt, Rot);
         }
       } else {
@@ -471,10 +472,9 @@ Expected<HandlerResult> handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
           }
         }
       }
-      Function *SetregFn = Intrinsic::getOrInsertDeclaration(
-          &Ctx.M, Intrinsic::amdgcn_s_setreg);
-      Ctx.B.CreateCall(SetregFn,
-                       {ConstantInt::get(Ctx.I32Ty, Simm16), ValArg});
+      Function *SetregFn =
+          Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_s_setreg);
+      Ctx.B.CreateCall(SetregFn, {ConstantInt::get(Ctx.I32Ty, Simm16), ValArg});
       Hr.Handled = true;
       return Hr;
     }

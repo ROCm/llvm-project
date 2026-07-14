@@ -91,11 +91,10 @@ llvm::Error linkDeviceLibrary(llvm::Module &M, DeviceLibRef Lib,
                    const llvm::StringSet<> &LinkedSymbols) {
             for (const auto &Entry : LinkedSymbols)
               State.LinkedSymbols.insert(Entry.getKey());
-            llvm::internalizeModule(
-                LinkedM, [&LinkedSymbols](const llvm::GlobalValue &GV) {
-                  return !GV.hasName() ||
-                         LinkedSymbols.count(GV.getName()) == 0;
-                });
+            llvm::internalizeModule(LinkedM, [&LinkedSymbols](
+                                                 const llvm::GlobalValue &GV) {
+              return !GV.hasName() || LinkedSymbols.count(GV.getName()) == 0;
+            });
           })) {
     return llvm::createStringError("failed to link embedded device library '" +
                                    Lib.Name + "' into module '" + M.getName() +

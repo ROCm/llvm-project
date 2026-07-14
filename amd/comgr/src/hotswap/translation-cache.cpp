@@ -18,8 +18,8 @@
 #include "llvm/Support/SHA256.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include <dlfcn.h>
 #include <chrono>
+#include <dlfcn.h>
 #include <optional>
 #include <string>
 #include <sys/stat.h>
@@ -125,8 +125,8 @@ std::string identityString(const FileIdentity &id) {
   std::string out;
   llvm::raw_string_ostream os(out);
   os << id.path << "|present=" << (id.present ? "1" : "0")
-     << "|size=" << id.size << "|mtime=" << id.mtimeSec << "."
-     << id.mtimeNsec << "|sha256=" << id.sha256;
+     << "|size=" << id.size << "|mtime=" << id.mtimeSec << "." << id.mtimeNsec
+     << "|sha256=" << id.sha256;
   if (!id.error.empty())
     os << "|error=" << id.error;
   return os.str();
@@ -278,8 +278,7 @@ KeyData buildKeyData(const TranslationCacheRequest &request,
       timingElapsed(CollectTimings, materialBuildStart);
   auto keyHashStart = timingStart(CollectTimings);
   data.key = sha256Hex(llvm::MemoryBufferRef(material, ""));
-  data.Timings.keyHashSeconds =
-      timingElapsed(CollectTimings, keyHashStart);
+  data.Timings.keyHashSeconds = timingElapsed(CollectTimings, keyHashStart);
   return data;
 }
 
@@ -312,9 +311,7 @@ std::string cacheMetadataPath(const TranslationCacheRequest &request,
   return std::string(path);
 }
 
-bool exists(llvm::StringRef path) {
-  return llvm::sys::fs::exists(path);
-}
+bool exists(llvm::StringRef path) { return llvm::sys::fs::exists(path); }
 
 std::string jsonToString(llvm::json::Value value) {
   std::string out;
@@ -355,8 +352,8 @@ bool writeFileAtomic(llvm::StringRef path, llvm::StringRef contents,
 bool writeFileAtomic(llvm::StringRef path, llvm::ArrayRef<uint8_t> data,
                      std::string &error) {
   return writeFileAtomic(
-      path, llvm::StringRef(reinterpret_cast<const char *>(data.data()),
-                            data.size()),
+      path,
+      llvm::StringRef(reinterpret_cast<const char *>(data.data()), data.size()),
       error);
 }
 
@@ -548,8 +545,8 @@ bool validateMetadata(const TranslationCacheRequest &request,
                         Reason) ||
       !requireEqualBool(obj, "assume_hip_global_offset_zero",
                         request.AssumeHipGlobalOffsetZero, Reason) ||
-      !requireEqualString(obj, "hotswap_build_identity",
-                          keyData.buildIdentity, Reason) ||
+      !requireEqualString(obj, "hotswap_build_identity", keyData.buildIdentity,
+                          Reason) ||
       !requireEqualString(obj, "device_libraries_identity",
                           keyData.deviceLibrariesIdentity, Reason))
     return false;
@@ -575,8 +572,7 @@ bool validateMetadata(const TranslationCacheRequest &request,
       requireInt(obj, "source_private_segment_fixed_size", Reason);
   auto targetScratch =
       requireInt(obj, "target_private_segment_fixed_size", Reason);
-  auto targetEnable =
-      requireBool(obj, "target_enable_private_segment", Reason);
+  auto targetEnable = requireBool(obj, "target_enable_private_segment", Reason);
   if (!lifted || !total || !c5Count || !c5Reason || !usesScratch ||
       !sourceScratch || !targetScratch || !targetEnable)
     return false;
@@ -587,10 +583,8 @@ bool validateMetadata(const TranslationCacheRequest &request,
   Result.C5SuppressedCount = static_cast<int>(*c5Count);
   Result.C5SuppressionReason = *c5Reason;
   Result.UsesScratchPrivateSegment = *usesScratch;
-  Result.SourcePrivateSegmentFixedSize =
-      static_cast<uint32_t>(*sourceScratch);
-  Result.TargetPrivateSegmentFixedSize =
-      static_cast<uint32_t>(*targetScratch);
+  Result.SourcePrivateSegmentFixedSize = static_cast<uint32_t>(*sourceScratch);
+  Result.TargetPrivateSegmentFixedSize = static_cast<uint32_t>(*targetScratch);
   Result.TargetEnablePrivateSegment = *targetEnable;
   return true;
 }
@@ -618,7 +612,8 @@ const char *translationCacheStatusString(TranslationCacheStatus Status) {
 }
 
 std::string sha256Hex(llvm::MemoryBufferRef buffer) {
-  llvm::ArrayRef data(buffer.getBuffer().bytes_begin(), buffer.getBuffer().bytes_end());
+  llvm::ArrayRef data(buffer.getBuffer().bytes_begin(),
+                      buffer.getBuffer().bytes_end());
   auto digest = llvm::SHA256::hash(data);
   std::string out;
   llvm::raw_string_ostream os(out);
@@ -627,8 +622,8 @@ std::string sha256Hex(llvm::MemoryBufferRef buffer) {
   return os.str();
 }
 
-TranslationCacheLookup lookupTranslationCache(
-    const TranslationCacheRequest &request) {
+TranslationCacheLookup
+lookupTranslationCache(const TranslationCacheRequest &request) {
   auto totalStart = timingStart(request.CollectTimings);
   TranslationCacheLookup lookup;
   auto finish = [&]() {
@@ -676,8 +671,8 @@ TranslationCacheLookup lookupTranslationCache(
       timingElapsed(request.CollectTimings, objectReadStart);
   if (!objectBuffer) {
     lookup.Status = TranslationCacheStatus::Invalid;
-    lookup.Reason = "failed to read cached object: " +
-                    objectBuffer.getError().message();
+    lookup.Reason =
+        "failed to read cached object: " + objectBuffer.getError().message();
     return finish();
   }
   auto objectHashStart = timingStart(request.CollectTimings);
@@ -692,8 +687,8 @@ TranslationCacheLookup lookupTranslationCache(
       timingElapsed(request.CollectTimings, metadataReadStart);
   if (!metadataBuffer) {
     lookup.Status = TranslationCacheStatus::Invalid;
-    lookup.Reason = "failed to read cache metadata: " +
-                    metadataBuffer.getError().message();
+    lookup.Reason =
+        "failed to read cache metadata: " + metadataBuffer.getError().message();
     return finish();
   }
   auto metadataParseStart = timingStart(request.CollectTimings);
@@ -702,8 +697,8 @@ TranslationCacheLookup lookupTranslationCache(
       timingElapsed(request.CollectTimings, metadataParseStart);
   if (!parsed) {
     lookup.Status = TranslationCacheStatus::Invalid;
-    lookup.Reason = "failed to parse cache metadata: " +
-                    llvm::toString(parsed.takeError());
+    lookup.Reason =
+        "failed to parse cache metadata: " + llvm::toString(parsed.takeError());
     return finish();
   }
   const llvm::json::Object *obj = parsed->getAsObject();
@@ -730,8 +725,9 @@ TranslationCacheLookup lookupTranslationCache(
   return finish();
 }
 
-TranslationCacheWrite writeTranslationCache(
-    const TranslationCacheRequest &request, const PipelineResult &Result) {
+TranslationCacheWrite
+writeTranslationCache(const TranslationCacheRequest &request,
+                      const PipelineResult &Result) {
   auto totalStart = timingStart(request.CollectTimings);
   TranslationCacheWrite write;
   auto finish = [&]() {
@@ -756,8 +752,7 @@ TranslationCacheWrite writeTranslationCache(
   write.MetadataPath = cacheMetadataPath(request, keyData.key);
   write.ObjectPath = cacheObjectPath(request, keyData.key);
 
-  if (!Result.Success || !Result.Hsaco ||
-      Result.Hsaco->getBufferSize() == 0) {
+  if (!Result.Success || !Result.Hsaco || Result.Hsaco->getBufferSize() == 0) {
     write.Status = TranslationCacheStatus::WriteFailed;
     write.Reason = "refusing to cache unsuccessful or empty translation";
     return finish();
@@ -769,8 +764,8 @@ TranslationCacheWrite writeTranslationCache(
     write.Timings.createDirectorySeconds =
         timingElapsed(request.CollectTimings, createDirectoryStart);
     write.Status = TranslationCacheStatus::WriteFailed;
-    write.Reason = "failed to create cache directory '" + dir + "': " +
-                   ec.message();
+    write.Reason =
+        "failed to create cache directory '" + dir + "': " + ec.message();
     return finish();
   }
   write.Timings.createDirectorySeconds =
@@ -793,8 +788,7 @@ TranslationCacheWrite writeTranslationCache(
       timingElapsed(request.CollectTimings, objectWriteStart);
 
   auto metadataBuildStart = timingStart(request.CollectTimings);
-  llvm::json::Object meta =
-      metadataObject(request, keyData, Result, objectSha);
+  llvm::json::Object meta = metadataObject(request, keyData, Result, objectSha);
   write.Timings.metadataBuildSeconds =
       timingElapsed(request.CollectTimings, metadataBuildStart);
   auto metadataWriteStart = timingStart(request.CollectTimings);
@@ -816,8 +810,9 @@ TranslationCacheWrite writeTranslationCache(
   return finish();
 }
 
-std::string skippedKernelForTranslationCache(
-    llvm::ArrayRef<std::string> kernelNames, llvm::StringRef skipList) {
+std::string
+skippedKernelForTranslationCache(llvm::ArrayRef<std::string> kernelNames,
+                                 llvm::StringRef skipList) {
   if (skipList.empty())
     return "";
 

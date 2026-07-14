@@ -45,10 +45,10 @@ struct KernargPtrConstRebase {
   std::optional<int64_t> Delta;
 };
 
-// Recognize scalar 64-bit add/sub forms that preserve a pointer's identity while
-// changing only its constant byte offset. The caller supplies register identity
-// so the same predicate can serve both the MC-only prepass and handler-time
-// ParsedReg state.
+// Recognize scalar 64-bit add/sub forms that preserve a pointer's identity
+// while changing only its constant byte offset. The caller supplies register
+// identity so the same predicate can serve both the MC-only prepass and
+// handler-time ParsedReg state.
 inline KernargPtrConstRebase classifyKernargPtrConstRebase(
     const DecodedInst &Di, llvm::function_ref<bool(llvm::MCRegister)> IsPair) {
   if ((Di.CanonOp != CanonicalOp::S_ADD_NC_U64 &&
@@ -82,8 +82,9 @@ struct RaiseContext {
   AllocaRegFile &Regs;
   const WaveProjection &Projection;
   const MCState &Mc;
-  const ISAProfile &Isa;       // source ISA (for disassembly / instruction semantics)
-  ISAProfile TargetIsa;        // compilation target ISA (for code generation decisions)
+  const ISAProfile &Isa; // source ISA (for disassembly / instruction semantics)
+  ISAProfile
+      TargetIsa; // compilation target ISA (for code generation decisions)
   // Target hidden-arg offsets are code-object-version dependent; default to
   // the backend's current emission contract and let the raiser override it.
   unsigned TargetCodeObjectVersion = 6;
@@ -208,8 +209,8 @@ struct RaiseContext {
   // stay DPP-agnostic. See `decoded-inst.h`'s DPP-state block for how
   // the modifier operand values reach us.
   llvm::Value *emitUpdateDpp(llvm::Value *OldVal, llvm::Value *Src,
-                              uint16_t Ctrl, uint8_t RowMask,
-                              uint8_t BankMask, bool BoundCtrl);
+                             uint16_t Ctrl, uint8_t RowMask, uint8_t BankMask,
+                             bool BoundCtrl);
 
   // Target-hardware lane id (i32), emitted once per kernel and reused.
   llvm::Value *emitLaneIdx();
@@ -291,9 +292,9 @@ struct RaiseContext {
   };
 
   // Consumers classify the pair by combining the two lane facts: both LiveEntry
-  // permits source hidden-arg synthesis at EntryByteOffset + instruction offset,
-  // both NonEntry uses ordinary memory lowering, and any mixed/Unknown state is
-  // ambiguous in strict mode.
+  // permits source hidden-arg synthesis at EntryByteOffset + instruction
+  // offset, both NonEntry uses ordinary memory lowering, and any mixed/Unknown
+  // state is ambiguous in strict mode.
   struct KernargPtrProvenance {
     KernargPtrLaneProvenance Low = KernargPtrLaneProvenance::Unknown;
     KernargPtrLaneProvenance High = KernargPtrLaneProvenance::Unknown;
@@ -318,8 +319,9 @@ struct RaiseContext {
   // Merge facts from two control-flow paths. Equal lane facts survive; any
   // disagreement becomes Unknown. A LiveEntry pair keeps EntryByteOffset only
   // when every incoming path has the same offset.
-  static KernargPtrLaneProvenance joinKernargPtrLaneProvenance(
-      KernargPtrLaneProvenance Lhs, KernargPtrLaneProvenance Rhs) {
+  static KernargPtrLaneProvenance
+  joinKernargPtrLaneProvenance(KernargPtrLaneProvenance Lhs,
+                               KernargPtrLaneProvenance Rhs) {
     if (Lhs == Rhs)
       return Lhs;
     return KernargPtrLaneProvenance::Unknown;
@@ -327,8 +329,7 @@ struct RaiseContext {
 
   // Pair-wise control-flow join for provenance carried through IR diamonds.
   static KernargPtrProvenance
-  joinKernargPtrProvenance(KernargPtrProvenance Lhs,
-                           KernargPtrProvenance Rhs) {
+  joinKernargPtrProvenance(KernargPtrProvenance Lhs, KernargPtrProvenance Rhs) {
     KernargPtrProvenance Result = {
         joinKernargPtrLaneProvenance(Lhs.Low, Rhs.Low),
         joinKernargPtrLaneProvenance(Lhs.High, Rhs.High), 0};
@@ -534,8 +535,9 @@ struct RaiseContext {
 
   // Conservative lane-wise kernarg-pointer provenance for the strict hidden-arg
   // SMEM gate. Filled before instruction lowering by a fixed-point over the
-  // decoded CFG. Mixed incoming states become Unknown and keep strict mode loud.
-  // False means tracking is inactive and BB entry uses Unknown without lookup.
+  // decoded CFG. Mixed incoming states become Unknown and keep strict mode
+  // loud. False means tracking is inactive and BB entry uses Unknown without
+  // lookup.
   bool HasKernargPtrProvenanceByBB = false;
   llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>
       KernargSegmentPtrProvenanceByBB =
@@ -554,8 +556,8 @@ struct RaiseContext {
     LastSgprWaveMaskI1[BaseIdx] = WaveMaskEntry{CmpI1, IsPair};
     if (BaseIdx >= 0 &&
         static_cast<size_t>(BaseIdx) < SgprWaveMaskExecShadow.size()) {
-      llvm::Value *ExecMask = Projection.ballotI1ToWidth(
-          B, CmpI1, Regs.ExecTy, "wm_shadow_exec");
+      llvm::Value *ExecMask =
+          Projection.ballotI1ToWidth(B, CmpI1, Regs.ExecTy, "wm_shadow_exec");
       B.CreateStore(ExecMask, SgprWaveMaskExecShadow[BaseIdx]);
       B.CreateStore(B.getTrue(), SgprWaveMaskValidShadow[BaseIdx]);
     }
@@ -572,14 +574,16 @@ struct RaiseContext {
   }
 
   llvm::Value *loadSgprWaveMaskExec(int BaseIdx) const {
-    if (BaseIdx < 0 || static_cast<size_t>(BaseIdx) >= SgprWaveMaskExecShadow.size())
+    if (BaseIdx < 0 ||
+        static_cast<size_t>(BaseIdx) >= SgprWaveMaskExecShadow.size())
       return nullptr;
     return B.CreateLoad(Regs.ExecTy, SgprWaveMaskExecShadow[BaseIdx],
                         "sgpr_mask_exec");
   }
 
   llvm::Value *loadSgprWaveMaskValid(int BaseIdx) const {
-    if (BaseIdx < 0 || static_cast<size_t>(BaseIdx) >= SgprWaveMaskValidShadow.size())
+    if (BaseIdx < 0 ||
+        static_cast<size_t>(BaseIdx) >= SgprWaveMaskValidShadow.size())
       return nullptr;
     return B.CreateLoad(I1Ty, SgprWaveMaskValidShadow[BaseIdx],
                         "sgpr_mask_valid");
@@ -683,21 +687,26 @@ struct OpResolver {
 
   unsigned srcMod(unsigned I) const {
     unsigned ModIdx = Di.ModMap[I];
-    if (ModIdx == UINT_MAX) return 0;
-    if (!Di.isImm(ModIdx)) return 0;
+    if (ModIdx == UINT_MAX)
+      return 0;
+    if (!Di.isImm(ModIdx))
+      return 0;
     return static_cast<unsigned>(Di.getImm(ModIdx) & 0xF);
   }
 
   llvm::Value *applyMods(unsigned I, llvm::Value *V) {
     unsigned Mods = srcMod(I);
-    if (Mods == 0) return V;
+    if (Mods == 0)
+      return V;
     bool IsI32 = (V->getType() == Ctx.I32Ty);
-    if (IsI32) V = Ctx.B.CreateBitCast(V, Ctx.F32Ty);
+    if (IsI32)
+      V = Ctx.B.CreateBitCast(V, Ctx.F32Ty);
     if (Mods & 2)
       V = Ctx.B.CreateUnaryIntrinsic(llvm::Intrinsic::fabs, V, nullptr, "abs");
     if (Mods & 1)
       V = Ctx.B.CreateFNeg(V, "neg");
-    if (IsI32) V = Ctx.B.CreateBitCast(V, Ctx.I32Ty);
+    if (IsI32)
+      V = Ctx.B.CreateBitCast(V, Ctx.I32Ty);
     return V;
   }
 
@@ -722,12 +731,14 @@ struct OpResolver {
   // but each lookup stays coherent. `emitUpdateDpp` supports both
   // widths; other widths abort loudly.
   llvm::Value *wrapDppIfNeeded(unsigned LogicalSrc, llvm::Value *Raw) {
-    if (!Di.HasDpp || LogicalSrc != 0) return Raw;
-    if (rejectDpp16FetchInactiveIfNeeded()) return Raw;
+    if (!Di.HasDpp || LogicalSrc != 0)
+      return Raw;
+    if (rejectDpp16FetchInactiveIfNeeded())
+      return Raw;
     if (!CachedDppOldVdst32)
       CachedDppOldVdst32 = Ctx.readOp32(Di, 0);
     return Ctx.emitUpdateDpp(CachedDppOldVdst32, Raw, Di.DppCtrl, Di.DppRowMask,
-                              Di.DppBankMask, Di.DppBoundCtrl);
+                             Di.DppBankMask, Di.DppBoundCtrl);
   }
 
   llvm::Value *src(unsigned I) {
@@ -740,13 +751,16 @@ struct OpResolver {
     llvm::Value *Raw = Ctx.readOp64(Di, srcIdx(I));
     if (!Di.HasDpp || I != 0)
       return Raw;
-    if (rejectDpp16FetchInactiveIfNeeded()) return Raw;
+    if (rejectDpp16FetchInactiveIfNeeded())
+      return Raw;
     if (!CachedDppOldVdst64)
       CachedDppOldVdst64 = Ctx.readOp64(Di, 0);
     return Ctx.emitUpdateDpp(CachedDppOldVdst64, Raw, Di.DppCtrl, Di.DppRowMask,
-                              Di.DppBankMask, Di.DppBoundCtrl);
+                             Di.DppBankMask, Di.DppBoundCtrl);
   }
-  llvm::Value *srcExecWidth(unsigned I) { return Ctx.readOpExecWidth(Di, srcIdx(I)); }
+  llvm::Value *srcExecWidth(unsigned I) {
+    return Ctx.readOpExecWidth(Di, srcIdx(I));
+  }
   int64_t srcImm(unsigned I) { return Di.getImm(srcIdx(I)); }
 
   ParsedReg dst(unsigned I = 0) { return Ctx.parseReg(Di.getReg(I), I); }

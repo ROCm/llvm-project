@@ -95,19 +95,17 @@ llvm::Error readKernelDescriptorBytes(llvm::object::ObjectFile &Obj,
   uint64_t SymAddr = *AddrOrErr;
 
   if (SymAddr < RodataAddr || SymAddr + KdSize > RodataAddr + RodataSize)
-    return makeHotswapError("readKernelDescriptorBytes: symbol '" + KdSymName +
-                            "' at " + hexAddr(SymAddr) +
-                            " is not contained within .rodata [" +
-                            hexAddr(RodataAddr) + ", " +
-                            hexAddr(RodataAddr + RodataSize) + ")");
+    return makeHotswapError(
+        "readKernelDescriptorBytes: symbol '" + KdSymName + "' at " +
+        hexAddr(SymAddr) + " is not contained within .rodata [" +
+        hexAddr(RodataAddr) + ", " + hexAddr(RodataAddr + RodataSize) + ")");
 
   uint64_t Off = SymAddr - RodataAddr;
   if (Off + KdSize > RodataContents.size())
-    return makeHotswapError("readKernelDescriptorBytes: symbol '" + KdSymName +
-                            "' offset " + hexAddr(Off) + " + " +
-                            llvm::Twine(KdSize) +
-                            " exceeds .rodata contents size " +
-                            hexAddr(RodataContents.size()));
+    return makeHotswapError(
+        "readKernelDescriptorBytes: symbol '" + KdSymName + "' offset " +
+        hexAddr(Off) + " + " + llvm::Twine(KdSize) +
+        " exceeds .rodata contents size " + hexAddr(RodataContents.size()));
 
   llvm::ArrayRef<uint8_t> Src(RodataContents.bytes_begin() + Off, KdSize);
   llvm::copy(Src, Out.begin());
@@ -190,8 +188,7 @@ void forEachKernelNode(llvm::msgpack::Document &Doc, Fn &&CB) {
   llvm::msgpack::DocNode &Root = Doc.getRoot();
   if (!Root.isMap())
     return;
-  llvm::msgpack::DocNode *Kernels =
-      findInMap(Root.getMap(), "amdhsa.kernels");
+  llvm::msgpack::DocNode *Kernels = findInMap(Root.getMap(), "amdhsa.kernels");
   if (!Kernels || !Kernels->isArray())
     return;
   for (auto &K : Kernels->getArray()) {
@@ -261,65 +258,67 @@ llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
   KernelMeta Meta;
   bool MatchedKernel = false;
   bool MalformedClusterDims = false;
-  forEachKernelNode(MetaDoc.MetaDoc->Document,
-                    [&](llvm::msgpack::MapDocNode &KMap) {
-    if (MatchedKernel)
-      return;
-    llvm::msgpack::DocNode *NameNode = findInMap(KMap, ".name");
-    if (!NameNode || NameNode->toString() != KernelName)
-      return;
-    MatchedKernel = true;
-    Meta.Name = NameNode->toString();
+  forEachKernelNode(
+      MetaDoc.MetaDoc->Document, [&](llvm::msgpack::MapDocNode &KMap) {
+        if (MatchedKernel)
+          return;
+        llvm::msgpack::DocNode *NameNode = findInMap(KMap, ".name");
+        if (!NameNode || NameNode->toString() != KernelName)
+          return;
+        MatchedKernel = true;
+        Meta.Name = NameNode->toString();
 
-    if (llvm::msgpack::DocNode *N = findInMap(KMap, ".kernarg_segment_size"))
-      Meta.KernargSegmentSize = nodeAsInt(*N);
-    if (llvm::msgpack::DocNode *N =
-            findInMap(KMap, ".group_segment_fixed_size"))
-      Meta.GroupSegmentFixedSize = nodeAsInt(*N);
-    if (llvm::msgpack::DocNode *N =
-            findInMap(KMap, ".private_segment_fixed_size"))
-      Meta.PrivateSegmentFixedSize = nodeAsInt(*N);
-    if (llvm::msgpack::DocNode *N = findInMap(KMap, ".max_flat_workgroup_size"))
-      Meta.MaxFlatWorkgroupSize = nodeAsInt(*N);
-    if (llvm::msgpack::DocNode *ClusterDims =
-            findInMap(KMap, ".cluster_dims")) {
-      if (!ClusterDims->isArray() || ClusterDims->getArray().size() != 3) {
-        MalformedClusterDims = true;
-      } else {
-        for (llvm::msgpack::DocNode &DimNode : ClusterDims->getArray()) {
-          std::optional<uint32_t> Dim = nodeAsUInt32(DimNode);
-          if (!Dim) {
+        if (llvm::msgpack::DocNode *N =
+                findInMap(KMap, ".kernarg_segment_size"))
+          Meta.KernargSegmentSize = nodeAsInt(*N);
+        if (llvm::msgpack::DocNode *N =
+                findInMap(KMap, ".group_segment_fixed_size"))
+          Meta.GroupSegmentFixedSize = nodeAsInt(*N);
+        if (llvm::msgpack::DocNode *N =
+                findInMap(KMap, ".private_segment_fixed_size"))
+          Meta.PrivateSegmentFixedSize = nodeAsInt(*N);
+        if (llvm::msgpack::DocNode *N =
+                findInMap(KMap, ".max_flat_workgroup_size"))
+          Meta.MaxFlatWorkgroupSize = nodeAsInt(*N);
+        if (llvm::msgpack::DocNode *ClusterDims =
+                findInMap(KMap, ".cluster_dims")) {
+          if (!ClusterDims->isArray() || ClusterDims->getArray().size() != 3) {
             MalformedClusterDims = true;
-            break;
+          } else {
+            for (llvm::msgpack::DocNode &DimNode : ClusterDims->getArray()) {
+              std::optional<uint32_t> Dim = nodeAsUInt32(DimNode);
+              if (!Dim) {
+                MalformedClusterDims = true;
+                break;
+              }
+              Meta.ClusterDims.push_back(*Dim);
+            }
+            if (!MalformedClusterDims)
+              Meta.HasClusterDims = true;
           }
-          Meta.ClusterDims.push_back(*Dim);
         }
-        if (!MalformedClusterDims)
-          Meta.HasClusterDims = true;
-      }
-    }
 
-    if (llvm::msgpack::DocNode *Args = findInMap(KMap, ".args");
-        Args && Args->isArray()) {
-      for (llvm::msgpack::DocNode &ArgNode : Args->getArray()) {
-        if (!ArgNode.isMap())
-          continue;
-        llvm::msgpack::MapDocNode &AMap = ArgNode.getMap();
-        KernelArgMeta Am;
-        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".name"))
-          Am.Name = N->toString();
-        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".offset"))
-          Am.Offset = nodeAsInt(*N);
-        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".size"))
-          Am.Size = nodeAsInt(*N);
-        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".value_kind"))
-          Am.ValueKind = N->toString();
-        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".address_space"))
-          Am.AddressSpace = nodeAsInt(*N);
-        Meta.Args.push_back(Am);
-      }
-    }
-  });
+        if (llvm::msgpack::DocNode *Args = findInMap(KMap, ".args");
+            Args && Args->isArray()) {
+          for (llvm::msgpack::DocNode &ArgNode : Args->getArray()) {
+            if (!ArgNode.isMap())
+              continue;
+            llvm::msgpack::MapDocNode &AMap = ArgNode.getMap();
+            KernelArgMeta Am;
+            if (llvm::msgpack::DocNode *N = findInMap(AMap, ".name"))
+              Am.Name = N->toString();
+            if (llvm::msgpack::DocNode *N = findInMap(AMap, ".offset"))
+              Am.Offset = nodeAsInt(*N);
+            if (llvm::msgpack::DocNode *N = findInMap(AMap, ".size"))
+              Am.Size = nodeAsInt(*N);
+            if (llvm::msgpack::DocNode *N = findInMap(AMap, ".value_kind"))
+              Am.ValueKind = N->toString();
+            if (llvm::msgpack::DocNode *N = findInMap(AMap, ".address_space"))
+              Am.AddressSpace = nodeAsInt(*N);
+            Meta.Args.push_back(Am);
+          }
+        }
+      });
 
   if (!MatchedKernel)
     return makeHotswapError("extractKernelMeta: kernel '" + KernelName +

@@ -79,8 +79,8 @@ inline llvm::Value *emitU16Mad(RaiseContext &Ctx, llvm::Value *A,
          "u16 MAD clamp constant must match the widened type");
 
   if (!Clamp) {
-    return Ctx.B.CreateAdd(Ctx.B.CreateMul(A, B, llvm::Twine(Name) + "_mul"),
-                           C, Name);
+    return Ctx.B.CreateAdd(Ctx.B.CreateMul(A, B, llvm::Twine(Name) + "_mul"), C,
+                           Name);
   }
 
   llvm::Value *WideA =
@@ -92,9 +92,8 @@ inline llvm::Value *emitU16Mad(RaiseContext &Ctx, llvm::Value *A,
   llvm::Value *Wide = Ctx.B.CreateAdd(
       Ctx.B.CreateMul(WideA, WideB, llvm::Twine(Name) + "_mul_wide"), WideC,
       llvm::Twine(Name) + "_wide");
-  llvm::Function *UminFn =
-      llvm::Intrinsic::getOrInsertDeclaration(&Ctx.M, llvm::Intrinsic::umin,
-                                              {WideTy});
+  llvm::Function *UminFn = llvm::Intrinsic::getOrInsertDeclaration(
+      &Ctx.M, llvm::Intrinsic::umin, {WideTy});
   llvm::Value *Sat =
       Ctx.B.CreateCall(UminFn, {Wide, ClampMax}, llvm::Twine(Name) + "_clamp");
   return Ctx.B.CreateTrunc(Sat, A->getType(), Name);

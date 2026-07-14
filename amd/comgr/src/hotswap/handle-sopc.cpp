@@ -51,16 +51,14 @@ Expected<HandlerResult> handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
   // would break the corpus's per-thread-mask compares used in
   // tensilelite gemm dispatch.
   if (Sop == CanonicalOp::S_CMP_EQ_U64) {
-    Value *Cmp64 =
-        Ctx.B.CreateICmpEQ(Op.src64(0), Op.src64(1), "scmp64");
+    Value *Cmp64 = Ctx.B.CreateICmpEQ(Op.src64(0), Op.src64(1), "scmp64");
     Ctx.Regs.storeSCC(Ctx.B, Cmp64);
     Hr.SccHandled = true;
     Hr.Handled = true;
     return Hr;
   }
   if (Sop == CanonicalOp::S_CMP_LG_U64) {
-    Value *Cmp64 =
-        Ctx.B.CreateICmpNE(Op.src64(0), Op.src64(1), "scmp64");
+    Value *Cmp64 = Ctx.B.CreateICmpNE(Op.src64(0), Op.src64(1), "scmp64");
     Ctx.Regs.storeSCC(Ctx.B, Cmp64);
     Hr.SccHandled = true;
     Hr.Handled = true;
@@ -89,8 +87,10 @@ Expected<HandlerResult> handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
   // parity with the SOPC compare family above (`S_CMP_*`) and makes
   // the four opcodes share exactly one code path.
   {
-    bool Is64 = (Sop == CanonicalOp::S_BITCMP0_B64 || Sop == CanonicalOp::S_BITCMP1_B64);
-    bool IsB32 = (Sop == CanonicalOp::S_BITCMP0_B32 || Sop == CanonicalOp::S_BITCMP1_B32);
+    bool Is64 = (Sop == CanonicalOp::S_BITCMP0_B64 ||
+                 Sop == CanonicalOp::S_BITCMP1_B64);
+    bool IsB32 = (Sop == CanonicalOp::S_BITCMP0_B32 ||
+                  Sop == CanonicalOp::S_BITCMP1_B32);
     if (Is64 || IsB32) {
       Value *Src0 = Is64 ? Op.src64(0) : Op.src(0);
       Type *IntTy = Is64 ? Ctx.I64Ty : Ctx.I32Ty;
@@ -104,17 +104,17 @@ Expected<HandlerResult> handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
         Shamt = Ctx.B.CreateBitOrPointerCast(Shamt, Ctx.I32Ty);
       Shamt = Ctx.B.CreateAnd(Shamt, ConstantInt::get(Ctx.I32Ty, Mask),
                               "bitcmp_shamt");
-      if (Is64) Shamt = Ctx.B.CreateZExt(Shamt, Ctx.I64Ty, "bitcmp_shamt64");
+      if (Is64)
+        Shamt = Ctx.B.CreateZExt(Shamt, Ctx.I64Ty, "bitcmp_shamt64");
 
-      Value *Bit = Ctx.B.CreateShl(ConstantInt::get(IntTy, 1), Shamt,
-                                    "bitcmp_bit");
+      Value *Bit =
+          Ctx.B.CreateShl(ConstantInt::get(IntTy, 1), Shamt, "bitcmp_bit");
       Value *Masked = Ctx.B.CreateAnd(Src0, Bit, "bitcmp_mask");
       Value *Zero = ConstantInt::get(IntTy, 0);
-      bool IsZeroPred =
-          (Sop == CanonicalOp::S_BITCMP0_B32 || Sop == CanonicalOp::S_BITCMP0_B64);
-      Value *Scc = IsZeroPred
-                       ? Ctx.B.CreateICmpEQ(Masked, Zero, "bitcmp0")
-                       : Ctx.B.CreateICmpNE(Masked, Zero, "bitcmp1");
+      bool IsZeroPred = (Sop == CanonicalOp::S_BITCMP0_B32 ||
+                         Sop == CanonicalOp::S_BITCMP0_B64);
+      Value *Scc = IsZeroPred ? Ctx.B.CreateICmpEQ(Masked, Zero, "bitcmp0")
+                              : Ctx.B.CreateICmpNE(Masked, Zero, "bitcmp1");
       Ctx.Regs.storeSCC(Ctx.B, Scc);
       Hr.SccHandled = true;
       Hr.Handled = true;
@@ -150,7 +150,8 @@ Expected<HandlerResult> handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
   else if (Sop == CanonicalOp::S_CMP_LG_I32)
     Cmp = Ctx.B.CreateICmpNE(Src0, Src1, "scmp");
   // GFX12 scalar FP compares (ordered and unordered variants)
-  else if (Sop >= CanonicalOp::S_CMP_EQ_F32 && Sop <= CanonicalOp::S_CMP_U_F32) {
+  else if (Sop >= CanonicalOp::S_CMP_EQ_F32 &&
+           Sop <= CanonicalOp::S_CMP_U_F32) {
     Value *F0 = Ctx.B.CreateBitCast(Src0, Ctx.F32Ty);
     Value *F1 = Ctx.B.CreateBitCast(Src1, Ctx.F32Ty);
     if (Sop == CanonicalOp::S_CMP_EQ_F32)
@@ -181,7 +182,8 @@ Expected<HandlerResult> handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
       Cmp = Ctx.B.CreateFCmpORD(F0, F1, "scmpf");
     else if (Sop == CanonicalOp::S_CMP_U_F32)
       Cmp = Ctx.B.CreateFCmpUNO(F0, F1, "scmpf");
-  } else if (Sop >= CanonicalOp::S_CMP_EQ_F16 && Sop <= CanonicalOp::S_CMP_U_F16) {
+  } else if (Sop >= CanonicalOp::S_CMP_EQ_F16 &&
+             Sop <= CanonicalOp::S_CMP_U_F16) {
     Type *F16Ty = Type::getHalfTy(Ctx.C);
     Value *F0 = Ctx.B.CreateBitCast(
         Ctx.B.CreateTrunc(Src0, Type::getInt16Ty(Ctx.C)), F16Ty);

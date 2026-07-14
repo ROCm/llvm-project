@@ -33,10 +33,8 @@ namespace mxfp4 {
 //   0b0110 / 0b1110 -> +/-4.0   = 0x4080 / 0xC080   (BF16 exp=129, mant=0)
 //   0b0111 / 0b1111 -> +/-6.0   = 0x40C0 / 0xC0C0   (BF16 exp=129, mant=0x40)
 const uint16_t kMxfp4ToBf16Table[16] = {
-    0x0000, 0x3F00, 0x3F80, 0x3FC0,
-    0x4000, 0x4040, 0x4080, 0x40C0,
-    0x8000, 0xBF00, 0xBF80, 0xBFC0,
-    0xC000, 0xC040, 0xC080, 0xC0C0,
+    0x0000, 0x3F00, 0x3F80, 0x3FC0, 0x4000, 0x4040, 0x4080, 0x40C0,
+    0x8000, 0xBF00, 0xBF80, 0xBFC0, 0xC000, 0xC040, 0xC080, 0xC0C0,
 };
 
 uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
@@ -45,24 +43,24 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
   // FP4 E2M1 field extraction.  sign is bit 3; exp is bits 2..1
   // (bias=1, range 0..3); mant is bit 0.
   uint32_t SignBit = (N >> 3) & 0x1u;
-  uint32_t ExpFp4  = (N >> 1) & 0x3u;
-  uint32_t MantFp4 =  N       & 0x1u;
+  uint32_t ExpFp4 = (N >> 1) & 0x3u;
+  uint32_t MantFp4 = N & 0x1u;
 
   // Normal-FP4 -> BF16 field synthesis.  FP4 exp = 1..3 maps to BF16
   // exp = 127..129 (i.e. exp_fp4 + 126).  FP4 mant=1 maps to BF16
   // mantissa 0x40 (the top bit of the 7-bit mantissa, which for BF16
   // at exp=127 encodes the 0.5 contribution: 1 + 0x40*2^-7 = 1.5).
-  uint32_t Bf16ExpNorm  = ExpFp4 + 126u;
+  uint32_t Bf16ExpNorm = ExpFp4 + 126u;
   uint32_t Bf16MantNorm = MantFp4 ? 0x40u : 0x00u;
 
   // Subnormal-FP4 branch (exp_fp4 == 0): FP4 value is +/-0 (mant_fp4=0)
   // or +/-0.5 (mant_fp4=1).  +/-0.5 is representable as a BF16 NORMAL
   // (exp=126, mant=0); +/-0 is BF16 +/-0 (exp=0, mant=0 with sign).
-  uint32_t Bf16ExpSub   = MantFp4 ? 126u : 0u;
-  uint32_t Bf16MantSub  = 0u;
+  uint32_t Bf16ExpSub = MantFp4 ? 126u : 0u;
+  uint32_t Bf16MantSub = 0u;
 
   uint32_t IsSub = (ExpFp4 == 0u) ? 1u : 0u;
-  uint32_t Bf16Exp  = IsSub ? Bf16ExpSub  : Bf16ExpNorm;
+  uint32_t Bf16Exp = IsSub ? Bf16ExpSub : Bf16ExpNorm;
   uint32_t Bf16Mant = IsSub ? Bf16MantSub : Bf16MantNorm;
 
   // Apply the E8M0 scale by adjusting the BF16 exponent field.  For
@@ -82,7 +80,7 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
     return static_cast<uint16_t>(0x7FC0);
   }
 
-  uint32_t Magnitude = (Bf16Exp << 7) | Bf16Mant;  // low 15 bits
+  uint32_t Magnitude = (Bf16Exp << 7) | Bf16Mant; // low 15 bits
   uint32_t SignField = SignBit << 15;
   if (Magnitude == 0u) {
     // FP4 +/-0: result is +/-0 regardless of the (finite) scale.  Sign
@@ -95,8 +93,7 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
   // so overflow / underflow branches dispatch on the sign of the
   // result (not on unsigned wrap).
   int32_t NewExpI =
-      static_cast<int32_t>(Bf16Exp) +
-      static_cast<int32_t>(Scale) - 127;
+      static_cast<int32_t>(Bf16Exp) + static_cast<int32_t>(Scale) - 127;
 
   if (NewExpI >= 0xFF) {
     // Overflow to BF16 +/-Inf (BF16 supports inf; FP4 does not, but the
@@ -107,9 +104,8 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
   if (NewExpI >= 1) {
     // Normal BF16 result.  Sign preserved, mantissa preserved
     // (power-of-2 scale doesn't change mantissa bits), exp replaced.
-    return static_cast<uint16_t>(SignField |
-        ((static_cast<uint32_t>(NewExpI) & 0xFFu) << 7) |
-        Bf16Mant);
+    return static_cast<uint16_t>(
+        SignField | ((static_cast<uint32_t>(NewExpI) & 0xFFu) << 7) | Bf16Mant);
   }
 
   // Underflow into BF16 subnormal range.  BF16 subnormals are
@@ -117,11 +113,9 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
   // result below that decays to +/-0.  Construct the subnormal bit
   // pattern by shifting the implicit-1.mant value right by the
   // amount the exponent fell below 1.
-  uint32_t Implicit1Mant = 0x80u | Bf16Mant;     // 0x80 (FP4=1) or 0xC0 (FP4=1.5)
-  int32_t ShiftAmt = 1 - NewExpI;                // >= 1
-  uint32_t SubMant = (ShiftAmt >= 8)
-                          ? 0u
-                          : (Implicit1Mant >> ShiftAmt);
+  uint32_t Implicit1Mant = 0x80u | Bf16Mant; // 0x80 (FP4=1) or 0xC0 (FP4=1.5)
+  int32_t ShiftAmt = 1 - NewExpI;            // >= 1
+  uint32_t SubMant = (ShiftAmt >= 8) ? 0u : (Implicit1Mant >> ShiftAmt);
   return static_cast<uint16_t>(SignField | SubMant);
 }
 
@@ -132,7 +126,7 @@ namespace {
 // `kMxfp4ToBf16Table` so the unit test can cross-check both FP4 ->
 // BF16 first-step lookups against the same OCP-spec table.
 constexpr double kMxfp4ToDouble[16] = {
-     0.0,  0.5,  1.0,  1.5,  2.0,  3.0,  4.0,  6.0,
+    0.0,  0.5,  1.0,  1.5,  2.0,  3.0,  4.0,  6.0,
     -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0,
 };
 
@@ -168,8 +162,8 @@ llvm::Expected<uint16_t> exactDoubleToBf16(double V) {
   uint64_t U;
   static_assert(sizeof(U) == sizeof(V), "double must be 64 bits");
   __builtin_memcpy(&U, &V, sizeof(U));
-  uint32_t Sign   = static_cast<uint32_t>(U >> 63) & 1u;
-  uint32_t ExpD  = static_cast<uint32_t>((U >> 52) & 0x7FFu);
+  uint32_t Sign = static_cast<uint32_t>(U >> 63) & 1u;
+  uint32_t ExpD = static_cast<uint32_t>((U >> 52) & 0x7FFu);
   uint64_t MantD = U & ((uint64_t{1} << 52) - 1);
 
   if (ExpD == 0x7FFu) {
@@ -190,7 +184,7 @@ llvm::Expected<uint16_t> exactDoubleToBf16(double V) {
     return static_cast<uint16_t>(Sign << 15);
   }
 
-  uint32_t High7 = static_cast<uint32_t>(MantD >> 45);   // top 7 mantissa bits
+  uint32_t High7 = static_cast<uint32_t>(MantD >> 45); // top 7 mantissa bits
   int32_t EUnbiased = static_cast<int32_t>(ExpD) - 1023;
   int32_t BfExp = EUnbiased + 127;
 
@@ -200,20 +194,17 @@ llvm::Expected<uint16_t> exactDoubleToBf16(double V) {
   }
 
   if (BfExp >= 1) {
-    return static_cast<uint16_t>((Sign << 15) |
-        ((static_cast<uint32_t>(BfExp) & 0xFFu) << 7) |
-        High7);
+    return static_cast<uint16_t>(
+        (Sign << 15) | ((static_cast<uint32_t>(BfExp) & 0xFFu) << 7) | High7);
   }
 
   // Underflow: right-shift the implicit-1.mant pattern into the
   // subnormal range.  No rounding to worry about -- the low bits we
   // drop are all zero by precondition (low45 == 0 ensures the top 7
   // mantissa bits are the ONLY set bits below bit 52).
-  uint32_t Implicit1Mant = 0x80u | High7;   // 0x80 (FP4=1.0) or 0xC0 (FP4=1.5)
-  int32_t ShiftAmt = 1 - BfExp;              // >= 1
-  uint32_t SubMant = (ShiftAmt >= 8)
-                          ? 0u
-                          : (Implicit1Mant >> ShiftAmt);
+  uint32_t Implicit1Mant = 0x80u | High7; // 0x80 (FP4=1.0) or 0xC0 (FP4=1.5)
+  int32_t ShiftAmt = 1 - BfExp;           // >= 1
+  uint32_t SubMant = (ShiftAmt >= 8) ? 0u : (Implicit1Mant >> ShiftAmt);
   return static_cast<uint16_t>((Sign << 15) | SubMant);
 }
 
@@ -225,8 +216,7 @@ double e8m0ScaleToDouble(uint8_t ScaleByte) {
   // scale_byte == 0xFE -> exp_field = 1150, which is within the
   // double's normal range (exp_field in [1, 2046] is normal).
   uint64_t Bits =
-      (static_cast<uint64_t>(static_cast<uint32_t>(ScaleByte) + 896u))
-      << 52;
+      (static_cast<uint64_t>(static_cast<uint32_t>(ScaleByte) + 896u)) << 52;
   double D;
   __builtin_memcpy(&D, &Bits, sizeof(D));
   return D;
@@ -250,8 +240,8 @@ llvm::Expected<uint16_t> mxfp4LutBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
     return static_cast<uint16_t>(0x7FC0);
   }
   double Fp4Val = kMxfp4ToDouble[Nibble & 0xFu];
-  double Scale   = e8m0ScaleToDouble(ScaleByte);
-  double Scaled  = Fp4Val * Scale;  // exact: power-of-2 mul
+  double Scale = e8m0ScaleToDouble(ScaleByte);
+  double Scaled = Fp4Val * Scale; // exact: power-of-2 mul
   // `exactDoubleToBf16` handles +/-0 (which fp4 * finite-scale
   // produces directly when fp4_val is +/-0), overflow to Inf, and
   // subnormal underflow uniformly -- returning an error on any input

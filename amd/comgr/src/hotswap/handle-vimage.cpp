@@ -79,13 +79,13 @@
 
 #include "handlers.h"
 
+#include "canonical-op.h"
 #include "decoded-inst.h"
 #include "isa-profile.h"
 #include "parsed-reg.h"
 #include "raise-context.h"
 #include "raise-failure.h"
 #include "reg-file.h"
-#include "canonical-op.h"
 #include "tdm-runtime.h"
 
 #include "llvm/ADT/Twine.h"
@@ -114,7 +114,8 @@ Value *marshalSgprGroup(RaiseContext &Ctx, ParsedReg Base, unsigned N,
   auto *VecTy = FixedVectorType::get(Ctx.I32Ty, N);
   Value *Vec = PoisonValue::get(VecTy);
   for (unsigned I = 0; I < N; ++I) {
-    Value *Dword = Ctx.Regs.loadSGPR32(Ctx.B, Base.BaseIdx + static_cast<int>(I));
+    Value *Dword =
+        Ctx.Regs.loadSGPR32(Ctx.B, Base.BaseIdx + static_cast<int>(I));
     Vec = Ctx.B.CreateInsertElement(Vec, Dword, I, Name);
   }
   return Vec;
@@ -269,15 +270,14 @@ Expected<HandlerResult> handleVIMAGE(RaiseContext &Ctx, const DecodedInst &Di,
   // pre-existing loud refusal so the no-hipcc build behaves exactly
   // as it did before this path landed.
   if (!tdmRuntimeAvailable()) {
-    llvm::errs()
-        << "transpiler: VIMAGE: " << Di.Mnemonic
-        << " has no equivalent on the compilation target "
-        << "(gfx1250 TENSORcnt unit; LLVM intrinsic "
-        << (Sop == CanonicalOp::TENSOR_LOAD_TO_LDS
-                ? "amdgcn.tensor.load.to.lds"
-                : "amdgcn.tensor.store.from.lds")
-        << " is gated isGFX125xOnly) and the TDM emulation runtime is "
-           "unavailable (transpiler was built without hipcc).\n";
+    llvm::errs() << "transpiler: VIMAGE: " << Di.Mnemonic
+                 << " has no equivalent on the compilation target "
+                 << "(gfx1250 TENSORcnt unit; LLVM intrinsic "
+                 << (Sop == CanonicalOp::TENSOR_LOAD_TO_LDS
+                         ? "amdgcn.tensor.load.to.lds"
+                         : "amdgcn.tensor.store.from.lds")
+                 << " is gated isGFX125xOnly) and the TDM emulation runtime is "
+                    "unavailable (transpiler was built without hipcc).\n";
     return RaiseFailure::unsupportedInstructionForm(
         Di, "VIMAGE",
         "gfx1250-only TENSOR cnt op; no equivalent on non-gfx1250 "

@@ -11,7 +11,7 @@
 #include "canonical-op.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h" // AMDGPU::OpName
-#include "SIDefines.h"                        // SISrcMods::OP_SEL_0
+#include "SIDefines.h"                       // SISrcMods::OP_SEL_0
 #include "Utils/AMDGPUBaseInfo.h"
 
 #include "llvm/ADT/Twine.h"
@@ -104,8 +104,8 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
   // slot) and `op.src(0)` (which `buildSrcMap` keeps as src0 after
   // the `vdst_in` elision).  Two outputs, two tied inputs, both
   // carried on VGPRs.
-  int Src0OutIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                               AMDGPU::OpName::src0_out);
+  int Src0OutIdx =
+      AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::src0_out);
   if (Src0OutIdx < 0 ||
       static_cast<unsigned>(Src0OutIdx) >= Di.Inst.getNumOperands() ||
       !Di.Inst.getOperand(static_cast<unsigned>(Src0OutIdx)).isReg()) {
@@ -141,11 +141,10 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
   // source lane's LDS slot (LDS slot size = 4 bytes for a 32-bit
   // dword).
   Value *LaneId = Ctx.emitLaneIdx();
-  Value *Partner = Ctx.B.CreateXor(
-      LaneId, Ctx.B.getInt32(PartnerXorMask),
-      Twine(SsaPrefix) + "_partner");
-  Value *BpermIdx = Ctx.B.CreateShl(Partner, Ctx.B.getInt32(2),
-                                     Twine(SsaPrefix) + "_addr");
+  Value *Partner = Ctx.B.CreateXor(LaneId, Ctx.B.getInt32(PartnerXorMask),
+                                   Twine(SsaPrefix) + "_partner");
+  Value *BpermIdx =
+      Ctx.B.CreateShl(Partner, Ctx.B.getInt32(2), Twine(SsaPrefix) + "_addr");
 
   // Two emission shapes gated by source wave size, both emitting
   // TWO `ds_bpermute` calls sharing `bpermIdx`:
@@ -182,8 +181,8 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
   // held pre-Session-8 for the fi=0 / bc=0 assumption documented
   // in the top-of-function block comment; the asymmetric arm
   // does not widen the divergent-EXEC contract.
-  Function *Bperm = Intrinsic::getOrInsertDeclaration(
-      &Ctx.M, Intrinsic::amdgcn_ds_bpermute);
+  Function *Bperm =
+      Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_ds_bpermute);
   Value *NewVdst = nullptr;
   Value *NewSrc0Out = nullptr;
   if (Ctx.Isa.isWave32()) {
@@ -240,18 +239,14 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
     Value *BpermVdst = Ctx.B.CreateCall(
         Bperm, {BpermIdx, VdstIn},
         Twine(SsaPrefix) + "_bperm_vdst"); // = old vdst[L XOR mask]
-    Value *HalfBit = Ctx.B.CreateAnd(
-        LaneId, Ctx.B.getInt32(PartnerXorMask),
-        Twine(SsaPrefix) + "_half_bit");
-    Value *IsLaneLow = Ctx.B.CreateICmpEQ(
-        HalfBit, Ctx.B.getInt32(0),
-        Twine(SsaPrefix) + "_is_lane_low");
-    NewVdst = Ctx.B.CreateSelect(
-        IsLaneLow, VdstIn, BpermSrc0,
-        Twine(SsaPrefix) + "_new_vdst");
-    NewSrc0Out = Ctx.B.CreateSelect(
-        IsLaneLow, BpermVdst, Src0In,
-        Twine(SsaPrefix) + "_new_src0_out");
+    Value *HalfBit = Ctx.B.CreateAnd(LaneId, Ctx.B.getInt32(PartnerXorMask),
+                                     Twine(SsaPrefix) + "_half_bit");
+    Value *IsLaneLow = Ctx.B.CreateICmpEQ(HalfBit, Ctx.B.getInt32(0),
+                                          Twine(SsaPrefix) + "_is_lane_low");
+    NewVdst = Ctx.B.CreateSelect(IsLaneLow, VdstIn, BpermSrc0,
+                                 Twine(SsaPrefix) + "_new_vdst");
+    NewSrc0Out = Ctx.B.CreateSelect(IsLaneLow, BpermVdst, Src0In,
+                                    Twine(SsaPrefix) + "_new_src0_out");
   } else {
     // Wave64 source (gfx950): pre-Session-8 symmetric lift.
     // Kept verbatim -- see the function-top branch comment above
@@ -391,7 +386,8 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *LaneId = Ctx.emitLaneIdx();
 
     // Group base (lane & ~0xF) and within-group index (lane & 0xF).
-    Value *GroupBase = Ctx.B.CreateAnd(LaneId, Ctx.B.getInt32(~0xF), "pl_group");
+    Value *GroupBase =
+        Ctx.B.CreateAnd(LaneId, Ctx.B.getInt32(~0xF), "pl_group");
     Value *Within = Ctx.B.CreateAnd(LaneId, Ctx.B.getInt32(0xF), "pl_within");
 
     // Pick the right 32-bit selector word based on within's high bit.
@@ -405,9 +401,10 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *Nibble = Ctx.B.CreateAnd(Shifted, Ctx.B.getInt32(0xF), "pl_nibble");
 
     // For permlanex16, XOR the group base by 0x10 to swap adjacent groups.
-    Value *SrcGroup = IsPermlaneX16
-        ? Ctx.B.CreateXor(GroupBase, Ctx.B.getInt32(0x10), "plx_group")
-        : GroupBase;
+    Value *SrcGroup =
+        IsPermlaneX16
+            ? Ctx.B.CreateXor(GroupBase, Ctx.B.getInt32(0x10), "plx_group")
+            : GroupBase;
     Value *SrcLaneAbs = Ctx.B.CreateOr(SrcGroup, Nibble, "pl_src_lane");
     Value *ByteAddr = Ctx.B.CreateShl(SrcLaneAbs, Ctx.B.getInt32(2), "pl_addr");
 
@@ -416,9 +413,9 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     // store for EXEC masking.
     Function *Bperm = Intrinsic::getOrInsertDeclaration(
         &Ctx.M, Intrinsic::amdgcn_ds_bpermute);
-    Value *Result = Ctx.B.CreateCall(
-        Bperm, {ByteAddr, Src0},
-        IsPermlaneX16 ? "permlanex16_emu" : "permlane16_emu");
+    Value *Result =
+        Ctx.B.CreateCall(Bperm, {ByteAddr, Src0},
+                         IsPermlaneX16 ? "permlanex16_emu" : "permlane16_emu");
     Ctx.writeReg32(Op.dst(), Result);
     Hr.Handled = true;
     return Hr;
@@ -541,7 +538,7 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   // `lit_tests/v_permlane32_swap_b32.s` (XOR-32).
   case CanonicalOp::V_PERMLANE16_SWAP_B32:
     return emitPermLaneSwapEmulation(Ctx, Di, Op, /*partnerXorMask=*/16,
-                                      /*ssaPrefix=*/"pls16");
+                                     /*ssaPrefix=*/"pls16");
   case CanonicalOp::V_PERMLANE32_SWAP_B32: {
     // Two precondition checks, both specific to the wider XOR-32
     // variant:
@@ -584,7 +581,7 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
           "source's wave topology.");
     }
     return emitPermLaneSwapEmulation(Ctx, Di, Op, /*partnerXorMask=*/32,
-                                      /*ssaPrefix=*/"pls32");
+                                     /*ssaPrefix=*/"pls32");
   }
 
   // ---- v_readfirstlane_b32 sDST, vSRC ----
@@ -610,24 +607,24 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
                                          "rfl_source_wave_base");
 
       Value *Exec = Ctx.Regs.loadExec(Ctx.B);
-      Value *ShiftAmt = Ctx.B.CreateZExtOrTrunc(GroupBase, Exec->getType(),
-                                                "rfl_exec_shift");
-      Value *SourceExecWide = Ctx.B.CreateLShr(Exec, ShiftAmt,
-                                               "rfl_exec_at_srcwave");
-      Value *SourceExec = Ctx.B.CreateTrunc(SourceExecWide, Ctx.I32Ty,
-                                            "rfl_exec");
+      Value *ShiftAmt =
+          Ctx.B.CreateZExtOrTrunc(GroupBase, Exec->getType(), "rfl_exec_shift");
+      Value *SourceExecWide =
+          Ctx.B.CreateLShr(Exec, ShiftAmt, "rfl_exec_at_srcwave");
+      Value *SourceExec =
+          Ctx.B.CreateTrunc(SourceExecWide, Ctx.I32Ty, "rfl_exec");
       Function *Cttz = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::cttz, {Ctx.I32Ty});
       Value *FirstSet = Ctx.B.CreateCall(
           Cttz, {SourceExec, ConstantInt::getFalse(Ctx.I1Ty)}, "rfl_first_set");
-      Value *ExecIsZero = Ctx.B.CreateICmpEQ(SourceExec, Ctx.B.getInt32(0),
-                                             "rfl_exec_is_zero");
+      Value *ExecIsZero =
+          Ctx.B.CreateICmpEQ(SourceExec, Ctx.B.getInt32(0), "rfl_exec_is_zero");
       Value *SourceLane = Ctx.B.CreateSelect(ExecIsZero, Ctx.B.getInt32(0),
                                              FirstSet, "rfl_source_lane");
-      Value *TargetLane = Ctx.B.CreateOr(GroupBase, SourceLane,
-                                         "rfl_target_lane");
-      Value *Addr = Ctx.B.CreateShl(TargetLane, Ctx.B.getInt32(2),
-                                    "rfl_bperm_addr");
+      Value *TargetLane =
+          Ctx.B.CreateOr(GroupBase, SourceLane, "rfl_target_lane");
+      Value *Addr =
+          Ctx.B.CreateShl(TargetLane, Ctx.B.getInt32(2), "rfl_bperm_addr");
       Function *Bperm = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_ds_bpermute);
       Val = Ctx.B.CreateCall(Bperm, {Addr, Src}, "readfirstlane_srcwave");
@@ -668,10 +665,10 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
           LaneId, Ctx.B.getInt32(Ctx.Isa.WaveSize - 1), "wrlane_source_lane");
       Value *WantedLane = Ctx.B.CreateAnd(
           Lane, Ctx.B.getInt32(Ctx.Isa.WaveSize - 1), "wrlane_wanted_lane");
-      Value *IsTargetLane = Ctx.B.CreateICmpEQ(SourceLane, WantedLane,
-                                               "wrlane_is_target_lane");
-      NewVal = Ctx.B.CreateSelect(IsTargetLane, Val, OldVal,
-                                  "writelane_srcwave");
+      Value *IsTargetLane =
+          Ctx.B.CreateICmpEQ(SourceLane, WantedLane, "wrlane_is_target_lane");
+      NewVal =
+          Ctx.B.CreateSelect(IsTargetLane, Val, OldVal, "writelane_srcwave");
     } else {
       Function *Wl = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_writelane, {Ctx.I32Ty});
@@ -698,10 +695,10 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
                                          "rdlane_source_wave_base");
       Value *SourceLane = Ctx.B.CreateAnd(Lane, Ctx.B.getInt32(SourceMask),
                                           "rdlane_source_lane");
-      Value *TargetLane = Ctx.B.CreateOr(GroupBase, SourceLane,
-                                         "rdlane_target_lane");
-      Value *Addr = Ctx.B.CreateShl(TargetLane, Ctx.B.getInt32(2),
-                                    "rdlane_bperm_addr");
+      Value *TargetLane =
+          Ctx.B.CreateOr(GroupBase, SourceLane, "rdlane_target_lane");
+      Value *Addr =
+          Ctx.B.CreateShl(TargetLane, Ctx.B.getInt32(2), "rdlane_bperm_addr");
       Function *Bperm = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_ds_bpermute);
       Val = Ctx.B.CreateCall(Bperm, {Addr, Src}, "readlane_srcwave");
@@ -728,17 +725,16 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
       Value *LaneId = Ctx.emitLaneIdx();
       Value *SourceLane = Ctx.B.CreateAnd(
           LaneId, Ctx.B.getInt32(Ctx.Isa.WaveSize - 1), "mbcnt_source_lane");
-      Value *LaneBit = Ctx.B.CreateShl(Ctx.B.getInt32(1), SourceLane,
-                                       "mbcnt_lane_bit");
-      Value *BelowMask = Ctx.B.CreateSub(LaneBit, Ctx.B.getInt32(1),
-                                         "mbcnt_below_mask");
+      Value *LaneBit =
+          Ctx.B.CreateShl(Ctx.B.getInt32(1), SourceLane, "mbcnt_lane_bit");
+      Value *BelowMask =
+          Ctx.B.CreateSub(LaneBit, Ctx.B.getInt32(1), "mbcnt_below_mask");
       Value *SrcMask = Ctx.readOpSourceWaveMask32(Di, Op.srcIdx(0));
       Value *Masked = Ctx.B.CreateAnd(SrcMask, BelowMask, "mbcnt_masked");
       Function *Ctpop = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::ctpop, {Ctx.I32Ty});
-      Result = Ctx.B.CreateAdd(
-          Ctx.B.CreateCall(Ctpop, {Masked}, "mbcnt_pop"), Op.src(1),
-          "mbcnt_lo_srcwave");
+      Result = Ctx.B.CreateAdd(Ctx.B.CreateCall(Ctpop, {Masked}, "mbcnt_pop"),
+                               Op.src(1), "mbcnt_lo_srcwave");
     } else {
       Function *Mbcnt = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_mbcnt_lo, {});

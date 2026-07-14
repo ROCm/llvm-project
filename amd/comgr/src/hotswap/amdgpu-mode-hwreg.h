@@ -68,8 +68,7 @@ inline SetregField decodeSetregSimm16(int64_t Simm16) {
 inline bool isModeReplayMultiGroupWrite(unsigned HwregId, int64_t Simm16,
                                         int64_t Imm) {
   const SetregField Field = decodeSetregSimm16(Simm16);
-  return HwregId == HwregIdMode &&
-         Field.Offset == ModeReg::ReplayModeBit &&
+  return HwregId == HwregIdMode && Field.Offset == ModeReg::ReplayModeBit &&
          Field.SizeBits == ModeReg::ReplayModeFieldSizeBits &&
          Imm == ModeReg::ReplayModeMultiGroup;
 }

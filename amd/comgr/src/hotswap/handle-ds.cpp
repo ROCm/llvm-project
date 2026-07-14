@@ -8,8 +8,8 @@
 
 #include "handlers.h"
 
-#include "canonical-op.h"
 #include "Utils/AMDGPUBaseInfo.h" // AMDGPU::getNamedOperandIdx
+#include "canonical-op.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -46,7 +46,8 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   // rather than silently emitting wrong IR.
   auto DsClassify = [](CanonicalOp S) -> std::tuple<int, int, bool> {
     switch (S) {
-    case CanonicalOp::DS_READ_B128:  case CanonicalOp::DS_WRITE_B128:
+    case CanonicalOp::DS_READ_B128:
+    case CanonicalOp::DS_WRITE_B128:
       return {4, 128, false};
     // 96-bit (3 x i32) LDS load/store. gfx11+ asm spellings are
     // `ds_load_b96` / `ds_store_b96`; LLVM MC keeps the legacy
@@ -56,21 +57,27 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // `store <3 x i32>` to either a native ds_read_b96/ds_write_b96
     // (gfx9 inherits the `_vi` Real form from DSInstructions.td) or
     // splits into 3x ds_read_b32/ds_write_b32 -- both correct.
-    case CanonicalOp::DS_READ_B96:   case CanonicalOp::DS_WRITE_B96:
+    case CanonicalOp::DS_READ_B96:
+    case CanonicalOp::DS_WRITE_B96:
       return {3, 96, false};
-    case CanonicalOp::DS_READ_B64:   case CanonicalOp::DS_WRITE_B64:
+    case CanonicalOp::DS_READ_B64:
+    case CanonicalOp::DS_WRITE_B64:
       return {2, 64, false};
-    case CanonicalOp::DS_READ_B32:   case CanonicalOp::DS_WRITE_B32:
+    case CanonicalOp::DS_READ_B32:
+    case CanonicalOp::DS_WRITE_B32:
       return {1, 32, false};
-    case CanonicalOp::DS_READ_U16:   case CanonicalOp::DS_WRITE_B16:
+    case CanonicalOp::DS_READ_U16:
+    case CanonicalOp::DS_WRITE_B16:
       return {0, 16, false};
     case CanonicalOp::DS_READ_I16:
       return {0, 16, true};
-    case CanonicalOp::DS_READ_U8:    case CanonicalOp::DS_WRITE_B8:
+    case CanonicalOp::DS_READ_U8:
+    case CanonicalOp::DS_WRITE_B8:
       return {0, 8, false};
     case CanonicalOp::DS_READ_I8:
       return {0, 8, true};
-    default: return {-1, 0, false};
+    default:
+      return {-1, 0, false};
     }
   };
   // ds_load_tr16_b128: LDS transpose load for Wave32 with 16-bit elements.
@@ -105,7 +112,8 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       if (Di.isImm(Op.srcIdx(K))) {
         int64_t Imm = Di.getImm(Op.srcIdx(K));
         if (Imm != 0)
-          Addr = Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm), "ds_off");
+          Addr =
+              Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm), "ds_off");
         break;
       }
     }
@@ -164,25 +172,24 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       if (Di.isImm(Op.srcIdx(K))) {
         int64_t Imm = Di.getImm(Op.srcIdx(K));
         if (Imm != 0)
-          Addr32 = Ctx.B.CreateAdd(Addr32,
-                       ConstantInt::get(Ctx.I32Ty, Imm), "ds_off32");
+          Addr32 = Ctx.B.CreateAdd(Addr32, ConstantInt::get(Ctx.I32Ty, Imm),
+                                   "ds_off32");
         break;
       }
     }
 
-    Function *MbcntLo = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::amdgcn_mbcnt_lo);
-    Function *MbcntHi = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::amdgcn_mbcnt_hi);
+    Function *MbcntLo =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_mbcnt_lo);
+    Function *MbcntHi =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_mbcnt_hi);
     Value *AllOnes = ConstantInt::getSigned(Ctx.I32Ty, -1);
     Value *Zero32 = ConstantInt::get(Ctx.I32Ty, 0);
     Value *Lo = Ctx.B.CreateCall(MbcntLo, {AllOnes, Zero32}, "lane_lo");
     Value *LaneId = Ctx.B.CreateCall(MbcntHi, {AllOnes, Lo}, "lane_id");
 
-    Value *LInGroup = Ctx.B.CreateAnd(LaneId, Ctx.B.getInt32(7),
-                                       "l_in_grp");
-    Value *GroupBase = Ctx.B.CreateAnd(LaneId,
-        Ctx.B.CreateNot(Ctx.B.getInt32(7)), "grp_base");
+    Value *LInGroup = Ctx.B.CreateAnd(LaneId, Ctx.B.getInt32(7), "l_in_grp");
+    Value *GroupBase =
+        Ctx.B.CreateAnd(LaneId, Ctx.B.CreateNot(Ctx.B.getInt32(7)), "grp_base");
     // Each i8 = 1 byte, so the per-element byte offset is just
     // l_in_group; no shift needed.
 
@@ -262,19 +269,18 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       for (unsigned J = 0; J < 2; J++) {
         Value *Acc = ConstantInt::get(Ctx.I32Ty, 0);
         for (unsigned I = 0; I < 4; I++) {
-          Value *SrcLane = Ctx.B.CreateAdd(GroupBase,
-                              Ctx.B.getInt32(4 * J + I));
+          Value *SrcLane =
+              Ctx.B.CreateAdd(GroupBase, Ctx.B.getInt32(4 * J + I));
           // ds_bpermute selector is byte-addressed (lane_id << 2).
-          Value *Base = Ctx.B.CreateCall(Bperm,
-              {Ctx.B.CreateShl(SrcLane, Ctx.B.getInt32(2)), Addr32},
+          Value *Base = Ctx.B.CreateCall(
+              Bperm, {Ctx.B.CreateShl(SrcLane, Ctx.B.getInt32(2)), Addr32},
               "bp_base");
           Value *LdAddr = Ctx.B.CreateAdd(Base, LInGroup, "ld_addr");
-          Value *Ptr = Ctx.B.CreateIntToPtr(
-              Ctx.B.CreateZExt(LdAddr, Ctx.I64Ty), PtrLdsTy, "tr8_p");
+          Value *Ptr = Ctx.B.CreateIntToPtr(Ctx.B.CreateZExt(LdAddr, Ctx.I64Ty),
+                                            PtrLdsTy, "tr8_p");
           Value *ValI8 = Ctx.B.CreateLoad(I8Ty, Ptr, "tr8_b");
           Value *ValI32 = Ctx.B.CreateZExt(ValI8, Ctx.I32Ty);
-          Value *Shifted = Ctx.B.CreateShl(ValI32,
-                              Ctx.B.getInt32(8 * I));
+          Value *Shifted = Ctx.B.CreateShl(ValI32, Ctx.B.getInt32(8 * I));
           Acc = Ctx.B.CreateOr(Acc, Shifted, "tr8_pack");
         }
         OutDw[J] = Acc;
@@ -298,7 +304,8 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       if (Di.isImm(Op.srcIdx(K))) {
         int64_t Imm = Di.getImm(Op.srcIdx(K));
         if (Imm != 0)
-          Addr = Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm), "ds_off");
+          Addr =
+              Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm), "ds_off");
         break;
       }
     }
@@ -317,16 +324,16 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       if (Di.isImm(Op.srcIdx(K))) {
         int64_t Imm = Di.getImm(Op.srcIdx(K));
         if (Imm != 0)
-          Addr32 = Ctx.B.CreateAdd(Addr32,
-                       ConstantInt::get(Ctx.I32Ty, Imm), "ds_off32");
+          Addr32 = Ctx.B.CreateAdd(Addr32, ConstantInt::get(Ctx.I32Ty, Imm),
+                                   "ds_off32");
         break;
       }
     }
 
-    Function *MbcntLo = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::amdgcn_mbcnt_lo);
-    Function *MbcntHi = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::amdgcn_mbcnt_hi);
+    Function *MbcntLo =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_mbcnt_lo);
+    Function *MbcntHi =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_mbcnt_hi);
     Value *AllOnes = ConstantInt::getSigned(Ctx.I32Ty, -1);
     Value *Zero32 = ConstantInt::get(Ctx.I32Ty, 0);
     Value *Lo = Ctx.B.CreateCall(MbcntLo, {AllOnes, Zero32}, "lane_lo");
@@ -335,8 +342,8 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // L_in_group = lane_id % 8
     Value *LInGroup = Ctx.B.CreateAnd(LaneId, Ctx.B.getInt32(7), "l_in_grp");
     // group_base = (lane_id / 8) * 8
-    Value *GroupBase = Ctx.B.CreateAnd(LaneId,
-        Ctx.B.CreateNot(Ctx.B.getInt32(7)), "grp_base");
+    Value *GroupBase =
+        Ctx.B.CreateAnd(LaneId, Ctx.B.CreateNot(Ctx.B.getInt32(7)), "grp_base");
     // Byte offset for element L_in_group (each i16 = 2 bytes)
     Value *ElemOff = Ctx.B.CreateShl(LInGroup, Ctx.B.getInt32(1), "elem_off");
 
@@ -363,11 +370,11 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
         Value *SrcHi = Ctx.B.CreateAdd(GroupBase, Ctx.B.getInt32(2 * J + 1));
 
         // Get source lane's LDS base address via ds_bpermute.
-        Value *BaseLo = Ctx.B.CreateCall(Bperm,
-            {Ctx.B.CreateShl(SrcLo, Ctx.B.getInt32(2)), Addr32},
+        Value *BaseLo = Ctx.B.CreateCall(
+            Bperm, {Ctx.B.CreateShl(SrcLo, Ctx.B.getInt32(2)), Addr32},
             "bp_base_lo");
-        Value *BaseHi = Ctx.B.CreateCall(Bperm,
-            {Ctx.B.CreateShl(SrcHi, Ctx.B.getInt32(2)), Addr32},
+        Value *BaseHi = Ctx.B.CreateCall(
+            Bperm, {Ctx.B.CreateShl(SrcHi, Ctx.B.getInt32(2)), Addr32},
             "bp_base_hi");
 
         // LDS address for element L_in_group in source lane's contiguous data.
@@ -385,8 +392,8 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
         // Pack two i16 into one i32: (hi << 16) | lo
         Value *Lo32 = Ctx.B.CreateZExt(ValLo, Ctx.I32Ty);
         Value *Hi32 = Ctx.B.CreateZExt(ValHi, Ctx.I32Ty);
-        OutDw[J] = Ctx.B.CreateOr(
-            Ctx.B.CreateShl(Hi32, Ctx.B.getInt32(16)), Lo32, "tr_out");
+        OutDw[J] = Ctx.B.CreateOr(Ctx.B.CreateShl(Hi32, Ctx.B.getInt32(16)),
+                                  Lo32, "tr_out");
       }
 
       for (unsigned J = 0; J < 4; J++)
@@ -461,19 +468,27 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   // stating it explicitly on `CreateAlignedLoad` / `CreateAlignedStore`
   // prevents the backend from falling back to a conservative Align(1)
   // and emitting byte-granular expansions.
-  auto Ds2Classify = [](CanonicalOp S) -> std::tuple<bool /*isRead*/,
-                                                int  /*widthBits*/,
-                                                int  /*unitBytes*/> {
+  auto Ds2Classify = [](CanonicalOp S)
+      -> std::tuple<bool /*isRead*/, int /*widthBits*/, int /*unitBytes*/> {
     switch (S) {
-    case CanonicalOp::DS_READ2_B32:       return {true,  32,   4};
-    case CanonicalOp::DS_READ2_B64:       return {true,  64,   8};
-    case CanonicalOp::DS_READ2ST64_B32:   return {true,  32, 256};
-    case CanonicalOp::DS_READ2ST64_B64:   return {true,  64, 512};
-    case CanonicalOp::DS_WRITE2_B32:      return {false, 32,   4};
-    case CanonicalOp::DS_WRITE2_B64:      return {false, 64,   8};
-    case CanonicalOp::DS_WRITE2ST64_B32:  return {false, 32, 256};
-    case CanonicalOp::DS_WRITE2ST64_B64:  return {false, 64, 512};
-    default:                        return {false,  0,   0};
+    case CanonicalOp::DS_READ2_B32:
+      return {true, 32, 4};
+    case CanonicalOp::DS_READ2_B64:
+      return {true, 64, 8};
+    case CanonicalOp::DS_READ2ST64_B32:
+      return {true, 32, 256};
+    case CanonicalOp::DS_READ2ST64_B64:
+      return {true, 64, 512};
+    case CanonicalOp::DS_WRITE2_B32:
+      return {false, 32, 4};
+    case CanonicalOp::DS_WRITE2_B64:
+      return {false, 64, 8};
+    case CanonicalOp::DS_WRITE2ST64_B32:
+      return {false, 32, 256};
+    case CanonicalOp::DS_WRITE2ST64_B64:
+      return {false, 64, 512};
+    default:
+      return {false, 0, 0};
     }
   };
   {
@@ -502,11 +517,11 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       Value *Vaddr = Ctx.B.CreateZExt(Op.src(0), Ctx.I64Ty, "ds2_addr");
       auto *LdsPtrTy = PointerType::get(Ctx.C, 3);
       auto MakePtr = [&](int64_t ByteOff, const char *Name) -> Value * {
-        Value *A = ByteOff == 0
-                       ? Vaddr
-                       : Ctx.B.CreateAdd(Vaddr,
-                                         ConstantInt::get(Ctx.I64Ty, ByteOff),
-                                         "ds2_off");
+        Value *A =
+            ByteOff == 0
+                ? Vaddr
+                : Ctx.B.CreateAdd(Vaddr, ConstantInt::get(Ctx.I64Ty, ByteOff),
+                                  "ds2_off");
         return Ctx.B.CreateIntToPtr(A, LdsPtrTy, Name);
       };
       Value *Ptr0 = MakePtr(ByteOff0, "ds2_p0");
@@ -529,17 +544,17 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
         // fix from the same commit.
         Ctx.emitUnderExec([&] {
           if (ds2WidthBits == 32) {
-            Value *V0 = Ctx.B.CreateAlignedLoad(Ctx.I32Ty, Ptr0, Access,
-                                                 "ds2_ld0");
-            Value *V1 = Ctx.B.CreateAlignedLoad(Ctx.I32Ty, Ptr1, Access,
-                                                 "ds2_ld1");
+            Value *V0 =
+                Ctx.B.CreateAlignedLoad(Ctx.I32Ty, Ptr0, Access, "ds2_ld0");
+            Value *V1 =
+                Ctx.B.CreateAlignedLoad(Ctx.I32Ty, Ptr1, Access, "ds2_ld1");
             Ctx.Regs.writeReg32(Ctx.B, SubReg(0), V0);
             Ctx.Regs.writeReg32(Ctx.B, SubReg(1), V1);
           } else { // 64
-            Value *V0 = Ctx.B.CreateAlignedLoad(Ctx.I64Ty, Ptr0, Access,
-                                                 "ds2_ld0");
-            Value *V1 = Ctx.B.CreateAlignedLoad(Ctx.I64Ty, Ptr1, Access,
-                                                 "ds2_ld1");
+            Value *V0 =
+                Ctx.B.CreateAlignedLoad(Ctx.I64Ty, Ptr0, Access, "ds2_ld0");
+            Value *V1 =
+                Ctx.B.CreateAlignedLoad(Ctx.I64Ty, Ptr1, Access, "ds2_ld1");
             Value *Lo0 = Ctx.B.CreateTrunc(V0, Ctx.I32Ty, "ds2_ld0_lo");
             Value *Hi0 = Ctx.B.CreateTrunc(
                 Ctx.B.CreateLShr(V0, ConstantInt::get(Ctx.I64Ty, 32)),
@@ -580,8 +595,10 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     }
   }
 
-  bool IsDsRead = Sop >= CanonicalOp::DS_READ_B32 && Sop <= CanonicalOp::DS_READ_I8;
-  bool IsDsWrite = Sop >= CanonicalOp::DS_WRITE_B32 && Sop <= CanonicalOp::DS_WRITE_B8;
+  bool IsDsRead =
+      Sop >= CanonicalOp::DS_READ_B32 && Sop <= CanonicalOp::DS_READ_I8;
+  bool IsDsWrite =
+      Sop >= CanonicalOp::DS_WRITE_B32 && Sop <= CanonicalOp::DS_WRITE_B8;
   if (IsDsRead || IsDsWrite) {
     auto [dwords, loadBits, isSigned] = DsClassify(Sop);
 
@@ -607,7 +624,8 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       if (Di.isImm(Op.srcIdx(K))) {
         int64_t Imm = Di.getImm(Op.srcIdx(K));
         if (Imm != 0)
-          Addr = Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm), "ds_off");
+          Addr =
+              Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm), "ds_off");
         break;
       }
     }
@@ -633,27 +651,27 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
         if (dwords == 0) {
           Type *MemTy = Type::getIntNTy(Ctx.C, loadBits);
           Value *V = Ctx.B.CreateLoad(MemTy, Ptr, "ds_ld");
-          Ctx.Regs.writeReg32(
-              Ctx.B, Dest,
-              isSigned ? Ctx.B.CreateSExt(V, Ctx.I32Ty)
-                       : Ctx.B.CreateZExt(V, Ctx.I32Ty));
+          Ctx.Regs.writeReg32(Ctx.B, Dest,
+                              isSigned ? Ctx.B.CreateSExt(V, Ctx.I32Ty)
+                                       : Ctx.B.CreateZExt(V, Ctx.I32Ty));
         } else if (dwords == 1) {
           Ctx.Regs.writeReg32(Ctx.B, Dest,
                               Ctx.B.CreateLoad(Ctx.I32Ty, Ptr, "ds_ld"));
         } else {
           auto *VecTy = FixedVectorType::get(Ctx.I32Ty, dwords);
           Ctx.Regs.writeRegVec(Ctx.B, Dest,
-                                Ctx.B.CreateLoad(VecTy, Ptr, "ds_ld"));
+                               Ctx.B.CreateLoad(VecTy, Ptr, "ds_ld"));
         }
       });
       Hr.Handled = true;
-    return Hr;
+      return Hr;
     }
     if (IsDsWrite) {
       ParsedReg StData = Op.srcReg(1);
       if (dwords == 0) {
         Type *MemTy = Type::getIntNTy(Ctx.C, loadBits);
-        Value *Val = Ctx.B.CreateTrunc(Ctx.Regs.readReg32(Ctx.B, StData), MemTy);
+        Value *Val =
+            Ctx.B.CreateTrunc(Ctx.Regs.readReg32(Ctx.B, StData), MemTy);
         Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Val, Ptr); });
       } else if (dwords == 1) {
         Value *Val = Ctx.Regs.readReg32(Ctx.B, StData);
@@ -664,7 +682,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Val, Ptr); });
       }
       Hr.Handled = true;
-    return Hr;
+      return Hr;
     }
   }
   // D16_HI partial-store family: ds_store_b16_d16_hi /
@@ -690,8 +708,8 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       if (Di.isImm(Op.srcIdx(K))) {
         int64_t Imm = Di.getImm(Op.srcIdx(K));
         if (Imm != 0)
-          Addr = Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm),
-                                  "ds_off");
+          Addr =
+              Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm), "ds_off");
         break;
       }
     }
@@ -706,10 +724,10 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Hi16 = Ctx.B.CreateTrunc(
         Ctx.B.CreateLShr(Raw, Ctx.B.getInt32(16), "ds_st_hi16_shr"),
         Type::getInt16Ty(Ctx.C), "ds_st_d16_hi");
-    Value *ToStore = (Sop == CanonicalOp::DS_WRITE_B8_D16_HI)
-                          ? Ctx.B.CreateTrunc(Hi16, Type::getInt8Ty(Ctx.C),
-                                              "ds_st_d8_hi")
-                          : Hi16;
+    Value *ToStore =
+        (Sop == CanonicalOp::DS_WRITE_B8_D16_HI)
+            ? Ctx.B.CreateTrunc(Hi16, Type::getInt8Ty(Ctx.C), "ds_st_d8_hi")
+            : Hi16;
     Ctx.emitUnderExec([&] { Ctx.B.CreateStore(ToStore, Ptr); });
     Hr.Handled = true;
     return Hr;
@@ -722,15 +740,16 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   // pre-add memory value to a dst VGPR pair (di.NumDefs > 0); the
   // non-RTN form discards the result.
   if (Sop == CanonicalOp::DS_ADD_F64) {
-    assert(((Di.TsFlags & SIInstrFlags::IsAtomicRet) != 0) == (Di.NumDefs > 0) &&
+    assert(((Di.TsFlags & SIInstrFlags::IsAtomicRet) != 0) ==
+               (Di.NumDefs > 0) &&
            "ds_add_f64: IsAtomicRet disagrees with numDefs");
     Value *Addr = Ctx.B.CreateZExt(Op.src(0), Ctx.I64Ty, "ds_addr");
     for (unsigned K = 1; K < Op.nSrcs(); K++) {
       if (Di.isImm(Op.srcIdx(K))) {
         int64_t Imm = Di.getImm(Op.srcIdx(K));
         if (Imm != 0)
-          Addr = Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm),
-                                  "ds_off");
+          Addr =
+              Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm), "ds_off");
         break;
       }
     }
@@ -738,12 +757,12 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // vdata is a 2-VGPR pair; read as i64, bitcast to f64 for the FP
     // atomic.
     ParsedReg StData = Op.srcReg(1);
-    Value *Data = Ctx.B.CreateBitCast(
-        Ctx.Regs.readReg64(Ctx.B, StData), Ctx.F64Ty);
+    Value *Data =
+        Ctx.B.CreateBitCast(Ctx.Regs.readReg64(Ctx.B, StData), Ctx.F64Ty);
     Ctx.emitUnderExec([&] {
-      auto *Rmw = Ctx.B.CreateAtomicRMW(
-          AtomicRMWInst::FAdd, Ptr, Data, MaybeAlign(),
-          AtomicOrdering::SequentiallyConsistent);
+      auto *Rmw =
+          Ctx.B.CreateAtomicRMW(AtomicRMWInst::FAdd, Ptr, Data, MaybeAlign(),
+                                AtomicOrdering::SequentiallyConsistent);
       if (Di.NumDefs > 0)
         Ctx.Regs.writeReg64(Ctx.B, Op.dst(),
                             Ctx.B.CreateBitCast(Rmw, Ctx.I64Ty));
@@ -778,12 +797,12 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // projection under WaveNative *and* MODREP -- for a real MODREP lane the
     // `laneId & ~31` base is 0 for the lower half and 32 for the replica half,
     // and clamping the selector to the source-wave byte range (`& 127`) keeps a
-    // phantom/undef-derived selector from indexing out of bounds. Gating this on
-    // the projection's source-wave *count* was the T1 bug: MODREP reports
-    // `numSourceWavesPerTarget() == 1`, so phantom-lane attention kernels (forced
-    // onto MODREP by the phantom-lane regime in `raiseToIR`) skipped the rebase
-    // and fed a raw, unclamped selector to the wave64 gather -> OOB fault. Gate
-    // on the cross-widening direction instead.
+    // phantom/undef-derived selector from indexing out of bounds. Gating this
+    // on the projection's source-wave *count* was the T1 bug: MODREP reports
+    // `numSourceWavesPerTarget() == 1`, so phantom-lane attention kernels
+    // (forced onto MODREP by the phantom-lane regime in `raiseToIR`) skipped
+    // the rebase and fed a raw, unclamped selector to the wave64 gather -> OOB
+    // fault. Gate on the cross-widening direction instead.
     //
     // EXEC gating. We emit the intrinsic *outside* `emitUnderExec`.
     // `amdgcn.ds_bpermute` is convergent -- all lanes of the hardware
@@ -805,13 +824,13 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       Value *LocalIndex = Ctx.B.CreateAnd(
           Index, Ctx.B.getInt32(kSourceWaveBytes - 1), "bperm_local_addr");
       Value *LaneId = Ctx.emitLaneIdx();
-      Value *SourceWaveLaneBase = Ctx.B.CreateAnd(
-          LaneId, Ctx.B.getInt32(~(kSourceWaveLanes - 1)),
-          "bperm_srcwave_lane_base");
+      Value *SourceWaveLaneBase =
+          Ctx.B.CreateAnd(LaneId, Ctx.B.getInt32(~(kSourceWaveLanes - 1)),
+                          "bperm_srcwave_lane_base");
       Value *SourceWaveByteBase = Ctx.B.CreateShl(
           SourceWaveLaneBase, Ctx.B.getInt32(2), "bperm_srcwave_byte_base");
-      Index = Ctx.B.CreateOr(LocalIndex, SourceWaveByteBase,
-                             "bperm_srcwave_addr");
+      Index =
+          Ctx.B.CreateOr(LocalIndex, SourceWaveByteBase, "bperm_srcwave_addr");
     }
     Value *Src = Op.src(1);
     Function *Bperm = Intrinsic::getOrInsertDeclaration(
@@ -965,8 +984,8 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // positional `op.src(0)` for consistency with their existing
     // patterns; the named-lookup audit there is a system-wide cleanup
     // outside the scope of P6.)
-    int AddrIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                              AMDGPU::OpName::addr);
+    int AddrIdx =
+        AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::addr);
     if (AddrIdx < 0 ||
         static_cast<unsigned>(AddrIdx) >= Di.Inst.getNumOperands() ||
         !Di.Inst.getOperand(static_cast<unsigned>(AddrIdx)).isReg()) {
@@ -976,12 +995,10 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
           "table mismatch");
     }
     Value *Src = Ctx.readOp32(Di, static_cast<unsigned>(AddrIdx));
-    Function *Swiz = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::amdgcn_ds_swizzle);
+    Function *Swiz =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_ds_swizzle);
     Value *Result = Ctx.B.CreateCall(
-        Swiz,
-        {Src, ConstantInt::get(Ctx.I32Ty, Di.DsSwizzleImm)},
-        "ds_swiz");
+        Swiz, {Src, ConstantInt::get(Ctx.I32Ty, Di.DsSwizzleImm)}, "ds_swiz");
     Ctx.writeReg32(Op.dst(), Result);
     Hr.Handled = true;
     return Hr;
