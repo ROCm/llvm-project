@@ -1,6 +1,6 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx900 -stop-after=prologepilog < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00 -stop-after=prolog-epilog < %s | FileCheck -check-prefix=GCN %s
 
-; It is a small loop test that iterates over the array member of the structure argument passed byval to the function.
+; It is a small loop test that iterates over the array member of the structure argument  passed byval to the function.
 ; The loop code will keep the prologue and epilogue blocks apart.
 ; The test is primarily to check the temp register used to preserve the earlier FP value
 ; is live-in at every BB in the function.

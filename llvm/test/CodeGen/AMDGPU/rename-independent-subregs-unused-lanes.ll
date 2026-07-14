@@ -55,16 +55,16 @@ define <7 x i32> @multiple_predecessor_unused_lanes(<7 x i32> %ha, i32 %h.sel) {
 ; CHECK-NEXT:  .LBB0_6: ; %h.default
 ; CHECK-NEXT:    v_xor_b32_e32 v5, 1, v5
 ; CHECK-NEXT:    v_mov_b32_e32 v12, v6
-; CHECK-NEXT:    v_dual_mov_b32 v9, v3 :: v_dual_mov_b32 v8, v2
-; CHECK-NEXT:    v_mov_b32_e32 v7, v1
+; CHECK-NEXT:    v_dual_mov_b32 v10, v4 :: v_dual_mov_b32 v9, v3
+; CHECK-NEXT:    v_dual_mov_b32 v8, v2 :: v_dual_mov_b32 v7, v1
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_4)
-; CHECK-NEXT:    v_dual_mov_b32 v11, v5 :: v_dual_mov_b32 v10, v4
-; CHECK-NEXT:    v_mov_b32_e32 v6, v0
+; CHECK-NEXT:    v_dual_mov_b32 v11, v5 :: v_dual_mov_b32 v6, v0
 ; CHECK-NEXT:  .LBB0_7: ; %UnifiedReturnBlock
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; CHECK-NEXT:    v_dual_mov_b32 v0, v6 :: v_dual_mov_b32 v1, v7
 ; CHECK-NEXT:    v_dual_mov_b32 v2, v8 :: v_dual_mov_b32 v3, v9
+; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; CHECK-NEXT:    v_dual_mov_b32 v4, v10 :: v_dual_mov_b32 v5, v11
 ; CHECK-NEXT:    v_mov_b32_e32 v6, v12
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]

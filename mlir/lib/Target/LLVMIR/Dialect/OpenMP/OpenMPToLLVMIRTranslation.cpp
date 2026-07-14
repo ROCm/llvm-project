@@ -5257,6 +5257,30 @@ applyUnrollHeuristic(omp::UnrollHeuristicOp op, llvm::IRBuilderBase &builder,
   return success();
 }
 
+/// Apply a `#pragma omp unroll partial` / `!$omp unroll partial`
+/// transformation using the OpenMPIRBuilder.
+static LogicalResult
+applyUnrollPartial(omp::UnrollPartialOp op, llvm::IRBuilderBase &builder,
+                   LLVM::ModuleTranslation &moduleTranslation) {
+  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+
+  Value applyee = op.getApplyee();
+  assert(applyee && "Loop to apply unrolling on required");
+
+  llvm::CanonicalLoopInfo *consBuilderCLI =
+      moduleTranslation.lookupOMPLoop(applyee);
+  llvm::OpenMPIRBuilder::LocationDescription loc(builder);
+
+  // No generatee is supported yet, so the unrolled loop's CanonicalLoopInfo is
+  // not requested and unrolling is deferred to LLVM's LoopUnroll pass.
+  int32_t factor = static_cast<int32_t>(op.getUnrollFactor());
+  ompBuilder->unrollLoopPartial(loc.DL, consBuilderCLI, factor,
+                                /*UnrolledCLI=*/nullptr);
+
+  moduleTranslation.invalidateOmpLoop(applyee);
+  return success();
+}
+
 /// Apply a `#pragma omp tile` / `!$omp tile` transformation using the
 /// OpenMPIRBuilder.
 static LogicalResult applyTile(omp::TileOp op, llvm::IRBuilderBase &builder,
@@ -6379,14 +6403,12 @@ static llvm::Value *getSizeInBytes(DataLayout &dl, const mlir::Type &type,
       // cover are:
       //
       // 1) If an argument has a null base pointer, then the size must be set to
-      // 0
-      //    to avoid the runtime exploding/complaining about an illegal pointer
-      //    map. The size returning non-zero is feasible in certain cases if for
-      //    example someone has specified there own bounds/range.
+      //    0 to avoid the runtime exploding/complaining about an illegal
+      //    pointer map. The size returning non-zero is feasible in certain
+      //    cases if for example someone has specified there own bounds/range.
       // 2) We wish to support a very specific OpenMP Fortran edge-case where a
-      // size
-      //    zero array can be legally presence checked and found to be on device
-      //    when it has been mapped. In these rare occasions the
+      //    size zero array can be legally presence checked and found to be on
+      //    device when it has been mapped. In these rare occasions the
       //    allocatable/pointer will have a size of 1 allocated for the
       //    underlying data, but this wall not be represented within the size of
       //    the descriptor, so we get a non-nullary pointer and a size of 0,
@@ -9030,14 +9052,16 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
     llvm::Module *llvmModule = moduleTranslation.getLLVMModule();
     updateDebugInfoForDeclareTargetVariables(gOp, moduleTranslation);
     if (auto *gVal = llvmModule->getNamedValue(gOp.getSymName())) {
+      auto *gVar = cast<llvm::GlobalVariable>(gVal);
       llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
       bool isDeclaration = gOp.isDeclaration();
       bool isExternallyVisible =
           gOp.getVisibility() != mlir::SymbolTable::Visibility::Private;
       auto loc = op->getLoc()->findInstanceOf<FileLineColLoc>();
       llvm::StringRef mangledName = gOp.getSymName();
-      auto captureClause =
-          convertToCaptureClauseKind(attribute.getCaptureClause().getValue());
+      mlir::omp::DeclareTargetCaptureClause captureClause =
+          attribute.getCaptureClause().getValue();
+      auto captureClauseKind = convertToCaptureClauseKind(captureClause);
       auto deviceClause =
           convertToDeviceClauseKind(attribute.getDeviceType().getValue());
       // unused for MLIR at the moment, required in Clang for book
@@ -9064,31 +9088,64 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
                                                      lineNo);
       };
 
-      llvm::vfs::FileSystem &vfs = moduleTranslation.getFileSystem();
+      bool requiresUSM = ompBuilder->Config.hasRequiresUnifiedSharedMemory();
+      bool isToOrEnter =
+          captureClause == omp::DeclareTargetCaptureClause::to ||
+          captureClause == omp::DeclareTargetCaptureClause::enter;
+      bool isHostOnly = attribute.getDeviceType().getValue() ==
+                        omp::DeclareTargetDeviceType::host;
 
+      // A to/enter declare-target variable needs a device-resident,
+      // name-resolvable copy and a host offloading entry. A local-linkage
+      // global provides neither, so we promote it to external.
+      if (isToOrEnter && !isHostOnly && !requiresUSM &&
+          gVar->hasLocalLinkage()) {
+        gVar->setLinkage(llvm::GlobalValue::ExternalLinkage);
+        isExternallyVisible = true;
+
+        // Clear the stale dso_local flag so it is referenced like a
+        // module-scope declare target global.
+        if (ompBuilder->Config.isTargetDevice())
+          gVar->setDSOLocal(false);
+      }
+
+      llvm::vfs::FileSystem &vfs = moduleTranslation.getFileSystem();
       ompBuilder->registerTargetGlobalVariable(
-          captureClause, deviceClause, isDeclaration, isExternallyVisible,
+          captureClauseKind, deviceClause, isDeclaration, isExternallyVisible,
           ompBuilder->getTargetEntryUniqueInfo(fileInfoCallBack, vfs),
           mangledName, generatedRefs, /*OpenMPSimd*/ false, targetTriple,
           /*GlobalInitializer*/ nullptr, /*VariableLinkage*/ nullptr,
           gVal->getType(), gVal);
 
-      bool requiresUSM = ompBuilder->Config.hasRequiresUnifiedSharedMemory();
       if (ompBuilder->Config.isTargetDevice() &&
-          (attribute.getCaptureClause().getValue() ==
-               mlir::omp::DeclareTargetCaptureClause::link ||
+          (captureClause == omp::DeclareTargetCaptureClause::link ||
            requiresUSM)) {
         llvm::Type *ptrTy = gVal->getType();
         // For USM the global type becomes a pointer handle, as opposed to the
         // globals original type.
         if (requiresUSM)
           ptrTy = llvm::PointerType::get(llvmModule->getContext(), 0);
-        ompBuilder->getAddrOfDeclareTargetVar(
-            captureClause, deviceClause, isDeclaration, isExternallyVisible,
+        bool addrGlobalCreated = ompBuilder->getAddrOfDeclareTargetVar(
+            captureClauseKind, deviceClause, isDeclaration, isExternallyVisible,
             ompBuilder->getTargetEntryUniqueInfo(fileInfoCallBack, vfs),
             mangledName, generatedRefs, /*OpenMPSimd*/ false, targetTriple,
             ptrTy, /*GlobalInitializer*/ nullptr,
             /*VariableLinkage*/ nullptr);
+
+        // For indirectly-accessed global pointers, we rely on "internal"
+        // linkage to optimize out the unneeded full-variable storage later,
+        // since we can't prevent the LLVM dialect from generating globals
+        // without also breaking target lowering.
+        if (addrGlobalCreated)
+          gVar->setLinkage(llvm::GlobalValue::InternalLinkage);
+      }
+
+      // Mark 'device_type(host) enter(...)' variables as external in the device
+      // since they're not supposed to have their own copy. This will cause
+      // linker errors if accesses are attempted from the target device.
+      if (ompBuilder->Config.isTargetDevice() && isHostOnly && isToOrEnter) {
+        gVar->setLinkage(llvm::GlobalValue::ExternalLinkage);
+        gVar->setInitializer(nullptr);
       }
     }
   }
@@ -9796,6 +9853,9 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
             // contained region including their transformations must occur at
             // the omp.canonical_loop.
             return applyUnrollHeuristic(op, builder, moduleTranslation);
+          })
+          .Case([&](omp::UnrollPartialOp op) {
+            return applyUnrollPartial(op, builder, moduleTranslation);
           })
           .Case([&](omp::TileOp op) {
             return applyTile(op, builder, moduleTranslation);

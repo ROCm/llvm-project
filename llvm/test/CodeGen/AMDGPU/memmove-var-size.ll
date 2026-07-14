@@ -78,8 +78,8 @@ define void @memmove_p0_p0(ptr addrspace(0) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    .p2align 6
 ; CHECK-NEXT:  .LBB0_6: ; %memmove_bwd_main_loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v8
+; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_add_co_u32 v4, vcc_lo, v2, v10
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v5, null, v3, v11, vcc_lo
 ; CHECK-NEXT:    v_add_co_u32 v8, vcc_lo, v10, -16
@@ -113,10 +113,10 @@ define void @memmove_p0_p0(ptr addrspace(0) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_11
 ; CHECK-NEXT:  .LBB0_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v5, v3
-; CHECK-NEXT:    v_mov_b32_e32 v11, v1
-; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v2
+; CHECK-NEXT:    v_mov_b32_e32 v11, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v0
+; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    s_and_b32 s4, s6, exec_lo
 ; CHECK-NEXT:    .p2align 6
@@ -250,8 +250,8 @@ define void @memmove_p0_p1(ptr addrspace(0) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    .p2align 6
 ; CHECK-NEXT:  .LBB1_6: ; %memmove_bwd_main_loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v8
+; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_add_co_u32 v4, vcc_lo, v2, v10
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v5, null, v3, v11, vcc_lo
 ; CHECK-NEXT:    v_add_co_u32 v8, vcc_lo, v10, -16
@@ -285,10 +285,10 @@ define void @memmove_p0_p1(ptr addrspace(0) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_11
 ; CHECK-NEXT:  .LBB1_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v5, v3
-; CHECK-NEXT:    v_mov_b32_e32 v11, v1
-; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v2
+; CHECK-NEXT:    v_mov_b32_e32 v11, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v0
+; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    s_and_b32 s4, s6, exec_lo
 ; CHECK-NEXT:    .p2align 6
@@ -422,8 +422,8 @@ define void @memmove_p0_p3(ptr addrspace(0) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    .p2align 6
 ; CHECK-NEXT:  .LBB2_6: ; %memmove_bwd_main_loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    v_mov_b32_e32 v10, v8
 ; CHECK-NEXT:    v_mov_b32_e32 v9, v7
+; CHECK-NEXT:    v_mov_b32_e32 v10, v8
 ; CHECK-NEXT:    ds_read_b128 v[3:6], v2
 ; CHECK-NEXT:    v_add_nc_u32_e32 v2, -16, v2
 ; CHECK-NEXT:    v_add_co_u32 v7, vcc_lo, v9, -16
@@ -456,8 +456,8 @@ define void @memmove_p0_p3(ptr addrspace(0) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB2_11
 ; CHECK-NEXT:  .LBB2_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v1
-; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    v_mov_b32_e32 v9, v0
+; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    v_mov_b32_e32 v11, v7
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v2
 ; CHECK-NEXT:    s_and_b32 s4, s6, exec_lo
@@ -590,8 +590,8 @@ define void @memmove_p0_p4(ptr addrspace(0) align 1 %dst, ptr addrspace(4) align
 ; CHECK-NEXT:    .p2align 6
 ; CHECK-NEXT:  .LBB3_6: ; %memmove_bwd_main_loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v8
+; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_add_co_u32 v4, vcc_lo, v2, v10
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v5, null, v3, v11, vcc_lo
 ; CHECK-NEXT:    v_add_co_u32 v8, vcc_lo, v10, -16
@@ -625,10 +625,10 @@ define void @memmove_p0_p4(ptr addrspace(0) align 1 %dst, ptr addrspace(4) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB3_11
 ; CHECK-NEXT:  .LBB3_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v5, v3
-; CHECK-NEXT:    v_mov_b32_e32 v11, v1
-; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v2
+; CHECK-NEXT:    v_mov_b32_e32 v11, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v0
+; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    s_and_b32 s4, s6, exec_lo
 ; CHECK-NEXT:    .p2align 6
@@ -800,8 +800,8 @@ define void @memmove_p0_p5(ptr addrspace(0) align 1 %dst, ptr addrspace(5) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB4_11
 ; CHECK-NEXT:  .LBB4_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v1
-; CHECK-NEXT:    v_mov_b32_e32 v12, v6
 ; CHECK-NEXT:    v_mov_b32_e32 v9, v0
+; CHECK-NEXT:    v_mov_b32_e32 v12, v6
 ; CHECK-NEXT:    v_mov_b32_e32 v11, v5
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v2
 ; CHECK-NEXT:    s_and_b32 s4, s6, exec_lo
@@ -939,8 +939,8 @@ define void @memmove_p1_p0(ptr addrspace(1) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    .p2align 6
 ; CHECK-NEXT:  .LBB5_6: ; %memmove_bwd_main_loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v8
+; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_add_co_u32 v4, vcc_lo, v2, v10
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v5, null, v3, v11, vcc_lo
 ; CHECK-NEXT:    v_add_co_u32 v8, vcc_lo, v10, -16
@@ -974,10 +974,10 @@ define void @memmove_p1_p0(ptr addrspace(1) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB5_11
 ; CHECK-NEXT:  .LBB5_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v5, v3
-; CHECK-NEXT:    v_mov_b32_e32 v11, v1
-; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v2
+; CHECK-NEXT:    v_mov_b32_e32 v11, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v0
+; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    s_and_b32 s4, s6, exec_lo
 ; CHECK-NEXT:    .p2align 6
@@ -1110,8 +1110,8 @@ define void @memmove_p1_p1(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    .p2align 6
 ; CHECK-NEXT:  .LBB6_6: ; %memmove_bwd_main_loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v8
+; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_add_co_u32 v4, vcc_lo, v2, v10
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v5, null, v3, v11, vcc_lo
 ; CHECK-NEXT:    v_add_co_u32 v8, vcc_lo, v10, -16
@@ -1145,10 +1145,10 @@ define void @memmove_p1_p1(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB6_11
 ; CHECK-NEXT:  .LBB6_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v5, v3
-; CHECK-NEXT:    v_mov_b32_e32 v11, v1
-; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v2
+; CHECK-NEXT:    v_mov_b32_e32 v11, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v0
+; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    s_and_b32 s4, s6, exec_lo
 ; CHECK-NEXT:    .p2align 6
@@ -1360,8 +1360,8 @@ define void @memmove_p1_p4(ptr addrspace(1) align 1 %dst, ptr addrspace(4) align
 ; CHECK-NEXT:    .p2align 6
 ; CHECK-NEXT:  .LBB8_6: ; %memmove_bwd_main_loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v8
+; CHECK-NEXT:    v_mov_b32_e32 v11, v9
 ; CHECK-NEXT:    v_add_co_u32 v4, vcc_lo, v2, v10
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v5, null, v3, v11, vcc_lo
 ; CHECK-NEXT:    v_add_co_u32 v8, vcc_lo, v10, -16
@@ -1395,10 +1395,10 @@ define void @memmove_p1_p4(ptr addrspace(1) align 1 %dst, ptr addrspace(4) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB8_11
 ; CHECK-NEXT:  .LBB8_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v5, v3
-; CHECK-NEXT:    v_mov_b32_e32 v11, v1
-; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v2
+; CHECK-NEXT:    v_mov_b32_e32 v11, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v0
+; CHECK-NEXT:    v_mov_b32_e32 v13, v9
 ; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    s_and_b32 s4, s6, exec_lo
 ; CHECK-NEXT:    .p2align 6
@@ -1649,8 +1649,8 @@ define void @memmove_p3_p0(ptr addrspace(3) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB10_11
 ; CHECK-NEXT:  .LBB10_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v2
-; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    v_mov_b32_e32 v9, v1
+; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    v_mov_b32_e32 v11, v7
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v0
 ; CHECK-NEXT:    s_and_b32 s7, s5, exec_lo
@@ -2204,8 +2204,8 @@ define void @memmove_p5_p0(ptr addrspace(5) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    s_cbranch_execz .LBB15_11
 ; CHECK-NEXT:  .LBB15_9: ; %memmove_fwd_main_loop.preheader
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v2
-; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    v_mov_b32_e32 v9, v1
+; CHECK-NEXT:    v_mov_b32_e32 v12, v8
 ; CHECK-NEXT:    v_mov_b32_e32 v11, v7
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v0
 ; CHECK-NEXT:    s_and_b32 s7, s5, exec_lo

@@ -114,12 +114,14 @@ set(SOURCES
   src/comgr-hotswap-patch-wmma-scale16.cpp
   src/comgr-hotswap-patch-wmma-split.cpp
   src/comgr-libcxx-headers.cpp
+  src/comgr-logger.cpp
   src/comgr-metadata.cpp
   src/comgr-signal.cpp
   src/comgr-spirv-command.cpp
   src/comgr-symbol.cpp
   src/comgr-symbolizer.cpp
   src/comgr-unbundle-command.cpp
+  src/comgr-unpackage-command.cpp
   src/time-stat/time-stat.cpp)
 
 # Hotswap binary transpiler, opt-in. The hotswap project lives under

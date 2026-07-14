@@ -481,8 +481,8 @@ define protected amdgpu_kernel void @kernel_round1(ptr addrspace(1) nocapture no
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_30
 ; CHECK-NEXT:  .LBB0_23:
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    s_mov_b64 s[66:67], s[6:7]
 ; CHECK-NEXT:    s_mov_b64 s[70:71], s[10:11]
+; CHECK-NEXT:    s_mov_b64 s[66:67], s[6:7]
 ; CHECK-NEXT:    s_mov_b64 s[64:65], s[4:5]
 ; CHECK-NEXT:    s_mov_b32 s4, -1
 ; CHECK-NEXT:    s_and_b32 s4, s4, exec_lo

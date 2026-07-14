@@ -1,4 +1,4 @@
-; RUN: llc < %s -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=gfx900 | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -mtriple=amdgpu9.00--amdpal | FileCheck %s
 
 ; Check that the redundant immediate MOV instruction
 ; (by-product of handling phi nodes) is not found

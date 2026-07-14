@@ -11,11 +11,11 @@ define amdgpu_kernel void @v_uextract_bit_31_i64(ptr addrspace(1) %out, ptr addr
 ; GCN-NEXT:    s_load_dwordx4 s[4:7], s[0:1], 0x9
 ; GCN-NEXT:    s_ashr_i32 s3, s2, 31
 ; GCN-NEXT:    s_lshl_b64 s[0:1], s[2:3], 3
-; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    s_mov_b32 s11, 0xf000
 ; GCN-NEXT:    s_mov_b32 s10, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[6:7]
+; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    v_mov_b32_e32 v1, s1
 ; GCN-NEXT:    buffer_load_dword v2, v[0:1], s[8:11], 0 addr64
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[4:5]
@@ -68,11 +68,11 @@ define amdgpu_kernel void @v_uextract_bit_1_i64(ptr addrspace(1) %out, ptr addrs
 ; GCN-NEXT:    s_load_dwordx4 s[4:7], s[0:1], 0x9
 ; GCN-NEXT:    s_ashr_i32 s3, s2, 31
 ; GCN-NEXT:    s_lshl_b64 s[0:1], s[2:3], 3
-; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    s_mov_b32 s11, 0xf000
 ; GCN-NEXT:    s_mov_b32 s10, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[6:7]
+; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    v_mov_b32_e32 v1, s1
 ; GCN-NEXT:    buffer_load_dword v2, v[0:1], s[8:11], 0 addr64
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[4:5]
@@ -97,11 +97,11 @@ define amdgpu_kernel void @v_uextract_bit_20_i64(ptr addrspace(1) %out, ptr addr
 ; GCN-NEXT:    s_load_dwordx4 s[4:7], s[0:1], 0x9
 ; GCN-NEXT:    s_ashr_i32 s3, s2, 31
 ; GCN-NEXT:    s_lshl_b64 s[0:1], s[2:3], 3
-; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    s_mov_b32 s11, 0xf000
 ; GCN-NEXT:    s_mov_b32 s10, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[6:7]
+; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    v_mov_b32_e32 v1, s1
 ; GCN-NEXT:    buffer_load_dword v2, v[0:1], s[8:11], 0 addr64
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[4:5]
@@ -180,11 +180,11 @@ define amdgpu_kernel void @v_uextract_bit_20_21_i64(ptr addrspace(1) %out, ptr a
 ; GCN-NEXT:    s_load_dwordx4 s[4:7], s[0:1], 0x9
 ; GCN-NEXT:    s_ashr_i32 s3, s2, 31
 ; GCN-NEXT:    s_lshl_b64 s[0:1], s[2:3], 3
-; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    s_mov_b32 s11, 0xf000
 ; GCN-NEXT:    s_mov_b32 s10, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[6:7]
+; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    v_mov_b32_e32 v1, s1
 ; GCN-NEXT:    buffer_load_dword v2, v[0:1], s[8:11], 0 addr64
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[4:5]
@@ -209,11 +209,11 @@ define amdgpu_kernel void @v_uextract_bit_1_30_i64(ptr addrspace(1) %out, ptr ad
 ; GCN-NEXT:    s_load_dwordx4 s[4:7], s[0:1], 0x9
 ; GCN-NEXT:    s_ashr_i32 s3, s2, 31
 ; GCN-NEXT:    s_lshl_b64 s[0:1], s[2:3], 3
-; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    s_mov_b32 s11, 0xf000
 ; GCN-NEXT:    s_mov_b32 s10, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[6:7]
+; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    v_mov_b32_e32 v1, s1
 ; GCN-NEXT:    buffer_load_dword v2, v[0:1], s[8:11], 0 addr64
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[4:5]
@@ -238,11 +238,11 @@ define amdgpu_kernel void @v_uextract_bit_1_31_i64(ptr addrspace(1) %out, ptr ad
 ; GCN-NEXT:    s_load_dwordx4 s[4:7], s[0:1], 0x9
 ; GCN-NEXT:    s_ashr_i32 s3, s2, 31
 ; GCN-NEXT:    s_lshl_b64 s[0:1], s[2:3], 3
-; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    s_mov_b32 s11, 0xf000
 ; GCN-NEXT:    s_mov_b32 s10, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[6:7]
+; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    v_mov_b32_e32 v1, s1
 ; GCN-NEXT:    buffer_load_dword v2, v[0:1], s[8:11], 0 addr64
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[4:5]
@@ -269,11 +269,11 @@ define amdgpu_kernel void @v_uextract_bit_31_32_i64(ptr addrspace(1) %out, ptr a
 ; GCN-NEXT:    s_load_dwordx4 s[4:7], s[0:1], 0x9
 ; GCN-NEXT:    s_ashr_i32 s3, s2, 31
 ; GCN-NEXT:    s_lshl_b64 s[0:1], s[2:3], 3
-; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    s_mov_b32 s11, 0xf000
 ; GCN-NEXT:    s_mov_b32 s10, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[6:7]
+; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    v_mov_b32_e32 v1, s1
 ; GCN-NEXT:    buffer_load_dwordx2 v[2:3], v[0:1], s[8:11], 0 addr64
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[4:5]

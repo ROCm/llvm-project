@@ -2,13 +2,14 @@
 // COM:
 // COM: Creates a minimal gfx1250 code object containing v_cvt_sr_fp8_f32
 // COM: with clamp (E5M3 mode), runs the hotswap rewrite, and verifies the
-// COM: replacement sequence covers: NaN detection, stochastic noise injection,
-// COM: F32->F16->UE5M3 conversion, overflow clamping, NaN override, and byte merge.
+// COM: replacement sequence covers: NaN detection, stochastic noise
+// COM: addition, F32->F16->UE5M3 conversion, overflow clamping, NaN
+// COM: override, and byte merge.
 // COM:
 // COM: Companion tests:
-// COM:   hotswap-cvt-fp8-modifiers.s — source modifier variants
-// COM:   hotswap-cvt-fp8-nosled.s    — trampoline fallback path
-// COM:   hotswap-cvt-fp8-multi.s     — multi-site stacking
+// COM:   hotswap-cvt-fp8-modifiers.s - source modifier variants
+// COM:   hotswap-cvt-fp8-nosled.s    - trampoline fallback path
+// COM:   hotswap-cvt-fp8-multi.s     - multi-site stacking
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -27,7 +28,7 @@
 //
 // COM: Original site is replaced with s_branch forward to trampoline.
 // COM: Trampoline body: VCC save, NaN detection, clamp negative, stochastic
-// COM: noise injection, F32→F16→UE5M3 conversion, overflow clamping,
+// COM: noise injection, F32->F16->UE5M3 conversion, overflow clamping,
 // COM: NaN override, byte merge (single bfi for byte_sel=0), VCC restore.
 
 // BYTE0-LABEL: <test_cvt_sr_fp8_byte0>:
@@ -41,17 +42,22 @@
 // COM: --- Clamp negative ---
 // BYTE0-NEXT:  v_max_num_f32{{.*}}, 0, v1
 // COM: --- Stochastic noise injection ---
-// BYTE0-NEXT:  v_and_b32{{.*}}0x7fffff
 // BYTE0-NEXT:  v_lshrrev_b32{{.*}}, 12, v2
 // BYTE0-NEXT:  v_add
-// BYTE0-NEXT:  v_and_b32{{.*}}0x7fffff
-// BYTE0-NEXT:  v_max_num_f32{{.*}}, 0, v1
-// BYTE0-NEXT:  v_bfi_b32
+// COM: --- High-range direct path ---
+// BYTE0-NEXT:  v_cmp_le_f32{{.*}}0x47800000
+// BYTE0-NEXT:  s_mov_b32
+// BYTE0-NEXT:  v_mul_f32{{.*}}0x39000000
+// BYTE0-NEXT:  v_cvt_floor_i32_f32
+// BYTE0-NEXT:  v_add{{.*}}0xf0
+// BYTE0-NEXT:  v_min_u32{{.*}}0xfe
 // COM: --- F32 -> F16 -> UE5M3 ---
 // BYTE0-NEXT:  v_cvt_f16_f32
-// BYTE0-NEXT:  v_lshrrev_b32
-// COM: --- Overflow clamp ---
-// BYTE0-NEXT:  v_min_u32
+// BYTE0-NEXT:  v_bfe_u32
+// COM: --- Overflow clamp and high-range select ---
+// BYTE0-NEXT:  v_min_u32{{.*}}0xfe
+// BYTE0-NEXT:  s_mov_b32
+// BYTE0-NEXT:  v_cndmask_b32
 // COM: --- NaN override ---
 // BYTE0-NEXT:  s_mov_b32
 // BYTE0-NEXT:  v_mov_b32
@@ -86,17 +92,22 @@ test_cvt_sr_fp8_byte0:
 // COM: --- Clamp negative ---
 // BYTE2-NEXT:  v_max_num_f32{{.*}}, 0, v6
 // COM: --- Stochastic noise injection ---
-// BYTE2-NEXT:  v_and_b32{{.*}}0x7fffff
 // BYTE2-NEXT:  v_lshrrev_b32{{.*}}, 12, v7
 // BYTE2-NEXT:  v_add
-// BYTE2-NEXT:  v_and_b32{{.*}}0x7fffff
-// BYTE2-NEXT:  v_max_num_f32{{.*}}, 0, v6
-// BYTE2-NEXT:  v_bfi_b32
+// COM: --- High-range direct path ---
+// BYTE2-NEXT:  v_cmp_le_f32{{.*}}0x47800000
+// BYTE2-NEXT:  s_mov_b32
+// BYTE2-NEXT:  v_mul_f32{{.*}}0x39000000
+// BYTE2-NEXT:  v_cvt_floor_i32_f32
+// BYTE2-NEXT:  v_add{{.*}}0xf0
+// BYTE2-NEXT:  v_min_u32{{.*}}0xfe
 // COM: --- F32 -> F16 -> UE5M3 ---
 // BYTE2-NEXT:  v_cvt_f16_f32
-// BYTE2-NEXT:  v_lshrrev_b32
-// COM: --- Overflow clamp ---
-// BYTE2-NEXT:  v_min_u32
+// BYTE2-NEXT:  v_bfe_u32
+// COM: --- Overflow clamp and high-range select ---
+// BYTE2-NEXT:  v_min_u32{{.*}}0xfe
+// BYTE2-NEXT:  s_mov_b32
+// BYTE2-NEXT:  v_cndmask_b32
 // COM: --- NaN override ---
 // BYTE2-NEXT:  s_mov_b32
 // BYTE2-NEXT:  v_mov_b32
@@ -148,3 +159,40 @@ test_cvt_sr_fp8_noclamp:
   .amdhsa_next_free_vgpr 13
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 3
+    - 0
+  amdhsa.kernels:
+    - .name: test_cvt_sr_fp8_byte0
+      .symbol: test_cvt_sr_fp8_byte0.kd
+      .sgpr_count: 2
+      .vgpr_count: 3
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_cvt_sr_fp8_byte2
+      .symbol: test_cvt_sr_fp8_byte2.kd
+      .sgpr_count: 2
+      .vgpr_count: 8
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_cvt_sr_fp8_noclamp
+      .symbol: test_cvt_sr_fp8_noclamp.kd
+      .sgpr_count: 2
+      .vgpr_count: 13
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+.end_amdgpu_metadata

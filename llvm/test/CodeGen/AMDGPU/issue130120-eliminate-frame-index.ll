@@ -37,13 +37,12 @@ define amdgpu_gfx [13 x i32] @issue130120() {
 ; CHECK-NEXT:    s_mov_b32 s1, s0
 ; CHECK-NEXT:    s_mov_b32 s0, 0
 ; CHECK-NEXT:    s_cmp_eq_u32 s1, 0
-; CHECK-NEXT:    s_mov_b32 s2, s0
 ; CHECK-NEXT:    s_mov_b32 s1, s0
+; CHECK-NEXT:    s_mov_b32 s2, s0
 ; CHECK-NEXT:    s_cselect_b32 s49, s48, 0xf0
 ; CHECK-NEXT:    s_cselect_b32 s50, 0, s34
 ; CHECK-NEXT:    s_cselect_b32 s51, 0, s35
 ; CHECK-NEXT:    s_cselect_b32 vcc_lo, 0, s47
-; CHECK-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v3, s1
 ; CHECK-NEXT:    s_cselect_b32 s52, 0, s36
 ; CHECK-NEXT:    s_cselect_b32 s53, 0, s37
 ; CHECK-NEXT:    s_cselect_b32 s54, 0, s38
@@ -56,6 +55,7 @@ define amdgpu_gfx [13 x i32] @issue130120() {
 ; CHECK-NEXT:    s_cselect_b32 s61, 0, s44
 ; CHECK-NEXT:    s_cselect_b32 s62, 0, s45
 ; CHECK-NEXT:    s_cselect_b32 s63, 0, s46
+; CHECK-NEXT:    v_dual_mov_b32 v4, s2 :: v_dual_mov_b32 v3, s1
 ; CHECK-NEXT:    v_mov_b32_e32 v2, s0
 ; CHECK-NEXT:    s_add_i32 s1, s32, s49
 ; CHECK-NEXT:    scratch_store_b32 off, v0, s50

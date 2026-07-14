@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -check-prefix=SI %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefix=SI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=SI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefix=SI %s
 
 ; SI-LABEL: {{^}}br_i1_phi:
 

@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1010 -mattr=dumpcode -filetype=obj < %s | llvm-objcopy --dump-section .AMDGPU.disasm=- - /dev/null | FileCheck %s -check-prefix=GFX10
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu10.10 -mattr=dumpcode -filetype=obj < %s | llvm-objcopy --dump-section .AMDGPU.disasm=- - /dev/null | FileCheck %s -check-prefix=GFX10
 
 ; GFX10: f:
 ; GFX10-NEXT: BB0_0:
