@@ -295,6 +295,15 @@ public:
                                        unsigned RequiredSgprs,
                                        bool UpdateDescriptor = true);
 
+  /// Metadata-only batched form of updateKernelDescriptorSgprCount: ensure each
+  /// kernel's msgpack `.sgpr_count` reserves at least the mapped value, parsing
+  /// and re-serializing the AMDGPU metadata note ONCE for the whole batch
+  /// instead of once per kernel. Byte-identical result to calling
+  /// updateKernelDescriptorSgprCount(name, n, /*UpdateDescriptor=*/false) for
+  /// each entry, just without the per-kernel parse/serialize cost.
+  bool updateKernelDescriptorSgprCountsBatch(
+      const llvm::StringMap<unsigned> &RequiredByKernel);
+
   /// Read COMPUTE_PGM_RSRC3.INST_PREF_SIZE for \p KernelName.
   std::optional<uint32_t>
   getKernelDescriptorInstPrefSize(llvm::StringRef KernelName,
@@ -871,8 +880,9 @@ bool rewriteKernelEntryDescriptorOffsets(
 /// virtual addresses, program headers, or relocations change; `.dynsym` (used
 /// by the loader) is left untouched.
 std::unique_ptr<llvm::WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
-    llvm::WritableMemoryBuffer &In, unsigned TextSectionIndex, uint64_t TextAddr,
-    uint64_t OldTextSize, llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
+    llvm::WritableMemoryBuffer &In, unsigned TextSectionIndex,
+    uint64_t TextAddr, uint64_t OldTextSize,
+    llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------
 

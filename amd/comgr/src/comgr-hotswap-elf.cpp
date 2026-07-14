@@ -16,6 +16,8 @@
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 
@@ -233,6 +235,164 @@ updateKernelMetadataSgprCount(uint8_t *Elf, const ELFFileT &File,
   if (SawMetadataNote) {
     log() << "hotswap: error: updateKernelMetadataSgprCount: AMDGPU metadata "
           << "has no entry for kernel '" << KernelName << "'.\n";
+    return MetadataSgprUpdateStatus::Error;
+  }
+  return MetadataSgprUpdateStatus::NotFound;
+}
+
+// Batched form of updateKernelMetadataSgprCount: parse the AMDGPU msgpack
+// metadata note ONCE, bump `.sgpr_count` for every requested kernel in a single
+// pass, then re-serialize ONCE. The per-fixup form above re-parses and
+// re-serializes the whole blob for every kernel, which is O(N * blob) and was
+// the dominant cost of phase:kd_rewrite (see
+// scripts/hotswap-findings/profile-ifh-a0-vs-b0-trampolines.md). This produces
+// byte-identical output to calling updateKernelMetadataSgprCount once per
+// kernel (each `.sgpr_count` ends at max(current, requested)); it only
+// collapses N parse/serialize round-trips into one. Same error contract: a
+// requested kernel missing from the metadata, or missing `.sgpr_count`, is an
+// error; a metadata note that changes size is rejected.
+static MetadataSgprUpdateStatus
+updateKernelMetadataSgprCountsBatch(uint8_t *Elf, const ELFFileT &File,
+                                    const StringMap<unsigned> &Required) {
+  if (Required.empty())
+    return MetadataSgprUpdateStatus::Found;
+
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (!PhdrsOrErr) {
+    log() << "hotswap: error: updateKernelMetadataSgprCountsBatch: failed to "
+          << "read program headers: " << toString(PhdrsOrErr.takeError())
+          << "\n";
+    return MetadataSgprUpdateStatus::Error;
+  }
+
+  bool SawMetadataNote = false;
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_type != ELF::PT_NOTE)
+      continue;
+
+    Error Err = Error::success();
+    for (ELFT::Note Note : File.notes(Phdr, Err)) {
+      if (Note.getName() != "AMDGPU" ||
+          Note.getType() != ELF::NT_AMDGPU_METADATA)
+        continue;
+      SawMetadataNote = true;
+
+      ArrayRef<uint8_t> Desc = Note.getDesc(4);
+      if (Desc.empty()) {
+        log() << "hotswap: error: updateKernelMetadataSgprCountsBatch: AMDGPU "
+              << "metadata note has an empty descriptor.\n";
+        return MetadataSgprUpdateStatus::Error;
+      }
+
+      StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
+      msgpack::Document Doc;
+      if (!Doc.readFromBlob(Blob, false)) {
+        log() << "hotswap: error: updateKernelMetadataSgprCountsBatch: failed "
+              << "to parse AMDGPU metadata note.\n";
+        return MetadataSgprUpdateStatus::Error;
+      }
+
+      msgpack::DocNode Root = Doc.getRoot();
+      if (!Root.isMap()) {
+        log() << "hotswap: error: updateKernelMetadataSgprCountsBatch: AMDGPU "
+              << "metadata root is not a map.\n";
+        return MetadataSgprUpdateStatus::Error;
+      }
+
+      msgpack::MapDocNode &RootMap = Root.getMap();
+      msgpack::DocNode::MapTy::iterator KernelsIt =
+          RootMap.find("amdhsa.kernels");
+      if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
+        continue;
+
+      msgpack::ArrayDocNode &KernelArray = KernelsIt->second.getArray();
+      StringSet<> Resolved;
+      bool Changed = false;
+      for (msgpack::DocNode &KNode : KernelArray) {
+        if (!KNode.isMap())
+          continue;
+        msgpack::MapDocNode &KMap = KNode.getMap();
+        msgpack::DocNode::MapTy::iterator NameIt = KMap.find(".name");
+        if (NameIt == KMap.end() || !NameIt->second.isString())
+          continue;
+        StringRef KName = NameIt->second.getString();
+        StringMap<unsigned>::const_iterator ReqIt = Required.find(KName);
+        if (ReqIt == Required.end())
+          continue;
+
+        msgpack::DocNode::MapTy::iterator SgprIt = KMap.find(".sgpr_count");
+        if (SgprIt == KMap.end()) {
+          log() << "hotswap: error: updateKernelMetadataSgprCountsBatch: "
+                << "metadata for kernel '" << KName
+                << "' has no .sgpr_count.\n";
+          return MetadataSgprUpdateStatus::Error;
+        }
+        std::optional<unsigned> CurrentSgprs = readSgprCountMetadataNode(
+            SgprIt->second, KName, "updateKernelMetadataSgprCountsBatch");
+        if (!CurrentSgprs)
+          return MetadataSgprUpdateStatus::Error;
+        Resolved.insert(KName);
+        if (ReqIt->second > *CurrentSgprs) {
+          SgprIt->second = static_cast<uint64_t>(ReqIt->second);
+          Changed = true;
+        }
+      }
+
+      // Every requested kernel must exist in the metadata, matching the
+      // per-kernel form's "no entry for kernel" error.
+      for (const StringMapEntry<unsigned> &Req : Required) {
+        if (!Resolved.contains(Req.first())) {
+          log()
+              << "hotswap: error: updateKernelMetadataSgprCountsBatch: AMDGPU "
+              << "metadata has no entry for kernel '" << Req.first() << "'.\n";
+          return MetadataSgprUpdateStatus::Error;
+        }
+      }
+
+      if (!Changed)
+        return MetadataSgprUpdateStatus::Found;
+
+      std::string NewBlob;
+      Doc.writeToBlob(NewBlob);
+      if (NewBlob.size() != Blob.size()) {
+        log()
+            << "hotswap: error: updateKernelMetadataSgprCountsBatch: updating "
+            << ".sgpr_count changes metadata note size from " << Blob.size()
+            << " to " << NewBlob.size()
+            << " bytes; in-place rewrite cannot preserve ELF layout.\n";
+        return MetadataSgprUpdateStatus::Error;
+      }
+
+      const uint8_t *DescBegin = Desc.data();
+      if (DescBegin < File.base() || DescBegin >= File.end()) {
+        log()
+            << "hotswap: error: updateKernelMetadataSgprCountsBatch: metadata "
+            << "descriptor pointer is outside the ELF buffer.\n";
+        return MetadataSgprUpdateStatus::Error;
+      }
+      size_t DescOffset = DescBegin - File.base();
+      if (Desc.size() > File.getBufSize() ||
+          DescOffset > File.getBufSize() - Desc.size()) {
+        log()
+            << "hotswap: error: updateKernelMetadataSgprCountsBatch: metadata "
+            << "descriptor extends past the ELF buffer.\n";
+        return MetadataSgprUpdateStatus::Error;
+      }
+
+      std::memcpy(Elf + DescOffset, NewBlob.data(), NewBlob.size());
+      return MetadataSgprUpdateStatus::Found;
+    }
+
+    if (Err) {
+      log() << "hotswap: error: updateKernelMetadataSgprCountsBatch: failed to "
+            << "iterate AMDGPU notes: " << toString(std::move(Err)) << "\n";
+      return MetadataSgprUpdateStatus::Error;
+    }
+  }
+
+  if (SawMetadataNote) {
+    log() << "hotswap: error: updateKernelMetadataSgprCountsBatch: AMDGPU "
+          << "metadata note has no amdhsa.kernels array.\n";
     return MetadataSgprUpdateStatus::Error;
   }
   return MetadataSgprUpdateStatus::NotFound;
@@ -702,6 +862,28 @@ bool ElfView::updateKernelDescriptorSgprCount(StringRef KernelName,
                   *RequiredGranulated);
   std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
               &Rsrc1, sizeof(Rsrc1));
+  return true;
+}
+
+bool ElfView::updateKernelDescriptorSgprCountsBatch(
+    const StringMap<unsigned> &RequiredByKernel) {
+  if (RequiredByKernel.empty())
+    return true;
+
+  // Metadata-only (UpdateDescriptor=false) batch: the descriptor
+  // GRANULATED_WAVEFRONT_SGPR_COUNT field is reserved on gfx10+, so entry
+  // trampolines only need the msgpack `.sgpr_count`. Collapsing the note
+  // parse/serialize into a single round-trip is where the win comes from.
+  MetadataSgprUpdateStatus Status =
+      updateKernelMetadataSgprCountsBatch(data(), File, RequiredByKernel);
+  if (Status == MetadataSgprUpdateStatus::Error)
+    return false;
+  if (Status == MetadataSgprUpdateStatus::NotFound) {
+    log() << "hotswap: error: updateKernelDescriptorSgprCountsBatch: gfx10+ "
+          << "code objects must carry .sgpr_count metadata because the "
+          << "descriptor SGPR-count field is reserved.\n";
+    return false;
+  }
   return true;
 }
 
@@ -1190,8 +1372,7 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
   SmallVector<uint8_t> StrBlob, SymBlob;
   for (const KernelEntryTrampolineFixup &F : Fixups) {
     std::string Name = F.KernelName + ".stub";
-    uint32_t NameOff =
-        static_cast<uint32_t>(StrShdr.sh_size + StrBlob.size());
+    uint32_t NameOff = static_cast<uint32_t>(StrShdr.sh_size + StrBlob.size());
     StrBlob.append(Name.begin(), Name.end());
     StrBlob.push_back(0);
 

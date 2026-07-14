@@ -635,6 +635,13 @@ bool rewriteKernelEntryDescriptorOffsets(
   if (Fixups.empty())
     return true;
 
+  // Collect the per-kernel SGPR reservations and apply them in a single
+  // batched msgpack parse/serialize after the loop (see
+  // ElfView::updateKernelDescriptorSgprCountsBatch). The per-fixup form
+  // re-parsed and re-serialized the whole metadata note for every kernel, which
+  // dominated phase:kd_rewrite.
+  StringMap<unsigned> SgprByKernel;
+
   uint8_t *Data = reinterpret_cast<uint8_t *>(OutBuf.getBufferStart());
   Expected<ElfView> ViewOrErr = ElfView::create(Data, OutBuf.getBufferSize());
   if (!ViewOrErr) {
@@ -687,13 +694,19 @@ bool rewriteKernelEntryDescriptorOffsets(
     }
     bool UpdatedEntry =
         OutElf.updateKernelDescriptorEntryOffset(Fixup.KernelName, *NewOffset);
-    bool UpdatedSgprs = OutElf.updateKernelDescriptorSgprCount(
-        Fixup.KernelName, Fixup.RequiredSgprs,
-        /*UpdateDescriptor=*/false);
     bool UpdatedInstPref = OutElf.updateKernelDescriptorInstPrefSize(
         Fixup.KernelName, TargetCpu, Fixup.InstPrefLines);
-    Ok = UpdatedEntry && UpdatedSgprs && UpdatedInstPref && Ok;
+    // Record this kernel's SGPR bump for the single batched metadata update
+    // below instead of re-parsing/re-serializing the note per fixup.
+    if (Fixup.RequiredSgprs > 0)
+      SgprByKernel[Fixup.KernelName] =
+          std::max(SgprByKernel.lookup(Fixup.KernelName), Fixup.RequiredSgprs);
+    Ok = UpdatedEntry && UpdatedInstPref && Ok;
   }
+
+  if (!OutElf.updateKernelDescriptorSgprCountsBatch(SgprByKernel))
+    Ok = false;
+
   return Ok;
 }
 
