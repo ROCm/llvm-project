@@ -623,6 +623,17 @@ public:
                         MachineFunctionAnalysisManager &MFAM);
 };
 
+FunctionPass *createAMDGPUEmitLiveDebugVarsPass();
+void initializeAMDGPUEmitLiveDebugVarsLegacyPass(PassRegistry &);
+extern char &AMDGPUEmitLiveDebugVarsLegacyID;
+
+class AMDGPUEmitLiveDebugVarsPass
+    : public OptionalPassInfoMixin<AMDGPUEmitLiveDebugVarsPass> {
+public:
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+};
+
 FunctionPass *createAMDGPUFinalizeISelWaveTransformPass();
 void initializeAMDGPUFinalizeISelWaveTransformLegacyPass(PassRegistry &);
 extern char &AMDGPUFinalizeISelWaveTransformID;

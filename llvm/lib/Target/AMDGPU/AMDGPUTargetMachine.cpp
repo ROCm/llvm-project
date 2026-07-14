@@ -710,6 +710,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPULowerKernelArgumentsPass(*PR);
   initializeAMDGPUPromoteKernelArgumentsPass(*PR);
   initializeAMDGPULowerKernelAttributesPass(*PR);
+  initializeAMDGPUEmitLiveDebugVarsLegacyPass(*PR);
   initializeAMDGPUExportKernelRuntimeHandlesLegacyPass(*PR);
   initializeAMDGPUPostLegalizerCombinerPass(*PR);
   initializeAMDGPUPreLegalizerCombinerPass(*PR);
@@ -2023,7 +2024,12 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     // Perlane VGPR allocation pipeline.
     addPass(createVGPRAllocPass(true));
     addPreRewrite();
-    addPass(createVirtRegRewriter(false));
+    addPass(createVirtRegRewriter(false, true));
+
+    // Emit debug values into MIR before WaveTransform invalidates LDV.
+    // This rewrites allocated VGPR locations to physical registers while
+    // keeping unallocated SGPR vregs for re-collection after WaveTransform.
+    addPass(createAMDGPUEmitLiveDebugVarsPass());
 
     // Prepare the machine function for WaveTransform.
     addPass(createAMDGPUPreWaveTransformPass());

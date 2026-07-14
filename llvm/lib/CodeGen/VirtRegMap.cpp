@@ -249,8 +249,10 @@ class VirtRegRewriterLegacy : public MachineFunctionPass {
 public:
   static char ID;
   bool ClearVirtRegs;
-  VirtRegRewriterLegacy(bool ClearVirtRegs = true)
-      : MachineFunctionPass(ID), ClearVirtRegs(ClearVirtRegs) {}
+  bool PreserveVRM;
+  VirtRegRewriterLegacy(bool ClearVirtRegs = true, bool PreserveVRM = false)
+      : MachineFunctionPass(ID), ClearVirtRegs(ClearVirtRegs),
+        PreserveVRM(PreserveVRM) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 
@@ -294,8 +296,11 @@ void VirtRegRewriterLegacy::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<VirtRegMapWrapperLegacy>();
   AU.addRequired<LiveRegMatrixWrapperLegacy>();
 
-  if (!ClearVirtRegs)
+  if (!ClearVirtRegs) {
     AU.addPreserved<LiveDebugVariablesWrapperLegacy>();
+    if (PreserveVRM)
+      AU.addPreserved<VirtRegMapWrapperLegacy>();
+  }
 
   MachineFunctionPass::getAnalysisUsage(AU);
 }
@@ -335,8 +340,11 @@ VirtRegRewriterPass::run(MachineFunction &MF,
   PA.preserve<LiveStacksAnalysis>();
   // LiveDebugVariables is preserved by default, so clear it
   // if this VRegRewriter is the last one in the pipeline.
-  if (ClearVirtRegs)
+  if (ClearVirtRegs) {
     PA.abandon<LiveDebugVariablesAnalysis>();
+  } else if (PreserveVRM) {
+    PA.preserve<VirtRegMapAnalysis>();
+  }
   return PA;
 }
 
@@ -793,6 +801,7 @@ void VirtRegRewriterPass::printPipeline(
     OS << "<no-clear-vregs>";
 }
 
-FunctionPass *llvm::createVirtRegRewriter(bool ClearVirtRegs) {
-  return new VirtRegRewriterLegacy(ClearVirtRegs);
+FunctionPass *llvm::createVirtRegRewriter(bool ClearVirtRegs,
+                                          bool PreserveVRM) {
+  return new VirtRegRewriterLegacy(ClearVirtRegs, PreserveVRM);
 }

@@ -19,9 +19,12 @@
 ; DEFAULT-NEXT: GCN NSA Reassign
 ; DEFAULT-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; DEFAULT-NEXT: Virtual Register Rewriter
+; DEFAULT-NEXT: AMDGPU Emit Live Debug Variables
 ; DEFAULT-NEXT: AMDGPU Pre Wave Transform
 ; DEFAULT-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-NEXT: AMDGPU Control Flow Wave Transform
+; DEFAULT-NEXT: Slot index numbering
+; DEFAULT-NEXT: Live Interval Analysis
 ; DEFAULT: Greedy Register Allocator
 ; DEFAULT-NEXT: Virtual Register Rewriter
 ; DEFAULT-NEXT: Stack Slot Coloring
@@ -65,9 +68,12 @@
 ; BASIC-DEFAULT-NEXT: GCN NSA Reassign
 ; BASIC-DEFAULT-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; BASIC-DEFAULT-NEXT: Virtual Register Rewriter
+; BASIC-DEFAULT-NEXT: AMDGPU Emit Live Debug Variables
 ; BASIC-DEFAULT-NEXT: AMDGPU Pre Wave Transform
 ; BASIC-DEFAULT-NEXT: Machine Cycle Info Analysis
 ; BASIC-DEFAULT-NEXT: AMDGPU Control Flow Wave Transform
+; BASIC-DEFAULT-NEXT: Slot index numbering
+; BASIC-DEFAULT-NEXT: Live Interval Analysis
 ; BASIC-DEFAULT: Basic Register Allocator
 ; BASIC-DEFAULT-NEXT: Virtual Register Rewriter
 ; BASIC-DEFAULT-NEXT: Stack Slot Coloring
@@ -87,9 +93,12 @@
 ; DEFAULT-BASIC-NEXT: GCN NSA Reassign
 ; DEFAULT-BASIC-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; DEFAULT-BASIC-NEXT: Virtual Register Rewriter
+; DEFAULT-BASIC-NEXT: AMDGPU Emit Live Debug Variables
 ; DEFAULT-BASIC-NEXT: AMDGPU Pre Wave Transform
 ; DEFAULT-BASIC-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-BASIC-NEXT: AMDGPU Control Flow Wave Transform
+; DEFAULT-BASIC-NEXT: Slot index numbering
+; DEFAULT-BASIC-NEXT: Live Interval Analysis
 ; DEFAULT-BASIC: Greedy Register Allocator
 ; DEFAULT-BASIC-NEXT: Virtual Register Rewriter
 ; DEFAULT-BASIC-NEXT: Stack Slot Coloring
@@ -111,9 +120,12 @@
 ; BASIC-BASIC-NEXT: GCN NSA Reassign
 ; BASIC-BASIC-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; BASIC-BASIC-NEXT: Virtual Register Rewriter
+; BASIC-BASIC-NEXT: AMDGPU Emit Live Debug Variables
 ; BASIC-BASIC-NEXT: AMDGPU Pre Wave Transform
 ; BASIC-BASIC-NEXT: Machine Cycle Info Analysis
 ; BASIC-BASIC-NEXT: AMDGPU Control Flow Wave Transform
+; BASIC-BASIC-NEXT: Slot index numbering
+; BASIC-BASIC-NEXT: Live Interval Analysis
 ; BASIC-BASIC: Basic Register Allocator
 ; BASIC-BASIC-NEXT: Virtual Register Rewriter
 ; BASIC-BASIC-NEXT: Stack Slot Coloring

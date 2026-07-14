@@ -1,4 +1,3 @@
-; XFAIL: *
 ; RUN: llc -amdgpu-late-wave-transform=1 -O1 -mcpu=gfx1030 -mtriple=amdgcn-amd-amdhsa -filetype=obj -o - < %s | llvm-dwarfdump --debug-info - | FileCheck %s
 
 ;; Verify that we produce valid debug locations for parameters of various types.
