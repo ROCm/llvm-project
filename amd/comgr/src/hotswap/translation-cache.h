@@ -52,6 +52,7 @@ struct TranslationCacheRequest {
   std::string HotswapRulesPath;
   std::string CacheDirectory;
   std::string CacheSkipKernels;
+  std::string KernelName;
   int OrigMach = -1;
   unsigned OptLevel = 0;
   bool EnableWritelaneRewrite = true;

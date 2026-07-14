@@ -2795,7 +2795,7 @@ amd_comgr_map_elf_virtual_address_to_code_object_offset(
  * patches (e.g. B0 to A0) and cross-family transpilation.
  * The input ELF is not modified; a new data object is created and returned.
  * This entry point does not use the HotSwap translation cache. Call
- * @c amd_comgr_hotswap_transpile_with_options to request cache lookup/write
+ * @c amd_comgr_hotswap_transpile_with_options_v2 to request cache lookup/write
  * and structured result metadata.
  *
  * If no patches are needed, the output is a copy of the input.
@@ -2912,9 +2912,12 @@ typedef enum amd_comgr_hotswap_transpile_option_flags_s {
 /**
  * @brief Options for @c amd_comgr_hotswap_transpile_with_options.
  *
- * The caller must set @p size to @c sizeof(amd_comgr_hotswap_transpile_options_t).
- * Pointers are borrowed only for the duration of the call. A NULL or empty
- * @p cache_directory disables cache lookup and writes.
+ * The caller must set @p size to
+ * @c sizeof(amd_comgr_hotswap_transpile_options_t). Pointers are borrowed only
+ * for the duration of the call. A NULL or empty @p cache_directory disables
+ * cache lookup and writes. This entry point is kept for compatibility with the
+ * original options layout; per-kernel and opt-level controls are available
+ * through @c amd_comgr_hotswap_transpile_with_options_v2.
  */
 typedef struct amd_comgr_hotswap_transpile_options_s {
   size_t size;
@@ -2925,10 +2928,84 @@ typedef struct amd_comgr_hotswap_transpile_options_s {
 } amd_comgr_hotswap_transpile_options_t;
 
 /**
+ * @brief Options layout selector.
+ */
+typedef enum amd_comgr_hotswap_transpile_options_version_s {
+  /**
+   * First versioned options layout, used with
+   * @c amd_comgr_hotswap_transpile_options_v2_t.
+   */
+  AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_VERSION_2 = 2,
+} amd_comgr_hotswap_transpile_options_version_t;
+
+/**
+ * @brief Flags for @c amd_comgr_hotswap_transpile_options_v2_t.
+ */
+typedef enum amd_comgr_hotswap_transpile_options_v2_flags_s {
+  /**
+   * Disable translation cache lookup and writes even when a cache directory is
+   * provided.
+   */
+  AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_CACHE_DISABLE = 1u << 0,
+  /**
+   * Allow cache lookup but do not write a translated object on cache miss.
+   */
+  AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_CACHE_READONLY = 1u << 1,
+  /**
+   * Enable HotSwap strict mode for unsafe lowering refusals.
+   */
+  AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_STRICT = 1u << 2,
+  /**
+   * Assume HIP launch semantics for hidden_global_offset_{x,y,z}. HIP launch
+   * APIs do not expose a non-zero HSA grid-global offset, so those source ABI
+   * fields may be synthesized as zero. Leave unset for generic HSA/OpenCL code
+   * objects so unsupported global-offset uses refuse instead of being guessed.
+   */
+  AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_ASSUME_HIP_GLOBAL_OFFSET_ZERO =
+      1u << 3,
+  /**
+   * Read @p opt_level from @c amd_comgr_hotswap_transpile_options_v2_t.
+   */
+  AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_USE_OPT_LEVEL = 1u << 4,
+  /**
+   * Optional exact metadata kernel name for lazy per-kernel translation. Used
+   * only when @c AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_USE_KERNEL_NAME is set.
+   */
+  AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_USE_KERNEL_NAME = 1u << 5,
+} amd_comgr_hotswap_transpile_options_v2_flags_t;
+
+/**
+ * @brief Version-2 options for @c amd_comgr_hotswap_transpile_with_options_v2.
+ *
+ * Pointers are borrowed only for the duration of the call. A NULL or empty
+ * @p cache_directory disables cache lookup and writes. COMGR reads
+ * @p kernel_name and @p opt_level only when their corresponding
+ * @c AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_USE_* flag is set.
+ */
+typedef struct amd_comgr_hotswap_transpile_options_v2_s {
+  uint32_t version;
+  const char *cache_directory;
+  const char *cache_skip_kernels;
+  const char *hotswap_rules_path;
+  uint64_t flags;
+  /**
+   * Optional exact metadata kernel name for lazy per-kernel translation. When
+   * used, COMGR translates only this kernel and returns the selected name in
+   * @c AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_KERNEL_NAME.
+   */
+  const char *kernel_name;
+  /**
+   * Optional optimization level, 0 through 3, for the in-process optimization
+   * and AMDGPU codegen stages. The COMGR HotSwap default is O2.
+   */
+  uint32_t opt_level;
+} amd_comgr_hotswap_transpile_options_v2_t;
+
+/**
  * @brief A handle to structured HotSwap transpilation result metadata.
  *
- * A non-zero result returned by @c amd_comgr_hotswap_transpile_with_options
- * must be destroyed with @c amd_comgr_destroy_hotswap_transpile_result.
+ * A non-zero result returned by the HotSwap transpile options APIs must be
+ * destroyed with @c amd_comgr_destroy_hotswap_transpile_result.
  */
 typedef struct amd_comgr_hotswap_transpile_result_s {
   uint64_t handle;
@@ -2985,6 +3062,7 @@ typedef enum amd_comgr_hotswap_transpile_result_string_s {
    * best-effort diagnostics rather than semantic ABI.
    */
   AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_TIMING_JSON = 0x9,
+  AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_KERNEL_NAME = 0xa,
 } amd_comgr_hotswap_transpile_result_string_t;
 
 /**
@@ -2992,8 +3070,40 @@ typedef enum amd_comgr_hotswap_transpile_result_string_s {
  * result metadata.
  *
  * The translation cache is owned by COMGR's hotswap compiler implementation,
- * but cache policy is explicit in @p options. On HotSwap pipeline failure,
- * cache corruption, or cache write failure, this function returns
+ * but cache policy is explicit in @p options. This compatibility entry point
+ * accepts the original options layout and does not expose per-kernel or
+ * opt-level controls; use @c amd_comgr_hotswap_transpile_with_options_v2 for
+ * the versioned options layout.
+ *
+ * @param[in] input A data object of kind @p AMD_COMGR_DATA_KIND_EXECUTABLE
+ *   containing the input ELF code object bytes.
+ * @param[in] source_isa_name A null terminated string that is the isa name
+ *   the code object was compiled for.
+ * @param[in] target_isa_name A null terminated string that is the isa name
+ *   of the target GPU.
+ * @param[in] options Optional explicit cache/strict-mode options. If NULL,
+ *   cache lookup and writes are disabled.
+ *
+ * See @c amd_comgr_hotswap_transpile_with_options_v2 for the common
+ * ownership, result, and status contract.
+ */
+amd_comgr_status_t AMD_COMGR_API
+amd_comgr_hotswap_transpile_with_options(
+    amd_comgr_data_t input,
+    const char *source_isa_name,
+    const char *target_isa_name,
+    const amd_comgr_hotswap_transpile_options_t *options,
+    amd_comgr_data_t *output,
+    amd_comgr_hotswap_transpile_result_t *result) AMD_COMGR_VERSION_3_2;
+
+/**
+ * @brief Transpile a code object using versioned options and return
+ * structured result metadata.
+ *
+ * The translation cache is owned by COMGR's hotswap compiler implementation,
+ * but cache policy is explicit in @p options. A NULL @p options disables cache
+ * lookup and writes and uses default pipeline options. On HotSwap pipeline
+ * failure, cache corruption, or cache write failure, this function returns
  * @c AMD_COMGR_STATUS_ERROR and may still return @p result containing
  * @c success=false plus failure detail. The caller owns and must destroy any
  * non-zero returned result handle.
@@ -3004,12 +3114,13 @@ typedef enum amd_comgr_hotswap_transpile_result_string_s {
  *   the code object was compiled for.
  * @param[in] target_isa_name A null terminated string that is the isa name
  *   of the target GPU.
+ * @param[in] options Optional versioned options. If non-NULL, @p version must
+ *   be @c AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_VERSION_2. If NULL, cache
+ *   lookup and writes are disabled.
  * @param[out] output A handle to a data object of kind @p
  *   AMD_COMGR_DATA_KIND_EXECUTABLE containing the transpiled ELF. The caller
  *   must release this handle using @c amd_comgr_release_data when done.
  *   @p output is not modified on failure.
- * @param[in] options Optional explicit cache/strict-mode options. If NULL,
- *   cache lookup and writes are disabled.
  * @param[out] result Optional structured result metadata. The caller must
  *   destroy a non-zero returned handle with
  *   @c amd_comgr_destroy_hotswap_transpile_result.
@@ -3019,17 +3130,18 @@ typedef enum amd_comgr_hotswap_transpile_result_string_s {
  *   entry was invalid, or a requested cache write failed.
  * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p input is an invalid
  *   data object, is not of kind @p AMD_COMGR_DATA_KIND_EXECUTABLE, does not
- *   contain data bytes, @p output is NULL, or @p source_isa_name /
- *   @p target_isa_name is NULL or malformed.
+ *   contain data bytes, @p output is NULL, @p source_isa_name /
+ *   @p target_isa_name is NULL or malformed, or @p options has an unsupported
+ *   version or invalid field.
  * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES Unable to allocate a
  *   returned data object.
  */
 amd_comgr_status_t AMD_COMGR_API
-amd_comgr_hotswap_transpile_with_options(
+amd_comgr_hotswap_transpile_with_options_v2(
     amd_comgr_data_t input,
     const char *source_isa_name,
     const char *target_isa_name,
-    const amd_comgr_hotswap_transpile_options_t *options,
+    const amd_comgr_hotswap_transpile_options_v2_t *options,
     amd_comgr_data_t *output,
     amd_comgr_hotswap_transpile_result_t *result) AMD_COMGR_VERSION_3_2;
 

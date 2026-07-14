@@ -8,6 +8,7 @@
 #include "llvm/Config/llvm-config.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/JSON.h"
@@ -227,20 +228,24 @@ KeyData buildKeyData(const TranslationCacheRequest &request,
   data.Timings.loadedImageIdentitySeconds =
       timingElapsed(CollectTimings, loadedImageIdentityStart);
   data.deviceLibrariesIdentity = deviceLibrariesIdentity();
-  auto kernelNamesStart = timingStart(CollectTimings);
-  llvm::Expected<llvm::SmallVector<std::string>> NamesOrErr =
-      listKernelNames(request.SourceObject);
-  data.Timings.kernelNamesSeconds =
-      timingElapsed(CollectTimings, kernelNamesStart);
-  if (!NamesOrErr) {
-    data.error = "failed to list kernels for translation cache key: " +
-                 llvm::toString(NamesOrErr.takeError());
-    return data;
-  }
-  data.kernelNames.assign(NamesOrErr->begin(), NamesOrErr->end());
-  if (data.kernelNames.empty()) {
-    data.error = "source code object has no kernel metadata entries";
-    return data;
+  if (!request.KernelName.empty()) {
+    data.kernelNames.push_back(request.KernelName);
+  } else {
+    auto kernelNamesStart = timingStart(CollectTimings);
+    llvm::Expected<llvm::SmallVector<std::string>> NamesOrErr =
+        listKernelNames(request.SourceObject);
+    data.Timings.kernelNamesSeconds =
+        timingElapsed(CollectTimings, kernelNamesStart);
+    if (!NamesOrErr) {
+      data.error = "failed to list kernels for translation cache key: " +
+                   llvm::toString(NamesOrErr.takeError());
+      return data;
+    }
+    data.kernelNames.assign(NamesOrErr->begin(), NamesOrErr->end());
+    if (data.kernelNames.empty()) {
+      data.error = "source code object has no kernel metadata entries";
+      return data;
+    }
   }
 
   auto materialBuildStart = timingStart(CollectTimings);
@@ -264,6 +269,8 @@ KeyData buildKeyData(const TranslationCacheRequest &request,
   appendKeyField(material, "enable_wave_native", request.EnableWaveNative);
   appendKeyField(material, "assume_hip_global_offset_zero",
                  request.AssumeHipGlobalOffsetZero);
+  if (!request.KernelName.empty())
+    appendKeyField(material, "kernel_name", request.KernelName);
   appendKeyField(material, "hotswap_build_identity", data.buildIdentity);
   appendKeyField(material, "device_libraries_identity",
                  data.deviceLibrariesIdentity);
@@ -396,6 +403,23 @@ bool requireEqualString(const llvm::json::Object &obj, llvm::StringRef field,
   return true;
 }
 
+llvm::Error validateKernelNameField(const llvm::json::Object &obj,
+                                    llvm::StringRef expected) {
+  const llvm::json::Value *rawValue = obj.get("kernel_name");
+  if (!rawValue) {
+    if (expected.empty())
+      return llvm::Error::success();
+    return llvm::createStringError("metadata field 'kernel_name' missing");
+  }
+  auto value = rawValue->getAsString();
+  if (!value)
+    return llvm::createStringError(
+        "metadata field 'kernel_name' is not a string");
+  if (*value != expected)
+    return llvm::createStringError("metadata field 'kernel_name' mismatch");
+  return llvm::Error::success();
+}
+
 bool requireEqualInt(const llvm::json::Object &obj, llvm::StringRef field,
                      int64_t expected, std::string &Reason) {
   auto value = requireInt(obj, field, Reason);
@@ -453,7 +477,7 @@ llvm::json::Object metadataObject(const TranslationCacheRequest &request,
                                   const KeyData &keyData,
                                   const PipelineResult &Result,
                                   llvm::StringRef objectSha256) {
-  return llvm::json::Object{
+  llvm::json::Object Obj{
       {"schema_version", kCacheSchemaVersion},
       {"key", keyData.key},
       {"source_object_sha256", keyData.sourceSha256},
@@ -490,6 +514,9 @@ llvm::json::Object metadataObject(const TranslationCacheRequest &request,
        static_cast<int64_t>(Result.TargetPrivateSegmentFixedSize)},
       {"target_enable_private_segment", Result.TargetEnablePrivateSegment},
   };
+  if (!request.KernelName.empty())
+    Obj["kernel_name"] = request.KernelName;
+  return Obj;
 }
 
 bool validateMetadata(const TranslationCacheRequest &request,
@@ -524,8 +551,13 @@ bool validateMetadata(const TranslationCacheRequest &request,
       !requireEqualString(obj, "hotswap_build_identity",
                           keyData.buildIdentity, Reason) ||
       !requireEqualString(obj, "device_libraries_identity",
-                          keyData.deviceLibrariesIdentity, Reason) ||
-      !requireEqualInt(obj, "kernel_count",
+                          keyData.deviceLibrariesIdentity, Reason))
+    return false;
+  if (llvm::Error Err = validateKernelNameField(obj, request.KernelName)) {
+    Reason = llvm::toString(std::move(Err));
+    return false;
+  }
+  if (!requireEqualInt(obj, "kernel_count",
                        static_cast<int64_t>(keyData.kernelNames.size()),
                        Reason) ||
       !validateKernelArray(obj, keyData.kernelNames, Reason) ||

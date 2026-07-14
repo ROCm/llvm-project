@@ -74,7 +74,7 @@ Verify that COMGR exports the hotswap entry point:
 
 ```bash
 nm -D "${THEROCK_BUILD}/compiler/amd-comgr/stage/lib/libamd_comgr.so" \
-  | rg ' amd_comgr_hotswap_transpile(_with_options)?$'
+  | rg ' amd_comgr_hotswap_transpile(_with_options(_v2)?)?$'
 ```
 
 Run the focused COMGR lit test:
@@ -86,7 +86,7 @@ Run the focused COMGR lit test:
 ```
 
 Runtime validation should remain a separate integration test. ROCR should call
-COMGR's `amd_comgr_hotswap_transpile_with_options` API rather than linking
+COMGR's `amd_comgr_hotswap_transpile_with_options_v2` API rather than linking
 hotswap internals, so the runtime can pass explicit cache policy and report
 typed cache hit/miss status from COMGR.
 
@@ -127,13 +127,23 @@ amd_comgr_status_t amd_comgr_hotswap_transpile_with_options(
     const amd_comgr_hotswap_transpile_options_t *options,
     amd_comgr_data_t *output,
     amd_comgr_hotswap_transpile_result_t *result);
+
+amd_comgr_status_t amd_comgr_hotswap_transpile_with_options_v2(
+    amd_comgr_data_t input,
+    const char *source_isa_name,
+    const char *target_isa_name,
+    const amd_comgr_hotswap_transpile_options_v2_t *options,
+    amd_comgr_data_t *output,
+    amd_comgr_hotswap_transpile_result_t *result);
 ```
 
-The options API accepts an executable code object, returns a new executable
-code object, and returns typed result metadata. COMGR owns cache lookup and
-writes, but cache root, readonly/disabled policy, skip list, rules path, and
-strict mode are explicit options passed by the caller; cache corruption and
-write failures are hard errors rather than silent misses.
+The options-v2 API accepts an executable code object, returns a new executable
+code object, and returns typed result metadata. COMGR owns cache lookup and writes,
+but cache root, readonly/disabled policy, skip list, rules path, strict mode,
+selected kernel, and opt level are explicit options passed by the caller;
+cache corruption and write failures are hard errors rather than silent misses.
+The options API maps to the same implementation without per-kernel or opt-level
+controls.
 
 ## Validation
 
