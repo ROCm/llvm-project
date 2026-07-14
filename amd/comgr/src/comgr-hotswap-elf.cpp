@@ -597,6 +597,7 @@ void ElfView::initializeKernelDescriptorCache() const {
   namespace hsa = amdhsa;
   std::vector<KernelDescriptorInfo> Result;
   StringMap<uint64_t> FileOffsets;
+  StringMap<uint64_t> SeenVAddr;
 
   for (const ELFT::Shdr &SymShdr : Sections) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
@@ -650,19 +651,30 @@ void ElfView::initializeKernelDescriptorCache() const {
               offsetof(hsa::kernel_descriptor_t, kernel_code_entry_byte_offset),
           sizeof(EntryOffset));
 
-      std::string KernelName = NameOrErr->drop_back(3).str();
-      const bool Seen = std::any_of(
-          Result.begin(), Result.end(), [&](const KernelDescriptorInfo &Info) {
-            return Info.KernelName == KernelName && Info.VAddr == Sym.st_value;
-          });
-      if (!Seen)
+      StringRef KernelNameRef = NameOrErr->drop_back(3);
+      std::string KernelName = KernelNameRef.str();
+      // Dedup by (name, vaddr) via a map; a per-symbol O(n) scan made cache
+      // init O(n^2).
+      StringMap<uint64_t>::const_iterator SeenIt =
+          SeenVAddr.find(KernelNameRef);
+      const bool Seen =
+          SeenIt != SeenVAddr.end() && SeenIt->second == Sym.st_value;
+      if (!Seen) {
+        SeenVAddr[KernelNameRef] = Sym.st_value;
         Result.push_back({std::move(KernelName), Sym.st_value, EntryOffset});
-      FileOffsets.try_emplace(NameOrErr->drop_back(3), *FileOffset);
+      }
+      FileOffsets.try_emplace(KernelNameRef, *FileOffset);
     }
   }
 
   KernelDescriptorFileOffsetCache = std::move(FileOffsets);
   KernelDescriptorCache = std::move(Result);
+
+  // Name -> vaddr map so getKernelDescriptorVAddr() is O(1) per call instead of
+  // a linear scan (O(n^2) over ~1000 per-fixup lookups).
+  KernelDescriptorVAddrCache.clear();
+  for (const KernelDescriptorInfo &Info : *KernelDescriptorCache)
+    KernelDescriptorVAddrCache.try_emplace(Info.KernelName, Info.VAddr);
 }
 
 uint8_t *ElfView::findKernelDescriptor(StringRef KernelName) {
@@ -681,11 +693,12 @@ ArrayRef<KernelDescriptorInfo> ElfView::kernelDescriptors() const {
 
 std::optional<uint64_t>
 ElfView::getKernelDescriptorVAddr(StringRef KernelName) const {
-  for (const KernelDescriptorInfo &Info : kernelDescriptors()) {
-    if (Info.KernelName == KernelName)
-      return Info.VAddr;
-  }
-  return std::nullopt;
+  initializeKernelDescriptorCache();
+  StringMap<uint64_t>::const_iterator It =
+      KernelDescriptorVAddrCache.find(KernelName);
+  if (It == KernelDescriptorVAddrCache.end())
+    return std::nullopt;
+  return It->second;
 }
 
 bool ElfView::updateKernelDescriptorEntryOffset(StringRef KernelName,
