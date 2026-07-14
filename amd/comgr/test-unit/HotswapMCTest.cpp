@@ -258,6 +258,107 @@ TEST(EncodeSetPCLongBranch, RejectsMisalignedScratchPair) {
   EXPECT_FALSE(encodeSetPCLongBranch(S, 0, 0x1000, /*SgprBase=*/3));
 }
 
+// -- buildKernelEntryTrampolineFast ------------------------------------------
+//
+// The fast path emits its entry stub from a pre-encoded byte template, patching
+// only the two PC-relative delta immediates. These tests disassemble the
+// emitted bytes and confirm (a) the stub keeps the fixed s[100:101] scratch
+// pair the template hard-codes, and (b) the runtime PC arithmetic --
+// s_get_pc_i64 then the two-word add-with-carry -- lands exactly on the
+// original entry. Checking the decoded immediates rather than the raw template
+// guards against a bad PC-base offset or a wrong delta word, which the
+// disassembly-mnemonic lit test cannot catch.
+
+// Disassemble a fast stub and reconstruct the entry vaddr it jumps to,
+// modelling the on-hardware two's-complement add-with-carry across the
+// s[100:101] pair. Also asserts the fixed structure (fixed scratch pair,
+// expected opcodes).
+static uint64_t decodeFastStubTarget(const LLVMState &S, uint64_t StubVAddr,
+                                     llvm::ArrayRef<uint8_t> Bytes) {
+  std::vector<InternalDecodedInst> Dec;
+  EXPECT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Dec));
+  EXPECT_GE(Dec.size(), 6u);
+
+  // Body layout: global_wb, v_nop, s_get_pc_i64, s_add_co_u32 (delta lo),
+  // s_add_co_ci_u32 (delta hi), s_set_pc_i64.
+  EXPECT_EQ(Dec[0].Inst.getOpcode(), S.GlobalWbOpcode);
+  EXPECT_EQ(Dec[1].Inst.getOpcode(), S.VNopInst.getOpcode());
+  EXPECT_EQ(Dec[2].Inst.getOpcode(), S.SGetPcI64Opcode);
+  EXPECT_EQ(Dec[3].Inst.getOpcode(), S.SAddU32Opcode);
+  EXPECT_EQ(Dec[4].Inst.getOpcode(), S.SAddcU32Opcode);
+  EXPECT_EQ(Dec[5].Inst.getOpcode(), S.SSetPcI64Opcode);
+  const llvm::MCInst &GetPc = Dec[2].Inst;
+  const llvm::MCInst &AddLo = Dec[3].Inst;
+  const llvm::MCInst &AddHi = Dec[4].Inst;
+  const llvm::MCInst &SetPc = Dec[5].Inst;
+
+  // s_get_pc, s_set_pc, and both add destinations must all name the same fixed
+  // scratch pair the template hard-codes (s[100:101]).
+  EXPECT_TRUE(GetPc.getOperand(0).isReg() && SetPc.getOperand(0).isReg() &&
+              AddLo.getOperand(0).isReg() && AddHi.getOperand(0).isReg());
+  const llvm::MCRegister Pair = GetPc.getOperand(0).getReg();
+  EXPECT_EQ(SetPc.getOperand(0).getReg(), Pair);
+  EXPECT_EQ(AddLo.getOperand(0).getReg(), AddLo.getOperand(1).getReg());
+  EXPECT_EQ(AddHi.getOperand(0).getReg(), AddHi.getOperand(1).getReg());
+
+  // The 32-bit literal is the trailing dword of each 8-byte add. Read it from
+  // the disassembler-reported instruction span rather than the decoded operand:
+  // the AMDGPU disassembler models s_add_co_ci_u32's literal as an expr, so
+  // getImm() on it is unreliable, while s_add_co_u32's is a plain imm.
+  EXPECT_EQ(Dec[3].Size, 8u);
+  EXPECT_EQ(Dec[4].Size, 8u);
+  const uint32_t Lo = readDword(Bytes.data() + Dec[3].Offset + Dec[3].Size - 4);
+  const uint32_t Hi = readDword(Bytes.data() + Dec[4].Offset + Dec[4].Size - 4);
+
+  // PC base is the address of the instruction after s_get_pc_i64.
+  const uint64_t PcBase = StubVAddr + Dec[2].Offset + Dec[2].Size;
+
+  // Model the hardware add-with-carry across the 64-bit pair rather than a
+  // plain 64-bit add, so a delta that carries out of the low word is exercised.
+  const uint32_t BaseLo = static_cast<uint32_t>(PcBase);
+  const uint32_t BaseHi = static_cast<uint32_t>(PcBase >> 32);
+  const uint64_t SumLo = static_cast<uint64_t>(BaseLo) + Lo;
+  const uint32_t ResLo = static_cast<uint32_t>(SumLo);
+  const uint32_t Carry = static_cast<uint32_t>(SumLo >> 32);
+  const uint32_t ResHi = BaseHi + Hi + Carry;
+  return (static_cast<uint64_t>(ResHi) << 32) | ResLo;
+}
+
+TEST(BuildKernelEntryTrampolineFast, ForwardDeltaLandsOnEntry) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  const uint64_t StubVAddr = 0x100000;
+  const uint64_t EntryVAddr = 0x180000; // forward
+  llvm::SmallVector<uint8_t> Bytes =
+      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
+}
+
+TEST(BuildKernelEntryTrampolineFast, BackwardDeltaLandsOnEntry) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  const uint64_t StubVAddr = 0x180000;
+  const uint64_t EntryVAddr = 0x100000; // backward: negative delta
+  llvm::SmallVector<uint8_t> Bytes =
+      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
+}
+
+TEST(BuildKernelEntryTrampolineFast, CarryProducingDeltaLandsOnEntry) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  // Pc base low word is near the top of 32 bits, and the entry is far enough
+  // above that the low-word add overflows and must carry into the high word.
+  const uint64_t StubVAddr = 0xFFFFF000;
+  const uint64_t EntryVAddr = 0x1'0002'0000; // crosses the 4 GiB boundary
+  llvm::SmallVector<uint8_t> Bytes =
+      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
+}
+
 TEST(IsSBranchReachable, CoversBoundariesAlignmentAndPcOverflow) {
   constexpr uint64_t PositiveLimit =
       static_cast<uint64_t>(BranchOffsetMax + 1) * MinInstSize;
