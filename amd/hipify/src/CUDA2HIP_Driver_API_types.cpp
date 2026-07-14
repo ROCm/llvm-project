@@ -1,0 +1,5081 @@
+﻿/*
+Copyright (c) 2015 - present Advanced Micro Devices, Inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+
+#include "CUDA2HIP.h"
+
+using SEC = driver::CUDA_DRIVER_API_SECTIONS;
+
+// Maps the names of CUDA DRIVER API types to the corresponding HIP types
+const std::map<llvm::StringRef, hipCounter> CUDA_DRIVER_TYPE_NAME_MAP = [] {
+  std::map<llvm::StringRef, hipCounter> m;
+
+  // 1. Structs
+
+  m["CUDA_ARRAY3D_DESCRIPTOR_st"]                                        = {"HIP_ARRAY3D_DESCRIPTOR",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_ARRAY3D_DESCRIPTOR"]                                           = {"HIP_ARRAY3D_DESCRIPTOR",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_ARRAY3D_DESCRIPTOR_v2"]                                        = {"HIP_ARRAY3D_DESCRIPTOR",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  m["CUDA_ARRAY_DESCRIPTOR_st"]                                          = {"HIP_ARRAY_DESCRIPTOR",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_ARRAY_DESCRIPTOR_v1_st"]                                       = {"HIP_ARRAY_DESCRIPTOR",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_ARRAY_DESCRIPTOR"]                                             = {"HIP_ARRAY_DESCRIPTOR",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_ARRAY_DESCRIPTOR_v1"]                                          = {"HIP_ARRAY_DESCRIPTOR",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_ARRAY_DESCRIPTOR_v2"]                                          = {"HIP_ARRAY_DESCRIPTOR",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaExternalMemoryBufferDesc
+  m["CUDA_EXTERNAL_MEMORY_BUFFER_DESC_st"]                               = {"hipExternalMemoryBufferDesc_st",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_MEMORY_BUFFER_DESC"]                                  = {"hipExternalMemoryBufferDesc",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_MEMORY_BUFFER_DESC_v1"]                               = {"hipExternalMemoryBufferDesc",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaExternalMemoryHandleDesc
+  m["CUDA_EXTERNAL_MEMORY_HANDLE_DESC_st"]                               = {"hipExternalMemoryHandleDesc_st",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_MEMORY_HANDLE_DESC"]                                  = {"hipExternalMemoryHandleDesc",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_MEMORY_HANDLE_DESC_v1"]                               = {"hipExternalMemoryHandleDesc",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaExternalMemoryMipmappedArrayDesc
+  m["CUDA_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC_st"]                      = {"HIP_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC",                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC"]                         = {"HIP_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC",                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC_v1"]                      = {"HIP_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC",                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaExternalSemaphoreHandleDesc
+  m["CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC_st"]                            = {"hipExternalSemaphoreHandleDesc_st",                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC"]                               = {"hipExternalSemaphoreHandleDesc",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC_v1"]                            = {"hipExternalSemaphoreHandleDesc",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaExternalSemaphoreSignalParams
+  m["CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS_st"]                          = {"hipExternalSemaphoreSignalParams_st",                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS"]                             = {"hipExternalSemaphoreSignalParams",                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS_v1"]                          = {"hipExternalSemaphoreSignalParams",                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaExternalSemaphoreWaitParams
+  m["CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS_st"]                            = {"hipExternalSemaphoreWaitParams_st",                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS"]                               = {"hipExternalSemaphoreWaitParams",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS_v1"]                            = {"hipExternalSemaphoreWaitParams",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaHostNodeParams
+  m["CUDA_HOST_NODE_PARAMS_st"]                                          = {"hipHostNodeParams",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_HOST_NODE_PARAMS"]                                             = {"hipHostNodeParams",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_HOST_NODE_PARAMS_v1"]                                          = {"hipHostNodeParams",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_HOST_NODE_PARAMS_v2_st"]                                       = {"hipHostNodeParams_v2",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaHostNodeParamsV2
+  m["CUDA_HOST_NODE_PARAMS_v2"]                                          = {"hipHostNodeParams_v2",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaKernelNodeParams
+  m["CUDA_KERNEL_NODE_PARAMS_st"]                                        = {"hipKernelNodeParams",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_KERNEL_NODE_PARAMS"]                                           = {"hipKernelNodeParams",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_KERNEL_NODE_PARAMS_v1"]                                        = {"hipKernelNodeParams",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaKernelNodeParamsV2
+  m["CUDA_KERNEL_NODE_PARAMS_v2_st"]                                     = {"hipKernelNodeParams_v2",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_KERNEL_NODE_PARAMS_v2"]                                        = {"hipKernelNodeParams_v2",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_KERNEL_NODE_PARAMS_v3_st"]                                     = {"hipKernelNodeParams_v3",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_KERNEL_NODE_PARAMS_v3"]                                        = {"hipKernelNodeParams_v3",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // no analogue
+  // NOTE: cudaLaunchParams struct differs
+  m["CUDA_LAUNCH_PARAMS_st"]                                             = {"hipFunctionLaunchParams_t",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_LAUNCH_PARAMS"]                                                = {"hipFunctionLaunchParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_LAUNCH_PARAMS_v1"]                                             = {"hipFunctionLaunchParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  m["CUDA_MEMCPY2D_st"]                                                  = {"hip_Memcpy2D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMCPY2D_v1_st"]                                               = {"hip_Memcpy2D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMCPY2D"]                                                     = {"hip_Memcpy2D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMCPY2D_v1"]                                                  = {"hip_Memcpy2D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMCPY2D_v2"]                                                  = {"hip_Memcpy2D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUDA_MEMCPY3D_st"]                                                  = {"HIP_MEMCPY3D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMCPY3D_v1_st"]                                               = {"HIP_MEMCPY3D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMCPY3D"]                                                     = {"HIP_MEMCPY3D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMCPY3D_v1"]                                                  = {"HIP_MEMCPY3D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMCPY3D_v2"]                                                  = {"HIP_MEMCPY3D",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  m["CUDA_MEMCPY3D_PEER_st"]                                             = {"hip_Memcpy3D_Peer",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_MEMCPY3D_PEER"]                                                = {"hip_Memcpy3D_Peer",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_MEMCPY3D_PEER_v1"]                                             = {"hip_Memcpy3D_Peer",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  m["CUDA_MEMCPY_NODE_PARAMS_st"]                                        = {"hipMemcpyNodeParams",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpyNodeParams
+  m["CUDA_MEMCPY_NODE_PARAMS"]                                           = {"hipMemcpyNodeParams",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  m["CUDA_MEMSET_NODE_PARAMS_st"]                                        = {"hipMemsetParams",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CUDA_MEMSET_NODE_PARAMS"]                                           = {"hipMemsetParams",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMSET_NODE_PARAMS_v1"]                                        = {"hipMemsetParams",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEMSET_NODE_PARAMS_v2_st"]                                     = {"hipMemsetParams_v2",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUDA_MEMSET_NODE_PARAMS_v2"]                                        = {"hipMemsetParams_v2",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  m["CUDA_POINTER_ATTRIBUTE_P2P_TOKENS_st"]                              = {"HIP_POINTER_ATTRIBUTE_P2P_TOKENS",                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_POINTER_ATTRIBUTE_P2P_TOKENS"]                                 = {"HIP_POINTER_ATTRIBUTE_P2P_TOKENS",                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_POINTER_ATTRIBUTE_P2P_TOKENS_v1"]                              = {"HIP_POINTER_ATTRIBUTE_P2P_TOKENS",                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // no analogue
+  // NOTE: cudaResourceDesc struct differs
+  m["CUDA_RESOURCE_DESC_st"]                                             = {"HIP_RESOURCE_DESC_st",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_RESOURCE_DESC"]                                                = {"HIP_RESOURCE_DESC",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_RESOURCE_DESC_v1"]                                             = {"HIP_RESOURCE_DESC",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaResourceViewDesc
+  // NOTE: cudaResourceViewDesc hasn't reserved bytes in the end
+  m["CUDA_RESOURCE_VIEW_DESC_st"]                                        = {"HIP_RESOURCE_VIEW_DESC_st",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_RESOURCE_VIEW_DESC"]                                           = {"HIP_RESOURCE_VIEW_DESC",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_RESOURCE_VIEW_DESC_v1"]                                        = {"HIP_RESOURCE_VIEW_DESC",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  // NOTE: cudaTextureDesc differs
+  m["CUDA_TEXTURE_DESC_st"]                                              = {"HIP_TEXTURE_DESC_st",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_TEXTURE_DESC"]                                                 = {"HIP_TEXTURE_DESC",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_TEXTURE_DESC_v1"]                                              = {"HIP_TEXTURE_DESC",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  // NOTE: cudaDeviceProp differs
+  m["CUdevprop_st"]                                                      = {"hipDevprop",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUdevprop"]                                                         = {"hipDevprop",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUdevprop_v1"]                                                      = {"hipDevprop",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaIpcEventHandle_st
+  m["CUipcEventHandle_st"]                                               = {"hipIpcEventHandle_st",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaIpcEventHandle_t
+  m["CUipcEventHandle"]                                                  = {"hipIpcEventHandle_t",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUipcEventHandle_v1"]                                               = {"hipIpcEventHandle_t",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaIpcMemHandle_st
+  m["CUipcMemHandle_st"]                                                 = {"hipIpcMemHandle_st",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaIpcMemHandle_t
+  m["CUipcMemHandle"]                                                    = {"hipIpcMemHandle_t",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUipcMemHandle_v1"]                                                 = {"hipIpcMemHandle_t",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // CUDA: "The types CUarray and cudaArray * represent the same data type and may be used interchangeably by casting the two types between each other."
+  // cudaArray
+  m["CUarray_st"]                                                        = {"hipArray",                                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaArray_t
+  m["CUarray"]                                                           = {"hipArray_t",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUctx_st"]                                                          = {"ihipCtx_t",                                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUcontext"]                                                         = {"hipCtx_t",                                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // CUeglStreamConnection_st
+  m["CUeglStreamConnection_st"]                                          = {"hipEglStreamConnection",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaEglStreamConnection
+  m["CUeglStreamConnection"]                                             = {"hipEglStreamConnection *",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // the same - CUevent_st
+  m["CUevent_st"]                                                        = {"ihipEvent_t",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaEvent_t
+  m["CUevent"]                                                           = {"hipEvent_t",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // CUexternalMemory_st
+  m["CUextMemory_st"]                                                    = {"hipExtMemory_st",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaExternalMemory_t
+  m["CUexternalMemory"]                                                  = {"hipExternalMemory_t",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // CUexternalSemaphore_st
+  m["CUextSemaphore_st"]                                                 = {"hipExtSemaphore_st",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaExternalSemaphore_t
+  m["CUexternalSemaphore"]                                               = {"hipExternalSemaphore_t",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUfunc_st"]                                                         = {"ihipModuleSymbol_t",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaFunction_t
+  m["CUfunction"]                                                        = {"hipFunction_t",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // the same - CUgraph_st
+  m["CUgraph_st"]                                                        = {"ihipGraph",                                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraph_t
+  m["CUgraph"]                                                           = {"hipGraph_t",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // the same -CUgraphExec_st
+  m["CUgraphExec_st"]                                                    = {"hipGraphExec",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphExec_t
+  m["CUgraphExec"]                                                       = {"hipGraphExec_t",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaGraphicsResource
+  m["CUgraphicsResource_st"]                                             = {"hipGraphicsResource",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphicsResource_t
+  m["CUgraphicsResource"]                                                = {"hipGraphicsResource_t",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // the same - CUgraphNode_st
+  m["CUgraphNode_st"]                                                    = {"hipGraphNode",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphNode_t
+  m["CUgraphNode"]                                                       = {"hipGraphNode_t",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaMipmappedArray
+  m["CUmipmappedArray_st"]                                               = {"hipMipmappedArray",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMipmappedArray_t
+  m["CUmipmappedArray"]                                                  = {"hipMipmappedArray_t",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUmod_st"]                                                          = {"ihipModule_t",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmodule"]                                                          = {"hipModule_t",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // the same - CUstream_st
+  m["CUstream_st"]                                                       = {"ihipStream_t",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaStream_t
+  m["CUstream"]                                                          = {"hipStream_t",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // NOTE: possibly surfaceReference is analogue
+  m["CUsurfref_st"]                                                      = {"ihipSurfaceReference_t",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUsurfref"]                                                         = {"hipSurfaceReference_t",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // textureReference
+  m["CUtexref_st"]                                                       = {"textureReference",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUtexref"]                                                          = {"hipTexRef",                                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // CUuuid_st
+  m["CUuuid_st"]                                                         = {"hipUUID_t",                                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUuuid"]                                                            = {"hipUUID",                                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaMemLocation
+  m["CUmemLocation_st"]                                                  = {"hipMemLocation",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemLocation"]                                                     = {"hipMemLocation",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemLocation_v1"]                                                  = {"hipMemLocation",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUmemAllocationProp_st"]                                            = {"hipMemAllocationProp",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemAllocationProp"]                                               = {"hipMemAllocationProp",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemAllocationProp_v1"]                                            = {"hipMemAllocationProp",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaMemAccessDesc
+  m["CUmemAccessDesc_st"]                                                = {"hipMemAccessDesc",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemAccessDesc"]                                                   = {"hipMemAccessDesc",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemAccessDesc_v1"]                                                = {"hipMemAccessDesc",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaAccessPolicyWindow
+  m["CUaccessPolicyWindow_st"]                                           = {"hipAccessPolicyWindow",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUaccessPolicyWindow"]                                              = {"hipAccessPolicyWindow",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaArraySparseProperties
+  m["CUDA_ARRAY_SPARSE_PROPERTIES_st"]                                   = {"hipArraySparseProperties",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_ARRAY_SPARSE_PROPERTIES"]                                      = {"hipArraySparseProperties",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_ARRAY_SPARSE_PROPERTIES_v1"]                                   = {"hipArraySparseProperties",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // no analogue
+  m["CUarrayMapInfo_st"]                                                 = {"hipArrayMapInfo",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUarrayMapInfo"]                                                    = {"hipArrayMapInfo",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUarrayMapInfo_v1"]                                                 = {"hipArrayMapInfo",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  //
+  m["CUmemPoolHandle_st"]                                                = {"ihipMemPoolHandle_t",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemPool_t
+  m["CUmemoryPool"]                                                      = {"hipMemPool_t",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaExternalSemaphoreSignalNodeParams
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS_st"]                                = {"hipExternalSemaphoreSignalNodeParams",                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS"]                                   = {"hipExternalSemaphoreSignalNodeParams",                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS_v1"]                                = {"hipExternalSemaphoreSignalNodeParams",                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaExternalSemaphoreSignalNodeParamsV2
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS_v2_st"]                             = {"hipExternalSemaphoreSignalNodeParams",                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS_v2"]                                = {"hipExternalSemaphoreSignalNodeParams",                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaExternalSemaphoreWaitNodeParams
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS_st"]                                  = {"hipExternalSemaphoreWaitNodeParams",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS"]                                     = {"hipExternalSemaphoreWaitNodeParams",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS_v1"]                                  = {"hipExternalSemaphoreWaitNodeParams",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaExternalSemaphoreWaitNodeParamsV2
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS_v2_st"]                               = {"hipExternalSemaphoreWaitNodeParams",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS_v2"]                                  = {"hipExternalSemaphoreWaitNodeParams",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaMemPoolProps
+  m["CUmemPoolProps_st"]                                                 = {"hipMemPoolProps",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemPoolProps"]                                                    = {"hipMemPoolProps",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemPoolProps_v1"]                                                 = {"hipMemPoolProps",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaMemPoolPtrExportData
+  m["CUmemPoolPtrExportData_st"]                                         = {"hipMemPoolPtrExportData",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemPoolPtrExportData"]                                            = {"hipMemPoolPtrExportData",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemPoolPtrExportData_v1"]                                         = {"hipMemPoolPtrExportData",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  //
+  m["CUuserObject_st"]                                                   = {"hipUserObject",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaUserObject_t
+  m["CUuserObject"]                                                      = {"hipUserObject_t",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  //
+  m["CUexecAffinitySmCount_st"]                                          = {"hipExecAffinitySmCount",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUexecAffinitySmCount"]                                             = {"hipExecAffinitySmCount",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUexecAffinitySmCount_v1"]                                          = {"hipExecAffinitySmCount",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUexecAffinityParam_st"]                                            = {"hipExecAffinityParam",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUexecAffinityParam"]                                               = {"hipExecAffinityParam",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUexecAffinityParam_v1"]                                            = {"hipExecAffinityParam",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaMemAllocNodeParams
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_st"]                                     = {"hipMemAllocNodeParams",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, CUDA_REMOVED};
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_v1_st"]                                  = {"hipMemAllocNodeParams",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemAllocNodeParamsV2
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_v2_st"]                                  = {"hipMemAllocNodeParams_v2",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_MEM_ALLOC_NODE_PARAMS"]                                        = {"hipMemAllocNodeParams",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_v1"]                                     = {"hipMemAllocNodeParams",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_v2"]                                     = {"hipMemAllocNodeParams_v2",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaMemFreeNodeParams
+  m["CUDA_MEM_FREE_NODE_PARAMS_st"]                                      = {"hipMemFreeNodeParams",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_MEM_FREE_NODE_PARAMS"]                                         = {"hipMemFreeNodeParams",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaChildGraphNodeParams
+  m["CUDA_CHILD_GRAPH_NODE_PARAMS_st"]                                   = {"hipChildGraphNodeParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_CHILD_GRAPH_NODE_PARAMS"]                                      = {"hipChildGraphNodeParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaEventRecordNodeParams
+  m["CUDA_EVENT_RECORD_NODE_PARAMS_st"]                                  = {"hipEventRecordNodeParams",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EVENT_RECORD_NODE_PARAMS"]                                     = {"hipEventRecordNodeParams",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaEventWaitNodeParams
+  m["CUDA_EVENT_WAIT_NODE_PARAMS_st"]                                    = {"hipEventWaitNodeParams",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_EVENT_WAIT_NODE_PARAMS"]                                       = {"hipEventWaitNodeParams",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaGraphNodeParams
+  m["CUgraphNodeParams_st"]                                              = {"hipGraphNodeParams",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUgraphNodeParams"]                                                 = {"hipGraphNodeParams",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaArrayMemoryRequirements
+  m["CUDA_ARRAY_MEMORY_REQUIREMENTS_st"]                                 = {"hipArrayMemoryRequirements",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_ARRAY_MEMORY_REQUIREMENTS_v1"]                                 = {"hipArrayMemoryRequirements",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_ARRAY_MEMORY_REQUIREMENTS"]                                    = {"hipArrayMemoryRequirements",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // no analogue
+  m["CUstreamMemOpMemoryBarrierParams_st"]                               = {"hipStreamMemOpMemoryBarrierParams",                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["memoryBarrier"]                                                     = {"hipMemoryBarrier",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // no analogue
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_st"]                                  = {"hipBatchMemOpNodeParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, CUDA_REMOVED};
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_v1_st"]                               = {"hipBatchMemOpNodeParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_v2_st"]                               = {"hipBatchMemOpNodeParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS"]                                     = {"hipBatchMemOpNodeParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_v1"]                                  = {"hipBatchMemOpNodeParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_v2"]                                  = {"hipBatchMemOpNodeParams",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaLaunchAttribute_st
+  m["CUlaunchAttribute_st"]                                              = {"hipLaunchAttribute_st",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLaunchAttribute
+  m["CUlaunchAttribute"]                                                 = {"hipLaunchAttribute",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // NOTE: cudaLaunchConfig_st struct differs
+  m["CUlaunchConfig_st"]                                                 = {"HIP_LAUNCH_CONFIG_st",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // NOTE: cudaLaunchConfig_t struct differs
+  m["CUlaunchConfig"]                                                    = {"HIP_LAUNCH_CONFIG",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // CUlib_st
+  m["CUlib_st"]                                                          = {"ihipLibrary_t",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLibrary_t
+  m["CUlibrary"]                                                         = {"hipLibrary_t",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // the same CUkern_st
+  m["CUkern_st"]                                                         = {"ihipKernel_t",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaKernel_t
+  m["CUkernel"]                                                          = {"hipKernel_t",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaGraphInstantiateParams_st
+  m["CUDA_GRAPH_INSTANTIATE_PARAMS_st"]                                  = {"hipGraphInstantiateParams",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphInstantiateParams
+  m["CUDA_GRAPH_INSTANTIATE_PARAMS"]                                     = {"hipGraphInstantiateParams",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaLaunchMemSyncDomainMap_st
+  m["CUlaunchMemSyncDomainMap_st"]                                       = {"hipLaunchMemSyncDomainMap",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLaunchMemSyncDomainMap
+  m["CUlaunchMemSyncDomainMap"]                                          = {"hipLaunchMemSyncDomainMap",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudalibraryHostUniversalFunctionAndDataTable
+  m["CUlibraryHostUniversalFunctionAndDataTable_st"]                     = {"hipLibraryHostUniversalFunctionAndDataTable",                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudalibraryHostUniversalFunctionAndDataTable
+  m["CUlibraryHostUniversalFunctionAndDataTable"]                        = {"hipLibraryHostUniversalFunctionAndDataTable",                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUtensorMap_st"]                                                    = {"hipTensorMap",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUtensorMap"]                                                       = {"hipTensorMap",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaGraphExecUpdateResultInfo_st
+  m["CUgraphExecUpdateResultInfo_st"]                                    = {"hipGraphExecUpdateResultInfo",                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaGraphExecUpdateResultInfo
+  m["CUgraphExecUpdateResultInfo_v1"]                                    = {"hipGraphExecUpdateResultInfo",                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaGraphExecUpdateResultInfo
+  m["CUgraphExecUpdateResultInfo"]                                       = {"hipGraphExecUpdateResultInfo",                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUmulticastObjectProp_st"]                                          = {"hipMulticastObjectProperties",                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUmulticastObjectProp_v1"]                                          = {"hipMulticastObjectProperties",                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUmulticastObjectProp"]                                             = {"hipMulticastObjectProperties",                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaMemFabricHandle_st
+  m["CUmemFabricHandle_st"]                                              = {"hipMemFabricHandle",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaMemFabricHandle_t
+  m["CUmemFabricHandle_v1"]                                              = {"hipMemFabricHandle",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaMemFabricHandle_t
+  m["CUmemFabricHandle"]                                                 = {"hipMemFabricHandle",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaConditionalNodeParams
+  m["CUDA_CONDITIONAL_NODE_PARAMS"]                                      = {"hipConditionalNodeParams",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaGraphEdgeData_st
+  m["CUgraphEdgeData_st"]                                                = {"hipGraphEdgeData",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphEdgeData
+  m["CUgraphEdgeData"]                                                   = {"hipGraphEdgeData",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // CUgraphDeviceUpdatableNode_st
+  m["CUgraphDeviceUpdatableNode_st"]                                     = {"hipGraphDeviceUpdatableNode",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaGraphDeviceNode_t
+  m["CUgraphDeviceNode"]                                                 = {"hipGraphDeviceNode",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaAsyncNotificationInfo
+  m["CUasyncNotificationInfo_st"]                                        = {"hipAsyncNotificationInfo",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAsyncNotificationInfo_t
+  m["CUasyncNotificationInfo"]                                           = {"hipAsyncNotificationInfo",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUgreenCtx_st"]                                                     = {"hipGreenCtx",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUgreenCtx"]                                                        = {"hipGreenCtx",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // CUdevResourceDesc_st
+  m["CUdevResourceDesc_st"]                                              = {"hipDevResourceDesc",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevResourceDesc_t
+  m["CUdevResourceDesc"]                                                 = {"hipDevResourceDesc_t",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDevSmResource
+  m["CUdevSmResource_st"]                                                = {"hipDevSmResource",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevSmResource
+  m["CUdevSmResource"]                                                   = {"hipDevSmResource",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDevResource_st
+  m["CUdevResource_st"]                                                  = {"hipDevResource",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevResource
+  m["CUdevResource"]                                                     = {"hipDevResource",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUctxCigParam_st"]                                                  = {"hipCtxCigParam",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUctxCigParam"]                                                     = {"hipCtxCigParam",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUctxCreateParams_st"]                                              = {"hipCtxCreateParams",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUctxCreateParams"]                                                 = {"hipCtxCreateParams",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUcheckpointLockArgs_st"]                                           = {"hipCheckpointLockArgs",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUcheckpointLockArgs"]                                              = {"hipCheckpointLockArgs",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUcheckpointCheckpointArgs_st"]                                     = {"hipCheckpointCheckpointArgs",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUcheckpointCheckpointArgs"]                                        = {"hipCheckpointCheckpointArgs",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUcheckpointRestoreArgs_st"]                                        = {"hipCheckpointRestoreArgs",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUcheckpointRestoreArgs"]                                           = {"hipCheckpointRestoreArgs",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUcheckpointGpuPair_st"]                                            = {"hipCheckpointGpuPair",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUcheckpointGpuPair"]                                               = {"hipCheckpointGpuPair",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaMemcpyAttributes
+  m["CUmemcpyAttributes_st"]                                             = {"hipMemcpyAttributes",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpyAttributes
+  m["CUmemcpyAttributes"]                                                = {"hipMemcpyAttributes",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpyAttributes
+  m["CUmemcpyAttributes_v1"]                                             = {"hipMemcpyAttributes",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  //
+  m["CUcheckpointUnlockArgs_st"]                                         = {"hipCheckpointUnlockArgs",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUcheckpointUnlockArgs"]                                            = {"hipCheckpointUnlockArgs",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaOffset3D
+  m["CUoffset3D_st"]                                                     = {"hipOffset3D",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaOffset3D
+  m["CUoffset3D"]                                                        = {"hipOffset3D",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaOffset3D
+  m["CUoffset3D_v1"]                                                     = {"hipOffset3D",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  //
+  m["CUextent3D_st"]                                                     = {"hipExtent3D",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUextent3D"]                                                        = {"hipExtent3D",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaMemcpy3DOperand
+  m["CUmemcpy3DOperand_st"]                                              = {"hipMemcpy3DOperand",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpy3DOperand
+  m["CUmemcpy3DOperand"]                                                 = {"hipMemcpy3DOperand",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpy3DOperand
+  m["CUmemcpy3DOperand_v1"]                                              = {"hipMemcpy3DOperand",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaMemcpy3DBatchOp
+  m["CUDA_MEMCPY3D_BATCH_OP_st"]                                         = {"hipMemcpy3DBatchOp",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpy3DBatchOp
+  m["CUDA_MEMCPY3D_BATCH_OP"]                                            = {"hipMemcpy3DBatchOp",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpy3DBatchOp
+  m["CUDA_MEMCPY3D_BATCH_OP_v1"]                                         = {"hipMemcpy3DBatchOp",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  //
+  m["CUmemDecompressParams_st"]                                          = {"hipMemDecompressParams",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUmemDecompressParams"]                                             = {"hipMemDecompressParams",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // CUlogsCallbackEntry_st
+  m["CUlogsCallbackEntry_st"]                                            = {"hipLogsCallbackEntry_st",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaLogsCallbackHandle
+  m["CUlogsCallbackHandle"]                                              = {"hipLogsCallbackHandle",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUstreamMemOpAtomicReductionParams_st"]                             = {"hipStreamMemOpAtomicReductionParams_st",                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDevWorkqueueConfigResource
+  m["CUdevWorkqueueConfigResource_st"]                                   = {"hipDevWorkqueueConfigResource",                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevWorkqueueConfigResource
+  m["CUdevWorkqueueConfigResource"]                                      = {"hipDevWorkqueueConfigResource",                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDevWorkqueueResource
+  m["CUdevWorkqueueResource_st"]                                         = {"hipDevWorkqueueResource",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevWorkqueueResource
+  m["CUdevWorkqueueResource"]                                            = {"hipDevWorkqueueResource",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDevSmResourceGroupParams_st
+  m["CU_DEV_SM_RESOURCE_GROUP_PARAMS_st"]                                = {"hipDevSmResourceGroupParams",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevSmResourceGroupParams
+  m["CU_DEV_SM_RESOURCE_GROUP_PARAMS"]                                   = {"hipDevSmResourceGroupParams",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // 2. Unions
+
+  m["CUstreamBatchMemOpParams"]                                          = {"hipStreamBatchMemOpParams",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUstreamBatchMemOpParams_v1"]                                       = {"hipStreamBatchMemOpParams",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUstreamBatchMemOpParams_union"]                                    = {"hipStreamBatchMemOpParams_union",                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaKernelNodeAttrValue
+  // NOTE: Starting from CUDA 11.8 CUlaunchAttributeValue is used instead of CUkernelNodeAttrValue:
+  // typedef CUlaunchAttributeValue CUkernelNodeAttrValue_v1;
+  // typedef CUkernelNodeAttrValue_v1 CUkernelNodeAttrValue;
+  m["CUkernelNodeAttrValue"]                                             = {"hipKernelNodeAttrValue",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUkernelNodeAttrValue_v1"]                                          = {"hipKernelNodeAttrValue",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUkernelNodeAttrValue_union"]                                       = {"hipKernelNodeAttrValue",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, CUDA_REMOVED};
+
+  // cudaStreamAttrValue
+  m["CUstreamAttrValue"]                                                 = {"hipLaunchAttributeValue",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUstreamAttrValue_v1"]                                              = {"hipLaunchAttributeValue",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUstreamAttrValue_union"]                                           = {"hipLaunchAttributeValue",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+    // no analogue
+  m["CUlinkState_st"]                                                    = {"ihiprtcLinkState",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUlinkState"]                                                       = {"hiprtcLinkState",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaLaunchAttributeValue
+  m["CUlaunchAttributeValue"]                                            = {"hipLaunchAttributeValue",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUlaunchAttributeValue_union"]                                      = {"hipLaunchAttributeValue",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // 3. Enums
+  // TODO: HIPaddress_mode_enum and all its values should be hipTextureAddressMode as long as they are equal.
+  m["CUaddress_mode"]                                                    = {"HIPaddress_mode",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUaddress_mode_enum"]                                               = {"HIPaddress_mode_enum",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUaddress_mode enum values
+  // cudaAddressModeWrap
+  m["CU_TR_ADDRESS_MODE_WRAP"]                                           = {"HIP_TR_ADDRESS_MODE_WRAP",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaAddressModeClamp
+  m["CU_TR_ADDRESS_MODE_CLAMP"]                                          = {"HIP_TR_ADDRESS_MODE_CLAMP",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaAddressModeMirror
+  m["CU_TR_ADDRESS_MODE_MIRROR"]                                         = {"HIP_TR_ADDRESS_MODE_MIRROR",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaAddressModeBorder
+  m["CU_TR_ADDRESS_MODE_BORDER"]                                         = {"HIP_TR_ADDRESS_MODE_BORDER",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+
+  m["CUarray_cubemap_face"]                                              = {"hipGraphicsCubeFace",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUarray_cubemap_face_enum"]                                         = {"hipGraphicsCubeFace",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUarray_cubemap_face enum values
+  // cudaGraphicsCubeFacePositiveX
+  m["CU_CUBEMAP_FACE_POSITIVE_X"]                                        = {"hipGraphicsCubeFacePositiveX",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  // cudaGraphicsCubeFaceNegativeX
+  m["CU_CUBEMAP_FACE_NEGATIVE_X"]                                        = {"hipGraphicsCubeFaceNegativeX",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaGraphicsCubeFacePositiveY
+  m["CU_CUBEMAP_FACE_POSITIVE_Y"]                                        = {"hipGraphicsCubeFacePositiveY",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+  // cudaGraphicsCubeFaceNegativeY
+  m["CU_CUBEMAP_FACE_NEGATIVE_Y"]                                        = {"hipGraphicsCubeFaceNegativeY",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x03
+  // cudaGraphicsCubeFacePositiveZ
+  m["CU_CUBEMAP_FACE_POSITIVE_Z"]                                        = {"hipGraphicsCubeFacePositiveZ",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x04
+  // cudaGraphicsCubeFaceNegativeZ
+  m["CU_CUBEMAP_FACE_NEGATIVE_Z"]                                        = {"hipGraphicsCubeFaceNegativeZ",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x05
+
+  m["CUarray_format"]                                                    = {"hipArray_Format",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUarray_format_enum"]                                               = {"hipArray_Format",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUarray_format enum values
+  m["CU_AD_FORMAT_UNSIGNED_INT8"]                                        = {"HIP_AD_FORMAT_UNSIGNED_INT8",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  m["CU_AD_FORMAT_UNSIGNED_INT16"]                                       = {"HIP_AD_FORMAT_UNSIGNED_INT16",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  m["CU_AD_FORMAT_UNSIGNED_INT32"]                                       = {"HIP_AD_FORMAT_UNSIGNED_INT32",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x03
+  m["CU_AD_FORMAT_SIGNED_INT8"]                                          = {"HIP_AD_FORMAT_SIGNED_INT8",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x08
+  m["CU_AD_FORMAT_SIGNED_INT16"]                                         = {"HIP_AD_FORMAT_SIGNED_INT16",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x09
+  m["CU_AD_FORMAT_SIGNED_INT32"]                                         = {"HIP_AD_FORMAT_SIGNED_INT32",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0a
+  m["CU_AD_FORMAT_HALF"]                                                 = {"HIP_AD_FORMAT_HALF",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x10
+  m["CU_AD_FORMAT_FLOAT"]                                                = {"HIP_AD_FORMAT_FLOAT",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x20
+  m["CU_AD_FORMAT_NV12"]                                                 = {"HIP_AD_FORMAT_NV12",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xb0
+  m["CU_AD_FORMAT_UNORM_INT8X1"]                                         = {"HIP_AD_FORMAT_UNORM_INT8X1",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc0
+  m["CU_AD_FORMAT_UNORM_INT8X2"]                                         = {"HIP_AD_FORMAT_UNORM_INT8X2",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc1
+  m["CU_AD_FORMAT_UNORM_INT8X4"]                                         = {"HIP_AD_FORMAT_UNORM_INT8X4",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc2
+  m["CU_AD_FORMAT_UNORM_INT16X1"]                                        = {"HIP_AD_FORMAT_UNORM_INT16X1",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc3
+  m["CU_AD_FORMAT_UNORM_INT16X2"]                                        = {"HIP_AD_FORMAT_UNORM_INT16X2",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc4
+  m["CU_AD_FORMAT_UNORM_INT16X4"]                                        = {"HIP_AD_FORMAT_UNORM_INT16X4",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc5
+  m["CU_AD_FORMAT_SNORM_INT8X1"]                                         = {"HIP_AD_FORMAT_SNORM_INT8X1",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc6
+  m["CU_AD_FORMAT_SNORM_INT8X2"]                                         = {"HIP_AD_FORMAT_SNORM_INT8X2",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc7
+  m["CU_AD_FORMAT_SNORM_INT8X4"]                                         = {"HIP_AD_FORMAT_SNORM_INT8X4",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc8
+  m["CU_AD_FORMAT_SNORM_INT16X1"]                                        = {"HIP_AD_FORMAT_SNORM_INT16X1",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xc9
+  m["CU_AD_FORMAT_SNORM_INT16X2"]                                        = {"HIP_AD_FORMAT_SNORM_INT16X2",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xca
+  m["CU_AD_FORMAT_SNORM_INT16X4"]                                        = {"HIP_AD_FORMAT_SNORM_INT16X4",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xcb
+  m["CU_AD_FORMAT_BC1_UNORM"]                                            = {"HIP_AD_FORMAT_BC1_UNORM",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x91
+  m["CU_AD_FORMAT_BC1_UNORM_SRGB"]                                       = {"HIP_AD_FORMAT_BC1_UNORM_SRGB",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x92
+  m["CU_AD_FORMAT_BC2_UNORM"]                                            = {"HIP_AD_FORMAT_BC2_UNORM",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x93
+  m["CU_AD_FORMAT_BC2_UNORM_SRGB"]                                       = {"HIP_AD_FORMAT_BC2_UNORM_SRGB",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x94
+  m["CU_AD_FORMAT_BC3_UNORM"]                                            = {"HIP_AD_FORMAT_BC3_UNORM",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x95
+  m["CU_AD_FORMAT_BC3_UNORM_SRGB"]                                       = {"HIP_AD_FORMAT_BC3_UNORM_SRGB",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x96
+  m["CU_AD_FORMAT_BC4_UNORM"]                                            = {"HIP_AD_FORMAT_BC4_UNORM",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x97
+  m["CU_AD_FORMAT_BC4_SNORM"]                                            = {"HIP_AD_FORMAT_BC4_SNORM",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x98
+  m["CU_AD_FORMAT_BC5_UNORM"]                                            = {"HIP_AD_FORMAT_BC5_UNORM",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x99
+  m["CU_AD_FORMAT_BC5_SNORM"]                                            = {"HIP_AD_FORMAT_BC5_SNORM",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x9a
+  m["CU_AD_FORMAT_BC6H_UF16"]                                            = {"HIP_AD_FORMAT_BC6H_UF16",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x9b
+  m["CU_AD_FORMAT_BC6H_SF16"]                                            = {"HIP_AD_FORMAT_BC6H_SF16",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x9c
+  m["CU_AD_FORMAT_BC7_UNORM"]                                            = {"HIP_AD_FORMAT_BC7_UNORM",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x9d
+  m["CU_AD_FORMAT_BC7_UNORM_SRGB"]                                       = {"HIP_AD_FORMAT_BC7_UNORM_SRGB",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x9e
+  m["CU_AD_FORMAT_P010"]                                                 = {"HIP_AD_FORMAT_P010",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x9f
+  m["CU_AD_FORMAT_P016"]                                                 = {"HIP_AD_FORMAT_P016",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xa1
+  m["CU_AD_FORMAT_NV16"]                                                 = {"HIP_AD_FORMAT_NV16",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xa2
+  m["CU_AD_FORMAT_P210"]                                                 = {"HIP_AD_FORMAT_P210",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xa3
+  m["CU_AD_FORMAT_P216"]                                                 = {"HIP_AD_FORMAT_P216",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xa4
+  m["CU_AD_FORMAT_YUY2"]                                                 = {"HIP_AD_FORMAT_YUY2",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xa5
+  m["CU_AD_FORMAT_Y210"]                                                 = {"HIP_AD_FORMAT_Y210",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xa6
+  m["CU_AD_FORMAT_Y216"]                                                 = {"HIP_AD_FORMAT_Y216",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xa7
+  m["CU_AD_FORMAT_AYUV"]                                                 = {"HIP_AD_FORMAT_AYUV",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xa8
+  m["CU_AD_FORMAT_Y410"]                                                 = {"HIP_AD_FORMAT_Y410",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xa9
+  m["CU_AD_FORMAT_Y416"]                                                 = {"HIP_AD_FORMAT_Y416",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xb1
+  m["CU_AD_FORMAT_Y444_PLANAR8"]                                         = {"HIP_AD_FORMAT_Y444_PLANAR8",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xb2
+  m["CU_AD_FORMAT_Y444_PLANAR10"]                                        = {"HIP_AD_FORMAT_Y444_PLANAR10",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xb3
+  m["CU_AD_FORMAT_YUV444_8bit_SemiPlanar"]                               = {"HIP_AD_FORMAT_YUV444_8bit_SemiPlanar",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xb4
+  m["CU_AD_FORMAT_YUV444_16bit_SemiPlanar"]                              = {"HIP_AD_FORMAT_YUV444_16bit_SemiPlanar",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xb5
+  m["CU_AD_FORMAT_UNORM_INT_101010_2"]                                   = {"HIP_AD_FORMAT_UNORM_INT_101010_2",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x50
+  m["CU_AD_FORMAT_UINT8_PACKED_422"]                                     = {"HIP_AD_FORMAT_UINT8_PACKED_422",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x51
+  m["CU_AD_FORMAT_UINT8_PACKED_444"]                                     = {"HIP_AD_FORMAT_UINT8_PACKED_444",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x52
+  m["CU_AD_FORMAT_UINT8_SEMIPLANAR_420"]                                 = {"HIP_AD_FORMAT_UINT8_SEMIPLANAR_420",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x53
+  m["CU_AD_FORMAT_UINT16_SEMIPLANAR_420"]                                = {"HIP_AD_FORMAT_UINT16_SEMIPLANAR_420",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x54
+  m["CU_AD_FORMAT_UINT8_SEMIPLANAR_422"]                                 = {"HIP_AD_FORMAT_UINT8_SEMIPLANAR_422",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x55
+  m["CU_AD_FORMAT_UINT16_SEMIPLANAR_422"]                                = {"HIP_AD_FORMAT_UINT16_SEMIPLANAR_422",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x56
+  m["CU_AD_FORMAT_UINT8_SEMIPLANAR_444"]                                 = {"HIP_AD_FORMAT_UINT8_SEMIPLANAR_444",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x57
+  m["CU_AD_FORMAT_UINT16_SEMIPLANAR_444"]                                = {"HIP_AD_FORMAT_UINT16_SEMIPLANAR_444",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x58
+  m["CU_AD_FORMAT_UINT8_PLANAR_420"]                                     = {"HIP_AD_FORMAT_UINT8_PLANAR_420",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x59
+  m["CU_AD_FORMAT_UINT16_PLANAR_420"]                                    = {"HIP_AD_FORMAT_UINT16_PLANAR_420",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x5a
+  m["CU_AD_FORMAT_UINT8_PLANAR_422"]                                     = {"HIP_AD_FORMAT_UINT8_PLANAR_422",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x5b
+  m["CU_AD_FORMAT_UINT16_PLANAR_422"]                                    = {"HIP_AD_FORMAT_UINT16_PLANAR_422",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x5c
+  m["CU_AD_FORMAT_UINT8_PLANAR_444"]                                     = {"HIP_AD_FORMAT_UINT8_PLANAR_444",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x5d
+  m["CU_AD_FORMAT_UINT16_PLANAR_444"]                                    = {"HIP_AD_FORMAT_UINT16_PLANAR_444",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x5e
+  m["CU_AD_FORMAT_MAX"]                                                  = {"HIP_AD_FORMAT_MAX",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x7FFFFFFF
+
+  // cudaComputeMode
+  m["CUcomputemode"]                                                     = {"hipComputeMode",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUcomputemode_enum"]                                                = {"hipComputeMode",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUcomputemode enum values
+  // cudaComputeModeDefault
+  m["CU_COMPUTEMODE_DEFAULT"]                                            = {"hipComputeModeDefault",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaComputeModeExclusive
+  // NOTE: Deprecated since CUDA 8.0
+  m["CU_COMPUTEMODE_EXCLUSIVE"]                                          = {"hipComputeModeExclusive",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_REMOVED}; // 1
+  // cudaComputeModeProhibited
+  m["CU_COMPUTEMODE_PROHIBITED"]                                         = {"hipComputeModeProhibited",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaComputeModeExclusiveProcess
+  m["CU_COMPUTEMODE_EXCLUSIVE_PROCESS"]                                  = {"hipComputeModeExclusiveProcess",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+
+  m["CUctx_flags"]                                                       = {"hipCctx_flags",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUctx_flags_enum"]                                                  = {"hipCctx_flags",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUctx_flags enum values
+  // cudaDeviceScheduleAuto
+  m["CU_CTX_SCHED_AUTO"]                                                 = {"hipDeviceScheduleAuto",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x00
+  // cudaDeviceScheduleSpin
+  m["CU_CTX_SCHED_SPIN"]                                                 = {"hipDeviceScheduleSpin",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaDeviceScheduleYield
+  m["CU_CTX_SCHED_YIELD"]                                                = {"hipDeviceScheduleYield",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaDeviceScheduleBlockingSync
+  m["CU_CTX_SCHED_BLOCKING_SYNC"]                                        = {"hipDeviceScheduleBlockingSync",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x04
+  // cudaDeviceBlockingSync
+  // NOTE: Deprecated since CUDA 4.0 and replaced with CU_CTX_SCHED_BLOCKING_SYNC
+  m["CU_CTX_BLOCKING_SYNC"]                                              = {"hipDeviceScheduleBlockingSync",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 0x04
+  // cudaDeviceScheduleMask
+  m["CU_CTX_SCHED_MASK"]                                                 = {"hipDeviceScheduleMask",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x07
+  // cudaDeviceMapHost
+  m["CU_CTX_MAP_HOST"]                                                   = {"hipDeviceMapHost",                                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x08
+  // cudaDeviceLmemResizeToMax
+  m["CU_CTX_LMEM_RESIZE_TO_MAX"]                                         = {"hipDeviceLmemResizeToMax",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x10
+  //
+  m["CU_CTX_COREDUMP_ENABLE"]                                            = {"hipDeviceCoreDumpEnable",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x20
+  //
+  m["CU_CTX_USER_COREDUMP_ENABLE"]                                       = {"hipDeviceUserCoreDumpEnable",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x40
+  // cudaDeviceSyncMemops
+  m["CU_CTX_SYNC_MEMOPS"]                                                = {"hipDeviceSyncMemOps",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x80
+  // cudaDeviceMask
+  m["CU_CTX_FLAGS_MASK"]                                                 = {"hipDeviceMask",                                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0xff
+
+  // cudaDeviceAttr
+  m["CUdevice_attribute"]                                                = {"hipDeviceAttribute_t",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUdevice_attribute_enum"]                                           = {"hipDeviceAttribute_t",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUdevice_attribute enum values
+  // cudaDevAttrMaxThreadsPerBlock
+  m["CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK"]                         = {"hipDeviceAttributeMaxThreadsPerBlock",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  1
+  // cudaDevAttrMaxBlockDimX
+  m["CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X"]                               = {"hipDeviceAttributeMaxBlockDimX",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  2
+  // cudaDevAttrMaxBlockDimY
+  m["CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y"]                               = {"hipDeviceAttributeMaxBlockDimY",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  3
+  // cudaDevAttrMaxBlockDimZ
+  m["CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z"]                               = {"hipDeviceAttributeMaxBlockDimZ",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  4
+  // cudaDevAttrMaxGridDimX
+  m["CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X"]                                = {"hipDeviceAttributeMaxGridDimX",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  5
+  // cudaDevAttrMaxGridDimY
+  m["CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y"]                                = {"hipDeviceAttributeMaxGridDimY",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  6
+  // cudaDevAttrMaxGridDimZ
+  m["CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z"]                                = {"hipDeviceAttributeMaxGridDimZ",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  7
+  // cudaDevAttrMaxSharedMemoryPerBlock
+  m["CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK"]                   = {"hipDeviceAttributeMaxSharedMemoryPerBlock",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  8
+  // no analogue
+  // NOTE: Deprecated, use CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK
+  m["CU_DEVICE_ATTRIBUTE_SHARED_MEMORY_PER_BLOCK"]                       = {"hipDeviceAttributeMaxSharedMemoryPerBlock",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; //  8
+  // cudaDevAttrTotalConstantMemory
+  m["CU_DEVICE_ATTRIBUTE_TOTAL_CONSTANT_MEMORY"]                         = {"hipDeviceAttributeTotalConstantMemory",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  9
+  // cudaDevAttrWarpSize
+  m["CU_DEVICE_ATTRIBUTE_WARP_SIZE"]                                     = {"hipDeviceAttributeWarpSize",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 10
+  // cudaDevAttrMaxPitch
+  m["CU_DEVICE_ATTRIBUTE_MAX_PITCH"]                                     = {"hipDeviceAttributeMaxPitch",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 11
+  // cudaDevAttrMaxRegistersPerBlock
+  m["CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_BLOCK"]                       = {"hipDeviceAttributeMaxRegistersPerBlock",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 12
+  // no analogue
+  m["CU_DEVICE_ATTRIBUTE_REGISTERS_PER_BLOCK"]                           = {"hipDeviceAttributeMaxRegistersPerBlock",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 12
+  // cudaDevAttrClockRate
+  m["CU_DEVICE_ATTRIBUTE_CLOCK_RATE"]                                    = {"hipDeviceAttributeClockRate",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 13
+  // cudaDevAttrTextureAlignment
+  m["CU_DEVICE_ATTRIBUTE_TEXTURE_ALIGNMENT"]                             = {"hipDeviceAttributeTextureAlignment",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 14
+  // cudaDevAttrGpuOverlap
+  // NOTE: Deprecated, use instead CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_GPU_OVERLAP"]                                   = {"hipDeviceAttributeAsyncEngineCount",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 15
+  // cudaDevAttrMultiProcessorCount
+  m["CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT"]                          = {"hipDeviceAttributeMultiprocessorCount",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 16
+  // cudaDevAttrKernelExecTimeout
+  m["CU_DEVICE_ATTRIBUTE_KERNEL_EXEC_TIMEOUT"]                           = {"hipDeviceAttributeKernelExecTimeout",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 17
+  // cudaDevAttrIntegrated
+  m["CU_DEVICE_ATTRIBUTE_INTEGRATED"]                                    = {"hipDeviceAttributeIntegrated",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 18
+  // cudaDevAttrCanMapHostMemory
+  m["CU_DEVICE_ATTRIBUTE_CAN_MAP_HOST_MEMORY"]                           = {"hipDeviceAttributeCanMapHostMemory",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 19
+  // cudaDevAttrComputeMode
+  m["CU_DEVICE_ATTRIBUTE_COMPUTE_MODE"]                                  = {"hipDeviceAttributeComputeMode",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 20
+  // cudaDevAttrMaxTexture1DWidth
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_WIDTH"]                       = {"hipDeviceAttributeMaxTexture1DWidth",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 21
+  // cudaDevAttrMaxTexture2DWidth
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_WIDTH"]                       = {"hipDeviceAttributeMaxTexture2DWidth",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 22
+  // cudaDevAttrMaxTexture2DHeight
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_HEIGHT"]                      = {"hipDeviceAttributeMaxTexture2DHeight",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 23
+  // cudaDevAttrMaxTexture3DWidth
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE3D_WIDTH"]                       = {"hipDeviceAttributeMaxTexture3DWidth",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 24
+  // cudaDevAttrMaxTexture3DHeight
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE3D_HEIGHT"]                      = {"hipDeviceAttributeMaxTexture3DHeight",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 25
+  // cudaDevAttrMaxTexture3DDepth
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE3D_DEPTH"]                       = {"hipDeviceAttributeMaxTexture3DDepth",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 26
+  // cudaDevAttrMaxTexture2DLayeredWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LAYERED_WIDTH"]               = {"hipDeviceAttributeMaxTexture2DLayered",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 27
+  // cudaDevAttrMaxTexture2DLayeredHeight
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LAYERED_HEIGHT"]              = {"hipDeviceAttributeMaxTexture2DLayered",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 28
+  // cudaDevAttrMaxTexture2DLayeredLayers
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LAYERED_LAYERS"]              = {"hipDeviceAttributeMaxTexture2DLayeredLayers",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 29
+  // cudaDevAttrMaxTexture2DLayeredWidth
+  // NOTE: Deprecated, use CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LAYERED_WIDTH
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_ARRAY_WIDTH"]                 = {"hipDeviceAttributeMaxTexture2DLayered",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 27
+  // cudaDevAttrMaxTexture2DLayeredHeight
+  // NOTE: Deprecated, use CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LAYERED_HEIGHT
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_ARRAY_HEIGHT"]                = {"hipDeviceAttributeMaxTexture2DLayered",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 28
+  // cudaDevAttrMaxTexture2DLayeredLayers
+  // NOTE: Deprecated, use CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LAYERED_LAYERS
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_ARRAY_NUMSLICES"]             = {"hipDeviceAttributeMaxTexture2DLayeredLayers",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_DEPRECATED}; // 29
+  // cudaDevAttrSurfaceAlignment
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_SURFACE_ALIGNMENT"]                             = {"hipDeviceAttributeSurfaceAlignment",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 30
+  // cudaDevAttrConcurrentKernels
+  m["CU_DEVICE_ATTRIBUTE_CONCURRENT_KERNELS"]                            = {"hipDeviceAttributeConcurrentKernels",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 31
+  // cudaDevAttrEccEnabled
+  m["CU_DEVICE_ATTRIBUTE_ECC_ENABLED"]                                   = {"hipDeviceAttributeEccEnabled",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 32
+  // cudaDevAttrPciBusId
+  m["CU_DEVICE_ATTRIBUTE_PCI_BUS_ID"]                                    = {"hipDeviceAttributePciBusId",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 33
+  // cudaDevAttrPciDeviceId
+  m["CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID"]                                 = {"hipDeviceAttributePciDeviceId",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 34
+  // cudaDevAttrTccDriver
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_TCC_DRIVER"]                                    = {"hipDeviceAttributeTccDriver",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 35
+  // cudaDevAttrMemoryClockRate
+  m["CU_DEVICE_ATTRIBUTE_MEMORY_CLOCK_RATE"]                             = {"hipDeviceAttributeMemoryClockRate",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 36
+  // cudaDevAttrGlobalMemoryBusWidth
+  m["CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH"]                       = {"hipDeviceAttributeMemoryBusWidth",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 37
+  // cudaDevAttrL2CacheSize
+  m["CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE"]                                 = {"hipDeviceAttributeL2CacheSize",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 38
+  // cudaDevAttrMaxThreadsPerMultiProcessor
+  m["CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR"]                = {"hipDeviceAttributeMaxThreadsPerMultiProcessor",              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 39
+  // cudaDevAttrAsyncEngineCount
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT"]                            = {"hipDeviceAttributeAsyncEngineCount",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 40
+  // cudaDevAttrUnifiedAddressing
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_UNIFIED_ADDRESSING"]                            = {"hipDeviceAttributeUnifiedAddressing",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 41
+  // cudaDevAttrMaxTexture1DLayeredWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_LAYERED_WIDTH"]               = {"hipDeviceAttributeMaxTexture1DLayered",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 42
+  // cudaDevAttrMaxTexture1DLayeredLayers
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_LAYERED_LAYERS"]              = {"hipDeviceAttributeMaxTexture1DLayeredLayers",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 43
+  // no analogue
+  // NOTE: Deprecated, do not use
+  m["CU_DEVICE_ATTRIBUTE_CAN_TEX2D_GATHER"]                              = {"hipDeviceAttributeCanTex2DGather",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_DEPRECATED}; // 44
+  // cudaDevAttrMaxTexture2DGatherWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_GATHER_WIDTH"]                = {"hipDeviceAttributeMaxTexture2DGather",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 45
+  // cudaDevAttrMaxTexture2DGatherHeight
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_GATHER_HEIGHT"]               = {"hipDeviceAttributeMaxTexture2DGather",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 46
+  // cudaDevAttrMaxTexture3DWidthAlt
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE3D_WIDTH_ALTERNATE"]             = {"hipDeviceAttributeMaxTexture3DAlt",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 47
+  // cudaDevAttrMaxTexture3DHeightAlt
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE3D_HEIGHT_ALTERNATE"]            = {"hipDeviceAttributeMaxTexture3DAlt",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 48
+  // cudaDevAttrMaxTexture3DDepthAlt
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE3D_DEPTH_ALTERNATE"]             = {"hipDeviceAttributeMaxTexture3DAlt",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 49
+  // cudaDevAttrPciDomainId
+  m["CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID"]                                 = {"hipDeviceAttributePciDomainId",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 50
+  // cudaDevAttrTexturePitchAlignment
+  m["CU_DEVICE_ATTRIBUTE_TEXTURE_PITCH_ALIGNMENT"]                       = {"hipDeviceAttributeTexturePitchAlignment",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 51
+  // cudaDevAttrMaxTextureCubemapWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURECUBEMAP_WIDTH"]                  = {"hipDeviceAttributeMaxTextureCubemap",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 52
+  // cudaDevAttrMaxTextureCubemapLayeredWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURECUBEMAP_LAYERED_WIDTH"]          = {"hipDeviceAttributeMaxTextureCubemapLayered",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 53
+  // cudaDevAttrMaxTextureCubemapLayeredLayers
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURECUBEMAP_LAYERED_LAYERS"]         = {"hipDeviceAttributeMaxTextureCubemapLayeredLayers",           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 54
+  // cudaDevAttrMaxSurface1DWidth
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE1D_WIDTH"]                       = {"hipDeviceAttributeMaxSurface1D",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 55
+  // cudaDevAttrMaxSurface2DWidth
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE2D_WIDTH"]                       = {"hipDeviceAttributeMaxSurface2D",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 56
+  // cudaDevAttrMaxSurface2DHeight
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE2D_HEIGHT"]                      = {"hipDeviceAttributeMaxSurface2D",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 57
+  // cudaDevAttrMaxSurface3DWidth
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE3D_WIDTH"]                       = {"hipDeviceAttributeMaxSurface3D",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 58
+  // cudaDevAttrMaxSurface3DHeight
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE3D_HEIGHT"]                      = {"hipDeviceAttributeMaxSurface3D",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 59
+  // cudaDevAttrMaxSurface3DDepth
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE3D_DEPTH"]                       = {"hipDeviceAttributeMaxSurface3D",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 60
+  // cudaDevAttrMaxSurface1DLayeredWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE1D_LAYERED_WIDTH"]               = {"hipDeviceAttributeMaxSurface1DLayered",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 61
+  // cudaDevAttrMaxSurface1DLayeredLayers
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE1D_LAYERED_LAYERS"]              = {"hipDeviceAttributeMaxSurface1DLayeredLayers",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 62
+  // cudaDevAttrMaxSurface2DLayeredWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE2D_LAYERED_WIDTH"]               = {"hipDeviceAttributeMaxSurface2DLayered",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 63
+  // cudaDevAttrMaxSurface2DLayeredHeight
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE2D_LAYERED_HEIGHT"]              = {"hipDeviceAttributeMaxSurface2DLayered",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 64
+  // cudaDevAttrMaxSurface2DLayeredLayers
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACE2D_LAYERED_LAYERS"]              = {"hipDeviceAttributeMaxSurface2DLayeredLayers",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 65
+  // cudaDevAttrMaxSurfaceCubemapWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACECUBEMAP_WIDTH"]                  = {"hipDeviceAttributeMaxSurfaceCubemap",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 66
+  // cudaDevAttrMaxSurfaceCubemapLayeredWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACECUBEMAP_LAYERED_WIDTH"]          = {"hipDeviceAttributeMaxSurfaceCubemapLayered",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 67
+  // cudaDevAttrMaxSurfaceCubemapLayeredLayers
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_SURFACECUBEMAP_LAYERED_LAYERS"]         = {"hipDeviceAttributeMaxSurfaceCubemapLayeredLayers",           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 68
+  // cudaDevAttrMaxTexture1DLinearWidth
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_LINEAR_WIDTH"]                = {"hipDeviceAttributeMaxTexture1DLinear",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 69
+  // cudaDevAttrMaxTexture2DLinearWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LINEAR_WIDTH"]                = {"hipDeviceAttributeMaxTexture2DLinear",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 70
+  // cudaDevAttrMaxTexture2DLinearHeight
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LINEAR_HEIGHT"]               = {"hipDeviceAttributeMaxTexture2DLinear",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 71
+  // CUDA only
+  // cudaDevAttrMaxTexture2DLinearPitch
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LINEAR_PITCH"]                = {"hipDeviceAttributeMaxTexture2DLinear",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 72
+  // cudaDevAttrMaxTexture2DMipmappedWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_MIPMAPPED_WIDTH"]             = {"hipDeviceAttributeMaxTexture2DMipmap",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 73
+  // cudaDevAttrMaxTexture2DMipmappedHeight
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_MIPMAPPED_HEIGHT"]            = {"hipDeviceAttributeMaxTexture2DMipmap",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 74
+  // cudaDevAttrComputeCapabilityMajor
+  m["CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR"]                      = {"hipDeviceAttributeComputeCapabilityMajor",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 75
+  // cudaDevAttrComputeCapabilityMinor
+  m["CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR"]                      = {"hipDeviceAttributeComputeCapabilityMinor",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 76
+  // cudaDevAttrMaxTexture1DMipmappedWidth
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_MIPMAPPED_WIDTH"]             = {"hipDeviceAttributeMaxTexture1DMipmap",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 77
+  // cudaDevAttrStreamPrioritiesSupported
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_STREAM_PRIORITIES_SUPPORTED"]                   = {"hipDeviceAttributeStreamPrioritiesSupported",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 78
+  // cudaDevAttrGlobalL1CacheSupported
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_GLOBAL_L1_CACHE_SUPPORTED"]                     = {"hipDeviceAttributeGlobalL1CacheSupported",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 79
+  // cudaDevAttrLocalL1CacheSupported
+  m["CU_DEVICE_ATTRIBUTE_LOCAL_L1_CACHE_SUPPORTED"]                      = {"hipDeviceAttributeLocalL1CacheSupported",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 80
+  // cudaDevAttrMaxSharedMemoryPerMultiprocessor
+  m["CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR"]          = {"hipDeviceAttributeMaxSharedMemoryPerMultiprocessor",         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 81
+  // cudaDevAttrMaxRegistersPerMultiprocessor
+  m["CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_MULTIPROCESSOR"]              = {"hipDeviceAttributeMaxRegistersPerMultiprocessor",            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 82
+  // cudaDevAttrManagedMemory
+  m["CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY"]                                = {"hipDeviceAttributeManagedMemory",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 83
+  // cudaDevAttrIsMultiGpuBoard
+  m["CU_DEVICE_ATTRIBUTE_MULTI_GPU_BOARD"]                               = {"hipDeviceAttributeIsMultiGpuBoard",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 84
+  // cudaDevAttrMultiGpuBoardGroupID
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MULTI_GPU_BOARD_GROUP_ID"]                      = {"hipDeviceAttributeMultiGpuBoardGroupId",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 85
+  // cudaDevAttrHostNativeAtomicSupported
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_HOST_NATIVE_ATOMIC_SUPPORTED"]                  = {"hipDeviceAttributeHostNativeAtomicSupported",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 86
+  // cudaDevAttrSingleToDoublePrecisionPerfRatio
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_SINGLE_TO_DOUBLE_PRECISION_PERF_RATIO"]         = {"hipDeviceAttributeSingleToDoublePrecisionPerfRatio",         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 87
+  // cudaDevAttrPageableMemoryAccess
+  m["CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS"]                        = {"hipDeviceAttributePageableMemoryAccess",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 88
+  // cudaDevAttrConcurrentManagedAccess
+  m["CU_DEVICE_ATTRIBUTE_CONCURRENT_MANAGED_ACCESS"]                     = {"hipDeviceAttributeConcurrentManagedAccess",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 89
+  // cudaDevAttrComputePreemptionSupported
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_COMPUTE_PREEMPTION_SUPPORTED"]                  = {"hipDeviceAttributeComputePreemptionSupported",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 90
+  // cudaDevAttrCanUseHostPointerForRegisteredMem
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_HOST_POINTER_FOR_REGISTERED_MEM"]       = {"hipDeviceAttributeCanUseHostPointerForRegisteredMem",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 91
+  // no analogue: cudaDevAttrReserved92
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_MEM_OPS"]                        = {"hipDeviceAttributeCanUseStreamMemOps",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 92
+  //
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_MEM_OPS_V1"]                     = {"hipDeviceAttributeCanUseStreamMemOps",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 92
+  // no analogue: cudaDevAttrReserved93
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_64_BIT_STREAM_MEM_OPS"]                 = {"hipDeviceAttributeCanUse64BitStreamMemOps",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 93
+  //
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_64_BIT_STREAM_MEM_OPS_V1"]              = {"hipDeviceAttributeCanUse64BitStreamMemOps",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 93
+  // no analogue: cudaDevAttrReserved94
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_WAIT_VALUE_NOR"]                 = {"hipDeviceAttributeCanUseStreamWaitValue",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 94
+  //
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_WAIT_VALUE_NOR_V1"]              = {"hipDeviceAttributeCanUseStreamWaitValue",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 94
+  // cudaDevAttrCooperativeLaunch
+  m["CU_DEVICE_ATTRIBUTE_COOPERATIVE_LAUNCH"]                            = {"hipDeviceAttributeCooperativeLaunch",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 95
+  // cudaDevAttrCooperativeMultiDeviceLaunch
+  m["CU_DEVICE_ATTRIBUTE_COOPERATIVE_MULTI_DEVICE_LAUNCH"]               = {"hipDeviceAttributeCooperativeMultiDeviceLaunch",             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 96
+  // cudaDevAttrMaxSharedMemoryPerBlockOptin
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN"]             = {"hipDeviceAttributeSharedMemPerBlockOptin",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 97
+  // cudaDevAttrCanFlushRemoteWrites
+  m["CU_DEVICE_ATTRIBUTE_CAN_FLUSH_REMOTE_WRITES"]                       = {"hipDeviceAttributeCanFlushRemoteWrites",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 98
+  // cudaDevAttrHostRegisterSupported
+  m["CU_DEVICE_ATTRIBUTE_HOST_REGISTER_SUPPORTED"]                       = {"hipDeviceAttributeHostRegisterSupported",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 99
+  // cudaDevAttrPageableMemoryAccessUsesHostPageTables
+  m["CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES"]  = {"hipDeviceAttributePageableMemoryAccessUsesHostPageTables",   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 100
+  // cudaDevAttrDirectManagedMemAccessFromHost
+  m["CU_DEVICE_ATTRIBUTE_DIRECT_MANAGED_MEM_ACCESS_FROM_HOST"]           = {"hipDeviceAttributeDirectManagedMemAccessFromHost",           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 101
+  // no analogue
+  m["CU_DEVICE_ATTRIBUTE_VIRTUAL_ADDRESS_MANAGEMENT_SUPPORTED"]          = {"hipDeviceAttributeVirtualAddressManagementSupported",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_DEPRECATED}; // 102
+  // no analogue
+  m["CU_DEVICE_ATTRIBUTE_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED"]           = {"hipDeviceAttributeVirtualMemoryManagementSupported",         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 102
+  // no analogue
+  m["CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR_SUPPORTED"]   = {"hipDeviceAttributeHandleTypePosixFileDescriptorSupported",   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 103
+  // no analogue
+  m["CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_WIN32_HANDLE_SUPPORTED"]            = {"hipDeviceAttributeHandleTypeWin32HandleSupported",           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 104
+  // no analogue
+  m["CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_WIN32_KMT_HANDLE_SUPPORTED"]        = {"hipDeviceAttributeHandleTypeWin32KmtHandleSupported",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 105
+  // cudaDevAttrMaxBlocksPerMultiprocessor
+  // CUDA only
+  m["CU_DEVICE_ATTRIBUTE_MAX_BLOCKS_PER_MULTIPROCESSOR"]                 = {"hipDeviceAttributeMaxBlocksPerMultiprocessor",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 106
+  // no analogue
+  m["CU_DEVICE_ATTRIBUTE_GENERIC_COMPRESSION_SUPPORTED"]                 = {"hipDeviceAttributeGenericCompressionSupported",              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 107
+  // cudaDevAttrMaxPersistingL2CacheSize
+  m["CU_DEVICE_ATTRIBUTE_MAX_PERSISTING_L2_CACHE_SIZE"]                  = {"hipDeviceAttributeMaxPersistingL2CacheSize",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 108
+  // cudaDevAttrMaxAccessPolicyWindowSize
+  m["CU_DEVICE_ATTRIBUTE_MAX_ACCESS_POLICY_WINDOW_SIZE"]                 = {"hipDeviceAttributeMaxAccessPolicyWindowSize",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 109
+  // no analogue
+  m["CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_CUDA_VMM_SUPPORTED"]       = {"hipDeviceAttributeGpuDirectRdmaWithCudaVmmSupported",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 110
+  // cudaDevAttrReservedSharedMemoryPerBlock
+  m["CU_DEVICE_ATTRIBUTE_RESERVED_SHARED_MEMORY_PER_BLOCK"]              = {"hipDeviceAttributeReservedSharedMemoryPerBlock",             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 111
+  // cudaDevAttrSparseCudaArraySupported
+  m["CU_DEVICE_ATTRIBUTE_SPARSE_CUDA_ARRAY_SUPPORTED"]                   = {"hipDeviceAttributeSparseCudaArraySupported",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 112
+  // cudaDevAttrHostRegisterReadOnlySupported
+  m["CU_DEVICE_ATTRIBUTE_READ_ONLY_HOST_REGISTER_SUPPORTED"]             = {"hipDeviceAttributeReadOnlyHostRestigerSupported",            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 113
+  // cudaDevAttrMaxTimelineSemaphoreInteropSupported
+  m["CU_DEVICE_ATTRIBUTE_TIMELINE_SEMAPHORE_INTEROP_SUPPORTED"]          = {"hipDeviceAttributeMaxTimelineSemaphoreInteropSupported",     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 114
+  // cudaDevAttrMemoryPoolsSupported
+  m["CU_DEVICE_ATTRIBUTE_MEMORY_POOLS_SUPPORTED"]                        = {"hipDeviceAttributeMemoryPoolsSupported",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 115
+  // cudaDevAttrGPUDirectRDMASupported
+  m["CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED"]                     = {"hipDeviceAttributeGpuDirectRdmaSupported",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 116
+  // cudaDevAttrGPUDirectRDMAFlushWritesOptions
+  m["CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_FLUSH_WRITES_OPTIONS"]          = {"hipDeviceAttributeGpuDirectRdmaFlushWritesOptions",          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 117
+  // cudaDevAttrGPUDirectRDMAWritesOrdering
+  m["CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WRITES_ORDERING"]               = {"hipDeviceAttributeGpuDirectRdmaWritesOrdering",              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 118
+  // cudaDevAttrMemoryPoolSupportedHandleTypes
+  m["CU_DEVICE_ATTRIBUTE_MEMPOOL_SUPPORTED_HANDLE_TYPES"]                = {"hipDeviceAttributeMempoolSupportedHandleTypes",              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 119
+  // cudaDevAttrClusterLaunch
+  m["CU_DEVICE_ATTRIBUTE_CLUSTER_LAUNCH"]                                = {"hipDeviceAttributeClusterLaunch",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 120
+  // cudaDevAttrDeferredMappingCudaArraySupported
+  m["CU_DEVICE_ATTRIBUTE_DEFERRED_MAPPING_CUDA_ARRAY_SUPPORTED"]         = {"hipDeviceAttributeDeferredMappingCudaArraySupported",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 121
+  // cudaDevAttrReserved122
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_64_BIT_STREAM_MEM_OPS_V2"]              = {"hipDeviceAttributeCanUse64BitStreamMemOpsV2",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 122
+  // cudaDevAttrReserved123
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_WAIT_VALUE_NOR_V2"]              = {"hipDeviceAttributeCanUseStreamWaitValueNorV2",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 123
+  // cudaDevAttrReserved124
+  m["CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED"]                             = {"hipDeviceAttributeDmaBufSupported",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 124
+  // cudaDevAttrIpcEventSupport
+  m["CU_DEVICE_ATTRIBUTE_IPC_EVENT_SUPPORTED"]                           = {"hipDeviceAttributeIpcEventSupported",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 125
+  // cudaDevAttrMemSyncDomainCount
+  m["CU_DEVICE_ATTRIBUTE_MEM_SYNC_DOMAIN_COUNT"]                         = {"hipDeviceAttributeMemSyncDomainCount",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 126
+  // cudaDevAttrReserved127
+  m["CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED"]                   = {"hipDeviceAttributeTensorMapAccessSupported",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 127
+  //
+  m["CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED"]                  = {"hipDeviceAttributeHandleTypeFabricSupported",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_EXPERIMENTAL}; // 128
+  // cudaDevAttrReserved129
+  m["CU_DEVICE_ATTRIBUTE_UNIFIED_FUNCTION_POINTERS"]                     = {"hipDeviceAttributeUnifiedFunctionPointers",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 129
+  // cudaDevAttrNumaConfig
+  m["CU_DEVICE_ATTRIBUTE_NUMA_CONFIG"]                                   = {"hipDeviceAttributeNumaConfig",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 130
+  // cudaDevAttrNumaId
+  m["CU_DEVICE_ATTRIBUTE_NUMA_ID"]                                       = {"hipDeviceAttributeNumaId",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 131
+  // cudaDevAttrReserved132
+  m["CU_DEVICE_ATTRIBUTE_MULTICAST_SUPPORTED"]                           = {"hipDeviceAttributeMulticastSupported",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 132
+  // cudaDevAttrMpsEnabled
+  m["CU_DEVICE_ATTRIBUTE_MPS_ENABLED"]                                   = {"hipDeviceAttributeMpsEnables",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 133
+  // cudaDevAttrHostNumaId
+  m["CU_DEVICE_ATTRIBUTE_HOST_NUMA_ID"]                                  = {"hipDeviceAttributeHostNumaId",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 134
+  // cudaDevAttrD3D12CigSupported
+  m["CU_DEVICE_ATTRIBUTE_D3D12_CIG_SUPPORTED"]                           = {"hipDeviceAttributeD3D12CigSupported",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 135
+  //
+  m["CU_DEVICE_ATTRIBUTE_MEM_DECOMPRESS_ALGORITHM_MASK"]                 = {"hipDeviceAttributeMemDecompressAlgorithmMask",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 136
+  //
+  m["CU_DEVICE_ATTRIBUTE_MEM_DECOMPRESS_MAXIMUM_LENGTH"]                 = {"hipDeviceAttributeMemDecompressMaximumLength",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 137
+  // cudaDevAttrVulkanCigSupported
+  m["CU_DEVICE_ATTRIBUTE_VULKAN_CIG_SUPPORTED"]                          = {"hipDeviceAttributeVulkanCigSupported",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 138
+  // cudaDevAttrGpuPciDeviceId
+  m["CU_DEVICE_ATTRIBUTE_GPU_PCI_DEVICE_ID"]                             = {"hipDeviceAttributePciDeviceId",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 139
+  // cudaDevAttrGpuPciSubsystemId
+  m["CU_DEVICE_ATTRIBUTE_GPU_PCI_SUBSYSTEM_ID"]                          = {"hipDeviceAttributeGpuPciSubsystemId",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 140
+  //
+  m["CU_DEVICE_ATTRIBUTE_HOST_NUMA_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED"] = {"hipDeviceAttributeHostNumaVirtualMemoryManagementSupported", "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 141
+  // cudaDevAttrHostNumaMemoryPoolsSupported
+  m["CU_DEVICE_ATTRIBUTE_HOST_NUMA_MEMORY_POOLS_SUPPORTED"]              = {"hipDeviceAttributeHostNumaMemoryPoolsSupported",             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 142
+  // cudaDevAttrHostNumaMultinodeIpcSupported
+  m["CU_DEVICE_ATTRIBUTE_HOST_NUMA_MULTINODE_IPC_SUPPORTED"]             = {"hipDeviceAttributeHostNumaMultinodeIpcSupported",            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 143
+  // cudaDevAttrHostMemoryPoolsSupported
+  m["CU_DEVICE_ATTRIBUTE_HOST_MEMORY_POOLS_SUPPORTED"]                   = {"hipDeviceAttributeHostMemoryPoolsSupported",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 144
+  //
+  m["CU_DEVICE_ATTRIBUTE_HOST_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED"]      = {"hipDeviceAttributeHostVirtualMemoryManagementSupported",     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 145
+  //
+  m["CU_DEVICE_ATTRIBUTE_HOST_ALLOC_DMA_BUF_SUPPORTED"]                  = {"hipDeviceAttributeHostHostAllocDmaBufSupported",             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 146
+  // cudaDevAttrOnlyPartialHostNativeAtomicSupported
+  m["CU_DEVICE_ATTRIBUTE_ONLY_PARTIAL_HOST_NATIVE_ATOMIC_SUPPORTED"]     = {"hipDevAttributeOnlyPartialHostNativeAtomicSupported",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 147
+  //
+  m["CU_DEVICE_ATTRIBUTE_ATOMIC_REDUCTION_SUPPORTED"]                    = {"hipDevAttributeAtomicReductionSupported",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 148
+  // cudaDevAttrMax
+  m["CU_DEVICE_ATTRIBUTE_MAX"]                                           = {"hipDeviceAttributeMax",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDeviceP2PAttr
+  m["CUdevice_P2PAttribute"]                                             = {"hipDeviceP2PAttr",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUdevice_P2PAttribute_enum"]                                        = {"hipDeviceP2PAttr",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUdevice_P2PAttribute enum values
+  // cudaDevP2PAttrPerformanceRank = 1
+  m["CU_DEVICE_P2P_ATTRIBUTE_PERFORMANCE_RANK"]                          = {"hipDevP2PAttrPerformanceRank",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaDevP2PAttrAccessSupported = 2
+  m["CU_DEVICE_P2P_ATTRIBUTE_ACCESS_SUPPORTED"]                          = {"hipDevP2PAttrAccessSupported",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaDevP2PAttrNativeAtomicSupported = 3
+  m["CU_DEVICE_P2P_ATTRIBUTE_NATIVE_ATOMIC_SUPPORTED"]                   = {"hipDevP2PAttrNativeAtomicSupported",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x03
+  // cudaDevP2PAttrCudaArrayAccessSupported = 4
+  // NOTE" deprecated, use CU_DEVICE_P2P_ATTRIBUTE_CUDA_ARRAY_ACCESS_SUPPORTED instead
+  m["CU_DEVICE_P2P_ATTRIBUTE_ACCESS_ACCESS_SUPPORTED"]                   = {"hipDevP2PAttrHipArrayAccessSupported",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 0x04
+  // NOTE" deprecated, use CU_DEVICE_P2P_ATTRIBUTE_CUDA_ARRAY_ACCESS_SUPPORTED instead
+  m["CU_DEVICE_P2P_ATTRIBUTE_ARRAY_ACCESS_ACCESS_SUPPORTED"]             = {"hipDevP2PAttrHipArrayAccessSupported",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED | CUDA_REMOVED}; // 0x04
+  // cudaDevP2PAttrCudaArrayAccessSupported = 4
+  m["CU_DEVICE_P2P_ATTRIBUTE_CUDA_ARRAY_ACCESS_SUPPORTED"]               = {"hipDevP2PAttrHipArrayAccessSupported",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x04
+  // cudaDevP2PAttrOnlyPartialNativeAtomicSupported
+  m["CU_DEVICE_P2P_ATTRIBUTE_ONLY_PARTIAL_NATIVE_ATOMIC_SUPPORTED"]      = {"hipDevP2PAttrOnlyPartialNativeAtomicSupported",              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x05
+
+  // cudaEGL.h - presented only on Linux in nvidia-cuda-dev package
+  // cudaEglColorFormat
+  m["CUeglColorFormat"]                                                  = {"hipEglColorFormat",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUeglColorFormate_enum"]                                            = {"hipEglColorFormat",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUeglColorFormat enum values
+  // cudaEglColorFormatYUV420Planar = 0
+  m["CU_EGL_COLOR_FORMAT_YUV420_PLANAR"]                                 = {"hipEglColorFormatYUV420Planar",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  // cudaEglColorFormatYUV420SemiPlanar = 1
+  m["CU_EGL_COLOR_FORMAT_YUV420_SEMIPLANAR"]                             = {"hipEglColorFormatYUV420SemiPlanar",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaEglColorFormatYUV422Planar = 2
+  m["CU_EGL_COLOR_FORMAT_YUV422_PLANAR"]                                 = {"hipEglColorFormatYUV422Planar",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+  // cudaEglColorFormatYUV422SemiPlanar = 3
+  m["CU_EGL_COLOR_FORMAT_YUV422_SEMIPLANAR"]                             = {"hipEglColorFormatYUV422SemiPlanar",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x03
+  // cudaEglColorFormatRGB = 4
+  m["CU_EGL_COLOR_FORMAT_RGB"]                                           = {"hipEglColorFormatRGB",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x04
+  // cudaEglColorFormatBGR = 5
+  m["CU_EGL_COLOR_FORMAT_BGR"]                                           = {"hipEglColorFormatBGR",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x05
+  // cudaEglColorFormatARGB = 6
+  m["CU_EGL_COLOR_FORMAT_ARGB"]                                          = {"hipEglColorFormatARGB",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x06
+  // cudaEglColorFormatRGBA = 7
+  m["CU_EGL_COLOR_FORMAT_RGBA"]                                          = {"hipEglColorFormatRGBA",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x07
+  // cudaEglColorFormatL = 8
+  m["CU_EGL_COLOR_FORMAT_L"]                                             = {"hipEglColorFormatL",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x08
+  // cudaEglColorFormatR = 9
+  m["CU_EGL_COLOR_FORMAT_R"]                                             = {"hipEglColorFormatR",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x09
+  // cudaEglColorFormatYUV444Planar = 10
+  m["CU_EGL_COLOR_FORMAT_YUV444_PLANAR"]                                 = {"hipEglColorFormatYUV444Planar",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x0A
+  // cudaEglColorFormatYUV444SemiPlanar = 11
+  m["CU_EGL_COLOR_FORMAT_YUV444_SEMIPLANAR"]                             = {"hipEglColorFormatYUV444SemiPlanar",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x0B
+  // cudaEglColorFormatYUYV422 = 12
+  m["CU_EGL_COLOR_FORMAT_YUYV_422"]                                      = {"hipEglColorFormatYUYV422",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x0C
+  // cudaEglColorFormatUYVY422 = 13
+  m["CU_EGL_COLOR_FORMAT_UYVY_422"]                                      = {"hipEglColorFormatUYVY422",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x0D
+  // cudaEglColorFormatABGR = 14
+  m["CU_EGL_COLOR_FORMAT_ABGR"]                                          = {"hipEglColorFormatABGR",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x0E
+  // cudaEglColorFormatBGRA = 15
+  m["CU_EGL_COLOR_FORMAT_BGRA"]                                          = {"hipEglColorFormatBGRA",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x0F
+  // cudaEglColorFormatA = 16
+  m["CU_EGL_COLOR_FORMAT_A"]                                             = {"hipEglColorFormatA",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x10
+  // cudaEglColorFormatRG = 17
+  m["CU_EGL_COLOR_FORMAT_RG"]                                            = {"hipEglColorFormatRG",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x11
+  // cudaEglColorFormatAYUV = 18
+  m["CU_EGL_COLOR_FORMAT_AYUV"]                                          = {"hipEglColorFormatAYUV",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x12
+  // cudaEglColorFormatYVU444SemiPlanar = 19
+  m["CU_EGL_COLOR_FORMAT_YVU444_SEMIPLANAR"]                             = {"hipEglColorFormatYVU444SemiPlanar",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x13
+  // cudaEglColorFormatYVU422SemiPlanar = 20
+  m["CU_EGL_COLOR_FORMAT_YVU422_SEMIPLANAR"]                             = {"hipEglColorFormatYVU422SemiPlanar",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x14
+  // cudaEglColorFormatYVU420SemiPlanar = 21
+  m["CU_EGL_COLOR_FORMAT_YVU420_SEMIPLANAR"]                             = {"hipEglColorFormatYVU420SemiPlanar",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x15
+  // cudaEglColorFormatYVU420SemiPlanar = 22
+  m["CU_EGL_COLOR_FORMAT_Y10V10U10_444_SEMIPLANAR"]                      = {"hipEglColorFormatY10V10U10_444SemiPlanar",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x16
+  // cudaEglColorFormatY10V10U10_420SemiPlanar = 23
+  m["CU_EGL_COLOR_FORMAT_Y10V10U10_420_SEMIPLANAR"]                      = {"hipEglColorFormatY10V10U10_420SemiPlanar",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x17
+  // cudaEglColorFormatY12V12U12_444SemiPlanar = 24
+  m["CU_EGL_COLOR_FORMAT_Y12V12U12_444_SEMIPLANAR"]                      = {"hipEglColorFormatY12V12U12_444SemiPlanar",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x18
+  // cudaEglColorFormatY12V12U12_420SemiPlanar = 25
+  m["CU_EGL_COLOR_FORMAT_Y12V12U12_420_SEMIPLANAR"]                      = {"hipEglColorFormatY12V12U12_420SemiPlanar",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x19
+  // cudaEglColorFormatVYUY_ER = 26
+  m["CU_EGL_COLOR_FORMAT_VYUY_ER"]                                       = {"hipEglColorFormatVYUY_ER",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1A
+  // cudaEglColorFormatUYVY_ER = 27
+  m["CU_EGL_COLOR_FORMAT_UYVY_ER"]                                       = {"hipEglColorFormatUYVY_ER",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1B
+  // cudaEglColorFormatYUYV_ER = 28
+  m["CU_EGL_COLOR_FORMAT_YUYV_ER"]                                       = {"hipEglColorFormatYUYV_ER",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1C
+  // cudaEglColorFormatYVYU_ER = 29
+  m["CU_EGL_COLOR_FORMAT_YVYU_ER"]                                       = {"hipEglColorFormatYVYU_ER",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1D
+  // cudaEglColorFormatYUV_ER = 30
+  m["CU_EGL_COLOR_FORMAT_YUV_ER"]                                        = {"hipEglColorFormatYUV_ER",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1E
+  // cudaEglColorFormatYUVA_ER = 31
+  m["CU_EGL_COLOR_FORMAT_YUVA_ER"]                                       = {"hipEglColorFormatYUVA_ER",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1F
+  // cudaEglColorFormatAYUV_ER = 32
+  m["CU_EGL_COLOR_FORMAT_AYUV_ER"]                                       = {"hipEglColorFormatAYUV_ER",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x20
+  // cudaEglColorFormatYUV444Planar_ER = 33
+  m["CU_EGL_COLOR_FORMAT_YUV444_PLANAR_ER"]                              = {"hipEglColorFormatYUV444Planar_ER",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x21
+  // cudaEglColorFormatYUV422Planar_ER = 34
+  m["CU_EGL_COLOR_FORMAT_YUV422_PLANAR_ER"]                              = {"hipEglColorFormatYUV422Planar_ER",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x22
+  // cudaEglColorFormatYUV420Planar_ER = 35
+  m["CU_EGL_COLOR_FORMAT_YUV420_PLANAR_ER"]                              = {"hipEglColorFormatYUV420Planar_ER",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x23
+  // cudaEglColorFormatYUV444SemiPlanar_ER = 36
+  m["CU_EGL_COLOR_FORMAT_YUV444_SEMIPLANAR_ER"]                          = {"hipEglColorFormatYUV444SemiPlanar_ER",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x24
+  // cudaEglColorFormatYUV422SemiPlanar_ER = 37
+  m["CU_EGL_COLOR_FORMAT_YUV422_SEMIPLANAR_ER"]                          = {"hipEglColorFormatYUV422SemiPlanar_ER",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x25
+  // cudaEglColorFormatYUV420SemiPlanar_ER = 38
+  m["CU_EGL_COLOR_FORMAT_YUV420_SEMIPLANAR_ER"]                          = {"hipEglColorFormatYUV420SemiPlanar_ER",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x26
+  // cudaEglColorFormatYVU444Planar_ER = 39
+  m["CU_EGL_COLOR_FORMAT_YVU444_PLANAR_ER"]                              = {"hipEglColorFormatYVU444Planar_ER",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x27
+  // cudaEglColorFormatYVU422Planar_ER = 40
+  m["CU_EGL_COLOR_FORMAT_YVU422_PLANAR_ER"]                              = {"hipEglColorFormatYVU422Planar_ER",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x28
+  // cudaEglColorFormatYVU420Planar_ER = 41
+  m["CU_EGL_COLOR_FORMAT_YVU420_PLANAR_ER"]                              = {"hipEglColorFormatYVU420Planar_ER",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x29
+  // cudaEglColorFormatYVU444SemiPlanar_ER = 42
+  m["CU_EGL_COLOR_FORMAT_YVU444_SEMIPLANAR_ER"]                          = {"hipEglColorFormatYVU444SemiPlanar_ER",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x2A
+  // cudaEglColorFormatYVU422SemiPlanar_ER = 43
+  m["CU_EGL_COLOR_FORMAT_YVU422_SEMIPLANAR_ER"]                          = {"hipEglColorFormatYVU422SemiPlanar_ER",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x2B
+  // cudaEglColorFormatYVU420SemiPlanar_ER = 44
+  m["CU_EGL_COLOR_FORMAT_YVU420_SEMIPLANAR_ER"]                          = {"hipEglColorFormatYVU420SemiPlanar_ER",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x2C
+  // cudaEglColorFormatBayerRGGB = 45
+  m["CU_EGL_COLOR_FORMAT_BAYER_RGGB"]                                    = {"hipEglColorFormatBayerRGGB",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x2D
+  // cudaEglColorFormatBayerBGGR = 46
+  m["CU_EGL_COLOR_FORMAT_BAYER_BGGR"]                                    = {"hipEglColorFormatBayerBGGR",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x2E
+  // cudaEglColorFormatBayerGRBG = 47
+  m["CU_EGL_COLOR_FORMAT_BAYER_GRBG"]                                    = {"hipEglColorFormatBayerGRBG",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x2F
+  // cudaEglColorFormatBayerGBRG = 48
+  m["CU_EGL_COLOR_FORMAT_BAYER_GBRG"]                                    = {"hipEglColorFormatBayerGBRG",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x30
+  // cudaEglColorFormatBayer10RGGB = 49
+  m["CU_EGL_COLOR_FORMAT_BAYER10_RGGB"]                                  = {"hipEglColorFormatBayer10RGGB",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x31
+  // cudaEglColorFormatBayer10BGGR = 50
+  m["CU_EGL_COLOR_FORMAT_BAYER10_BGGR"]                                  = {"hipEglColorFormatBayer10BGGR",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x32
+  // cudaEglColorFormatBayer10GRBG = 51
+  m["CU_EGL_COLOR_FORMAT_BAYER10_GRBG"]                                  = {"hipEglColorFormatBayer10GRBG",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x33
+  // cudaEglColorFormatBayer10GBRG = 52
+  m["CU_EGL_COLOR_FORMAT_BAYER10_GBRG"]                                  = {"hipEglColorFormatBayer10GBRG",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x34
+  // cudaEglColorFormatBayer12RGGB = 53
+  m["CU_EGL_COLOR_FORMAT_BAYER12_RGGB"]                                  = {"hipEglColorFormatBayer12RGGB",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x35
+  // cudaEglColorFormatBayer12BGGR = 54
+  m["CU_EGL_COLOR_FORMAT_BAYER12_BGGR"]                                  = {"hipEglColorFormatBayer12BGGR",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x36
+  // cudaEglColorFormatBayer12GRBG = 55
+  m["CU_EGL_COLOR_FORMAT_BAYER12_GRBG"]                                  = {"hipEglColorFormatBayer12GRBG",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x37
+  // cudaEglColorFormatBayer12GBRG = 56
+  m["CU_EGL_COLOR_FORMAT_BAYER12_GBRG"]                                  = {"hipEglColorFormatBayer12GBRG",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x38
+  // cudaEglColorFormatBayer14RGGB = 57
+  m["CU_EGL_COLOR_FORMAT_BAYER14_RGGB"]                                  = {"hipEglColorFormatBayer14RGGB",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x39
+  // cudaEglColorFormatBayer14BGGR = 58
+  m["CU_EGL_COLOR_FORMAT_BAYER14_BGGR"]                                  = {"hipEglColorFormatBayer14BGGR",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x3A
+  // cudaEglColorFormatBayer14GRBG = 59
+  m["CU_EGL_COLOR_FORMAT_BAYER14_GRBG"]                                  = {"hipEglColorFormatBayer14GRBG",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x3B
+  // cudaEglColorFormatBayer14GBRG = 60
+  m["CU_EGL_COLOR_FORMAT_BAYER14_GBRG"]                                  = {"hipEglColorFormatBayer14GBRG",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x3C
+  // cudaEglColorFormatBayer20RGGB = 61
+  m["CU_EGL_COLOR_FORMAT_BAYER20_RGGB"]                                  = {"hipEglColorFormatBayer20RGGB",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x3D
+  // cudaEglColorFormatBayer20BGGR = 62
+  m["CU_EGL_COLOR_FORMAT_BAYER20_BGGR"]                                  = {"hipEglColorFormatBayer20BGGR",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x3E
+  // cudaEglColorFormatBayer20GRBG = 63
+  m["CU_EGL_COLOR_FORMAT_BAYER20_GRBG"]                                  = {"hipEglColorFormatBayer20GRBG",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x3F
+  // cudaEglColorFormatBayer20GBRG = 64
+  m["CU_EGL_COLOR_FORMAT_BAYER20_GBRG"]                                  = {"hipEglColorFormatBayer20GBRG",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x40
+  // cudaEglColorFormatYVU444Planar = 65
+  m["CU_EGL_COLOR_FORMAT_YVU444_PLANAR"]                                 = {"hipEglColorFormatYVU444Planar",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x41
+  // cudaEglColorFormatYVU422Planar = 66
+  m["CU_EGL_COLOR_FORMAT_YVU422_PLANAR"]                                 = {"hipEglColorFormatYVU422Planar",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x42
+  // cudaEglColorFormatYVU420Planar = 67
+  m["CU_EGL_COLOR_FORMAT_YVU420_PLANAR"]                                 = {"hipEglColorFormatYVU420Planar",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x43
+  // cudaEglColorFormatBayerIspRGGB = 68
+  m["CU_EGL_COLOR_FORMAT_BAYER_ISP_RGGB"]                                = {"hipEglColorFormatBayerIspRGGB",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x44
+  // cudaEglColorFormatBayerIspBGGR = 69
+  m["CU_EGL_COLOR_FORMAT_BAYER_ISP_BGGR"]                                = {"hipEglColorFormatBayerIspBGGR",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x45
+  // cudaEglColorFormatBayerIspGRBG = 70
+  m["CU_EGL_COLOR_FORMAT_BAYER_ISP_GRBG"]                                = {"hipEglColorFormatBayerIspGRBG",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x46
+  // cudaEglColorFormatBayerIspGBRG = 71
+  m["CU_EGL_COLOR_FORMAT_BAYER_ISP_GBRG"]                                = {"hipEglColorFormatBayerIspGBRG",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x47
+  // no analogue
+  m["CU_EGL_COLOR_FORMAT_MAX"]                                           = {"hipEglColorFormatMax",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x48
+
+  // cudaEglFrameType
+  m["CUeglFrameType"]                                                    = {"hipEglFrameType",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUeglFrameType_enum"]                                               = {"hipEglFrameType",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUeglFrameType enum values
+  // cudaEglFrameTypeArray
+  m["CU_EGL_FRAME_TYPE_ARRAY"]                                           = {"hipEglFrameTypeArray",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0
+  // cudaEglFrameTypePitch
+  m["CU_EGL_FRAME_TYPE_PITCH"]                                           = {"hipEglFrameTypePitch",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 1
+
+  // cudaEglResourceLocationFlags
+  m["CUeglResourceLocationFlags"]                                        = {"hipEglResourceLocationFlags",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUeglResourceLocationFlags_enum"]                                   = {"hipEglResourceLocationFlags",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUeglResourceLocationFlags enum values
+  // cudaEglResourceLocationSysmem
+  m["CU_EGL_RESOURCE_LOCATION_SYSMEM"]                                   = {"hipEglResourceLocationSysmem",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  // cudaEglResourceLocationVidmem
+  m["CU_EGL_RESOURCE_LOCATION_VIDMEM"]                                   = {"hipEglResourceLocationVidmem",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+
+  // no analogue
+  m["CUevent_flags"]                                                     = {"hipEventFlags",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUevent_flags_enum"]                                                = {"hipEventFlags",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUevent_flags enum values
+  // cudaEventDefault
+  m["CU_EVENT_DEFAULT"]                                                  = {"hipEventDefault",                                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x00
+  // cudaEventBlockingSync
+  m["CU_EVENT_BLOCKING_SYNC"]                                            = {"hipEventBlockingSync",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaEventDisableTiming
+  m["CU_EVENT_DISABLE_TIMING"]                                           = {"hipEventDisableTiming",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaEventInterprocess
+  m["CU_EVENT_INTERPROCESS"]                                             = {"hipEventInterprocess",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x04
+
+  // cudaExternalMemoryHandleType
+  m["CUexternalMemoryHandleType"]                                        = {"hipExternalMemoryHandleType",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUexternalMemoryHandleType_enum"]                                   = {"hipExternalMemoryHandleType_enum",                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUexternalMemoryHandleType enum values
+  // cudaExternalMemoryHandleTypeOpaqueFd
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD"]                          = {"hipExternalMemoryHandleTypeOpaqueFd",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaExternalMemoryHandleTypeOpaqueWin32
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32"]                       = {"hipExternalMemoryHandleTypeOpaqueWin32",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaExternalMemoryHandleTypeOpaqueWin32Kmt
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT"]                   = {"hipExternalMemoryHandleTypeOpaqueWin32Kmt",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  // cudaExternalMemoryHandleTypeD3D12Heap
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_HEAP"]                         = {"hipExternalMemoryHandleTypeD3D12Heap",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+  // cudaExternalMemoryHandleTypeD3D12Resource
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE"]                     = {"hipExternalMemoryHandleTypeD3D12Resource",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 5
+  // cudaExternalMemoryHandleTypeD3D11Resource
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_RESOURCE"]                     = {"hipExternalMemoryHandleTypeD3D11Resource",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 6
+  // cudaExternalMemoryHandleTypeD3D11ResourceKmt
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_RESOURCE_KMT"]                 = {"hipExternalMemoryHandleTypeD3D11ResourceKmt",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 7
+  // cudaExternalMemoryHandleTypeNvSciBuf
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_NVSCIBUF"]                           = {"hipExternalMemoryHandleTypeNvSciBuf",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 8
+  //
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_DMABUF_FD"]                          = {"hipExternalMemoryHandleTypeDmaBufFd",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 9
+
+  // cudaExternalSemaphoreHandleType
+  m["CUexternalSemaphoreHandleType"]                                     = {"hipExternalSemaphoreHandleType",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUexternalSemaphoreHandleType_enum"]                                = {"hipExternalSemaphoreHandleType_enum",                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUexternalSemaphoreHandleType enum values
+  // cudaExternalSemaphoreHandleTypeOpaqueFd
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD"]                       = {"hipExternalSemaphoreHandleTypeOpaqueFd",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaExternalSemaphoreHandleTypeOpaqueWin32
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32"]                    = {"hipExternalSemaphoreHandleTypeOpaqueWin32",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaExternalSemaphoreHandleTypeOpaqueWin32Kmt
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT"]                = {"hipExternalSemaphoreHandleTypeOpaqueWin32Kmt",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  // cudaExternalSemaphoreHandleTypeD3D12Fence
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE"]                     = {"hipExternalSemaphoreHandleTypeD3D12Fence",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+  // cudaExternalSemaphoreHandleTypeD3D11Fence
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D11_FENCE"]                     = {"hipExternalSemaphoreHandleTypeD3D11Fence",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 5
+  // cudaExternalSemaphoreHandleTypeNvSciSync
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_NVSCISYNC"]                       = {"hipExternalSemaphoreHandleTypeNvSciSync",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 6
+  // cudaExternalSemaphoreHandleTypeKeyedMutex
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D11_KEYED_MUTEX"]               = {"hipExternalSemaphoreHandleTypeKeyedMutex",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 7
+  // cudaExternalSemaphoreHandleTypeKeyedMutexKmt
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D11_KEYED_MUTEX_KMT"]           = {"hipExternalSemaphoreHandleTypeKeyedMutexKmt",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 8
+  // cudaExternalSemaphoreHandleTypeTimelineSemaphoreFd
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_TIMELINE_SEMAPHORE_FD"]           = {"hipExternalSemaphoreHandleTypeTimelineSemaphoreFd",          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 9
+  // cudaExternalSemaphoreHandleTypeTimelineSemaphoreWin32
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_TIMELINE_SEMAPHORE_WIN32"]        = {"hipExternalSemaphoreHandleTypeTimelineSemaphoreWin32",       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 10
+
+  // TODO: HIPfilter_mode_enum and all its values should be hipTextureFilterMode as long as they are equal.
+  // cudaTextureFilterMode
+  m["CUfilter_mode"]                                                     = {"HIPfilter_mode",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUfilter_mode_enum"]                                                = {"HIPfilter_mode_enum",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUfilter_mode enum values
+  // cudaFilterModePoint
+  m["CU_TR_FILTER_MODE_POINT"]                                           = {"HIP_TR_FILTER_MODE_POINT",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaFilterModeLinear
+  m["CU_TR_FILTER_MODE_LINEAR"]                                          = {"HIP_TR_FILTER_MODE_LINEAR",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+
+  // cudaFuncCache
+  m["CUfunc_cache"]                                                      = {"hipFuncCache_t",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUfunc_cache_enum"]                                                 = {"hipFuncCache_t",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUfunc_cache enum values
+  // cudaFilterModePoint = 0
+  m["CU_FUNC_CACHE_PREFER_NONE"]                                         = {"hipFuncCachePreferNone",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x00
+  // cudaFuncCachePreferShared = 1
+  m["CU_FUNC_CACHE_PREFER_SHARED"]                                       = {"hipFuncCachePreferShared",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaFuncCachePreferL1 = 2
+  m["CU_FUNC_CACHE_PREFER_L1"]                                           = {"hipFuncCachePreferL1",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaFuncCachePreferEqual = 3
+  m["CU_FUNC_CACHE_PREFER_EQUAL"]                                        = {"hipFuncCachePreferEqual",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x03
+
+  // cudaFuncAttribute
+  m["CUfunction_attribute"]                                              = {"hipFunction_attribute",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUfunction_attribute_enum"]                                         = {"hipFunction_attribute",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUfunction_attribute enum values
+  // no analogue
+  m["CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK"]                           = {"HIP_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  0
+  // no analogue
+  m["CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES"]                               = {"HIP_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  1
+  // no analogue
+  m["CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES"]                                = {"HIP_FUNC_ATTRIBUTE_CONST_SIZE_BYTES",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  2
+  // no analogue
+  m["CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES"]                                = {"HIP_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  3
+  // no analogue
+  m["CU_FUNC_ATTRIBUTE_NUM_REGS"]                                        = {"HIP_FUNC_ATTRIBUTE_NUM_REGS",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  4
+  // no analogue
+  m["CU_FUNC_ATTRIBUTE_PTX_VERSION"]                                     = {"HIP_FUNC_ATTRIBUTE_PTX_VERSION",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  5
+  // no analogue
+  m["CU_FUNC_ATTRIBUTE_BINARY_VERSION"]                                  = {"HIP_FUNC_ATTRIBUTE_BINARY_VERSION",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  6
+  // no analogue
+  m["CU_FUNC_ATTRIBUTE_CACHE_MODE_CA"]                                   = {"HIP_FUNC_ATTRIBUTE_CACHE_MODE_CA",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  7
+  // cudaFuncAttributeMaxDynamicSharedMemorySize
+  m["CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES"]                   = {"HIP_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES",           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  8
+  // cudaFuncAttributePreferredSharedMemoryCarveout
+  m["CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT"]                = {"HIP_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; //  9
+  // cudaFuncAttributeClusterDimMustBeSet
+  m["CU_FUNC_ATTRIBUTE_CLUSTER_SIZE_MUST_BE_SET"]                        = {"HIP_FUNC_ATTRIBUTE_CLUSTER_SIZE_MUST_BE_SET",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 10
+  // cudaFuncAttributeRequiredClusterWidth
+  m["CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH"]                          = {"HIP_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 11
+  // cudaFuncAttributeRequiredClusterHeight
+  m["CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT"]                         = {"HIP_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 12
+  // cudaFuncAttributeRequiredClusterDepth
+  m["CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH"]                          = {"HIP_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 13
+  // cudaFuncAttributeNonPortableClusterSizeAllowed
+  m["CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED"]               = {"HIP_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED",       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 14
+  // cudaFuncAttributeClusterSchedulingPolicyPreference
+  m["CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE"]            = {"HIP_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE",    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 15
+  // cudaFuncAttributeMax
+  m["CU_FUNC_ATTRIBUTE_MAX"]                                             = {"HIP_FUNC_ATTRIBUTE_MAX",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 16
+
+  // cudaGraphicsMapFlags
+  m["CUgraphicsMapResourceFlags"]                                        = {"hipGraphicsMapFlags",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUgraphicsMapResourceFlags_enum"]                                   = {"hipGraphicsMapFlags",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUgraphicsMapResourceFlags enum values
+  // cudaGraphicsMapFlagsNone = 0
+  m["CU_GRAPHICS_MAP_RESOURCE_FLAGS_NONE"]                               = {"hipGraphicsMapFlagsNone",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  // cudaGraphicsMapFlagsReadOnly = 1
+  m["CU_GRAPHICS_MAP_RESOURCE_FLAGS_READ_ONLY"]                          = {"hipGraphicsMapFlagsReadOnly",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaGraphicsMapFlagsWriteDiscard = 2
+  m["CU_GRAPHICS_MAP_RESOURCE_FLAGS_WRITE_DISCARD"]                      = {"hipGraphicsMapFlagsWriteDiscard",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+
+  // cudaGraphicsRegisterFlags
+  m["CUgraphicsRegisterFlags"]                                           = {"hipGraphicsRegisterFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUgraphicsRegisterFlags_enum"]                                      = {"hipGraphicsRegisterFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphicsRegisterFlags enum values
+  // cudaGraphicsRegisterFlagsNone = 0
+  m["CU_GRAPHICS_REGISTER_FLAGS_NONE"]                                   = {"hipGraphicsRegisterFlagsNone",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x00
+  // cudaGraphicsRegisterFlagsReadOnly = 1
+  m["CU_GRAPHICS_REGISTER_FLAGS_READ_ONLY"]                              = {"hipGraphicsRegisterFlagsReadOnly",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaGraphicsRegisterFlagsWriteDiscard = 2
+  m["CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD"]                          = {"hipGraphicsRegisterFlagsWriteDiscard",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaGraphicsRegisterFlagsSurfaceLoadStore = 4
+  m["CU_GRAPHICS_REGISTER_FLAGS_SURFACE_LDST"]                           = {"hipGraphicsRegisterFlagsSurfaceLoadStore",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x04
+  // cudaGraphicsRegisterFlagsTextureGather = 8
+  m["CU_GRAPHICS_REGISTER_FLAGS_TEXTURE_GATHER"]                         = {"hipGraphicsRegisterFlagsTextureGather",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x08
+
+  // cudaGraphNodeType
+  m["CUgraphNodeType"]                                                   = {"hipGraphNodeType",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUgraphNodeType_enum"]                                              = {"hipGraphNodeType",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphNodeType enum values
+  // cudaGraphNodeTypeKernel = 0x00
+  m["CU_GRAPH_NODE_TYPE_KERNEL"]                                         = {"hipGraphNodeTypeKernel",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaGraphNodeTypeMemcpy = 0x01
+  m["CU_GRAPH_NODE_TYPE_MEMCPY"]                                         = {"hipGraphNodeTypeMemcpy",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaGraphNodeTypeMemset = 0x02
+  m["CU_GRAPH_NODE_TYPE_MEMSET"]                                         = {"hipGraphNodeTypeMemset",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaGraphNodeTypeHost = 0x03
+  m["CU_GRAPH_NODE_TYPE_HOST"]                                           = {"hipGraphNodeTypeHost",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  // cudaGraphNodeTypeGraph = 0x04
+  m["CU_GRAPH_NODE_TYPE_GRAPH"]                                          = {"hipGraphNodeTypeGraph",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+  // cudaGraphNodeTypeEmpty = 0x05
+  m["CU_GRAPH_NODE_TYPE_EMPTY"]                                          = {"hipGraphNodeTypeEmpty",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 5
+  // cudaGraphNodeTypeWaitEvent = 0x06
+  m["CU_GRAPH_NODE_TYPE_WAIT_EVENT"]                                     = {"hipGraphNodeTypeWaitEvent",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 6
+  // cudaGraphNodeTypeEventRecord = 0x07
+  m["CU_GRAPH_NODE_TYPE_EVENT_RECORD"]                                   = {"hipGraphNodeTypeEventRecord",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 7
+  // cudaGraphNodeTypeExtSemaphoreSignal
+  m["CU_GRAPH_NODE_TYPE_EXT_SEMAS_SIGNAL"]                               = {"hipGraphNodeTypeExtSemaphoreSignal",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 8
+  // cudaGraphNodeTypeExtSemaphoreWait
+  m["CU_GRAPH_NODE_TYPE_EXT_SEMAS_WAIT"]                                 = {"hipGraphNodeTypeExtSemaphoreWait",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 9
+  // cudaGraphNodeTypeMemAlloc
+  m["CU_GRAPH_NODE_TYPE_MEM_ALLOC"]                                      = {"hipGraphNodeTypeMemAlloc",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 10
+  // cudaGraphNodeTypeMemFree
+  m["CU_GRAPH_NODE_TYPE_MEM_FREE"]                                       = {"hipGraphNodeTypeMemFree",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 11
+  //
+  m["CU_GRAPH_NODE_TYPE_BATCH_MEM_OP"]                                   = {"hipGraphNodeTypeBatchMemOp",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 12
+  // cudaGraphNodeTypeConditional
+  m["CU_GRAPH_NODE_TYPE_CONDITIONAL"]                                    = {"hipGraphNodeTypeConditional",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 13
+  // cudaGraphNodeTypeCount
+  m["CU_GRAPH_NODE_TYPE_COUNT"]                                          = {"hipGraphNodeTypeCount",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_REMOVED};
+
+  // cudaGraphExecUpdateResult
+  m["CUgraphExecUpdateResult"]                                           = {"hipGraphExecUpdateResult",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUgraphExecUpdateResult_enum"]                                      = {"hipGraphExecUpdateResult",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUgraphExecUpdateResult enum values
+  // cudaGraphExecUpdateSuccess
+  m["CU_GRAPH_EXEC_UPDATE_SUCCESS"]                                      = {"hipGraphExecUpdateSuccess",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  // cudaGraphExecUpdateError
+  m["CU_GRAPH_EXEC_UPDATE_ERROR"]                                        = {"hipGraphExecUpdateError",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+  // cudaGraphExecUpdateErrorTopologyChanged
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_TOPOLOGY_CHANGED"]                       = {"hipGraphExecUpdateErrorTopologyChanged",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x2
+  // cudaGraphExecUpdateErrorNodeTypeChanged
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_NODE_TYPE_CHANGED"]                      = {"hipGraphExecUpdateErrorNodeTypeChanged",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x3
+  // cudaGraphExecUpdateErrorFunctionChanged
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_FUNCTION_CHANGED"]                       = {"hipGraphExecUpdateErrorFunctionChanged",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x4
+  // cudaGraphExecUpdateErrorParametersChanged
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_PARAMETERS_CHANGED"]                     = {"hipGraphExecUpdateErrorParametersChanged",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x5
+  // cudaGraphExecUpdateErrorNotSupported
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_NOT_SUPPORTED"]                          = {"hipGraphExecUpdateErrorNotSupported",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x6
+  // cudaGraphExecUpdateErrorUnsupportedFunctionChange
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_UNSUPPORTED_FUNCTION_CHANGE"]            = {"hipGraphExecUpdateErrorUnsupportedFunctionChange",           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x7
+  // cudaGraphExecUpdateErrorAttributesChanged
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_ATTRIBUTES_CHANGED"]                     = {"hipGraphExecUpdateErrorAttributesChanged",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x8
+
+  // no analogue
+  m["CUipcMem_flags"]                                                    = {"hipIpcMemFlags",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUipcMem_flags_enum"]                                               = {"hipIpcMemFlags",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUipcMem_flags enum values
+  // cudaIpcMemLazyEnablePeerAccess
+  m["CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS"]                                = {"hipIpcMemLazyEnablePeerAccess",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+
+  // cudaJit_CacheMode
+  m["CUjit_cacheMode"]                                                   = {"hipJitCacheMode",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaJit_CacheMode
+  m["CUjit_cacheMode_enum"]                                              = {"hipJitCacheMode",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUjit_cacheMode enum values
+  // cudaJitCacheOptionNone
+  m["CU_JIT_CACHE_OPTION_NONE"]                                          = {"hipJitCacheModeOptionNone",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0
+  // cudaJitCacheOptionCG
+  m["CU_JIT_CACHE_OPTION_CG"]                                            = {"hipJitCacheModeOptionCG",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaJitCacheOptionCA
+  m["CU_JIT_CACHE_OPTION_CA"]                                            = {"hipJitCacheModeOptionCA",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaJit_Fallback
+  m["CUjit_fallback"]                                                    = {"hipJitFallback",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaJit_Fallback
+  m["CUjit_fallback_enum"]                                               = {"hipJitFallback",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUjit_fallback enum values
+  // cudaPreferPtx
+  m["CU_PREFER_PTX"]                                                     = {"hipJitFallbackPreferPtx",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0
+  // cudaPreferBinary
+  m["CU_PREFER_BINARY"]                                                  = {"hipJitFallbackPreferBinary",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // NOTE: HIP doesn't have JIT; this dummy enum is used for syntactical compatibility
+  // cudaJitOption
+  m["CUjit_option"]                                                      = {"hipJitOption",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUjit_option_enum"]                                                 = {"hipJitOption",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUjit_option enum values
+  // cudaJitMaxRegisters
+  m["CU_JIT_MAX_REGISTERS"]                                              = {"hipJitOptionMaxRegisters",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaJitThreadsPerBlock
+  m["CU_JIT_THREADS_PER_BLOCK"]                                          = {"hipJitOptionThreadsPerBlock",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaJitWallTime
+  m["CU_JIT_WALL_TIME"]                                                  = {"hipJitOptionWallTime",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaJitInfoLogBuffer
+  m["CU_JIT_INFO_LOG_BUFFER"]                                            = {"hipJitOptionInfoLogBuffer",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  // cudaJitInfoLogBufferSizeBytes
+  m["CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES"]                                 = {"hipJitOptionInfoLogBufferSizeBytes",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+  // cudaJitErrorLogBuffer
+  m["CU_JIT_ERROR_LOG_BUFFER"]                                           = {"hipJitOptionErrorLogBuffer",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 5
+  // cudaJitErrorLogBufferSizeBytes
+  m["CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES"]                                = {"hipJitOptionErrorLogBufferSizeBytes",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 6
+  // cudaJitOptimizationLevel
+  m["CU_JIT_OPTIMIZATION_LEVEL"]                                         = {"hipJitOptionOptimizationLevel",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 7
+  //
+  m["CU_JIT_TARGET_FROM_CUCONTEXT"]                                      = {"hipJitOptionTargetFromContext",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CU_JIT_TARGET"]                                                     = {"hipJitOptionTarget",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaJitFallbackStrategy
+  m["CU_JIT_FALLBACK_STRATEGY"]                                          = {"hipJitOptionFallbackStrategy",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 10
+  // cudaJitGenerateDebugInfo
+  m["CU_JIT_GENERATE_DEBUG_INFO"]                                        = {"hipJitOptionGenerateDebugInfo",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 11
+  // cudaJitLogVerbose
+  m["CU_JIT_LOG_VERBOSE"]                                                = {"hipJitOptionLogVerbose",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 12
+  // cudaJitGenerateLineInfo
+  m["CU_JIT_GENERATE_LINE_INFO"]                                         = {"hipJitOptionGenerateLineInfo",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 13
+  // cudaJitCacheMode
+  m["CU_JIT_CACHE_MODE"]                                                 = {"hipJitOptionCacheMode",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 14
+  //
+  m["CU_JIT_NEW_SM3X_OPT"]                                               = {"hipJitOptionSm3xOpt",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CU_JIT_FAST_COMPILE"]                                               = {"hipJitOptionFastCompile",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CU_JIT_GLOBAL_SYMBOL_NAMES"]                                        = {"hipJitOptionGlobalSymbolNames",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CU_JIT_GLOBAL_SYMBOL_ADDRESSES"]                                    = {"hipJitOptionGlobalSymbolAddresses",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CU_JIT_GLOBAL_SYMBOL_COUNT"]                                        = {"hipJitOptionGlobalSymbolCount",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CU_JIT_LTO"]                                                        = {"hipJitOptionLto",                                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED};
+  //
+  m["CU_JIT_FTZ"]                                                        = {"hipJitOptionFtz",                                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED};
+  //
+  m["CU_JIT_PREC_DIV"]                                                   = {"hipJitOptionPrecDiv",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED};
+  //
+  m["CU_JIT_PREC_SQRT"]                                                  = {"hipJitOptionPrecSqrt",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED};
+  //
+  m["CU_JIT_FMA"]                                                        = {"hipJitOptionFma",                                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED};
+  //
+  m["CU_JIT_REFERENCED_KERNEL_NAMES"]                                    = {"hipJitReferencedKernelNames",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_DEPRECATED};
+  //
+  m["CU_JIT_REFERENCED_KERNEL_COUNT"]                                    = {"hipJitReferencedKernelCount",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_DEPRECATED};
+  //
+  m["CU_JIT_REFERENCED_VARIABLE_NAMES"]                                  = {"hipJitReferencedVariableNames",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_DEPRECATED};
+  //
+  m["CU_JIT_REFERENCED_VARIABLE_COUNT"]                                  = {"hipJitReferencedVariableCount",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_DEPRECATED};
+  //
+  m["CU_JIT_OPTIMIZE_UNUSED_DEVICE_VARIABLES"]                           = {"hipJitOptimizeUnusedDeviceVariables",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_DEPRECATED};
+  // cudaJitPositionIndependentCode
+  m["CU_JIT_POSITION_INDEPENDENT_CODE"]                                  = {"hipJitOptionPositionIndependentCode",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 30
+  // cudaJitMinCtaPerSm
+  m["CU_JIT_MIN_CTA_PER_SM"]                                             = {"hipJitOptionMinCTAPerSM",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 31
+  // cudaJitMaxThreadsPerBlock
+  m["CU_JIT_MAX_THREADS_PER_BLOCK"]                                      = {"hipJitOptionMaxThreadsPerBlock",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 32
+  // cudaJitOverrideDirectiveValues
+  m["CU_JIT_OVERRIDE_DIRECTIVE_VALUES"]                                  = {"hipJitOptionOverrideDirectiveValues",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 33
+  //
+  m["CU_JIT_SPLIT_COMPILE"]                                              = {"hipJitOptionSplitCompile",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 34
+  //
+  m["CU_JIT_BINARY_LOADER_THREAD_COUNT"]                                 = {"hipJitBinaryLoadedThreadCount",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 35
+  //
+  m["CU_JIT_NUM_OPTIONS"]                                                = {"hipJitOptionNumOptions",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUjit_target"]                                                      = {"hipJitTarget",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUjit_target_enum"]                                                 = {"hipJitTarget",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUjit_target enum values
+  // NOTE: Deprecated since CUDA 9.0
+  m["CU_TARGET_COMPUTE_10"]                                              = {"hipJitTargetCompute10",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 10
+  // NOTE: Deprecated since CUDA 9.0
+  m["CU_TARGET_COMPUTE_11"]                                              = {"hipJitTargetCompute11",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 11
+  // NOTE: Deprecated since CUDA 9.0
+  m["CU_TARGET_COMPUTE_12"]                                              = {"hipJitTargetCompute12",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 12
+  // NOTE: Deprecated since CUDA 9.0
+  m["CU_TARGET_COMPUTE_13"]                                              = {"hipJitTargetCompute13",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 13
+  m["CU_TARGET_COMPUTE_20"]                                              = {"hipJitTargetCompute20",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 20
+  m["CU_TARGET_COMPUTE_21"]                                              = {"hipJitTargetCompute21",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 21
+  m["CU_TARGET_COMPUTE_30"]                                              = {"hipJitTargetCompute30",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 20
+  m["CU_TARGET_COMPUTE_32"]                                              = {"hipJitTargetCompute32",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 32
+  m["CU_TARGET_COMPUTE_35"]                                              = {"hipJitTargetCompute35",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 35
+  m["CU_TARGET_COMPUTE_37"]                                              = {"hipJitTargetCompute37",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 37
+  m["CU_TARGET_COMPUTE_50"]                                              = {"hipJitTargetCompute50",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 50
+  m["CU_TARGET_COMPUTE_52"]                                              = {"hipJitTargetCompute52",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 52
+  m["CU_TARGET_COMPUTE_53"]                                              = {"hipJitTargetCompute53",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 53
+  m["CU_TARGET_COMPUTE_60"]                                              = {"hipJitTargetCompute60",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 60
+  m["CU_TARGET_COMPUTE_61"]                                              = {"hipJitTargetCompute61",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 61
+  m["CU_TARGET_COMPUTE_62"]                                              = {"hipJitTargetCompute62",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 62
+  m["CU_TARGET_COMPUTE_70"]                                              = {"hipJitTargetCompute70",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 70
+  m["CU_TARGET_COMPUTE_72"]                                              = {"hipJitTargetCompute72",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 70
+  // NOTE: Deprecated since CUDA 10.0
+  m["CU_TARGET_COMPUTE_73"]                                              = {"hipJitTargetCompute73",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 73
+  m["CU_TARGET_COMPUTE_75"]                                              = {"hipJitTargetCompute75",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 75
+  m["CU_TARGET_COMPUTE_80"]                                              = {"hipJitTargetCompute80",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 80
+  m["CU_TARGET_COMPUTE_86"]                                              = {"hipJitTargetCompute86",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 86
+  m["CU_TARGET_COMPUTE_87"]                                              = {"hipJitTargetCompute87",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 87
+  m["CU_TARGET_COMPUTE_89"]                                              = {"hipJitTargetCompute89",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 89
+  m["CU_TARGET_COMPUTE_90"]                                              = {"hipJitTargetCompute90",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 90
+  m["CU_TARGET_COMPUTE_90A"]                                             = {"hipJitTargetCompute90a",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_COMPUTE_ACCELERATED_TARGET_BASE + CU_TARGET_COMPUTE_90
+  m["CU_TARGET_COMPUTE_100"]                                             = {"hipJitTargetCompute100",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 100
+  m["CU_TARGET_COMPUTE_100A"]                                            = {"hipJitTargetCompute100a",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_COMPUTE_ACCELERATED_TARGET_BASE + CU_TARGET_COMPUTE_100
+  m["CU_TARGET_COMPUTE_100F"]                                            = {"hipJitTargetCompute100f",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_COMPUTE_FAMILY_TARGET_BASE + CU_TARGET_COMPUTE_100
+  m["CU_TARGET_COMPUTE_101"]                                             = {"hipJitTargetCompute101",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // 101
+  m["CU_TARGET_COMPUTE_101A"]                                            = {"hipJitTargetCompute101a",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // CU_COMPUTE_ACCELERATED_TARGET_BASE + CU_TARGET_COMPUTE_101
+  m["CU_TARGET_COMPUTE_101F"]                                            = {"hipJitTargetCompute101f",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED}; // CU_COMPUTE_FAMILY_TARGET_BASE + CU_TARGET_COMPUTE_101
+  m["CU_TARGET_COMPUTE_103"]                                             = {"hipJitTargetCompute103",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 103
+  m["CU_TARGET_COMPUTE_103A"]                                            = {"hipJitTargetCompute103a",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_COMPUTE_ACCELERATED_TARGET_BASE + CU_TARGET_COMPUTE_103
+  m["CU_TARGET_COMPUTE_103F"]                                            = {"hipJitTargetCompute103f",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_COMPUTE_FAMILY_TARGET_BASE + CU_TARGET_COMPUTE_103
+  m["CU_TARGET_COMPUTE_110"]                                             = {"hipJitTargetCompute110",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 110
+  m["CU_TARGET_COMPUTE_110A"]                                            = {"hipJitTargetCompute110A",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 110A
+  m["CU_TARGET_COMPUTE_110F"]                                            = {"hipJitTargetCompute110F",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 110F
+  m["CU_TARGET_COMPUTE_120"]                                             = {"hipJitTargetCompute120",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 120
+  m["CU_TARGET_COMPUTE_120A"]                                            = {"hipJitTargetCompute120a",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_COMPUTE_ACCELERATED_TARGET_BASE + CU_TARGET_COMPUTE_120
+  m["CU_TARGET_COMPUTE_120F"]                                            = {"hipJitTargetCompute120f",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_COMPUTE_FAMILY_TARGET_BASE + CU_TARGET_COMPUTE_120
+  m["CU_TARGET_COMPUTE_121"]                                             = {"hipJitTargetCompute121",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 121
+  m["CU_TARGET_COMPUTE_121A"]                                            = {"hipJitTargetCompute121a",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_COMPUTE_ACCELERATED_TARGET_BASE + CU_TARGET_COMPUTE_121
+  m["CU_TARGET_COMPUTE_121F"]                                            = {"hipJitTargetCompute121f",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_COMPUTE_FAMILY_TARGET_BASE + CU_TARGET_COMPUTE_121
+
+  // no analogue
+  m["CUjitInputType"]                                                    = {"hipJitInputType",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUjitInputType_enum"]                                               = {"hipJitInputType",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUjitInputType enum values
+  m["CU_JIT_INPUT_CUBIN"]                                                = {"hipJitInputCubin",                                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  m["CU_JIT_INPUT_PTX"]                                                  = {"hipJitInputPtx",                                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  m["CU_JIT_INPUT_FATBINARY"]                                            = {"hipJitInputFatBinary",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  m["CU_JIT_INPUT_OBJECT"]                                               = {"hipJitInputObject",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  m["CU_JIT_INPUT_LIBRARY"]                                              = {"hipJitInputLibrary",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  m["CU_JIT_INPUT_NVVM"]                                                 = {"hipJitInputNvvm",                                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED};
+  m["CU_JIT_NUM_INPUT_TYPES"]                                            = {"hipJitNumLegacyInputTypes",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaLimit
+  m["CUlimit"]                                                           = {"hipLimit_t",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUlimit_enum"]                                                      = {"hipLimit_t",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUlimit enum values
+  // cudaLimitStackSize
+  m["CU_LIMIT_STACK_SIZE"]                                               = {"hipLimitStackSize",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x00
+  // cudaLimitPrintfFifoSize
+  m["CU_LIMIT_PRINTF_FIFO_SIZE"]                                         = {"hipLimitPrintfFifoSize",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaLimitMallocHeapSize
+  m["CU_LIMIT_MALLOC_HEAP_SIZE"]                                         = {"hipLimitMallocHeapSize",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaLimitDevRuntimeSyncDepth
+  m["CU_LIMIT_DEV_RUNTIME_SYNC_DEPTH"]                                   = {"hipLimitDevRuntimeSyncDepth",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x03
+  // cudaLimitDevRuntimePendingLaunchCount
+  m["CU_LIMIT_DEV_RUNTIME_PENDING_LAUNCH_COUNT"]                         = {"hipLimitDevRuntimePendingLaunchCount",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x04
+  // cudaLimitMaxL2FetchGranularity
+  m["CU_LIMIT_MAX_L2_FETCH_GRANULARITY"]                                 = {"hipLimitMaxL2FetchGranularity",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x05
+  // cudaLimitPersistingL2CacheSize
+  m["CU_LIMIT_PERSISTING_L2_CACHE_SIZE"]                                 = {"hipLimitPersistingL2CacheSize",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x06
+  //
+  m["CU_LIMIT_SHMEM_SIZE"]                                               = {"hipLimitShmemSize",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x07
+  //
+  m["CU_LIMIT_CIG_ENABLED"]                                              = {"hipLimitCigEnabled",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x08
+  //
+  m["CU_LIMIT_CIG_SHMEM_FALLBACK_ENABLED"]                               = {"hipLimitCigShmemFallbackEnabled",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x09
+  // no analogue
+  m["CU_LIMIT_MAX"]                                                      = {"hipLimitMax",                                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaMemoryAdvise
+  m["CUmem_advise"]                                                      = {"hipMemoryAdvise",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmem_advise_enum"]                                                 = {"hipMemoryAdvise",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmem_advise enum values
+  // cudaMemAdviseSetReadMostly
+  m["CU_MEM_ADVISE_SET_READ_MOSTLY"]                                     = {"hipMemAdviseSetReadMostly",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaMemAdviseUnsetReadMostly
+  m["CU_MEM_ADVISE_UNSET_READ_MOSTLY"]                                   = {"hipMemAdviseUnsetReadMostly",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaMemAdviseSetPreferredLocation
+  m["CU_MEM_ADVISE_SET_PREFERRED_LOCATION"]                              = {"hipMemAdviseSetPreferredLocation",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  // cudaMemAdviseUnsetPreferredLocation
+  m["CU_MEM_ADVISE_UNSET_PREFERRED_LOCATION"]                            = {"hipMemAdviseUnsetPreferredLocation",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+  // cudaMemAdviseSetAccessedBy
+  m["CU_MEM_ADVISE_SET_ACCESSED_BY"]                                     = {"hipMemAdviseSetAccessedBy",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 5
+  // cudaMemAdviseUnsetAccessedBy
+  m["CU_MEM_ADVISE_UNSET_ACCESSED_BY"]                                   = {"hipMemAdviseUnsetAccessedBy",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 6
+
+  // no analogue
+  m["CUmemAttach_flags"]                                                 = {"hipMemAttachFlags_t",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUmemAttach_flags_enum"]                                            = {"hipMemAttachFlags_t",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUmemAttach_flags enum values
+  // cudaMemAttachGlobal
+  m["CU_MEM_ATTACH_GLOBAL"]                                              = {"hipMemAttachGlobal",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+  // cudaMemAttachHost
+  m["CU_MEM_ATTACH_HOST"]                                                = {"hipMemAttachHost",                                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x2
+  // cudaMemAttachSingle
+  m["CU_MEM_ATTACH_SINGLE"]                                              = {"hipMemAttachSingle",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x4
+
+  // no analogue
+  // NOTE: cudaMemoryType is partial analogue
+  m["CUmemorytype"]                                                      = {"hipMemoryType",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemorytype_enum"]                                                 = {"hipMemoryType",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemorytype enum values
+  m["CU_MEMORYTYPE_HOST"]                                                = {"hipMemoryTypeHost",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  m["CU_MEMORYTYPE_DEVICE"]                                              = {"hipMemoryTypeDevice",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  m["CU_MEMORYTYPE_ARRAY"]                                               = {"hipMemoryTypeArray",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x03
+  m["CU_MEMORYTYPE_UNIFIED"]                                             = {"hipMemoryTypeUnified",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x04
+
+  // cudaMemRangeAttribute
+  m["CUmem_range_attribute"]                                             = {"hipMemRangeAttribute",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmem_range_attribute_enum"]                                        = {"hipMemRangeAttribute",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmem_range_attribute enum values
+  // cudaMemRangeAttributeReadMostly
+  m["CU_MEM_RANGE_ATTRIBUTE_READ_MOSTLY"]                                = {"hipMemRangeAttributeReadMostly",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaMemRangeAttributePreferredLocation
+  m["CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION"]                         = {"hipMemRangeAttributePreferredLocation",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaMemRangeAttributeAccessedBy
+  m["CU_MEM_RANGE_ATTRIBUTE_ACCESSED_BY"]                                = {"hipMemRangeAttributeAccessedBy",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  // cudaMemRangeAttributeLastPrefetchLocation
+  m["CU_MEM_RANGE_ATTRIBUTE_LAST_PREFETCH_LOCATION"]                     = {"hipMemRangeAttributeLastPrefetchLocation",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+  // cudaMemRangeAttributePreferredLocationType
+  m["CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION_TYPE"]                    = {"hipMemRangeAttributePreferredLocationType",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 5
+  // cudaMemRangeAttributePreferredLocationId
+  m["CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION_ID"]                      = {"hipMemRangeAttributePreferredLocationId",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 6
+  // cudaMemRangeAttributeLastPrefetchLocationType
+  m["CU_MEM_RANGE_ATTRIBUTE_LAST_PREFETCH_LOCATION_TYPE"]                = {"hipMemRangeAttributeLastPrefetchLocationType",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 7
+  // cudaMemRangeAttributeLastPrefetchLocationId
+  m["CU_MEM_RANGE_ATTRIBUTE_LAST_PREFETCH_LOCATION_ID"]                  = {"hipMemRangeAttributeLastPrefetchLocationId",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 8
+
+  // no analogue
+  m["CUoccupancy_flags"]                                                 = {"hipOccupancyFlags",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUoccupancy_flags_enum"]                                            = {"hipOccupancyFlags",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUoccupancy_flags enum values
+  // cudaOccupancyDefault
+  m["CU_OCCUPANCY_DEFAULT"]                                              = {"hipOccupancyDefault",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x00
+  // cudaOccupancyDisableCachingOverride
+  m["CU_OCCUPANCY_DISABLE_CACHING_OVERRIDE"]                             = {"hipOccupancyDisableCachingOverride",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+
+  // no analogue
+  m["CUpointer_attribute"]                                               = {"hipPointer_attribute",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUpointer_attribute_enum"]                                          = {"hipPointer_attribute",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUpointer_attribute enum values
+  m["CU_POINTER_ATTRIBUTE_CONTEXT"]                                      = {"HIP_POINTER_ATTRIBUTE_CONTEXT",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  m["CU_POINTER_ATTRIBUTE_MEMORY_TYPE"]                                  = {"HIP_POINTER_ATTRIBUTE_MEMORY_TYPE",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  m["CU_POINTER_ATTRIBUTE_DEVICE_POINTER"]                               = {"HIP_POINTER_ATTRIBUTE_DEVICE_POINTER",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  m["CU_POINTER_ATTRIBUTE_HOST_POINTER"]                                 = {"HIP_POINTER_ATTRIBUTE_HOST_POINTER",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+  m["CU_POINTER_ATTRIBUTE_P2P_TOKENS"]                                   = {"HIP_POINTER_ATTRIBUTE_P2P_TOKENS",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 5
+  m["CU_POINTER_ATTRIBUTE_SYNC_MEMOPS"]                                  = {"HIP_POINTER_ATTRIBUTE_SYNC_MEMOPS",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 6
+  m["CU_POINTER_ATTRIBUTE_BUFFER_ID"]                                    = {"HIP_POINTER_ATTRIBUTE_BUFFER_ID",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 7
+  m["CU_POINTER_ATTRIBUTE_IS_MANAGED"]                                   = {"HIP_POINTER_ATTRIBUTE_IS_MANAGED",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 8
+  m["CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL"]                               = {"HIP_POINTER_ATTRIBUTE_DEVICE_ORDINAL",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 9
+  m["CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE"]                   = {"HIP_POINTER_ATTRIBUTE_IS_LEGACY_HIP_IPC_CAPABLE",            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 10
+  m["CU_POINTER_ATTRIBUTE_RANGE_START_ADDR"]                             = {"HIP_POINTER_ATTRIBUTE_RANGE_START_ADDR",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 11
+  m["CU_POINTER_ATTRIBUTE_RANGE_SIZE"]                                   = {"HIP_POINTER_ATTRIBUTE_RANGE_SIZE",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 12
+  m["CU_POINTER_ATTRIBUTE_MAPPED"]                                       = {"HIP_POINTER_ATTRIBUTE_MAPPED",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 13
+  m["CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES"]                         = {"HIP_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 14
+  m["CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE"]                   = {"HIP_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE",           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 15
+  m["CU_POINTER_ATTRIBUTE_ACCESS_FLAGS"]                                 = {"HIP_POINTER_ATTRIBUTE_ACCESS_FLAGS",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 16
+  m["CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE"]                               = {"HIP_POINTER_ATTRIBUTE_MEMPOOL_HANDLE",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 17
+  m["CU_POINTER_ATTRIBUTE_MAPPING_SIZE"]                                 = {"HIP_POINTER_ATTRIBUTE_MAPPING_SIZE",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 18
+  m["CU_POINTER_ATTRIBUTE_MAPPING_BASE_ADDR"]                            = {"HIP_POINTER_ATTRIBUTE_MAPPING_BASE_ADDR",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 19
+  m["CU_POINTER_ATTRIBUTE_MEMORY_BLOCK_ID"]                              = {"HIP_POINTER_ATTRIBUTE_MEMORY_BLOCK_ID",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 20
+  m["CU_POINTER_ATTRIBUTE_IS_HW_DECOMPRESS_CAPABLE"]                     = {"HIP_POINTER_ATTRIBUTE_IS_HW_DECOMPRESS_CAPABLE",             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 21
+
+  // TODO [HIP]: HIPresourcetype_enum and all its values should be hipResourceType as long as they are equal
+  // cudaResourceType
+  m["CUresourcetype"]                                                    = {"HIPresourcetype",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUresourcetype_enum"]                                               = {"HIPresourcetype_enum",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUresourcetype enum values
+  // cudaResourceTypeArray
+  m["CU_RESOURCE_TYPE_ARRAY"]                                            = {"HIP_RESOURCE_TYPE_ARRAY",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x00
+  // cudaResourceTypeMipmappedArray
+  m["CU_RESOURCE_TYPE_MIPMAPPED_ARRAY"]                                  = {"HIP_RESOURCE_TYPE_MIPMAPPED_ARRAY",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaResourceTypeLinear
+  m["CU_RESOURCE_TYPE_LINEAR"]                                           = {"HIP_RESOURCE_TYPE_LINEAR",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaResourceTypePitch2D
+  m["CU_RESOURCE_TYPE_PITCH2D"]                                          = {"HIP_RESOURCE_TYPE_PITCH2D",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x03
+
+  // TODO [HIP]: HIPresourceViewFormat_enum and all its values should be hipResourceViewFormat as long as they are equal
+  // cudaResourceViewFormat
+  m["CUresourceViewFormat"]                                              = {"HIPresourceViewFormat",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUresourceViewFormat_enum"]                                         = {"HIPresourceViewFormat_enum",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUresourceViewFormat enum values
+  // cudaResViewFormatNone
+  m["CU_RES_VIEW_FORMAT_NONE"]                                           = {"HIP_RES_VIEW_FORMAT_NONE",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x00
+  // cudaResViewFormatUnsignedChar1
+  m["CU_RES_VIEW_FORMAT_UINT_1X8"]                                       = {"HIP_RES_VIEW_FORMAT_UINT_1X8",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaResViewFormatUnsignedChar2
+  m["CU_RES_VIEW_FORMAT_UINT_2X8"]                                       = {"HIP_RES_VIEW_FORMAT_UINT_2X8",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaResViewFormatUnsignedChar4
+  m["CU_RES_VIEW_FORMAT_UINT_4X8"]                                       = {"HIP_RES_VIEW_FORMAT_UINT_4X8",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x03
+  // cudaResViewFormatSignedChar1
+  m["CU_RES_VIEW_FORMAT_SINT_1X8"]                                       = {"HIP_RES_VIEW_FORMAT_SINT_1X8",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x04
+  // cudaResViewFormatSignedChar2
+  m["CU_RES_VIEW_FORMAT_SINT_2X8"]                                       = {"HIP_RES_VIEW_FORMAT_SINT_2X8",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x05
+  // cudaResViewFormatSignedChar4
+  m["CU_RES_VIEW_FORMAT_SINT_4X8"]                                       = {"HIP_RES_VIEW_FORMAT_SINT_4X8",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x06
+  // cudaResViewFormatUnsignedShort1
+  m["CU_RES_VIEW_FORMAT_UINT_1X16"]                                      = {"HIP_RES_VIEW_FORMAT_UINT_1X16",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x07
+  // cudaResViewFormatUnsignedShort2
+  m["CU_RES_VIEW_FORMAT_UINT_2X16"]                                      = {"HIP_RES_VIEW_FORMAT_UINT_2X16",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x08
+  // cudaResViewFormatUnsignedShort4
+  m["CU_RES_VIEW_FORMAT_UINT_4X16"]                                      = {"HIP_RES_VIEW_FORMAT_UINT_4X16",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x09
+  // cudaResViewFormatSignedShort1
+  m["CU_RES_VIEW_FORMAT_SINT_1X16"]                                      = {"HIP_RES_VIEW_FORMAT_SINT_1X16",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0a
+  // cudaResViewFormatSignedShort2
+  m["CU_RES_VIEW_FORMAT_SINT_2X16"]                                      = {"HIP_RES_VIEW_FORMAT_SINT_2X16",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0b
+  // cudaResViewFormatSignedShort4
+  m["CU_RES_VIEW_FORMAT_SINT_4X16"]                                      = {"HIP_RES_VIEW_FORMAT_SINT_4X16",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0c
+  // cudaResViewFormatUnsignedInt1
+  m["CU_RES_VIEW_FORMAT_UINT_1X32"]                                      = {"HIP_RES_VIEW_FORMAT_UINT_1X32",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0d
+  // cudaResViewFormatUnsignedInt2
+  m["CU_RES_VIEW_FORMAT_UINT_2X32"]                                      = {"HIP_RES_VIEW_FORMAT_UINT_2X32",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0e
+  // cudaResViewFormatUnsignedInt4
+  m["CU_RES_VIEW_FORMAT_UINT_4X32"]                                      = {"HIP_RES_VIEW_FORMAT_UINT_4X32",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0f
+  // cudaResViewFormatSignedInt1
+  m["CU_RES_VIEW_FORMAT_SINT_1X32"]                                      = {"HIP_RES_VIEW_FORMAT_SINT_1X32",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x10
+  // cudaResViewFormatSignedInt2
+  m["CU_RES_VIEW_FORMAT_SINT_2X32"]                                      = {"HIP_RES_VIEW_FORMAT_SINT_2X32",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x11
+  // cudaResViewFormatSignedInt4
+  m["CU_RES_VIEW_FORMAT_SINT_4X32"]                                      = {"HIP_RES_VIEW_FORMAT_SINT_4X32",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x12
+  // cudaResViewFormatHalf1
+  m["CU_RES_VIEW_FORMAT_FLOAT_1X16"]                                     = {"HIP_RES_VIEW_FORMAT_FLOAT_1X16",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x13
+  // cudaResViewFormatHalf2
+  m["CU_RES_VIEW_FORMAT_FLOAT_2X16"]                                     = {"HIP_RES_VIEW_FORMAT_FLOAT_2X16",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x14
+  // cudaResViewFormatHalf4
+  m["CU_RES_VIEW_FORMAT_FLOAT_4X16"]                                     = {"HIP_RES_VIEW_FORMAT_FLOAT_4X16",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x15
+  // cudaResViewFormatFloat1
+  m["CU_RES_VIEW_FORMAT_FLOAT_1X32"]                                     = {"HIP_RES_VIEW_FORMAT_FLOAT_1X32",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x16
+  // cudaResViewFormatFloat2
+  m["CU_RES_VIEW_FORMAT_FLOAT_2X32"]                                     = {"HIP_RES_VIEW_FORMAT_FLOAT_2X32",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x17
+  // cudaResViewFormatFloat4
+  m["CU_RES_VIEW_FORMAT_FLOAT_4X32"]                                     = {"HIP_RES_VIEW_FORMAT_FLOAT_4X32",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x18
+  // cudaResViewFormatUnsignedBlockCompressed1
+  m["CU_RES_VIEW_FORMAT_UNSIGNED_BC1"]                                   = {"HIP_RES_VIEW_FORMAT_UNSIGNED_BC1",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x19
+  // cudaResViewFormatUnsignedBlockCompressed2
+  m["CU_RES_VIEW_FORMAT_UNSIGNED_BC2"]                                   = {"HIP_RES_VIEW_FORMAT_UNSIGNED_BC2",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1a
+  // cudaResViewFormatUnsignedBlockCompressed3
+  m["CU_RES_VIEW_FORMAT_UNSIGNED_BC3"]                                   = {"HIP_RES_VIEW_FORMAT_UNSIGNED_BC3",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1b
+  // cudaResViewFormatUnsignedBlockCompressed4
+  m["CU_RES_VIEW_FORMAT_UNSIGNED_BC4"]                                   = {"HIP_RES_VIEW_FORMAT_UNSIGNED_BC4",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1c
+  // cudaResViewFormatSignedBlockCompressed4
+  m["CU_RES_VIEW_FORMAT_SIGNED_BC4"]                                     = {"HIP_RES_VIEW_FORMAT_SIGNED_BC4",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1d
+  // cudaResViewFormatUnsignedBlockCompressed5
+  m["CU_RES_VIEW_FORMAT_UNSIGNED_BC5"]                                   = {"HIP_RES_VIEW_FORMAT_UNSIGNED_BC5",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1e
+  // cudaResViewFormatSignedBlockCompressed5
+  m["CU_RES_VIEW_FORMAT_SIGNED_BC5"]                                     = {"HIP_RES_VIEW_FORMAT_SIGNED_BC5",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1f
+  // cudaResViewFormatUnsignedBlockCompressed6H
+  m["CU_RES_VIEW_FORMAT_UNSIGNED_BC6H"]                                  = {"HIP_RES_VIEW_FORMAT_UNSIGNED_BC6H",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x20
+  // cudaResViewFormatSignedBlockCompressed6H
+  m["CU_RES_VIEW_FORMAT_SIGNED_BC6H"]                                    = {"HIP_RES_VIEW_FORMAT_SIGNED_BC6H",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x21
+  // cudaResViewFormatUnsignedBlockCompressed7
+  m["CU_RES_VIEW_FORMAT_UNSIGNED_BC7"]                                   = {"HIP_RES_VIEW_FORMAT_UNSIGNED_BC7",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x22
+
+  // cudaError
+  m["CUresult"]                                                          = {"hipError_t",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["cudaError_enum"]                                                    = {"hipError_t",                                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUresult enum values
+  // cudaSuccess
+  m["CUDA_SUCCESS"]                                                      = {"hipSuccess",                                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaErrorInvalidValue
+  m["CUDA_ERROR_INVALID_VALUE"]                                          = {"hipErrorInvalidValue",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaErrorMemoryAllocation
+  m["CUDA_ERROR_OUT_OF_MEMORY"]                                          = {"hipErrorOutOfMemory",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaErrorInitializationError
+  m["CUDA_ERROR_NOT_INITIALIZED"]                                        = {"hipErrorNotInitialized",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  // cudaErrorCudartUnloading
+  m["CUDA_ERROR_DEINITIALIZED"]                                          = {"hipErrorDeinitialized",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+  // cudaErrorProfilerDisabled
+  m["CUDA_ERROR_PROFILER_DISABLED"]                                      = {"hipErrorProfilerDisabled",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 5
+  // cudaErrorProfilerNotInitialized
+  // NOTE: Deprecated since CUDA 5.0
+  m["CUDA_ERROR_PROFILER_NOT_INITIALIZED"]                               = {"hipErrorProfilerNotInitialized",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 6
+  // NOTE: Deprecated since CUDA 5.0
+  // cudaErrorProfilerAlreadyStarted
+  m["CUDA_ERROR_PROFILER_ALREADY_STARTED"]                               = {"hipErrorProfilerAlreadyStarted",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 7
+  // cudaErrorProfilerAlreadyStopped
+  // NOTE: Deprecated since CUDA 5.0
+  m["CUDA_ERROR_PROFILER_ALREADY_STOPPED"]                               = {"hipErrorProfilerAlreadyStopped",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 8
+  // cudaErrorStubLibrary
+  m["CUDA_ERROR_STUB_LIBRARY"]                                           = {"hipErrorStubLibrary",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 34
+  // cudaErrorCallRequiresNewerDriver
+  m["CUDA_ERROR_CALL_REQUIRES_NEWER_DRIVER"]                             = {"hipErrorCallRequiresNewerDriver",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 36
+  // cudaErrorDevicesUnavailable
+  m["CUDA_ERROR_DEVICE_UNAVAILABLE"]                                     = {"hipErrorDeviceUnavailable",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 46
+  // cudaErrorNoDevice
+  m["CUDA_ERROR_NO_DEVICE"]                                              = {"hipErrorNoDevice",                                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 100
+  // cudaErrorInvalidDevice
+  m["CUDA_ERROR_INVALID_DEVICE"]                                         = {"hipErrorInvalidDevice",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 101
+  // cudaErrorDeviceNotLicensed
+  m["CUDA_ERROR_DEVICE_NOT_LICENSED"]                                    = {"hipErrorDeviceNotLicensed",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 102
+  // cudaErrorInvalidKernelImage
+  m["CUDA_ERROR_INVALID_IMAGE"]                                          = {"hipErrorInvalidImage",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 200
+  // cudaErrorDeviceUninitialized
+  m["CUDA_ERROR_INVALID_CONTEXT"]                                        = {"hipErrorInvalidContext",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 201
+  // no analogue
+  // NOTE: Deprecated since CUDA 3.2
+  m["CUDA_ERROR_CONTEXT_ALREADY_CURRENT"]                                = {"hipErrorContextAlreadyCurrent",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, CUDA_DEPRECATED}; // 202
+  // cudaErrorMapBufferObjectFailed
+  m["CUDA_ERROR_MAP_FAILED"]                                             = {"hipErrorMapFailed",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 205
+  // cudaErrorUnmapBufferObjectFailed
+  m["CUDA_ERROR_UNMAP_FAILED"]                                           = {"hipErrorUnmapFailed",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 206
+  // cudaErrorArrayIsMapped
+  m["CUDA_ERROR_ARRAY_IS_MAPPED"]                                        = {"hipErrorArrayIsMapped",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 207
+  // cudaErrorAlreadyMapped
+  m["CUDA_ERROR_ALREADY_MAPPED"]                                         = {"hipErrorAlreadyMapped",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 208
+  // cudaErrorNoKernelImageForDevice
+  m["CUDA_ERROR_NO_BINARY_FOR_GPU"]                                      = {"hipErrorNoBinaryForGpu",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 209
+  // cudaErrorAlreadyAcquired
+  m["CUDA_ERROR_ALREADY_ACQUIRED"]                                       = {"hipErrorAlreadyAcquired",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 210
+  // cudaErrorNotMapped
+  m["CUDA_ERROR_NOT_MAPPED"]                                             = {"hipErrorNotMapped",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 211
+  // cudaErrorNotMappedAsArray
+  m["CUDA_ERROR_NOT_MAPPED_AS_ARRAY"]                                    = {"hipErrorNotMappedAsArray",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 212
+  // cudaErrorNotMappedAsPointer
+  m["CUDA_ERROR_NOT_MAPPED_AS_POINTER"]                                  = {"hipErrorNotMappedAsPointer",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 213
+  // cudaErrorECCUncorrectable
+  m["CUDA_ERROR_ECC_UNCORRECTABLE"]                                      = {"hipErrorECCNotCorrectable",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 214
+  // cudaErrorUnsupportedLimit
+  m["CUDA_ERROR_UNSUPPORTED_LIMIT"]                                      = {"hipErrorUnsupportedLimit",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 215
+  // cudaErrorDeviceAlreadyInUse
+  m["CUDA_ERROR_CONTEXT_ALREADY_IN_USE"]                                 = {"hipErrorContextAlreadyInUse",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 216
+  // cudaErrorPeerAccessUnsupported
+  m["CUDA_ERROR_PEER_ACCESS_UNSUPPORTED"]                                = {"hipErrorPeerAccessUnsupported",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 217
+  // cudaErrorInvalidPtx
+  m["CUDA_ERROR_INVALID_PTX"]                                            = {"hipErrorInvalidKernelFile",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 218
+  // cudaErrorInvalidGraphicsContext
+  m["CUDA_ERROR_INVALID_GRAPHICS_CONTEXT"]                               = {"hipErrorInvalidGraphicsContext",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 219
+  // cudaErrorNvlinkUncorrectable
+  m["CUDA_ERROR_NVLINK_UNCORRECTABLE"]                                   = {"hipErrorNvlinkUncorrectable",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 220
+  // cudaErrorJitCompilerNotFound
+  m["CUDA_ERROR_JIT_COMPILER_NOT_FOUND"]                                 = {"hipErrorJitCompilerNotFound",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 221
+  // cudaErrorUnsupportedPtxVersion
+  m["CUDA_ERROR_UNSUPPORTED_PTX_VERSION"]                                = {"hipErrorUnsupportedPtxVersion",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 222
+  // cudaErrorJitCompilationDisabled
+  m["CUDA_ERROR_JIT_COMPILATION_DISABLED"]                               = {"hipErrorJitCompilationDisabled",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 223
+  // cudaErrorUnsupportedExecAffinity
+  m["CUDA_ERROR_UNSUPPORTED_EXEC_AFFINITY"]                              = {"hipErrorUnsupportedExecAffinity",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 224
+  // cudaErrorUnsupportedDevSideSync
+  m["CUDA_ERROR_UNSUPPORTED_DEVSIDE_SYNC"]                               = {"hipErrorUnsupportedDevSideSync",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 225
+  // cudaErrorContained
+  m["CUDA_ERROR_CONTAINED"]                                              = {"hipErrorContained",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 226
+  // cudaErrorInvalidSource
+  m["CUDA_ERROR_INVALID_SOURCE"]                                         = {"hipErrorInvalidSource",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 300
+  // cudaErrorFileNotFound
+  m["CUDA_ERROR_FILE_NOT_FOUND"]                                         = {"hipErrorFileNotFound",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 301
+  // cudaErrorSharedObjectSymbolNotFound
+  m["CUDA_ERROR_SHARED_OBJECT_SYMBOL_NOT_FOUND"]                         = {"hipErrorSharedObjectSymbolNotFound",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 302
+  // cudaErrorSharedObjectInitFailed
+  m["CUDA_ERROR_SHARED_OBJECT_INIT_FAILED"]                              = {"hipErrorSharedObjectInitFailed",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 303
+  // cudaErrorOperatingSystem
+  m["CUDA_ERROR_OPERATING_SYSTEM"]                                       = {"hipErrorOperatingSystem",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 304
+  // cudaErrorInvalidResourceHandle
+  m["CUDA_ERROR_INVALID_HANDLE"]                                         = {"hipErrorInvalidHandle",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 400
+  // cudaErrorIllegalState
+  m["CUDA_ERROR_ILLEGAL_STATE"]                                          = {"hipErrorIllegalState",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 401
+  // cudaErrorLossyQuery
+  m["CUDA_ERROR_LOSSY_QUERY"]                                            = {"hipErrorLossyQuery",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 402
+  // cudaErrorSymbolNotFound
+  m["CUDA_ERROR_NOT_FOUND"]                                              = {"hipErrorNotFound",                                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 500
+  // cudaErrorNotReady
+  m["CUDA_ERROR_NOT_READY"]                                              = {"hipErrorNotReady",                                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 600
+  // cudaErrorIllegalAddress
+  m["CUDA_ERROR_ILLEGAL_ADDRESS"]                                        = {"hipErrorIllegalAddress",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 700
+  // cudaErrorLaunchOutOfResources
+  m["CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES"]                                = {"hipErrorLaunchOutOfResources",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 701
+  // cudaErrorLaunchTimeout
+  m["CUDA_ERROR_LAUNCH_TIMEOUT"]                                         = {"hipErrorLaunchTimeOut",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 702
+  // cudaErrorLaunchIncompatibleTexturing
+  m["CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING"]                          = {"hipErrorLaunchIncompatibleTexturing",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 703
+  // cudaErrorPeerAccessAlreadyEnabled
+  m["CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED"]                            = {"hipErrorPeerAccessAlreadyEnabled",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 704
+  // cudaErrorPeerAccessNotEnabled
+  m["CUDA_ERROR_PEER_ACCESS_NOT_ENABLED"]                                = {"hipErrorPeerAccessNotEnabled",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 705
+  // cudaErrorSetOnActiveProcess
+  m["CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE"]                                 = {"hipErrorSetOnActiveProcess",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 708
+  // cudaErrorContextIsDestroyed
+  m["CUDA_ERROR_CONTEXT_IS_DESTROYED"]                                   = {"hipErrorContextIsDestroyed",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 709
+  // cudaErrorAssert
+  m["CUDA_ERROR_ASSERT"]                                                 = {"hipErrorAssert",                                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 710
+  // cudaErrorTooManyPeers
+  m["CUDA_ERROR_TOO_MANY_PEERS"]                                         = {"hipErrorTooManyPeers",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 711
+  // cudaErrorHostMemoryAlreadyRegistered
+  m["CUDA_ERROR_HOST_MEMORY_ALREADY_REGISTERED"]                         = {"hipErrorHostMemoryAlreadyRegistered",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 712
+  // cudaErrorHostMemoryNotRegistered
+  m["CUDA_ERROR_HOST_MEMORY_NOT_REGISTERED"]                             = {"hipErrorHostMemoryNotRegistered",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 713
+  // cudaErrorHardwareStackError
+  m["CUDA_ERROR_HARDWARE_STACK_ERROR"]                                   = {"hipErrorHardwareStackError",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 714
+  // cudaErrorIllegalInstruction
+  m["CUDA_ERROR_ILLEGAL_INSTRUCTION"]                                    = {"hipErrorIllegalInstruction",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 715
+  // cudaErrorMisalignedAddress
+  m["CUDA_ERROR_MISALIGNED_ADDRESS"]                                     = {"hipErrorMisalignedAddress",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 716
+  // cudaErrorInvalidAddressSpace
+  m["CUDA_ERROR_INVALID_ADDRESS_SPACE"]                                  = {"hipErrorInvalidAddressSpace",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 717
+  // cudaErrorInvalidPc
+  m["CUDA_ERROR_INVALID_PC"]                                             = {"hipErrorInvalidPc",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 718
+  // cudaErrorLaunchFailure
+  m["CUDA_ERROR_LAUNCH_FAILED"]                                          = {"hipErrorLaunchFailure",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 719
+  // cudaErrorCooperativeLaunchTooLarge
+  m["CUDA_ERROR_COOPERATIVE_LAUNCH_TOO_LARGE"]                           = {"hipErrorCooperativeLaunchTooLarge",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 720
+  // cudaErrorTensorMemoryLeak
+  m["CUDA_ERROR_TENSOR_MEMORY_LEAK"]                                     = {"hipErrorTensorMemoryLeak",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 721
+  // cudaErrorNotPermitted
+  m["CUDA_ERROR_NOT_PERMITTED"]                                          = {"hipErrorNotPermitted",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 800
+  // cudaErrorNotSupported
+  m["CUDA_ERROR_NOT_SUPPORTED"]                                          = {"hipErrorNotSupported",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 801
+  // cudaErrorSystemNotReady
+  m["CUDA_ERROR_SYSTEM_NOT_READY"]                                       = {"hipErrorSystemNotReady",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 802
+  // cudaErrorSystemDriverMismatch
+  m["CUDA_ERROR_SYSTEM_DRIVER_MISMATCH"]                                 = {"hipErrorSystemDriverMismatch",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 803
+  // cudaErrorCompatNotSupportedOnDevice
+  m["CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE"]                         = {"hipErrorCompatNotSupportedOnDevice",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 804
+  // cudaErrorMpsConnectionFailed
+  m["CUDA_ERROR_MPS_CONNECTION_FAILED"]                                  = {"hipErrorMpsConnectionFailed",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 805
+  // cudaErrorMpsRpcFailure
+  m["CUDA_ERROR_MPS_RPC_FAILURE"]                                        = {"hipErrorMpsRpcFailed",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 806
+  // cudaErrorMpsServerNotReady
+  m["CUDA_ERROR_MPS_SERVER_NOT_READY"]                                   = {"hipErrorMpsServerNotReady",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 807
+  // cudaErrorMpsMaxClientsReached
+  m["CUDA_ERROR_MPS_MAX_CLIENTS_REACHED"]                                = {"hipErrorMpsMaxClientsReached",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 808
+  // cudaErrorMpsMaxConnectionsReached
+  m["CUDA_ERROR_MPS_MAX_CONNECTIONS_REACHED"]                            = {"hipErrorMpsMaxConnectionsReached",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 809
+  // cudaErrorMpsClientTerminated
+  m["CUDA_ERROR_MPS_CLIENT_TERMINATED"]                                  = {"hipErrorMpsClientTerminated",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 810
+  // cudaErrorCdpNotSupported
+  m["CUDA_ERROR_CDP_NOT_SUPPORTED"]                                      = {"hipErrorCdpNotUnsupported",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 811
+  // cudaErrorCdpVersionMismatch
+  m["CUDA_ERROR_CDP_VERSION_MISMATCH"]                                   = {"hipErrorCdpVersionMismatch",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 812
+  // cudaErrorStreamCaptureUnsupported
+  m["CUDA_ERROR_STREAM_CAPTURE_UNSUPPORTED"]                             = {"hipErrorStreamCaptureUnsupported",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 900
+  // cudaErrorStreamCaptureInvalidated
+  m["CUDA_ERROR_STREAM_CAPTURE_INVALIDATED"]                             = {"hipErrorStreamCaptureInvalidated",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 901
+  // cudaErrorStreamCaptureMerge
+  m["CUDA_ERROR_STREAM_CAPTURE_MERGE"]                                   = {"hipErrorStreamCaptureMerge",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 902
+  // cudaErrorStreamCaptureUnmatched
+  m["CUDA_ERROR_STREAM_CAPTURE_UNMATCHED"]                               = {"hipErrorStreamCaptureUnmatched",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 903
+  // cudaErrorStreamCaptureUnjoined
+  m["CUDA_ERROR_STREAM_CAPTURE_UNJOINED"]                                = {"hipErrorStreamCaptureUnjoined",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 904
+  // cudaErrorStreamCaptureIsolation
+  m["CUDA_ERROR_STREAM_CAPTURE_ISOLATION"]                               = {"hipErrorStreamCaptureIsolation",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 905
+  // cudaErrorStreamCaptureImplicit
+  m["CUDA_ERROR_STREAM_CAPTURE_IMPLICIT"]                                = {"hipErrorStreamCaptureImplicit",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 906
+  // cudaErrorCapturedEvent
+  m["CUDA_ERROR_CAPTURED_EVENT"]                                         = {"hipErrorCapturedEvent",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 907
+  // cudaErrorStreamCaptureWrongThread
+  m["CUDA_ERROR_STREAM_CAPTURE_WRONG_THREAD"]                            = {"hipErrorStreamCaptureWrongThread",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 908
+  // cudaErrorTimeout
+  m["CUDA_ERROR_TIMEOUT"]                                                = {"hipErrorTimeout",                                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 909
+  // cudaErrorGraphExecUpdateFailure
+  m["CUDA_ERROR_GRAPH_EXEC_UPDATE_FAILURE"]                              = {"hipErrorGraphExecUpdateFailure",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 910
+  // cudaErrorExternalDevice
+  m["CUDA_ERROR_EXTERNAL_DEVICE"]                                        = {"hipErrorExternalDevice",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 911
+  // cudaErrorInvalidClusterSize
+  m["CUDA_ERROR_INVALID_CLUSTER_SIZE"]                                   = {"hipErrorInvalidClusterSize",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 912
+  // cudaErrorFunctionNotLoaded
+  m["CUDA_ERROR_FUNCTION_NOT_LOADED"]                                    = {"hipErrorFunctionNotLoaded",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 913
+  // cudaErrorInvalidResourceType
+  m["CUDA_ERROR_INVALID_RESOURCE_TYPE"]                                  = {"hipErrorInvalidResourceType",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 914
+  // cudaErrorInvalidResourceConfiguration
+  m["CUDA_ERROR_INVALID_RESOURCE_CONFIGURATION"]                         = {"hipErrorInvalidResourceConfiguration",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 915
+  //
+  m["CUDA_ERROR_KEY_ROTATION"]                                           = {"hipErrorKeyRotation",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 916
+  // cudaErrorStreamDetached
+  m["CUDA_ERROR_STREAM_DETACHED"]                                        = {"hipErrorStreamDetached",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 917
+  // cudaErrorUnknown
+  m["CUDA_ERROR_UNKNOWN"]                                                = {"hipErrorUnknown",                                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 999
+
+  // cudaSharedMemConfig
+  m["CUsharedconfig"]                                                    = {"hipSharedMemConfig",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUsharedconfig_enum"]                                               = {"hipSharedMemConfig",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUsharedconfig enum values
+  // cudaSharedMemBankSizeDefault = 0
+  m["CU_SHARED_MEM_CONFIG_DEFAULT_BANK_SIZE"]                            = {"hipSharedMemBankSizeDefault",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x00
+  // cudaSharedMemBankSizeFourByte = 1
+  m["CU_SHARED_MEM_CONFIG_FOUR_BYTE_BANK_SIZE"]                          = {"hipSharedMemBankSizeFourByte",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaSharedMemBankSizeEightByte = 2
+  m["CU_SHARED_MEM_CONFIG_EIGHT_BYTE_BANK_SIZE"]                         = {"hipSharedMemBankSizeEightByte",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+
+  // cudaSharedCarveout
+  m["CUshared_carveout"]                                                 = {"hipSharedCarveout",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUshared_carveout_enum"]                                            = {"hipSharedCarveout",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUshared_carveout enum values
+  // cudaSharedmemCarveoutDefault
+  m["CU_SHAREDMEM_CARVEOUT_DEFAULT"]                                     = {"hipSharedmemCarveoutDefault",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // -1
+  // cudaSharedmemCarveoutMaxShared
+  m["CU_SHAREDMEM_CARVEOUT_MAX_SHARED"]                                  = {"hipSharedmemCarveoutMaxShared",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 100
+  // cudaSharedmemCarveoutMaxShared
+  m["CU_SHAREDMEM_CARVEOUT_MAX_L1"]                                      = {"hipSharedmemCarveoutMaxL1",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0
+
+  // no analogue
+  m["CUstream_flags"]                                                    = {"hipStreamFlags",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUstream_flags_enum"]                                               = {"hipStreamFlags",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUstream_flags enum values
+  // cudaStreamDefault = 0x00
+  m["CU_STREAM_DEFAULT"]                                                 = {"hipStreamDefault",                                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  // cudaStreamNonBlocking = 0x01
+  m["CU_STREAM_NON_BLOCKING"]                                            = {"hipStreamNonBlocking",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+
+  // no analogue
+  m["CUstreamBatchMemOpType"]                                            = {"hipStreamBatchMemOpType",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUstreamBatchMemOpType_enum"]                                       = {"hipStreamBatchMemOpType",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUstreamBatchMemOpType enum values
+  m["CU_STREAM_MEM_OP_WAIT_VALUE_32"]                                    = {"hipStreamMemOpWaitValue32",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  m["CU_STREAM_MEM_OP_WRITE_VALUE_32"]                                   = {"hipStreamMemOpWriteValue32",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  m["CU_STREAM_MEM_OP_FLUSH_REMOTE_WRITES"]                              = {"hipStreamMemOpFlushRemoteWrites",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  m["CU_STREAM_MEM_OP_WAIT_VALUE_64"]                                    = {"hipStreamMemOpWaitValue64",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+  m["CU_STREAM_MEM_OP_WRITE_VALUE_64"]                                   = {"hipStreamMemOpWriteValue64",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 5
+  m["CU_STREAM_MEM_OP_BARRIER"]                                          = {"hipStreamMemOpBarrier",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 6
+  m["CU_STREAM_MEM_OP_ATOMIC_REDUCTION"]                                 = {"hipStreamMemOpAtomicReduction",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 8
+
+  // cudaStreamCaptureStatus
+  m["CUstreamCaptureStatus"]                                             = {"hipStreamCaptureStatus",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUstreamCaptureStatus_enum"]                                        = {"hipStreamCaptureStatus",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUstreamCaptureStatus enum values
+  // cudaStreamCaptureStatusNone
+  m["CU_STREAM_CAPTURE_STATUS_NONE"]                                     = {"hipStreamCaptureStatusNone",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaStreamCaptureStatusActive
+  m["CU_STREAM_CAPTURE_STATUS_ACTIVE"]                                   = {"hipStreamCaptureStatusActive",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaStreamCaptureStatusInvalidated
+  m["CU_STREAM_CAPTURE_STATUS_INVALIDATED"]                              = {"hipStreamCaptureStatusInvalidated",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+
+  // cudaStreamCaptureMode
+  m["CUstreamCaptureMode"]                                               = {"hipStreamCaptureMode",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUstreamCaptureMode_enum"]                                          = {"hipStreamCaptureMode",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUstreamCaptureMode enum values
+  // cudaStreamCaptureModeGlobal
+  m["CU_STREAM_CAPTURE_MODE_GLOBAL"]                                     = {"hipStreamCaptureModeGlobal",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaStreamCaptureModeThreadLocal
+  m["CU_STREAM_CAPTURE_MODE_THREAD_LOCAL"]                               = {"hipStreamCaptureModeThreadLocal",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaStreamCaptureModeRelaxed
+  m["CU_STREAM_CAPTURE_MODE_RELAXED"]                                    = {"hipStreamCaptureModeRelaxed",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+
+  // no analogue
+  m["CUstreamWaitValue_flags"]                                           = {"hipStreamWaitValueFlags",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUstreamWaitValue_flags_enum"]                                      = {"hipStreamWaitValueFlags",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUstreamWaitValue_flags enum values
+  m["CU_STREAM_WAIT_VALUE_GEQ"]                                          = {"hipStreamWaitValueGte",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  m["CU_STREAM_WAIT_VALUE_EQ"]                                           = {"hipStreamWaitValueEq",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+  m["CU_STREAM_WAIT_VALUE_AND"]                                          = {"hipStreamWaitValueAnd",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x2
+  m["CU_STREAM_WAIT_VALUE_NOR"]                                          = {"hipStreamWaitValueNor",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x3
+  m["CU_STREAM_WAIT_VALUE_FLUSH"]                                        = {"hipStreamWaitValueFlush",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 1<<30
+
+  // no analogue
+  m["CUstreamWriteValue_flags"]                                          = {"hipStreamWriteValueFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUstreamWriteValue_flags_enum"]                                     = {"hipStreamWriteValueFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUstreamWriteValue_flags enum values
+  m["CU_STREAM_WRITE_VALUE_DEFAULT"]                                     = {"hipStreamWriteValueDefault",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x0
+  m["CU_STREAM_WRITE_VALUE_NO_MEMORY_BARRIER"]                           = {"hipStreamWriteValueNoMemoryBarrier",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1
+
+  // cudaGLDeviceList
+  m["CUGLDeviceList"]                                                    = {"hipGLDeviceList",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUGLDeviceList_enum"]                                               = {"hipGLDeviceList",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUGLDeviceList enum values
+  // cudaGLDeviceListAll = 1
+  m["CU_GL_DEVICE_LIST_ALL"]                                             = {"hipGLDeviceListAll",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaGLDeviceListCurrentFrame = 2
+  m["CU_GL_DEVICE_LIST_CURRENT_FRAME"]                                   = {"hipGLDeviceListCurrentFrame",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaGLDeviceListNextFrame = 3
+  m["CU_GL_DEVICE_LIST_NEXT_FRAME"]                                      = {"hipGLDeviceListNextFrame",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x03
+
+  // cudaGLMapFlags
+  m["CUGLmap_flags"]                                                     = {"hipGLMapFlags",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUGLmap_flags_enum"]                                                = {"hipGLMapFlags",                                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUGLmap_flags enum values
+  // cudaGLMapFlagsNone = 0
+  m["CU_GL_MAP_RESOURCE_FLAGS_NONE"]                                     = {"hipGLMapFlagsNone",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  // cudaGLMapFlagsReadOnly = 1
+  m["CU_GL_MAP_RESOURCE_FLAGS_READ_ONLY"]                                = {"hipGLMapFlagsReadOnly",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaGLMapFlagsWriteDiscard = 2
+  m["CU_GL_MAP_RESOURCE_FLAGS_WRITE_DISCARD"]                            = {"hipGLMapFlagsWriteDiscard",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+
+  // cudaD3D9DeviceList
+  m["CUd3d9DeviceList"]                                                  = {"hipD3D9DeviceList",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUd3d9DeviceList_enum"]                                             = {"hipD3D9DeviceList",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUd3d9DeviceList enum values
+  // cudaD3D9DeviceListAll = 1
+  m["CU_D3D9_DEVICE_LIST_ALL"]                                           = {"HIP_D3D9_DEVICE_LIST_ALL",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaD3D9DeviceListCurrentFrame = 2
+  m["CU_D3D9_DEVICE_LIST_CURRENT_FRAME"]                                 = {"HIP_D3D9_DEVICE_LIST_CURRENT_FRAME",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+  // cudaD3D9DeviceListNextFrame = 3
+  m["CU_D3D9_DEVICE_LIST_NEXT_FRAME"]                                    = {"HIP_D3D9_DEVICE_LIST_NEXT_FRAME",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x03
+
+  // cudaD3D9MapFlags
+  // NOTE: Deprecated
+  m["CUd3d9map_flags"]                                                   = {"hipD3D9MapFlags",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUd3d9map_flags_enum"]                                              = {"hipD3D9MapFlags",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUd3d9map_flags enum values
+  // cudaD3D9MapFlagsNone = 0
+  m["CU_D3D9_MAPRESOURCE_FLAGS_NONE"]                                    = {"HIP_D3D9_MAPRESOURCE_FLAGS_NONE",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  // cudaD3D9MapFlagsReadOnly = 1
+  m["CU_D3D9_MAPRESOURCE_FLAGS_READONLY"]                                = {"HIP_D3D9_MAPRESOURCE_FLAGS_READONLY",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaD3D9MapFlagsWriteDiscard = 2
+  m["CU_D3D9_MAPRESOURCE_FLAGS_WRITEDISCARD"]                            = {"HIP_D3D9_MAPRESOURCE_FLAGS_WRITEDISCARD",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+
+  // cudaD3D9RegisterFlags
+  m["CUd3d9register_flags"]                                              = {"hipD3D9RegisterFlags",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUd3d9register_flags_enum"]                                         = {"hipD3D9RegisterFlags",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUd3d9register_flags enum values
+  // cudaD3D9RegisterFlagsNone = 0
+  m["CU_D3D9_REGISTER_FLAGS_NONE"]                                       = {"HIP_D3D9_REGISTER_FLAGS_NONE",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  // cudaD3D9RegisterFlagsArray = 1
+  m["CU_D3D9_REGISTER_FLAGS_ARRAY"]                                      = {"HIP_D3D9_REGISTER_FLAGS_ARRAY",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+
+  // cudaD3D10DeviceList
+  m["CUd3d10DeviceList"]                                                 = {"hipd3d10DeviceList",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUd3d10DeviceList_enum"]                                            = {"hipD3D10DeviceList",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUd3d10DeviceList enum values
+  // cudaD3D10DeviceListAll = 1
+  m["CU_D3D10_DEVICE_LIST_ALL"]                                          = {"HIP_D3D10_DEVICE_LIST_ALL",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaD3D10DeviceListCurrentFrame = 2
+  m["CU_D3D10_DEVICE_LIST_CURRENT_FRAME"]                                = {"HIP_D3D10_DEVICE_LIST_CURRENT_FRAME",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+  // cudaD3D10DeviceListNextFrame = 3
+  m["CU_D3D10_DEVICE_LIST_NEXT_FRAME"]                                   = {"HIP_D3D10_DEVICE_LIST_NEXT_FRAME",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x03
+
+  // cudaD3D10MapFlags
+  m["CUd3d10map_flags"]                                                  = {"hipD3D10MapFlags",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUd3d10map_flags_enum"]                                             = {"hipD3D10MapFlags",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUd3d10map_flags enum values
+  // cudaD3D10MapFlagsNone = 0
+  m["CU_D3D10_MAPRESOURCE_FLAGS_NONE"]                                   = {"HIP_D3D10_MAPRESOURCE_FLAGS_NONE",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  // cudaD3D10MapFlagsReadOnly = 1
+  m["CU_D3D10_MAPRESOURCE_FLAGS_READONLY"]                               = {"HIP_D3D10_MAPRESOURCE_FLAGS_READONLY",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaD3D10MapFlagsWriteDiscard = 2
+  m["CU_D3D10_MAPRESOURCE_FLAGS_WRITEDISCARD"]                           = {"HIP_D3D10_MAPRESOURCE_FLAGS_WRITEDISCARD",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+
+  // cudaD3D10RegisterFlags
+  m["CUd3d10register_flags"]                                             = {"hipD3D10RegisterFlags",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUd3d10register_flags_enum"]                                        = {"hipD3D10RegisterFlags",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUd3d10register_flags enum values
+  // cudaD3D10RegisterFlagsNone = 0
+  m["CU_D3D10_REGISTER_FLAGS_NONE"]                                      = {"HIP_D3D10_REGISTER_FLAGS_NONE",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  // cudaD3D10RegisterFlagsArray = 1
+  m["CU_D3D10_REGISTER_FLAGS_ARRAY"]                                     = {"HIP_D3D10_REGISTER_FLAGS_ARRAY",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+
+  // cudaD3D11DeviceList
+  m["CUd3d11DeviceList"]                                                 = {"hipd3d11DeviceList",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUd3d11DeviceList_enum"]                                            = {"hipD3D11DeviceList",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUd3d11DeviceList enum values
+  // cudaD3D11DeviceListAll = 1
+  m["CU_D3D11_DEVICE_LIST_ALL"]                                          = {"HIP_D3D11_DEVICE_LIST_ALL",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaD3D11DeviceListCurrentFrame = 2
+  m["CU_D3D11_DEVICE_LIST_CURRENT_FRAME"]                                = {"HIP_D3D11_DEVICE_LIST_CURRENT_FRAME",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+  // cudaD3D11DeviceListNextFrame = 3
+  m["CU_D3D11_DEVICE_LIST_NEXT_FRAME"]                                   = {"HIP_D3D11_DEVICE_LIST_NEXT_FRAME",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x03
+
+  // cudaMemAllocationHandleType
+  m["CUmemAllocationHandleType"]                                         = {"hipMemAllocationHandleType",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemAllocationHandleType_enum"]                                    = {"hipMemAllocationHandleType",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemAllocationHandleType enum values
+  // cudaMemHandleTypeNone
+  m["CU_MEM_HANDLE_TYPE_NONE"]                                           = {"hipMemHandleTypeNone",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  // cudaMemHandleTypePosixFileDescriptor
+  m["CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR"]                          = {"hipMemHandleTypePosixFileDescriptor",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+  // cudaMemHandleTypeWin32
+  m["CU_MEM_HANDLE_TYPE_WIN32"]                                          = {"hipMemHandleTypeWin32",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x2
+  // cudaMemHandleTypeWin32Kmt
+  m["CU_MEM_HANDLE_TYPE_WIN32_KMT"]                                      = {"hipMemHandleTypeWin32Kmt",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x4
+  // cudaMemHandleTypeFabric
+  m["CU_MEM_HANDLE_TYPE_FABRIC"]                                         = {"hipMemHandleTypeFabric",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_EXPERIMENTAL}; // 0x8
+  // no analogue
+  m["CU_MEM_HANDLE_TYPE_MAX"]                                            = {"hipMemHandleTypeMax",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x7FFFFFFF
+
+  // cudaMemAccessFlags
+  m["CUmemAccess_flags"]                                                 = {"hipMemAccessFlags",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemAccess_flags_enum"]                                            = {"hipMemAccessFlags",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemAccess_flags enum values
+  // cudaMemAccessFlagsProtNone
+  m["CU_MEM_ACCESS_FLAGS_PROT_NONE"]                                     = {"hipMemAccessFlagsProtNone",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  // cudaMemAccessFlagsProtRead
+  m["CU_MEM_ACCESS_FLAGS_PROT_READ"]                                     = {"hipMemAccessFlagsProtRead",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+  // cudaMemAccessFlagsProtReadWrite
+  m["CU_MEM_ACCESS_FLAGS_PROT_READWRITE"]                                = {"hipMemAccessFlagsProtReadWrite",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x3
+  // no analogue
+  m["CU_MEM_ACCESS_FLAGS_PROT_MAX"]                                      = {"hipMemAccessFlagsProtMax",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x7FFFFFFF
+
+  // cudaMemLocationType
+  m["CUmemLocationType"]                                                 = {"hipMemLocationType",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemLocationType_enum"]                                            = {"hipMemLocationType",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemLocationType enum values
+  // cudaMemLocationTypeInvalid
+  m["CU_MEM_LOCATION_TYPE_INVALID"]                                      = {"hipMemLocationTypeInvalid",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  // cudaMemLocationTypeNone
+  m["CU_MEM_LOCATION_TYPE_NONE"]                                         = {"hipMemLocationTypeNone",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  // cudaMemLocationTypeDevice
+  m["CU_MEM_LOCATION_TYPE_DEVICE"]                                       = {"hipMemLocationTypeDevice",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+  // cudaMemLocationTypeHost
+  m["CU_MEM_LOCATION_TYPE_HOST"]                                         = {"hipMemLocationTypeHost",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x2
+  // cudaMemLocationTypeHostNuma
+  m["CU_MEM_LOCATION_TYPE_HOST_NUMA"]                                    = {"hipMemLocationTypeHostNuma",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x3
+  // cudaMemLocationTypeHostNumaCurrent
+  m["CU_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT"]                            = {"hipMemLocationTypeHostNumaCurrent",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x4
+  // no analogue
+  m["CU_MEM_LOCATION_TYPE_MAX"]                                          = {"hipMemLocationTypeMax",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x7FFFFFFF
+
+  // cudaMemAllocationType
+  m["CUmemAllocationType"]                                               = {"hipMemAllocationType",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemAllocationType_enum"]                                          = {"hipMemAllocationType",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemAllocationType enum values
+  // cudaMemAllocationTypeInvalid
+  m["CU_MEM_ALLOCATION_TYPE_INVALID"]                                    = {"hipMemAllocationTypeInvalid",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  // cudaMemAllocationTypePinned
+  m["CU_MEM_ALLOCATION_TYPE_PINNED"]                                     = {"hipMemAllocationTypePinned",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+  // cudaMemAllocationTypeManaged
+  m["CU_MEM_ALLOCATION_TYPE_MANAGED"]                                    = {"hipMemAllocationTypeManaged",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x2
+  // cudaMemAllocationTypeMax
+  m["CU_MEM_ALLOCATION_TYPE_MAX"]                                        = {"hipMemAllocationTypeMax",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x7FFFFFFF
+
+  // no analogue
+  m["CUmemAllocationGranularity_flags"]                                  = {"hipMemAllocationGranularity_flags",                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemAllocationGranularity_flags_enum"]                             = {"hipMemAllocationGranularity_flags",                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemAllocationGranularity_flags enum values
+  m["CU_MEM_ALLOC_GRANULARITY_MINIMUM"]                                  = {"hipMemAllocationGranularityMinimum",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  m["CU_MEM_ALLOC_GRANULARITY_RECOMMENDED"]                              = {"hipMemAllocationGranularityRecommended",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+
+  // cudaAccessProperty
+  m["CUaccessProperty"]                                                  = {"hipAccessProperty",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUaccessProperty_enum"]                                             = {"hipAccessProperty",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUaccessProperty_enum enum values
+  // cudaAccessPropertyNormal
+  m["CU_ACCESS_PROPERTY_NORMAL"]                                         = {"hipAccessPropertyNormal",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaAccessPropertyStreaming
+  m["CU_ACCESS_PROPERTY_STREAMING"]                                      = {"hipAccessPropertyStreaming",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaAccessPropertyPersisting
+  m["CU_ACCESS_PROPERTY_PERSISTING"]                                     = {"hipAccessPropertyPersisting",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+
+  // cudaSynchronizationPolicy
+  m["CUsynchronizationPolicy"]                                           = {"hipSynchronizationPolicy",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUsynchronizationPolicy_enum"]                                      = {"hipSynchronizationPolicy",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUsynchronizationPolicy_enum enum values
+  // cudaSyncPolicyAuto
+  m["CU_SYNC_POLICY_AUTO"]                                               = {"hipSyncPolicyAuto",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaSyncPolicySpin
+  m["CU_SYNC_POLICY_SPIN"]                                               = {"hipSyncPolicySpin",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+  // cudaSyncPolicyYield
+  m["CU_SYNC_POLICY_YIELD"]                                              = {"hipSyncPolicyYield",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 3
+  // cudaSyncPolicyBlockingSync
+  m["CU_SYNC_POLICY_BLOCKING_SYNC"]                                      = {"hipSyncPolicyBlockingSync",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 4
+
+  // cudaKernelNodeAttrID
+  m["CUkernelNodeAttrID"]                                                = {"hipKernelNodeAttrID",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUkernelNodeAttrID_enum"]                                           = {"hipKernelNodeAttrID",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, CUDA_REMOVED};
+  // CUkernelNodeAttrID_enum enum values
+  // cudaKernelNodeAttributeAccessPolicyWindow
+  m["CU_KERNEL_NODE_ATTRIBUTE_ACCESS_POLICY_WINDOW"]                     = {"hipKernelNodeAttributeAccessPolicyWindow",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaKernelNodeAttributeCooperative
+  m["CU_KERNEL_NODE_ATTRIBUTE_COOPERATIVE"]                              = {"hipKernelNodeAttributeCooperative",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaKernelNodeAttributePriority
+  m["CU_KERNEL_NODE_ATTRIBUTE_PRIORITY"]                                 = {"hipKernelNodeAttributePriority",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaKernelNodeAttributeMemSyncDomainMap
+  m["CU_KERNEL_NODE_ATTRIBUTE_MEM_SYNC_DOMAIN_MAP"]                      = {"hipKernelNodeAttributeMemSyncDomainMap",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaKernelNodeAttributeMemSyncDomain
+  m["CU_KERNEL_NODE_ATTRIBUTE_MEM_SYNC_DOMAIN"]                          = {"hipKernelNodeAttributeMemSyncDomain",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_KERNEL_NODE_ATTRIBUTE_PREFERRED_CLUSTER_DIMENSION"]              = {"hipKernelNodeAttributePrefferedClusterDimension",            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaKernelNodeAttributeDeviceUpdatableKernelNode
+  m["CU_KERNEL_NODE_ATTRIBUTE_DEVICE_UPDATABLE_KERNEL_NODE"]             = {"hipKernelNodeAttributeDeviceUpdatableKernelMode",            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaKernelNodeAttributePreferredSharedMemoryCarveout
+  m["CU_KERNEL_NODE_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT"]         = {"hipKernelNodeAttributePreferredSharedMemoryCarveout",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaStreamAttrID
+  m["CUstreamAttrID"]                                                    = {"hipLaunchAttributeID",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUstreamAttrID_enum"]                                               = {"hipLaunchAttributeID",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, CUDA_REMOVED};
+  // CUstreamAttrID_enum enum values
+  // cudaStreamAttributeAccessPolicyWindow
+  m["CU_STREAM_ATTRIBUTE_ACCESS_POLICY_WINDOW"]                          = {"hipLaunchAttributeAccessPolicyWindow",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaStreamAttributeSynchronizationPolicy
+  m["CU_STREAM_ATTRIBUTE_SYNCHRONIZATION_POLICY"]                        = {"hipLaunchAttributeSynchronizationPolicy",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaStreamAttributePriority
+  m["CU_STREAM_ATTRIBUTE_PRIORITY"]                                      = {"hipLaunchAttributePriority",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaStreamAttributeMemSyncDomainMap
+  m["CU_STREAM_ATTRIBUTE_MEM_SYNC_DOMAIN_MAP"]                           = {"hipLaunchAttributeMemSyncDomainMap",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaStreamAttributeMemSyncDomain
+  m["CU_STREAM_ATTRIBUTE_MEM_SYNC_DOMAIN"]                               = {"hipLaunchAttributeMemSyncDomain",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUevent_record_flags"]                                              = {"hipEvent_record_flags",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUevent_record_flags_enum"]                                         = {"hipEvent_record_flags",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUevent_record_flags enum values
+  // cudaEventRecordDefault
+  m["CU_EVENT_RECORD_DEFAULT"]                                           = {"hipEventRecordDefault",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  // cudaEventRecordExternal
+  m["CU_EVENT_RECORD_EXTERNAL"]                                          = {"hipEventRecordExternal",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+
+  // no analogue
+  m["CUevent_wait_flags"]                                                = {"hipEvent_wait_flags",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUevent_wait_flags_enum"]                                           = {"hipEvent_wait_flags",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUevent_wait_flags enum values
+  // cudaEventWaitDefault
+  m["CU_EVENT_WAIT_DEFAULT"]                                             = {"hipEventWaitDefault",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x0
+  // cudaEventWaitExternal
+  m["CU_EVENT_WAIT_EXTERNAL"]                                            = {"hipEventWaitExternal",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1
+
+  // no analogue
+  m["CUDA_POINTER_ATTRIBUTE_ACCESS_FLAGS"]                               = {"HIP_POINTER_ATTRIBUTE_ACCESS_FLAGS",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUDA_POINTER_ATTRIBUTE_ACCESS_FLAGS_enum"]                          = {"HIP_POINTER_ATTRIBUTE_ACCESS_FLAGS",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUDA_POINTER_ATTRIBUTE_ACCESS_FLAGS enum values
+  m["CU_POINTER_ATTRIBUTE_ACCESS_FLAG_NONE"]                             = {"HIP_POINTER_ATTRIBUTE_ACCESS_FLAG_NONE",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x0
+  m["CU_POINTER_ATTRIBUTE_ACCESS_FLAG_READ"]                             = {"HIP_POINTER_ATTRIBUTE_ACCESS_FLAG_READ",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1
+  m["CU_POINTER_ATTRIBUTE_ACCESS_FLAG_READWRITE"]                        = {"HIP_POINTER_ATTRIBUTE_ACCESS_FLAG_READWRITE",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x3
+
+  // no analogue
+  m["CUarraySparseSubresourceType"]                                      = {"hipArraySparseSubresourceType",                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUarraySparseSubresourceType_enum"]                                 = {"hipArraySparseSubresourceType",                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUarraySparseSubresourceType enum values
+  m["CU_ARRAY_SPARSE_SUBRESOURCE_TYPE_SPARSE_LEVEL"]                     = {"hipArraySparseSubresourceTypeSparseLevel",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  m["CU_ARRAY_SPARSE_SUBRESOURCE_TYPE_MIPTAIL"]                          = {"hipArraySparseSubresourceTypeMiptail",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+
+  // no analogue
+  m["CUmemOperationType"]                                                = {"hipMemOperationType",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemOperationType_enum"]                                           = {"hipMemOperationType",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemOperationType enum values
+  m["CU_MEM_OPERATION_TYPE_MAP"]                                         = {"hipMemOperationTypeMap",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  m["CU_MEM_OPERATION_TYPE_UNMAP"]                                       = {"hipMemOperationTypeUnmap",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 2
+
+  // no analogue
+  m["CUmemHandleType"]                                                   = {"hipMemHandleType",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemHandleType_enum"]                                              = {"hipMemHandleType",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemHandleType enum values
+  m["CU_MEM_HANDLE_TYPE_GENERIC"]                                        = {"hipMemHandleTypeGeneric",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+
+  // cudaMemPoolAttr
+  m["CUmemPool_attribute"]                                               = {"hipMemPoolAttr",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemPool_attribute_enum"]                                          = {"hipMemPoolAttr",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemPool_attribute enum values
+  // cudaMemPoolReuseFollowEventDependencies
+  m["CU_MEMPOOL_ATTR_REUSE_FOLLOW_EVENT_DEPENDENCIES"]                   = {"hipMemPoolReuseFollowEventDependencies",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaMemPoolReuseAllowOpportunistic
+  m["CU_MEMPOOL_ATTR_REUSE_ALLOW_OPPORTUNISTIC"]                         = {"hipMemPoolReuseAllowOpportunistic",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemPoolReuseAllowInternalDependencies
+  m["CU_MEMPOOL_ATTR_REUSE_ALLOW_INTERNAL_DEPENDENCIES"]                 = {"hipMemPoolReuseAllowInternalDependencies",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemPoolAttrReleaseThreshold
+  m["CU_MEMPOOL_ATTR_RELEASE_THRESHOLD"]                                 = {"hipMemPoolAttrReleaseThreshold",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemPoolAttrReservedMemCurrent
+  m["CU_MEMPOOL_ATTR_RESERVED_MEM_CURRENT"]                              = {"hipMemPoolAttrReservedMemCurrent",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemPoolAttrReservedMemHigh
+  m["CU_MEMPOOL_ATTR_RESERVED_MEM_HIGH"]                                 = {"hipMemPoolAttrReservedMemHigh",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemPoolAttrUsedMemCurrent
+  m["CU_MEMPOOL_ATTR_USED_MEM_CURRENT"]                                  = {"hipMemPoolAttrUsedMemCurrent",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemPoolAttrUsedMemHigh
+  m["CU_MEMPOOL_ATTR_USED_MEM_HIGH"]                                     = {"hipMemPoolAttrUsedMemHigh",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaStreamUpdateCaptureDependenciesFlags
+  m["CUstreamUpdateCaptureDependencies_flags"]                           = {"hipStreamUpdateCaptureDependenciesFlags",                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUstreamUpdateCaptureDependencies_flags_enum"]                      = {"hipStreamUpdateCaptureDependenciesFlags",                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUstreamUpdateCaptureDependencies_flags enum values
+  // cudaStreamAddCaptureDependencies
+  m["CU_STREAM_ADD_CAPTURE_DEPENDENCIES"]                                = {"hipStreamAddCaptureDependencies",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x0
+  // cudaStreamSetCaptureDependencies
+  m["CU_STREAM_SET_CAPTURE_DEPENDENCIES"]                                = {"hipStreamSetCaptureDependencies",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+
+  // cudaGetDriverEntryPointFlags
+  m["CUdriverProcAddress_flags"]                                         = {"hipDriverProcAddress",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUdriverProcAddress_flags_enum"]                                    = {"hipDriverProcAddress",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUdriverProcAddress_flags enum values
+  // cudaEnableDefault
+  m["CU_GET_PROC_ADDRESS_DEFAULT"]                                       = {"hipEnableDefault",                                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaEnableLegacyStream
+  m["CU_GET_PROC_ADDRESS_LEGACY_STREAM"]                                 = {"hipEnableLegacyStream",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1 << 0
+  // cudaEnablePerThreadDefaultStream
+  m["CU_GET_PROC_ADDRESS_PER_THREAD_DEFAULT_STREAM"]                     = {"hipEnablePerThreadDefaultStream",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1 << 1
+
+  // cudaFlushGPUDirectRDMAWritesOptions
+  m["CUflushGPUDirectRDMAWritesOptions"]                                 = {"hipFlushGPUDirectRDMAWritesOptions",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUflushGPUDirectRDMAWritesOptions_enum"]                            = {"hipFlushGPUDirectRDMAWritesOptions",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUflushGPUDirectRDMAWritesOptions enum values
+  // cudaFlushGPUDirectRDMAWritesOptionHost
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_OPTION_HOST"]                       = {"hipFlushGPUDirectRDMAWritesOptionHost",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<0
+  // cudaFlushGPUDirectRDMAWritesOptionMemOps
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_OPTION_MEMOPS"]                     = {"hipFlushGPUDirectRDMAWritesOptionMemOps",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<1
+
+  // cudaGPUDirectRDMAWritesOrdering
+  m["CUGPUDirectRDMAWritesOrdering"]                                     = {"hipGPUDirectRDMAWritesOrdering",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUGPUDirectRDMAWritesOrdering_enum"]                                = {"hipGPUDirectRDMAWritesOrdering",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUGPUDirectRDMAWritesOrdering enum values
+  // cudaGPUDirectRDMAWritesOrderingNone
+  m["CU_GPU_DIRECT_RDMA_WRITES_ORDERING_NONE"]                           = {"hipGPUDirectRDMAWritesOrderingNone",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaGPUDirectRDMAWritesOrderingOwner
+  m["CU_GPU_DIRECT_RDMA_WRITES_ORDERING_OWNER"]                          = {"hipGPUDirectRDMAWritesOrderingOwner",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 100
+  // cudaGPUDirectRDMAWritesOrderingAllDevices
+  m["CU_GPU_DIRECT_RDMA_WRITES_ORDERING_ALL_DEVICES"]                    = {"hipGPUDirectRDMAWritesOrderingAllDevices",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 200
+
+  // cudaFlushGPUDirectRDMAWritesScope
+  m["CUflushGPUDirectRDMAWritesScope"]                                   = {"hipFlushGPUDirectRDMAWritesScope",                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUflushGPUDirectRDMAWritesScope_enum"]                              = {"hipFlushGPUDirectRDMAWritesScope",                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUflushGPUDirectRDMAWritesScope enum values
+  // cudaFlushGPUDirectRDMAWritesToOwner
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_TO_OWNER"]                          = {"hipFlushGPUDirectRDMAWritesToOwner",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 100
+  // cudaFlushGPUDirectRDMAWritesToAllDevices
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_TO_ALL_DEVICES"]                    = {"hipFlushGPUDirectRDMAWritesToAllDevices",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 200
+
+  // cudaFlushGPUDirectRDMAWritesTarget
+  m["CUflushGPUDirectRDMAWritesTarget"]                                  = {"hipFlushGPUDirectRDMAWritesTarget",                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUflushGPUDirectRDMAWritesTarget_enum"]                             = {"hipFlushGPUDirectRDMAWritesTarget",                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUflushGPUDirectRDMAWritesTarget enum values
+  // cudaFlushGPUDirectRDMAWritesTargetCurrentDevice
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_TARGET_CURRENT_CTX"]                = {"hipFlushGPUDirectRDMAWritesTargetCurrentDevice",             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaGraphDebugDotFlags
+  m["CUgraphDebugDot_flags"]                                             = {"hipGraphDebugDotFlags",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUgraphDebugDot_flags_enum"]                                        = {"hipGraphDebugDotFlags",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUgraphDebugDot_flags enum values
+  // cudaGraphDebugDotFlagsVerbose
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_VERBOSE"]                                  = {"hipGraphDebugDotFlagsVerbose",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<0
+  // no analogue
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_RUNTIME_TYPES"]                            = {"hipGraphDebugDotFlagsRuntimeTypes",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<1
+  // cudaGraphDebugDotFlagsKernelNodeParams
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_KERNEL_NODE_PARAMS"]                       = {"hipGraphDebugDotFlagsKernelNodeParams",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<2
+  // cudaGraphDebugDotFlagsMemcpyNodeParams
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_MEMCPY_NODE_PARAMS"]                       = {"hipGraphDebugDotFlagsMemcpyNodeParams",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<3
+  // cudaGraphDebugDotFlagsMemsetNodeParams
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_MEMSET_NODE_PARAMS"]                       = {"hipGraphDebugDotFlagsMemsetNodeParams",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<4
+  // cudaGraphDebugDotFlagsHostNodeParams
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_HOST_NODE_PARAMS"]                         = {"hipGraphDebugDotFlagsHostNodeParams",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<5
+  // cudaGraphDebugDotFlagsEventNodeParams
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_EVENT_NODE_PARAMS"]                        = {"hipGraphDebugDotFlagsEventNodeParams",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<6
+  // cudaGraphDebugDotFlagsExtSemasSignalNodeParams
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_EXT_SEMAS_SIGNAL_NODE_PARAMS"]             = {"hipGraphDebugDotFlagsExtSemasSignalNodeParams",              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<7
+  // cudaGraphDebugDotFlagsExtSemasWaitNodeParams
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_EXT_SEMAS_WAIT_NODE_PARAMS"]               = {"hipGraphDebugDotFlagsExtSemasWaitNodeParams",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<8
+  // cudaGraphDebugDotFlagsKernelNodeAttributes
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_KERNEL_NODE_ATTRIBUTES"]                   = {"hipGraphDebugDotFlagsKernelNodeAttributes",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<9
+  // cudaGraphDebugDotFlagsHandles
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_HANDLES"]                                  = {"hipGraphDebugDotFlagsHandles",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1<<10
+  //
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_MEM_ALLOC_NODE_PARAMS"]                    = {"hipGraphDebugDotFlagsMemAllocNodeParams",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 1<<11
+  //
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_MEM_FREE_NODE_PARAMS"]                     = {"hipGraphDebugDotFlagsMemFreeNodeParams",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 1<<12
+  //
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_BATCH_MEM_OP_NODE_PARAMS"]                 = {"hipGraphDebugDotFlagsBatchMemOpNodeParams",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 1<<13
+  //
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_EXTRA_TOPO_INFO"]                          = {"hipGraphDebugDotFlagsExtraTopoInfo",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 1<<14
+  // cudaGraphDebugDotFlagsConditionalNodeParams
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_CONDITIONAL_NODE_PARAMS"]                  = {"hipGraphDebugDotFlagsConditionalNodeParams",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 1<<15
+
+  // cudaUserObjectFlags
+  m["CUuserObject_flags"]                                                = {"hipUserObjectFlags",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUuserObject_flags_enum"]                                           = {"hipUserObjectFlags",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUuserObject_flags enum values
+  // cudaUserObjectNoDestructorSync
+  m["CU_USER_OBJECT_NO_DESTRUCTOR_SYNC"]                                 = {"hipUserObjectNoDestructorSync",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+
+  // cudaUserObjectRetainFlags
+  m["CUuserObjectRetain_flags"]                                          = {"hipUserObjectRetainFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUuserObjectRetain_flags_enum"]                                     = {"hipUserObjectRetainFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUuserObjectRetain_flags enum values
+  // cudaGraphUserObjectMove
+  m["CU_GRAPH_USER_OBJECT_MOVE"]                                         = {"hipGraphUserObjectMove",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES}; // 1
+
+  // no analogue
+  m["CUexecAffinityType"]                                                = {"hipExecAffinityType",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUexecAffinityType_enum"]                                           = {"hipExecAffinityType",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUexecAffinityType enum values
+  m["CU_EXEC_AFFINITY_TYPE_SM_COUNT"]                                    = {"hipExecAffinityTypeSmCount",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0
+  m["CU_EXEC_AFFINITY_TYPE_MAX"]                                         = {"hipExecAffinityTypeMax",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; //
+
+  // cudaGraphMemAttributeType
+  m["CUgraphMem_attribute"]                                              = {"hipGraphMemAttributeType",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUgraphMem_attribute_enum"]                                         = {"hipGraphMemAttributeType",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUgraphMem_attribute enum values
+  // cudaGraphMemAttrUsedMemCurrent
+  m["CU_GRAPH_MEM_ATTR_USED_MEM_CURRENT"]                                = {"hipGraphMemAttrUsedMemCurrent",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphMemAttrUsedMemHigh
+  m["CU_GRAPH_MEM_ATTR_USED_MEM_HIGH"]                                   = {"hipGraphMemAttrUsedMemHigh",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphMemAttrReservedMemCurrent
+  m["CU_GRAPH_MEM_ATTR_RESERVED_MEM_CURRENT"]                            = {"hipGraphMemAttrReservedMemCurrent",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphMemAttrReservedMemHigh
+  m["CU_GRAPH_MEM_ATTR_RESERVED_MEM_HIGH"]                               = {"hipGraphMemAttrReservedMemHigh",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaGraphInstantiateFlags
+  m["CUgraphInstantiate_flags"]                                          = {"hipGraphInstantiateFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUgraphInstantiate_flags_enum"]                                     = {"hipGraphInstantiateFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUgraphInstantiate_flags enum values
+  // cudaGraphInstantiateFlagAutoFreeOnLaunch
+  m["CUDA_GRAPH_INSTANTIATE_FLAG_AUTO_FREE_ON_LAUNCH"]                   = {"hipGraphInstantiateFlagAutoFreeOnLaunch",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphInstantiateFlagUpload
+  m["CUDA_GRAPH_INSTANTIATE_FLAG_UPLOAD"]                                = {"hipGraphInstantiateFlagUpload",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphInstantiateFlagDeviceLaunch
+  m["CUDA_GRAPH_INSTANTIATE_FLAG_DEVICE_LAUNCH"]                         = {"hipGraphInstantiateFlagDeviceLaunch",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphInstantiateFlagUseNodePriority
+  m["CUDA_GRAPH_INSTANTIATE_FLAG_USE_NODE_PRIORITY"]                     = {"hipGraphInstantiateFlagUseNodePriority",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUstreamMemoryBarrier_flags"]                                       = {"hipGraphInstantiateFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUstreamMemoryBarrier_flags_enum"]                                  = {"hipGraphInstantiateFlags",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUstreamMemoryBarrier_flags enum values
+  m["CU_STREAM_MEMORY_BARRIER_TYPE_SYS"]                                 = {"HIP_STREAM_MEMORY_BARRIER_TYPE_SYS",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CU_STREAM_MEMORY_BARRIER_TYPE_GPU"]                                 = {"HIP_STREAM_MEMORY_BARRIER_TYPE_GPU",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUmemRangeHandleType"]                                              = {"hipMemRangeHandleType",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemRangeHandleType_enum"]                                         = {"hipMemRangeHandleType",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemRangeHandleType enum values
+  m["CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD"]                               = {"hipMemRangeHandleTypeDmaBufFd",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  m["CU_MEM_RANGE_HANDLE_TYPE_MAX"]                                      = {"hipMemRangeHandleTypeMax",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  //
+  m["CUmoduleLoadingMode"]                                               = {"hipModuleLoadingMode",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUmoduleLoadingMode_enum"]                                          = {"hipModuleLoadingMode",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUmoduleLoadingMode enum values
+  m["CU_MODULE_EAGER_LOADING"]                                           = {"HIP_MODULE_EAGER_LOADING",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CU_MODULE_LAZY_LOADING"]                                            = {"HIP_MODULE_LAZY_LOADING",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUevent_sched_flags"]                                               = {"hipEventSchedFlags",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUevent_sched_flags_enum"]                                          = {"hipEventSchedFlags",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUevent_sched_flags enum values
+  //
+  m["CU_EVENT_SCHED_AUTO"]                                               = {"HIP_EVENT_SCHED_AUTO",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_EVENT_SCHED_SPIN"]                                               = {"HIP_EVENT_SCHED_SPIN",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_EVENT_SCHED_YIELD"]                                              = {"HIP_EVENT_SCHED_YIELD",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_EVENT_SCHED_BLOCKING_SYNC"]                                      = {"HIP_EVENT_SCHED_BLOCKING_SYNC",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["cl_event_flags"]                                                    = {"hipClEventFlags",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["cl_event_flags_enum"]                                               = {"hipClEventFlags",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cl_event_flags enum values
+  //
+  m["NVCL_EVENT_SCHED_AUTO"]                                             = {"HIP_CL_EVENT_SCHED_AUTO",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["NVCL_EVENT_SCHED_SPIN"]                                             = {"HIP_CL_EVENT_SCHED_SPIN",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["NVCL_EVENT_SCHED_YIELD"]                                            = {"HIP_CL_EVENT_SCHED_YIELD",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["NVCL_EVENT_SCHED_BLOCKING_SYNC"]                                    = {"HIP_CL_EVENT_SCHED_BLOCKING_SYNC",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["cl_context_flags"]                                                  = {"hipClContextFlags",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["cl_context_flags_enum"]                                             = {"hipClContextFlags",                                          "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cl_context_flags enum values
+  //
+  m["NVCL_CTX_SCHED_AUTO"]                                               = {"HIP_CL_CTX_SCHED_AUTO",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["NVCL_CTX_SCHED_SPIN"]                                               = {"HIP_CL_CTX_SCHED_SPIN",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["NVCL_CTX_SCHED_YIELD"]                                              = {"HIP_CL_CTX_SCHED_YIELD",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["NVCL_CTX_SCHED_BLOCKING_SYNC"]                                      = {"HIP_CL_CTX_SCHED_BLOCKING_SYNC",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaClusterSchedulingPolicy
+  m["CUclusterSchedulingPolicy"]                                         = {"hipClusterSchedulingPolicy",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUclusterSchedulingPolicy_enum"]                                    = {"hipClusterSchedulingPolicy",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUclusterSchedulingPolicy enum values
+  // cudaClusterSchedulingPolicyDefault
+  m["CU_CLUSTER_SCHEDULING_POLICY_DEFAULT"]                              = {"hipClusterSchedulingPolicyDefault",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaClusterSchedulingPolicySpread
+  m["CU_CLUSTER_SCHEDULING_POLICY_SPREAD"]                               = {"hipClusterSchedulingPolicySpread",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaClusterSchedulingPolicyLoadBalancing
+  m["CU_CLUSTER_SCHEDULING_POLICY_LOAD_BALANCING"]                       = {"hipClusterSchedulingPolicyLoadBalancing",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaLaunchAttributeID
+  m["CUlaunchAttributeID"]                                               = {"hipLaunchAttributeID",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUlaunchAttributeID_enum"]                                          = {"hipLaunchAttributeID",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUlaunchAttributeID enum values
+  // cudaLaunchAttributeIgnore
+  m["CU_LAUNCH_ATTRIBUTE_IGNORE"]                                        = {"hipLaunchAttributeIgnore",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaLaunchAttributeAccessPolicyWindow
+  m["CU_LAUNCH_ATTRIBUTE_ACCESS_POLICY_WINDOW"]                          = {"hipLaunchAttributeAccessPolicyWindow",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLaunchAttributeCooperative
+  m["CU_LAUNCH_ATTRIBUTE_COOPERATIVE"]                                   = {"hipLaunchAttributeCooperative",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLaunchAttributeSynchronizationPolicy
+  m["CU_LAUNCH_ATTRIBUTE_SYNCHRONIZATION_POLICY"]                        = {"hipLaunchAttributeSynchronizationPolicy",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLaunchAttributeClusterDimension
+  m["CU_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION"]                             = {"hipLaunchAttributeClusterDimension",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaLaunchAttributeClusterSchedulingPolicyPreference
+  m["CU_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE"]          = {"hipLaunchAttributeClusterSchedulingPolicyPreference",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaLaunchAttributeProgrammaticStreamSerialization
+  m["CU_LAUNCH_ATTRIBUTE_PROGRAMMATIC_STREAM_SERIALIZATION"]             = {"hipLaunchAttributeProgrammaticStreamSerialization",          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaLaunchAttributeProgrammaticEvent
+  m["CU_LAUNCH_ATTRIBUTE_PROGRAMMATIC_EVENT"]                            = {"hipLaunchAttributeProgrammaticEvent",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaLaunchAttributePriority
+  m["CU_LAUNCH_ATTRIBUTE_PRIORITY"]                                      = {"hipLaunchAttributePriority",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLaunchAttributeMemSyncDomainMap
+  m["CU_LAUNCH_ATTRIBUTE_MEM_SYNC_DOMAIN_MAP"]                           = {"hipLaunchAttributeMemSyncDomainMap",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLaunchAttributeMemSyncDomain
+  m["CU_LAUNCH_ATTRIBUTE_MEM_SYNC_DOMAIN"]                               = {"hipLaunchAttributeMemSyncDomain",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLaunchAttributePreferredClusterDimension
+  m["CU_LAUNCH_ATTRIBUTE_PREFERRED_CLUSTER_DIMENSION"]                   = {"hipLaunchAttributePreferredClusterDimension",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaLaunchAttributeLaunchCompletionEvent
+  m["CU_LAUNCH_ATTRIBUTE_LAUNCH_COMPLETION_EVENT"]                       = {"hipLaunchAttributeLaunchCompletionEvent",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaLaunchAttributeDeviceUpdatableKernelNode
+  m["CU_LAUNCH_ATTRIBUTE_DEVICE_UPDATABLE_KERNEL_NODE"]                  = {"hipLaunchAttributeDeviceUpdatableKernelNode",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaLaunchAttributePreferredSharedMemoryCarveout
+  m["CU_LAUNCH_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT"]              = {"hipLaunchAttributePreferredSharedMemoryCarveout",            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaKernelNodeAttributeNvlinkUtilCentricScheduling
+  m["CU_LAUNCH_ATTRIBUTE_NVLINK_UTIL_CENTRIC_SCHEDULING"]                = {"hipLaunchAttributeNvlinkUtilCentricScheduling",              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // no analogue
+  m["CU_LAUNCH_ATTRIBUTE_MAX"]                                           = {"hipLaunchAttributeMax",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaGraphInstantiateResult
+  m["CUgraphInstantiateResult"]                                          = {"hipGraphInstantiateResult",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUgraphInstantiateResult_enum"]                                     = {"hipGraphInstantiateResult",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUgraphInstantiateResult enum values
+  // cudaGraphInstantiateSuccess
+  m["CUDA_GRAPH_INSTANTIATE_SUCCESS"]                                    = {"hipGraphInstantiateSuccess",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphInstantiateError
+  m["CUDA_GRAPH_INSTANTIATE_ERROR"]                                      = {"hipGraphInstantiateError",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphInstantiateInvalidStructure
+  m["CUDA_GRAPH_INSTANTIATE_INVALID_STRUCTURE"]                          = {"hipGraphInstantiateInvalidStructure",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphInstantiateNodeOperationNotSupported
+  m["CUDA_GRAPH_INSTANTIATE_NODE_OPERATION_NOT_SUPPORTED"]               = {"hipGraphInstantiateNodeOperationNotSupported",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphInstantiateMultipleDevicesNotSupported
+  m["CUDA_GRAPH_INSTANTIATE_MULTIPLE_CTXS_NOT_SUPPORTED"]                = {"hipGraphInstantiateMultipleDevicesNotSupported",             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphInstantiateConditionalHandleUnused
+  m["CUDA_GRAPH_INSTANTIATE_CONDITIONAL_HANDLE_UNUSED"]                  = {"hipGraphInstantiateConditionalHandleUnused",                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaLaunchMemSyncDomain
+  m["CUlaunchMemSyncDomain"]                                             = {"hipLaunchMemSyncDomain",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUlaunchMemSyncDomain_enum"]                                        = {"hipLaunchMemSyncDomain",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUlaunchMemSyncDomain enum values
+  // cudaLaunchMemSyncDomainDefault
+  m["CU_LAUNCH_MEM_SYNC_DOMAIN_DEFAULT"]                                 = {"hipLaunchMemSyncDomainDefault",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLaunchMemSyncDomainRemote
+  m["CU_LAUNCH_MEM_SYNC_DOMAIN_REMOTE"]                                  = {"hipLaunchMemSyncDomainRemote",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaDriverEntryPointQueryResult
+  m["CUdriverProcAddressQueryResult"]                                    = {"hipDriverProcAddressQueryResult",                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUdriverProcAddressQueryResult_enum"]                               = {"hipDriverProcAddressQueryResult",                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUdriverProcAddressQueryResult enum values
+  // cudaDriverEntryPointSuccess
+  m["CU_GET_PROC_ADDRESS_SUCCESS"]                                       = {"HIP_GET_PROC_ADDRESS_SUCCESS",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaDriverEntryPointSymbolNotFound
+  m["CU_GET_PROC_ADDRESS_SYMBOL_NOT_FOUND"]                              = {"HIP_GET_PROC_ADDRESS_SYMBOL_NOT_FOUND",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaDriverEntryPointVersionNotSufficent
+  m["CU_GET_PROC_ADDRESS_VERSION_NOT_SUFFICIENT"]                        = {"HIP_GET_PROC_ADDRESS_VERSION_NOT_SUFFICIENT",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaLibraryOption
+  m["CUlibraryOption"]                                                   = {"hipLibraryOption",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLibraryOption
+  m["CUlibraryOption_enum"]                                              = {"hipLibraryOption_e",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUlibraryOption enum values
+  // cudaLibraryHostUniversalFunctionAndDataTable
+  m["CU_LIBRARY_HOST_UNIVERSAL_FUNCTION_AND_DATA_TABLE"]                 = {"hipLibraryHostUniversalFunctionAndDataTable",                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaLibraryBinaryIsPreserved
+  m["CU_LIBRARY_BINARY_IS_PRESERVED"]                                    = {"hipLibraryBinaryIsPreserved",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CU_LIBRARY_NUM_OPTIONS"]                                            = {"hipLibraryNumOptions",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUtensorMapDataType"]                                               = {"hipTensorMapDataType",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUtensorMapDataType_enum"]                                          = {"hipTensorMapDataType",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUtensorMapDataType enum values
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_UINT8"]                                     = {"HIP_TENSOR_MAP_DATA_TYPE_UINT8",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_UINT16"]                                    = {"HIP_TENSOR_MAP_DATA_TYPE_UINT16",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_UINT32"]                                    = {"HIP_TENSOR_MAP_DATA_TYPE_UINT32",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_INT32"]                                     = {"HIP_TENSOR_MAP_DATA_TYPE_INT32",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_UINT64"]                                    = {"HIP_TENSOR_MAP_DATA_TYPE_UINT64",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_INT64"]                                     = {"HIP_TENSOR_MAP_DATA_TYPE_INT64",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_FLOAT16"]                                   = {"HIP_TENSOR_MAP_DATA_TYPE_FLOAT16",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_FLOAT32"]                                   = {"HIP_TENSOR_MAP_DATA_TYPE_FLOAT32",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_FLOAT64"]                                   = {"HIP_TENSOR_MAP_DATA_TYPE_FLOAT64",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_BFLOAT16"]                                  = {"HIP_TENSOR_MAP_DATA_TYPE_BFLOAT16",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_FLOAT32_FTZ"]                               = {"HIP_TENSOR_MAP_DATA_TYPE_FLOAT32_FTZ",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_TFLOAT32"]                                  = {"HIP_TENSOR_MAP_DATA_TYPE_TFLOAT32",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_TFLOAT32_FTZ"]                              = {"HIP_TENSOR_MAP_DATA_TYPE_TFLOAT32_FTZ",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_16U4_ALIGN8B"]                              = {"HIP_TENSOR_MAP_DATA_TYPE_16U4_ALIGN8B",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_16U4_ALIGN16B"]                             = {"HIP_TENSOR_MAP_DATA_TYPE_16U4_ALIGN16B",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_DATA_TYPE_16U6_ALIGN16B"]                             = {"HIP_TENSOR_MAP_DATA_TYPE_16U6_ALIGN16B",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUtensorMapInterleave"]                                             = {"hipTensorMapInterleave",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUtensorMapInterleave_enum"]                                        = {"hipTensorMapDataType",                                       "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUtensorMapInterleave enum values
+  //
+  m["CU_TENSOR_MAP_INTERLEAVE_NONE"]                                     = {"HIP_TENSOR_MAP_INTERLEAVE_NONE",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_INTERLEAVE_16B"]                                      = {"HIP_TENSOR_MAP_INTERLEAVE_16B",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_INTERLEAVE_32B"]                                      = {"HIP_TENSOR_MAP_INTERLEAVE_32B",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUtensorMapSwizzle"]                                                = {"hipTensorMapSwizzle",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUtensorMapSwizzle_enum"]                                           = {"hipTensorMapSwizzle",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUtensorMapSwizzle enum values
+  //
+  m["CU_TENSOR_MAP_SWIZZLE_NONE"]                                        = {"HIP_TENSOR_MAP_SWIZZLE_NONE",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_SWIZZLE_32B"]                                         = {"HIP_TENSOR_MAP_SWIZZLE_32B",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_SWIZZLE_64B"]                                         = {"HIP_TENSOR_MAP_SWIZZLE_64B",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_SWIZZLE_128B"]                                        = {"HIP_TENSOR_MAP_SWIZZLE_128B",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_SWIZZLE_128B_ATOM_32B"]                               = {"HIP_TENSOR_MAP_SWIZZLE_128B_ATOM_32B",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_SWIZZLE_128B_ATOM_32B_FLIP_8B"]                       = {"HIP_TENSOR_MAP_SWIZZLE_128B_ATOM_32B_FLIP_8B",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_SWIZZLE_128B_ATOM_64B"]                               = {"HIP_TENSOR_MAP_SWIZZLE_128B_ATOM_64B",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUtensorMapL2promotion"]                                            = {"hipTensorMapL2promotion",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUtensorMapL2promotion_enum"]                                       = {"hipTensorMapL2promotion",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUtensorMapL2promotion enum values
+  //
+  m["CU_TENSOR_MAP_L2_PROMOTION_NONE"]                                   = {"HIP_TENSOR_MAP_L2_PROMOTION_NONE",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_L2_PROMOTION_L2_64B"]                                 = {"HIP_TENSOR_MAP_L2_PROMOTION_L2_64B",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_L2_PROMOTION_L2_128B"]                                = {"HIP_TENSOR_MAP_L2_PROMOTION_L2_128B",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_L2_PROMOTION_L2_256B"]                                = {"HIP_TENSOR_MAP_L2_PROMOTION_L2_256B",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUtensorMapFloatOOBfill"]                                           = {"hipTensorMapFloatOOBfill",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUtensorMapFloatOOBfill_enum"]                                      = {"hipTensorMapFloatOOBfill",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUtensorMapFloatOOBfill enum values
+  m["CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE"]                                 = {"HIP_TENSOR_MAP_FLOAT_OOB_FILL_NONE",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_FLOAT_OOB_FILL_NAN_REQUEST_ZERO_FMA"]                 = {"HIP_TENSOR_MAP_FLOAT_OOB_FILL_NAN_REQUEST_ZERO_FMA",         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUmulticastGranularity_flags"]                                      = {"hipMulticastGranularity_flags",                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUmulticastGranularity_flags_enum"]                                 = {"hipMulticastGranularity_flags",                              "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUmulticastGranularity_flags enum values
+  //
+  m["CU_MULTICAST_GRANULARITY_MINIMUM"]                                  = {"hipMulticastGranularityMinimum",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_MULTICAST_GRANULARITY_RECOMMENDED"]                              = {"hipMulticastGranularityRecommended",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUcoredumpSettings"]                                                = {"hipCoredumpSettings",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUcoredumpSettings_enum"]                                           = {"hipCoredumpSettings",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUcoredumpSettings enum values
+  //
+  m["CU_COREDUMP_ENABLE_ON_EXCEPTION"]                                   = {"HIP_COREDUMP_ENABLE_ON_EXCEPTION",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_TRIGGER_HOST"]                                          = {"HIP_COREDUMP_TRIGGER_HOST",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_LIGHTWEIGHT"]                                           = {"HIP_COREDUMP_LIGHTWEIGHT",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_ENABLE_USER_TRIGGER"]                                   = {"HIP_COREDUMP_ENABLE_USER_TRIGGER",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_FILE"]                                                  = {"HIP_COREDUMP_FILE",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_PIPE"]                                                  = {"HIP_COREDUMP_PIPE",                                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_GENERATION_FLAGS"]                                      = {"HIP_COREDUMP_GENERATION_FLAGS",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_MAX"]                                                   = {"HIP_COREDUMP_MAX",                                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUCoredumpGenerationFlags"]                                         = {"hipCoredumpGenerationFlags",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUCoredumpGenerationFlags enum values
+  //
+  m["CU_COREDUMP_DEFAULT_FLAGS"]                                         = {"HIP_COREDUMP_DEFAULT_FLAGS",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_SKIP_NONRELOCATED_ELF_IMAGES"]                          = {"HIP_COREDUMP_SKIP_NONRELOCATED_ELF_IMAGES",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_SKIP_GLOBAL_MEMORY"]                                    = {"HIP_COREDUMP_SKIP_GLOBAL_MEMORY",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_SKIP_SHARED_MEMORY"]                                    = {"HIP_COREDUMP_SKIP_SHARED_MEMORY",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_SKIP_LOCAL_MEMORY"]                                     = {"HIP_COREDUMP_SKIP_LOCAL_MEMORY",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_SKIP_ABORT"]                                            = {"HIP_COREDUMP_SKIP_ABORT",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_SKIP_CONSTBANK_MEMORY"]                                 = {"HIP_COREDUMP_SKIP_CONSTBANK_MEMORY",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_GZIP_COMPRESS"]                                         = {"HIP_COREDUMP_GZIP_COMPRESS",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_COREDUMP_LIGHTWEIGHT_FLAGS"]                                     = {"HIP_COREDUMP_LIGHTWEIGHT_FLAGS",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUdevSmResourceSplit_flags"]                                        = {"hipDevSmResourceSplit_flags",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED};
+  // cudaDevSmResourceSplitByCount_flags
+  m["CUdevSmResourceSplitByCount_flags"]                                 = {"hipDevSmResourceSplitByCount_flags",                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUdevSmResourceSplitByCount_flags enum values
+  // cudaDevSmResourceSplitIgnoreSmCoscheduling
+  m["CU_DEV_SM_RESOURCE_SPLIT_IGNORE_SM_COSCHEDULING"]                   = {"hipDevSmResourceSplitIgnoreSmCoscheduling",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevSmResourceSplitMaxPotentialClusterSize
+  m["CU_DEV_SM_RESOURCE_SPLIT_MAX_POTENTIAL_CLUSTER_SIZE"]               = {"hipDevSmResourceSplitMaxPotentialClusterSize",               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDeviceNumaConfig
+  m["CUdeviceNumaConfig"]                                                = {"hipDeviceNumaConfig",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUdeviceNumaConfig_enum"]                                           = {"hipDeviceNumaConfig",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUdeviceNumaConfig enum values
+  // cudaDeviceNumaConfigNone
+  m["CU_DEVICE_NUMA_CONFIG_NONE"]                                        = {"hipDeviceNumaConfigNone",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDeviceNumaConfigNumaNode
+  m["CU_DEVICE_NUMA_CONFIG_NUMA_NODE"]                                   = {"hipDeviceNumaConfigNumaNode",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaGraphConditionalNodeType
+  m["CUgraphConditionalNodeType"]                                        = {"hipGraphConditionalNodeType",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  m["CUgraphConditionalNodeType_enum"]                                   = {"hipGraphConditionalNodeType",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUgraphConditionalNodeType enum values
+  // cudaGraphCondTypeIf
+  m["CU_GRAPH_COND_TYPE_IF"]                                             = {"hipGraphCondTypeIf",                                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaGraphCondTypeWhile
+  m["CU_GRAPH_COND_TYPE_WHILE"]                                          = {"hipGraphCondTypeWhile",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaGraphCondTypeSwitch
+  m["CU_GRAPH_COND_TYPE_SWITCH"]                                         = {"hipGraphCondTypeSwitch",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaGraphDependencyType
+  m["CUgraphDependencyType"]                                             = {"hipGraphDependencyType",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphDependencyType_enum
+  m["CUgraphDependencyType_enum"]                                        = {"hipGraphDependencyType",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUgraphDependencyType enum values
+  // cudaGraphDependencyTypeDefault
+  m["CU_GRAPH_DEPENDENCY_TYPE_DEFAULT"]                                  = {"hipGraphDependencyTypeDefault",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaGraphDependencyTypeProgrammatic
+  m["CU_GRAPH_DEPENDENCY_TYPE_PROGRAMMATIC"]                             = {"hipGraphDependencyTypeProgrammatic",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  //
+  m["CUasyncNotificationType"]                                           = {"hipAsyncNotificationType",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUasyncNotificationType_enum"]                                      = {"hipAsyncNotificationType",                                   "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUasyncNotificationType enum values
+  //
+  m["CU_ASYNC_NOTIFICATION_TYPE_OVER_BUDGET"]                            = {"HIP_ASYNC_NOTIFICATION_TYPE_OVER_BUDGET",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUfunctionLoadingState"]                                            = {"hipFunctionLoadingState",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUfunctionLoadingState_enum"]                                       = {"hipFunctionLoadingState",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUfunctionLoadingState enum values
+  //
+  m["CU_FUNCTION_LOADING_STATE_UNLOADED"]                                = {"HIP_FUNCTION_LOADING_STATE_UNLOADED",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_FUNCTION_LOADING_STATE_LOADED"]                                  = {"HIP_FUNCTION_LOADING_STATE_LOADED",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_FUNCTION_LOADING_STATE_MAX"]                                     = {"HIP_FUNCTION_LOADING_STATE_MAX",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUgreenCtxCreate_flags"]                                            = {"hipGreenCtxCreate_flags",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUgreenCtxCreate_flags enum values
+  //
+  m["CU_GREEN_CTX_DEFAULT_STREAM"]                                       = {"HIP_GREEN_CTX_DEFAULT_STREAM",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDevResourceType
+  m["CUdevResourceType"]                                                 = {"hipDevResourceType",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUdevResourceType enum values
+  // cudaDevResourceTypeInvalid
+  m["CU_DEV_RESOURCE_TYPE_INVALID"]                                      = {"HIP_DEV_RESOURCE_TYPE_INVALID",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevResourceTypeSm
+  m["CU_DEV_RESOURCE_TYPE_SM"]                                           = {"hipDevResourceTypeInvalid",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevResourceTypeWorkqueueConfig
+  m["CU_DEV_RESOURCE_TYPE_WORKQUEUE_CONFIG"]                             = {"hipDevResourceTypeSm",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevResourceTypeWorkqueue
+  m["CU_DEV_RESOURCE_TYPE_WORKQUEUE"]                                    = {"hipDevResourceTypeWorkqueueConfig",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // no analogue
+  m["CU_DEV_RESOURCE_TYPE_MAX"]                                          = {"hipDevResourceTypeWorkqueue",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_REMOVED};
+
+  //
+  m["CUcigDataType"]                                                     = {"hipCigDataType",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUcigDataType_enum"]                                                = {"hipCigDataType",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUcigDataType enum values
+  //
+  m["CIG_DATA_TYPE_D3D12_COMMAND_QUEUE"]                                 = {"HIP_CIG_DATA_TYPE_D3D12_COMMAND_QUEUE",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CIG_DATA_TYPE_NV_BLOB"]                                             = {"HIP_CIG_DATA_TYPE_NV_BLOB",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUtensorMapIm2ColWideMode"]                                         = {"hipTensorMapIm2ColWideMode",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUtensorMapIm2ColWideMode_enum"]                                    = {"hipTensorMapIm2ColWideMode",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUtensorMapIm2ColWideMode enum values
+  //
+  m["CU_TENSOR_MAP_IM2COL_WIDE_MODE_W"]                                  = {"HIP_TENSOR_MAP_IM2COL_WIDE_MODE_W",                          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_TENSOR_MAP_IM2COL_WIDE_MODE_W128"]                               = {"HIP_TENSOR_MAP_IM2COL_WIDE_MODE_W128",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUmemRangeFlags"]                                                   = {"hipMemRangeFlags",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CUmemRangeFlags_enum"]                                              = {"hipMemRangeFlags",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemRangeFlags enum values
+  //
+  m["CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE"]                       = {"hipMemRangeFlagDmaBufMappingTypePcie",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  //
+  m["CUprocessState"]                                                    = {"hipProcessState",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUprocessState_enum"]                                               = {"hipProcessState",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUprocessState enum values
+  //
+  m["CU_PROCESS_STATE_RUNNING"]                                          = {"HIP_PROCESS_STATE_RUNNING",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_PROCESS_STATE_LOCKED"]                                           = {"HIP_PROCESS_STATE_LOCKED",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_PROCESS_STATE_CHECKPOINTED"]                                     = {"HIP_PROCESS_STATE_CHECKPOINTED",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_PROCESS_STATE_FAILED"]                                           = {"HIP_PROCESS_STATE_FAILED",                                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaMemcpySrcAccessOrder
+  m["CUmemcpySrcAccessOrder"]                                            = {"hipMemcpySrcAccessOrder",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CUmemcpySrcAccessOrder_enum"]                                       = {"hipMemcpySrcAccessOrder",                                    "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemcpySrcAccessOrder enum values
+  // cudaMemcpySrcAccessOrderInvalid
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_INVALID"]                                = {"hipMemcpySrcAccessOrderInvalid",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpySrcAccessOrderStream
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_STREAM"]                                 = {"hipMemcpySrcAccessOrderStream",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpySrcAccessOrderDuringApiCall
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_DURING_API_CALL"]                        = {"hipMemcpySrcAccessOrderDuringApiCall",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpySrcAccessOrderAny
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_ANY"]                                    = {"hipMemcpySrcAccessOrderAny",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpySrcAccessOrderMax
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_MAX"]                                    = {"hipMemcpySrcAccessOrderMax",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaMemcpyFlags
+  m["CUmemcpyFlags"]                                                     = {"hipMemcpyFlags",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CUmemcpyFlags_enum"]                                                = {"hipMemcpyFlags",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemcpyFlags enum values
+  // cudaMemcpyFlagDefault
+  m["CU_MEMCPY_FLAG_DEFAULT"]                                            = {"hipMemcpyFlagDefault",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpyFlagPreferOverlapWithCompute
+  m["CU_MEMCPY_FLAG_PREFER_OVERLAP_WITH_COMPUTE"]                        = {"hipMemcpyFlagPreferOverlapWithCompute",                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaMemcpy3DOperandType
+  m["CUmemcpy3DOperandType"]                                             = {"hipMemcpy3DOperandType",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  //
+  m["CUmemcpy3DOperandType_enum"]                                        = {"hipMemcpy3DOperandType",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  // CUmemcpy3DOperandType enum values
+  // cudaMemcpyOperandTypePointer
+  m["CU_MEMCPY_OPERAND_TYPE_POINTER"]                                    = {"hipMemcpyOperandTypePointer",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpyOperandTypeArray
+  m["CU_MEMCPY_OPERAND_TYPE_ARRAY"]                                      = {"hipMemcpyOperandTypeArray",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+  // cudaMemcpyOperandTypeMax
+  m["CU_MEMCPY_OPERAND_TYPE_MAX"]                                        = {"hipMemcpyOperandTypeMax",                                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaGraphChildGraphNodeOwnership
+  m["CUgraphChildGraphNodeOwnership"]                                    = {"hipGraphChildGraphNodeOwnership",                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaGraphChildGraphNodeOwnership
+  m["CUgraphChildGraphNodeOwnership_enum"]                               = {"hipGraphChildGraphNodeOwnership",                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUgraphChildGraphNodeOwnership enum values
+  // cudaGraphChildGraphOwnershipClone
+  m["CU_GRAPH_CHILD_GRAPH_OWNERSHIP_CLONE"]                              = {"hipGraphChildGraphOwnershipClone",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaGraphChildGraphOwnershipMove
+  m["CU_GRAPH_CHILD_GRAPH_OWNERSHIP_MOVE"]                               = {"hipGraphChildGraphOwnershipMove",                            "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUmemDecompressAlgorithm"]                                          = {"hipMemDecompressAlgorithm",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUmemDecompressAlgorithm_enum"]                                     = {"hipMemDecompressAlgorithm",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUmemDecompressAlgorithm enum values
+  //
+  m["CU_MEM_DECOMPRESS_UNSUPPORTED"]                                     = {"HIP_MEM_DECOMPRESS_UNSUPPORTED",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_MEM_DECOMPRESS_ALGORITHM_DEFLATE"]                               = {"HIP_MEM_DECOMPRESS_ALGORITHM_DEFLATE",                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_MEM_DECOMPRESS_ALGORITHM_SNAPPY"]                                = {"HIP_MEM_DECOMPRESS_ALGORITHM_SNAPPY",                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_MEM_DECOMPRESS_ALGORITHM_LZ4"]                                   = {"HIP_MEM_DECOMPRESS_ALGORITHM_LZ4",                           "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUlogLevel"]                                                        = {"hipLlogLevel",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUlogLevel_enum"]                                                   = {"hipLlogLevel",                                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUlogLevel enum values
+  //
+  m["CU_LOG_LEVEL_ERROR"]                                                = {"HIP_LOG_LEVEL_ERROR",                                        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_LOG_LEVEL_WARNING"]                                              = {"HIP_LOG_LEVEL_WARNING",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaAtomicOperation
+  m["CUatomicOperation"]                                                 = {"hipAtomicOperation",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperation
+  m["CUatomicOperation_enum"]                                            = {"hipAtomicOperation",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUatomicOperation enum values
+  // cudaAtomicOperationIntegerAdd
+  m["CU_ATOMIC_OPERATION_INTEGER_ADD"]                                   = {"hipAtomicOperationIntegerAdd",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationIntegerMin
+  m["CU_ATOMIC_OPERATION_INTEGER_MIN"]                                   = {"hipAtomicOperationIntegerMin",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationIntegerMax
+  m["CU_ATOMIC_OPERATION_INTEGER_MAX"]                                   = {"hipAtomicOperationIntegerMax",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationIntegerIncrement
+  m["CU_ATOMIC_OPERATION_INTEGER_INCREMENT"]                             = {"hipAtomicOperationIntegerIncrement",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationIntegerDecrement
+  m["CU_ATOMIC_OPERATION_INTEGER_DECREMENT"]                             = {"hipAtomicOperationIntegerDecrement",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationAnd
+  m["CU_ATOMIC_OPERATION_AND"]                                           = {"hipAtomicOperationAnd",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationOr
+  m["CU_ATOMIC_OPERATION_OR"]                                            = {"hipAtomicOperationOr",                                       "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationXOR
+  m["CU_ATOMIC_OPERATION_XOR"]                                           = {"hipAtomicOperationXOR",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationExchange
+  m["CU_ATOMIC_OPERATION_EXCHANGE"]                                      = {"hipAtomicOperationExchange",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationCAS
+  m["CU_ATOMIC_OPERATION_CAS"]                                           = {"hipAtomicOperationCAS",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationFloatAdd
+  m["CU_ATOMIC_OPERATION_FLOAT_ADD"]                                     = {"hipAtomicOperationFloatAdd",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationFloatMin
+  m["CU_ATOMIC_OPERATION_FLOAT_MIN"]                                     = {"hipAtomicOperationFloatMin",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationFloatMax
+  m["CU_ATOMIC_OPERATION_FLOAT_MAX"]                                     = {"hipAtomicOperationFloatMax",                                 "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // no analogue
+  m["CU_ATOMIC_OPERATION_MAX"]                                           = {"hipAtomicOperationMax",                                      "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaAtomicOperationCapability
+  m["CUatomicOperationCapability"]                                       = {"hipAtomicOperationCapability",                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicOperationCapability
+  m["CUatomicOperationCapability_enum"]                                  = {"hipAtomicOperationCapability",                               "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUatomicOperationCapability enum values
+  // cudaAtomicCapabilitySigned
+  m["CU_ATOMIC_CAPABILITY_SIGNED"]                                       = {"hipAtomicCapabilitySigned",                                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicCapabilityUnsigned
+  m["CU_ATOMIC_CAPABILITY_UNSIGNED"]                                     = {"hipAtomicCapabilityUnsigned",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicCapabilityReduction
+  m["CU_ATOMIC_CAPABILITY_REDUCTION"]                                    = {"hipAtomicCapabilityReduction",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicCapabilityScalar32
+  m["CU_ATOMIC_CAPABILITY_SCALAR_32"]                                    = {"hipAtomicCapabilityScalar32",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicCapabilityScalar64
+  m["CU_ATOMIC_CAPABILITY_SCALAR_64"]                                    = {"hipAtomicCapabilityScalar64",                                "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicCapabilityScalar128
+  m["CU_ATOMIC_CAPABILITY_SCALAR_128"]                                   = {"hipAtomicCapabilityScalar128",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAtomicCapabilityVector32x4
+  m["CU_ATOMIC_CAPABILITY_VECTOR_32x4"]                                  = {"hipAtomicCapabilityVector32x4",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUstreamAtomicReductionOpType"]                                     = {"hipStreamAtomicReductionOpType",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUstreamAtomicReductionOpType_enum"]                                = {"hipStreamAtomicReductionOpType",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUstreamAtomicReductionOpType enum values
+  //
+  m["CU_STREAM_ATOMIC_REDUCTION_OP_OR"]                                  = {"hipStreamAtomicReductionOpPr",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_STREAM_ATOMIC_REDUCTION_OP_AND"]                                 = {"hipStreamAtomicReductionOpAnd",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_STREAM_ATOMIC_REDUCTION_OP_ADD"]                                 = {"hipStreamAtomicReductionOpAdd",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUstreamAtomicReductionDataType"]                                   = {"hipStreamAtomicReductionDataType",                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUstreamAtomicReductionDataType_enum"]                              = {"hipStreamAtomicReductionOpType",                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUstreamAtomicReductionOpType enum values
+  //
+  m["CU_STREAM_ATOMIC_REDUCTION_UNSIGNED_32"]                            = {"hipStreamAtomicReductionUnsigned32",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_STREAM_ATOMIC_REDUCTION_UNSIGNED_64"]                            = {"hipStreamAtomicReductionUnsigned64",                         "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDevSmResourceGroup_flags
+  m["CUdevSmResourceGroup_flags"]                                        = {"hipDevSmResourceGroup_flags",                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUdevSmResourceGroup_flags enum values
+  // cudaDevSmResourceGroupDefault
+  m["CU_DEV_SM_RESOURCE_GROUP_DEFAULT"]                                  = {"hipDevSmResourceGroupDefault",                               "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevSmResourceGroupBackfill
+  m["CU_DEV_SM_RESOURCE_GROUP_BACKFILL"]                                 = {"hipDevSmResourceGroupBackfill",                              "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaDevWorkqueueConfigScope
+  m["CUdevWorkqueueConfigScope"]                                         = {"hipDevWorkqueueConfigScope",                                 "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUdevWorkqueueConfigScope enum values
+  // cudaDevWorkqueueConfigScopeDeviceCtx
+  m["CU_WORKQUEUE_SCOPE_DEVICE_CTX"]                                     = {"HIP_WORKQUEUE_SCOPE_DEVICE_CTX",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaDevWorkqueueConfigScopeGreenCtxBalanced
+  m["CU_WORKQUEUE_SCOPE_GREEN_CTX_BALANCED"]                             = {"HIP_WORKQUEUE_SCOPE_GREEN_CTX_BALANCED",                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUhostTaskSyncMode"]                                                = {"hipHostTaskSyncMode",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUhostTaskSyncMode_enum"]                                           = {"hipHostTaskSyncMode",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUhostTaskSyncMode enum values
+  //
+  m["CU_HOST_TASK_BLOCKING"]                                             = {"HIP_HOST_TASK_BLOCKING",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_HOST_TASK_SPINWAIT"]                                             = {"HIP_HOST_TASK_SPINWAIT",                                     "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUlaunchAttributePortableClusterMode"]                              = {"hipLaunchAttributePortableClusterMode",                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUlaunchAttributePortableClusterMode_enum"]                         = {"hipLaunchAttributePortableClusterMode",                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUlaunchAttributePortableClusterMode enum values
+  //
+  m["CU_LAUNCH_PORTABLE_CLUSTER_MODE_DEFAULT"]                           = {"HIP_LAUNCH_PORTABLE_CLUSTER_MODE_DEFAULT",                   "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_LAUNCH_PORTABLE_CLUSTER_MODE_REQUIRE_PORTABLE"]                  = {"HIP_LAUNCH_PORTABLE_CLUSTER_MODE_REQUIRE_PORTABLE",          "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_LAUNCH_PORTABLE_CLUSTER_MODE_ALLOW_NON_PORTABLE"]                = {"HIP_LAUNCH_PORTABLE_CLUSTER_MODE_ALLOW_NON_PORTABLE",        "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUsharedMemoryMode"]                                                = {"hipSharedMemoryMode",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CUsharedMemoryMode_enum"]                                           = {"hipSharedMemoryMode",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // CUsharedMemoryMode enum values
+  //
+  m["CU_SHARED_MEMORY_MODE_DEFAULT"]                                     = {"HIP_SHARED_MEMORY_MODE_DEFAULT",                             "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_SHARED_MEMORY_MODE_REQUIRE_PORTABLE"]                            = {"HIP_SHARED_MEMORY_MODE_REQUIRE_PORTABLE",                    "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  //
+  m["CU_SHARED_MEMORY_MODE_ALLOW_NON_PORTABLE"]                          = {"HIP_SHARED_MEMORY_MODE_ALLOW_NON_PORTABLE",                  "", CONV_NUMERIC_LITERAL, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // 4. Typedefs
+
+  // no analogue
+  m["CUdevice"]                                                          = {"hipDevice_t",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUdevice_v1"]                                                       = {"hipDevice_t",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUdeviceptr"]                                                       = {"hipDeviceptr_t",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUdeviceptr_v1"]                                                    = {"hipDeviceptr_t",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUdeviceptr_v2"]                                                    = {"hipDeviceptr_t",                                             "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaHostFn_t
+  m["CUhostFn"]                                                          = {"hipHostFn_t",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUoccupancyB2DSize"]                                                = {"void*",                                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaStreamCallback_t
+  m["CUstreamCallback"]                                                  = {"hipStreamCallback_t",                                        "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaSurfaceObject_t
+  m["CUsurfObject"]                                                      = {"hipSurfaceObject_t",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUsurfObject_v1"]                                                   = {"hipSurfaceObject_t",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaTextureObject_t
+  m["CUtexObject"]                                                       = {"hipTextureObject_t",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUtexObject_v1"]                                                    = {"hipTextureObject_t",                                         "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // no analogue
+  m["CUmemGenericAllocationHandle"]                                      = {"hipMemGenericAllocationHandle_t",                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUmemGenericAllocationHandle_v1"]                                   = {"hipMemGenericAllocationHandle_t",                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // GLuint
+  m["GLuint"]                                                            = {"GLuint",                                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // GLenum
+  m["GLenum"]                                                            = {"GLenum",                                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES};
+
+  // cudaGraphConditionalHandle
+  m["CUgraphConditionalHandle"]                                          = {"hipGraphConditionalHandle",                                  "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // cudaAsyncCallbackEntry
+  m["CUasyncCallbackEntry_st"]                                           = {"hipAsyncCallbackEntry",                                      "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAsyncCallbackHandle_t
+  m["CUasyncCallbackHandle"]                                             = {"hipAsyncCallbackHandle",                                     "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaAsyncCallback
+  m["CUasyncCallback"]                                                   = {"hipAsyncCallback",                                           "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUextent3D_v1"]                                                     = {"hipExtent3D",                                                "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  //
+  m["CUlogsCallback"]                                                    = {"hipLogsCallback",                                            "", CONV_TYPE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  // 5. Defines
+
+  m["__CUDACC__"]                                                        = {"__HIPCC__",                                                  "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES};
+  m["CUDA_CB"]                                                           = {"HIP_CB",                                                     "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+  // cudaCpuDeviceId ((int)-1)
+  m["CU_DEVICE_CPU"]                                                     = {"hipCpuDeviceId",                                             "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // ((CUdevice)-1)
+  // cudaInvalidDeviceId ((int)-1)
+  m["CU_DEVICE_INVALID"]                                                 = {"hipInvalidDeviceId",                                         "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // ((CUdevice)-2)
+  // CUDA_IPC_HANDLE_SIZE
+  m["CU_IPC_HANDLE_SIZE"]                                                = {"HIP_IPC_HANDLE_SIZE",                                        "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 64
+  m["CU_LAUNCH_PARAM_BUFFER_POINTER"]                                    = {"HIP_LAUNCH_PARAM_BUFFER_POINTER",                            "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // ((void*)CU_LAUNCH_PARAM_BUFFER_POINTER_AS_INT)
+  m["CU_LAUNCH_PARAM_BUFFER_SIZE"]                                       = {"HIP_LAUNCH_PARAM_BUFFER_SIZE",                               "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // ((void*)CU_LAUNCH_PARAM_BUFFER_SIZE_AS_INT)
+  m["CU_LAUNCH_PARAM_END"]                                               = {"HIP_LAUNCH_PARAM_END",                                       "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // ((void*)CU_LAUNCH_PARAM_END_AS_INT)
+  // cudaHostAllocPortable
+  m["CU_MEMHOSTALLOC_PORTABLE"]                                          = {"hipHostMallocPortable",                                      "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaHostAllocMapped
+  m["CU_MEMHOSTALLOC_DEVICEMAP"]                                         = {"hipHostMallocMapped",                                        "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaHostAllocWriteCombined
+  m["CU_MEMHOSTALLOC_WRITECOMBINED"]                                     = {"hipHostMallocWriteCombined",                                 "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x04
+  // cudaHostRegisterPortable
+  m["CU_MEMHOSTREGISTER_PORTABLE"]                                       = {"hipHostRegisterPortable",                                    "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaHostRegisterMapped
+  m["CU_MEMHOSTREGISTER_DEVICEMAP"]                                      = {"hipHostRegisterMapped",                                      "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaHostRegisterIoMemory
+  m["CU_MEMHOSTREGISTER_IOMEMORY"]                                       = {"hipHostRegisterIoMemory",                                    "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x04
+  // cudaHostRegisterReadOnly
+  m["CU_MEMHOSTREGISTER_READ_ONLY"]                                      = {"hipHostRegisterReadOnly",                                    "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x08
+  //
+  m["CU_PARAM_TR_DEFAULT"]                                               = {"HIP_PARAM_TR_DEFAULT",                                       "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // -1
+  // cudaStreamLegacy ((cudaStream_t)0x1)
+  m["CU_STREAM_LEGACY"]                                                  = {"hipStreamLegacy",                                            "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // ((CUstream)0x1)
+  // cudaStreamPerThread ((cudaStream_t)0x2)
+  m["CU_STREAM_PER_THREAD"]                                              = {"hipStreamPerThread",                                         "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // ((CUstream)0x2)
+  m["CU_TRSA_OVERRIDE_FORMAT"]                                           = {"HIP_TRSA_OVERRIDE_FORMAT",                                   "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  m["CU_TRSF_NORMALIZED_COORDINATES"]                                    = {"HIP_TRSF_NORMALIZED_COORDINATES",                            "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  m["CU_TRSF_READ_AS_INTEGER"]                                           = {"HIP_TRSF_READ_AS_INTEGER",                                   "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  m["CU_TRSF_SRGB"]                                                      = {"HIP_TRSF_SRGB",                                              "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x10
+  // no analogue
+  // NOTE: Deprecated, use CUDA_ARRAY3D_LAYERED
+  m["CUDA_ARRAY3D_2DARRAY"]                                              = {"HIP_ARRAY3D_2DARRAY",                                        "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED | CUDA_DEPRECATED}; // 0x01
+  // cudaArrayLayered
+  m["CUDA_ARRAY3D_LAYERED"]                                              = {"hipArrayLayered",                                            "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaArraySurfaceLoadStore
+  m["CUDA_ARRAY3D_SURFACE_LDST"]                                         = {"hipArraySurfaceLoadStore",                                   "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaArrayCubemap
+  m["CUDA_ARRAY3D_CUBEMAP"]                                              = {"hipArrayCubemap",                                            "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x04
+  // cudaArrayTextureGather
+  m["CUDA_ARRAY3D_TEXTURE_GATHER"]                                       = {"hipArrayTextureGather",                                      "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x08
+  // no analogue
+  m["CUDA_ARRAY3D_DEPTH_TEXTURE"]                                        = {"hipArrayDepthTexture",                                       "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x10
+  // cudaArrayColorAttachment
+  m["CUDA_ARRAY3D_COLOR_ATTACHMENT"]                                     = {"hipArrayColorAttachment",                                    "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x20
+  // cudaArraySparse
+  m["CUDA_ARRAY3D_SPARSE"]                                               = {"hipArraySparse",                                             "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x40
+  // cudaCooperativeLaunchMultiDeviceNoPreSync
+  m["CUDA_COOPERATIVE_LAUNCH_MULTI_DEVICE_NO_PRE_LAUNCH_SYNC"]           = {"hipCooperativeLaunchMultiDeviceNoPreSync",                   "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x01
+  // cudaCooperativeLaunchMultiDeviceNoPostSync
+  m["CUDA_COOPERATIVE_LAUNCH_MULTI_DEVICE_NO_POST_LAUNCH_SYNC"]          = {"hipCooperativeLaunchMultiDeviceNoPostSync",                  "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x02
+  // cudaExternalMemoryDedicated
+  m["CUDA_EXTERNAL_MEMORY_DEDICATED"]                                    = {"hipExternalMemoryDedicated",                                 "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0x1
+  // cudaExternalSemaphoreSignalSkipNvSciBufMemSync
+  m["CUDA_EXTERNAL_SEMAPHORE_SIGNAL_SKIP_NVSCIBUF_MEMSYNC"]              = {"hipExternalSemaphoreSignalSkipNvSciBufMemSync",              "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  // cudaExternalSemaphoreWaitSkipNvSciBufMemSync
+  m["CUDA_EXTERNAL_SEMAPHORE_WAIT_SKIP_NVSCIBUF_MEMSYNC"]                = {"hipExternalSemaphoreWaitSkipNvSciBufMemSync",                "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+  // cudaNvSciSyncAttrSignal
+  m["CUDA_NVSCISYNC_ATTR_SIGNAL"]                                        = {"hipNvSciSyncAttrSignal",                                     "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1
+  // cudaNvSciSyncAttrWait
+  m["CUDA_NVSCISYNC_ATTR_WAIT"]                                          = {"hipNvSciSyncAttrWait",                                       "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1
+  m["CU_TRSF_DISABLE_TRILINEAR_OPTIMIZATION"]                            = {"HIP_TRSF_DISABLE_TRILINEAR_OPTIMIZATION",                    "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x20
+  // cudaArraySparsePropertiesSingleMipTail
+  m["CU_ARRAY_SPARSE_PROPERTIES_SINGLE_MIPTAIL"]                         = {"HIP_ARRAY_SPARSE_PROPERTIES_SINGLE_MIPTAIL",                 "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1
+  m["CU_MEM_CREATE_USAGE_TILE_POOL"]                                     = {"HIP_MEM_CREATE_USAGE_TILE_POOL",                             "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1
+  // cudaArrayDeferredMapping
+  m["CUDA_ARRAY3D_DEFERRED_MAPPING"]                                     = {"hipArrayDeferredMapping",                                    "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x80
+  //
+  m["CU_TRSF_SEAMLESS_CUBEMAP"]                                          = {"HIP_TRSF_SEAMLESS_CUBEMAP",                                  "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x40
+  //
+  m["CU_LAUNCH_PARAM_END_AS_INT"]                                        = {"HIP_LAUNCH_PARAM_END_AS_INT",                                "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x00
+  //
+  m["CU_LAUNCH_PARAM_BUFFER_POINTER_AS_INT"]                             = {"HIP_LAUNCH_PARAM_BUFFER_POINTER_AS_INT",                     "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x01
+  //
+  m["CU_LAUNCH_PARAM_BUFFER_SIZE_AS_INT"]                                = {"HIP_LAUNCH_PARAM_BUFFER_SIZE_AS_INT",                        "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x02
+  // cudaKernelNodeAttributeClusterDimension
+  m["CU_KERNEL_NODE_ATTRIBUTE_CLUSTER_DIMENSION"]                        = {"hipKernelNodeAttributeClusterDimension",                     "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION
+  // cudaKernelNodeAttributeClusterSchedulingPolicyPreference
+  m["CU_KERNEL_NODE_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE"]     = {"hipKernelNodeAttributeClusterSchedulingPolicyPreference",    "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // CU_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE
+  //
+  m["CU_COMPUTE_ACCELERATED_TARGET_BASE"]                                = {"HIP_COMPUTE_ACCELERATED_TARGET_BASE",                        "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x10000
+  //
+  m["CU_TENSOR_MAP_NUM_QWORDS"]                                          = {"HIP_TENSOR_MAP_NUM_QWORDS",                                  "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 16
+  //
+  m["CU_GRAPH_COND_ASSIGN_DEFAULT"]                                      = {"HIP_GRAPH_COND_ASSIGN_DEFAULT",                              "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x1
+  // cudaGraphKernelNodePortDefault
+  m["CU_GRAPH_KERNEL_NODE_PORT_DEFAULT"]                                 = {"hipGraphKernelNodePortDefault",                              "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 0
+  // cudaGraphKernelNodePortProgrammatic
+  m["CU_GRAPH_KERNEL_NODE_PORT_PROGRAMMATIC"]                            = {"hipGraphKernelNodePortProgrammatic",                         "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 1
+  // cudaGraphKernelNodePortLaunchCompletion
+  m["CU_GRAPH_KERNEL_NODE_PORT_LAUNCH_ORDER"]                            = {"hipGraphKernelNodePortLaunchCompletion",                     "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES}; // 2
+  //
+  m["CUDA_ARRAY3D_VIDEO_ENCODE_DECODE"]                                  = {"HIP_ARRAY3D_VIDEO_ENCODE_DECODE",                            "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 2
+  //
+  m["CU_MEM_CREATE_USAGE_HW_DECOMPRESS"]                                 = {"HIP_MEM_CREATE_USAGE_HW_DECOMPRESS",                         "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x2
+  // cudaMemPoolCreateUsageHwDecompress
+  m["CU_MEM_POOL_CREATE_USAGE_HW_DECOMPRESS"]                            = {"HIP_MEM_POOL_CREATE_USAGE_HW_DECOMPRESS",                    "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x2
+  //
+  m["CU_COMPUTE_FAMILY_TARGET_BASE"]                                     = {"HIP_COMPUTE_FAMILY_TARGET_BASE",                             "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 0x20000
+  //
+  m["CU_LAUNCH_KERNEL_REQUIRED_BLOCK_DIM"]                               = {"HIP_LAUNCH_KERNEL_REQUIRED_BLOCK_DIM",                       "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED}; // 1
+  // cudaLogIterator
+  m["CUlogIterator"]                                                     = {"hipLogIterator",                                             "", CONV_DEFINE, API_DRIVER, SEC::DATA_TYPES, HIP_UNSUPPORTED};
+
+  return m;
+}();
+
+const std::map<llvm::StringRef, cudaAPIversions> CUDA_DRIVER_TYPE_NAME_VER_MAP = [] {
+  std::map<llvm::StringRef, cudaAPIversions> m;
+
+  m["CU_CTX_BLOCKING_SYNC"]                                              = {CUDA_0,   CUDA_40,  CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_BUFFER_DESC_st"]                               = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_BUFFER_DESC"]                                  = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_HANDLE_DESC_st"]                               = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_HANDLE_DESC"]                                  = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC_st"]                      = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC"]                         = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC_st"]                            = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC"]                               = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS"]                             = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS_st"]                          = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS"]                               = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS_st"]                            = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_HOST_NODE_PARAMS"]                                             = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_HOST_NODE_PARAMS_st"]                                          = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_KERNEL_NODE_PARAMS"]                                           = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_KERNEL_NODE_PARAMS_st"]                                        = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_LAUNCH_PARAMS"]                                                = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUDA_LAUNCH_PARAMS_st"]                                             = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUDA_MEMSET_NODE_PARAMS"]                                           = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMSET_NODE_PARAMS_st"]                                        = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUeglStreamConnection"]                                             = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUeglStreamConnection_st"]                                          = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUexternalMemory"]                                                  = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUextMemory_st"]                                                    = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUexternalSemaphore"]                                               = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUextSemaphore_st"]                                                 = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUgraph"]                                                           = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUgraph_st"]                                                        = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUgraphExec"]                                                       = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUgraphExec_st"]                                                    = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUgraphNode"]                                                       = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUgraphNode_st"]                                                    = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUmemLocation"]                                                     = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemLocation_st"]                                                  = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAllocationProp"]                                               = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAllocationProp_st"]                                            = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAccessDesc"]                                                   = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAccessDesc_st"]                                                = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUaccessPolicyWindow"]                                              = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUaccessPolicyWindow_st"]                                           = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUstreamBatchMemOpParams"]                                          = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUstreamBatchMemOpParams_union"]                                    = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUkernelNodeAttrValue"]                                             = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUkernelNodeAttrValue_union"]                                       = {CUDA_110, CUDA_0,   CUDA_118};
+  m["CUstreamAttrValue"]                                                 = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUstreamAttrValue_union"]                                           = {CUDA_110, CUDA_0,   CUDA_118};
+  m["CU_COMPUTEMODE_EXCLUSIVE"]                                          = {CUDA_0,   CUDA_0,   CUDA_80 };
+  m["CU_DEVICE_ATTRIBUTE_RESERVED_SHARED_MEMORY_PER_BLOCK"]              = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_CUDA_VMM_SUPPORTED"]       = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MAX_ACCESS_POLICY_WINDOW_SIZE"]                 = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MAX_PERSISTING_L2_CACHE_SIZE"]                  = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_GENERIC_COMPRESSION_SUPPORTED"]                 = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MAX_BLOCKS_PER_MULTIPROCESSOR"]                 = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_WIN32_KMT_HANDLE_SUPPORTED"]        = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_WIN32_HANDLE_SUPPORTED"]            = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR_SUPPORTED"]   = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_VIRTUAL_ADDRESS_MANAGEMENT_SUPPORTED"]          = {CUDA_102, CUDA_112, CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_DIRECT_MANAGED_MEM_ACCESS_FROM_HOST"]           = {CUDA_92,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES"]  = {CUDA_92,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HOST_REGISTER_SUPPORTED"]                       = {CUDA_92,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CAN_FLUSH_REMOTE_WRITES"]                       = {CUDA_92,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN"]             = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_COOPERATIVE_MULTI_DEVICE_LAUNCH"]               = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_COOPERATIVE_LAUNCH"]                            = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_WAIT_VALUE_NOR"]                 = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_64_BIT_STREAM_MEM_OPS"]                 = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_MEM_OPS"]                        = {CUDA_90,  CUDA_0,   CUDA_120};
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_HOST_POINTER_FOR_REGISTERED_MEM"]       = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_COMPUTE_PREEMPTION_SUPPORTED"]                  = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CONCURRENT_MANAGED_ACCESS"]                     = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS"]                        = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_SINGLE_TO_DOUBLE_PRECISION_PERF_RATIO"]         = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HOST_NATIVE_ATOMIC_SUPPORTED"]                  = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUdevice_P2PAttribute"]                                             = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUdevice_P2PAttribute_enum"]                                        = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_P2P_ATTRIBUTE_PERFORMANCE_RANK"]                          = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_P2P_ATTRIBUTE_ACCESS_SUPPORTED"]                          = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_P2P_ATTRIBUTE_NATIVE_ATOMIC_SUPPORTED"]                   = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_P2P_ATTRIBUTE_ACCESS_ACCESS_SUPPORTED"]                   = {CUDA_101, CUDA_101, CUDA_0  };
+  m["CU_DEVICE_P2P_ATTRIBUTE_ARRAY_ACCESS_ACCESS_SUPPORTED"]             = {CUDA_92,  CUDA_100, CUDA_101};
+  m["CU_DEVICE_P2P_ATTRIBUTE_CUDA_ARRAY_ACCESS_SUPPORTED"]               = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUeglColorFormat"]                                                  = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUeglColorFormate_enum"]                                            = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV420_PLANAR"]                                 = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV420_SEMIPLANAR"]                             = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV422_PLANAR"]                                 = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV422_SEMIPLANAR"]                             = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_RGB"]                                           = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BGR"]                                           = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_ARGB"]                                          = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_L"]                                             = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_R"]                                             = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV444_PLANAR"]                                 = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV444_SEMIPLANAR"]                             = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUYV_422"]                                      = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_UYVY_422"]                                      = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_ABGR"]                                          = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BGRA"]                                          = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_A"]                                             = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_RG"]                                            = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_AYUV"]                                          = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU444_SEMIPLANAR"]                             = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU422_SEMIPLANAR"]                             = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU420_SEMIPLANAR"]                             = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_Y10V10U10_444_SEMIPLANAR"]                      = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_Y10V10U10_420_SEMIPLANAR"]                      = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_Y12V12U12_444_SEMIPLANAR"]                      = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_Y12V12U12_420_SEMIPLANAR"]                      = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_VYUY_ER"]                                       = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_UYVY_ER"]                                       = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUYV_ER"]                                       = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVYU_ER"]                                       = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV_ER"]                                        = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUVA_ER"]                                       = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_AYUV_ER"]                                       = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV444_PLANAR_ER"]                              = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV422_PLANAR_ER"]                              = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV420_PLANAR_ER"]                              = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV444_SEMIPLANAR_ER"]                          = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV422_SEMIPLANAR_ER"]                          = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YUV420_SEMIPLANAR_ER"]                          = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU444_PLANAR_ER"]                              = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU422_PLANAR_ER"]                              = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU420_PLANAR_ER"]                              = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU444_SEMIPLANAR_ER"]                          = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU422_SEMIPLANAR_ER"]                          = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU420_SEMIPLANAR_ER"]                          = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER_RGGB"]                                    = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER_BGGR"]                                    = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER_GRBG"]                                    = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER_GBRG"]                                    = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER10_RGGB"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER10_BGGR"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER10_GRBG"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER10_GBRG"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER12_RGGB"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER12_BGGR"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER12_GRBG"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER12_GBRG"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER14_RGGB"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER14_BGGR"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER14_GRBG"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER14_GBRG"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER20_RGGB"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER20_BGGR"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER20_GRBG"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER20_GBRG"]                                  = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU444_PLANAR"]                                 = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU422_PLANAR"]                                 = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_YVU420_PLANAR"]                                 = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER_ISP_RGGB"]                                = {CUDA_92,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER_ISP_BGGR"]                                = {CUDA_92,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER_ISP_GRBG"]                                = {CUDA_92,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_BAYER_ISP_GBRG"]                                = {CUDA_92,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_COLOR_FORMAT_MAX"]                                           = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUeglFrameType"]                                                    = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUeglFrameType_enum"]                                               = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_FRAME_TYPE_ARRAY"]                                           = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_FRAME_TYPE_PITCH"]                                           = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUeglResourceLocationFlags"]                                        = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUeglResourceLocationFlags_enum"]                                   = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_RESOURCE_LOCATION_SYSMEM"]                                   = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_EGL_RESOURCE_LOCATION_VIDMEM"]                                   = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUexternalMemoryHandleType"]                                        = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUexternalMemoryHandleType_enum"]                                   = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD"]                          = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32"]                       = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT"]                   = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_HEAP"]                         = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE"]                     = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_RESOURCE"]                     = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_RESOURCE_KMT"]                 = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_NVSCIBUF"]                           = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUexternalSemaphoreHandleType"]                                     = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUexternalSemaphoreHandleType_enum"]                                = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD"]                       = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32"]                    = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT"]                = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE"]                     = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D11_FENCE"]                     = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_NVSCISYNC"]                       = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D11_KEYED_MUTEX"]               = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D11_KEYED_MUTEX_KMT"]           = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES"]                   = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT"]                = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUgraphNodeType"]                                                   = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUgraphNodeType_enum"]                                              = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_KERNEL"]                                         = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_MEMCPY"]                                         = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_MEMSET"]                                         = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_HOST"]                                           = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_GRAPH"]                                          = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_EMPTY"]                                          = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_COUNT"]                                          = {CUDA_100, CUDA_0,   CUDA_110};
+  m["CUgraphExecUpdateResult"]                                           = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUgraphExecUpdateResult_enum"]                                      = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_EXEC_UPDATE_SUCCESS"]                                      = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_EXEC_UPDATE_ERROR"]                                        = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_TOPOLOGY_CHANGED"]                       = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_NODE_TYPE_CHANGED"]                      = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_FUNCTION_CHANGED"]                       = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_PARAMETERS_CHANGED"]                     = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_NOT_SUPPORTED"]                          = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_80"]                                              = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_75"]                                              = {CUDA_91,  CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_73"]                                              = {CUDA_91,  CUDA_0,   CUDA_100};
+  m["CU_TARGET_COMPUTE_72"]                                              = {CUDA_101, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_70"]                                              = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_62"]                                              = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_61"]                                              = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_60"]                                              = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_53"]                                              = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_13"]                                              = {CUDA_0,   CUDA_0,   CUDA_90 };
+  m["CU_TARGET_COMPUTE_12"]                                              = {CUDA_0,   CUDA_0,   CUDA_90 };
+  m["CU_TARGET_COMPUTE_11"]                                              = {CUDA_0,   CUDA_0,   CUDA_90 };
+  m["CU_TARGET_COMPUTE_10"]                                              = {CUDA_0,   CUDA_0,   CUDA_90 };
+  m["CU_LIMIT_MAX_L2_FETCH_GRANULARITY"]                                 = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_LIMIT_PERSISTING_L2_CACHE_SIZE"]                                 = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUmem_advise"]                                                      = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUmem_advise_enum"]                                                 = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_ADVISE_SET_READ_MOSTLY"]                                     = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_ADVISE_UNSET_READ_MOSTLY"]                                   = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_ADVISE_SET_PREFERRED_LOCATION"]                              = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_ADVISE_UNSET_PREFERRED_LOCATION"]                            = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_ADVISE_SET_ACCESSED_BY"]                                     = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_ADVISE_UNSET_ACCESSED_BY"]                                   = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUmem_range_attribute"]                                             = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUmem_range_attribute_enum"]                                        = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_ATTRIBUTE_READ_MOSTLY"]                                = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION"]                         = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_ATTRIBUTE_ACCESSED_BY"]                                = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_ATTRIBUTE_LAST_PREFETCH_LOCATION"]                     = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE"]                   = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES"]                         = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_MAPPED"]                                       = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_RANGE_SIZE"]                                   = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_RANGE_START_ADDR"]                             = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE"]                   = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL"]                               = {CUDA_92,  CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_PROFILER_NOT_INITIALIZED"]                               = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CUDA_ERROR_PROFILER_ALREADY_STARTED"]                               = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CUDA_ERROR_PROFILER_ALREADY_STOPPED"]                               = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CUDA_ERROR_CONTEXT_ALREADY_CURRENT"]                                = {CUDA_0,   CUDA_32,  CUDA_0  };
+  m["CUDA_ERROR_NVLINK_UNCORRECTABLE"]                                   = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_JIT_COMPILER_NOT_FOUND"]                                 = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_ILLEGAL_STATE"]                                          = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_COOPERATIVE_LAUNCH_TOO_LARGE"]                           = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_SYSTEM_NOT_READY"]                                       = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_SYSTEM_DRIVER_MISMATCH"]                                 = {CUDA_101, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE"]                         = {CUDA_101, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STREAM_CAPTURE_UNSUPPORTED"]                             = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STREAM_CAPTURE_INVALIDATED"]                             = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STREAM_CAPTURE_MERGE"]                                   = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STREAM_CAPTURE_UNMATCHED"]                               = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STREAM_CAPTURE_UNJOINED"]                                = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STREAM_CAPTURE_ISOLATION"]                               = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STREAM_CAPTURE_IMPLICIT"]                                = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_CAPTURED_EVENT"]                                         = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STREAM_CAPTURE_WRONG_THREAD"]                            = {CUDA_101, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_TIMEOUT"]                                                = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_GRAPH_EXEC_UPDATE_FAILURE"]                              = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUshared_carveout"]                                                 = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUshared_carveout_enum"]                                            = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_SHAREDMEM_CARVEOUT_DEFAULT"]                                     = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_SHAREDMEM_CARVEOUT_MAX_SHARED"]                                  = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_SHAREDMEM_CARVEOUT_MAX_L1"]                                      = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUstreamBatchMemOpType"]                                            = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUstreamBatchMemOpType_enum"]                                       = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_MEM_OP_WAIT_VALUE_32"]                                    = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_MEM_OP_WRITE_VALUE_32"]                                   = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_MEM_OP_FLUSH_REMOTE_WRITES"]                              = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_MEM_OP_WAIT_VALUE_64"]                                    = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_MEM_OP_WRITE_VALUE_64"]                                   = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUstreamCaptureStatus"]                                             = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUstreamCaptureStatus_enum"]                                        = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_CAPTURE_STATUS_NONE"]                                     = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_CAPTURE_STATUS_ACTIVE"]                                   = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_CAPTURE_STATUS_INVALIDATED"]                              = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUstreamCaptureMode"]                                               = {CUDA_101, CUDA_0,   CUDA_0  };
+  m["CUstreamCaptureMode_enum"]                                          = {CUDA_101, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_CAPTURE_MODE_GLOBAL"]                                     = {CUDA_101, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_CAPTURE_MODE_THREAD_LOCAL"]                               = {CUDA_101, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_CAPTURE_MODE_RELAXED"]                                    = {CUDA_101, CUDA_0,   CUDA_0  };
+  m["CUstreamWaitValue_flags"]                                           = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUstreamWaitValue_flags_enum"]                                      = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_WAIT_VALUE_GEQ"]                                          = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_WAIT_VALUE_EQ"]                                           = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_WAIT_VALUE_AND"]                                          = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_WAIT_VALUE_FLUSH"]                                        = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUstreamWriteValue_flags"]                                          = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUstreamWriteValue_flags_enum"]                                     = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_WRITE_VALUE_DEFAULT"]                                     = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_STREAM_WRITE_VALUE_NO_MEMORY_BARRIER"]                           = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CUmemAllocationHandleType"]                                         = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAllocationHandleType_enum"]                                    = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR"]                          = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_HANDLE_TYPE_WIN32"]                                          = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_HANDLE_TYPE_WIN32_KMT"]                                      = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_HANDLE_TYPE_MAX"]                                            = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAccess_flags"]                                                 = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAccess_flags_enum"]                                            = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ACCESS_FLAGS_PROT_NONE"]                                     = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ACCESS_FLAGS_PROT_READ"]                                     = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ACCESS_FLAGS_PROT_READWRITE"]                                = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ACCESS_FLAGS_PROT_MAX"]                                      = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemLocationType"]                                                 = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemLocationType_enum"]                                            = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_LOCATION_TYPE_INVALID"]                                      = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_LOCATION_TYPE_DEVICE"]                                       = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_LOCATION_TYPE_MAX"]                                          = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAllocationGranularity_flags"]                                  = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAllocationGranularity_flags_enum"]                             = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ALLOC_GRANULARITY_MINIMUM"]                                  = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ALLOC_GRANULARITY_RECOMMENDED"]                              = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUaccessProperty"]                                                  = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUaccessProperty_enum"]                                             = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_ACCESS_PROPERTY_NORMAL"]                                         = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_ACCESS_PROPERTY_STREAMING"]                                      = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_ACCESS_PROPERTY_PERSISTING"]                                     = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUsynchronizationPolicy"]                                           = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUsynchronizationPolicy_enum"]                                      = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_SYNC_POLICY_AUTO"]                                               = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_SYNC_POLICY_SPIN"]                                               = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_SYNC_POLICY_YIELD"]                                              = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_SYNC_POLICY_BLOCKING_SYNC"]                                      = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUkernelNodeAttrID"]                                                = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUkernelNodeAttrID_enum"]                                           = {CUDA_110, CUDA_0,   CUDA_118};
+  m["CU_KERNEL_NODE_ATTRIBUTE_ACCESS_POLICY_WINDOW"]                     = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_KERNEL_NODE_ATTRIBUTE_COOPERATIVE"]                              = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUstreamAttrID"]                                                    = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUstreamAttrID_enum"]                                               = {CUDA_110, CUDA_0,   CUDA_118};
+  m["CU_STREAM_ATTRIBUTE_ACCESS_POLICY_WINDOW"]                          = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ATTRIBUTE_SYNCHRONIZATION_POLICY"]                        = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CUhostFn"]                                                          = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUmemGenericAllocationHandle"]                                      = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_CPU"]                                                     = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_INVALID"]                                                 = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_MEMHOSTREGISTER_IOMEMORY"]                                       = {CUDA_75,  CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY3D_COLOR_ATTACHMENT"]                                     = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_COOPERATIVE_LAUNCH_MULTI_DEVICE_NO_PRE_LAUNCH_SYNC"]           = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUDA_COOPERATIVE_LAUNCH_MULTI_DEVICE_NO_POST_LAUNCH_SYNC"]          = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_DEDICATED"]                                    = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_SIGNAL_SKIP_NVSCIBUF_MEMSYNC"]              = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_WAIT_SKIP_NVSCIBUF_MEMSYNC"]                = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUDA_NVSCISYNC_ATTR_SIGNAL"]                                        = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUDA_NVSCISYNC_ATTR_WAIT"]                                          = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_TRSF_DISABLE_TRILINEAR_OPTIMIZATION"]                            = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_SHARED_MEMORY_PER_BLOCK"]                       = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_GPU_OVERLAP"]                                   = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_ARRAY_WIDTH"]                 = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_ARRAY_HEIGHT"]                = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_ARRAY_NUMSLICES"]             = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CAN_TEX2D_GATHER"]                              = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CUDA_ARRAY3D_2DARRAY"]                                              = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_REGISTERS_PER_BLOCK"]                           = {CUDA_0,   CUDA_50,  CUDA_0  };
+  m["CUevent_record_flags"]                                              = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUevent_record_flags_enum"]                                         = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_EVENT_RECORD_DEFAULT"]                                           = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_EVENT_RECORD_EXTERNAL"]                                          = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUevent_wait_flags"]                                                = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_EVENT_WAIT_DEFAULT"]                                             = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_EVENT_WAIT_EXTERNAL"]                                            = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_SPARSE_CUDA_ARRAY_SUPPORTED"]                   = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_READ_ONLY_HOST_REGISTER_SUPPORTED"]             = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_ACCESS_FLAGS"]                                 = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_86"]                                              = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_WAIT_EVENT"]                                     = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_EVENT_RECORD"]                                   = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STUB_LIBRARY"]                                           = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_DEVICE_NOT_LICENSED"]                                    = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_UNSUPPORTED_PTX_VERSION"]                                = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_MEMHOSTREGISTER_READ_ONLY"]                                      = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_ARRAY_SPARSE_PROPERTIES_SINGLE_MIPTAIL"]                         = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY_SPARSE_PROPERTIES_st"]                                   = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY_SPARSE_PROPERTIES"]                                      = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUDA_POINTER_ATTRIBUTE_ACCESS_FLAGS"]                               = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUDA_POINTER_ATTRIBUTE_ACCESS_FLAGS_enum"]                          = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_ACCESS_FLAG_NONE"]                             = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_ACCESS_FLAG_READ"]                             = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_ACCESS_FLAG_READWRITE"]                        = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUarraySparseSubresourceType"]                                      = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUarraySparseSubresourceType_enum"]                                 = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_ARRAY_SPARSE_SUBRESOURCE_TYPE_SPARSE_LEVEL"]                     = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_ARRAY_SPARSE_SUBRESOURCE_TYPE_MIPTAIL"]                          = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUmemOperationType"]                                                = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUmemOperationType_enum"]                                           = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_MEM_OPERATION_TYPE_MAP"]                                         = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_MEM_OPERATION_TYPE_UNMAP"]                                       = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUmemHandleType"]                                                   = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUmemHandleType_enum"]                                              = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_MEM_HANDLE_TYPE_GENERIC"]                                        = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUarrayMapInfo"]                                                    = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUarrayMapInfo_st"]                                                 = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CU_MEM_CREATE_USAGE_TILE_POOL"]                                     = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY3D_SPARSE"]                                               = {CUDA_111, CUDA_0,   CUDA_0  };
+  m["CUmemPoolHandle_st"]                                                = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUmemoryPool"]                                                      = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_NV12"]                                                 = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_LINEAR_WIDTH"]                = {CUDA_0,   CUDA_112, CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED"]           = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_TIMELINE_SEMAPHORE_INTEROP_SUPPORTED"]          = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MEMORY_POOLS_SUPPORTED"]                        = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_EXT_SEMAS_SIGNAL"]                               = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_EXT_SEMAS_WAIT"]                                 = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_JIT_COMPILATION_DISABLED"]                               = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_TIMELINE_SEMAPHORE_FD"]           = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_TIMELINE_SEMAPHORE_WIN32"]        = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS_st"]                                = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS"]                                   = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS_st"]                                  = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS"]                                     = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_MEM_HANDLE_TYPE_NONE"]                                           = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_UNSUPPORTED_FUNCTION_CHANGE"]            = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUmemPool_attribute"]                                               = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUmemPool_attribute_enum"]                                          = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_MEMPOOL_ATTR_REUSE_FOLLOW_EVENT_DEPENDENCIES"]                   = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_MEMPOOL_ATTR_REUSE_ALLOW_OPPORTUNISTIC"]                         = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_MEMPOOL_ATTR_REUSE_ALLOW_INTERNAL_DEPENDENCIES"]                 = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CU_MEMPOOL_ATTR_RELEASE_THRESHOLD"]                                 = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUmemPoolProps_st"]                                                 = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUmemPoolProps"]                                                    = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUmemPoolPtrExportData_st"]                                         = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUmemPoolPtrExportData"]                                            = {CUDA_112, CUDA_0,   CUDA_0  };
+  m["CUmemAllocationType"]                                               = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUmemAllocationType_enum"]                                          = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ALLOCATION_TYPE_INVALID"]                                    = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ALLOCATION_TYPE_PINNED"]                                     = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ALLOCATION_TYPE_MAX"]                                        = {CUDA_102, CUDA_0,   CUDA_0  };
+  m["CUdeviceptr_v2"]                                                    = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUdevice_v1"]                                                       = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUtexObject_v1"]                                                    = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUsurfObject_v1"]                                                   = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUuserObject_st"]                                                   = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUuserObject"]                                                      = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUipcEventHandle_v1"]                                               = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUipcMemHandle_v1"]                                                 = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUstreamBatchMemOpParams_v1"]                                       = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUstreamUpdateCaptureDependencies_flags"]                           = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUstreamUpdateCaptureDependencies_flags_enum"]                      = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ADD_CAPTURE_DEPENDENCIES"]                                = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_SET_CAPTURE_DEPENDENCIES"]                                = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED"]                     = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_FLUSH_WRITES_OPTIONS"]          = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WRITES_ORDERING"]               = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MEMPOOL_SUPPORTED_HANDLE_TYPES"]                = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUdevprop_v1"]                                                      = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE"]                               = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_KERNEL_NODE_PARAMS_v1"]                                        = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMSET_NODE_PARAMS_v1"]                                        = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_HOST_NODE_PARAMS_v1"]                                          = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUkernelNodeAttrValue_v1"]                                          = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUstreamAttrValue_v1"]                                              = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUdriverProcAddress_flags"]                                         = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUdriverProcAddress_flags_enum"]                                    = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GET_PROC_ADDRESS_DEFAULT"]                                       = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GET_PROC_ADDRESS_LEGACY_STREAM"]                                 = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GET_PROC_ADDRESS_PER_THREAD_DEFAULT_STREAM"]                     = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMCPY2D_v2"]                                                  = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMCPY3D_v2"]                                                  = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMCPY3D_PEER_v1"]                                             = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY_DESCRIPTOR_v2"]                                          = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY3D_DESCRIPTOR_v2"]                                        = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY_SPARSE_PROPERTIES_v1"]                                   = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_RESOURCE_DESC_v1"]                                             = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_TEXTURE_DESC_v1"]                                              = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_RESOURCE_VIEW_DESC_v1"]                                        = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_POINTER_ATTRIBUTE_P2P_TOKENS_v1"]                              = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_LAUNCH_PARAMS_v1"]                                             = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_HANDLE_DESC_v1"]                               = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_BUFFER_DESC_v1"]                               = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_MEMORY_MIPMAPPED_ARRAY_DESC_v1"]                      = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC_v1"]                            = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS_v1"]                          = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS_v1"]                            = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS_v1"]                                = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS_v1"]                                  = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUmemGenericAllocationHandle_v1"]                                   = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUarrayMapInfo_v1"]                                                 = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUmemLocation_v1"]                                                  = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUmemAllocationProp_v1"]                                            = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUmemAccessDesc_v1"]                                                = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_MEMPOOL_ATTR_RESERVED_MEM_CURRENT"]                              = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_MEMPOOL_ATTR_RESERVED_MEM_HIGH"]                                 = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_MEMPOOL_ATTR_USED_MEM_CURRENT"]                                  = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_MEMPOOL_ATTR_USED_MEM_HIGH"]                                     = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUmemPoolProps_v1"]                                                 = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUmemPoolPtrExportData_v1"]                                         = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUflushGPUDirectRDMAWritesOptions"]                                 = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUflushGPUDirectRDMAWritesOptions_enum"]                            = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_OPTION_HOST"]                       = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_OPTION_MEMOPS"]                     = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUGPUDirectRDMAWritesOrdering"]                                     = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUGPUDirectRDMAWritesOrdering_enum"]                                = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GPU_DIRECT_RDMA_WRITES_ORDERING_NONE"]                           = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GPU_DIRECT_RDMA_WRITES_ORDERING_OWNER"]                          = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GPU_DIRECT_RDMA_WRITES_ORDERING_ALL_DEVICES"]                    = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUflushGPUDirectRDMAWritesScope"]                                   = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUflushGPUDirectRDMAWritesScope_enum"]                              = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_TO_OWNER"]                          = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_TO_ALL_DEVICES"]                    = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUflushGPUDirectRDMAWritesTarget"]                                  = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUflushGPUDirectRDMAWritesTarget_enum"]                             = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_FLUSH_GPU_DIRECT_RDMA_WRITES_TARGET_CURRENT_CTX"]                = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUgraphDebugDot_flags"]                                             = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUgraphDebugDot_flags_enum"]                                        = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_VERBOSE"]                                  = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_RUNTIME_TYPES"]                            = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_KERNEL_NODE_PARAMS"]                       = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_MEMCPY_NODE_PARAMS"]                       = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_MEMSET_NODE_PARAMS"]                       = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_HOST_NODE_PARAMS"]                         = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_EVENT_NODE_PARAMS"]                        = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_EXT_SEMAS_SIGNAL_NODE_PARAMS"]             = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_EXT_SEMAS_WAIT_NODE_PARAMS"]               = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_KERNEL_NODE_ATTRIBUTES"]                   = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_HANDLES"]                                  = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUuserObject_flags"]                                                = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUuserObject_flags_enum"]                                           = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_USER_OBJECT_NO_DESTRUCTOR_SYNC"]                                 = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUuserObjectRetain_flags"]                                          = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CUuserObjectRetain_flags_enum"]                                     = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_USER_OBJECT_MOVE"]                                         = {CUDA_113, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_WAIT_VALUE_NOR"]                                          = {CUDA_90,  CUDA_0,   CUDA_0  };
+  m["CU_JIT_LTO"]                                                        = {CUDA_114, CUDA_120, CUDA_0  };
+  m["CU_JIT_FTZ"]                                                        = {CUDA_114, CUDA_120, CUDA_0  };
+  m["CU_JIT_PREC_DIV"]                                                   = {CUDA_114, CUDA_120, CUDA_0  };
+  m["CU_JIT_PREC_SQRT"]                                                  = {CUDA_114, CUDA_120, CUDA_0  };
+  m["CU_JIT_FMA"]                                                        = {CUDA_114, CUDA_120, CUDA_0  };
+  m["CU_JIT_INPUT_NVVM"]                                                 = {CUDA_114, CUDA_120, CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_MEM_ALLOC"]                                      = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_MEM_FREE"]                                       = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUexecAffinityType"]                                                = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUexecAffinityType_enum"]                                           = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_EXEC_AFFINITY_TYPE_SM_COUNT"]                                    = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_EXEC_AFFINITY_TYPE_MAX"]                                         = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUexecAffinitySmCount_st"]                                          = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUexecAffinitySmCount_v1"]                                          = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUexecAffinitySmCount"]                                             = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUexecAffinityParam_st"]                                            = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUexecAffinityParam_v1"]                                            = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUexecAffinityParam"]                                               = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_UNSUPPORTED_EXEC_AFFINITY"]                              = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_MPS_CONNECTION_FAILED"]                                  = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_MPS_RPC_FAILURE"]                                        = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_MPS_SERVER_NOT_READY"]                                   = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_MPS_MAX_CLIENTS_REACHED"]                                = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_MPS_MAX_CONNECTIONS_REACHED"]                            = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_st"]                                     = {CUDA_114, CUDA_0,   CUDA_122};
+  m["CUDA_MEM_ALLOC_NODE_PARAMS"]                                        = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUgraphMem_attribute"]                                              = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUgraphMem_attribute_enum"]                                         = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_MEM_ATTR_USED_MEM_CURRENT"]                                = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_MEM_ATTR_USED_MEM_HIGH"]                                   = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_MEM_ATTR_RESERVED_MEM_CURRENT"]                            = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_MEM_ATTR_RESERVED_MEM_HIGH"]                               = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_MEM_ALLOC_NODE_PARAMS"]                    = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_MEM_FREE_NODE_PARAMS"]                     = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUgraphInstantiate_flags"]                                          = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUgraphInstantiate_flags_enum"]                                     = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_FLAG_AUTO_FREE_ON_LAUNCH"]                   = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_EXTERNAL_DEVICE"]                                        = {CUDA_114, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UNORM_INT8X1"]                                         = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UNORM_INT8X2"]                                         = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UNORM_INT8X4"]                                         = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UNORM_INT16X1"]                                        = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UNORM_INT16X2"]                                        = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UNORM_INT16X4"]                                        = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_SNORM_INT8X1"]                                         = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_SNORM_INT8X2"]                                         = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_SNORM_INT8X4"]                                         = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_SNORM_INT16X1"]                                        = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_SNORM_INT16X2"]                                        = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_SNORM_INT16X4"]                                        = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC1_UNORM"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC1_UNORM_SRGB"]                                       = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC2_UNORM"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC2_UNORM_SRGB"]                                       = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC3_UNORM"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC3_UNORM_SRGB"]                                       = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC4_UNORM"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC4_SNORM"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC5_UNORM"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC5_SNORM"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC6H_UF16"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC6H_SF16"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC7_UNORM"]                                            = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_BC7_UNORM_SRGB"]                                       = {CUDA_115, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_DEFERRED_MAPPING_CUDA_ARRAY_SUPPORTED"]         = {CUDA_116, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY_MEMORY_REQUIREMENTS_st"]                                 = {CUDA_116, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY_MEMORY_REQUIREMENTS_v1"]                                 = {CUDA_116, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY_MEMORY_REQUIREMENTS"]                                    = {CUDA_116, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_EXEC_UPDATE_ERROR_ATTRIBUTES_CHANGED"]                     = {CUDA_116, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY3D_DEFERRED_MAPPING"]                                     = {CUDA_116, CUDA_0,   CUDA_0  };
+  m["CU_TRSF_SEAMLESS_CUBEMAP"]                                          = {CUDA_116, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_MEM_OP_BARRIER"]                                          = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUstreamMemoryBarrier_flags"]                                       = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUstreamMemoryBarrier_flags_enum"]                                  = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_MEMORY_BARRIER_TYPE_SYS"]                                 = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_MEMORY_BARRIER_TYPE_GPU"]                                 = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUstreamMemOpMemoryBarrierParams_st"]                               = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["memoryBarrier"]                                                     = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_st"]                                  = {CUDA_117, CUDA_0,   CUDA_122};
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS"]                                     = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_64_BIT_STREAM_MEM_OPS_V2"]              = {CUDA_117, CUDA_0,   CUDA_120};
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_WAIT_VALUE_NOR_V2"]              = {CUDA_117, CUDA_0,   CUDA_120};
+  m["CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED"]                             = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_MAPPING_SIZE"]                                 = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_MAPPING_BASE_ADDR"]                            = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_MEMORY_BLOCK_ID"]                              = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_JIT_REFERENCED_KERNEL_NAMES"]                                    = {CUDA_117, CUDA_120, CUDA_0  };
+  m["CU_JIT_REFERENCED_KERNEL_COUNT"]                                    = {CUDA_117, CUDA_120, CUDA_0  };
+  m["CU_JIT_REFERENCED_VARIABLE_NAMES"]                                  = {CUDA_117, CUDA_120, CUDA_0  };
+  m["CU_JIT_REFERENCED_VARIABLE_COUNT"]                                  = {CUDA_117, CUDA_120, CUDA_0  };
+  m["CU_JIT_OPTIMIZE_UNUSED_DEVICE_VARIABLES"]                           = {CUDA_117, CUDA_120, CUDA_0  };
+  m["CU_TARGET_COMPUTE_87"]                                              = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_BATCH_MEM_OP"]                                   = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_KERNEL_NODE_ATTRIBUTE_PRIORITY"]                                 = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_DEVICE_UNAVAILABLE"]                                     = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUmemRangeHandleType"]                                              = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUmemRangeHandleType_enum"]                                         = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD"]                               = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_HANDLE_TYPE_MAX"]                                      = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_PARAM_END_AS_INT"]                                        = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_PARAM_BUFFER_POINTER_AS_INT"]                             = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_PARAM_BUFFER_SIZE_AS_INT"]                                = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_BATCH_MEM_OP_NODE_PARAMS"]                 = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_FLAG_USE_NODE_PRIORITY"]                     = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUmoduleLoadingMode"]                                               = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUmoduleLoadingMode_enum"]                                          = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_MODULE_EAGER_LOADING"]                                           = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CU_MODULE_LAZY_LOADING"]                                            = {CUDA_117, CUDA_0,   CUDA_0  };
+  m["CUevent_sched_flags"]                                               = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUevent_sched_flags_enum"]                                          = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_EVENT_SCHED_AUTO"]                                               = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_EVENT_SCHED_SPIN"]                                               = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_EVENT_SCHED_YIELD"]                                              = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_EVENT_SCHED_BLOCKING_SYNC"]                                      = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["cl_event_flags"]                                                    = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["cl_event_flags_enum"]                                               = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["NVCL_EVENT_SCHED_AUTO"]                                             = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["NVCL_EVENT_SCHED_SPIN"]                                             = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["NVCL_EVENT_SCHED_YIELD"]                                            = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["NVCL_EVENT_SCHED_BLOCKING_SYNC"]                                    = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["cl_context_flags"]                                                  = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["cl_context_flags_enum"]                                             = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["NVCL_CTX_SCHED_AUTO"]                                               = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["NVCL_CTX_SCHED_SPIN"]                                               = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["NVCL_CTX_SCHED_YIELD"]                                              = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["NVCL_CTX_SCHED_BLOCKING_SYNC"]                                      = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CLUSTER_LAUNCH"]                                = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_FUNC_ATTRIBUTE_CLUSTER_SIZE_MUST_BE_SET"]                        = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH"]                          = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT"]                         = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH"]                          = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED"]               = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE"]            = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_89"]                                              = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_90"]                                              = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUclusterSchedulingPolicy"]                                         = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUclusterSchedulingPolicy_enum"]                                    = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_CLUSTER_SCHEDULING_POLICY_DEFAULT"]                              = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_CLUSTER_SCHEDULING_POLICY_SPREAD"]                               = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_CLUSTER_SCHEDULING_POLICY_LOAD_BALANCING"]                       = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUlaunchAttributeID"]                                               = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUlaunchAttributeID_enum"]                                          = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_IGNORE"]                                        = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_ACCESS_POLICY_WINDOW"]                          = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_COOPERATIVE"]                                   = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_SYNCHRONIZATION_POLICY"]                        = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION"]                             = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE"]          = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_PROGRAMMATIC_STREAM_SERIALIZATION"]             = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_PROGRAMMATIC_EVENT"]                            = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_PRIORITY"]                                      = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUlaunchAttributeValue"]                                            = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUlaunchAttributeValue_union"]                                      = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUlaunchAttribute"]                                                 = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUlaunchAttribute_st"]                                              = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUlaunchConfig"]                                                    = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUlaunchConfig_st"]                                                 = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_KERNEL_NODE_ATTRIBUTE_CLUSTER_DIMENSION"]                        = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CU_KERNEL_NODE_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE"]     = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_MPS_CLIENT_TERMINATED"]                                  = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_INVALID_CLUSTER_SIZE"]                                   = {CUDA_118, CUDA_0,   CUDA_0  };
+  m["CUlib_st"]                                                          = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUlibrary"]                                                         = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUkern_st"]                                                         = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUkernel"]                                                          = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_MEM_OPS_V1"]                     = {CUDA_120, CUDA_120, CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_64_BIT_STREAM_MEM_OPS_V1"]              = {CUDA_120, CUDA_120, CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_CAN_USE_STREAM_WAIT_VALUE_NOR_V1"]              = {CUDA_120, CUDA_120, CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_IPC_EVENT_SUPPORTED"]                           = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MEM_SYNC_DOMAIN_COUNT"]                         = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED"]                   = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_UNIFIED_FUNCTION_POINTERS"]                     = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_JIT_POSITION_INDEPENDENT_CODE"]                                  = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_COMPUTE_ACCELERATED_TARGET_BASE"]                                = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_20"]                                              = {CUDA_0,   CUDA_0,   CUDA_120};
+  m["CU_TARGET_COMPUTE_21"]                                              = {CUDA_0,   CUDA_0,   CUDA_120};
+  m["CU_TARGET_COMPUTE_90A"]                                             = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_KERNEL_NODE_PARAMS_v2_st"]                                     = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_KERNEL_NODE_PARAMS_v2"]                                        = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUgraphInstantiateResult"]                                          = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUgraphInstantiateResult_enum"]                                     = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_SUCCESS"]                                    = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_ERROR"]                                      = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_INVALID_STRUCTURE"]                          = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_NODE_OPERATION_NOT_SUPPORTED"]               = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_MULTIPLE_CTXS_NOT_SUPPORTED"]                = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_PARAMS_st"]                                  = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_PARAMS"]                                     = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUlaunchMemSyncDomain"]                                             = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUlaunchMemSyncDomain_enum"]                                        = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_MEM_SYNC_DOMAIN_DEFAULT"]                                 = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_MEM_SYNC_DOMAIN_REMOTE"]                                  = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUlaunchMemSyncDomainMap_st"]                                       = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUlaunchMemSyncDomainMap"]                                          = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_MEM_SYNC_DOMAIN_MAP"]                           = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_MEM_SYNC_DOMAIN"]                               = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_KERNEL_NODE_ATTRIBUTE_MEM_SYNC_DOMAIN_MAP"]                      = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_KERNEL_NODE_ATTRIBUTE_MEM_SYNC_DOMAIN"]                          = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ATTRIBUTE_PRIORITY"]                                      = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ATTRIBUTE_MEM_SYNC_DOMAIN_MAP"]                           = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ATTRIBUTE_MEM_SYNC_DOMAIN"]                               = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUdriverProcAddressQueryResult"]                                    = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUdriverProcAddressQueryResult_enum"]                               = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_GET_PROC_ADDRESS_SUCCESS"]                                       = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_GET_PROC_ADDRESS_SYMBOL_NOT_FOUND"]                              = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_GET_PROC_ADDRESS_VERSION_NOT_SUFFICIENT"]                        = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUlibraryOption"]                                                   = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUlibraryOption_enum"]                                              = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_LIBRARY_HOST_UNIVERSAL_FUNCTION_AND_DATA_TABLE"]                 = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_LIBRARY_BINARY_IS_PRESERVED"]                                    = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_LIBRARY_NUM_OPTIONS"]                                            = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUlibraryHostUniversalFunctionAndDataTable_st"]                     = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUlibraryHostUniversalFunctionAndDataTable"]                        = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_CDP_NOT_SUPPORTED"]                                      = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_CDP_VERSION_MISMATCH"]                                   = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_NUM_QWORDS"]                                          = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMap_st"]                                                    = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMap"]                                                       = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapDataType"]                                               = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapDataType_enum"]                                          = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_UINT8"]                                     = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_UINT16"]                                    = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_UINT32"]                                    = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_INT32"]                                     = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_UINT64"]                                    = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_INT64"]                                     = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_FLOAT16"]                                   = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_FLOAT32"]                                   = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_FLOAT64"]                                   = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_BFLOAT16"]                                  = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_FLOAT32_FTZ"]                               = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_TFLOAT32"]                                  = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_TFLOAT32_FTZ"]                              = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapInterleave"]                                             = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapInterleave_enum"]                                        = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_INTERLEAVE_NONE"]                                     = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_INTERLEAVE_16B"]                                      = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_INTERLEAVE_32B"]                                      = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapSwizzle"]                                                = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapSwizzle_enum"]                                           = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_SWIZZLE_NONE"]                                        = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_SWIZZLE_32B"]                                         = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_SWIZZLE_64B"]                                         = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_SWIZZLE_128B"]                                        = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapL2promotion"]                                            = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapL2promotion_enum"]                                       = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_L2_PROMOTION_NONE"]                                   = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_L2_PROMOTION_L2_64B"]                                 = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_L2_PROMOTION_L2_128B"]                                = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_L2_PROMOTION_L2_256B"]                                = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapFloatOOBfill"]                                           = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUtensorMapFloatOOBfill_enum"]                                      = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE"]                                 = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_FLOAT_OOB_FILL_NAN_REQUEST_ZERO_FMA"]                 = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUgraphExecUpdateResultInfo_st"]                                    = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUgraphExecUpdateResultInfo_v1"]                                    = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUgraphExecUpdateResultInfo"]                                       = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_EXTRA_TOPO_INFO"]                          = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_FLAG_UPLOAD"]                                = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_FLAG_DEVICE_LAUNCH"]                         = {CUDA_120, CUDA_0,   CUDA_0  };
+  m["CU_CTX_COREDUMP_ENABLE"]                                            = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_CTX_USER_COREDUMP_ENABLE"]                                       = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_CTX_SYNC_MEMOPS"]                                                = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MULTICAST_SUPPORTED"]                           = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_MAX"]                                           = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_UNSUPPORTED_DEVSIDE_SYNC"]                               = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CUmulticastGranularity_flags"]                                      = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CUmulticastGranularity_flags_enum"]                                 = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_MULTICAST_GRANULARITY_MINIMUM"]                                  = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_MULTICAST_GRANULARITY_RECOMMENDED"]                              = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CUmulticastObjectProp_st"]                                          = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CUmulticastObjectProp_v1"]                                          = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CUmulticastObjectProp"]                                             = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CUcoredumpSettings"]                                                = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CUcoredumpSettings_enum"]                                           = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_ENABLE_ON_EXCEPTION"]                                   = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_TRIGGER_HOST"]                                          = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_LIGHTWEIGHT"]                                           = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_ENABLE_USER_TRIGGER"]                                   = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_FILE"]                                                  = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_PIPE"]                                                  = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_MAX"]                                                   = {CUDA_121, CUDA_0,   CUDA_0  };
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_v1_st"]                                  = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_v1"]                                     = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_v2_st"]                                  = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_MEM_ALLOC_NODE_PARAMS_v2"]                                     = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_v1_st"]                               = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_v1"]                                  = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_v2_st"]                               = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_BATCH_MEM_OP_NODE_PARAMS_v2"]                                  = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_NUMA_CONFIG"]                                   = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_NUMA_ID"]                                       = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HOST_NUMA_ID"]                                  = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION_TYPE"]                    = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION_ID"]                      = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_ATTRIBUTE_LAST_PREFETCH_LOCATION_TYPE"]                = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_ATTRIBUTE_LAST_PREFETCH_LOCATION_ID"]                  = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_KERNEL_NODE_PARAMS_v3_st"]                                     = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_KERNEL_NODE_PARAMS_v3"]                                        = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMSET_NODE_PARAMS_v2_st"]                                     = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMSET_NODE_PARAMS_v2"]                                        = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_HOST_NODE_PARAMS_v2_st"]                                       = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_HOST_NODE_PARAMS_v2"]                                          = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMCPY_NODE_PARAMS_st"]                                        = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMCPY_NODE_PARAMS"]                                           = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS_v2_st"]                             = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_SIGNAL_NODE_PARAMS_v2"]                                = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS_v2_st"]                               = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_EXT_SEM_WAIT_NODE_PARAMS_v2"]                                  = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_MEM_LOCATION_TYPE_HOST"]                                         = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_MEM_LOCATION_TYPE_HOST_NUMA"]                                    = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT"]                            = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_MEM_FREE_NODE_PARAMS_st"]                                      = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_MEM_FREE_NODE_PARAMS"]                                         = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_CHILD_GRAPH_NODE_PARAMS_st"]                                   = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_CHILD_GRAPH_NODE_PARAMS"]                                      = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_EVENT_RECORD_NODE_PARAMS_st"]                                  = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_EVENT_RECORD_NODE_PARAMS"]                                     = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_EVENT_WAIT_NODE_PARAMS_st"]                                    = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUDA_EVENT_WAIT_NODE_PARAMS"]                                       = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUgraphNodeParams_st"]                                              = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUgraphNodeParams"]                                                 = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUdeviceNumaConfig_enum"]                                           = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUdeviceNumaConfig"]                                                = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_NUMA_CONFIG_NONE"]                                        = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_NUMA_CONFIG_NUMA_NODE"]                                   = {CUDA_122, CUDA_0,   CUDA_0  };
+  m["CUgraphConditionalHandle"]                                          = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUmemFabricHandle_st"]                                              = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUmemFabricHandle_v1"]                                              = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUmemFabricHandle"]                                                 = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED"]                  = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MPS_ENABLED"]                                   = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_JIT_MIN_CTA_PER_SM"]                                             = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_COND_ASSIGN_DEFAULT"]                                      = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUgraphConditionalNodeType"]                                        = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUgraphConditionalNodeType_enum"]                                   = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_COND_TYPE_IF"]                                             = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_COND_TYPE_WHILE"]                                          = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUDA_CONDITIONAL_NODE_PARAMS"]                                      = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_NODE_TYPE_CONDITIONAL"]                                    = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUgraphDependencyType"]                                             = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUgraphDependencyType_enum"]                                        = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEPENDENCY_TYPE_DEFAULT"]                                  = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEPENDENCY_TYPE_PROGRAMMATIC"]                             = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_KERNEL_NODE_PORT_DEFAULT"]                                 = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_KERNEL_NODE_PORT_PROGRAMMATIC"]                            = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_KERNEL_NODE_PORT_LAUNCH_ORDER"]                            = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUgraphEdgeData_st"]                                                = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUgraphEdgeData"]                                                   = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_LAUNCH_COMPLETION_EVENT"]                       = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_MEM_HANDLE_TYPE_FABRIC"]                                         = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_DEBUG_DOT_FLAGS_CONDITIONAL_NODE_PARAMS"]                  = {CUDA_123, CUDA_0,   CUDA_0  };
+  m["CUgraphDeviceUpdatableNode_st"]                                     = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUgraphDeviceNode"]                                                 = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUasyncNotificationType"]                                           = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUasyncNotificationType_enum"]                                      = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_ASYNC_NOTIFICATION_TYPE_OVER_BUDGET"]                            = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUasyncNotificationInfo_st"]                                        = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUasyncNotificationInfo"]                                           = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUasyncCallback"]                                                   = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_JIT_MAX_THREADS_PER_BLOCK"]                                      = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_JIT_OVERRIDE_DIRECTIVE_VALUES"]                                  = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_DEVICE_UPDATABLE_KERNEL_NODE"]                  = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_KERNEL_NODE_ATTRIBUTE_DEVICE_UPDATABLE_KERNEL_NODE"]             = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_FUNCTION_NOT_LOADED"]                                    = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_INVALID_RESOURCE_TYPE"]                                  = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_INVALID_RESOURCE_CONFIGURATION"]                         = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUfunctionLoadingState"]                                            = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUfunctionLoadingState_enum"]                                       = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_FUNCTION_LOADING_STATE_UNLOADED"]                                = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_FUNCTION_LOADING_STATE_LOADED"]                                  = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_FUNCTION_LOADING_STATE_MAX"]                                     = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUgreenCtx_st"]                                                     = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUgreenCtx"]                                                        = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUdevResourceDesc_st"]                                              = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUdevResourceDesc"]                                                 = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUgreenCtxCreate_flags"]                                            = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_GREEN_CTX_DEFAULT_STREAM"]                                       = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUdevResourceType"]                                                 = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_DEV_RESOURCE_TYPE_INVALID"]                                      = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_DEV_RESOURCE_TYPE_SM"]                                           = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_DEV_RESOURCE_TYPE_MAX"]                                          = {CUDA_124, CUDA_0,   CUDA_131};
+  m["CUdevSmResource_st"]                                                = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUdevSmResource"]                                                   = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUdevResource_st"]                                                  = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUdevResource"]                                                     = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUasyncCallbackEntry_st"]                                           = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CUasyncCallbackHandle"]                                             = {CUDA_124, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_P010"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_P016"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_NV16"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_P210"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_P216"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_YUY2"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_Y210"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_Y216"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_AYUV"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_Y410"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_Y416"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_Y444_PLANAR8"]                                         = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_Y444_PLANAR10"]                                        = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_MAX"]                                                  = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_D3D12_CIG_SUPPORTED"]                           = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_LIMIT_SHMEM_SIZE"]                                               = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_LIMIT_CIG_ENABLED"]                                              = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_LIMIT_CIG_SHMEM_FALLBACK_ENABLED"]                               = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT"]              = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_KERNEL_NODE_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT"]         = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CUcigDataType"]                                                     = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CUcigDataType_enum"]                                                = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CIG_DATA_TYPE_D3D12_COMMAND_QUEUE"]                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CUctxCigParam_st"]                                                  = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CUctxCigParam"]                                                     = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CUctxCreateParams_st"]                                              = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CUctxCreateParams"]                                                 = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CUDA_ARRAY3D_VIDEO_ENCODE_DECODE"]                                  = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_GENERATION_FLAGS"]                                      = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CUCoredumpGenerationFlags"]                                         = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_DEFAULT_FLAGS"]                                         = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_SKIP_NONRELOCATED_ELF_IMAGES"]                          = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_SKIP_GLOBAL_MEMORY"]                                    = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_SKIP_SHARED_MEMORY"]                                    = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_SKIP_LOCAL_MEMORY"]                                     = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_SKIP_ABORT"]                                            = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_LIGHTWEIGHT_FLAGS"]                                     = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CUdevSmResourceSplit_flags"]                                        = {CUDA_125, CUDA_0,   CUDA_131};
+  m["CU_DEV_SM_RESOURCE_SPLIT_IGNORE_SM_COSCHEDULING"]                   = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_DEV_SM_RESOURCE_SPLIT_MAX_POTENTIAL_CLUSTER_SIZE"]               = {CUDA_125, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_SKIP_CONSTBANK_MEMORY"]                                 = {CUDA_126, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_YUV444_8bit_SemiPlanar"]                               = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_YUV444_16bit_SemiPlanar"]                              = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UNORM_INT_101010_2"]                                   = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MEM_DECOMPRESS_ALGORITHM_MASK"]                 = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_MEM_DECOMPRESS_MAXIMUM_LENGTH"]                 = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_GPU_PCI_DEVICE_ID"]                             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_GPU_PCI_SUBSYSTEM_ID"]                          = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HOST_NUMA_MULTINODE_IPC_SUPPORTED"]             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_POINTER_ATTRIBUTE_IS_HW_DECOMPRESS_CAPABLE"]                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_100"]                                             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_101"]                                             = {CUDA_128, CUDA_0,   CUDA_130};
+  m["CU_TARGET_COMPUTE_120"]                                             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_100A"]                                            = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_101A"]                                            = {CUDA_128, CUDA_0,   CUDA_130};
+  m["CU_TARGET_COMPUTE_120A"]                                            = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_COND_TYPE_SWITCH"]                                         = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUDA_GRAPH_INSTANTIATE_CONDITIONAL_HANDLE_UNUSED"]                  = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_PREFERRED_CLUSTER_DIMENSION"]                   = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_KERNEL_NODE_ATTRIBUTE_PREFERRED_CLUSTER_DIMENSION"]              = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_CONTAINED"]                                              = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_TENSOR_MEMORY_LEAK"]                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_KEY_ROTATION"]                                           = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_16U4_ALIGN8B"]                              = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_16U4_ALIGN16B"]                             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_DATA_TYPE_16U6_ALIGN16B"]                             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_SWIZZLE_128B_ATOM_32B"]                               = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_SWIZZLE_128B_ATOM_32B_FLIP_8B"]                       = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_SWIZZLE_128B_ATOM_64B"]                               = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUtensorMapIm2ColWideMode"]                                         = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUtensorMapIm2ColWideMode_enum"]                                    = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_IM2COL_WIDE_MODE_W"]                                  = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_TENSOR_MAP_IM2COL_WIDE_MODE_W128"]                               = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemRangeFlags"]                                                   = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemRangeFlags_enum"]                                              = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE"]                       = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEM_CREATE_USAGE_HW_DECOMPRESS"]                                 = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEM_POOL_CREATE_USAGE_HW_DECOMPRESS"]                            = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUprocessState"]                                                    = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUprocessState_enum"]                                               = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_PROCESS_STATE_RUNNING"]                                          = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_PROCESS_STATE_LOCKED"]                                           = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_PROCESS_STATE_CHECKPOINTED"]                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_PROCESS_STATE_FAILED"]                                           = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUcheckpointLockArgs_st"]                                           = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUcheckpointLockArgs"]                                              = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUcheckpointCheckpointArgs_st"]                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUcheckpointCheckpointArgs"]                                        = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUcheckpointRestoreArgs_st"]                                        = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUcheckpointRestoreArgs"]                                           = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUcheckpointUnlockArgs_st"]                                         = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUcheckpointUnlockArgs"]                                            = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpyFlags"]                                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpyFlags_enum"]                                                = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_FLAG_DEFAULT"]                                            = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_FLAG_PREFER_OVERLAP_WITH_COMPUTE"]                        = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpySrcAccessOrder"]                                            = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpySrcAccessOrder_enum"]                                       = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_INVALID"]                                = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_STREAM"]                                 = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_DURING_API_CALL"]                        = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_ANY"]                                    = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_SRC_ACCESS_ORDER_MAX"]                                    = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpyAttributes_st"]                                             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpyAttributes"]                                                = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpyAttributes_v1"]                                             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpy3DOperandType"]                                             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpy3DOperandType_enum"]                                        = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_OPERAND_TYPE_POINTER"]                                    = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_OPERAND_TYPE_ARRAY"]                                      = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEMCPY_OPERAND_TYPE_MAX"]                                        = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUoffset3D_st"]                                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUoffset3D"]                                                        = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUoffset3D_v1"]                                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUextent3D_st"]                                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUextent3D"]                                                        = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUextent3D_v1"]                                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpy3DOperand_st"]                                              = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpy3DOperand"]                                                 = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemcpy3DOperand_v1"]                                              = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMCPY3D_BATCH_OP_st"]                                         = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMCPY3D_BATCH_OP"]                                            = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUDA_MEMCPY3D_BATCH_OP_v1"]                                         = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemDecompressAlgorithm"]                                          = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemDecompressAlgorithm_enum"]                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEM_DECOMPRESS_UNSUPPORTED"]                                     = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEM_DECOMPRESS_ALGORITHM_DEFLATE"]                               = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_MEM_DECOMPRESS_ALGORITHM_SNAPPY"]                                = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemDecompressParams_st"]                                          = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CUmemDecompressParams"]                                             = {CUDA_128, CUDA_0,   CUDA_0  };
+  m["CU_JIT_GLOBAL_SYMBOL_NAMES"]                                        = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_JIT_GLOBAL_SYMBOL_ADDRESSES"]                                    = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_JIT_GLOBAL_SYMBOL_COUNT"]                                        = {CUDA_100, CUDA_0,   CUDA_0  };
+  m["CU_JIT_NEW_SM3X_OPT"]                                               = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_JIT_FAST_COMPILE"]                                               = {CUDA_80,  CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_VULKAN_CIG_SUPPORTED"]                          = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HOST_NUMA_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED"] = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HOST_NUMA_MEMORY_POOLS_SUPPORTED"]              = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_COMPUTE_FAMILY_TARGET_BASE"]                                     = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_100F"]                                            = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_101F"]                                            = {CUDA_129, CUDA_0,   CUDA_130};
+  m["CU_TARGET_COMPUTE_103"]                                             = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_103A"]                                            = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_103F"]                                            = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_120F"]                                            = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_121"]                                             = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_121A"]                                            = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_121F"]                                            = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CIG_DATA_TYPE_NV_BLOB"]                                             = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CUgraphChildGraphNodeOwnership"]                                    = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CUgraphChildGraphNodeOwnership_enum"]                               = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_CHILD_GRAPH_OWNERSHIP_CLONE"]                              = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_GRAPH_CHILD_GRAPH_OWNERSHIP_MOVE"]                               = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_KERNEL_REQUIRED_BLOCK_DIM"]                               = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_MEM_DECOMPRESS_ALGORITHM_LZ4"]                                   = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CUlogLevel"]                                                        = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CUlogLevel_enum"]                                                   = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_LOG_LEVEL_ERROR"]                                                = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_LOG_LEVEL_WARNING"]                                              = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CUlogsCallbackEntry_st"]                                            = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CUlogsCallbackHandle"]                                              = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CUlogsCallback"]                                                    = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CUlogIterator"]                                                     = {CUDA_129, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HOST_MEMORY_POOLS_SUPPORTED"]                   = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HOST_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED"]      = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_HOST_ALLOC_DMA_BUF_SUPPORTED"]                  = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_ONLY_PARTIAL_HOST_NATIVE_ATOMIC_SUPPORTED"]     = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_JIT_SPLIT_COMPILE"]                                              = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_110"]                                             = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_110A"]                                            = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_TARGET_COMPUTE_110F"]                                            = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_ATTRIBUTE_NVLINK_UTIL_CENTRIC_SCHEDULING"]                = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_CALL_REQUIRES_NEWER_DRIVER"]                             = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_P2P_ATTRIBUTE_ONLY_PARTIAL_NATIVE_ATOMIC_SUPPORTED"]      = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CUatomicOperation"]                                                 = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CUatomicOperation_enum"]                                            = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_INTEGER_ADD"]                                   = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_INTEGER_MIN"]                                   = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_INTEGER_MAX"]                                   = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_INTEGER_INCREMENT"]                             = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_INTEGER_DECREMENT"]                             = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_AND"]                                           = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_OR"]                                            = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_XOR"]                                           = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_EXCHANGE"]                                      = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_CAS"]                                           = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_FLOAT_ADD"]                                     = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_FLOAT_MIN"]                                     = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_FLOAT_MAX"]                                     = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_OPERATION_MAX"]                                           = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CUatomicOperationCapability"]                                       = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CUatomicOperationCapability_enum"]                                  = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_CAPABILITY_SIGNED"]                                       = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_CAPABILITY_UNSIGNED"]                                     = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_CAPABILITY_REDUCTION"]                                    = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_CAPABILITY_SCALAR_32"]                                    = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_CAPABILITY_SCALAR_64"]                                    = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_CAPABILITY_SCALAR_128"]                                   = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_ATOMIC_CAPABILITY_VECTOR_32x4"]                                  = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_EXTERNAL_MEMORY_HANDLE_TYPE_DMABUF_FD"]                          = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_MEM_LOCATION_TYPE_NONE"]                                         = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_MEM_ALLOCATION_TYPE_MANAGED"]                                    = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CUcheckpointGpuPair_st"]                                            = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CUcheckpointGpuPair"]                                               = {CUDA_130, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_MEM_OP_ATOMIC_REDUCTION"]                                 = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUstreamAtomicReductionOpType"]                                     = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUstreamAtomicReductionOpType_enum"]                                = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ATOMIC_REDUCTION_OP_OR"]                                  = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ATOMIC_REDUCTION_OP_AND"]                                 = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ATOMIC_REDUCTION_OP_ADD"]                                 = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUstreamAtomicReductionDataType"]                                   = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUstreamAtomicReductionDataType_enum"]                              = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ATOMIC_REDUCTION_UNSIGNED_32"]                            = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_STREAM_ATOMIC_REDUCTION_UNSIGNED_64"]                            = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUstreamMemOpAtomicReductionParams_st"]                             = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT8_PACKED_422"]                                     = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT8_PACKED_444"]                                     = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT8_SEMIPLANAR_420"]                                 = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT16_SEMIPLANAR_420"]                                = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT8_SEMIPLANAR_422"]                                 = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT16_SEMIPLANAR_422"]                                = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT8_SEMIPLANAR_444"]                                 = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT16_SEMIPLANAR_444"]                                = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT8_PLANAR_420"]                                     = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT16_PLANAR_420"]                                    = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT8_PLANAR_422"]                                     = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT16_PLANAR_422"]                                    = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT8_PLANAR_444"]                                     = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_AD_FORMAT_UINT16_PLANAR_444"]                                    = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_DEVICE_ATTRIBUTE_ATOMIC_REDUCTION_SUPPORTED"]                    = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_JIT_BINARY_LOADER_THREAD_COUNT"]                                 = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUDA_ERROR_STREAM_DETACHED"]                                        = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_COREDUMP_GZIP_COMPRESS"]                                         = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUdevSmResourceSplitByCount_flags"]                                 = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUdevSmResourceGroup_flags"]                                        = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_DEV_SM_RESOURCE_GROUP_DEFAULT"]                                  = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_DEV_SM_RESOURCE_GROUP_BACKFILL"]                                 = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_DEV_RESOURCE_TYPE_WORKQUEUE_CONFIG"]                             = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_DEV_RESOURCE_TYPE_WORKQUEUE"]                                    = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUdevWorkqueueConfigScope"]                                         = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_WORKQUEUE_SCOPE_DEVICE_CTX"]                                     = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_WORKQUEUE_SCOPE_GREEN_CTX_BALANCED"]                             = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUdevWorkqueueConfigResource_st"]                                   = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUdevWorkqueueConfigResource"]                                      = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUdevWorkqueueResource_st"]                                         = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUdevWorkqueueResource"]                                            = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_DEV_SM_RESOURCE_GROUP_PARAMS_st"]                                = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CU_DEV_SM_RESOURCE_GROUP_PARAMS"]                                   = {CUDA_131, CUDA_0,   CUDA_0  };
+  m["CUhostTaskSyncMode"]                                                = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CUhostTaskSyncMode_enum"]                                           = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CU_HOST_TASK_BLOCKING"]                                             = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CU_HOST_TASK_SPINWAIT"]                                             = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CUlaunchAttributePortableClusterMode"]                              = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CUlaunchAttributePortableClusterMode_enum"]                         = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_PORTABLE_CLUSTER_MODE_DEFAULT"]                           = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_PORTABLE_CLUSTER_MODE_REQUIRE_PORTABLE"]                  = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CU_LAUNCH_PORTABLE_CLUSTER_MODE_ALLOW_NON_PORTABLE"]                = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CUsharedMemoryMode"]                                                = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CUsharedMemoryMode_enum"]                                           = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CU_SHARED_MEMORY_MODE_DEFAULT"]                                     = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CU_SHARED_MEMORY_MODE_REQUIRE_PORTABLE"]                            = {CUDA_132, CUDA_0,   CUDA_0  };
+  m["CU_SHARED_MEMORY_MODE_ALLOW_NON_PORTABLE"]                          = {CUDA_132, CUDA_0,   CUDA_0  };
+
+  return m;
+}();
+
+const std::map<llvm::StringRef, hipAPIversions> HIP_DRIVER_TYPE_NAME_VER_MAP = [] {
+  std::map<llvm::StringRef, hipAPIversions> m;
+
+  m["HIP_LAUNCH_PARAM_BUFFER_POINTER"]                                   = {HIP_1060, HIP_0,    HIP_0   };
+  m["HIP_LAUNCH_PARAM_BUFFER_SIZE"]                                      = {HIP_1060, HIP_0,    HIP_0   };
+  m["HIP_LAUNCH_PARAM_END"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipCtx_t"]                                                          = {HIP_1060, HIP_0,    HIP_0   };
+  m["ihipCtx_t"]                                                         = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDevice_t"]                                                       = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceP2PAttr"]                                                  = {HIP_3080, HIP_0,    HIP_0   };
+  m["hipDevP2PAttrPerformanceRank"]                                      = {HIP_3080, HIP_0,    HIP_0   };
+  m["hipDevP2PAttrAccessSupported"]                                      = {HIP_3080, HIP_0,    HIP_0   };
+  m["hipDevP2PAttrNativeAtomicSupported"]                                = {HIP_3080, HIP_0,    HIP_0   };
+  m["hipDevP2PAttrHipArrayAccessSupported"]                              = {HIP_3080, HIP_0,    HIP_0   };
+  m["hipStream_t"]                                                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["ihipStream_t"]                                                      = {HIP_1050, HIP_0,    HIP_0   };
+  m["hipIpcMemLazyEnablePeerAccess"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["HIP_IPC_HANDLE_SIZE"]                                               = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipIpcMemHandle_st"]                                                = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipIpcMemHandle_t"]                                                 = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipIpcEventHandle_st"]                                              = {HIP_3050, HIP_0,    HIP_0   };
+  m["hipIpcEventHandle_t"]                                               = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipModule_t"]                                                       = {HIP_1060, HIP_0,    HIP_0   };
+  m["ihipModule_t"]                                                      = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipFunction_t"]                                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["ihipModuleSymbol_t"]                                                = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipFuncAttributes"]                                                 = {HIP_1090, HIP_0,    HIP_0   };
+  m["hipEvent_t"]                                                        = {HIP_1060, HIP_0,    HIP_0   };
+  m["ihipEvent_t"]                                                       = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipLimit_t"]                                                        = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipLimitMallocHeapSize"]                                            = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipStreamDefault"]                                                  = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipStreamNonBlocking"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipEventDefault"]                                                   = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipEventBlockingSync"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipEventDisableTiming"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipEventInterprocess"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipEventReleaseToDevice"]                                           = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipEventReleaseToSystem"]                                           = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipHostMallocDefault"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipHostMallocMapped"]                                               = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipHostMallocPortable"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipHostMallocWriteCombined"]                                        = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipMemAttachGlobal"]                                                = {HIP_2050, HIP_0,    HIP_0   };
+  m["hipMemAttachHost"]                                                  = {HIP_2050, HIP_0,    HIP_0   };
+  m["hipMemAttachSingle"]                                                = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipHostRegisterPortable"]                                           = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipHostRegisterMapped"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipHostRegisterIoMemory"]                                           = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceScheduleAuto"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceScheduleSpin"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceScheduleYield"]                                            = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceScheduleBlockingSync"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceScheduleMask"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceMapHost"]                                                  = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceLmemResizeToMax"]                                          = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipArrayLayered"]                                                   = {HIP_1070, HIP_0,    HIP_0   };
+  m["hipArraySurfaceLoadStore"]                                          = {HIP_1070, HIP_0,    HIP_0   };
+  m["hipArrayCubemap"]                                                   = {HIP_1070, HIP_0,    HIP_0   };
+  m["hipArrayTextureGather"]                                             = {HIP_1070, HIP_0,    HIP_0   };
+  m["hipOccupancyDefault"]                                               = {HIP_3020, HIP_0,    HIP_0   };
+  m["hipCooperativeLaunchMultiDeviceNoPreSync"]                          = {HIP_3020, HIP_0,    HIP_0   };
+  m["hipCooperativeLaunchMultiDeviceNoPostSync"]                         = {HIP_3020, HIP_0,    HIP_0   };
+  m["hipCpuDeviceId"]                                                    = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipInvalidDeviceId"]                                                = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemoryAdvise"]                                                   = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemAdviseSetReadMostly"]                                         = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemAdviseUnsetReadMostly"]                                       = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemAdviseSetPreferredLocation"]                                  = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemAdviseUnsetPreferredLocation"]                                = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemAdviseSetAccessedBy"]                                         = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemAdviseUnsetAccessedBy"]                                       = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemRangeAttribute"]                                              = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemRangeAttributeReadMostly"]                                    = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemRangeAttributePreferredLocation"]                             = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemRangeAttributeAccessedBy"]                                    = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipMemRangeAttributeLastPrefetchLocation"]                          = {HIP_3070, HIP_0,    HIP_0   };
+  m["hipJitOption"]                                                      = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipJitOptionMaxRegisters"]                                          = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionThreadsPerBlock"]                                       = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionWallTime"]                                              = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionInfoLogBuffer"]                                         = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionInfoLogBufferSizeBytes"]                                = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionErrorLogBuffer"]                                        = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionErrorLogBufferSizeBytes"]                               = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionOptimizationLevel"]                                     = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionTargetFromContext"]                                     = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionTarget"]                                                = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionFallbackStrategy"]                                      = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionGenerateDebugInfo"]                                     = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionLogVerbose"]                                            = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionGenerateLineInfo"]                                      = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionCacheMode"]                                             = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionSm3xOpt"]                                               = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionFastCompile"]                                           = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionNumOptions"]                                            = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipFuncCache_t"]                                                    = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipFuncCachePreferNone"]                                            = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipFuncCachePreferShared"]                                          = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipFuncCachePreferL1"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipFuncCachePreferEqual"]                                           = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipSharedMemConfig"]                                                = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipSharedMemBankSizeDefault"]                                       = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipSharedMemBankSizeFourByte"]                                      = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipSharedMemBankSizeEightByte"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceptr_t"]                                                    = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_TRSA_OVERRIDE_FORMAT"]                                          = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_TRSF_READ_AS_INTEGER"]                                          = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_TRSF_NORMALIZED_COORDINATES"]                                   = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_TRSF_SRGB"]                                                     = {HIP_3020, HIP_0,    HIP_0   };
+  m["hipArray_Format"]                                                   = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_AD_FORMAT_UNSIGNED_INT8"]                                       = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_AD_FORMAT_UNSIGNED_INT16"]                                      = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_AD_FORMAT_UNSIGNED_INT32"]                                      = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_AD_FORMAT_SIGNED_INT8"]                                         = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_AD_FORMAT_SIGNED_INT16"]                                        = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_AD_FORMAT_SIGNED_INT32"]                                        = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_AD_FORMAT_HALF"]                                                = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_AD_FORMAT_FLOAT"]                                               = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_ARRAY_DESCRIPTOR"]                                              = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIP_ARRAY3D_DESCRIPTOR"]                                            = {HIP_2070, HIP_0,    HIP_0   };
+  m["hipArray"]                                                          = {HIP_1070, HIP_0,    HIP_0   };
+  m["hip_Memcpy2D"]                                                      = {HIP_1070, HIP_0,    HIP_0   };
+  m["hipArray_t"]                                                        = {HIP_1070, HIP_0,    HIP_0   };
+  m["hipMipmappedArray"]                                                 = {HIP_1070, HIP_0,    HIP_0   };
+  m["hipMipmappedArray_t"]                                               = {HIP_1070, HIP_0,    HIP_0   };
+  m["HIPresourcetype_enum"]                                              = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIPresourcetype"]                                                   = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RESOURCE_TYPE_ARRAY"]                                           = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RESOURCE_TYPE_MIPMAPPED_ARRAY"]                                 = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RESOURCE_TYPE_LINEAR"]                                          = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RESOURCE_TYPE_PITCH2D"]                                         = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIPfilter_mode_enum"]                                               = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIPfilter_mode"]                                                    = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_TR_FILTER_MODE_POINT"]                                          = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_TR_FILTER_MODE_LINEAR"]                                         = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_TEXTURE_DESC"]                                                  = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_TEXTURE_DESC_st"]                                               = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIPresourceViewFormat_enum"]                                        = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIPresourceViewFormat"]                                             = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_NONE"]                                          = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UINT_1X8"]                                      = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UINT_2X8"]                                      = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UINT_4X8"]                                      = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SINT_1X8"]                                      = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SINT_2X8"]                                      = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SINT_4X8"]                                      = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UINT_1X16"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UINT_2X16"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UINT_4X16"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SINT_1X16"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SINT_2X16"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SINT_4X16"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UINT_1X32"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UINT_2X32"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UINT_4X32"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SINT_1X32"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SINT_2X32"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SINT_4X32"]                                     = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_FLOAT_1X16"]                                    = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_FLOAT_2X16"]                                    = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_FLOAT_4X16"]                                    = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_FLOAT_1X32"]                                    = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_FLOAT_2X32"]                                    = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_FLOAT_4X32"]                                    = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UNSIGNED_BC1"]                                  = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UNSIGNED_BC2"]                                  = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UNSIGNED_BC3"]                                  = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UNSIGNED_BC4"]                                  = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SIGNED_BC4"]                                    = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UNSIGNED_BC5"]                                  = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SIGNED_BC5"]                                    = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UNSIGNED_BC6H"]                                 = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_SIGNED_BC6H"]                                   = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RES_VIEW_FORMAT_UNSIGNED_BC7"]                                  = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RESOURCE_DESC_st"]                                              = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RESOURCE_DESC"]                                                 = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RESOURCE_VIEW_DESC_st"]                                         = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_RESOURCE_VIEW_DESC"]                                            = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_MEMCPY3D"]                                                      = {HIP_3020, HIP_0,    HIP_0   };
+  m["hipFunction_attribute"]                                             = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK"]                          = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES"]                              = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_CONST_SIZE_BYTES"]                               = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES"]                               = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_NUM_REGS"]                                       = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_PTX_VERSION"]                                    = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_BINARY_VERSION"]                                 = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_CACHE_MODE_CA"]                                  = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES"]                  = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT"]               = {HIP_2080, HIP_0,    HIP_0   };
+  m["HIP_FUNC_ATTRIBUTE_MAX"]                                            = {HIP_2080, HIP_0,    HIP_0   };
+  m["hipComputeMode"]                                                    = {HIP_1090, HIP_0,    HIP_0   };
+  m["hipComputeModeDefault"]                                             = {HIP_1090, HIP_0,    HIP_0   };
+  m["hipComputeModeExclusive"]                                           = {HIP_1090, HIP_0,    HIP_0   };
+  m["hipComputeModeProhibited"]                                          = {HIP_1090, HIP_0,    HIP_0   };
+  m["hipComputeModeExclusiveProcess"]                                    = {HIP_2000, HIP_0,    HIP_0   };
+  m["hipTextureObject_t"]                                                = {HIP_1070, HIP_0,    HIP_0   };
+  m["hipError_t"]                                                        = {HIP_1050, HIP_0,    HIP_0   };
+  m["hipDeviceProp_t"]                                                   = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipMemoryType"]                                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipMemoryTypeArray"]                                                = {HIP_1070, HIP_0,    HIP_0   };
+  m["hipMemoryTypeDevice"]                                               = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipMemoryTypeHost"]                                                 = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipMemoryTypeUnified"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipSuccess"]                                                        = {HIP_1050, HIP_0,    HIP_0   };
+  m["hipErrorInvalidValue"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorOutOfMemory"]                                               = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorNotInitialized"]                                            = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorDeinitialized"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorProfilerDisabled"]                                          = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorProfilerNotInitialized"]                                    = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorProfilerAlreadyStarted"]                                    = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorProfilerAlreadyStopped"]                                    = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorNoDevice"]                                                  = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorInvalidDevice"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorInvalidImage"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorInvalidContext"]                                            = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorContextAlreadyCurrent"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorMapFailed"]                                                 = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorUnmapFailed"]                                               = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorArrayIsMapped"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorAlreadyMapped"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorNoBinaryForGpu"]                                            = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorAlreadyAcquired"]                                           = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorNotMapped"]                                                 = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorNotMappedAsArray"]                                          = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorNotMappedAsPointer"]                                        = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorECCNotCorrectable"]                                         = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorUnsupportedLimit"]                                          = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorContextAlreadyInUse"]                                       = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorPeerAccessUnsupported"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorInvalidKernelFile"]                                         = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorInvalidGraphicsContext"]                                    = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorInvalidSource"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorFileNotFound"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorSharedObjectSymbolNotFound"]                                = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorSharedObjectInitFailed"]                                    = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorOperatingSystem"]                                           = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorInvalidHandle"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorNotFound"]                                                  = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorNotReady"]                                                  = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorIllegalAddress"]                                            = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorLaunchOutOfResources"]                                      = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorLaunchTimeOut"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorPeerAccessAlreadyEnabled"]                                  = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorPeerAccessNotEnabled"]                                      = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorSetOnActiveProcess"]                                        = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorAssert"]                                                    = {HIP_1090, HIP_0,    HIP_0   };
+  m["hipErrorHostMemoryAlreadyRegistered"]                               = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorHostMemoryNotRegistered"]                                   = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorLaunchFailure"]                                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorCooperativeLaunchTooLarge"]                                 = {HIP_3020, HIP_0,    HIP_0   };
+  m["hipErrorNotSupported"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipErrorUnknown"]                                                   = {HIP_1060, HIP_0,    HIP_0   };
+  m["HIPaddress_mode"]                                                   = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIPaddress_mode_enum"]                                              = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_TR_ADDRESS_MODE_BORDER"]                                        = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_TR_ADDRESS_MODE_CLAMP"]                                         = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_TR_ADDRESS_MODE_MIRROR"]                                        = {HIP_3050, HIP_0,    HIP_0   };
+  m["HIP_TR_ADDRESS_MODE_WRAP"]                                          = {HIP_3050, HIP_0,    HIP_0   };
+  m["textureReference"]                                                  = {HIP_1060, HIP_0,    HIP_0   };
+  m["__HIPCC__"]                                                         = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttribute_t"]                                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxThreadsPerBlock"]                              = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxBlockDimX"]                                    = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxBlockDimY"]                                    = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxBlockDimZ"]                                    = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxGridDimX"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxGridDimY"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxGridDimZ"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxSharedMemoryPerBlock"]                         = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeTotalConstantMemory"]                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeWarpSize"]                                        = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxRegistersPerBlock"]                            = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeClockRate"]                                       = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMemoryClockRate"]                                 = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMemoryBusWidth"]                                  = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMultiprocessorCount"]                             = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeComputeMode"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeL2CacheSize"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxThreadsPerMultiProcessor"]                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeComputeCapabilityMajor"]                          = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeComputeCapabilityMinor"]                          = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeConcurrentKernels"]                               = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributePciBusId"]                                        = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributePciDeviceId"]                                     = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxSharedMemoryPerMultiprocessor"]                = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeIsMultiGpuBoard"]                                 = {HIP_1060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeIntegrated"]                                      = {HIP_1090, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeCooperativeLaunch"]                               = {HIP_2060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeCooperativeMultiDeviceLaunch"]                    = {HIP_2060, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture1DWidth"]                               = {HIP_2070, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture2DWidth"]                               = {HIP_2070, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture2DHeight"]                              = {HIP_2070, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture3DWidth"]                               = {HIP_2070, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture3DHeight"]                              = {HIP_2070, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture3DDepth"]                               = {HIP_2070, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxPitch"]                                        = {HIP_2100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeTextureAlignment"]                                = {HIP_2100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeTexturePitchAlignment"]                           = {HIP_3020, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeKernelExecTimeout"]                               = {HIP_2100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeCanMapHostMemory"]                                = {HIP_2100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeEccEnabled"]                                      = {HIP_2100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeManagedMemory"]                                   = {HIP_3100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeDirectManagedMemAccessFromHost"]                  = {HIP_3100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeConcurrentManagedAccess"]                         = {HIP_3100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributePageableMemoryAccess"]                            = {HIP_3100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributePageableMemoryAccessUsesHostPageTables"]          = {HIP_3100, HIP_0,    HIP_0   };
+  m["hipStreamWaitValueGte"]                                             = {HIP_4020, HIP_0,    HIP_0   };
+  m["hipStreamWaitValueEq"]                                              = {HIP_4020, HIP_0,    HIP_0   };
+  m["hipStreamWaitValueAnd"]                                             = {HIP_4020, HIP_0,    HIP_0   };
+  m["hipStreamWaitValueNor"]                                             = {HIP_4020, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleType"]                                       = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleType_enum"]                                  = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleTypeOpaqueFd"]                               = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleTypeOpaqueWin32"]                            = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleTypeOpaqueWin32Kmt"]                         = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleTypeD3D12Heap"]                              = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleTypeD3D12Resource"]                          = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleTypeD3D11Resource"]                          = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleTypeD3D11ResourceKmt"]                       = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryHandleDesc_st"]                                    = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemoryBufferDesc_st"]                                    = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalMemory_t"]                                               = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreHandleDesc_st"]                                 = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipExternalSemaphore_t"]                                            = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreSignalParams_st"]                               = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipHostNodeParams"]                                                 = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipKernelNodeParams"]                                               = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipTexRef"]                                                         = {HIP_3100, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeAsyncEngineCount"]                                = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeSurfaceAlignment"]                                = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeTccDriver"]                                       = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeUnifiedAddressing"]                               = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture1DLayered"]                             = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributePciDomainId"]                                     = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxSurface1D"]                                    = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxSurface2D"]                                    = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTextureCubemap"]                               = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTextureCubemapLayered"]                        = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture2DLayered"]                             = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture2DGather"]                              = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture3DAlt"]                                 = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxSurface3D"]                                    = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxSurface1DLayered"]                             = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxSurface2DLayered"]                             = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxSurfaceCubemap"]                               = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxSurfaceCubemapLayered"]                        = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture1DLinear"]                              = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture2DLinear"]                              = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture2DMipmap"]                              = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxTexture1DMipmap"]                              = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeStreamPrioritiesSupported"]                       = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeGlobalL1CacheSupported"]                          = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeLocalL1CacheSupported"]                           = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxRegistersPerMultiprocessor"]                   = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMultiGpuBoardGroupId"]                            = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeHostNativeAtomicSupported"]                       = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeSingleToDoublePrecisionPerfRatio"]                = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeComputePreemptionSupported"]                      = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeCanUseHostPointerForRegisteredMem"]               = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeCanUseStreamWaitValue"]                           = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeSharedMemPerBlockOptin"]                          = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeMaxBlocksPerMultiprocessor"]                      = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorContextIsDestroyed"]                                        = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorStreamCaptureUnsupported"]                                  = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorStreamCaptureInvalidated"]                                  = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorStreamCaptureMerge"]                                        = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorStreamCaptureUnmatched"]                                    = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorStreamCaptureUnjoined"]                                     = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorStreamCaptureIsolation"]                                    = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorStreamCaptureImplicit"]                                     = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorCapturedEvent"]                                             = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipErrorStreamCaptureWrongThread"]                                  = {HIP_4030, HIP_0,    HIP_0   };
+  m["hipSurfaceObject_t"]                                                = {HIP_1090, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreWaitParams_st"]                                 = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreWaitParams"]                                    = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreHandleType_enum"]                               = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreHandleType"]                                    = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreHandleTypeOpaqueFd"]                            = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreHandleTypeOpaqueWin32"]                         = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreHandleTypeOpaqueWin32Kmt"]                      = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreHandleTypeD3D12Fence"]                          = {HIP_4040, HIP_0,    HIP_0   };
+  m["hipLimitPrintfFifoSize"]                                            = {HIP_4050, HIP_0,    HIP_0   };
+  m["hipStreamPerThread"]                                                = {HIP_4050, HIP_0,    HIP_0   };
+  m["hipPointer_attribute"]                                              = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_CONTEXT"]                                     = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_MEMORY_TYPE"]                                 = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_DEVICE_POINTER"]                              = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_HOST_POINTER"]                                = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_P2P_TOKENS"]                                  = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_SYNC_MEMOPS"]                                 = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_BUFFER_ID"]                                   = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_IS_MANAGED"]                                  = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_DEVICE_ORDINAL"]                              = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_IS_LEGACY_HIP_IPC_CAPABLE"]                   = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_RANGE_START_ADDR"]                            = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_RANGE_SIZE"]                                  = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_MAPPED"]                                      = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES"]                        = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE"]                  = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_ACCESS_FLAGS"]                                = {HIP_5000, HIP_0,    HIP_0   };
+  m["HIP_POINTER_ATTRIBUTE_MEMPOOL_HANDLE"]                              = {HIP_5000, HIP_0,    HIP_0   };
+  m["hipStreamUpdateCaptureDependenciesFlags"]                           = {HIP_5000, HIP_0,    HIP_0   };
+  m["hipStreamAddCaptureDependencies"]                                   = {HIP_5000, HIP_0,    HIP_0   };
+  m["hipStreamSetCaptureDependencies"]                                   = {HIP_5000, HIP_0,    HIP_0   };
+  m["GLuint"]                                                            = {HIP_5010, HIP_0,    HIP_0   };
+  m["GLenum"]                                                            = {HIP_5010, HIP_0,    HIP_0   };
+  m["ihipMemPoolHandle_t"]                                               = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemAllocationProp"]                                              = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemGenericAllocationHandle_t"]                                   = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemAllocationGranularity_flags"]                                 = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemAllocationGranularityMinimum"]                                = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemAllocationGranularityRecommended"]                            = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemHandleType"]                                                  = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemHandleTypeGeneric"]                                           = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemOperationType"]                                               = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemOperationTypeMap"]                                            = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipMemOperationTypeUnmap"]                                          = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipArraySparseSubresourceType"]                                     = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipArraySparseSubresourceTypeSparseLevel"]                          = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipArraySparseSubresourceTypeMiptail"]                              = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipArrayMapInfo"]                                                   = {HIP_5020, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeVirtualMemoryManagementSupported"]                = {HIP_5030, HIP_0,    HIP_0   };
+  m["hipUserObject"]                                                     = {HIP_5030, HIP_0,    HIP_0   };
+  m["hipUserObject_t"]                                                   = {HIP_5030, HIP_0,    HIP_0   };
+  m["hipJitInputType"]                                                   = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitInputCubin"]                                                  = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitInputPtx"]                                                    = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitInputFatBinary"]                                              = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitInputObject"]                                                 = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitInputLibrary"]                                                = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitInputNvvm"]                                                   = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitNumLegacyInputTypes"]                                         = {HIP_6040, HIP_0,    HIP_0   };
+  m["ihiprtcLinkState"]                                                  = {HIP_5030, HIP_0,    HIP_0   };
+  m["hiprtcLinkState"]                                                   = {HIP_5030, HIP_0,    HIP_0   };
+  m["hipFunctionLaunchParams_t"]                                         = {HIP_5050, HIP_0,    HIP_0   };
+  m["hipFunctionLaunchParams"]                                           = {HIP_5050, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeHostRegisterSupported"]                           = {HIP_6000, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreSignalNodeParams"]                              = {HIP_6000, HIP_0,    HIP_0   };
+  m["hipExternalSemaphoreWaitNodeParams"]                                = {HIP_6000, HIP_0,    HIP_0   };
+  m["hipDriverProcAddressQueryResult"]                                   = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIP_GET_PROC_ADDRESS_SUCCESS"]                                      = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIP_GET_PROC_ADDRESS_SYMBOL_NOT_FOUND"]                             = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIP_GET_PROC_ADDRESS_VERSION_NOT_SUFFICIENT"]                       = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIP_MEMSET_NODE_PARAMS"]                                            = {HIP_6010, HIP_0,    HIP_7000};
+  m["hipStreamLegacy"]                                                   = {HIP_6020, HIP_0,    HIP_0   };
+  m["hipStreamBatchMemOpParams_union"]                                   = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipStreamBatchMemOpParams"]                                         = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipBatchMemOpNodeParams"]                                           = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipStreamBatchMemOpType"]                                           = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipStreamMemOpWaitValue32"]                                         = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipStreamMemOpWriteValue32"]                                        = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipStreamMemOpFlushRemoteWrites"]                                   = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipStreamMemOpWaitValue64"]                                         = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipStreamMemOpWriteValue64"]                                        = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipStreamMemOpBarrier"]                                             = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipGraphNodeTypeBatchMemOp"]                                        = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionGlobalSymbolNames"]                                     = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionGlobalSymbolAddresses"]                                 = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionGlobalSymbolCount"]                                     = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionLto"]                                                   = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionFtz"]                                                   = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionPrecDiv"]                                               = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionPrecSqrt"]                                              = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionFma"]                                                   = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionPositionIndependentCode"]                               = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionMinCTAPerSM"]                                           = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionMaxThreadsPerBlock"]                                    = {HIP_6040, HIP_0,    HIP_0   };
+  m["hipJitOptionOverrideDirectiveValues"]                               = {HIP_6040, HIP_0,    HIP_0   };
+  m["HIP_LAUNCH_CONFIG_st"]                                              = {HIP_7000, HIP_0,    HIP_0   };
+  m["HIP_LAUNCH_CONFIG"]                                                 = {HIP_7000, HIP_0,    HIP_0   };
+  m["hipMemRangeHandleType"]                                             = {HIP_7000, HIP_0,    HIP_0   };
+  m["hipMemRangeHandleTypeDmaBufFd"]                                     = {HIP_7000, HIP_0,    HIP_0   };
+  m["hipMemRangeHandleTypeMax"]                                          = {HIP_7000, HIP_0,    HIP_0   };
+  m["hipMemRangeFlags"]                                                  = {HIP_7000, HIP_0,    HIP_0   };
+  m["hipMemRangeFlagDmaBufMappingTypePcie"]                              = {HIP_7000, HIP_0,    HIP_0   };
+  m["hipLaunchAttributeMax"]                                             = {HIP_7000, HIP_0,    HIP_0   };
+  m["ihipLibrary_t"]                                                     = {HIP_7010, HIP_0,    HIP_0   };
+  m["hipLibrary_t"]                                                      = {HIP_7010, HIP_0,    HIP_0   };
+  m["ihipKernel_t"]                                                      = {HIP_7010, HIP_0,    HIP_0   };
+  m["hipKernel_t"]                                                       = {HIP_7010, HIP_0,    HIP_0   };
+  m["hipLibraryOption_e"]                                                = {HIP_7010, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeHostNumaId"]                                      = {HIP_7020, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeDmaBufSupported"]                                 = {HIP_7120, HIP_0,    HIP_0   };
+  m["hipDeviceAttributeHandleTypeFabricSupported"]                       = {HIP_8000, HIP_0,    HIP_0,  HIP_LATEST};
+  m["hipMemHandleTypeFabric"]                                            = {HIP_8000, HIP_0,    HIP_0,  HIP_LATEST};
+
+  return m;
+}();
+
+const std::map<llvm::StringRef, cudaAPIChangedVersions> CUDA_DRIVER_TYPE_CHANGED_VER_MAP = [] {
+  std::map<llvm::StringRef, cudaAPIChangedVersions> m;
+
+  m["CUdevSmResource_st"]                                                = {CUDA_131};
+  m["CUdevResource_st"]                                                  = {CUDA_131};
+  m["CUstreamBatchMemOpParams_union"]                                    = {CUDA_131};
+  m["CUDA_HOST_NODE_PARAMS_v2_st"]                                       = {CUDA_132};
+  m["CUDA_HOST_NODE_PARAMS_v2"]                                          = {CUDA_132};
+
+  return m;
+  }();
+
+const std::map<llvm::StringRef, hipAPIChangedVersions> HIP_DRIVER_TYPE_CHANGED_VER_MAP = [] {
+  std::map<llvm::StringRef, hipAPIChangedVersions> m;
+
+  m["hipLaunchAttributeValue"]                                           = {HIP_7010};
+
+  return m;
+}();

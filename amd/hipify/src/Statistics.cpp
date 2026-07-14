@@ -1,0 +1,932 @@
+/*
+Copyright (c) 2015 - present Advanced Micro Devices, Inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+
+#include "Statistics.h"
+#include <assert.h>
+#include <sstream>
+#include <iomanip>
+
+#if defined(__has_include) && __has_include(<optional>)
+#include <optional>
+using std::optional;
+#elif __has_include(<experimental/optional>)
+#include <experimental/optional>
+using std::experimental::optional;
+#else
+#error "A standard or experimental <optional> header is required."
+#endif
+
+#include "ArgParse.h"
+
+const char *counterNames[NUM_CONV_TYPES] = {
+  "error", // CONV_ERROR
+  "init", // CONV_INIT
+  "version", // CONV_VERSION
+  "device", // CONV_DEVICE
+  "context", // CONV_CONTEXT
+  "module", // CONV_MODULE
+  "library", // CONV_LIBRARY
+  "memory", // CONV_MEMORY
+  "virtual_memory", // CONV_VIRTUAL_MEMORY
+  "ordered_memory", // CONV_ORDERED_MEMORY
+  "multicast", // CONV_MULTICAST
+  "unified", // CONV_UNIFIED
+  "stream", // CONV_STREAM
+  "event", // CONV_EVENT
+  "external_resource", // CONV_EXTERNAL_RES
+  "stream_memory", // CONV_STREAM_MEMORY
+  "execution", // CONV_EXECUTION
+  "graph", // CONV_GRAPH
+  "occupancy", // CONV_OCCUPANCY
+  "texture", // CONV_TEXTURE
+  "surface", // CONV_SURFACE
+  "tensor", // CONV_TENSOR
+  "peer", // CONV_PEER
+  "graphics", // CONV_GRAPHICS
+  "driver_entry_point", // CONV_DRIVER_ENTRY_POINT
+  "cpp", // CONV_CPP
+  "coredump", // CONV_COREDUMP
+  "green_context", // CONV_GREEN_CONTEXT
+  "error_log", // CONV_ERROR_LOG
+  "driver_interact", // CONV_DRIVER_INTERACT
+  "profiler", // CONV_PROFILER
+  "openGL", // CONV_OPENGL
+  "D3D9", // CONV_D3D9
+  "D3D10", // CONV_D3D10
+  "D3D11", // CONV_D3D11
+  "VDPAU", // CONV_VDPAU
+  "EGL", // CONV_EGL
+  "thread", // CONV_THREAD
+  "complex", // CONV_COMPLEX
+  "library", // CONV_LIB_FUNC
+  "device_library", // CONV_LIB_DEVICE_FUNC
+  "device_function", // CONV_DEVICE_FUNC
+  "device_type", // CONV_DEVICE_TYPE
+  "include", // CONV_INCLUDE
+  "include_cuda_main_header", // CONV_INCLUDE_CUDA_MAIN_H
+  "include_cuda_main_header_v2", // CONV_INCLUDE_CUDA_MAIN_V2_H
+  "type", // CONV_TYPE
+  "literal", // CONV_LITERAL
+  "numeric_literal", // CONV_NUMERIC_LITERAL
+  "define", // CONV_DEFINE
+  "extern_shared", // CONV_EXTERN_SHARED
+  "kernel_launch" // CONV_KERNEL_LAUNCH
+};
+
+const char *counterTypes[NUM_CONV_TYPES] = {
+  "CONV_ERROR",
+  "CONV_INIT",
+  "CONV_VERSION",
+  "CONV_DEVICE",
+  "CONV_CONTEXT",
+  "CONV_MODULE",
+  "CONV_LIBRARY",
+  "CONV_MEMORY",
+  "CONV_VIRTUAL_MEMORY",
+  "CONV_ORDERED_MEMORY",
+  "CONV_MULTICAST",
+  "CONV_UNIFIED",
+  "CONV_STREAM",
+  "CONV_EVENT",
+  "CONV_EXTERNAL_RES",
+  "CONV_STREAM_MEMORY",
+  "CONV_EXECUTION",
+  "CONV_GRAPH",
+  "CONV_OCCUPANCY",
+  "CONV_TEXTURE",
+  "CONV_SURFACE",
+  "CONV_TENSOR",
+  "CONV_PEER",
+  "CONV_GRAPHICS",
+  "CONV_DRIVER_ENTRY_POINT",
+  "CONV_CPP",
+  "CONV_COREDUMP",
+  "CONV_GREEN_CONTEXT",
+  "CONV_ERROR_LOG",
+  "CONV_DRIVER_INTERACT",
+  "CONV_PROFILER",
+  "CONV_OPENGL",
+  "CONV_D3D9",
+  "CONV_D3D10",
+  "CONV_D3D11",
+  "CONV_VDPAU",
+  "CONV_EGL",
+  "CONV_THREAD",
+  "CONV_COMPLEX",
+  "CONV_LIB_FUNC",
+  "CONV_LIB_DEVICE_FUNC",
+  "CONV_DEVICE_FUNC",
+  "CONV_DEVICE_TYPE",
+  "CONV_INCLUDE",
+  "CONV_INCLUDE_CUDA_MAIN_H",
+  "CONV_INCLUDE_CUDA_MAIN_V2_H",
+  "CONV_TYPE",
+  "CONV_LITERAL",
+  "CONV_NUMERIC_LITERAL",
+  "CONV_DEFINE",
+  "CONV_EXTERN_SHARED",
+  "CONV_KERNEL_LAUNCH"
+};
+
+const char *apiNames[NUM_API_TYPES] = {
+  "CUDA Driver API",
+  "CUDA RT API",
+  "cuComplex API",
+  "cuBLAS API",
+  "cuRAND API",
+  "cuDNN API",
+  "cuFFT API",
+  "cuSPARSE API",
+  "cuSOLVER API",
+  "CUB API",
+  "RTC API",
+  "TENSOR API",
+  "cuFile API",
+};
+
+const char *apiTypes[NUM_API_TYPES] = {
+  "API_DRIVER",
+  "API_RUNTIME",
+  "API_COMPLEX",
+  "API_BLAS",
+  "API_RAND",
+  "API_DNN",
+  "API_FFT",
+  "API_CUB",
+  "API_SPARSE",
+  "API_SOLVER",
+  "API_RTC",
+  "API_TENSOR",
+  "API_FILE"
+};
+
+const std::vector<cudaVersions> CUDA_114_cuFile_version = { CUFILE_1000, CUFILE_1001, CUFILE_1002 };
+const std::vector<cudaVersions> CUDA_115_cuFile_version = { CUFILE_1010, CUFILE_1011 };
+const std::vector<cudaVersions> CUDA_116_cuFile_version = { CUFILE_1020, CUFILE_1021 };
+const std::vector<cudaVersions> CUDA_117_cuFile_version = { CUFILE_1030, CUFILE_1031 };
+const std::vector<cudaVersions> CUDA_118_cuFile_version = { CUFILE_1040 };
+const std::vector<cudaVersions> CUDA_120_cuFile_version = { CUFILE_1050, CUFILE_1051 };
+const std::vector<cudaVersions> CUDA_121_cuFile_version = { CUFILE_1060, CUFILE_1061 };
+const std::vector<cudaVersions> CUDA_122_cuFile_version = { CUFILE_1070, CUFILE_1071, CUFILE_1072 };
+const std::vector<cudaVersions> CUDA_123_cuFile_version = { CUFILE_1080, CUFILE_1081 };
+const std::vector<cudaVersions> CUDA_124_cuFile_version = { CUFILE_1090, CUFILE_1091 };
+const std::vector<cudaVersions> CUDA_125_cuFile_version = { CUFILE_1100, CUFILE_1101 };
+const std::vector<cudaVersions> CUDA_126_cuFile_version = { CUFILE_1110, CUFILE_1111 };
+const std::vector<cudaVersions> CUDA_128_cuFile_version = { CUFILE_1130, CUFILE_1131 };
+const std::vector<cudaVersions> CUDA_129_cuFile_version = { CUFILE_1140, CUFILE_1141 };
+const std::vector<cudaVersions> CUDA_130_cuFile_version = { CUFILE_1150, CUFILE_1151 };
+const std::vector<cudaVersions> CUDA_131_cuFile_version = { CUFILE_1160, CUFILE_1161 };
+const std::vector<cudaVersions> Empty_vector = {};
+
+namespace {
+
+template<typename ST, typename ST2>
+void conditionalPrint(ST *stream1,
+                      ST2 *stream2,
+                      const std::string &s1,
+                      const std::string &s2) {
+  if (stream1) *stream1 << s1;
+  if (stream2) *stream2 << s2;
+}
+
+// Print a named stat value to both the terminal and the CSV file.
+template<typename T>
+void printStat(std::ostream *csv, llvm::raw_ostream *printOut, const std::string &name, T value) {
+  if (printOut)
+    *printOut << "  " << name << ": " << value << "\n";
+  if (csv)
+    *csv << name << ";" << value << "\n";
+}
+
+} // Anonymous namespace
+
+void StatCounter::incrementCounter(const hipCounter &counter, const std::string &name) {
+  counters[name]++;
+  apiCounters[(int) counter.apiType]++;
+  convTypeCounters[(int) counter.type]++;
+}
+
+void StatCounter::add(const StatCounter &other) {
+  for (const auto &p : other.counters)
+    counters[p.first] += p.second;
+  for (int i = 0; i < NUM_API_TYPES; ++i)
+    apiCounters[i] += other.apiCounters[i];
+  for (int i = 0; i < NUM_CONV_TYPES; ++i)
+    convTypeCounters[i] += other.convTypeCounters[i];
+}
+
+int StatCounter::getConvSum() {
+  int acc = 0;
+  for (const int &i : convTypeCounters)
+    acc += i;
+  return acc;
+}
+
+void StatCounter::print(std::ostream *csv, llvm::raw_ostream *printOut, const std::string &prefix) {
+  for (int i = 0; i < NUM_CONV_TYPES; ++i) {
+    if (convTypeCounters[i] > 0) {
+      conditionalPrint(csv, printOut, "\nCUDA ref type;Count\n", "[HIPIFY] info: " + prefix + " refs by type:\n");
+      break;
+    }
+  }
+  for (int i = 0; i < NUM_CONV_TYPES; ++i) {
+    if (convTypeCounters[i] > 0) {
+      printStat(csv, printOut, counterNames[i], convTypeCounters[i]);
+    }
+  }
+  for (int i = 0; i < NUM_API_TYPES; ++i) {
+    if (apiCounters[i] > 0) {
+      conditionalPrint(csv, printOut, "\nCUDA API;Count\n", "[HIPIFY] info: " + prefix + " refs by API:\n");
+      break;
+    }
+  }
+  for (int i = 0; i < NUM_API_TYPES; ++i) {
+    if (apiCounters[i] > 0) {
+      printStat(csv, printOut, apiNames[i], apiCounters[i]);
+    }
+  }
+  if (counters.size() > 0) {
+    conditionalPrint(csv, printOut, "\nCUDA ref name;Count\n", "[HIPIFY] info: " + prefix + " refs by names:\n");
+    for (const auto &it : counters) {
+      printStat(csv, printOut, it.first, it.second);
+    }
+  }
+}
+
+Statistics::Statistics(const std::string &name): fileName(name) {
+  // Compute the total bytes/lines in the input file.
+  std::ifstream src_file(name, std::ios::binary | std::ios::ate);
+  if (src_file.good()) {
+    src_file.clear();
+    src_file.seekg(0);
+    totalLines = (unsigned)std::count(std::istreambuf_iterator<char>(src_file), std::istreambuf_iterator<char>(), '\n');
+    totalBytes = (unsigned)src_file.tellg();
+    if (totalBytes < 0) {
+      totalBytes = 0;
+    }
+  }
+  startTime = chr::steady_clock::now();
+}
+
+///////// Counter update routines //////////
+
+void Statistics::incrementCounter(const hipCounter &counter, const std::string &name) {
+  if (Statistics::isUnsupported(counter)) {
+    unsupported.incrementCounter(counter, name);
+  } else {
+    supported.incrementCounter(counter, name);
+  }
+}
+
+void Statistics::add(const Statistics &other) {
+  supported.add(other.supported);
+  unsupported.add(other.unsupported);
+  touchedBytes += other.touchedBytes;
+  totalBytes += other.totalBytes;
+  touchedLines += other.touchedLines;
+  totalLines += other.totalLines;
+  if (other.hasErrors && !hasErrors) hasErrors = true;
+  if (startTime > other.startTime)   startTime = other.startTime;
+}
+
+void Statistics::lineTouched(unsigned int lineNumber) {
+  touchedLinesSet.insert(lineNumber);
+  touchedLines = unsigned(touchedLinesSet.size());
+}
+
+void Statistics::bytesChanged(unsigned int bytes) {
+  touchedBytes += bytes;
+}
+
+void Statistics::markCompletion() {
+  completionTime = chr::steady_clock::now();
+}
+
+///////// Output functions //////////
+
+void Statistics::print(std::ostream *csv, llvm::raw_ostream *printOut, bool skipHeader) {
+  if (!skipHeader) {
+    std::string str = "file \'" + fileName + "\' statistics:\n";
+    conditionalPrint(csv, printOut, "\n" + str, "\n[HIPIFY] info: " + str);
+  }
+  if (hasErrors || totalBytes == 0 || totalLines == 0) {
+    std::string str = "\n  ERROR: Statistics is invalid due to failed hipification.\n\n";
+    conditionalPrint(csv, printOut, str, str);
+  }
+  std::stringstream stream;
+  // Total number of (un)supported refs that were converted.
+  int supportedSum = supported.getConvSum();
+  int unsupportedSum = unsupported.getConvSum();
+  int allSum = supportedSum + unsupportedSum;
+  printStat(csv, printOut, "CONVERTED refs count", supportedSum);
+  printStat(csv, printOut, "UNCONVERTED refs count", unsupportedSum);
+  stream << std::fixed << std::setprecision(1) << 100 - (0 == allSum ? 100 : double(unsupportedSum) / double(allSum) * 100);
+  printStat(csv, printOut, "CONVERSION %", stream.str());
+  stream.str("");
+  printStat(csv, printOut, "REPLACED bytes", touchedBytes);
+  printStat(csv, printOut, "TOTAL bytes", totalBytes);
+  printStat(csv, printOut, "CHANGED lines of code", touchedLines);
+  printStat(csv, printOut, "TOTAL lines of code", totalLines);
+  stream << std::fixed << std::setprecision(1) << (0 == totalBytes ? 0 : double(touchedBytes) / double(totalBytes) * 100);
+  printStat(csv, printOut, "CODE CHANGED (in bytes) %", stream.str());
+  stream.str("");
+  stream << std::fixed << std::setprecision(1) << (0 == totalBytes ? 0 : double(touchedLines) / double(totalLines) * 100);
+  printStat(csv, printOut, "CODE CHANGED (in lines) %", stream.str());
+  stream.str("");
+  typedef std::chrono::duration<double, std::milli> duration;
+  duration elapsed = completionTime - startTime;
+  stream << std::fixed << std::setprecision(2) << elapsed.count() / 1000;
+  printStat(csv, printOut, "TIME ELAPSED s", stream.str());
+  supported.print(csv, printOut, "CONVERTED");
+  unsupported.print(csv, printOut, "UNCONVERTED");
+}
+
+void Statistics::printAggregate(std::ostream *csv, llvm::raw_ostream *printOut) {
+  Statistics globalStats = getAggregate();
+  // A file is considered "converted" if we made any changes to it.
+  int convertedFiles = 0;
+  for (const auto &p : stats) {
+    if (p.second.touchedLines && p.second.totalBytes &&
+        p.second.totalLines && !p.second.hasErrors) {
+      convertedFiles++;
+    }
+  }
+  globalStats.markCompletion();
+  globalStats.print(csv, printOut);
+  std::string str = "TOTAL statistics:";
+  conditionalPrint(csv, printOut, "\n" + str + "\n", "\n[HIPIFY] info: " + str + "\n");
+  printStat(csv, printOut, "CONVERTED files", convertedFiles);
+  printStat(csv, printOut, "PROCESSED files", stats.size());
+}
+
+//// Static state management ////
+
+Statistics Statistics::getAggregate() {
+  Statistics globalStats("GLOBAL");
+  for (const auto &p : stats) {
+    globalStats.add(p.second);
+  }
+  return globalStats;
+}
+
+Statistics &Statistics::current() {
+  assert(Statistics::currentStatistics);
+  return *Statistics::currentStatistics;
+}
+
+void Statistics::setActive(const std::string &name) {
+  stats.emplace(std::make_pair(name, Statistics{name}));
+  Statistics::currentStatistics = &stats.at(name);
+}
+
+bool Statistics::isToRoc(const hipCounter &counter) {
+  return ((counter.apiType == API_BLAS || counter.apiType == API_DNN || counter.apiType == API_SPARSE || counter.apiType == API_SOLVER ||
+           counter.apiType == API_RUNTIME || counter.apiType == API_COMPLEX || counter.apiType == API_RAND || counter.apiType == API_FILE)
+          && TranslateToRoc) || isToMIOpen(counter);
+}
+
+bool Statistics::isToMIOpen(const hipCounter &counter) {
+  return counter.apiType == API_DNN && TranslateToMIOpen;
+}
+
+bool Statistics::isHipExperimental(const hipCounter &counter) {
+  return HIP_EXPERIMENTAL == (counter.supportDegree & HIP_EXPERIMENTAL);
+}
+
+bool Statistics::isHipPartiallySupported(const hipCounter &counter) {
+  return HIP_PARTIALLY_SUPPORTED == (counter.supportDegree & HIP_PARTIALLY_SUPPORTED);
+}
+
+bool Statistics::isHipUnsupported(const hipCounter &counter) {
+  return HIP_UNSUPPORTED == (counter.supportDegree & HIP_UNSUPPORTED) ||
+    UNSUPPORTED == (counter.supportDegree & UNSUPPORTED);
+}
+
+bool Statistics::isRocUnsupported(const hipCounter &counter) {
+  return ROC_UNSUPPORTED == (counter.supportDegree & ROC_UNSUPPORTED) ||
+    UNSUPPORTED == (counter.supportDegree & UNSUPPORTED);
+}
+
+bool Statistics::isRocPartiallySupported(const hipCounter &counter) {
+  return ROC_PARTIALLY_SUPPORTED == (counter.supportDegree & ROC_PARTIALLY_SUPPORTED);
+}
+
+bool Statistics::isUnsupported(const hipCounter &counter) {
+  if (UNSUPPORTED == (counter.supportDegree & UNSUPPORTED)) return true;
+  if (Statistics::isToRoc(counter)) return Statistics::isRocUnsupported(counter);
+  else return Statistics::isHipUnsupported(counter);
+}
+
+bool Statistics::isCudaDeprecated(const hipCounter &counter) {
+  return CUDA_DEPRECATED == (counter.supportDegree & CUDA_DEPRECATED) ||
+         DEPRECATED == (counter.supportDegree & DEPRECATED);
+}
+
+bool Statistics::isHipDeprecated(const hipCounter &counter) {
+  return HIP_DEPRECATED == (counter.supportDegree & HIP_DEPRECATED) ||
+         DEPRECATED == (counter.supportDegree & DEPRECATED);
+}
+
+bool Statistics::isRocDeprecated(const hipCounter &counter) {
+  return ROC_DEPRECATED == (counter.supportDegree & ROC_DEPRECATED) ||
+         DEPRECATED == (counter.supportDegree & DEPRECATED);
+}
+
+bool Statistics::isDeprecated(const hipCounter &counter) {
+  return DEPRECATED == (counter.supportDegree & DEPRECATED) || (
+         CUDA_DEPRECATED == (counter.supportDegree & CUDA_DEPRECATED) &&
+         HIP_DEPRECATED == (counter.supportDegree & HIP_DEPRECATED) &&
+         ROC_DEPRECATED == (counter.supportDegree & ROC_DEPRECATED));
+}
+
+bool Statistics::isCudaRemoved(const hipCounter &counter) {
+  return CUDA_REMOVED == (counter.supportDegree & CUDA_REMOVED) ||
+         REMOVED == (counter.supportDegree & REMOVED);
+}
+
+bool Statistics::isHipRemoved(const hipCounter &counter) {
+  return HIP_REMOVED == (counter.supportDegree & HIP_REMOVED) ||
+         REMOVED == (counter.supportDegree & REMOVED);
+}
+
+bool Statistics::isRocRemoved(const hipCounter &counter) {
+  return ROC_REMOVED == (counter.supportDegree & ROC_REMOVED) ||
+         REMOVED == (counter.supportDegree & REMOVED);
+}
+
+bool Statistics::isRemoved(const hipCounter &counter) {
+  return REMOVED == (counter.supportDegree & REMOVED) || (
+         CUDA_REMOVED == (counter.supportDegree & CUDA_REMOVED) &&
+         HIP_REMOVED == (counter.supportDegree & HIP_REMOVED) &&
+         ROC_REMOVED == (counter.supportDegree & ROC_REMOVED));
+}
+
+bool Statistics::isHipSupportedV2Only(const hipCounter &counter) {
+  return HIP_SUPPORTED_V2_ONLY == (counter.supportDegree & HIP_SUPPORTED_V2_ONLY);
+}
+
+bool Statistics::isCudaOverloaded(const hipCounter &counter) {
+  return CUDA_OVERLOADED == (counter.supportDegree & CUDA_OVERLOADED);
+}
+
+std::string Statistics::getCudaVersion(const cudaVersions &ver) {
+  switch (ver) {
+    case CUDA_0:
+    default:       return "";
+    case CUDA_10:  return "1.0";
+    case CUDA_11:  return "1.1";
+    case CUDA_20:  return "2.0";
+    case CUDA_21:  return "2.1";
+    case CUDA_22:  return "2.2";
+    case CUDA_23:  return "2.3";
+    case CUDA_30:  return "3.0";
+    case CUDA_31:  return "3.1";
+    case CUDA_32:  return "3.2";
+    case CUDA_40:  return "4.0";
+    case CUDA_41:  return "4.1";
+    case CUDA_42:  return "4.2";
+    case CUDA_50:  return "5.0";
+    case CUDA_55:  return "5.5";
+    case CUDA_60:  return "6.0";
+    case CUDA_65:  return "6.5";
+    case CUDA_70:  return "7.0";
+    case CUDA_75:  return "7.5";
+    case CUDA_80:  return "8.0";
+    case CUDA_90:  return "9.0";
+    case CUDA_91:  return "9.1";
+    case CUDA_92:  return "9.2";
+    case CUDA_100: return "10.0";
+    case CUDA_101: return "10.1";
+    case CUDA_102: return "10.2";
+    case CUDA_110: return "11.0";
+    case CUDA_111: return "11.1";
+    case CUDA_112: return "11.2";
+    case CUDA_113: return "11.3";
+    case CUDA_114: return "11.4";
+    case CUDA_115: return "11.5";
+    case CUDA_116: return "11.6";
+    case CUDA_117: return "11.7";
+    case CUDA_118: return "11.8";
+    case CUDA_120: return "12.0";
+    case CUDA_121: return "12.1";
+    case CUDA_122: return "12.2";
+    case CUDA_123: return "12.3";
+    case CUDA_124: return "12.4";
+    case CUDA_125: return "12.5";
+    case CUDA_126: return "12.6";
+    case CUDA_128: return "12.8";
+    case CUDA_129: return "12.9";
+    case CUDA_130: return "13.0";
+    case CUDA_131: return "13.1";
+    case CUDA_132: return "13.2";
+    case CUDNN_10: return "1.0.0";
+    case CUDNN_20: return "2.0.0";
+    case CUDNN_30: return "3.0.0";
+    case CUDNN_40: return "4.0.0";
+    case CUDNN_50: return "5.0.0";
+    case CUDNN_51: return "5.1.0";
+    case CUDNN_60: return "6.0.0";
+    case CUDNN_704: return "7.0.4";
+    case CUDNN_705: return "7.0.5";
+    case CUDNN_712: return "7.1.2";
+    case CUDNN_713: return "7.1.3";
+    case CUDNN_714: return "7.1.4";
+    case CUDNN_721: return "7.2.1";
+    case CUDNN_730: return "7.3.0";
+    case CUDNN_731: return "7.3.1";
+    case CUDNN_741: return "7.4.1";
+    case CUDNN_742: return "7.4.2";
+    case CUDNN_750: return "7.5.0";
+    case CUDNN_751: return "7.5.1";
+    case CUDNN_760: return "7.6.0";
+    case CUDNN_761: return "7.6.1";
+    case CUDNN_762: return "7.6.2";
+    case CUDNN_763: return "7.6.3";
+    case CUDNN_764: return "7.6.4";
+    case CUDNN_765: return "7.6.5";
+    case CUDNN_801: return "8.0.1";
+    case CUDNN_802: return "8.0.2";
+    case CUDNN_803: return "8.0.3";
+    case CUDNN_804: return "8.0.4";
+    case CUDNN_805: return "8.0.5";
+    case CUDNN_810: return "8.1.0";
+    case CUDNN_811: return "8.1.1";
+    case CUDNN_820: return "8.2.0";
+    case CUDNN_830: return "8.3.0";
+    case CUDNN_840: return "8.4.0";
+    case CUDNN_850: return "8.5.0";
+    case CUDNN_860: return "8.6.0";
+    case CUDNN_870: return "8.7.0";
+    case CUDNN_880: return "8.8.0";
+    case CUDNN_881: return "8.8.1";
+    case CUDNN_890: return "8.9.0";
+    case CUDNN_891: return "8.9.1";
+    case CUDNN_892: return "8.9.2";
+    case CUDNN_893: return "8.9.3";
+    case CUDNN_894: return "8.9.4";
+    case CUDNN_895: return "8.9.5";
+    case CUDNN_896: return "8.9.6";
+    case CUDNN_897: return "8.9.7";
+    case CUDNN_900: return "9.0.0";
+    case CUDNN_910: return "9.1.0";
+    case CUDNN_920: return "9.2.0";
+    case CUDNN_930: return "9.3.0";
+    case CUDNN_940: return "9.4.0";
+    case CUDNN_950: return "9.5.0";
+    case CUDNN_960: return "9.6.0";
+    case CUDNN_970: return "9.7.0";
+    case CUDNN_980: return "9.8.0";
+    case CUDNN_990: return "9.9.0";
+    case CUDNN_9100: return "9.10.0";
+    case CUDNN_9110: return "9.11.0";
+    case CUDNN_9120: return "9.12.0";
+    case CUDNN_9130: return "9.13.0";
+    case CUDNN_9140: return "9.14.0";
+    case CUDNN_9150: return "9.15.0";
+    case CUDNN_9170: return "9.17.0";
+    case CUDNN_9180: return "9.18.0";
+    case CUDNN_9200: return "9.20.0";
+    case CUTENSOR_1010: return "1.0.1.0";
+    case CUTENSOR_1100: return "1.1.0.0";
+    case CUTENSOR_1200: return "1.2.0.0";
+    case CUTENSOR_1210: return "1.2.1.0";
+    case CUTENSOR_1220: return "1.2.2.0";
+    case CUTENSOR_1300: return "1.3.0.0";
+    case CUTENSOR_1310: return "1.3.1.0";
+    case CUTENSOR_1320: return "1.3.2.0";
+    case CUTENSOR_1330: return "1.3.3.0";
+    case CUTENSOR_1400: return "1.4.0.0";
+    case CUTENSOR_1500: return "1.5.0.0";
+    case CUTENSOR_1600: return "1.6.0.0";
+    case CUTENSOR_1610: return "1.6.1.0";
+    case CUTENSOR_1620: return "1.6.2.0";
+    case CUTENSOR_1700: return "1.7.0.0";
+    case CUTENSOR_2000: return "2.0.0.0";
+    case CUTENSOR_2010: return "2.0.1.0";
+    case CUTENSOR_2020: return "2.0.2.0";
+    case CUTENSOR_2021: return "2.0.2.1";
+    case CUTENSOR_2109: return "2.1.0.9";
+    case CUTENSOR_2200: return "2.2.0.0";
+    case CUTENSOR_2300: return "2.3.0.0";
+    case CUTENSOR_2400: return "2.4.0.0";
+    case CUTENSOR_2500: return "2.5.0.0";
+    case CUTENSOR_2600: return "2.6.0.0";
+    case CUFILE_1000: return "1.0.0";
+    case CUFILE_1001: return "1.0.1";
+    case CUFILE_1002: return "1.0.2";
+    case CUFILE_1010: return "1.1.0";
+    case CUFILE_1011: return "1.1.1";
+    case CUFILE_1020: return "1.2.0";
+    case CUFILE_1021: return "1.2.1";
+    case CUFILE_1030: return "1.3.0";
+    case CUFILE_1031: return "1.3.1";
+    case CUFILE_1040: return "1.4.0";
+    case CUFILE_1050: return "1.5.0";
+    case CUFILE_1051: return "1.5.1";
+    case CUFILE_1060: return "1.6.0";
+    case CUFILE_1061: return "1.6.1";
+    case CUFILE_1070: return "1.7.0";
+    case CUFILE_1071: return "1.7.1";
+    case CUFILE_1072: return "1.7.2";
+    case CUFILE_1080: return "1.8.0";
+    case CUFILE_1081: return "1.8.1";
+    case CUFILE_1090: return "1.9.0";
+    case CUFILE_1091: return "1.9.1";
+    case CUFILE_1100: return "1.10.0";
+    case CUFILE_1101: return "1.10.1";
+    case CUFILE_1110: return "1.11.0";
+    case CUFILE_1111: return "1.11.1";
+    case CUFILE_1130: return "1.13.0";
+    case CUFILE_1131: return "1.13.1";
+    case CUFILE_1140: return "1.14.0";
+    case CUFILE_1141: return "1.14.1";
+    case CUFILE_1150: return "1.15.0";
+    case CUFILE_1151: return "1.15.1";
+    case CUFILE_1160: return "1.16.0";
+    case CUFILE_1161: return "1.16.1";
+    case CUFILE_1170: return "1.17.0";
+  }
+  return "";
+}
+
+cudaVersions Statistics::getCudaVersionForCuFileVersion(const cudaVersions &ver) {
+  switch (ver) {
+    case CUFILE_1000:
+    case CUFILE_1001:
+    case CUFILE_1002:
+      return CUDA_114;
+    case CUFILE_1010:
+    case CUFILE_1011:
+      return CUDA_115;
+    case CUFILE_1020:
+    case CUFILE_1021:
+      return CUDA_116;
+    case CUFILE_1030:
+    case CUFILE_1031:
+      return CUDA_117;
+    case CUFILE_1040:
+      return CUDA_118;
+    case CUFILE_1050:
+    case CUFILE_1051:
+      return CUDA_120;
+    case CUFILE_1060:
+    case CUFILE_1061:
+      return CUDA_121;
+    case CUFILE_1070:
+    case CUFILE_1071:
+    case CUFILE_1072:
+      return CUDA_122;
+    case CUFILE_1080:
+    case CUFILE_1081:
+      return CUDA_123;
+    case CUFILE_1090:
+    case CUFILE_1091:
+      return CUDA_124;
+    case CUFILE_1100:
+    case CUFILE_1101:
+      return CUDA_125;
+    case CUFILE_1110:
+    case CUFILE_1111:
+      return CUDA_126;
+    case CUFILE_1130:
+    case CUFILE_1131:
+      return CUDA_128;
+    case CUFILE_1140:
+    case CUFILE_1141:
+      return CUDA_129;
+    case CUFILE_1150:
+    case CUFILE_1151:
+      return CUDA_130;
+    case CUFILE_1160:
+    case CUFILE_1161:
+      return CUDA_131;
+    default:
+      return CUDA_0;
+  }
+}
+
+const std::vector<cudaVersions> &Statistics::getCuFileVersionsForCudaVersion(const cudaVersions &ver) {
+  switch (ver) {
+    case CUDA_114:
+      return CUDA_114_cuFile_version;
+    case CUDA_115:
+      return CUDA_115_cuFile_version;
+    case CUDA_116:
+      return CUDA_116_cuFile_version;
+    case CUDA_117:
+      return CUDA_117_cuFile_version;
+    case CUDA_118:
+      return CUDA_118_cuFile_version;
+    case CUDA_120:
+      return CUDA_120_cuFile_version;
+    case CUDA_121:
+      return CUDA_121_cuFile_version;
+    case CUDA_122:
+      return CUDA_122_cuFile_version;
+    case CUDA_123:
+      return CUDA_123_cuFile_version;
+    case CUDA_124:
+      return CUDA_124_cuFile_version;
+    case CUDA_125:
+      return CUDA_125_cuFile_version;
+    case CUDA_126:
+      return CUDA_126_cuFile_version;
+    case CUDA_128:
+      return CUDA_128_cuFile_version;
+    case CUDA_129:
+      return CUDA_129_cuFile_version;
+    case CUDA_130:
+      return CUDA_130_cuFile_version;
+    case CUDA_131:
+      return CUDA_131_cuFile_version;
+    default:
+      return Empty_vector;
+  }
+}
+
+std::string Statistics::getHipVersion(const hipVersions &ver) {
+  switch (ver) {
+    case HIP_0:
+    default:       return "";
+    case HIP_1050: return "1.5.0";
+    case HIP_1051: return "1.5.1";
+    case HIP_1052: return "1.5.2";
+    case HIP_1060: return "1.6.0";
+    case HIP_1061: return "1.6.1";
+    case HIP_1064: return "1.6.4";
+    case HIP_1070: return "1.7.0";
+    case HIP_1071: return "1.7.1";
+    case HIP_1080: return "1.8.0";
+    case HIP_1082: return "1.8.2";
+    case HIP_1090: return "1.9.0";
+    case HIP_1091: return "1.9.1";
+    case HIP_1092: return "1.9.2";
+    case HIP_2000: return "2.0.0";
+    case HIP_2010: return "2.1.0";
+    case HIP_2020: return "2.2.0";
+    case HIP_2030: return "2.3.0";
+    case HIP_2040: return "2.4.0";
+    case HIP_2050: return "2.5.0";
+    case HIP_2060: return "2.6.0";
+    case HIP_2070: return "2.7.0";
+    case HIP_2072: return "2.7.2";
+    case HIP_2080: return "2.8.0";
+    case HIP_2090: return "2.9.0";
+    case HIP_2100: return "2.10.0";
+    case HIP_3000: return "3.0.0";
+    case HIP_3010: return "3.1.0";
+    case HIP_3011: return "3.1.1";
+    case HIP_3020: return "3.2.0";
+    case HIP_3021: return "3.2.1";
+    case HIP_3022: return "3.2.2";
+    case HIP_3030: return "3.3.0";
+    case HIP_3040: return "3.4.0";
+    case HIP_3050: return "3.5.0";
+    case HIP_3051: return "3.5.1";
+    case HIP_3060: return "3.6.0";
+    case HIP_3070: return "3.7.0";
+    case HIP_3080: return "3.8.0";
+    case HIP_3090: return "3.9.0";
+    case HIP_3100: return "3.10.0";
+    case HIP_4000: return "4.0.0";
+    case HIP_4010: return "4.1.0";
+    case HIP_4011: return "4.1.1";
+    case HIP_4020: return "4.2.0";
+    case HIP_4030: return "4.3.0";
+    case HIP_4040: return "4.4.0";
+    case HIP_4050: return "4.5.0";
+    case HIP_4051: return "4.5.1";
+    case HIP_4052: return "4.5.2";
+    case HIP_5000: return "5.0.0";
+    case HIP_5001: return "5.0.1";
+    case HIP_5002: return "5.0.2";
+    case HIP_5010: return "5.1.0";
+    case HIP_5011: return "5.1.1";
+    case HIP_5020: return "5.2.0";
+    case HIP_5030: return "5.3.0";
+    case HIP_5040: return "5.4.0";
+    case HIP_5050: return "5.5.0";
+    case HIP_5060: return "5.6.0";
+    case HIP_5070: return "5.7.0";
+    case HIP_6000: return "6.0.0";
+    case HIP_6002: return "6.0.2";
+    case HIP_6010: return "6.1.0";
+    case HIP_6011: return "6.1.1";
+    case HIP_6020: return "6.2.0";
+    case HIP_6030: return "6.3.0";
+    case HIP_6040: return "6.4.0";
+    case HIP_7000: return "7.0.0";
+    case HIP_7010: return "7.1.0";
+    case HIP_7020: return "7.2.0";
+    case HIP_7120: return "7.12.0";
+    case HIP_8000: return "8.0.0";
+  }
+  return "";
+}
+
+#if LLVM_VERSION_MAJOR > 3
+cudaVersions Statistics::convertCudaToolkitVersion(const clang::CudaVersion &ver) {
+  switch (ver) {
+    default:
+    case clang::CudaVersion::UNKNOWN: return CUDA_0;
+    case clang::CudaVersion::CUDA_70: return CUDA_70;
+    case clang::CudaVersion::CUDA_75: return CUDA_75;
+    case clang::CudaVersion::CUDA_80: return CUDA_80;
+#if LLVM_VERSION_MAJOR > 5
+    case clang::CudaVersion::CUDA_90: return CUDA_90;
+#if LLVM_VERSION_MAJOR > 6
+    case clang::CudaVersion::CUDA_91: return CUDA_91;
+    case clang::CudaVersion::CUDA_92: return CUDA_92;
+#if LLVM_VERSION_MAJOR > 7
+    case clang::CudaVersion::CUDA_100: return CUDA_100;
+#if LLVM_VERSION_MAJOR > 8
+    case clang::CudaVersion::CUDA_101: return CUDA_101;
+#if LLVM_VERSION_MAJOR > 9
+    case clang::CudaVersion::CUDA_102: return CUDA_102;
+    case clang::CudaVersion::CUDA_110: return CUDA_110;
+#if LLVM_VERSION_MAJOR > 12
+    case clang::CudaVersion::CUDA_111: return CUDA_111;
+    case clang::CudaVersion::CUDA_112: return CUDA_112;
+#if LLVM_VERSION_MAJOR > 13
+    case clang::CudaVersion::CUDA_113: return CUDA_113;
+    case clang::CudaVersion::CUDA_114: return CUDA_114;
+    case clang::CudaVersion::CUDA_115: return CUDA_115;
+    case clang::CudaVersion::NEW: return CUDA_PARTIALLY_SUPPORTED;
+#if LLVM_VERSION_MAJOR > 15
+    case clang::CudaVersion::CUDA_116: return CUDA_116;
+    case clang::CudaVersion::CUDA_117: return CUDA_117;
+    case clang::CudaVersion::CUDA_118: return CUDA_118;
+#if LLVM_VERSION_MAJOR > 16
+    case clang::CudaVersion::CUDA_120: return CUDA_120;
+    case clang::CudaVersion::CUDA_121: return CUDA_121;
+#if LLVM_VERSION_MAJOR > 17
+    case clang::CudaVersion::CUDA_122: return CUDA_122;
+    case clang::CudaVersion::CUDA_123: return CUDA_123;
+#if LLVM_VERSION_MAJOR > 18
+    case clang::CudaVersion::CUDA_124: return CUDA_124;
+    case clang::CudaVersion::CUDA_125: return CUDA_125;
+#if LLVM_VERSION_MAJOR > 19
+    case clang::CudaVersion::CUDA_126: return CUDA_126;
+    case clang::CudaVersion::CUDA_128: return CUDA_128;
+#if LLVM_VERSION_MAJOR > 21
+    case clang::CudaVersion::CUDA_129: return CUDA_129;
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+  }
+  return CUDA_0;
+}
+#endif
+
+void Statistics::setCudaVersion(llvm::StringRef cuda_h_file) {
+  auto StartsWithWords =
+    [](llvm::StringRef l, const llvm::SmallVector<llvm::StringRef, 3> words) -> optional<llvm::StringRef> {
+      for (llvm::StringRef word : words) {
+        if (!l.consume_front(word)) return {};
+        l = l.ltrim();
+      }
+      return l;
+  };
+  cuda_h_file = cuda_h_file.ltrim();
+  while (!cuda_h_file.empty()) {
+    if (auto l = StartsWithWords(cuda_h_file.ltrim(), { "#", "define", "CUDA_VERSION" })) {
+      l->consumeInteger(10, Statistics::cudaVersion);
+      return;
+    }
+    cuda_h_file = cuda_h_file.drop_front(cuda_h_file.find_first_of("\n\r")).ltrim();
+  }
+}
+
+std::map<std::string, Statistics> Statistics::stats = {};
+Statistics *Statistics::currentStatistics = nullptr;
+cudaVersions Statistics::cudaVersionUsedByClang = CUDA_0;
+unsigned Statistics::cudaVersion = CUDA_0;

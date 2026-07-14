@@ -1,0 +1,7 @@
+* @searlmc1 @emankov
+
+# Documentation files
+docs/ @ROCm/rocm-documentation @searlmc1 @emankov
+*.md @ROCm/rocm-documentation @searlmc1 @emankov
+*.rst @ROCm/rocm-documentation @searlmc1 @emankov
+.readthedocs.yaml @ROCm/rocm-documentation @searlmc1 @emankov

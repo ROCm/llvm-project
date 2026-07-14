@@ -1,0 +1,71 @@
+import sys
+import os
+import re
+
+config.hipify_install_path = "@CMAKE_INSTALL_PREFIX@"
+config.hipify_clang_tests_only = "@HIPIFY_CLANG_TESTS_ONLY@"
+config.pointer_size = @CMAKE_SIZEOF_VOID_P@
+config.llvm_version = "@LLVM_PACKAGE_VERSION@"
+config.llvm_version_major = int("@LLVM_VERSION_MAJOR@")
+config.llvm_tools_dir = "@LLVM_TOOLS_BINARY_DIR@"
+config.obj_root = "@CMAKE_CURRENT_BINARY_DIR@"
+config.cuda_root = "@CUDA_TOOLKIT_ROOT_DIR@"
+config.cuda_sdk_root = "@CUDA_SDK_ROOT_DIR@"
+config.cuda_dnn_root = "@CUDA_DNN_ROOT_DIR@"
+config.cuda_cub_root = "@CUDA_CUB_ROOT_DIR@"
+config.cuda_tensor_root = "@CUDA_TENSOR_ROOT_DIR@"
+config.cuda_file_root = "@CUDA_FILE_ROOT_DIR@"
+config.cuda_version_major = int("@CUDA_VERSION_MAJOR@")
+config.cuda_version_minor = int("@CUDA_VERSION_MINOR@")
+config.cuda_version_full = "@CUDA_VERSION_FULL@"
+config.cuda_version = "@CUDA_VERSION@"
+config.clang_resource_dir = "@HIPIFY_CLANG_RES@"
+if sys.platform in ['win32']:
+    config.build_type = "@CMAKE_BUILD_TYPE@"
+    if not config.build_type:
+        config.build_type = "Debug"
+
+pattern_major = r'_MAJOR ([1-9]|1[0-9])'
+
+def get_lib_major_ver(file_name):
+    if os.path.isfile(file_name):
+        with open(file_name, 'r') as f:
+            match = re.search(pattern_major, f.read())
+        if match:
+            s = match.group(0)[7:]
+            return int(s)
+    return 0
+
+def get_cudnn_major_ver():
+    ver_file = config.cuda_dnn_root + '/cudnn_version.h'
+    ver = get_lib_major_ver(ver_file)
+    if ver == 0:
+        ver_file = config.cuda_dnn_root + '/cudnn_version_v9.h'
+        ver = get_lib_major_ver(ver_file)
+    if ver == 0:
+        ver_file = config.cuda_dnn_root + '/cudnn_version_v999.h'
+        ver = get_lib_major_ver(ver_file)
+    return int(ver)
+
+def get_cutensor_major_ver():
+    ver_file = config.cuda_tensor_root + '/cutensor.h'
+    ver = get_lib_major_ver(ver_file)
+    if ver == 0:
+        ver = 1
+    return ver
+
+if config.cuda_dnn_root and config.cuda_dnn_root != "OFF":
+    config.cudnn_version_major = get_cudnn_major_ver()
+
+if config.cuda_tensor_root and config.cuda_tensor_root != "OFF":
+    config.cutensor_version_major = get_cutensor_major_ver()
+
+# Support substitution of the tools and libs dirs with user parameters. This is
+# used when we can't determine the tool dir at configuration time.
+try:
+    config.llvm_tools_dir = config.llvm_tools_dir % lit_config.params
+    config.obj_root = config.obj_root % lit_config.params
+except KeyError:
+    e = sys.exc_info()[1]
+    key, = e.args
+    lit_config.fatal("unable to find %r parameter, use '--param=%s=VALUE'" % (key,key))

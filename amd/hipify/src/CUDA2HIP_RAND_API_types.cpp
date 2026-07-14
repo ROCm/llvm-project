@@ -1,0 +1,280 @@
+/*
+Copyright (c) 2015 - present Advanced Micro Devices, Inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+
+#include "CUDA2HIP.h"
+
+// Map of all functions
+const std::map<llvm::StringRef, hipCounter> CUDA_RAND_TYPE_NAME_MAP = [] {
+  std::map<llvm::StringRef, hipCounter> m;
+
+  // RAND Host types
+  m["curandStatus"]                                    = {"hiprandStatus",                                  "rocrand_status",                                                 CONV_TYPE, API_RAND, 1};
+  m["curandStatus_t"]                                  = {"hiprandStatus_t",                                "rocrand_status",                                                 CONV_TYPE, API_RAND, 1};
+  // RAND function call status types (enum curandStatus)
+  m["CURAND_STATUS_SUCCESS"]                           = {"HIPRAND_STATUS_SUCCESS",                         "ROCRAND_STATUS_SUCCESS",                                         CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_STATUS_VERSION_MISMATCH"]                  = {"HIPRAND_STATUS_VERSION_MISMATCH",                "ROCRAND_STATUS_VERSION_MISMATCH",                                CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_STATUS_NOT_INITIALIZED"]                   = {"HIPRAND_STATUS_NOT_INITIALIZED",                 "ROCRAND_STATUS_NOT_CREATED",                                     CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_STATUS_ALLOCATION_FAILED"]                 = {"HIPRAND_STATUS_ALLOCATION_FAILED",               "ROCRAND_STATUS_ALLOCATION_FAILED",                               CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_STATUS_TYPE_ERROR"]                        = {"HIPRAND_STATUS_TYPE_ERROR",                      "ROCRAND_STATUS_TYPE_ERROR",                                      CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_STATUS_OUT_OF_RANGE"]                      = {"HIPRAND_STATUS_OUT_OF_RANGE",                    "ROCRAND_STATUS_OUT_OF_RANGE",                                    CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_STATUS_LENGTH_NOT_MULTIPLE"]               = {"HIPRAND_STATUS_LENGTH_NOT_MULTIPLE",             "ROCRAND_STATUS_LENGTH_NOT_MULTIPLE",                             CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_STATUS_DOUBLE_PRECISION_REQUIRED"]         = {"HIPRAND_STATUS_DOUBLE_PRECISION_REQUIRED",       "ROCRAND_STATUS_DOUBLE_PRECISION_REQUIRED",                       CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_STATUS_LAUNCH_FAILURE"]                    = {"HIPRAND_STATUS_LAUNCH_FAILURE",                  "ROCRAND_STATUS_LAUNCH_FAILURE",                                  CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_STATUS_PREEXISTING_FAILURE"]               = {"HIPRAND_STATUS_PREEXISTING_FAILURE",             "",                                                               CONV_NUMERIC_LITERAL, API_RAND, 1, ROC_UNSUPPORTED};
+  m["CURAND_STATUS_INITIALIZATION_FAILED"]             = {"HIPRAND_STATUS_INITIALIZATION_FAILED",           "",                                                               CONV_NUMERIC_LITERAL, API_RAND, 1, ROC_UNSUPPORTED};
+  m["CURAND_STATUS_ARCH_MISMATCH"]                     = {"HIPRAND_STATUS_ARCH_MISMATCH",                   "",                                                               CONV_NUMERIC_LITERAL, API_RAND, 1, ROC_UNSUPPORTED};
+  m["CURAND_STATUS_INTERNAL_ERROR"]                    = {"HIPRAND_STATUS_INTERNAL_ERROR",                  "ROCRAND_STATUS_INTERNAL_ERROR",                                  CONV_NUMERIC_LITERAL, API_RAND, 1};
+
+  m["curandRngType"]                                   = {"hiprandRngType_t",                               "rocrand_rng_type",                                               CONV_TYPE, API_RAND, 1};
+  m["curandRngType_t"]                                 = {"hiprandRngType_t",                               "rocrand_rng_type",                                               CONV_TYPE, API_RAND, 1};
+  // RAND generator types (enum curandRngType)
+  m["CURAND_RNG_TEST"]                                 = {"HIPRAND_RNG_TEST",                               "",                                                               CONV_NUMERIC_LITERAL, API_RAND, 1, ROC_UNSUPPORTED};
+  m["CURAND_RNG_PSEUDO_DEFAULT"]                       = {"HIPRAND_RNG_PSEUDO_DEFAULT",                     "ROCRAND_RNG_PSEUDO_DEFAULT",                                     CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_PSEUDO_XORWOW"]                        = {"HIPRAND_RNG_PSEUDO_XORWOW",                      "ROCRAND_RNG_PSEUDO_XORWOW",                                      CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_PSEUDO_MRG32K3A"]                      = {"HIPRAND_RNG_PSEUDO_MRG32K3A",                    "ROCRAND_RNG_PSEUDO_MRG32K3A",                                    CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_PSEUDO_MTGP32"]                        = {"HIPRAND_RNG_PSEUDO_MTGP32",                      "ROCRAND_RNG_PSEUDO_MTGP32",                                      CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_PSEUDO_MT19937"]                       = {"HIPRAND_RNG_PSEUDO_MT19937",                     "ROCRAND_RNG_PSEUDO_MT19937",                                     CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_PSEUDO_PHILOX4_32_10"]                 = {"HIPRAND_RNG_PSEUDO_PHILOX4_32_10",               "ROCRAND_RNG_PSEUDO_PHILOX4_32_10",                               CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_QUASI_DEFAULT"]                        = {"HIPRAND_RNG_QUASI_DEFAULT",                      "ROCRAND_RNG_QUASI_DEFAULT",                                      CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_QUASI_SOBOL32"]                        = {"HIPRAND_RNG_QUASI_SOBOL32",                      "ROCRAND_RNG_QUASI_SOBOL32",                                      CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_QUASI_SCRAMBLED_SOBOL32"]              = {"HIPRAND_RNG_QUASI_SCRAMBLED_SOBOL32",            "ROCRAND_RNG_QUASI_SCRAMBLED_SOBOL32",                            CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_QUASI_SOBOL64"]                        = {"HIPRAND_RNG_QUASI_SOBOL64",                      "ROCRAND_RNG_QUASI_SOBOL64",                                      CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_RNG_QUASI_SCRAMBLED_SOBOL64"]              = {"HIPRAND_RNG_QUASI_SCRAMBLED_SOBOL64",            "ROCRAND_RNG_QUASI_SCRAMBLED_SOBOL64",                            CONV_NUMERIC_LITERAL, API_RAND, 1};
+
+  m["curandOrdering"]                                  = {"hiprandOrdering",                                "rocrand_ordering",                                               CONV_TYPE, API_RAND, 1};
+  m["curandOrdering_t"]                                = {"hiprandOrdering_t",                              "rocrand_ordering",                                               CONV_TYPE, API_RAND, 1};
+  // RAND ordering of results in memory (enum curandOrdering)
+  m["CURAND_ORDERING_PSEUDO_BEST"]                     = {"HIPRAND_ORDERING_PSEUDO_BEST",                   "ROCRAND_ORDERING_PSEUDO_BEST",                                   CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_ORDERING_PSEUDO_DEFAULT"]                  = {"HIPRAND_ORDERING_PSEUDO_DEFAULT",                "ROCRAND_ORDERING_PSEUDO_DEFAULT",                                CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_ORDERING_PSEUDO_SEEDED"]                   = {"HIPRAND_ORDERING_PSEUDO_SEEDED",                 "ROCRAND_ORDERING_PSEUDO_SEEDED",                                 CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_ORDERING_PSEUDO_LEGACY"]                   = {"HIPRAND_ORDERING_PSEUDO_LEGACY",                 "ROCRAND_ORDERING_PSEUDO_LEGACY",                                 CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_ORDERING_PSEUDO_DYNAMIC"]                  = {"HIPRAND_ORDERING_PSEUDO_DYNAMIC",                "ROCRAND_ORDERING_PSEUDO_DYNAMIC",                                CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_ORDERING_QUASI_DEFAULT"]                   = {"HIPRAND_ORDERING_QUASI_DEFAULT",                 "ROCRAND_ORDERING_QUASI_DEFAULT",                                 CONV_NUMERIC_LITERAL, API_RAND, 1};
+
+  m["curandDirectionVectorSet"]                        = {"hiprandDirectionVectorSet_t",                    "rocrand_direction_vector_set",                                   CONV_TYPE, API_RAND, 1};
+  m["curandDirectionVectorSet_t"]                      = {"hiprandDirectionVectorSet_t",                    "rocrand_direction_vector_set",                                   CONV_TYPE, API_RAND, 1};
+  // RAND choice of direction vector set (enum curandDirectionVectorSet)
+  m["CURAND_DIRECTION_VECTORS_32_JOEKUO6"]             = {"HIPRAND_DIRECTION_VECTORS_32_JOEKUO6",           "ROCRAND_DIRECTION_VECTORS_32_JOEKUO6",                           CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_SCRAMBLED_DIRECTION_VECTORS_32_JOEKUO6"]   = {"HIPRAND_SCRAMBLED_DIRECTION_VECTORS_32_JOEKUO6", "ROCRAND_SCRAMBLED_DIRECTION_VECTORS_32_JOEKUO6",                 CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_DIRECTION_VECTORS_64_JOEKUO6"]             = {"HIPRAND_DIRECTION_VECTORS_64_JOEKUO6",           "ROCRAND_DIRECTION_VECTORS_64_JOEKUO6",                           CONV_NUMERIC_LITERAL, API_RAND, 1};
+  m["CURAND_SCRAMBLED_DIRECTION_VECTORS_64_JOEKUO6"]   = {"HIPRAND_SCRAMBLED_DIRECTION_VECTORS_64_JOEKUO6", "ROCRAND_SCRAMBLED_DIRECTION_VECTORS_64_JOEKUO6",                 CONV_NUMERIC_LITERAL, API_RAND, 1};
+
+  m["curandGenerator_st"]                              = {"hiprandGenerator_st",                            "rocrand_generator_base_type",                                    CONV_TYPE, API_RAND, 1};
+  m["curandGenerator_t"]                               = {"hiprandGenerator_t",                             "rocrand_generator",                                              CONV_TYPE, API_RAND, 1};
+
+  m["curandDistribution_st"]                           = {"hiprandDistribution_st",                         "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandDistribution_t"]                            = {"hiprandDistribution_t",                          "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+
+  m["curandHistogramM2V_st"]                           = {"hiprandHistogramM2V_st",                         "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandHistogramM2V_t"]                            = {"hiprandHistogramM2V_t",                          "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+
+  m["curandDistributionShift_st"]                      = {"hiprandDistributionShift_st",                    "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandDistributionShift_t"]                       = {"hiprandDistributionShift_t",                     "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+
+  m["curandDistributionM2Shift_st"]                    = {"hiprandDistributionM2Shift_st",                  "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandDistributionM2Shift_t"]                     = {"hiprandDistributionM2Shift_t",                   "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandHistogramM2_st"]                            = {"hiprandHistogramM2_st",                          "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandHistogramM2_t"]                             = {"hiprandHistogramM2_t",                           "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandHistogramM2K_st"]                           = {"hiprandHistogramM2K_st",                         "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandHistogramM2K_t"]                            = {"hiprandHistogramM2K_t",                          "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandDiscreteDistribution_st"]                   = {"hiprandDiscreteDistribution_st",                 "rocrand_discrete_distribution_st",                               CONV_TYPE, API_RAND, 1};
+  m["curandDiscreteDistribution_t"]                    = {"hiprandDiscreteDistribution_t",                  "rocrand_discrete_distribution",                                  CONV_TYPE, API_RAND, 1};
+  m["curandMethod"]                                    = {"hiprandMethod_t",                                "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandMethod_t"]                                  = {"hiprandMethod_t",                                "",                                                               CONV_TYPE, API_RAND, 1, UNSUPPORTED};
+  m["curandDirectionVectors32_t"]                      = {"hiprandDirectionVectors32_t",                    "",                                                               CONV_TYPE, API_RAND, 1, ROC_UNSUPPORTED};
+  m["curandDirectionVectors64_t"]                      = {"hiprandDirectionVectors64_t",                    "",                                                               CONV_TYPE, API_RAND, 1, ROC_UNSUPPORTED};
+
+  // RAND types for Device functions
+  m["curandStateMtgp32"]                               = {"hiprandStateMtgp32",                             "rocrand_device::mtgp32_engine",                                  CONV_TYPE, API_RAND, 1};
+  m["curandStateMtgp32_t"]                             = {"hiprandStateMtgp32_t",                           "rocrand_state_mtgp32",                                           CONV_TYPE, API_RAND, 1};
+  m["curandStateScrambledSobol64"]                     = {"hiprandStateScrambledSobol64",                   "rocrand_device::scrambled_sobol64_engine<false>",                CONV_TYPE, API_RAND, 1};
+  m["curandStateScrambledSobol64_t"]                   = {"hiprandStateScrambledSobol64_t",                 "rocrand_state_scrambled_sobol64",                                CONV_TYPE, API_RAND, 1};
+  m["curandStateSobol64"]                              = {"hiprandStateSobol64",                            "rocrand_device::sobol64_engine<false>",                          CONV_TYPE, API_RAND, 1};
+  m["curandStateSobol64_t"]                            = {"hiprandStateSobol64_t",                          "rocrand_state_sobol64",                                          CONV_TYPE, API_RAND, 1};
+  m["curandStateScrambledSobol32"]                     = {"hiprandStateScrambledSobol32",                   "rocrand_device::scrambled_sobol32_engine<false>",                CONV_TYPE, API_RAND, 1};
+  m["curandStateScrambledSobol32_t"]                   = {"hiprandStateScrambledSobol32_t",                 "rocrand_state_scrambled_sobol32",                                CONV_TYPE, API_RAND, 1};
+  m["curandStateSobol32"]                              = {"hiprandStateSobol32",                            "rocrand_device::sobol32_engine<false>",                          CONV_TYPE, API_RAND, 1};
+  m["curandStateSobol32_t"]                            = {"hiprandStateSobol32_t",                          "rocrand_state_sobol32",                                          CONV_TYPE, API_RAND, 1};
+  m["curandStateMRG32k3a"]                             = {"hiprandStateMRG32k3a",                           "rocrand_device::mrg32k3a_engine",                                CONV_TYPE, API_RAND, 1};
+  m["curandStateMRG32k3a_t"]                           = {"hiprandStateMRG32k3a_t",                         "rocrand_state_mrg32k3a",                                         CONV_TYPE, API_RAND, 1};
+  m["curandStatePhilox4_32_10"]                        = {"hiprandStatePhilox4_32_10",                      "rocrand_device::philox4x32_10_engine",                           CONV_TYPE, API_RAND, 1};
+  m["curandStatePhilox4_32_10_t"]                      = {"hiprandStatePhilox4_32_10_t",                    "rocrand_state_philox4x32_10",                                    CONV_TYPE, API_RAND, 1};
+  m["curandStateXORWOW"]                               = {"hiprandStateXORWOW",                             "rocrand_device::xorwow_engine",                                  CONV_TYPE, API_RAND, 1};
+  m["curandStateXORWOW_t"]                             = {"hiprandStateXORWOW_t",                           "rocrand_state_xorwow",                                           CONV_TYPE, API_RAND, 1};
+  m["curandState"]                                     = {"hiprandState",                                   "",                                                               CONV_TYPE, API_RAND, 1, ROC_UNSUPPORTED};
+  m["curandState_t"]                                   = {"hiprandState_t",                                 "",                                                               CONV_TYPE, API_RAND, 1, ROC_UNSUPPORTED};
+
+  // RAND method (enum curandMethod)
+  m["CURAND_CHOOSE_BEST"]                              = {"HIPRAND_CHOOSE_BEST",                            "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_ITR"]                                      = {"HIPRAND_ITR",                                    "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_KNUTH"]                                    = {"HIPRAND_KNUTH",                                  "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_HITR"]                                     = {"HIPRAND_HITR",                                   "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_M1"]                                       = {"HIPRAND_M1",                                     "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_M2"]                                       = {"HIPRAND_M2",                                     "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_BINARY_SEARCH"]                            = {"HIPRAND_BINARY_SEARCH",                          "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_DISCRETE_GAUSS"]                           = {"HIPRAND_DISCRETE_GAUSS",                         "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_REJECTION"]                                = {"HIPRAND_REJECTION",                              "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_DEVICE_API"]                               = {"HIPRAND_DEVICE_API",                             "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_FAST_REJECTION"]                           = {"HIPRAND_FAST_REJECTION",                         "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_3RD"]                                      = {"HIPRAND_3RD",                                    "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_DEFINITION"]                               = {"HIPRAND_DEFINITION",                             "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+  m["CURAND_POISSON"]                                  = {"HIPRAND_POISSON",                                "",                                                                CONV_NUMERIC_LITERAL, API_RAND, 1, UNSUPPORTED};
+
+  return m;
+}();
+
+const std::map<llvm::StringRef, cudaAPIversions> CUDA_RAND_TYPE_NAME_VER_MAP = [] {
+  std::map<llvm::StringRef, cudaAPIversions> m;
+
+  m["CURAND_ORDERING_PSEUDO_LEGACY"]                   = {CUDA_110, CUDA_0,   CUDA_0  };
+  m["CURAND_ORDERING_PSEUDO_DYNAMIC"]                  = {CUDA_115, CUDA_0,   CUDA_0  };
+
+  return m;
+}();
+
+const std::map<llvm::StringRef, hipAPIversions> HIP_RAND_TYPE_NAME_VER_MAP = [] {
+  std::map<llvm::StringRef, hipAPIversions> m;
+
+  m["hiprandStatus"]                                   = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandStatus_t"]                                 = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandRngType_t"]                                = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandGenerator_st"]                             = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandGenerator_t"]                              = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandDiscreteDistribution_st"]                  = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandDiscreteDistribution_t"]                   = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandDirectionVectors32_t"]                     = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandStateMtgp32"]                              = {HIP_1080, HIP_0,    HIP_0   };
+  m["hiprandStateMtgp32_t"]                            = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandStateSobol32"]                             = {HIP_1080, HIP_0,    HIP_0   };
+  m["hiprandStateSobol32_t"]                           = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandStateMRG32k3a"]                            = {HIP_1080, HIP_0,    HIP_0   };
+  m["hiprandStateMRG32k3a_t"]                          = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandStatePhilox4_32_10"]                       = {HIP_1080, HIP_0,    HIP_0   };
+  m["hiprandStatePhilox4_32_10_t"]                     = {HIP_1080, HIP_0,    HIP_0   };
+  m["hiprandStateXORWOW"]                              = {HIP_1080, HIP_0,    HIP_0   };
+  m["hiprandStateXORWOW_t"]                            = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandState"]                                    = {HIP_1080, HIP_0,    HIP_0   };
+  m["hiprandState_t"]                                  = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_SUCCESS"]                          = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_VERSION_MISMATCH"]                 = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_NOT_INITIALIZED"]                  = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_ALLOCATION_FAILED"]                = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_TYPE_ERROR"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_OUT_OF_RANGE"]                     = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_LENGTH_NOT_MULTIPLE"]              = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_DOUBLE_PRECISION_REQUIRED"]        = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_LAUNCH_FAILURE"]                   = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_PREEXISTING_FAILURE"]              = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_INITIALIZATION_FAILED"]            = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_ARCH_MISMATCH"]                    = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_STATUS_INTERNAL_ERROR"]                   = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_TEST"]                                = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_PSEUDO_DEFAULT"]                      = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_PSEUDO_XORWOW"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_PSEUDO_MRG32K3A"]                     = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_PSEUDO_MTGP32"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_PSEUDO_MT19937"]                      = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_PSEUDO_PHILOX4_32_10"]                = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_QUASI_DEFAULT"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_QUASI_SOBOL32"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_QUASI_SCRAMBLED_SOBOL32"]             = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_QUASI_SOBOL64"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["HIPRAND_RNG_QUASI_SCRAMBLED_SOBOL64"]             = {HIP_1050, HIP_0,    HIP_0   };
+  m["hiprandDirectionVectorSet_t"]                     = {HIP_6000, HIP_0,    HIP_0   };
+  m["HIPRAND_DIRECTION_VECTORS_32_JOEKUO6"]            = {HIP_6000, HIP_0,    HIP_0   };
+  m["HIPRAND_SCRAMBLED_DIRECTION_VECTORS_32_JOEKUO6"]  = {HIP_6000, HIP_0,    HIP_0   };
+  m["HIPRAND_DIRECTION_VECTORS_64_JOEKUO6"]            = {HIP_6000, HIP_0,    HIP_0   };
+  m["HIPRAND_SCRAMBLED_DIRECTION_VECTORS_64_JOEKUO6"]  = {HIP_6000, HIP_0,    HIP_0   };
+  m["hiprandDirectionVectors64_t"]                     = {HIP_6000, HIP_0,    HIP_0   };
+  m["hiprandOrdering"]                                 = {HIP_6020, HIP_0,    HIP_0   };
+  m["hiprandOrdering_t"]                               = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIPRAND_ORDERING_PSEUDO_BEST"]                    = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIPRAND_ORDERING_PSEUDO_DEFAULT"]                 = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIPRAND_ORDERING_PSEUDO_SEEDED"]                  = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIPRAND_ORDERING_PSEUDO_LEGACY"]                  = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIPRAND_ORDERING_PSEUDO_DYNAMIC"]                 = {HIP_6020, HIP_0,    HIP_0   };
+  m["HIPRAND_ORDERING_QUASI_DEFAULT"]                  = {HIP_6020, HIP_0,    HIP_0   };
+  m["hiprandStateScrambledSobol32"]                    = {HIP_6020, HIP_0,    HIP_0   };
+  m["hiprandStateScrambledSobol32_t"]                  = {HIP_6020, HIP_0,    HIP_0   };
+  m["hiprandStateScrambledSobol64"]                    = {HIP_6020, HIP_0,    HIP_0   };
+  m["hiprandStateScrambledSobol64_t"]                  = {HIP_6020, HIP_0,    HIP_0   };
+  m["hiprandStateSobol64"]                             = {HIP_6020, HIP_0,    HIP_0   };
+  m["hiprandStateSobol64_t"]                           = {HIP_6020, HIP_0,    HIP_0   };
+
+  m["rocrand_status"]                                  = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_SUCCESS"]                          = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_VERSION_MISMATCH"]                 = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_NOT_CREATED"]                      = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_ALLOCATION_FAILED"]                = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_TYPE_ERROR"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_OUT_OF_RANGE"]                     = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_LENGTH_NOT_MULTIPLE"]              = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_DOUBLE_PRECISION_REQUIRED"]        = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_LAUNCH_FAILURE"]                   = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_STATUS_INTERNAL_ERROR"]                   = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_rng_type"]                                = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_PSEUDO_DEFAULT"]                      = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_PSEUDO_XORWOW"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_PSEUDO_MRG32K3A"]                     = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_PSEUDO_MTGP32"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_PSEUDO_MT19937"]                      = {HIP_5050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_PSEUDO_PHILOX4_32_10"]                = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_QUASI_DEFAULT"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_QUASI_SOBOL32"]                       = {HIP_1050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_QUASI_SCRAMBLED_SOBOL32"]             = {HIP_5040, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_QUASI_SOBOL64"]                       = {HIP_4050, HIP_0,    HIP_0   };
+  m["ROCRAND_RNG_QUASI_SCRAMBLED_SOBOL64"]             = {HIP_5040, HIP_0,    HIP_0   };
+  m["rocrand_ordering"]                                = {HIP_5050, HIP_0,    HIP_0   };
+  m["ROCRAND_ORDERING_PSEUDO_BEST"]                    = {HIP_5050, HIP_0,    HIP_0   };
+  m["ROCRAND_ORDERING_PSEUDO_DEFAULT"]                 = {HIP_5050, HIP_0,    HIP_0   };
+  m["ROCRAND_ORDERING_PSEUDO_SEEDED"]                  = {HIP_5050, HIP_0,    HIP_0   };
+  m["ROCRAND_ORDERING_PSEUDO_LEGACY"]                  = {HIP_5050, HIP_0,    HIP_0   };
+  m["ROCRAND_ORDERING_PSEUDO_DYNAMIC"]                 = {HIP_5050, HIP_0,    HIP_0   };
+  m["ROCRAND_ORDERING_QUASI_DEFAULT"]                  = {HIP_5050, HIP_0,    HIP_0   };
+  m["rocrand_direction_vector_set"]                    = {HIP_6000, HIP_0,    HIP_0   };
+  m["ROCRAND_DIRECTION_VECTORS_32_JOEKUO6"]            = {HIP_6000, HIP_0,    HIP_0   };
+  m["ROCRAND_SCRAMBLED_DIRECTION_VECTORS_32_JOEKUO6"]  = {HIP_6000, HIP_0,    HIP_0   };
+  m["ROCRAND_DIRECTION_VECTORS_64_JOEKUO6"]            = {HIP_6000, HIP_0,    HIP_0   };
+  m["ROCRAND_SCRAMBLED_DIRECTION_VECTORS_64_JOEKUO6"]  = {HIP_6000, HIP_0,    HIP_0   };
+  m["rocrand_generator_base_type"]                     = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_generator"]                               = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_discrete_distribution_st"]                = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_discrete_distribution"]                   = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_device::philox4x32_10_engine"]            = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_state_philox4x32_10"]                     = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_device::mtgp32_engine"]                   = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_state_mtgp32"]                            = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_device::scrambled_sobol32_engine<false>"] = {HIP_5040, HIP_0,    HIP_0   };
+  m["rocrand_state_scrambled_sobol32"]                 = {HIP_5040, HIP_0,    HIP_0   };
+  m["rocrand_device::scrambled_sobol64_engine<false>"] = {HIP_5040, HIP_0,    HIP_0   };
+  m["rocrand_state_scrambled_sobol64"]                 = {HIP_5040, HIP_0,    HIP_0   };
+  m["rocrand_device::sobol32_engine<false>"]           = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_state_sobol32"]                           = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_device::sobol64_engine<false>"]           = {HIP_4050, HIP_0,    HIP_0   };
+  m["rocrand_state_sobol64"]                           = {HIP_4050, HIP_0,    HIP_0   };
+  m["rocrand_device::mrg32k3a_engine"]                 = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_state_mrg32k3a"]                          = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_device::xorwow_engine"]                   = {HIP_1050, HIP_0,    HIP_0   };
+  m["rocrand_state_xorwow"]                            = {HIP_1050, HIP_0,    HIP_0   };
+
+  return m;
+}();
