@@ -41,6 +41,12 @@ static cl::opt<bool>
                         "AMDGPULateCodeGenPrepare"),
                cl::ReallyHidden, cl::init(true));
 
+static cl::opt<bool> CanonicalizeShufflePadToZero(
+    "amdgpu-late-codegenprepare-canon-pad-zero",
+    cl::desc("Canonicalize poison/zero shuffle operands to zeroinitializer in "
+             "AMDGPULateCodeGenPrepare"),
+    cl::ReallyHidden, cl::init(true));
+
 namespace {
 
 class AMDGPULateCodeGenPrepare
@@ -69,6 +75,7 @@ public:
 
   bool canWidenScalarExtLoad(LoadInst &LI) const;
   bool visitLoadInst(LoadInst &LI);
+  bool visitShuffleVectorInst(ShuffleVectorInst &SVI);
 };
 
 using ValueToValueMap = DenseMap<const Value *, Value *>;
@@ -222,11 +229,54 @@ bool AMDGPULateCodeGenPrepare::run() {
 
   for (auto &BB : reverse(F))
     for (Instruction &I : make_early_inc_range(reverse(BB))) {
+      if (CanonicalizeShufflePadToZero)
+        if (auto *SVI = dyn_cast<ShuffleVectorInst>(&I))
+          Changed |= visitShuffleVectorInst(*SVI);
       Changed |= !HasScalarSubwordLoads && visit(I);
       Changed |= LRO.optimizeLiveType(&I, DeadInsts);
     }
 
   RecursivelyDeleteTriviallyDeadInstructionsPermissive(DeadInsts);
+  return Changed;
+}
+
+static bool isVectorWithOnlyPoisonAndZero(Constant *C) {
+  auto *VTy = dyn_cast<FixedVectorType>(C->getType());
+  if (!VTy)
+    return false;
+
+  bool SawPoison = false;
+  bool SawZero = false;
+  for (unsigned I = 0, E = VTy->getNumElements(); I != E; ++I) {
+    Constant *Elt = C->getAggregateElement(I);
+    if (isa_and_nonnull<PoisonValue>(Elt)) {
+      SawPoison = true;
+      continue;
+    }
+    if (Elt && Elt->isNullValue()) {
+      SawZero = true;
+      continue;
+    }
+    return false;
+  }
+
+  return SawPoison && SawZero;
+}
+
+bool AMDGPULateCodeGenPrepare::visitShuffleVectorInst(ShuffleVectorInst &SVI) {
+  bool Changed = false;
+  for (unsigned OpIdx = 0; OpIdx != 2; ++OpIdx) {
+    auto *C = dyn_cast<Constant>(SVI.getOperand(OpIdx));
+    if (!C || !isVectorWithOnlyPoisonAndZero(C))
+      continue;
+
+    // A poison lane may be replaced by any concrete value. Canonicalizing a
+    // mixed poison/zero vector to zeroinitializer gives instruction selection a
+    // single all-zero source instead of materializing unrelated values for the
+    // poison lanes (e.g. padded WMMA operands).
+    SVI.setOperand(OpIdx, ConstantAggregateZero::get(C->getType()));
+    Changed = true;
+  }
   return Changed;
 }
 
