@@ -9,6 +9,8 @@
 #ifndef HOTSWAP_TRANSPILER_WMMA_LOWERING_H
 #define HOTSWAP_TRANSPILER_WMMA_LOWERING_H
 
+#include "llvm/Support/Error.h"
+
 namespace llvm {
 class Value;
 } // namespace llvm
@@ -119,12 +121,11 @@ enum class WMMAInputType {
 /// \param inputType  selects MFMA intrinsic, per-MFMA AB pack type,
 ///                   AND the accumulator pack/result element type.
 /// \returns  <8 x t> -- result in Wave32 layout, where t = float for
-///           every variant except IU8 which returns <8 x i32>.
-llvm::Value *emitWMMAtoMFMA(RaiseContext &Ctx,
-                            llvm::Value *A,
-                            llvm::Value *B,
-                            llvm::Value *C,
-                            WMMAInputType InputType);
+///           every variant except IU8 which returns <8 x i32>. Returns an
+///           error for an unsupported source-wave projection.
+llvm::Expected<llvm::Value *> emitWMMAtoMFMA(RaiseContext &Ctx, llvm::Value *A,
+                                             llvm::Value *B, llvm::Value *C,
+                                             WMMAInputType InputType);
 
 /// Lower a Wave32 v_wmma_f32_16x16x4_f32 (gfx1250 RDNA4 VOP3P opcode
 /// 0x05D) to Wave64 mfma_f32_16x16x4f32 (gfx942 CDNA3) using
@@ -173,11 +174,12 @@ llvm::Value *emitWMMAtoMFMA(RaiseContext &Ctx,
 /// \param a  WMMA source A fragment (<2 x f32> in Wave32)
 /// \param b  WMMA source B fragment (<2 x f32> in Wave32)
 /// \param c  WMMA accumulator fragment (<8 x f32> in Wave32)
-/// \returns  `<8 x float>` -- result in Wave32 C-layout.
-llvm::Value *emitWmmAtoMfmaF3216x16x4(RaiseContext &Ctx,
-                                         llvm::Value *A,
-                                         llvm::Value *B,
-                                         llvm::Value *C);
+/// \returns  `<8 x float>` -- result in Wave32 C-layout. Returns an error for
+///           an unsupported source-wave projection.
+llvm::Expected<llvm::Value *> emitWmmAtoMfmaF3216x16x4(RaiseContext &Ctx,
+                                                       llvm::Value *A,
+                                                       llvm::Value *B,
+                                                       llvm::Value *C);
 
 /// Lower a Wave32 v_wmma_scale_f32_16x16x128_f8f6f4 (gfx1250 RDNA4 VOP3PX2)
 /// to a Wave64 v_mfma_scale_f32_16x16x128_f8f6f4 (gfx950 CDNA4 VOP3PX) via
@@ -219,8 +221,9 @@ llvm::Value *emitWmmAtoMfmaF3216x16x4(RaiseContext &Ctx,
 ///   matrix_a_reuse, matrix_b_reuse      -> dropped (perf hint, not
 ///   correctness)
 ///
-/// Returns nullptr if the helper cannot lower the call (e.g. unsupported
-/// fragment width). Caller produces an unsupportedInstructionForm refusal.
+/// Returns a null Value if the helper cannot lower the call (e.g. unsupported
+/// fragment width) -- caller produces an unsupportedInstructionForm refusal --
+/// or an error for an unsupported source-wave projection.
 ///
 /// \param a       WMMA A fragment (`<aDwords x i32>` per Wave32 lane;
 ///                aDwords = 16/12/8 for f8/f6/f4)
@@ -234,8 +237,9 @@ llvm::Value *emitWmmAtoMfmaF3216x16x4(RaiseContext &Ctx,
 /// \param matrixBScale, matrixBScaleFmt, scaleSrc1   B-side scale operands
 /// \param aDwords, bDwords   per-Wave32-lane WMMA dword counts (16/12/8)
 /// \returns       `<8 x float>` in Wave32 D-layout (caller writes back via
-///                ctx.writeRegVec); nullptr on unrecoverable shape error.
-llvm::Value *emitWMMAScaleF8F6F4toScaledMFMA(
+///                ctx.writeRegVec); null Value on unrecoverable shape error;
+///                an error for an unsupported source-wave projection.
+llvm::Expected<llvm::Value *> emitWMMAScaleF8F6F4toScaledMFMA(
     RaiseContext &ctx, llvm::Value *a, llvm::Value *b, llvm::Value *c,
     llvm::Value *matrixAFmt, llvm::Value *matrixBFmt, llvm::Value *cMod,
     llvm::Value *matrixAScale, llvm::Value *matrixAScaleFmt,
@@ -248,9 +252,9 @@ llvm::Value *emitWMMAScaleF8F6F4toScaledMFMA(
 /// fp8/bf8 MFMA family, so this decomposes K=128 into 4 K=32 MFMAs, widens
 /// FP6/BF6/FP4 to FP8/BF8 in-line, and applies the per-K-block scale via
 /// fmuladd. Covers {FP8,BF8,FP6,BF6,FP4}^2, scale formats E8M0 / E4M3
-/// (E5M3 deferred). Returns `<8 x float>` in wave32 D-layout, or nullptr for
-/// unsupported configurations.
-llvm::Value *emitWMMAScaleF8F6F4toMFMA(
+/// (E5M3 deferred). Returns `<8 x float>` in wave32 D-layout, nullptr for
+/// unsupported configurations, or an error on an invariant violation.
+llvm::Expected<llvm::Value *> emitWMMAScaleF8F6F4toMFMA(
     RaiseContext &ctx, llvm::Value *a, llvm::Value *b, llvm::Value *c,
     llvm::Value *matrixAFmt, llvm::Value *matrixBFmt, llvm::Value *cMod,
     llvm::Value *matrixAScale, llvm::Value *matrixAScaleFmt,

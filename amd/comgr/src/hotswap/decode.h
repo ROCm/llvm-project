@@ -13,6 +13,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Error.h"
 
 #include <cstdint>
 #include <optional>
@@ -48,33 +49,35 @@ struct DecodeResult {
 // (canonOp, tsFlags, srcMap/modMap, implicit-def classification, branch
 // targets) and the set of block-start offsets.
 //
-// Fails loudly via `report_fatal_error` on any MC/TableGen invariant
-// violation (unknown tied-to-def OpName, srcMap vs OpName::srcN drift,
-// KMaxSrcs overflow). This is the LLVM-version-drift guard surface --
-// every check here catches an upstream LLVM change before it can silently
-// corrupt a handler's view of an instruction.
-DecodeResult decodeKernel(const MCState &Mc,
-                          const OpcodeMap &OpcMap,
-                          llvm::ArrayRef<uint8_t> TextBytes,
-                          uint64_t KernelOffset,
-                          uint64_t KernelEndOffset = 0,
-                          std::optional<uint64_t> KernelStartOffset =
-                              std::nullopt);
+// Returns an error for invalid decode extents (offset/start/end outside the
+// .text contents or inconsistent with one another) so callers can surface a
+// diagnostic instead of aborting.
+//
+// Also returns an error on any MC/TableGen invariant violation (unknown
+// tied-to-def OpName, srcMap vs OpName::srcN drift, KMaxSrcs overflow). This is
+// the LLVM-version-drift guard surface -- every check here catches an upstream
+// LLVM change before it can silently corrupt a handler's view of an
+// instruction.
+llvm::Expected<DecodeResult>
+decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
+             llvm::ArrayRef<uint8_t> TextBytes, uint64_t KernelOffset,
+             uint64_t KernelEndOffset = 0,
+             std::optional<uint64_t> KernelStartOffset = std::nullopt);
 
 // Compute the decoded CFG successors for a block ending in LastInst.
 // NextBlockOffset is the linear fallthrough block start, or std::nullopt when
 // no decoded linear fallthrough block exists. The model is intentionally
 // conservative and matches the successor model used by setpc analysis and the
 // raiser's provenance prepasses.
-llvm::SmallVector<uint64_t>
+llvm::Expected<llvm::SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
                               std::optional<uint64_t> NextBlockOffset);
 
 // Compute the absolute byte offset of a SOPP branch target. SOPP branch
 // immediates are signed 16-bit dword offsets from the next instruction
-// (`PC + 4`). Invalid source-offset arithmetic is reported loudly rather than
+// (`PC + 4`). Invalid source-offset arithmetic returns an error rather than
 // dropping the edge from CFG recovery.
-uint64_t computeSoppBranchTarget(uint64_t Off, int64_t RawImm);
+llvm::Expected<uint64_t> computeSoppBranchTarget(uint64_t Off, int64_t RawImm);
 
 // True when LastInst terminates the recovered source block. This is separate
 // from successor count: s_swap_pc_i64 ends its block while still having a

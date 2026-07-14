@@ -14,6 +14,7 @@
 #include "raise-context.h"
 
 #include "llvm/IR/Value.h"
+#include "llvm/Support/Error.h"
 
 namespace COMGR::hotswap {
 
@@ -64,12 +65,13 @@ struct MubufAddr {
 // order inside an encoding can vary between LLVM versions so the
 // classifier keys on `ParsedReg::Kind` rather than position.
 //
-// Fails loudly via `report_fatal_error` on unrecognised shapes (no
-// SRSRC found, or cannot read SRSRC dwords). `diagLabel` names the
-// caller for the error message (e.g. `"MUBUF"` or `"MUBUF_LDS"`).
-MubufAddr decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
-                          OpResolver &Op, bool IsStore,
-                          llvm::StringRef DiagLabel);
+// Returns an error on unrecognised shapes (no SRSRC found, or cannot read
+// SRSRC dwords). `diagLabel` names the caller for the error message (e.g.
+// `"MUBUF"` or `"MUBUF_LDS"`).
+llvm::Expected<MubufAddr> decodeMubufAddr(RaiseContext &Ctx,
+                                          const DecodedInst &Di, OpResolver &Op,
+                                          bool IsStore,
+                                          llvm::StringRef DiagLabel);
 
 } // namespace COMGR::hotswap
 

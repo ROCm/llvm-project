@@ -46,7 +46,7 @@ Value *toGlobalPtr(RaiseContext &Ctx, Value *Addr, int64_t MemOffset) {
 
 } // namespace
 
-int64_t getGlobalFlatOffset(const DecodedInst &Di) {
+Expected<int64_t> getGlobalFlatOffset(const DecodedInst &Di) {
   unsigned Opc = Di.Inst.getOpcode();
   int OffsetIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::offset);
   if (OffsetIdx >= 0 &&
@@ -60,12 +60,12 @@ int64_t getGlobalFlatOffset(const DecodedInst &Di) {
   Os << "transpiler: FLAT/GLOBAL opcode '" << Di.RawMnemonic
      << "' (opcode=" << Opc
      << ") is missing an immediate OpName::offset operand";
-  report_fatal_error(StringRef(Os.str()));
+  return createStringError(Os.str());
 }
 
-FlatAddr decodeGlobalLoadAddr(RaiseContext &Ctx, const DecodedInst &Di,
-                               OpResolver &Op, int ElemBytes,
-                               StringRef DiagLabel) {
+Expected<FlatAddr> decodeGlobalLoadAddr(RaiseContext &Ctx,
+                                        const DecodedInst &Di, OpResolver &Op,
+                                        int ElemBytes, StringRef DiagLabel) {
   FlatAddr Out;
   Value *Addr = nullptr;
 
@@ -96,17 +96,20 @@ FlatAddr decodeGlobalLoadAddr(RaiseContext &Ctx, const DecodedInst &Di,
     Os << "transpiler: unrecognized " << DiagLabel
        << " operand shape (expected plain VGPR64 or SADDR SGPR64+VGPR32): \""
        << Di.FullText << "\" (mnemonic=" << Di.RawMnemonic << ")";
-    report_fatal_error(StringRef(Os.str()));
+    return createStringError(Os.str());
   }
 
-  Out.MemOffset = getGlobalFlatOffset(Di);
+  Expected<int64_t> MemOffset = getGlobalFlatOffset(Di);
+  if (!MemOffset)
+    return MemOffset.takeError();
+  Out.MemOffset = *MemOffset;
   Out.Ptr = toGlobalPtr(Ctx, Addr, Out.MemOffset);
   return Out;
 }
 
-FlatAddr decodeGlobalStoreAddr(RaiseContext &Ctx, const DecodedInst &Di,
-                                OpResolver &Op, int ElemBytes,
-                                StringRef DiagLabel) {
+Expected<FlatAddr> decodeGlobalStoreAddr(RaiseContext &Ctx,
+                                         const DecodedInst &Di, OpResolver &Op,
+                                         int ElemBytes, StringRef DiagLabel) {
   FlatAddr Out;
   Value *Addr = nullptr;
 
@@ -135,10 +138,13 @@ FlatAddr decodeGlobalStoreAddr(RaiseContext &Ctx, const DecodedInst &Di,
     Os << "transpiler: unrecognized " << DiagLabel
        << " operand shape (expected plain VGPR+VGPR or SADDR VGPR+VGPR+SGPR): \""
        << Di.FullText << "\" (mnemonic=" << Di.RawMnemonic << ")";
-    report_fatal_error(StringRef(Os.str()));
+    return createStringError(Os.str());
   }
 
-  Out.MemOffset = getGlobalFlatOffset(Di);
+  Expected<int64_t> MemOffset = getGlobalFlatOffset(Di);
+  if (!MemOffset)
+    return MemOffset.takeError();
+  Out.MemOffset = *MemOffset;
   Out.Ptr = toGlobalPtr(Ctx, Addr, Out.MemOffset);
   return Out;
 }

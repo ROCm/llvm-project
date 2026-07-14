@@ -46,6 +46,8 @@
 // the corpus-provenance argument (both `_matmul_ogs_*` blobs use
 // only scale_sel=0 across 128 instances combined).
 
+#include "llvm/Support/Error.h"
+
 #include <cstdint>
 
 namespace COMGR::hotswap {
@@ -85,7 +87,10 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte);
 // `mxfp4BitAlgebraBf16Bits`; the unit test asserts they agree on every
 // input, which gives us two-implementation confidence that neither
 // side silently encoded an OCP-spec miscount.
-uint16_t mxfp4LutBf16Bits(uint8_t Nibble, uint8_t ScaleByte);
+//
+// Returns an error if the intermediate exact-double falls outside the
+// declared FP4 × power-of-2 domain (Inf/NaN or a value needing rounding).
+llvm::Expected<uint16_t> mxfp4LutBf16Bits(uint8_t Nibble, uint8_t ScaleByte);
 
 // 16-entry FP4 E2M1 -> BF16 table, exposed for the unit test to pin
 // the constants against the OCP MXFP spec explicitly.  Indexed by the

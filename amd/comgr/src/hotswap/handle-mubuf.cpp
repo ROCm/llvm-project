@@ -73,7 +73,11 @@ Expected<HandlerResult> handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
     // loads return 0, stores are silently dropped. This avoids the
     // flat-memory lowering that requires conditional branches (which
     // break under LLVM -O1+ SIMT optimizations).
-    MubufAddr Mbuf = decodeMubufAddr(Ctx, Di, Op, isStore, "MUBUF");
+    Expected<MubufAddr> MbufOrErr =
+        decodeMubufAddr(Ctx, Di, Op, isStore, "MUBUF");
+    if (!MbufOrErr)
+      return MbufOrErr.takeError();
+    MubufAddr Mbuf = *MbufOrErr;
     // For loads, vdata is the dst; for stores it's the first VGPR src
     // (captured into mbuf.stData by the decoder).
     ParsedReg Vdata = isStore ? Mbuf.StData : Op.dst(0);
@@ -274,8 +278,11 @@ Expected<HandlerResult> handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
     int Dwords = (Sop == CanonicalOp::BUFFER_LOAD_DWORDX4_LDS) ? 4
                : (Sop == CanonicalOp::BUFFER_LOAD_DWORDX2_LDS) ? 2 : 1;
 
-    MubufAddr Mbuf = decodeMubufAddr(Ctx, Di, Op, /*isStore=*/false,
-                                      "MUBUF_LDS");
+    Expected<MubufAddr> MbufOrErr =
+        decodeMubufAddr(Ctx, Di, Op, /*isStore=*/false, "MUBUF_LDS");
+    if (!MbufOrErr)
+      return MbufOrErr.takeError();
+    MubufAddr Mbuf = *MbufOrErr;
 
     Type *LdTy = (Dwords == 1)
                      ? static_cast<Type *>(Ctx.I32Ty)
@@ -325,8 +332,11 @@ Expected<HandlerResult> handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop >= CanonicalOp::BUFFER_ATOMIC_ADD && Sop <= CanonicalOp::BUFFER_ATOMIC_MAX_NUM_F64) {
     assert(((Di.TsFlags & SIInstrFlags::IsAtomicRet) != 0) == (Di.NumDefs > 0) &&
            "buffer atomic: IsAtomicRet disagrees with numDefs");
-    MubufAddr Mbuf = decodeMubufAddr(Ctx, Di, Op, /*isStore=*/true,
-                                     "buffer_atomic");
+    Expected<MubufAddr> MbufOrErr =
+        decodeMubufAddr(Ctx, Di, Op, /*isStore=*/true, "buffer_atomic");
+    if (!MbufOrErr)
+      return MbufOrErr.takeError();
+    MubufAddr Mbuf = *MbufOrErr;
 
     // `BUFFER_ATOMIC_CMPSWAP` is the one buffer atomic whose vdata is
     // a register PAIR carrying `{cmp, new}` rather than a single data

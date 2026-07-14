@@ -193,8 +193,8 @@ TEST(DecodeBlockSuccessors, AddPcI64UsesByteOffsetAndIgnoresLowBits) {
   auto SuccessorForImm = [&](int64_t Imm) {
     Di.Inst = llvm::MCInst();
     Di.Inst.addOperand(llvm::MCOperand::createImm(Imm));
-    return COMGR::hotswap::computeDecodedBlockSuccessors(
-        Di, /*NextBlockOffset=*/12);
+    return llvm::cantFail(COMGR::hotswap::computeDecodedBlockSuccessors(
+        Di, /*NextBlockOffset=*/12));
   };
 
   // 8 + 4 + 8 = 20 (byte); SOPP scaling would give 8 + 4 + 8*4 = 44.

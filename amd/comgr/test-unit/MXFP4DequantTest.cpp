@@ -74,9 +74,15 @@
 
 using COMGR::hotswap::mxfp4::kMxfp4ToBf16Table;
 using COMGR::hotswap::mxfp4::mxfp4BitAlgebraBf16Bits;
-using COMGR::hotswap::mxfp4::mxfp4LutBf16Bits;
 
 namespace {
+
+// All test inputs are inside the declared FP4 × power-of-2 domain, so the
+// LUT reference never errors; unwrap here to keep the assertions readable.
+uint16_t mxfp4LutBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
+  return llvm::cantFail(
+      COMGR::hotswap::mxfp4::mxfp4LutBf16Bits(Nibble, ScaleByte));
+}
 
 // Explicit OCP MXFP FP4 E2M1 -> BF16 table, hand-derived from the
 // OCP spec and the BF16 IEEE-754 encoding rules.  Used as a third

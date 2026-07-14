@@ -138,7 +138,7 @@ constexpr double kMxfp4ToDouble[16] = {
 
 // Convert an exact-BF16-representable double to its BF16 bit pattern.
 //
-// Preconditions (enforced via `report_fatal_error` -- violating them
+// Preconditions (enforced by returning an error -- violating them
 // indicates either a caller bug or an unexpected hardware-primitive
 // semantics, NOT a case for silent rounding):
 //
@@ -164,7 +164,7 @@ constexpr double kMxfp4ToDouble[16] = {
 // BF16 mantissa, no rounding.  Overflow (BF16 exp >= 0xFF) saturates
 // to ±Inf; underflow (BF16 exp < 1) produces an exact BF16 subnormal
 // or ±0 via right-shift of the implicit-1.mant field.
-uint16_t exactDoubleToBf16(double V) {
+llvm::Expected<uint16_t> exactDoubleToBf16(double V) {
   uint64_t U;
   static_assert(sizeof(U) == sizeof(V), "double must be 64 bits");
   __builtin_memcpy(&U, &V, sizeof(U));
@@ -173,16 +173,16 @@ uint16_t exactDoubleToBf16(double V) {
   uint64_t MantD = U & ((uint64_t{1} << 52) - 1);
 
   if (ExpD == 0x7FFu) {
-    llvm::report_fatal_error(
+    return llvm::createStringError(
         "mxfp4::exactDoubleToBf16: Inf/NaN input not representable "
-        "under declared FP4 × power-of-2 input domain");
+        "under declared FP4 * power-of-2 input domain");
   }
   uint64_t Low45 = MantD & ((uint64_t{1} << 45) - 1);
   if (Low45 != 0) {
-    llvm::report_fatal_error(
+    return llvm::createStringError(
         "mxfp4::exactDoubleToBf16: non-zero low-45 mantissa bits "
         "would require BF16 rounding; input outside declared "
-        "FP4 × power-of-2 domain");
+        "FP4 * power-of-2 domain");
   }
   if (ExpD == 0u) {
     // Double subnormal/zero: every value below 2^-1022 is below the
@@ -234,7 +234,7 @@ double e8m0ScaleToDouble(uint8_t ScaleByte) {
 
 } // namespace
 
-uint16_t mxfp4LutBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
+llvm::Expected<uint16_t> mxfp4LutBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
   // Different algorithmic shape from `mxfp4BitAlgebraBf16Bits`: LUT
   // the FP4 value into an exact double, multiply by the double form
   // of 2^(scale_byte - 127) (also exact -- scale is a power of 2),
@@ -254,8 +254,8 @@ uint16_t mxfp4LutBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
   double Scaled  = Fp4Val * Scale;  // exact: power-of-2 mul
   // `exactDoubleToBf16` handles ±0 (which fp4 * finite-scale
   // produces directly when fp4_val is ±0), overflow to Inf, and
-  // subnormal underflow uniformly -- with `report_fatal_error` on
-  // any input it cannot convert without rounding.
+  // subnormal underflow uniformly -- returning an error on any input
+  // it cannot convert without rounding.
   return exactDoubleToBf16(Scaled);
 }
 

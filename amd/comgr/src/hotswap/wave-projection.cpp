@@ -142,8 +142,8 @@ Value *WaveProjection::emitPackedWorkitemId(IRBuilder<> &B,
 Value *WaveProjection::emitCurrentSourceWaveMask(IRBuilder<> &B, Value *Mask,
                                                  const Twine &Name) const {
   Type *SourceTy = sourceWaveMaskTy();
-  if (!Mask->getType()->isIntegerTy())
-    report_fatal_error("emitCurrentSourceWaveMask expects an integer mask");
+  assert(Mask->getType()->isIntegerTy() &&
+         "emitCurrentSourceWaveMask expects an integer mask");
   if (Mask->getType() == SourceTy)
     return Mask;
   return B.CreateZExtOrTrunc(Mask, SourceTy, Name);
@@ -253,6 +253,10 @@ Value *ModuloReplicationProjection::ballotI1ToWidth(
   Value *WaveMask = B.CreateCall(Ballot, {Pred}, Name);
   unsigned WantedBits = ResultTy->getPrimitiveSizeInBits();
   unsigned WaveBits = WaveMaskTy->getPrimitiveSizeInBits();
+  assert(WantedBit <= WaveBits &&
+         "ballotI1ToWidth: wantedBits > waveBits (wave64 source on wave32 "
+         "target) has no modulo-replication projection; this direction needs "
+         "an explicit policy decision before use");
   if (WantedBits == WaveBits)
     return WaveMask;
   if (WantedBits < WaveBits)
@@ -264,10 +268,6 @@ Value *ModuloReplicationProjection::ballotI1ToWidth(
   // lanes that do not exist in the narrower target), so zero-extending
   // would invent bits. Bail so a future wave64->wave32 lift lands here
   // rather than silently miscompiles.
-  report_fatal_error(
-      "ballotI1ToWidth: wantedBits > waveBits (wave64 source on wave32 "
-      "target) has no modulo-replication projection; this direction needs "
-      "an explicit policy decision before use");
 }
 
 Value *ModuloReplicationProjection::extractLaneBitFromWaveMask(
@@ -348,17 +348,16 @@ WaveNativeProjection::WaveNativeProjection(const ISAProfile &SrcIsa,
   // projection's extra invariants are well-defined. Same-wave paths
   // don't need a widened EXEC (ModRep already collapses to identity
   // there), and narrowing (wave64 source -> wave32 target) loses lanes
-  // regardless of policy -- `ModuloReplicationProjection` documents the
-  // narrowing bail via `report_fatal_error` in `ballotI1ToWidth`; the
-  // wave-native projection is not a second answer for that direction.
-  if (!(SrcIsa.isWave32() && !TgtIsa.isWave32()))
-    report_fatal_error(
-        "WaveNativeProjection is defined only for wave32 source -> "
-        "wave64 target cross-widening; other directions must use "
-        "ModuloReplicationProjection (same-wave / narrowing) or a "
-        "future ThreadLoopProjection implementation. See hotswap/"
-        "docs/wave-size-translation.md \u00a72.2 for the projection "
-        "ladder.");
+  // regardless of policy -- `ModuloReplicationProjection` in
+  // `ballotI1ToWidth`; the wave-native projection is not a second
+  //  answer for that direction.
+  assert((SrcIsa.isWave32() && !TgtIsa.isWave32()) &&
+         "WaveNativeProjection is defined only for wave32 source -> "
+         "wave64 target cross-widening; other directions must use "
+         "ModuloReplicationProjection (same-wave / narrowing) or a "
+         "future ThreadLoopProjection implementation. See hotswap/"
+         "docs/wave-size-translation.md 2.2 for the projection "
+         "ladder.");
 }
 
 Value *WaveNativeProjection::emitInitialExec(IRBuilder<> &B) const {
@@ -436,6 +435,10 @@ Value *WaveNativeProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
   Value *WaveMask = B.CreateCall(Ballot, {Pred}, Name);
   unsigned WantedBits = ResultTy->getPrimitiveSizeInBits();
   unsigned WaveBits = WaveMaskTy->getPrimitiveSizeInBits();
+  assert(WantedBits <= WaveBits &&
+         "WaveNativeProjection::ballotI1ToWidth: wantedBits > waveBits "
+         "is not defined for wave32 source -> wave64 target cross-"
+         "widening; caller must request resultTy ≤ waveMaskTy");
   if (WantedBits == WaveBits)
     return WaveMask;
   if (WantedBits < WaveBits)
@@ -456,10 +459,6 @@ Value *WaveNativeProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
   // wider than its native mask. This direction only arises on same-
   // target-wave lifts (not our wave32->wave64 cross-widening), so
   // reaching it under WaveNativeProjection is a raiser bug.
-  report_fatal_error(
-      "WaveNativeProjection::ballotI1ToWidth: wantedBits > waveBits "
-      "is not defined for wave32 source -> wave64 target cross-"
-      "widening; caller must request resultTy ≤ waveMaskTy");
 }
 
 Value *WaveNativeProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
@@ -510,8 +509,9 @@ Value *WaveNativeProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
 Value *WaveNativeProjection::emitCurrentSourceWaveMask(IRBuilder<> &B,
                                                        Value *Mask,
                                                        const Twine &Name) const {
-  if (!Mask->getType()->isIntegerTy())
-    report_fatal_error("emitCurrentSourceWaveMask expects an integer mask");
+  assert(Mask->getType()->isIntegerTy() &&
+         "emitCurrentSourceWaveMask expects an "
+         "integer mask");
 
   Type *SourceTy = sourceWaveMaskTy();
   unsigned SourceBits = SourceTy->getPrimitiveSizeInBits();
@@ -543,21 +543,20 @@ ThreadLoopProjection::ThreadLoopProjection(const ISAProfile &SrcIsa,
                                             const ISAProfile &TgtIsa,
                                             Type *I32Ty, Type *I64Ty)
     : WaveProjection(SrcIsa, TgtIsa, I32Ty, I64Ty) {
-  if (TgtIsa.WaveSize <= SrcIsa.WaveSize)
-    report_fatal_error(
-        "ThreadLoopProjection is defined only for cross-widening "
-        "(target wave > source wave)");
-  if ((TgtIsa.WaveSize % SrcIsa.WaveSize) != 0)
-    report_fatal_error(
-        "ThreadLoopProjection requires target wave size to be an integer "
-        "multiple of source wave size");
+  assert(TgtIsa.WaveSize > SrcIsa.WaveSize &&
+         "ThreadLoopProjection is defined only for cross-widening "
+         "(target wave > source wave)");
+
+  assert((TgtIsa.WaveSize % SrcIsa.WaveSize) == 0 &&
+         "ThreadLoopProjection requires target wave size to be an integer "
+         "multiple of source wave size");
 }
 
 Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
-  if (!IterationAlloca)
-    report_fatal_error(
-        "ThreadLoopProjection::emitWorkitemIdX requires an iteration alloca; "
-        "raiser must call setIterationAlloca before emitting source workitem ids");
+  assert(IterationAlloca
+         "ThreadLoopProjection::emitWorkitemIdX requires an iteration alloca; "
+         "raiser must call setIterationAlloca before emitting source workitem "
+         "ids");
   Module *M = B.GetInsertBlock()->getModule();
   Function *Fn = Intrinsic::getOrInsertDeclaration(
       M, Intrinsic::amdgcn_workitem_id_x);
@@ -599,10 +598,9 @@ Value *ThreadLoopProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
   Value *WaveMask = B.CreateCall(Ballot, {Pred}, Name);
   const unsigned WantedBits = ResultTy->getPrimitiveSizeInBits();
   const unsigned WaveBits = WaveMaskTy->getPrimitiveSizeInBits();
-  if (WantedBits > WaveBits)
-    report_fatal_error(
-        "ThreadLoopProjection::ballotI1ToWidth requires resultTy <= target "
-        "wave mask width");
+  assert(WantedBits <= WaveBits
+         "ThreadLoopProjection::ballotI1ToWidth requires resultTy <= target "
+         "wave mask width");
   if (WantedBits == WaveBits)
     return WaveMask;
   return B.CreateTrunc(WaveMask, ResultTy, Name + "_trunc");

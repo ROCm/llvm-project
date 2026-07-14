@@ -15,6 +15,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Error.h"
 
 #include <cstdint>
 #include <set>
@@ -144,9 +145,9 @@ struct SetPcAnalysis {
 // already discovered (used to reset the per-block symbolic-PC table
 // at every BB boundary). `mc` provides MCRegisterInfo for SGPR
 // classification.
-SetPcAnalysis analyseSetPC(llvm::ArrayRef<DecodedInst> Insts,
-                           const std::set<uint64_t> &BlockStarts,
-                           const MCState &Mc);
+llvm::Expected<SetPcAnalysis>
+analyseSetPC(llvm::ArrayRef<DecodedInst> Insts,
+             const std::set<uint64_t> &BlockStarts, const MCState &Mc);
 
 } // namespace COMGR::hotswap
 

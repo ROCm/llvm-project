@@ -15,6 +15,7 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Value.h"
+#include "llvm/Support/Error.h"
 
 namespace COMGR::hotswap {
 
@@ -41,13 +42,14 @@ struct FlatAddr {
 // `elemBytes` is the access element size (used only when
 // `di.hasScaleOffset` is set -- then the per-lane VGPR vaddr is
 // multiplied by `elemBytes` before being added to the SGPR base).
-// `diagLabel` is used in the `report_fatal_error` message if neither
-// form matches (e.g. `"GLOBAL_LOAD sub-dword"`).
+// `diagLabel` is used in the error message if neither form matches
+// (e.g. `"GLOBAL_LOAD sub-dword"`).
 //
-// Fails loudly on unrecognised shapes.
-FlatAddr decodeGlobalLoadAddr(RaiseContext &Ctx, const DecodedInst &Di,
-                               OpResolver &Op, int ElemBytes,
-                               llvm::StringRef DiagLabel);
+// Returns an error on unrecognised shapes.
+llvm::Expected<FlatAddr> decodeGlobalLoadAddr(RaiseContext &Ctx,
+                                              const DecodedInst &Di,
+                                              OpResolver &Op, int ElemBytes,
+                                              llvm::StringRef DiagLabel);
 
 // Decode a GLOBAL_STORE addressing operand shape. Recognised forms:
 //
@@ -56,15 +58,16 @@ FlatAddr decodeGlobalLoadAddr(RaiseContext &Ctx, const DecodedInst &Di,
 //
 // On success, `.stData` is populated with the vdata register. Other
 // behaviour matches `decodeGlobalLoadAddr`.
-FlatAddr decodeGlobalStoreAddr(RaiseContext &Ctx, const DecodedInst &Di,
-                                OpResolver &Op, int ElemBytes,
-                                llvm::StringRef DiagLabel);
+llvm::Expected<FlatAddr> decodeGlobalStoreAddr(RaiseContext &Ctx,
+                                               const DecodedInst &Di,
+                                               OpResolver &Op, int ElemBytes,
+                                               llvm::StringRef DiagLabel);
 
 // Decode the first immediate in a GLOBAL/FLAT memory operand tail as the signed
 // byte offset. Later immediates are encoding flags (`cpol`, TH, scope) and are
 // deliberately ignored. MC may surface the signed 24-bit field as an unsigned
 // bit pattern, so the helper sign-extends before callers materialise a GEP.
-int64_t getGlobalFlatOffset(const DecodedInst &Di);
+llvm::Expected<int64_t> getGlobalFlatOffset(const DecodedInst &Di);
 
 } // namespace COMGR::hotswap
 

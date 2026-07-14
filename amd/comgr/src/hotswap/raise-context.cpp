@@ -97,10 +97,10 @@ static bool hasVectorRegOperand(const DecodedInst &Di,
   return false;
 }
 
-void RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
+Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   std::fill_n(CurrentVgprAdjust, KMaxOps, 0u);
   if (VgprMsBs == 0)
-    return;
+    return Error::success();
 
   // The low byte of the S_SET_VGPR_MSB immediate holds four 2-bit MSB fields,
   // one per slot, that form bits [9:8] of the VGPR address (i.e. extend the
@@ -125,10 +125,11 @@ void RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   if (!Ops) {
     if (ignoresVGPRMsb(Opc) || !hasVectorRegOperand(Di, *Mc.RegInfo) ||
         Desc.isPseudo() || Desc.isMetaInstruction())
-      return;
-    report_fatal_error(Twine("transpiler: S_SET_VGPR_MSB has no "
-                             "operand-role table for vector instruction ") +
-                       Di.Mnemonic);
+      return Error::success();
+    return createStringError(
+        Twine("transpiler: S_SET_VGPR_MSB has no "
+              "operand-role table for vector instruction ") +
+        Di.Mnemonic);
   }
 
   for (unsigned Slot = 0; Slot != 4; ++Slot) {
@@ -149,12 +150,13 @@ void RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
     if (OpIdx < 0)
       continue;
     if (static_cast<unsigned>(OpIdx) >= KMaxOps)
-      report_fatal_error(Twine("transpiler: S_SET_VGPR_MSB operand index ") +
-                         Twine(OpIdx) +
-                         " exceeds CurrentVgprAdjust capacity " +
-                         Twine(KMaxOps) + " for " + Di.Mnemonic);
+      return createStringError("transpiler: S_SET_VGPR_MSB operand index " +
+                               Twine(OpIdx) +
+                               " exceeds CurrentVgprAdjust capacity " +
+                               Twine(KMaxOps) + " for " + Di.Mnemonic);
     CurrentVgprAdjust[OpIdx] = Adjust;
   }
+  return Error::success();
 }
 
 // Count how many 32-bit sub-registers make up `reg`. A 32-bit register has

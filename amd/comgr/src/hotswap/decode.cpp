@@ -63,7 +63,7 @@ constexpr int64_t KAddPcI64LiteralAlignmentBytes = 4;
 //     in srcMap. We therefore select on the named-operand id rather than
 //     the TIED_TO bit alone.
 //   * Everything else is a logical source recorded in MCInst order.
-void buildSrcMap(DecodedInst &Di, const MCInstrDesc &Desc) {
+Error buildSrcMap(DecodedInst &Di, const MCInstrDesc &Desc) {
   const MCInst &Inst = Di.Inst;
   unsigned Opc = Inst.getOpcode();
   int OldIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::old);
@@ -81,14 +81,15 @@ void buildSrcMap(DecodedInst &Di, const MCInstrDesc &Desc) {
       continue;
     }
     if (Di.NumSrcs >= DecodedInst::KMaxSrcs)
-      report_fatal_error("transpiler: DecodedInst::KMaxSrcs exceeded; "
-                         "bump KMaxSrcs to match the widest LLVM operand "
-                         "list");
+      return createStringError("transpiler: DecodedInst::KMaxSrcs exceeded; "
+                               "bump KMaxSrcs to match the widest LLVM operand "
+                               "list");
     Di.SrcMap[Di.NumSrcs] = I;
     Di.ModMap[Di.NumSrcs] = PendingModIdx;
     Di.NumSrcs++;
     PendingModIdx = UINT_MAX;
   }
+  return Error::success();
 }
 
 // Drift check A: every tied-to-def operand on this instruction must have
@@ -126,7 +127,7 @@ void buildSrcMap(DecodedInst &Di, const MCInstrDesc &Desc) {
 // ties `$src0`, SOP2 `sdst,sdst_in` variants may also surface `$src0`,
 // VALU MAC forms tie `$src2`, and VOPD3 FMAC halves tie `$src2X` /
 // `$src2Y` (plus potentially the separate VOPD3 third source).
-void driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
+Error driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
   static constexpr AMDGPU::OpName KKnownTiedIn[] = {
       AMDGPU::OpName::old,        AMDGPU::OpName::vdst_in,
       AMDGPU::OpName::sdst_in,    AMDGPU::OpName::vdata_in,
@@ -165,9 +166,10 @@ void driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
          << ", tiedTo=" << Tied
          << ", numDefs=" << Desc.getNumDefs()
          << ", numOps=" << Inst.getNumOperands();
-      report_fatal_error(StringRef(Msg));
+      return createStringError(Msg);
     }
   }
+  return Error::success();
 }
 
 // Drift check B: for every opcode that exposes `srcN` / `srcN_modifiers`
@@ -185,7 +187,7 @@ void driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
 // modMap from LLVM's authoritative named-operand table here, but ONLY
 // for MAI-format instructions so we don't silently mask future layout
 // drift in other formats.
-void driftCheckSrcN(DecodedInst &Di, const MCInstrDesc &Desc) {
+Error driftCheckSrcN(DecodedInst &Di, const MCInstrDesc &Desc) {
   static constexpr AMDGPU::OpName KSrcNames[] = {
       AMDGPU::OpName::src0, AMDGPU::OpName::src1, AMDGPU::OpName::src2};
   static constexpr AMDGPU::OpName KModNames[] = {
@@ -193,7 +195,7 @@ void driftCheckSrcN(DecodedInst &Di, const MCInstrDesc &Desc) {
       AMDGPU::OpName::src2_modifiers};
 
   auto ReportErr = [&](const Twine &Prefix, int Index, int Ours,
-                       int Expected) -> void {
+                       int Expected) -> Error {
     std::string Msg;
     raw_string_ostream Os(Msg);
     Os << Prefix << " for " << Di.RawMnemonic
@@ -202,7 +204,7 @@ void driftCheckSrcN(DecodedInst &Di, const MCInstrDesc &Desc) {
        << ", numSrcs=" << Di.NumSrcs
        << ", numDefs=" << Desc.getNumDefs()
        << ", numOps=" << Di.Inst.getNumOperands();
-    report_fatal_error(StringRef(Msg));
+    return createStringError(Msg);
   };
 
   unsigned Opc = Di.Inst.getOpcode();
@@ -253,8 +255,8 @@ void driftCheckSrcN(DecodedInst &Di, const MCInstrDesc &Desc) {
     // for MADMK opcodes.
     bool SkipThis = IsMadmk && K == 1;
     if (!SkipThis && OurSrc != NamedSrc)
-      ReportErr("transpiler: srcMap disagrees with OpName::srcN table",
-                static_cast<int>(K), OurSrc, NamedSrc);
+      return ReportErr("transpiler: srcMap disagrees with OpName::srcN table",
+                       static_cast<int>(K), OurSrc, NamedSrc);
     int NamedMod = AMDGPU::getNamedOperandIdx(Opc, KModNames[K]);
     int OurMod =
         (Di.ModMap[K] == UINT_MAX) ? -1 : static_cast<int>(Di.ModMap[K]);
@@ -264,12 +266,13 @@ void driftCheckSrcN(DecodedInst &Di, const MCInstrDesc &Desc) {
       if (IsMai && NamedMod >= 0 && OurMod == -1) {
         Di.ModMap[K] = static_cast<unsigned>(NamedMod);
       } else {
-        ReportErr(
+        return ReportErr(
             "transpiler: modMap disagrees with OpName::srcN_modifiers table",
             static_cast<int>(K), OurMod, ExpectedMod);
       }
     }
   }
+  return Error::success();
 }
 
 // Identify implicit defs of wave-mask / condition-flag registers via
@@ -322,9 +325,9 @@ void decodeScaleOffset(DecodedInst &Di) {
 // SMEM SGPR_IMM forms carry two offset operands: a dynamic SGPR `soffset` and
 // a static byte `offset:` immediate. Decode only that shape here so ordinary
 // immediate-only SMEM forms keep using the normal logical source operand.
-void decodeStaticSmemOffset(DecodedInst &Di) {
+Error decodeStaticSmemOffset(DecodedInst &Di) {
   if ((Di.TsFlags & SIInstrFlags::SMRD) == 0)
-    return;
+    return Error::success();
 
   const MCInst &Inst = Di.Inst;
   unsigned Opc = Inst.getOpcode();
@@ -333,7 +336,7 @@ void decodeStaticSmemOffset(DecodedInst &Di) {
   // Absence of either named operand means this is not the SGPR_IMM shape that
   // carries both dynamic and static offsets.
   if (SOffsetIdx < 0 || OffsetIdx < 0)
-    return;
+    return Error::success();
 
   auto InRange = [&](int Idx) {
     return static_cast<unsigned>(Idx) < Inst.getNumOperands();
@@ -347,11 +350,11 @@ void decodeStaticSmemOffset(DecodedInst &Di) {
        << "' (opcode=" << Opc
        << ") has both OpName::soffset and OpName::offset but the decoded "
           "operands are not a register soffset plus immediate offset";
-    StringRef Reason = Os.str();
-    report_fatal_error(Reason);
+    return createStringError(Msg);
   }
 
   Di.StaticOffset = Inst.getOperand(static_cast<unsigned>(OffsetIdx)).getImm();
+  return Error::success();
 }
 
 // Decode DPP16 modifier operands (dpp_ctrl / row_mask / bank_mask /
@@ -381,16 +384,16 @@ void decodeStaticSmemOffset(DecodedInst &Di) {
 // obstruction classifier) or at the DPP wrapper for same-wave raises.
 // This keeps the ordinary DPP16 path representable while making the
 // semantic gap explicit.
-void decodeDppModifiers(DecodedInst &Di) {
+Error decodeDppModifiers(DecodedInst &Di) {
   if (!(Di.TsFlags & SIInstrFlags::DPP))
-    return;
+    return Error::success();
   const MCInst &Inst = Di.Inst;
   const unsigned Opc = Inst.getOpcode();
   // Detect DPP8 form by presence of the `dpp8` named operand. If this
   // is a DPP8 instruction, leave `hasDpp` false -- see the header
   // comment for the classifier-refusal contract.
   if (AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::dpp8) >= 0)
-    return;
+    return Error::success();
   auto ImmOpt = [&](AMDGPU::OpName Name) -> std::optional<int64_t> {
     int Idx = AMDGPU::getNamedOperandIdx(Opc, Name);
     if (Idx < 0 || static_cast<unsigned>(Idx) >= Inst.getNumOperands())
@@ -421,7 +424,7 @@ void decodeDppModifiers(DecodedInst &Di) {
           "not an immediate. LLVM likely added a new DPP variant "
           "whose operand layout this decoder does not yet recognise; "
           "extend decodeDppModifiers.";
-    report_fatal_error(Os.str().c_str());
+    return createStringError(Msg);
   }
   Di.HasDpp = true;
   Di.DppCtrl = static_cast<uint16_t>(*Ctrl & 0xFFFF);
@@ -429,6 +432,7 @@ void decodeDppModifiers(DecodedInst &Di) {
   Di.DppBankMask = static_cast<uint8_t>(*BankMask & 0xF);
   Di.DppBoundCtrl = (*BoundCtrl) != 0;
   Di.DppFi = Fi && *Fi != 0;
+  return Error::success();
 }
 
 // Decode the 16-bit `OpName::offset` immediate of `ds_swizzle_b32`
@@ -472,13 +476,13 @@ void decodeDsSwizzleImm(DecodedInst &Di) {
 // instruction's successor (off + 4, not off + instSize -- matches the
 // hardware encoding definition).
 
-void failVopdDecode(const DecodedInst &Di, const Twine &Detail) {
+Error failVopdDecode(const DecodedInst &Di, const Twine &Detail) {
   std::string Msg;
   raw_string_ostream Os(Msg);
   Os << "decodeVopd: " << Detail << " for '" << Di.RawMnemonic
      << "' (opcode=" << Di.Inst.getOpcode()
      << ", numOps=" << Di.Inst.getNumOperands() << ")";
-  report_fatal_error(Os.str().c_str());
+  return createStringError(Msg);
 }
 
 int findRegIndexInClass(const MCRegisterClass &RC, MCRegister Reg) {
@@ -504,8 +508,8 @@ unsigned computeRegWidthDwords(const MCRegisterInfo &MRI, MCRegister Reg) {
   return Width;
 }
 
-void classifyVopdRegSource(DecodedInst &Di, DecodedInst::VopdSource &Src,
-                           const MCRegisterInfo &MRI, MCRegister Reg) {
+Error classifyVopdRegSource(DecodedInst &Di, DecodedInst::VopdSource &Src,
+                            const MCRegisterInfo &MRI, MCRegister Reg) {
   Src.Reg = Reg;
   Src.Width = computeRegWidthDwords(MRI, Reg);
   MCRegister Lane = MRI.getSubReg(Reg, AMDGPU::sub0);
@@ -517,18 +521,18 @@ void classifyVopdRegSource(DecodedInst &Di, DecodedInst::VopdSource &Src,
   case AMDGPU::VCC_LO:
   case AMDGPU::VCC_HI:
     Src.SrcKind = DecodedInst::VopdSource::Kind::VCC;
-    return;
+    return Error::success();
   case AMDGPU::EXEC_LO:
   case AMDGPU::EXEC_HI:
     Src.SrcKind = DecodedInst::VopdSource::Kind::EXEC;
     Src.BaseIdx = (Lane == AMDGPU::EXEC_HI) ? 1 : 0;
-    return;
+    return Error::success();
   case AMDGPU::SCC:
     Src.SrcKind = DecodedInst::VopdSource::Kind::SCC;
-    return;
+    return Error::success();
   case AMDGPU::M0:
     Src.SrcKind = DecodedInst::VopdSource::Kind::M0;
-    return;
+    return Error::success();
   default:
     break;
   }
@@ -538,12 +542,12 @@ void classifyVopdRegSource(DecodedInst &Di, DecodedInst::VopdSource &Src,
   if (Enc & AMDGPU::HWEncoding::IS_AGPR) {
     Src.SrcKind = DecodedInst::VopdSource::Kind::AGPR;
     Src.BaseIdx = HwIdx;
-    return;
+    return Error::success();
   }
   if (Enc & AMDGPU::HWEncoding::IS_VGPR) {
     Src.SrcKind = DecodedInst::VopdSource::Kind::VGPR;
     Src.BaseIdx = HwIdx;
-    return;
+    return Error::success();
   }
 
   const MCRegisterClass &TTMP32 =
@@ -551,91 +555,96 @@ void classifyVopdRegSource(DecodedInst &Di, DecodedInst::VopdSource &Src,
   if (int Idx = findRegIndexInClass(TTMP32, Lane); Idx >= 0) {
     Src.SrcKind = DecodedInst::VopdSource::Kind::TTMP;
     Src.BaseIdx = Idx;
-    return;
+    return Error::success();
   }
 
   if (MRI.getRegClass(AMDGPU::SGPR_32RegClassID).contains(Lane)) {
     Src.SrcKind = DecodedInst::VopdSource::Kind::SGPR;
     Src.BaseIdx = HwIdx;
-    return;
+    return Error::success();
   }
 
-  failVopdDecode(Di, Twine("unsupported VOPD register source '") +
-                         MRI.getName(Reg) + "'");
+  return failVopdDecode(Di, Twine("unsupported VOPD register source '") +
+                                MRI.getName(Reg) + "'");
 }
 
-void decodeVopdSource(DecodedInst &Di, DecodedInst::VopdHalf &Half,
-                      const AMDGPU::VOPD::ComponentInfo &Info,
-                      unsigned CompSrcIdx, const MCRegisterInfo &MRI) {
+Error decodeVopdSource(DecodedInst &Di, DecodedInst::VopdHalf &Half,
+                       const AMDGPU::VOPD::ComponentInfo &Info,
+                       unsigned CompSrcIdx, const MCRegisterInfo &MRI) {
   const MCInst &Inst = Di.Inst;
   unsigned McIdx = Info.getIndexOfSrcInMCOperands(CompSrcIdx, Di.IsVopd3);
   if (McIdx >= Inst.getNumOperands())
-    failVopdDecode(Di, Twine("component source index out of MCInst range: src") +
-                           Twine(CompSrcIdx) + " -> operand " + Twine(McIdx));
+    return failVopdDecode(
+        Di, "component source index out of MCInst range: src" +
+                Twine(CompSrcIdx) + " -> operand " + Twine(McIdx));
 
   if (static_cast<int>(McIdx) == Info.getBitOp3OperandIdx()) {
     const MCOperand &Mop = Inst.getOperand(McIdx);
     if (!Mop.isImm())
-      failVopdDecode(Di, "bitop3 operand is not an immediate");
+      return failVopdDecode(Di, "bitop3 operand is not an immediate");
     int64_t Raw = Mop.getImm();
     if (Raw < 0 || Raw > 0xff)
-      failVopdDecode(Di, Twine("bitop3 immediate out of range: ") + Twine(Raw));
+      return failVopdDecode(Di, "bitop3 immediate out of range: " + Twine(Raw));
     Half.HasBitOp3 = true;
     Half.BitOp3 = static_cast<uint8_t>(Raw);
-    return;
+    return Error::success();
   }
 
   if (Half.NumSrcs >= 3)
-    failVopdDecode(Di, "component has more than three decoded sources");
+    return failVopdDecode(Di, "component has more than three decoded sources");
 
   DecodedInst::VopdSource &Src = Half.Src[Half.NumSrcs++];
   Src.OperandIndex = McIdx;
   const MCOperand &Mop = Inst.getOperand(McIdx);
   if (Mop.isReg()) {
-    classifyVopdRegSource(Di, Src, MRI, Mop.getReg());
+    if (Error E = classifyVopdRegSource(Di, Src, MRI, Mop.getReg()))
+      return E;
   } else if (Mop.isImm()) {
     Src.SrcKind = DecodedInst::VopdSource::Kind::Imm;
     Src.Imm = Mop.getImm();
   } else {
-    failVopdDecode(Di, Twine("component source operand is neither reg nor imm: ") +
-                           Twine(McIdx));
+    return failVopdDecode(
+        Di, Twine("component source operand is neither reg nor imm: ") +
+                Twine(McIdx));
   }
 
   if (Di.IsVopd3 && CompSrcIdx < Info.getCompVOPD3ModsNum()) {
     if (McIdx == 0)
-      failVopdDecode(Di, "VOPD3 modifier cannot precede operand 0");
+      return failVopdDecode(Di, "VOPD3 modifier cannot precede operand 0");
     unsigned ModIdx = McIdx - 1;
     if (ModIdx >= Inst.getNumOperands() || !Inst.getOperand(ModIdx).isImm())
-      failVopdDecode(Di, Twine("VOPD3 modifier missing before source operand ") +
-                             Twine(McIdx));
+      return failVopdDecode(
+          Di, "VOPD3 modifier missing before source operand " + Twine(McIdx));
     int64_t Mods = Inst.getOperand(ModIdx).getImm();
     if (Mods < 0 || Mods > 0xff)
-      failVopdDecode(Di, Twine("VOPD3 modifier out of range: ") + Twine(Mods));
+      return failVopdDecode(Di, "VOPD3 modifier out of range: " + Twine(Mods));
     Src.Modifiers = static_cast<uint8_t>(Mods);
   }
+  return Error::success();
 }
 
-void decodeVopdHalf(DecodedInst &Di, DecodedInst::VopdHalf &Half,
-                    const AMDGPU::VOPD::ComponentInfo &Info,
-                    unsigned ComponentOpcode, const OpcodeMap &OpcMap,
-                    const MCRegisterInfo &MRI) {
+Error decodeVopdHalf(DecodedInst &Di, DecodedInst::VopdHalf &Half,
+                     const AMDGPU::VOPD::ComponentInfo &Info,
+                     unsigned ComponentOpcode, const OpcodeMap &OpcMap,
+                     const MCRegisterInfo &MRI) {
   const MCInst &Inst = Di.Inst;
   Half.ComponentOpcode = ComponentOpcode;
   Half.CanonOp = OpcMap.lookup(ComponentOpcode);
   if (Half.CanonOp == CanonicalOp::Unknown)
-    failVopdDecode(Di, Twine("unknown VOPD component opcode ") +
-                           Twine(ComponentOpcode));
+    return failVopdDecode(Di, "unknown VOPD component opcode " +
+                                  Twine(ComponentOpcode));
   Half.HasSrc2Acc = Info.hasSrc2Acc();
   Half.IsVoP3 = Info.isVOP3();
 
   unsigned DstIdx = Info.getIndexOfDstInMCOperands();
   if (DstIdx >= Inst.getNumOperands() || !Inst.getOperand(DstIdx).isReg())
-    failVopdDecode(Di, Twine("component dst operand missing or not reg at ") +
-                           Twine(DstIdx));
+    return failVopdDecode(Di, "component dst operand missing or not reg at " +
+                                  Twine(DstIdx));
   Half.DstReg = Inst.getOperand(DstIdx).getReg();
 
   for (unsigned I = 0; I < Info.getCompParsedSrcOperandsNum(); ++I)
-    decodeVopdSource(Di, Half, Info, I, MRI);
+    if (Error E = decodeVopdSource(Di, Half, Info, I, MRI))
+      return E;
 
   int BitOpIdx = Info.getBitOp3OperandIdx();
   if (BitOpIdx < 0 &&
@@ -654,23 +663,24 @@ void decodeVopdHalf(DecodedInst &Di, DecodedInst::VopdHalf &Half,
   }
   if (!Half.HasBitOp3 && BitOpIdx >= 0) {
     if (static_cast<unsigned>(BitOpIdx) >= Inst.getNumOperands())
-      failVopdDecode(Di, Twine("bitop3 operand index out of MCInst range: ") +
-                             Twine(BitOpIdx));
+      return failVopdDecode(Di, "bitop3 operand index out of MCInst range: " +
+                                    Twine(BitOpIdx));
     const MCOperand &Mop = Inst.getOperand(static_cast<unsigned>(BitOpIdx));
     if (!Mop.isImm())
-      failVopdDecode(Di, "bitop3 operand is not an immediate");
+      return failVopdDecode(Di, "bitop3 operand is not an immediate");
     int64_t Raw = Mop.getImm();
     if (Raw < 0 || Raw > 0xff)
-      failVopdDecode(Di, Twine("bitop3 immediate out of range: ") + Twine(Raw));
+      return failVopdDecode(Di, "bitop3 immediate out of range: " + Twine(Raw));
     Half.HasBitOp3 = true;
     Half.BitOp3 = static_cast<uint8_t>(Raw);
   }
+  return Error::success();
 }
 
-void decodeVopd(DecodedInst &Di, const MCInstrInfo &MCII,
-                const MCRegisterInfo &MRI, const OpcodeMap &OpcMap) {
+Error decodeVopd(DecodedInst &Di, const MCInstrInfo &MCII,
+                 const MCRegisterInfo &MRI, const OpcodeMap &OpcMap) {
   if (!AMDGPU::isVOPD(Di.Inst.getOpcode()))
-    return;
+    return Error::success();
   Di.HasVopd = true;
   Di.IsVopd3 = (Di.TsFlags & SIInstrFlags::VOPD3) != 0;
 
@@ -681,10 +691,11 @@ void decodeVopd(DecodedInst &Di, const MCInstrInfo &MCII,
       OpXDesc, AMDGPU::VOPD::ComponentKind::COMPONENT_X, Di.IsVopd3);
   AMDGPU::VOPD::ComponentInfo YInfo(OpYDesc, XInfo, Di.IsVopd3);
 
-  decodeVopdHalf(Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::X], XInfo, opX,
-                 OpcMap, MRI);
-  decodeVopdHalf(Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::Y], YInfo, opY,
-                 OpcMap, MRI);
+  if (Error E = decodeVopdHalf(Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::X],
+                               XInfo, opX, OpcMap, MRI))
+    return E;
+  return decodeVopdHalf(Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::Y], YInfo,
+                        opY, OpcMap, MRI);
 }
 
 // Absolute byte target of an s_add_pc_i64: PC of the following instruction
@@ -692,12 +703,13 @@ void decodeVopd(DecodedInst &Di, const MCInstrInfo &MCII,
 // an immediate or a lit64 MCExpr (hence evalOperandAsConst). The displacement
 // is in bytes, with the low two bits ignored, not the dword units of
 // computeSoppBranchTarget.
-uint64_t computeAddPcI64Target(const MCInst &Inst, uint64_t Off,
-                               uint64_t InstSize) {
+Expected<uint64_t> computeAddPcI64Target(const MCInst &Inst, uint64_t Off,
+                                         uint64_t InstSize) {
   std::optional<int64_t> ConstOpt = evalOperandAsConst(Inst, 0);
   if (!ConstOpt)
-    report_fatal_error("transpiler: s_add_pc_i64 with non-constant source "
-                       "(only immediate-literal and lit64 forms are supported)");
+    return createStringError(
+        "transpiler: s_add_pc_i64 with non-constant source "
+        "(only immediate-literal and lit64 forms are supported)");
   int64_t Imm = divideFloorSigned(*ConstOpt, KAddPcI64LiteralAlignmentBytes) *
                 KAddPcI64LiteralAlignmentBytes;
   assert(InstSize <= UINT64_MAX - Off &&
@@ -706,61 +718,68 @@ uint64_t computeAddPcI64Target(const MCInst &Inst, uint64_t Off,
   if (Imm < 0) {
     uint64_t Back = llvm::AbsoluteValue(Imm);
     if (Back > Base)
-      report_fatal_error("transpiler: s_add_pc_i64 branch target underflow");
+      return createStringError(
+          "transpiler: s_add_pc_i64 branch target underflow");
     return Base - Back;
   }
   uint64_t Forward = static_cast<uint64_t>(Imm);
   if (Forward > UINT64_MAX - Base)
-    report_fatal_error("transpiler: s_add_pc_i64 branch target overflow");
+    return createStringError("transpiler: s_add_pc_i64 branch target overflow");
   return Base + Forward;
 }
 
-void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
-                          uint64_t InstSize, uint64_t KernelStartOffset,
-                          uint64_t DecodeLimit,
-                          std::set<uint64_t> &BlockStarts) {
+Error collectBranchTargets(const DecodedInst &Di, uint64_t Off,
+                           uint64_t InstSize, uint64_t KernelStartOffset,
+                           uint64_t DecodeLimit,
+                           std::set<uint64_t> &BlockStarts) {
   const MCInst &Inst = Di.Inst;
   // s_add_pc_i64 carries a signed i64 PC-relative byte offset, not the SOPP form.
   if (Di.CanonOp == CanonicalOp::S_ADD_PC_I64) {
-    uint64_t Target = computeAddPcI64Target(Inst, Off, InstSize);
-    if (Target >= KernelStartOffset && Target < DecodeLimit)
-      BlockStarts.insert(Target);
-    return;
+    Expected<uint64_t> Target = computeAddPcI64Target(Inst, Off, InstSize);
+    if (!Target)
+      return Target.takeError();
+    if (*Target >= KernelStartOffset && *Target < DecodeLimit)
+      BlockStarts.insert(*Target);
+    return Error::success();
   }
   for (unsigned I = 0; I < Inst.getNumOperands(); ++I) {
     if (!Inst.getOperand(I).isImm())
       continue;
-    uint64_t Target = computeSoppBranchTarget(Off, Inst.getOperand(I).getImm());
-    if (Target >= KernelStartOffset && Target < DecodeLimit)
-      BlockStarts.insert(Target);
+    Expected<uint64_t> Target =
+        computeSoppBranchTarget(Off, Inst.getOperand(I).getImm());
+    if (!Target)
+      return Target.takeError();
+    if (*Target >= KernelStartOffset && *Target < DecodeLimit)
+      BlockStarts.insert(*Target);
   }
   if (Di.IsConditionalBranch && InstSize <= UINT64_MAX - Off) {
     uint64_t Fallthrough = Off + InstSize;
     if (Fallthrough >= KernelStartOffset && Fallthrough < DecodeLimit)
       BlockStarts.insert(Fallthrough);
   }
+  return Error::success();
 }
 
 } // namespace
 
-uint64_t computeSoppBranchTarget(uint64_t Off, int64_t RawImm) {
+Expected<uint64_t> computeSoppBranchTarget(uint64_t Off, int64_t RawImm) {
   // SOPP encodes branch displacements as signed 16-bit instruction offsets
   // relative to the next instruction.  Convert once to a byte offset from
   // `Off + 4`, keeping underflow/overflow explicit instead of wrapping the
   // source address and corrupting CFG recovery.
   int64_t BrOff = SignExtend64<16>(static_cast<uint64_t>(RawImm));
   if (Off > UINT64_MAX - KSoppBranchStrideBytes)
-    report_fatal_error("transpiler: SOPP branch base offset overflow");
+    return createStringError("transpiler: SOPP branch base offset overflow");
   uint64_t Base = Off + KSoppBranchStrideBytes;
   if (BrOff < 0) {
     uint64_t Back = static_cast<uint64_t>(-BrOff) * KSoppBranchStrideBytes;
     if (Back > Base)
-      report_fatal_error("transpiler: SOPP branch target underflow");
+      return createStringError("transpiler: SOPP branch target underflow");
     return Base - Back;
   }
   uint64_t Forward = static_cast<uint64_t>(BrOff) * KSoppBranchStrideBytes;
   if (Forward > UINT64_MAX - Base)
-    report_fatal_error("transpiler: SOPP branch target overflow");
+    return createStringError("transpiler: SOPP branch target overflow");
   return Base + Forward;
 }
 
@@ -775,16 +794,17 @@ uint64_t computeSoppBranchTarget(uint64_t Off, int64_t RawImm) {
 // edges must consult the SetPcAnalysis table after this helper returns the
 // local decoded model.
 //
-SmallVector<uint64_t>
+Expected<SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
                               std::optional<uint64_t> NextBlockOffset) {
   SmallVector<uint64_t> Result;
-  auto BranchTargetFromImm = [&](unsigned OpIdx) -> uint64_t {
+  auto BranchTargetFromImm = [&](unsigned OpIdx) -> Expected<uint64_t> {
     if (OpIdx >= LastInst.Inst.getNumOperands())
-      report_fatal_error("transpiler: branch target operand missing");
+      return createStringError("transpiler: branch target operand missing");
     const MCOperand &Op = LastInst.Inst.getOperand(OpIdx);
     if (!Op.isImm())
-      report_fatal_error("transpiler: branch target operand is not immediate");
+      return createStringError(
+          "transpiler: branch target operand is not immediate");
     return computeSoppBranchTarget(LastInst.Offset, Op.getImm());
   };
 
@@ -803,13 +823,19 @@ computeDecodedBlockSuccessors(const DecodedInst &LastInst,
   // s_add_pc_i64 is isBranch but uses a byte displacement, so the SOPP path
   // below would mis-handle it. It is an unconditional skip: one successor.
   if (LastInst.CanonOp == CanonicalOp::S_ADD_PC_I64) {
-    Result.push_back(
-        computeAddPcI64Target(LastInst.Inst, LastInst.Offset, LastInst.Size));
+    Expected<uint64_t> Target =
+        computeAddPcI64Target(LastInst.Inst, LastInst.Offset, LastInst.Size);
+    if (!Target)
+      return Target.takeError();
+    Result.push_back(*Target);
     return Result;
   }
 
   if (LastInst.IsBranch) {
-    Result.push_back(BranchTargetFromImm(0));
+    Expected<uint64_t> Target = BranchTargetFromImm(0);
+    if (!Target)
+      return Target.takeError();
+    Result.push_back(*Target);
     if (LastInst.IsConditionalBranch && NextBlockOffset)
       Result.push_back(*NextBlockOffset);
     return Result;
@@ -839,12 +865,11 @@ bool decodedInstEndsBlock(const DecodedInst &LastInst) {
   }
 }
 
-DecodeResult decodeKernel(const MCState &Mc,
-                          const OpcodeMap &OpcMap,
-                          ArrayRef<uint8_t> TextBytes,
-                          uint64_t KernelOffset,
-                          uint64_t KernelEndOffset,
-                          std::optional<uint64_t> KernelStartOffset) {
+Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
+                                    ArrayRef<uint8_t> TextBytes,
+                                    uint64_t KernelOffset,
+                                    uint64_t KernelEndOffset,
+                                    std::optional<uint64_t> KernelStartOffset) {
   DecodeResult Out;
   Out.BlockStarts.insert(KernelOffset);
   uint64_t KernelStart = KernelStartOffset.value_or(KernelOffset);
@@ -854,14 +879,16 @@ DecodeResult decodeKernel(const MCState &Mc,
            << utohexstr(KernelOffset) << "\n";
 
   if (KernelOffset > TextBytes.size())
-    report_fatal_error(
+    return createStringError(
         "transpiler: kernel decode offset is outside .text contents");
   if (KernelStart > KernelOffset)
-    report_fatal_error("transpiler: kernel decode start follows scan offset");
+    return createStringError(
+        "transpiler: kernel decode start follows scan offset");
   if (KernelEndOffset != 0 && KernelEndOffset < KernelOffset)
-    report_fatal_error("transpiler: kernel decode end precedes start");
+    return createStringError("transpiler: kernel decode end precedes start");
   if (KernelEndOffset > TextBytes.size())
-    report_fatal_error("transpiler: kernel decode end is outside .text contents");
+    return createStringError(
+        "transpiler: kernel decode end is outside .text contents");
 
   const uint64_t TotalSize =
       KernelEndOffset == 0 ? static_cast<uint64_t>(TextBytes.size())
@@ -901,18 +928,25 @@ DecodeResult decodeKernel(const MCState &Mc,
     Di.FirstSrcIdx = Desc.getNumDefs();
 
     decodeScaleOffset(Di);
-    decodeStaticSmemOffset(Di);
-    decodeDppModifiers(Di);
+    if (Error E = decodeStaticSmemOffset(Di))
+      return E;
+    if (Error E = decodeDppModifiers(Di))
+      return E;
     decodeDsSwizzleImm(Di);
-    decodeVopd(Di, *Mc.InstrInfo, *Mc.RegInfo, OpcMap);
-    buildSrcMap(Di, Desc);
-    driftCheckTiedIn(Di, Desc);
-    driftCheckSrcN(Di, Desc);
+    if (Error E = decodeVopd(Di, *Mc.InstrInfo, *Mc.RegInfo, OpcMap))
+      return E;
+    if (Error E = buildSrcMap(Di, Desc))
+      return E;
+    if (Error E = driftCheckTiedIn(Di, Desc))
+      return E;
+    if (Error E = driftCheckSrcN(Di, Desc))
+      return E;
     classifyImplicitDefs(Di, Desc);
 
     if (Di.IsBranch)
-      collectBranchTargets(Di, Off, InstSize, KernelStart, TotalSize,
-                           Out.BlockStarts);
+      if (Error E = collectBranchTargets(Di, Off, InstSize, KernelStart,
+                                         TotalSize, Out.BlockStarts))
+        return E;
 
     bool IsEnd = (Di.CanonOp == CanonicalOp::S_ENDPGM);
     Out.Insts.push_back(std::move(Di));

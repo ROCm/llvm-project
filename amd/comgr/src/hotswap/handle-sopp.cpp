@@ -69,7 +69,11 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_BRANCH) {
-    uint64_t Target = computeSoppBranchTarget(Di.Offset, Di.getImm(0));
+    Expected<uint64_t> TargetOrErr =
+        computeSoppBranchTarget(Di.Offset, Di.getImm(0));
+    if (!TargetOrErr)
+      return TargetOrErr.takeError();
+    uint64_t Target = *TargetOrErr;
     Expected<BasicBlock *> TargetBb =
         lookupDecodedBB(Ctx, Di, Target, "s_branch");
     if (!TargetBb)
@@ -80,7 +84,11 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_CBRANCH_EXECZ || Sop == CanonicalOp::S_CBRANCH_EXECNZ) {
-    uint64_t Target = computeSoppBranchTarget(Di.Offset, Di.getImm(0));
+    Expected<uint64_t> TargetOrErr =
+        computeSoppBranchTarget(Di.Offset, Di.getImm(0));
+    if (!TargetOrErr)
+      return TargetOrErr.takeError();
+    uint64_t Target = *TargetOrErr;
     Expected<BasicBlock *> TargetBb =
         lookupDecodedBB(Ctx, Di, Target, "s_cbranch_exec");
     if (!TargetBb)
@@ -103,7 +111,11 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_CBRANCH_SCC0 || Sop == CanonicalOp::S_CBRANCH_SCC1) {
-    uint64_t Target = computeSoppBranchTarget(Di.Offset, Di.getImm(0));
+    Expected<uint64_t> TargetOrErr =
+        computeSoppBranchTarget(Di.Offset, Di.getImm(0));
+    if (!TargetOrErr)
+      return TargetOrErr.takeError();
+    uint64_t Target = *TargetOrErr;
     Expected<BasicBlock *> TargetBb =
         lookupDecodedBB(Ctx, Di, Target, "s_cbranch_scc");
     if (!TargetBb)
@@ -122,7 +134,11 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_CBRANCH_VCCNZ || Sop == CanonicalOp::S_CBRANCH_VCCZ) {
-    uint64_t Target = computeSoppBranchTarget(Di.Offset, Di.getImm(0));
+    Expected<uint64_t> TargetOrErr =
+        computeSoppBranchTarget(Di.Offset, Di.getImm(0));
+    if (!TargetOrErr)
+      return TargetOrErr.takeError();
+    uint64_t Target = *TargetOrErr;
     Expected<BasicBlock *> TargetBb =
         lookupDecodedBB(Ctx, Di, Target, "s_cbranch_vcc");
     if (!TargetBb)

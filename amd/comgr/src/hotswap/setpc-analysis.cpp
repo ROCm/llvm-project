@@ -504,9 +504,9 @@ void joinValue(PcLatticeValue &Dst, const PcLatticeValue &Src) {
 
 } // namespace
 
-SetPcAnalysis analyseSetPC(ArrayRef<DecodedInst> Insts,
-                           const std::set<uint64_t> &BlockStarts,
-                           const MCState &Mc) {
+Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
+                                     const std::set<uint64_t> &BlockStarts,
+                                     const MCState &Mc) {
   SetPcAnalysis Result;
   if (Insts.empty())
     return Result;
@@ -924,7 +924,11 @@ SetPcAnalysis analyseSetPC(ArrayRef<DecodedInst> Insts,
     std::optional<uint64_t> NextOff;
     if ((Bi + 1) < Blocks.size())
       NextOff = Blocks[Bi + 1].Offset;
-    Bd.Successors = computeDecodedBlockSuccessors(Insts[Bd.LastIdx], NextOff);
+    Expected<SmallVector<uint64_t>> SuccOrErr =
+        computeDecodedBlockSuccessors(Insts[Bd.LastIdx], NextOff);
+    if (!SuccOrErr)
+      return SuccOrErr.takeError();
+    Bd.Successors = std::move(*SuccOrErr);
   }
 
   // ---------------------------------------------------------------

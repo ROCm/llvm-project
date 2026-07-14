@@ -1869,15 +1869,14 @@ void OpcodeMap::build(const MCInstrInfo &MCII) {
   // once as gfx12-rename `E(S_ADD_U64, S_ADD_NC_U64)`) with the
   // second row silently losing the routing race and leaving every
   // `s_add_u64` lift routed through the wrong CanonicalOp -- see commit
-  // eaee0a0e88 for the repair.  The loop below now aborts loudly on
+  // eaee0a0e88 for the repair.  The loop below now returns an error on
   // duplicate keys so a future add that re-introduces the collision
   // is caught at transpiler init time instead of quietly miscompiling
   // everything under the duplicated opcode.
   //
-  // `report_fatal_error` is used (rather than `assert`) so the check
-  // is active in release builds too -- the cost is a single
-  // `try_emplace` per table row at process start, which is
-  // negligible for a ~800-entry table.
+  // A returned error (rather than `assert`) keeps the check active in
+  // release builds too -- the cost is a single `try_emplace` per table
+  // row at process start, which is negligible for a ~800-entry table.
   //
   // "Same CanonicalOp twice" is also rejected.  In principle a redundant
   // row that maps the same MC opcode to the same CanonicalOp is just

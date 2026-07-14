@@ -546,9 +546,10 @@ toFinalKernargPtrProvenance(KernargPtrDataflowState State) {
 }
 
 // Compute recovered CFG successors for the kernarg provenance prepass.
-static SmallVector<uint64_t> computeKernargProvenanceSuccessors(
-    const DecodedInst &LastInst, std::optional<uint64_t> NextBlockOffset,
-    const SetPcAnalysis &SetpcAnalysis) {
+static Expected<SmallVector<uint64_t>>
+computeKernargProvenanceSuccessors(const DecodedInst &LastInst,
+                                   std::optional<uint64_t> NextBlockOffset,
+                                   const SetPcAnalysis &SetpcAnalysis) {
   // Ordinary SOPP successors use the shared decoded CFG model. SETPC/SWAPPC
   // successors come from setpc-analysis.
   if (LastInst.CanonOp != CanonicalOp::S_SET_PC_I64 &&
@@ -577,15 +578,13 @@ static SmallVector<uint64_t> computeKernargProvenanceSuccessors(
 
 // Fill RaiseContext's per-BB kernarg provenance map by fixed-point over the
 // recovered source CFG.
-static void
-computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
-                            const std::set<uint64_t> &BlockStarts,
-                            uint64_t KernelOffset,
-                            const DenseMap<uint64_t, BasicBlock *>
-                                &OffsetToBb) {
+static Error computeKernargPtrProvenance(
+    RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
+    const std::set<uint64_t> &BlockStarts, uint64_t KernelOffset,
+    const DenseMap<uint64_t, BasicBlock *> &OffsetToBb) {
   assert(Ctx.Layout && "RaiseContext requires descriptor-derived SGPR layout");
   if (Insts.empty() || Ctx.Layout->KernargSegmentPtrSgpr < 0)
-    return;
+    return Error::success();
   Ctx.HasKernargPtrProvenanceByBB = true;
   unsigned KernargPtrSgpr =
       static_cast<unsigned>(Ctx.Layout->KernargSegmentPtrSgpr);
@@ -637,8 +636,12 @@ computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
       NextStart = Starts[I + 1];
     assert(Ctx.SetpcAnalysis &&
            "kernarg provenance requires completed SETPC analysis");
-    for (uint64_t SuccOffset : computeKernargProvenanceSuccessors(
-             Insts[Block.LastIdx], NextStart, *Ctx.SetpcAnalysis)) {
+    Expected<SmallVector<uint64_t>> SuccsOrErr =
+        computeKernargProvenanceSuccessors(Insts[Block.LastIdx], NextStart,
+                                           *Ctx.SetpcAnalysis);
+    if (!SuccsOrErr)
+      return SuccsOrErr.takeError();
+    for (uint64_t SuccOffset : *SuccsOrErr) {
       auto SuccIt = BlockIndexByOffset.find(SuccOffset);
       if (SuccIt != BlockIndexByOffset.end())
         Block.Successors.push_back(SuccIt->second);
@@ -694,6 +697,7 @@ computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
     Ctx.setKernargPtrProvenanceForBlock(
         BbIt->second, toFinalKernargPtrProvenance(State[I]));
   }
+  return Error::success();
 }
 
 static bool threadLoopUnsupportedWorkgroupMemoryOrBarrier(
@@ -758,7 +762,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
               llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
               bool EnableWaveNative, bool ForceThreadLoopProjection,
               bool SuppressC5ForThreadLoopRoute,
-              bool AssumeHipGlobalOffsetZero) {
+              bool AssumeHipGlobalOffsetZero, RaiseStats *Stats) {
   RaiseResult Result;
 
   // Reject obviously-bad ISA inputs before reaching the MC stack -- an
@@ -980,10 +984,12 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       KernelSize == 0 ? 0 : KernelOffset + KernelSize;
   const uint64_t DecodeLimit =
       KernelEndOffset == 0 ? TextBytes.size() : KernelEndOffset;
-  DecodeResult Decoded =
-      decodeKernel(Mc, OpcMap,
-                   ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
-                   KernelOffset, KernelEndOffset);
+  Expected<DecodeResult> DecodedOrErr = decodeKernel(
+      Mc, OpcMap, ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
+      KernelOffset, KernelEndOffset);
+  if (!DecodedOrErr)
+    return DecodedOrErr.takeError();
+  DecodeResult Decoded = std::move(*DecodedOrErr);
   auto &Insts = Decoded.Insts;
   auto &BlockStarts = Decoded.BlockStarts;
 
@@ -1006,7 +1012,11 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // fixpoint; crossing the selected symbol extent is a boundary violation, and
   // an in-extent target that cannot decode is a hard CFG recovery failure.
   while (true) {
-    SetpcAnalysis = analyseSetPC(Insts, BlockStarts, Mc);
+    Expected<SetPcAnalysis> SetpcAnalysisOrErr =
+        analyseSetPC(Insts, BlockStarts, Mc);
+    if (!SetpcAnalysisOrErr)
+      return SetpcAnalysisOrErr.takeError();
+    SetpcAnalysis = std::move(*SetpcAnalysisOrErr);
     llvm::DenseSet<uint64_t> InstOffsets = collectInstructionOffsets(Insts);
     bool AddedHelperRegion = false;
     for (uint64_t Addr : SetpcAnalysis.ExtraBlockStarts) {
@@ -1018,9 +1028,12 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       }
       if (InstOffsets.count(Addr))
         continue;
-      DecodeResult HelperDecoded = decodeKernel(
+      Expected<DecodeResult> HelperDecodedOrErr = decodeKernel(
           Mc, OpcMap, ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
           Addr, KernelEndOffset, KernelOffset);
+      if (!HelperDecodedOrErr)
+        return HelperDecodedOrErr.takeError();
+      DecodeResult HelperDecoded = std::move(*HelperDecodedOrErr);
       if (HelperDecoded.Insts.empty()) {
         return RaiseFailure::kernelBoundaryViolation(
             KernelName, Addr,
@@ -1043,7 +1056,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     BlockStarts.insert(Addr);
   }
 
-  Result.TotalCount = static_cast<int>(Insts.size());
+  if (Stats)
+    Stats->TotalCount = static_cast<int>(Insts.size());
 
   // Source disassembly is only consumed by the `.dis` debug dump. Skip the
   // string build on the production path; the pipeline only writes it when a
@@ -1658,8 +1672,9 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   Ctx.SourceComputePgmRsrc2 = Meta.ComputePgmRsrc2;
   Ctx.SourceKernelCodeProperties = Meta.KernelCodeProperties;
   Ctx.AssumeHipGlobalOffsetZero = AssumeHipGlobalOffsetZero;
-  computeKernargPtrProvenance(Ctx, Insts, Decoded.BlockStarts, KernelOffset,
-                              OffsetToBb);
+  if (Error E = computeKernargPtrProvenance(Ctx, Insts, Decoded.BlockStarts,
+                                            KernelOffset, OffsetToBb))
+    return E;
   auto EntryBbIt = OffsetToBb.find(KernelOffset);
   if (EntryBbIt == OffsetToBb.end())
     return llvm::createStringError(
@@ -1806,7 +1821,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       Ctx.clearSgprWaveMaskShadow();
     }
 
-    Ctx.computeVGPRAdjust(Di);
+    if (Error E = Ctx.computeVGPRAdjust(Di))
+      return E;
     // Invalidate the SPE lane_active memoisation at every instruction
     // boundary. Any instruction is a potential EXEC writer (either through
     // our modeled CanonicalOp allow-list, or through a path we haven't yet
@@ -2010,7 +2026,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     }
   }
 
-  Result.LiftedCount = RaisedCount;
+  if (Stats)
+    Stats->LiftedCount = RaisedCount;
 
   // If any instructions failed to raise, skip Phases 6-7.
   if (RaiseFailures) {
@@ -2093,8 +2110,12 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     // refinement. See the rewrite's header comment for the contract
     // (nullable -- null disables the gate and falls back to the
     // conservative pre-UA refusal behaviour).
-    CrossLaneDivergentRewriteReport RewriteReport = rewriteCrossLaneDivergent(
-        *F, Isa.WaveSize, TargetIsa.WaveSize, Tm.get());
+    Expected<CrossLaneDivergentRewriteReport> RewriteReportOrErr =
+        rewriteCrossLaneDivergent(*F, Isa.WaveSize, TargetIsa.WaveSize,
+                                  Tm.get());
+    if (!RewriteReportOrErr)
+      return RewriteReportOrErr.takeError();
+    CrossLaneDivergentRewriteReport RewriteReport = *RewriteReportOrErr;
 
     if (RewriteReport.refusedSgprForced()) {
       ThreadLoopDecisionResult TlDecision = decideThreadLoopFallback(
@@ -2125,7 +2146,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
                              /*suppressC5ForThreadLoopRoute=*/true,
-                             AssumeHipGlobalOffsetZero);
+                             AssumeHipGlobalOffsetZero, Stats);
       }
       if (!ForceThreadLoopProjection &&
           TlDecision.Decision == ThreadLoopDecision::EligibleButGateOff) {
@@ -2301,7 +2322,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
                              /*suppressC5ForThreadLoopRoute=*/true,
-                             AssumeHipGlobalOffsetZero);
+                             AssumeHipGlobalOffsetZero, Stats);
       }
       errs() << "transpiler: pre-translation abort: "
              << reasonString(RaiseFailureReason::CrossWavePredicateChain)
@@ -2349,11 +2370,12 @@ llvm::Expected<RaiseResult>
 raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           llvm::StringRef KernelName, const KernelMeta &Meta,
           llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
-          bool EnableWaveNative) {
+          bool EnableWaveNative, RaiseStats *Stats) {
   return raiseToIR(TextBytes, SourceIsa, KernelName, Meta,
                    /*KernelOffset=*/0,
                    /*KernelSize=*/0, CompilationTargetIsa,
-                   EnableWritelaneRewrite, EnableWaveNative);
+                   EnableWritelaneRewrite, EnableWaveNative,
+                   /*AssumeHipGlobalOffsetZero=*/false, Stats);
 }
 
 llvm::Expected<RaiseResult>
@@ -2361,12 +2383,13 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           llvm::StringRef KernelName, const KernelMeta &Meta,
           uint64_t KernelOffset, uint64_t KernelSize,
           llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
-          bool EnableWaveNative, bool AssumeHipGlobalOffsetZero) {
+          bool EnableWaveNative, bool AssumeHipGlobalOffsetZero,
+          RaiseStats *Stats) {
   return raiseToIRImpl(
       TextBytes, SourceIsa, KernelName, Meta, KernelOffset, KernelSize,
       CompilationTargetIsa, EnableWritelaneRewrite, EnableWaveNative,
       /*forceThreadLoopProjection=*/false,
-      /*suppressC5ForThreadLoopRoute=*/false, AssumeHipGlobalOffsetZero);
+      /*suppressC5ForThreadLoopRoute=*/false, AssumeHipGlobalOffsetZero, Stats);
 }
 
 } // namespace COMGR::hotswap

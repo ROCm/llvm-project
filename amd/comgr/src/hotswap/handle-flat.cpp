@@ -478,8 +478,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     // to the element size.
     Align LoadAlign = Align(IsByte ? 1 : 2);
 
-    FlatAddr Fa = decodeGlobalLoadAddr(Ctx, Di, Op, IsByte ? 1 : 2,
-                                        "GLOBAL_LOAD sub-dword");
+    Expected<FlatAddr> FaOrErr = decodeGlobalLoadAddr(
+        Ctx, Di, Op, IsByte ? 1 : 2, "GLOBAL_LOAD sub-dword");
+    if (!FaOrErr)
+      return FaOrErr.takeError();
+    FlatAddr Fa = *FaOrErr;
     Value *Addr = Fa.Ptr;
     // SPE-gate the memory access itself, not just the VGPR write-back.
     // The store counterparts (GLOBAL_STORE_*, ~line 196 below) are
@@ -523,8 +526,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
 
     ParsedReg Dest = Op.dst();
 
-    FlatAddr Fa = decodeGlobalLoadAddr(Ctx, Di, Op, LoadDwords * 4,
-                                        "GLOBAL_LOAD dword");
+    Expected<FlatAddr> FaOrErr =
+        decodeGlobalLoadAddr(Ctx, Di, Op, LoadDwords * 4, "GLOBAL_LOAD dword");
+    if (!FaOrErr)
+      return FaOrErr.takeError();
+    FlatAddr Fa = *FaOrErr;
     Value *Addr = Fa.Ptr;
 
     // Same SPE-gating rationale as the GLOBAL_LOAD sub-dword block
@@ -606,8 +612,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     // with a lane-index vaddr to lower `out[tid] = vec4` patterns.
     int ElemBytes = StoreBits < 32 ? (StoreBits / 8)
                                     : std::max(StoreDwords, 1) * 4;
-    FlatAddr Fa =
+    Expected<FlatAddr> FaOrErr =
         decodeGlobalStoreAddr(Ctx, Di, Op, ElemBytes, "GLOBAL_STORE");
+    if (!FaOrErr)
+      return FaOrErr.takeError();
+    FlatAddr Fa = *FaOrErr;
     Value *Addr = Fa.Ptr;
     ParsedReg StData = Fa.StData;
 
@@ -1025,8 +1034,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
            "byte-aligned TR packing assumes one element per (lane, dword slot)");
 
     ParsedReg Dest = Op.dst();
-    FlatAddr Fa =
+    Expected<FlatAddr> FaOrErr =
         decodeGlobalLoadAddr(Ctx, Di, Op, TotalBytes, "GLOBAL_LOAD_TR");
+    if (!FaOrErr)
+      return FaOrErr.takeError();
+    FlatAddr Fa = *FaOrErr;
     Value *Addr = Fa.Ptr;
 
     auto [LaneInGroup, GroupBase] = emitTransposeGroup(Ctx, GroupSize);
@@ -1077,8 +1089,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
            "TR6 packs one element per source lane in the group");
 
     ParsedReg Dest = Op.dst();
-    FlatAddr Fa =
+    Expected<FlatAddr> FaOrErr =
         decodeGlobalLoadAddr(Ctx, Di, Op, TotalBytes, "GLOBAL_LOAD_TR6");
+    if (!FaOrErr)
+      return FaOrErr.takeError();
+    FlatAddr Fa = *FaOrErr;
     Value *Addr = Fa.Ptr;
 
     auto [LaneInGroup, GroupBase] = emitTransposeGroup(Ctx, GroupSize);
@@ -1283,8 +1298,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     if (Op.nSrcs() >= 2 && Op.isSrcReg(0) && Op.isSrcReg(1) &&
         Op.srcReg(0).RegKind == ParsedReg::SGPR &&
         Op.srcReg(1).RegKind == ParsedReg::VGPR) {
-      FlatAddr Fa = decodeGlobalLoadAddr(Ctx, Di, Op, IsByte ? 1 : 2,
-                                          "FLAT_LOAD sub-dword (SADDR)");
+      Expected<FlatAddr> FaOrErr = decodeGlobalLoadAddr(
+          Ctx, Di, Op, IsByte ? 1 : 2, "FLAT_LOAD sub-dword (SADDR)");
+      if (!FaOrErr)
+        return FaOrErr.takeError();
+      FlatAddr Fa = *FaOrErr;
       Addr = Fa.Ptr;
     } else {
       // Plain-flat form: VGPR64 holds the full per-lane flat address.
@@ -1365,8 +1383,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     if (Op.nSrcs() >= 2 && Op.isSrcReg(0) && Op.isSrcReg(1) &&
         Op.srcReg(0).RegKind == ParsedReg::SGPR &&
         Op.srcReg(1).RegKind == ParsedReg::VGPR) {
-      FlatAddr Fa = decodeGlobalLoadAddr(Ctx, Di, Op, LoadDwords * 4,
-                                          "FLAT_LOAD dword (SADDR)");
+      Expected<FlatAddr> FaOrErr = decodeGlobalLoadAddr(
+          Ctx, Di, Op, LoadDwords * 4, "FLAT_LOAD dword (SADDR)");
+      if (!FaOrErr)
+        return FaOrErr.takeError();
+      FlatAddr Fa = *FaOrErr;
       Addr = Fa.Ptr;
     } else {
       Addr = Ctx.Regs.readReg64(Ctx.B, Op.srcReg(0));
@@ -1453,8 +1474,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
         Op.srcReg(0).RegKind == ParsedReg::VGPR &&
         Op.srcReg(1).RegKind == ParsedReg::VGPR &&
         Op.srcReg(2).RegKind == ParsedReg::SGPR) {
-      FlatAddr Fa = decodeGlobalStoreAddr(Ctx, Di, Op, ElemBytes,
-                                           "FLAT_STORE (SADDR)");
+      Expected<FlatAddr> FaOrErr =
+          decodeGlobalStoreAddr(Ctx, Di, Op, ElemBytes, "FLAT_STORE (SADDR)");
+      if (!FaOrErr)
+        return FaOrErr.takeError();
+      FlatAddr Fa = *FaOrErr;
       Addr = Fa.Ptr;
       StData = Fa.StData;
     } else {
@@ -1547,9 +1571,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
           "compare semantics, not minimumNumber");
     }
     if (IsSaddr) {
-      FlatAddr Fa = decodeGlobalStoreAddr(Ctx, Di, Op,
-                                           /*elemBytes=*/Is64 ? 8 : 4,
-                                           "FLAT_ATOMIC (SADDR)");
+      Expected<FlatAddr> FaOrErr = decodeGlobalStoreAddr(
+          Ctx, Di, Op, /*elemBytes=*/Is64 ? 8 : 4, "FLAT_ATOMIC (SADDR)");
+      if (!FaOrErr)
+        return FaOrErr.takeError();
+      FlatAddr Fa = *FaOrErr;
       Addr = Fa.Ptr;
       StData = Fa.StData;
     } else {
@@ -1558,7 +1584,10 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       Type *PtrFlatTy = PointerType::get(Ctx.C, 0);
       if (Addr->getType() != PtrFlatTy)
         Addr = Ctx.B.CreateIntToPtr(Addr, PtrFlatTy);
-      int64_t MemOffset = getGlobalFlatOffset(Di);
+      Expected<int64_t> MemOffsetOrErr = getGlobalFlatOffset(Di);
+      if (!MemOffsetOrErr)
+        return MemOffsetOrErr.takeError();
+      int64_t MemOffset = *MemOffsetOrErr;
       if (MemOffset != 0)
         Addr = Ctx.B.CreateGEP(Ctx.I8Ty, Addr, Ctx.B.getInt64(MemOffset));
       StData = Op.srcReg(1);
@@ -1730,9 +1759,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
           "f64 atomic min/max from a pre-gfx12 source uses raw "
           "compare semantics, not minimumNumber");
     }
-    FlatAddr Fa = decodeGlobalStoreAddr(Ctx, Di, Op,
-                                         /*elemBytes=*/Is64 ? 8 : 4,
-                                         "GLOBAL_ATOMIC");
+    Expected<FlatAddr> FaOrErr = decodeGlobalStoreAddr(
+        Ctx, Di, Op, /*elemBytes=*/Is64 ? 8 : 4, "GLOBAL_ATOMIC");
+    if (!FaOrErr)
+      return FaOrErr.takeError();
+    FlatAddr Fa = *FaOrErr;
     // b64 integer swap (`global_atomic_swap_x2`, collapsed to
     // GLOBAL_ATOMIC_SWAP in opcode-map): read/atomic/write at 64-bit width
     // like the F64 path but as a plain integer (no fp bitcast). Detect by

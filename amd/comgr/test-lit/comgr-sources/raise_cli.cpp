@@ -631,26 +631,27 @@ int main(int argc, char **argv) {
       } else {
         llvm::consumeError(metaOrErr.takeError());
       }
+      COMGR::hotswap::RaiseStats Stats;
       llvm::Expected<COMGR::hotswap::RaiseResult> RaisedOrErr =
           COMGR::hotswap::raiseToIR(text.Bytes, isa, kName, meta, kernelOffset,
                                     kernelSize, targetIsa,
                                     EnableWritelaneRewrite, EnableWaveNative,
-                                    AssumeHipGlobalOffsetZeroOpt);
+                                    AssumeHipGlobalOffsetZeroOpt, &Stats);
       if (RaisedOrErr) {
         COMGR::hotswap::RaiseResult Raised = std::move(*RaisedOrErr);
         shm->done = true;
         shm->success = true;
-        shm->lifted = Raised.LiftedCount;
-        shm->total = Raised.TotalCount;
+        shm->lifted = Stats.LiftedCount;
+        shm->total = Stats.TotalCount;
         shm->numDroppedFailures = 0;
 
-        ChildOut << "OK " << kName << " (" << Raised.LiftedCount << "/"
-                 << Raised.TotalCount << ")\n";
+        ChildOut << "OK " << kName << " (" << Stats.LiftedCount << "/"
+                 << Stats.TotalCount << ")\n";
       } else {
         shm->done = true;
         shm->success = false;
-        shm->lifted = -1; // TOOD: fix this once Stats are separate
-        shm->total = -1;  // TOOD: fix this once Stats are separate
+        shm->lifted = Stats.LiftedCount;
+        shm->total = Stats.TotalCount;
         shm->numDroppedFailures = 0;
 
         llvm::SmallVector<FailureBucketKey> Seen;

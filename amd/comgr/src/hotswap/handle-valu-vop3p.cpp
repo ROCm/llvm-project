@@ -902,7 +902,12 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // matrix-translation.md §12.4.7), not a WMMA-lowering
       // problem, so with that fixed the MODREP MFMA lowering
       // handles both single- and multi-WMMA cases correctly.
-      ResultVal = emitWmmAtoMfmaF3216x16x4(Ctx, A, B, *C);
+      {
+        Expected<Value *> RV = emitWmmAtoMfmaF3216x16x4(Ctx, A, B, *C);
+        if (!RV)
+          return RV.takeError();
+        ResultVal = *RV;
+      }
     } else {
       return RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
@@ -1116,7 +1121,12 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // (Session-8, matrix-translation.md §12.4.7) the MODREP
       // MFMA redistribution is correct for both single- and
       // multi-WMMA regimes, so this refusal is no longer needed.
-      ResultVal = emitWMMAtoMFMA(Ctx, A, B, *C, WmmaInputType);
+      {
+        Expected<Value *> RV = emitWMMAtoMFMA(Ctx, A, B, *C, WmmaInputType);
+        if (!RV)
+          return RV.takeError();
+        ResultVal = *RV;
+      }
     } else {
       // Target has neither gfx1250 tensor ops (hasTensorOps, K=32
       // / K=64 WMMA native) nor MFMA (gfx942 CDNA3 et al., the
@@ -1294,28 +1304,31 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       //
       // matrix_a_reuse / matrix_b_reuse are perf hints (not correctness)
       // and have no MFMA equivalent; the helper drops them.
-      ResultVal = emitWMMAScaleF8F6F4toScaledMFMA(
-          Ctx, A, B, *C, MatrixAFmt, MatrixBFmt, CMod, MatrixAScale,
-          MatrixAScaleFmt, ScaleSrc0, MatrixBScale, MatrixBScaleFmt, ScaleSrc1,
-          ADwords, BDwords);
+      {
+        Expected<Value *> RV = emitWMMAScaleF8F6F4toScaledMFMA(
+            Ctx, A, B, *C, MatrixAFmt, MatrixBFmt, CMod, MatrixAScale,
+            MatrixAScaleFmt, ScaleSrc0, MatrixBScale, MatrixBScaleFmt,
+            ScaleSrc1, ADwords, BDwords);
+        if (!RV)
+          return RV.takeError();
+        ResultVal = *RV;
+      }
       // reuse hints have no MFMA equivalent; silence -Wunused-variable.
       (void)MatrixAReuse;
       (void)MatrixBReuse;
-      if (!ResultVal)
-        return RaiseFailure::unsupportedInstructionForm(
-            Di, "VOP3P",
-            "emitWMMAScaleF8F6F4toScaledMFMA refused this fragment width "
-            "(ADwords/BDwords outside f8/f6/f4 set)");
 
     } else if (Ctx.TargetIsa.HasFP8Insts) {
       // Cross-target gfx1250 -> gfx942: K-decomposed unscaled FP8/BF8 MFMA
       // chain with software scale. Gated on HasFP8Insts (not HasMfma) so
       // gfx90a / gfx940 (MAI but no FP8 MFMA) don't take this path; gfx950
       // is already handled by the HasGfx950Insts branch above.
-      ResultVal = emitWMMAScaleF8F6F4toMFMA(
+      Expected<Value *> RV = emitWMMAScaleF8F6F4toMFMA(
           Ctx, A, B, *C, MatrixAFmt, MatrixBFmt, CMod, MatrixAScale,
           MatrixAScaleFmt, ScaleSrc0, MatrixBScale, MatrixBScaleFmt, ScaleSrc1,
           ADwords, BDwords);
+      if (!RV)
+        return RV.takeError();
+      ResultVal = *RV;
       (void)MatrixAReuse;
       (void)MatrixBReuse;
       if (!ResultVal)

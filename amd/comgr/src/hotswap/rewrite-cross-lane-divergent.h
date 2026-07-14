@@ -9,6 +9,8 @@
 #ifndef HOTSWAP_TRANSPILER_REWRITE_CROSS_LANE_DIVERGENT_H
 #define HOTSWAP_TRANSPILER_REWRITE_CROSS_LANE_DIVERGENT_H
 
+#include "llvm/Support/Error.h"
+
 #include <string>
 
 namespace llvm {
@@ -268,9 +270,10 @@ struct CrossLaneDivergentRewriteReport {
 // `ds_bpermute` whose result is MODREP-replica-divergent -- so a
 // pre-rewrite UA verdict does not survive the rewrite), so no such
 // refinement is active today.
-CrossLaneDivergentRewriteReport rewriteCrossLaneDivergent(
-    llvm::Function &F, unsigned SourceWaveSize, unsigned TargetWaveSize,
-    llvm::TargetMachine *TM = nullptr);
+llvm::Expected<CrossLaneDivergentRewriteReport>
+rewriteCrossLaneDivergent(llvm::Function &F, unsigned SourceWaveSize,
+                          unsigned TargetWaveSize,
+                          llvm::TargetMachine *TM = nullptr);
 
 } // namespace COMGR::hotswap
 

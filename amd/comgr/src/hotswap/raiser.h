@@ -26,11 +26,16 @@ class Module;
 
 namespace COMGR::hotswap {
 
+// Instruction-lifting statistics collected during a raise. Passed to
+// raiseToIR by pointer; a null pointer means the caller does not want stats.
+struct RaiseStats {
+  int LiftedCount = 0;
+  int TotalCount = 0;
+};
+
 struct RaiseResult {
   std::unique_ptr<llvm::LLVMContext> Ctx;
   std::unique_ptr<llvm::Module> Module;
-  int LiftedCount = 0;
-  int TotalCount = 0;
   // Source disassembly, populated only when HSA_HOTSWAP_DUMP_INPUT=1 for the
   // `.dis` debug dump; empty on the production path.
   std::string DisasmText;
@@ -50,7 +55,8 @@ llvm::Expected<RaiseResult>
 raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           llvm::StringRef KernelName, const KernelMeta &Meta,
           llvm::StringRef CompilationTargetIsa = "",
-          bool EnableWritelaneRewrite = true, bool EnableWaveNative = true);
+          bool EnableWritelaneRewrite = true, bool EnableWaveNative = true,
+          RaiseStats *Stats = nullptr);
 
 llvm::Expected<RaiseResult>
 raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
@@ -58,7 +64,7 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           uint64_t KernelOffset, uint64_t KernelSize,
           llvm::StringRef CompilationTargetIsa = "",
           bool EnableWritelaneRewrite = true, bool EnableWaveNative = true,
-          bool AssumeHipGlobalOffsetZero = false);
+          bool AssumeHipGlobalOffsetZero = false, RaiseStats *Stats = nullptr);
 
 } // namespace COMGR::hotswap
 

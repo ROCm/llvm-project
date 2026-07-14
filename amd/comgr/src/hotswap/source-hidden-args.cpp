@@ -46,7 +46,7 @@ unsigned dispatchWorkgroupSizeOffset(unsigned Dim) {
   case 2:
     return WorkgroupSizeZOffset;
   default:
-    report_fatal_error("invalid source hidden workgroup-size dimension");
+    llvm_unreachable("invalid source hidden workgroup-size dimension");
   }
 }
 
@@ -60,7 +60,7 @@ unsigned dispatchGridSizeOffset(unsigned Dim) {
   case 2:
     return GridSizeZOffset;
   default:
-    report_fatal_error("invalid source hidden grid-size dimension");
+    llvm_unreachable("invalid source hidden grid-size dimension");
   }
 }
 } // namespace DispatchPacket

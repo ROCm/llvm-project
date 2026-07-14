@@ -173,14 +173,14 @@ struct RaiseContext {
 
   // Per-instruction VGPR index adjustment, indexed by MCInst operand index.
   // Computed from vgprMSBs before each instruction dispatch. computeVGPRAdjust
-  // fails loudly if LLVM TableGen grows a VGPR-MSB-controlled operand beyond
-  // this bound; silently dropping such an adjustment would misdecode the source
-  // register bank.
+  // returns an error if LLVM TableGen grows a VGPR-MSB-controlled operand
+  // beyond this bound; silently dropping such an adjustment would misdecode the
+  // source register bank.
   static constexpr unsigned KMaxOps = 16;
   unsigned CurrentVgprAdjust[KMaxOps] = {};
 
   // Compute currentVGPRAdjust for the given instruction based on vgprMSBs.
-  void computeVGPRAdjust(const DecodedInst &Di);
+  llvm::Error computeVGPRAdjust(const DecodedInst &Di);
 
   llvm::BasicBlock *lookupBB(uint64_t Addr);
 

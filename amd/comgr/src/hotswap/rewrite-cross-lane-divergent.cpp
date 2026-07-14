@@ -881,8 +881,8 @@ struct DppLaneMap {
 // obliviousness property the rewrite relies on.
 //
 // Unsupported families (filtered upstream via
-// `isDppCtrlRewritable`; reaching this function with one fires
-// `report_fatal_error` at the trailing default case):
+// `isDppCtrlRewritable`; reaching this function with one returns
+// an error at the trailing default case):
 //
 //   * ROW_ROR:N (row rotate right).  Rotation keeps data within a
 //     16-lane row, but requires modular arithmetic this helper
@@ -917,11 +917,11 @@ struct DppLaneMap {
 // layout and document the in-range predicate and source-lane
 // formula alongside each case -- the correctness argument is local
 // per ctrl value.  Caller MUST have verified `isDppCtrlRewritable`;
-// this function asserts the invariant and `report_fatal_error`s
-// otherwise to turn an internal-invariant violation into a loud
+// this function re-checks the invariant and returns an error
+// otherwise to turn an internal-invariant violation into a surfaced
 // failure rather than a silent "miscompile with default values".
-DppLaneMap buildDppLaneMap(IRBuilder<> &B, Value *WithinRow,
-                            unsigned Ctrl) {
+Expected<DppLaneMap> buildDppLaneMap(IRBuilder<> &B, Value *WithinRow,
+                                     unsigned Ctrl) {
   using namespace llvm::AMDGPU::DPP;
   DppLaneMap Out;
   Type *I32Ty = B.getInt32Ty();
@@ -995,7 +995,7 @@ DppLaneMap buildDppLaneMap(IRBuilder<> &B, Value *WithinRow,
   // miscompile-by-omission shape.  Fail loudly rather than produce
   // a zero-initialised DppLaneMap that would silently short-circuit
   // the rewrite's correctness invariant.
-  report_fatal_error(
+  return createStringError(
       "buildDppLaneMap invariant: isDppCtrlRewritable said supported "
       "but the decoder has no matching case. Extend both together.");
 }
@@ -1048,16 +1048,16 @@ std::string describeDppCtrl(unsigned Ctrl) {
 // Rewrite one `amdgcn.update.dpp.i32(old, src, dpp_ctrl, row_mask,
 // bank_mask, bound_ctrl)` call.  CALLER CONTRACT: `isDppCtrlRewritable(
 // ctrl)` MUST be true -- the pre-flight pass enforces this, and this
-// function `report_fatal_error`s if the invariant is broken at the
-// call site.  This is stricter than an assert (which would no-op in
+// function returns an error if the invariant is broken at the
+// call site.  This is stronger than an assert (which would no-op in
 // release builds) because a silently-half-rewritten function is
 // exactly the "silent-fallback" shape the project rule forbids.
 //
 // Only called for i32-overloaded DPP.  i64 DPP sites are left to
 // the backend's native lowering (see the header's "@llvm.amdgcn.
 // update.dpp" paragraph for the i32-only scope rationale).
-void rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
-                             unsigned SourceWaveSize) {
+Error rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
+                              unsigned SourceWaveSize) {
   IRBuilder<> B(CI);
   B.SetCurrentDebugLocation(CI->getDebugLoc());
   Module *M = CI->getModule();
@@ -1084,9 +1084,9 @@ void rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
   // on one DPP site would violate the all-or-nothing symmetry across
   // the function's cross-lane primitives.
   if (!isDppCtrlRewritable(Ctrl))
-    report_fatal_error(Twine("rewriteUpdateDppI32Call invariant: "
-                              "pre-flight missed unsupported dpp_ctrl ") +
-                        describeDppCtrl(Ctrl));
+    return createStringError(Twine("rewriteUpdateDppI32Call invariant: "
+                                   "pre-flight missed unsupported dpp_ctrl ") +
+                             describeDppCtrl(Ctrl));
 
   // Lane-topology values for the source-fetch path.  Both are
   // derived from the target-wave physical `LaneId` because DPP
@@ -1102,7 +1102,10 @@ void rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
 
   // Per-ctrl source mapping.  `isDppCtrlRewritable` gated the call
   // site -- `buildDppLaneMap` is guaranteed to return a valid map.
-  DppLaneMap LaneMap = buildDppLaneMap(B, WithinRow, Ctrl);
+  Expected<DppLaneMap> LaneMapOrErr = buildDppLaneMap(B, WithinRow, Ctrl);
+  if (!LaneMapOrErr)
+    return LaneMapOrErr.takeError();
+  DppLaneMap LaneMap = *LaneMapOrErr;
 
   // Clamp the bogus wrap-around result on OOB so the ds_bpermute
   // selector always references a deterministic intra-row lane.  The
@@ -1171,13 +1174,14 @@ void rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
 
   CI->replaceAllUsesWith(Result);
   CI->eraseFromParent();
+  return Error::success();
 }
 
 } // namespace
 
-CrossLaneDivergentRewriteReport rewriteCrossLaneDivergent(
-    Function &F, unsigned SourceWaveSize, unsigned TargetWaveSize,
-    TargetMachine *TM) {
+Expected<CrossLaneDivergentRewriteReport>
+rewriteCrossLaneDivergent(Function &F, unsigned SourceWaveSize,
+                          unsigned TargetWaveSize, TargetMachine *TM) {
   CrossLaneDivergentRewriteReport Report;
   // `TM` is reserved for a future UA-backed classifier refinement.
   // See the header doc block for the soundness analysis of why the
@@ -1357,13 +1361,14 @@ CrossLaneDivergentRewriteReport rewriteCrossLaneDivergent(
     rewriteReadfirstlaneCall(CI, GetLaneId(), SourceWaveSize);
   for (CallInst *CI : DppI32Sites) {
     // Phase B above guaranteed `isDppCtrlRewritable(ctrl)`, and
-    // `rewriteUpdateDppI32Call` re-checks and `report_fatal_error`s
+    // `rewriteUpdateDppI32Call` re-checks and returns an error
     // on violation -- defence in depth, release-build-safe (unlike
     // `assert`, which no-ops under NDEBUG and would let a silent
     // half-rewrite through).  The counter increments only AFTER the
-    // rewriter successfully returns; a hypothetical fatal-error (which
-    // aborts the whole process) cannot leave the report lying.
-    rewriteUpdateDppI32Call(CI, GetLaneId(), SourceWaveSize);
+    // rewriter successfully returns; a returned error propagates out
+    // first, so it cannot leave the report lying.
+    if (Error E = rewriteUpdateDppI32Call(CI, GetLaneId(), SourceWaveSize))
+      return E;
     ++Report.DppRewritten;
   }
 

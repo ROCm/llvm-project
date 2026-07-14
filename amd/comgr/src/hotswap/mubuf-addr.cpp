@@ -206,7 +206,7 @@ bool constantI32(Value *V, uint32_t &Out) {
 // FORMAT_32 + NUM_FORMAT_FLOAT for the same raw store family; the raw
 // intrinsics still move the explicitly typed payload bits without
 // numeric conversion.
-Value *buildMubufSRD(RaiseContext &Ctx, const SRSRCDwords &Dw) {
+Expected<Value *> buildMubufSRD(RaiseContext &Ctx, const SRSRCDwords &Dw) {
   constexpr uint32_t kGfx1250RawPointerWord1Bits = 0xfc000000u;
   constexpr uint32_t kGfx1250RawBufferMaxRecords = 0x00ffffffu;
   constexpr uint32_t kGfx942RawBufferMaxRecords = 0x7ffffffeu;
@@ -259,19 +259,19 @@ Value *buildMubufSRD(RaiseContext &Ctx, const SRSRCDwords &Dw) {
   uint32_t Dw1Const = 0;
   if (constantI32(Dw.Dw1, Dw1Const) && (Dw1Const & 0xFFFF0000u) != 0 &&
       (Dw1Const & 0xFFFF0000u) != kGfx1250RawPointerWord1Bits) {
-    report_fatal_error("transpiler: MUBUF: unsupported non-raw SRSRC "
-                       "descriptor: source word1 contains structured/"
-                       "swizzled fields that the raw-buffer lowering cannot "
-                       "preserve");
+    return createStringError("transpiler: MUBUF: unsupported non-raw SRSRC "
+                             "descriptor: source word1 contains structured/"
+                             "swizzled fields that the raw-buffer lowering "
+                             "cannot preserve");
   }
   uint32_t Dw3Const = 0;
   if (constantI32(Dw.Dw3, Dw3Const) && Dw3Const != 0 &&
       Dw3Const != kGfx942RawBufferFormat32 &&
       Dw3Const != kGfx942RawBufferFormat32Uint &&
       Dw3Const != kGfx942RawBufferFormat32Float) {
-    report_fatal_error("transpiler: MUBUF: unsupported non-raw SRSRC "
-                       "descriptor: source word3 is not a raw-buffer "
-                       "FORMAT_32 descriptor shape");
+    return createStringError("transpiler: MUBUF: unsupported non-raw SRSRC "
+                             "descriptor: source word3 is not a raw-buffer "
+                             "FORMAT_32 descriptor shape");
   }
 
   Value *CleanDw1 = Ctx.B.CreateAnd(Dw.Dw1,
@@ -297,9 +297,9 @@ Value *buildMubufSRD(RaiseContext &Ctx, const SRSRCDwords &Dw) {
 
 } // namespace
 
-MubufAddr decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
-                          OpResolver &Op, bool IsStore,
-                          StringRef DiagLabel) {
+Expected<MubufAddr> decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
+                                    OpResolver &Op, bool IsStore,
+                                    StringRef DiagLabel) {
   MubufOps M = classifyMubufOps(Di, Op, IsStore);
 
   if (!M.HaveSrsrc) {
@@ -307,17 +307,20 @@ MubufAddr decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
     raw_string_ostream Os(Msg);
     Os << "transpiler: " << DiagLabel << ": no SRSRC found for "
        << Di.RawMnemonic;
-    report_fatal_error(StringRef(Os.str()));
+    return createStringError(Os.str());
   }
 
   MubufAddr Out;
   if (M.HasSwz) {
-    report_fatal_error(Twine("transpiler: ") + DiagLabel +
-                       ": swizzled buffer addressing is unsupported "
-                       "by the raw-buffer lowering");
+    return createStringError("transpiler: " + DiagLabel +
+                             ": swizzled buffer addressing is unsupported "
+                             "by the raw-buffer lowering");
   }
   SRSRCDwords Dw = readSRSRCDwords(Ctx, M.Srsrc);
-  Out.Srd = buildMubufSRD(Ctx, Dw);
+  Expected<Value *> Srd = buildMubufSRD(Ctx, Dw);
+  if (!Srd)
+    return Srd.takeError();
+  Out.Srd = *Srd;
   Out.StData = M.Vdata;
 
   Value *Voffset = ConstantInt::get(Ctx.I32Ty, 0);
