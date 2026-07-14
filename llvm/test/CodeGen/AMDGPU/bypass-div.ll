@@ -10,7 +10,8 @@ define i64 @sdiv64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX9-NEXT:  .LBB0_1:
@@ -35,9 +36,8 @@ define i64 @sdiv64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_cndmask_b32_e64 v0, v1, v3, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-NEXT:  .LBB0_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
-; GFX9-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX9-NEXT:  .LBB0_3:
@@ -158,7 +158,8 @@ define i64 @udiv64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX9-NEXT:  .LBB1_1:
@@ -183,9 +184,8 @@ define i64 @udiv64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_cndmask_b32_e64 v0, v1, v3, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-NEXT:  .LBB1_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
-; GFX9-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB1_4
 ; GFX9-NEXT:  .LBB1_3:
@@ -291,7 +291,8 @@ define i64 @srem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX9-NEXT:  .LBB2_1:
@@ -314,9 +315,8 @@ define i64 @srem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_cndmask_b32_e64 v0, v0, v1, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-NEXT:  .LBB2_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX9-NEXT:    s_and_saveexec_b64 s[8:9], vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB2_4
 ; GFX9-NEXT:  .LBB2_3:
@@ -435,7 +435,8 @@ define i64 @urem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX9-NEXT:  .LBB3_1:
@@ -458,9 +459,8 @@ define i64 @urem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_cndmask_b32_e64 v0, v0, v1, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-NEXT:  .LBB3_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX9-NEXT:    s_and_saveexec_b64 s[8:9], vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB3_4
 ; GFX9-NEXT:  .LBB3_3:
@@ -688,7 +688,8 @@ define <2 x i64> @sdivrem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB8_2
 ; GFX9-NEXT:  .LBB8_1:
@@ -716,9 +717,8 @@ define <2 x i64> @sdivrem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_cndmask_b32_e64 v0, v3, v5, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v3, v1
 ; GFX9-NEXT:  .LBB8_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
-; GFX9-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX9-NEXT:    s_and_saveexec_b64 s[10:11], vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB8_4
 ; GFX9-NEXT:  .LBB8_3:
@@ -853,7 +853,8 @@ define <2 x i64> @udivrem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB9_2
 ; GFX9-NEXT:  .LBB9_1:
@@ -881,9 +882,8 @@ define <2 x i64> @udivrem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_cndmask_b32_e64 v0, v3, v5, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v3, v1
 ; GFX9-NEXT:  .LBB9_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX9-NEXT:    s_and_saveexec_b64 s[8:9], vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB9_4
 ; GFX9-NEXT:  .LBB9_3:
@@ -1001,7 +1001,8 @@ define i64 @sdiv64_known32(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_ashrrev_i32_e32 v0, 31, v3
 ; GFX9-NEXT:    v_or_b32_e32 v4, v2, v0
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB10_2
 ; GFX9-NEXT:  .LBB10_1:
@@ -1026,9 +1027,8 @@ define i64 @sdiv64_known32(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_cndmask_b32_e64 v0, v0, v2, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-NEXT:  .LBB10_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
-; GFX9-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB10_4
 ; GFX9-NEXT:  .LBB10_3:

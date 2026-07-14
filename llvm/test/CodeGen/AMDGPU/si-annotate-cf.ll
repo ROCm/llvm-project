@@ -17,9 +17,8 @@ define amdgpu_kernel void @break_inserted_outside_of_loop(ptr addrspace(1) %out,
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; SI-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; SI-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
-; SI-NEXT:    s_mov_b64 exec, s[2:3]
+; SI-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB0_1
 ; SI-NEXT:  .LBB0_2: ; %ENDLOOP
@@ -46,9 +45,8 @@ define amdgpu_kernel void @break_inserted_outside_of_loop(ptr addrspace(1) %out,
 ; FLAT-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; FLAT-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; FLAT-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
-; FLAT-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
-; FLAT-NEXT:    s_mov_b64 exec, s[2:3]
+; FLAT-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; FLAT-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; FLAT-NEXT:    ; divergent control-flow edge
 ; FLAT-NEXT:    s_cbranch_execnz .LBB0_1
 ; FLAT-NEXT:  .LBB0_2: ; %ENDLOOP
@@ -81,9 +79,10 @@ define amdgpu_kernel void @phi_cond_outside_loop(i32 %b) {
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[0:1]
-; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; SI-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; SI-NEXT:    s_mov_b64 s[2:3], -1
-; SI-NEXT:    s_mov_b64 exec, s[6:7]
+; SI-NEXT:    s_and_saveexec_b64 s[6:7], s[0:1]
+; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB1_2
 ; SI-NEXT:  .LBB1_1: ; %else
@@ -93,15 +92,14 @@ define amdgpu_kernel void @phi_cond_outside_loop(i32 %b) {
 ; SI-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
 ; SI-NEXT:  .LBB1_2: ; %endif
-; SI-NEXT:    s_or_b64 exec, exec, vcc
+; SI-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; SI-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; SI-NEXT:  .LBB1_3: ; %loop
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; SI-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; SI-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; SI-NEXT:    s_mov_b64 exec, s[2:3]
+; SI-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB1_3
 ; SI-NEXT:  .LBB1_4: ; %exit
@@ -113,9 +111,10 @@ define amdgpu_kernel void @phi_cond_outside_loop(i32 %b) {
 ; FLAT-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; FLAT-NEXT:    s_mov_b64 s[0:1], 0
 ; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[0:1]
-; FLAT-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; FLAT-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; FLAT-NEXT:    s_mov_b64 s[2:3], -1
-; FLAT-NEXT:    s_mov_b64 exec, s[6:7]
+; FLAT-NEXT:    s_and_saveexec_b64 s[6:7], s[0:1]
+; FLAT-NEXT:    s_mov_b64 s[0:1], 0
 ; FLAT-NEXT:    ; divergent control-flow edge
 ; FLAT-NEXT:    s_cbranch_execz .LBB1_2
 ; FLAT-NEXT:  .LBB1_1: ; %else
@@ -125,15 +124,14 @@ define amdgpu_kernel void @phi_cond_outside_loop(i32 %b) {
 ; FLAT-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
 ; FLAT-NEXT:  .LBB1_2: ; %endif
-; FLAT-NEXT:    s_or_b64 exec, exec, vcc
+; FLAT-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; FLAT-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; FLAT-NEXT:  .LBB1_3: ; %loop
 ; FLAT-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; FLAT-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; FLAT-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; FLAT-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; FLAT-NEXT:    s_mov_b64 exec, s[2:3]
+; FLAT-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
+; FLAT-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; FLAT-NEXT:    ; divergent control-flow edge
 ; FLAT-NEXT:    s_cbranch_execnz .LBB1_3
 ; FLAT-NEXT:  .LBB1_4: ; %exit

@@ -9,8 +9,7 @@ define <2 x i32> @uniform_masked_load_ptr1_mask_v2i32(ptr addrspace(1) inreg noc
 ; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX942-NEXT:  .LBB0_1: ; %cond.load
@@ -36,8 +35,7 @@ define <4 x i32> @uniform_masked_load_ptr1_mask_v4i32(ptr addrspace(1) inreg noc
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v3, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX942-NEXT:  .LBB1_1: ; %cond.load
@@ -63,8 +61,7 @@ define <4 x float> @uniform_masked_load_ptr1_mask_v4f32(ptr addrspace(1) inreg n
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v3, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX942-NEXT:  .LBB2_1: ; %cond.load
@@ -94,8 +91,7 @@ define <8 x i32> @uniform_masked_load_ptr1_mask_v8i32(ptr addrspace(1) inreg noc
 ; GFX942-NEXT:    v_mov_b32_e32 v5, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v6, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v7, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX942-NEXT:  .LBB3_1: ; %cond.load
@@ -127,8 +123,7 @@ define <8 x float> @uniform_masked_load_ptr1_mask_v8f32(ptr addrspace(1) inreg n
 ; GFX942-NEXT:    v_mov_b32_e32 v5, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v6, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v7, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX942-NEXT:  .LBB4_1: ; %cond.load
@@ -156,8 +151,7 @@ define <8 x i16> @uniform_masked_load_ptr1_mask_v8i16(ptr addrspace(1) inreg noc
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v3, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX942-NEXT:  .LBB5_1: ; %cond.load
@@ -183,8 +177,7 @@ define <8 x half> @uniform_masked_load_ptr1_mask_v8f16(ptr addrspace(1) inreg no
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v3, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB6_2
 ; GFX942-NEXT:  .LBB6_1: ; %cond.load
@@ -210,8 +203,7 @@ define <8 x bfloat> @uniform_masked_load_ptr1_mask_v8bf16(ptr addrspace(1) inreg
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v3, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB7_2
 ; GFX942-NEXT:  .LBB7_1: ; %cond.load
@@ -249,8 +241,7 @@ define <16 x i8> @uniform_masked_load_ptr1_mask_v16i8(ptr addrspace(1) inreg noc
 ; GFX942-NEXT:    v_mov_b32_e32 v13, 0
 ; GFX942-NEXT:    v_mov_b32_e32 v14, 0
 ; GFX942-NEXT:    v_mov_b32_e32 v15, 0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB8_2
 ; GFX942-NEXT:  .LBB8_1: ; %cond.load

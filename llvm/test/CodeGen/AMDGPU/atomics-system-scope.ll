@@ -370,11 +370,10 @@ define i16 @global_one_as_atomic_min_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
-; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
+; FAKE16-NEXT:    s_and_saveexec_b32 s1, s1
+; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; FAKE16-NEXT:    s_or_b32 s0, s0, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
 ; FAKE16-NEXT:    s_cbranch_execnz .LBB28_1
 ; FAKE16-NEXT:  .LBB28_2: ; %atomicrmw.end
@@ -412,11 +411,10 @@ define i16 @global_one_as_atomic_min_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
 ; REAL16-NEXT:    s_wait_xcnt 0x0
-; REAL16-NEXT:    s_mov_b32 exec_lo, s1
+; REAL16-NEXT:    s_and_saveexec_b32 s1, s1
+; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; REAL16-NEXT:    s_or_b32 s0, s0, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
 ; REAL16-NEXT:    s_cbranch_execnz .LBB28_1
 ; REAL16-NEXT:  .LBB28_2: ; %atomicrmw.end
@@ -459,11 +457,10 @@ define i16 @global_one_as_atomic_umin_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
-; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
+; FAKE16-NEXT:    s_and_saveexec_b32 s1, s1
+; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; FAKE16-NEXT:    s_or_b32 s0, s0, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
 ; FAKE16-NEXT:    s_cbranch_execnz .LBB29_1
 ; FAKE16-NEXT:  .LBB29_2: ; %atomicrmw.end
@@ -501,11 +498,10 @@ define i16 @global_one_as_atomic_umin_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
 ; REAL16-NEXT:    s_wait_xcnt 0x0
-; REAL16-NEXT:    s_mov_b32 exec_lo, s1
+; REAL16-NEXT:    s_and_saveexec_b32 s1, s1
+; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; REAL16-NEXT:    s_or_b32 s0, s0, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
 ; REAL16-NEXT:    s_cbranch_execnz .LBB29_1
 ; REAL16-NEXT:  .LBB29_2: ; %atomicrmw.end
@@ -548,11 +544,10 @@ define i16 @global_one_as_atomic_max_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
-; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
+; FAKE16-NEXT:    s_and_saveexec_b32 s1, s1
+; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; FAKE16-NEXT:    s_or_b32 s0, s0, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
 ; FAKE16-NEXT:    s_cbranch_execnz .LBB30_1
 ; FAKE16-NEXT:  .LBB30_2: ; %atomicrmw.end
@@ -590,11 +585,10 @@ define i16 @global_one_as_atomic_max_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
 ; REAL16-NEXT:    s_wait_xcnt 0x0
-; REAL16-NEXT:    s_mov_b32 exec_lo, s1
+; REAL16-NEXT:    s_and_saveexec_b32 s1, s1
+; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; REAL16-NEXT:    s_or_b32 s0, s0, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
 ; REAL16-NEXT:    s_cbranch_execnz .LBB30_1
 ; REAL16-NEXT:  .LBB30_2: ; %atomicrmw.end
@@ -637,11 +631,10 @@ define i16 @global_one_as_atomic_umax_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
-; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
+; FAKE16-NEXT:    s_and_saveexec_b32 s1, s1
+; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; FAKE16-NEXT:    s_or_b32 s0, s0, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
 ; FAKE16-NEXT:    s_cbranch_execnz .LBB31_1
 ; FAKE16-NEXT:  .LBB31_2: ; %atomicrmw.end
@@ -679,11 +672,10 @@ define i16 @global_one_as_atomic_umax_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
 ; REAL16-NEXT:    s_wait_xcnt 0x0
-; REAL16-NEXT:    s_mov_b32 exec_lo, s1
+; REAL16-NEXT:    s_and_saveexec_b32 s1, s1
+; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; REAL16-NEXT:    s_or_b32 s0, s0, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
 ; REAL16-NEXT:    s_cbranch_execnz .LBB31_1
 ; REAL16-NEXT:  .LBB31_2: ; %atomicrmw.end
@@ -726,8 +718,8 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_mov_b64 s[0:1], src_shared_base
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX1250-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB34_2
 ; GFX1250-NEXT:  .LBB34_1: ; %atomicrmw.shared
@@ -736,10 +728,7 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    ds_add_rtn_f64 v[0:1], v0, v[2:3]
 ; GFX1250-NEXT:  .LBB34_2:
 ; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, s1
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB34_7
 ; GFX1250-NEXT:  .LBB34_3: ; %atomicrmw.check.private
@@ -748,7 +737,7 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s2, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX1250-NEXT:  .LBB34_4: ; %atomicrmw.private
@@ -762,13 +751,10 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB34_5:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX1250-NEXT:    s_and_b32 s2, s2, exec_lo
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_or_b32 s0, s0, s2
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 s0, s0, s1
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB34_7
 ; GFX1250-NEXT:  .LBB34_6: ; %atomicrmw.global
@@ -790,8 +776,8 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_mov_b64 s[0:1], src_shared_base
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX1250-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB35_2
 ; GFX1250-NEXT:  .LBB35_1: ; %atomicrmw.shared
@@ -800,10 +786,7 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    ds_add_rtn_f64 v[0:1], v0, v[2:3]
 ; GFX1250-NEXT:  .LBB35_2:
 ; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, s1
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB35_7
 ; GFX1250-NEXT:  .LBB35_3: ; %atomicrmw.check.private
@@ -812,7 +795,7 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s2, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX1250-NEXT:  .LBB35_4: ; %atomicrmw.private
@@ -826,13 +809,10 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB35_5:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX1250-NEXT:    s_and_b32 s2, s2, exec_lo
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_or_b32 s0, s0, s2
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 s0, s0, s1
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB35_7
 ; GFX1250-NEXT:  .LBB35_6: ; %atomicrmw.global
@@ -879,7 +859,7 @@ define double @flat_system_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB38_2
 ; GFX1250-NEXT:  .LBB38_1: ; %atomicrmw.private
@@ -894,17 +874,15 @@ define double @flat_system_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-NEXT:  .LBB38_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB38_4
 ; GFX1250-NEXT:  .LBB38_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_min_num_f64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB38_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw fmin ptr %ptr, double %val monotonic
@@ -920,7 +898,7 @@ define double @flat_one_as_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB39_2
 ; GFX1250-NEXT:  .LBB39_1: ; %atomicrmw.private
@@ -935,17 +913,15 @@ define double @flat_one_as_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-NEXT:  .LBB39_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB39_4
 ; GFX1250-NEXT:  .LBB39_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_min_num_f64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB39_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw fmin ptr %ptr, double %val syncscope("one-as") monotonic
@@ -985,7 +961,7 @@ define double @flat_system_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB42_2
 ; GFX1250-NEXT:  .LBB42_1: ; %atomicrmw.private
@@ -1000,17 +976,15 @@ define double @flat_system_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-NEXT:  .LBB42_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB42_4
 ; GFX1250-NEXT:  .LBB42_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_max_num_f64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB42_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw fmax ptr %ptr, double %val monotonic
@@ -1026,7 +1000,7 @@ define double @flat_one_as_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB43_2
 ; GFX1250-NEXT:  .LBB43_1: ; %atomicrmw.private
@@ -1041,17 +1015,15 @@ define double @flat_one_as_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-NEXT:  .LBB43_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB43_4
 ; GFX1250-NEXT:  .LBB43_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_max_num_f64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB43_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw fmax ptr %ptr, double %val syncscope("one-as") monotonic
@@ -1163,7 +1135,7 @@ define i64 @flat_one_as_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB52_2
 ; GFX1250-NEXT:  .LBB52_1: ; %atomicrmw.private
@@ -1177,17 +1149,15 @@ define i64 @flat_one_as_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB52_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB52_4
 ; GFX1250-NEXT:  .LBB52_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_min_i64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB52_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw min ptr %ptr, i64 %val syncscope("one-as") monotonic
@@ -1203,7 +1173,7 @@ define i64 @flat_system_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB53_2
 ; GFX1250-NEXT:  .LBB53_1: ; %atomicrmw.private
@@ -1217,17 +1187,15 @@ define i64 @flat_system_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB53_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB53_4
 ; GFX1250-NEXT:  .LBB53_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_min_i64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB53_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw min ptr %ptr, i64 %val monotonic
@@ -1243,7 +1211,7 @@ define i64 @flat_one_as_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB54_2
 ; GFX1250-NEXT:  .LBB54_1: ; %atomicrmw.private
@@ -1257,17 +1225,15 @@ define i64 @flat_one_as_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB54_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB54_4
 ; GFX1250-NEXT:  .LBB54_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_max_i64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB54_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw max ptr %ptr, i64 %val syncscope("one-as") monotonic
@@ -1283,7 +1249,7 @@ define i64 @flat_system_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB55_2
 ; GFX1250-NEXT:  .LBB55_1: ; %atomicrmw.private
@@ -1297,17 +1263,15 @@ define i64 @flat_system_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB55_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB55_4
 ; GFX1250-NEXT:  .LBB55_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_max_i64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB55_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw max ptr %ptr, i64 %val monotonic
@@ -1323,7 +1287,7 @@ define i64 @flat_one_as_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB56_2
 ; GFX1250-NEXT:  .LBB56_1: ; %atomicrmw.private
@@ -1337,17 +1301,15 @@ define i64 @flat_one_as_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB56_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB56_4
 ; GFX1250-NEXT:  .LBB56_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_min_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB56_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw umin ptr %ptr, i64 %val syncscope("one-as") monotonic
@@ -1363,7 +1325,7 @@ define i64 @flat_system_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB57_2
 ; GFX1250-NEXT:  .LBB57_1: ; %atomicrmw.private
@@ -1377,17 +1339,15 @@ define i64 @flat_system_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB57_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB57_4
 ; GFX1250-NEXT:  .LBB57_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_min_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB57_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw umin ptr %ptr, i64 %val monotonic
@@ -1403,7 +1363,7 @@ define i64 @flat_one_as_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB58_2
 ; GFX1250-NEXT:  .LBB58_1: ; %atomicrmw.private
@@ -1417,17 +1377,15 @@ define i64 @flat_one_as_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB58_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB58_4
 ; GFX1250-NEXT:  .LBB58_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_max_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB58_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw umax ptr %ptr, i64 %val syncscope("one-as") monotonic
@@ -1443,7 +1401,7 @@ define i64 @flat_system_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB59_2
 ; GFX1250-NEXT:  .LBB59_1: ; %atomicrmw.private
@@ -1457,17 +1415,15 @@ define i64 @flat_system_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB59_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB59_4
 ; GFX1250-NEXT:  .LBB59_3: ; %atomicrmw.global
 ; GFX1250-NEXT:    flat_atomic_max_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:  .LBB59_4: ; %atomicrmw.phi
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
   %result = atomicrmw umax ptr %ptr, i64 %val monotonic
@@ -1506,11 +1462,10 @@ define i16 @flat_one_as_atomic_min_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
-; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
+; FAKE16-NEXT:    s_and_saveexec_b32 s1, s1
+; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; FAKE16-NEXT:    s_or_b32 s0, s0, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
 ; FAKE16-NEXT:    s_cbranch_execnz .LBB60_1
 ; FAKE16-NEXT:  .LBB60_2: ; %atomicrmw.end
@@ -1548,11 +1503,10 @@ define i16 @flat_one_as_atomic_min_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
 ; REAL16-NEXT:    s_wait_xcnt 0x0
-; REAL16-NEXT:    s_mov_b32 exec_lo, s1
+; REAL16-NEXT:    s_and_saveexec_b32 s1, s1
+; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; REAL16-NEXT:    s_or_b32 s0, s0, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
 ; REAL16-NEXT:    s_cbranch_execnz .LBB60_1
 ; REAL16-NEXT:  .LBB60_2: ; %atomicrmw.end
@@ -1595,11 +1549,10 @@ define i16 @flat_one_as_atomic_umin_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
-; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
+; FAKE16-NEXT:    s_and_saveexec_b32 s1, s1
+; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; FAKE16-NEXT:    s_or_b32 s0, s0, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
 ; FAKE16-NEXT:    s_cbranch_execnz .LBB61_1
 ; FAKE16-NEXT:  .LBB61_2: ; %atomicrmw.end
@@ -1637,11 +1590,10 @@ define i16 @flat_one_as_atomic_umin_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
 ; REAL16-NEXT:    s_wait_xcnt 0x0
-; REAL16-NEXT:    s_mov_b32 exec_lo, s1
+; REAL16-NEXT:    s_and_saveexec_b32 s1, s1
+; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; REAL16-NEXT:    s_or_b32 s0, s0, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
 ; REAL16-NEXT:    s_cbranch_execnz .LBB61_1
 ; REAL16-NEXT:  .LBB61_2: ; %atomicrmw.end
@@ -1684,11 +1636,10 @@ define i16 @flat_one_as_atomic_max_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
-; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
+; FAKE16-NEXT:    s_and_saveexec_b32 s1, s1
+; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; FAKE16-NEXT:    s_or_b32 s0, s0, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
 ; FAKE16-NEXT:    s_cbranch_execnz .LBB62_1
 ; FAKE16-NEXT:  .LBB62_2: ; %atomicrmw.end
@@ -1726,11 +1677,10 @@ define i16 @flat_one_as_atomic_max_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
 ; REAL16-NEXT:    s_wait_xcnt 0x0
-; REAL16-NEXT:    s_mov_b32 exec_lo, s1
+; REAL16-NEXT:    s_and_saveexec_b32 s1, s1
+; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; REAL16-NEXT:    s_or_b32 s0, s0, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
 ; REAL16-NEXT:    s_cbranch_execnz .LBB62_1
 ; REAL16-NEXT:  .LBB62_2: ; %atomicrmw.end
@@ -1773,11 +1723,10 @@ define i16 @flat_one_as_atomic_umax_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
-; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
+; FAKE16-NEXT:    s_and_saveexec_b32 s1, s1
+; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; FAKE16-NEXT:    s_or_b32 s0, s0, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
 ; FAKE16-NEXT:    s_cbranch_execnz .LBB63_1
 ; FAKE16-NEXT:  .LBB63_2: ; %atomicrmw.end
@@ -1815,11 +1764,10 @@ define i16 @flat_one_as_atomic_umax_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
 ; REAL16-NEXT:    s_wait_xcnt 0x0
-; REAL16-NEXT:    s_mov_b32 exec_lo, s1
+; REAL16-NEXT:    s_and_saveexec_b32 s1, s1
+; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; REAL16-NEXT:    s_or_b32 s0, s0, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
 ; REAL16-NEXT:    s_cbranch_execnz .LBB63_1
 ; REAL16-NEXT:  .LBB63_2: ; %atomicrmw.end

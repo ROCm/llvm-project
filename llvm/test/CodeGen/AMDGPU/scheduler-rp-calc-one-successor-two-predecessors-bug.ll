@@ -15,7 +15,7 @@ define amdgpu_ps void @_amdgpu_ps_main(float %arg) {
 ; GFX900-NEXT:    v_cmp_gt_f32_e32 vcc, 0, v1
 ; GFX900-NEXT:    s_mov_b32 s0, 0
 ; GFX900-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX900-NEXT:    s_mov_b64 exec, vcc
+; GFX900-NEXT:    s_and_saveexec_b64 s[6:7], vcc
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB0_3
 ; GFX900-NEXT:  .LBB0_1: ; %bb5
@@ -26,9 +26,8 @@ define amdgpu_ps void @_amdgpu_ps_main(float %arg) {
 ; GFX900-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX900-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX900-NEXT:  .LBB0_3:
-; GFX900-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX900-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
-; GFX900-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX900-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX900-NEXT:    s_and_saveexec_b64 s[6:7], s[2:3]
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB0_5
 ; GFX900-NEXT:  .LBB0_4: ; %bb1

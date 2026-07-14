@@ -7,13 +7,13 @@ define amdgpu_kernel void @global_atomic_fadd_ret_f32_wrong_subtarget(ptr addrsp
 ; GCN-NEXT:    s_mov_b64 s[6:7], exec
 ; GCN-NEXT:    v_mbcnt_lo_u32_b32 v0, s6, 0
 ; GCN-NEXT:    v_mbcnt_hi_u32_b32 v2, s7, v0
-; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v2
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GCN-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
-; GCN-NEXT:    s_xor_b64 s[2:3], s[0:1], exec
+; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GCN-NEXT:    v_cmp_eq_u32_e64 s[0:1], 0, v2
+; GCN-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[0:1]
+; GCN-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GCN-NEXT:    s_mov_b64 s[8:9], -1
 ; GCN-NEXT:    ; implicit-def: $vgpr0
-; GCN-NEXT:    s_mov_b64 exec, s[2:3]
+; GCN-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_3
 ; GCN-NEXT:  .LBB0_1:
@@ -34,11 +34,10 @@ define amdgpu_kernel void @global_atomic_fadd_ret_f32_wrong_subtarget(ptr addrsp
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    buffer_wbinvl1
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GCN-NEXT:    v_mov_b32_e32 v1, v0
-; GCN-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
-; GCN-NEXT:    s_mov_b64 exec, s[4:5]
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GCN-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB0_2
 ; GCN-NEXT:  .LBB0_3:
@@ -64,7 +63,7 @@ define amdgpu_kernel void @global_atomic_fadd_noret_f32_wrong_subtarget(ptr addr
 ; GCN-NEXT:    v_mbcnt_hi_u32_b32 v0, s1, v0
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GCN-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GCN-NEXT:    s_mov_b64 exec, s[2:3]
+; GCN-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB1_2
 ; GCN-NEXT:  .LBB1_1:

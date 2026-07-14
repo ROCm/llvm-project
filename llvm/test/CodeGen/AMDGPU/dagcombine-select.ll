@@ -741,9 +741,9 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX9-NEXT:    v_and_b32_e32 v0, 1, v2
 ; GFX9-NEXT:    v_cmp_eq_u32_e64 s[4:5], 1, v1
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; GFX9-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX9-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
 ; GFX9-NEXT:    s_mov_b64 s[6:7], -1
-; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB27_3
 ; GFX9-NEXT:  .LBB27_1: ; %for.inc.preheader
@@ -764,9 +764,8 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX9-NEXT:  .LBB27_2: ; %for.inc
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX9-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], vcc
 ; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB27_2
 ; GFX9-NEXT:  .LBB27_3: ; %for.cond.cleanup
@@ -781,9 +780,9 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX942-NEXT:    v_and_b32_e32 v0, 1, v2
 ; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], 1, v1
 ; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GFX942-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
 ; GFX942-NEXT:    s_mov_b64 s[2:3], -1
-; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX942-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB27_3
 ; GFX942-NEXT:  .LBB27_1: ; %for.inc.preheader
@@ -806,9 +805,8 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX942-NEXT:  .LBB27_2: ; %for.inc
 ; GFX942-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
+; GFX942-NEXT:    s_and_saveexec_b64 s[2:3], vcc
 ; GFX942-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
-; GFX942-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execnz .LBB27_2
 ; GFX942-NEXT:  .LBB27_3: ; %for.cond.cleanup

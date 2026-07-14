@@ -37,12 +37,11 @@ define amdgpu_cs_chain void @basic(<3 x i32> inreg %sgpr, ptr inreg %callee, i32
 ; DAGISEL12-NEXT:    s_wait_kmcnt 0x0
 ; DAGISEL12-NEXT:    s_or_saveexec_b32 s8, -1
 ; DAGISEL12-NEXT:    s_mov_b32 s7, s4
-; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_and_b32 s4, exec_lo, s8
 ; DAGISEL12-NEXT:    s_mov_b32 s6, s3
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_xor_b32 s3, exec_lo, s4
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL12-NEXT:    s_and_b32 s3, exec_lo, s8
+; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL12-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB0_2
 ; DAGISEL12-NEXT:  .LBB0_1: ; %shader
@@ -77,10 +76,9 @@ define amdgpu_cs_chain void @basic(<3 x i32> inreg %sgpr, ptr inreg %callee, i32
 ; DAGISEL10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL10-NEXT:    s_or_saveexec_b32 s8, -1
 ; DAGISEL10-NEXT:    s_mov_b32 s7, s4
-; DAGISEL10-NEXT:    s_and_b32 s4, exec_lo, s8
 ; DAGISEL10-NEXT:    s_mov_b32 s6, s3
-; DAGISEL10-NEXT:    s_xor_b32 s3, exec_lo, s4
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL10-NEXT:    s_and_b32 s3, exec_lo, s8
+; DAGISEL10-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB0_2
 ; DAGISEL10-NEXT:  .LBB0_1: ; %shader
@@ -149,12 +147,11 @@ define amdgpu_cs_chain void @wwm_in_shader(<3 x i32> inreg %sgpr, ptr inreg %cal
 ; DAGISEL12-NEXT:    s_or_saveexec_b32 s8, -1
 ; DAGISEL12-NEXT:    v_dual_mov_b32 v11, v13 :: v_dual_mov_b32 v10, v12
 ; DAGISEL12-NEXT:    s_mov_b32 s7, s4
-; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_and_b32 s4, exec_lo, s8
 ; DAGISEL12-NEXT:    s_mov_b32 s6, s3
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_xor_b32 s3, exec_lo, s4
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL12-NEXT:    s_and_b32 s3, exec_lo, s8
+; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL12-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB1_2
 ; DAGISEL12-NEXT:  .LBB1_1: ; %shader
@@ -199,10 +196,9 @@ define amdgpu_cs_chain void @wwm_in_shader(<3 x i32> inreg %sgpr, ptr inreg %cal
 ; DAGISEL10-NEXT:    v_mov_b32_e32 v11, v13
 ; DAGISEL10-NEXT:    v_mov_b32_e32 v10, v12
 ; DAGISEL10-NEXT:    s_mov_b32 s7, s4
-; DAGISEL10-NEXT:    s_and_b32 s4, exec_lo, s8
 ; DAGISEL10-NEXT:    s_mov_b32 s6, s3
-; DAGISEL10-NEXT:    s_xor_b32 s3, exec_lo, s4
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL10-NEXT:    s_and_b32 s3, exec_lo, s8
+; DAGISEL10-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB1_2
 ; DAGISEL10-NEXT:  .LBB1_1: ; %shader
@@ -274,12 +270,11 @@ define amdgpu_cs_chain void @phi_whole_struct(<3 x i32> inreg %sgpr, ptr inreg %
 ; DAGISEL12-NEXT:    s_wait_kmcnt 0x0
 ; DAGISEL12-NEXT:    s_or_saveexec_b32 s8, -1
 ; DAGISEL12-NEXT:    s_mov_b32 s7, s4
-; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_and_b32 s4, exec_lo, s8
 ; DAGISEL12-NEXT:    s_mov_b32 s6, s3
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_xor_b32 s3, exec_lo, s4
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL12-NEXT:    s_and_b32 s3, exec_lo, s8
+; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL12-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB2_2
 ; DAGISEL12-NEXT:  .LBB2_1: ; %shader
@@ -320,10 +315,9 @@ define amdgpu_cs_chain void @phi_whole_struct(<3 x i32> inreg %sgpr, ptr inreg %
 ; DAGISEL10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL10-NEXT:    s_or_saveexec_b32 s8, -1
 ; DAGISEL10-NEXT:    s_mov_b32 s7, s4
-; DAGISEL10-NEXT:    s_and_b32 s4, exec_lo, s8
 ; DAGISEL10-NEXT:    s_mov_b32 s6, s3
-; DAGISEL10-NEXT:    s_xor_b32 s3, exec_lo, s4
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL10-NEXT:    s_and_b32 s3, exec_lo, s8
+; DAGISEL10-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB2_2
 ; DAGISEL10-NEXT:  .LBB2_1: ; %shader
@@ -431,15 +425,14 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL12-NEXT:    s_wait_bvhcnt 0x0
 ; DAGISEL12-NEXT:    s_wait_kmcnt 0x0
 ; DAGISEL12-NEXT:    s_or_saveexec_b32 s8, -1
-; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_and_b32 s9, exec_lo, s8
 ; DAGISEL12-NEXT:    s_mov_b32 s7, s4
 ; DAGISEL12-NEXT:    s_mov_b32 s6, s3
+; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL12-NEXT:    s_and_b32 s3, exec_lo, s8
 ; DAGISEL12-NEXT:    s_mov_b32 s8, -1
 ; DAGISEL12-NEXT:    s_mov_b32 s4, 0
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_xor_b32 s3, exec_lo, s9
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s9
+; DAGISEL12-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB3_4
 ; DAGISEL12-NEXT:  .LBB3_1: ; %shader.preheader
@@ -455,12 +448,11 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; DAGISEL12-NEXT:    v_cmp_ne_u32_e64 s9, 0, v0
 ; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s8
-; DAGISEL12-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v13, v1
 ; DAGISEL12-NEXT:    v_mov_b32_e32 v11, s9
-; DAGISEL12-NEXT:    s_xor_b32 s8, exec_lo, vcc_lo
+; DAGISEL12-NEXT:    s_mov_b32 s8, exec_lo
+; DAGISEL12-NEXT:    v_cmpx_ne_u32_e32 v13, v1
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL12-NEXT:    s_or_b32 s4, s4, s8
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execnz .LBB3_2
 ; DAGISEL12-NEXT:  .LBB3_3: ; %tail.loopexit
@@ -471,16 +463,17 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL12-NEXT:    s_or_b32 exec_lo, exec_lo, s3
 ; DAGISEL12-NEXT:    v_cmp_lt_i32_e32 vcc_lo, v12, v13
-; DAGISEL12-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; DAGISEL12-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
+; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL12-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB3_6
 ; DAGISEL12-NEXT:  .LBB3_5: ; %tail.then
 ; DAGISEL12-NEXT:    v_mov_b32_e32 v8, 44
 ; DAGISEL12-NEXT:  .LBB3_6:
-; DAGISEL12-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
-; DAGISEL12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; DAGISEL12-NEXT:    s_xor_b32 s3, exec_lo, vcc_lo
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL12-NEXT:    s_or_b32 exec_lo, exec_lo, s3
+; DAGISEL12-NEXT:    s_and_saveexec_b32 s3, vcc_lo
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB3_8
 ; DAGISEL12-NEXT:  .LBB3_7: ; %tail.else
@@ -544,13 +537,12 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL10:       ; %bb.0: ; %entry
 ; DAGISEL10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL10-NEXT:    s_or_saveexec_b32 s8, -1
-; DAGISEL10-NEXT:    s_and_b32 s9, exec_lo, s8
 ; DAGISEL10-NEXT:    s_mov_b32 s7, s4
 ; DAGISEL10-NEXT:    s_mov_b32 s6, s3
+; DAGISEL10-NEXT:    s_and_b32 s3, exec_lo, s8
 ; DAGISEL10-NEXT:    s_mov_b32 s8, -1
 ; DAGISEL10-NEXT:    s_mov_b32 s4, 0
-; DAGISEL10-NEXT:    s_xor_b32 s3, exec_lo, s9
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s9
+; DAGISEL10-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB3_4
 ; DAGISEL10-NEXT:  .LBB3_1: ; %shader.preheader
@@ -563,11 +555,10 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL10-NEXT:    v_cndmask_b32_e64 v0, 0x47, v1, s8
 ; DAGISEL10-NEXT:    v_cmp_ne_u32_e64 s9, 0, v0
 ; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s8
-; DAGISEL10-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v13, v1
 ; DAGISEL10-NEXT:    v_mov_b32_e32 v11, s9
-; DAGISEL10-NEXT:    s_xor_b32 s8, exec_lo, vcc_lo
+; DAGISEL10-NEXT:    s_mov_b32 s8, exec_lo
+; DAGISEL10-NEXT:    v_cmpx_ne_u32_e32 v13, v1
 ; DAGISEL10-NEXT:    s_or_b32 s4, s4, s8
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execnz .LBB3_2
 ; DAGISEL10-NEXT:  .LBB3_3: ; %tail.loopexit
@@ -576,15 +567,15 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL10-NEXT:  .LBB3_4: ; %tail
 ; DAGISEL10-NEXT:    s_or_b32 exec_lo, exec_lo, s3
 ; DAGISEL10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, v12, v13
-; DAGISEL10-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; DAGISEL10-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
+; DAGISEL10-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB3_6
 ; DAGISEL10-NEXT:  .LBB3_5: ; %tail.then
 ; DAGISEL10-NEXT:    v_mov_b32_e32 v8, 44
 ; DAGISEL10-NEXT:  .LBB3_6:
-; DAGISEL10-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
-; DAGISEL10-NEXT:    s_xor_b32 s3, exec_lo, vcc_lo
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; DAGISEL10-NEXT:    s_or_b32 exec_lo, exec_lo, s3
+; DAGISEL10-NEXT:    s_and_saveexec_b32 s3, vcc_lo
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB3_8
 ; DAGISEL10-NEXT:  .LBB3_7: ; %tail.else
@@ -676,12 +667,11 @@ define amdgpu_cs_chain void @use_v0_7(<3 x i32> inreg %sgpr, ptr inreg %callee, 
 ; DAGISEL12-NEXT:    s_wait_kmcnt 0x0
 ; DAGISEL12-NEXT:    s_or_saveexec_b32 s8, -1
 ; DAGISEL12-NEXT:    s_mov_b32 s7, s4
-; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_and_b32 s4, exec_lo, s8
 ; DAGISEL12-NEXT:    s_mov_b32 s6, s3
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_xor_b32 s3, exec_lo, s4
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL12-NEXT:    s_and_b32 s3, exec_lo, s8
+; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL12-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB4_2
 ; DAGISEL12-NEXT:  .LBB4_1: ; %shader
@@ -729,10 +719,9 @@ define amdgpu_cs_chain void @use_v0_7(<3 x i32> inreg %sgpr, ptr inreg %callee, 
 ; DAGISEL10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL10-NEXT:    s_or_saveexec_b32 s8, -1
 ; DAGISEL10-NEXT:    s_mov_b32 s7, s4
-; DAGISEL10-NEXT:    s_and_b32 s4, exec_lo, s8
 ; DAGISEL10-NEXT:    s_mov_b32 s6, s3
-; DAGISEL10-NEXT:    s_xor_b32 s3, exec_lo, s4
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s4
+; DAGISEL10-NEXT:    s_and_b32 s3, exec_lo, s8
+; DAGISEL10-NEXT:    s_and_saveexec_b32 s3, s3
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB4_2
 ; DAGISEL10-NEXT:  .LBB4_1: ; %shader
@@ -877,15 +866,14 @@ define amdgpu_cs_chain void @wwm_write_to_arg_reg(<3 x i32> inreg %sgpr, ptr inr
 ; DAGISEL12-NEXT:    v_dual_mov_b32 v25, v9 :: v_dual_mov_b32 v24, v8
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s6
-; DAGISEL12-NEXT:    s_mov_b32 s7, s0
-; DAGISEL12-NEXT:    s_and_b32 s0, exec_lo, s10
 ; DAGISEL12-NEXT:    s_mov_b32 s9, s4
 ; DAGISEL12-NEXT:    s_mov_b32 s8, s3
 ; DAGISEL12-NEXT:    s_mov_b32 s4, s2
 ; DAGISEL12-NEXT:    s_mov_b32 s6, s1
+; DAGISEL12-NEXT:    s_mov_b32 s7, s0
+; DAGISEL12-NEXT:    s_and_b32 s0, exec_lo, s10
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_xor_b32 s10, exec_lo, s0
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s0
+; DAGISEL12-NEXT:    s_and_saveexec_b32 s10, s0
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB5_2
 ; DAGISEL12-NEXT:  .LBB5_1: ; %shader
@@ -1076,14 +1064,13 @@ define amdgpu_cs_chain void @wwm_write_to_arg_reg(<3 x i32> inreg %sgpr, ptr inr
 ; DAGISEL10-NEXT:    v_mov_b32_e32 v25, v9
 ; DAGISEL10-NEXT:    v_mov_b32_e32 v24, v8
 ; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s6
-; DAGISEL10-NEXT:    s_mov_b32 s7, s0
-; DAGISEL10-NEXT:    s_and_b32 s0, exec_lo, s10
 ; DAGISEL10-NEXT:    s_mov_b32 s9, s4
 ; DAGISEL10-NEXT:    s_mov_b32 s8, s3
 ; DAGISEL10-NEXT:    s_mov_b32 s4, s2
 ; DAGISEL10-NEXT:    s_mov_b32 s6, s1
-; DAGISEL10-NEXT:    s_xor_b32 s10, exec_lo, s0
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s0
+; DAGISEL10-NEXT:    s_mov_b32 s7, s0
+; DAGISEL10-NEXT:    s_and_b32 s0, exec_lo, s10
+; DAGISEL10-NEXT:    s_and_saveexec_b32 s10, s0
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB5_2
 ; DAGISEL10-NEXT:  .LBB5_1: ; %shader
@@ -1229,12 +1216,11 @@ define amdgpu_cs_chain void @with_inactive_vgprs(ptr inreg %callee, i32 inreg %e
 ; DAGISEL12-NEXT:    s_wait_kmcnt 0x0
 ; DAGISEL12-NEXT:    s_or_saveexec_b32 s6, -1
 ; DAGISEL12-NEXT:    s_mov_b32 s5, s1
-; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_and_b32 s1, exec_lo, s6
 ; DAGISEL12-NEXT:    s_mov_b32 s4, s0
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_xor_b32 s0, exec_lo, s1
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s1
+; DAGISEL12-NEXT:    s_and_b32 s0, exec_lo, s6
+; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL12-NEXT:    s_and_saveexec_b32 s0, s0
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB6_2
 ; DAGISEL12-NEXT:  .LBB6_1: ; %shader
@@ -1285,10 +1271,9 @@ define amdgpu_cs_chain void @with_inactive_vgprs(ptr inreg %callee, i32 inreg %e
 ; DAGISEL10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL10-NEXT:    s_or_saveexec_b32 s6, -1
 ; DAGISEL10-NEXT:    s_mov_b32 s5, s1
-; DAGISEL10-NEXT:    s_and_b32 s1, exec_lo, s6
 ; DAGISEL10-NEXT:    s_mov_b32 s4, s0
-; DAGISEL10-NEXT:    s_xor_b32 s0, exec_lo, s1
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s1
+; DAGISEL10-NEXT:    s_and_b32 s0, exec_lo, s6
+; DAGISEL10-NEXT:    s_and_saveexec_b32 s0, s0
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB6_2
 ; DAGISEL10-NEXT:  .LBB6_1: ; %shader

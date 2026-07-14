@@ -19,7 +19,8 @@ define amdgpu_kernel void @foobar(float %a0, float %a1, ptr addrspace(1) %out) #
 ; CHECK-NEXT:    v_mov_b32_e32 v1, s5
 ; CHECK-NEXT:    v_mov_b32_e32 v2, s6
 ; CHECK-NEXT:    v_mov_b32_e32 v3, s7
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %ift
@@ -29,7 +30,7 @@ define amdgpu_kernel void @foobar(float %a0, float %a1, ptr addrspace(1) %out) #
 ; CHECK-NEXT:    v_mov_b32_e32 v2, s6
 ; CHECK-NEXT:    v_mov_b32_e32 v3, s7
 ; CHECK-NEXT:  .LBB0_2: ; %ife
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; CHECK-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0xb
 ; CHECK-NEXT:    s_mov_b32 s3, 0xf000
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)

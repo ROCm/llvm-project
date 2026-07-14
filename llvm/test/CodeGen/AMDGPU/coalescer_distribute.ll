@@ -15,7 +15,8 @@ define amdgpu_kernel void @hoge(i1 %c0, i1 %c1, i1 %c2, i1 %c3, i1 %c4) {
 ; CHECK-NEXT:    s_xor_b64 s[0:1], s[0:1], -1
 ; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; CHECK-NEXT:    s_and_b64 s[0:1], exec, s[0:1]
-; CHECK-NEXT:    s_xor_b64 exec, s[0:1], exec
+; CHECK-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; CHECK-NEXT:    s_bitcmp1_b32 s2, 24

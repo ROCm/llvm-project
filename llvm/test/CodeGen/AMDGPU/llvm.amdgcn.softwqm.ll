@@ -176,7 +176,8 @@ define amdgpu_ps float @test_control_flow_0(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; CHECK-LABEL: test_control_flow_0:
 ; CHECK:       ; %bb.0: ; %main_body
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB6_2
 ; CHECK-NEXT:  .LBB6_1: ; %IF
@@ -188,9 +189,8 @@ define amdgpu_ps float @test_control_flow_0(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; CHECK-NEXT:    v_add_f32_e32 v0, v0, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v2, v0
 ; CHECK-NEXT:  .LBB6_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
+; CHECK-NEXT:    s_and_saveexec_b64 s[0:1], vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB6_4
 ; CHECK-NEXT:  .LBB6_3: ; %ELSE
@@ -225,11 +225,11 @@ END:
 define amdgpu_ps float @test_control_flow_1(<8 x i32> inreg %rsrc, <4 x i32> inreg %sampler, i32 inreg %idx0, i32 inreg %idx1, i32 %c, i32 %z, float %data) {
 ; CHECK-LABEL: test_control_flow_1:
 ; CHECK:       ; %bb.0: ; %main_body
-; CHECK-NEXT:    s_mov_b64 s[14:15], exec
-; CHECK-NEXT:    s_wqm_b64 exec, exec
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
+; CHECK-NEXT:    s_mov_b64 s[14:15], exec
 ; CHECK-NEXT:    s_xor_b64 s[16:17], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, s[16:17]
+; CHECK-NEXT:    s_and_saveexec_b64 s[16:17], s[16:17]
+; CHECK-NEXT:    s_wqm_b64 exec, exec
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_2
 ; CHECK-NEXT:  .LBB7_1: ; %IF
@@ -241,9 +241,8 @@ define amdgpu_ps float @test_control_flow_1(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; CHECK-NEXT:    v_add_f32_e32 v0, v0, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v2, v0
 ; CHECK-NEXT:  .LBB7_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[12:13], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[16:17]
+; CHECK-NEXT:    s_and_saveexec_b64 s[12:13], vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_4
 ; CHECK-NEXT:  .LBB7_3: ; %ELSE

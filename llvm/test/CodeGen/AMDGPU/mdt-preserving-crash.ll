@@ -15,7 +15,8 @@ define protected amdgpu_kernel void @_RSENC_PRInit______________________________
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_lshl_add_u32 v0, v0, 1, v0
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v0
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_14
 ; CHECK-NEXT:  .LBB0_1: ; %if.end15
@@ -53,18 +54,19 @@ define protected amdgpu_kernel void @_RSENC_PRInit______________________________
 ; CHECK-NEXT:    flat_load_ubyte v0, v[0:1]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_cmp_ne_u16_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_12
 ; CHECK-NEXT:  .LBB0_10: ; %if.then404
-; CHECK-NEXT:    s_movk_i32 s4, 0x1000
+; CHECK-NEXT:    s_movk_i32 s6, 0x1000
 ; CHECK-NEXT:  .LBB0_11: ; %for.body564
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    s_sub_i32 s4, s4, 32
-; CHECK-NEXT:    s_cmp_lg_u32 s4, 0
+; CHECK-NEXT:    s_sub_i32 s6, s6, 32
+; CHECK-NEXT:    s_cmp_lg_u32 s6, 0
 ; CHECK-NEXT:    s_cbranch_scc1 .LBB0_11
 ; CHECK-NEXT:  .LBB0_12: ; %if.end570
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; CHECK-NEXT:  .LBB0_13: ; %UnifiedUnreachableBlock
 ; CHECK-NEXT:    ; divergent unreachable
 ; CHECK-NEXT:  .LBB0_14: ; %UnifiedReturnBlock

@@ -60,10 +60,8 @@ define amdgpu_vs void @multi_else_break(<4 x float> %vec, i32 %ub, i32 %cont) {
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], s[6:7]
 ; GCN-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_5
@@ -76,22 +74,18 @@ define amdgpu_vs void @multi_else_break(<4 x float> %vec, i32 %ub, i32 %cont) {
 ; GCN-NEXT:    ; Parent Loop BB0_2 Depth=1
 ; GCN-NEXT:    ; => This Inner Loop Header: Depth=2
 ; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, v0, v4
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GCN-NEXT:    v_mov_b32_e32 v3, v1
+; GCN-NEXT:    s_and_saveexec_b64 s[8:9], vcc
 ; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_1
 ; GCN-NEXT:  .LBB0_4: ; %ENDIF
 ; GCN-NEXT:    ; in Loop: Header=BB0_3 Depth=2
 ; GCN-NEXT:    v_add_i32_e32 v0, vcc, 1, v0
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v0
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GCN-NEXT:    v_mov_b32_e32 v3, v2
+; GCN-NEXT:    s_and_saveexec_b64 s[8:9], vcc
 ; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB0_3
 ; GCN-NEXT:    s_branch .LBB0_1
@@ -186,10 +180,8 @@ define amdgpu_kernel void @multi_if_break_loop(i32 %arg) #0 {
 ; GCN-NEXT:    buffer_load_dword v1, off, s[0:3], 0 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, v0, v1
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], vcc
 ; GCN-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_5
 ; GCN-NEXT:  .LBB1_3: ; %bb1

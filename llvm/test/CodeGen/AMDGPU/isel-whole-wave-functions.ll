@@ -73,7 +73,7 @@ define amdgpu_gfx_whole_wave i32 @multiple_blocks(i1 %active, i32 %a, i32 %b) {
   ; DAGISEL-NEXT:   [[SI_WHOLE_WAVE_FUNC_SETUP:%[0-9]+]]:sreg_32_xm0_xexec = SI_WHOLE_WAVE_FUNC_SETUP implicit-def dead $exec, implicit $exec
   ; DAGISEL-NEXT:   [[V_CNDMASK_B32_e64_:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, -1, [[SI_WHOLE_WAVE_FUNC_SETUP]], implicit $exec
   ; DAGISEL-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_NE_U32_e64 [[COPY1]], [[COPY]], implicit $exec
-  ; DAGISEL-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_NE_U32_e64_]]
+  ; DAGISEL-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_NE_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc_lo, implicit $exec
   ; DAGISEL-NEXT:   S_BRANCH %bb.1
   ; DAGISEL-NEXT: {{  $}}
   ; DAGISEL-NEXT: bb.1.if.then:

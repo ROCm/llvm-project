@@ -606,7 +606,8 @@ define amdgpu_kernel void @uniform_inside_divergent(ptr addrspace(1) %out, i32 %
 ; SI-LABEL: uniform_inside_divergent:
 ; SI:       ; %bb.0: ; %entry
 ; SI-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
-; SI-NEXT:    s_xor_b64 exec, vcc, exec
+; SI-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; SI-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB11_2
 ; SI-NEXT:  .LBB11_1: ; %if
@@ -630,7 +631,8 @@ define amdgpu_kernel void @uniform_inside_divergent(ptr addrspace(1) %out, i32 %
 ; VI-LABEL: uniform_inside_divergent:
 ; VI:       ; %bb.0: ; %entry
 ; VI-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
-; VI-NEXT:    s_xor_b64 exec, vcc, exec
+; VI-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; VI-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execz .LBB11_2
 ; VI-NEXT:  .LBB11_1: ; %if
@@ -679,13 +681,14 @@ define amdgpu_kernel void @divergent_inside_uniform(ptr addrspace(1) %out, i32 %
 ; SI-NEXT:    s_endpgm
 ; SI-NEXT:  .LBB12_2: ; %if
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
+; SI-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
 ; SI-NEXT:    s_mov_b32 s3, 0xf000
 ; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:    v_mov_b32_e32 v1, 0
-; SI-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    buffer_store_dword v1, off, s[0:3], 0
-; SI-NEXT:    s_xor_b64 exec, vcc, exec
+; SI-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB12_1
 ; SI-NEXT:  .LBB12_3: ; %if_uniform
@@ -704,13 +707,14 @@ define amdgpu_kernel void @divergent_inside_uniform(ptr addrspace(1) %out, i32 %
 ; VI-NEXT:    s_endpgm
 ; VI-NEXT:  .LBB12_2: ; %if
 ; VI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; VI-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
 ; VI-NEXT:    s_mov_b32 s3, 0xf000
 ; VI-NEXT:    s_mov_b32 s2, -1
 ; VI-NEXT:    v_mov_b32_e32 v1, 0
-; VI-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    buffer_store_dword v1, off, s[0:3], 0
-; VI-NEXT:    s_xor_b64 exec, vcc, exec
+; VI-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execz .LBB12_1
 ; VI-NEXT:  .LBB12_3: ; %if_uniform
@@ -740,7 +744,8 @@ define amdgpu_kernel void @divergent_if_uniform_if(ptr addrspace(1) %out, i32 %c
 ; SI:       ; %bb.0: ; %entry
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; SI-NEXT:    s_xor_b64 exec, vcc, exec
+; SI-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; SI-NEXT:    s_and_saveexec_b64 s[6:7], s[2:3]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB13_2
 ; SI-NEXT:  .LBB13_1: ; %if
@@ -750,7 +755,7 @@ define amdgpu_kernel void @divergent_if_uniform_if(ptr addrspace(1) %out, i32 %c
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; SI-NEXT:  .LBB13_2: ; %endif
-; SI-NEXT:    s_or_b64 exec, exec, vcc
+; SI-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; SI-NEXT:    s_load_dword s2, s[4:5], 0xb
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_cmp_lg_u32 s2, 0
@@ -769,7 +774,8 @@ define amdgpu_kernel void @divergent_if_uniform_if(ptr addrspace(1) %out, i32 %c
 ; VI:       ; %bb.0: ; %entry
 ; VI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; VI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; VI-NEXT:    s_xor_b64 exec, vcc, exec
+; VI-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; VI-NEXT:    s_and_saveexec_b64 s[6:7], s[2:3]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execz .LBB13_2
 ; VI-NEXT:  .LBB13_1: ; %if
@@ -779,7 +785,7 @@ define amdgpu_kernel void @divergent_if_uniform_if(ptr addrspace(1) %out, i32 %c
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-NEXT:  .LBB13_2: ; %endif
-; VI-NEXT:    s_or_b64 exec, exec, vcc
+; VI-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; VI-NEXT:    s_load_dword s2, s[4:5], 0x2c
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    s_cmp_lg_u32 s2, 0

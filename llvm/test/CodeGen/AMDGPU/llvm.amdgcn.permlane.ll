@@ -13803,8 +13803,9 @@ define amdgpu_kernel void @v_permlanex16_convergent(ptr addrspace(1) %out, i32 %
 ; GFX10-SDAG-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
 ; GFX10-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX10-SDAG-NEXT:    v_mov_b32_e32 v1, s0
+; GFX10-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX10-SDAG-NEXT:    v_permlanex16_b32 v1, v1, s1, s2
-; GFX10-SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB142_2
 ; GFX10-SDAG-NEXT:  .LBB142_1: ; %f
@@ -13845,7 +13846,9 @@ define amdgpu_kernel void @v_permlanex16_convergent(ptr addrspace(1) %out, i32 %
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX11-SDAG-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
 ; GFX11-SDAG-NEXT:    v_permlanex16_b32 v0, v0, s1, s2
-; GFX11-SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX11-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB142_2
 ; GFX11-SDAG-NEXT:  .LBB142_1: ; %f
@@ -13885,7 +13888,9 @@ define amdgpu_kernel void @v_permlanex16_convergent(ptr addrspace(1) %out, i32 %
 ; GFX12-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX12-SDAG-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
 ; GFX12-SDAG-NEXT:    v_permlanex16_b32 v0, v0, s1, s2
-; GFX12-SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX12-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB142_2
 ; GFX12-SDAG-NEXT:  .LBB142_1: ; %f
@@ -13919,12 +13924,13 @@ define amdgpu_kernel void @v_permlanex16_convergent(ptr addrspace(1) %out, i32 %
 ; GFX13-SDAG:       ; %bb.0:
 ; GFX13-SDAG-NEXT:    s_load_b96 s[0:2], s[4:5], 0x2c nv
 ; GFX13-SDAG-NEXT:    v_and_b32_e32 v1, 0x3ff, v0
-; GFX13-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
+; GFX13-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; GFX13-SDAG-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    v_mov_b32_e32 v0, s0
+; GFX13-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX13-SDAG-NEXT:    v_permlanex16_b32 v0, v0, s1, s2
-; GFX13-SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX13-SDAG-NEXT:    s_and_saveexec_b32 s0, s0
 ; GFX13-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX13-SDAG-NEXT:    s_cbranch_execnz .LBB142_2
 ; GFX13-SDAG-NEXT:  .LBB142_1: ; %f

@@ -12,8 +12,8 @@ define <7 x i32> @multiple_predecessor_unused_lanes(<7 x i32> %ha, i32 %h.sel) {
 ; CHECK-NEXT:    v_and_b32_e32 v7, 3, v7
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 1, v7
-; CHECK-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; CHECK-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; CHECK-NEXT:    s_and_saveexec_b32 s1, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %h.add
@@ -26,16 +26,13 @@ define <7 x i32> @multiple_predecessor_unused_lanes(<7 x i32> %ha, i32 %h.sel) {
 ; CHECK-NEXT:    v_or_b32_e32 v6, 1, v0
 ; CHECK-NEXT:  .LBB0_2:
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; CHECK-NEXT:    s_xor_b32 s0, exec_lo, s1
-; CHECK-NEXT:    s_and_b32 s0, s0, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, s1
+; CHECK-NEXT:    s_and_saveexec_b32 s0, s0
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_7
 ; CHECK-NEXT:  .LBB0_3: ; %LeafBlock
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v7
 ; CHECK-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; CHECK-NEXT:    s_and_saveexec_b32 s2, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_5
 ; CHECK-NEXT:  .LBB0_4: ; %h.shuffle
@@ -43,13 +40,10 @@ define <7 x i32> @multiple_predecessor_unused_lanes(<7 x i32> %ha, i32 %h.sel) {
 ; CHECK-NEXT:    v_mov_b32_e32 v8, v0
 ; CHECK-NEXT:    v_mov_b32_e32 v10, v0
 ; CHECK-NEXT:  .LBB0_5:
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; CHECK-NEXT:    s_xor_b32 s2, exec_lo, s1
-; CHECK-NEXT:    s_and_b32 s2, s2, exec_lo
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; CHECK-NEXT:    s_and_saveexec_b32 s1, s1
 ; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-NEXT:    s_or_b32 s0, s0, s2
-; CHECK-NEXT:    s_mov_b32 exec_lo, s1
+; CHECK-NEXT:    s_or_b32 s0, s0, s1
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_7
 ; CHECK-NEXT:  .LBB0_6: ; %h.default

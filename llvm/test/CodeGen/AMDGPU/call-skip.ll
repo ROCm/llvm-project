@@ -16,7 +16,7 @@ define void @if_call(i32 %flag) #0 {
 ; SDAG-LABEL: if_call:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SDAG-NEXT:    s_mov_b32 s18, s33
+; SDAG-NEXT:    s_mov_b32 s20, s33
 ; SDAG-NEXT:    s_mov_b32 s33, s32
 ; SDAG-NEXT:    s_xor_saveexec_b64 s[16:17], -1
 ; SDAG-NEXT:    buffer_store_dword v1, off, s[0:3], s33 ; 4-byte Folded Spill
@@ -25,23 +25,24 @@ define void @if_call(i32 %flag) #0 {
 ; SDAG-NEXT:    s_addk_i32 s32, 0x400
 ; SDAG-NEXT:    v_writelane_b32 v1, s31, 1
 ; SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; SDAG-NEXT:    s_xor_b64 s[16:17], vcc, exec
+; SDAG-NEXT:    s_and_saveexec_b64 s[16:17], s[16:17]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB1_2
 ; SDAG-NEXT:  .LBB1_1: ; %call
-; SDAG-NEXT:    s_getpc_b64 s[16:17]
-; SDAG-NEXT:    s_add_u32 s16, s16, func@rel32@lo+4
-; SDAG-NEXT:    s_addc_u32 s17, s17, func@rel32@hi+12
-; SDAG-NEXT:    s_swappc_b64 s[30:31], s[16:17]
+; SDAG-NEXT:    s_getpc_b64 s[18:19]
+; SDAG-NEXT:    s_add_u32 s18, s18, func@rel32@lo+4
+; SDAG-NEXT:    s_addc_u32 s19, s19, func@rel32@hi+12
+; SDAG-NEXT:    s_swappc_b64 s[30:31], s[18:19]
 ; SDAG-NEXT:  .LBB1_2: ; %end
-; SDAG-NEXT:    s_or_b64 exec, exec, vcc
+; SDAG-NEXT:    s_or_b64 exec, exec, s[16:17]
 ; SDAG-NEXT:    v_readlane_b32 s30, v1, 0
 ; SDAG-NEXT:    v_readlane_b32 s31, v1, 1
 ; SDAG-NEXT:    s_mov_b32 s32, s33
 ; SDAG-NEXT:    s_xor_saveexec_b64 s[4:5], -1
 ; SDAG-NEXT:    buffer_load_dword v1, off, s[0:3], s33 ; 4-byte Folded Reload
 ; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
-; SDAG-NEXT:    s_mov_b32 s33, s18
+; SDAG-NEXT:    s_mov_b32 s33, s20
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -91,17 +92,18 @@ define void @if_asm(i32 %flag) #0 {
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; SDAG-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; SDAG-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB2_2
 ; SDAG-NEXT:  .LBB2_1: ; %end
-; SDAG-NEXT:    s_or_b64 exec, exec, vcc
+; SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
 ; SDAG-NEXT:  .LBB2_2: ; %call
 ; SDAG-NEXT:    ;;#ASMSTART
 ; SDAG-NEXT:    ; sample asm
 ; SDAG-NEXT:    ;;#ASMEND
-; SDAG-NEXT:    s_or_b64 exec, exec, vcc
+; SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GISEL-LABEL: if_asm:
@@ -136,9 +138,10 @@ define amdgpu_kernel void @if_call_kernel() #0 {
 ; SDAG-NEXT:    s_add_u32 s0, s0, s17
 ; SDAG-NEXT:    s_addc_u32 s1, s1, 0
 ; SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+; SDAG-NEXT:    s_xor_b64 s[18:19], vcc, exec
 ; SDAG-NEXT:    s_mov_b32 s32, 0
 ; SDAG-NEXT:    s_mov_b32 flat_scratch_lo, s13
-; SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; SDAG-NEXT:    s_and_saveexec_b64 s[18:19], s[18:19]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB3_2
 ; SDAG-NEXT:  .LBB3_1: ; %end

@@ -11,7 +11,9 @@ define amdgpu_gs void @test_ds_bvh_stack_push4_pop1(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    v_mov_b32_e32 v31, v20
 ; CHECK-NEXT:    v_cmp_neq_f32_e32 vcc_lo, 0, v20
 ; CHECK-NEXT:    image_bvh8_intersect_ray v[21:30], [v[2:3], v[4:5], v[31:33], v[8:10], v11], s[0:3]
-; CHECK-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
+; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; CHECK-NEXT:    s_and_saveexec_b32 s4, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %if
@@ -28,7 +30,7 @@ define amdgpu_gs void @test_ds_bvh_stack_push4_pop1(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    v_add3_u32 v1, v1, v37, v39
 ; CHECK-NEXT:    v_add3_u32 v1, v6, v38, v1
 ; CHECK-NEXT:  .LBB0_2: ; %end
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; CHECK-NEXT:    s_wait_bvhcnt 0x0
 ; CHECK-NEXT:    ds_bvh_stack_push4_pop1_rtn_b32 v1, v0, v1, v[21:24]
 ; CHECK-NEXT:    image_bvh8_intersect_ray v[20:29], [v[2:3], v[4:5], v[31:33], v[8:10], v11], s[0:3]
@@ -106,7 +108,9 @@ define amdgpu_gs void @test_ds_bvh_stack_push8_pop1(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    v_mov_b32_e32 v31, v20
 ; CHECK-NEXT:    v_cmp_neq_f32_e32 vcc_lo, 0, v20
 ; CHECK-NEXT:    image_bvh8_intersect_ray v[21:30], [v[2:3], v[4:5], v[31:33], v[8:10], v11], s[0:3]
-; CHECK-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
+; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; CHECK-NEXT:    s_and_saveexec_b32 s4, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_2
 ; CHECK-NEXT:  .LBB1_1: ; %if
@@ -123,7 +127,7 @@ define amdgpu_gs void @test_ds_bvh_stack_push8_pop1(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    v_add3_u32 v1, v1, v37, v39
 ; CHECK-NEXT:    v_add3_u32 v1, v6, v38, v1
 ; CHECK-NEXT:  .LBB1_2: ; %end
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; CHECK-NEXT:    s_wait_bvhcnt 0x0
 ; CHECK-NEXT:    ds_bvh_stack_push8_pop1_rtn_b32 v1, v0, v1, v[21:28]
 ; CHECK-NEXT:    image_bvh8_intersect_ray v[20:29], [v[2:3], v[4:5], v[31:33], v[8:10], v11], s[0:3]
@@ -209,7 +213,9 @@ define amdgpu_gs void @test_ds_bvh_stack_push8_pop2(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    v_mov_b32_e32 v31, v20
 ; CHECK-NEXT:    v_cmp_neq_f32_e32 vcc_lo, 0, v20
 ; CHECK-NEXT:    image_bvh8_intersect_ray v[21:30], [v[2:3], v[4:5], v[31:33], v[8:10], v11], s[0:3]
-; CHECK-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
+; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; CHECK-NEXT:    s_and_saveexec_b32 s4, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB2_2
 ; CHECK-NEXT:  .LBB2_1: ; %if
@@ -226,7 +232,7 @@ define amdgpu_gs void @test_ds_bvh_stack_push8_pop2(i32 %addr, i32 %data.0, i64 
 ; CHECK-NEXT:    v_add3_u32 v1, v1, v37, v39
 ; CHECK-NEXT:    v_add3_u32 v1, v6, v38, v1
 ; CHECK-NEXT:  .LBB2_2: ; %end
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; CHECK-NEXT:    s_wait_bvhcnt 0x0
 ; CHECK-NEXT:    ds_bvh_stack_push8_pop2_rtn_b64 v[6:7], v0, v1, v[21:28]
 ; CHECK-NEXT:    image_bvh8_intersect_ray v[20:29], [v[2:3], v[4:5], v[31:33], v[8:10], v11], s[0:3]

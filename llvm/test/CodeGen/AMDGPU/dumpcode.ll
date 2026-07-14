@@ -10,9 +10,8 @@
 ; GFX10-NEXT: BB0_1:
 ; GFX10-NEXT:   v_add_nc_u32_e32 v2, -1, v2             ; 4A0404C1
 ; GFX10-NEXT:   v_cmp_ne_u32_e32 vcc_lo, 0, v2          ; 7D8A0480
-; GFX10-NEXT:   s_xor_b32 s5, exec_lo, vcc_lo           ; 89056A7E
+; GFX10-NEXT:   s_and_saveexec_b32 s5, vcc_lo           ; BE853C6A
 ; GFX10-NEXT:   s_or_b32 s4, s4, s5                     ; 88040504
-; GFX10-NEXT:   s_mov_b32 exec_lo, vcc_lo               ; BEFE036A
 ; GFX10-NEXT:   s_cbranch_execnz ""                     ; BF890000
 ; GFX10-NEXT: BB0_2:
 ; GFX10-NEXT:   s_or_b32 exec_lo, exec_lo, s4           ; 887E047E

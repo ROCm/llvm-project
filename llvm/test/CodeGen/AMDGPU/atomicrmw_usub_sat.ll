@@ -79,9 +79,8 @@ define i32 @global_atomic_usub_sat(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX9-SDAG-NEXT:  .LBB0_2: ; %atomicrmw.end
@@ -207,9 +206,8 @@ define i32 @global_atomic_usub_sat_offset(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX9-SDAG-NEXT:  .LBB1_2: ; %atomicrmw.end
@@ -326,11 +324,10 @@ define void @global_atomic_usub_sat_nortn(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
-; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB2_1
 ; GFX9-SDAG-NEXT:  .LBB2_2: ; %atomicrmw.end
@@ -453,11 +450,10 @@ define void @global_atomic_usub_sat_offset_nortn(ptr addrspace(1) %ptr, i32 %dat
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB3_1
 ; GFX9-SDAG-NEXT:  .LBB3_2: ; %atomicrmw.end
@@ -603,9 +599,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset(ptr addrspace
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
-; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB4_1
 ; GFX9-SDAG-NEXT:  .LBB4_2: ; %atomicrmw.end
@@ -748,11 +743,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn(ptr add
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB5_1
 ; GFX9-SDAG-NEXT:  .LBB5_2: ; %atomicrmw.end
@@ -927,9 +921,8 @@ define i16 @global_atomic_usub_sat_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX9-SDAG-NEXT:  .LBB6_2: ; %atomicrmw.end
@@ -956,9 +949,8 @@ define i16 @global_atomic_usub_sat_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX10-SDAG-NEXT:    buffer_gl0_inv
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX10-SDAG-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s5
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s5
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX10-SDAG-NEXT:  .LBB6_2: ; %atomicrmw.end
@@ -987,9 +979,8 @@ define i16 @global_atomic_usub_sat_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX11-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX11-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
+; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX11-SDAG-NEXT:  .LBB6_2: ; %atomicrmw.end
@@ -1021,10 +1012,9 @@ define i16 @global_atomic_usub_sat_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX12-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX12-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX12-SDAG-NEXT:  .LBB6_2: ; %atomicrmw.end
@@ -1165,9 +1155,8 @@ define i16 @global_atomic_usub_sat_offset_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX9-SDAG-NEXT:  .LBB7_2: ; %atomicrmw.end
@@ -1196,9 +1185,8 @@ define i16 @global_atomic_usub_sat_offset_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX10-SDAG-NEXT:    buffer_gl0_inv
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v1
 ; GFX10-SDAG-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s5
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s5
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX10-SDAG-NEXT:  .LBB7_2: ; %atomicrmw.end
@@ -1226,9 +1214,8 @@ define i16 @global_atomic_usub_sat_offset_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX11-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX11-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
+; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX11-SDAG-NEXT:  .LBB7_2: ; %atomicrmw.end
@@ -1260,10 +1247,9 @@ define i16 @global_atomic_usub_sat_offset_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX12-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX12-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX12-SDAG-NEXT:  .LBB7_2: ; %atomicrmw.end
@@ -1398,11 +1384,10 @@ define void @global_atomic_usub_sat_nortn_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX9-SDAG-NEXT:  .LBB8_2: ; %atomicrmw.end
@@ -1428,9 +1413,8 @@ define void @global_atomic_usub_sat_nortn_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX10-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX10-SDAG-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s5
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s5
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX10-SDAG-NEXT:  .LBB8_2: ; %atomicrmw.end
@@ -1458,9 +1442,8 @@ define void @global_atomic_usub_sat_nortn_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX11-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX11-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
+; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX11-SDAG-NEXT:  .LBB8_2: ; %atomicrmw.end
@@ -1491,10 +1474,9 @@ define void @global_atomic_usub_sat_nortn_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX12-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX12-SDAG-NEXT:  .LBB8_2: ; %atomicrmw.end
@@ -1629,11 +1611,10 @@ define void @global_atomic_usub_sat_offset_nortn_16(ptr addrspace(1) %ptr, i16 %
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX9-SDAG-NEXT:  .LBB9_2: ; %atomicrmw.end
@@ -1661,9 +1642,8 @@ define void @global_atomic_usub_sat_offset_nortn_16(ptr addrspace(1) %ptr, i16 %
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX10-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX10-SDAG-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s5
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s5
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX10-SDAG-NEXT:  .LBB9_2: ; %atomicrmw.end
@@ -1691,9 +1671,8 @@ define void @global_atomic_usub_sat_offset_nortn_16(ptr addrspace(1) %ptr, i16 %
 ; GFX11-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX11-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
+; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX11-SDAG-NEXT:  .LBB9_2: ; %atomicrmw.end
@@ -1724,10 +1703,9 @@ define void @global_atomic_usub_sat_offset_nortn_16(ptr addrspace(1) %ptr, i16 %
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX12-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX12-SDAG-NEXT:  .LBB9_2: ; %atomicrmw.end
@@ -1893,9 +1871,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_16(ptr addrsp
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v1, v2
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
-; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX9-SDAG-NEXT:  .LBB10_2: ; %atomicrmw.end
@@ -1931,9 +1908,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_16(ptr addrsp
 ; GFX10-SDAG-NEXT:    buffer_gl0_inv
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v2
 ; GFX10-SDAG-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s5, exec_lo, s4
-; GFX10-SDAG-NEXT:    s_or_b32 s3, s3, s5
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s4, s4
+; GFX10-SDAG-NEXT:    s_or_b32 s3, s3, s4
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX10-SDAG-NEXT:  .LBB10_2: ; %atomicrmw.end
@@ -1970,9 +1946,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_16(ptr addrsp
 ; GFX11-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v2
 ; GFX11-SDAG-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s7, exec_lo, s6
-; GFX11-SDAG-NEXT:    s_or_b32 s3, s3, s7
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s6
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s6, s6
+; GFX11-SDAG-NEXT:    s_or_b32 s3, s3, s6
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX11-SDAG-NEXT:  .LBB10_2: ; %atomicrmw.end
@@ -2006,10 +1981,9 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_16(ptr addrsp
 ; GFX12-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v2
 ; GFX12-SDAG-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s6, s6
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s3, s3, s7
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s6
+; GFX12-SDAG-NEXT:    s_or_b32 s3, s3, s6
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX12-SDAG-NEXT:  .LBB10_2: ; %atomicrmw.end
@@ -2156,11 +2130,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_16(ptr 
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB11_1
 ; GFX9-SDAG-NEXT:  .LBB11_2: ; %atomicrmw.end
@@ -2191,9 +2164,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_16(ptr 
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v1
 ; GFX10-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX10-SDAG-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s5, exec_lo, s4
-; GFX10-SDAG-NEXT:    s_or_b32 s3, s3, s5
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s4, s4
+; GFX10-SDAG-NEXT:    s_or_b32 s3, s3, s4
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB11_1
 ; GFX10-SDAG-NEXT:  .LBB11_2: ; %atomicrmw.end
@@ -2224,9 +2196,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_16(ptr 
 ; GFX11-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX11-SDAG-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s5, exec_lo, s4
-; GFX11-SDAG-NEXT:    s_or_b32 s3, s3, s5
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s4
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s4, s4
+; GFX11-SDAG-NEXT:    s_or_b32 s3, s3, s4
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB11_1
 ; GFX11-SDAG-NEXT:  .LBB11_2: ; %atomicrmw.end
@@ -2254,10 +2225,9 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_16(ptr 
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX12-SDAG-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s4, s4
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s3, s3, s5
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s4
+; GFX12-SDAG-NEXT:    s_or_b32 s3, s3, s4
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB11_1
 ; GFX12-SDAG-NEXT:  .LBB11_2: ; %atomicrmw.end
@@ -2414,9 +2384,8 @@ define i8 @global_atomic_usub_sat_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX9-SDAG-NEXT:  .LBB12_2: ; %atomicrmw.end
@@ -2446,9 +2415,8 @@ define i8 @global_atomic_usub_sat_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX10-SDAG-NEXT:    buffer_gl0_inv
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX10-SDAG-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s5
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s5
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX10-SDAG-NEXT:  .LBB12_2: ; %atomicrmw.end
@@ -2481,9 +2449,8 @@ define i8 @global_atomic_usub_sat_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX11-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX11-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
+; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX11-SDAG-NEXT:  .LBB12_2: ; %atomicrmw.end
@@ -2518,10 +2485,9 @@ define i8 @global_atomic_usub_sat_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX12-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX12-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX12-SDAG-NEXT:  .LBB12_2: ; %atomicrmw.end
@@ -2679,9 +2645,8 @@ define i8 @global_atomic_usub_sat_offset_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB13_1
 ; GFX9-SDAG-NEXT:  .LBB13_2: ; %atomicrmw.end
@@ -2711,9 +2676,8 @@ define i8 @global_atomic_usub_sat_offset_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX10-SDAG-NEXT:    buffer_gl0_inv
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX10-SDAG-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s5
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s5
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB13_1
 ; GFX10-SDAG-NEXT:  .LBB13_2: ; %atomicrmw.end
@@ -2746,9 +2710,8 @@ define i8 @global_atomic_usub_sat_offset_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX11-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX11-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
+; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB13_1
 ; GFX11-SDAG-NEXT:  .LBB13_2: ; %atomicrmw.end
@@ -2783,10 +2746,9 @@ define i8 @global_atomic_usub_sat_offset_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX12-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX12-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB13_1
 ; GFX12-SDAG-NEXT:  .LBB13_2: ; %atomicrmw.end
@@ -2937,11 +2899,10 @@ define void @global_atomic_usub_sat_nortn_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB14_1
 ; GFX9-SDAG-NEXT:  .LBB14_2: ; %atomicrmw.end
@@ -2970,9 +2931,8 @@ define void @global_atomic_usub_sat_nortn_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX10-SDAG-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX10-SDAG-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s5
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s5
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB14_1
 ; GFX10-SDAG-NEXT:  .LBB14_2: ; %atomicrmw.end
@@ -3003,9 +2963,8 @@ define void @global_atomic_usub_sat_nortn_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX11-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX11-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
+; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB14_1
 ; GFX11-SDAG-NEXT:  .LBB14_2: ; %atomicrmw.end
@@ -3038,10 +2997,9 @@ define void @global_atomic_usub_sat_nortn_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX12-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB14_1
 ; GFX12-SDAG-NEXT:  .LBB14_2: ; %atomicrmw.end
@@ -3190,11 +3148,10 @@ define void @global_atomic_usub_sat_offset_nortn_8(ptr addrspace(1) %ptr, i8 %da
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB15_1
 ; GFX9-SDAG-NEXT:  .LBB15_2: ; %atomicrmw.end
@@ -3223,9 +3180,8 @@ define void @global_atomic_usub_sat_offset_nortn_8(ptr addrspace(1) %ptr, i8 %da
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX10-SDAG-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX10-SDAG-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s5
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s5, s5
+; GFX10-SDAG-NEXT:    s_or_b32 s4, s4, s5
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB15_1
 ; GFX10-SDAG-NEXT:  .LBB15_2: ; %atomicrmw.end
@@ -3256,9 +3212,8 @@ define void @global_atomic_usub_sat_offset_nortn_8(ptr addrspace(1) %ptr, i8 %da
 ; GFX11-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX11-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
+; GFX11-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB15_1
 ; GFX11-SDAG-NEXT:  .LBB15_2: ; %atomicrmw.end
@@ -3291,10 +3246,9 @@ define void @global_atomic_usub_sat_offset_nortn_8(ptr addrspace(1) %ptr, i8 %da
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX12-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s1, s1
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s2
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; GFX12-SDAG-NEXT:    s_or_b32 s0, s0, s1
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB15_1
 ; GFX12-SDAG-NEXT:  .LBB15_2: ; %atomicrmw.end
@@ -3479,9 +3433,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_8(ptr addrspa
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v1, v2
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
-; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[10:11]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB16_1
 ; GFX9-SDAG-NEXT:  .LBB16_2: ; %atomicrmw.end
@@ -3518,9 +3471,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_8(ptr addrspa
 ; GFX10-SDAG-NEXT:    buffer_gl0_inv
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v2
 ; GFX10-SDAG-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s5, exec_lo, s4
-; GFX10-SDAG-NEXT:    s_or_b32 s2, s2, s5
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s4, s4
+; GFX10-SDAG-NEXT:    s_or_b32 s2, s2, s4
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB16_1
 ; GFX10-SDAG-NEXT:  .LBB16_2: ; %atomicrmw.end
@@ -3560,9 +3512,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_8(ptr addrspa
 ; GFX11-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v2
 ; GFX11-SDAG-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s7, exec_lo, s6
-; GFX11-SDAG-NEXT:    s_or_b32 s2, s2, s7
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s6
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s6, s6
+; GFX11-SDAG-NEXT:    s_or_b32 s2, s2, s6
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB16_1
 ; GFX11-SDAG-NEXT:  .LBB16_2: ; %atomicrmw.end
@@ -3599,9 +3550,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_8(ptr addrspa
 ; GFX12-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v2
 ; GFX12-SDAG-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_xor_b32 s7, exec_lo, s6
-; GFX12-SDAG-NEXT:    s_or_b32 s2, s2, s7
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s6
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s6, s6
+; GFX12-SDAG-NEXT:    s_or_b32 s2, s2, s6
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB16_1
 ; GFX12-SDAG-NEXT:  .LBB16_2: ; %atomicrmw.end
@@ -3769,11 +3719,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_8(ptr a
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB17_1
 ; GFX9-SDAG-NEXT:  .LBB17_2: ; %atomicrmw.end
@@ -3805,9 +3754,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_8(ptr a
 ; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v1
 ; GFX10-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX10-SDAG-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; GFX10-SDAG-NEXT:    s_xor_b32 s5, exec_lo, s4
-; GFX10-SDAG-NEXT:    s_or_b32 s3, s3, s5
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-SDAG-NEXT:    s_and_saveexec_b32 s4, s4
+; GFX10-SDAG-NEXT:    s_or_b32 s3, s3, s4
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execnz .LBB17_1
 ; GFX10-SDAG-NEXT:  .LBB17_2: ; %atomicrmw.end
@@ -3842,9 +3790,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_8(ptr a
 ; GFX11-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX11-SDAG-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s5, exec_lo, s4
-; GFX11-SDAG-NEXT:    s_or_b32 s3, s3, s5
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s4
+; GFX11-SDAG-NEXT:    s_and_saveexec_b32 s4, s4
+; GFX11-SDAG-NEXT:    s_or_b32 s3, s3, s4
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-NEXT:    s_cbranch_execnz .LBB17_1
 ; GFX11-SDAG-NEXT:  .LBB17_2: ; %atomicrmw.end
@@ -3875,10 +3822,9 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_8(ptr a
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX12-SDAG-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX12-SDAG-NEXT:    s_and_saveexec_b32 s4, s4
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-SDAG-NEXT:    s_or_b32 s3, s3, s5
-; GFX12-SDAG-NEXT:    s_mov_b32 exec_lo, s4
+; GFX12-SDAG-NEXT:    s_or_b32 s3, s3, s4
 ; GFX12-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-NEXT:    s_cbranch_execnz .LBB17_1
 ; GFX12-SDAG-NEXT:  .LBB17_2: ; %atomicrmw.end
@@ -3959,9 +3905,8 @@ define i32 @global_atomic_usub_sat__amdgpu_no_remote_memory(ptr addrspace(1) %pt
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB18_1
 ; GFX9-SDAG-NEXT:  .LBB18_2: ; %atomicrmw.end
@@ -4076,9 +4021,8 @@ define i32 @global_atomic_usub_sat__amdgpu_no_fine_grained_memory(ptr addrspace(
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB19_1
 ; GFX9-SDAG-NEXT:  .LBB19_2: ; %atomicrmw.end
@@ -4193,9 +4137,8 @@ define i32 @global_atomic_usub_sat__amdgpu_no_fine_grained_memory__amdgpu_no_rem
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
 ; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB20_1
 ; GFX9-SDAG-NEXT:  .LBB20_2: ; %atomicrmw.end

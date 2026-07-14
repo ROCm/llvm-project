@@ -4752,12 +4752,13 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; GENERIC-NEXT:    v_cndmask_b32_e64 v2, 15, v3, s[0:1]
 ; GENERIC-NEXT:    v_cmp_ne_u32_e64 s[0:1], 15, v0
 ; GENERIC-NEXT:    v_cndmask_b32_e64 v0, 16, v2, s[0:1]
+; GENERIC-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GENERIC-NEXT:    s_waitcnt lgkmcnt(0)
 ; GENERIC-NEXT:    buffer_store_dword v1, off, s[8:11], 0
 ; GENERIC-NEXT:    s_waitcnt vmcnt(0)
 ; GENERIC-NEXT:    buffer_store_dword v0, off, s[8:11], 0
 ; GENERIC-NEXT:    s_waitcnt vmcnt(0)
-; GENERIC-NEXT:    s_xor_b64 exec, vcc, exec
+; GENERIC-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GENERIC-NEXT:    ; divergent control-flow edge
 ; GENERIC-NEXT:    s_cbranch_execnz .LBB16_2
 ; GENERIC-NEXT:  .LBB16_1: ; %bb2
@@ -5081,13 +5082,12 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; NOOPT-NEXT:    buffer_store_dword v1, off, s[4:7], 0
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
 ; NOOPT-NEXT:    v_cmp_eq_u32_e64 s[0:1], v0, s0
-; NOOPT-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v18, s2, 26
-; NOOPT-NEXT:    v_writelane_b32 v18, s3, 27
+; NOOPT-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
+; NOOPT-NEXT:    v_writelane_b32 v18, s0, 26
+; NOOPT-NEXT:    v_writelane_b32 v18, s1, 27
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[28:29], -1
 ; NOOPT-NEXT:    buffer_store_dword v18, off, s[36:39], 0 offset:156 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    s_mov_b64 exec, s[28:29]
-; NOOPT-NEXT:    s_mov_b64 exec, s[0:1]
 ; NOOPT-NEXT:    ; divergent control-flow edge
 ; NOOPT-NEXT:    s_cbranch_execz .LBB16_8
 ; NOOPT-NEXT:  .LBB16_7: ; %bb1
@@ -5198,12 +5198,13 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; SI-MOVREL-NEXT:    v_cndmask_b32_e64 v2, 15, v3, s[0:1]
 ; SI-MOVREL-NEXT:    v_cmp_ne_u32_e64 s[0:1], 15, v0
 ; SI-MOVREL-NEXT:    v_cndmask_b32_e64 v0, 16, v2, s[0:1]
+; SI-MOVREL-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; SI-MOVREL-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-MOVREL-NEXT:    buffer_store_dword v1, off, s[8:11], 0
 ; SI-MOVREL-NEXT:    s_waitcnt vmcnt(0)
 ; SI-MOVREL-NEXT:    buffer_store_dword v0, off, s[8:11], 0
 ; SI-MOVREL-NEXT:    s_waitcnt vmcnt(0)
-; SI-MOVREL-NEXT:    s_xor_b64 exec, vcc, exec
+; SI-MOVREL-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; SI-MOVREL-NEXT:    ; divergent control-flow edge
 ; SI-MOVREL-NEXT:    s_cbranch_execnz .LBB16_2
 ; SI-MOVREL-NEXT:  .LBB16_1: ; %bb2
@@ -5294,11 +5295,12 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; VI-NEXT:    v_cndmask_b32_e64 v4, 15, v5, s[0:1]
 ; VI-NEXT:    v_cmp_ne_u32_e64 s[0:1], 15, v0
 ; VI-NEXT:    v_cndmask_b32_e64 v0, 16, v4, s[0:1]
+; VI-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; VI-NEXT:    flat_store_dword v[2:3], v1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    flat_store_dword v[2:3], v0
 ; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    s_xor_b64 exec, vcc, exec
+; VI-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB16_2
 ; VI-NEXT:  .LBB16_1: ; %bb2
@@ -5383,11 +5385,12 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e64 v3, 15, v4, s[0:1]
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e64 s[0:1], 15, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e64 v0, 16, v3, s[0:1]
+; GFX9-IDXMODE-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX9-IDXMODE-NEXT:    global_store_dword v1, v2, s[2:3]
 ; GFX9-IDXMODE-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-IDXMODE-NEXT:    global_store_dword v1, v0, s[2:3]
 ; GFX9-IDXMODE-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-IDXMODE-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-IDXMODE-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX9-IDXMODE-NEXT:    ; divergent control-flow edge
 ; GFX9-IDXMODE-NEXT:    s_cbranch_execnz .LBB16_2
 ; GFX9-IDXMODE-NEXT:  .LBB16_1: ; %bb2
@@ -5528,7 +5531,8 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; GENERIC-NEXT:    s_waitcnt vmcnt(0)
 ; GENERIC-NEXT:    buffer_store_dwordx4 v[2:5], off, s[0:3], 0
 ; GENERIC-NEXT:    s_waitcnt vmcnt(0)
-; GENERIC-NEXT:    s_xor_b64 exec, vcc, exec
+; GENERIC-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; GENERIC-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GENERIC-NEXT:    ; divergent control-flow edge
 ; GENERIC-NEXT:    s_cbranch_execnz .LBB17_2
 ; GENERIC-NEXT:  .LBB17_1: ; %bb2
@@ -5928,13 +5932,12 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; NOOPT-NEXT:    buffer_store_dwordx4 v[1:4], off, s[4:7], 0
 ; NOOPT-NEXT:    s_waitcnt vmcnt(0)
 ; NOOPT-NEXT:    v_cmp_eq_u32_e64 s[0:1], v0, s0
-; NOOPT-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; NOOPT-NEXT:    v_writelane_b32 v32, s2, 13
-; NOOPT-NEXT:    v_writelane_b32 v32, s3, 14
+; NOOPT-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
+; NOOPT-NEXT:    v_writelane_b32 v32, s0, 13
+; NOOPT-NEXT:    v_writelane_b32 v32, s1, 14
 ; NOOPT-NEXT:    s_or_saveexec_b64 s[26:27], -1
 ; NOOPT-NEXT:    buffer_store_dword v32, off, s[28:31], 0 offset:280 ; 4-byte Folded Spill
 ; NOOPT-NEXT:    s_mov_b64 exec, s[26:27]
-; NOOPT-NEXT:    s_mov_b64 exec, s[0:1]
 ; NOOPT-NEXT:    ; divergent control-flow edge
 ; NOOPT-NEXT:    s_cbranch_execz .LBB17_8
 ; NOOPT-NEXT:  .LBB17_7: ; %bb1
@@ -6071,7 +6074,8 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; SI-MOVREL-NEXT:    s_waitcnt vmcnt(0)
 ; SI-MOVREL-NEXT:    buffer_store_dwordx4 v[2:5], off, s[0:3], 0
 ; SI-MOVREL-NEXT:    s_waitcnt vmcnt(0)
-; SI-MOVREL-NEXT:    s_xor_b64 exec, vcc, exec
+; SI-MOVREL-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; SI-MOVREL-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; SI-MOVREL-NEXT:    ; divergent control-flow edge
 ; SI-MOVREL-NEXT:    s_cbranch_execnz .LBB17_2
 ; SI-MOVREL-NEXT:  .LBB17_1: ; %bb2
@@ -6199,9 +6203,10 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    v_mov_b32_e32 v7, s1
 ; VI-NEXT:    v_mov_b32_e32 v6, s0
+; VI-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; VI-NEXT:    flat_store_dwordx4 v[6:7], v[2:5]
 ; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    s_xor_b64 exec, vcc, exec
+; VI-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB17_2
 ; VI-NEXT:  .LBB17_1: ; %bb2
@@ -6315,7 +6320,8 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; GFX9-IDXMODE-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-IDXMODE-NEXT:    global_store_dwordx4 v18, v[2:5], s[0:1]
 ; GFX9-IDXMODE-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-IDXMODE-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-IDXMODE-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; GFX9-IDXMODE-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GFX9-IDXMODE-NEXT:    ; divergent control-flow edge
 ; GFX9-IDXMODE-NEXT:    s_cbranch_execnz .LBB17_2
 ; GFX9-IDXMODE-NEXT:  .LBB17_1: ; %bb2

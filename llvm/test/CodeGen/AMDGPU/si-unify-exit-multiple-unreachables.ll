@@ -18,7 +18,8 @@ define amdgpu_kernel void @kernel(i32 %a, ptr addrspace(1) %x, i32 noundef %n) {
 ; CHECK-NEXT:    s_cbranch_scc0 .LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %if.else
 ; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 9, v0
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[2:3], s[2:3]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_5
 ; CHECK-NEXT:  .LBB0_2: ; %if.then

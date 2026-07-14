@@ -14,19 +14,20 @@ define bfloat @sitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    v_or_b32_e32 v4, v0, v2
 ; GCN-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[4:5]
 ; GCN-NEXT:    v_mov_b32_e32 v4, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_and_saveexec_b64 s[8:9], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_11
 ; GCN-NEXT:  .LBB0_1: ; %itofp-if-end
 ; GCN-NEXT:    v_ashrrev_i32_e32 v5, 31, v3
 ; GCN-NEXT:    v_xor_b32_e32 v0, v0, v5
 ; GCN-NEXT:    v_xor_b32_e32 v1, v1, v5
-; GCN-NEXT:    v_sub_co_u32_e64 v0, s[4:5], v0, v5
-; GCN-NEXT:    v_subb_co_u32_e64 v1, s[4:5], v1, v5, s[4:5]
+; GCN-NEXT:    v_sub_co_u32_e32 v0, vcc, v0, v5
+; GCN-NEXT:    v_subb_co_u32_e32 v1, vcc, v1, v5, vcc
 ; GCN-NEXT:    v_xor_b32_e32 v2, v2, v5
 ; GCN-NEXT:    v_xor_b32_e32 v6, v3, v5
-; GCN-NEXT:    v_subb_co_u32_e64 v4, s[4:5], v2, v5, s[4:5]
-; GCN-NEXT:    v_subb_co_u32_e64 v5, s[4:5], v6, v5, s[4:5]
+; GCN-NEXT:    v_subb_co_u32_e32 v4, vcc, v2, v5, vcc
+; GCN-NEXT:    v_subb_co_u32_e32 v5, vcc, v6, v5, vcc
 ; GCN-NEXT:    v_ffbh_u32_e32 v2, v4
 ; GCN-NEXT:    v_add_u32_e32 v2, 32, v2
 ; GCN-NEXT:    v_ffbh_u32_e32 v6, v5
@@ -35,37 +36,34 @@ define bfloat @sitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    v_add_u32_e32 v6, 32, v6
 ; GCN-NEXT:    v_ffbh_u32_e32 v7, v1
 ; GCN-NEXT:    v_min_u32_e32 v6, v6, v7
-; GCN-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
+; GCN-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
 ; GCN-NEXT:    v_add_u32_e32 v6, 64, v6
-; GCN-NEXT:    v_cndmask_b32_e64 v7, v6, v2, s[4:5]
+; GCN-NEXT:    v_cndmask_b32_e32 v7, v6, v2, vcc
 ; GCN-NEXT:    v_sub_u32_e32 v6, 0x80, v7
-; GCN-NEXT:    v_cmp_gt_i32_e64 s[8:9], 25, v6
+; GCN-NEXT:    v_cmp_gt_i32_e32 vcc, 25, v6
 ; GCN-NEXT:    v_sub_u32_e32 v2, 0x7f, v7
-; GCN-NEXT:    s_xor_b64 s[6:7], s[8:9], exec
-; GCN-NEXT:    s_mov_b64 s[4:5], s[8:9]
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_and_saveexec_b64 s[10:11], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_8
 ; GCN-NEXT:  .LBB0_2: ; %NodeBlock
 ; GCN-NEXT:    v_cmp_gt_i32_e64 s[4:5], 26, v6
 ; GCN-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; GCN-NEXT:    s_mov_b64 exec, s[4:5]
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_4
 ; GCN-NEXT:  .LBB0_3: ; %itofp-sw-bb
 ; GCN-NEXT:    v_lshlrev_b64 v[0:1], 1, v[0:1]
 ; GCN-NEXT:  .LBB0_4:
-; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; GCN-NEXT:    s_and_b64 s[10:11], s[4:5], exec
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_and_saveexec_b64 s[12:13], s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_7
 ; GCN-NEXT:  .LBB0_5: ; %LeafBlock
 ; GCN-NEXT:    v_cmp_eq_u32_e64 s[4:5], 26, v6
-; GCN-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[10:11], s[10:11], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
+; GCN-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GCN-NEXT:    s_or_b64 s[12:13], s[12:13], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_7
 ; GCN-NEXT:  .LBB0_6: ; %itofp-sw-default
@@ -107,7 +105,7 @@ define bfloat @sitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    v_mov_b32_e32 v0, v8
 ; GCN-NEXT:    v_mov_b32_e32 v1, v9
 ; GCN-NEXT:  .LBB0_7: ; %itofp-sw-epilog
-; GCN-NEXT:    s_or_b64 exec, exec, s[10:11]
+; GCN-NEXT:    s_or_b64 exec, exec, s[12:13]
 ; GCN-NEXT:    v_lshrrev_b32_e32 v4, 2, v0
 ; GCN-NEXT:    v_and_or_b32 v0, v4, 1, v0
 ; GCN-NEXT:    v_add_co_u32_e64 v4, s[4:5], 1, v0
@@ -116,24 +114,23 @@ define bfloat @sitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    v_mov_b32_e32 v8, 0
 ; GCN-NEXT:    v_cmp_eq_u64_e64 s[4:5], 0, v[7:8]
 ; GCN-NEXT:    v_alignbit_b32 v0, v1, v4, 2
-; GCN-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[4:5], s[8:9], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
+; GCN-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GCN-NEXT:    s_or_b64 s[10:11], s[10:11], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB0_12
 ; GCN-NEXT:  .LBB0_8:
-; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]
-; GCN-NEXT:    s_mov_b64 exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, s[10:11]
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_10
 ; GCN-NEXT:  .LBB0_9: ; %itofp-if-else
 ; GCN-NEXT:    v_add_u32_e32 v4, 0xffffff98, v7
 ; GCN-NEXT:    v_lshlrev_b64 v[0:1], v4, v[0:1]
-; GCN-NEXT:    v_cmp_gt_u32_e64 s[4:5], 64, v4
-; GCN-NEXT:    v_cndmask_b32_e64 v0, 0, v0, s[4:5]
+; GCN-NEXT:    v_cmp_gt_u32_e32 vcc, 64, v4
+; GCN-NEXT:    v_cndmask_b32_e32 v0, 0, v0, vcc
 ; GCN-NEXT:  .LBB0_10: ; %itofp-if-end26
-; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    v_and_b32_e32 v1, 0x80000000, v3
 ; GCN-NEXT:    v_lshl_add_u32 v2, v2, 23, 1.0
 ; GCN-NEXT:    v_and_b32_e32 v3, 0x7fffff, v0
@@ -142,11 +139,11 @@ define bfloat @sitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    s_movk_i32 s4, 0x7fff
 ; GCN-NEXT:    v_add3_u32 v0, v0, v1, s4
 ; GCN-NEXT:    v_or_b32_e32 v2, 0x400000, v1
-; GCN-NEXT:    v_cmp_u_f32_e64 s[4:5], v1, v1
-; GCN-NEXT:    v_cndmask_b32_e64 v0, v0, v2, s[4:5]
+; GCN-NEXT:    v_cmp_u_f32_e32 vcc, v1, v1
+; GCN-NEXT:    v_cndmask_b32_e32 v0, v0, v2, vcc
 ; GCN-NEXT:    v_lshrrev_b32_e32 v4, 16, v0
 ; GCN-NEXT:  .LBB0_11: ; %itofp-return
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GCN-NEXT:    v_mov_b32_e32 v0, v4
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 ; GCN-NEXT:  .LBB0_12: ; %itofp-if-then20
@@ -165,7 +162,8 @@ define bfloat @uitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    v_or_b32_e32 v4, v0, v2
 ; GCN-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[4:5]
 ; GCN-NEXT:    v_mov_b32_e32 v4, 0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_and_saveexec_b64 s[8:9], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_11
 ; GCN-NEXT:  .LBB1_1: ; %itofp-if-end
@@ -177,37 +175,34 @@ define bfloat @uitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    v_add_u32_e32 v5, 32, v5
 ; GCN-NEXT:    v_ffbh_u32_e32 v6, v1
 ; GCN-NEXT:    v_min_u32_e32 v5, v5, v6
-; GCN-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[2:3]
+; GCN-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[2:3]
 ; GCN-NEXT:    v_add_u32_e32 v5, 64, v5
-; GCN-NEXT:    v_cndmask_b32_e64 v6, v5, v4, s[4:5]
+; GCN-NEXT:    v_cndmask_b32_e32 v6, v5, v4, vcc
 ; GCN-NEXT:    v_sub_u32_e32 v5, 0x80, v6
-; GCN-NEXT:    v_cmp_gt_i32_e64 s[8:9], 25, v5
+; GCN-NEXT:    v_cmp_gt_i32_e32 vcc, 25, v5
 ; GCN-NEXT:    v_sub_u32_e32 v4, 0x7f, v6
-; GCN-NEXT:    s_xor_b64 s[6:7], s[8:9], exec
-; GCN-NEXT:    s_mov_b64 s[4:5], s[8:9]
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_and_saveexec_b64 s[10:11], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_8
 ; GCN-NEXT:  .LBB1_2: ; %NodeBlock
 ; GCN-NEXT:    v_cmp_gt_i32_e64 s[4:5], 26, v5
 ; GCN-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; GCN-NEXT:    s_mov_b64 exec, s[4:5]
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_4
 ; GCN-NEXT:  .LBB1_3: ; %itofp-sw-bb
 ; GCN-NEXT:    v_lshlrev_b64 v[0:1], 1, v[0:1]
 ; GCN-NEXT:  .LBB1_4:
-; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; GCN-NEXT:    s_and_b64 s[10:11], s[4:5], exec
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_and_saveexec_b64 s[12:13], s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_7
 ; GCN-NEXT:  .LBB1_5: ; %LeafBlock
 ; GCN-NEXT:    v_cmp_eq_u32_e64 s[4:5], 26, v5
-; GCN-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[10:11], s[10:11], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
+; GCN-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GCN-NEXT:    s_or_b64 s[12:13], s[12:13], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_7
 ; GCN-NEXT:  .LBB1_6: ; %itofp-sw-default
@@ -249,7 +244,7 @@ define bfloat @uitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    v_mov_b32_e32 v0, v7
 ; GCN-NEXT:    v_mov_b32_e32 v1, v8
 ; GCN-NEXT:  .LBB1_7: ; %itofp-sw-epilog
-; GCN-NEXT:    s_or_b64 exec, exec, s[10:11]
+; GCN-NEXT:    s_or_b64 exec, exec, s[12:13]
 ; GCN-NEXT:    v_lshrrev_b32_e32 v2, 2, v0
 ; GCN-NEXT:    v_and_or_b32 v0, v2, 1, v0
 ; GCN-NEXT:    v_add_co_u32_e64 v0, s[4:5], 1, v0
@@ -258,24 +253,23 @@ define bfloat @uitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    v_mov_b32_e32 v3, 0
 ; GCN-NEXT:    v_cmp_eq_u64_e64 s[4:5], 0, v[2:3]
 ; GCN-NEXT:    v_alignbit_b32 v2, v1, v0, 2
-; GCN-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[4:5], s[8:9], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
+; GCN-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
+; GCN-NEXT:    s_or_b64 s[10:11], s[10:11], s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB1_12
 ; GCN-NEXT:  .LBB1_8:
-; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]
-; GCN-NEXT:    s_mov_b64 exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, s[10:11]
+; GCN-NEXT:    s_and_saveexec_b64 s[4:5], vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_10
 ; GCN-NEXT:  .LBB1_9: ; %itofp-if-else
 ; GCN-NEXT:    v_add_u32_e32 v2, 0xffffff98, v6
 ; GCN-NEXT:    v_lshlrev_b64 v[0:1], v2, v[0:1]
-; GCN-NEXT:    v_cmp_gt_u32_e64 s[4:5], 64, v2
-; GCN-NEXT:    v_cndmask_b32_e64 v2, 0, v0, s[4:5]
+; GCN-NEXT:    v_cmp_gt_u32_e32 vcc, 64, v2
+; GCN-NEXT:    v_cndmask_b32_e32 v2, 0, v0, vcc
 ; GCN-NEXT:  .LBB1_10: ; %itofp-if-end26
-; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    v_and_b32_e32 v0, 0x7fffff, v2
 ; GCN-NEXT:    v_lshl_or_b32 v0, v4, 23, v0
 ; GCN-NEXT:    v_add_u32_e32 v0, 1.0, v0
@@ -283,11 +277,11 @@ define bfloat @uitofp_i128_to_bf16(i128 %x) {
 ; GCN-NEXT:    s_movk_i32 s4, 0x7fff
 ; GCN-NEXT:    v_add3_u32 v1, v1, v0, s4
 ; GCN-NEXT:    v_or_b32_e32 v2, 0x400000, v0
-; GCN-NEXT:    v_cmp_u_f32_e64 s[4:5], v0, v0
-; GCN-NEXT:    v_cndmask_b32_e64 v0, v1, v2, s[4:5]
+; GCN-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
+; GCN-NEXT:    v_cndmask_b32_e32 v0, v1, v2, vcc
 ; GCN-NEXT:    v_lshrrev_b32_e32 v4, 16, v0
 ; GCN-NEXT:  .LBB1_11: ; %itofp-return
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GCN-NEXT:    v_mov_b32_e32 v0, v4
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 ; GCN-NEXT:  .LBB1_12: ; %itofp-if-then20

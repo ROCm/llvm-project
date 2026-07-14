@@ -176,9 +176,8 @@ define void @mad24_destroyed_knownbits_2(i32 %arg, i32 %arg1, i32 %arg2, ptr add
 ; GCN-NEXT:    v_mad_i32_i24 v0, v0, v5, v0
 ; GCN-NEXT:    v_mov_b32_e32 v5, v2
 ; GCN-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
+; GCN-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB3_1
 ; GCN-NEXT:  .LBB3_2: ; %bb5
@@ -198,17 +197,16 @@ define void @mad24_destroyed_knownbits_2(i32 %arg, i32 %arg1, i32 %arg2, ptr add
 ; VI-NEXT:    s_mov_b64 s[4:5], 0
 ; VI-NEXT:  .LBB3_1: ; %bb6
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; VI-NEXT:    v_add_u32_e32 v1, vcc, -1, v1
 ; VI-NEXT:    v_mad_i32_i24 v0, v0, v5, v5
-; VI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v1
 ; VI-NEXT:    v_mad_i32_i24 v5, v0, v5, v0
-; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; VI-NEXT:    v_add_u32_e32 v1, vcc, -1, v1
 ; VI-NEXT:    v_mad_i32_i24 v0, v5, v0, v5
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; VI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v1
 ; VI-NEXT:    v_mad_i32_i24 v0, v0, v5, v0
 ; VI-NEXT:    v_mov_b32_e32 v5, v2
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; VI-NEXT:    s_mov_b64 exec, s[6:7]
+; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; VI-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB3_1
 ; VI-NEXT:  .LBB3_2: ; %bb5

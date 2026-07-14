@@ -79,12 +79,10 @@ define amdgpu_cs void @issue130119(i1 %arg) {
 ; CHECK-NEXT:  .LBB1_2: ; %bb8
 ; CHECK-NEXT:    ; in Loop: Header=BB1_3 Depth=2
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; CHECK-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; CHECK-NEXT:    s_and_b64 s[12:13], s[12:13], exec
 ; CHECK-NEXT:    s_mov_b64 s[6:7], 0
-; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[12:13]
-; CHECK-NEXT:    s_mov_b64 exec, s[10:11]
+; CHECK-NEXT:    s_xor_b64 s[10:11], vcc, exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[10:11], s[10:11]
+; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[10:11]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_6
 ; CHECK-NEXT:  .LBB1_3: ; %bb3

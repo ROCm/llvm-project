@@ -102,15 +102,16 @@ define i64 @v_xor_i64_known_i32_from_range_use_out_of_block(i64 %x) {
 ; CHECK-NEXT:    v_cmp_ne_u64_e32 vcc, v[4:5], v[0:1]
 ; CHECK-NEXT:    v_mov_b32_e32 v2, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v3, 0
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB6_2
 ; CHECK-NEXT:  .LBB6_1: ; %inc
 ; CHECK-NEXT:    v_not_b32_e32 v2, v4
-; CHECK-NEXT:    v_add_co_u32_e64 v2, s[4:5], v0, v2
-; CHECK-NEXT:    v_addc_co_u32_e64 v3, s[4:5], -1, v1, s[4:5]
+; CHECK-NEXT:    v_add_co_u32_e32 v2, vcc, v0, v2
+; CHECK-NEXT:    v_addc_co_u32_e32 v3, vcc, -1, v1, vcc
 ; CHECK-NEXT:  .LBB6_2: ; %UnifiedReturnBlock
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; CHECK-NEXT:    v_mov_b32_e32 v0, v2
 ; CHECK-NEXT:    v_mov_b32_e32 v1, v3
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]

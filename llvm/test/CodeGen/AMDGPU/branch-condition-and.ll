@@ -16,7 +16,8 @@ define amdgpu_ps void @ham(float %arg, float %arg1) #0 {
 ; GCN-NEXT:    v_cmp_nlt_f32_e32 vcc, 0, v0
 ; GCN-NEXT:    v_cmp_nlt_f32_e64 s[0:1], 0, v1
 ; GCN-NEXT:    s_or_b64 s[0:1], vcc, s[0:1]
-; GCN-NEXT:    s_xor_b64 exec, s[0:1], exec
+; GCN-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
+; GCN-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %bb4

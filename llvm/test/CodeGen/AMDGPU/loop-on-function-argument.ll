@@ -28,11 +28,10 @@ define void @loop_on_argument(i1 %arg) {
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; CHECK-NEXT:    global_store_dword v[0:1], v1, off
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
+; CHECK-NEXT:    s_and_saveexec_b64 s[6:7], s[6:7]
+; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_1
 ; CHECK-NEXT:  .LBB0_2: ; %exit

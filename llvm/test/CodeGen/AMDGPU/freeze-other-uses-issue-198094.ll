@@ -19,9 +19,10 @@ define void @repro(<6 x i32> %a, i32 %i) {
 ; CHECK-NEXT:    v_xor_b32_e32 v0, v2, v0
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
   %r0 = shufflevector <6 x i32> %a, <6 x i32> poison, <6 x i32> <i32 0, i32 0, i32 poison, i32 0, i32 0, i32 1>
   %l0 = extractelement <6 x i32> %a, i32 %i

@@ -44,15 +44,14 @@ define amdgpu_cs_chain void @basic(<3 x i32> inreg %sgpr, ptr inreg %callee, i64
 ; DAGISEL12-NEXT:    s_wait_bvhcnt 0x0
 ; DAGISEL12-NEXT:    s_wait_kmcnt 0x0
 ; DAGISEL12-NEXT:    s_or_saveexec_b64 s[8:9], -1
-; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_and_b64 s[10:11], exec, s[8:9]
 ; DAGISEL12-NEXT:    s_mov_b32 s7, s6
 ; DAGISEL12-NEXT:    s_mov_b32 s6, s5
 ; DAGISEL12-NEXT:    s_mov_b32 s5, s4
 ; DAGISEL12-NEXT:    s_mov_b32 s4, s3
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_xor_b64 s[8:9], exec, s[10:11]
-; DAGISEL12-NEXT:    s_mov_b64 exec, s[10:11]
+; DAGISEL12-NEXT:    s_and_b64 s[8:9], exec, s[8:9]
+; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; DAGISEL12-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB0_2
 ; DAGISEL12-NEXT:  .LBB0_1: ; %shader
@@ -97,13 +96,12 @@ define amdgpu_cs_chain void @basic(<3 x i32> inreg %sgpr, ptr inreg %callee, i64
 ; DAGISEL10:       ; %bb.0: ; %entry
 ; DAGISEL10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL10-NEXT:    s_or_saveexec_b64 s[8:9], -1
-; DAGISEL10-NEXT:    s_and_b64 s[10:11], exec, s[8:9]
 ; DAGISEL10-NEXT:    s_mov_b32 s7, s6
 ; DAGISEL10-NEXT:    s_mov_b32 s6, s5
 ; DAGISEL10-NEXT:    s_mov_b32 s5, s4
 ; DAGISEL10-NEXT:    s_mov_b32 s4, s3
-; DAGISEL10-NEXT:    s_xor_b64 s[8:9], exec, s[10:11]
-; DAGISEL10-NEXT:    s_mov_b64 exec, s[10:11]
+; DAGISEL10-NEXT:    s_and_b64 s[8:9], exec, s[8:9]
+; DAGISEL10-NEXT:    s_and_saveexec_b64 s[8:9], s[8:9]
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB0_2
 ; DAGISEL10-NEXT:  .LBB0_1: ; %shader

@@ -33,7 +33,7 @@ define i32 @test_cvt_pk_fp8_f32(float %x, float %y) {
   ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 7
   ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 killed [[REG_SEQUENCE]], killed [[S_MOV_B32_2]], implicit $exec
   ; CHECK-NEXT:   [[V_MOV_B32_e32_1:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 1, implicit $exec
-  ; CHECK-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_EQ_U32_e64_]]
+  ; CHECK-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1.a2:
@@ -90,7 +90,7 @@ define i32 @test_cvt_pk_fp8_f32_e5m3(float %x, float %y) {
   ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 7
   ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 killed [[REG_SEQUENCE]], killed [[S_MOV_B32_2]], implicit $exec
   ; CHECK-NEXT:   [[V_MOV_B32_e32_1:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 1, implicit $exec
-  ; CHECK-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_EQ_U32_e64_]]
+  ; CHECK-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1.a2:

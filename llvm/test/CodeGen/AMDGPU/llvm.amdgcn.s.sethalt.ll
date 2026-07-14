@@ -29,7 +29,8 @@ define amdgpu_gs void @if_sethalt(i32 %flag) #0 {
 ; SDAG-LABEL: if_sethalt:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; SDAG-NEXT:    s_and_saveexec_b64 s[0:1], s[0:1]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB1_2
 ; SDAG-NEXT:  .LBB1_1: ; %end

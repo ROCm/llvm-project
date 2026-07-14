@@ -138,8 +138,16 @@ void AMDGPULaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
   if (!PrevConstant) {
     PrevMaskedReg = PrevReg;
   }
+  // Donot mask CurReg if CurReg = S_AND_SAVEEXEC(_TERM) Reg
+  // Contributions from this Opc implies we are building the rejoin merge at
+  // secondary block and the contribution should be used as is , without EXEC
+  // AND masking.
   if (!CurConstant) {
-    if ((PrevConstant && PrevVal) ||
+    const MachineInstr *CurDef = MF.getRegInfo().getUniqueVRegDef(CurReg);
+    bool IsSaveExecDef =
+        CurDef && (CurDef->getOpcode() == LMC.AndSaveExecOpc ||
+                   CurDef->getOpcode() == LMC.AndSaveExecTermOpc);
+    if ((PrevConstant && PrevVal) || IsSaveExecDef ||
         (LMA && LMA->isSubsetOfExec(CurReg, MBB, I))) {
       CurMaskedReg = CurReg;
     } else {
@@ -472,13 +480,14 @@ void AMDGPULaneMaskUpdater::insertAccumulatorResets() {
 
     // TODO : We only need to compute EndInsertPt if any of B's AccFlagPairs has
     // ResetAtEnd
+    const AMDGPU::LaneMaskConstants &LMConsts = LMU.getLaneMaskConsts();
     MachineBasicBlock::iterator EndInsertPt;
     EndInsertPt = B->getFirstTerminator();
-    if (EndInsertPt != B->end() && EndInsertPt->getOpcode() == LMU.getLaneMaskConsts().MovTermOpc &&
-        EndInsertPt->getOperand(0).getReg() ==
-            LMU.getLaneMaskConsts().ExecReg) {
-      EndInsertPt->setDesc(TII->get(LMU.getLaneMaskConsts().MovOpc));
-      EndInsertPt++;
+    if (EndInsertPt != B->end()) {
+      if (EndInsertPt->getOpcode() == LMConsts.AndSaveExecTermOpc) {
+        EndInsertPt->setDesc(TII->get(LMConsts.AndSaveExecOpc));
+        ++EndInsertPt;
+      }
     }
 
     for (auto &[Acc, Flags] : AccFlagPairs) {
