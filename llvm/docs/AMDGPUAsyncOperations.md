@@ -7,9 +7,12 @@
 
 Asynchronous operations are operations whose completion is not tracked
 internally by the compiler. A thread that initiates one or more async operations can use
-*asyncmarks* to track their completion.
+execution synchronization mechanisms such as *asyncmarks* or
+{ref}`barriers<amdgpu-execution-synchronization>` to track their completion.
 
 - Most {ref}`DMA operations <amdgpu-dma-operations>` are asynchronous.
+
+(amdgpu-asyncmarks)=
 
 ## Asyncmarks
 
@@ -32,6 +35,11 @@ Produces an asyncmark and appends it to the current sequence.
 Ensures that the length of the current sequence is at most `N` by removing
 asyncmarks from the start of the sequence if it is more than `N`.
 
+This operation implicitly includes the semantics of a `fence acquire` at
+*system-scope*.
+
+(amdgpu-asyncmark-completed-at)=
+
 ### Completion of Asyncmarks
 
 An `asyncmark()` operation `X` that produces an asyncmark `M` is
@@ -42,26 +50,39 @@ if:
 - `M` is not in the current sequence at any operation `Z` that immediately
   follows `Y` in *program-order*.
 
+(amdgpu-async-completed-at)=
+
 ## Completion of Async Operations
 
 An async operation executes outside the thread that initiated it, i.e., it is
 not related in *program-order* with any other operations from that thread. But
-the thread can use an asyncmark to ensure that the async operation is
-*completed-at* some later operation.
+a thread that depends on the side-effects of `A` can use an asyncmark or barrier
+to ensure that `A` is *completed-at* some operation in that thread.
 
-An async operation `A` *initiated-by* an instruction `I` is *completed-at* some
+```{note}
+{ref}`DMA operations<amdgpu-dma-memmodel>` use the *completed-at* relation to
+establish a *happens-before* relation with threads that depend on their
+completion.
+```
+
+### Using Asyncmarks
+
+Some async operations use asyncmarks to notify completion. Such an async
+operation `A` *initiated-by* an instruction `I` is *completed-at* some
 `wait.asyncmark()` operation `Y` if there exists an `asyncmark()` operation `X`
 such that:
 - `I` is *program-ordered* before `X`, and
 - `X` is *completed-at* `Y`.
 
-### happens-before
+### Using Barriers
 
-When an instruction `I` initiates an async operation `A`, `I` *happens-before*
-`A`.
+Some async operations can take a {ref}`barrier
+<amdgpu-execution-synchronization>` as an argument. A thread that depends on the
+side-effects of `A` performs a {ref}`barrier wait <amdgpu-barrier-operations>`
+operation `W` on the barrier.
 
-If `A` is *completed-at* a `wait.asyncmark()` operation `Y`, then `A`
-*happens-before* `Y`.
+`A` is said to be *completed-at* `W` when it performs a {ref}`barrier arrive
+<amdgpu-barrier-operations>` operation on the barrier and the barrier completes.
 
 ## Examples
 
