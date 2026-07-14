@@ -279,8 +279,8 @@ bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,
          std::equal(Prefix.begin(), Prefix.end(), Bytes.begin());
 }
 
-static std::optional<uint64_t>
-checkedAlignTo(uint64_t Value, uint64_t Alignment, StringRef Context) {
+std::optional<uint64_t> checkedAlignTo(uint64_t Value, uint64_t Alignment,
+                                       StringRef Context) {
   if (Alignment == 0)
     return Value;
 
@@ -290,7 +290,7 @@ checkedAlignTo(uint64_t Value, uint64_t Alignment, StringRef Context) {
   return checkedAddUint64(Value, Alignment - Remainder, Context);
 }
 
-static std::optional<uint64_t> entryVAddr(const KernelDescriptorInfo &KD) {
+std::optional<uint64_t> entryVAddr(const KernelDescriptorInfo &KD) {
   if (KD.EntryOffset >= 0)
     return checkedAddUint64(
         KD.VAddr, static_cast<uint64_t>(KD.EntryOffset),
@@ -671,9 +671,13 @@ bool rewriteKernelEntryDescriptorOffsets(
     }
     bool UpdatedEntry =
         OutElf.updateKernelDescriptorEntryOffset(Fixup.KernelName, *NewOffset);
-    bool UpdatedSgprs = OutElf.updateKernelDescriptorSgprCount(
-        Fixup.KernelName, Fixup.RequiredSgprs,
-        /*UpdateDescriptor=*/false);
+    // The fast path leaves the logical SGPR reservation unchanged (fixed
+    // s[100:101]), so skip the descriptor SGPR-count update entirely.
+    bool UpdatedSgprs = Fixup.SkipSgprReservation
+                            ? true
+                            : OutElf.updateKernelDescriptorSgprCount(
+                                  Fixup.KernelName, Fixup.RequiredSgprs,
+                                  /*UpdateDescriptor=*/false);
     bool UpdatedInstPref = OutElf.updateKernelDescriptorInstPrefSize(
         Fixup.KernelName, TargetCpu, Fixup.InstPrefLines);
     Ok = UpdatedEntry && UpdatedSgprs && UpdatedInstPref && Ok;
