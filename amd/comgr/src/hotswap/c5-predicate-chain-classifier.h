@@ -21,7 +21,7 @@ namespace COMGR::hotswap {
 
 // ============================================================================
 // Narrow-O1 post-mem2reg IR-level classifier for the Class-5
-// predicate-chain class. See hotswap/docs/modrep-predicate-chain.md §5
+// predicate-chain class. See hotswap/docs/modrep-predicate-chain.md sec. 5
 // (O1) for the design and narrowing rationale.
 // ============================================================================
 //
@@ -40,7 +40,7 @@ namespace COMGR::hotswap {
 // (`compare_correctness` Triton suite) is the canary that pins it.
 //
 // NARROWING RULE (the key principled bit -- Phase-2 evidence in
-// `modrep-predicate-chain.md` §5 O1). "Refuse any unmasked
+// `modrep-predicate-chain.md` sec. 5 O1). "Refuse any unmasked
 // `tid -> icmp -> side-effect`" -- the literal O1 wording -- would also
 // refuse currently-passing baselines (`vecadd_f16`, `rope_fp32`,
 // elementwise Triton kernels) whose IR has structurally identical
@@ -97,7 +97,7 @@ namespace COMGR::hotswap {
 //
 //   * `and %v, K` with `K <= W_s - 1`: walk transitions into the
 //     masked state. The result enters `maskedVisited`. (This is the
-//     §5.6.2 `wave_id` lift's mask shape and the SPE prelude's own
+//     sec. 5.6.2 `wave_id` lift's mask shape and the SPE prelude's own
 //     `lane_id & (W_s-1)` -- both produce safe values.)
 //   * Pure propagators (cast, binop incl. non-masking `and`, phi,
 //     select, gep, freeze, insert/extract{element,value},
@@ -125,7 +125,7 @@ namespace COMGR::hotswap {
 // Same-wave or narrowing: no replica-1 exists, no lane-position
 // ambiguity, the classifier is a structural no-op.
 //
-// COVERAGE + INTENTIONAL NON-COVERAGE. Per §5 O1 of the design doc:
+// COVERAGE + INTENTIONAL NON-COVERAGE. Per sec. 5 O1 of the design doc:
 //
 //   * `canary_bpermute_scan_fp32`: Kogge-Stone scan stages emit
 //     `icmp ult i32 K, %tid` with K in {1, 3, 7, 15} (all
@@ -134,19 +134,19 @@ namespace COMGR::hotswap {
 //     is short-circuited (see `projection` docstring below); the
 //     recipe's previously-observed WRONG
 //     numerics turned out to be an orthogonal VOPD-cndmask bug
-//     (design-doc §6.4), fixed independently of this classifier.
+//     (design-doc sec. 6.4), fixed independently of this classifier.
 //   * `rmsnorm_fp32`, `swiglu_fp32`, `corpus_layernorm_fp32`:
 //     their kernel-level icmps compare `tid` against a dynamic
 //     kernarg (`%arg4` / `%arg2`), not a compile-time constant.
 //     Classifier does NOT refuse. Their end-to-end status is
 //     MATCH today; the relevant fixes were orthogonal to this
-//     classifier (see design-doc §6.3 / §6.4).
+//     classifier (see design-doc sec. 6.3 / sec. 6.4).
 //   * `vecadd_f16`, `rope_fp32`, `canary_dpp_compound_add_fp32`
 //     (baselines): no icmps with the C5 shape. Classifier does
 //     NOT refuse. Baselines stay green.
 //
-// RELATIONSHIP TO §5 O2 (the mask rewrite). O2 is deferred
-// indefinitely per §6.2 of the design doc: the mask's shape is
+// RELATIONSHIP TO sec. 5 O2 (the mask rewrite). O2 is deferred
+// indefinitely per sec. 6.2 of the design doc: the mask's shape is
 // semantically incorrect for multi-warp kernels and a structural
 // no-op for single-warp sub-case 2. This classifier is
 // refuse-only; there is no `RewriteId` entry paired with

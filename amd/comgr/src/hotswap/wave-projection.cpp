@@ -296,7 +296,7 @@ Value *ModuloReplicationProjection::extractLaneBitFromWaveMask(
     // out-of-bounds and the SRD bounds check silently drops them --
     // the observed "half of every target wave64's outputs stay at
     // their zero-initialised value" miscompile.  MODREP's contract
-    // (`wave-size-translation.md` §6 / class-"modulo-replication"
+    // (`wave-size-translation.md` sec. 6 / class-"modulo-replication"
     // policy) says target lane L reads bit `L mod W_src` of the source
     // wave's mask, so the right widening *replicates* the narrow mask
     // into the upper half rather than zero-extending.  That matches
@@ -388,7 +388,7 @@ Value *WaveNativeProjection::emitInitialExec(IRBuilder<> &B) const {
   // strategy. See the long comment block on
   // `WaveProjection::emitInitialExec` for the register-allocator
   // pressure argument (`SIPreAllocateWWMRegs` requires dedicated
-  // physregs for every vreg inside a WWM bracket, which a 128×128
+  // physregs for every vreg inside a WWM bracket, which a 128x128
   // matmul tile cannot satisfy).
   Module *M = B.GetInsertBlock()->getModule();
   Function *InitWw = Intrinsic::getOrInsertDeclaration(
@@ -438,7 +438,7 @@ Value *WaveNativeProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
   assert(WantedBits <= WaveBits &&
          "WaveNativeProjection::ballotI1ToWidth: wantedBits > waveBits "
          "is not defined for wave32 source -> wave64 target cross-"
-         "widening; caller must request resultTy ≤ waveMaskTy");
+         "widening; caller must request resultTy <= waveMaskTy");
   if (WantedBits == WaveBits)
     return WaveMask;
   if (WantedBits < WaveBits)
@@ -531,7 +531,7 @@ Value *WaveNativeProjection::emitCurrentSourceWaveMask(IRBuilder<> &B,
 
 // ----------------------------------------------------------------------------
 // ThreadLoopProjection -- second rung of the coverage ladder described
-// in hotswap/docs/wave-size-translation.md §2.2.
+// in hotswap/docs/wave-size-translation.md sec. 2.2.
 //
 // This implementation is intentionally conservative at the projection
 // boundary: source-width EXEC storage, source-width lane selection for

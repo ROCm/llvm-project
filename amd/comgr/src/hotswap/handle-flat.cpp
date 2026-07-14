@@ -608,7 +608,7 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     // scale_offset on stores scales the per-lane vaddr by the access
     // element size. For sub-dword stores (byte/short) the element size
     // is 1 or 2 bytes; for dword/dwordx{2,3,4} it is 4, 8, 12, or 16
-    // bytes -- the compiler emits `global_store_dwordx4 … scale_offset`
+    // bytes -- the compiler emits `global_store_dwordx4 ... scale_offset`
     // with a lane-index vaddr to lower `out[tid] = vec4` patterns.
     int ElemBytes = StoreBits < 32 ? (StoreBits / 8)
                                     : std::max(StoreDwords, 1) * 4;
@@ -651,7 +651,7 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
   // gfx1250 async global -> LDS load (FLAT VFLAT 0x5f-0x62 -- b8 / b32 /
   // b64 / b128).
   //
-  // Operand layout from `FLAT_Global_Load_LDS_Pseudo<…, IsAsync=1>`
+  // Operand layout from `FLAT_Global_Load_LDS_Pseudo<..., IsAsync=1>`
   // (FLATInstructions.td:391-417) is identical across all four widths
   // (only the data byte size -- and so the intrinsic ID / per-lane load
   // type -- varies):
@@ -676,7 +676,7 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
   // Operand parsing is shared between the two arms so any shape
   // that lifts on gfx1250 lifts identically on gfx942, modulo the
   // emission tail. The ISA source-of-truth pragma
-  // (`instruction_manual.pdf §13.6.9-12`, verbatim -- identical
+  // (`instruction_manual.pdf sec. 13.6.9-12`, verbatim -- identical
   // across all four widths except the LDS-store width):
   //
   //   pragma "vector" do
@@ -776,7 +776,7 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
             "(SGPR_64, VGPR_32) for (saddr, vaddr)");
       }
       Value *Saddr = Ctx.Regs.readReg64(Ctx.B, SaddrPr);
-      // `zext` (not `sext`): the ISA programming manual §4.9.9
+      // `zext` (not `sext`): the ISA programming manual sec. 4.9.9
       // ("Instruction Fields") specifies that in the SADDR form
       // the VGPR vaddr is an "unsigned byte offset" added to the
       // SGPR base. The address-space decoder in `flat-addr.cpp`
@@ -941,7 +941,7 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     // without a gfx942 encoding -- the backend re-derives cache
     // behaviour from the IR's `load` / `store` ordering (default
     // semantics = unordered).  Dropping them is the same posture
-    // that `sync-translation.md §5.3` takes for atomic scope
+    // that `sync-translation.md sec. 5.3` takes for atomic scope
     // recovery on pre-gfx12 targets when the decoded modifiers
     // have no representable mapping.  The value is read only to
     // avoid an unused-variable warning in release builds.
@@ -1357,7 +1357,7 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     //              backend can re-emit `flat_load_*`.
     //
     //   (SADDR)  saddr:SGPR64, vaddr:VGPR32, [scale_offset] [offset:imm]
-    //              -- gfx12+ `flat_load_b32 … scale_offset`: uniform
+    //              -- gfx12+ `flat_load_b32 ... scale_offset`: uniform
     //              SGPR64 base + per-lane VGPR32 offset, semantically
     //              identical to `global_load_dword`'s SADDR form (the
     //              hardware's scale-offset + signed-imm arithmetic can

@@ -125,10 +125,10 @@ ArrayRef<CanonicalOpAttrSpec> getHandlerSOP2Attrs() {
 // the per-lane i1 of the result directly from the two input i1s.
 // This closes three idiom classes from Triton's gfx1250 output:
 //
-//   * `v_cmp_X s2; v_cmp_Y s3; s_xor_b32 s2, s2, s3; v_cndmask … s2`
+//   * `v_cmp_X s2; v_cmp_Y s3; s_xor_b32 s2, s2, s3; v_cndmask ... s2`
 //     (both sources shadowed SGPR -- core matmul-fix shape).
 //   * `v_cmp_X vcc; s_and_saveexec_b32 s2, vcc; s_xor_b32 s2,
-//     exec_lo, s2; v_cndmask … s2` (right source = saved old_exec
+//     exec_lo, s2; v_cndmask ... s2` (right source = saved old_exec
 //     in SGPR, left source = current exec_lo after saveexec -- the
 //     "else-branch mask" idiom Triton's tl.sort at small BLOCK_N
 //     emits between its bitonic stages).
@@ -252,7 +252,7 @@ static void storeSccFromWaveMaskI1(RaiseContext &Ctx, llvm::Value *I1,
 // SCC must be 1). Compute the shift-add once in i64, truncate for the
 // destination, and set SCC from bits [63:32] being nonzero (equivalently
 // the unbounded result exceeding 0xFFFFFFFF). See instruction_manual.pdf
-// §S_LSHLn_ADD_U32 and the S_ADD_U32 handler above for the sibling
+// sec. S_LSHLn_ADD_U32 and the S_ADD_U32 handler above for the sibling
 // carry-out pattern.
 static void handleLshlAddU32(RaiseContext &Ctx, OpResolver &Op, unsigned ShAmt,
                              const Twine &Name, HandlerResult &Hr) {
@@ -472,7 +472,7 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
-  // gfx11+ scalar FP fused multiply-accumulate. Manual §4.5.25 marks this
+  // gfx11+ scalar FP fused multiply-accumulate. Manual sec. 4.5.25 marks this
   // OPF_DACCUM and defines `D0.f32 = fma(S0.f32, S1.f32, D0.f32)`, so the
   // third operand is the old destination value, not a hidden source slot.
   if (Sop == CanonicalOp::S_FMAC_F32) {
@@ -491,7 +491,7 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   // Scalar IEEE-754-2019 maximumNumber/minimumNumber. LLVM's canonical pseudo
-  // is `S_{MAX,MIN}_F32`; `instruction_manual.pdf` §4.5.39/§4.5.45 names the
+  // is `S_{MAX,MIN}_F32`; `instruction_manual.pdf` sec. 4.5.39/sec. 4.5.45 names the
   // gfx12+ real mnemonics `s_max_num_f32` / `s_min_num_f32`, with `s_max_f32`
   // / `s_min_f32` accepted as compatibility aliases. The manual's pseudocode
   // favors a numeric operand over NaN (including signaling NaN after setting
@@ -725,7 +725,7 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     //
     // Why a pattern-lift is needed under cross-widening (wave32 -> wave64,
     // `WaveNativeProjection`):
-    //   - `wave_id_in_workgroup` is a Class 1 value (`§6` of
+    //   - `wave_id_in_workgroup` is a Class 1 value (`sec. 6` of
     //     `hotswap/docs/wave-size-translation.md`): it depends on the
     //     absolute lane position within the target wave, not merely
     //     `lane_id mod W_s`. Target lanes 0..W_s-1 correspond to one
@@ -770,8 +770,8 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     // using `ttmp` for something the raiser's init does not model, and
     // forcing them through the lift would silently miscompile.
     //
-    // See `hotswap/docs/wave-size-translation.md` §5.6.2 (wave_id
-    // lift) and §6 (Class 1 obstructions) for the full contract.
+    // See `hotswap/docs/wave-size-translation.md` sec. 5.6.2 (wave_id
+    // lift) and sec. 6 (Class 1 obstructions) for the full contract.
     if (Op.isSrcReg(0) && !Op.isSrcReg(1)) {
       ParsedReg SrcPr = Op.srcReg(0);
       int64_t CtrlImm = Op.srcImm(1);

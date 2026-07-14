@@ -27,7 +27,7 @@ namespace COMGR::hotswap {
 // Cross-lane VALU primitives -- the subset of VALU opcodes whose result
 // in lane L depends on values held by lane L' != L. Isolated from the
 // rest of handleVALU because this is exactly the surface the cross-
-// wave strategy (hotswap/docs/wave-size-translation.md §§5.3 and 7)
+// wave strategy (hotswap/docs/wave-size-translation.md sec. sec. 5.3 and 7)
 // keeps iterating on: every rewrite from the "wave-size-baked cross-
 // lane" rewrite table lands in this file, not scattered through the
 // VALU arithmetic sections.
@@ -38,7 +38,7 @@ namespace COMGR::hotswap {
 // selector is a silent miscompile for any kernel that feeds divergent
 // operands into the primitive. Several permlane variants here are
 // known broken (see the pending-rewrite table in wave-size-
-// translation.md §7); they stay same-lane for now but any new cross-
+// translation.md sec. 7); they stay same-lane for now but any new cross-
 // lane CanonicalOp must be modelled correctly before landing.
 
 // Shared `ds_bpermute`-based emulation of the `VOP_PERMLANE_SWAP`
@@ -82,7 +82,7 @@ namespace COMGR::hotswap {
 // The corpus patterns (e32 form, EXEC=full at the swap site) are
 // bit-exact correct under this emulation; fi/bc are accepted
 // without inspection and the EXEC=full assumption is documented
-// here.  P4.b future-hardening (wave-size-translation.md §10): a
+// here.  P4.b future-hardening (wave-size-translation.md sec. 10): a
 // "true fi=0 emulation" would zero inactive lanes' VGPR
 // contribution before the bpermute via `select EXEC[L], src, 0`,
 // at the cost of two extra selects per swap; a static alternative
@@ -151,7 +151,7 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
   // TWO `ds_bpermute` calls sharing `bpermIdx`:
   //
   //   * WAVE32 source -- ASYMMETRIC per-lane select matching the
-  //     MI400 Shader Programming Guide § V_PERMLANE16_SWAP_B32
+  //     MI400 Shader Programming Guide sec. V_PERMLANE16_SWAP_B32
   //     pragma (only two of the four 16-lane rows move).
   //
   //   * WAVE64 source -- SYMMETRIC cross-wired bpermute pair
@@ -188,7 +188,7 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
   Value *NewSrc0Out = nullptr;
   if (Ctx.Isa.isWave32()) {
     // Asymmetric gfx1250 semantic of `v_permlane16_swap_b32`
-    // (MI400 Shader Programming Guide § V_PERMLANE16_SWAP_B32
+    // (MI400 Shader Programming Guide sec. V_PERMLANE16_SWAP_B32
     // pragma, verbatim):
     //
     //   // Lanes 0:15 of src0 and lanes 16:31 of vdst swapped.
@@ -208,8 +208,8 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
     //                             :  src0_in[L]             // UNCHANGED
     //
     // where `L_low` is the low row of each partnered pair.  For
-    // the XOR-16 variant (partnerXorMask=16) that's `L ∈ [0,15]
-    // ∪ [32,47]` (i.e. `(L & 16) == 0`), which generalises
+    // the XOR-16 variant (partnerXorMask=16) that's `L in [0,15]
+    // union [32,47]` (i.e. `(L & 16) == 0`), which generalises
     // correctly to both MODREP wave32 replicas on the wave64
     // target (lanes 0..31 and 32..63).  The XOR-32 variant
     // cannot reach here (no wave32 ISA exposes
@@ -220,7 +220,7 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
     // (below) unconditionally -- over-swapping the "unchanged"
     // halves corrupted every `matmul_fp16` A-operand position
     // because vdst_in and src0_in carry distinct data at the
-    // swap site (see § 12.4.7 of hotswap/docs/matrix-
+    // swap site (see sec. 12.4.7 of hotswap/docs/matrix-
     // translation.md for the Session-8 root-cause pin).  The
     // self-preserve idiom (`vdst_in == src0_in == seed`, Triton
     // `tl.sort` / `tl.topk`) masqueraded as working because the
@@ -283,7 +283,7 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
 
   // ---- v_permlane16_b32 / v_permlanex16_b32 ----
   // P2 lowering -- see the permlane16 / permlanex16 row of hotswap/
-  // docs/wave-size-translation.md §5.3. Target constraint: `v_permlane16`
+  // docs/wave-size-translation.md sec. 5.3. Target constraint: `v_permlane16`
   // and `v_permlanex16` are RDNA/gfx10+ instructions and DO NOT exist
   // on CDNA (gfx9/gfx94x). Emitting `llvm.amdgcn.permlane16` or
   // `permlanex16` directly fails isel on gfx942 with "Cannot select:
@@ -302,7 +302,7 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   //   [4] src1 (SSrc_b32)  = sel_1                                here)
   //
   // Selector encoding: src1 and src2 are each 32-bit scalar values
-  // containing 8 × 4-bit per-lane selectors. src1 covers within-
+  // containing 8 x 4-bit per-lane selectors. src1 covers within-
   // group lanes 0..7, src2 covers within-group lanes 8..15. Each
   // 4-bit nibble selects a source lane within the 16-lane group.
   //
@@ -322,10 +322,10 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   //   result       = ds_bpermute(byte_addr, src0)
   //
   // Wave-width correctness under modulo-replication (hotswap/docs/
-  // wave-size-translation.md §6's wave-size-obliviousness theorem):
+  // wave-size-translation.md sec. 6's wave-size-obliviousness theorem):
   // the source gfx1250 kernel is wave32 so its selector values
-  // encode a shuffle pattern over 2 × 16-lane groups. On wave64
-  // target each modrep replica occupies 2 × 16-lane groups (R=2),
+  // encode a shuffle pattern over 2 x 16-lane groups. On wave64
+  // target each modrep replica occupies 2 x 16-lane groups (R=2),
   // and the `group ^ 0x10` swap stays within a replica (0<->1 within
   // replica 0, 2<->3 within replica 1), so the modrep invariant is
   // preserved for permlanex16. permlane16 keeps every lane within
@@ -426,7 +426,7 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
 
   // ---- v_permlane64_b32 ----
   // KNOWN LIMITATION -- see the v_permlane64_b32 row in the
-  // unrewritable table of hotswap/docs/wave-size-translation.md §7:
+  // unrewritable table of hotswap/docs/wave-size-translation.md sec. 7:
   // no wave32 analogue, so
   // the Phase 1.4.5 classifier refuses this op in any cross-wave
   // lift (it is taxonomised as FullWaveRotate / unrewritable). The
@@ -444,7 +444,7 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   // ---- gfx950 lane-swap: v_permlane16_swap_b32 ----
   //
   // P4 lowering -- see the permlane16_swap row of hotswap/docs/wave-
-  // size-translation.md §5.3. Exchanges two VGPRs across
+  // size-translation.md sec. 5.3. Exchanges two VGPRs across
   // lanes 0..15 <-> 16..31 within each 32-lane group. Two defs
   // (vdst, src0_out) and two tied uses (vdst_in tied to vdst,
   // src0 tied to src0_out). Effect:
@@ -498,7 +498,7 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   // probing other targets (e.g. gfx950 which has the native
   // instruction) is left for hardware-availability work and is the
   // P4.b sub-item recorded in hotswap/docs/wave-size-translation.md
-  // §10 (known gaps). The emulation
+  // sec. 10 (known gaps). The emulation
   // independently maps onto the published .td swap semantics
   // (VOP_PERMLANE_SWAP profile), so per-target hardware-vs-
   // emulation parity follows from emulation-correctness +
@@ -557,7 +557,7 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     //
     // Refusal in both cases preserves the "refuse when uncertain"
     // contract documented on the P4 pending row of
-    // hotswap/docs/wave-size-translation.md §5.3; the wave64 ->
+    // hotswap/docs/wave-size-translation.md sec. 5.3; the wave64 ->
     // wave64 path below is the positive case this handler now
     // lifts.  The XOR-16 sibling has no equivalent precondition
     // because its partner stays within each 32-lane half

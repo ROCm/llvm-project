@@ -99,7 +99,7 @@ namespace {
 void emitEnumeratedDispatch(RaiseContext &Ctx, Value *TargetInt,
                             ArrayRef<uint64_t> Targets,
                             uint64_t SiteOffset) {
-  assert(!Targets.empty() && "enumerated dispatch needs ≥1 target");
+  assert(!Targets.empty() && "enumerated dispatch needs >=1 target");
   assert(TargetInt->getType() == Ctx.I64Ty &&
          "enumerated dispatch expects i64 target marker");
 

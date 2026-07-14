@@ -33,7 +33,7 @@ namespace COMGR::hotswap {
 // Cross-lane primitives: V_READFIRSTLANE_B32, V_READLANE_B32,
 // V_WRITELANE_B32, V_MBCNT_{LO,HI}_U32_B32, V_PERMLANE{16,X16,64}_B32,
 // V_PERMLANE{16,32}_SWAP_B32. Isolated because the cross-wave
-// strategy (hotswap/docs/wave-size-translation.md §§5.3 and 7) keeps
+// strategy (hotswap/docs/wave-size-translation.md sec. sec. 5.3 and 7) keeps
 // iterating on exactly this surface.
 llvm::Expected<HandlerResult>
 handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op);

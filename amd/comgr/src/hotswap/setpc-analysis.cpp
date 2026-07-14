@@ -94,7 +94,7 @@
 //             logic, identifies it by `retPairLowReg` membership) OR
 //             (b) a DispatchSet site, where retention is conditional
 //             on BOTH `retPairLowReg == DispatchSet.indirectRetPairLowReg`
-//             AND `resolvedReturnAddr ∈ DispatchSet.indirectTargets`
+//             AND `resolvedReturnAddr in DispatchSet.indirectTargets`
 //             (so dead chain terminators that don't match a target
 //             are still pruned). Build per-pair return-target lists
 //             for IndirectB. Drop unused terminators so the raiser's
@@ -937,11 +937,11 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
   //   entryFacts[blockIdx][pairLow] = PcLatticeValue
   //
   // Formulation: at each block B,
-  //   entryFacts[B] = JOIN over P ∈ preds(B) of exitFacts(P)
+  //   entryFacts[B] = JOIN over P in preds(B) of exitFacts(P)
   //
   // where exitFacts(P) = transfer(entryFacts[P], P.transfers):
   //   - SET overrides any incoming entry with {value, !incomplete}
-  //   - KILL overrides with {∅, incomplete}
+  //   - KILL overrides with {empty, incomplete}
   //   - PASS leaves the entry unchanged
   //
   // and JOIN is set-union of `values` + OR of `incomplete` bits, with

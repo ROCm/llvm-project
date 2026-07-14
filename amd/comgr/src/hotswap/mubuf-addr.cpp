@@ -44,7 +44,7 @@ namespace {
 // so the fix is required for the BUFFER_STORE rewrite to actually
 // hit the right address. CPol bits are otherwise still dropped (see
 // the "Not refused here" note in handle-mubuf.cpp's refusal block,
-// and §"Known limitations" of hotswap/docs/buffer-store-lowering.md).
+// and sec. "Known limitations" of hotswap/docs/buffer-store-lowering.md).
 struct MubufOps {
   ParsedReg Srsrc;
   ParsedReg Vaddr;

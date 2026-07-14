@@ -9,7 +9,7 @@
 #ifndef HOTSWAP_TRANSPILER_MXFP4_DEQUANT_H
 #define HOTSWAP_TRANSPILER_MXFP4_DEQUANT_H
 
-// see hotswap/docs/matrix-translation.md §7.4 -- MXFP4 dequant primitive,
+// see hotswap/docs/matrix-translation.md sec. 7.4 -- MXFP4 dequant primitive,
 // cross-target lowering of v_cvt_scale_pk8_bf16_fp4 (gfx1250-only VOP3)
 // into per-nibble bit-algebra expansion on any target that lacks the
 // primitive (gfx942/gfx950).
@@ -23,7 +23,7 @@
 //     step-for-step.  The algorithm is: decompose FP4 E2M1 into
 //     (sign, exp_fp4, mant_fp4); synthesise BF16 normal-vs-subnormal
 //     field values directly; add `scale_byte - 127` to the BF16
-//     exponent; handle NaN scale / fp4 ±0 / overflow / underflow
+//     exponent; handle NaN scale / fp4 +/-0 / overflow / underflow
 //     branches.
 //
 //   * `mxfp4LutBf16Bits` -- a slower, more obvious LUT-based
@@ -42,7 +42,7 @@
 // Both functions encode the `scale_sel == 0` semantics only -- i.e.
 // the scale byte is taken from the low byte of the 32-bit scale
 // register.  `scale_sel != 0` is outside the declared support set;
-// the handler refuses loudly.  See matrix-translation.md §7.4 for
+// the handler refuses loudly.  See matrix-translation.md sec. 7.4 for
 // the corpus-provenance argument (both `_matmul_ogs_*` blobs use
 // only scale_sel=0 across 128 instances combined).
 
@@ -74,8 +74,8 @@ namespace mxfp4 {
 //
 // Output corners
 //   scale_byte == 0xFF        -> BF16 canonical qNaN (0x7FC0)
-//   fp4 encodes ±0            -> BF16 ±0 preserving sign (finite scale)
-//   new_exp >= 0xFF            -> BF16 ±Inf preserving sign
+//   fp4 encodes +/-0            -> BF16 +/-0 preserving sign (finite scale)
+//   new_exp >= 0xFF            -> BF16 +/-Inf preserving sign
 //   new_exp in [1, 254]        -> BF16 normal with mantissa preserved
 //   new_exp <= 0               -> BF16 subnormal via right-shift of the
 //                                implicit-1.mant; zero when all bits fall
@@ -89,7 +89,7 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte);
 // side silently encoded an OCP-spec miscount.
 //
 // Returns an error if the intermediate exact-double falls outside the
-// declared FP4 × power-of-2 domain (Inf/NaN or a value needing rounding).
+// declared FP4 x power-of-2 domain (Inf/NaN or a value needing rounding).
 llvm::Expected<uint16_t> mxfp4LutBf16Bits(uint8_t Nibble, uint8_t ScaleByte);
 
 // 16-entry FP4 E2M1 -> BF16 table, exposed for the unit test to pin

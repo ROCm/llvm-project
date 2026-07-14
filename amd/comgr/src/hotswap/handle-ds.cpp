@@ -41,7 +41,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   // table is how we prevent the former silent-miscompile shape
   // (single contiguous `<N x i32>` load at raw offset0) from ever
   // being reachable again; if a handler ever falls through to here
-  // with a DS_READ2* CanonicalOp the dsClassify default returns {-1, 0, …}
+  // with a DS_READ2* CanonicalOp the dsClassify default returns {-1, 0, ...}
   // and the generic block below surfaces it as `unsupportedInstructionForm`
   // rather than silently emitting wrong IR.
   auto DsClassify = [](CanonicalOp S) -> std::tuple<int, int, bool> {
@@ -77,10 +77,10 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   //
   // Hardware behaviour (gfx1250, Wave32):
   //   Each lane provides a base address via VGPR + immediate offset.  The
-  //   hardware reads 128 bits (8 × i16) from each lane's LDS address, then
+  //   hardware reads 128 bits (8 x i16) from each lane's LDS address, then
   //   transposes the data across lanes within groups of 8.
   //
-  //   Per the CDNA4 ISA doc §11.4 (gfx950 DS_READ_B64_TR_B16):
+  //   Per the CDNA4 ISA doc sec. 11.4 (gfx950 DS_READ_B64_TR_B16):
   //   "Read N bits of data per lane from data share. Interpret the data as
   //    a matrix with 16 bit elements and transpose the matrix."
   //   "Each lane (one VGPR) holds 4 consecutive M or N values."
@@ -89,14 +89,14 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   //   register layout where each thread holds K-contiguous elements.
   //
   // Software emulation (for gfx942 which lacks transpose loads):
-  //   1. Contiguous 128-bit load (4 × i32) from each lane's address.
-  //   2. 8×8 cross-lane transpose via ds_bpermute within groups of 8 lanes:
+  //   1. Contiguous 128-bit load (4 x i32) from each lane's address.
+  //   2. 8x8 cross-lane transpose via ds_bpermute within groups of 8 lanes:
   //        result[lane][elem] = raw[group_base + elem][lane_in_group]
   //      This exchanges rows and columns so that each lane, which started
   //      with 8 values from consecutive M positions for one K column, now
   //      holds 8 values from different K columns for its M position.
   // gfx950 ds_read_b64_tr_b16: LDS transpose read, returns 64 bits as
-  // v4i16 (4 × i16). Emit the LLVM intrinsic so the backend can lower it
+  // v4i16 (4 x i16). Emit the LLVM intrinsic so the backend can lower it
   // to the correct instruction for the target ISA (native on gfx950,
   // software-emulated on targets that lack it).
   if (Sop == CanonicalOp::DS_READ_B64_TR_B16) {
@@ -125,7 +125,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   // 64-bit transposed LDS load with 8-bit elements (gfx950
   // `ds_read_b64_tr_b8` and its gfx1250 spelling `ds_load_tr8_b64`).
   //
-  // Hardware behaviour (CDNA4 ISA §11.4 / RDNA4 gfx1250 spec):
+  // Hardware behaviour (CDNA4 ISA sec. 11.4 / RDNA4 gfx1250 spec):
   //   Each lane provides a base address via VGPR + immediate offset.
   //   The hardware reads 64 bits (8 x i8) from each lane's LDS
   //   address, then transposes across 8-lane groups so each lane
@@ -428,7 +428,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   // a contiguous `<2 x i32>` load coincide with the hardware's bytes 0
   // and 4 reads. The corpus repeatedly violates that happy case (see
   // e.g. kerneldex scope_discovery___matmul_ogs_*: `offset0:4 offset1:6`,
-  // `offset0:64 offset1:66`, …). This block therefore emits two
+  // `offset0:64 offset1:66`, ...). This block therefore emits two
   // independent loads/stores at the correctly-scaled byte addresses,
   // writing the two results into the dest VGPR pair in MCInst order
   // (dw0 <- access 0, dw1 <- access 1 for B32; four-dword destination
@@ -668,7 +668,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     }
   }
   // D16_HI partial-store family: ds_store_b16_d16_hi /
-  // ds_store_b8_d16_hi (DSInstructions.td §604-606, gfx8+ behind
+  // ds_store_b8_d16_hi (DSInstructions.td sec. 604-606, gfx8+ behind
   // SubtargetPredicate=HasD16LoadStore). Both shift the source
   // VGPR right by 16 to surface its UPPER half, then truncate to
   // 16 or 8 bits and store to LDS at addr=src(0)+immOffset.
@@ -790,7 +790,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // wave must participate or the result in inactive lanes is
     // undefined. For lanes that are inactive in the source kernel,
     // their `src1` input is the ambient VGPR value (possibly the
-    // 0xA5A5… sentinel), but since no lane *reads* from an inactive
+    // 0xA5A5... sentinel), but since no lane *reads* from an inactive
     // lane under a correct selector, the undef propagation does not
     // affect the active-lane outputs. If a future handler needs to
     // emit `ds_bpermute` on a value that was written inside an SPE
@@ -823,7 +823,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   }
   if (Sop == CanonicalOp::DS_SWIZZLE_B32) {
     // P6 lowering -- see the ds_swizzle_b32 row of hotswap/docs/wave-
-    // size-translation.md §5.3: lift `ds_swizzle_b32` through
+    // size-translation.md sec. 5.3: lift `ds_swizzle_b32` through
     // `llvm.amdgcn.ds.swizzle`. The intrinsic signature is
     //   declare i32 @llvm.amdgcn.ds.swizzle(i32 %src, i32 immarg %offset)
     // (`ImmArg<ArgIndex<1>>`), so the second operand MUST be a
@@ -884,7 +884,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     //   * BROADCAST(32, 5) (imm=0x00A0, BITMASK_PERM): lanes 0..31
     //     -> lane 5, lanes 32..63 -> lane 37 (= 32+5).
     //   * SWAP-1           (imm=0x041F, BITMASK_PERM): lane 32<->33,
-    //     34<->35, …, 62<->63. Each 32-lane half pairs internally.
+    //     34<->35, ..., 62<->63. Each 32-lane half pairs internally.
     //   * FFT 0x00         (imm=0xE000): 5-bit-reverse within each
     //     32-lane half (lanes 32..63 produce lower-half-result + 32).
     //   * FFT 0x10         (imm=0xE010): 4-bit-reverse within each

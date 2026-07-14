@@ -30,7 +30,7 @@ struct MCState;
 // A *projection* maps a source-ISA wavefront onto a target-ISA wavefront
 // when the two wave widths differ. This is an abstract base; see
 // `ModuloReplicationProjection` below for the sole concrete policy in
-// use today. hotswap/docs/wave-size-translation.md §2.2 catalogues the
+// use today. hotswap/docs/wave-size-translation.md sec. 2.2 catalogues the
 // alternatives (thread-loop, scalarisation, half-wave-masking) that
 // are not yet implemented but whose implementations would each be a
 // new subclass.
@@ -79,7 +79,7 @@ public:
 
   // EXEC alloca storage width chosen by the projection. Modulo-
   // replication returns the source wave width (the long-standing
-  // default, see hotswap/docs/wave-size-translation.md §5.1); wave-
+  // default, see hotswap/docs/wave-size-translation.md sec. 5.1); wave-
   // native cross-widening returns the target hardware wave mask
   // width (`WaveMaskTy`) so a target-width ballot from a data-
   // dependent `v_cmpx` AND's directly into EXEC without losing the
@@ -118,8 +118,8 @@ public:
   // `SIPreAllocateWWMRegs` on large matmul kernels: that pass requires
   // a DEDICATED physical VGPR per vreg defined inside a WWM bracket,
   // and the WWM def-chain from an MFMA-output marker walks back
-  // through the entire accumulator initialisation (≈200 IMPLICIT_DEF
-  // / AV_MOV_B32 0 defs in a 128×128 f16 matmul tile's entry region),
+  // through the entire accumulator initialisation (~200 IMPLICIT_DEF
+  // / AV_MOV_B32 0 defs in a 128x128 f16 matmul tile's entry region),
   // which cannot fit in gfx942's 256-VGPR pool once the kernel's
   // own computation has claimed its share. Moving the EXEC=-1
   // guarantee to kernel entry sidesteps the allocator pressure
@@ -246,7 +246,7 @@ public:
   // each target wave under this projection's mapping.  Callers that
   // synthesise per-source-wave passes (most notably the WMMA -> MFMA
   // redistribute / MFMA / collect pipeline in `wmma-lowering.cpp`)
-  // iterate `groupBase ∈ {0, W_src, ..., (numSourceWavesPerTarget() -
+  // iterate `groupBase in {0, W_src, ..., (numSourceWavesPerTarget() -
   // 1) * W_src}` so that each pass covers exactly one source wave's
   // worth of data.
   //
@@ -281,7 +281,7 @@ public:
   // this is an identity: returning the input unchanged avoids the
   // regalloc pressure that `SIPreAllocateWWMRegs` would impose if
   // we emitted a redundant marker (see `WaveProjection::emitInitial
-  // Exec`'s block comment for the 128×128-matmul accumulator-ring
+  // Exec`'s block comment for the 128x128-matmul accumulator-ring
   // failure mode).
   //
   // The marker tells the AMDGPU backend's `SIWholeQuadMode` pass
@@ -355,8 +355,8 @@ protected:
 //     `lane_id mod W_src` (`extractLaneBitFromWaveMask`).
 //
 // None of that is a hardware fact -- it is a *choice*. See hotswap/
-// docs/wave-size-translation.md §6 for the correctness theorem
-// (wave-size-obliviousness) and §2.2 for the alternatives.
+// docs/wave-size-translation.md sec. 6 for the correctness theorem
+// (wave-size-obliviousness) and sec. 2.2 for the alternatives.
 class ModuloReplicationProjection final : public WaveProjection {
 public:
   using WaveProjection::WaveProjection;
@@ -423,7 +423,7 @@ public:
 // widening. Instantiating it for same-wave or narrowing directions
 // would make `broadcastNarrowExecLoWrite()` change EXEC semantics in
 // directions the source author can disambiguate, so the constructor
-// asserts. The ladder in hotswap/docs/wave-size-translation.md §2.2
+// asserts. The ladder in hotswap/docs/wave-size-translation.md sec. 2.2
 // still reserves `ThreadLoopProjection` for higher-obligation
 // rewrites; wave-native sits between the two as the first rung that
 // handles data-dependent EXEC writes correctly without restructuring
@@ -463,7 +463,7 @@ public:
 
 // ============================================================================
 // ThreadLoopProjection -- second rung of the coverage ladder described
-// in hotswap/docs/wave-size-translation.md §2.2.
+// in hotswap/docs/wave-size-translation.md sec. 2.2.
 //
 // The thread-loop rung is the coverage-ladder home for source-wave-scoped
 // execution. The current implementation is the first useful subset: it banks
@@ -471,7 +471,7 @@ public:
 // workitem id through one projection hook, so C5 equality predicates can keep
 // the two packed source waves distinct. It does NOT yet clone the full CFG into
 // a temporal `for iter in 0..R` loop, and it still does NOT dissolve Class 2
-// cross-lane obstructions (see wave-size-translation.md §7's unrewritable and
+// cross-lane obstructions (see wave-size-translation.md sec. 7's unrewritable and
 // pending tables).
 //
 // This implementation provides a conservative projection surface:
@@ -491,14 +491,14 @@ public:
 // outcome (a) under thread-loop), the steps are:
 //   1. Populate the overridden emitters with thread-loop semantics
 //      (follow the projection sketch in wave-size-translation.md
-//      §2.2's projections table).
+//      sec. 2.2's projections table).
 //   2. Add the additional correctness obligations the thread-loop
 //      projection introduces -- barrier hoisting, LDS-aliasing -- as
 //      extra checks in `buildObstructionReport` gated on the current
 //      projection choice.
 //   3. Extend `decideProjection` to try thread-loop after modulo-
 //      replication refuses, per the ladder in wave-size-
-//      translation.md §2.2.
+//      translation.md sec. 2.2.
 class ThreadLoopProjection final : public WaveProjection {
 public:
   ThreadLoopProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
@@ -549,7 +549,7 @@ private:
 //       defs always come first in the MCInst operand list) and classify
 //       each through `AMDGPU::mc2PseudoReg`, same as (a).
 //
-// (a) ∪ (b) is exhaustive for AMDGPU: an MCInst either defines a
+// (a) union (b) is exhaustive for AMDGPU: an MCInst either defines a
 // register implicitly (via TableGen `let Defs = [...]`) or explicitly
 // (as an `outs` operand). There is no third path. Both halves ground in
 // MCInstrDesc; no mnemonic parsing and no per-opcode lists.

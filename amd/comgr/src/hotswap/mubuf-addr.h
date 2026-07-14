@@ -30,7 +30,7 @@ namespace COMGR::hotswap {
 // `auxFlags` is always a zero i32 -- the raw buffer intrinsics take it
 // but today's raiser doesn't surface cpol/th/scope (see the
 // "auxFlags is hard-coded to 0" item in
-// hotswap/docs/buffer-store-lowering.md §"Known limitations").
+// hotswap/docs/buffer-store-lowering.md sec. "Known limitations").
 //
 // For stores and atomics, `stData` is the VGPR source carrying the data.
 // For loads it's a default-constructed ParsedReg (kind == OTHER).

@@ -562,7 +562,7 @@ Value *RaiseContext::emitUpdateDpp(Value *OldVal, Value *Src, uint16_t Ctrl,
                                     uint8_t RowMask, uint8_t BankMask,
                                     bool BoundCtrl) {
   // P5 lowering -- see the DPP row of hotswap/docs/wave-size-
-  // translation.md §5.3: lift the DPP src-pathway modifier through
+  // translation.md sec. 5.3: lift the DPP src-pathway modifier through
   // `llvm.amdgcn.update.dpp`. The intrinsic is type-overloaded
   // (`llvm_any_ty`). We route through integer overloads sized to match
   // the input's bit-width and bitcast through when the input is a
@@ -627,11 +627,11 @@ Value *RaiseContext::emitLaneActiveBit() {
   //
   //   Each emitUnderExec diamond is structurally linear:
   //
-  //     preBB ──┬─▶ doBB ──▶ skipBB
-  //             └────────────▶ skipBB   (the conditional skip edge)
+  //     preBB --+-> doBB --> skipBB
+  //             +------------> skipBB   (the conditional skip edge)
   //
   //   Chaining N emitUnderExecs yields
-  //     preBB -> (doBB1 -> skipBB1) -> (doBB2 -> skipBB2) -> … -> skipBBN
+  //     preBB -> (doBB1 -> skipBB1) -> (doBB2 -> skipBB2) -> ... -> skipBBN
   //
   //   where every successor BB has preBB on its dominator path. So an
   //   i1 defined in preBB dominates every subsequent doBB/skipBB emitted
@@ -756,7 +756,7 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
   // write side: `(v << W_src) | v` lifts a wave32 scalar wave mask
   // to a wave64 scalar wave mask where target lane K and K+W_src
   // agree. This keeps the save/restore round trip `s_mov_b32 sN,
-  // exec_lo; …; s_mov_b32 exec_lo, sN` behaving as the wave32
+  // exec_lo; ...; s_mov_b32 exec_lo, sN` behaving as the wave32
   // author expected, and matches the replication done inside
   // `WaveNativeProjection::extractLaneBitFromWaveMask` on the VCC
   // consumer side.
@@ -820,7 +820,7 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
   // (lane-31 bit), etc. An earlier `ConstantInt::getSigned(srcTy,
   // di.getImm(opIdx))` misinterpreted the container as a SIGNED
   // value and, on a wave32 source whose immediate reads as
-  // `uint32_t ≥ 0x80000000`, tripped APInt's signed-range assertion
+  // `uint32_t >= 0x80000000`, tripped APInt's signed-range assertion
   // (`isIntN(BitWidth, val) && "Value is not an N-bit signed
   // value"`) -- because `(int64_t)0xFFFF0000 == +4294901760` is
   // outside `[-2^31, 2^31 - 1]`.

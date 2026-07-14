@@ -26,7 +26,7 @@ class OpcodeMap;
 // translation gates. Grows incrementally as new per-writer predicates
 // are needed (today only `routesExecThroughStoreExec`; the wave-size-
 // obliviousness predicate from hotswap/docs/wave-size-translation.md
-// §7's decision procedure will attach here too).
+// sec. 7's decision procedure will attach here too).
 //
 // Default-constructed attrs mean "no declared guarantees" -- the gate
 // aborts for any EXEC-writer encountered that does not have its

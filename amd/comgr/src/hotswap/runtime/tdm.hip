@@ -23,7 +23,7 @@
 //   * Atomic-barrier emit is gated to source-local lane 0.
 //
 // Field offsets follow the MI450 SPG Tensor DMA Resource Descriptor
-// tables (79–84).
+// tables (79-84).
 //
 //===----------------------------------------------------------------------===//
 

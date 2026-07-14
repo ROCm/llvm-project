@@ -393,7 +393,7 @@ Expected<HandlerResult> handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
              << " writes load-bearing or unknown HWREG id=" << HwregId
              << " -- refusing to lower. Dropping this write would silently "
                 "change compute semantics (FLAT aperture, trap handler, "
-                "XNACK retry, …) that subsequent lifted instructions "
+                "XNACK retry, ...) that subsequent lifted instructions "
                 "rely on.\n";
       return Hr;
     }

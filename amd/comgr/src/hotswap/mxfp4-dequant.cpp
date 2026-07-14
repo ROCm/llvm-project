@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// see hotswap/docs/matrix-translation.md §7.4 -- MXFP4 dequant primitive.
+// see hotswap/docs/matrix-translation.md sec. 7.4 -- MXFP4 dequant primitive.
 //
 // Two-way reference implementation for cross-target lowering of
 // `v_cvt_scale_pk8_bf16_fp4` (gfx1250-only VOP3).  See mxfp4-dequant.h
@@ -24,14 +24,14 @@ namespace mxfp4 {
 
 // OCP MXFP FP4 E2M1 -> BF16 bit patterns at identity scale (2^0).
 // Derivation (OCP MXFP spec):
-//   0b0000 / 0b1000 -> ±0.0   = 0x0000 / 0x8000   (BF16 ±0)
-//   0b0001 / 0b1001 -> ±0.5   = 0x3F00 / 0xBF00   (BF16 exp=126, mant=0)
-//   0b0010 / 0b1010 -> ±1.0   = 0x3F80 / 0xBF80   (BF16 exp=127, mant=0)
-//   0b0011 / 0b1011 -> ±1.5   = 0x3FC0 / 0xBFC0   (BF16 exp=127, mant=0x40)
-//   0b0100 / 0b1100 -> ±2.0   = 0x4000 / 0xC000   (BF16 exp=128, mant=0)
-//   0b0101 / 0b1101 -> ±3.0   = 0x4040 / 0xC040   (BF16 exp=128, mant=0x40)
-//   0b0110 / 0b1110 -> ±4.0   = 0x4080 / 0xC080   (BF16 exp=129, mant=0)
-//   0b0111 / 0b1111 -> ±6.0   = 0x40C0 / 0xC0C0   (BF16 exp=129, mant=0x40)
+//   0b0000 / 0b1000 -> +/-0.0   = 0x0000 / 0x8000   (BF16 +/-0)
+//   0b0001 / 0b1001 -> +/-0.5   = 0x3F00 / 0xBF00   (BF16 exp=126, mant=0)
+//   0b0010 / 0b1010 -> +/-1.0   = 0x3F80 / 0xBF80   (BF16 exp=127, mant=0)
+//   0b0011 / 0b1011 -> +/-1.5   = 0x3FC0 / 0xBFC0   (BF16 exp=127, mant=0x40)
+//   0b0100 / 0b1100 -> +/-2.0   = 0x4000 / 0xC000   (BF16 exp=128, mant=0)
+//   0b0101 / 0b1101 -> +/-3.0   = 0x4040 / 0xC040   (BF16 exp=128, mant=0x40)
+//   0b0110 / 0b1110 -> +/-4.0   = 0x4080 / 0xC080   (BF16 exp=129, mant=0)
+//   0b0111 / 0b1111 -> +/-6.0   = 0x40C0 / 0xC0C0   (BF16 exp=129, mant=0x40)
 const uint16_t kMxfp4ToBf16Table[16] = {
     0x0000, 0x3F00, 0x3F80, 0x3FC0,
     0x4000, 0x4040, 0x4080, 0x40C0,
@@ -55,9 +55,9 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
   uint32_t Bf16ExpNorm  = ExpFp4 + 126u;
   uint32_t Bf16MantNorm = MantFp4 ? 0x40u : 0x00u;
 
-  // Subnormal-FP4 branch (exp_fp4 == 0): FP4 value is ±0 (mant_fp4=0)
-  // or ±0.5 (mant_fp4=1).  ±0.5 is representable as a BF16 NORMAL
-  // (exp=126, mant=0); ±0 is BF16 ±0 (exp=0, mant=0 with sign).
+  // Subnormal-FP4 branch (exp_fp4 == 0): FP4 value is +/-0 (mant_fp4=0)
+  // or +/-0.5 (mant_fp4=1).  +/-0.5 is representable as a BF16 NORMAL
+  // (exp=126, mant=0); +/-0 is BF16 +/-0 (exp=0, mant=0 with sign).
   uint32_t Bf16ExpSub   = MantFp4 ? 126u : 0u;
   uint32_t Bf16MantSub  = 0u;
 
@@ -67,8 +67,8 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
 
   // Apply the E8M0 scale by adjusting the BF16 exponent field.  For
   // scale_byte == 0xFF the output is NaN regardless of the FP4
-  // nibble (IEEE-754 0 × NaN = NaN).  For FP4 ±0 inputs (bf16
-  // magnitude == 0) the output is ±0 preserving sign (finite-scale
+  // nibble (IEEE-754 0 x NaN = NaN).  For FP4 +/-0 inputs (bf16
+  // magnitude == 0) the output is +/-0 preserving sign (finite-scale
   // case), which falls out of the zero-exp + zero-mant branch
   // trivially without the scale add.
   uint32_t Scale = static_cast<uint32_t>(ScaleByte);
@@ -85,7 +85,7 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
   uint32_t Magnitude = (Bf16Exp << 7) | Bf16Mant;  // low 15 bits
   uint32_t SignField = SignBit << 15;
   if (Magnitude == 0u) {
-    // FP4 ±0: result is ±0 regardless of the (finite) scale.  Sign
+    // FP4 +/-0: result is +/-0 regardless of the (finite) scale.  Sign
     // comes from the FP4 nibble's sign bit.
     return static_cast<uint16_t>(SignField);
   }
@@ -99,7 +99,7 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
       static_cast<int32_t>(Scale) - 127;
 
   if (NewExpI >= 0xFF) {
-    // Overflow to BF16 ±Inf (BF16 supports inf; FP4 does not, but the
+    // Overflow to BF16 +/-Inf (BF16 supports inf; FP4 does not, but the
     // destination format's semantics apply after the scale add).
     return static_cast<uint16_t>(SignField | 0x7F80u);
   }
@@ -114,7 +114,7 @@ uint16_t mxfp4BitAlgebraBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
 
   // Underflow into BF16 subnormal range.  BF16 subnormals are
   // representable down to value = 2^-133 (mant = 0x01, exp = 0); any
-  // result below that decays to ±0.  Construct the subnormal bit
+  // result below that decays to +/-0.  Construct the subnormal bit
   // pattern by shifting the implicit-1.mant value right by the
   // amount the exponent fell below 1.
   uint32_t Implicit1Mant = 0x80u | Bf16Mant;     // 0x80 (FP4=1) or 0xC0 (FP4=1.5)
@@ -143,14 +143,14 @@ constexpr double kMxfp4ToDouble[16] = {
 // semantics, NOT a case for silent rounding):
 //
 //   * Input is finite (not Inf/NaN).  `mxfp4LutBf16Bits` computes
-//     `fp4_val * scale` where `fp4_val` is finite (max ±6.0) and
+//     `fp4_val * scale` where `fp4_val` is finite (max +/-6.0) and
 //     `scale` is a finite power of 2 (2^-127..2^127), so the product
 //     is always finite.  Scale-byte 0xFF (E8M0 NaN) is handled by
 //     the caller BEFORE this function, so NaN doubles never arrive
 //     here.
 //
 //   * The double's 52-bit mantissa has its low 45 bits zero.  Our
-//     inputs are always FP4 mantissas (∈ {0, 1.0, 1.5}) scaled by
+//     inputs are always FP4 mantissas (in {0, 1.0, 1.5}) scaled by
 //     powers of 2; the non-zero mantissa cases have bit 51 set and
 //     nothing below it.  A double with non-zero low-45 bits cannot
 //     arise from our declared input domain, and would require RTE
@@ -162,8 +162,8 @@ constexpr double kMxfp4ToDouble[16] = {
 // With those preconditions, the conversion is purely exponent-field
 // remapping: the top 7 bits of the double's mantissa become the
 // BF16 mantissa, no rounding.  Overflow (BF16 exp >= 0xFF) saturates
-// to ±Inf; underflow (BF16 exp < 1) produces an exact BF16 subnormal
-// or ±0 via right-shift of the implicit-1.mant field.
+// to +/-Inf; underflow (BF16 exp < 1) produces an exact BF16 subnormal
+// or +/-0 via right-shift of the implicit-1.mant field.
 llvm::Expected<uint16_t> exactDoubleToBf16(double V) {
   uint64_t U;
   static_assert(sizeof(U) == sizeof(V), "double must be 64 bits");
@@ -175,18 +175,18 @@ llvm::Expected<uint16_t> exactDoubleToBf16(double V) {
   if (ExpD == 0x7FFu) {
     return llvm::createStringError(
         "mxfp4::exactDoubleToBf16: Inf/NaN input not representable "
-        "under declared FP4 * power-of-2 input domain");
+        "under declared FP4 x power-of-2 input domain");
   }
   uint64_t Low45 = MantD & ((uint64_t{1} << 45) - 1);
   if (Low45 != 0) {
     return llvm::createStringError(
         "mxfp4::exactDoubleToBf16: non-zero low-45 mantissa bits "
         "would require BF16 rounding; input outside declared "
-        "FP4 * power-of-2 domain");
+        "FP4 x power-of-2 domain");
   }
   if (ExpD == 0u) {
     // Double subnormal/zero: every value below 2^-1022 is below the
-    // BF16 subnormal floor of 2^-133, so the result is ±0.
+    // BF16 subnormal floor of 2^-133, so the result is +/-0.
     return static_cast<uint16_t>(Sign << 15);
   }
 
@@ -195,7 +195,7 @@ llvm::Expected<uint16_t> exactDoubleToBf16(double V) {
   int32_t BfExp = EUnbiased + 127;
 
   if (BfExp >= 0xFF) {
-    // Overflow beyond BF16 finite range -> saturate to ±Inf.
+    // Overflow beyond BF16 finite range -> saturate to +/-Inf.
     return static_cast<uint16_t>((Sign << 15) | 0x7F80u);
   }
 
@@ -252,8 +252,8 @@ llvm::Expected<uint16_t> mxfp4LutBf16Bits(uint8_t Nibble, uint8_t ScaleByte) {
   double Fp4Val = kMxfp4ToDouble[Nibble & 0xFu];
   double Scale   = e8m0ScaleToDouble(ScaleByte);
   double Scaled  = Fp4Val * Scale;  // exact: power-of-2 mul
-  // `exactDoubleToBf16` handles ±0 (which fp4 * finite-scale
-  // produces directly when fp4_val is ±0), overflow to Inf, and
+  // `exactDoubleToBf16` handles +/-0 (which fp4 * finite-scale
+  // produces directly when fp4_val is +/-0), overflow to Inf, and
   // subnormal underflow uniformly -- returning an error on any input
   // it cannot convert without rounding.
   return exactDoubleToBf16(Scaled);

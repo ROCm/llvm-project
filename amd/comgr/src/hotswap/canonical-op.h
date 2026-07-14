@@ -941,10 +941,10 @@ enum class CanonicalOp : uint16_t {
   // a separate set with their own tied-source dest_in handling.
   DS_WRITE_B16_D16_HI, DS_WRITE_B8_D16_HI,
   DS_BPERMUTE_B32,
-  // Class 2 DsSwizzle (hotswap/docs/wave-size-translation.md §6).
+  // Class 2 DsSwizzle (hotswap/docs/wave-size-translation.md sec. 6).
   // Wave-width-specific cross-lane shuffle. The handler refuses with
   // `unsupportedInstructionForm` until the P6 rewrite (lift through
-  // llvm.amdgcn.ds.swizzle -- see wave-size-translation.md §5.3 row
+  // llvm.amdgcn.ds.swizzle -- see wave-size-translation.md sec. 5.3 row
   // P6) lands; the wave-size classifier
   // (wave-size-obstruction.cpp) flags it before the handler is even
   // dispatched in the cross-wave case.
@@ -980,7 +980,7 @@ enum class CanonicalOp : uint16_t {
   BUFFER_ATOMIC_ADD, BUFFER_ATOMIC_SUB,
   BUFFER_ATOMIC_AND, BUFFER_ATOMIC_OR, BUFFER_ATOMIC_XOR,
   // Class 3 non-commutative atomics (NonCommutativeAtomic), see
-  // hotswap/docs/wave-size-translation.md §6.
+  // hotswap/docs/wave-size-translation.md sec. 6.
   // The wave-size classifier flags these in the cross-wave case;
   // handle-mubuf.cpp models them with raw-buffer atomics so same-wave
   // and same-target lifts preserve descriptor-relative addressing.
@@ -1063,7 +1063,7 @@ enum class CanonicalOp : uint16_t {
   // per-lane fragment shape (A,B: <8 x i32> = 32 fp8/bf8 bytes per
   // Wave32 lane, C/D: <8 x f32>) and the same gfx942 MFMA decomposition
   // path through `emitWMMAtoMFMA`. The K=64 dimension splits into
-  // 2 chained K=32 MFMAs per Wave32 group, mirroring the K=32->2×K=16
+  // 2 chained K=32 MFMAs per Wave32 group, mirroring the K=32->2xK=16
   // split used for the 16-bit variants. The lane-redistribution math
   // is byte-identical between the two K-families (32 bytes per lane
   // either way), so the only divergence inside `emitWMMAtoMFMA` is the
@@ -1094,7 +1094,7 @@ enum class CanonicalOp : uint16_t {
   // f8f6f4 mantissa-format family (gfx1250 RDNA4 VOP3P opcode 0x033 in
   // VOP3PX2 form, pseudo `V_WMMA_SCALE_F32_16X16X128_F8F6F4_*_w32_*`).
   // Each kernel encodes one of 9 opcode-suffix mantissa-pair variants
-  // (`{f4,f6,f8} × {f4,f6,f8}`), but the in-family element format
+  // (`{f4,f6,f8} x {f4,f6,f8}`), but the in-family element format
   // (BF8 vs FP8 within f8; BF6 vs FP6 within f6) is selected at runtime
   // by the `matrix_a_fmt` / `matrix_b_fmt` named-immediate operands
   // (`enum MatrixFMT { FP8=0, BF8=1, FP6=2, BF6=3, FP4=4 }`,
@@ -1103,7 +1103,7 @@ enum class CanonicalOp : uint16_t {
   // `<12 x i32>` for f6 (24 packed bytes/lane), and `<8 x i32>` for f4
   // (16 packed bytes/lane); B is independently `<16/12/8 x i32>` per
   // its own format. C/D is `<8 x f32>`. We collapse all 18 MC pseudos
-  // (9 mantissa pairs × `_twoaddr` / `_threeaddr`) onto this single
+  // (9 mantissa pairs x `_twoaddr` / `_threeaddr`) onto this single
   // CanonicalOp and discriminate at the handler with `getNamedOperandIdx`,
   // mirroring the F8F6F4 MFMA collapse rule in `kCanonTable`.
   //
@@ -1141,7 +1141,7 @@ enum class CanonicalOp : uint16_t {
   // is `mfma_scale_f32_16x16x128_f8f6f4` (already mapped via
   // `V_MFMA_SCALE_F32_16x16x128_F8F6F4`), but the WMMA-to-MFMA lane
   // redistribution for K=128 + per-matrix-fmt selection + the
-  // matrix_a/b_scale_fmt × scale_src0/src1 exponent application is
+  // matrix_a/b_scale_fmt x scale_src0/src1 exponent application is
   // not modelled in `wmma-lowering.cpp` (only K=32 / K=64 fp16/bf16/
   // fp8/bf8/iu8 paths exist). Per the user-rules (no silent
   // fallbacks) and consistent with the gfx1250-only refusal contract
@@ -1186,7 +1186,7 @@ enum class CanonicalOp : uint16_t {
   // shape on `op.nSrcs()` exactly the same way `tensor_load_to_lds`
   // discriminates `_d2` vs `_d4`. The pseudo InOperandList is
   // documented in `FLATInstructions.td:391-417`
-  // (`FLAT_Global_Load_LDS_Pseudo<…, IsAsync=1>`):
+  // (`FLAT_Global_Load_LDS_Pseudo<..., IsAsync=1>`):
   //
   //   plain : (vdst:VGPR_32, vaddr:VGPR_64,             offset, cpol)
   //   SADDR : (vdst:VGPR_32, saddr:SReg_64, vaddr:VGPR_32, offset, cpol)
@@ -1234,7 +1234,7 @@ enum class CanonicalOp : uint16_t {
   // lane, `load <T>, ptr addrspace(1) %gptr` followed by
   // `store <T>, ptr addrspace(3) %lptr`, width `T` chosen per the
   // b8 / b32 / b64 / b128 CanonicalOp. The source ISA pragma
-  // (`instruction_manual.pdf §13.6.{9,10,11,12}`, verbatim):
+  // (`instruction_manual.pdf sec. 13.6.{9,10,11,12}`, verbatim):
   //
   //   pragma "vector" do
   //     dsaddr  = LDS_BASE.b32 + VGPR[laneId][VDST.u32] + INST_OFFSET.b32;
@@ -1255,7 +1255,7 @@ enum class CanonicalOp : uint16_t {
   //
   // The async intrinsic carries `IntrInaccessibleMemOrArgMemOnly`
   // and the hardware schedules the DMA against a dedicated counter
-  // (`ASYNCcnt`; `programming_manual.pdf §4.9.9`). Completion is
+  // (`ASYNCcnt`; `programming_manual.pdf sec. 4.9.9`). Completion is
   // signalled via `S_WAIT_ASYNCCNT`. The same aggregate
   // observable per-lane LDS state is produced by a synchronous
   // `load`+`store` chain AFTER the corresponding `s_wait_asynccnt
@@ -1302,7 +1302,7 @@ enum class CanonicalOp : uint16_t {
   // fragment redistribution surface -- already works; unblocking the
   // MoE GEMM was the single highest-impact change. The trade-off
   // is scoped and documented, not hidden, and matches the posture
-  // the sibling TDM axis takes in `sync-translation.md §10` ("TDM
+  // the sibling TDM axis takes in `sync-translation.md sec. 10` ("TDM
   // emulation lowers to synchronous buffer loads").
   GLOBAL_LOAD_ASYNC_TO_LDS_B8,
   GLOBAL_LOAD_ASYNC_TO_LDS_B32,

@@ -27,8 +27,8 @@ namespace COMGR::hotswap {
 namespace {
 
 // ============================================================================
-// Narrow-O1 classifier -- see hotswap/docs/modrep-predicate-chain.md §5 (O1)
-// (§5 O1 "narrow-O1, as landed" documents the narrowing
+// Narrow-O1 classifier -- see hotswap/docs/modrep-predicate-chain.md sec. 5 (O1)
+// (sec. 5 O1 "narrow-O1, as landed" documents the narrowing
 // rationale). Two-pass design:
 //
 //   Pass 1: forward-walk from each `@llvm.amdgcn.workitem.id.x()` call,
@@ -102,7 +102,7 @@ Value *otherOperand(const Instruction *I, const Value *V) {
 }
 
 // True iff `I` is an `and` that AND-masks `V` against a compile-time
-// constant K with `K <= sourceWaveSize - 1`. Matches the §5.6.2
+// constant K with `K <= sourceWaveSize - 1`. Matches the sec. 5.6.2
 // `wave_id` lift's `and X, 0x1F` mask, the SPE prelude's
 // `lane_id & (execBits - 1)` mask, and the Triton-emitted
 // `offs & (BLOCK_SIZE - 1)` mask when `BLOCK_SIZE <= W_s`.

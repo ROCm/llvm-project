@@ -801,12 +801,12 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   }
 
   // ---- WMMA (gfx1250 RDNA4, VOP3P encoding) ----
-  // 16x16xK WMMA family. Three K-families × accumulator-type
+  // 16x16xK WMMA family. Three K-families x accumulator-type
   // permutations covered today:
   //   * 16-bit elements, K=32, f32 acc (8 VGPRs of <16 x t> per A/B side):
   //       v_wmma_f32_16x16x32_f16,  v_wmma_f32_16x16x32_bf16
   //   * 8-bit elements,  K=64, f32 acc (8 VGPRs of <8 x i32> per A/B side):
-  //       v_wmma_f32_16x16x64_<a>_<b>  for a,b ∈ {fp8, bf8}
+  //       v_wmma_f32_16x16x64_<a>_<b>  for a,b in {fp8, bf8}
   //   * 8-bit elements,  K=64, i32 acc (8 VGPRs of <8 x i32> per A/B side):
   //       v_wmma_i32_16x16x64_iu8  (signed/unsigned 8-bit integer GEMMs)
   //
@@ -899,7 +899,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // presence) was detected.  The root cause turned out to be a
       // wrong-semantic lift of `v_permlane16_swap_b32` (symmetric
       // vs. ISA-asymmetric -- see `handle-valu-cross-lane.cpp` and
-      // matrix-translation.md §12.4.7), not a WMMA-lowering
+      // matrix-translation.md sec. 12.4.7), not a WMMA-lowering
       // problem, so with that fixed the MODREP MFMA lowering
       // handles both single- and multi-WMMA cases correctly.
       {
@@ -1081,7 +1081,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // my test harness actually populating per-iter A/B data --
       // earlier runs claiming "K-loop failure" were a host-side
       // test-input miscount that populated the wrong stride; the
-      // fixture itself matches bit-exact at n_iters ∈ {1,2,4,8}
+      // fixture itself matches bit-exact at n_iters in {1,2,4,8}
       // under both MODREP phantom-lane and WaveNative).  Triton's
       // `matmul_fp16_16x16` at M>=32 still shows a WRONG-numerics
       // residual through `compare_correctness`, where the
@@ -1108,7 +1108,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // MFMA redistribution reading duplicated K subsets for
       // WMMA.A.
       //
-      // MI400 Shader Programming Guide § V_PERMLANE16_SWAP_B32
+      // MI400 Shader Programming Guide sec. V_PERMLANE16_SWAP_B32
       // pinned the real root cause: our permlane16_swap lift was
       // implementing the SYMMETRIC cross-16 swap, but the ISA
       // semantic is ASYMMETRIC ("lanes 0:15 of src0 and lanes
@@ -1118,7 +1118,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // every matmul_fp16 input position and surfaced downstream
       // as the "+16 col shift" on mode-5 / "+4 bias" on mode-8.
       // With the asymmetric lift in `handle-valu-cross-lane.cpp`
-      // (Session-8, matrix-translation.md §12.4.7) the MODREP
+      // (Session-8, matrix-translation.md sec. 12.4.7) the MODREP
       // MFMA redistribution is correct for both single- and
       // multi-WMMA regimes, so this refusal is no longer needed.
       {

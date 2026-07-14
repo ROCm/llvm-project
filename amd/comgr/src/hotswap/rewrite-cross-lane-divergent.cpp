@@ -158,7 +158,7 @@ bool isIntrinsicVGPRSafePropagator(Intrinsic::ID Id) {
   // accepting all-VGPR operands -- same bar as the `amdgcn_*` cases
   // above.  Unknown generic intrinsics stay SGPR-forced via the default
   // arm below, consistent with the "refuse when uncertain" rule in
-  // hotswap/docs/wave-size-translation.md §5.6.3.
+  // hotswap/docs/wave-size-translation.md sec. 5.6.3.
   //
   // Why these specifically, and why now: Triton's AMD backend emits
   // these in the fast-reciprocal / rsqrt Newton-iteration expansion
@@ -169,7 +169,7 @@ bool isIntrinsicVGPRSafePropagator(Intrinsic::ID Id) {
   // Triton kernel's readlane-result use chain.  Pre-audit, the
   // classifier over-approximated them as SGPR-forced, which disabled
   // the rewrite pass on the entire function (all-or-nothing per
-  // §5.6.3's "mix of rewritten and preserved sites recreates the
+  // sec. 5.6.3's "mix of rewritten and preserved sites recreates the
   // Matmul128x128 asymmetric-rewrite fault" rule).  The AMDGPU
   // lowerings are:
   //

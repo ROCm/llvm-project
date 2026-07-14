@@ -23,7 +23,7 @@ namespace COMGR::hotswap {
 // ============================================================================
 // Post-raise rewrite: per-source-wave cross-lane primitives under
 // cross-widen divergence. See hotswap/docs/wave-size-translation.md
-// §5.6.3 for the principled derivation of the rewrite shapes below.
+// sec. 5.6.3 for the principled derivation of the rewrite shapes below.
 // ============================================================================
 //
 // PROBLEM. The AMDGPU backend lowers `llvm.amdgcn.writelane(val, lane,
@@ -34,7 +34,7 @@ namespace COMGR::hotswap {
 // scalarise it. Under cross-widening (source wave32 -> target wave64),
 // a value that is *intentionally* per-lane-divergent within a target
 // wave -- e.g. the `wave_id_in_workgroup` divergent-VGPR lifted out of
-// `s_bfe_u32 ttmp8, 0x50019` (handle-sop2.cpp §5.6.2 rescue) -- gets
+// `s_bfe_u32 ttmp8, 0x50019` (handle-sop2.cpp sec. 5.6.2 rescue) -- gets
 // collapsed by the readfirstlane to one lane's value, and the other
 // target lanes lose their per-source-wave meaning. Every downstream
 // computation keyed on the collapsed value (tile-column address, EXEC

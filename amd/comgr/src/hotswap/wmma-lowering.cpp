@@ -16,7 +16,7 @@
 // Background
 // ----------
 // WMMA (Wave Matrix Multiply Accumulate) on gfx1250 is a Wave32 collective
-// operation: 32 lanes cooperate to compute a 16×16 matrix multiply.  MFMA on
+// operation: 32 lanes cooperate to compute a 16x16 matrix multiply.  MFMA on
 // gfx942 is a Wave64 collective: 64 lanes cooperate.  Because the per-lane
 // fragment sizes differ (WMMA: <16 x half> / <8 x float>; MFMA: <4 x half> /
 // <4 x float>), a simple intrinsic swap is impossible.
@@ -107,7 +107,7 @@
 //      With WMMA GPR selection cycling every 2 lane groups (GPR pairs {0,1},
 //      {2,3} for first K=16; {4,5}, {6,7} for second K=16).
 //
-//   2. MFMA: Two v_mfma_f32_16x16x16_f16 calls (K=32 decomposed to 2× K=16),
+//   2. MFMA: Two v_mfma_f32_16x16x16_f16 calls (K=32 decomposed to 2x K=16),
 //      chaining the accumulator.
 //
 //   3. COLLECT: Gather the 4-VGPR MFMA result back to 8-VGPR WMMA layout.
@@ -162,7 +162,7 @@
 // unscalable: `SIPreAllocateWWMRegs` requires a DEDICATED physical
 // VGPR per virtual register defined inside a WWM bracket, and the
 // WWM def-chain from an MFMA output walks back through the entire
-// accumulator initialisation. A 128×128 f16 matmul tile's entry
+// accumulator initialisation. A 128x128 f16 matmul tile's entry
 // region contains ~200 IMPLICIT_DEF / AV_MOV_B32 0 instructions for
 // its accumulator ring, which together with the kernel's own VGPR
 // demand exceeds gfx942's 256-VGPR pool and aborts the allocator
@@ -337,7 +337,7 @@ static void collectResult(IRBuilder<> &B, Module &M,
 }
 
 /// Run one full pass for a virtual Wave32 group:
-/// redistribute -> 2× MFMA -> collect, wrapped in a single whole-wave
+/// redistribute -> 2x MFMA -> collect, wrapped in a single whole-wave
 /// region so the cross-lane pipeline runs with EXEC = -1 regardless
 /// of the caller-level EXEC mask (see file-header "Whole-wave mode").
 ///
@@ -388,7 +388,7 @@ static void runGroupPass(IRBuilder<> &B, Module &M, RaiseContext &Ctx,
   //
   // AB pack type:
   //   16-bit variants pack 2 redistributed dwords into a `<4 x t>` vector
-  //   (4 elements per lane × 2 bytes = 8 bytes = 2 dwords). The 8-bit
+  //   (4 elements per lane x 2 bytes = 8 bytes = 2 dwords). The 8-bit
   //   variants pack the same 2 dwords into a single `i64`; the CDNA fp8/
   //   bf8/i8 MFMA intrinsics were defined before fp8 became a first-class
   //   LLVM type (and there's no first-class packed-i8 vector type either),
@@ -523,7 +523,7 @@ static void runGroupPass(IRBuilder<> &B, Module &M, RaiseContext &Ctx,
 
 Expected<Value *> emitWMMAtoMFMA(RaiseContext &Ctx, Value *A, Value *Vb,
                                  Value *C, WMMAInputType InputType) {
-  // The redistribute / 2×MFMA / collect chain is a Wave64 collective.
+  // The redistribute / 2xMFMA / collect chain is a Wave64 collective.
   // Per-MFMA-output `strict.wwm` markers inside `runGroupPass` handle
   // the two projections uniformly:
   //
@@ -590,7 +590,7 @@ Expected<Value *> emitWMMAtoMFMA(RaiseContext &Ctx, Value *A, Value *Vb,
   // removed once the gate was narrowed to the multi-WMMA-per-K-iter
   // regime only (matmul_fp16 still refuses; matmul_fp16_16x16 and
   // other single-WMMA kernels now reach this path correctly).  See
-  // matrix-translation.md §12.4.4 for the layout characterisation
+  // matrix-translation.md sec. 12.4.4 for the layout characterisation
   // and handle-valu-vop3p.cpp's K=32/K=64 diagnostic for the
   // surgical refusal criterion.
 
@@ -626,8 +626,8 @@ Expected<Value *> emitWMMAtoMFMA(RaiseContext &Ctx, Value *A, Value *Vb,
 // ----------------------------------------------------------------------
 //
 // Source (gfx1250 RDNA4, Wave32):
-//   int_amdgcn_wmma_f32_16x16x4_f32 -- `<8 x f32>` = (…, <2 x f32> A,
-//   …, <2 x f32> B, …, <8 x f32> C, …)
+//   int_amdgcn_wmma_f32_16x16x4_f32 -- `<8 x f32>` = (..., <2 x f32> A,
+//   ..., <2 x f32> B, ..., <8 x f32> C, ...)
 //
 // Target (gfx942 CDNA3, Wave64):
 //   int_amdgcn_mfma_f32_16x16x4f32 -- `<4 x f32>` = (f32 A, f32 B,
@@ -655,9 +655,9 @@ Expected<Value *> emitWMMAtoMFMA(RaiseContext &Ctx, Value *A, Value *Vb,
 //
 // Redistribution
 // --------------
-// Per-group pass (`groupBase ∈ {0, 32}`): the W32-group-N's data is
+// Per-group pass (`groupBase in {0, 32}`): the W32-group-N's data is
 // held by W64 lanes `[groupBase .. groupBase+31]`. Each MFMA call
-// spreads ONE Wave32 group's 32-lane × 2-dword A across all 64 Wave64
+// spreads ONE Wave32 group's 32-lane x 2-dword A across all 64 Wave64
 // lanes:
 //
 //   loAddr = 4 * ((lane%16) + groupBase)       // source for k=0..1
@@ -770,7 +770,7 @@ Expected<Value *> emitWmmAtoMfmaF3216x16x4(RaiseContext &Ctx, Value *A,
   // lane).  The only structural difference is that the K=4 f32
   // decomposition emits ONE MFMA per group pass (the source WMMA
   // is already K=4, exactly matching `mfma_f32_16x16x4f32`), not
-  // the 2-chained-MFMA K=32->2×K=16 structure of the 16-/8-bit
+  // the 2-chained-MFMA K=32->2xK=16 structure of the 16-/8-bit
   // family.
   IRBuilder<> &B = Ctx.B;
   Module &M = Ctx.M;
@@ -1131,7 +1131,7 @@ int effectiveFmtAfterWiden(int srcFmt) {
 }
 
 // FP4 (E2M1, bias 1) -> FP8 E4M3 (bias 7) over `<N x i32>` of nibbles.
-// FP4's only subnormal is ±0.5 (biased exp 6); the ±0 override keeps the
+// FP4's only subnormal is +/-0.5 (biased exp 6); the +/-0 override keeps the
 // subnormal path from emitting 0x30 / 0xB0.
 Value *widenF4NibbleVecToFP8(IRBuilder<> &B, Value *Nibbles) {
   auto *VecTy = cast<FixedVectorType>(Nibbles->getType());

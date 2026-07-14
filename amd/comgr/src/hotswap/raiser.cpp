@@ -776,7 +776,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // canonical AMDGPU ISA string (`amdgcn-amd-amdhsa--gfx942[:feat...]`).
   // Defer to Comgr's `parseTargetIdentifier` for the canonical form (it
   // handles the dash-separated Arch/Vendor/OS/Environ/Processor split
-  // and the `:sramecc±:xnack±` feature suffix in one place);
+  // and the `:sramecc+/-:xnack+/-` feature suffix in one place);
   // `MCSubtargetInfo` only accepts the bare processor name, so we
   // forward `Ident.Processor` to the MC stack below.
   auto NormalizeIsa = [](StringRef Iso) -> StringRef {
@@ -853,7 +853,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // each target lane onto `lane_id mod W_src` of the source EXEC mask
   // and truncates cross-wave ballots to source width. Correct under
   // the wave-size-obliviousness theorem (hotswap/docs/wave-size-
-  // translation.md §6); insufficient for kernels whose WMMA -> MFMA
+  // translation.md sec. 6); insufficient for kernels whose WMMA -> MFMA
   // redistribute / collect pipeline needs hardware EXEC = -1 on the
   // upper half of the Wave64 target (lanes 32..63 would otherwise
   // never update their MFMA destination VGPRs -- see the file-header
@@ -1080,17 +1080,17 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                        CompilationTargetIsa);
 
   // ==== Phase 1.4.5: Wave-size obstruction classifier
-  // (hotswap/docs/wave-size-translation.md §7) ====
+  // (hotswap/docs/wave-size-translation.md sec. 7) ====
   //
   // The classifier walks the decoded instruction stream and tags every
   // site that violates the wave-size-obliviousness theorem (see
-  // wave-size-translation.md §6 for the precise definition). The
+  // wave-size-translation.md sec. 6 for the precise definition). The
   // decider then applies the 3-outcome procedure:
   //   (a) no obstructions, or every obstruction is covered by an
   //       implemented rewrite -> emit modulo-replication.
   //   (b) at least one obstruction has a rewrite structurally
   //       recognised but not yet implemented (the "Pending rewrite"
-  //       table in wave-size-translation.md §7) -> refuse with a
+  //       table in wave-size-translation.md sec. 7) -> refuse with a
   //       `CrossWaveShuffleRewritePending` diagnostic naming the P-item.
   //   (c) at least one obstruction has no rewrite in the decision
   //       procedure's unrewritable table -> refuse with the kind-
@@ -1342,7 +1342,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // kernel with a non-trivial LDS round-trip, most visibly Triton's
   // `matmul_fp16` (mode-5 B-only-varying input returned all zeros
   // because the cross-thread LDS fragment shuffle read from an
-  // uninitialised segment; see matrix-translation.md §12.4 for the
+  // uninitialised segment; see matrix-translation.md sec. 12.4 for the
   // bisection).
   //
   // We mirror the source's `.group_segment_fixed_size` by setting the
@@ -1713,7 +1713,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
 
   // Wire the reg-file's EXEC-write invalidation hook to ctx's lane_active
   // memo. This catches every EXEC mutation -- ctx.storeExec, the various
-  // ctx.writeReg*(EXEC, …) wrappers, *and* the handful of handlers that
+  // ctx.writeReg*(EXEC, ...) wrappers, *and* the handful of handlers that
   // still call ctx.Regs.storeExec / ctx.Regs.writeRegExecWidth directly
   // (SAVEEXEC family in handle_sop1, V_CMPX in handle_valu). Without
   // this hook those direct paths would leave the memo pointing at a
@@ -2066,7 +2066,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // 6.04 "permlane16-xor3-partner" rewrites were deleted after
   // the asymmetric `v_permlane16_swap_b32` lift landed -- see
   // `handle-valu-cross-lane.cpp::emitPermLaneSwapEmulation` and
-  // matrix-translation.md §12.4.7.  Both passes were transitional
+  // matrix-translation.md sec. 12.4.7.  Both passes were transitional
   // bridges that compensated for the symmetric lift's
   // over-swap of the asymmetric-semantic's "unchanged" halves;
   // with the lift corrected, their fingerprints either no
@@ -2080,7 +2080,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // (raise_cli's `--enable-writelane-rewrite`, PipelineConfig's
   // `enableWritelaneRewrite`) must ask for it explicitly. See
   // `rewrite_cross_lane_divergent.{hpp,cpp}` and
-  // wave-size-translation.md §5.6.3 for the principled derivation,
+  // wave-size-translation.md sec. 5.6.3 for the principled derivation,
   // and hotswap/docs/learnings.md for the asymmetric-rewrite bug
   // that motivated the symmetry-plus-use-chain design.
   //
@@ -2106,7 +2106,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   if (EnableWritelaneRewrite) {
     // `tm.get()` threaded through so `rewriteCrossLaneDivergent` can
     // build a `UniformityAnalysis` against the compilation target
-    // for the §5.6.3 "UA-backed readfirstlane allow-gate" classifier
+    // for the sec. 5.6.3 "UA-backed readfirstlane allow-gate" classifier
     // refinement. See the rewrite's header comment for the contract
     // (nullable -- null disables the gate and falls back to the
     // conservative pre-UA refusal behaviour).
@@ -2218,7 +2218,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // ==== Phase 6.6: Cross-widen predicate-chain classifier (C5) ====
   //
   // Post-mem2reg classifier for the Class-5 predicate-chain class
-  // documented in hotswap/docs/modrep-predicate-chain.md §5 (narrow-O1).
+  // documented in hotswap/docs/modrep-predicate-chain.md sec. 5 (narrow-O1).
   // Walks every `@llvm.amdgcn.workitem.id.x()` call in the function and
   // refuses the lift if any call's forward use chain reaches an `icmp`
   // against a compile-time constant K in `(0, W_s - 1]` without being
@@ -2228,13 +2228,13 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // under modulo-replication despite sharing the source EXEC bit.
   //
   // Intentionally narrow: Phase-2 IR inspection (modrep-predicate-chain.md
-  // §5 O1) established that the broader "any unmasked tid -> icmp ->
+  // sec. 5 O1) established that the broader "any unmasked tid -> icmp ->
   // side-effect refuses" rule would also refuse baselines
   // `vecadd_f16` / `rope_fp32` / `canary_dpp_compound_add_fp32` (their
   // IR has structurally identical shapes but with a dynamic kernarg as
   // the icmp constant, not a compile-time K). The compile-time-K-only
   // rule catches `canary_bpermute_scan_fp32`'s Kogge-Stone scan-stage
-  // predicates (K ∈ {1, 3, 7, 15}) while leaving the baselines green.
+  // predicates (K in {1, 3, 7, 15}) while leaving the baselines green.
   //
   // Runs AFTER Phase 6 `PromoteMemToReg` so scratch-addrspace round-trips
   // are gone and the forward use-chain classifier operates on clean SSA.
@@ -2244,8 +2244,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // `classifyPredicateChain` short-circuits when
   // `targetWaveSize <= sourceWaveSize`.
   //
-  // No companion rewrite today. The design doc's §5 O2 "tid AND (W_s-1)"
-  // rewrite is deferred (§6.2 documents the semantic-incorrectness of
+  // No companion rewrite today. The design doc's sec. 5 O2 "tid AND (W_s-1)"
+  // rewrite is deferred (sec. 6.2 documents the semantic-incorrectness of
   // the norm-family failing recipes and are a no-op for sub-case-2
   // scan-shaped recipes). If a future design iteration adds a principled
   // rewrite, pair it with a `RewriteId` alongside
@@ -2326,9 +2326,9 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       }
       errs() << "transpiler: pre-translation abort: "
              << reasonString(RaiseFailureReason::CrossWavePredicateChain)
-             << " on 'workitem.id.x-predicate-chain-classifier' — "
+             << " on 'workitem.id.x-predicate-chain-classifier' -- "
              << PredReport.RefusalDetail << "\n";
-      errs() << "  outcome: (c) refuse — WorkitemIdPredicateChain (§3 Class 5"
+      errs() << "  outcome: (c) refuse -- WorkitemIdPredicateChain (sec. 3 Class 5"
              << (PredReport.WaveNativePhantomRefusal ? " phantom-lane sub-case"
                                                      : "")
              << ")\n";

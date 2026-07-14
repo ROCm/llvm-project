@@ -209,7 +209,7 @@ Expected<HandlerResult> handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
         // Same ballot discipline as V_CMPX: the SGPR destination
         // carries a wave-level mask, not a per-lane predicate. `sext`
         // here would make every downstream consumer that reads the
-        // SGPR as a wave mask (`s_and_b64`, `s_mov_b64 exec, …`,
+        // SGPR as a wave mask (`s_and_b64`, `s_mov_b64 exec, ...`,
         // `v_cndmask_b32`'s mask input via `readVCCAsWaveMask`) see
         // divergent SSA and silently miscompile.
         //

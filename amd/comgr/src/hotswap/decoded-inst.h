@@ -83,8 +83,8 @@ struct DecodedInst {
   // pieces during address calculation.
   std::optional<int64_t> StaticOffset;
 
-  // ── DPP modifier state (Class 2 DppCrossLane; see
-  //    hotswap/docs/wave-size-translation.md §6) ──
+  // -- DPP modifier state (Class 2 DppCrossLane; see
+  //    hotswap/docs/wave-size-translation.md sec. 6) --
   //
   // DPP is a src0-pathway cross-lane shuffle modifier. The original
   // `inst.getOpcode()` retains the `_dpp` suffix and its MCInstrDesc
@@ -120,8 +120,8 @@ struct DecodedInst {
   bool DppBoundCtrl = false;
   bool DppFi = false;
 
-  // ── ds_swizzle_b32 imm state (Class 2 DsSwizzle; see
-  //    hotswap/docs/wave-size-translation.md §6) ──
+  // -- ds_swizzle_b32 imm state (Class 2 DsSwizzle; see
+  //    hotswap/docs/wave-size-translation.md sec. 6) --
   //
   // The 16-bit `OpName::offset` immediate of `ds_swizzle_b32` encodes
   // a swizzle-mode selector + per-mode parameters (SIDefines.h
@@ -145,7 +145,7 @@ struct DecodedInst {
   bool HasDsSwizzleImm = false;
   uint16_t DsSwizzleImm = 0;
 
-  // ── VOPD structural decode ────────────────────────────────────────
+  // -- VOPD structural decode ----------------------------------------
   //
   // VOPD packets contain two VALU component instructions sharing one
   // MCInst. The disassembler prints them as

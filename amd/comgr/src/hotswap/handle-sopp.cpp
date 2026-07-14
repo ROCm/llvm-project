@@ -208,8 +208,8 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
   // correctness argument alongside the other SOPP branches.
   //
   // Both counters track work in dedicated gfx1250 hardware units
-  // (`ASYNCcnt`, `TENSORcnt`; programming_manual.pdf §4.9.9 and
-  // §6 respectively) that do not exist on gfx942.  The source DMAs
+  // (`ASYNCcnt`, `TENSORcnt`; programming_manual.pdf sec. 4.9.9 and
+  // sec. 6 respectively) that do not exist on gfx942.  The source DMAs
   // they gate are emulated as synchronous `load`+`store` chains on
   // the cross-target arm (see `handle-flat.cpp`'s
   // `GLOBAL_LOAD_ASYNC_TO_LDS_B*` handler and `handle-vimage.cpp`'s

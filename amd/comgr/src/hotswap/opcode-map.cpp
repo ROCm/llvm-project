@@ -1055,7 +1055,7 @@ static const Entry kCanonTable[] = {
     E(DS_WRITE2ST64_B64, DS_WRITE2ST64_B64),
     E(DS_WRITE_B16, DS_WRITE_B16), E(DS_WRITE_B8, DS_WRITE_B8),
     // gfx8+ HasD16LoadStore D16_HI store family (DSInstructions.td
-    // §604-606). Stores bits [31:16] (B16_HI) or bits [23:16] (B8_HI)
+    // sec. 604-606). Stores bits [31:16] (B16_HI) or bits [23:16] (B8_HI)
     // of the source VGPR to LDS -- same VGPR/i32 source operand
     // shape as their non-_HI siblings, so the canonical-table macro
     // routes both encoding forks (gfx10 m0-based vs gfx11+ no-m0)
@@ -1066,9 +1066,9 @@ static const Entry kCanonTable[] = {
     // ds_swizzle_b32 -- wave-width-specific cross-lane shuffle. The
     // handler refuses with `unsupportedInstructionForm` until the P6 rewrite
     // lands (see the ds_swizzle_b32 row of hotswap/docs/wave-size-
-    // translation.md §5.3); the wave-size classifier (Phase 1.4.5)
+    // translation.md sec. 5.3); the wave-size classifier (Phase 1.4.5)
     // flags it as a Class 2 obstruction (wave-size-translation.md
-    // §6) in the cross-wave case.
+    // sec. 6) in the cross-wave case.
     E(DS_SWIZZLE_B32, DS_SWIZZLE_B32),
 
     // DS atomics carry `_RTN` as an infix (`DS_ADD_RTN_F64`), so the
@@ -1142,7 +1142,7 @@ static const Entry kCanonTable[] = {
     MUBUF4(BUFFER_ATOMIC_OR, BUFFER_ATOMIC_OR),
     MUBUF4(BUFFER_ATOMIC_XOR, BUFFER_ATOMIC_XOR),
     // Class 3 non-commutative atomics (hotswap/docs/wave-size-
-    // translation.md §6). The wave-size classifier flags them in
+    // translation.md sec. 6). The wave-size classifier flags them in
     // the cross-wave case before
     // dispatch ever reaches handle-mubuf.cpp's switch. Same-wave and
     // same-target lifts are still modeled with raw-buffer atomics there.
@@ -1316,7 +1316,7 @@ static const Entry kCanonTable[] = {
     // ---------------------------------------------------------------------
     // Scaled WMMA F8F6F4 (gfx1250 RDNA4 -- VOP3PX2 paired form, real opcode
     // 0x033 + 0x35 / 0x3a, FLATInstructions / VOP3PInstructions.td:1987).
-    // The 9 mantissa-pair pseudos (`f4_f4`, `f4_f6`, …, `f8_f8`) all share
+    // The 9 mantissa-pair pseudos (`f4_f4`, `f4_f6`, ..., `f8_f8`) all share
     // the same CanonicalOp because the per-format element distinction (BF8 vs
     // FP8 within f8, etc.) travels as the `matrix_a_fmt` /
     // `matrix_b_fmt` named-immediate operands rather than the opcode
@@ -1377,7 +1377,7 @@ static const Entry kCanonTable[] = {
     // The disassembler's MC opcodes are the `_gfx1250` (or
     // `_SADDR_gfx1250`) reals declared by
     // `VFLAT_Real_AllAddr_gfx1250` (FLATInstructions.td:2003-2018)
-    // off the `FLAT_Global_Load_LDS_Pseudo<…, IsAsync=1>` family
+    // off the `FLAT_Global_Load_LDS_Pseudo<..., IsAsync=1>` family
     // (FLATInstructions.td:391-417). The canonicalization chain in
     // `OpcodeMap::canonicalize` collapses each real onto its pseudo
     // (`GLOBAL_LOAD_ASYNC_TO_LDS_B{8,32,64,128}` / `_SADDR`
@@ -1747,10 +1747,10 @@ unsigned canonicalize(unsigned Mc,
 
 // Parse a canonical vector-compare pseudo name into (predicate, bits, kind).
 // Accepted shape: `V_CMP_<PRED>_<TYPE><BITS>_e64` where
-//   PRED  ∈ {EQ, NE, GT, GE, LT, LE, LG, NEQ, NLT, NLE, NGT, NGE, NLG, U, O,
+//   PRED  in {EQ, NE, GT, GE, LT, LE, LG, NEQ, NLT, NLE, NGT, NGE, NLG, U, O,
 //            CLASS}
-//   TYPE  ∈ {U, I, F} (CLASS only ever appears with TYPE=F)
-//   BITS  ∈ {16, 32, 64}
+//   TYPE  in {U, I, F} (CLASS only ever appears with TYPE=F)
+//   BITS  in {16, 32, 64}
 // and an optional `V_CMPX_` prefix plays the role of `V_CMP_`. Returns
 // `std::nullopt` for anything else; caller is responsible for only passing
 // compare-family pseudos.
@@ -1762,8 +1762,8 @@ unsigned canonicalize(unsigned Mc,
 // hard-coded in LLVM's TableGen for these instructions.
 //
 // CLASS is special: `V_CMP_CLASS_F<bits>` is *not* a predicate compare. src1
-// is an i32 mask of FP classes (signaling NaN, quiet NaN, ±inf, ±normal,
-// ±subnormal, ±0), and the result lane bit is set iff src0's IEEE class
+// is an i32 mask of FP classes (signaling NaN, quiet NaN, +/-inf, +/-normal,
+// +/-subnormal, +/-0), and the result lane bit is set iff src0's IEEE class
 // matches any enabled bit in the mask. We collapse it onto the same
 // `V_CMP` / `V_CMPX` CanonicalOps and signal the special-case lift via
 // `VCmpMeta::isClass`; the dispatch in handle-valu-vcmp.cpp branches on

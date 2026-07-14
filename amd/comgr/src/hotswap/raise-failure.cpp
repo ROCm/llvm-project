@@ -214,7 +214,7 @@ RaiseFailure::crossWaveLanePredicatedExec(const DecodedInst &Di,
                               Di, KindDetail);
 }
 
-// see hotswap/docs/modrep-predicate-chain.md §5 (narrow-O1)
+// see hotswap/docs/modrep-predicate-chain.md sec. 5 (narrow-O1)
 llvm::Error RaiseFailure::crossWavePredicateChain(llvm::StringRef KernelName,
                                                   const llvm::Twine &Detail) {
   return makeKernelScopedFailure(RaiseFailureReason::CrossWavePredicateChain,

@@ -69,7 +69,7 @@ Expected<HandlerResult> handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
 
   // SOPC bit-test family (SOPInstructions.td:1411-1414; gfx6+).
   // Shape per the GCN3/RDNA/CDNA ISA references
-  // (e.g. RDNA3 ISA ref §4.3.2 "Scalar ALU Operations"):
+  // (e.g. RDNA3 ISA ref sec. 4.3.2 "Scalar ALU Operations"):
   //
   //   S_BITCMP0_B32  SCC = (src0 & (1u  << (src1 & 0x1F))) == 0
   //   S_BITCMP1_B32  SCC = (src0 & (1u  << (src1 & 0x1F))) != 0

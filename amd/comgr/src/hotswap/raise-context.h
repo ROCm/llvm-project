@@ -196,7 +196,7 @@ struct RaiseContext {
 
   // Emit `llvm.amdgcn.update.dpp.<i32>(old, src, ctrl, row_mask, bank_mask,
   // bound_ctrl)` -- the P5 lowering for src0-path DPP modifiers; see the
-  // DPP row of hotswap/docs/wave-size-translation.md §5.3 for the rewrite
+  // DPP row of hotswap/docs/wave-size-translation.md sec. 5.3 for the rewrite
   // contract. `src` and `old` must be 32-bit (i32 or f32/bitcastable); a
   // future 64-bit lift would extend the intrinsic overload set and the
   // bitcast-bridge below. The return type matches `src->getType()` so
@@ -215,7 +215,7 @@ struct RaiseContext {
   llvm::Value *emitLaneIdx();
 
   // ==== SIMT Predicated Execution (SPE) helpers
-  // (see hotswap/docs/wave-size-translation.md §5.1). ================
+  // (see hotswap/docs/wave-size-translation.md sec. 5.1). ================
   //
   // emitLaneActiveBit() returns an i1 true iff the current lane's bit in the
   // EXEC-mask alloca is set. Wave-size-aware via targetIsa: the lane id is
@@ -516,7 +516,7 @@ struct RaiseContext {
   // Default-construct via an explicit zero-arg temporary to disambiguate
   // from DenseMap's `explicit` single-unsigned-int constructor under
   // RaiseContext's aggregate brace-init. (With `= {}` or no initializer
-  // GCC warns: "converting … from initializer list would use explicit
+  // GCC warns: "converting ... from initializer list would use explicit
   // constructor DenseMap(unsigned int)".)
   llvm::DenseMap<int, WaveMaskEntry> LastSgprWaveMaskI1 =
       llvm::DenseMap<int, WaveMaskEntry>();

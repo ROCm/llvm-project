@@ -29,13 +29,13 @@ class WaveProjection;
 // Wave-size obstruction classifier.
 //
 // Implements the obstruction catalog + 3-outcome decision procedure
-// specified in hotswap/docs/wave-size-translation.md §§6–7. Given a
+// specified in hotswap/docs/wave-size-translation.md sec. sec. 6-7. Given a
 // decoded instruction stream for a source kernel whose target wave
 // size differs from the source's, this pass produces an
 // `ObstructionReport` whose sites enumerate every construct in the
 // kernel that violates the wave-size-obliviousness theorem (see
-// wave-size-translation.md §6 for the precise definition), tagged
-// with (a) the obstruction class, (b) the rewrite entry in §7's
+// wave-size-translation.md sec. 6 for the precise definition), tagged
+// with (a) the obstruction class, (b) the rewrite entry in sec. 7's
 // landed-rewrites table (if any) that would discharge it, and
 // (c) whether the rewrite is implemented in the current raiser.
 //
@@ -94,7 +94,7 @@ class WaveProjection;
 //
 // Each enum value names the *specific failure mode* the classifier
 // detected. The Class 1..4 grouping from hotswap/docs/wave-size-
-// translation.md §6 is preserved as the comment headers below; that
+// translation.md sec. 6 is preserved as the comment headers below; that
 // grouping is the stable design-doc cross-reference, but it is not
 // part of the code-level identity of an obstruction (a reader should
 // not have to bounce to the doc to know what
@@ -104,7 +104,7 @@ class WaveProjection;
 enum class ObstructionKind : uint8_t {
   None = 0,
 
-  // ── Class 1 (wave-size-translation.md §6): absolute lane-ID leaks ──
+  // -- Class 1 (wave-size-translation.md sec. 6): absolute lane-ID leaks --
   // The kernel exposes the absolute target-hardware lane position
   // through one of these constructs; under modulo-replication the
   // value diverges from what the wave32 source intended.
@@ -132,7 +132,7 @@ enum class ObstructionKind : uint8_t {
                             // lift introduced (source_wave[k]'s wave_id=k
                             // becomes uniform across the target wave = 0).
                             // WMMA forecloses the ThreadLoopProjection escape
-                            // hatch (§5.2 requires the full target wave
+                            // hatch (sec. 5.2 requires the full target wave
                             // simultaneously), so there is no correct
                             // projection today. No rewrite.
 
@@ -158,30 +158,30 @@ enum class ObstructionKind : uint8_t {
                             // Phase-4 init + handler lifts, never as a
                             // source-side CanonicalOp). `buildObstructionReport`
                             // must never tag a `DecodedInst` with this kind.
-                            // See hotswap/docs/modrep-predicate-chain.md §5
+                            // See hotswap/docs/modrep-predicate-chain.md sec. 5
                             // (narrow-O1) for the principled derivation and
-                            // §5 O1 for the narrowing rationale that narrowed the
+                            // sec. 5 O1 for the narrowing rationale that narrowed the
                             // classifier from "any unmasked `tid -> icmp ->
-                            // side-effect`" to "compile-time K ≤ W_s-1" so
+                            // side-effect`" to "compile-time K <= W_s-1" so
                             // baseline Triton recipes
                             // (`vecadd_f16`, `rope_fp32`,
                             // `canary_dpp_compound_add_fp32`) don't refuse.
 
-  // ── Class 2 (wave-size-translation.md §6): cross-lane shuffles whose
-  //                                            semantics bake in the wave width ──
+  // -- Class 2 (wave-size-translation.md sec. 6): cross-lane shuffles whose
+  //                                            semantics bake in the wave width --
   FullWaveRotate,           // v_permlane64_b32 -- no wave32 analogue, unrewritable.
-  LaneGroupShuffle,         // permlane16 / permlanex16 / permlane*_swap_b32 -- wave-size-translation.md §5.3 rows P2 / P4 (and the pending-table P4 entry for permlane32_swap).
-  DsSwizzle,                // ds_swizzle_b32 -- wave-size-translation.md §5.3 row P6.
-  DppCrossLane,             // any `_dpp` variant -- wave-size-translation.md §5.3 row P5.
-  DsBpermuteGather,         // ds_bpermute_b32 -- wave-size-translation.md §5.3 row P1 (handler landed).
+  LaneGroupShuffle,         // permlane16 / permlanex16 / permlane*_swap_b32 -- wave-size-translation.md sec. 5.3 rows P2 / P4 (and the pending-table P4 entry for permlane32_swap).
+  DsSwizzle,                // ds_swizzle_b32 -- wave-size-translation.md sec. 5.3 row P6.
+  DppCrossLane,             // any `_dpp` variant -- wave-size-translation.md sec. 5.3 row P5.
+  DsBpermuteGather,         // ds_bpermute_b32 -- wave-size-translation.md sec. 5.3 row P1 (handler landed).
 
-  // ── Class 3 (wave-size-translation.md §6): replica races on shared state ──
+  // -- Class 3 (wave-size-translation.md sec. 6): replica races on shared state --
   // Modulo-replication introduces racers on the same address from
   // target lanes i and i + W_s; for non-commutative atomics this
   // produces an outcome the source program never expressed.
   NonCommutativeAtomic,     // atomic_cmpswap / atomic_swap / atomic_xchg -- no rewrite.
 
-  // ── Class 4 (wave-size-translation.md §6): lane-predicated EXEC writes ──
+  // -- Class 4 (wave-size-translation.md sec. 6): lane-predicated EXEC writes --
   // The EXEC mask the kernel writes depends on the absolute lane
   // position; under modulo-replication the projection does not
   // reproduce the source's intent.
@@ -266,7 +266,7 @@ struct ObstructionReport {
   llvm::SmallVector<ObstructionSite> Sites;
 
   // True iff any site has `rewrite == RewriteId::None` -- i.e. we saw
-  // an obstruction for which no rewrite in §4's table applies. This is
+  // an obstruction for which no rewrite in sec. 4's table applies. This is
   // the outcome-(c) condition.
   bool hasUnrewritable() const;
 
@@ -307,7 +307,7 @@ struct ObstructionReport {
 // corpus graduation (see raiser.h for the full rationale); callers
 // that want to pin the pre-rewrite REFUSE contract (lit fixtures for
 // the `c1_wave_id_lift_scalarized` REFUSE sibling, etc.) pass `false`
-// explicitly. See wave-size-translation.md §5.6.3.
+// explicitly. See wave-size-translation.md sec. 5.6.3.
 ObstructionReport buildObstructionReport(llvm::ArrayRef<DecodedInst> Insts,
                                           const MCState &Mc,
                                           const WaveProjection &Projection,
