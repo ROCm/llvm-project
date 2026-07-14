@@ -621,6 +621,60 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   }
 }
 
+TEST(ElfView, AddKernelEntryTrampolineSymbolsPreservesPhdr) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  const unsigned TextIdx = ViewOrErr->textSectionIndex();
+  const uint64_t TextAddr = ViewOrErr->textAddr();
+  const uint64_t OldTextSize = ViewOrErr->textSize();
+
+  Trampoline Stub;
+  Stub.Bytes.assign(2 * KernelEntryStubStride, 0);
+  std::vector<Trampoline> Growth{Stub};
+  const uint8_t SNop[4] = {};
+  std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
+      ViewOrErr->growWithTrampolines(Growth, SNop);
+  ASSERT_NE(Grown, nullptr);
+
+  std::vector<KernelEntryTrampolineFixup> Fixups = {
+      {"kernel_a", /*StubTextOffset=*/0, /*RequiredSgprs=*/10},
+      {"kernel_b", /*StubTextOffset=*/KernelEntryStubStride,
+       /*RequiredSgprs=*/12},
+  };
+  std::unique_ptr<llvm::WritableMemoryBuffer> WithSyms =
+      addKernelEntryTrampolineSymbols(*Grown, TextIdx, TextAddr, OldTextSize,
+                                      Fixups);
+  ASSERT_NE(WithSyms, nullptr);
+
+  using ELFT = llvm::object::ELF64LE;
+  llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
+      llvm::object::ELFFile<ELFT>::create(llvm::StringRef(
+          WithSyms->getBufferStart(), WithSyms->getBufferSize()));
+  ASSERT_TRUE((bool)FileOrErr) << llvm::toString(FileOrErr.takeError());
+
+  llvm::Expected<ELFT::PhdrRange> PhdrsOrErr = FileOrErr->program_headers();
+  ASSERT_TRUE((bool)PhdrsOrErr) << llvm::toString(PhdrsOrErr.takeError());
+  EXPECT_GE(PhdrsOrErr->size(), 2u);
+
+  bool FoundPoolLoad = false;
+  for (const auto &Phdr : *PhdrsOrErr) {
+    EXPECT_LE(Phdr.p_offset, WithSyms->getBufferSize());
+    if (Phdr.p_type == llvm::ELF::PT_LOAD && (Phdr.p_flags & llvm::ELF::PF_X)) {
+      FoundPoolLoad = true;
+      EXPECT_GT(Phdr.p_filesz, 0u);
+      EXPECT_LE(Phdr.p_offset + Phdr.p_filesz, WithSyms->getBufferSize());
+    }
+  }
+  EXPECT_TRUE(FoundPoolLoad) << "no executable PT_LOAD segment found";
+}
+
 TEST(ElfView, UpdateKernelDescriptorSgprCountUpdatesMetadataAndDescriptor) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
