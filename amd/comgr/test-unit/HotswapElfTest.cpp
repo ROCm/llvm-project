@@ -557,7 +557,7 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   // Grow .text by two entry-stub-sized blocks, mirroring the entry-trampoline
   // pass appending one stub per kernel.
   Trampoline Stub;
-  Stub.Bytes.assign(2 * KernelEntryStubStride, 0);
+  Stub.Bytes.assign(2 * KernelEntryStubStride, 0xAA);
   std::vector<Trampoline> Growth{Stub};
   const uint8_t SNop[4] = {};
   std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
@@ -636,7 +636,7 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsPreservesPhdr) {
   const uint64_t OldTextSize = ViewOrErr->textSize();
 
   Trampoline Stub;
-  Stub.Bytes.assign(2 * KernelEntryStubStride, 0);
+  Stub.Bytes.assign(2 * KernelEntryStubStride, 0xAA);
   std::vector<Trampoline> Growth{Stub};
   const uint8_t SNop[4] = {};
   std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
@@ -669,7 +669,12 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsPreservesPhdr) {
     if (Phdr.p_type == llvm::ELF::PT_LOAD && (Phdr.p_flags & llvm::ELF::PF_X)) {
       FoundPoolLoad = true;
       EXPECT_GT(Phdr.p_filesz, 0u);
-      EXPECT_LE(Phdr.p_offset + Phdr.p_filesz, WithSyms->getBufferSize());
+      ASSERT_LE(Phdr.p_offset + Phdr.p_filesz, WithSyms->getBufferSize());
+      const uint8_t *PoolBytes =
+          reinterpret_cast<const uint8_t *>(WithSyms->getBufferStart()) +
+          Phdr.p_offset;
+      for (uint64_t I = 0; I < Phdr.p_filesz; ++I)
+        EXPECT_EQ(PoolBytes[I], 0xAA) << "pool content mismatch at byte " << I;
     }
   }
   EXPECT_TRUE(FoundPoolLoad) << "no executable PT_LOAD segment found";
