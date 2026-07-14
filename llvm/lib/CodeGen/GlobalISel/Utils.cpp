@@ -2089,8 +2089,7 @@ static bool findGISelOptimalMemOpLowering(std::vector<LLT> &MemOps,
                                           unsigned DstAS, unsigned SrcAS,
                                           const AttributeList &FuncAttributes,
                                           const TargetLowering &TLI) {
-  if (Op.isMemcpyOrMemmoveWithFixedDstAlign() &&
-      Op.getSrcAlign() < Op.getDstAlign())
+  if (Op.isMemcpyWithFixedDstAlign() && Op.getSrcAlign() < Op.getDstAlign())
     return false;
 
   LLT Ty = TLI.getOptimalMemOpLLT(Op, FuncAttributes);
@@ -2129,7 +2128,7 @@ static bool findGISelOptimalMemOpLowering(std::vector<LLT> &MemOps,
       unsigned Fast;
       // Need to get a VT equivalent for allowMisalignedMemoryAccesses().
       MVT VT = getMVTForLLT(Ty);
-      if (NumMemOps && !Op.isVolatile() && NewTySize < Size &&
+      if (NumMemOps && Op.allowOverlap() && NewTySize < Size &&
           TLI.allowsMisalignedMemoryAccesses(
               VT, DstAS, Op.isFixedDstAlign() ? Op.getDstAlign() : Align(1),
               MachineMemOperand::MONone, &Fast) &&
@@ -2236,12 +2235,12 @@ bool llvm::canLowerMemCpyFamily(const MachineInstr &MI,
     const auto &SrcMMO = **std::next(MI.memoperands_begin());
     MachinePointerInfo SrcPtrInfo = SrcMMO.getPointerInfo();
     unsigned Limit = TLI.getMaxStoresPerMemmove(OptSize);
-    // FIXME: SelectionDAG always passes true for 'IsVolatile', apparently
+    // FIXME: SelectionDAG always passes false for 'AllowOverlap', apparently
     // due to a bug in it's findOptimalMemOpLowering implementation. For now do
     // the same thing here.
     return findGISelOptimalMemOpLowering(
         MemOps, Limit,
-        MemOp::Move(KnownLen, DstAlignCanChange, std::min(DstAlign, SrcAlign),
+        MemOp::Copy(KnownLen, DstAlignCanChange, std::min(DstAlign, SrcAlign),
                     SrcAlign, /*IsVolatile=*/true),
         DstPtrInfo.getAddrSpace(), SrcPtrInfo.getAddrSpace(),
         MF.getFunction().getAttributes(), TLI);

@@ -203,8 +203,9 @@ public:
                    uint32_t log_options, llvm::StringRef channel,
                    llvm::ArrayRef<const char *> categories);
 
-  static llvm::Error DisableLogChannel(llvm::StringRef channel,
-                                       llvm::ArrayRef<const char *> categories);
+  static bool DisableLogChannel(llvm::StringRef channel,
+                                llvm::ArrayRef<const char *> categories,
+                                llvm::raw_ostream &error_stream);
 
   static bool DumpLogChannel(llvm::StringRef channel,
                              llvm::raw_ostream &output_stream,

@@ -16,6 +16,7 @@
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/Twine.h"
 
 #include <algorithm>
@@ -484,7 +485,7 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     const ElfView &Elf, const LLVMState &LS, unsigned MaxSgprs,
     std::vector<Trampoline> &Growth,
     std::vector<KernelEntryTrampolineFixup> &OutFixups) {
-  ArrayRef<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
+  std::vector<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
   if (Descriptors.empty())
     return 0;
 
@@ -644,9 +645,24 @@ bool rewriteKernelEntryDescriptorOffsets(
 
   bool Ok = true;
   ElfView &OutElf = *ViewOrErr;
+
+  // O(n) name->vaddr lookup: getKernelDescriptorVAddr() rebuilds the whole
+  // kernelDescriptors() list (full symbol-table scan + O(n^2) dedup) on every
+  // call, so calling it once per fixup is O(n * (S + n^2)). Materialize the
+  // descriptor vaddrs into a StringMap once here so the per-fixup lookup is
+  // O(1). This is the isolated algorithmic change from ROCm/llvm-project#3361
+  // (name->vaddr StringMap), ported without the descriptor-cache/fast-path
+  // machinery that depends on #3348. Same output, lower complexity.
+  StringMap<uint64_t> KdVAddrByName;
+  for (const KernelDescriptorInfo &Info : OutElf.kernelDescriptors())
+    KdVAddrByName.try_emplace(Info.KernelName, Info.VAddr);
+
   for (const KernelEntryTrampolineFixup &Fixup : Fixups) {
+    StringMap<uint64_t>::const_iterator KdIt =
+        KdVAddrByName.find(Fixup.KernelName);
     std::optional<uint64_t> KdVAddr =
-        OutElf.getKernelDescriptorVAddr(Fixup.KernelName);
+        KdIt == KdVAddrByName.end() ? std::nullopt
+                                    : std::optional<uint64_t>(KdIt->second);
     if (!KdVAddr) {
       log() << "hotswap: error: missing kernel descriptor for entry "
             << "trampoline fixup '" << Fixup.KernelName << "'.\n";

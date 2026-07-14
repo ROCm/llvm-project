@@ -8,7 +8,6 @@
 
 #include "../lldb-python.h"
 
-#include "lldb/Core/PluginManager.h"
 #include "lldb/Host/Config.h"
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Utility/Log.h"
@@ -194,16 +193,4 @@ ScriptedFramePythonInterface::GetValueObjectForVariableExpression(
   }
 
   return val;
-}
-
-void ScriptedFramePythonInterface::Initialize() {
-  PluginManager::RegisterPlugin(
-      GetPluginNameStatic(),
-      "Provide frame state for scripted threads and frame providers.",
-      CreateInstance, eScriptedExtensionScriptedFrame, eScriptLanguagePython,
-      {});
-}
-
-void ScriptedFramePythonInterface::Terminate() {
-  PluginManager::UnregisterPlugin(CreateInstance);
 }

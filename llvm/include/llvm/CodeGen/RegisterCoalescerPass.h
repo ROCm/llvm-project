@@ -13,7 +13,7 @@
 
 namespace llvm {
 class RegisterCoalescerPass
-    : public RequiredPassInfoMixin<RegisterCoalescerPass> {
+    : public OptionalPassInfoMixin<RegisterCoalescerPass> {
 public:
   LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM);

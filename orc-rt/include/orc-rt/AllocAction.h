@@ -16,7 +16,6 @@
 #include "orc-rt/CallableTraitsHelper.h"
 #include "orc-rt/Error.h"
 #include "orc-rt/WrapperFunction.h"
-#include "orc-rt/scope_exit.h"
 
 #include <vector>
 
@@ -75,45 +74,11 @@ struct AllocActionPair {
 ///
 /// Both finalize and dealloc actions are permitted to be null (i.e. have a
 /// null action function) in which case they are ignored.
-template <typename ReportErrorFn>
 Expected<std::vector<AllocAction>>
-runFinalizeActions(std::vector<AllocActionPair> AAPs,
-                   ReportErrorFn &&ReportError) {
-  std::vector<AllocAction> DeallocActions;
-  auto RunDeallocActions = scope_exit([&]() {
-    while (!DeallocActions.empty()) {
-      auto B = DeallocActions.back()();
-      if (auto *ErrMsg = B.getOutOfBandError())
-        ReportError(make_error<StringError>(ErrMsg));
-      DeallocActions.pop_back();
-    }
-  });
-
-  for (auto &AAP : AAPs) {
-    if (AAP.Finalize) {
-      auto B = AAP.Finalize();
-      if (const char *ErrMsg = B.getOutOfBandError())
-        return make_error<StringError>(ErrMsg);
-    }
-    if (AAP.Dealloc)
-      DeallocActions.push_back(std::move(AAP.Dealloc));
-  }
-
-  RunDeallocActions.release();
-  return DeallocActions;
-}
+runFinalizeActions(std::vector<AllocActionPair> AAPs);
 
 /// Run the given deallocation actions in revwerse order.
-template <typename ReportErrorFn>
-void runDeallocActions(std::vector<AllocAction> DAAs,
-                       ReportErrorFn &&ReportError) {
-  while (!DAAs.empty()) {
-    auto B = DAAs.back()();
-    if (const char *ErrMsg = B.getOutOfBandError())
-      ReportError(make_error<StringError>(ErrMsg));
-    DAAs.pop_back();
-  }
-}
+void runDeallocActions(std::vector<AllocAction> DAAs);
 
 } // namespace orc_rt
 

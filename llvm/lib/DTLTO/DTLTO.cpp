@@ -90,7 +90,7 @@ LLVM_ABI Error lto::DTLTO::run(AddStreamFn AddStream, FileCache CacheParam) {
 
   if (Error Err = prepareDtltoJobs())
     return Err;
-  if (Error Err = extractLTOInputs())
+  if (Error Err = serializeLTOInputs())
     return Err;
   if (Error Err = performCodegen())
     return Err;
@@ -154,9 +154,9 @@ Error lto::DTLTO::prepareDtltoJob(StringRef ModulePath, unsigned Task) {
   if (Error Err = checkCacheHit(J))
     return Err;
   if (!J.Cached) {
-    InputModuleIDsToExtract.insert(J.ModuleID);
+    InputModuleIDsToSerialize.insert(J.ModuleID);
     for (StringRef ImportPath : J.ImportsFilesList)
-      InputModuleIDsToExtract.insert(ImportPath);
+      InputModuleIDsToSerialize.insert(ImportPath);
 
     TimeTraceScope JobScope("Emit individual index for DTLTO",
                             J.SummaryIndexPath);
@@ -229,7 +229,7 @@ Error lto::DTLTO::prepareDtltoJobs() {
   auto &ModuleMap =
       ThinLTO.ModulesToCompile ? *ThinLTO.ModulesToCompile : ThinLTO.ModuleMap;
 
-  InputModuleIDsToExtract.clear();
+  InputModuleIDsToSerialize.clear();
 
   if (ModuleMap.empty())
     return Error::success();

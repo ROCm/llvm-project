@@ -247,23 +247,28 @@ Log::EnableLogChannel(const std::shared_ptr<LogHandler> &log_handler_sp,
   return llvm::Error::success();
 }
 
-llvm::Error Log::DisableLogChannel(llvm::StringRef channel,
-                                   llvm::ArrayRef<const char *> categories) {
+bool Log::DisableLogChannel(llvm::StringRef channel,
+                            llvm::ArrayRef<const char *> categories,
+                            llvm::raw_ostream &error_stream) {
   auto iter = g_channel_map->find(channel);
-  if (iter == g_channel_map->end())
-    return llvm::createStringErrorV("Invalid log channel '{0}'.\n", channel);
+  if (iter == g_channel_map->end()) {
+    error_stream << llvm::formatv("Invalid log channel '{0}'.\n", channel);
+    return false;
+  }
 
   if (categories.empty()) {
     iter->second.Disable(std::nullopt);
-    return llvm::Error::success();
+    return true;
   }
 
   llvm::Expected<MaskType> flags = GetFlags(*iter, categories);
-  if (!flags)
-    return flags.takeError();
+  if (!flags) {
+    error_stream << toString(flags.takeError()) << "\n";
+    return false;
+  }
 
   iter->second.Disable(*flags);
-  return llvm::Error::success();
+  return true;
 }
 
 bool Log::DumpLogChannel(llvm::StringRef channel,

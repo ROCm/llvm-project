@@ -15,8 +15,7 @@
 
 namespace lldb_private {
 class ScriptedThreadPythonInterface : public ScriptedThreadInterface,
-                                      public ScriptedPythonInterface,
-                                      virtual public PluginInterface {
+                                      public ScriptedPythonInterface {
 public:
   ScriptedThreadPythonInterface(ScriptInterpreterPythonImpl &interpreter);
 
@@ -50,16 +49,6 @@ public:
   StructuredData::ArraySP GetExtendedInfo() override;
 
   std::optional<std::string> GetScriptedFramePluginName() override;
-
-  static void Initialize();
-
-  static void Terminate();
-
-  static llvm::StringRef GetPluginNameStatic() {
-    return "ScriptedThreadPythonInterface";
-  }
-
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
 
 protected:
   lldb::ScriptedFrameInterfaceSP CreateScriptedFrameInterface() override;

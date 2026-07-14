@@ -339,13 +339,11 @@ void MarkLive<ELFT, TrackWhyLive>::markSymbol(Symbol *sym, StringRef reason) {
       enqueue(isec, d->value, sym, {std::nullopt, reason});
 }
 
-// If -r or --emit-relocs, mark symbols referenced by relocations as used so
-// .symtab retains them and the relocations keep valid symbol indices. Callers
-// invoke this only when .symtab filtering is active (--discard-* or
-// --retain-symbols-file); otherwise .symtab keeps every symbol anyway.
-template <class ELFT> static void markUsedSymbols(InputSectionBase &sec) {
+template <class ELFT> static void markUsedLocalSymbols(InputSectionBase &sec) {
   auto mark = [&](const auto &rel) {
-    sec.file->getRelocTargetSym(rel).setFlags(USED);
+    Symbol &sym = sec.file->getRelocTargetSym(rel);
+    if (sym.isLocal())
+      sym.setFlags(USED);
   };
   const RelsOrRelas<ELFT> rels = sec.template relsOrRelas<ELFT>();
   for (const typename ELFT::Rel &rel : rels.rels)
@@ -387,10 +385,7 @@ void MarkLive<ELFT, TrackWhyLive>::run() {
   // referenced by .eh_frame sections, so we scan them for that here.
   for (EhInputSection *eh : ctx.ehInputSections)
     scanEhFrameSection(*eh);
-  // See markUsedSymbols.
-  bool markUsed =
-      ctx.arg.copyRelocs &&
-      (ctx.arg.discard != DiscardPolicy::None || ctx.arg.retainSymbols);
+  bool markUsed = ctx.arg.copyRelocs && ctx.arg.discard != DiscardPolicy::None;
   for (InputSectionBase *sec : ctx.inputSections) {
     if (sec->flags & SHF_GNU_RETAIN) {
       enqueue(sec, /*offset=*/0, /*sym=*/nullptr, {std::nullopt, "retained"});
@@ -426,8 +421,10 @@ void MarkLive<ELFT, TrackWhyLive>::run() {
         sec->markLive();
         for (InputSection *isec : sec->dependentSections)
           isec->markLive();
+        // If -r or --emit-relocs, ensure referenced local symbols are
+        // preserved by --discard-{locals,all} (see shouldKeepInSymtab).
         if (markUsed)
-          markUsedSymbols<ELFT>(*sec);
+          markUsedLocalSymbols<ELFT>(*sec);
       }
     }
 
@@ -605,13 +602,14 @@ template <class ELFT> void elf::markLive(Ctx &ctx) {
       if (auto *s = dyn_cast<SharedSymbol>(sym))
         if (s->isUsedInRegularObj && !s->isWeak())
           cast<SharedFile>(s->file)->isNeeded = true;
-    // See markUsedSymbols.
-    if (ctx.arg.copyRelocs &&
-        (ctx.arg.discard != DiscardPolicy::None || ctx.arg.retainSymbols))
+    // If -r or --emit-relocs, ensure referenced local symbols are preserved so
+    // that they won't be discarded by --discard-{locals,all} (see
+    // shouldKeepInSymtab).
+    if (ctx.arg.copyRelocs && ctx.arg.discard != DiscardPolicy::None)
       parallelForEach(ctx.objectFiles, [](ELFFileBase *file) {
         for (InputSectionBase *sec : file->getSections())
           if (sec)
-            markUsedSymbols<ELFT>(*sec);
+            markUsedLocalSymbols<ELFT>(*sec);
       });
     return;
   }

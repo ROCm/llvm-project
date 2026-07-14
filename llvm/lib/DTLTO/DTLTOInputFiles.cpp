@@ -163,7 +163,8 @@ lto::DTLTO::addInput(std::unique_ptr<InputFile> InputPtr) {
   }
 
   // For a member of a thin archive that is not a FatLTO object, there is an
-  // existing file on disk that can be used, so we can avoid having to extract.
+  // existing file on disk that can be used, so we can avoid having to
+  // serialize.
   Expected<bool> UseThinMember =
       Input->isFatLTOObject() ? false : isThinArchive(ArchivePath);
   if (!UseThinMember)
@@ -178,7 +179,7 @@ lto::DTLTO::addInput(std::unique_ptr<InputFile> InputPtr) {
   }
 
   // A new file on disk will be needed for archive members and FatLTO objects.
-  Input->setExtractForDistribution(true);
+  Input->setSerializeForDistribution(true);
 
   // Get the normalized output directory, if we haven't already.
   if (LinkerOutputDir.empty()) {
@@ -200,18 +201,18 @@ lto::DTLTO::addInput(std::unique_ptr<InputFile> InputPtr) {
   return Input;
 }
 
-// Save the contents of ThinLTO-enabled input files that must be extracted for
+// Save the contents of ThinLTO-enabled input files that must be serialized for
 // distribution.
-Error lto::DTLTO::extractLTOInputs() {
+Error lto::DTLTO::serializeLTOInputs() {
   for (auto &Input : InputFiles) {
-    if (!Input->isThinLTO() || !Input->getExtractForDistribution())
+    if (!Input->isThinLTO() || !Input->getSerializeForDistribution())
       continue;
 
     // Save the content of the input file to a file named after the module ID.
     StringRef ModuleID = Input->getName();
-    if (!InputModuleIDsToExtract.contains(ModuleID))
+    if (!InputModuleIDsToSerialize.contains(ModuleID))
       continue;
-    TimeTraceScope TimeScope("Extract bitcode input for DTLTO", ModuleID);
+    TimeTraceScope TimeScope("Serialize bitcode input for DTLTO", ModuleID);
     MemoryBufferRef Buf = Input->getFileBuffer();
     if (Error Err = save(Buf.getBuffer(), ModuleID))
       return Err;

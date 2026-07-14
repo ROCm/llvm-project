@@ -254,15 +254,11 @@ EXECUTION OPTIONS
 
  Do not track elapsed wall time for each test.
 
-.. option:: --time-tests[=N|all]
+.. option:: --time-tests
 
- Track the wall time individual tests take to execute and include the results
+ Track the wall time individual tests take to execute and includes the results
  in the summary output.  This is useful for determining which tests in a test
- suite take the most time to execute.  When enabled, lit prints a slowest-test
- list and a histogram over all timed tests.  The slowest-test list defaults to
- the 20 slowest tests, but can be limited with ``=N`` or expanded to every
- timed test with ``=all``.  The headings report how many tests are listed, for
- example ``Slowest Tests (N of M):`` and ``Test Times (M):``.
+ suite take the most time to execute.
 
 .. _selection-options:
 

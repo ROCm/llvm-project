@@ -23,7 +23,6 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/MemoryModelRelaxationAnnotations.h"
-#include <optional>
 
 using namespace mlir;
 using namespace mlir::LLVM;
@@ -100,14 +99,6 @@ getSupportedMetadataImpl(llvm::LLVMContext &llvmContext) {
   return convertibleMetadata;
 }
 
-/// Extracts an LLVM metadata constant as an unsigned 64-bit integer.
-static std::optional<uint64_t> getUInt64Metadata(llvm::Metadata *metadata) {
-  auto *constant = llvm::mdconst::dyn_extract<llvm::ConstantInt>(metadata);
-  if (!constant)
-    return std::nullopt;
-  return constant->getValue().tryZExtValue();
-}
-
 /// Converts the given profiling metadata `node` to an MLIR profiling attribute
 /// and attaches it to the imported operation if the translation succeeds.
 /// Returns failure otherwise.
@@ -121,45 +112,27 @@ static LogicalResult setProfilingAttr(OpBuilder &builder, llvm::MDNode *node,
   auto *name = dyn_cast<llvm::MDString>(node->getOperand(0));
   if (!name)
     return failure();
-  StringRef profName = name->getString();
 
   // Handle function entry count metadata.
-  if (profName == llvm::MDProfLabels::FunctionEntryCount ||
-      profName == llvm::MDProfLabels::SyntheticFunctionEntryCount) {
-    if (node->getNumOperands() < 2)
+  if (name->getString() == llvm::MDProfLabels::FunctionEntryCount) {
+
+    // TODO support function entry count metadata with GUID fields.
+    if (node->getNumOperands() != 2)
       return failure();
 
-    bool isSynthetic =
-        profName == llvm::MDProfLabels::SyntheticFunctionEntryCount;
-    ProfileCountType profileCountType =
-        isSynthetic ? ProfileCountType::Synthetic : ProfileCountType::Real;
-
-    std::optional<uint64_t> entryCountValue =
-        getUInt64Metadata(node->getOperand(1));
-    if (!entryCountValue)
+    llvm::ConstantInt *entryCount =
+        llvm::mdconst::dyn_extract<llvm::ConstantInt>(node->getOperand(1));
+    if (!entryCount)
       return failure();
-
-    SmallVector<uint64_t> importGUIDValues;
-    importGUIDValues.reserve(node->getNumOperands() - 2);
-    for (unsigned idx = 2, e = node->getNumOperands(); idx < e; ++idx) {
-      std::optional<uint64_t> guidValue =
-          getUInt64Metadata(node->getOperand(idx));
-      if (!guidValue)
-        return failure();
-      importGUIDValues.push_back(*guidValue);
-    }
-
     if (auto funcOp = dyn_cast<LLVMFuncOp>(op)) {
-      funcOp.setFunctionEntryCountAttr(
-          FunctionEntryCountAttr::get(builder.getContext(), *entryCountValue,
-                                      profileCountType, importGUIDValues));
+      funcOp.setFunctionEntryCount(entryCount->getZExtValue());
       return success();
     }
     return op->emitWarning()
            << "expected function_entry_count to be attached to a function";
   }
 
-  if (profName != llvm::MDProfLabels::BranchWeights)
+  if (name->getString() != llvm::MDProfLabels::BranchWeights)
     return failure();
   // The branch_weights metadata must have at least 2 operands.
   if (node->getNumOperands() < 2)

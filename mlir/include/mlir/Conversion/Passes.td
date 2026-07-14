@@ -1106,8 +1106,7 @@ def ConvertNVGPUToNVVMPass : Pass<"convert-nvgpu-to-nvvm"> {
     "arith::ArithDialect",
     "LLVM::LLVMDialect",
     "memref::MemRefDialect",
-    "NVVM::NVVMDialect",
-    "vector::VectorDialect"
+    "NVVM::NVVMDialect"
   ];
 }
 

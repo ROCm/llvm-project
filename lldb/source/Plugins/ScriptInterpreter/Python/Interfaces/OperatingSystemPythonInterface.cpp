@@ -94,8 +94,7 @@ void OperatingSystemPythonInterface::Initialize() {
   const std::vector<llvm::StringRef> api_usages = {};
   PluginManager::RegisterPlugin(
       GetPluginNameStatic(), llvm::StringRef("Mock thread state"),
-      CreateInstance, eScriptedExtensionOperatingSystem, eScriptLanguagePython,
-      {ci_usages, api_usages});
+      CreateInstance, eScriptLanguagePython, {ci_usages, api_usages});
 }
 
 void OperatingSystemPythonInterface::Terminate() {

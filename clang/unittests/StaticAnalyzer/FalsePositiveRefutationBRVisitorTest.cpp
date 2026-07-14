@@ -183,10 +183,8 @@ TEST_F(FalsePositiveRefutationBRVisitorTestBase,
       if (n >= 1 && n <= 2) {
         if (x >= 3)
           return;
-        // x: [0,2] and n: [1,2], so the reachable products of 'x*n' are
-        // {0,1,2,4}. The range manager cannot represent this gap and
-        // over-approximates the symbol '(x*n)' to the contiguous range [0,4].
-        int y = x * n;
+        // x: [0,2] and n: [1,2]
+        int y = x + n; // y: '(x+n)' Which is in approximately between 1 and 4.
 
         // Registers the symbol 'y' with the constraint [1, MAX] in the true
         // branch.
@@ -196,14 +194,13 @@ TEST_F(FalsePositiveRefutationBRVisitorTestBase,
           // SAT. Therefore that report is NOT invalidated.
           reachedWithNoContradiction(); // 'y' can be greater than zero. OK
 
-          // If we ask the analyzer whether the 'y' can be 3. It won't know,
-          // because 3 is inside the over-approximated range [1,4], therefore
-          // the state will be created where the 'y' expression is 3.
+          // If we ask the analyzer whether the 'y' can be 5. It won't know,
+          // therefore, the state will be created where the 'y' expression is 5.
           // Although, this assumption is false!
-          // 'x*n' can not be 3 given x: [0,2] and n: [1,2].
+          // 'y' can not be 5 if the maximal value of both x and n is 2.
           // The BugPath which become UnSAT in the ErrorNode with a refined
           // constraint, should be invalidated.
-          reportIfCanBeTrue(y == 3);
+          reportIfCanBeTrue(y == 5);
         }
       }
     })";

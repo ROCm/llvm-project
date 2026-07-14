@@ -1553,30 +1553,23 @@ bool PreRARematStage::initGCNSchedStage() {
     // We further filter the registers that we can rematerialize based on our
     // current tracking capabilities in the stage. The user cannot itself be
     // marked rematerializable, and no register operand of the defining MI can
-    // be marked rematerializable. We also do not rematerialize an instruction
-    // if it uses registers that aren't available at its use. This ensures that
-    // we are not extending any live range while rematerializing.
+    // be marked rematerializable.
     MachineInstr *UseMI = *CandReg.Uses.begin()->getSecond().begin();
     const MachineOperand &UseMO = UseMI->getOperand(0);
     if (UseMO.isReg() && MarkedRegs.contains(UseMO.getReg()))
       continue;
-    SlotIndex UseIdx = DAG.LIS->getInstructionIndex(*UseMI).getRegSlot(true);
-    SlotIndex RefIdx =
-        DAG.LIS->getInstructionIndex(*CandReg.DefMI).getRegSlot(true);
-    if (llvm::any_of(CandReg.Dependencies, [&](RegisterIdx DepRegIdx) {
-          const Rematerializer::Reg &DepReg = Remater.getReg(DepRegIdx);
-          Register DepDefReg = DepReg.getDefReg();
-          return MarkedRegs.contains(DepDefReg) ||
-                 !Remater.isRegIdenticalAtUses(DepDefReg, DepReg.Mask, RefIdx,
-                                               {UseIdx});
-        }))
-      continue;
-    if (llvm::any_of(Remater.getUnrematableDeps(RegIdx),
-                     [&](const std::pair<Register, LaneBitmask> &RegAndMask) {
-                       const auto &[Reg, Mask] = RegAndMask;
-                       return !Remater.isRegIdenticalAtUses(Reg, Mask, RefIdx,
-                                                            {UseIdx});
+    if (llvm::any_of(CandReg.DefMI->all_uses(),
+                     [&MarkedRegs](const MachineOperand &MO) {
+                       return MarkedRegs.contains(MO.getReg());
                      }))
+      continue;
+
+    // Do not rematerialize an instruction if it uses registers that aren't
+    // available at its use. This ensures that we are not extending any live
+    // range while rematerializing.
+    SlotIndex UseIdx = DAG.LIS->getInstructionIndex(*UseMI).getRegSlot(true);
+    if (!VirtRegAuxInfo::allUsesAvailableAt(CandReg.DefMI, UseIdx, *DAG.LIS,
+                                            DAG.MRI, *DAG.TII))
       continue;
 
     MarkedRegs.insert(CandReg.getDefReg());
@@ -3103,8 +3096,8 @@ void PreRARematStage::ScoredRemat::rematerialize(
     Rematerializer &Remater) const {
   const Rematerializer::Reg &Reg = Remater.getReg(RegIdx);
   Rematerializer::DependencyReuseInfo DRI;
-  for (RegisterIdx DepRegIdx : Reg.Dependencies)
-    DRI.reuse(DepRegIdx);
+  for (const Rematerializer::Reg::Dependency &Dep : Reg.Dependencies)
+    DRI.reuse(Dep.RegIdx);
   unsigned UseRegion = Reg.Uses.begin()->first;
   Remater.rematerializeToRegion(RegIdx, UseRegion, DRI);
 }

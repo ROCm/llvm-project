@@ -11,7 +11,6 @@ f:
 # ASM: f:
 # ASM-NEXT: .cfi_sections .debug_frame
 # ASM-NEXT: .cfi_startproc
-# ASM-NEXT: .amdgcn_target "amdgcn-amd-amdhsa-unknown-gfx900"
 # ASM-NEXT: s_nop 0
 # ASM-NEXT: .cfi_endproc
 

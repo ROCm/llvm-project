@@ -477,9 +477,6 @@ def FunctionAttr : Pass<"function-attr", "mlir::func::FuncOp"> {
        Option<"setNoAlias", "set-noalias", "bool", /*default=*/"false",
               "Set LLVM noalias attribute on function arguments, "
               "if possible">,
-       Option<"setReadOnly", "set-readonly", "bool", /*default=*/"false",
-              "Set LLVM readonly attribute on INTENT(IN) by-reference "
-              "function arguments, if possible">,
   ];
 }
 

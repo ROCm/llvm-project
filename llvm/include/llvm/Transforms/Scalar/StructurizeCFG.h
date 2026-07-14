@@ -12,7 +12,7 @@
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
-struct StructurizeCFGPass : RequiredPassInfoMixin<StructurizeCFGPass> {
+struct StructurizeCFGPass : OptionalPassInfoMixin<StructurizeCFGPass> {
 private:
   bool SkipUniformRegions;
 

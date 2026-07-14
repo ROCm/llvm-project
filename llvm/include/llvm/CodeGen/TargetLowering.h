@@ -119,27 +119,21 @@ enum Preference : uint8_t {
 // MemOp models a memory operation, either memset or memcpy/memmove.
 struct MemOp {
 private:
-  enum class MemOpKind {
-    Memset,
-    MemsetWithZero, // memset the memory with zeros
-    Memcpy, // copy memory from source to destination, source and destination do
-            // not overlap
-    MemcpyStrSrc, // memcpy source is an in-register constant, so it does not
-                  // need to be loaded
-    Memmove, // memmove: like memcpy, but source and destination regions may
-             // overlap
-  };
-
   // Shared
   uint64_t Size;
   bool DstAlignCanChange; // true if destination alignment can satisfy any
                           // constraint.
   Align DstAlign;         // Specified alignment of the memory operation.
 
-  bool IsVolatile;
-  MemOpKind Kind;
-  Align SrcAlign; // Inferred alignment of the source or default value if the
-                  // memory operation does not need to load the value.
+  bool AllowOverlap;
+  // memset only
+  bool IsMemset;   // If setthis memory operation is a memset.
+  bool ZeroMemset; // If set clears out memory with zeros.
+  // memcpy only
+  bool MemcpyStrSrc; // Indicates whether the memcpy source is an in-register
+                     // constant so it does not need to be loaded.
+  Align SrcAlign;    // Inferred alignment of the source or default value if the
+                     // memory operation does not need to load the value.
 public:
   static MemOp Copy(uint64_t Size, bool DstAlignCanChange, Align DstAlign,
                     Align SrcAlign, bool IsVolatile,
@@ -148,20 +142,10 @@ public:
     Op.Size = Size;
     Op.DstAlignCanChange = DstAlignCanChange;
     Op.DstAlign = DstAlign;
-    Op.IsVolatile = IsVolatile;
-    Op.Kind = MemcpyStrSrc ? MemOpKind::MemcpyStrSrc : MemOpKind::Memcpy;
-    Op.SrcAlign = SrcAlign;
-    return Op;
-  }
-
-  static MemOp Move(uint64_t Size, bool DstAlignCanChange, Align DstAlign,
-                    Align SrcAlign, bool IsVolatile) {
-    MemOp Op;
-    Op.Size = Size;
-    Op.DstAlignCanChange = DstAlignCanChange;
-    Op.DstAlign = DstAlign;
-    Op.IsVolatile = IsVolatile;
-    Op.Kind = MemOpKind::Memmove;
+    Op.AllowOverlap = !IsVolatile;
+    Op.IsMemset = false;
+    Op.ZeroMemset = false;
+    Op.MemcpyStrSrc = MemcpyStrSrc;
     Op.SrcAlign = SrcAlign;
     return Op;
   }
@@ -172,8 +156,10 @@ public:
     Op.Size = Size;
     Op.DstAlignCanChange = DstAlignCanChange;
     Op.DstAlign = DstAlign;
-    Op.IsVolatile = IsVolatile;
-    Op.Kind = IsZeroMemset ? MemOpKind::MemsetWithZero : MemOpKind::Memset;
+    Op.AllowOverlap = !IsVolatile;
+    Op.IsMemset = true;
+    Op.ZeroMemset = IsZeroMemset;
+    Op.MemcpyStrSrc = false;
     return Op;
   }
 
@@ -183,22 +169,19 @@ public:
     return DstAlign;
   }
   bool isFixedDstAlign() const { return !DstAlignCanChange; }
-  bool isVolatile() const { return IsVolatile; }
-  bool isMemset() const {
-    return Kind == MemOpKind::Memset || Kind == MemOpKind::MemsetWithZero;
+  bool allowOverlap() const { return AllowOverlap; }
+  bool isMemset() const { return IsMemset; }
+  bool isMemcpy() const { return !IsMemset; }
+  bool isMemcpyWithFixedDstAlign() const {
+    return isMemcpy() && !DstAlignCanChange;
   }
-  bool isMemcpy() const {
-    return Kind == MemOpKind::Memcpy || Kind == MemOpKind::MemcpyStrSrc;
+  bool isZeroMemset() const { return isMemset() && ZeroMemset; }
+  bool isMemcpyStrSrc() const {
+    assert(isMemcpy() && "Must be a memcpy");
+    return MemcpyStrSrc;
   }
-  bool isMemmove() const { return Kind == MemOpKind::Memmove; }
-  bool isMemcpyOrMemmove() const { return isMemcpy() || isMemmove(); }
-  bool isMemcpyOrMemmoveWithFixedDstAlign() const {
-    return isMemcpyOrMemmove() && !DstAlignCanChange;
-  }
-  bool isZeroMemset() const { return Kind == MemOpKind::MemsetWithZero; }
-  bool isMemcpyStrSrc() const { return Kind == MemOpKind::MemcpyStrSrc; }
   Align getSrcAlign() const {
-    assert(isMemcpyOrMemmove() && "Must be a memcpy or memmove");
+    assert(isMemcpy() && "Must be a memcpy");
     return SrcAlign;
   }
   bool isSrcAligned(Align AlignCheck) const {

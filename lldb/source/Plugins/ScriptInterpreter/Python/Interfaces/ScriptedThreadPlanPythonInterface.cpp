@@ -109,8 +109,7 @@ void ScriptedThreadPlanPythonInterface::Initialize() {
   PluginManager::RegisterPlugin(
       GetPluginNameStatic(),
       llvm::StringRef("Alter thread stepping logic and stop reason"),
-      CreateInstance, eScriptedExtensionScriptedThreadPlan,
-      eScriptLanguagePython, {ci_usages, api_usages});
+      CreateInstance, eScriptLanguagePython, {ci_usages, api_usages});
 }
 
 void ScriptedThreadPlanPythonInterface::Terminate() {

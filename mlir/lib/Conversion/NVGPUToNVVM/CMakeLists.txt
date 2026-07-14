@@ -18,7 +18,6 @@ add_mlir_conversion_library(MLIRNVGPUToNVVM
   MLIRNVGPUDialect
   MLIRNVVMDialect
   MLIRArithDialect
-  MLIRVectorDialect
   MLIRPass
   MLIRSCFTransforms
   MLIRTransforms

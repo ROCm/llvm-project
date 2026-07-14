@@ -225,7 +225,7 @@ enum class CommentKind {
   CK_Unknown
 };
 
-enum OutputFormatTy { md, html, json };
+enum OutputFormatTy { md, yaml, html, json };
 
 CommentKind stringToCommentKind(llvm::StringRef KindStr);
 llvm::StringRef commentKindToString(CommentKind Kind);

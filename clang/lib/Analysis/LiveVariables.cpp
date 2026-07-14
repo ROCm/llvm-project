@@ -88,18 +88,16 @@ bool LiveVariables::LivenessValues::isLive(const VarDecl *D) const {
 }
 
 namespace {
-template <typename SET> SET mergeSets(SET A, SET B) {
-  if (A.getRootWithoutRetain() == B.getRootWithoutRetain())
+  template <typename SET>
+  SET mergeSets(SET A, SET B) {
+    if (A.isEmpty())
+      return B;
+
+    for (const auto *Elem : B) {
+      A = A.add(Elem);
+    }
     return A;
-
-  if (A.getHeight() < B.getHeight())
-    std::swap(A, B);
-
-  for (const auto *Elem : B) {
-    A = A.add(Elem);
   }
-  return A;
-}
 } // namespace
 
 void LiveVariables::Observer::anchor() { }

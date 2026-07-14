@@ -18,6 +18,7 @@ namespace {
 
 static bool isMemRefTypeLegalForEmitC(MemRefType memRefType) {
   return memRefType.hasStaticShape() && memRefType.getLayout().isIdentity() &&
+         memRefType.getRank() != 0 &&
          !llvm::is_contained(memRefType.getShape(), 0);
 }
 
@@ -49,8 +50,6 @@ EmitCTypeConverter::EmitCTypeConverter(MLIRContext *ctx) {
     if (!convertedElementType)
       return {};
 
-    if (memRefType.getRank() == 0)
-      return emitc::PointerType::get(convertedElementType);
     return emitc::ArrayType::get(memRefType.getShape(), convertedElementType);
   });
 

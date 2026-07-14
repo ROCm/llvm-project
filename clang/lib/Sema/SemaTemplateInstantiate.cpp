@@ -3678,12 +3678,7 @@ bool Sema::InstantiateClassImpl(
 
     if (Member->isInvalidDecl()) {
       Instantiation->setInvalidDecl();
-      // Drop invalid members to prevent cascading diagnostic errors.
-      // We make an exception for VarTemplateDecl because the primary template
-      // is required for partial specialization lookup. Keeping it is safe from
-      // cascading errors due to the parser's type recovery.
-      if (!isa<VarTemplateDecl>(Member))
-        continue;
+      continue;
     }
 
     Decl *NewMember = Instantiator.Visit(Member);
@@ -3714,9 +3709,6 @@ bool Sema::InstantiateClassImpl(
             (MD->isVirtualAsWritten() || Instantiation->getNumBases()))
           MightHaveConstexprVirtualFunctions = true;
       }
-
-      if (Member->isInvalidDecl())
-        NewMember->setInvalidDecl();
 
       if (NewMember->isInvalidDecl())
         Instantiation->setInvalidDecl();

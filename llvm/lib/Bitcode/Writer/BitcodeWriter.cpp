@@ -5008,9 +5008,7 @@ void ModuleBitcodeWriterBase::writePerModuleGlobalValueSummary() {
     if (!VI || VI.getSummaryList().empty()) {
       // Only declarations should not have a summary (a declaration might
       // however have a summary if the def was in module level asm).
-      if (!F.isDeclaration())
-        reportFatalUsageError("expected function definition " + F.getName() +
-                              " to have an associated value info.");
+      assert(F.isDeclaration());
       continue;
     }
     auto *Summary = VI.getSummaryList()[0].get();

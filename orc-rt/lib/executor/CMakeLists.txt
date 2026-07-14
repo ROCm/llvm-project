@@ -1,4 +1,5 @@
 set(files
+  AllocAction.cpp
   BootstrapInfo.cpp
   SimpleSymbolTable.cpp
   Environment.cpp

@@ -28,7 +28,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "llvm/ADT/ArrayRef.h"
@@ -100,27 +99,13 @@ struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
-  // When set, the pool is beyond s_branch reach. The source site branches to a
-  // nearby NOP gateway, which uses the scratch-backed pre-Gen5 set-PC sequence
-  // to reach the pool without executing s_add_pc_i64.
+  // When set, both edges use an s_add_pc_i64 long branch instead of s_branch
+  // (reaches anywhere, no scratch reg, no SCC). Set when the appended pool is
+  // beyond s_branch's +-128 KB reach; widens the reserved branch-back slot.
   bool Long = false;
-  bool UsesSetPCBack = false;
-  unsigned LongBranchSgprBase = 0;
-  bool HasPoolBranchIsland = false;
-  uint64_t PoolBranchIslandOffset = 0;
-  bool UsesShortBranchForward = false;
-  bool UsesDirectSetPCForward = false;
-  llvm::SmallVector<uint8_t> DirectSetPCForwardBytes;
-  llvm::SmallVector<uint64_t, 4> ForwardBranchIslands;
-  uint64_t ForwardBranchTargetOffset = 0;
-  bool HasForwardGateway = false;
-  uint64_t ForwardGatewayOffset = 0;
-  llvm::SmallVector<uint8_t> ForwardGatewayBytes;
-  // A far-site run may only be coalesced within one known function. Unknown
-  // ranges stay unmerged because adjacent symbols are independent entries.
-  bool HasFunctionRange = false;
-  uint64_t FunctionStart = 0;
-  uint64_t FunctionEnd = 0;
+  // The branch-back is already present at the end of Bytes. Used by required
+  // far patches whose backward edge cannot use s_add_pc_i64 on gfx1250 A0.
+  bool PreEncodedBack = false;
 };
 
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
@@ -183,15 +168,13 @@ static constexpr uint64_t MinNopSledSize = 8;
 // Minimum AMDGPU instruction size (one dword).
 static constexpr uint32_t MinInstSize = 4;
 
-// Fixed reservation for the SCC-preserving set-PC return. The assembled
-// sequence is 28 bytes for a same-object forward or backward delta.
-static constexpr uint32_t SetPcReturnReserveBytes = 28;
-
-// A gateway needs at least 20 bytes when incoming SCC is proven dead. Live SCC
-// uses the 28-byte preserving sequence.
-static constexpr uint32_t SetPcMinGatewayBytes = 20;
-static constexpr uint32_t SetPcForwardSequenceBytes = 28;
-static constexpr uint32_t PoolBranchIslandBytes = MinInstSize;
+// s_add_pc_i64 long-branch encoded sizes: 8 bytes for a forward (32-bit
+// literal) offset, 12 for a backward (64-bit literal) one. The back slot
+// reserves the max; unused tail bytes are s_nop-padded. emitToTrampoline picks
+// the long path only when a short s_branch cannot reach the site's exact pool
+// offset on either edge (computed from the already-queued trampolines).
+static constexpr uint32_t LongBranchFwdBytes = 8;
+static constexpr uint32_t LongBranchMaxBytes = 12;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
 // LLVMState::encodeSBranch to reject out-of-range branches before handing
@@ -293,9 +276,8 @@ public:
   uint8_t *findKernelDescriptor(llvm::StringRef KernelName);
 
   /// Enumerate kernel descriptor symbols named "<kernel>.kd" and read their
-  /// current kernel_code_entry_byte_offset values. The returned range remains
-  /// valid until this ElfView is destroyed.
-  llvm::ArrayRef<KernelDescriptorInfo> kernelDescriptors() const;
+  /// current kernel_code_entry_byte_offset values.
+  std::vector<KernelDescriptorInfo> kernelDescriptors() const;
 
   /// Return the virtual address of the kernel descriptor symbol for
   /// \p KernelName, or std::nullopt when the descriptor is not present.
@@ -312,16 +294,6 @@ public:
   bool updateKernelDescriptorSgprCount(llvm::StringRef KernelName,
                                        unsigned RequiredSgprs,
                                        bool UpdateDescriptor = true);
-
-  /// Update metadata SGPR counts for every named kernel in one parse and
-  /// serialization pass. All requested kernels must be present.
-  bool updateKernelMetadataSgprCounts(
-      const llvm::StringMap<unsigned> &RequiredSgprs);
-
-  /// Retag every gfx1250 kernel in the AMDGPU metadata note with \p Revision.
-  /// The revision strings used by gfx1250 ("A0" and "B0") have equal encoded
-  /// size, so this preserves the ELF layout.
-  bool updateGfx1250RevisionMetadata(llvm::StringRef Revision);
 
   /// Read COMPUTE_PGM_RSRC3.INST_PREF_SIZE for \p KernelName.
   std::optional<uint32_t>
@@ -398,35 +370,15 @@ public:
                       llvm::ArrayRef<uint8_t> SNopBytes) const;
 
 private:
-  enum class KernelSgprCacheState {
-    Uninitialized,
-    Metadata,
-    NoMetadata,
-    Error,
-  };
-
   ElfView(ELFFileT File, ELFT::ShdrRange Sections,
           const ELFT::Shdr *TextSection, unsigned TextSectionIndex)
       : File(std::move(File)), Sections(Sections), TextSection(TextSection),
         TextSectionIndex(TextSectionIndex) {}
 
-  llvm::ArrayRef<FunctionTextRange> cachedFunctionTextRanges() const;
-  const FunctionTextRange *
-  findFunctionTextRangeAtAddress(uint64_t TextAddress) const;
-  void initializeKernelDescriptorCache() const;
-  void initializeKernelSgprCountCache() const;
-
   ELFFileT File;
   ELFT::ShdrRange Sections;
   const ELFT::Shdr *TextSection;
   unsigned TextSectionIndex;
-  mutable std::optional<std::vector<FunctionTextRange>> FunctionRangeCache;
-  mutable std::optional<std::vector<KernelDescriptorInfo>>
-      KernelDescriptorCache;
-  mutable llvm::StringMap<uint64_t> KernelDescriptorFileOffsetCache;
-  mutable KernelSgprCacheState SgprCacheState =
-      KernelSgprCacheState::Uninitialized;
-  mutable llvm::StringMap<std::optional<unsigned>> KernelSgprCountCache;
 };
 
 // -- Free-function ELF helpers (no ELF state required) ------------------------
@@ -528,23 +480,6 @@ struct LLVMState {
   unsigned SAddcU32Opcode = 0;
   unsigned SSetPcI64Opcode = 0;
 
-  /// MC identities used by far-trampoline relocation analysis. Each opcode is
-  /// resolved once through the asm parser so policy code never compares
-  /// disassembled mnemonic strings.
-  unsigned SClauseOpcode = 0;
-  unsigned SDelayAluOpcode = 0;
-  unsigned SEndPgmOpcode = 0;
-  unsigned SEndPgmSavedOpcode = 0;
-  unsigned SAddPcI64Opcode = 0;
-  unsigned SCallI64Opcode = 0;
-  unsigned SSwapPcI64Opcode = 0;
-  unsigned SPrefetchInstPcRelOpcode = 0;
-  unsigned SPrefetchDataPcRelOpcode = 0;
-
-  /// SCC, recovered from the implicit definition on a parsed scalar compare.
-  /// This avoids scanning target register names in policy code.
-  llvm::MCRegister SCCRegister;
-
   bool Valid = false;
 
   /// Encode a relative `s_branch` from \p FromOffset to \p ToOffset and
@@ -566,7 +501,6 @@ struct InternalDecodedInst {
   uint32_t Size = 0;
   llvm::MCInst Inst;
   std::string Mnemonic;
-  bool DecodeSucceeded = false;
 };
 
 // -- Function declarations (LLVM MC layer) ------------------------------------
@@ -755,13 +689,6 @@ struct KernelPatchStats {
   unsigned ScratchAboveKd = 0;
 };
 
-struct SafeSgprUsageSummary {
-  bool Valid = true;
-  bool UsesVcc = false;
-  bool HasCall = false;
-  unsigned HighWatermark = 0;
-};
-
 /// Mutable per-run context threaded through all patch passes. Bundles the
 /// input config, decoded instruction stream, raw .text bytes, MC state,
 /// output streams (trampolines / scratch info), and the shared ELF view +
@@ -787,39 +714,7 @@ struct PatchContext {
   // unsafe to return when the selected rewrite policy needs the patch.
   bool RequiredPatchFailed = false;
   bool RequiredPatchApplied = false;
-  // Sum of the bytes already queued in OutTrampolines. Keeping this in the
-  // per-rewrite context makes each new pool-position calculation constant
-  // time even for code objects with many thousands of patch sites.
-  uint64_t QueuedTrampolineBytes = 0;
-  // Safe far-return scratch allocation can be queried at many patch sites in
-  // one function. Cache the immutable decoded SGPR usage summaries so each
-  // function, and the whole-object fallback, is scanned at most once.
-  std::optional<SafeSgprUsageSummary> WholeObjectSgprUsage;
-  llvm::DenseMap<std::pair<uint64_t, uint64_t>, SafeSgprUsageSummary>
-      FunctionSgprUsage{0};
 };
-
-/// A block of numbered SGPRs that is not referenced in the function being
-/// patched, or anywhere in the code object when the site may be reached by a
-/// call whose register requirements cannot be bounded locally.
-struct SafeSgprScratchBlock {
-  unsigned Base = 0;
-  unsigned Count = 0;
-};
-
-/// Find an aligned block of unused numbered SGPRs for \p TextOffset. Returns
-/// nullopt after logging when no block fits below RewriteConfig::MaxSgprs.
-std::optional<SafeSgprScratchBlock>
-findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
-                         unsigned Alignment, llvm::StringRef Context);
-
-/// Charge a previously selected global block to the kernel owning \p
-/// TextOffset. If the site is in an ordinary device function, conservatively
-/// charge every kernel descriptor because the ELF does not carry a complete
-/// call graph.
-bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
-                                const SafeSgprScratchBlock &Block,
-                                llvm::StringRef Context);
 
 // -- Trampoline emission helpers (defined in comgr-hotswap-b0a0.cpp) ----------
 
@@ -828,39 +723,28 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
                                  llvm::ArrayRef<uint8_t> Replacement);
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
-                                    llvm::ArrayRef<uint8_t> Replacement);
+                                    llvm::ArrayRef<uint8_t> Replacement,
+                                    bool AllowSafeFarReturn = false);
 
-/// Encode an SCC-preserving indirect long branch using three numbered SGPRs:
-/// an aligned PC pair at \p SgprBase and an SCC-save temporary at Base + 2.
-/// The displacement is materialized as two 32-bit literals; no
-/// s_add_pc_i64 or 64-bit literal is emitted.
+// Encode an s_add_pc_i64 PC-relative long branch from \p FromOffset to
+// \p TargetOffset (.text byte offsets). Exposed for unit testing the offset
+// math / encoding. Returns empty on failure.
+llvm::SmallVector<uint8_t> encodeLongBranch(const LLVMState &LS,
+                                            uint64_t FromOffset,
+                                            uint64_t TargetOffset);
+
+// Encode an SCC-neutral PC-relative long branch through an aligned SGPR pair.
+// s_get_pc_i64 captures the next instruction's PC, s_add_nc_u64 applies the
+// two's-complement delta without reading or writing SCC, and s_set_pc_i64
+// transfers control. Exposed for unit testing the offset math and register
+// constraints. Returns std::nullopt after logging the specific failure.
 std::optional<llvm::SmallVector<uint8_t>>
-encodeSetPCLongBranch(const LLVMState &LS, uint64_t FromOffset,
-                      uint64_t TargetOffset, unsigned SgprBase);
-
-/// Return whether an s_branch at \p From can encode \p To, including the
-/// instruction-relative PC base, alignment, signed range, and overflow checks.
-bool isSBranchReachable(uint64_t From, uint64_t To);
-
-/// Evaluate a statically direct branch or call target from its decoded MCInst.
-/// Uses MCInstrAnalysis where supported and the documented gfx1250 s_call_i64
-/// operand fallback otherwise.
-std::optional<uint64_t>
-evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
-                                const LLVMState &LS);
-
+encodeSccNeutralLongBranch(const LLVMState &LS, uint64_t FromOffset,
+                           uint64_t TargetOffset, unsigned SgprBase);
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
-                                       llvm::ArrayRef<uint8_t> Replacement);
-
-/// Expand one decoded gfx1250 DS two-address instruction into the ordered
-/// single-address instruction sequence used by the trampoline patch. Exposed
-/// from the internal interface so unit tests can verify read-before-write
-/// dependency handling without constructing a complete ELF rewrite. Returns
-/// std::nullopt after logging a malformed or unsafe expansion.
-[[nodiscard]] std::optional<std::vector<std::string>>
-expandDs2Addr(const llvm::MCInst &Inst, llvm::StringRef FromMnem,
-              llvm::StringRef ToMnem, const LLVMState &LS);
+                                       llvm::ArrayRef<uint8_t> Replacement,
+                                       bool AllowSafeFarReturn = false);
 
 // -- Patch dispatch vtable ----------------------------------------------------
 //
@@ -987,9 +871,8 @@ bool rewriteKernelEntryDescriptorOffsets(
 /// virtual addresses, program headers, or relocations change; `.dynsym` (used
 /// by the loader) is left untouched.
 std::unique_ptr<llvm::WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
-    llvm::WritableMemoryBuffer &In, unsigned TextSectionIndex,
-    uint64_t TextAddr, uint64_t OldTextSize,
-    llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
+    llvm::WritableMemoryBuffer &In, unsigned TextSectionIndex, uint64_t TextAddr,
+    uint64_t OldTextSize, llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------
 

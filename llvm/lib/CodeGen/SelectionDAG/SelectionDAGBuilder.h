@@ -397,8 +397,6 @@ public:
     N = NewN;
   }
 
-  void setValueToPoison(const Value *V, const SDLoc &dl);
-
   bool shouldKeepJumpConditionsTogether(
       const FunctionLoweringInfo &FuncInfo, const CondBrInst &I,
       Instruction::BinaryOps Opc, const Value *Lhs, const Value *Rhs,

@@ -45,7 +45,6 @@ struct ReplacementInfo {
   AtomicRMWInst::BinOp Op;
   unsigned ValIdx;
   bool ValDivergent;
-  bool IsLDS;
 };
 
 class AMDGPUAtomicOptimizer : public FunctionPass {
@@ -88,7 +87,7 @@ private:
                        BasicBlock *ComputeLoop, BasicBlock *ComputeEnd) const;
 
   void optimizeAtomic(Instruction &I, AtomicRMWInst::BinOp Op, unsigned ValIdx,
-                      bool ValDivergent, bool IsLDS) const;
+                      bool ValDivergent) const;
 
 public:
   AMDGPUAtomicOptimizerImpl() = delete;
@@ -162,8 +161,8 @@ bool AMDGPUAtomicOptimizerImpl::run() {
   if (ToReplace.empty())
     return false;
 
-  for (auto &[I, Op, ValIdx, ValDivergent, IsLDS] : ToReplace)
-    optimizeAtomic(*I, Op, ValIdx, ValDivergent, IsLDS);
+  for (auto &[I, Op, ValIdx, ValDivergent] : ToReplace)
+    optimizeAtomic(*I, Op, ValIdx, ValDivergent);
   ToReplace.clear();
   return true;
 }
@@ -242,12 +241,10 @@ void AMDGPUAtomicOptimizerImpl::visitAtomicRMWInst(AtomicRMWInst &I) {
       return;
   }
 
-  const bool IsLDS = I.getPointerAddressSpace() == AMDGPUAS::LOCAL_ADDRESS;
-
   // If we get here, we can optimize the atomic using a single wavefront-wide
   // atomic operation to do the calculation for the entire wavefront, so
   // remember the instruction so we can come back to it.
-  ToReplace.push_back({&I, Op, ValIdx, ValDivergent, IsLDS});
+  ToReplace.push_back({&I, Op, ValIdx, ValDivergent});
 }
 
 void AMDGPUAtomicOptimizerImpl::visitIntrinsicInst(IntrinsicInst &I) {
@@ -338,8 +335,7 @@ void AMDGPUAtomicOptimizerImpl::visitIntrinsicInst(IntrinsicInst &I) {
   // If we get here, we can optimize the atomic using a single wavefront-wide
   // atomic operation to do the calculation for the entire wavefront, so
   // remember the instruction so we can come back to it.
-  // Buffer atomics are never LDS.
-  ToReplace.push_back({&I, Op, ValIdx, ValDivergent, /*IsLDS=*/false});
+  ToReplace.push_back({&I, Op, ValIdx, ValDivergent});
 }
 
 // Use the builder to create the non-atomic counterpart of the specified
@@ -650,23 +646,7 @@ static Value *buildMul(IRBuilder<> &B, Value *LHS, Value *RHS) {
 void AMDGPUAtomicOptimizerImpl::optimizeAtomic(Instruction &I,
                                                AtomicRMWInst::BinOp Op,
                                                unsigned ValIdx,
-                                               bool ValDivergent,
-                                               bool IsLDS) const {
-  // Don't generate a DPP scan if !amdgpu.expected.active.lane hint indicates
-  // insufficient lanes to offset fixed overhead.
-
-  // FIXME: The threshold was tuned empirically on gfx11 and gfx12. The DPP scan
-  // overhead differs across subtargets, so the break-even point may differ too;
-  // this may need to become subtarget-dependent.
-  if (IsLDS && ValDivergent && ScanImpl == ScanOptions::DPP) {
-    if (MDNode *MD = I.getMetadata("amdgpu.expected.active.lanes")) {
-      auto *CI = mdconst::extract<ConstantInt>(MD->getOperand(0));
-      constexpr unsigned ActiveLanesThreshold = 5;
-      if (CI->getValue().ule(ActiveLanesThreshold))
-        return;
-    }
-  }
-
+                                               bool ValDivergent) const {
   // Start building just before the instruction.
   IRBuilder<> B(&I);
 

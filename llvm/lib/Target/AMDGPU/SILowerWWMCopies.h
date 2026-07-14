@@ -13,7 +13,7 @@
 
 namespace llvm {
 class SILowerWWMCopiesPass
-    : public RequiredPassInfoMixin<SILowerWWMCopiesPass> {
+    : public OptionalPassInfoMixin<SILowerWWMCopiesPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

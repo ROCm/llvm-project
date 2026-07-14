@@ -667,7 +667,6 @@ public:
   // Scripted Interface
   static bool RegisterPlugin(llvm::StringRef name, llvm::StringRef description,
                              ScriptedInterfaceCreateInstance create_callback,
-                             lldb::ScriptedExtension extension,
                              lldb::ScriptLanguage language,
                              ScriptedInterfaceUsages usages);
 
@@ -678,9 +677,6 @@ public:
   static llvm::StringRef GetScriptedInterfaceNameAtIndex(uint32_t idx);
 
   static llvm::StringRef GetScriptedInterfaceDescriptionAtIndex(uint32_t idx);
-
-  static lldb::ScriptedExtension
-  GetScriptedInterfaceExtensionAtIndex(uint32_t idx);
 
   static lldb::ScriptLanguage GetScriptedInterfaceLanguageAtIndex(uint32_t idx);
 

@@ -14,7 +14,7 @@
 namespace llvm {
 
 class MachineBlockPlacementPass
-    : public OptionalPassInfoMixin<MachineBlockPlacementPass> {
+    : public RequiredPassInfoMixin<MachineBlockPlacementPass> {
 
   bool AllowTailMerge = true;
 

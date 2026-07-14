@@ -1068,17 +1068,14 @@ AnalysisKey StackSafetyGlobalAnalysis::Key;
 
 StackSafetyGlobalInfo
 StackSafetyGlobalAnalysis::run(Module &M, ModuleAnalysisManager &AM) {
+  // FIXME: Lookup Module Summary.
   FunctionAnalysisManager &FAM =
       AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
-  const ModuleSummaryIndex *Index = nullptr;
-  if (auto *IndexPass =
-          AM.getCachedResult<ImmutableModuleSummaryIndexAnalysis>(M))
-    Index = IndexPass->getIndex();
   return {&M,
           [&FAM](Function &F) -> const StackSafetyInfo & {
             return FAM.getResult<StackSafetyAnalysis>(F);
           },
-          Index};
+          nullptr};
 }
 
 PreservedAnalyses StackSafetyGlobalPrinterPass::run(Module &M,

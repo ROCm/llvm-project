@@ -26,7 +26,6 @@
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/Support/Error.h"
@@ -3045,9 +3044,7 @@ void LLVMFuncOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute(getComdatAttrName(result.name), comdat);
   if (functionEntryCount)
     result.addAttribute(getFunctionEntryCountAttrName(result.name),
-                        FunctionEntryCountAttr::get(
-                            builder.getContext(), *functionEntryCount,
-                            ProfileCountType::Real, ArrayRef<uint64_t>{}));
+                        builder.getI64IntegerAttr(functionEntryCount.value()));
 #ifndef NDEBUG
   std::optional<NamedAttribute> duplicate = result.attributes.findDuplicate();
   if (duplicate.has_value()) {

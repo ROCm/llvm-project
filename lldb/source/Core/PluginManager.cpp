@@ -13,7 +13,6 @@
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Interpreter/OptionValueProperties.h"
-#include "lldb/Interpreter/ScriptInterpreter.h"
 #include "lldb/Symbol/SaveCoreOptions.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Utility/FileSpec.h"
@@ -2059,14 +2058,12 @@ struct ScriptedInterfaceInstance
     : public PluginInstance<ScriptedInterfaceCreateInstance> {
   ScriptedInterfaceInstance(llvm::StringRef name, llvm::StringRef description,
                             ScriptedInterfaceCreateInstance create_callback,
-                            lldb::ScriptedExtension extension,
                             lldb::ScriptLanguage language,
                             ScriptedInterfaceUsages usages)
       : PluginInstance<ScriptedInterfaceCreateInstance>(name, description,
                                                         create_callback),
-        extension(extension), language(language), usages(usages) {}
+        language(language), usages(usages) {}
 
-  lldb::ScriptedExtension extension;
   lldb::ScriptLanguage language;
   ScriptedInterfaceUsages usages;
 };
@@ -2081,10 +2078,9 @@ static ScriptedInterfaceInstances &GetScriptedInterfaceInstances() {
 bool PluginManager::RegisterPlugin(
     llvm::StringRef name, llvm::StringRef description,
     ScriptedInterfaceCreateInstance create_callback,
-    lldb::ScriptedExtension extension, lldb::ScriptLanguage language,
-    ScriptedInterfaceUsages usages) {
+    lldb::ScriptLanguage language, ScriptedInterfaceUsages usages) {
   return GetScriptedInterfaceInstances().RegisterPlugin(
-      name, description, create_callback, extension, language, usages);
+      name, description, create_callback, language, usages);
 }
 
 bool PluginManager::UnregisterPlugin(
@@ -2103,13 +2099,6 @@ llvm::StringRef PluginManager::GetScriptedInterfaceNameAtIndex(uint32_t index) {
 llvm::StringRef
 PluginManager::GetScriptedInterfaceDescriptionAtIndex(uint32_t index) {
   return GetScriptedInterfaceInstances().GetDescriptionAtIndex(index);
-}
-
-lldb::ScriptedExtension
-PluginManager::GetScriptedInterfaceExtensionAtIndex(uint32_t index) {
-  if (auto instance = GetScriptedInterfaceInstances().GetInstanceAtIndex(index))
-    return instance->extension;
-  return ScriptedExtension::eScriptedExtensionInvalid;
 }
 
 lldb::ScriptLanguage

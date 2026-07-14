@@ -118,7 +118,8 @@ define void @whilege_first_active_branch(i64 %a, i64 %b) {
 ; CHECK-LABEL: whilege_first_active_branch:
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    whilege pn8.b, x0, x1, vlx4
-; CHECK-NEXT:    b.pl .LBB8_2
+; CHECK-NEXT:    cset w8, mi
+; CHECK-NEXT:    cbz w8, .LBB8_2
 ; CHECK-NEXT:  // %bb.1: // %then
 ; CHECK-NEXT:    //APP
 ; CHECK-NEXT:    //NO_APP
@@ -142,7 +143,8 @@ define void @whilelo_first_active_branch(i64 %a, i64 %b) {
 ; CHECK-LABEL: whilelo_first_active_branch:
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    whilelo pn8.s, x0, x1, vlx4
-; CHECK-NEXT:    b.mi .LBB9_2
+; CHECK-NEXT:    cset w8, mi
+; CHECK-NEXT:    tbnz w8, #0, .LBB9_2
 ; CHECK-NEXT:  // %bb.1: // %then
 ; CHECK-NEXT:    //APP
 ; CHECK-NEXT:    //NO_APP
