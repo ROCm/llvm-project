@@ -38,6 +38,18 @@ namespace hotswap {
 static constexpr StringLiteral UnknownMnemonic("<unknown>");
 
 namespace {
+/// Whether the per-call instruction decode cache is enabled (HOTSWAP_DECODE_CACHE
+/// set and not "0"). Evaluated once per process.
+bool isDecodeCacheEnabled() {
+  static const bool Enabled = [] {
+    const char *V = getenv("HOTSWAP_DECODE_CACHE");
+    return V && V[0] != '\0' && StringRef(V) != "0";
+  }();
+  return Enabled;
+}
+} // namespace
+
+namespace {
 // The amdgcn Target is the same for every AMDGPU subtarget (the per-CPU /
 // per-feature differences live in MCSubtargetInfo), so a fixed triple is fine
 // for the one-time TargetRegistry lookup below. The per-call ISA-specific
@@ -448,9 +460,39 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
                        std::vector<InternalDecodedInst> &Decoded) {
   Decoded.reserve(Decoded.size() + TextSize / MinInstSize);
   uint64_t Pos = 0;
+  // Per-call instruction decode cache (opt-in via HOTSWAP_DECODE_CACHE). Decode
+  // is a pure function of the instruction bytes, so byte-identical instructions
+  // (~87% of .text, almost all intra-object) reuse the first decode instead of
+  // re-running the MCDisassembler decision walk. Position-specific data lives in
+  // DI.Offset (set per occurrence), never in the cached MCInst, so reuse is
+  // safe. Keyed on the up-to-8-byte instruction window: a shared key implies
+  // identical decode; an over-specific key only costs a (correct) miss.
+  const bool Cache = isDecodeCacheEnabled();
+  struct DecodeCacheEntry {
+    MCInst Inst;
+    uint32_t Size;
+    std::string Mnemonic;
+  };
+  DenseMap<uint64_t, DecodeCacheEntry> LocalCache;
   while (Pos < TextSize) {
     InternalDecodedInst DI;
     DI.Offset = Pos;
+
+    uint64_t Key = 0;
+    unsigned KeyN = static_cast<unsigned>(std::min<uint64_t>(8, TextSize - Pos));
+    memcpy(&Key, Text + Pos, KeyN);
+
+    if (Cache) {
+      DenseMap<uint64_t, DecodeCacheEntry>::iterator It = LocalCache.find(Key);
+      if (It != LocalCache.end()) {
+        DI.Size = It->second.Size;
+        DI.Inst = It->second.Inst;
+        DI.Mnemonic = It->second.Mnemonic;
+        Pos += DI.Size;
+        Decoded.emplace_back(std::move(DI));
+        continue;
+      }
+    }
 
     ArrayRef<uint8_t> Bytes(Text + Pos, TextSize - Pos);
     uint64_t InstSize = 0;
@@ -476,6 +518,11 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
         DI.Mnemonic = UnknownMnemonic.str();
       }
     }
+    // Only cache clean 4/8-byte decodes whose key fully covers the instruction
+    // (KeyN >= Size); a truncated tail key could alias a shorter instruction.
+    if (Cache && Status != MCDisassembler::Fail && DI.Size <= KeyN)
+      LocalCache.try_emplace(Key,
+                             DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic});
     Pos += DI.Size;
     Decoded.emplace_back(std::move(DI));
   }
