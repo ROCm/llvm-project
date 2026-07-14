@@ -748,7 +748,7 @@ void AMDGPUAtomicOptimizerImpl::optimizeAtomic(Instruction &I,
   const bool IsFloatingTy =
       Ty->isHalfTy() || Ty->isFloatTy() || Ty->isDoubleTy();
   const bool UseWaveReductionIntrinsic =
-      (!ValDivergent || !NeedResult) && (Ty->isIntegerTy() || IsFloatingTy);
+      !NeedResult && (Ty->isIntegerTy() || IsFloatingTy);
 
   // For atomic sub, perform scan with add operation and allow one lane to
   // subtract the reduced value later.
