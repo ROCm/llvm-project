@@ -748,10 +748,7 @@ void AMDGPUAtomicOptimizerImpl::optimizeAtomic(Instruction &I,
   const bool IsFloatingTy =
       Ty->isHalfTy() || Ty->isFloatTy() || Ty->isDoubleTy();
   const bool UseWaveReductionIntrinsic =
-      (!ValDivergent && NeedResult) && (Ty->isIntegerTy() || IsFloatingTy);
-  // the normal atomic optimizer also only works for i32/i64 types. why is this?
-  // where is the check for that? also apparantly only i32/i64 are classified as
-  // interger types, in the isIntegerTy() API.
+      (!ValDivergent || !NeedResult) && (Ty->isIntegerTy() || IsFloatingTy);
 
   // For atomic sub, perform scan with add operation and allow one lane to
   // subtract the reduced value later.
