@@ -1033,6 +1033,12 @@ struct Gfx1250RewriteOptions {
   bool RunB0A0Patches = true;
   bool RunEntryTrampolines = false;
   MaskWorkaroundPolicy MaskPolicy = MaskWorkaroundPolicy::None;
+  // Source and target are both gfx1250 B0. Only then may the entry-trampoline
+  // rewrite take the no-MC fast path; the source/target stepping needed to
+  // decide this is known to the caller but not recoverable from TargetIdent
+  // alone. A0->A0 and A0->B0 also run without instruction patches, so this must
+  // be set explicitly rather than inferred inside retargetCodeObject.
+  bool UseB0B0EntryFastPath = false;
 };
 
 /// Run the selected GFX1250 hotswap rewrite passes on \p ElfData / \p ElfSize.
