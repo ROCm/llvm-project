@@ -177,8 +177,8 @@ ScratchAllocation allocateScratch(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
   std::string KernelName =
       Ctx.Elf.findKernelAtAddress(DI.Offset + Ctx.Elf.textAddr());
-  std::optional<unsigned> KdVgprs =
-      Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
+  std::optional<unsigned> KdVgprs = Ctx.Elf.getKernelVgprCount(
+      KernelName, getKernelVgprGranuleSize(Ctx, KernelName));
   unsigned VgprKdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
   VgprAllocator VgprAlloc(Ctx.Liveness.LiveBefore[Idx], VgprKdCount,
                           Ctx.Config.MaxVgprs);
@@ -403,12 +403,18 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
+  unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
+  if (!SA.KernelName.empty() &&
+      checkKernelVgprBump(Ctx, SA.KernelName, ExtraV,
+                          PatchRequirement::Optional) !=
+          VgprBumpDecision::Apply)
+    return 0;
+
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, ReplacementBytes))
     return 0;
 
   if (!SA.KernelName.empty()) {
     KernelPatchStats &Stats = Ctx.KernelStats[SA.KernelName];
-    unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
     Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, ExtraV);
     Stats.ExtraSgprs =
         std::max(Stats.ExtraSgprs, SA.SgprAlloc.extraSgprsNeeded());
@@ -596,12 +602,18 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
+  unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
+  if (!SA.KernelName.empty() &&
+      checkKernelVgprBump(Ctx, SA.KernelName, ExtraV,
+                          PatchRequirement::Optional) !=
+          VgprBumpDecision::Apply)
+    return 0;
+
   if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
     return 0;
 
   if (!SA.KernelName.empty()) {
     KernelPatchStats &Stats = Ctx.KernelStats[SA.KernelName];
-    unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
     Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, ExtraV);
     Stats.ExtraSgprs =
         std::max(Stats.ExtraSgprs, SA.SgprAlloc.extraSgprsNeeded());
@@ -760,12 +772,18 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
+  unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
+  if (!SA.KernelName.empty() &&
+      checkKernelVgprBump(Ctx, SA.KernelName, ExtraV,
+                          PatchRequirement::Optional) !=
+          VgprBumpDecision::Apply)
+    return 0;
+
   if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
     return 0;
 
   if (!SA.KernelName.empty()) {
     KernelPatchStats &Stats = Ctx.KernelStats[SA.KernelName];
-    unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
     Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, ExtraV);
     Stats.ExtraSgprs =
         std::max(Stats.ExtraSgprs, SA.SgprAlloc.extraSgprsNeeded());
