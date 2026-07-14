@@ -381,11 +381,6 @@ jobs:
       - name: LLVM Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/amd-feature/wave-transform" ]] || \
-             [[ "${{ github.head_ref }}" == "amd-feature/wave-transform" ]] || \
-             [[ "${{ github.base_ref }}" == "amd-feature/wave-transform" ]]; then
-                export LIT_XFAIL_NOT='CodeGen/AMDGPU/ds-read2-write2-debug-info.ll;CodeGen/AMDGPU/llvm.dbg.value.ll;DebugInfo/AMDGPU/dbg-value-sched-crash.ll;CodeGen/AMDGPU/debug-independence-adjustSchedDependency.ll'
-          fi          
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-llvm
 
       - name: Clang Lit Tests
