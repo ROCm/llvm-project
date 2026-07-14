@@ -337,7 +337,7 @@ public:
   /// field; it is reserved and must remain unchanged on gfx10+.
   bool updateKernelDescriptorSgprCount(llvm::StringRef KernelName,
                                        unsigned RequiredSgprs,
-                                       bool UpdateDescriptor = true);
+                                       bool UpdateDescriptor);
 
   /// Update metadata SGPR counts for every named kernel in one parse and
   /// serialization pass. All requested kernels must be present.
@@ -594,6 +594,11 @@ struct LLVMState {
   /// SCC, recovered from the implicit definition on a parsed scalar compare.
   /// This avoids scanning target register names in policy code.
   llvm::MCRegister SCCRegister;
+
+  /// VCC super-register, recovered from the destination of a parsed scalar
+  /// move. Policy code uses regsOverlap against this cached identity so VCC_LO,
+  /// VCC_HI, and tuple aliases are handled by LLVM MC.
+  llvm::MCRegister VCCRegister;
 
   bool Valid = false;
 

@@ -520,7 +520,8 @@ static bool updateNumberedSgprHighWatermark(const MCRegisterInfo &MRI,
 }
 
 static bool isVccRegister(const LLVMState &LS, MCRegister Reg) {
-  return Reg.isValid() && StringRef(LS.MRI->getName(Reg)).starts_with("VCC");
+  return Reg.isValid() && LS.VCCRegister.isValid() &&
+         LS.MRI->regsOverlap(Reg, LS.VCCRegister);
 }
 
 static bool instructionUsesVcc(const LLVMState &LS,

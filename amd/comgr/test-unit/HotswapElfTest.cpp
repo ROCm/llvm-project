@@ -88,6 +88,13 @@ TEST(ElfView, FindKernelAtAddressResolvesNearestPrecedingForZeroSizeSymbol) {
   // interior offset the zero-size symbol still resolves.
   EXPECT_EQ(ViewOrErr->findKernelAtAddress(0x1000), "zero_size_kernel");
   EXPECT_EQ(ViewOrErr->findKernelAtAddress(0x1000 + 4), "zero_size_kernel");
+  std::optional<ElfView::FunctionTextRange> Range =
+      ViewOrErr->findFunctionTextRangeAtOffset(4);
+  ASSERT_TRUE(Range.has_value());
+  EXPECT_EQ(Range->Begin, 0u);
+  EXPECT_EQ(Range->End, makeText().size());
+  EXPECT_NE(Range->Symbol, nullptr);
+  EXPECT_NE(Range->Symtab, nullptr);
   // An address before the symbol has no preceding function symbol to resolve.
   EXPECT_EQ(ViewOrErr->findKernelAtAddress(0x0FF0), "");
 }
@@ -177,7 +184,8 @@ TEST(ElfView, KernelDescriptorsEnumeratesAndUpdatesEntryOffset) {
 
   // Prime the descriptor fallback cache before changing the encoded count.
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 8u);
-  ASSERT_TRUE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  ASSERT_TRUE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   EXPECT_GE(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 10u);
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 16u);
 }
@@ -716,7 +724,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountUpdatesMetadataAndDescriptor) {
 
   // Prime the metadata cache before the in-place update.
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 8u);
-  ASSERT_TRUE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  ASSERT_TRUE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   std::optional<unsigned> MetadataSgprs =
       ViewOrErr->getKernelSgprCount("entry_kernel");
   ASSERT_TRUE(MetadataSgprs.has_value());
@@ -922,7 +931,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsMissingMetadataCount) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   EXPECT_EQ(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 8u);
 }
 
@@ -939,7 +949,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsMissingMetadataKernel) {
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), std::nullopt);
-  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   EXPECT_EQ(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 8u);
 }
 
@@ -955,7 +966,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsNonIntegerMetadataCount) {
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), std::nullopt);
-  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   EXPECT_EQ(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 8u);
 }
 
@@ -970,7 +982,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsMetadataSizeChange) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 128));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 128, /*UpdateDescriptor=*/true));
   std::optional<unsigned> MetadataSgprs =
       ViewOrErr->getKernelSgprCount("entry_kernel");
   ASSERT_TRUE(MetadataSgprs.has_value());
@@ -989,8 +1002,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsDescriptorLimitFirst) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  EXPECT_FALSE(
-      ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 100000));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 100000, /*UpdateDescriptor=*/true));
   std::optional<unsigned> MetadataSgprs =
       ViewOrErr->getKernelSgprCount("entry_kernel");
   ASSERT_TRUE(MetadataSgprs.has_value());

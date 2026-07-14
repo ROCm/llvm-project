@@ -581,7 +581,8 @@ ElfView::findFunctionTextRangeAtOffset(uint64_t TextOffset) const {
       findFunctionTextRangeAtAddress(textAddr() + TextOffset);
   if (!Range || Range->Begin < textAddr() || Range->End < textAddr())
     return std::nullopt;
-  return FunctionTextRange{Range->Begin - textAddr(), Range->End - textAddr()};
+  return FunctionTextRange{Range->Begin - textAddr(), Range->End - textAddr(),
+                           Range->Symbol, Range->Symtab};
 }
 
 // -- ElfView::kernelDescriptors -----------------------------------------------
