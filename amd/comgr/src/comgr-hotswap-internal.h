@@ -448,6 +448,7 @@ private:
   mutable std::optional<std::vector<KernelDescriptorInfo>>
       KernelDescriptorCache;
   mutable llvm::StringMap<uint64_t> KernelDescriptorFileOffsetCache;
+  mutable llvm::StringMap<uint64_t> KernelDescriptorVAddrCache;
   mutable KernelSgprCacheState SgprCacheState =
       KernelSgprCacheState::Uninitialized;
   mutable llvm::StringMap<std::optional<unsigned>> KernelSgprCountCache;
