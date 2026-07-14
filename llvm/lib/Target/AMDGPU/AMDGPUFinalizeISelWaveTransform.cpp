@@ -45,9 +45,14 @@ private:
 
     Register DstReg = MI.getOperand(0).getReg();
     const MachineBasicBlock *DefMBB = MI.getParent();
-    for (const MachineInstr &UseMI : MRI->use_nodbg_instructions(DstReg))
-      if (UseMI.getParent() != DefMBB)
+    for (const MachineInstr &UseMI : MRI->use_nodbg_instructions(DstReg)) {
+      // A PHI operand belongs to its predecessor edge, so a same-block
+      // (self-back-edge) PHI use still crosses a CFG edge that getParent()
+      // misses. Round#1 always widens vreg_1 PHIs to VGPR_32, so a value
+      // feeding one cannot stay a lane mask: treat any PHI use as non-local.
+      if (UseMI.isPHI() || UseMI.getParent() != DefMBB)
         return false;
+    }
 
     return true;
   }
