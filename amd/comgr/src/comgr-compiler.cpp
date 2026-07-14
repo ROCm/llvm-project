@@ -1883,11 +1883,12 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
            ActionInfo->PackageEntryIDs) {
         llvm::object::OffloadFile::TargetID EntryTarget =
             std::make_pair(StringRef(Entry.first), StringRef(Entry.second));
-        // Select files whose target matches the requested entry exactly, or is
-        // compatible with it. areTargetsCompatible() reports false for an exact
-        // match, so the equality check handles the common case.
-        if (EntryTarget == FileTarget ||
-            llvm::object::areTargetsCompatible(EntryTarget, FileTarget)) {
+        // Select files whose target can serve the requested entry.
+        // areTargetsCompatible() is directional: the image is the provider and
+        // the requested entry is the consumer (e.g. a plain gfx900 image serves
+        // a gfx900:xnack+ request, but not vice versa). It also returns true for
+        // an exact match.
+        if (llvm::object::areTargetsCompatible(FileTarget, EntryTarget)) {
           const char *FileExtension;
           amd_comgr_data_kind_t DataKind;
           if (auto Status = getUnpackagedImageInfo(Binary->getImage(),

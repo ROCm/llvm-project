@@ -36,14 +36,16 @@ amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
     object::OffloadFile::TargetID Target = File;
 
     // Prefer an exact match, then fall back to a compatible target. Note that
-    // areTargetsCompatible() reports false for an exact match (it only flags
-    // distinct-but-compatible targets), so the explicit lookup below is
-    // required to handle equal targets. We track the matching Worklist entry by
-    // iterator so it can be erased once written.
+    // areTargetsCompatible() is directional: the image is the provider and the
+    // requested target from the Worklist is the consumer (e.g. a plain gfx900
+    // image serves a gfx900:xnack+ request, but not vice versa). Doing the
+    // exact key lookup first keeps target selection deterministic when several
+    // requested targets could be served by the same image. We track the
+    // matching Worklist entry by iterator so it can be erased once written.
     auto Match = Worklist.find(Target);
     if (Match == Worklist.end())
       Match = find_if(Worklist, [Target](const auto &KV) {
-        return object::areTargetsCompatible(KV.first, Target);
+        return object::areTargetsCompatible(Target, KV.first);
       });
 
     if (Match == Worklist.end())
