@@ -32,15 +32,15 @@ __constant__ int GlobalConstantB;
 // DIEXPRESSION-IR-NEXT:    [[KERNELVARBPOINTER_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[KERNELVARBPOINTER]] to ptr
 // DIEXPRESSION-IR-NEXT:    store i32 [[ARG:%.*]], ptr [[ARG_ADDR_ASCAST]], align 4
 // DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[ARG_ADDR]], [[META23:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META37:![0-9]+]])
-// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARA]], [[META24:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META38:![0-9]+]])
-// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARB]], [[META25:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META39:![0-9]+]])
-// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARSHAREDAPOINTER]], [[META26:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META40:![0-9]+]])
+// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARA]], [[META26:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META38:![0-9]+]])
+// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARB]], [[META27:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META39:![0-9]+]])
+// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARSHAREDAPOINTER]], [[META28:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META40:![0-9]+]])
 // DIEXPRESSION-IR-NEXT:    store ptr addrspacecast (ptr addrspace(3) @_ZZ7kernel1iE16KernelVarSharedA to ptr), ptr [[KERNELVARSHAREDAPOINTER_ASCAST]], align 8, !dbg [[META40]]
-// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARSHAREDBPOINTER]], [[META28:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META41:![0-9]+]])
+// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARSHAREDBPOINTER]], [[META30:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META41:![0-9]+]])
 // DIEXPRESSION-IR-NEXT:    store ptr addrspacecast (ptr addrspace(3) @_ZZ7kernel1iE16KernelVarSharedB to ptr), ptr [[KERNELVARSHAREDBPOINTER_ASCAST]], align 8, !dbg [[META41]]
-// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARAPOINTER]], [[META29:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META42:![0-9]+]])
+// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARAPOINTER]], [[META31:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META42:![0-9]+]])
 // DIEXPRESSION-IR-NEXT:    store ptr [[KERNELVARA_ASCAST]], ptr [[KERNELVARAPOINTER_ASCAST]], align 8, !dbg [[META42]]
-// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARBPOINTER]], [[META30:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META43:![0-9]+]])
+// DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[KERNELVARBPOINTER]], [[META32:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META43:![0-9]+]])
 // DIEXPRESSION-IR-NEXT:    store ptr [[KERNELVARB_ASCAST]], ptr [[KERNELVARBPOINTER_ASCAST]], align 8, !dbg [[META43]]
 // DIEXPRESSION-IR-NEXT:    ret void, !dbg [[DBG44:![0-9]+]]
 //
@@ -102,7 +102,7 @@ __device__ void func1(pair p) {}
 // DIEXPRESSION-IR: [[META1]] = distinct !DIGlobalVariable(name: "GlobalSharedA", scope: [[META2:![0-9]+]], file: [[META7:![0-9]+]], line: 10, type: [[META8:![0-9]+]], isLocal: false, isDefinition: true, memorySpace: DW_MSPACE_LLVM_group)
 // DIEXPRESSION-IR: [[META2]] = distinct !DICompileUnit(language: DW_LANG_HIP, file: [[META3:![0-9]+]], producer: "{{.*}}clang version {{.*}}", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, globals: [[META4:![0-9]+]], splitDebugInlining: false, nameTableKind: None)
 // DIEXPRESSION-IR: [[META3]] = !DIFile(filename: "{{.*}}<stdin>", directory: {{.*}})
-// DIEXPRESSION-IR: [[META4]] = !{[[META0]], [[META5:![0-9]+]], [[META9:![0-9]+]], [[META11:![0-9]+]], [[META13:![0-9]+]], [[META15:![0-9]+]], [[META17:![0-9]+]], [[META31:![0-9]+]]}
+// DIEXPRESSION-IR: [[META4]] = !{[[META0]], [[META5:![0-9]+]], [[META9:![0-9]+]], [[META11:![0-9]+]], [[META13:![0-9]+]], [[META15:![0-9]+]]}
 // DIEXPRESSION-IR: [[META5]] = !DIGlobalVariableExpression(var: [[META6:![0-9]+]], expr: !DIExpression(DIOpArg(0, ptr addrspace(3)), DIOpDeref(i32)))
 // DIEXPRESSION-IR: [[META6]] = distinct !DIGlobalVariable(name: "GlobalSharedB", scope: [[META2]], file: [[META7]], line: 11, type: [[META8]], isLocal: false, isDefinition: true, memorySpace: DW_MSPACE_LLVM_group)
 // DIEXPRESSION-IR: [[META7]] = !DIFile(filename: "{{.*}}debug-info-diop-in-diexpression_ir.hip", directory: {{.*}})
@@ -115,22 +115,22 @@ __device__ void func1(pair p) {}
 // DIEXPRESSION-IR: [[META14]] = distinct !DIGlobalVariable(name: "GlobalConstantA", scope: [[META2]], file: [[META7]], line: 14, type: [[META8]], isLocal: false, isDefinition: true, memorySpace: DW_MSPACE_LLVM_constant)
 // DIEXPRESSION-IR: [[META15]] = !DIGlobalVariableExpression(var: [[META16:![0-9]+]], expr: !DIExpression(DIOpArg(0, ptr addrspace(4)), DIOpDeref(i32)))
 // DIEXPRESSION-IR: [[META16]] = distinct !DIGlobalVariable(name: "GlobalConstantB", scope: [[META2]], file: [[META7]], line: 15, type: [[META8]], isLocal: false, isDefinition: true, memorySpace: DW_MSPACE_LLVM_constant)
-// DIEXPRESSION-IR: [[META17]] = !DIGlobalVariableExpression(var: [[META18:![0-9]+]], expr: !DIExpression(DIOpArg(0, ptr addrspace(3)), DIOpDeref(i32)))
+// DIEXPRESSION-IR: [[META17:![0-9]+]] = !DIGlobalVariableExpression(var: [[META18:![0-9]+]], expr: !DIExpression(DIOpArg(0, ptr addrspace(3)), DIOpDeref(i32)))
 // DIEXPRESSION-IR: [[META18]] = distinct !DIGlobalVariable(name: "KernelVarSharedA", scope: [[META19:![0-9]+]], file: [[META7]], line: 48, type: [[META8]], isLocal: true, isDefinition: true, memorySpace: DW_MSPACE_LLVM_group)
 // DIEXPRESSION-IR: [[META19]] = distinct !DISubprogram(name: "kernel1", linkageName: "_Z7kernel1i", scope: [[META7]], file: [[META7]], line: 47, type: [[META20:![0-9]+]], scopeLine: 47, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META2]], retainedNodes: [[META22:![0-9]+]])
 // DIEXPRESSION-IR: [[META20]] = !DISubroutineType(types: [[META21:![0-9]+]])
 // DIEXPRESSION-IR: [[META21]] = !{null, [[META8]]}
-// DIEXPRESSION-IR: [[META22]] = !{[[META23]], [[META24]], [[META25]], [[META26]], [[META28]], [[META29]], [[META30]]}
+// DIEXPRESSION-IR: [[META22]] = !{[[META23]], [[META17]], [[META24:![0-9]+]], [[META26]], [[META27]], [[META28]], [[META30]], [[META31]], [[META32]]}
 // DIEXPRESSION-IR: [[META23]] = !DILocalVariable(name: "Arg", arg: 1, scope: [[META19]], file: [[META7]], line: 47, type: [[META8]])
-// DIEXPRESSION-IR: [[META24]] = !DILocalVariable(name: "KernelVarA", scope: [[META19]], file: [[META7]], line: 50, type: [[META8]])
-// DIEXPRESSION-IR: [[META25]] = !DILocalVariable(name: "KernelVarB", scope: [[META19]], file: [[META7]], line: 51, type: [[META8]])
-// DIEXPRESSION-IR: [[META26]] = !DILocalVariable(name: "KernelVarSharedAPointer", scope: [[META19]], file: [[META7]], line: 53, type: [[META27:![0-9]+]])
-// DIEXPRESSION-IR: [[META27]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META8]], size: 64, addressSpace: 1)
-// DIEXPRESSION-IR: [[META28]] = !DILocalVariable(name: "KernelVarSharedBPointer", scope: [[META19]], file: [[META7]], line: 54, type: [[META27]])
-// DIEXPRESSION-IR: [[META29]] = !DILocalVariable(name: "KernelVarAPointer", scope: [[META19]], file: [[META7]], line: 55, type: [[META27]])
-// DIEXPRESSION-IR: [[META30]] = !DILocalVariable(name: "KernelVarBPointer", scope: [[META19]], file: [[META7]], line: 56, type: [[META27]])
-// DIEXPRESSION-IR: [[META31]] = !DIGlobalVariableExpression(var: [[META32:![0-9]+]], expr: !DIExpression(DIOpArg(0, ptr addrspace(3)), DIOpDeref(i32)))
-// DIEXPRESSION-IR: [[META32]] = distinct !DIGlobalVariable(name: "KernelVarSharedB", scope: [[META19]], file: [[META7]], line: 49, type: [[META8]], isLocal: true, isDefinition: true, memorySpace: DW_MSPACE_LLVM_group)
+// DIEXPRESSION-IR: [[META24]] = !DIGlobalVariableExpression(var: [[META25:![0-9]+]], expr: !DIExpression(DIOpArg(0, ptr addrspace(3)), DIOpDeref(i32)))
+// DIEXPRESSION-IR: [[META25]] = distinct !DIGlobalVariable(name: "KernelVarSharedB", scope: [[META19]], file: [[META7]], line: 49, type: [[META8]], isLocal: true, isDefinition: true, memorySpace: DW_MSPACE_LLVM_group)
+// DIEXPRESSION-IR: [[META26]] = !DILocalVariable(name: "KernelVarA", scope: [[META19]], file: [[META7]], line: 50, type: [[META8]])
+// DIEXPRESSION-IR: [[META27]] = !DILocalVariable(name: "KernelVarB", scope: [[META19]], file: [[META7]], line: 51, type: [[META8]])
+// DIEXPRESSION-IR: [[META28]] = !DILocalVariable(name: "KernelVarSharedAPointer", scope: [[META19]], file: [[META7]], line: 53, type: [[META29:![0-9]+]])
+// DIEXPRESSION-IR: [[META29]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META8]], size: 64, addressSpace: 1)
+// DIEXPRESSION-IR: [[META30]] = !DILocalVariable(name: "KernelVarSharedBPointer", scope: [[META19]], file: [[META7]], line: 54, type: [[META29]])
+// DIEXPRESSION-IR: [[META31]] = !DILocalVariable(name: "KernelVarAPointer", scope: [[META19]], file: [[META7]], line: 55, type: [[META29]])
+// DIEXPRESSION-IR: [[META32]] = !DILocalVariable(name: "KernelVarBPointer", scope: [[META19]], file: [[META7]], line: 56, type: [[META29]])
 // DIEXPRESSION-IR: [[META37]] = !DILocation(line: 47, column: 29, scope: [[META19]])
 // DIEXPRESSION-IR: [[META38]] = !DILocation(line: 50, column: 7, scope: [[META19]])
 // DIEXPRESSION-IR: [[META39]] = !DILocation(line: 51, column: 7, scope: [[META19]])
@@ -144,8 +144,8 @@ __device__ void func1(pair p) {}
 // DIEXPRESSION-IR: [[META47]] = !DILocalVariable(name: "Arg", arg: 1, scope: [[META45]], file: [[META7]], line: 81, type: [[META8]])
 // DIEXPRESSION-IR: [[META48]] = !DILocalVariable(name: "FuncVarA", scope: [[META45]], file: [[META7]], line: 82, type: [[META8]])
 // DIEXPRESSION-IR: [[META49]] = !DILocalVariable(name: "FuncVarB", scope: [[META45]], file: [[META7]], line: 83, type: [[META8]])
-// DIEXPRESSION-IR: [[META50]] = !DILocalVariable(name: "FuncVarAPointer", scope: [[META45]], file: [[META7]], line: 85, type: [[META27]])
-// DIEXPRESSION-IR: [[META51]] = !DILocalVariable(name: "FuncVarBPointer", scope: [[META45]], file: [[META7]], line: 86, type: [[META27]])
+// DIEXPRESSION-IR: [[META50]] = !DILocalVariable(name: "FuncVarAPointer", scope: [[META45]], file: [[META7]], line: 85, type: [[META29]])
+// DIEXPRESSION-IR: [[META51]] = !DILocalVariable(name: "FuncVarBPointer", scope: [[META45]], file: [[META7]], line: 86, type: [[META29]])
 // DIEXPRESSION-IR: [[META52]] = !DILocation(line: 81, column: 27, scope: [[META45]])
 // DIEXPRESSION-IR: [[META53]] = !DILocation(line: 82, column: 7, scope: [[META45]])
 // DIEXPRESSION-IR: [[META54]] = !DILocation(line: 83, column: 7, scope: [[META45]])

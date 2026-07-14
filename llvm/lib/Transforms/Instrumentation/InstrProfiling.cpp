@@ -1905,6 +1905,7 @@ InstrLowerer::getOrCreateRegionBitmaps(InstrProfMCDCBitmapInstBase *Inc) {
           /*Decl=*/nullptr, /*TemplateParams=*/nullptr, llvm::dwarf::DW_MSPACE_LLVM_none,
           /*AlignInBits=*/0, Annotations);
       BitmapPtr->addDebugInfo(DICounter);
+      DB.finalizeSubprogram(SP);
       DB.finalize();
     }
 
@@ -1981,6 +1982,7 @@ InstrLowerer::getOrCreateRegionCounters(InstrProfCntrInstBase *Inc) {
           /*Decl=*/nullptr, /*TemplateParams=*/nullptr,
           llvm::dwarf::DW_MSPACE_LLVM_none, /*AlignInBits=*/0, Annotations);
       CounterPtr->addDebugInfo(DICounter);
+      DB.finalizeSubprogram(SP);
       DB.finalize();
     }
 
