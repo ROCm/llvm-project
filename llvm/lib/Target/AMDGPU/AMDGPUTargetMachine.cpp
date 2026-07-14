@@ -99,7 +99,6 @@
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/DiagnosticInfo.h"
-#include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
