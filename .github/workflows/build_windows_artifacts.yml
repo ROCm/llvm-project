@@ -112,7 +112,7 @@ jobs:
           git submodule status
           git submodule
 
-      - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
+      - name: Download LLVM and SPIRV PRs stored in file
         if: ${{ github.event_name == 'workflow_dispatch' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
@@ -138,7 +138,6 @@ jobs:
           set +a
           echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
           echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
-          echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
 
       - name: Update submodule pointers from provided parameter PR values
         if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
@@ -168,16 +167,6 @@ jobs:
               git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
           fi
 
-          # HIPIFY PR
-          if [[ -n "$HIPIFY_PR_URL" ]]; then
-              HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
-              echo "HIPIFY head SHA: $HIPIFY_SHA"
-              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
-          else
-              HIPIFY_SHA="$(git ls-remote https://github.com/ROCm/HIPIFY.git refs/heads/amd-staging | awk '{print $1}')"
-              echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
-              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
-          fi
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule references from PR URLs"
