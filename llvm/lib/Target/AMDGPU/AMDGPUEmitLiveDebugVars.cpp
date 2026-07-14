@@ -100,8 +100,9 @@ llvm::AMDGPUEmitLiveDebugVarsPass::run(MachineFunction &MF,
   auto &LDV = MFAM.getResult<LiveDebugVariablesAnalysis>(MF);
   auto &VRM = MFAM.getResult<VirtRegMapAnalysis>(MF);
   AMDGPUEmitLiveDebugVars().run(MF, LDV, VRM);
-  // Intentionally do NOT preserve LDV.
   PreservedAnalyses PA = getMachineFunctionPassPreservedAnalyses();
   PA.preserveSet<CFGAnalyses>();
+  // Intentionally do NOT preserve LDV.
+  PA.abandon<LiveDebugVariablesAnalysis>();
   return PA;
 }
