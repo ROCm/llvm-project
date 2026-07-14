@@ -1,7 +1,7 @@
 // COM: Test multi-site tensor_load_to_lds patching: multiple tensor_load
 // COM: instructions in a single kernel. Verifies:
-// COM:   - Each site is independently patched with its own s_pack_hh
-// COM:   - Idempotency guard correctly handles back-to-back patches
+// COM:   - Each site's canonical delay is independently replaced by s_pack_hh
+// COM:   - The idempotency guard recognizes every in-place pack
 // COM:   - DS + tensor coexistence in the same kernel
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
@@ -16,44 +16,35 @@
 
 // COM: Kernel 1: two tensor_load_to_lds with different descriptors
 // COM: (s[4:11] and s[16:23]). Both should be patched independently.
-// COM: The second tensor_load's predecessor after patching is the first's
-// COM: branch-back, not its own s_pack_hh — idempotency guard must not
-// COM: false-positive on it.
 // DISASM-LABEL: <test_tensor_multi_different>:
-// DISASM: s_branch
-// DISASM: s_branch
-// DISASM: s_endpgm
-// DISASM: s_pack_hh_b32_b16
-// DISASM: tensor_load_to_lds
-// DISASM: s_branch
-// DISASM: s_pack_hh_b32_b16
-// DISASM: tensor_load_to_lds
-// DISASM: s_branch
+// DISASM-NOT: s_branch
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
+// DISASM-NEXT: s_pack_hh_b32_b16 s16, 0, s16
+// DISASM-NEXT: tensor_load_to_lds s[0:3], s[16:23]
+// DISASM-NEXT: s_endpgm
 
 // COM: Kernel 2: two tensor_load_to_lds sharing the same descriptor
-// COM: (s[4:11]). Both should still be patched — the idempotency guard
-// COM: checks the immediately preceding instruction, and after patching
-// COM: the first, the second's predecessor is an s_branch (not s_pack_hh).
+// COM: (s[4:11]). Both canonical delay slots should still be patched.
 // DISASM-LABEL: <test_tensor_multi_same>:
-// DISASM: s_branch
-// DISASM: s_branch
-// DISASM: s_endpgm
-// DISASM: s_pack_hh_b32_b16
-// DISASM: tensor_load_to_lds
-// DISASM: s_branch
-// DISASM: s_pack_hh_b32_b16
-// DISASM: tensor_load_to_lds
-// DISASM: s_branch
+// DISASM-NOT: s_branch
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
+// DISASM-NEXT: s_endpgm
 
 // COM: Kernel 3: mixed DS 2-addr + tensor_load in the same kernel.
-// COM: Both patch types should coexist: DS expansion produces two
-// COM: single-address loads + wait bump, tensor produces s_pack_hh.
+// COM: Both patch types should coexist: DS expands through its trampoline and
+// COM: the tensor pass independently replaces its canonical delay in place.
 // DISASM-LABEL: <test_tensor_mixed_ds>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
-// DISASM: s_wait_dscnt
-// DISASM: s_branch
-// DISASM: s_endpgm
+// DISASM: s_wait_dscnt 0x0
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
+// DISASM-NEXT: s_endpgm
 
 // COM: Idempotency
 // RUN: hotswap-rewrite %t.out.elf \
@@ -70,7 +61,9 @@
 .p2align 8
 .type test_tensor_multi_different,@function
 test_tensor_multi_different:
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[4:11]
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[16:23]
   s_endpgm
   s_nop 0
@@ -114,7 +107,9 @@ test_tensor_multi_different:
 .p2align 8
 .type test_tensor_multi_same,@function
 test_tensor_multi_same:
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[4:11]
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[4:11]
   s_endpgm
   s_nop 0
@@ -160,6 +155,7 @@ test_tensor_multi_same:
 test_tensor_mixed_ds:
   ds_load_2addr_stride64_b32 v[0:1], v2 offset0:1 offset1:3
   s_wait_dscnt 0x0
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[4:11]
   s_endpgm
   s_nop 0

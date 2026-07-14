@@ -34,7 +34,7 @@
 // DISASM-LABEL: <test_multi_ds_nostride64>:
 // DISASM-NOT: ds_load_2addr_b32
 // DISASM: s_branch
-// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
 // DISASM: s_wait_dscnt 0x0
 // COM: Sled 1 (first DS2 site, vdst pair v[0:1]).
 // DISASM: ds_load_b32 v0, v4 offset:4

@@ -21,10 +21,10 @@
 // DISASM-LABEL: <test_ds_pipelined_single>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
 // DISASM: s_wait_dscnt 0x1
 // DISASM: ds_load_b32 v0
 // DISASM: ds_load_b32 v1
-// DISASM: s_wait_dscnt 0x0
 // DISASM: s_branch
 
 // COM: Kernel 2 (two splits): each split lands its own s_wait_dscnt 0x0 drain;
@@ -32,14 +32,14 @@
 // DISASM-LABEL: <test_ds_pipelined_multi>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
-// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
 // DISASM: s_wait_dscnt 0x1
 // DISASM: ds_load_b32 v0
 // DISASM: ds_load_b32 v1
 // DISASM: s_wait_dscnt 0x0
 // DISASM: ds_load_b32 v2
 // DISASM: ds_load_b32 v3
-// DISASM: s_wait_dscnt 0x0
+// DISASM: s_branch
 
 // COM: Idempotency: a second rewrite produces identical bytes (the 2-addr
 // COM: forms are gone, so there is nothing left to split).

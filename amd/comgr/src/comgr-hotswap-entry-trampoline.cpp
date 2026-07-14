@@ -258,13 +258,59 @@ decodeEntryStubTargetVAddr(ArrayRef<InternalDecodedInst> Decoded,
   return *PcBase + Delta;
 }
 
-bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
-  if (!hasKernelEntryTrampolinePrefix(Bytes, LS))
+static bool hasExactEntryStubPadding(ArrayRef<uint8_t> Bytes,
+                                     ArrayRef<InternalDecodedInst> Decoded,
+                                     const LLVMState &LS) {
+  if (Decoded.size() < 6 ||
+      Decoded[5].Offset > std::numeric_limits<uint64_t>::max() -
+                              Decoded[5].Size)
     return false;
+  const uint64_t BodyEnd = Decoded[5].Offset + Decoded[5].Size;
+  SmallVector<uint8_t> CodeEnd = getCodeEndBytes(LS);
+  if (CodeEnd.empty() || BodyEnd > KernelEntryStubStride ||
+      (KernelEntryStubStride - BodyEnd) % CodeEnd.size() != 0)
+    return false;
+  for (uint64_t Offset = BodyEnd; Offset < KernelEntryStubStride;
+       Offset += CodeEnd.size())
+    if (!Bytes.slice(Offset, CodeEnd.size()).equals(CodeEnd))
+      return false;
+  return true;
+}
+
+bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
+  return getKernelEntryTrampolineInfo(Bytes, 0, LS).has_value();
+}
+
+std::optional<KernelEntryTrampolineInfo>
+getKernelEntryTrampolineInfo(ArrayRef<uint8_t> Bytes, uint64_t StubVAddr,
+                             const LLVMState &LS) {
+  if (!hasKernelEntryTrampolinePrefix(Bytes, LS))
+    return std::nullopt;
 
   std::vector<InternalDecodedInst> Decoded;
-  return decodeKernelEntryStub(Bytes, LS, Decoded, "isKernelEntryTrampoline") &&
-         hasEntryStubOperandShape(Decoded, LS);
+  if (!decodeKernelEntryStub(Bytes, LS, Decoded,
+                             "kernel entry target matcher") ||
+      !hasEntryStubOperandShape(Decoded, LS) ||
+      !hasExactEntryStubPadding(Bytes, Decoded, LS))
+    return std::nullopt;
+  std::optional<uint64_t> Target =
+      decodeEntryStubTargetVAddr(Decoded, StubVAddr);
+  std::optional<uint64_t> Terminal = checkedAddUint64(
+      StubVAddr, Decoded[5].Offset, "kernel entry terminal address");
+  if (!Target || !Terminal)
+    return std::nullopt;
+  return KernelEntryTrampolineInfo{*Target, *Terminal};
+}
+
+std::optional<uint64_t>
+getKernelEntryTrampolineTargetVAddr(ArrayRef<uint8_t> Bytes,
+                                    uint64_t StubVAddr,
+                                    const LLVMState &LS) {
+  std::optional<KernelEntryTrampolineInfo> Info =
+      getKernelEntryTrampolineInfo(Bytes, StubVAddr, LS);
+  if (!Info)
+    return std::nullopt;
+  return Info->TargetVAddr;
 }
 
 bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,

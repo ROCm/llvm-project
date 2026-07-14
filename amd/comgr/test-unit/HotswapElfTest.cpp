@@ -19,6 +19,69 @@ static std::vector<uint8_t> makeText(size_t Size = 16) {
   return std::vector<uint8_t>(Size, 0);
 }
 
+static llvm::Expected<ElfView>
+createElfView(comgr_test::KernelDescriptorElf &Obj) {
+  return ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+}
+
+static bool relocateHeaderTable(std::vector<uint8_t> &Bytes,
+                                uint64_t OldOffset, uint16_t EntrySize,
+                                uint16_t OldCount, uint16_t NewCount,
+                                size_t MinimumEntrySize,
+                                uint64_t &NewOffset) {
+  if (NewCount < OldCount || EntrySize < MinimumEntrySize ||
+      OldOffset > Bytes.size())
+    return false;
+  const uint64_t OldSize = static_cast<uint64_t>(OldCount) * EntrySize;
+  if (OldSize > Bytes.size() - OldOffset)
+    return false;
+
+  std::vector<uint8_t> OldTable(
+      Bytes.begin() + static_cast<size_t>(OldOffset),
+      Bytes.begin() + static_cast<size_t>(OldOffset + OldSize));
+  NewOffset = comgr_test::alignTo8(Bytes.size());
+  const uint64_t NewSize = static_cast<uint64_t>(NewCount) * EntrySize;
+  if (NewOffset > std::numeric_limits<size_t>::max() - NewSize)
+    return false;
+  Bytes.resize(static_cast<size_t>(NewOffset + NewSize), 0);
+  std::memcpy(Bytes.data() + NewOffset, OldTable.data(), OldTable.size());
+  return true;
+}
+
+static bool setProgramHeaderCount(std::vector<uint8_t> &Bytes,
+                                  uint16_t NewCount) {
+  if (Bytes.size() < sizeof(llvm::ELF::Elf64_Ehdr))
+    return false;
+  llvm::ELF::Elf64_Ehdr Header{};
+  std::memcpy(&Header, Bytes.data(), sizeof(Header));
+  uint64_t NewOffset = 0;
+  if (!relocateHeaderTable(Bytes, Header.e_phoff, Header.e_phentsize,
+                           Header.e_phnum, NewCount,
+                           sizeof(llvm::ELF::Elf64_Phdr), NewOffset))
+    return false;
+  Header.e_phoff = NewOffset;
+  Header.e_phnum = NewCount;
+  std::memcpy(Bytes.data(), &Header, sizeof(Header));
+  return true;
+}
+
+static bool setSectionHeaderCount(std::vector<uint8_t> &Bytes,
+                                  uint16_t NewCount) {
+  if (Bytes.size() < sizeof(llvm::ELF::Elf64_Ehdr))
+    return false;
+  llvm::ELF::Elf64_Ehdr Header{};
+  std::memcpy(&Header, Bytes.data(), sizeof(Header));
+  uint64_t NewOffset = 0;
+  if (!relocateHeaderTable(Bytes, Header.e_shoff, Header.e_shentsize,
+                           Header.e_shnum, NewCount,
+                           sizeof(llvm::ELF::Elf64_Shdr), NewOffset))
+    return false;
+  Header.e_shoff = NewOffset;
+  Header.e_shnum = NewCount;
+  std::memcpy(Bytes.data(), &Header, sizeof(Header));
+  return true;
+}
+
 static unsigned readReservedSgprs(const std::vector<uint8_t> &Bytes,
                                   uint64_t KernelDescriptorOffset) {
   namespace hsa = llvm::amdhsa;
@@ -50,6 +113,26 @@ TEST(ElfView, RejectsNonElfInput) {
   llvm::consumeError(ViewOrErr.takeError());
 }
 
+TEST(ElfView, RejectsExtendedSymbolSectionIndices) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  llvm::ELF::Elf64_Ehdr Header{};
+  std::memcpy(&Header, Obj.Bytes.data(), sizeof(Header));
+  llvm::ELF::Elf64_Shdr Symtab{};
+  std::memcpy(&Symtab,
+              Obj.Bytes.data() + Header.e_shoff + 4 * Header.e_shentsize,
+              sizeof(Symtab));
+  llvm::ELF::Elf64_Sym Kernel{};
+  const uint64_t KernelOffset = Symtab.sh_offset + sizeof(Kernel);
+  std::memcpy(&Kernel, Obj.Bytes.data() + KernelOffset, sizeof(Kernel));
+  Kernel.st_shndx = llvm::ELF::SHN_XINDEX;
+  std::memcpy(Obj.Bytes.data() + KernelOffset, &Kernel, sizeof(Kernel));
+
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  EXPECT_FALSE((bool)View);
+  llvm::consumeError(View.takeError());
+}
+
 // -- ElfView::findKernelAtAddress ---------------------------------------------
 
 TEST(ElfView, FindKernelAtAddressResolvesNearestPrecedingForZeroSizeSymbol) {
@@ -78,19 +161,75 @@ TEST(ElfView, FindKernelAtAddressResolvesNearestPrecedingForZeroSizeSymbol) {
 
 // -- findNearestSled ----------------------------------------------------------
 
-TEST(FindNearestSled, SkipsSledsOutsideInstructionFunctionRange) {
+TEST(FindNearestSled, SkipsSledsOutsideSourceOwnerRange) {
   std::vector<NopSled> Sleds;
-  // {Start, End, WritePos, FunctionStart, FunctionEnd}
+  // {Start, End, WritePos, OwnerStart, OwnerEnd}
   Sleds.push_back({/*Start=*/0, /*End=*/32, /*WritePos=*/0,
-                   /*FunctionStart=*/0, /*FunctionEnd=*/32});
+                   /*OwnerStart=*/0, /*OwnerEnd=*/32});
   Sleds.push_back({/*Start=*/96, /*End=*/128, /*WritePos=*/96,
-                   /*FunctionStart=*/96, /*FunctionEnd=*/160});
+                   /*OwnerStart=*/96, /*OwnerEnd=*/160});
 
   NopSled *Sled = findNearestSled(Sleds, 108, 8);
   ASSERT_NE(Sled, nullptr);
   EXPECT_EQ(Sled->Start, 96u);
 
   EXPECT_EQ(findNearestSled(Sleds, 64, 8), nullptr);
+}
+
+TEST(FindNearestSled, UsesGatewayOnlyPaddingOnlyWhenRequested) {
+  std::vector<NopSled> Sleds;
+  Sleds.push_back({/*Start=*/0, /*End=*/32, /*WritePos=*/0,
+                   /*OwnerStart=*/0, /*OwnerEnd=*/128,
+                   /*GatewayOnly=*/true});
+  Sleds.push_back({/*Start=*/64, /*End=*/96, /*WritePos=*/64,
+                   /*OwnerStart=*/0, /*OwnerEnd=*/128});
+
+  EXPECT_EQ(findNearestSled(Sleds, 4, 8), &Sleds[1]);
+  EXPECT_EQ(findNearestSled(Sleds, 4, 8, NopSledUse::Gateway),
+            &Sleds[0]);
+}
+
+TEST(FindNearestSled, SeparatesSourceOwnerFromStorageCapacity) {
+  std::vector<NopSled> Sleds = {
+      {/*Start=*/64, /*End=*/96, /*WritePos=*/64,
+       /*OwnerStart=*/0, /*OwnerEnd=*/32}};
+
+  EXPECT_EQ(findNearestSled(Sleds, /*Offset=*/16, /*Needed=*/32), &Sleds[0]);
+  EXPECT_EQ(findNearestSled(Sleds, /*Offset=*/64, /*Needed=*/8), nullptr);
+}
+
+TEST(FindNearestSled, SharesPostFunctionPaddingAcrossCertifiedRoles) {
+  std::vector<NopSled> Sleds = {
+      {/*Start=*/64, /*End=*/96, /*WritePos=*/64,
+       /*OwnerStart=*/0, /*OwnerEnd=*/32, /*GatewayOnly=*/false,
+       /*GlobalGateway=*/true, /*GlobalBody=*/true}};
+
+  NopSled *Body =
+      findNearestSled(Sleds, /*Offset=*/16, /*Needed=*/20);
+  ASSERT_EQ(Body, &Sleds[0]);
+  Body->WritePos += 20;
+
+  EXPECT_EQ(findNearestSled(Sleds, /*Offset=*/128, /*Needed=*/8), nullptr);
+  EXPECT_EQ(findNearestSled(Sleds, /*Offset=*/128, /*Needed=*/8,
+                            NopSledUse::RelocationBody),
+            &Sleds[0]);
+  EXPECT_EQ(findNearestSled(Sleds, /*Offset=*/128, /*Needed=*/8,
+                            NopSledUse::Gateway),
+            &Sleds[0]);
+  EXPECT_EQ(Sleds[0].WritePos, 84u);
+}
+
+TEST(FindNearestSled, PrefersOwnerBodyBeforeGlobalRelocationBody) {
+  std::vector<NopSled> Sleds = {
+      {/*Start=*/40, /*End=*/72, /*WritePos=*/40,
+       /*OwnerStart=*/64, /*OwnerEnd=*/96, /*GatewayOnly=*/false,
+       /*GlobalGateway=*/true, /*GlobalBody=*/true},
+      {/*Start=*/200, /*End=*/232, /*WritePos=*/200,
+       /*OwnerStart=*/0, /*OwnerEnd=*/32}};
+
+  EXPECT_EQ(findNearestSled(Sleds, /*Offset=*/16, /*Needed=*/20,
+                            NopSledUse::RelocationBody),
+            &Sleds[1]);
 }
 
 // -- ElfView::getKernelStaticLdsSize ------------------------------------------
@@ -192,6 +331,7 @@ TEST(ElfView, GrowWithTrampolinesKeepsAllocSectionSymbols) {
 
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
+  Opts.MetadataSgprCount = 8;
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(makeText(), Opts);
 
@@ -205,7 +345,8 @@ TEST(ElfView, GrowWithTrampolinesKeepsAllocSectionSymbols) {
   Trampolines.push_back(T);
   const uint8_t SNop[4] = {};
   std::unique_ptr<llvm::WritableMemoryBuffer> Out =
-      ViewOrErr->growWithTrampolines(Trampolines, SNop);
+      ViewOrErr->growWithTrampolines(
+          Trampolines, SNop, ExecutablePoolTargetState::Neutral);
   ASSERT_NE(Out, nullptr);
 
   uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
@@ -215,6 +356,460 @@ TEST(ElfView, GrowWithTrampolinesKeepsAllocSectionSymbols) {
   llvm::ArrayRef<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
   ASSERT_EQ(KDs.size(), 1u);
   EXPECT_EQ(KDs[0].VAddr, Obj.RodataAddr);
+}
+
+TEST(ElfView, TrampolinePoolVAddrRejectsAlignmentOverflow) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  llvm::ELF::Elf64_Ehdr Header{};
+  std::memcpy(&Header, Obj.Bytes.data(), sizeof(Header));
+  llvm::ELF::Elf64_Shdr Rodata{};
+  std::memcpy(&Rodata,
+              Obj.Bytes.data() + Header.e_shoff + 2 * Header.e_shentsize,
+              sizeof(Rodata));
+  ASSERT_NE(Rodata.sh_size, 0u);
+  Rodata.sh_addr = std::numeric_limits<uint64_t>::max() - Rodata.sh_size;
+  std::memcpy(Obj.Bytes.data() + Header.e_shoff + 2 * Header.e_shentsize,
+              &Rodata, sizeof(Rodata));
+
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  EXPECT_FALSE(View->trampolinePoolVAddr().has_value());
+}
+
+TEST(ElfView, TrampolinePoolVAddrAccountsForLoadSegmentMemoryTail) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  llvm::ELF::Elf64_Ehdr Header{};
+  std::memcpy(&Header, Obj.Bytes.data(), sizeof(Header));
+  ASSERT_EQ(Header.e_phnum, 1u);
+  llvm::ELF::Elf64_Phdr Load{};
+  std::memcpy(&Load, Obj.Bytes.data() + Header.e_phoff, sizeof(Load));
+  ASSERT_EQ(Load.p_type, llvm::ELF::PT_LOAD);
+  Load.p_memsz = 0x5001;
+  std::memcpy(Obj.Bytes.data() + Header.e_phoff, &Load, sizeof(Load));
+
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  ASSERT_TRUE(View->trampolinePoolVAddr().has_value());
+  EXPECT_EQ(*View->trampolinePoolVAddr(), 0x7000u);
+}
+
+TEST(ElfView, TrampolinePoolVAddrRejectsLoadSegmentRangeOverflow) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  llvm::ELF::Elf64_Ehdr Header{};
+  std::memcpy(&Header, Obj.Bytes.data(), sizeof(Header));
+  ASSERT_EQ(Header.e_phnum, 1u);
+  llvm::ELF::Elf64_Phdr Load{};
+  std::memcpy(&Load, Obj.Bytes.data() + Header.e_phoff, sizeof(Load));
+  ASSERT_EQ(Load.p_type, llvm::ELF::PT_LOAD);
+  Load.p_vaddr = std::numeric_limits<uint64_t>::max() - 7;
+  Load.p_memsz = 16;
+  std::memcpy(Obj.Bytes.data() + Header.e_phoff, &Load, sizeof(Load));
+
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  EXPECT_FALSE(View->trampolinePoolVAddr().has_value());
+}
+
+TEST(ElfView, GrowWithTrampolinesAcceptsLargestDirectProgramHeaderCount) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  constexpr uint16_t InputCount = llvm::ELF::PN_XNUM - 2;
+  ASSERT_TRUE(setProgramHeaderCount(Obj.Bytes, InputCount));
+
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  Trampoline T;
+  T.Bytes.assign(8, 0);
+  const uint8_t SNop[4] = {};
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out =
+      View->growWithTrampolines({T}, SNop,
+                                ExecutablePoolTargetState::Neutral);
+  ASSERT_NE(Out, nullptr);
+
+  llvm::ELF::Elf64_Ehdr Header{};
+  std::memcpy(&Header, Out->getBufferStart(), sizeof(Header));
+  EXPECT_EQ(Header.e_phnum, llvm::ELF::PN_XNUM - 1);
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+  EXPECT_TRUE(OutView->trampolinePoolVAddr().has_value());
+}
+
+TEST(ElfView, GrowWithTrampolinesRejectsProgramHeaderExtendedNumbering) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  constexpr uint16_t InputCount = llvm::ELF::PN_XNUM - 1;
+  ASSERT_TRUE(setProgramHeaderCount(Obj.Bytes, InputCount));
+
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  Trampoline T;
+  T.Bytes.assign(8, 0);
+  const uint8_t SNop[4] = {};
+  EXPECT_EQ(View->growWithTrampolines(
+                {T}, SNop, ExecutablePoolTargetState::Neutral),
+            nullptr);
+}
+
+TEST(ElfView, GrowWithTrampolinesAcceptsLargestDirectSectionHeaderCount) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  constexpr uint16_t InputCount = llvm::ELF::SHN_LORESERVE - 3;
+  ASSERT_TRUE(setSectionHeaderCount(Obj.Bytes, InputCount));
+
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  Trampoline T;
+  T.Bytes.assign(8, 0);
+  const uint8_t SNop[4] = {};
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out =
+      View->growWithTrampolines({T}, SNop,
+                                ExecutablePoolTargetState::Neutral);
+  ASSERT_NE(Out, nullptr);
+
+  llvm::ELF::Elf64_Ehdr Header{};
+  std::memcpy(&Header, Out->getBufferStart(), sizeof(Header));
+  EXPECT_EQ(Header.e_shnum, llvm::ELF::SHN_LORESERVE - 1);
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+  EXPECT_TRUE(OutView->trampolinePoolVAddr().has_value());
+}
+
+TEST(ElfView, GrowWithTrampolinesRejectsSectionHeaderExtendedNumbering) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  constexpr uint16_t InputCount = llvm::ELF::SHN_LORESERVE - 2;
+  ASSERT_TRUE(setSectionHeaderCount(Obj.Bytes, InputCount));
+
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  Trampoline T;
+  T.Bytes.assign(8, 0);
+  const uint8_t SNop[4] = {};
+  EXPECT_EQ(View->growWithTrampolines(
+                {T}, SNop, ExecutablePoolTargetState::Neutral),
+            nullptr);
+}
+
+TEST(ElfView, GrowWithTrampolinesDropsRelocatedPtPhdr) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.EmitPhdrSegment = true;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+  llvm::ELF::Elf64_Ehdr Before{};
+  std::memcpy(&Before, Obj.Bytes.data(), sizeof(Before));
+  ASSERT_GE(Before.e_phnum, 2u);
+  llvm::ELF::Elf64_Phdr OriginalPhdr{};
+  std::memcpy(&OriginalPhdr, Obj.Bytes.data() + Before.e_phoff,
+              sizeof(OriginalPhdr));
+  ASSERT_EQ(OriginalPhdr.p_type, llvm::ELF::PT_PHDR);
+
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  Trampoline T;
+  T.Bytes.assign(8, 0);
+  const uint8_t SNop[4] = {};
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out =
+      View->growWithTrampolines({T}, SNop,
+                                ExecutablePoolTargetState::Neutral);
+  ASSERT_NE(Out, nullptr);
+
+  llvm::ELF::Elf64_Ehdr After{};
+  std::memcpy(&After, Out->getBufferStart(), sizeof(After));
+  EXPECT_NE(After.e_phoff, Before.e_phoff);
+  EXPECT_EQ(After.e_phnum, Before.e_phnum + 1);
+  bool SawNull = false;
+  bool SawPhdr = false;
+  for (uint16_t I = 0; I != After.e_phnum; ++I) {
+    llvm::ELF::Elf64_Phdr Entry{};
+    std::memcpy(&Entry,
+                Out->getBufferStart() + After.e_phoff +
+                    static_cast<uint64_t>(I) * After.e_phentsize,
+                sizeof(Entry));
+    SawNull |= Entry.p_type == llvm::ELF::PT_NULL;
+    SawPhdr |= Entry.p_type == llvm::ELF::PT_PHDR;
+  }
+  EXPECT_TRUE(SawNull);
+  EXPECT_FALSE(SawPhdr);
+}
+
+TEST(ElfView, ExecutablePoolProvenanceIsTargetSpecificAndFailClosed) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+  llvm::Expected<ElfView> SourceView = createElfView(Obj);
+  ASSERT_TRUE((bool)SourceView) << llvm::toString(SourceView.takeError());
+  const uint64_t TextAddr = SourceView->textAddr();
+  const uint64_t TextOffset = SourceView->textOffset();
+  const uint8_t SNop[4] = {};
+  Trampoline T;
+  T.Bytes.assign(8, 0);
+  std::vector<Trampoline> Trampolines{T};
+
+  auto Grow = [&](ExecutablePoolTargetState State) {
+    llvm::Expected<ElfView> View = createElfView(Obj);
+    EXPECT_TRUE((bool)View);
+    if (!View) {
+      llvm::consumeError(View.takeError());
+      return std::unique_ptr<llvm::WritableMemoryBuffer>();
+    }
+    return View->growWithTrampolines(Trampolines, SNop, State);
+  };
+  auto ExpectCompatibility = [](llvm::WritableMemoryBuffer &Buffer,
+                                ExecutablePoolTargetState State,
+                                bool Expected) {
+    uint8_t *Data = reinterpret_cast<uint8_t *>(Buffer.getBufferStart());
+    llvm::Expected<ElfView> View =
+        ElfView::create(Data, Buffer.getBufferSize());
+    ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+    std::optional<bool> Compatible =
+        View->executableCodeOutsideTextIsCompatibleWith(State);
+    ASSERT_TRUE(Compatible.has_value());
+    EXPECT_EQ(*Compatible, Expected);
+  };
+
+  std::unique_ptr<llvm::WritableMemoryBuffer> Neutral =
+      Grow(ExecutablePoolTargetState::Neutral);
+  ASSERT_NE(Neutral, nullptr);
+  ExpectCompatibility(*Neutral, ExecutablePoolTargetState::A0, true);
+  ExpectCompatibility(*Neutral, ExecutablePoolTargetState::B0, true);
+
+  std::unique_ptr<llvm::WritableMemoryBuffer> A0 =
+      Grow(ExecutablePoolTargetState::A0);
+  ASSERT_NE(A0, nullptr);
+  ExpectCompatibility(*A0, ExecutablePoolTargetState::A0, true);
+  ExpectCompatibility(*A0, ExecutablePoolTargetState::B0, false);
+
+  std::unique_ptr<llvm::WritableMemoryBuffer> B0 =
+      Grow(ExecutablePoolTargetState::B0);
+  ASSERT_NE(B0, nullptr);
+  ExpectCompatibility(*B0, ExecutablePoolTargetState::B0, true);
+  ExpectCompatibility(*B0, ExecutablePoolTargetState::A0, false);
+  EXPECT_EQ(Grow(static_cast<ExecutablePoolTargetState>(99)), nullptr);
+
+  uint8_t *A0Data = reinterpret_cast<uint8_t *>(A0->getBufferStart());
+  llvm::Expected<ElfView> A0View = ElfView::create(A0Data, A0->getBufferSize());
+  ASSERT_TRUE((bool)A0View) << llvm::toString(A0View.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> TwoPools =
+      A0View->growWithTrampolines(Trampolines, SNop,
+                                  ExecutablePoolTargetState::A0);
+  ASSERT_NE(TwoPools, nullptr);
+  ExpectCompatibility(*TwoPools, ExecutablePoolTargetState::A0, true);
+
+  using ELFT = llvm::object::ELF64LE;
+  auto FindPoolNoteSection = [](llvm::WritableMemoryBuffer &Buffer)
+      -> std::optional<std::pair<unsigned, ELFT::Shdr>> {
+    const uint8_t *Data =
+        reinterpret_cast<const uint8_t *>(Buffer.getBufferStart());
+    llvm::Expected<llvm::object::ELFFile<ELFT>> File =
+        llvm::object::ELFFile<ELFT>::create(llvm::StringRef(
+            reinterpret_cast<const char *>(Data), Buffer.getBufferSize()));
+    if (!File)
+      return std::nullopt;
+    llvm::Expected<ELFT::ShdrRange> Sections = File->sections();
+    if (!Sections)
+      return std::nullopt;
+    for (unsigned I = 0; I != Sections->size(); ++I)
+      if ((*Sections)[I].sh_type == llvm::ELF::SHT_NOTE &&
+          !((*Sections)[I].sh_flags & llvm::ELF::SHF_ALLOC))
+        return std::pair<unsigned, ELFT::Shdr>{I, (*Sections)[I]};
+    return std::nullopt;
+  };
+  auto CloneBuffer = [](llvm::WritableMemoryBuffer &Buffer) {
+    std::unique_ptr<llvm::WritableMemoryBuffer> Clone =
+        llvm::WritableMemoryBuffer::getNewMemBuffer(Buffer.getBufferSize());
+    if (Clone)
+      std::memcpy(Clone->getBufferStart(), Buffer.getBufferStart(),
+                  Buffer.getBufferSize());
+    return Clone;
+  };
+  auto FindPoolSection = [TextAddr](llvm::WritableMemoryBuffer &Buffer)
+      -> std::optional<std::pair<unsigned, ELFT::Shdr>> {
+    const uint8_t *Data =
+        reinterpret_cast<const uint8_t *>(Buffer.getBufferStart());
+    llvm::Expected<llvm::object::ELFFile<ELFT>> File =
+        llvm::object::ELFFile<ELFT>::create(llvm::StringRef(
+            reinterpret_cast<const char *>(Data), Buffer.getBufferSize()));
+    if (!File)
+      return std::nullopt;
+    llvm::Expected<ELFT::ShdrRange> Sections = File->sections();
+    if (!Sections)
+      return std::nullopt;
+    for (unsigned I = 0; I != Sections->size(); ++I) {
+      const ELFT::Shdr &Shdr = (*Sections)[I];
+      if (Shdr.sh_type == llvm::ELF::SHT_PROGBITS &&
+          (Shdr.sh_flags & (llvm::ELF::SHF_ALLOC | llvm::ELF::SHF_EXECINSTR)) ==
+              (llvm::ELF::SHF_ALLOC | llvm::ELF::SHF_EXECINSTR) &&
+          Shdr.sh_addr != TextAddr)
+        return std::pair<unsigned, ELFT::Shdr>{I, Shdr};
+    }
+    return std::nullopt;
+  };
+  enum class Mutation {
+    UnsupportedVersion,
+    Unmarked,
+    DuplicateNote,
+    Align8Note,
+    MissingNameNul,
+    EnlargedTextLoad,
+    PoolFileAliasesText,
+    PoolVAddrOverlapsText,
+  };
+  auto Mutate = [&](llvm::WritableMemoryBuffer &Buffer, Mutation Kind) {
+    llvm::ELF::Elf64_Ehdr Header{};
+    std::memcpy(&Header, Buffer.getBufferStart(), sizeof(Header));
+    auto WriteShdr = [&](unsigned Index, const ELFT::Shdr &Shdr) {
+      std::memcpy(Buffer.getBufferStart() + Header.e_shoff +
+                      static_cast<uint64_t>(Index) * Header.e_shentsize,
+                  &Shdr, sizeof(Shdr));
+    };
+    auto RewritePhdr = [&](auto Predicate, auto Rewrite) {
+      for (unsigned I = 0; I != Header.e_phnum; ++I) {
+        llvm::ELF::Elf64_Phdr Phdr{};
+        char *PhdrData = Buffer.getBufferStart() + Header.e_phoff +
+                         static_cast<uint64_t>(I) * Header.e_phentsize;
+        std::memcpy(&Phdr, PhdrData, sizeof(Phdr));
+        if (!Predicate(Phdr))
+          continue;
+        Rewrite(Phdr);
+        std::memcpy(PhdrData, &Phdr, sizeof(Phdr));
+        return true;
+      }
+      return false;
+    };
+
+    std::optional<std::pair<unsigned, ELFT::Shdr>> Note =
+        FindPoolNoteSection(Buffer);
+    if (!Note)
+      return false;
+    if (Kind == Mutation::UnsupportedVersion) {
+      uint32_t Version = 2;
+      std::memcpy(Buffer.getBufferStart() + Note->second.sh_offset + 20,
+                  &Version, sizeof(Version));
+      return true;
+    }
+    if (Kind == Mutation::Unmarked) {
+      ELFT::Shdr Shdr = Note->second;
+      Shdr.sh_type = llvm::ELF::SHT_PROGBITS;
+      WriteShdr(Note->first, Shdr);
+      return true;
+    }
+    if (Kind == Mutation::DuplicateNote) {
+      for (unsigned I = 0; I != Header.e_shnum; ++I) {
+        ELFT::Shdr Shdr{};
+        std::memcpy(&Shdr,
+                    Buffer.getBufferStart() + Header.e_shoff +
+                        static_cast<uint64_t>(I) * Header.e_shentsize,
+                    sizeof(Shdr));
+        if (Shdr.sh_type == llvm::ELF::SHT_PROGBITS &&
+            !(Shdr.sh_flags & llvm::ELF::SHF_EXECINSTR)) {
+          WriteShdr(I, Note->second);
+          return true;
+        }
+      }
+      return false;
+    }
+    if (Kind == Mutation::Align8Note) {
+      ELFT::Shdr Shdr = Note->second;
+      Shdr.sh_addralign = 8;
+      WriteShdr(Note->first, Shdr);
+      return true;
+    }
+    if (Kind == Mutation::MissingNameNul) {
+      uint32_t NameSize = 6;
+      std::memcpy(Buffer.getBufferStart() + Note->second.sh_offset, &NameSize,
+                  sizeof(NameSize));
+      return true;
+    }
+    if (Kind == Mutation::EnlargedTextLoad)
+      return RewritePhdr(
+          [&](const llvm::ELF::Elf64_Phdr &Phdr) {
+            return Phdr.p_type == llvm::ELF::PT_LOAD &&
+                   Phdr.p_vaddr == TextAddr && Phdr.p_offset == TextOffset;
+          },
+          [](llvm::ELF::Elf64_Phdr &Phdr) {
+            ++Phdr.p_filesz;
+            ++Phdr.p_memsz;
+          });
+
+    std::optional<std::pair<unsigned, ELFT::Shdr>> Pool =
+        FindPoolSection(Buffer);
+    if (!Pool)
+      return false;
+    if (Kind == Mutation::PoolFileAliasesText) {
+      ELFT::Shdr Shdr = Pool->second;
+      Shdr.sh_offset = TextOffset;
+      WriteShdr(Pool->first, Shdr);
+      return RewritePhdr(
+          [&](const llvm::ELF::Elf64_Phdr &Phdr) {
+            return Phdr.p_type == llvm::ELF::PT_LOAD &&
+                   Phdr.p_vaddr == Pool->second.sh_addr &&
+                   Phdr.p_filesz == Pool->second.sh_size;
+          },
+          [&](llvm::ELF::Elf64_Phdr &Phdr) { Phdr.p_offset = TextOffset; });
+    }
+    ELFT::Shdr Shdr = Pool->second;
+    Shdr.sh_addr = TextAddr;
+    WriteShdr(Pool->first, Shdr);
+    bool Rewritten = RewritePhdr(
+        [&](const llvm::ELF::Elf64_Phdr &Phdr) {
+          return Phdr.p_type == llvm::ELF::PT_LOAD &&
+                 Phdr.p_vaddr == Pool->second.sh_addr &&
+                 Phdr.p_filesz == Pool->second.sh_size;
+        },
+        [&](llvm::ELF::Elf64_Phdr &Phdr) {
+          Phdr.p_vaddr = TextAddr;
+          Phdr.p_paddr = TextAddr;
+        });
+    // Nhdr (12) + padded "AMDGPU\0" (8) + version/state (8).
+    std::memcpy(Buffer.getBufferStart() + Note->second.sh_offset + 28,
+                &TextAddr, sizeof(TextAddr));
+    return Rewritten;
+  };
+
+  struct MutationCase {
+    const char *Name;
+    Mutation Kind;
+    bool IsMalformed;
+  };
+  const MutationCase Cases[] = {
+      {"unsupported version", Mutation::UnsupportedVersion, true},
+      {"unmarked pool", Mutation::Unmarked, false},
+      {"duplicate note", Mutation::DuplicateNote, true},
+      {"align-8 note", Mutation::Align8Note, true},
+      {"missing name NUL", Mutation::MissingNameNul, true},
+      {"enlarged text load", Mutation::EnlargedTextLoad, false},
+      {"pool file alias", Mutation::PoolFileAliasesText, false},
+      {"pool vaddr overlap", Mutation::PoolVAddrOverlapsText, false},
+  };
+  for (const MutationCase &Case : Cases) {
+    SCOPED_TRACE(Case.Name);
+    std::unique_ptr<llvm::WritableMemoryBuffer> Buffer = CloneBuffer(*A0);
+    ASSERT_NE(Buffer, nullptr);
+    ASSERT_TRUE(Mutate(*Buffer, Case.Kind));
+
+    uint8_t *Data = reinterpret_cast<uint8_t *>(Buffer->getBufferStart());
+    llvm::Expected<ElfView> View =
+        ElfView::create(Data, Buffer->getBufferSize());
+    ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+    std::optional<bool> Compatible =
+        View->executableCodeOutsideTextIsCompatibleWith(
+            ExecutablePoolTargetState::A0);
+    if (Case.IsMalformed) {
+      EXPECT_FALSE(Compatible.has_value());
+    } else {
+      ASSERT_TRUE(Compatible.has_value());
+      EXPECT_FALSE(*Compatible);
+    }
+  }
 }
 
 // gfx1250 "address of a global" idiom, as emitted for e.g. `x++` on a
@@ -277,6 +872,7 @@ TEST(ElfView, GrowWithTrampolinesKeepsIsaReferenceConsistentWithSymbol) {
 
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
+  Opts.MetadataSgprCount = 8;
   // .text (at TextAddr) references the descriptor symbol in .rodata (at
   // RodataAddr), which sits after .text -- like a kernel referencing a global
   // in a post-.text data section.
@@ -298,7 +894,8 @@ TEST(ElfView, GrowWithTrampolinesKeepsIsaReferenceConsistentWithSymbol) {
   std::vector<Trampoline> Trampolines{T};
   const uint8_t SNop[4] = {};
   std::unique_ptr<llvm::WritableMemoryBuffer> Out =
-      ViewOrErr->growWithTrampolines(Trampolines, SNop);
+      ViewOrErr->growWithTrampolines(
+          Trampolines, SNop, ExecutablePoolTargetState::Neutral);
   ASSERT_NE(Out, nullptr);
 
   uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
@@ -364,7 +961,9 @@ DwarfRefElf makeDwarfRefElf(uint64_t TextAddr = 0x1000,
   constexpr uint32_t GNameOff = 1;
 
   constexpr unsigned ShNum = 7;
-  const uint64_t ShOff = sizeof(Elf64_Ehdr);
+  const uint64_t PhOff = sizeof(Elf64_Ehdr);
+  const uint64_t ShOff =
+      comgr_test::alignTo8(PhOff + sizeof(Elf64_Phdr));
   const uint64_t TextOff =
       comgr_test::alignTo8(ShOff + ShNum * sizeof(Elf64_Shdr));
   const uint64_t DataOff = comgr_test::alignTo8(TextOff + TextSize);
@@ -384,12 +983,26 @@ DwarfRefElf makeDwarfRefElf(uint64_t TextAddr = 0x1000,
   Ehdr.e_ident[EI_OSABI] = ELFOSABI_AMDGPU_HSA;
   Ehdr.e_type = ET_DYN;
   Ehdr.e_version = EV_CURRENT;
+  Ehdr.e_phoff = PhOff;
+  Ehdr.e_phentsize = sizeof(Elf64_Phdr);
+  Ehdr.e_phnum = 1;
   Ehdr.e_shoff = ShOff;
   Ehdr.e_ehsize = sizeof(Elf64_Ehdr);
   Ehdr.e_shentsize = sizeof(Elf64_Shdr);
   Ehdr.e_shnum = ShNum;
   Ehdr.e_shstrndx = 6;
   std::memcpy(B, &Ehdr, sizeof(Ehdr));
+
+  Elf64_Phdr TextLoad{};
+  TextLoad.p_type = PT_LOAD;
+  TextLoad.p_flags = PF_R | PF_X;
+  TextLoad.p_offset = TextOff;
+  TextLoad.p_vaddr = TextAddr;
+  TextLoad.p_paddr = TextAddr;
+  TextLoad.p_filesz = TextSize;
+  TextLoad.p_memsz = TextSize;
+  TextLoad.p_align = 4;
+  std::memcpy(B + PhOff, &TextLoad, sizeof(TextLoad));
 
   std::memcpy(B + StrOff, Str, sizeof(Str));
   std::memcpy(B + ShStrOff, ShStr, sizeof(ShStr));
@@ -514,7 +1127,8 @@ TEST(ElfView, GrowWithTrampolinesKeepsDwarfConsistentWithSymbol) {
   std::vector<Trampoline> Trampolines{T};
   const uint8_t SNop[4] = {};
   std::unique_ptr<llvm::WritableMemoryBuffer> Out =
-      ViewOrErr->growWithTrampolines(Trampolines, SNop);
+      ViewOrErr->growWithTrampolines(
+          Trampolines, SNop, ExecutablePoolTargetState::Neutral);
   ASSERT_NE(Out, nullptr);
 
   uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
@@ -531,56 +1145,55 @@ TEST(ElfView, GrowWithTrampolinesKeepsDwarfConsistentWithSymbol) {
   EXPECT_EQ(DwarfAddr, SymbolVAddr);
 }
 
-// Covers: addKernelEntryTrampolineSymbols attaches a distinct, correctly
-// placed `<kernel>.stub` symbol for every appended entry-trampoline stub, so a
-// dispatch whose entry now points at a stub still resolves to a name.
-//
-// How: build a synthetic AMDGPU code object that has a .symtab, then grow .text
-// by two entry-stub-sized (KernelEntryStubStride) blocks with
-// growWithTrampolines -- mirroring the pass appending one stub per kernel.
-// Call addKernelEntryTrampolineSymbols with two fixups that use distinct kernel
-// names and the two stub offsets (0 and KernelEntryStubStride). Re-parse the
-// returned buffer with llvm::object::ELFFile and, for each fixup, assert a
-// "<name>.stub" symbol exists in .symtab that is (a) STT_FUNC, (b) defined in
-// the .text section (st_shndx), (c) located at TextAddr + OldTextSize +
-// StubTextOffset, and (d) sized to KernelEntryStubStride. Two fixups (rather
-// than one) prove each stub gets its own name at its own address, not a single
-// shared or mis-placed entry.
-TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
+// Stub symbols must describe the same entry as the rewritten kernel descriptor
+// and the appended executable pool. Growing the non-allocating symbol tables
+// must not move or invalidate that pool's PT_LOAD mapping.
+TEST(ElfView, AddKernelEntryTrampolineSymbolMatchesDescriptorAndPool) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
+  Opts.MetadataSgprCount = 8;
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(makeText(), Opts);
 
-  llvm::Expected<ElfView> ViewOrErr =
-      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  llvm::Expected<ElfView> ViewOrErr = createElfView(Obj);
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  const unsigned TextIdx = ViewOrErr->textSectionIndex();
-  const uint64_t TextAddr = ViewOrErr->textAddr();
-  const uint64_t OldTextSize = ViewOrErr->textSize();
+  std::optional<uint64_t> PoolVAddr = ViewOrErr->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddr.has_value());
 
-  // Grow .text by two entry-stub-sized blocks, mirroring the entry-trampoline
-  // pass appending one stub per kernel.
   Trampoline Stub;
-  Stub.Bytes.assign(2 * KernelEntryStubStride, 0xAA);
+  Stub.Bytes.assign(KernelEntryStubStride, 0xa5);
   std::vector<Trampoline> Growth{Stub};
   const uint8_t SNop[4] = {};
   std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
-      ViewOrErr->growWithTrampolines(Growth, SNop);
+      ViewOrErr->growWithTrampolines(
+          Growth, SNop, ExecutablePoolTargetState::Neutral);
   ASSERT_NE(Grown, nullptr);
 
-  // One fixup per appended stub; the names need not match real kernels, since
-  // addKernelEntryTrampolineSymbols only attaches a symbol at each stub address.
   std::vector<KernelEntryTrampolineFixup> Fixups = {
-      {"kernel_a", /*StubTextOffset=*/0, /*RequiredSgprs=*/10},
-      {"kernel_b", /*StubTextOffset=*/KernelEntryStubStride, /*RequiredSgprs=*/12},
+      {"entry_kernel", /*StubTextOffset=*/0, /*RequiredSgprs=*/10,
+       /*InstPrefLines=*/0},
   };
-  std::unique_ptr<llvm::WritableMemoryBuffer> WithSyms =
-      addKernelEntryTrampolineSymbols(*Grown, TextIdx, TextAddr, OldTextSize,
-                                      Fixups);
-  ASSERT_NE(WithSyms, nullptr);
+  uint8_t *GrownData =
+      reinterpret_cast<uint8_t *>(Grown->getBufferStart());
+  llvm::Expected<ElfView> GrownView =
+      ElfView::create(GrownData, Grown->getBufferSize());
+  ASSERT_TRUE((bool)GrownView) << llvm::toString(GrownView.takeError());
+  std::optional<uint64_t> KdVAddr =
+      GrownView->getKernelDescriptorVAddr("entry_kernel");
+  ASSERT_TRUE(KdVAddr.has_value());
+  ASSERT_GE(*PoolVAddr, *KdVAddr);
+  ASSERT_LE(*PoolVAddr - *KdVAddr,
+            static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
+  ASSERT_TRUE(GrownView->updateKernelDescriptorEntryOffset(
+      "entry_kernel", static_cast<int64_t>(*PoolVAddr - *KdVAddr)));
 
   using ELFT = llvm::object::ELF64LE;
+  llvm::ELF::Elf64_Ehdr GrownHeader{};
+  std::memcpy(&GrownHeader, Grown->getBufferStart(), sizeof(GrownHeader));
+  std::unique_ptr<llvm::WritableMemoryBuffer> WithSyms =
+      addKernelEntryTrampolineSymbols(*Grown, *PoolVAddr, Fixups);
+  ASSERT_NE(WithSyms, nullptr);
+
   const uint8_t *Data =
       reinterpret_cast<const uint8_t *>(WithSyms->getBufferStart());
   llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
@@ -592,12 +1205,21 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   llvm::Expected<ELFT::ShdrRange> SecsOrErr = File.sections();
   ASSERT_TRUE((bool)SecsOrErr) << llvm::toString(SecsOrErr.takeError());
   const ELFT::Shdr *SymtabShdr = nullptr;
-  for (const ELFT::Shdr &S : *SecsOrErr)
+  std::optional<unsigned> PoolSectionIndex;
+  for (unsigned I = 0; I != SecsOrErr->size(); ++I) {
+    const ELFT::Shdr &S = (*SecsOrErr)[I];
     if (S.sh_type == llvm::ELF::SHT_SYMTAB) {
       SymtabShdr = &S;
-      break;
+      continue;
     }
+    if (S.sh_type == llvm::ELF::SHT_PROGBITS &&
+        (S.sh_flags & (llvm::ELF::SHF_ALLOC | llvm::ELF::SHF_EXECINSTR)) ==
+            (llvm::ELF::SHF_ALLOC | llvm::ELF::SHF_EXECINSTR) &&
+        S.sh_addr == *PoolVAddr && S.sh_size >= KernelEntryStubStride)
+      PoolSectionIndex = I;
+  }
   ASSERT_NE(SymtabShdr, nullptr);
+  ASSERT_TRUE(PoolSectionIndex.has_value());
   llvm::Expected<ELFT::SymRange> SymsOrErr = File.symbols(SymtabShdr);
   ASSERT_TRUE((bool)SymsOrErr) << llvm::toString(SymsOrErr.takeError());
   llvm::Expected<llvm::StringRef> StrTabOrErr =
@@ -613,76 +1235,118 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
     return nullptr;
   };
 
-  // Every appended stub must have a <kernel>.stub STT_FUNC symbol covering the
-  // stub, in the .text section, at the stub's virtual address.
-  for (const KernelEntryTrampolineFixup &F : Fixups) {
-    const ELFT::Sym *Sym = FindSym(F.KernelName + ".stub");
-    ASSERT_NE(Sym, nullptr) << "missing stub symbol for " << F.KernelName;
-    EXPECT_EQ(static_cast<unsigned>(Sym->getType()),
-              static_cast<unsigned>(llvm::ELF::STT_FUNC));
-    EXPECT_EQ(Sym->st_shndx, TextIdx);
-    EXPECT_EQ(Sym->st_value, TextAddr + OldTextSize + F.StubTextOffset);
-    EXPECT_EQ(Sym->st_size, KernelEntryStubStride);
-  }
+  const ELFT::Sym *Sym = FindSym("entry_kernel.stub");
+  ASSERT_NE(Sym, nullptr);
+  EXPECT_EQ(static_cast<unsigned>(Sym->getType()),
+            static_cast<unsigned>(llvm::ELF::STT_FUNC));
+  EXPECT_EQ(Sym->st_shndx, *PoolSectionIndex);
+  EXPECT_EQ(Sym->st_value, *PoolVAddr);
+  EXPECT_EQ(Sym->st_size, KernelEntryStubStride);
+
+  uint8_t *WithSymsData =
+      reinterpret_cast<uint8_t *>(WithSyms->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(WithSymsData, WithSyms->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+  llvm::ArrayRef<KernelDescriptorInfo> Descriptors =
+      OutView->kernelDescriptors();
+  ASSERT_EQ(Descriptors.size(), 1u);
+  ASSERT_GE(Descriptors.front().EntryOffset, 0);
+  const uint64_t DescriptorEntry =
+      Descriptors.front().VAddr +
+      static_cast<uint64_t>(Descriptors.front().EntryOffset);
+  EXPECT_EQ(Sym->st_value, DescriptorEntry);
+
+  llvm::ELF::Elf64_Ehdr OutputHeader{};
+  std::memcpy(&OutputHeader, Data, sizeof(OutputHeader));
+  EXPECT_EQ(OutputHeader.e_phoff, GrownHeader.e_phoff);
+  EXPECT_EQ(OutputHeader.e_phnum, GrownHeader.e_phnum);
+  EXPECT_EQ(OutputHeader.e_phentsize, GrownHeader.e_phentsize);
+  const uint64_t PhdrBytes =
+      static_cast<uint64_t>(OutputHeader.e_phnum) * OutputHeader.e_phentsize;
+  ASSERT_LE(OutputHeader.e_phoff, WithSyms->getBufferSize());
+  ASSERT_LE(PhdrBytes, WithSyms->getBufferSize() - OutputHeader.e_phoff);
+  ASSERT_LE(GrownHeader.e_phoff, Grown->getBufferSize());
+  ASSERT_LE(PhdrBytes, Grown->getBufferSize() - GrownHeader.e_phoff);
+  EXPECT_EQ(std::memcmp(Data + OutputHeader.e_phoff,
+                        Grown->getBufferStart() + GrownHeader.e_phoff,
+                        PhdrBytes),
+            0);
+
+  llvm::Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  ASSERT_TRUE((bool)PhdrsOrErr) << llvm::toString(PhdrsOrErr.takeError());
+  const ELFT::Phdr *PoolPhdr = nullptr;
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr)
+    if (Phdr.p_type == llvm::ELF::PT_LOAD &&
+        (Phdr.p_flags & (llvm::ELF::PF_R | llvm::ELF::PF_X)) ==
+            (llvm::ELF::PF_R | llvm::ELF::PF_X) &&
+        Phdr.p_vaddr == *PoolVAddr &&
+        Phdr.p_filesz >= KernelEntryStubStride) {
+      PoolPhdr = &Phdr;
+      break;
+    }
+  ASSERT_NE(PoolPhdr, nullptr);
+  ASSERT_LE(PoolPhdr->p_offset, WithSyms->getBufferSize());
+  ASSERT_LE(KernelEntryStubStride,
+            WithSyms->getBufferSize() - PoolPhdr->p_offset);
+  EXPECT_EQ(std::memcmp(Data + PoolPhdr->p_offset, Stub.Bytes.data(),
+                        KernelEntryStubStride),
+            0);
 }
 
-TEST(ElfView, AddKernelEntryTrampolineSymbolsPreservesPhdr) {
+TEST(ElfView, AddKernelEntryTrampolineSymbolsRejectsLinkedShndxTable) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
-  Opts.MetadataSgprCount = 8;
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(makeText(), Opts);
-
-  llvm::Expected<ElfView> ViewOrErr =
-      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
-  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  const unsigned TextIdx = ViewOrErr->textSectionIndex();
-  const uint64_t TextAddr = ViewOrErr->textAddr();
-  const uint64_t OldTextSize = ViewOrErr->textSize();
+  llvm::Expected<ElfView> View = createElfView(Obj);
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  std::optional<uint64_t> PoolVAddr = View->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddr.has_value());
 
   Trampoline Stub;
-  Stub.Bytes.assign(2 * KernelEntryStubStride, 0xAA);
+  Stub.Bytes.assign(KernelEntryStubStride, 0);
   std::vector<Trampoline> Growth{Stub};
   const uint8_t SNop[4] = {};
   std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
-      ViewOrErr->growWithTrampolines(Growth, SNop);
+      View->growWithTrampolines(Growth, SNop,
+                                ExecutablePoolTargetState::Neutral);
   ASSERT_NE(Grown, nullptr);
 
-  std::vector<KernelEntryTrampolineFixup> Fixups = {
-      {"kernel_a", /*StubTextOffset=*/0, /*RequiredSgprs=*/10},
-      {"kernel_b", /*StubTextOffset=*/KernelEntryStubStride,
-       /*RequiredSgprs=*/12},
-  };
-  std::unique_ptr<llvm::WritableMemoryBuffer> WithSyms =
-      addKernelEntryTrampolineSymbols(*Grown, TextIdx, TextAddr, OldTextSize,
-                                      Fixups);
-  ASSERT_NE(WithSyms, nullptr);
-
-  using ELFT = llvm::object::ELF64LE;
-  llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
-      llvm::object::ELFFile<ELFT>::create(llvm::StringRef(
-          WithSyms->getBufferStart(), WithSyms->getBufferSize()));
-  ASSERT_TRUE((bool)FileOrErr) << llvm::toString(FileOrErr.takeError());
-
-  llvm::Expected<ELFT::PhdrRange> PhdrsOrErr = FileOrErr->program_headers();
-  ASSERT_TRUE((bool)PhdrsOrErr) << llvm::toString(PhdrsOrErr.takeError());
-  EXPECT_GE(PhdrsOrErr->size(), 2u);
-
-  bool FoundPoolLoad = false;
-  for (const auto &Phdr : *PhdrsOrErr) {
-    EXPECT_LE(Phdr.p_offset, WithSyms->getBufferSize());
-    if (Phdr.p_type == llvm::ELF::PT_LOAD && (Phdr.p_flags & llvm::ELF::PF_X)) {
-      FoundPoolLoad = true;
-      EXPECT_GT(Phdr.p_filesz, 0u);
-      ASSERT_LE(Phdr.p_offset + Phdr.p_filesz, WithSyms->getBufferSize());
-      const uint8_t *PoolBytes =
-          reinterpret_cast<const uint8_t *>(WithSyms->getBufferStart()) +
-          Phdr.p_offset;
-      for (uint64_t I = 0; I < Phdr.p_filesz; ++I)
-        EXPECT_EQ(PoolBytes[I], 0xAA) << "pool content mismatch at byte " << I;
-    }
+  llvm::ELF::Elf64_Ehdr Header{};
+  std::memcpy(&Header, Grown->getBufferStart(), sizeof(Header));
+  std::optional<unsigned> SymtabIndex;
+  std::optional<unsigned> NoteIndex;
+  for (unsigned I = 0; I != Header.e_shnum; ++I) {
+    llvm::ELF::Elf64_Shdr Shdr{};
+    std::memcpy(&Shdr,
+                Grown->getBufferStart() + Header.e_shoff +
+                    static_cast<uint64_t>(I) * Header.e_shentsize,
+                sizeof(Shdr));
+    if (Shdr.sh_type == llvm::ELF::SHT_SYMTAB)
+      SymtabIndex = I;
+    else if (Shdr.sh_type == llvm::ELF::SHT_NOTE)
+      NoteIndex = I;
   }
-  EXPECT_TRUE(FoundPoolLoad) << "no executable PT_LOAD segment found";
+  ASSERT_TRUE(SymtabIndex.has_value());
+  ASSERT_TRUE(NoteIndex.has_value());
+  llvm::ELF::Elf64_Shdr Shndx{};
+  std::memcpy(&Shndx,
+              Grown->getBufferStart() + Header.e_shoff +
+                  static_cast<uint64_t>(*NoteIndex) * Header.e_shentsize,
+              sizeof(Shndx));
+  Shndx.sh_type = llvm::ELF::SHT_SYMTAB_SHNDX;
+  Shndx.sh_link = *SymtabIndex;
+  std::memcpy(Grown->getBufferStart() + Header.e_shoff +
+                  static_cast<uint64_t>(*NoteIndex) * Header.e_shentsize,
+              &Shndx, sizeof(Shndx));
+
+  std::vector<KernelEntryTrampolineFixup> Fixups = {
+      {"entry_kernel", /*StubTextOffset=*/0, /*RequiredSgprs=*/8,
+       /*InstPrefLines=*/0},
+  };
+  EXPECT_EQ(addKernelEntryTrampolineSymbols(*Grown, *PoolVAddr, Fixups),
+            nullptr);
 }
 
 TEST(ElfView, UpdateKernelDescriptorSgprCountUpdatesMetadataAndDescriptor) {
@@ -706,28 +1370,6 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountUpdatesMetadataAndDescriptor) {
   EXPECT_GE(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 10u);
 }
 
-TEST(ElfView, UpdateGfx1250RevisionMetadataRetagsKernelInPlace) {
-  comgr_test::KernelDescriptorElfOptions Opts;
-  Opts.MetadataSgprCount = 8;
-  Opts.MetadataGfx1250Revision = "B0";
-  comgr_test::KernelDescriptorElf Obj =
-      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
-
-  llvm::StringRef Before(reinterpret_cast<const char *>(Obj.Bytes.data()),
-                         Obj.Bytes.size());
-  EXPECT_NE(Before.find("B0"), llvm::StringRef::npos);
-
-  llvm::Expected<ElfView> ViewOrErr =
-      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
-  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  ASSERT_TRUE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
-
-  llvm::StringRef After(reinterpret_cast<const char *>(Obj.Bytes.data()),
-                        Obj.Bytes.size());
-  EXPECT_EQ(After.find("B0"), llvm::StringRef::npos);
-  EXPECT_NE(After.find("A0"), llvm::StringRef::npos);
-}
-
 TEST(ElfView, UpdateKernelDescriptorSgprCountCanUpdateMetadataOnly) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
@@ -735,8 +1377,7 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountCanUpdateMetadataOnly) {
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(makeText(), Opts);
 
-  llvm::Expected<ElfView> ViewOrErr =
-      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  llvm::Expected<ElfView> ViewOrErr = createElfView(Obj);
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
   const unsigned DescriptorSgprsBefore =
       readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset);
@@ -755,8 +1396,7 @@ TEST(ElfView, UpdateKernelMetadataSgprCountsKeepsPrimedCacheCoherent) {
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(makeText(), Opts);
 
-  llvm::Expected<ElfView> ViewOrErr =
-      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  llvm::Expected<ElfView> ViewOrErr = createElfView(Obj);
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 8u);
 
@@ -766,52 +1406,13 @@ TEST(ElfView, UpdateKernelMetadataSgprCountsKeepsPrimedCacheCoherent) {
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 10u);
 }
 
-TEST(ElfView, UpdateKernelMetadataSgprCountsBatchesMixedRequirements) {
-  comgr_test::KernelDescriptorElfOptions Opts;
-  Opts.MetadataKernels = {{"needs_update", 8}, {"already_enough", 16}};
-  comgr_test::KernelDescriptorElf Obj =
-      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
-
-  llvm::Expected<ElfView> ViewOrErr =
-      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
-  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-
-  llvm::StringMap<unsigned> RequiredSgprs;
-  RequiredSgprs.try_emplace("needs_update", 10u);
-  RequiredSgprs.try_emplace("already_enough", 12u);
-  ASSERT_TRUE(ViewOrErr->updateKernelMetadataSgprCounts(RequiredSgprs));
-  EXPECT_EQ(ViewOrErr->getKernelSgprCount("needs_update"), 10u);
-  EXPECT_EQ(ViewOrErr->getKernelSgprCount("already_enough"), 16u);
-}
-
-TEST(ElfView, UpdateKernelMetadataSgprCountsRejectsAbsentKernelAtomically) {
-  comgr_test::KernelDescriptorElfOptions Opts;
-  Opts.MetadataKernels = {{"needs_update", 8}, {"already_enough", 16}};
-  comgr_test::KernelDescriptorElf Obj =
-      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
-
-  llvm::Expected<ElfView> ViewOrErr =
-      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
-  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-
-  llvm::StringMap<unsigned> RequiredSgprs;
-  RequiredSgprs.try_emplace("needs_update", 10u);
-  RequiredSgprs.try_emplace("already_enough", 12u);
-  RequiredSgprs.try_emplace("absent_kernel", 4u);
-  EXPECT_FALSE(ViewOrErr->updateKernelMetadataSgprCounts(RequiredSgprs));
-  EXPECT_EQ(ViewOrErr->getKernelSgprCount("needs_update"), 8u);
-  EXPECT_EQ(ViewOrErr->getKernelSgprCount("already_enough"), 16u);
-  EXPECT_EQ(ViewOrErr->getKernelSgprCount("absent_kernel"), std::nullopt);
-}
-
 TEST(ElfView, UpdateKernelDescriptorSgprCountMetadataOnlyRequiresMetadata) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(makeText(), Opts);
 
-  llvm::Expected<ElfView> ViewOrErr =
-      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  llvm::Expected<ElfView> ViewOrErr = createElfView(Obj);
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
   const unsigned DescriptorSgprsBefore =
       readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset);

@@ -1,6 +1,6 @@
-// COM: A far patch can live in an ordinary device function shared by multiple
-// COM: kernels. The tensor descriptor save and set-PC return safely reuse one
-// COM: global scratch block, charged to both possible callers.
+// COM: A tensor load in an ordinary device function shared by multiple kernels
+// COM: is patched in place. The distant end of .text must not force the tensor
+// COM: into a trampoline or increase either caller's SGPR metadata.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
@@ -13,32 +13,15 @@
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=META %s
 
 // DISASM-LABEL: <device_tensor>:
-// DISASM-NEXT: s_branch
-// DISASM-NEXT: s_nop
-// DISASM-NEXT: s_nop
-// DISASM-LABEL: <kernel_b>:
-// DISASM: s_endpgm
-// DISASM-NEXT: s_cselect_b32 s68, 1, 0
-// DISASM-NEXT: s_get_pc_i64 s[66:67]
-// DISASM-NEXT: s_add_co_u32 s66, s66,
-// DISASM-NEXT: s_add_co_ci_u32 s67, s67,
-// DISASM-NEXT: s_cmp_lg_u32 s68, 0
-// DISASM-NEXT: s_set_pc_i64 s[66:67]
-// DISASM: s_mov_b32 s66, s4
+// DISASM-NOT: s_branch
 // DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
-// DISASM-NEXT: s_mov_b32 s4, s66
-// DISASM-NEXT: s_cselect_b32 s68, 1, 0
-// DISASM-NEXT: s_get_pc_i64 s[66:67]
-// DISASM-NEXT: s_add_co_u32 s66, s66,
-// DISASM-NEXT: s_add_co_ci_u32 s67, s67,
-// DISASM-NEXT: s_cmp_lg_u32 s68, 0
-// DISASM-NEXT: s_set_pc_i64 s[66:67]
+// DISASM-NEXT: s_set_pc_i64 s[30:31]
 
 // META: .name:           kernel_a
-// META: .sgpr_count:     71
+// META: .sgpr_count:     48
 // META: .name:           kernel_b
-// META: .sgpr_count:     71
+// META: .sgpr_count:     48
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -50,6 +33,7 @@
 .local device_tensor
 .type device_tensor,@function
 device_tensor:
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[4:11]
   s_set_pc_i64 s[30:31]
 .Ldevice_tensor_end:

@@ -29,18 +29,21 @@
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefix=LOG %s
 // COM: Pin the message shape (mnemonic, both raw + scaled values, the
-// COM: 16-bit limit, and the required-rewrite failure closer) so a regression
-// COM: in the message format or the limit constant fails here, not in some
-// COM: downstream-symptoms test. The helper's specific message is the only
-// COM: diagnostic; patchDs2Addr does not add a second generic failure.
-// COM: RESULT: ERROR comes last because leaving the required A0 rewrite
-// COM: unapplied would be unsafe.
+// COM: 16-bit limit, and the "leaving original instruction in place"
+// COM: closer) so a regression in the message format or the limit
+// COM: constant fails here, not in some downstream-symptoms test. The
+// COM: generic "ds_2addr expansion failed" line is the patchDs2Addr-level
+// COM: error that follows naturally from the overflow guard returning
+// COM: an empty expansion; pin it too so a refactor that reroutes the
+// COM: error path is caught. RESULT: SUCCESS comes last because the
+// COM: rewrite as a whole succeeds (the in-range kernel is patched).
 // LOG:      hotswap: error: ds_load_2addr_stride64_b64 scaled offsets exceed
 // LOG-SAME: the single-address DS 16-bit field
 // LOG-SAME: off0=raw 128 * scale 512 = 65536
 // LOG-SAME: off1=raw 255 * scale 512 = 130560
 // LOG-SAME: max 65535
 // LOG-SAME: required A0 rewrite cannot continue
+// LOG:      hotswap: error: ds_2addr expansion failed for: ds_load_2addr_stride64_b64
 // LOG:      RESULT: ERROR
 
 // ---- Kernel 1: out-of-range -- patch must NOT fire --------------------------

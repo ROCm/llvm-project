@@ -23,8 +23,10 @@
 #include "comgr-env.h"
 #include "comgr.h"
 
+#include <array>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -34,6 +36,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -60,6 +63,10 @@
 
 namespace COMGR {
 namespace hotswap {
+
+inline constexpr int8_t VgprMsbUnanalyzed = -3;
+inline constexpr int8_t VgprMsbUnreachable = -2;
+inline constexpr int8_t VgprMsbUnknown = -1;
 
 // -- Logging ------------------------------------------------------------------
 //
@@ -106,6 +113,10 @@ struct Trampoline {
   bool Long = false;
   bool UsesSetPCBack = false;
   unsigned LongBranchSgprBase = 0;
+  // The scratch pair was proven dead only at the original resume point.
+  // Backward source growth is safe only across instructions that do not touch
+  // the pair; forward growth must re-prove it at the moved resume point.
+  bool LongBranchScratchIsSiteProven = false;
   bool HasPoolBranchIsland = false;
   uint64_t PoolBranchIslandOffset = 0;
   bool UsesShortBranchForward = false;
@@ -135,6 +146,7 @@ static constexpr uint32_t KernelEntryStubInstPrefLines =
 struct KernelDescriptorInfo {
   std::string KernelName;
   uint64_t VAddr = 0;
+  uint64_t FileOffset = 0;
   int64_t EntryOffset = 0;
 };
 
@@ -144,18 +156,60 @@ struct KernelClusterDims {
   unsigned Z = 0;
 };
 
+enum class NopSledUse {
+  OwnerBody,
+  RelocationBody,
+  Gateway,
+};
+
+enum class ReplacementPlacement {
+  Default,
+  Ds2SourceTail,
+  ProtectedCombinedDelay,
+};
+
 struct NopSled {
   uint64_t Start = 0;
   uint64_t End = 0;
   uint64_t WritePos = 0;
-  uint64_t FunctionStart = 0;
-  uint64_t FunctionEnd = 0;
+  uint64_t OwnerStart = 0;
+  uint64_t OwnerEnd = 0;
+  // This storage may contain branch gateways only, never a replacement body.
+  // It covers certified external padding and appended-pool branch islands.
+  bool GatewayOnly = false;
+  // Explicit NOP padding immediately after a proven no-fallthrough function
+  // boundary remains body-owned by that function, but any function may use
+  // the same allocation cursor for branch-only gateway instructions.
+  bool GlobalGateway = false;
+  // Strictly proven post-function NOP padding may also hold straight-line,
+  // PC-independent relocation bodies when the patch pass explicitly opts in.
+  bool GlobalBody = false;
+
+  bool ownsSource(uint64_t Offset) const {
+    return OwnerStart <= Offset && Offset < OwnerEnd;
+  }
+
+  bool canGatewayFrom(uint64_t Offset) const {
+    return GlobalGateway || ownsSource(Offset);
+  }
+
+  bool canHoldBodyFrom(uint64_t Offset, bool AllowGlobalBody) const {
+    return ownsSource(Offset) || (AllowGlobalBody && GlobalBody);
+  }
 };
 
 enum class MaskWorkaroundPolicy {
   None,
   A0,
   B0,
+};
+
+/// Target dependence of an executable pool emitted by HotSwap. Neutral pools
+/// contain only stepping-independent code such as kernel-entry stubs.
+enum class ExecutablePoolTargetState : uint32_t {
+  Neutral = 0,
+  A0 = 1,
+  B0 = 2,
 };
 
 // -- Rewrite rule -------------------------------------------------------------
@@ -183,14 +237,10 @@ static constexpr uint64_t MinNopSledSize = 8;
 // Minimum AMDGPU instruction size (one dword).
 static constexpr uint32_t MinInstSize = 4;
 
-// Fixed reservation for the SCC-preserving set-PC return. The assembled
-// sequence is 28 bytes for a same-object forward or backward delta.
-static constexpr uint32_t SetPcReturnReserveBytes = 28;
-
-// A gateway needs at least 20 bytes when incoming SCC is proven dead. Live SCC
-// uses the 28-byte preserving sequence.
-static constexpr uint32_t SetPcMinGatewayBytes = 20;
-static constexpr uint32_t SetPcForwardSequenceBytes = 28;
+// Fixed reservation for the SCC-neutral set-PC sequence. The gfx1250
+// s_add_nc_u64 form is 20 bytes for a same-object forward or backward delta.
+static constexpr uint32_t SetPcReturnReserveBytes = 20;
+static constexpr uint32_t SetPcForwardSequenceBytes = 20;
 static constexpr uint32_t PoolBranchIslandBytes = MinInstSize;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
@@ -227,6 +277,11 @@ public:
     uint64_t End = 0;
     const ELFT::Sym *Symbol = nullptr;
     const ELFT::Shdr *Symtab = nullptr;
+  };
+
+  struct TextOffsetRange {
+    uint64_t Begin = 0;
+    uint64_t End = 0;
   };
 
   /// Parse \p Data / \p Size into an ElfView. Fails if the bytes are not a
@@ -273,6 +328,15 @@ public:
   /// Zero-size symbols extend to the next function symbol or `.text` end.
   std::vector<FunctionTextRange> functionTextRanges() const;
 
+  /// Return every defined symbol offset in `.text`, irrespective of symbol
+  /// type. A missing value means symbol-table discovery was incomplete.
+  std::optional<std::vector<uint64_t>> textSymbolOffsets() const;
+
+  /// Return sorted, coalesced half-open extents for sized, non-callable
+  /// symbols defined in `.text`. Extents are clipped to `.text`; a missing
+  /// value means discovery was incomplete or an extent overflowed.
+  std::optional<std::vector<TextOffsetRange>> textSymbolExtents() const;
+
   /// Find the kernel function symbol whose range includes \p TextAddress.
   /// Returns "" if no matching function symbol exists.
   std::string findKernelAtAddress(uint64_t TextAddress) const;
@@ -288,6 +352,19 @@ public:
   /// section covers the range or it falls outside the buffer.
   const uint8_t *dataAtVAddr(uint64_t VAddr, uint64_t Len) const;
 
+  /// Return true when the complete virtual-address range is backed by bytes
+  /// in an executable PT_LOAD segment. Segment validation is still required
+  /// even when the range also has an executable section header.
+  bool isExecutableVAddrRange(uint64_t VAddr, uint64_t Len) const;
+
+  /// Return true when every file-backed executable region outside the `.text`
+  /// section analyzed by the instruction rewriter has valid HotSwap provenance
+  /// and is either stepping-neutral or built for \p TargetState. Unmarked,
+  /// stale, conflicting, or malformed provenance fails closed; structurally
+  /// malformed ELF data returns std::nullopt.
+  std::optional<bool> executableCodeOutsideTextIsCompatibleWith(
+      ExecutablePoolTargetState TargetState) const;
+
   /// Pointer to the kernel_descriptor for \p KernelName inside the buffer,
   /// or nullptr if not found.
   uint8_t *findKernelDescriptor(llvm::StringRef KernelName);
@@ -296,6 +373,10 @@ public:
   /// current kernel_code_entry_byte_offset values. The returned range remains
   /// valid until this ElfView is destroyed.
   llvm::ArrayRef<KernelDescriptorInfo> kernelDescriptors() const;
+
+  /// True only when every descriptor symbol was parsed and duplicate names
+  /// resolved to the same descriptor location.
+  bool kernelDescriptorCacheIsComplete() const;
 
   /// Return the virtual address of the kernel descriptor symbol for
   /// \p KernelName, or std::nullopt when the descriptor is not present.
@@ -322,6 +403,12 @@ public:
   /// The revision strings used by gfx1250 ("A0" and "B0") have equal encoded
   /// size, so this preserves the ELF layout.
   bool updateGfx1250RevisionMetadata(llvm::StringRef Revision);
+
+  /// Return true only when metadata contains at least one kernel and every
+  /// kernel explicitly records \p Revision. Missing revision keys return
+  /// false; malformed metadata returns std::nullopt.
+  std::optional<bool>
+  allKernelsHaveGfx1250Revision(llvm::StringRef Revision) const;
 
   /// Read COMPUTE_PGM_RSRC3.INST_PREF_SIZE for \p KernelName.
   std::optional<uint32_t>
@@ -378,11 +465,13 @@ public:
                               unsigned VgprGranuleSize);
 
   /// Virtual address at which growWithTrampolines appends the trampoline pool:
-  /// the first page-aligned address above every existing allocatable section.
+  /// the first page-aligned address above every existing allocatable section
+  /// and PT_LOAD memory range.
   /// Callers that pre-compute branch/stub targets (B0-to-A0 trampolines,
   /// kernel-entry stubs) must resolve pool positions against this value so the
   /// baked branches land on the pool's final location. Single source of truth
-  /// shared with growWithTrampolines. std::nullopt on sh_addr+sh_size overflow.
+  /// shared with growWithTrampolines. std::nullopt on section or segment range
+  /// overflow.
   std::optional<uint64_t> trampolinePoolVAddr() const;
 
   /// Grow the ELF by appending the trampoline pool at a fresh virtual address
@@ -395,7 +484,8 @@ public:
   /// AMDGPU code object, which carries no relocations to fix up.
   std::unique_ptr<llvm::WritableMemoryBuffer>
   growWithTrampolines(llvm::ArrayRef<Trampoline> Trampolines,
-                      llvm::ArrayRef<uint8_t> SNopBytes) const;
+                      llvm::ArrayRef<uint8_t> SNopBytes,
+                      ExecutablePoolTargetState TargetState) const;
 
 private:
   enum class KernelSgprCacheState {
@@ -424,6 +514,7 @@ private:
   mutable std::optional<std::vector<KernelDescriptorInfo>>
       KernelDescriptorCache;
   mutable llvm::StringMap<uint64_t> KernelDescriptorFileOffsetCache;
+  mutable bool KernelDescriptorCacheComplete = false;
   mutable KernelSgprCacheState SgprCacheState =
       KernelSgprCacheState::Uninitialized;
   mutable llvm::StringMap<std::optional<unsigned>> KernelSgprCountCache;
@@ -442,9 +533,13 @@ struct LLVMState;
                                     const LLVMState &LS);
 
 /// Find the nearest NOP sled to \p Offset with at least \p Needed bytes of
-/// free space. Returns nullptr if none found within MaxSledDistance.
+/// free space. \p Use controls whether selection is restricted to owner-local
+/// bodies, allows certified relocation bodies in post-function padding, or
+/// allows branch-only gateways. Returns nullptr if none is found within
+/// MaxSledDistance.
 NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
-                         uint64_t Needed);
+                         uint64_t Needed,
+                         NopSledUse Use = NopSledUse::OwnerBody);
 
 // -- RewriteConfig ------------------------------------------------------------
 //
@@ -526,24 +621,10 @@ struct LLVMState {
   unsigned SGetPcI64Opcode = 0;
   unsigned SAddU32Opcode = 0;
   unsigned SAddcU32Opcode = 0;
+  unsigned SAddNcU64Opcode = 0;
   unsigned SSetPcI64Opcode = 0;
-
-  /// MC identities used by far-trampoline relocation analysis. Each opcode is
-  /// resolved once through the asm parser so policy code never compares
-  /// disassembled mnemonic strings.
-  unsigned SClauseOpcode = 0;
-  unsigned SDelayAluOpcode = 0;
-  unsigned SEndPgmOpcode = 0;
-  unsigned SEndPgmSavedOpcode = 0;
-  unsigned SAddPcI64Opcode = 0;
-  unsigned SCallI64Opcode = 0;
   unsigned SSwapPcI64Opcode = 0;
-  unsigned SPrefetchInstPcRelOpcode = 0;
-  unsigned SPrefetchDataPcRelOpcode = 0;
-
-  /// SCC, recovered from the implicit definition on a parsed scalar compare.
-  /// This avoids scanning target register names in policy code.
-  llvm::MCRegister SCCRegister;
+  unsigned SCallI64Opcode = 0;
 
   bool Valid = false;
 
@@ -566,7 +647,6 @@ struct InternalDecodedInst {
   uint32_t Size = 0;
   llvm::MCInst Inst;
   std::string Mnemonic;
-  bool DecodeSucceeded = false;
 };
 
 // -- Function declarations (LLVM MC layer) ------------------------------------
@@ -630,6 +710,12 @@ struct WmmaNopReq {
 /// Classify the A0/B0 v_nop requirement for a WMMA/SWMMAC mnemonic.
 WmmaNopReq classifyWmmaNops(llvm::StringRef Mnemonic);
 
+/// Record a WMMA spacing deficit for a candidate VALU and return the maximum
+/// requirement seen for that candidate. Multiple WMMA scans must compose the
+/// strongest requirement rather than letting discovery order weaken it.
+int updateWmmaHazardDeficit(llvm::DenseMap<size_t, int> &MaxDeficits,
+                            size_t ValuIndex, int Deficit);
+
 /// Patch the VOP3PX2 scale_src2 field (bits [58:50]) to VGPR0 encoding
 /// (0x100) in a 16-byte instruction buffer. Returns true if the field
 /// was modified (false if already set to the target value).
@@ -664,6 +750,26 @@ struct CFG {
   std::vector<BasicBlock> Blocks;
   llvm::DenseMap<uint64_t, unsigned> OffsetToBlock;
 };
+
+struct MaterializedPcTransfer {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
+  uint64_t Target = 0;
+};
+
+std::optional<int64_t> getAbsoluteOperandValue(const llvm::MCOperand &Operand,
+                                               const InternalDecodedInst &DI,
+                                               llvm::ArrayRef<uint8_t> Text);
+
+std::optional<MaterializedPcTransfer> evaluateMaterializedPcTransfer(
+    llvm::ArrayRef<InternalDecodedInst> Decoded, size_t TransferIndex,
+    const llvm::DenseSet<uint64_t> &DirectTargets, llvm::ArrayRef<uint8_t> Text,
+    const LLVMState &LS, const ElfView &Elf,
+    std::optional<llvm::ArrayRef<uint64_t>> TextSymbolOffsets = std::nullopt,
+    std::optional<llvm::ArrayRef<ElfView::TextOffsetRange>> TextSymbolExtents =
+        std::nullopt);
+
+bool isStandardLinkReturn(const InternalDecodedInst &DI, const LLVMState &LS);
 
 /// Dataflow-liveness result for a kernel's VGPR set. \c LiveBefore[i] and
 /// \c LiveAfter[i] are the live-in / live-out bitvectors for Decoded[i].
@@ -743,6 +849,17 @@ struct ScratchPatchInfo {
   llvm::BitVector ScratchRegs;
 };
 
+/// Transactional ownership and composition state for one replacement source.
+/// A whole-function requirement may reserve a site before its ordinary
+/// per-instruction owner is known. The first successful emission commits that
+/// owner and composes every pending requirement into the same body.
+struct SiteReplacementState {
+  uint32_t OriginalSize = 0;
+  unsigned RequiredLeadingVNops = 0;
+  bool Committed = false;
+  bool WmmaHazardComposed = false;
+};
+
 // -- Patch types --------------------------------------------------------------
 
 /// Per-kernel counters accumulated by the patch passes. Reported via log()
@@ -761,6 +878,90 @@ struct SafeSgprUsageSummary {
   bool HasCall = false;
   unsigned HighWatermark = 0;
 };
+
+struct SiteDeadSgprFunctionFacts {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
+  size_t GlobalFirst = 0;
+  unsigned NumberedLimit = 0;
+  std::vector<std::array<uint64_t, 2>> SafeBefore;
+  llvm::BitVector ForbiddenResume;
+};
+
+struct KernelTextRange {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
+  std::vector<uint64_t> AdditionalEntries;
+};
+
+/// Forward must-analysis used by the gfx1250 initial-VMEM workaround. The
+/// bitvectors are indexed like the mutable .text decode. DescriptorCovered
+/// distinguishes dead code in a known kernel from helpers whose entry
+/// semantics cannot be proven.
+struct InitialVmemMustAnalysis {
+  llvm::BitVector DescriptorCovered;
+  llvm::BitVector Reachable;
+  llvm::BitVector MustHavePriorVmem;
+};
+
+InitialVmemMustAnalysis
+computeInitialVmemMustAnalysis(llvm::ArrayRef<InternalDecodedInst> Decoded,
+                               llvm::ArrayRef<InternalDecodedInst> AllDecoded,
+                               llvm::ArrayRef<KernelTextRange> KernelRanges,
+                               const LLVMState &LS);
+
+/// Forward must-analysis for the low 16 bits of tensor group descriptors.
+/// A set bit means every modeled path to the tensor instruction provides a
+/// group-1 base register whose low half is zero. MaskDefinitionOffsets records
+/// the single reaching v_readfirstlane definition when every path agrees, so
+/// one persistent mask can be shared by later tensor operations.
+struct TensorDescriptorMustAnalysis {
+  llvm::BitVector Low16KnownZero;
+  std::vector<uint64_t> MaskDefinitionOffsets;
+};
+
+/// Exact, byte-validated kernel-entry stub metadata. Offsets are relative to
+/// .text, including stubs in appended executable sections. The descriptor's
+/// virtual dispatch edge enters Begin; Terminal is the stub's only decoded
+/// transfer and resolves to Target.
+struct TensorDispatchStub {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
+  uint64_t Terminal = 0;
+  uint64_t Target = 0;
+};
+
+struct TensorAnalysisRange {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
+  // Original-.text control transfers from outside this range that target an
+  // appended executable segment. A generated path rooted in this range may
+  // not share one of these segment entries: the foreign path would carry an
+  // unmodeled descriptor and EXEC state to the same re-entry tail.
+  std::vector<uint64_t> ForeignExternalEntries;
+  // Hardware dispatch roots from kernel descriptors that do not name an exact
+  // validated HotSwap entry stub. They have no decoded predecessor edge and
+  // therefore may not enter a candidate-owned external subgraph.
+  std::vector<uint64_t> VirtualExternalEntries;
+  // Complete set of resolved original-.text control-flow and fallthrough
+  // edges. Source provenance distinguishes exact split-relay entry from an
+  // arbitrary join into its address-materialization tail.
+  std::vector<std::pair<uint64_t, uint64_t>> OriginalControlFlowEdges;
+  // Callable and kernel roots in original .text. A root may enter a computed
+  // PC sequence only at a self-initializing get-PC prefix.
+  std::vector<uint64_t> OriginalCodeEntries;
+  // Complete immutable set of validated dispatch stubs in this code object.
+  // The range analysis uses it both to admit its own virtual dispatch edge
+  // and to classify carry-form set-PC terminals belonging to other kernels.
+  std::vector<TensorDispatchStub> DispatchStubs;
+};
+
+TensorDescriptorMustAnalysis computeTensorDescriptorMustAnalysis(
+    llvm::ArrayRef<InternalDecodedInst> Decoded,
+    llvm::ArrayRef<InternalDecodedInst> AllDecoded,
+    llvm::ArrayRef<TensorAnalysisRange> KernelRanges, const LLVMState &LS,
+    const llvm::DenseSet<uint64_t> &DirectControlFlowTargets, unsigned MaxSgprs,
+    unsigned MaxVgprs);
 
 /// Mutable per-run context threaded through all patch passes. Bundles the
 /// input config, decoded instruction stream, raw .text bytes, MC state,
@@ -783,21 +984,104 @@ struct PatchContext {
   const LivenessInfo &Liveness;
   llvm::StringMap<KernelPatchStats> &KernelStats;
   std::vector<ScratchPatchInfo> &OutScratchPatches;
+  const InitialVmemMustAnalysis *InitialVmemAnalysis = nullptr;
+  const TensorDescriptorMustAnalysis *TensorDescriptorAnalysis = nullptr;
+  // Indexed once from the original instruction stream. CFG analyses use these
+  // sets to model predecessor merges and indirect entries without rescanning
+  // the complete code object for every patch site.
+  std::optional<llvm::DenseSet<uint64_t>> DirectControlFlowTargets;
+  // Sized, non-callable .text data/object extents. Moving any overlapping
+  // byte would violate symbol ownership even when the symbol starts before a
+  // candidate instruction window.
+  std::optional<llvm::ArrayRef<ElfView::TextOffsetRange>> TextSymbolExtents;
+  llvm::DenseSet<uint64_t> IndirectControlFlowFunctions;
+  llvm::DenseSet<uint64_t> CrossFunctionInteriorEntryFunctions;
+  bool HasUnknownArbitraryIndirectTarget = false;
+  // True before an instruction only when forward must-dataflow proves that
+  // MODE selects the same physical VGPR bank for VALU destinations and DS
+  // address operands on every reachable path.
+  llvm::BitVector VgprMsbDstSrc0EqualBefore;
+  // Exact persistent bank selectors before each instruction, or -1 when a
+  // path merge, call, or unknown MODE definition prevents recovery. Long
+  // range DS2 proofs compare a VALU definition's dst selector with the later
+  // DS address operand's src0 selector.
+  std::vector<int8_t> VgprMsbDstBefore;
+  std::vector<int8_t> VgprMsbSrc0Before;
+  // Exact packed src0/src1/src2/dst VGPR-MSB mode before each instruction.
+  // Negative sentinels distinguish unanalyzed functions, CFG-unreachable
+  // instructions, and reachable paths with an unknown field. WMMA splitting
+  // uses the complete mode while DS2 alignment can still consume the
+  // independently merged dst/src0 facts.
+  std::vector<int16_t> VgprMsbModeBefore;
+  // Set at a VALU copy when its corresponding destination is known to receive
+  // an 8-byte-aligned numbered SGPR value on every path. The two vectors keep
+  // the slots of v_dual_mov_b32 independent.
+  llvm::BitVector VgprDef0AlignedTo8;
+  llvm::BitVector VgprDef1AlignedTo8;
+  // DS2 alignment exemptions are decided from the immutable decoded stream
+  // before any earlier patch relabels an instruction as <replaced>.
+  llvm::BitVector Ds2AddressProvenAligned;
+  // Source-window expansion must not split clause/delay geometry or move a
+  // patch site whose replacement has explicitly position-sensitive state.
+  llvm::DenseSet<uint64_t> RelocationProtectedOffsets;
+  // Keep the source of relocation protection so removing an unsafe clause
+  // releases only that clause's members. Counts preserve overlapping or
+  // malformed clause ranges; delay and dynamically added protections remain
+  // independent and must survive clause removal.
+  llvm::DenseMap<uint64_t, unsigned> ClauseRelocationProtectionCounts{0};
+  llvm::DenseSet<uint64_t> NonClauseRelocationProtectedOffsets;
+  // Instructions whose execution was moved into a larger atomic replacement
+  // window. Keep their immutable MC description available to analyses that
+  // reason about the relocated instruction order, but prevent later patch
+  // families from emitting a second replacement at the stale linked address.
+  llvm::DenseSet<uint64_t> ClaimedReplacementOffsets;
+  // Descriptor definitions already extended by this pass with the persistent
+  // A0 low-half mask. A must-analysis may reuse one for a later tensor site,
+  // but may not use the reaching-definition fact to authorize a fresh move.
+  llvm::DenseSet<uint64_t> TensorMaskedDefinitionOffsets;
+  // Single source of truth for exact replacement ownership and pending
+  // whole-function composition requirements. This also covers NOP-sled
+  // placements, which do not appear in OutTrampolines.
+  std::map<uint64_t, SiteReplacementState> SiteReplacements;
+  llvm::SmallVector<uint64_t, 16> WmmaHazardSites;
+  uint32_t WmmaHazardsComposed = 0;
   // Required patches are transformations whose unpatched original code is
   // unsafe to return when the selected rewrite policy needs the patch.
   bool RequiredPatchFailed = false;
   bool RequiredPatchApplied = false;
-  // Sum of the bytes already queued in OutTrampolines. Keeping this in the
-  // per-rewrite context makes each new pool-position calculation constant
-  // time even for code objects with many thousands of patch sites.
+  // Conservative upper bound for the final bytes occupied by trampolines
+  // already queued in OutTrampolines. Far entries also reserve their eventual
+  // pool-island slot and bounded straight-line growth, so a later short-branch
+  // decision cannot be invalidated when the final pool is laid out.
   uint64_t QueuedTrampolineBytes = 0;
+  // Largest instruction in the immutable decoded stream. Source-window growth
+  // stops after crossing SetPcForwardSequenceBytes, so this bounds its final
+  // overshoot without assuming an ISA-wide maximum encoding size.
+  uint32_t MaxDecodedInstSize = 0;
   // Safe far-return scratch allocation can be queried at many patch sites in
   // one function. Cache the immutable decoded SGPR usage summaries so each
   // function, and the whole-object fallback, is scanned at most once.
   std::optional<SafeSgprUsageSummary> WholeObjectSgprUsage;
   llvm::DenseMap<std::pair<uint64_t, uint64_t>, SafeSgprUsageSummary>
       FunctionSgprUsage{0};
+  llvm::DenseMap<std::pair<uint64_t, uint64_t>, SiteDeadSgprFunctionFacts>
+      SiteDeadSgprFacts{0};
 };
+
+inline void protectNonClauseRelocationOffset(PatchContext &Ctx,
+                                             uint64_t Offset) {
+  Ctx.NonClauseRelocationProtectedOffsets.insert(Offset);
+  Ctx.RelocationProtectedOffsets.insert(Offset);
+}
+
+/// Return whether \p Mnemonic is one of the A0-incompatible WMMA forms owned
+/// by the split patch.
+bool isWmmaSplitPatchCandidate(llvm::StringRef Mnemonic);
+
+/// Return whether the instruction at \p Idx owns a precomputed whole-pass
+/// requirement or still needs an independent configured HotSwap rewrite.
+/// Atomic source-window relocation uses this to avoid claiming its source.
+bool requiresIndependentInstructionRewrite(const PatchContext &Ctx, size_t Idx);
 
 /// A block of numbered SGPRs that is not referenced in the function being
 /// patched, or anywhere in the code object when the site may be reached by a
@@ -805,13 +1089,15 @@ struct PatchContext {
 struct SafeSgprScratchBlock {
   unsigned Base = 0;
   unsigned Count = 0;
+  bool IsSiteProven = false;
 };
 
 /// Find an aligned block of unused numbered SGPRs for \p TextOffset. Returns
 /// nullopt after logging when no block fits below RewriteConfig::MaxSgprs.
 std::optional<SafeSgprScratchBlock>
 findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
-                         unsigned Alignment, llvm::StringRef Context);
+                         unsigned Alignment, llvm::StringRef Context,
+                         bool DiagnoseFailure = true);
 
 /// Charge a previously selected global block to the kernel owning \p
 /// TextOffset. If the site is in an ordinary device function, conservatively
@@ -821,46 +1107,86 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
                                 const SafeSgprScratchBlock &Block,
                                 llvm::StringRef Context);
 
+/// Decode \p Bytes and return every numbered SGPR touched by an explicit or
+/// implicit operand. Returns nullopt after logging if the sequence cannot be
+/// decoded completely.
+std::optional<llvm::BitVector>
+collectTouchedNumberedSgprs(llvm::ArrayRef<uint8_t> Bytes,
+                            unsigned NumberedSgprLimit, const LLVMState &LS);
+
+/// Return true when both halves of the aligned numbered SGPR pair beginning at
+/// \p SgprBase are defined before any reachable use from \p ResumeIndex. A call
+/// reached while either half remains live fails closed because its outgoing
+/// argument registers are not explicit in the machine instruction.
+bool isSgprPairDeadFrom(llvm::ArrayRef<InternalDecodedInst> Function,
+                        size_t ResumeIndex, unsigned SgprBase,
+                        const LLVMState &LS, llvm::ArrayRef<uint8_t> Text = {});
+
+/// Return true when both VCC halves are dead from \p ResumeIndex. On gfx1250
+/// wave32, implicit composite VCC operands affect VCC_LO; explicit VCC and
+/// VCC_HI operands retain their full register semantics. Proven ABI calls and
+/// returns terminate the caller-clobbered VCC lifetime.
+bool isVccPairDeadFrom(llvm::ArrayRef<InternalDecodedInst> Function,
+                       size_t ResumeIndex, const LLVMState &LS,
+                       llvm::ArrayRef<uint8_t> Text = {});
+
+/// Return the numbered SGPRs that every path from the original resume point
+/// defines before a use, call, or exit. Facts are cached per function.
+std::optional<llvm::BitVector> getSiteDeadNumberedSgprs(PatchContext &Ctx,
+                                                        uint64_t InstOffset,
+                                                        uint32_t InstSize);
+
+/// Build immutable site-dead facts before any patch relabels Decoded entries.
+void precomputeSiteDeadSgprFacts(PatchContext &Ctx);
+
 // -- Trampoline emission helpers (defined in comgr-hotswap-b0a0.cpp) ----------
 
-[[nodiscard]] bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,
-                                 uint64_t InstOffset, uint32_t InstSize,
-                                 llvm::ArrayRef<uint8_t> Replacement);
-[[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
-                                    uint32_t InstSize,
-                                    llvm::ArrayRef<uint8_t> Replacement);
+uint64_t getNopSledBytesNeeded(
+    const PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
+    llvm::ArrayRef<uint8_t> Replacement,
+    ReplacementPlacement Placement = ReplacementPlacement::Default);
 
-/// Encode an SCC-preserving indirect long branch using three numbered SGPRs:
-/// an aligned PC pair at \p SgprBase and an SCC-save temporary at Base + 2.
-/// The displacement is materialized as two 32-bit literals; no
-/// s_add_pc_i64 or 64-bit literal is emitted.
-std::optional<llvm::SmallVector<uint8_t>>
-encodeSetPCLongBranch(const LLVMState &LS, uint64_t FromOffset,
-                      uint64_t TargetOffset, unsigned SgprBase);
+[[nodiscard]] bool
+emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
+                 llvm::ArrayRef<uint8_t> Replacement,
+                 ReplacementPlacement Placement = ReplacementPlacement::Default,
+                 bool DiagnoseFailure = true);
 
-/// Return whether an s_branch at \p From can encode \p To, including the
-/// instruction-relative PC base, alignment, signed range, and overflow checks.
-bool isSBranchReachable(uint64_t From, uint64_t To);
+/// Return the encoded s_delay_alu dependency span, or the conservative ISA
+/// maximum when the immediate cannot be interpreted safely.
+unsigned getDelayProtectedSpan(const InternalDecodedInst &DI);
 
-/// Evaluate a statically direct branch or call target from its decoded MCInst.
-/// Uses MCInstrAnalysis where supported and the documented gfx1250 s_call_i64
-/// operand fallback otherwise.
-std::optional<uint64_t>
-evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
-                                const LLVMState &LS);
+/// Return true when direct-control-flow information is unavailable, the
+/// half-open window is malformed, or a direct edge enters after \p Begin and
+/// before \p End. An edge to Begin is allowed because the replacement branch
+/// remains there; an edge to any later instruction or literal slot is not.
+bool hasDirectControlFlowTargetInWindowInterior(
+    const std::optional<llvm::DenseSet<uint64_t>> &Targets, uint64_t Begin,
+    uint64_t End);
 
-[[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
-                                       uint32_t InstSize,
-                                       llvm::ArrayRef<uint8_t> Replacement);
+/// Return true when both edges of a replacement at \p InstOffset can use
+/// s_branch with the trampoline's current queued pool position.
+bool canEmitShortTrampoline(const PatchContext &Ctx, uint64_t InstOffset,
+                            uint32_t InstSize, uint64_t ReplacementSize);
 
-/// Expand one decoded gfx1250 DS two-address instruction into the ordered
-/// single-address instruction sequence used by the trampoline patch. Exposed
-/// from the internal interface so unit tests can verify read-before-write
-/// dependency handling without constructing a complete ELF rewrite. Returns
-/// std::nullopt after logging a malformed or unsafe expansion.
-[[nodiscard]] std::optional<std::vector<std::string>>
-expandDs2Addr(const llvm::MCInst &Inst, llvm::StringRef FromMnem,
-              llvm::StringRef ToMnem, const LLVMState &LS);
+/// Encode an SCC-neutral indirect long branch using the aligned numbered SGPR
+/// pair at \p SgprBase. The displacement is applied with s_add_nc_u64; no
+/// s_add_pc_i64 is emitted and no third SGPR is needed to save SCC.
+llvm::SmallVector<uint8_t> encodeSetPCLongBranch(const LLVMState &LS,
+                                                 uint64_t FromOffset,
+                                                 uint64_t TargetOffset,
+                                                 unsigned SgprBase);
+
+[[nodiscard]] bool emitReplacementCode(
+    PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
+    llvm::ArrayRef<uint8_t> Replacement,
+    ReplacementPlacement Placement = ReplacementPlacement::Default,
+    bool DiagnoseFailure = true);
+
+/// Whether p Offset is reserved by a pending requirement or already owns a
+/// committed replacement. Relocation windows may not move such a site, while
+/// its exact per-instruction owner may still emit through the shared helpers.
+bool hasSiteReplacementReservation(const PatchContext &Ctx, uint64_t Offset);
 
 // -- Patch dispatch vtable ----------------------------------------------------
 //
@@ -894,6 +1220,7 @@ struct HotswapPatchVTable {
 
   // Whole-kernel passes: called once per kernel after the per-instruction
   // loop completes.
+  bool (*precomputeWmmaHazards)(PatchContext &) = nullptr;
   uint32_t (*applyWmmaHazardPatch)(PatchContext &) = nullptr;
   uint32_t (*applyVop3px2Src2Fix)(PatchContext &) = nullptr;
 };
@@ -925,6 +1252,9 @@ HotswapPatchVTable &getHotswapPatchVTable();
 #include "comgr-hotswap-patches.def"
 #undef HOTSWAP_PATCH
 
+/// Cache every DS2 alignment exemption before the patch loop mutates Decoded.
+void precomputeDs2AddressAlignment(PatchContext &Ctx);
+
 // -- Function declarations (kernel-entry trampoline pass) ---------------------
 
 struct KernelEntryTrampolineFixup {
@@ -946,6 +1276,26 @@ llvm::SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
 /// buildKernelEntryTrampoline, used to keep the rewrite idempotent.
 bool isKernelEntryTrampoline(llvm::ArrayRef<uint8_t> Bytes,
                              const LLVMState &LS);
+
+struct KernelEntryTrampolineInfo {
+  uint64_t TargetVAddr = 0;
+  uint64_t TerminalVAddr = 0;
+};
+
+/// Return the resolved target and terminal instruction address of an exact
+/// HotSwap entry stub. Besides validating the generated instruction shape,
+/// this requires the remainder of the fixed-size stub to contain only the
+/// exact generated s_code_end padding.
+std::optional<KernelEntryTrampolineInfo>
+getKernelEntryTrampolineInfo(llvm::ArrayRef<uint8_t> Bytes, uint64_t StubVAddr,
+                             const LLVMState &LS);
+
+/// Return the original kernel entry encoded by a structurally valid HotSwap
+/// entry stub at \p StubVAddr. Returns std::nullopt for a non-stub or malformed
+/// candidate.
+std::optional<uint64_t>
+getKernelEntryTrampolineTargetVAddr(llvm::ArrayRef<uint8_t> Bytes,
+                                    uint64_t StubVAddr, const LLVMState &LS);
 
 /// Cheap raw-byte prefilter for the entry stubs produced by
 /// buildKernelEntryTrampoline. This is intentionally weaker than
@@ -983,12 +1333,11 @@ bool rewriteKernelEntryDescriptorOffsets(
 /// problem) -- callers treat nullptr as "keep the existing buffer", since the
 /// symbol is a debugging aid and its absence is not a correctness failure.
 ///
-/// Only the trailing non-alloc `.symtab` / `.strtab` sections grow, so no
-/// virtual addresses, program headers, or relocations change; `.dynsym` (used
-/// by the loader) is left untouched.
+/// The non-allocating `.symtab` / `.strtab` copies are relocated after the
+/// existing ELF bytes, so the executable pool and all program-header mappings
+/// remain unchanged; `.dynsym` (used by the loader) is left untouched.
 std::unique_ptr<llvm::WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
-    llvm::WritableMemoryBuffer &In, unsigned TextSectionIndex,
-    uint64_t TextAddr, uint64_t OldTextSize,
+    llvm::WritableMemoryBuffer &In, uint64_t PoolVAddr,
     llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------

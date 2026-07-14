@@ -49,11 +49,6 @@ inline uint64_t alignTo4(uint64_t V) { return llvm::alignTo(V, 4); }
 inline uint64_t alignTo8(uint64_t V) { return llvm::alignTo(V, 8); }
 
 struct KernelDescriptorElfOptions {
-  struct MetadataKernel {
-    std::string Name;
-    unsigned SgprCount = 0;
-  };
-
   uint16_t ElfType = llvm::ELF::ET_DYN;
   std::string KernelName = "kernel";
   uint64_t TextAddr = 0x1000;
@@ -68,12 +63,11 @@ struct KernelDescriptorElfOptions {
   uint32_t ComputePgmRsrc3 = 0;
   std::optional<std::string> MetadataKernelName;
   std::optional<unsigned> MetadataSgprCount;
-  std::optional<std::string> MetadataGfx1250Revision;
   bool MetadataOmitSgprCount = false;
   bool MetadataSgprCountAsString = false;
-  // When non-empty, emit these kernel metadata entries instead of the single
-  // entry described by MetadataKernelName / MetadataSgprCount.
-  std::vector<MetadataKernel> MetadataKernels;
+  // Emit a real PT_PHDR entry before PT_LOAD, with both the ELF and program
+  // header tables covered by the load segment.
+  bool EmitPhdrSegment = false;
 };
 
 struct KernelDescriptorElf {
@@ -88,32 +82,20 @@ makeAmdgpuMetadataBlob(const KernelDescriptorElfOptions &Options) {
   llvm::msgpack::Document Doc;
   llvm::msgpack::MapDocNode Root = Doc.getRoot().getMap(/*Convert=*/true);
   llvm::msgpack::ArrayDocNode Kernels = Doc.getArrayNode();
-  if (!Options.MetadataKernels.empty()) {
-    for (const KernelDescriptorElfOptions::MetadataKernel &Spec :
-         Options.MetadataKernels) {
-      llvm::msgpack::MapDocNode Kernel = Doc.getMapNode();
-      Kernel[".name"] = Doc.getNode(Spec.Name, /*Copy=*/true);
-      Kernel[".sgpr_count"] = static_cast<uint64_t>(Spec.SgprCount);
-      Kernels.push_back(Kernel);
-    }
-  } else {
-    llvm::msgpack::MapDocNode Kernel = Doc.getMapNode();
-    const std::string &MetadataKernelName = Options.MetadataKernelName
-                                                ? *Options.MetadataKernelName
-                                                : Options.KernelName;
-    Kernel[".name"] = Doc.getNode(MetadataKernelName, /*Copy=*/true);
-    if (!Options.MetadataOmitSgprCount) {
-      if (Options.MetadataSgprCountAsString)
-        Kernel[".sgpr_count"] = Doc.getNode("not-an-integer", /*Copy=*/true);
-      else
-        Kernel[".sgpr_count"] =
-            static_cast<uint64_t>(Options.MetadataSgprCount.value_or(0));
-    }
-    if (Options.MetadataGfx1250Revision)
-      Kernel[".gfx1250_revision"] =
-          Doc.getNode(*Options.MetadataGfx1250Revision, /*Copy=*/true);
-    Kernels.push_back(Kernel);
+  llvm::msgpack::MapDocNode Kernel = Doc.getMapNode();
+
+  const std::string &MetadataKernelName = Options.MetadataKernelName
+                                              ? *Options.MetadataKernelName
+                                              : Options.KernelName;
+  Kernel[".name"] = Doc.getNode(MetadataKernelName, /*Copy=*/true);
+  if (!Options.MetadataOmitSgprCount) {
+    if (Options.MetadataSgprCountAsString)
+      Kernel[".sgpr_count"] = Doc.getNode("not-an-integer", /*Copy=*/true);
+    else
+      Kernel[".sgpr_count"] =
+          static_cast<uint64_t>(Options.MetadataSgprCount.value_or(0));
   }
+  Kernels.push_back(Kernel);
   Root["amdhsa.kernels"] = Kernels;
 
   std::string Blob;
@@ -178,10 +160,9 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   StrTab += ".kd";
   StrTab.push_back('\0');
 
-  const bool HasMetadataNote =
-      Options.MetadataSgprCount || Options.MetadataGfx1250Revision ||
-      Options.MetadataOmitSgprCount || Options.MetadataSgprCountAsString ||
-      !Options.MetadataKernels.empty();
+  const bool HasMetadataNote = Options.MetadataSgprCount ||
+                               Options.MetadataOmitSgprCount ||
+                               Options.MetadataSgprCountAsString;
   std::vector<uint8_t> MetadataNote;
   if (HasMetadataNote) {
     std::string MetadataBlob = makeAmdgpuMetadataBlob(Options);
@@ -196,10 +177,15 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
       alignTo8(SymTabOff + SymCount * sizeof(Elf64_Sym));
   const uint64_t NoteOff =
       HasMetadataNote ? alignTo4(ShStrTabOff + sizeof(ShStrTab)) : 0;
-  const uint64_t PhOff =
-      HasMetadataNote ? alignTo8(NoteOff + MetadataNote.size()) : 0;
-  const uint64_t ContentEnd = HasMetadataNote ? PhOff + sizeof(Elf64_Phdr)
-                                              : ShStrTabOff + sizeof(ShStrTab);
+  const bool HasTextLoad = Options.ElfType != ET_REL;
+  const uint16_t PhNum = static_cast<uint16_t>(Options.EmitPhdrSegment) +
+                         static_cast<uint16_t>(HasTextLoad) +
+                         static_cast<uint16_t>(HasMetadataNote);
+  const uint64_t BeforePhdrs = HasMetadataNote ? NoteOff + MetadataNote.size()
+                                               : ShStrTabOff + sizeof(ShStrTab);
+  const uint64_t PhOff = PhNum ? alignTo8(BeforePhdrs) : 0;
+  const uint64_t ContentEnd =
+      PhNum ? PhOff + PhNum * sizeof(Elf64_Phdr) : BeforePhdrs;
   const uint64_t BufSize = alignTo8(ContentEnd + 64);
 
   KernelDescriptorElf Result;
@@ -224,10 +210,10 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   Ehdr.e_type = Options.ElfType;
   Ehdr.e_version = EV_CURRENT;
   Ehdr.e_shoff = ShOff;
-  if (HasMetadataNote) {
+  if (PhNum) {
     Ehdr.e_phoff = PhOff;
     Ehdr.e_phentsize = sizeof(Elf64_Phdr);
-    Ehdr.e_phnum = 1;
+    Ehdr.e_phnum = PhNum;
   }
   Ehdr.e_ehsize = sizeof(Elf64_Ehdr);
   Ehdr.e_shentsize = sizeof(Elf64_Shdr);
@@ -281,6 +267,45 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   ShstrSh.sh_size = sizeof(ShStrTab);
   std::memcpy(Buf + ShOff + 5 * sizeof(Elf64_Shdr), &ShstrSh, sizeof(ShstrSh));
 
+  uint64_t PhdrOff = PhOff;
+  if (Options.EmitPhdrSegment) {
+    assert(HasTextLoad && Options.TextAddr >= TextOffset);
+    const uint64_t LoadVAddr = Options.TextAddr - TextOffset;
+    Elf64_Phdr HeaderPhdr{};
+    HeaderPhdr.p_type = PT_PHDR;
+    HeaderPhdr.p_flags = PF_R;
+    HeaderPhdr.p_offset = PhOff;
+    HeaderPhdr.p_vaddr = LoadVAddr + PhOff;
+    HeaderPhdr.p_paddr = HeaderPhdr.p_vaddr;
+    HeaderPhdr.p_filesz = PhNum * sizeof(Elf64_Phdr);
+    HeaderPhdr.p_memsz = HeaderPhdr.p_filesz;
+    HeaderPhdr.p_align = alignof(Elf64_Phdr);
+    std::memcpy(Buf + PhdrOff, &HeaderPhdr, sizeof(HeaderPhdr));
+    PhdrOff += sizeof(Elf64_Phdr);
+  }
+
+  if (HasTextLoad) {
+    Elf64_Phdr TextPhdr{};
+    TextPhdr.p_type = PT_LOAD;
+    TextPhdr.p_flags = PF_R | PF_X;
+    if (Options.EmitPhdrSegment) {
+      TextPhdr.p_offset = 0;
+      TextPhdr.p_vaddr = Options.TextAddr - TextOffset;
+      TextPhdr.p_paddr = TextPhdr.p_vaddr;
+      TextPhdr.p_filesz = ContentEnd;
+      TextPhdr.p_memsz = ContentEnd;
+    } else {
+      TextPhdr.p_offset = TextOffset;
+      TextPhdr.p_vaddr = Options.TextAddr;
+      TextPhdr.p_paddr = Options.TextAddr;
+      TextPhdr.p_filesz = Text.size();
+      TextPhdr.p_memsz = Text.size();
+    }
+    TextPhdr.p_align = 4;
+    std::memcpy(Buf + PhdrOff, &TextPhdr, sizeof(TextPhdr));
+    PhdrOff += sizeof(Elf64_Phdr);
+  }
+
   if (HasMetadataNote) {
     Elf64_Phdr NotePhdr{};
     NotePhdr.p_type = PT_NOTE;
@@ -288,7 +313,7 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
     NotePhdr.p_filesz = MetadataNote.size();
     NotePhdr.p_memsz = MetadataNote.size();
     NotePhdr.p_align = 4;
-    std::memcpy(Buf + PhOff, &NotePhdr, sizeof(NotePhdr));
+    std::memcpy(Buf + PhdrOff, &NotePhdr, sizeof(NotePhdr));
   }
 
   std::memcpy(

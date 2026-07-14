@@ -9,7 +9,7 @@
 // RUN:   | %FileCheck %s
 
 // CHECK: hotswap: error: ds_storexchg_2addr has cyclic destination/source overlap
-// CHECK-NOT: hotswap: error: ds_2addr expansion failed
+// CHECK: hotswap: error: ds_2addr expansion failed for: ds_storexchg_2addr_rtn_b64
 // CHECK: RESULT: ERROR
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

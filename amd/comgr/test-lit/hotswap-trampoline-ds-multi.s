@@ -19,7 +19,7 @@
 // DISASM-LABEL: <test_multi_ds>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
-// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
 // DISASM: s_wait_dscnt 0x0
 
 // COM: Idempotency

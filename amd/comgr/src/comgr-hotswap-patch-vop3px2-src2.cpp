@@ -47,6 +47,7 @@ namespace {
 constexpr uint8_t Byte6ScaleSrc2Mask = 0xFC;
 constexpr uint8_t Byte7ScaleSrc2LoMask = 0x03;
 constexpr uint8_t Byte7ScaleSrc2HiBit = 0x04;
+constexpr uint32_t Vop3px2Size = 16;
 
 bool isVop3px2ScaleInst(StringRef Mnemonic) {
   return StringSwitch<bool>(Mnemonic)
@@ -82,8 +83,8 @@ bool patchScaleSrc2(uint8_t *InstBytes) {
 }
 
 // Must run before any pass that grows .text or invalidates
-// Ctx.Decoded[i].Offset. Currently safe after applyWmmaHazardPatch
-// because trampolines are deferred to the post-pass grow step.
+// Ctx.Decoded[i].Offset. Whole-pass requirements are discovered first but do
+// not mutate bytes; trampoline growth remains deferred to finalization.
 //
 // This only fires on the B0-to-A0 rewrite path (applyGfx1250B0toA0Rules).
 // A0-native binaries are compiled with an A0-targeted Clang that sets the
@@ -96,6 +97,21 @@ static uint32_t applyVop3px2Src2FixImpl(PatchContext &Ctx) {
     if (!isVop3px2ScaleInst(DI.Mnemonic))
       continue;
     ++Scanned;
+
+    if (DI.Size != Vop3px2Size || DI.Offset > Ctx.TextSize ||
+        DI.Size > Ctx.TextSize - DI.Offset) {
+      log() << "hotswap: error: VOP3PX2 SRC2 fix has invalid source at 0x"
+            << utohexstr(DI.Offset) << " (size " << DI.Size << ")\n";
+      Ctx.RequiredPatchFailed = true;
+      continue;
+    }
+
+    if (Ctx.ClaimedReplacementOffsets.contains(DI.Offset)) {
+      log() << "hotswap: error: VOP3PX2 SRC2 fix at 0x" << utohexstr(DI.Offset)
+            << " overlaps an atomic relocated source window\n";
+      Ctx.RequiredPatchFailed = true;
+      continue;
+    }
 
     if (patchScaleSrc2(Ctx.Text + DI.Offset)) {
       log() << "hotswap: VOP3PX2 SRC2 fix at 0x" << utohexstr(DI.Offset) << ": "
