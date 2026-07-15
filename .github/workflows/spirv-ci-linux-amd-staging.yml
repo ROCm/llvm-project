@@ -552,6 +552,7 @@ jobs:
   # Select the gfx942 test runner the same way TheRock CI does.
   pick_runner:
     name: Select gfx942 test runner
+    needs: [build]
     runs-on: azure-linux-scale-rocm
     timeout-minutes: 5
     outputs:
