@@ -888,6 +888,17 @@ handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Hr.Handled = true;
     return Hr;
   }
+  case CanonicalOp::V_FREXP_EXP_I32_F32: {
+    if (Error Err = requireDefaultOutputModsIfPresent(Di))
+      return Err;
+    Value *S = Ctx.B.CreateBitCast(Op.srcF(0), Ctx.F32Ty);
+    Function *Fn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_frexp_exp, {Ctx.I32Ty, Ctx.F32Ty});
+    Value *Exp = Ctx.B.CreateCall(Fn, {S}, "frexp_exp");
+    Ctx.writeReg32(Op.dst(), Exp);
+    Hr.Handled = true;
+    return Hr;
+  }
   case CanonicalOp::V_FREXP_EXP_I32_F64: {
     if (Error Err = requireDefaultOutputModsIfPresent(Di))
       return Err;

@@ -499,6 +499,8 @@ static const Entry kCanonTable[] = {
     E(V_LOG_F32_e64, V_LOG_F32),
     E(V_SIN_F32_e64, V_SIN_F32),
     E(V_COS_F32_e64, V_COS_F32),
+    E(V_FREXP_EXP_I32_F32_e32, V_FREXP_EXP_I32_F32),
+    E(V_FREXP_EXP_I32_F32_e64, V_FREXP_EXP_I32_F32),
     E(V_FREXP_EXP_I32_F64_e64, V_FREXP_EXP_I32_F64),
     // Targets with native tanh support use `llvm.amdgcn.tanh.*`; targets
     // without native support lower through matching OCML entry points.
