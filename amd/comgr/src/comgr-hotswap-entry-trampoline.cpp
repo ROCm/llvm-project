@@ -675,9 +675,10 @@ bool rewriteKernelEntryDescriptorOffsets(
     }
     bool UpdatedEntry =
         OutElf.updateKernelDescriptorEntryOffset(Fixup.KernelName, *NewOffset);
-    if (!Fixup.SkipSgprReservation && Fixup.RequiredSgprs != 0)
-      SgprBumps[Fixup.KernelName] =
-          std::max(SgprBumps.lookup(Fixup.KernelName), Fixup.RequiredSgprs);
+    if (!Fixup.SkipSgprReservation && Fixup.RequiredSgprs != 0) {
+      unsigned &Bump = SgprBumps[Fixup.KernelName];
+      Bump = std::max(Bump, Fixup.RequiredSgprs);
+    }
     bool UpdatedInstPref = OutElf.updateKernelDescriptorInstPrefSize(
         Fixup.KernelName, TargetCpu, Fixup.InstPrefLines);
     Ok = UpdatedEntry && UpdatedInstPref && Ok;

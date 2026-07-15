@@ -668,7 +668,11 @@ void ElfView::initializeKernelDescriptorCache() const {
   KernelDescriptorCache = std::move(Result);
 
   // Name -> vaddr map so getKernelDescriptorVAddr() is O(1) per call instead of
-  // a linear scan (O(n^2) over ~1000 per-fixup lookups).
+  // a linear scan (O(n^2) over ~1000 per-fixup lookups). When a name has more
+  // than one descriptor (the dedup set tracks (name, vaddr) pairs), try_emplace
+  // keeps the first in symtab order -- the same descriptor the prior linear
+  // scan returned, so the single-value lookup is unchanged. The multi-vaddr set
+  // matters only for enumeration/dedup, not this name->vaddr resolution.
   KernelDescriptorVAddrCache.clear();
   for (const KernelDescriptorInfo &Info : *KernelDescriptorCache)
     KernelDescriptorVAddrCache.try_emplace(Info.KernelName, Info.VAddr);
