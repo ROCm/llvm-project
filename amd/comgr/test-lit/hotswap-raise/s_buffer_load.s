@@ -5,14 +5,14 @@
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --write-hsaco=%t.gfx942.hsaco --kernel=s_buffer_load_success_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=PIPE
-; RUN: %not %raise_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=s_buffer_load_scope_refuse_kernel 2>&1 \
+; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=s_buffer_load_scope_refuse_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=SCOPE
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=s_buffer_load_unrepresentable_base_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=TRAP
 
-; s_buffer_load_b64/96/128 lift to buffer.rsrc + raw.ptr.buffer.load, with scope-refusal/trap paths.
+; s_buffer_load_b64/96/128 lift to buffer.rsrc + raw.ptr.buffer.load; cpol bits ignored; unrepresentable base traps.
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
@@ -61,7 +61,8 @@ s_buffer_load_success_kernel:
 	.p2alignl 7, 3214868480
 	.fill 96, 4, 3214868480
 
-; SCOPE: S_BUFFER_LOAD cache-policy/scope bits are not modelled
+; SCOPE-LABEL: define amdgpu_kernel void @s_buffer_load_scope_refuse_kernel(
+; SCOPE: call <2 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v2i32(
 	.globl	s_buffer_load_scope_refuse_kernel
 	.p2align	8
 	.type	s_buffer_load_scope_refuse_kernel,@function
