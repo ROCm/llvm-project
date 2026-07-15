@@ -16,6 +16,7 @@
 
 #include "comgr-hotswap-internal.h"
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
@@ -597,7 +598,7 @@ void ElfView::initializeKernelDescriptorCache() const {
   namespace hsa = amdhsa;
   std::vector<KernelDescriptorInfo> Result;
   StringMap<uint64_t> FileOffsets;
-  StringMap<uint64_t> SeenVAddr;
+  StringMap<DenseSet<uint64_t>> SeenVAddr;
 
   for (const ELFT::Shdr &SymShdr : Sections) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
@@ -653,16 +654,12 @@ void ElfView::initializeKernelDescriptorCache() const {
 
       StringRef KernelNameRef = NameOrErr->drop_back(3);
       std::string KernelName = KernelNameRef.str();
-      // Dedup by (name, vaddr) via a map; a per-symbol O(n) scan made cache
-      // init O(n^2).
-      StringMap<uint64_t>::const_iterator SeenIt =
-          SeenVAddr.find(KernelNameRef);
-      const bool Seen =
-          SeenIt != SeenVAddr.end() && SeenIt->second == Sym.st_value;
-      if (!Seen) {
-        SeenVAddr[KernelNameRef] = Sym.st_value;
+      // Dedup by (name, vaddr): a kernel name can legitimately map to more than
+      // one vaddr, so track the full vaddr set per name rather than only the
+      // last one. (The previous per-symbol linear scan over Result made cache
+      // init O(n^2).)
+      if (SeenVAddr[KernelNameRef].insert(Sym.st_value).second)
         Result.push_back({std::move(KernelName), Sym.st_value, EntryOffset});
-      }
       FileOffsets.try_emplace(KernelNameRef, *FileOffset);
     }
   }
