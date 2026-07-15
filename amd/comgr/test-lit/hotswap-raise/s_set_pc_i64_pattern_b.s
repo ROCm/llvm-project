@@ -1,8 +1,12 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=setpc_pattern_b_kernel 2>/dev/null | %FileCheck %s
+; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=setpc_pattern_b_kernel 2>/dev/null | %FileCheck %s --check-prefix=IR
+; RUN: raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out \
+; RUN:   --kernel=setpc_pattern_b_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
 
-; s_set_pc_i64 resolvable call/return pair folded to direct branches.
-; CHECK-LABEL: define amdgpu_kernel void @setpc_pattern_b_kernel(
+; s_set_pc_i64 resolvable call/return pair raised to direct branches plus an
+; explicit switch for the return-side enumerated dispatch.
+; PIPE: raise_cli: wrote
+; PIPE-SAME: setpc_pattern_b_kernel
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -11,6 +15,7 @@
 	.p2align	8
 	.type	setpc_pattern_b_kernel,@function
 setpc_pattern_b_kernel:
+; IR-LABEL: define amdgpu_kernel void @setpc_pattern_b_kernel(
 	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
 	s_load_b64 s[0:1], s[0:1], 0x0
 	s_get_pc_i64 s[8:9]
@@ -19,21 +24,23 @@ setpc_pattern_b_kernel:
 	s_get_pc_i64 s[10:11]
 	s_add_co_u32 s10, s10, 24
 	s_add_co_ci_u32 s11, s11, 0
-; CHECK: bb_0x0:
-; CHECK: br label %bb_0x38
 	s_set_pc_i64 s[10:11]
+; IR: bb_0x0:
+; IR: br label %bb_0x38
 	s_branch 2
 	v_mov_b32 v1, 0xCAFE0001
 	v_mov_b32 v1, 0xDEAD0001
-; CHECK: bb_0x30:
-; CHECK: %ret_pc_marker = select i1 {{[^,]+}}, i64 {{[^,]+}}, i64 {{[^ ]+}}
-; CHECK-NEXT: %dispatch_0x40_cmp_0 = icmp eq i64 %ret_pc_marker, 48
-; CHECK-NEXT: br i1 %dispatch_0x40_cmp_0, label %bb_0x30, label %dispatch_0x40_unreachable
-; CHECK: dispatch_0x40_unreachable:
-; CHECK-NEXT: unreachable
-; CHECK-NOT: indirectbr
-; CHECK-NOT: blockaddress(
 	s_set_pc_i64 s[8:9]
+; IR: bb_0x30:
+; IR: %ret_pc_marker = select i1 {{[^,]+}}, i64 {{[^,]+}}, i64 {{[^ ]+}}
+; IR-NEXT: switch i64 %ret_pc_marker, label %dispatch_0x40_unreachable [
+; IR-NEXT: i64 48, label %bb_0x30
+; IR-NEXT: ]
+; IR: dispatch_0x40_unreachable:
+; IR-NEXT: call void @llvm.trap()
+; IR-NEXT: unreachable
+; IR-NOT: indirectbr
+; IR-NOT: blockaddress(
 	
 	s_wait_kmcnt 0x0
 	global_store_b32 v0, v1, s[0:1] scale_offset

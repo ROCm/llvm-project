@@ -28,7 +28,7 @@ struct MCState;
 // Static analysis pass that classifies every `s_set_pc_i64` site in a
 // decoded kernel. See canonical-op.h's S_SET_PC_I64 doc for the three
 // principled lowering shapes (Pattern A direct br, Pattern B / DispatchSet
-// cmp+br cascade via `emitEnumeratedDispatch`, Unresolvable refusal).
+// switch dispatch via `emitEnumeratedDispatch`, Unresolvable refusal).
 //
 // The analysis is conservative: any SGPR pair whose value path it
 // cannot follow drops out of the symbolic-PC table immediately, so
@@ -45,9 +45,9 @@ struct SetPcSiteInfo {
     DirectA,
     // Subroutine-return shape: the source SGPR pair is the ret-pair
     // populated by a caller's chainTerminator hook. Lowering emits a
-    // `cmp eq + br` cascade (via `emitEnumeratedDispatch` in
-    // handle-sop1.cpp) over the resolved return targets, terminating
-    // in an `unreachable` trap BB. Pattern B is asymmetric -- call-
+    // switch (via `emitEnumeratedDispatch` in handle-sop1.cpp) over the
+    // resolved return targets, terminating in a trap default. Pattern B is
+    // asymmetric -- call-
     // side and return-side participate through chainTerminators +
     // pendingB enumeration in Pass 4.
     IndirectB,
@@ -61,16 +61,14 @@ struct SetPcSiteInfo {
     // hook writes the per-predecessor i64 marker (the resolved
     // callee's source-MC byte offset) into the pair at each
     // predecessor (mirroring the IndirectB return-side mechanism).
-    // The lowering emits the same cmp+br enumerated-dispatch cascade
-    // as IndirectB (comparing the marker against each enumerated
-    // target offset); for s_swap_pc_i64 it ALSO writes the
-    // return-address marker into sdst before the cascade (same as
-    // DirectA). Order is deterministic (ascending) so lit fixtures
-    // can pin shape. See `emitEnumeratedDispatch`'s rationale block
-    // in handle-sop1.cpp for why a cascade (FixIrreducible
-    // compatibility under irreducible CFGs) and why integer markers
-    // rather than `ptrtoint(blockaddress)` (AMDGPU ISel cannot
-    // materialise a `BlockAddress` as an i64).
+    // The lowering emits the same switch enumerated dispatch as IndirectB
+    // (comparing the marker against each enumerated target offset); for
+    // s_swap_pc_i64 it ALSO writes the return-address marker into sdst before
+    // the switch (same as DirectA). Order is deterministic (ascending) so lit
+    // fixtures can pin shape. See `emitEnumeratedDispatch`'s rationale block
+    // in handle-sop1.cpp for why the switch is lowered before AMDGPU codegen
+    // and why integer markers rather than `ptrtoint(blockaddress)` (AMDGPU
+    // ISel cannot materialise a `BlockAddress` as an i64).
     DispatchSet,
     // Refused. The handler converts this into
     // `RaiseFailure::unsupportedInstructionForm` with `refusalReason`.
@@ -92,7 +90,7 @@ struct SetPcSiteInfo {
   // IndirectB: the SGPR low index of the source pair (for diagnostics
   // and so the handler can read the right pair).
   // DispatchSet: same -- the SGPR low index of the source pair the
-  // handler reads to drive the cmp+br cascade.
+  // handler reads to drive the switch dispatch.
   unsigned IndirectRetPairLowReg = 0;
   // Unresolvable: human-readable reason for the refusal diagnostic.
   std::string RefusalReason;
@@ -102,7 +100,7 @@ struct SetPcCallSiteInfo {
   // Absolute kernel offset of the instruction immediately following
   // the call-site `s_branch` (i.e. the return target the call site
   // expected). The Pattern B lowering will list this offset's BB as
-  // one of the cascade's enumerated targets.
+  // one of the switch's enumerated targets.
   uint64_t ResolvedReturnAddr = 0;
   // SGPR low index of the ret-pair this call site populates. Pattern
   // B `s_set_pc_i64 sX:Y` enumerates call sites whose
@@ -121,13 +119,9 @@ struct SetPcAnalysis {
   // plain i64 marker `resolvedReturnAddr` (the source-MC byte
   // offset of the BB the chain was intended to return to), so the
   // i64 value carried in the ret-pair across the call is a normal
-  // integer constant on each contributing predecessor path rather
-  // than a binary runtime PC. This makes each downstream
-  // enumerated-dispatch cascade `icmp eq i64 %marker, <offset>`
-  // foldable to `i1 true` under mem2reg + SCCP + InstCombine after
-  // the cross-predecessor phi join, so SimplifyCFG collapses the
-  // cascade to a direct branch on each predecessor-specialised
-  // path. (An earlier revision stored
+  // integer constant on each contributing predecessor path rather than a
+  // binary runtime PC. This lets downstream enumerated dispatch compare the
+  // marker with plain integer switch cases. (An earlier revision stored
   // `ptrtoint(blockaddress(@kernel, %BB_<resolvedReturnAddr>))`
   // here -- that form survived unfolded in irreducible CFGs and
   // crashed AMDGPU ISel with `Cannot select: BlockAddress`; see

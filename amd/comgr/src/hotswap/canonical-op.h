@@ -252,26 +252,21 @@ enum class CanonicalOp : uint16_t {
   //                  the target is a known intra-function label.
   //   IndirectB    -- subroutine return via an SGPR pair stashed at the
   //                  call site (the canonical s[30:31] return-PC
-  //                  idiom). Lowers to a `cmp eq + br` cascade (via
+  //                  idiom). Lowers to a switch (via
   //                  `emitEnumeratedDispatch` in handle-sop1.cpp)
   //                  enumerating the resolved return targets and
-  //                  terminating in an `unreachable` trap BB. The
-  //                  corresponding call-site
+  //                  terminating in a trap default. The corresponding call-site
   //                  `s_get_pc_i64 + s_add*` chains are rewritten by
   //                  the raiser to write the plain i64 marker
   //                  `resolvedReturnAddr` (the source-MC byte offset
   //                  of the intended return BB) into the ret-pair
   //                  (via a post-handler hook in raiser.cpp), so
-  //                  each cascade `icmp eq i64 %marker, <offset>`
-  //                  folds across the phi join under mem2reg + SCCP
-  //                  + InstCombine and SimplifyCFG collapses the
-  //                  cmp+br to a direct branch -- the same final
-  //                  codegen as a fully-folded `indirectbr` would
-  //                  produce. See `emitEnumeratedDispatch`'s
-  //                  rationale block for why a cascade (LLVM's
+  //                  the switch cases compare ordinary integer markers. See
+  //                  `emitEnumeratedDispatch`'s rationale block for why the
+  //                  switch is lowered before AMDGPU codegen (LLVM's
   //                  FixIrreducible pass only handles br-flavoured
-  //                  predecessors of an irreducible cycle header)
-  //                  and why an integer marker rather than
+  //                  predecessors of an irreducible cycle header) and why an
+  //                  integer marker rather than
   //                  `ptrtoint(blockaddress)` (AMDGPU ISel has no
   //                  pattern to materialise a `BlockAddress` as an
   //                  i64 register value).
@@ -282,12 +277,11 @@ enum class CanonicalOp : uint16_t {
   //                  `s_set_pc_i64`. The dataflow in setpc_analysis
   //                  enumerates the bounded set of targets reaching
   //                  the use site through distinct CFG paths. Lowers
-  //                  to the same enumerated-dispatch cascade as
+  //                  to the same switch enumerated dispatch as
   //                  IndirectB. Same chain-terminator hook as
   //                  IndirectB writes the per-predecessor i64 marker
   //                  (the callee's source-MC byte offset) on each
-  //                  contributing predecessor path so each cascade
-  //                  cmp folds to a constant branch after SCCP.
+  //                  contributing predecessor path.
   // Sites the analysis cannot resolve (incomplete dataflow,
   // unbounded fan-in past kMaxDispatchTargets, or pair killed by an
   // unmodelled write before the use site) refuse loudly via
@@ -316,20 +310,18 @@ enum class CanonicalOp : uint16_t {
   //                  pair via its own getpc+add chain, then a join
   //                  block executes `s_swap_pc_i64`). Lowering writes
   //                  the return-address marker into sdst as in
-  //                  DirectA, then emits a `cmp eq + br` cascade
-  //                  (via `emitEnumeratedDispatch` in
-  //                  handle-sop1.cpp) over the enumerated callee
-  //                  targets, terminating in an `unreachable` trap
-  //                  BB. The chain-terminator hook in raiser.cpp
+  //                  DirectA, then emits a switch (via
+  //                  `emitEnumeratedDispatch` in handle-sop1.cpp) over the
+  //                  enumerated callee targets, terminating in a trap
+  //                  default. The chain-terminator hook in raiser.cpp
   //                  rewrites ssrc to hold the callee's i64 marker
   //                  (source-MC byte offset) on every contributing
-  //                  predecessor path so each cascade cmp folds to
-  //                  a constant branch after SCCP. See
-  //                  `emitEnumeratedDispatch`'s rationale block for
-  //                  why a cascade (FixIrreducible compatibility
-  //                  under irreducible CFGs -- the dominant shape
-  //                  this pattern produces) and why an integer
-  //                  marker rather than `ptrtoint(blockaddress)`
+  //                  predecessor path. See `emitEnumeratedDispatch`'s
+  //                  rationale block for why the switch is lowered before
+  //                  AMDGPU codegen (FixIrreducible compatibility under
+  //                  irreducible CFGs -- the dominant shape this pattern
+  //                  produces) and why an integer marker rather than
+  //                  `ptrtoint(blockaddress)`
   //                  (AMDGPU ISel cannot materialise a
   //                  `BlockAddress` as an i64).
   //   Unresolvable -- call target cannot be statically enumerated
@@ -346,8 +338,7 @@ enum class CanonicalOp : uint16_t {
   // registers a synthetic chain-terminator at the swap site itself
   // (key = swap.offset, value = {sdst-low-reg, swap.offset+swap.size})
   // so any downstream IndirectB `s_set_pc_i64` reading sdst
-  // enumerates the swap's return offset as one of its cascade
-  // targets.
+  // enumerates the swap's return offset as one of its switch targets.
   S_SWAP_PC_I64,
   // SOP1 gfx1250 PC-relative branch; signed i64 offset, immediate form only.
   S_ADD_PC_I64,
@@ -507,7 +498,9 @@ enum class CanonicalOp : uint16_t {
   // agnostic. V_MOVRELD writes VGPR[base(vdst)+M0]=vsrc (M0-relative dst,
   // tied vdst_in); V_MOVRELS reads vdst=VGPR[base(vsrc)+M0] (relative
   // src); V_MOVRELSD is both relative. See handle-valu-small-ops.cpp.
-  V_MOVRELD_B32, V_MOVRELS_B32, V_MOVRELSD_B32,
+  V_MOVRELD_B32,
+  V_MOVRELS_B32,
+  V_MOVRELSD_B32,
   V_CVT_F32_I32,
   V_CVT_F32_U32,
   V_CVT_I32_F32,

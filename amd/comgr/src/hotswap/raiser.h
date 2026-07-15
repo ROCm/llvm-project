@@ -49,6 +49,7 @@ struct RaiseResult {
   bool UsesScratchPrivateSegment = false;
   uint32_t SourcePrivateSegmentFixedSize = 0;
   bool HasDivergentExec = false;
+  bool HasEnumeratedSetpcDispatch = false;
 };
 
 llvm::Expected<RaiseResult>

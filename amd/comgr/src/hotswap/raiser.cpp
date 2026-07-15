@@ -1117,6 +1117,14 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     }
     BlockStarts.insert(Addr);
   }
+  for (const auto &Site : SetpcAnalysis.SetpcSites) {
+    const SetPcSiteInfo::Kind Kind = Site.second.SiteKind;
+    if (Kind == SetPcSiteInfo::Kind::IndirectB ||
+        Kind == SetPcSiteInfo::Kind::DispatchSet) {
+      Result.HasEnumeratedSetpcDispatch = true;
+      break;
+    }
+  }
 
   if (Stats)
     Stats->TotalCount = static_cast<int>(Insts.size());
@@ -2056,18 +2064,13 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       Result.HasDivergentExec = true;
     // Pattern B call-site post-processing: if this s_add_co_ci_u32
     // is the high-half terminator of a getpc+add chain that feeds
-    // a Pattern B `s_set_pc_i64` enumerated-dispatch cascade (i.e.
+    // a Pattern B `s_set_pc_i64` enumerated dispatch (i.e.
     // some downstream s_set_pc_i64 reads the same ret-pair this
     // chain populated), overwrite the ret-pair SGPR with the plain
     // i64 marker `resolvedReturnAddr` -- i.e. the source-MC byte
     // offset of the BB this chain meant to return to. The
-    // downstream cascade compares against the same offsets via
-    // `icmp eq i64 %marker, <offset_k>` for each enumerated
-    // target; when this predecessor's marker matches one of the
-    // enumerated offsets, mem2reg + SCCP + InstCombine fold the
-    // compare to `i1 true` across the phi join and SimplifyCFG
-    // collapses the cmp+br cascade into a direct
-    // `br label %BB_<offset>`. The SOP2 handler has already done
+    // downstream switch compares against the same offsets for each
+    // enumerated target. The SOP2 handler has already done
     // its (binary-PC-producing) arithmetic above; this commit
     // happens *after* and clobbers that result on purpose -- that
     // value was an opaque runtime PC we never want to see
@@ -2075,7 +2078,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     //
     // An earlier revision of this hook wrote
     // `ptrtoint(blockaddress(@kernel, %BB_returnAddr)) to i64`
-    // here so the cascade could compare against a `blockaddress`
+    // here so the dispatch could compare against a `blockaddress`
     // constant. That form survived mem2reg + SCCP unfolded in
     // irreducible tensilelite-shaped CFGs (the `storeSGPR64`
     // hi/lo split prevented the cross-phi fold), leaving a
@@ -2091,9 +2094,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
         Di.CanonOp == CanonicalOp::S_ADD_NC_U64) {
       auto It = SetpcAnalysis.ChainTerminators.find(Di.Offset);
       if (It != SetpcAnalysis.ChainTerminators.end()) {
-        // Force the BB to exist so the downstream cascade's
-        // direct branch has a destination; we don't use the
-        // pointer here.
+        // Force the BB to exist so the downstream switch case has a
+        // destination; we don't use the pointer here.
         (void)Ctx.lookupBB(It->second.ResolvedReturnAddr);
         Value *RetMarker =
             ConstantInt::get(Ctx.I64Ty, It->second.ResolvedReturnAddr);

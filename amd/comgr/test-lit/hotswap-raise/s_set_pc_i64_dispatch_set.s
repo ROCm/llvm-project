@@ -1,8 +1,12 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=setpc_set_dispatch_set_kernel 2>/dev/null | %FileCheck %s
+; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --emit-ir=setpc_set_dispatch_set_kernel 2>/dev/null | %FileCheck %s --check-prefix=IR
+; RUN: raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out \
+; RUN:   --kernel=setpc_set_dispatch_set_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
 
-; s_set_pc_i64 enumerated dispatch-set lowered to icmp/branch chain.
-; CHECK-LABEL: define amdgpu_kernel void @setpc_set_dispatch_set_kernel(
+; s_set_pc_i64 enumerated dispatch-set raised to an explicit switch.
+; The pipeline normalizes this through LowerSwitch before AMDGPU codegen.
+; PIPE: raise_cli: wrote
+; PIPE-SAME: setpc_set_dispatch_set_kernel
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -11,6 +15,7 @@
 	.p2align	8
 	.type	setpc_set_dispatch_set_kernel,@function
 setpc_set_dispatch_set_kernel:
+; IR-LABEL: define amdgpu_kernel void @setpc_set_dispatch_set_kernel(
 	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
 	s_load_b64 s[0:1], s[0:1], 0x0
 	s_cmp_eq_u32 s2, s3
@@ -23,19 +28,17 @@ setpc_set_dispatch_set_kernel:
 	s_add_co_u32 s10, s10, 24
 	s_add_co_ci_u32 s11, s11, 0
 	s_branch 0
-; CHECK-DAG: 60, %bb_0x18
-; CHECK-DAG: 68, %bb_0x28
-; CHECK: %ret_pc_marker = select i1 {{[^,]+}}, i64 {{[^,]+}}, i64 {{[^ ]+}}
-; CHECK-NEXT: %dispatch_0x38_cmp_0 = icmp eq i64 %ret_pc_marker, 60
-; CHECK-NEXT: br i1 %dispatch_0x38_cmp_0, label %bb_0x3C, label %dispatch_0x38_1
-; CHECK: dispatch_0x38_unreachable:
-; CHECK-NEXT: unreachable
-; CHECK: dispatch_0x38_1:
-; CHECK-NEXT: %dispatch_0x38_cmp_1 = icmp eq i64 %ret_pc_marker, 68
-; CHECK-NEXT: br i1 %dispatch_0x38_cmp_1, label %bb_0x44, label %dispatch_0x38_unreachable
-; CHECK-NOT: indirectbr
-; CHECK-NOT: blockaddress(
 	s_set_pc_i64 s[10:11]
+; IR: %ret_pc_marker = select i1 {{[^,]+}}, i64 {{[^,]+}}, i64 {{[^ ]+}}
+; IR-NEXT: switch i64 %ret_pc_marker, label %dispatch_0x38_unreachable [
+; IR-NEXT: i64 60, label %bb_0x3C
+; IR-NEXT: i64 68, label %bb_0x44
+; IR-NEXT: ]
+; IR: dispatch_0x38_unreachable:
+; IR-NEXT: call void @llvm.trap()
+; IR-NEXT: unreachable
+; IR-NOT: indirectbr
+; IR-NOT: blockaddress(
 	v_mov_b32 v1, 0xCAFE0001
 	v_mov_b32 v1, 0xDEAD0001
 	s_endpgm

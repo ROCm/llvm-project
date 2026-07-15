@@ -11,6 +11,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
@@ -30,6 +31,7 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Transforms/Utils/LowerSwitch.h"
 
 #include <algorithm>
 #include <chrono>
@@ -173,6 +175,43 @@ void runOptPipeline(llvm::Module &M, llvm::TargetMachine &TM,
                                     ? PB.buildO0DefaultPipeline(OL)
                                     : PB.buildPerModuleDefaultPipeline(OL);
   MPM.run(M, MAM);
+}
+
+// Normalize raised setpc/swap_pc dispatch switches to ordinary branch trees
+// before AMDGPU codegen. Raw switch terminators are not safe to hand to the
+// irreducible-CFG path in the backend, so the pipeline calls this only for
+// kernels that the raiser marked as containing enumerated setpc dispatch.
+void lowerSwitchesToBranches(llvm::Module &M) {
+  llvm::FunctionAnalysisManager FAM;
+  llvm::PassBuilder PB;
+  PB.registerFunctionAnalyses(FAM);
+
+  llvm::FunctionPassManager FPM;
+  FPM.addPass(llvm::LowerSwitchPass());
+  for (llvm::Function &F : M) {
+    if (!F.isDeclaration())
+      FPM.run(F, FAM);
+  }
+}
+
+// Fail closed if switch lowering did not remove every switch terminator. This
+// is deliberately module-wide: the setpc dispatch marker means the kernel
+// requires branch-only IR before codegen, and silently letting any switch
+// through would reintroduce the backend hazard this path exists to avoid.
+llvm::Error checkNoSwitchTerminators(const llvm::Module &M,
+                                     llvm::StringRef KernelName) {
+  for (const llvm::Function &F : M) {
+    for (const llvm::BasicBlock &BB : F) {
+      if (!llvm::isa<llvm::SwitchInst>(BB.getTerminator()))
+        continue;
+      return llvm::createStringError(
+          llvm::Twine("setpc dispatch switch remained after LowerSwitch for "
+                      "kernel '") +
+          KernelName + "' in function '" + F.getName() + "', block '" +
+          BB.getName() + "'");
+    }
+  }
+  return llvm::Error::success();
 }
 
 // In-process `llc`: run codegen for `M` and emit `FileType` to `OS`.
@@ -449,6 +488,19 @@ static bool raiseAndCompileKernel(
 
   auto OptStart = timingStart(Options.CollectTimings);
   runOptPipeline(M, *TM, Options.OptLevel);
+  if (Raised.HasEnumeratedSetpcDispatch) {
+    lowerSwitchesToBranches(M);
+    if (llvm::Error Err = checkNoSwitchTerminators(M, KernelName)) {
+      std::string Detail = llvm::toString(std::move(Err));
+      llvm::errs() << "transpiler: " << Detail << "\n";
+      Result.FailKernel = KernelName;
+      Result.FailReason = reasonString(RaiseFailureReason::InternalError);
+      Result.FailDetail = Detail;
+      Result.Timings.optSeconds +=
+          timingElapsed(Options.CollectTimings, OptStart);
+      return false;
+    }
+  }
   Result.Timings.optSeconds += timingElapsed(Options.CollectTimings, OptStart);
 
   // Object codegen consumes the module, so clone it first when a debug
