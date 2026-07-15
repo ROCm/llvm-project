@@ -658,8 +658,7 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/${{ env.STAGING }}/lib
         run: |
-          ctest --test-dir examples-build-Applications --output-on-failure -j $(nproc) \
-            -E '^applications_optical_flow$' # TODO: ISSUE #3143
+          ctest --test-dir examples-build-Applications --output-on-failure -j $(nproc)
 
       # Libraries.
       - name: ROCm Examples build Libraries
