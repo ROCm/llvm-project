@@ -151,13 +151,16 @@ comgr_configure_test_target(HotswapMCTests)
 # default. The library links it with a PRIVATE ENABLE_HOTSWAP_PROFILE, which
 # does not reach the unit test binaries above (they recompile the sources
 # separately). This dedicated target defines the macro so the enabled branch is
-# actually built and exercised, covering runtime-off and runtime-on sessions.
+# actually built and exercised, covering disabled and enabled sessions.
 
 add_executable(HotswapProfileTests
   HotswapProfileTest.cpp
-  # COMGR::env::shouldEmitVerboseLogs() is referenced by the inline
-  # COMGR::hotswap::log() helper pulled in via comgr-hotswap-internal.h.
-  ../src/comgr-env.cpp)
+  # COMGR::env::* is referenced by the inline COMGR::hotswap::log() helper and by
+  # the profiler gating, both pulled in via comgr-hotswap-internal.h.
+  ../src/comgr-env.cpp
+  # HotswapProfile::flush() merges into Comgr TimeStatistics, so the enabled
+  # build needs TimeStatistics::mergeStats().
+  ../src/time-stat/time-stat.cpp)
 
 llvm_map_components_to_libnames(COMGR_TEST_UNIT_PROFILE_LIBS
   BinaryFormat Object Support TargetParser)

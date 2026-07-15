@@ -9,9 +9,9 @@
 /// Unit tests for the opt-in HotSwap rewrite profiler
 /// (comgr-hotswap-internal.h). This translation unit is compiled with
 /// ENABLE_HOTSWAP_PROFILE defined so the enabled branch (which the default
-/// library build compiles out) is exercised, covering both runtime-off and
-/// runtime-on sessions. See review on ROCm/llvm-project#3364, comment about the
-/// enabled branch being untested.
+/// library build compiles out) is exercised, covering both disabled and enabled
+/// per-rewrite sessions. See review on ROCm/llvm-project#3364 and #3388,
+/// comment about the enabled branch being untested.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -23,8 +23,8 @@ using namespace COMGR::hotswap;
 
 #ifdef ENABLE_HOTSWAP_PROFILE
 
-// Runtime gate: with the facility compiled in but HOTSWAP_PROFILE unset, the
-// process-wide session must report disabled so no hot-path clock read happens.
+// Runtime gate: with the facility compiled in but AMD_COMGR_TIME_STATISTICS
+// unset, the session must report disabled so no hot-path clock read happens.
 TEST(HotswapProfile, ProfilingDisabledByDefault) {
   EXPECT_FALSE(hotswapProfilingEnabled());
 }

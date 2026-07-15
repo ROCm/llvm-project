@@ -23,6 +23,7 @@
 #include "amd_comgr.h"
 #include "comgr-env.h"
 #include "comgr.h"
+#include "time-stat/ts-interface.h"
 
 #include <algorithm>
 #include <array>
@@ -106,27 +107,30 @@ inline std::optional<uint64_t> checkedSubUint64(uint64_t LHS, uint64_t RHS,
 // -- HotSwap rewrite profiling -----------------------------------------------
 //
 // Two-level gate:
-//   1. Compile time -- the whole facility is compiled in only when the build
-//      defines ENABLE_HOTSWAP_PROFILE (e.g. cmake -DENABLE_HOTSWAP_PROFILE=ON,
-//      which passes -DENABLE_HOTSWAP_PROFILE to the compiler). In a normal
-//      build every type below collapses to the no-op stubs in the #else branch,
-//      so there is no code, no static state, and no per-call overhead.
-//   2. Run time  -- when compiled in, it stays dormant until HOTSWAP_PROFILE is
-//      set (and not "0"). A disabled session never reads the clock.
+//   1. Compile time -- the instrumentation is compiled in only when the build
+//      defines ENABLE_HOTSWAP_PROFILE (e.g. cmake -DENABLE_HOTSWAP_PROFILE=ON).
+//      In a normal build every type below collapses to the no-op stubs in the
+//      #else branch, so there is no code and no per-call overhead.
+//   2. Run time  -- when compiled in, it reports only when Comgr time
+//      statistics are enabled (AMD_COMGR_TIME_STATISTICS); a disabled session
+//      never reads the clock.
 //
-// Design (see review on ROCm/llvm-project#3364): a single retargetCodeObject
-// call is single-threaded internally, but many calls run concurrently on
-// different threads. So each call owns a stack-local HotswapProfile whose
-// counters live in a fixed-size array indexed by HotswapMetric -- the hot path
-// records with no lock and no string lookup. When the rewrite finishes, the
-// session merges its array once into the process-wide HotswapAggregator (the
-// only lock, taken once per code object), which prints the table at exit.
+// Design (see review on ROCm/llvm-project#3364 and #3388): a single
+// retargetCodeObject call is single-threaded internally, but many calls run
+// concurrently on different threads. So each call owns a stack-local
+// HotswapProfile whose counters live in a fixed-size array indexed by
+// HotswapMetric -- the hot path records with no lock and no string lookup. When
+// the rewrite finishes, the session merges its array once (the only lock, taken
+// once per code object) into Comgr's built-in profiler, TimeStatistics, which
+// dumps the aggregated stats at process exit. We reuse TimeStatistics rather
+// than a bespoke aggregator (per review feedback); the only addition there is a
+// mutex + a batch-merge entry point + a few extra columns.
 //
-// Row families:
+// Row families (names carry one level of parent/child hierarchy via '/'):
 //   phase:*  coarse pipeline stages in retargetCodeObject. The timed stages
 //            plus phase:unaccounted partition phase:rewrite_total.
-//   strat:*  the B0-to-A0 patch strategies, with per-rule children indented
-//            under their parent (e.g. strat:trampoline -> ds_2addr).
+//   strat:*  the B0-to-A0 patch strategies, with per-rule children
+//            (e.g. strat:trampoline/ds_2addr).
 //   jump:*   trampoline placement outcomes; the "calls" column is the count.
 
 /// Identity of a profiled bucket. Used as an array index so the hot path
@@ -249,115 +253,14 @@ inline constexpr HotswapMetricInfo hotswapMetricInfo[HotswapMetricCount] = {
     {"jump:declined_far", HotswapMetric::Count, false},
 };
 
-/// Process-wide accumulator. Each per-rewrite HotswapProfile merges its array
-/// here once, under a single lock. Meyers singleton; prints the table at exit.
-class HotswapAggregator {
-public:
-  static HotswapAggregator &get() {
-    static HotswapAggregator Instance;
-    return Instance;
-  }
-
-  bool enabled() const { return Enabled; }
-
-  void merge(const std::array<HotswapSample, HotswapMetricCount> &Samples) {
-    std::scoped_lock Lock(Mtx);
-    for (size_t I = 0; I < HotswapMetricCount; ++I) {
-      HotswapSample &T = Totals[I];
-      const HotswapSample &S = Samples[I];
-      T.Nanos += S.Nanos;
-      T.Calls += S.Calls;
-      T.Patches += S.Patches;
-      T.MinNanos = std::min(T.MinNanos, S.MinNanos);
-      T.MaxNanos = std::max(T.MaxNanos, S.MaxNanos);
-    }
-    HaveData = true;
-  }
-
-  ~HotswapAggregator() { dump(); }
-
-private:
-  HotswapAggregator() {
-    const char *V = getenv("HOTSWAP_PROFILE");
-    Enabled = V && V[0] != '\0' && llvm::StringRef(V) != "0";
-  }
-
-  bool hasData(HotswapMetric M) const {
-    const HotswapSample &S = Totals[static_cast<size_t>(M)];
-    return S.Calls != 0 || S.Nanos != 0 || S.Patches != 0;
-  }
-
-  void printRow(llvm::StringRef Label, unsigned Indent,
-                const HotswapSample &S) const {
-    std::string L = std::string(Indent * 2, ' ') + Label.str();
-    const double TotalUs = S.Nanos / 1000.0;
-    const double AvgUs = S.Calls ? TotalUs / S.Calls : 0.0;
-    const double MinUs = S.MinNanos == std::numeric_limits<uint64_t>::max()
-                             ? 0.0
-                             : S.MinNanos / 1000.0;
-    const double MaxUs = S.MaxNanos / 1000.0;
-    fprintf(stderr, "%-28s %8llu %12.1f %11.3f %11.3f %11.3f %9llu\n",
-            L.c_str(), static_cast<unsigned long long>(S.Calls), TotalUs, AvgUs,
-            MinUs, MaxUs, static_cast<unsigned long long>(S.Patches));
-  }
-
-  void dump() {
-    if (!Enabled || !HaveData)
-      return;
-
-    // phase:unaccounted = rewrite_total - sum(partitioning phases), so the
-    // timed phases plus this residual add up to the whole rewrite.
-    uint64_t PhaseSum = 0;
-    for (size_t I = 0; I < HotswapMetricCount; ++I)
-      if (hotswapMetricInfo[I].PartitionsTotal)
-        PhaseSum += Totals[I].Nanos;
-    HotswapSample &Total =
-        Totals[static_cast<size_t>(HotswapMetric::RewriteTotal)];
-    HotswapSample &Unacc =
-        Totals[static_cast<size_t>(HotswapMetric::Unaccounted)];
-    Unacc.Nanos = Total.Nanos > PhaseSum ? Total.Nanos - PhaseSum : 0;
-    Unacc.Calls = Total.Calls;
-
-    fprintf(stderr,
-            "\n=== HotSwap COMGR rewrite profile (HOTSWAP_PROFILE) ===\n");
-    fprintf(stderr, "%-28s %8s %12s %11s %11s %11s %9s\n", "name", "calls",
-            "total_us", "avg_us", "min_us", "max_us", "patches");
-    // Top-level rows in enum order, each followed by its children indented one
-    // level. Children carry a non-Count parent and are skipped by the outer
-    // loop.
-    for (size_t I = 0; I < HotswapMetricCount; ++I) {
-      const HotswapMetricInfo &Info = hotswapMetricInfo[I];
-      if (Info.Parent != HotswapMetric::Count)
-        continue;
-      const HotswapMetric M = static_cast<HotswapMetric>(I);
-      if (!hasData(M) && M != HotswapMetric::Unaccounted)
-        continue;
-      printRow(Info.Label, 0, Totals[I]);
-      for (size_t J = 0; J < HotswapMetricCount; ++J) {
-        if (hotswapMetricInfo[J].Parent != M)
-          continue;
-        if (!hasData(static_cast<HotswapMetric>(J)))
-          continue;
-        printRow(hotswapMetricInfo[J].Label, 1, Totals[J]);
-      }
-    }
-    fprintf(stderr, "======================================================\n");
-  }
-
-  bool Enabled = false;
-  bool HaveData = false;
-  std::mutex Mtx;
-  std::array<HotswapSample, HotswapMetricCount> Totals{};
-};
-
-/// True when profiling is compiled in and armed at runtime (HOTSWAP_PROFILE).
-inline bool hotswapProfilingEnabled() {
-  return HotswapAggregator::get().enabled();
-}
+/// True when the hotswap profiler is compiled in and Comgr time statistics are
+/// enabled at runtime (AMD_COMGR_TIME_STATISTICS). Hotswap timings are reported
+/// through Comgr's built-in profiler (TimeStatistics), not a bespoke sink.
+inline bool hotswapProfilingEnabled() { return env::needTimeStatistics(); }
 
 /// Per-rewrite profiling session. Lives on the retargetCodeObject stack and is
 /// referenced from PatchContext so deep patch sites record into its lock-free
-/// local array. Merges once into the aggregator on destruction.
+/// local array. Merges once into Comgr TimeStatistics on destruction.
 class HotswapProfile {
 public:
   explicit HotswapProfile(bool Enabled) : Enabled(Enabled) {}
@@ -365,7 +268,7 @@ public:
   HotswapProfile &operator=(const HotswapProfile &) = delete;
   ~HotswapProfile() {
     if (Enabled)
-      HotswapAggregator::get().merge(Samples);
+      flush();
   }
 
   bool enabled() const { return Enabled; }
@@ -422,12 +325,68 @@ public:
   }
 
   /// Read-only view of the per-metric samples. Exposed for unit testing the
-  /// session accumulation; production code reports through the aggregator.
+  /// session accumulation; production code reports through TimeStatistics.
   const HotswapSample &sample(HotswapMetric Metric) const {
     return Samples[static_cast<size_t>(Metric)];
   }
 
 private:
+  /// Fold this rewrite's samples into Comgr TimeStatistics in one batch: derive
+  /// phase:unaccounted, convert ns to the configured granularity unit, encode
+  /// the one-level parent/child hierarchy in each row name (e.g.
+  /// "strat:trampoline/ds_2addr"), and merge under a single lock.
+  void flush() {
+    uint64_t PhaseSum = 0;
+    for (size_t I = 0; I < HotswapMetricCount; ++I)
+      if (hotswapMetricInfo[I].PartitionsTotal)
+        PhaseSum += Samples[I].Nanos;
+    HotswapSample &Total =
+        Samples[static_cast<size_t>(HotswapMetric::RewriteTotal)];
+    HotswapSample &Unacc =
+        Samples[static_cast<size_t>(HotswapMetric::Unaccounted)];
+    Unacc.Nanos = Total.Nanos > PhaseSum ? Total.Nanos - PhaseSum : 0;
+    Unacc.Calls = Total.Calls;
+
+    const double UnitsPerNs = env::getGranularityUnitsPerSecond() / 1.0e9;
+    // Build names first (SmallVector inline storage keeps them stable), then
+    // point the records' StringRefs at them.
+    llvm::SmallVector<std::string, HotswapMetricCount> Names;
+    llvm::SmallVector<size_t, HotswapMetricCount> Rows;
+    for (size_t I = 0; I < HotswapMetricCount; ++I) {
+      const HotswapSample &S = Samples[I];
+      const HotswapMetric M = static_cast<HotswapMetric>(I);
+      if (!S.Calls && !S.Nanos && !S.Patches && M != HotswapMetric::Unaccounted)
+        continue;
+      const HotswapMetricInfo &Info = hotswapMetricInfo[I];
+      if (Info.Parent != HotswapMetric::Count)
+        Names.push_back(
+            std::string(
+                hotswapMetricInfo[static_cast<size_t>(Info.Parent)].Label) +
+            "/" + Info.Label);
+      else
+        Names.push_back(std::string(Info.Label));
+      Rows.push_back(I);
+    }
+
+    llvm::SmallVector<COMGR::TimeStatistics::PerfStatRecord, HotswapMetricCount>
+        Records;
+    Records.reserve(Rows.size());
+    for (size_t K = 0; K < Rows.size(); ++K) {
+      const HotswapSample &S = Samples[Rows[K]];
+      COMGR::TimeStatistics::PerfStatRecord R;
+      R.Name = Names[K];
+      R.TimeTaken = static_cast<double>(S.Nanos) * UnitsPerNs;
+      R.Calls = S.Calls;
+      R.Patches = S.Patches;
+      R.MinTime = S.MinNanos == std::numeric_limits<uint64_t>::max()
+                      ? 0.0
+                      : static_cast<double>(S.MinNanos) * UnitsPerNs;
+      R.MaxTime = static_cast<double>(S.MaxNanos) * UnitsPerNs;
+      Records.push_back(R);
+    }
+    COMGR::TimeStatistics::mergeStats(Records);
+  }
+
   bool Enabled;
   std::array<HotswapSample, HotswapMetricCount> Samples{};
 };

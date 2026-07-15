@@ -47,9 +47,10 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
-// HotSwap rewrite profiling (opt-in via HOTSWAP_PROFILE) lives in
+// HotSwap rewrite profiling (compiled in via ENABLE_HOTSWAP_PROFILE, reported
+// at runtime through Comgr TimeStatistics / AMD_COMGR_TIME_STATISTICS) lives in
 // comgr-hotswap-internal.h so the sibling comgr-hotswap-patch-*.cpp TUs can
-// record per-rule timings into the same process-wide accumulator.
+// record per-rule timings into the same per-rewrite session.
 
 // -- GFX1250 B0-to-A0 constants -----------------------------------------------
 //

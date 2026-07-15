@@ -103,6 +103,15 @@ ProfilePoint::~ProfilePoint() {
   }
 }
 
+void mergeStats(llvm::ArrayRef<PerfStatRecord> Records) {
+  // Lazily stand up the sink (and the atexit dump) exactly as ProfilePoint
+  // does; a no-op when AMD_COMGR_TIME_STATISTICS is unset.
+  if (!InitTimeStatistics(""))
+    return;
+  if (PS)
+    PS->mergeStats(Records);
+}
+
 // Timer implementation
 #if defined _WIN64 || defined _WIN32
 class PerfTimerWindows : public PerfTimerImpl {
