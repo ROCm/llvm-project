@@ -3,18 +3,6 @@
 
 ; s_swap_pc_i64 enumerated dispatch-set call lowered to icmp/branch chain.
 ; CHECK-LABEL: define amdgpu_kernel void @setpc_swap_dispatch_set_kernel(
-; CHECK-DAG: 68, %bb_0x18
-; CHECK-DAG: 76, %bb_0x28
-; CHECK: %swap_call_target_marker = or i64 %{{[^ ]+}}, %{{[^ ]+}}
-; CHECK-NEXT: %dispatch_0x38_cmp_0 = icmp eq i64 %swap_call_target_marker, 68
-; CHECK-NEXT: br i1 %dispatch_0x38_cmp_0, label %bb_0x44, label %dispatch_0x38_1
-; CHECK: dispatch_0x38_unreachable:
-; CHECK-NEXT: unreachable
-; CHECK: dispatch_0x38_1:
-; CHECK-NEXT: %dispatch_0x38_cmp_1 = icmp eq i64 %swap_call_target_marker, 76
-; CHECK-NEXT: br i1 %dispatch_0x38_cmp_1, label %bb_0x4C, label %dispatch_0x38_unreachable
-; CHECK-NOT: indirectbr
-; CHECK-NOT: blockaddress(
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -35,6 +23,20 @@ setpc_swap_dispatch_set_kernel:
 	s_add_co_u32 s10, s10, 32
 	s_add_co_ci_u32 s11, s11, 0
 	s_branch 0
+; CHECK-DAG: 68, %bb_0x18
+; CHECK-DAG: 76, %bb_0x28
+; CHECK: %source_wave_active = icmp ne
+; CHECK: %source_wave_sgpr_pair = select i1 %source_wave_active, i64 60, i64 0
+; CHECK: %swap_call_target_marker = select i1 {{[^,]+}}, i64 {{[^,]+}}, i64 {{[^ ]+}}
+; CHECK-NEXT: %dispatch_0x38_cmp_0 = icmp eq i64 %swap_call_target_marker, 68
+; CHECK-NEXT: br i1 %dispatch_0x38_cmp_0, label %bb_0x44, label %dispatch_0x38_1
+; CHECK: dispatch_0x38_unreachable:
+; CHECK-NEXT: unreachable
+; CHECK: dispatch_0x38_1:
+; CHECK-NEXT: %dispatch_0x38_cmp_1 = icmp eq i64 %swap_call_target_marker, 76
+; CHECK-NEXT: br i1 %dispatch_0x38_cmp_1, label %bb_0x4C, label %dispatch_0x38_unreachable
+; CHECK-NOT: indirectbr
+; CHECK-NOT: blockaddress(
 	s_swap_pc_i64 s[20:21], s[10:11]
 	v_mov_b32 v1, 0xCAFE0001
 	v_mov_b32 v1, 0xDEAD0001

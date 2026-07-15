@@ -532,6 +532,8 @@ struct RaiseContext {
   // shadow and fallback via `select`, avoiding SSA-dominance hazards.
   llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskExecShadow;
   llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskValidShadow;
+  llvm::SmallVector<llvm::AllocaInst *> SourceWaveSgprPairShadow;
+  llvm::SmallVector<llvm::AllocaInst *> SourceWaveSgprPairValidShadow;
 
   // Raise-time constant shadow of M0; see updateM0Const / getM0Const.
   std::optional<uint64_t> M0Const;
@@ -564,6 +566,63 @@ struct RaiseContext {
       B.CreateStore(ExecMask, SgprWaveMaskExecShadow[BaseIdx]);
       B.CreateStore(B.getTrue(), SgprWaveMaskValidShadow[BaseIdx]);
     }
+  }
+
+  // Return true when the source wave containing the current target lane has any
+  // active lane in EXEC.
+  llvm::Value *emitCurrentSourceWaveHasActiveLane() {
+    llvm::Value *Exec = Regs.loadExec(B);
+    if (!Projection.providesFullWaveExecInvariant())
+      return emitLaneActiveBit();
+    unsigned SourceBits = Isa.WaveSize;
+    assert(Isa.hasValidWaveSize() && "source wave size must be 32 or 64");
+    if (SourceBits >= 64)
+      return B.CreateICmpNE(Exec, llvm::ConstantInt::get(Exec->getType(), 0),
+                            "source_wave_active");
+    llvm::Type *ExecTy = Exec->getType();
+    llvm::Value *Lane =
+        B.CreateZExtOrTrunc(emitLaneIdx(), ExecTy, "source_wave_lane");
+    llvm::Value *Group = B.CreateUDiv(
+        Lane, llvm::ConstantInt::get(ExecTy, SourceBits), "source_wave_group");
+    llvm::Value *Shift = B.CreateMul(
+        Group, llvm::ConstantInt::get(ExecTy, SourceBits), "source_wave_shift");
+    llvm::Value *Shifted = B.CreateLShr(Exec, Shift, "source_wave_exec");
+    uint64_t Mask = (uint64_t{1} << SourceBits) - 1;
+    llvm::Value *GroupMask = B.CreateAnd(
+        Shifted, llvm::ConstantInt::get(ExecTy, Mask), "source_wave_mask");
+    return B.CreateICmpNE(GroupMask, llvm::ConstantInt::get(ExecTy, 0),
+                          "source_wave_active");
+  }
+
+  // Record an SGPR-pair marker for the currently active source wave, preserving
+  // the old marker for inactive source waves.
+  void recordSourceWaveSgprPair(int BaseIdx, llvm::Value *V) {
+    if (!Projection.providesFullWaveExecInvariant())
+      return;
+    if (BaseIdx < 0 ||
+        static_cast<size_t>(BaseIdx) >= SourceWaveSgprPairShadow.size())
+      return;
+    llvm::Value *Old = B.CreateLoad(I64Ty, SourceWaveSgprPairShadow[BaseIdx],
+                                    "source_wave_sgpr_pair_old");
+    llvm::Value *Merged = B.CreateSelect(emitCurrentSourceWaveHasActiveLane(),
+                                         V, Old, "source_wave_sgpr_pair");
+    B.CreateStore(Merged, SourceWaveSgprPairShadow[BaseIdx]);
+    B.CreateStore(B.getTrue(), SourceWaveSgprPairValidShadow[BaseIdx]);
+  }
+
+  // Load the source-wave marker when one was recorded; otherwise use the normal
+  // SGPR-pair value.
+  llvm::Value *materializeSourceWaveSgprPair(int BaseIdx,
+                                             llvm::Value *Fallback) {
+    if (!Projection.providesFullWaveExecInvariant() || BaseIdx < 0 ||
+        static_cast<size_t>(BaseIdx) >= SourceWaveSgprPairShadow.size())
+      return Fallback;
+    llvm::Value *Shadow = B.CreateLoad(I64Ty, SourceWaveSgprPairShadow[BaseIdx],
+                                       "source_wave_sgpr_pair");
+    llvm::Value *Valid =
+        B.CreateLoad(I1Ty, SourceWaveSgprPairValidShadow[BaseIdx],
+                     "source_wave_sgpr_pair_valid");
+    return B.CreateSelect(Valid, Shadow, Fallback, "source_wave_sgpr_pair_sel");
   }
 
   // Look up the cached per-lane i1 for SGPR baseIdx in the current
@@ -615,6 +674,9 @@ struct RaiseContext {
     if (BaseIdx >= 0 &&
         static_cast<size_t>(BaseIdx) < SgprWaveMaskValidShadow.size())
       B.CreateStore(B.getFalse(), SgprWaveMaskValidShadow[BaseIdx]);
+    if (BaseIdx >= 0 &&
+        static_cast<size_t>(BaseIdx) < SourceWaveSgprPairValidShadow.size())
+      B.CreateStore(B.getFalse(), SourceWaveSgprPairValidShadow[BaseIdx]);
     if (BaseIdx > 0) {
       auto Prev = LastSgprWaveMaskI1.find(BaseIdx - 1);
       if (Prev != LastSgprWaveMaskI1.end() && Prev->second.IsPair) {
@@ -622,6 +684,9 @@ struct RaiseContext {
         if (static_cast<size_t>(BaseIdx - 1) < SgprWaveMaskValidShadow.size())
           B.CreateStore(B.getFalse(), SgprWaveMaskValidShadow[BaseIdx - 1]);
       }
+      if (static_cast<size_t>(BaseIdx - 1) <
+          SourceWaveSgprPairValidShadow.size())
+        B.CreateStore(B.getFalse(), SourceWaveSgprPairValidShadow[BaseIdx - 1]);
     }
   }
 
@@ -655,6 +720,10 @@ struct RaiseContext {
       llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const {
     Out.append(SgprWaveMaskExecShadow.begin(), SgprWaveMaskExecShadow.end());
     Out.append(SgprWaveMaskValidShadow.begin(), SgprWaveMaskValidShadow.end());
+    Out.append(SourceWaveSgprPairShadow.begin(),
+               SourceWaveSgprPairShadow.end());
+    Out.append(SourceWaveSgprPairValidShadow.begin(),
+               SourceWaveSgprPairValidShadow.end());
   }
 
   // Pending failure raised during operand-read dispatch (e.g.

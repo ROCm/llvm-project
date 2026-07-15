@@ -3,16 +3,6 @@
 
 ; s_set_pc_i64 resolvable call/return pair folded to direct branches.
 ; CHECK-LABEL: define amdgpu_kernel void @setpc_pattern_b_kernel(
-; CHECK: bb_0x0:
-; CHECK: br label %bb_0x38
-; CHECK: bb_0x30:
-; CHECK: %ret_pc_marker = or i64 %{{[^ ]+}}, %{{[^ ]+}}
-; CHECK-NEXT: %dispatch_0x40_cmp_0 = icmp eq i64 %ret_pc_marker, 48
-; CHECK-NEXT: br i1 %dispatch_0x40_cmp_0, label %bb_0x30, label %dispatch_0x40_unreachable
-; CHECK: dispatch_0x40_unreachable:
-; CHECK-NEXT: unreachable
-; CHECK-NOT: indirectbr
-; CHECK-NOT: blockaddress(
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -29,10 +19,20 @@ setpc_pattern_b_kernel:
 	s_get_pc_i64 s[10:11]
 	s_add_co_u32 s10, s10, 24
 	s_add_co_ci_u32 s11, s11, 0
+; CHECK: bb_0x0:
+; CHECK: br label %bb_0x38
 	s_set_pc_i64 s[10:11]
 	s_branch 2
 	v_mov_b32 v1, 0xCAFE0001
 	v_mov_b32 v1, 0xDEAD0001
+; CHECK: bb_0x30:
+; CHECK: %ret_pc_marker = select i1 {{[^,]+}}, i64 {{[^,]+}}, i64 {{[^ ]+}}
+; CHECK-NEXT: %dispatch_0x40_cmp_0 = icmp eq i64 %ret_pc_marker, 48
+; CHECK-NEXT: br i1 %dispatch_0x40_cmp_0, label %bb_0x30, label %dispatch_0x40_unreachable
+; CHECK: dispatch_0x40_unreachable:
+; CHECK-NEXT: unreachable
+; CHECK-NOT: indirectbr
+; CHECK-NOT: blockaddress(
 	s_set_pc_i64 s[8:9]
 	
 	s_wait_kmcnt 0x0

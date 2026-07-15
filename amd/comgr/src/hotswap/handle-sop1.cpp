@@ -415,6 +415,8 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
       // forward dispatch); the lowering mechanism is identical.
       Value *RetVal = Ctx.Regs.loadSGPR64(
           Ctx.B, static_cast<int>(Info.IndirectRetPairLowReg));
+      RetVal = Ctx.materializeSourceWaveSgprPair(
+          static_cast<int>(Info.IndirectRetPairLowReg), RetVal);
       RetVal->setName("ret_pc_marker");
       emitEnumeratedDispatch(Ctx, RetVal, Info.IndirectTargets, Di.Offset);
       Hr.Handled = true;
@@ -506,6 +508,7 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     (void)Ctx.lookupBB(ReturnAddr);
     Value *RetMarker = ConstantInt::get(Ctx.I64Ty, ReturnAddr);
     Ctx.Regs.writeReg64(Ctx.B, Op.dst(), RetMarker);
+    Ctx.recordSourceWaveSgprPair(Op.dst().BaseIdx, RetMarker);
 
     if (Info.SiteKind == SetPcSiteInfo::Kind::DirectA) {
       Ctx.B.CreateBr(Ctx.lookupBB(Info.DirectTarget));
@@ -519,6 +522,8 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     // raiser.cpp on each contributing predecessor path.
     Value *CallTarget = Ctx.Regs.loadSGPR64(
         Ctx.B, static_cast<int>(Info.IndirectRetPairLowReg));
+    CallTarget = Ctx.materializeSourceWaveSgprPair(
+        static_cast<int>(Info.IndirectRetPairLowReg), CallTarget);
     CallTarget->setName("swap_call_target_marker");
     emitEnumeratedDispatch(Ctx, CallTarget, Info.IndirectTargets, Di.Offset);
     Hr.Handled = true;

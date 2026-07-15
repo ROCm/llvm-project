@@ -105,6 +105,7 @@ struct ISAProfile {
   unsigned LdsByteCapacity = 65536;
 
   bool isWave32() const { return WaveSize == 32; }
+  bool hasValidWaveSize() const { return WaveSize == 32 || WaveSize == 64; }
 
   static ISAProfile fromSubtarget(const llvm::MCSubtargetInfo &STI) {
     ISAProfile P;
