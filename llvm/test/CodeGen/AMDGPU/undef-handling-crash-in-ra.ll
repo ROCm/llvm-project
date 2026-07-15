@@ -16,18 +16,18 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    s_add_u32 s0, s0, s17
 ; CHECK-NEXT:    s_addc_u32 s1, s1, 0
 ; CHECK-NEXT:    s_mov_b64 s[8:9], src_private_base
-; CHECK-NEXT:    s_mov_b64 s[48:49], s[4:5]
+; CHECK-NEXT:    s_mov_b64 s[38:39], s[6:7]
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_cmp_lg_u32 s68, -1
+; CHECK-NEXT:    s_mov_b64 s[48:49], s[4:5]
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:    s_cselect_b32 s5, s9, 0
-; CHECK-NEXT:    s_mov_b64 s[38:39], s[6:7]
 ; CHECK-NEXT:    s_cselect_b32 s6, s68, 0
+; CHECK-NEXT:    s_add_u32 s50, s34, 48
 ; CHECK-NEXT:    v_mov_b32_e32 v47, s5
 ; CHECK-NEXT:    s_mov_b32 s5, s4
-; CHECK-NEXT:    s_add_u32 s50, s34, 48
-; CHECK-NEXT:    v_accvgpr_write_b32 a33, s5
 ; CHECK-NEXT:    s_addc_u32 s51, s35, 0
+; CHECK-NEXT:    v_accvgpr_write_b32 a33, s5
 ; CHECK-NEXT:    v_accvgpr_write_b32 a32, s4
 ; CHECK-NEXT:    s_getpc_b64 s[4:5]
 ; CHECK-NEXT:    s_add_u32 s4, s4, G@gotpcrel32@lo+4

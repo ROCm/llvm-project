@@ -89,6 +89,8 @@ define amdgpu_kernel void @constant_load_i32(ptr addrspace(1) %out, ptr addrspac
 ;
 ; GFX1250-LABEL: constant_load_i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -181,14 +183,16 @@ define amdgpu_kernel void @constant_load_v2i32(ptr addrspace(1) %out, ptr addrsp
 ; GFX12-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    s_load_b64 s[2:3], s[2:3], 0x0
-; GFX12-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    v_dual_mov_b32 v0, s2 :: v_dual_mov_b32 v1, s3
+; GFX12-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v1, s3
+; GFX12-NEXT:    v_mov_b32_e32 v0, s2
 ; GFX12-NEXT:    global_store_b64 v2, v[0:1], s[0:1]
 ; GFX12-NEXT:    s_endpgm
 ;
 ; GFX1250-LABEL: constant_load_v2i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    v_mov_b32_e32 v2, 0
@@ -299,6 +303,8 @@ define amdgpu_kernel void @constant_load_v3i32(ptr addrspace(1) %out, ptr addrsp
 ;
 ; GFX1250-LABEL: constant_load_v3i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -400,15 +406,17 @@ define amdgpu_kernel void @constant_load_v4i32(ptr addrspace(1) %out, ptr addrsp
 ; GFX12-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    s_load_b128 s[4:7], s[2:3], 0x0
-; GFX12-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
+; GFX12-NEXT:    v_dual_mov_b32 v4, 0 :: v_dual_mov_b32 v1, s5
 ; GFX12-NEXT:    v_dual_mov_b32 v0, s4 :: v_dual_mov_b32 v3, s7
-; GFX12-NEXT:    v_dual_mov_b32 v1, s5 :: v_dual_mov_b32 v2, s6
+; GFX12-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX12-NEXT:    global_store_b128 v4, v[0:3], s[0:1]
 ; GFX12-NEXT:    s_endpgm
 ;
 ; GFX1250-LABEL: constant_load_v4i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    v_mov_b32_e32 v4, 0
@@ -556,6 +564,8 @@ define amdgpu_kernel void @constant_load_v8i32(ptr addrspace(1) %out, ptr addrsp
 ;
 ; GFX1250-LABEL: constant_load_v8i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[8:11], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -624,9 +634,9 @@ define amdgpu_kernel void @constant_load_v9i32(ptr addrspace(1) %out, ptr addrsp
 ; GFX7-HSA-NEXT:    s_add_u32 s4, s8, 16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX7-HSA-NEXT:    s_addc_u32 s5, s9, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s8
@@ -655,9 +665,9 @@ define amdgpu_kernel void @constant_load_v9i32(ptr addrspace(1) %out, ptr addrsp
 ; GFX8-NOHSA-NEXT:    s_add_u32 s4, s8, 16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s5, s9, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
@@ -736,6 +746,8 @@ define amdgpu_kernel void @constant_load_v9i32(ptr addrspace(1) %out, ptr addrsp
 ;
 ; GFX1250-LABEL: constant_load_v9i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[8:11], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -809,9 +821,9 @@ define amdgpu_kernel void @constant_load_v10i32(ptr addrspace(1) %out, ptr addrs
 ; GFX7-HSA-NEXT:    s_add_u32 s4, s8, 16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX7-HSA-NEXT:    s_addc_u32 s5, s9, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s8
@@ -841,9 +853,9 @@ define amdgpu_kernel void @constant_load_v10i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s4, s8, 16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s5, s9, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
@@ -909,13 +921,13 @@ define amdgpu_kernel void @constant_load_v10i32(ptr addrspace(1) %out, ptr addrs
 ; GFX12-NEXT:    s_clause 0x1
 ; GFX12-NEXT:    s_load_b64 s[12:13], s[10:11], 0x20
 ; GFX12-NEXT:    s_load_b256 s[0:7], s[10:11], 0x0
-; GFX12-NEXT:    v_mov_b32_e32 v10, 0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
+; GFX12-NEXT:    v_dual_mov_b32 v10, 0 :: v_dual_mov_b32 v9, s13
 ; GFX12-NEXT:    v_dual_mov_b32 v8, s12 :: v_dual_mov_b32 v1, s5
-; GFX12-NEXT:    v_dual_mov_b32 v9, s13 :: v_dual_mov_b32 v0, s4
-; GFX12-NEXT:    v_dual_mov_b32 v3, s7 :: v_dual_mov_b32 v2, s6
-; GFX12-NEXT:    v_dual_mov_b32 v5, s1 :: v_dual_mov_b32 v4, s0
-; GFX12-NEXT:    v_dual_mov_b32 v7, s3 :: v_dual_mov_b32 v6, s2
+; GFX12-NEXT:    v_dual_mov_b32 v0, s4 :: v_dual_mov_b32 v3, s7
+; GFX12-NEXT:    v_dual_mov_b32 v2, s6 :: v_dual_mov_b32 v5, s1
+; GFX12-NEXT:    v_dual_mov_b32 v4, s0 :: v_dual_mov_b32 v7, s3
+; GFX12-NEXT:    v_mov_b32_e32 v6, s2
 ; GFX12-NEXT:    s_clause 0x2
 ; GFX12-NEXT:    global_store_b64 v10, v[8:9], s[8:9] offset:32
 ; GFX12-NEXT:    global_store_b128 v10, v[0:3], s[8:9] offset:16
@@ -924,6 +936,8 @@ define amdgpu_kernel void @constant_load_v10i32(ptr addrspace(1) %out, ptr addrs
 ;
 ; GFX1250-LABEL: constant_load_v10i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[8:11], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -1123,6 +1137,8 @@ define amdgpu_kernel void @constant_load_v11i32(ptr addrspace(1) %out, ptr addrs
 ;
 ; GFX1250-LABEL: constant_load_v11i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[8:11], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -1202,9 +1218,9 @@ define amdgpu_kernel void @constant_load_v12i32(ptr addrspace(1) %out, ptr addrs
 ; GFX7-HSA-NEXT:    s_add_u32 s4, s8, 16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX7-HSA-NEXT:    s_addc_u32 s5, s9, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s8
@@ -1237,9 +1253,9 @@ define amdgpu_kernel void @constant_load_v12i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s4, s8, 16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s5, s9, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
@@ -1307,14 +1323,14 @@ define amdgpu_kernel void @constant_load_v12i32(ptr addrspace(1) %out, ptr addrs
 ; GFX12-NEXT:    s_clause 0x1
 ; GFX12-NEXT:    s_load_b128 s[12:15], s[10:11], 0x20
 ; GFX12-NEXT:    s_load_b256 s[0:7], s[10:11], 0x0
-; GFX12-NEXT:    v_mov_b32_e32 v12, 0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
+; GFX12-NEXT:    v_dual_mov_b32 v12, 0 :: v_dual_mov_b32 v1, s13
 ; GFX12-NEXT:    v_dual_mov_b32 v0, s12 :: v_dual_mov_b32 v3, s15
-; GFX12-NEXT:    v_dual_mov_b32 v1, s13 :: v_dual_mov_b32 v2, s14
-; GFX12-NEXT:    v_dual_mov_b32 v5, s5 :: v_dual_mov_b32 v4, s4
-; GFX12-NEXT:    v_dual_mov_b32 v7, s7 :: v_dual_mov_b32 v6, s6
-; GFX12-NEXT:    v_dual_mov_b32 v9, s1 :: v_dual_mov_b32 v8, s0
-; GFX12-NEXT:    v_dual_mov_b32 v11, s3 :: v_dual_mov_b32 v10, s2
+; GFX12-NEXT:    v_dual_mov_b32 v2, s14 :: v_dual_mov_b32 v5, s5
+; GFX12-NEXT:    v_dual_mov_b32 v4, s4 :: v_dual_mov_b32 v7, s7
+; GFX12-NEXT:    v_dual_mov_b32 v6, s6 :: v_dual_mov_b32 v9, s1
+; GFX12-NEXT:    v_dual_mov_b32 v8, s0 :: v_dual_mov_b32 v11, s3
+; GFX12-NEXT:    v_mov_b32_e32 v10, s2
 ; GFX12-NEXT:    s_clause 0x2
 ; GFX12-NEXT:    global_store_b128 v12, v[0:3], s[8:9] offset:32
 ; GFX12-NEXT:    global_store_b128 v12, v[4:7], s[8:9] offset:16
@@ -1323,6 +1339,8 @@ define amdgpu_kernel void @constant_load_v12i32(ptr addrspace(1) %out, ptr addrs
 ;
 ; GFX1250-LABEL: constant_load_v12i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[8:11], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -1407,9 +1425,9 @@ define amdgpu_kernel void @constant_load_v16i32(ptr addrspace(1) %out, ptr addrs
 ; GFX7-HSA-NEXT:    s_add_u32 s8, s16, 32
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s9
 ; GFX7-HSA-NEXT:    s_addc_u32 s9, s17, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s11
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s9
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    s_nop 0
@@ -1417,9 +1435,9 @@ define amdgpu_kernel void @constant_load_v16i32(ptr addrspace(1) %out, ptr addrs
 ; GFX7-HSA-NEXT:    s_add_u32 s4, s16, 16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX7-HSA-NEXT:    s_addc_u32 s5, s17, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s16
@@ -1451,9 +1469,9 @@ define amdgpu_kernel void @constant_load_v16i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s8, s16, 32
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s9
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s9, s17, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s11
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s9
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -1461,9 +1479,9 @@ define amdgpu_kernel void @constant_load_v16i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s4, s16, 16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s5, s17, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s16
@@ -1554,6 +1572,8 @@ define amdgpu_kernel void @constant_load_v16i32(ptr addrspace(1) %out, ptr addrs
 ;
 ; GFX1250-LABEL: constant_load_v16i32:
 ; GFX1250:       ; %bb.0: ; %entry
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[16:19], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -1665,6 +1685,8 @@ define amdgpu_kernel void @constant_zextload_i32_to_i64(ptr addrspace(1) %out, p
 ;
 ; GFX1250-LABEL: constant_zextload_i32_to_i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -1772,6 +1794,8 @@ define amdgpu_kernel void @constant_sextload_i32_to_i64(ptr addrspace(1) %out, p
 ;
 ; GFX1250-LABEL: constant_sextload_i32_to_i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -1874,6 +1898,8 @@ define amdgpu_kernel void @constant_zextload_v1i32_to_v1i64(ptr addrspace(1) %ou
 ;
 ; GFX1250-LABEL: constant_zextload_v1i32_to_v1i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -1981,6 +2007,8 @@ define amdgpu_kernel void @constant_sextload_v1i32_to_v1i64(ptr addrspace(1) %ou
 ;
 ; GFX1250-LABEL: constant_sextload_v1i32_to_v1i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -2096,6 +2124,8 @@ define amdgpu_kernel void @constant_zextload_v2i32_to_v2i64(ptr addrspace(1) %ou
 ;
 ; GFX1250-LABEL: constant_zextload_v2i32_to_v2i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -2224,6 +2254,8 @@ define amdgpu_kernel void @constant_sextload_v2i32_to_v2i64(ptr addrspace(1) %ou
 ;
 ; GFX1250-LABEL: constant_sextload_v2i32_to_v2i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -2276,8 +2308,8 @@ define amdgpu_kernel void @constant_zextload_v4i32_to_v4i64(ptr addrspace(1) %ou
 ; GFX7-HSA-NEXT:    s_load_dwordx4 s[4:7], s[2:3], 0x0
 ; GFX7-HSA-NEXT:    s_add_u32 s2, s0, 16
 ; GFX7-HSA-NEXT:    s_addc_u32 s3, s1, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, v1
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX7-HSA-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s7
@@ -2372,6 +2404,8 @@ define amdgpu_kernel void @constant_zextload_v4i32_to_v4i64(ptr addrspace(1) %ou
 ;
 ; GFX1250-LABEL: constant_zextload_v4i32_to_v4i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -2436,9 +2470,9 @@ define amdgpu_kernel void @constant_sextload_v4i32_to_v4i64(ptr addrspace(1) %ou
 ; GFX7-HSA-NEXT:    s_add_u32 s2, s0, 16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s3
 ; GFX7-HSA-NEXT:    s_addc_u32 s3, s1, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s7
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s2
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s1
@@ -2464,9 +2498,9 @@ define amdgpu_kernel void @constant_sextload_v4i32_to_v4i64(ptr addrspace(1) %ou
 ; GFX8-NOHSA-NEXT:    s_add_u32 s2, s0, 16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s3
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s3, s1, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s7
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s2
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s1
@@ -2553,6 +2587,8 @@ define amdgpu_kernel void @constant_sextload_v4i32_to_v4i64(ptr addrspace(1) %ou
 ;
 ; GFX1250-LABEL: constant_sextload_v4i32_to_v4i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -2618,8 +2654,8 @@ define amdgpu_kernel void @constant_zextload_v8i32_to_v8i64(ptr addrspace(1) %ou
 ; GFX7-HSA-NEXT:    s_load_dwordx8 s[0:7], s[10:11], 0x0
 ; GFX7-HSA-NEXT:    s_add_u32 s10, s8, 48
 ; GFX7-HSA-NEXT:    s_addc_u32 s11, s9, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s10
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, v1
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s10
 ; GFX7-HSA-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s7
@@ -2774,6 +2810,8 @@ define amdgpu_kernel void @constant_zextload_v8i32_to_v8i64(ptr addrspace(1) %ou
 ;
 ; GFX1250-LABEL: constant_zextload_v8i32_to_v8i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[8:11], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -2864,9 +2902,9 @@ define amdgpu_kernel void @constant_sextload_v8i32_to_v8i64(ptr addrspace(1) %ou
 ; GFX7-HSA-NEXT:    s_add_u32 s6, s8, 48
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s7
 ; GFX7-HSA-NEXT:    s_addc_u32 s7, s9, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s17
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s16
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s7
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    s_nop 0
@@ -2874,9 +2912,9 @@ define amdgpu_kernel void @constant_sextload_v8i32_to_v8i64(ptr addrspace(1) %ou
 ; GFX7-HSA-NEXT:    s_add_u32 s4, s8, 32
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s5
 ; GFX7-HSA-NEXT:    s_addc_u32 s5, s9, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s15
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s14
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    s_nop 0
@@ -2884,9 +2922,9 @@ define amdgpu_kernel void @constant_sextload_v8i32_to_v8i64(ptr addrspace(1) %ou
 ; GFX7-HSA-NEXT:    s_add_u32 s2, s8, 16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s3
 ; GFX7-HSA-NEXT:    s_addc_u32 s3, s9, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s13
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s12
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s2
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s8
@@ -2916,9 +2954,9 @@ define amdgpu_kernel void @constant_sextload_v8i32_to_v8i64(ptr addrspace(1) %ou
 ; GFX8-NOHSA-NEXT:    s_add_u32 s6, s8, 48
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s7
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s7, s9, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s17
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s16
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s7
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -2926,9 +2964,9 @@ define amdgpu_kernel void @constant_sextload_v8i32_to_v8i64(ptr addrspace(1) %ou
 ; GFX8-NOHSA-NEXT:    s_add_u32 s4, s8, 32
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s5
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s5, s9, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s15
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s14
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -2936,9 +2974,9 @@ define amdgpu_kernel void @constant_sextload_v8i32_to_v8i64(ptr addrspace(1) %ou
 ; GFX8-NOHSA-NEXT:    s_add_u32 s2, s8, 16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s3
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s3, s9, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s13
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s12
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s2
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
@@ -3066,6 +3104,8 @@ define amdgpu_kernel void @constant_sextload_v8i32_to_v8i64(ptr addrspace(1) %ou
 ;
 ; GFX1250-LABEL: constant_sextload_v8i32_to_v8i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[8:11], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -3210,27 +3250,27 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ; GFX7-HSA-NEXT:    s_add_u32 s24, s16, 64
 ; GFX7-HSA-NEXT:    s_addc_u32 s25, s17, 0
 ; GFX7-HSA-NEXT:    s_add_u32 s26, s16, 48
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v8, s18
 ; GFX7-HSA-NEXT:    s_addc_u32 s27, s17, 0
+; GFX7-HSA-NEXT:    s_add_u32 s28, s16, 32
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v8, s18
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s19
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s20
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s48
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s47
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s14
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s15
-; GFX7-HSA-NEXT:    s_add_u32 s28, s16, 32
+; GFX7-HSA-NEXT:    s_addc_u32 s29, s17, 0
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s20
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s21
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v13, s22
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v17, s26
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s46
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s45
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[8:9], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s13
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s12
-; GFX7-HSA-NEXT:    s_addc_u32 s29, s17, 0
+; GFX7-HSA-NEXT:    s_add_u32 s30, s16, 16
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v13, s22
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v14, s23
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v17, s26
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v18, s27
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v19, s28
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s44
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s43
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s40
@@ -3240,34 +3280,34 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s39
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s7
-; GFX7-HSA-NEXT:    s_add_u32 s30, s16, 16
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v15, s24
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v20, s29
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s38
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[13:14], v[6:9]
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[17:18], v[0:3]
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s37
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s4
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX7-HSA-NEXT:    s_addc_u32 s31, s17, 0
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v15, s24
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v16, s25
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v19, s28
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v20, s29
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v10, s42
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s41
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s8
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s38
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[13:14], v[6:9]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s9
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s37
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s8
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[17:18], v[0:3]
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s5
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v13, s30
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[19:20], v[3:6]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v14, s31
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s16
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[15:16], v[9:12]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s36
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s2
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[19:20], v[3:6]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v8, s3
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s2
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s35
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s34
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s33
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s17
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[13:14], v[6:9]
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
@@ -3299,9 +3339,9 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s14, s16, 0x70
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s15
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s15, s17, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s14
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s34
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s33
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s14
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s15
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -3309,9 +3349,9 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s12, s16, 0x60
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s13
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s13, s17, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s12
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s31
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s30
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s12
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s13
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -3319,9 +3359,9 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s10, s16, 0x50
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s11
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s11, s17, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s10
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s29
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s28
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s10
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s11
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -3329,9 +3369,9 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s8, s16, 64
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s9
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s9, s17, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s27
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s26
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s9
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -3339,9 +3379,9 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s6, s16, 48
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s7
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s7, s17, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s25
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s24
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s7
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -3349,9 +3389,9 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s4, s16, 32
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s5
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s5, s17, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s23
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s22
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -3359,9 +3399,9 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s2, s16, 16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s3
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s3, s17, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s21
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s20
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s2
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s16
@@ -3570,6 +3610,8 @@ define amdgpu_kernel void @constant_sextload_v16i32_to_v16i64(ptr addrspace(1) %
 ;
 ; GFX1250-LABEL: constant_sextload_v16i32_to_v16i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[16:19], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -3959,6 +4001,8 @@ define amdgpu_kernel void @constant_zextload_v16i32_to_v16i64(ptr addrspace(1) %
 ;
 ; GFX1250-LABEL: constant_zextload_v16i32_to_v16i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[16:19], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -4200,28 +4244,28 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s23
 ; GFX7-HSA-NEXT:    s_addc_u32 s23, s37, 0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v31, s17
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v24, s30
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v26, s47
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v30, s16
 ; GFX7-HSA-NEXT:    s_add_u32 s16, s36, 0xb0
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[30:31], v[23:26]
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v24, s30
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v26, s47
 ; GFX7-HSA-NEXT:    s_addc_u32 s17, s37, 0
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[30:31], v[23:26]
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s26
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v24, s19
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v23, s18
 ; GFX7-HSA-NEXT:    s_add_u32 s18, s36, 0xa0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v26, s21
 ; GFX7-HSA-NEXT:    s_addc_u32 s19, s37, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s26
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v14, s45
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v26, s21
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v25, s20
 ; GFX7-HSA-NEXT:    s_add_u32 s20, s36, 0x90
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[25:26], v[11:14]
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v14, s45
 ; GFX7-HSA-NEXT:    s_addc_u32 s21, s37, 0
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[25:26], v[11:14]
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v16, s24
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v13, s16
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s22
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v14, s17
 ; GFX7-HSA-NEXT:    s_add_u32 s16, s36, 0x80
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v16, s24
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s22
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s23
 ; GFX7-HSA-NEXT:    s_addc_u32 s17, s37, 0
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[11:12], v[15:18]
@@ -4232,12 +4276,12 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v22, s46
 ; GFX7-HSA-NEXT:    s_addc_u32 s17, s37, 0
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[23:24], v[19:22]
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s18
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s42
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v20, s17
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v19, s16
 ; GFX7-HSA-NEXT:    s_add_u32 s16, s36, 0x60
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s42
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s41
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s18
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s19
 ; GFX7-HSA-NEXT:    s_addc_u32 s17, s37, 0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v8, s44
@@ -4247,68 +4291,68 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s14
 ; GFX7-HSA-NEXT:    s_add_u32 s14, s36, 0x50
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v8, s15
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s16
 ; GFX7-HSA-NEXT:    s_addc_u32 s15, s37, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v15, s20
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s57
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s56
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s17
 ; GFX7-HSA-NEXT:    s_add_u32 s16, s36, 64
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s57
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s56
+; GFX7-HSA-NEXT:    s_addc_u32 s17, s37, 0
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[19:20], v[6:9]
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v15, s20
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s12
+; GFX7-HSA-NEXT:    s_add_u32 s12, s36, 48
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v16, s21
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v28, s40
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v30, s35
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v10, s55
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s54
-; GFX7-HSA-NEXT:    s_addc_u32 s17, s37, 0
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[19:20], v[6:9]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s13
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s14
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s12
+; GFX7-HSA-NEXT:    s_addc_u32 s13, s37, 0
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s34
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[15:16], v[27:30]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v13, s53
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s33
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v15, s52
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s14
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s15
-; GFX7-HSA-NEXT:    s_add_u32 s12, s36, 48
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[9:12]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v14, s11
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s10
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s34
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s33
-; GFX7-HSA-NEXT:    s_addc_u32 s13, s37, 0
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[6:7], v[12:15]
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s12
+; GFX7-HSA-NEXT:    s_add_u32 s10, s36, 32
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[17:18], v[0:3]
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v8, s13
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[6:7], v[12:15]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s49
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s48
-; GFX7-HSA-NEXT:    s_add_u32 s10, s36, 32
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s12
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v8, s13
+; GFX7-HSA-NEXT:    s_addc_u32 s11, s37, 0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s7
-; GFX7-HSA-NEXT:    s_addc_u32 s11, s37, 0
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[7:8], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s39
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s10
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s38
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s4
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[7:8], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s5
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s4
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s10
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s11
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[0:1], v[3:6]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s2
 ; GFX7-HSA-NEXT:    s_add_u32 s2, s36, 16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s3
 ; GFX7-HSA-NEXT:    s_addc_u32 s3, s37, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s31
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s29
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s2
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v20, s17
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s36
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v16, s51
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v18, s50
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v20, s17
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v19, s16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v15, s8
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v17, s9
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s36
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s27
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s1
@@ -4361,9 +4405,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s30, s36, 0xf0
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s31
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s31, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s30
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s66
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s65
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s30
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s31
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4371,9 +4415,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s28, s36, 0xe0
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s29
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s29, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s28
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s64
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s63
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s28
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s29
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4381,9 +4425,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s26, s36, 0xd0
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s27
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s27, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s26
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s62
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s61
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s26
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s27
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4391,9 +4435,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s24, s36, 0xc0
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s25
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s25, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s24
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s60
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s59
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s24
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s25
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4401,9 +4445,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s22, s36, 0xb0
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s23
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s23, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s22
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s58
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s57
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s22
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s23
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4411,9 +4455,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s20, s36, 0xa0
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s21
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s21, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s20
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s56
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s55
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s20
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s21
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4421,9 +4465,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s18, s36, 0x90
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s19
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s19, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s18
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s54
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s53
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s18
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s19
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4431,9 +4475,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s16, s36, 0x80
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s17
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s17, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s52
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s51
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s17
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4441,9 +4485,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s14, s36, 0x70
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s15
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s15, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s14
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s50
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s49
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s14
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s15
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4451,9 +4495,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s12, s36, 0x60
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s13
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s13, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s12
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s48
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s47
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s12
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s13
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4461,9 +4505,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s10, s36, 0x50
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s11
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s11, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s10
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s46
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s45
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s10
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s11
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4471,9 +4515,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s8, s36, 64
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s9
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s9, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s44
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s43
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s9
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4481,9 +4525,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s6, s36, 48
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s7
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s7, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s42
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s41
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s7
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4491,9 +4535,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s4, s36, 32
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s5
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s5, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s40
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s39
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -4501,9 +4545,9 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX8-NOHSA-NEXT:    s_add_u32 s2, s36, 16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s3
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s3, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s38
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s35
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s3
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s2
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s36
@@ -4877,6 +4921,8 @@ define amdgpu_kernel void @constant_sextload_v32i32_to_v32i64(ptr addrspace(1) %
 ;
 ; GFX1250-LABEL: constant_sextload_v32i32_to_v32i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[36:39], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -5078,8 +5124,8 @@ define amdgpu_kernel void @constant_zextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX7-HSA-NEXT:    s_add_u32 s0, s36, 0xf0
 ; GFX7-HSA-NEXT:    s_addc_u32 s1, s37, 0
 ; GFX7-HSA-NEXT:    s_add_u32 s2, s36, 0xe0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s1
 ; GFX7-HSA-NEXT:    s_addc_u32 s3, s37, 0
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s1
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s0
 ; GFX7-HSA-NEXT:    s_add_u32 s0, s36, 0xd0
 ; GFX7-HSA-NEXT:    s_addc_u32 s1, s37, 0
@@ -5090,23 +5136,23 @@ define amdgpu_kernel void @constant_zextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s1
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v10, s0
 ; GFX7-HSA-NEXT:    s_add_u32 s0, s36, 0xb0
+; GFX7-HSA-NEXT:    s_load_dwordx16 s[16:31], s[38:39], 0x10
 ; GFX7-HSA-NEXT:    s_addc_u32 s1, s37, 0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v13, s1
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s0
 ; GFX7-HSA-NEXT:    s_add_u32 s0, s36, 0xa0
-; GFX7-HSA-NEXT:    s_load_dwordx16 s[16:31], s[38:39], 0x10
 ; GFX7-HSA-NEXT:    s_addc_u32 s1, s37, 0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v15, s1
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v14, s0
 ; GFX7-HSA-NEXT:    s_add_u32 s0, s36, 0x90
 ; GFX7-HSA-NEXT:    s_addc_u32 s1, s37, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s3
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, v1
 ; GFX7-HSA-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s30
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s31
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v17, s1
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s3
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s2
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v17, s1
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v16, s0
 ; GFX7-HSA-NEXT:    s_load_dwordx16 s[0:15], s[38:39], 0x0
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
@@ -5145,45 +5191,46 @@ define amdgpu_kernel void @constant_zextload_v32i32_to_v32i64(ptr addrspace(1) %
 ; GFX7-HSA-NEXT:    s_addc_u32 s21, s37, 0
 ; GFX7-HSA-NEXT:    s_add_u32 s22, s36, 0x50
 ; GFX7-HSA-NEXT:    s_addc_u32 s23, s37, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s16
 ; GFX7-HSA-NEXT:    s_add_u32 s24, s36, 64
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s17
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s18
 ; GFX7-HSA-NEXT:    s_addc_u32 s25, s37, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s19
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v8, s20
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s16
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s17
 ; GFX7-HSA-NEXT:    s_add_u32 s26, s36, 48
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v6, s18
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v7, s19
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
+; GFX7-HSA-NEXT:    s_addc_u32 s27, s37, 0
 ; GFX7-HSA-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s14
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s15
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v8, s20
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v9, s21
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v10, s22
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[6:7], v[0:3]
-; GFX7-HSA-NEXT:    s_addc_u32 s27, s37, 0
+; GFX7-HSA-NEXT:    s_add_u32 s28, s36, 32
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s12
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s13
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v10, s22
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v11, s23
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s24
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[8:9], v[0:3]
-; GFX7-HSA-NEXT:    s_add_u32 s28, s36, 32
+; GFX7-HSA-NEXT:    s_addc_u32 s29, s37, 0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s10
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s11
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v12, s24
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v13, s25
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v14, s26
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[10:11], v[0:3]
-; GFX7-HSA-NEXT:    s_addc_u32 s29, s37, 0
+; GFX7-HSA-NEXT:    s_add_u32 s30, s36, 16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s8
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s9
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v14, s26
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v15, s27
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s28
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[12:13], v[0:3]
-; GFX7-HSA-NEXT:    s_add_u32 s30, s36, 16
+; GFX7-HSA-NEXT:    s_addc_u32 s31, s37, 0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s7
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s28
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s29
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[14:15], v[0:3]
-; GFX7-HSA-NEXT:    s_addc_u32 s31, s37, 0
+; GFX7-HSA-NEXT:    s_nop 0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s5
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
@@ -5593,6 +5640,8 @@ define amdgpu_kernel void @constant_zextload_v32i32_to_v32i64(ptr addrspace(1) %
 ;
 ; GFX1250-LABEL: constant_zextload_v32i32_to_v32i64:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[36:39], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
@@ -5748,18 +5797,19 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v16, s18
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v17, s19
 ; GFX7-HSA-NEXT:    s_add_u32 s18, s16, 0x60
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[16:17], v[0:3]
 ; GFX7-HSA-NEXT:    s_addc_u32 s19, s17, 0
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[16:17], v[0:3]
+; GFX7-HSA-NEXT:    s_nop 0
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s18
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s19
 ; GFX7-HSA-NEXT:    s_add_u32 s18, s16, 0x50
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[0:1], v[4:7]
 ; GFX7-HSA-NEXT:    s_addc_u32 s19, s17, 0
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[0:1], v[4:7]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s18
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s19
 ; GFX7-HSA-NEXT:    s_add_u32 s18, s16, 64
-; GFX7-HSA-NEXT:    flat_store_dwordx4 v[0:1], v[8:11]
 ; GFX7-HSA-NEXT:    s_addc_u32 s19, s17, 0
+; GFX7-HSA-NEXT:    flat_store_dwordx4 v[0:1], v[8:11]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v0, s18
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s19
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[0:1], v[12:15]
@@ -5768,9 +5818,9 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX7-HSA-NEXT:    s_add_u32 s12, s16, 48
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s13
 ; GFX7-HSA-NEXT:    s_addc_u32 s13, s17, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s12
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s14
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s15
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s12
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s13
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    s_nop 0
@@ -5778,9 +5828,9 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX7-HSA-NEXT:    s_add_u32 s8, s16, 32
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s9
 ; GFX7-HSA-NEXT:    s_addc_u32 s9, s17, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s11
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s9
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    s_nop 0
@@ -5788,9 +5838,9 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX7-HSA-NEXT:    s_add_u32 s4, s16, 16
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX7-HSA-NEXT:    s_addc_u32 s5, s17, 0
-; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX7-HSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX7-HSA-NEXT:    v_mov_b32_e32 v4, s16
@@ -5823,9 +5873,9 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s24, s36, 0x60
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s25
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s25, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s24
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s26
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s27
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s24
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s25
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -5833,9 +5883,9 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s20, s36, 0x50
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s21
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s21, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s20
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s22
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s23
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s20
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s21
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -5843,9 +5893,9 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s16, s36, 64
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s17
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s17, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s18
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s19
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s17
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_waitcnt lgkmcnt(0)
@@ -5853,9 +5903,9 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s12, s36, 48
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s13
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s13, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s12
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s14
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s15
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s12
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s13
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -5863,9 +5913,9 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s8, s36, 32
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s9
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s9, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s11
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s8
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s9
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    s_nop 0
@@ -5873,9 +5923,9 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NOHSA-NEXT:    s_add_u32 s4, s36, 16
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX8-NOHSA-NEXT:    s_addc_u32 s5, s37, 0
-; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v3, s7
+; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s4
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v5, s5
 ; GFX8-NOHSA-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NOHSA-NEXT:    v_mov_b32_e32 v4, s36
@@ -6022,6 +6072,8 @@ define amdgpu_kernel void @constant_load_v32i32(ptr addrspace(1) %out, ptr addrs
 ;
 ; GFX1250-LABEL: constant_load_v32i32:
 ; GFX1250:       ; %bb.0:
+; GFX1250-NEXT:    global_wb
+; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    s_load_b128 s[36:39], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0

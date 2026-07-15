@@ -1,52 +1,58 @@
 // COM: Test the true trampoline fallback path for tensor_load_to_lds
-// COM: when no NOP sled is available. Two variants:
-// COM:   dead SGPR — s_pack_hh + tensor_load appended via growWithTrampolines
-// COM:   live SGPR — save/pack/tensor/restore (4-instruction sequence)
-// COM:              appended via growWithTrampolines, the largest replacement
+// COM: when no NOP sled is available. Both live and dead descriptor variants
+// COM: append the persistent s_pack_hh + tensor_load normalization via
+// COM: growWithTrampolines.
 // COM: Both force emitReplacementCode to use emitToTrampoline.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out.elf \
+// RUN:   --strict-mode --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: Kernel 1 (dead SGPR, no sled): original tensor_load replaced by
-// COM: s_branch forward. Trampoline body appended in alignment padding.
+// COM: Kernel 1 (dead SGPR, no in-function sled): original tensor_load
+// COM: replaced by s_branch forward. Inter-function alignment padding is not a
+// COM: borrowable sled, so trampoline bodies are appended after the original
+// COM: functions.
 // DISASM-LABEL: <test_tensor_trampoline>:
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_nop 0
+// DISASM-NEXT: s_nop 0
+// DISASM-NEXT: s_endpgm
 // DISASM-NOT: tensor_load_to_lds
-// DISASM: s_branch
-// DISASM: s_endpgm
 
-// COM: Dead-SGPR trampoline body: s_pack_hh + tensor_load + branch-back.
+// COM: Kernel 2 (live SGPR, no in-function sled): the original tensor_load is
+// COM: replaced by s_branch forward to its appended trampoline body.
+// DISASM-LABEL: <test_tensor_trampoline_live>:
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_nop 0
+// DISASM-NEXT: s_nop 0
+// DISASM-NEXT: s_mov_b32
+// DISASM-NEXT: s_endpgm
+// DISASM-NOT: tensor_load_to_lds
+
+// COM: Dead-SGPR trampoline body: s_pack_hh + tensor_load + branch-back,
+// COM: appended in the trampoline pool section (a fresh vaddr above .text), so
+// COM: objdump emits a section header between .text and the pool -- use DISASM
+// COM: (not DISASM-NEXT) to cross that boundary.
 // DISASM: s_pack_hh_b32_b16
-// DISASM: tensor_load_to_lds
-// DISASM: s_branch
-
-// COM: Live-SGPR trampoline body (for kernel 2): also placed in the
-// COM: padding region. save + pack + tensor + restore + branch-back.
-// DISASM: s_mov_b32 [[SCRATCH:s[0-9]+]], s4
-// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds
-// DISASM-NEXT: s_mov_b32 s4, [[SCRATCH]]
 // DISASM-NEXT: s_branch
 
-// COM: Kernel 2 (live SGPR, no sled): the original tensor_load is
-// COM: replaced by s_branch backward to the trampoline body above.
-// DISASM-LABEL: <test_tensor_trampoline_live>:
-// DISASM-NOT: tensor_load_to_lds
-// DISASM: s_branch
-// DISASM: s_mov_b32
-// DISASM: s_endpgm
+// COM: Live-SGPR trampoline body (for kernel 2): the same persistent mask and
+// COM: tensor sequence followed by branch-back.
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds
+// DISASM-NEXT: s_branch
 
 // COM: Idempotency
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --check-idempotent \
+// RUN:   --strict-mode --check-idempotent \
 // RUN:   | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES
 
@@ -61,7 +67,7 @@ test_tensor_trampoline:
 .Ltest_tensor_trampoline_end:
 .size test_tensor_trampoline, .Ltest_tensor_trampoline_end-test_tensor_trampoline
 
-// ---- Kernel 2: live SGPR, no NOP sled (trampoline + save/restore) ----------
+// ---- Kernel 2: live SGPR, no NOP sled (persistent mask trampoline) --------
 
 .globl test_tensor_trampoline_live
 .p2align 8

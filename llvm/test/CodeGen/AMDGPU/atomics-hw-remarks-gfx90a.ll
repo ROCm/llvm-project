@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx90a --pass-remarks=si-lower \
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.0a --pass-remarks=si-lower \
 ; RUN:      %s -o - 2>&1 | FileCheck %s --check-prefix=GFX90A-HW
 
 ; GFX90A-HW: Hardware instruction generated for atomic fadd operation at memory scope agent due to an unsafe request.

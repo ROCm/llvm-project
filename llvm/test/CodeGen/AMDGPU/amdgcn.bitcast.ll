@@ -104,10 +104,10 @@ define amdgpu_kernel void @i8ptr_v16i8ptr(ptr addrspace(1) %out, ptr addrspace(1
 ; GFX11-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    s_load_b128 s[4:7], s[2:3], 0x0
-; GFX11-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX11-NEXT:    v_dual_mov_b32 v4, 0 :: v_dual_mov_b32 v1, s5
 ; GFX11-NEXT:    v_dual_mov_b32 v0, s4 :: v_dual_mov_b32 v3, s7
-; GFX11-NEXT:    v_dual_mov_b32 v1, s5 :: v_dual_mov_b32 v2, s6
+; GFX11-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX11-NEXT:    global_store_b128 v4, v[0:3], s[0:1]
 ; GFX11-NEXT:    s_endpgm
 entry:
@@ -656,9 +656,9 @@ define amdgpu_kernel void @bitcast_v2i64_to_v2f64(i32 %cond, ptr addrspace(1) %o
 ; VI-NEXT:    s_mov_b64 s[10:11], s[6:7]
 ; VI-NEXT:    s_mov_b64 s[8:9], s[4:5]
 ; VI-NEXT:  .LBB10_2: ; %end
-; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v4, s0
 ; VI-NEXT:    v_mov_b32_e32 v5, s1
+; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s9
 ; VI-NEXT:    v_mov_b32_e32 v2, s10
 ; VI-NEXT:    v_mov_b32_e32 v3, s11
@@ -683,8 +683,8 @@ define amdgpu_kernel void @bitcast_v2i64_to_v2f64(i32 %cond, ptr addrspace(1) %o
 ; GFX9-NEXT:    s_mov_b64 s[10:11], s[6:7]
 ; GFX9-NEXT:    s_mov_b64 s[8:9], s[4:5]
 ; GFX9-NEXT:  .LBB10_2: ; %end
-; GFX9-NEXT:    v_mov_b32_e32 v0, s8
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
+; GFX9-NEXT:    v_mov_b32_e32 v0, s8
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s9
 ; GFX9-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s11
@@ -712,8 +712,8 @@ define amdgpu_kernel void @bitcast_v2i64_to_v2f64(i32 %cond, ptr addrspace(1) %o
 ; GFX11-NEXT:    s_mov_b64 s[8:9], s[4:5]
 ; GFX11-NEXT:  .LBB10_2: ; %end
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v0, s8 :: v_dual_mov_b32 v3, s11
 ; GFX11-NEXT:    v_dual_mov_b32 v4, 0 :: v_dual_mov_b32 v1, s9
+; GFX11-NEXT:    v_dual_mov_b32 v0, s8 :: v_dual_mov_b32 v3, s11
 ; GFX11-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX11-NEXT:    global_store_b128 v4, v[0:3], s[0:1]
 ; GFX11-NEXT:    s_endpgm
@@ -778,9 +778,9 @@ define amdgpu_kernel void @bitcast_v2f64_to_v2i64(i32 %cond, ptr addrspace(1) %o
 ; VI-NEXT:    s_mov_b64 s[10:11], s[6:7]
 ; VI-NEXT:    s_mov_b64 s[8:9], s[4:5]
 ; VI-NEXT:  .LBB11_2: ; %end
-; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v4, s0
 ; VI-NEXT:    v_mov_b32_e32 v5, s1
+; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s9
 ; VI-NEXT:    v_mov_b32_e32 v2, s10
 ; VI-NEXT:    v_mov_b32_e32 v3, s11
@@ -805,8 +805,8 @@ define amdgpu_kernel void @bitcast_v2f64_to_v2i64(i32 %cond, ptr addrspace(1) %o
 ; GFX9-NEXT:    s_mov_b64 s[10:11], s[6:7]
 ; GFX9-NEXT:    s_mov_b64 s[8:9], s[4:5]
 ; GFX9-NEXT:  .LBB11_2: ; %end
-; GFX9-NEXT:    v_mov_b32_e32 v0, s8
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
+; GFX9-NEXT:    v_mov_b32_e32 v0, s8
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s9
 ; GFX9-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s11
@@ -834,8 +834,8 @@ define amdgpu_kernel void @bitcast_v2f64_to_v2i64(i32 %cond, ptr addrspace(1) %o
 ; GFX11-NEXT:    s_mov_b64 s[8:9], s[4:5]
 ; GFX11-NEXT:  .LBB11_2: ; %end
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v0, s8 :: v_dual_mov_b32 v3, s11
 ; GFX11-NEXT:    v_dual_mov_b32 v4, 0 :: v_dual_mov_b32 v1, s9
+; GFX11-NEXT:    v_dual_mov_b32 v0, s8 :: v_dual_mov_b32 v3, s11
 ; GFX11-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX11-NEXT:    global_store_b128 v4, v[0:3], s[0:1]
 ; GFX11-NEXT:    s_endpgm
@@ -3984,9 +3984,9 @@ define amdgpu_kernel void @bitcast_v20f16_to_v5f64(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -4114,9 +4114,9 @@ define amdgpu_kernel void @bitcast_v10f32_to_v5f64(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -4244,9 +4244,9 @@ define amdgpu_kernel void @bitcast_v10i32_to_v5f64(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -4374,9 +4374,9 @@ define amdgpu_kernel void @bitcast_v10f32_to_v5i64(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -4504,9 +4504,9 @@ define amdgpu_kernel void @bitcast_v10i32_to_v5i64(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -4634,9 +4634,9 @@ define amdgpu_kernel void @bitcast_v40i8_to_v5f64(i32 %cond, ptr addrspace(1) %o
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -4764,9 +4764,9 @@ define amdgpu_kernel void @bitcast_v40i8_to_v5i64(i32 %cond, ptr addrspace(1) %o
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -4890,9 +4890,9 @@ define amdgpu_kernel void @bitcast_v5f64_to_v10f32(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -5012,9 +5012,9 @@ define amdgpu_kernel void @bitcast_v5f64_to_v10i32(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -5134,9 +5134,9 @@ define amdgpu_kernel void @bitcast_v5i64_to_v10f32(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -5256,9 +5256,9 @@ define amdgpu_kernel void @bitcast_v5i64_to_v10i32(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -6034,9 +6034,9 @@ define amdgpu_kernel void @bitcast_v7i64_to_v14i32(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    v_mov_b32_e32 v5, s3
 ; VI-NEXT:    v_mov_b32_e32 v4, s2
 ; VI-NEXT:    s_add_u32 s2, s0, 48
+; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    v_mov_b32_e32 v5, s1
-; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
 ; VI-NEXT:    v_mov_b32_e32 v2, s8
 ; VI-NEXT:    v_mov_b32_e32 v3, s8
@@ -6044,16 +6044,16 @@ define amdgpu_kernel void @bitcast_v7i64_to_v14i32(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_add_u32 s0, s0, 32
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v2, s2
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v2, s2
 ; VI-NEXT:    v_mov_b32_e32 v3, s3
-; VI-NEXT:    v_mov_b32_e32 v5, s1
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
 ; VI-NEXT:    v_mov_b32_e32 v2, s8
 ; VI-NEXT:    v_mov_b32_e32 v3, s8
+; VI-NEXT:    v_mov_b32_e32 v5, s1
 ; VI-NEXT:    v_mov_b32_e32 v4, s0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_endpgm
@@ -6185,9 +6185,9 @@ define amdgpu_kernel void @bitcast_v7f64_to_v14i32(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    v_mov_b32_e32 v5, s3
 ; VI-NEXT:    v_mov_b32_e32 v4, s2
 ; VI-NEXT:    s_add_u32 s2, s0, 48
+; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    v_mov_b32_e32 v5, s1
-; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
 ; VI-NEXT:    v_mov_b32_e32 v2, s8
 ; VI-NEXT:    v_mov_b32_e32 v3, s8
@@ -6195,16 +6195,16 @@ define amdgpu_kernel void @bitcast_v7f64_to_v14i32(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_add_u32 s0, s0, 32
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v2, s2
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
+; VI-NEXT:    v_mov_b32_e32 v2, s2
 ; VI-NEXT:    v_mov_b32_e32 v3, s3
-; VI-NEXT:    v_mov_b32_e32 v5, s1
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    v_mov_b32_e32 v0, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s8
 ; VI-NEXT:    v_mov_b32_e32 v2, s8
 ; VI-NEXT:    v_mov_b32_e32 v3, s8
+; VI-NEXT:    v_mov_b32_e32 v5, s1
 ; VI-NEXT:    v_mov_b32_e32 v4, s0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_endpgm
@@ -6370,9 +6370,9 @@ define amdgpu_kernel void @bitcast_v9i64_to_v18i32(i32 %cond, ptr addrspace(1) %
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s36
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -6722,15 +6722,15 @@ define amdgpu_kernel void @bitcast_v11i64_to_v20i32(i32 %cond, ptr addrspace(1) 
 ; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    v_mov_b32_e32 v5, s3
+; VI-NEXT:    v_mov_b32_e32 v4, s2
+; VI-NEXT:    s_add_u32 s2, s0, 0x50
 ; VI-NEXT:    v_mov_b32_e32 v0, s36
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
 ; VI-NEXT:    v_mov_b32_e32 v2, s36
 ; VI-NEXT:    v_mov_b32_e32 v3, s36
-; VI-NEXT:    v_mov_b32_e32 v4, s2
-; VI-NEXT:    s_add_u32 s2, s0, 0x50
+; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    v_mov_b32_e32 v5, s1
-; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
 ; VI-NEXT:    v_mov_b32_e32 v2, s36
 ; VI-NEXT:    v_mov_b32_e32 v3, s36
@@ -6738,16 +6738,16 @@ define amdgpu_kernel void @bitcast_v11i64_to_v20i32(i32 %cond, ptr addrspace(1) 
 ; VI-NEXT:    s_add_u32 s0, s0, 64
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v2, s2
 ; VI-NEXT:    v_mov_b32_e32 v0, s36
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
+; VI-NEXT:    v_mov_b32_e32 v2, s2
 ; VI-NEXT:    v_mov_b32_e32 v3, s3
-; VI-NEXT:    v_mov_b32_e32 v5, s1
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    v_mov_b32_e32 v0, s36
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
 ; VI-NEXT:    v_mov_b32_e32 v2, s36
 ; VI-NEXT:    v_mov_b32_e32 v3, s36
+; VI-NEXT:    v_mov_b32_e32 v5, s1
 ; VI-NEXT:    v_mov_b32_e32 v4, s0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_endpgm
@@ -7166,9 +7166,9 @@ define amdgpu_kernel void @bitcast_v13i64_to_v24i32(i32 %cond, ptr addrspace(1) 
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_nop 0
-; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v0, s36
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
+; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_mov_b32_e32 v2, s0
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
@@ -7610,15 +7610,15 @@ define amdgpu_kernel void @bitcast_v15i64_to_v26i32(i32 %cond, ptr addrspace(1) 
 ; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    v_mov_b32_e32 v5, s3
+; VI-NEXT:    v_mov_b32_e32 v4, s2
+; VI-NEXT:    s_add_u32 s2, s0, 0x70
 ; VI-NEXT:    v_mov_b32_e32 v0, s36
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
 ; VI-NEXT:    v_mov_b32_e32 v2, s36
 ; VI-NEXT:    v_mov_b32_e32 v3, s36
-; VI-NEXT:    v_mov_b32_e32 v4, s2
-; VI-NEXT:    s_add_u32 s2, s0, 0x70
+; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    v_mov_b32_e32 v5, s1
-; VI-NEXT:    s_addc_u32 s3, s1, 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
 ; VI-NEXT:    v_mov_b32_e32 v2, s36
 ; VI-NEXT:    v_mov_b32_e32 v3, s36
@@ -7626,16 +7626,16 @@ define amdgpu_kernel void @bitcast_v15i64_to_v26i32(i32 %cond, ptr addrspace(1) 
 ; VI-NEXT:    s_add_u32 s0, s0, 0x60
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v2, s2
 ; VI-NEXT:    v_mov_b32_e32 v0, s36
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
+; VI-NEXT:    v_mov_b32_e32 v2, s2
 ; VI-NEXT:    v_mov_b32_e32 v3, s3
-; VI-NEXT:    v_mov_b32_e32 v5, s1
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    v_mov_b32_e32 v0, s36
 ; VI-NEXT:    v_mov_b32_e32 v1, s36
 ; VI-NEXT:    v_mov_b32_e32 v2, s36
 ; VI-NEXT:    v_mov_b32_e32 v3, s36
+; VI-NEXT:    v_mov_b32_e32 v5, s1
 ; VI-NEXT:    v_mov_b32_e32 v4, s0
 ; VI-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; VI-NEXT:    s_endpgm
@@ -10137,9 +10137,8 @@ define void @v_bitcast_v6bf16_to_v6i16(i32 %cond, ptr addrspace(1) %out, <6 x bf
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB82_2
 ; GFX11-NEXT:  .LBB82_1: ; %if
-; GFX11-NEXT:    v_mov_b32_e32 v9, v6
-; GFX11-NEXT:    v_dual_mov_b32 v8, v5 :: v_dual_mov_b32 v7, v4
-; GFX11-NEXT:    v_mov_b32_e32 v6, v3
+; GFX11-NEXT:    v_dual_mov_b32 v9, v6 :: v_dual_mov_b32 v8, v5
+; GFX11-NEXT:    v_dual_mov_b32 v7, v4 :: v_dual_mov_b32 v6, v3
 ; GFX11-NEXT:  .LBB82_2: ; %end
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX11-NEXT:    global_store_b96 v[1:2], v[6:8], off
@@ -10268,9 +10267,8 @@ define void @v_bitcast_v6bf16_to_v6f16(i32 %cond, ptr addrspace(1) %out, <6 x bf
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB83_2
 ; GFX11-NEXT:  .LBB83_1: ; %if
-; GFX11-NEXT:    v_mov_b32_e32 v9, v6
-; GFX11-NEXT:    v_dual_mov_b32 v8, v5 :: v_dual_mov_b32 v7, v4
-; GFX11-NEXT:    v_mov_b32_e32 v6, v3
+; GFX11-NEXT:    v_dual_mov_b32 v9, v6 :: v_dual_mov_b32 v8, v5
+; GFX11-NEXT:    v_dual_mov_b32 v7, v4 :: v_dual_mov_b32 v6, v3
 ; GFX11-NEXT:  .LBB83_2: ; %end
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX11-NEXT:    global_store_b96 v[1:2], v[6:8], off
@@ -10507,9 +10505,8 @@ define void @v_bitcast_v6f16_to_v6bf16(i32 %cond, ptr addrspace(1) %out, <6 x ha
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB85_2
 ; GFX11-NEXT:  .LBB85_1: ; %if
-; GFX11-NEXT:    v_mov_b32_e32 v9, v6
-; GFX11-NEXT:    v_dual_mov_b32 v8, v5 :: v_dual_mov_b32 v7, v4
-; GFX11-NEXT:    v_mov_b32_e32 v6, v3
+; GFX11-NEXT:    v_dual_mov_b32 v9, v6 :: v_dual_mov_b32 v8, v5
+; GFX11-NEXT:    v_dual_mov_b32 v7, v4 :: v_dual_mov_b32 v6, v3
 ; GFX11-NEXT:  .LBB85_2: ; %end
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX11-NEXT:    global_store_b96 v[1:2], v[6:8], off
@@ -10631,9 +10628,8 @@ define void @v_bitcast_v6i16_to_v6bf16(i32 %cond, ptr addrspace(1) %out, <6 x i1
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB86_2
 ; GFX11-NEXT:  .LBB86_1: ; %if
-; GFX11-NEXT:    v_mov_b32_e32 v9, v6
-; GFX11-NEXT:    v_dual_mov_b32 v8, v5 :: v_dual_mov_b32 v7, v4
-; GFX11-NEXT:    v_mov_b32_e32 v6, v3
+; GFX11-NEXT:    v_dual_mov_b32 v9, v6 :: v_dual_mov_b32 v8, v5
+; GFX11-NEXT:    v_dual_mov_b32 v7, v4 :: v_dual_mov_b32 v6, v3
 ; GFX11-NEXT:  .LBB86_2: ; %end
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX11-NEXT:    global_store_b96 v[1:2], v[6:8], off
@@ -23169,7 +23165,6 @@ define void @v_bitcast_v32f32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; VI-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; VI-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; VI-NEXT:    s_mov_b32 s4, 0
-; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    s_mov_b32 s5, s4
 ; VI-NEXT:    s_mov_b32 s6, s4
 ; VI-NEXT:    s_mov_b32 s7, s4
@@ -23184,6 +23179,7 @@ define void @v_bitcast_v32f32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; VI-NEXT:    s_mov_b32 s16, s4
 ; VI-NEXT:    s_mov_b32 s17, s4
 ; VI-NEXT:    s_mov_b32 s18, s4
+; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    v_mov_b32_e32 v50, s19
 ; VI-NEXT:    v_mov_b32_e32 v49, s18
 ; VI-NEXT:    v_mov_b32_e32 v48, s17
@@ -23325,7 +23321,6 @@ define void @v_bitcast_v32f32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX9-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; GFX9-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; GFX9-NEXT:    s_mov_b32 s4, 0
-; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    s_mov_b32 s5, s4
 ; GFX9-NEXT:    s_mov_b32 s6, s4
 ; GFX9-NEXT:    s_mov_b32 s7, s4
@@ -23340,6 +23335,7 @@ define void @v_bitcast_v32f32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX9-NEXT:    s_mov_b32 s16, s4
 ; GFX9-NEXT:    s_mov_b32 s17, s4
 ; GFX9-NEXT:    s_mov_b32 s18, s4
+; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    v_mov_b32_e32 v50, s19
 ; GFX9-NEXT:    v_mov_b32_e32 v49, s18
 ; GFX9-NEXT:    v_mov_b32_e32 v48, s17
@@ -23492,7 +23488,6 @@ define void @v_bitcast_v32f32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX11-NEXT:    scratch_load_b32 v31, off, s32
 ; GFX11-NEXT:    s_mov_b32 s0, 0
 ; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 s2, s0
 ; GFX11-NEXT:    s_mov_b32 s3, s0
@@ -23507,19 +23502,21 @@ define void @v_bitcast_v32f32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX11-NEXT:    s_mov_b32 s12, s0
 ; GFX11-NEXT:    s_mov_b32 s13, s0
 ; GFX11-NEXT:    s_mov_b32 s14, s0
+; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v66, s15 :: v_dual_mov_b32 v65, s14
-; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
+; GFX11-NEXT:    v_dual_mov_b32 v65, s14 :: v_dual_mov_b32 v66, s15
 ; GFX11-NEXT:    v_dual_mov_b32 v64, s13 :: v_dual_mov_b32 v63, s12
 ; GFX11-NEXT:    v_dual_mov_b32 v62, s11 :: v_dual_mov_b32 v61, s10
 ; GFX11-NEXT:    v_dual_mov_b32 v60, s9 :: v_dual_mov_b32 v59, s8
 ; GFX11-NEXT:    v_dual_mov_b32 v58, s7 :: v_dual_mov_b32 v57, s6
 ; GFX11-NEXT:    v_dual_mov_b32 v56, s5 :: v_dual_mov_b32 v55, s4
 ; GFX11-NEXT:    v_dual_mov_b32 v54, s3 :: v_dual_mov_b32 v53, s2
-; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
+; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX11-NEXT:    v_dual_mov_b32 v39, v55 :: v_dual_mov_b32 v40, v56
 ; GFX11-NEXT:    v_dual_mov_b32 v37, v53 :: v_dual_mov_b32 v38, v54
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
+; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
 ; GFX11-NEXT:    v_dual_mov_b32 v41, v57 :: v_dual_mov_b32 v42, v58
 ; GFX11-NEXT:    v_dual_mov_b32 v43, v59 :: v_dual_mov_b32 v44, v60
 ; GFX11-NEXT:    v_dual_mov_b32 v45, v61 :: v_dual_mov_b32 v46, v62
@@ -23530,8 +23527,6 @@ define void @v_bitcast_v32f32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX11-NEXT:    s_cbranch_execz .LBB135_2
 ; GFX11-NEXT:  .LBB135_1: ; %if
 ; GFX11-NEXT:    v_dual_mov_b32 v66, v18 :: v_dual_mov_b32 v65, v17
-; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v64, v16 :: v_dual_mov_b32 v63, v15
 ; GFX11-NEXT:    v_dual_mov_b32 v62, v14 :: v_dual_mov_b32 v61, v13
 ; GFX11-NEXT:    v_dual_mov_b32 v60, v12 :: v_dual_mov_b32 v59, v11
@@ -23539,6 +23534,8 @@ define void @v_bitcast_v32f32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX11-NEXT:    v_dual_mov_b32 v56, v8 :: v_dual_mov_b32 v55, v7
 ; GFX11-NEXT:    v_dual_mov_b32 v54, v6 :: v_dual_mov_b32 v53, v5
 ; GFX11-NEXT:    v_dual_mov_b32 v52, v4 :: v_dual_mov_b32 v51, v3
+; GFX11-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v48, v32 :: v_dual_mov_b32 v47, v31
 ; GFX11-NEXT:    v_dual_mov_b32 v46, v30 :: v_dual_mov_b32 v45, v29
 ; GFX11-NEXT:    v_dual_mov_b32 v44, v28 :: v_dual_mov_b32 v43, v27
@@ -24144,7 +24141,6 @@ define void @v_bitcast_v32i32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; VI-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; VI-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; VI-NEXT:    s_mov_b32 s4, 0
-; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    s_mov_b32 s5, s4
 ; VI-NEXT:    s_mov_b32 s6, s4
 ; VI-NEXT:    s_mov_b32 s7, s4
@@ -24159,6 +24155,7 @@ define void @v_bitcast_v32i32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; VI-NEXT:    s_mov_b32 s16, s4
 ; VI-NEXT:    s_mov_b32 s17, s4
 ; VI-NEXT:    s_mov_b32 s18, s4
+; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    v_mov_b32_e32 v50, s19
 ; VI-NEXT:    v_mov_b32_e32 v49, s18
 ; VI-NEXT:    v_mov_b32_e32 v48, s17
@@ -24300,7 +24297,6 @@ define void @v_bitcast_v32i32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX9-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; GFX9-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; GFX9-NEXT:    s_mov_b32 s4, 0
-; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    s_mov_b32 s5, s4
 ; GFX9-NEXT:    s_mov_b32 s6, s4
 ; GFX9-NEXT:    s_mov_b32 s7, s4
@@ -24315,6 +24311,7 @@ define void @v_bitcast_v32i32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX9-NEXT:    s_mov_b32 s16, s4
 ; GFX9-NEXT:    s_mov_b32 s17, s4
 ; GFX9-NEXT:    s_mov_b32 s18, s4
+; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    v_mov_b32_e32 v50, s19
 ; GFX9-NEXT:    v_mov_b32_e32 v49, s18
 ; GFX9-NEXT:    v_mov_b32_e32 v48, s17
@@ -24467,7 +24464,6 @@ define void @v_bitcast_v32i32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX11-NEXT:    scratch_load_b32 v31, off, s32
 ; GFX11-NEXT:    s_mov_b32 s0, 0
 ; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 s2, s0
 ; GFX11-NEXT:    s_mov_b32 s3, s0
@@ -24482,19 +24478,21 @@ define void @v_bitcast_v32i32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX11-NEXT:    s_mov_b32 s12, s0
 ; GFX11-NEXT:    s_mov_b32 s13, s0
 ; GFX11-NEXT:    s_mov_b32 s14, s0
+; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v66, s15 :: v_dual_mov_b32 v65, s14
-; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
+; GFX11-NEXT:    v_dual_mov_b32 v65, s14 :: v_dual_mov_b32 v66, s15
 ; GFX11-NEXT:    v_dual_mov_b32 v64, s13 :: v_dual_mov_b32 v63, s12
 ; GFX11-NEXT:    v_dual_mov_b32 v62, s11 :: v_dual_mov_b32 v61, s10
 ; GFX11-NEXT:    v_dual_mov_b32 v60, s9 :: v_dual_mov_b32 v59, s8
 ; GFX11-NEXT:    v_dual_mov_b32 v58, s7 :: v_dual_mov_b32 v57, s6
 ; GFX11-NEXT:    v_dual_mov_b32 v56, s5 :: v_dual_mov_b32 v55, s4
 ; GFX11-NEXT:    v_dual_mov_b32 v54, s3 :: v_dual_mov_b32 v53, s2
-; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
+; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX11-NEXT:    v_dual_mov_b32 v39, v55 :: v_dual_mov_b32 v40, v56
 ; GFX11-NEXT:    v_dual_mov_b32 v37, v53 :: v_dual_mov_b32 v38, v54
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
+; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
 ; GFX11-NEXT:    v_dual_mov_b32 v41, v57 :: v_dual_mov_b32 v42, v58
 ; GFX11-NEXT:    v_dual_mov_b32 v43, v59 :: v_dual_mov_b32 v44, v60
 ; GFX11-NEXT:    v_dual_mov_b32 v45, v61 :: v_dual_mov_b32 v46, v62
@@ -24505,8 +24503,6 @@ define void @v_bitcast_v32i32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX11-NEXT:    s_cbranch_execz .LBB136_2
 ; GFX11-NEXT:  .LBB136_1: ; %if
 ; GFX11-NEXT:    v_dual_mov_b32 v66, v18 :: v_dual_mov_b32 v65, v17
-; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v64, v16 :: v_dual_mov_b32 v63, v15
 ; GFX11-NEXT:    v_dual_mov_b32 v62, v14 :: v_dual_mov_b32 v61, v13
 ; GFX11-NEXT:    v_dual_mov_b32 v60, v12 :: v_dual_mov_b32 v59, v11
@@ -24514,6 +24510,8 @@ define void @v_bitcast_v32i32_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <32 x
 ; GFX11-NEXT:    v_dual_mov_b32 v56, v8 :: v_dual_mov_b32 v55, v7
 ; GFX11-NEXT:    v_dual_mov_b32 v54, v6 :: v_dual_mov_b32 v53, v5
 ; GFX11-NEXT:    v_dual_mov_b32 v52, v4 :: v_dual_mov_b32 v51, v3
+; GFX11-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v48, v32 :: v_dual_mov_b32 v47, v31
 ; GFX11-NEXT:    v_dual_mov_b32 v46, v30 :: v_dual_mov_b32 v45, v29
 ; GFX11-NEXT:    v_dual_mov_b32 v44, v28 :: v_dual_mov_b32 v43, v27
@@ -25188,7 +25186,6 @@ define void @v_bitcast_v64i16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; VI-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; VI-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; VI-NEXT:    s_mov_b32 s4, 0
-; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    s_mov_b32 s5, s4
 ; VI-NEXT:    s_mov_b32 s6, s4
 ; VI-NEXT:    s_mov_b32 s7, s4
@@ -25203,6 +25200,7 @@ define void @v_bitcast_v64i16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; VI-NEXT:    s_mov_b32 s16, s4
 ; VI-NEXT:    s_mov_b32 s17, s4
 ; VI-NEXT:    s_mov_b32 s18, s4
+; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    v_mov_b32_e32 v50, s19
 ; VI-NEXT:    v_mov_b32_e32 v49, s18
 ; VI-NEXT:    v_mov_b32_e32 v48, s17
@@ -25344,7 +25342,6 @@ define void @v_bitcast_v64i16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX9-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; GFX9-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; GFX9-NEXT:    s_mov_b32 s4, 0
-; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    s_mov_b32 s5, s4
 ; GFX9-NEXT:    s_mov_b32 s6, s4
 ; GFX9-NEXT:    s_mov_b32 s7, s4
@@ -25359,6 +25356,7 @@ define void @v_bitcast_v64i16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX9-NEXT:    s_mov_b32 s16, s4
 ; GFX9-NEXT:    s_mov_b32 s17, s4
 ; GFX9-NEXT:    s_mov_b32 s18, s4
+; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    v_mov_b32_e32 v50, s19
 ; GFX9-NEXT:    v_mov_b32_e32 v49, s18
 ; GFX9-NEXT:    v_mov_b32_e32 v48, s17
@@ -25511,7 +25509,6 @@ define void @v_bitcast_v64i16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    scratch_load_b32 v31, off, s32
 ; GFX11-NEXT:    s_mov_b32 s0, 0
 ; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 s2, s0
 ; GFX11-NEXT:    s_mov_b32 s3, s0
@@ -25526,19 +25523,21 @@ define void @v_bitcast_v64i16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    s_mov_b32 s12, s0
 ; GFX11-NEXT:    s_mov_b32 s13, s0
 ; GFX11-NEXT:    s_mov_b32 s14, s0
+; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v66, s15 :: v_dual_mov_b32 v65, s14
-; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
+; GFX11-NEXT:    v_dual_mov_b32 v65, s14 :: v_dual_mov_b32 v66, s15
 ; GFX11-NEXT:    v_dual_mov_b32 v64, s13 :: v_dual_mov_b32 v63, s12
 ; GFX11-NEXT:    v_dual_mov_b32 v62, s11 :: v_dual_mov_b32 v61, s10
 ; GFX11-NEXT:    v_dual_mov_b32 v60, s9 :: v_dual_mov_b32 v59, s8
 ; GFX11-NEXT:    v_dual_mov_b32 v58, s7 :: v_dual_mov_b32 v57, s6
 ; GFX11-NEXT:    v_dual_mov_b32 v56, s5 :: v_dual_mov_b32 v55, s4
 ; GFX11-NEXT:    v_dual_mov_b32 v54, s3 :: v_dual_mov_b32 v53, s2
-; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
+; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX11-NEXT:    v_dual_mov_b32 v39, v55 :: v_dual_mov_b32 v40, v56
 ; GFX11-NEXT:    v_dual_mov_b32 v37, v53 :: v_dual_mov_b32 v38, v54
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
+; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
 ; GFX11-NEXT:    v_dual_mov_b32 v41, v57 :: v_dual_mov_b32 v42, v58
 ; GFX11-NEXT:    v_dual_mov_b32 v43, v59 :: v_dual_mov_b32 v44, v60
 ; GFX11-NEXT:    v_dual_mov_b32 v45, v61 :: v_dual_mov_b32 v46, v62
@@ -25549,8 +25548,6 @@ define void @v_bitcast_v64i16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    s_cbranch_execz .LBB137_2
 ; GFX11-NEXT:  .LBB137_1: ; %if
 ; GFX11-NEXT:    v_dual_mov_b32 v66, v18 :: v_dual_mov_b32 v65, v17
-; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v64, v16 :: v_dual_mov_b32 v63, v15
 ; GFX11-NEXT:    v_dual_mov_b32 v62, v14 :: v_dual_mov_b32 v61, v13
 ; GFX11-NEXT:    v_dual_mov_b32 v60, v12 :: v_dual_mov_b32 v59, v11
@@ -25558,6 +25555,8 @@ define void @v_bitcast_v64i16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    v_dual_mov_b32 v56, v8 :: v_dual_mov_b32 v55, v7
 ; GFX11-NEXT:    v_dual_mov_b32 v54, v6 :: v_dual_mov_b32 v53, v5
 ; GFX11-NEXT:    v_dual_mov_b32 v52, v4 :: v_dual_mov_b32 v51, v3
+; GFX11-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v48, v32 :: v_dual_mov_b32 v47, v31
 ; GFX11-NEXT:    v_dual_mov_b32 v46, v30 :: v_dual_mov_b32 v45, v29
 ; GFX11-NEXT:    v_dual_mov_b32 v44, v28 :: v_dual_mov_b32 v43, v27
@@ -26232,7 +26231,6 @@ define void @v_bitcast_v64f16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; VI-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; VI-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; VI-NEXT:    s_mov_b32 s4, 0
-; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    s_mov_b32 s5, s4
 ; VI-NEXT:    s_mov_b32 s6, s4
 ; VI-NEXT:    s_mov_b32 s7, s4
@@ -26247,6 +26245,7 @@ define void @v_bitcast_v64f16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; VI-NEXT:    s_mov_b32 s16, s4
 ; VI-NEXT:    s_mov_b32 s17, s4
 ; VI-NEXT:    s_mov_b32 s18, s4
+; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    v_mov_b32_e32 v50, s19
 ; VI-NEXT:    v_mov_b32_e32 v49, s18
 ; VI-NEXT:    v_mov_b32_e32 v48, s17
@@ -26388,7 +26387,6 @@ define void @v_bitcast_v64f16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX9-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; GFX9-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; GFX9-NEXT:    s_mov_b32 s4, 0
-; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    s_mov_b32 s5, s4
 ; GFX9-NEXT:    s_mov_b32 s6, s4
 ; GFX9-NEXT:    s_mov_b32 s7, s4
@@ -26403,6 +26401,7 @@ define void @v_bitcast_v64f16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX9-NEXT:    s_mov_b32 s16, s4
 ; GFX9-NEXT:    s_mov_b32 s17, s4
 ; GFX9-NEXT:    s_mov_b32 s18, s4
+; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    v_mov_b32_e32 v50, s19
 ; GFX9-NEXT:    v_mov_b32_e32 v49, s18
 ; GFX9-NEXT:    v_mov_b32_e32 v48, s17
@@ -26555,7 +26554,6 @@ define void @v_bitcast_v64f16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    scratch_load_b32 v31, off, s32
 ; GFX11-NEXT:    s_mov_b32 s0, 0
 ; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 s2, s0
 ; GFX11-NEXT:    s_mov_b32 s3, s0
@@ -26570,19 +26568,21 @@ define void @v_bitcast_v64f16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    s_mov_b32 s12, s0
 ; GFX11-NEXT:    s_mov_b32 s13, s0
 ; GFX11-NEXT:    s_mov_b32 s14, s0
+; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v66, s15 :: v_dual_mov_b32 v65, s14
-; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
+; GFX11-NEXT:    v_dual_mov_b32 v65, s14 :: v_dual_mov_b32 v66, s15
 ; GFX11-NEXT:    v_dual_mov_b32 v64, s13 :: v_dual_mov_b32 v63, s12
 ; GFX11-NEXT:    v_dual_mov_b32 v62, s11 :: v_dual_mov_b32 v61, s10
 ; GFX11-NEXT:    v_dual_mov_b32 v60, s9 :: v_dual_mov_b32 v59, s8
 ; GFX11-NEXT:    v_dual_mov_b32 v58, s7 :: v_dual_mov_b32 v57, s6
 ; GFX11-NEXT:    v_dual_mov_b32 v56, s5 :: v_dual_mov_b32 v55, s4
 ; GFX11-NEXT:    v_dual_mov_b32 v54, s3 :: v_dual_mov_b32 v53, s2
-; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
+; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX11-NEXT:    v_dual_mov_b32 v39, v55 :: v_dual_mov_b32 v40, v56
 ; GFX11-NEXT:    v_dual_mov_b32 v37, v53 :: v_dual_mov_b32 v38, v54
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
+; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
 ; GFX11-NEXT:    v_dual_mov_b32 v41, v57 :: v_dual_mov_b32 v42, v58
 ; GFX11-NEXT:    v_dual_mov_b32 v43, v59 :: v_dual_mov_b32 v44, v60
 ; GFX11-NEXT:    v_dual_mov_b32 v45, v61 :: v_dual_mov_b32 v46, v62
@@ -26593,8 +26593,6 @@ define void @v_bitcast_v64f16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    s_cbranch_execz .LBB138_2
 ; GFX11-NEXT:  .LBB138_1: ; %if
 ; GFX11-NEXT:    v_dual_mov_b32 v66, v18 :: v_dual_mov_b32 v65, v17
-; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v64, v16 :: v_dual_mov_b32 v63, v15
 ; GFX11-NEXT:    v_dual_mov_b32 v62, v14 :: v_dual_mov_b32 v61, v13
 ; GFX11-NEXT:    v_dual_mov_b32 v60, v12 :: v_dual_mov_b32 v59, v11
@@ -26602,6 +26600,8 @@ define void @v_bitcast_v64f16_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    v_dual_mov_b32 v56, v8 :: v_dual_mov_b32 v55, v7
 ; GFX11-NEXT:    v_dual_mov_b32 v54, v6 :: v_dual_mov_b32 v53, v5
 ; GFX11-NEXT:    v_dual_mov_b32 v52, v4 :: v_dual_mov_b32 v51, v3
+; GFX11-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v48, v32 :: v_dual_mov_b32 v47, v31
 ; GFX11-NEXT:    v_dual_mov_b32 v46, v30 :: v_dual_mov_b32 v45, v29
 ; GFX11-NEXT:    v_dual_mov_b32 v44, v28 :: v_dual_mov_b32 v43, v27
@@ -27940,7 +27940,6 @@ define void @v_bitcast_v128i8_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <128 
 ; VI-NEXT:    buffer_store_dword v4, off, s[0:3], s32 offset:600 ; 4-byte Folded Spill
 ; VI-NEXT:    buffer_store_dword v3, off, s[0:3], s32 offset:604 ; 4-byte Folded Spill
 ; VI-NEXT:    s_mov_b32 s4, 0
-; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    s_mov_b32 s5, s4
 ; VI-NEXT:    s_mov_b32 s6, s4
 ; VI-NEXT:    s_mov_b32 s7, s4
@@ -27955,6 +27954,7 @@ define void @v_bitcast_v128i8_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <128 
 ; VI-NEXT:    s_mov_b32 s16, s4
 ; VI-NEXT:    s_mov_b32 s17, s4
 ; VI-NEXT:    s_mov_b32 s18, s4
+; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    v_mov_b32_e32 v30, s19
 ; VI-NEXT:    v_mov_b32_e32 v29, s18
 ; VI-NEXT:    v_mov_b32_e32 v28, s17
@@ -28608,7 +28608,6 @@ define void @v_bitcast_v128i8_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <128 
 ; GFX9-NEXT:    buffer_store_dword v4, off, s[0:3], s32 offset:584 ; 4-byte Folded Spill
 ; GFX9-NEXT:    buffer_store_dword v3, off, s[0:3], s32 offset:588 ; 4-byte Folded Spill
 ; GFX9-NEXT:    s_mov_b32 s4, 0
-; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    s_mov_b32 s5, s4
 ; GFX9-NEXT:    s_mov_b32 s6, s4
 ; GFX9-NEXT:    s_mov_b32 s7, s4
@@ -28623,6 +28622,7 @@ define void @v_bitcast_v128i8_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <128 
 ; GFX9-NEXT:    s_mov_b32 s16, s4
 ; GFX9-NEXT:    s_mov_b32 s17, s4
 ; GFX9-NEXT:    s_mov_b32 s18, s4
+; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    v_mov_b32_e32 v30, s19
 ; GFX9-NEXT:    v_mov_b32_e32 v29, s18
 ; GFX9-NEXT:    v_mov_b32_e32 v28, s17
@@ -29377,7 +29377,6 @@ define void @v_bitcast_v128i8_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <128 
 ; GFX11-TRUE16-NEXT:    scratch_load_d16_b16 v88, off, s32
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s15, s0
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s1, s0
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s2, s0
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s3, s0
@@ -29392,8 +29391,9 @@ define void @v_bitcast_v128i8_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <128 
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s12, s0
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s13, s0
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s14, s0
+; GFX11-TRUE16-NEXT:    s_mov_b32 s15, s0
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    v_dual_mov_b32 v46, s15 :: v_dual_mov_b32 v45, s14
+; GFX11-TRUE16-NEXT:    v_dual_mov_b32 v45, s14 :: v_dual_mov_b32 v46, s15
 ; GFX11-TRUE16-NEXT:    v_dual_mov_b32 v44, s13 :: v_dual_mov_b32 v43, s12
 ; GFX11-TRUE16-NEXT:    v_dual_mov_b32 v42, s11 :: v_dual_mov_b32 v41, s10
 ; GFX11-TRUE16-NEXT:    v_dual_mov_b32 v40, s9 :: v_dual_mov_b32 v39, s8
@@ -29806,7 +29806,6 @@ define void @v_bitcast_v128i8_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <128 
 ; GFX11-FAKE16-NEXT:    scratch_load_u16 v138, off, s32
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-FAKE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s15, s0
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s1, s0
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s2, s0
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s3, s0
@@ -29821,8 +29820,9 @@ define void @v_bitcast_v128i8_to_v64bf16(i32 %cond, ptr addrspace(1) %out, <128 
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s12, s0
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s13, s0
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s14, s0
+; GFX11-FAKE16-NEXT:    s_mov_b32 s15, s0
 ; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    v_dual_mov_b32 v46, s15 :: v_dual_mov_b32 v45, s14
+; GFX11-FAKE16-NEXT:    v_dual_mov_b32 v45, s14 :: v_dual_mov_b32 v46, s15
 ; GFX11-FAKE16-NEXT:    v_dual_mov_b32 v44, s13 :: v_dual_mov_b32 v43, s12
 ; GFX11-FAKE16-NEXT:    v_dual_mov_b32 v42, s11 :: v_dual_mov_b32 v41, s10
 ; GFX11-FAKE16-NEXT:    v_dual_mov_b32 v40, s9 :: v_dual_mov_b32 v39, s8
@@ -30434,7 +30434,6 @@ define void @v_bitcast_v64bf16_to_v64i16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; VI-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; VI-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; VI-NEXT:    s_mov_b32 s4, 0
-; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    s_mov_b32 s5, s4
 ; VI-NEXT:    s_mov_b32 s6, s4
 ; VI-NEXT:    s_mov_b32 s7, s4
@@ -30449,6 +30448,7 @@ define void @v_bitcast_v64bf16_to_v64i16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; VI-NEXT:    s_mov_b32 s16, s4
 ; VI-NEXT:    s_mov_b32 s17, s4
 ; VI-NEXT:    s_mov_b32 s18, s4
+; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    v_mov_b32_e32 v50, s19
 ; VI-NEXT:    v_mov_b32_e32 v49, s18
 ; VI-NEXT:    v_mov_b32_e32 v48, s17
@@ -30590,7 +30590,6 @@ define void @v_bitcast_v64bf16_to_v64i16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX9-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; GFX9-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; GFX9-NEXT:    s_mov_b32 s4, 0
-; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    s_mov_b32 s5, s4
 ; GFX9-NEXT:    s_mov_b32 s6, s4
 ; GFX9-NEXT:    s_mov_b32 s7, s4
@@ -30605,6 +30604,7 @@ define void @v_bitcast_v64bf16_to_v64i16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX9-NEXT:    s_mov_b32 s16, s4
 ; GFX9-NEXT:    s_mov_b32 s17, s4
 ; GFX9-NEXT:    s_mov_b32 s18, s4
+; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    v_mov_b32_e32 v50, s19
 ; GFX9-NEXT:    v_mov_b32_e32 v49, s18
 ; GFX9-NEXT:    v_mov_b32_e32 v48, s17
@@ -30757,7 +30757,6 @@ define void @v_bitcast_v64bf16_to_v64i16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    scratch_load_b32 v31, off, s32
 ; GFX11-NEXT:    s_mov_b32 s0, 0
 ; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 s2, s0
 ; GFX11-NEXT:    s_mov_b32 s3, s0
@@ -30772,19 +30771,21 @@ define void @v_bitcast_v64bf16_to_v64i16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    s_mov_b32 s12, s0
 ; GFX11-NEXT:    s_mov_b32 s13, s0
 ; GFX11-NEXT:    s_mov_b32 s14, s0
+; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v66, s15 :: v_dual_mov_b32 v65, s14
-; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
+; GFX11-NEXT:    v_dual_mov_b32 v65, s14 :: v_dual_mov_b32 v66, s15
 ; GFX11-NEXT:    v_dual_mov_b32 v64, s13 :: v_dual_mov_b32 v63, s12
 ; GFX11-NEXT:    v_dual_mov_b32 v62, s11 :: v_dual_mov_b32 v61, s10
 ; GFX11-NEXT:    v_dual_mov_b32 v60, s9 :: v_dual_mov_b32 v59, s8
 ; GFX11-NEXT:    v_dual_mov_b32 v58, s7 :: v_dual_mov_b32 v57, s6
 ; GFX11-NEXT:    v_dual_mov_b32 v56, s5 :: v_dual_mov_b32 v55, s4
 ; GFX11-NEXT:    v_dual_mov_b32 v54, s3 :: v_dual_mov_b32 v53, s2
-; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
+; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX11-NEXT:    v_dual_mov_b32 v39, v55 :: v_dual_mov_b32 v40, v56
 ; GFX11-NEXT:    v_dual_mov_b32 v37, v53 :: v_dual_mov_b32 v38, v54
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
+; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
 ; GFX11-NEXT:    v_dual_mov_b32 v41, v57 :: v_dual_mov_b32 v42, v58
 ; GFX11-NEXT:    v_dual_mov_b32 v43, v59 :: v_dual_mov_b32 v44, v60
 ; GFX11-NEXT:    v_dual_mov_b32 v45, v61 :: v_dual_mov_b32 v46, v62
@@ -30795,8 +30796,6 @@ define void @v_bitcast_v64bf16_to_v64i16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    s_cbranch_execz .LBB140_2
 ; GFX11-NEXT:  .LBB140_1: ; %if
 ; GFX11-NEXT:    v_dual_mov_b32 v66, v18 :: v_dual_mov_b32 v65, v17
-; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v64, v16 :: v_dual_mov_b32 v63, v15
 ; GFX11-NEXT:    v_dual_mov_b32 v62, v14 :: v_dual_mov_b32 v61, v13
 ; GFX11-NEXT:    v_dual_mov_b32 v60, v12 :: v_dual_mov_b32 v59, v11
@@ -30804,6 +30803,8 @@ define void @v_bitcast_v64bf16_to_v64i16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    v_dual_mov_b32 v56, v8 :: v_dual_mov_b32 v55, v7
 ; GFX11-NEXT:    v_dual_mov_b32 v54, v6 :: v_dual_mov_b32 v53, v5
 ; GFX11-NEXT:    v_dual_mov_b32 v52, v4 :: v_dual_mov_b32 v51, v3
+; GFX11-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v48, v32 :: v_dual_mov_b32 v47, v31
 ; GFX11-NEXT:    v_dual_mov_b32 v46, v30 :: v_dual_mov_b32 v45, v29
 ; GFX11-NEXT:    v_dual_mov_b32 v44, v28 :: v_dual_mov_b32 v43, v27
@@ -31516,7 +31517,6 @@ define void @v_bitcast_v64bf16_to_v64f16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; VI-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; VI-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; VI-NEXT:    s_mov_b32 s4, 0
-; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    s_mov_b32 s5, s4
 ; VI-NEXT:    s_mov_b32 s6, s4
 ; VI-NEXT:    s_mov_b32 s7, s4
@@ -31531,6 +31531,7 @@ define void @v_bitcast_v64bf16_to_v64f16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; VI-NEXT:    s_mov_b32 s16, s4
 ; VI-NEXT:    s_mov_b32 s17, s4
 ; VI-NEXT:    s_mov_b32 s18, s4
+; VI-NEXT:    s_mov_b32 s19, s4
 ; VI-NEXT:    v_mov_b32_e32 v50, s19
 ; VI-NEXT:    v_mov_b32_e32 v49, s18
 ; VI-NEXT:    v_mov_b32_e32 v48, s17
@@ -31672,7 +31673,6 @@ define void @v_bitcast_v64bf16_to_v64f16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX9-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4
 ; GFX9-NEXT:    buffer_load_dword v31, off, s[0:3], s32
 ; GFX9-NEXT:    s_mov_b32 s4, 0
-; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    s_mov_b32 s5, s4
 ; GFX9-NEXT:    s_mov_b32 s6, s4
 ; GFX9-NEXT:    s_mov_b32 s7, s4
@@ -31687,6 +31687,7 @@ define void @v_bitcast_v64bf16_to_v64f16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX9-NEXT:    s_mov_b32 s16, s4
 ; GFX9-NEXT:    s_mov_b32 s17, s4
 ; GFX9-NEXT:    s_mov_b32 s18, s4
+; GFX9-NEXT:    s_mov_b32 s19, s4
 ; GFX9-NEXT:    v_mov_b32_e32 v50, s19
 ; GFX9-NEXT:    v_mov_b32_e32 v49, s18
 ; GFX9-NEXT:    v_mov_b32_e32 v48, s17
@@ -31839,7 +31840,6 @@ define void @v_bitcast_v64bf16_to_v64f16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    scratch_load_b32 v31, off, s32
 ; GFX11-NEXT:    s_mov_b32 s0, 0
 ; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 s2, s0
 ; GFX11-NEXT:    s_mov_b32 s3, s0
@@ -31854,19 +31854,21 @@ define void @v_bitcast_v64bf16_to_v64f16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    s_mov_b32 s12, s0
 ; GFX11-NEXT:    s_mov_b32 s13, s0
 ; GFX11-NEXT:    s_mov_b32 s14, s0
+; GFX11-NEXT:    s_mov_b32 s15, s0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v66, s15 :: v_dual_mov_b32 v65, s14
-; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
+; GFX11-NEXT:    v_dual_mov_b32 v65, s14 :: v_dual_mov_b32 v66, s15
 ; GFX11-NEXT:    v_dual_mov_b32 v64, s13 :: v_dual_mov_b32 v63, s12
 ; GFX11-NEXT:    v_dual_mov_b32 v62, s11 :: v_dual_mov_b32 v61, s10
 ; GFX11-NEXT:    v_dual_mov_b32 v60, s9 :: v_dual_mov_b32 v59, s8
 ; GFX11-NEXT:    v_dual_mov_b32 v58, s7 :: v_dual_mov_b32 v57, s6
 ; GFX11-NEXT:    v_dual_mov_b32 v56, s5 :: v_dual_mov_b32 v55, s4
 ; GFX11-NEXT:    v_dual_mov_b32 v54, s3 :: v_dual_mov_b32 v53, s2
-; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
+; GFX11-NEXT:    v_dual_mov_b32 v52, s1 :: v_dual_mov_b32 v51, s0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX11-NEXT:    v_dual_mov_b32 v39, v55 :: v_dual_mov_b32 v40, v56
 ; GFX11-NEXT:    v_dual_mov_b32 v37, v53 :: v_dual_mov_b32 v38, v54
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
+; GFX11-NEXT:    v_dual_mov_b32 v35, v51 :: v_dual_mov_b32 v36, v52
 ; GFX11-NEXT:    v_dual_mov_b32 v41, v57 :: v_dual_mov_b32 v42, v58
 ; GFX11-NEXT:    v_dual_mov_b32 v43, v59 :: v_dual_mov_b32 v44, v60
 ; GFX11-NEXT:    v_dual_mov_b32 v45, v61 :: v_dual_mov_b32 v46, v62
@@ -31877,8 +31879,6 @@ define void @v_bitcast_v64bf16_to_v64f16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    s_cbranch_execz .LBB141_2
 ; GFX11-NEXT:  .LBB141_1: ; %if
 ; GFX11-NEXT:    v_dual_mov_b32 v66, v18 :: v_dual_mov_b32 v65, v17
-; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v64, v16 :: v_dual_mov_b32 v63, v15
 ; GFX11-NEXT:    v_dual_mov_b32 v62, v14 :: v_dual_mov_b32 v61, v13
 ; GFX11-NEXT:    v_dual_mov_b32 v60, v12 :: v_dual_mov_b32 v59, v11
@@ -31886,6 +31886,8 @@ define void @v_bitcast_v64bf16_to_v64f16(i32 %cond, ptr addrspace(1) %out, <64 x
 ; GFX11-NEXT:    v_dual_mov_b32 v56, v8 :: v_dual_mov_b32 v55, v7
 ; GFX11-NEXT:    v_dual_mov_b32 v54, v6 :: v_dual_mov_b32 v53, v5
 ; GFX11-NEXT:    v_dual_mov_b32 v52, v4 :: v_dual_mov_b32 v51, v3
+; GFX11-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-NEXT:    v_dual_mov_b32 v50, v34 :: v_dual_mov_b32 v49, v33
 ; GFX11-NEXT:    v_dual_mov_b32 v48, v32 :: v_dual_mov_b32 v47, v31
 ; GFX11-NEXT:    v_dual_mov_b32 v46, v30 :: v_dual_mov_b32 v45, v29
 ; GFX11-NEXT:    v_dual_mov_b32 v44, v28 :: v_dual_mov_b32 v43, v27

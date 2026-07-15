@@ -140,7 +140,7 @@ define amdgpu_kernel void @gep_as0_uniform(ptr %p, i64 %offset, ptr %ret) {
 ; GFX11-NEXT:    s_add_u32 s0, s0, s2
 ; GFX11-NEXT:    s_addc_u32 s1, s1, s3
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
+; GFX11-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX11-NEXT:    flat_store_b64 v[0:1], v[2:3]
 ; GFX11-NEXT:    s_endpgm
 ;
@@ -303,7 +303,7 @@ define amdgpu_kernel void @multi_gep_as0_uniform(ptr %p, i64 %offset, ptr %ret) 
 ; GFX11-NEXT:    s_add_u32 s0, s0, 5
 ; GFX11-NEXT:    s_addc_u32 s1, s1, 0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
+; GFX11-NEXT:    v_dual_mov_b32 v2, s0 :: v_dual_mov_b32 v3, s1
 ; GFX11-NEXT:    flat_store_b64 v[0:1], v[2:3]
 ; GFX11-NEXT:    s_endpgm
 ;
