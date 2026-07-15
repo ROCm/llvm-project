@@ -1158,6 +1158,81 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   EXPECT_EQ(KDs[0].EntryOffset, static_cast<int64_t>(StubVAddr - *KdVAddr));
 }
 
+// rewriteKernelEntryDescriptorOffsets aggregates per-kernel SGPR bumps into a
+// single batched metadata update. Drive it with a fixup list covering the
+// aggregation cases: a kernel appearing twice (take the max), a kernel that
+// skips the reservation, and a kernel with a zero requirement. Only the
+// max-aggregated kernel's metadata SGPR count should be raised.
+TEST(RewriteKernelEntryDescriptorOffsets, AggregatesSgprBumpsMaxSkipZero) {
+  comgr_test::MultiKernelDescriptorElfOptions Opts;
+  Opts.Kernels = {
+      {"k_max", 0x1000, 0x2000, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true, /*MetadataSgprCount=*/8},
+      {"k_skip", 0x1100, 0x2100, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true, /*MetadataSgprCount=*/8},
+      {"k_zero", 0x1200, 0x2200, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true, /*MetadataSgprCount=*/8},
+  };
+  std::vector<uint8_t> Bytes = comgr_test::makeMultiKernelDescriptorElf(Opts);
+
+  std::unique_ptr<llvm::WritableMemoryBuffer> Buf =
+      llvm::WritableMemoryBuffer::getNewUninitMemBuffer(Bytes.size());
+  ASSERT_NE(Buf, nullptr);
+  std::memcpy(Buf->getBufferStart(), Bytes.data(), Bytes.size());
+
+  // Two fixups name k_max with different RequiredSgprs -> aggregate to the max
+  // (12). k_skip sets SkipSgprReservation, k_zero has RequiredSgprs == 0; both
+  // must leave the metadata count untouched.
+  const uint64_t PoolVAddr = 0x4000;
+  std::vector<KernelEntryTrampolineFixup> Fixups = {
+      {"k_max", /*StubTextOffset=*/0, /*RequiredSgprs=*/10, /*InstPrefLines=*/0,
+       /*SkipSgprReservation=*/false},
+      {"k_max", /*StubTextOffset=*/KernelEntryStubStride, /*RequiredSgprs=*/12,
+       /*InstPrefLines=*/0, /*SkipSgprReservation=*/false},
+      {"k_skip", /*StubTextOffset=*/2 * KernelEntryStubStride,
+       /*RequiredSgprs=*/20, /*InstPrefLines=*/0, /*SkipSgprReservation=*/true},
+      {"k_zero", /*StubTextOffset=*/3 * KernelEntryStubStride,
+       /*RequiredSgprs=*/0, /*InstPrefLines=*/0, /*SkipSgprReservation=*/false},
+  };
+
+  ASSERT_TRUE(
+      rewriteKernelEntryDescriptorOffsets(*Buf, PoolVAddr, "gfx1250", Fixups));
+
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Buf->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Buf->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+  EXPECT_EQ(OutView->getKernelSgprCount("k_max"), 12u);
+  EXPECT_EQ(OutView->getKernelSgprCount("k_skip"), 8u);
+  EXPECT_EQ(OutView->getKernelSgprCount("k_zero"), 8u);
+}
+
+// A fixup naming a kernel with no descriptor must fail the whole rewrite, even
+// when another fixup in the batch is valid.
+TEST(RewriteKernelEntryDescriptorOffsets, PropagatesMissingDescriptorFailure) {
+  comgr_test::MultiKernelDescriptorElfOptions Opts;
+  Opts.Kernels = {
+      {"present", 0x1000, 0x2000, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true, /*MetadataSgprCount=*/8},
+  };
+  std::vector<uint8_t> Bytes = comgr_test::makeMultiKernelDescriptorElf(Opts);
+
+  std::unique_ptr<llvm::WritableMemoryBuffer> Buf =
+      llvm::WritableMemoryBuffer::getNewUninitMemBuffer(Bytes.size());
+  ASSERT_NE(Buf, nullptr);
+  std::memcpy(Buf->getBufferStart(), Bytes.data(), Bytes.size());
+
+  std::vector<KernelEntryTrampolineFixup> Fixups = {
+      {"present", /*StubTextOffset=*/0, /*RequiredSgprs=*/10,
+       /*InstPrefLines=*/0, /*SkipSgprReservation=*/false},
+      {"absent", /*StubTextOffset=*/KernelEntryStubStride, /*RequiredSgprs=*/10,
+       /*InstPrefLines=*/0, /*SkipSgprReservation=*/false},
+  };
+
+  EXPECT_FALSE(rewriteKernelEntryDescriptorOffsets(*Buf, /*PoolVAddr=*/0x4000,
+                                                   "gfx1250", Fixups));
+}
+
 // Count symbols named \p Name in the .symtab of the ELF held in \p Buf.
 // Returns ~0u if the ELF or its symbol table cannot be parsed, so a mis-parse
 // surfaces as a failed expectation rather than a silent zero.
