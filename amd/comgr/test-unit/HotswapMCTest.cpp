@@ -23,10 +23,16 @@
 #include "llvm/Support/TargetSelect.h"
 #include "gtest/gtest.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <mutex>
 #include <vector>
+
+#if defined(__linux__)
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 using namespace COMGR;
 using namespace COMGR::hotswap;
@@ -437,6 +443,117 @@ TEST(AssembleDecode, RejectsGarbageAsm) {
   ASSERT_TRUE(S.Valid);
   llvm::SmallVector<uint8_t> Bytes = assembleSingleInst("not_a_real_op", S);
   EXPECT_TRUE(Bytes.empty());
+}
+
+// -- Decode cache (opt-in via HOTSWAP_DECODE_CACHE) --------------------------
+//
+// isDecodeCacheEnabled() reads HOTSWAP_DECODE_CACHE exactly once and memoizes
+// the result in a function-local static, so the cache path cannot be toggled
+// within a single process. Every other test here runs with the variable unset
+// (cache off), so the cache-on path is exercised by re-exec'ing this test
+// binary as a child with HOTSWAP_DECODE_CACHE=1 and a gtest filter selecting
+// only the child-side test below. The child performs the real assertions; its
+// exit status is checked by the parent.
+
+// Child-side checks. Only meaningful when the process was launched with
+// HOTSWAP_DECODE_CACHE=1 (see DecodeCacheSubprocess.CacheOnPathIsSafe); skipped
+// during the ordinary cache-off run of the suite.
+TEST(DecodeCacheChild, Run) {
+  if (!std::getenv("COMGR_HOTSWAP_DECODE_CACHE_CHILD"))
+    GTEST_SKIP() << "child-only test; launched by DecodeCacheSubprocess";
+
+  // The child inherited HOTSWAP_DECODE_CACHE=1, so decodeTextSection() takes
+  // the caching branch for every instruction below.
+  ASSERT_STREQ(std::getenv("HOTSWAP_DECODE_CACHE"), "1");
+
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Nop = assembleSingleInst("s_nop 0", S);
+  ASSERT_EQ(Nop.size(), MinInstSize);
+  // A multi-dword (12-byte) instruction: its leading dword is, on its own, a
+  // different (shorter) decode input than the whole 12 bytes, which is exactly
+  // what the widened, length-qualified cache key must keep distinct.
+  llvm::SmallVector<uint8_t> Wide = assembleSingleInst(
+      "v_cvt_pk_fp8_f32 v4, 0x477f0000, 0x477f0000 clamp", S);
+  ASSERT_EQ(Wide.size(), 3u * MinInstSize);
+
+  // (a) Hit path: a run of byte-identical instructions must reuse the first
+  // decode and still yield the correct per-occurrence size / mnemonic. With
+  // eight consecutive s_nops every position whose 16-byte window is fully
+  // populated (offsets 4, 8, 12, 16) reuses the entry stored at offset 0.
+  {
+    llvm::SmallVector<uint8_t> Text;
+    for (int I = 0; I < 8; ++I)
+      Text.append(Nop.begin(), Nop.end());
+
+    std::vector<InternalDecodedInst> Decoded;
+    ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+    ASSERT_EQ(Decoded.size(), 8u);
+    uint64_t Sum = 0;
+    for (const InternalDecodedInst &DI : Decoded) {
+      EXPECT_EQ(DI.Size, MinInstSize);
+      EXPECT_EQ(DI.Mnemonic, "s_nop");
+      // No entry may claim bytes past the end of the buffer; a bad cache hit
+      // (the truncated-tail aliasing bug) would over-read here.
+      EXPECT_LE(DI.Offset + DI.Size, Text.size());
+      Sum += DI.Size;
+    }
+    // Sizes must tile the buffer exactly.
+    EXPECT_EQ(Sum, Text.size());
+  }
+
+  // (b) Truncated final window must not alias a longer cached instruction. The
+  // buffer is a full 12-byte instruction followed by a 4-byte tail equal to
+  // that instruction's first dword. Under the old up-to-8-byte uint64 key a
+  // trailing window could collide with a wider cached entry and inherit its
+  // size, over-reading past .text. The length-qualified window + exact byte
+  // compare + size<=remaining checks must instead confine the tail to its own
+  // four bytes.
+  {
+    llvm::SmallVector<uint8_t> Text;
+    Text.append(Wide.begin(), Wide.end());
+    Text.append(Wide.begin(), Wide.begin() + MinInstSize);
+    ASSERT_EQ(Text.size(), 4u * MinInstSize);
+
+    std::vector<InternalDecodedInst> Decoded;
+    ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+    ASSERT_EQ(Decoded.size(), 2u);
+    EXPECT_EQ(Decoded[0].Offset, 0u);
+    EXPECT_EQ(Decoded[0].Size, 3u * MinInstSize);
+    // The tail starts at offset 12 with only 4 bytes remaining, so its size can
+    // never exceed those 4 bytes regardless of what the leading dword looks
+    // like as a standalone decode.
+    EXPECT_EQ(Decoded[1].Offset, 3u * MinInstSize);
+    EXPECT_EQ(Decoded[1].Size, MinInstSize);
+    EXPECT_LE(Decoded[1].Offset + Decoded[1].Size, Text.size());
+  }
+}
+
+// Parent: re-exec the test binary with HOTSWAP_DECODE_CACHE=1 so the child
+// takes the caching path, then assert the child's checks all passed.
+TEST(DecodeCacheSubprocess, CacheOnPathIsSafe) {
+#if !defined(__linux__)
+  GTEST_SKIP() << "subprocess re-exec harness is Linux-only";
+#else
+  pid_t Pid = fork();
+  ASSERT_GE(Pid, 0) << "fork failed";
+  if (Pid == 0) {
+    // Child: enable the cache, mark ourselves as the child, and run only the
+    // child-side test via /proc/self/exe.
+    setenv("HOTSWAP_DECODE_CACHE", "1", /*overwrite=*/1);
+    setenv("COMGR_HOTSWAP_DECODE_CACHE_CHILD", "1", /*overwrite=*/1);
+    char Arg0[] = "HotswapMCTests";
+    char Filter[] = "--gtest_filter=DecodeCacheChild.Run";
+    char *const Argv[] = {Arg0, Filter, nullptr};
+    execv("/proc/self/exe", Argv);
+    _exit(127); // execv only returns on failure.
+  }
+  int Status = 0;
+  ASSERT_EQ(waitpid(Pid, &Status, 0), Pid);
+  ASSERT_TRUE(WIFEXITED(Status)) << "child did not exit normally";
+  EXPECT_EQ(WEXITSTATUS(Status), 0) << "child cache-on checks failed";
+#endif
 }
 
 // -- applyByteReplace ---------------------------------------------------------

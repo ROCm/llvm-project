@@ -29,6 +29,9 @@
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/xxhash.h"
+
+#include <utility>
 
 using namespace llvm;
 
@@ -36,6 +39,18 @@ namespace COMGR {
 namespace hotswap {
 
 static constexpr StringLiteral UnknownMnemonic("<unknown>");
+
+namespace {
+/// Whether the per-call instruction decode cache is enabled
+/// (HOTSWAP_DECODE_CACHE set and not "0"). Evaluated once per process.
+bool isDecodeCacheEnabled() {
+  static const bool Enabled = [] {
+    const char *V = getenv("HOTSWAP_DECODE_CACHE");
+    return V && V[0] != '\0' && StringRef(V) != "0";
+  }();
+  return Enabled;
+}
+} // namespace
 
 namespace {
 // The amdgcn Target is the same for every AMDGPU subtarget (the per-CPU /
@@ -394,11 +409,69 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
                        std::vector<InternalDecodedInst> &Decoded) {
   Decoded.reserve(Decoded.size() + TextSize / MinInstSize);
   uint64_t Pos = 0;
+  // Per-call instruction decode cache (opt-in via HOTSWAP_DECODE_CACHE). Decode
+  // is a pure function of the instruction bytes, so byte-identical instructions
+  // (~87% of .text, almost all intra-object) can reuse the first decode instead
+  // of re-running the MCDisassembler decision walk. Position-specific data
+  // lives in DI.Offset (set per occurrence), never in the cached MCInst, so
+  // reuse is safe.
+  //
+  // The key must uniquely identify the *decode input*: the exact bytes the
+  // disassembler is allowed to consume at this position. On AMDGPU the
+  // disassembler tries the widest encodings first (128/96-bit before 64/32-bit
+  // on gfx950/gfx1250) and may read up to getMaxInstLength() bytes (16 here),
+  // so an 8-byte window is not a sufficient decode identity -- and a raw uint64
+  // key cannot even hold the full window. We therefore key on (window length,
+  // xxh3 of the window bytes) and, on every hit, re-validate with an exact byte
+  // compare of the stored window plus a "decoded size fits in the bytes
+  // actually remaining" check. Making the window length part of the key means a
+  // short truncated tail can never alias a longer instruction whose leading
+  // bytes match, and the exact byte compare removes any hash-collision
+  // mis-decode. Keying on the full window is stricter than strictly necessary
+  // for sub-16-byte instructions (their trailing window bytes must also match),
+  // but an over-specific key only ever costs a correct miss, never a wrong hit.
+  const bool Cache = isDecodeCacheEnabled();
+  // Widest byte window the disassembler may read for one instruction (16 for
+  // gfx1250/gfx950). Fall back to a safe upper bound if MAI is unavailable.
+  const unsigned MaxWindow = S.MAI ? S.MAI->getMaxInstLength(S.STI.get()) : 16u;
+  struct DecodeCacheEntry {
+    MCInst Inst;
+    uint32_t Size;
+    std::string Mnemonic;
+    SmallVector<uint8_t, 16> Window;
+  };
+  DenseMap<std::pair<unsigned, uint64_t>, DecodeCacheEntry> LocalCache;
   while (Pos < TextSize) {
     InternalDecodedInst DI;
     DI.Offset = Pos;
 
-    ArrayRef<uint8_t> Bytes(Text + Pos, TextSize - Pos);
+    const uint64_t Remaining = TextSize - Pos;
+    const unsigned WindowLen =
+        static_cast<unsigned>(std::min<uint64_t>(MaxWindow, Remaining));
+    ArrayRef<uint8_t> Window(Text + Pos, WindowLen);
+    std::pair<unsigned, uint64_t> Key;
+    if (Cache)
+      Key = {WindowLen, xxh3_64bits(Window)};
+
+    if (Cache) {
+      DenseMap<std::pair<unsigned, uint64_t>, DecodeCacheEntry>::iterator It =
+          LocalCache.find(Key);
+      // Reuse only on an exact byte match of the decode window (the key hash is
+      // not collision-proof) and only when the cached size fits the bytes still
+      // remaining, so a hit can never return a size that over-reads .text.
+      if (It != LocalCache.end() &&
+          ArrayRef<uint8_t>(It->second.Window) == Window &&
+          It->second.Size <= Remaining) {
+        DI.Size = It->second.Size;
+        DI.Inst = It->second.Inst;
+        DI.Mnemonic = It->second.Mnemonic;
+        Pos += DI.Size;
+        Decoded.emplace_back(std::move(DI));
+        continue;
+      }
+    }
+
+    ArrayRef<uint8_t> Bytes(Text + Pos, Remaining);
     uint64_t InstSize = 0;
     MCDisassembler::DecodeStatus Status =
         S.MCD->getInstruction(DI.Inst, InstSize, Bytes, Pos, nulls());
@@ -421,6 +494,15 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
         DI.Mnemonic = UnknownMnemonic.str();
       }
     }
+    // Cache only clean decodes whose consumed size fits inside the exact window
+    // we keyed and stored (InstSize <= WindowLen == min(MaxWindow, Remaining)).
+    // The window bytes are stored verbatim so every reuse is guarded by the
+    // exact-compare + size-vs-remaining checks above.
+    if (Cache && Status != MCDisassembler::Fail && DI.Size <= WindowLen)
+      LocalCache.try_emplace(
+          Key, DecodeCacheEntry{
+                   DI.Inst, DI.Size, DI.Mnemonic,
+                   SmallVector<uint8_t, 16>(Window.begin(), Window.end())});
     Pos += DI.Size;
     Decoded.emplace_back(std::move(DI));
   }
