@@ -710,12 +710,6 @@ struct WmmaNopReq {
 /// Classify the A0/B0 v_nop requirement for a WMMA/SWMMAC mnemonic.
 WmmaNopReq classifyWmmaNops(llvm::StringRef Mnemonic);
 
-/// Record a WMMA spacing deficit for a candidate VALU and return the maximum
-/// requirement seen for that candidate. Multiple WMMA scans must compose the
-/// strongest requirement rather than letting discovery order weaken it.
-int updateWmmaHazardDeficit(llvm::DenseMap<size_t, int> &MaxDeficits,
-                            size_t ValuIndex, int Deficit);
-
 /// Patch the VOP3PX2 scale_src2 field (bits [58:50]) to VGPR0 encoding
 /// (0x100) in a 16-byte instruction buffer. Returns true if the field
 /// was modified (false if already set to the target value).

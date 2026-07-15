@@ -103,13 +103,6 @@ WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
   return {4, 4};
 }
 
-int updateWmmaHazardDeficit(DenseMap<size_t, int> &MaxDeficits,
-                            size_t ValuIndex, int Deficit) {
-  int &Maximum = MaxDeficits[ValuIndex];
-  Maximum = std::max(Maximum, Deficit);
-  return Maximum;
-}
-
 namespace {
 
 std::optional<std::vector<WmmaHazard>>
@@ -165,8 +158,8 @@ findWmmaCoexecHazards(const PatchContext &Ctx) {
 
         if (SafeSlots < Req.A0Nops) {
           const int Deficit = Req.A0Nops - SafeSlots;
-          const int MaxDeficit =
-              updateWmmaHazardDeficit(MaxDeficitByValu, ValuIdx, Deficit);
+          int &MaxDeficit = MaxDeficitByValu[ValuIdx];
+          MaxDeficit = std::max(MaxDeficit, Deficit);
           log() << "hotswap: WMMA co-exec hazard at 0x"
                 << utohexstr(WmmaDI.Offset) << ": " << WmmaDI.Mnemonic
                 << " needs " << Req.A0Nops << " v_nops, only " << SafeSlots
@@ -184,7 +177,8 @@ findWmmaCoexecHazards(const PatchContext &Ctx) {
   std::vector<WmmaHazard> Hazards;
   Hazards.reserve(MaxDeficitByValu.size());
   for (size_t I = 0, E = Ctx.Decoded.size(); I != E; ++I)
-    if (auto It = MaxDeficitByValu.find(I); It != MaxDeficitByValu.end())
+    if (DenseMap<size_t, int>::iterator It = MaxDeficitByValu.find(I);
+        It != MaxDeficitByValu.end())
       Hazards.push_back({I, It->second});
 
   log() << "hotswap: WMMA co-exec validation: " << Hazards.size()
@@ -195,8 +189,7 @@ findWmmaCoexecHazards(const PatchContext &Ctx) {
 } // anonymous namespace
 
 static bool precomputeWmmaHazardsImpl(PatchContext &Ctx) {
-  std::optional<std::vector<WmmaHazard>> Hazards =
-      findWmmaCoexecHazards(Ctx);
+  std::optional<std::vector<WmmaHazard>> Hazards = findWmmaCoexecHazards(Ctx);
   if (!Hazards) {
     Ctx.RequiredPatchFailed = true;
     return false;
@@ -228,7 +221,8 @@ static bool precomputeWmmaHazardsImpl(PatchContext &Ctx) {
 
 static uint32_t applyWmmaHazardPatchImpl(PatchContext &Ctx) {
   for (uint64_t Offset : Ctx.WmmaHazardSites) {
-    auto StateIt = Ctx.SiteReplacements.find(Offset);
+    std::map<uint64_t, SiteReplacementState>::iterator StateIt =
+        Ctx.SiteReplacements.find(Offset);
     if (StateIt == Ctx.SiteReplacements.end() ||
         StateIt->second.RequiredLeadingVNops == 0) {
       log() << "hotswap: error: lost precomputed WMMA hazard state at 0x"
@@ -245,7 +239,7 @@ static uint32_t applyWmmaHazardPatchImpl(PatchContext &Ctx) {
       return 0;
     }
 
-    auto DI = llvm::lower_bound(
+    std::vector<InternalDecodedInst>::iterator DI = llvm::lower_bound(
         Ctx.Decoded, Offset,
         [](const InternalDecodedInst &Inst, uint64_t CandidateOffset) {
           return Inst.Offset < CandidateOffset;
@@ -253,8 +247,8 @@ static uint32_t applyWmmaHazardPatchImpl(PatchContext &Ctx) {
     if (DI == Ctx.Decoded.end() || DI->Offset != Offset ||
         DI->Size != StateIt->second.OriginalSize || Offset > Ctx.TextSize ||
         DI->Size > Ctx.TextSize - Offset) {
-      log() << "hotswap: error: WMMA hazard source at 0x"
-            << utohexstr(Offset) << " is not a valid current instruction\n";
+      log() << "hotswap: error: WMMA hazard source at 0x" << utohexstr(Offset)
+            << " is not a valid current instruction\n";
       Ctx.RequiredPatchFailed = true;
       return 0;
     }
