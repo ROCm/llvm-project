@@ -10,8 +10,8 @@
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=LOG,API %s
 // LOG: hotswap: unresolved call target at 0x8 (s_swap_pc_i64)
-// LOG: hotswap: unresolved control-flow target disables trampoline
-// LOG-SAME: coalescing, source relocation, and .text gateways
+// LOG: hotswap: unresolved control-flow target disables NOP-sled emission,
+// LOG-SAME: trampoline coalescing, source relocation, and .text gateways
 // LOG: hotswap: error: no safe short-branch gateway for far site
 // API: RESULT: ERROR
 

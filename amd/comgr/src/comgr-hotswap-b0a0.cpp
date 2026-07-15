@@ -911,17 +911,26 @@ static bool isControlFlowBoundary(const InternalDecodedInst &DI,
          LS.MIA->isBarrier(DI.Inst);
 }
 
-static std::optional<SmallVector<uint64_t, 16>>
+struct DeclaredTextEntryInfo {
+  SmallVector<uint64_t, 16> Entries;
+  SmallVector<uint64_t, 16> ExternalEntries;
+};
+
+static std::optional<DeclaredTextEntryInfo>
 collectDeclaredTextEntries(const ElfView &Elf) {
   std::optional<uint64_t> TextEnd =
       checkedAddUint64(Elf.textAddr(), Elf.textSize(), "declared text end");
   if (!TextEnd)
     return std::nullopt;
 
-  SmallVector<uint64_t, 16> Entries;
+  DeclaredTextEntryInfo Info;
   for (const ElfView::FunctionTextRange &Range : Elf.functionTextRanges())
-    if (Range.Begin >= Elf.textAddr() && Range.Begin < *TextEnd)
-      Entries.push_back(Range.Begin - Elf.textAddr());
+    if (Range.Begin >= Elf.textAddr() && Range.Begin < *TextEnd) {
+      uint64_t Entry = Range.Begin - Elf.textAddr();
+      Info.Entries.push_back(Entry);
+      if (Range.Symbol && Range.Symbol->getBinding() != ELF::STB_LOCAL)
+        Info.ExternalEntries.push_back(Entry);
+    }
 
   for (const KernelDescriptorInfo &Descriptor : Elf.kernelDescriptors()) {
     std::optional<uint64_t> EntryAddress;
@@ -939,10 +948,13 @@ collectDeclaredTextEntries(const ElfView &Elf) {
     }
     if (!EntryAddress)
       return std::nullopt;
-    if (*EntryAddress >= Elf.textAddr() && *EntryAddress < *TextEnd)
-      Entries.push_back(*EntryAddress - Elf.textAddr());
+    if (*EntryAddress >= Elf.textAddr() && *EntryAddress < *TextEnd) {
+      uint64_t Entry = *EntryAddress - Elf.textAddr();
+      Info.Entries.push_back(Entry);
+      Info.ExternalEntries.push_back(Entry);
+    }
   }
-  return Entries;
+  return Info;
 }
 
 struct PcMaterializedCallInfo {
@@ -1117,12 +1129,101 @@ static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
   return Calls;
 }
 
+static bool hasUnprovenFallthroughEntry(ArrayRef<InternalDecodedInst> Decoded,
+                                        const LLVMState &LS, uint64_t TextAddr,
+                                        uint64_t TextEnd,
+                                        uint64_t FunctionBegin,
+                                        uint64_t ReturnOffset,
+                                        ArrayRef<uint64_t> DeclaredEntries,
+                                        ArrayRef<KnownCallSite> Calls) {
+  if (FunctionBegin == 0)
+    return false;
+
+  size_t BeginIndex = 0;
+  while (BeginIndex != Decoded.size() &&
+         Decoded[BeginIndex].Offset < FunctionBegin)
+    ++BeginIndex;
+  if (BeginIndex == Decoded.size() ||
+      Decoded[BeginIndex].Offset != FunctionBegin) {
+    log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+          << " is not a bounded return: function entry at 0x"
+          << utohexstr(FunctionBegin) << " is not an instruction boundary\n";
+    return true;
+  }
+
+  uint64_t ChainBegin = FunctionBegin;
+  size_t PredecessorIndex = BeginIndex;
+  while (PredecessorIndex != 0) {
+    const InternalDecodedInst &Predecessor = Decoded[PredecessorIndex - 1];
+    std::optional<uint64_t> PredecessorEnd = checkedAddUint64(
+        Predecessor.Offset, Predecessor.Size, "fallthrough predecessor end");
+    if (!PredecessorEnd || *PredecessorEnd != ChainBegin ||
+        !Predecessor.DecodeSucceeded) {
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+            << " is not a bounded return: fallthrough into function entry "
+               "at 0x"
+            << utohexstr(FunctionBegin) << " is unprovable\n";
+      return true;
+    }
+    if (LS.MIA->isBarrier(Predecessor.Inst))
+      break;
+    ChainBegin = Predecessor.Offset;
+    --PredecessorIndex;
+  }
+
+  if (ChainBegin == FunctionBegin)
+    return false;
+
+  for (uint64_t Entry : DeclaredEntries)
+    if (Entry >= ChainBegin && Entry < FunctionBegin) {
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+            << " is not a bounded return: declared entry at 0x"
+            << utohexstr(Entry) << " falls through to function entry 0x"
+            << utohexstr(FunctionBegin) << "\n";
+      return true;
+    }
+
+  for (const KnownCallSite &Call : Calls) {
+    uint64_t Source = Decoded[Call.InstIndex].Offset;
+    if (Source >= ChainBegin && Source < FunctionBegin)
+      continue;
+    if ((Call.Target >= ChainBegin && Call.Target < FunctionBegin) ||
+        (Call.Continuation >= ChainBegin &&
+         Call.Continuation < FunctionBegin)) {
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+            << " is not a bounded return: call at 0x" << utohexstr(Source)
+            << " enters the fallthrough chain at 0x"
+            << utohexstr(Call.Target >= ChainBegin &&
+                                 Call.Target < FunctionBegin
+                             ? Call.Target
+                             : Call.Continuation)
+            << "\n";
+      return true;
+    }
+  }
+
+  for (const InternalDecodedInst &Source : Decoded) {
+    std::optional<uint64_t> Target =
+        getDirectTextTarget(Source, LS, TextAddr, TextEnd);
+    if (!Target || *Target < ChainBegin || *Target >= FunctionBegin ||
+        (Source.Offset >= ChainBegin && Source.Offset < FunctionBegin))
+      continue;
+    log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+          << " is not a bounded return: control flow at 0x"
+          << utohexstr(Source.Offset) << " enters the fallthrough chain at 0x"
+          << utohexstr(*Target) << "\n";
+    return true;
+  }
+  return false;
+}
+
 static std::optional<SmallVector<BoundedSetPcReturn, 2>>
 collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
                            const LLVMState &LS, uint64_t TextAddr,
                            uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
                            ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-                           ArrayRef<KnownCallSite> Calls) {
+                           ArrayRef<KnownCallSite> Calls,
+                           ArrayRef<uint64_t> ExternalEntries) {
   SmallVector<BoundedSetPcReturn, 2> Returns;
   for (size_t ReturnIndex = 0; ReturnIndex != Decoded.size(); ++ReturnIndex) {
     const InternalDecodedInst &Return = Decoded[ReturnIndex];
@@ -1149,6 +1250,33 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
         continue;
 
       bool Safe = true;
+      for (uint64_t Entry : ExternalEntries)
+        if (Entry >= FunctionBegin && Entry < FunctionEnd) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: externally reachable entry at "
+                   "0x"
+                << utohexstr(Entry) << " overlaps the local function\n";
+          Safe = false;
+          break;
+        }
+      if (!Safe)
+        continue;
+
+      for (const ElfView::FunctionTextRange &Alias : FunctionRanges) {
+        if (Return.Offset + TextAddr < Alias.Begin ||
+            Return.Offset + TextAddr >= Alias.End || Alias.Begin == Range.Begin)
+          continue;
+        log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+              << " is not a bounded return: overlapping function entry at "
+                 "0x"
+              << utohexstr(Alias.Begin - TextAddr)
+              << " makes entry provenance ambiguous\n";
+        Safe = false;
+        break;
+      }
+      if (!Safe)
+        continue;
+
       for (uint64_t Entry : DeclaredEntries)
         if (Entry > FunctionBegin && Entry < FunctionEnd) {
           log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
@@ -1158,6 +1286,11 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
           break;
         }
       if (!Safe)
+        continue;
+
+      if (hasUnprovenFallthroughEntry(Decoded, LS, TextAddr, TextEnd,
+                                      FunctionBegin, Return.Offset,
+                                      DeclaredEntries, Calls))
         continue;
 
       // The link pair must retain the value written by the incoming call
@@ -1181,8 +1314,17 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
 
       SmallVector<uint64_t, 2> Targets;
       for (const KnownCallSite &Call : Calls) {
-        if (Call.Target != FunctionBegin)
+        if (Call.Target < FunctionBegin || Call.Target >= FunctionEnd)
           continue;
+        if (Call.Target != FunctionBegin) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: call at 0x"
+                << utohexstr(Decoded[Call.InstIndex].Offset)
+                << " enters the function interior at 0x"
+                << utohexstr(Call.Target) << "\n";
+          Safe = false;
+          break;
+        }
         if (Call.ReturnRegister != ReturnRegister) {
           log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
                 << " is not a bounded return: call at 0x"
@@ -1294,7 +1436,8 @@ hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
 std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries,
-    ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<uint64_t> ExternalEntries) {
   if (!LS.MIA) {
     log() << "hotswap: MC branch analysis is unavailable; adjacent far "
              "trampolines will not be coalesced\n";
@@ -1317,7 +1460,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     return std::nullopt;
   std::optional<SmallVector<BoundedSetPcReturn, 2>> BoundedReturns =
       collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
-                                 DeclaredEntries, FunctionRanges, *Calls);
+                                 DeclaredEntries, FunctionRanges, *Calls,
+                                 ExternalEntries);
   if (!BoundedReturns)
     return std::nullopt;
 
@@ -2124,15 +2268,15 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     const RewriteConfig &Config, bool &OutRequiredPatchApplied) {
   uint32_t Patched = 0;
   std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS, Elf);
-  std::optional<SmallVector<uint64_t, 16>> DeclaredEntries =
+  std::optional<DeclaredTextEntryInfo> DeclaredEntries =
       collectDeclaredTextEntries(Elf);
   if (!DeclaredEntries)
     return std::nullopt;
   std::vector<ElfView::FunctionTextRange> FunctionRanges =
       Elf.functionTextRanges();
-  std::optional<DirectControlFlowInfo> ControlFlow =
-      collectDirectBranchTargets(Decoded, LS, Elf.textAddr(), Elf.textSize(),
-                                 *DeclaredEntries, FunctionRanges);
+  std::optional<DirectControlFlowInfo> ControlFlow = collectDirectBranchTargets(
+      Decoded, LS, Elf.textAddr(), Elf.textSize(), DeclaredEntries->Entries,
+      FunctionRanges, DeclaredEntries->ExternalEntries);
   if (!ControlFlow)
     return std::nullopt;
   if (ControlFlow->HasUnresolvedTargets) {
