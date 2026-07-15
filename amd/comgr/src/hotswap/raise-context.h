@@ -533,6 +533,9 @@ struct RaiseContext {
   llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskExecShadow;
   llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskValidShadow;
 
+  // Raise-time constant shadow of M0; see updateM0Const / getM0Const.
+  std::optional<uint64_t> M0Const;
+
   // Conservative lane-wise kernarg-pointer provenance for the strict hidden-arg
   // SMEM gate. Filled before instruction lowering by a fixed-point over the
   // decoded CFG. Mixed incoming states become Unknown and keep strict mode
@@ -630,6 +633,23 @@ struct RaiseContext {
   // IR (see sgpr-wave-mask-translation.md section 7 evolution
   // path) can upgrade this to a proper per-BB merge.
   void clearSgprWaveMaskShadow() { LastSgprWaveMaskI1.clear(); }
+
+  // --- M0 raise-time constant shadow ---------------------------------------
+  // v_movrel* resolve their VGPR index from `base + M0`. Because the reg
+  // file promotes VGPRs to SSA by index, the index must be known at raise
+  // time. `M0Const` tracks the last constant stored to M0 within the
+  // current basic block; it is cleared on any non-constant M0 store and at
+  // every BB boundary (M0 is uniform, but a value written in a predecessor
+  // no longer dominates trivially, so we stay conservative). Installed via
+  // `RegFile::OnM0Written`.
+  void updateM0Const(llvm::Value *V) {
+    if (auto *CI = llvm::dyn_cast<llvm::ConstantInt>(V))
+      M0Const = CI->getZExtValue();
+    else
+      M0Const = std::nullopt;
+  }
+  void clearM0Const() { M0Const = std::nullopt; }
+  std::optional<uint64_t> getM0Const() const { return M0Const; }
 
   void collectSgprWaveMaskShadowAllocas(
       llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const {

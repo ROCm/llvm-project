@@ -241,6 +241,32 @@ Error driftCheckSrcN(DecodedInst &Di, const MCInstrDesc &Desc) {
   bool IsMadmk = ImmIdx >= 0 && Src0Idx >= 0 && Src1Idx >= 0 &&
                  Src0Idx < ImmIdx && ImmIdx < Src1Idx;
 
+  // v_movreld_b32 / v_movrelsd_b32 are the "no true destination" VOP1 forms:
+  // their profile sets HasDst=0 and hacks $vdst into the *inputs* at MC operand
+  // 0 (see VOP_MOVREL in VOP1Instructions.td), so the positional source walk
+  // records SrcMap[0] = that vdst-as-source while OpName::src0 lives at index 1.
+  // That is a legitimate layout, not decoder drift -- like MADMK -- so skip the
+  // strict srcN-position check at k=0 for it. Detect it structurally from the
+  // operand tables (vdst present at operand 0 with zero declared defs) rather
+  // than by mnemonic string. Note there is no MC-level TIED_TO here: the tied
+  // vdst_in described in the ISA is added later by the custom inserter, not in
+  // the MCInstrDesc we see at decode time. v_movrels_b32 has a genuine def, so
+  // its walk matches OpName::src0 naturally and needs no exception. The
+  // v_movrel* handler reads vdst/vsrc by named operand index (not SrcMap[0]),
+  // so it does not depend on the layout skipped here; a data-dependent M0 has
+  // no statically-known index and fails gracefully downstream (stubbed under
+  // HSA_HOTSWAP_STUB_FAILED_KERNELS).
+  int VdstIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::vdst);
+  bool IsMovrel = VdstIdx == 0 && Desc.getNumDefs() == 0;
+  // Cross-check the structural signature against the mnemonic: every op that
+  // matches (vdst-as-source, no declared defs) must be a v_movrel* form. If a
+  // future opcode trips this signature without being a register-relative move,
+  // we would silently skip a genuine srcN drift here -- catch that in asserts
+  // builds rather than let it slip. (One-directional: v_movrels_b32 also starts
+  // with the prefix but has a real def, so it is not expected to match above.)
+  assert((!IsMovrel || StringRef(Di.RawMnemonic).starts_with("v_movrel")) &&
+         "vdst-at-0/no-defs signature matched a non-movrel opcode");
+
   for (unsigned K = 0; K < 3; ++K) {
     int NamedSrc = AMDGPU::getNamedOperandIdx(Opc, KSrcNames[K]);
     if (NamedSrc < 0)
@@ -250,7 +276,7 @@ Error driftCheckSrcN(DecodedInst &Di, const MCInstrDesc &Desc) {
     // (src0) still receives the strict check, so a hypothetical
     // future drift in src0's MCInst position is still caught even
     // for MADMK opcodes.
-    bool SkipThis = IsMadmk && K == 1;
+    bool SkipThis = (IsMadmk && K == 1) || (IsMovrel && K == 0);
     if (!SkipThis && OurSrc != NamedSrc)
       return ReportErr("transpiler: srcMap disagrees with OpName::srcN table",
                        static_cast<int>(K), OurSrc, NamedSrc);

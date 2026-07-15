@@ -133,6 +133,14 @@ struct AllocaRegFile {
   // interference defeats the cache).
   llvm::unique_function<void(int)> OnSgprWritten;
 
+  // Invalidation/tracking hook fired on every M0 store, passing the stored
+  // value. The owning RaiseContext installs this to maintain a raise-time
+  // constant shadow of M0 (see raise-context.h `M0Const`), which the
+  // register-relative move handlers (v_movrel*, handle-valu-small-ops.cpp)
+  // consult to resolve the M0-relative VGPR index statically. A store of a
+  // non-constant value clears the shadow.
+  llvm::unique_function<void(llvm::Value *)> OnM0Written;
+
   // Initialise storage.
   //
   // `MRI` is queried for the architectural SGPR_32 / TTMP_32 register-

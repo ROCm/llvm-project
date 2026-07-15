@@ -502,6 +502,12 @@ enum class CanonicalOp : uint16_t {
   V_NOT_B32,
   V_BFREV_B32,
   V_SWAP_B32,
+  // Register-relative moves. The relative index is `M0` (uniform across
+  // lanes), so these carry no cross-lane component and are wave-size-
+  // agnostic. V_MOVRELD writes VGPR[base(vdst)+M0]=vsrc (M0-relative dst,
+  // tied vdst_in); V_MOVRELS reads vdst=VGPR[base(vsrc)+M0] (relative
+  // src); V_MOVRELSD is both relative. See handle-valu-small-ops.cpp.
+  V_MOVRELD_B32, V_MOVRELS_B32, V_MOVRELSD_B32,
   V_CVT_F32_I32,
   V_CVT_F32_U32,
   V_CVT_I32_F32,

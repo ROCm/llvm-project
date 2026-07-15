@@ -435,6 +435,16 @@ static const Entry kCanonTable[] = {
     // needs an entry here.
     E(V_MOV_B16_e64, V_MOV_B16),
     E(V_SWAP_B32, V_SWAP_B32),
+    // Register-relative moves. Both e32 and e64 base pseudos are mapped
+    // (the suffix-stripping canonicalizer collapses subtarget/_dpp forms
+    // onto these). M0 supplies the relative index; see handle-valu-small-
+    // ops.cpp for the lowering.
+    E(V_MOVRELD_B32_e32, V_MOVRELD_B32),
+    E(V_MOVRELD_B32_e64, V_MOVRELD_B32),
+    E(V_MOVRELS_B32_e32, V_MOVRELS_B32),
+    E(V_MOVRELS_B32_e64, V_MOVRELS_B32),
+    E(V_MOVRELSD_B32_e32, V_MOVRELSD_B32),
+    E(V_MOVRELSD_B32_e64, V_MOVRELSD_B32),
     E(V_NOP_e64, V_NOP),
     E(V_NOT_B32_e64, V_NOT_B32),
     E(V_BFREV_B32_e64, V_BFREV_B32),

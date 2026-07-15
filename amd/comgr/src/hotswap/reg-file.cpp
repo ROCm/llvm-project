@@ -561,6 +561,8 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
     if (V->getType() != B.getInt32Ty())
       V = B.CreateBitCast(V, B.getInt32Ty());
     B.CreateStore(V, M0);
+    if (OnM0Written)
+      OnM0Written(V);
     return;
   }
   if (Pr.RegKind == ParsedReg::FLAT_SCR) {

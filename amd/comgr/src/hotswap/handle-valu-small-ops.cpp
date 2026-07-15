@@ -149,6 +149,69 @@ handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   Type *HalfTy = Type::getHalfTy(Ctx.C);
 
   switch (Di.CanonOp) {
+  // ---- Register-relative moves (v_movrel{d,s,sd}_b32) ----
+  //
+  // These access a VGPR at an M0-relative index. M0 is uniform across
+  // lanes, so there is no cross-lane component -- this is a plain indexed
+  // register access. Because the reg file promotes VGPRs to SSA by index,
+  // the M0-relative index must be resolved at raise time; we use the M0
+  // constant shadow (RaiseContext::getM0Const), which covers the common
+  // unrolled-copy-loop idiom (e.g. CatArrayBatchedCopy). A data-dependent
+  // M0 has no statically-known index and is refused loudly (stubbed).
+  //
+  //   v_movreld_b32  vdst, vsrc : VGPR[base(vdst)+M0] = vsrc  (tied vdst_in)
+  //   v_movrels_b32  vdst, vsrc : vdst = VGPR[base(vsrc)+M0]
+  //   v_movrelsd_b32 vdst, vsrc : VGPR[base(vdst)+M0] = VGPR[base(vsrc)+M0]
+  case CanonicalOp::V_MOVRELD_B32:
+  case CanonicalOp::V_MOVRELS_B32:
+  case CanonicalOp::V_MOVRELSD_B32: {
+    unsigned Opc = Di.Inst.getOpcode();
+    int VdstIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::vdst);
+    int VsrcIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::src0);
+    if (VdstIdx < 0 || VsrcIdx < 0 || !Di.isReg(VdstIdx) ||
+        !Di.isReg(VsrcIdx)) {
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP1", "v_movrel* missing vdst/vsrc register operand");
+    }
+    std::optional<uint64_t> M0 = Ctx.getM0Const();
+    if (!M0) {
+      // Data-dependent M0: no statically-known relative index. Refuse
+      // rather than emit an unbounded index cascade.
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP1",
+          "v_movrel* with non-constant M0 (data-dependent register-relative "
+          "index) is not supported; only a raise-time-constant M0 is handled");
+    }
+    ParsedReg VdstBase = Ctx.parseReg(Di.getReg(VdstIdx), VdstIdx);
+    ParsedReg VsrcBase = Ctx.parseReg(Di.getReg(VsrcIdx), VsrcIdx);
+    auto InRange = [](long Idx) {
+      return Idx >= 0 && Idx < static_cast<long>(AllocaRegFile::KVGPRCap);
+    };
+    assert(*M0 <= UINT32_MAX && "M0 is a 32-bit hardware register");
+    long Rel = static_cast<long>(*M0);
+    bool RelDst = Di.CanonOp == CanonicalOp::V_MOVRELD_B32 ||
+                  Di.CanonOp == CanonicalOp::V_MOVRELSD_B32;
+    bool RelSrc = Di.CanonOp == CanonicalOp::V_MOVRELS_B32 ||
+                  Di.CanonOp == CanonicalOp::V_MOVRELSD_B32;
+    long DstIdx = VdstBase.BaseIdx + (RelDst ? Rel : 0);
+    long SrcIdx = VsrcBase.BaseIdx + (RelSrc ? Rel : 0);
+    if (!InRange(DstIdx) || !InRange(SrcIdx)) {
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP1",
+          "v_movrel* M0-relative VGPR index out of range (MEMVIOL)");
+    }
+    // Read the value to move: vsrc's SSA value for V_MOVRELD; the
+    // relative-source VGPR for V_MOVRELS / V_MOVRELSD.
+    Value *Val = RelSrc ? Ctx.Regs.loadVGPR32(Ctx.B, static_cast<int>(SrcIdx))
+                        : Ctx.readOp32(Di, static_cast<unsigned>(VsrcIdx));
+    ParsedReg DstPr;
+    DstPr.RegKind = ParsedReg::VGPR;
+    DstPr.BaseIdx = static_cast<int>(DstIdx);
+    DstPr.WidthInDwords = 1;
+    Ctx.writeReg32(DstPr, Val);
+    Hr.Handled = true;
+    return Hr;
+  }
   // ---- F32 <-> integer conversions ----
   case CanonicalOp::V_CVT_F32_U32: {
     Value *R = Ctx.B.CreateUIToFP(Op.src(0), Ctx.F32Ty, "cvt");

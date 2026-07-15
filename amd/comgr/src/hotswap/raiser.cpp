@@ -1815,6 +1815,12 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // wave-mask-translation.md section 3.1 for the full contract.
   Regs.OnSgprWritten = [&Ctx](int Idx) { Ctx.invalidateSgprWaveMaskI1(Idx); };
 
+  // Wire the reg-file's M0-write hook to ctx's raise-time M0 constant
+  // shadow. Fires on every M0 store; a constant store records the value,
+  // any other store clears it. The v_movrel* handlers consult
+  // `Ctx.getM0Const()` to resolve the M0-relative VGPR index statically.
+  Regs.OnM0Written = [&Ctx](llvm::Value *V) { Ctx.updateM0Const(V); };
+
   if (UseThreadLoop) {
     auto *IterA = B.CreateAlloca(I32Ty, nullptr, "tl_iter_alloca");
     B.CreateStore(B.getInt32(0), IterA);
@@ -1907,6 +1913,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       // to a proper per-BB merge (see sgpr-wave-mask-translation.md
       // section 7 evolution path).
       Ctx.clearSgprWaveMaskShadow();
+      // M0's raise-time constant shadow only dominates within its BB.
+      Ctx.clearM0Const();
     }
 
     if (Error E = Ctx.computeVGPRAdjust(Di))
