@@ -24,9 +24,16 @@
 #include "comgr-env.h"
 #include "comgr.h"
 
+#include <algorithm>
+#include <array>
+#include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -95,6 +102,362 @@ inline std::optional<uint64_t> checkedSubUint64(uint64_t LHS, uint64_t RHS,
   }
   return LHS - RHS;
 }
+
+// -- HotSwap rewrite profiling -----------------------------------------------
+//
+// Two-level gate:
+//   1. Compile time -- the whole facility is compiled in only when the build
+//      defines ENABLE_HOTSWAP_PROFILE (e.g. cmake -DENABLE_HOTSWAP_PROFILE=ON,
+//      which passes -DENABLE_HOTSWAP_PROFILE to the compiler). In a normal
+//      build every type below collapses to the no-op stubs in the #else branch,
+//      so there is no code, no static state, and no per-call overhead.
+//   2. Run time  -- when compiled in, it stays dormant until HOTSWAP_PROFILE is
+//      set (and not "0"). A disabled session never reads the clock.
+//
+// Design (see review on ROCm/llvm-project#3364): a single retargetCodeObject
+// call is single-threaded internally, but many calls run concurrently on
+// different threads. So each call owns a stack-local HotswapProfile whose
+// counters live in a fixed-size array indexed by HotswapMetric -- the hot path
+// records with no lock and no string lookup. When the rewrite finishes, the
+// session merges its array once into the process-wide HotswapAggregator (the
+// only lock, taken once per code object), which prints the table at exit.
+//
+// Row families:
+//   phase:*  coarse pipeline stages in retargetCodeObject. The timed stages
+//            plus phase:unaccounted partition phase:rewrite_total.
+//   strat:*  the B0-to-A0 patch strategies, with per-rule children indented
+//            under their parent (e.g. strat:trampoline -> ds_2addr).
+//   jump:*   trampoline placement outcomes; the "calls" column is the count.
+
+/// Identity of a profiled bucket. Used as an array index so the hot path
+/// records without hashing a string. The enumerator order MUST match the
+/// hotswapMetricInfo table below.
+enum class HotswapMetric : uint8_t {
+  // phase:* rows. The entries flagged PartitionsTotal in hotswapMetricInfo sum,
+  // together with Unaccounted, to RewriteTotal. Declared in pipeline order.
+  RewriteTotal,
+  InputCopy,
+  ElfParse,
+  InitLLVM,
+  Decode,
+  B0A0Dispatch,
+  PoolSetup,
+  FixupTrampolines,
+  EntryTrampolines,
+  PrefetchGuard,
+  GrowElf,
+  DebugSections,
+  KdRewrite,
+  SymbolInsert,
+  ScratchVerify,
+  OutputCopy,
+  Unaccounted,
+  // dispatch-internal sub-phases (shown indented under B0A0Dispatch)
+  NopSledScan,
+  CfgBuild,
+  Liveness,
+  // strat:* parents
+  InPlace,
+  Trampoline,
+  WmmaSplit,
+  ScratchFp8,
+  WmmaScale16,
+  WmmaHazard,
+  Vop3px2Src2,
+  // strat:inplace children (s_clause is handled identically on A0/B0 upstream,
+  // so it is no longer an in-place rewrite and has no bucket)
+  InPlaceClusterLoad,
+  InPlaceBarrierSignal,
+  // strat:trampoline children
+  TrampolineDs2Addr,
+  TrampolineTensorTdm,
+  TrampolineAddtid,
+  TrampolineClusterLoad,
+  // jump:* outcomes (count-only rows)
+  JumpNopSled,
+  JumpShort,
+  JumpLong,
+  JumpDeclined,
+  Count
+};
+
+inline constexpr size_t HotswapMetricCount =
+    static_cast<size_t>(HotswapMetric::Count);
+
+#ifdef ENABLE_HOTSWAP_PROFILE
+
+inline uint64_t profNowNs() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
+struct HotswapSample {
+  uint64_t Nanos = 0;
+  uint64_t Calls = 0;
+  uint64_t Patches = 0;
+  uint64_t MinNanos = std::numeric_limits<uint64_t>::max();
+  uint64_t MaxNanos = 0;
+};
+
+/// Static per-metric display info: label, parent (Count == top-level row), and
+/// whether the row partitions phase:rewrite_total. Indexed by HotswapMetric;
+/// the array order MUST match the enumerator order.
+struct HotswapMetricInfo {
+  const char *Label;
+  HotswapMetric Parent;
+  bool PartitionsTotal;
+};
+
+inline constexpr HotswapMetricInfo hotswapMetricInfo[HotswapMetricCount] = {
+    {"phase:rewrite_total", HotswapMetric::Count, false},
+    {"phase:input_copy", HotswapMetric::Count, true},
+    {"phase:elf_parse", HotswapMetric::Count, true},
+    {"phase:initLLVM", HotswapMetric::Count, true},
+    {"phase:decode", HotswapMetric::Count, true},
+    {"phase:b0a0_dispatch", HotswapMetric::Count, true},
+    {"phase:pool_setup", HotswapMetric::Count, true},
+    {"phase:fixup_trampolines", HotswapMetric::Count, true},
+    {"phase:entry_trampolines", HotswapMetric::Count, true},
+    {"phase:prefetch_guard", HotswapMetric::Count, true},
+    {"phase:grow_elf", HotswapMetric::Count, true},
+    {"phase:debug_sections", HotswapMetric::Count, true},
+    {"phase:kd_rewrite", HotswapMetric::Count, true},
+    {"phase:symbol_insert", HotswapMetric::Count, true},
+    {"phase:scratch_verify", HotswapMetric::Count, true},
+    {"phase:output_copy", HotswapMetric::Count, true},
+    {"phase:unaccounted", HotswapMetric::Count, false},
+    {"nop_sled_scan", HotswapMetric::B0A0Dispatch, false},
+    {"cfg_build", HotswapMetric::B0A0Dispatch, false},
+    {"liveness", HotswapMetric::B0A0Dispatch, false},
+    {"strat:inplace", HotswapMetric::Count, false},
+    {"strat:trampoline", HotswapMetric::Count, false},
+    {"strat:wmma_split", HotswapMetric::Count, false},
+    {"strat:scratch_fp8", HotswapMetric::Count, false},
+    {"strat:wmma_scale16", HotswapMetric::Count, false},
+    {"strat:wmma_hazard", HotswapMetric::Count, false},
+    {"strat:vop3px2_src2", HotswapMetric::Count, false},
+    {"cluster_load", HotswapMetric::InPlace, false},
+    {"s_barrier_signal_isfirst", HotswapMetric::InPlace, false},
+    {"ds_2addr", HotswapMetric::Trampoline, false},
+    {"tensor_tdm", HotswapMetric::Trampoline, false},
+    {"addtid", HotswapMetric::Trampoline, false},
+    {"cluster_load", HotswapMetric::Trampoline, false},
+    {"jump:nop_sled", HotswapMetric::Count, false},
+    {"jump:short_s_branch", HotswapMetric::Count, false},
+    {"jump:far_set_pc_back", HotswapMetric::Count, false},
+    {"jump:declined_far", HotswapMetric::Count, false},
+};
+
+/// Process-wide accumulator. Each per-rewrite HotswapProfile merges its array
+/// here once, under a single lock. Meyers singleton; prints the table at exit.
+class HotswapAggregator {
+public:
+  static HotswapAggregator &get() {
+    static HotswapAggregator Instance;
+    return Instance;
+  }
+
+  bool enabled() const { return Enabled; }
+
+  void merge(const std::array<HotswapSample, HotswapMetricCount> &Samples) {
+    std::scoped_lock Lock(Mtx);
+    for (size_t I = 0; I < HotswapMetricCount; ++I) {
+      HotswapSample &T = Totals[I];
+      const HotswapSample &S = Samples[I];
+      T.Nanos += S.Nanos;
+      T.Calls += S.Calls;
+      T.Patches += S.Patches;
+      T.MinNanos = std::min(T.MinNanos, S.MinNanos);
+      T.MaxNanos = std::max(T.MaxNanos, S.MaxNanos);
+    }
+    HaveData = true;
+  }
+
+  ~HotswapAggregator() { dump(); }
+
+private:
+  HotswapAggregator() {
+    const char *V = getenv("HOTSWAP_PROFILE");
+    Enabled = V && V[0] != '\0' && llvm::StringRef(V) != "0";
+  }
+
+  bool hasData(HotswapMetric M) const {
+    const HotswapSample &S = Totals[static_cast<size_t>(M)];
+    return S.Calls != 0 || S.Nanos != 0 || S.Patches != 0;
+  }
+
+  void printRow(llvm::StringRef Label, unsigned Indent,
+                const HotswapSample &S) const {
+    std::string L = std::string(Indent * 2, ' ') + Label.str();
+    const double TotalUs = S.Nanos / 1000.0;
+    const double AvgUs = S.Calls ? TotalUs / S.Calls : 0.0;
+    const double MinUs = S.MinNanos == std::numeric_limits<uint64_t>::max()
+                             ? 0.0
+                             : S.MinNanos / 1000.0;
+    const double MaxUs = S.MaxNanos / 1000.0;
+    fprintf(stderr, "%-28s %8llu %12.1f %11.3f %11.3f %11.3f %9llu\n",
+            L.c_str(), static_cast<unsigned long long>(S.Calls), TotalUs, AvgUs,
+            MinUs, MaxUs, static_cast<unsigned long long>(S.Patches));
+  }
+
+  void dump() {
+    if (!Enabled || !HaveData)
+      return;
+
+    // phase:unaccounted = rewrite_total - sum(partitioning phases), so the
+    // timed phases plus this residual add up to the whole rewrite.
+    uint64_t PhaseSum = 0;
+    for (size_t I = 0; I < HotswapMetricCount; ++I)
+      if (hotswapMetricInfo[I].PartitionsTotal)
+        PhaseSum += Totals[I].Nanos;
+    HotswapSample &Total =
+        Totals[static_cast<size_t>(HotswapMetric::RewriteTotal)];
+    HotswapSample &Unacc =
+        Totals[static_cast<size_t>(HotswapMetric::Unaccounted)];
+    Unacc.Nanos = Total.Nanos > PhaseSum ? Total.Nanos - PhaseSum : 0;
+    Unacc.Calls = Total.Calls;
+
+    fprintf(stderr,
+            "\n=== HotSwap COMGR rewrite profile (HOTSWAP_PROFILE) ===\n");
+    fprintf(stderr, "%-28s %8s %12s %11s %11s %11s %9s\n", "name", "calls",
+            "total_us", "avg_us", "min_us", "max_us", "patches");
+    // Top-level rows in enum order, each followed by its children indented one
+    // level. Children carry a non-Count parent and are skipped by the outer
+    // loop.
+    for (size_t I = 0; I < HotswapMetricCount; ++I) {
+      const HotswapMetricInfo &Info = hotswapMetricInfo[I];
+      if (Info.Parent != HotswapMetric::Count)
+        continue;
+      const HotswapMetric M = static_cast<HotswapMetric>(I);
+      if (!hasData(M) && M != HotswapMetric::Unaccounted)
+        continue;
+      printRow(Info.Label, 0, Totals[I]);
+      for (size_t J = 0; J < HotswapMetricCount; ++J) {
+        if (hotswapMetricInfo[J].Parent != M)
+          continue;
+        if (!hasData(static_cast<HotswapMetric>(J)))
+          continue;
+        printRow(hotswapMetricInfo[J].Label, 1, Totals[J]);
+      }
+    }
+    fprintf(stderr, "======================================================\n");
+  }
+
+  bool Enabled = false;
+  bool HaveData = false;
+  std::mutex Mtx;
+  std::array<HotswapSample, HotswapMetricCount> Totals{};
+};
+
+/// True when profiling is compiled in and armed at runtime (HOTSWAP_PROFILE).
+inline bool hotswapProfilingEnabled() {
+  return HotswapAggregator::get().enabled();
+}
+
+/// Per-rewrite profiling session. Lives on the retargetCodeObject stack and is
+/// referenced from PatchContext so deep patch sites record into its lock-free
+/// local array. Merges once into the aggregator on destruction.
+class HotswapProfile {
+public:
+  explicit HotswapProfile(bool Enabled) : Enabled(Enabled) {}
+  HotswapProfile(const HotswapProfile &) = delete;
+  HotswapProfile &operator=(const HotswapProfile &) = delete;
+  ~HotswapProfile() {
+    if (Enabled)
+      HotswapAggregator::get().merge(Samples);
+  }
+
+  bool enabled() const { return Enabled; }
+
+  /// RAII timer. Records the elapsed ns (plus any patches) under Metric on
+  /// finish() or destruction. A disabled session hands out an inert scope with
+  /// a null back-pointer, so the clock is never read on the disabled path.
+  class Scope {
+  public:
+    Scope(HotswapProfile *Profile, HotswapMetric Metric)
+        : Profile(Profile), Metric(Metric), StartNs(Profile ? profNowNs() : 0) {
+    }
+    Scope(const Scope &) = delete;
+    Scope &operator=(const Scope &) = delete;
+    ~Scope() { finish(); }
+    void addPatches(uint64_t P) { Patches += P; }
+    void finish() {
+      if (!Profile)
+        return;
+      Profile->add(Metric, profNowNs() - StartNs, Patches);
+      Profile = nullptr;
+    }
+
+  private:
+    HotswapProfile *Profile;
+    HotswapMetric Metric;
+    uint64_t StartNs;
+    uint64_t Patches = 0;
+  };
+
+  Scope time(HotswapMetric Metric) {
+    return Scope(Enabled ? this : nullptr, Metric);
+  }
+
+  /// Count-only record (e.g. jump outcomes): one call, no wall time.
+  void count(HotswapMetric Metric, uint64_t N = 1) {
+    if (Enabled)
+      Samples[static_cast<size_t>(Metric)].Calls += N;
+  }
+
+  /// Accumulate a pre-measured interval as one call. Used by the
+  /// per-instruction pass loop, which sums locally across the stream and
+  /// flushes one row per rewrite (so a strat:* parent's "calls" stays one per
+  /// code object).
+  void add(HotswapMetric Metric, uint64_t Nanos, uint64_t Patches) {
+    if (!Enabled)
+      return;
+    HotswapSample &S = Samples[static_cast<size_t>(Metric)];
+    S.Nanos += Nanos;
+    S.Calls += 1;
+    S.Patches += Patches;
+    S.MinNanos = std::min(S.MinNanos, Nanos);
+    S.MaxNanos = std::max(S.MaxNanos, Nanos);
+  }
+
+  /// Read-only view of the per-metric samples. Exposed for unit testing the
+  /// session accumulation; production code reports through the aggregator.
+  const HotswapSample &sample(HotswapMetric Metric) const {
+    return Samples[static_cast<size_t>(Metric)];
+  }
+
+private:
+  bool Enabled;
+  std::array<HotswapSample, HotswapMetricCount> Samples{};
+};
+
+#else // !ENABLE_HOTSWAP_PROFILE
+
+// Profiling compiled out. These no-op shims keep every hotswap-*.cpp call site
+// valid at zero cost: the session is never enabled, so the timing / record
+// calls are dead-code eliminated. No static state, no atexit dump, no work.
+
+inline uint64_t profNowNs() { return 0; }
+inline bool hotswapProfilingEnabled() { return false; }
+
+class HotswapProfile {
+public:
+  class Scope {
+  public:
+    void addPatches(uint64_t) {}
+    void finish() {}
+  };
+  explicit HotswapProfile(bool = false) {}
+  HotswapProfile(const HotswapProfile &) = delete;
+  HotswapProfile &operator=(const HotswapProfile &) = delete;
+  bool enabled() const { return false; }
+  Scope time(HotswapMetric) { return Scope{}; }
+  void count(HotswapMetric, uint64_t = 1) {}
+  void add(HotswapMetric, uint64_t, uint64_t) {}
+};
+
+#endif // ENABLE_HOTSWAP_PROFILE
 
 // -- Trampoline and NOP sled --------------------------------------------------
 
@@ -873,6 +1236,9 @@ struct PatchContext {
   llvm::StringMap<KernelPatchStats> &KernelStats;
   std::vector<ScratchPatchInfo> &OutScratchPatches;
   const DirectControlFlowInfo &DirectControlFlow;
+  // Per-rewrite profiling session (no-op stub unless ENABLE_HOTSWAP_PROFILE).
+  // Deep patch sites record into its lock-free local array.
+  HotswapProfile &Profile;
   // Required patches are transformations whose unpatched original code is
   // unsafe to return when the selected rewrite policy needs the patch.
   bool RequiredPatchFailed = false;
