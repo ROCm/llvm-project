@@ -453,6 +453,13 @@ public:
                              const MachineInstr *OtherMI) const;
 
 private:
+  /// Result of a single scheduling attempt.
+  enum class ScheduleAttemptResult {
+    Scheduled,    ///< Found a schedule.
+    FailedSearch, ///< Searched [MII, MAX_II] with no schedule.
+    AbortEarly    ///< Bailed before searching (e.g. invalid MII).
+  };
+  ScheduleAttemptResult buildAndAttemptSchedule(SMSchedule &Schedule);
   LoopCarriedEdges addLoopCarriedDependences();
   void updatePhiDependences();
   void changeDependences();

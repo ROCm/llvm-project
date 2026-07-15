@@ -758,9 +758,9 @@ void SwingSchedulerDAG::setMAX_II() {
     MAX_II = MII + SwpIISearchRange;
 }
 
-/// We override the schedule function in ScheduleDAGInstrs to implement the
-/// scheduling part of the Swing Modulo Scheduling algorithm.
-void SwingSchedulerDAG::schedule() {
+/// Build the dependence graph and attempt to find a modulo schedule once.
+SwingSchedulerDAG::ScheduleAttemptResult
+SwingSchedulerDAG::buildAndAttemptSchedule(SMSchedule &Schedule) {
   buildSchedGraph(AA);
   const LoopCarriedEdges LCE = addLoopCarriedDependences();
   updatePhiDependences();
@@ -805,7 +805,7 @@ void SwingSchedulerDAG::schedule() {
                  DEBUG_TYPE, "schedule", Loop.getStartLoc(), Loop.getHeader())
              << "Invalid Minimal Initiation Interval: 0";
     });
-    return;
+    return ScheduleAttemptResult::AbortEarly;
   }
 
   // Don't pipeline large loops.
@@ -826,7 +826,7 @@ void SwingSchedulerDAG::schedule() {
              << "."
              << "Refer to -pipeliner-max-mii.";
     });
-    return;
+    return ScheduleAttemptResult::AbortEarly;
   }
 
   computeNodeFunctions(NodeSets);
@@ -862,17 +862,28 @@ void SwingSchedulerDAG::schedule() {
   // check for node order issues
   checkValidNodeOrder(Circuits);
 
-  SMSchedule Schedule(Pass.MF, this);
-  Scheduled = schedulePipeline(Schedule);
+  if (!schedulePipeline(Schedule))
+    return ScheduleAttemptResult::FailedSearch;
+  return ScheduleAttemptResult::Scheduled;
+}
 
-  if (!Scheduled){
-    LLVM_DEBUG(dbgs() << "No schedule found, return\n");
-    NumFailNoSchedule++;
-    Pass.ORE->emit([&]() {
-      return MachineOptimizationRemarkAnalysis(
-                 DEBUG_TYPE, "schedule", Loop.getStartLoc(), Loop.getHeader())
-             << "Unable to find schedule";
-    });
+/// We override the schedule function in ScheduleDAGInstrs to implement the
+/// scheduling part of the Swing Modulo Scheduling algorithm.
+void SwingSchedulerDAG::schedule() {
+  SMSchedule Schedule(Pass.MF, this);
+  ScheduleAttemptResult Result = buildAndAttemptSchedule(Schedule);
+
+  Scheduled = Result == ScheduleAttemptResult::Scheduled;
+  if (!Scheduled) {
+    if (Result == ScheduleAttemptResult::FailedSearch) {
+      LLVM_DEBUG(dbgs() << "No schedule found, return\n");
+      NumFailNoSchedule++;
+      Pass.ORE->emit([&]() {
+        return MachineOptimizationRemarkAnalysis(
+                   DEBUG_TYPE, "schedule", Loop.getStartLoc(), Loop.getHeader())
+               << "Unable to find schedule";
+      });
+    }
     return;
   }
 
