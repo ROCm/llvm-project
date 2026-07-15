@@ -262,8 +262,8 @@ static bool hasExactEntryStubPadding(ArrayRef<uint8_t> Bytes,
                                      ArrayRef<InternalDecodedInst> Decoded,
                                      const LLVMState &LS) {
   if (Decoded.size() < 6 ||
-      Decoded[5].Offset > std::numeric_limits<uint64_t>::max() -
-                              Decoded[5].Size)
+      Decoded[5].Offset >
+          std::numeric_limits<uint64_t>::max() - Decoded[5].Size)
     return false;
   const uint64_t BodyEnd = Decoded[5].Offset + Decoded[5].Size;
   SmallVector<uint8_t> CodeEnd = getCodeEndBytes(LS);
@@ -303,8 +303,7 @@ getKernelEntryTrampolineInfo(ArrayRef<uint8_t> Bytes, uint64_t StubVAddr,
 }
 
 std::optional<uint64_t>
-getKernelEntryTrampolineTargetVAddr(ArrayRef<uint8_t> Bytes,
-                                    uint64_t StubVAddr,
+getKernelEntryTrampolineTargetVAddr(ArrayRef<uint8_t> Bytes, uint64_t StubVAddr,
                                     const LLVMState &LS) {
   std::optional<KernelEntryTrampolineInfo> Info =
       getKernelEntryTrampolineInfo(Bytes, StubVAddr, LS);

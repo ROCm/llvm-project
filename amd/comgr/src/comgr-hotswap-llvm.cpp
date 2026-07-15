@@ -346,8 +346,8 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_swap_pc_i64 s[30:31], s[0:1]",
                                      "s_swap_pc_i64", S, S.SSwapPcI64Opcode))
     return S;
-  if (!resolveRequiredOpcodeViaParse("s_call_i64 s[30:31], 0", "s_call_i64",
-                                     S, S.SCallI64Opcode))
+  if (!resolveRequiredOpcodeViaParse("s_call_i64 s[30:31], 0", "s_call_i64", S,
+                                     S.SCallI64Opcode))
     return S;
 
   S.Valid = true;

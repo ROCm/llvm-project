@@ -62,9 +62,8 @@ static constexpr uint32_t HotswapPoolNoteType = 0x48535750; // "HSWP"
 static constexpr uint32_t HotswapPoolNoteVersion = 1;
 static constexpr uint32_t HotswapPoolNoteDescSize = 24;
 
-static std::optional<uint64_t> checkedAlignToUint64(uint64_t Value,
-                                                    uint64_t Alignment,
-                                                    StringRef Context) {
+static std::optional<uint64_t>
+checkedAlignToUint64(uint64_t Value, uint64_t Alignment, StringRef Context) {
   if (Alignment == 0) {
     log() << "hotswap: error: " << Context << " has zero alignment.\n";
     return std::nullopt;
@@ -80,9 +79,8 @@ buildHotswapPoolNote(uint64_t PoolVAddr, uint64_t PoolSize,
                      ExecutablePoolTargetState TargetState) {
   const uint32_t NameSize = HotswapPoolNoteName.size() + 1;
   const uint32_t NameStorageSize = alignTo(NameSize, uint32_t{4});
-  SmallVector<uint8_t, 48> Bytes(12 + NameStorageSize +
-                                    HotswapPoolNoteDescSize,
-                                0);
+  SmallVector<uint8_t, 48> Bytes(12 + NameStorageSize + HotswapPoolNoteDescSize,
+                                 0);
   support::endian::write32le(Bytes.data(), NameSize);
   support::endian::write32le(Bytes.data() + 4, HotswapPoolNoteDescSize);
   support::endian::write32le(Bytes.data() + 8, HotswapPoolNoteType);
@@ -90,8 +88,7 @@ buildHotswapPoolNote(uint64_t PoolVAddr, uint64_t PoolSize,
               HotswapPoolNoteName.size());
   uint8_t *Desc = Bytes.data() + 12 + NameStorageSize;
   support::endian::write32le(Desc, HotswapPoolNoteVersion);
-  support::endian::write32le(Desc + 4,
-                             static_cast<uint32_t>(TargetState));
+  support::endian::write32le(Desc + 4, static_cast<uint32_t>(TargetState));
   support::endian::write64le(Desc + 8, PoolVAddr);
   support::endian::write64le(Desc + 16, PoolSize);
   return Bytes;
@@ -523,9 +520,9 @@ ElfView::allKernelsHaveGfx1250Revision(StringRef Revision) const {
       return std::nullopt;
     }
   }
-  return FoundKernel &&
-         llvm::all_of(DescriptorSeen,
-                      [](const auto &Entry) { return Entry.getValue(); });
+  return FoundKernel && llvm::all_of(DescriptorSeen, [](const auto &Entry) {
+           return Entry.getValue();
+         });
 }
 
 // -- applyByteReplace ---------------------------------------------------------
@@ -577,8 +574,7 @@ NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
     const bool Eligible =
         Use == NopSledUse::Gateway
             ? Sled.canGatewayFrom(Offset)
-            : Sled.canHoldBodyFrom(
-                  Offset, Use == NopSledUse::RelocationBody);
+            : Sled.canHoldBodyFrom(Offset, Use == NopSledUse::RelocationBody);
     if (!Eligible)
       continue;
     if (Sled.WritePos > Sled.End || Needed > Sled.End - Sled.WritePos)
@@ -588,10 +584,9 @@ NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
     const bool Owned = Sled.ownsSource(Offset);
     const bool PreferOwned = Use == NopSledUse::RelocationBody;
     const bool Better =
-        !Best ||
-        (PreferOwned ? (Owned && !BestOwned) ||
-                           (Owned == BestOwned && Dist < BestDist)
-                     : Dist < BestDist);
+        !Best || (PreferOwned ? (Owned && !BestOwned) ||
+                                    (Owned == BestOwned && Dist < BestDist)
+                              : Dist < BestDist);
     if (Dist < MaxSledDistance && Better) {
       Best = &Sled;
       BestDist = Dist;
@@ -1648,15 +1643,14 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
 
   unsigned SectionIndex = 0;
   for (const ELFT::Shdr &Shdr : Sections) {
-    const bool IsFileBackedExecutable =
-        (Shdr.sh_flags & ELF::SHF_EXECINSTR) &&
-        Shdr.sh_type != ELF::SHT_NOBITS && Shdr.sh_size != 0;
+    const bool IsFileBackedExecutable = (Shdr.sh_flags & ELF::SHF_EXECINSTR) &&
+                                        Shdr.sh_type != ELF::SHT_NOBITS &&
+                                        Shdr.sh_size != 0;
     if (!IsFileBackedExecutable) {
       ++SectionIndex;
       continue;
     }
-    if (Shdr.sh_offset > FileSize ||
-        Shdr.sh_size > FileSize - Shdr.sh_offset) {
+    if (Shdr.sh_offset > FileSize || Shdr.sh_size > FileSize - Shdr.sh_offset) {
       log() << "hotswap: error: executable section " << SectionIndex
             << " extends past the end of the ELF buffer.\n";
       return std::nullopt;
@@ -1674,8 +1668,7 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
               << " is not a non-writable allocatable SHT_PROGBITS pool.\n";
         return false;
       }
-      ExternalSections.push_back(
-          {Shdr.sh_addr, Shdr.sh_size, Shdr.sh_offset});
+      ExternalSections.push_back({Shdr.sh_addr, Shdr.sh_size, Shdr.sh_offset});
     }
     ++SectionIndex;
   }
@@ -1691,8 +1684,7 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
   for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
     if (Phdr.p_type != ELF::PT_LOAD || !(Phdr.p_flags & ELF::PF_X))
       continue;
-    if (Phdr.p_offset > FileSize ||
-        Phdr.p_filesz > FileSize - Phdr.p_offset) {
+    if (Phdr.p_offset > FileSize || Phdr.p_filesz > FileSize - Phdr.p_offset) {
       log() << "hotswap: error: executable PT_LOAD extends past the end of "
                "the ELF buffer.\n";
       return std::nullopt;
@@ -1726,8 +1718,7 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
       ++TextSegmentCount;
       continue;
     }
-    ExternalSegments.push_back(
-        {Phdr.p_vaddr, Phdr.p_filesz, Phdr.p_offset});
+    ExternalSegments.push_back({Phdr.p_vaddr, Phdr.p_filesz, Phdr.p_offset});
   }
   if (TextSegmentCount != 1) {
     log() << "hotswap: error: .text must have exactly one exact RX PT_LOAD "
@@ -1736,8 +1727,8 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
     return false;
   }
 
-  auto RangesOverlap = [](uint64_t AStart, uint64_t ASize,
-                          uint64_t BStart, uint64_t BSize) {
+  auto RangesOverlap = [](uint64_t AStart, uint64_t ASize, uint64_t BStart,
+                          uint64_t BSize) {
     // All range ends were checked above before regions were collected.
     return ASize != 0 && BSize != 0 && AStart < BStart + BSize &&
            BStart < AStart + ASize;
@@ -1746,7 +1737,8 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
       [&](ArrayRef<ExecutableRegion> Regions, StringRef Kind) {
         for (size_t I = 0; I != Regions.size(); ++I) {
           const ExecutableRegion &Region = Regions[I];
-          if (RangesOverlap(Region.VAddr, Region.Size, textAddr(), textSize()) ||
+          if (RangesOverlap(Region.VAddr, Region.Size, textAddr(),
+                            textSize()) ||
               RangesOverlap(Region.FileOffset, Region.Size, textOffset(),
                             textSize())) {
             log() << "hotswap: error: external executable " << Kind << " " << I
@@ -1757,8 +1749,8 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
             const ExecutableRegion &Other = Regions[J];
             if (RangesOverlap(Region.VAddr, Region.Size, Other.VAddr,
                               Other.Size) ||
-                RangesOverlap(Region.FileOffset, Region.Size,
-                              Other.FileOffset, Other.Size)) {
+                RangesOverlap(Region.FileOffset, Region.Size, Other.FileOffset,
+                              Other.Size)) {
               log() << "hotswap: error: external executable " << Kind << " "
                     << I << " overlaps or aliases " << Kind << " " << J
                     << ".\n";
@@ -1776,8 +1768,7 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
   for (const ELFT::Shdr &Shdr : Sections) {
     if (Shdr.sh_type != ELF::SHT_NOTE)
       continue;
-    if (Shdr.sh_offset > FileSize ||
-        Shdr.sh_size > FileSize - Shdr.sh_offset) {
+    if (Shdr.sh_offset > FileSize || Shdr.sh_size > FileSize - Shdr.sh_offset) {
       log() << "hotswap: error: SHT_NOTE section extends past the end of the "
                "ELF buffer.\n";
       return std::nullopt;
@@ -1802,10 +1793,8 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
       const uint32_t NameSize = support::endian::read32le(Header);
       const uint32_t DescSize = support::endian::read32le(Header + 4);
       const uint32_t Type = support::endian::read32le(Header + 8);
-      const uint64_t NameStorageSize =
-          alignTo(uint64_t{NameSize}, RecordAlign);
-      const uint64_t DescStorageSize =
-          alignTo(uint64_t{DescSize}, RecordAlign);
+      const uint64_t NameStorageSize = alignTo(uint64_t{NameSize}, RecordAlign);
+      const uint64_t DescStorageSize = alignTo(uint64_t{DescSize}, RecordAlign);
       const uint64_t BytesAfterHeader = NoteBytes.size() - Cursor - 12;
       if (NameStorageSize > BytesAfterHeader ||
           DescStorageSize > BytesAfterHeader - NameStorageSize) {
@@ -1847,8 +1836,7 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
         const uint64_t VAddr = support::endian::read64le(Desc + 8);
         const uint64_t RegionSize = support::endian::read64le(Desc + 16);
         if (Version != HotswapPoolNoteVersion ||
-            RawState >
-                static_cast<uint32_t>(ExecutablePoolTargetState::B0) ||
+            RawState > static_cast<uint32_t>(ExecutablePoolTargetState::B0) ||
             RegionSize == 0 ||
             RegionSize > std::numeric_limits<uint64_t>::max() - VAddr) {
           log() << "hotswap: error: malformed or unsupported HotSwap pool "
@@ -1901,8 +1889,7 @@ std::optional<bool> ElfView::executableCodeOutsideTextIsCompatibleWith(
     }
     if (Section->FileOffset != Segment->FileOffset) {
       log() << "hotswap: error: HotSwap pool section/PT_LOAD at vaddr 0x"
-            << utohexstr(Pool.VAddr)
-            << " refer to different file bytes.\n";
+            << utohexstr(Pool.VAddr) << " refer to different file bytes.\n";
       return false;
     }
     if (Pool.State != ExecutablePoolTargetState::Neutral &&
@@ -1957,9 +1944,9 @@ std::optional<uint64_t> ElfView::trampolinePoolVAddr() const {
 
 // -- addKernelEntryTrampolineSymbols ------------------------------------------
 
-std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
-    WritableMemoryBuffer &In, uint64_t PoolVAddr,
-    ArrayRef<KernelEntryTrampolineFixup> Fixups) {
+std::unique_ptr<WritableMemoryBuffer>
+addKernelEntryTrampolineSymbols(WritableMemoryBuffer &In, uint64_t PoolVAddr,
+                                ArrayRef<KernelEntryTrampolineFixup> Fixups) {
   if (Fixups.empty())
     return nullptr;
 
@@ -2059,9 +2046,9 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
       if (SectionOffset > Section.sh_size ||
           KernelEntryStubStride > Section.sh_size - SectionOffset)
         continue;
-      std::optional<uint64_t> StubFileOffset = checkedAddUint64(
-          Section.sh_offset, SectionOffset,
-          "kernel-entry stub symbol file offset");
+      std::optional<uint64_t> StubFileOffset =
+          checkedAddUint64(Section.sh_offset, SectionOffset,
+                           "kernel-entry stub symbol file offset");
       if (!StubFileOffset || *StubFileOffset > Size ||
           KernelEntryStubStride > Size - *StubFileOffset)
         continue;
@@ -2088,8 +2075,9 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
     }
 
     std::string Name = F.KernelName + ".stub";
-    std::optional<uint64_t> NameOff = checkedAddUint64(
-        StrShdr.sh_size, StrBlob.size(), "kernel-entry stub symbol name offset");
+    std::optional<uint64_t> NameOff =
+        checkedAddUint64(StrShdr.sh_size, StrBlob.size(),
+                         "kernel-entry stub symbol name offset");
     if (!NameOff || *NameOff > std::numeric_limits<uint32_t>::max()) {
       log() << "hotswap: error: addKernelEntryTrampolineSymbols: string-table "
                "offset exceeds Elf64_Sym::st_name.\n";
@@ -2165,7 +2153,8 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
   std::memcpy(O + *NewStrOff, Data + StrOff, StrShdr.sh_size);
   std::memcpy(O + *NewStrOff + StrShdr.sh_size, StrBlob.data(), StrBlob.size());
   std::memcpy(O + *NewSymOff, Data + SymOff, SymShdr->sh_size);
-  std::memcpy(O + *NewSymOff + SymShdr->sh_size, SymBlob.data(), SymBlob.size());
+  std::memcpy(O + *NewSymOff + SymShdr->sh_size, SymBlob.data(),
+              SymBlob.size());
 
   uint64_t Shoff;
   uint16_t Shentsize, Shnum;
@@ -2249,9 +2238,9 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
     return nullptr;
   }
   const uint64_t PoolVAddr = *PoolVAddrOr;
-  std::optional<uint64_t> PoolFileOffOr = checkedAlignToUint64(
-      static_cast<uint64_t>(InputSize), TrampolinePoolAlign,
-      "trampoline pool file offset");
+  std::optional<uint64_t> PoolFileOffOr =
+      checkedAlignToUint64(static_cast<uint64_t>(InputSize),
+                           TrampolinePoolAlign, "trampoline pool file offset");
   if (!PoolFileOffOr)
     return nullptr;
   const uint64_t PoolFileOff = *PoolFileOffOr;
@@ -2317,9 +2306,9 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
              "numbering.\n";
     return nullptr;
   }
-  std::optional<uint64_t> NewPhoffOr = checkedAlignToUint64(
-      Cursor, static_cast<uint64_t>(alignof(Phdr)),
-      "relocated phdr table offset");
+  std::optional<uint64_t> NewPhoffOr =
+      checkedAlignToUint64(Cursor, static_cast<uint64_t>(alignof(Phdr)),
+                           "relocated phdr table offset");
   if (!NewPhoffOr)
     return nullptr;
   const uint64_t NewPhoff = *NewPhoffOr;
@@ -2336,9 +2325,9 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
              "unsupported extended numbering.\n";
     return nullptr;
   }
-  std::optional<uint64_t> NewShoffOr = checkedAlignToUint64(
-      Cursor, static_cast<uint64_t>(alignof(Shdr)),
-      "relocated shdr table offset");
+  std::optional<uint64_t> NewShoffOr =
+      checkedAlignToUint64(Cursor, static_cast<uint64_t>(alignof(Shdr)),
+                           "relocated shdr table offset");
   if (!NewShoffOr)
     return nullptr;
   const uint64_t NewShoff = *NewShoffOr;
@@ -2427,8 +2416,7 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
   NoteShdr.sh_offset = PoolNoteFileOff;
   NoteShdr.sh_size = PoolNote.size();
   NoteShdr.sh_addralign = 4;
-  std::memcpy(Out + NewShoff +
-                  (static_cast<uint64_t>(Shnum) + 1) * Shentsize,
+  std::memcpy(Out + NewShoff + (static_cast<uint64_t>(Shnum) + 1) * Shentsize,
               &NoteShdr, sizeof(NoteShdr));
   std::memcpy(Out + offsetof(Ehdr, e_shoff), &NewShoff, sizeof(NewShoff));
   uint16_t NewShnum16 = static_cast<uint16_t>(NewShnum);
