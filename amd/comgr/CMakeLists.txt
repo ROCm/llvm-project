@@ -646,13 +646,27 @@ if (NOT WIN32)
       ${CMAKE_DL_LIBS})
 endif()
 
+# The C-API test suite in test/ does `find_package(hip)`, which pulls
+# AMDDeviceLibsConfig and re-declares imported targets (oclc_*, ocml,
+# hip, ...). In an in-tree build that already builds device-libs via
+# LLVM_EXTERNAL_PROJECTS those targets already exist, so the
+# find_package collides ("cannot create imported target ... already
+# exists") and aborts configure. Gate it so a hotswap-focused build can
+# enable BUILD_TESTING (for test-lit's raise_cli / test-unit) without
+# dragging in the hip-dependent C-API tests.
+option(COMGR_BUILD_C_API_TESTS
+  "Build the C-API comgr tests in test/ (require find_package(hip); \
+conflicts with an in-tree device-libs build)" ON)
+
 include(CTest)
 if(BUILD_TESTING)
   add_custom_target(check-comgr COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS amd_comgr)
   if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set_property(GLOBAL APPEND PROPERTY LLVM_ADDITIONAL_TEST_TARGETS check-comgr)
   endif()
-  add_subdirectory(test)
+  if(COMGR_BUILD_C_API_TESTS)
+    add_subdirectory(test)
+  endif()
   add_subdirectory(test-lit)
   add_subdirectory(test-unit)
 endif()

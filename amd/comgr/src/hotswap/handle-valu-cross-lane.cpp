@@ -659,6 +659,13 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Lane = Ctx.B.CreateZExtOrTrunc(Lane, Ctx.I32Ty, "wrlane_idx");
     Value *OldVal = Ctx.Regs.readReg32(Ctx.B, Dst);
     Value *NewVal = nullptr;
+    // ThreadLoopProjection is the only projection that scopes lane ops to the
+    // source wave inside the handler (`sourceWaveScopedLaneOps()`); the wider
+    // ModuloReplicationProjection path leaves the native intrinsic here and
+    // relies on the default-on post-raise `rewriteCrossLaneDivergent` pass to
+    // rebase it symmetrically (with the SGPR-forced use-chain safety net), or
+    // on the TLP re-raise fallback when that pass refuses.  See issue #146 and
+    // wave-size-translation.md §5.6.3.
     if (Ctx.Projection.sourceWaveScopedLaneOps()) {
       Value *LaneId = Ctx.emitLaneIdx();
       Value *SourceLane = Ctx.B.CreateAnd(
@@ -680,14 +687,17 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   }
 
   // ---- v_readlane_b32 sDST, vSRC, lane ----
-  // Read a specific lane of vSRC into an SGPR. Reverse of writelane;
-  // cross-lane so must use the native intrinsic.
+  // Read a specific lane of vSRC into an SGPR. Reverse of writelane.
   case CanonicalOp::V_READLANE_B32: {
     ParsedReg SrcReg = Op.srcReg(0);
     Value *Lane = Op.src(1);
     Lane = Ctx.B.CreateZExtOrTrunc(Lane, Ctx.I32Ty, "rdlane_idx");
     Value *Src = Ctx.Regs.readReg32(Ctx.B, SrcReg);
     Value *Val = nullptr;
+    // See the parallel note on V_WRITELANE_B32: the source-wave rebase here is
+    // the ThreadLoopProjection path; under ModuloReplicationProjection the
+    // native intrinsic is left for the default-on `rewriteCrossLaneDivergent`
+    // pass (or the TLP re-raise fallback) to rebase.  Issue #146.
     if (Ctx.Projection.sourceWaveScopedLaneOps()) {
       Value *LaneId = Ctx.emitLaneIdx();
       uint32_t SourceMask = Ctx.Isa.WaveSize - 1;

@@ -2093,10 +2093,15 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
 
   // ==== Phase 6.5: Cross-widen writelane/readlane rewrite ====
   //
-  // Opt-in symmetric rewrite of `v_writelane_b32` / `v_readlane_b32`
-  // sites under cross-widening. Disabled by default; the caller
-  // (raise_cli's `--enable-writelane-rewrite`, PipelineConfig's
-  // `enableWritelaneRewrite`) must ask for it explicitly. See
+  // Symmetric rewrite of `v_writelane_b32` / `v_readlane_b32` sites
+  // under cross-widening. Runs by default (post-Triton-corpus
+  // graduation): raise_cli's `--disable-writelane-rewrite` and
+  // PipelineConfig's `enableWritelaneRewrite=false` pin the pre-rewrite
+  // path for lit fixtures; `--enable-writelane-rewrite` is a retained
+  // no-op compatibility spelling. This default-on pass is what closes
+  // issue #146 for the ModuloReplicationProjection path (the handler in
+  // handle-valu-cross-lane.cpp only rebases read/writelane under
+  // ThreadLoopProjection). See
   // `rewrite_cross_lane_divergent.{hpp,cpp}` and
   // wave-size-translation.md sec. 5.6.3 for the principled derivation,
   // and hotswap/docs/learnings.md for the asymmetric-rewrite bug
