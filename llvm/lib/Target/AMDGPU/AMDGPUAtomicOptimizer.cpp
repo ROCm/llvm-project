@@ -644,13 +644,11 @@ static Intrinsic::ID getWaveReductionIntrinsic(AtomicRMWInst::BinOp Op) {
     llvm_unreachable(
         "Atomic Op yet to be ported to use Wave Reduction intrinsics.");
   case AtomicRMWInst::Add:
+  case AtomicRMWInst::Sub:
     return Intrinsic::amdgcn_wave_reduce_add;
   case AtomicRMWInst::FAdd:
-    return Intrinsic::amdgcn_wave_reduce_fadd;
-  case AtomicRMWInst::Sub:
-    return Intrinsic::amdgcn_wave_reduce_sub;
   case AtomicRMWInst::FSub:
-    return Intrinsic::amdgcn_wave_reduce_fsub;
+    return Intrinsic::amdgcn_wave_reduce_fadd;
   case AtomicRMWInst::And:
     return Intrinsic::amdgcn_wave_reduce_and;
   case AtomicRMWInst::Or:

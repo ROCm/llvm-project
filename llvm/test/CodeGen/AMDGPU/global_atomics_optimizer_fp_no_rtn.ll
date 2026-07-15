@@ -252,7 +252,7 @@ define amdgpu_ps void @global_atomic_fsub_uni_address_div_value_agent_scope_stri
 ; IR-ITERATIVE-NEXT:    [[TMP6:%.*]] = trunc i64 [[TMP5]] to i32
 ; IR-ITERATIVE-NEXT:    [[TMP7:%.*]] = call i32 @llvm.amdgcn.mbcnt.lo(i32 [[TMP4]], i32 0) #[[ATTR2]]
 ; IR-ITERATIVE-NEXT:    [[TMP8:%.*]] = call i32 @llvm.amdgcn.mbcnt.hi(i32 [[TMP6]], i32 [[TMP7]]) #[[ATTR2]]
-; IR-ITERATIVE-NEXT:    [[TMP17:%.*]] = call float @llvm.amdgcn.wave.reduce.fsub.f32(float [[VAL:%.*]], i32 1) #[[ATTR2]]
+; IR-ITERATIVE-NEXT:    [[TMP17:%.*]] = call float @llvm.amdgcn.wave.reduce.fadd.f32(float [[VAL:%.*]], i32 1) #[[ATTR2]]
 ; IR-ITERATIVE-NEXT:    [[TMP10:%.*]] = icmp eq i32 [[TMP8]], 0
 ; IR-ITERATIVE-NEXT:    br i1 [[TMP10]], label [[TMP14:%.*]], label [[TMP12:%.*]]
 ; IR-ITERATIVE:       11:
@@ -273,7 +273,7 @@ define amdgpu_ps void @global_atomic_fsub_uni_address_div_value_agent_scope_stri
 ; IR-DPP-NEXT:    [[TMP6:%.*]] = trunc i64 [[TMP5]] to i32
 ; IR-DPP-NEXT:    [[TMP7:%.*]] = call i32 @llvm.amdgcn.mbcnt.lo(i32 [[TMP4]], i32 0) #[[ATTR2]]
 ; IR-DPP-NEXT:    [[TMP8:%.*]] = call i32 @llvm.amdgcn.mbcnt.hi(i32 [[TMP6]], i32 [[TMP7]]) #[[ATTR2]]
-; IR-DPP-NEXT:    [[TMP23:%.*]] = call float @llvm.amdgcn.wave.reduce.fsub.f32(float [[VAL:%.*]], i32 2) #[[ATTR2]]
+; IR-DPP-NEXT:    [[TMP23:%.*]] = call float @llvm.amdgcn.wave.reduce.fadd.f32(float [[VAL:%.*]], i32 2) #[[ATTR2]]
 ; IR-DPP-NEXT:    [[TMP24:%.*]] = icmp eq i32 [[TMP8]], 0
 ; IR-DPP-NEXT:    br i1 [[TMP24]], label [[TMP25:%.*]], label [[TMP27:%.*]]
 ; IR-DPP:       11:
@@ -924,7 +924,7 @@ define amdgpu_ps void @global_atomic_fsub_double_uni_address_div_value_agent_sco
 ; IR-ITERATIVE-NEXT:    [[TMP6:%.*]] = trunc i64 [[TMP5]] to i32
 ; IR-ITERATIVE-NEXT:    [[TMP7:%.*]] = call i32 @llvm.amdgcn.mbcnt.lo(i32 [[TMP4]], i32 0) #[[ATTR2]]
 ; IR-ITERATIVE-NEXT:    [[TMP8:%.*]] = call i32 @llvm.amdgcn.mbcnt.hi(i32 [[TMP6]], i32 [[TMP7]]) #[[ATTR2]]
-; IR-ITERATIVE-NEXT:    [[TMP17:%.*]] = call double @llvm.amdgcn.wave.reduce.fsub.f64(double [[VAL:%.*]], i32 1) #[[ATTR2]]
+; IR-ITERATIVE-NEXT:    [[TMP17:%.*]] = call double @llvm.amdgcn.wave.reduce.fadd.f64(double [[VAL:%.*]], i32 1) #[[ATTR2]]
 ; IR-ITERATIVE-NEXT:    [[TMP10:%.*]] = icmp eq i32 [[TMP8]], 0
 ; IR-ITERATIVE-NEXT:    br i1 [[TMP10]], label [[TMP14:%.*]], label [[TMP12:%.*]]
 ; IR-ITERATIVE:       11:
@@ -945,7 +945,7 @@ define amdgpu_ps void @global_atomic_fsub_double_uni_address_div_value_agent_sco
 ; IR-DPP-NEXT:    [[TMP6:%.*]] = trunc i64 [[TMP5]] to i32
 ; IR-DPP-NEXT:    [[TMP7:%.*]] = call i32 @llvm.amdgcn.mbcnt.lo(i32 [[TMP4]], i32 0) #[[ATTR2]]
 ; IR-DPP-NEXT:    [[TMP8:%.*]] = call i32 @llvm.amdgcn.mbcnt.hi(i32 [[TMP6]], i32 [[TMP7]]) #[[ATTR2]]
-; IR-DPP-NEXT:    [[TMP23:%.*]] = call double @llvm.amdgcn.wave.reduce.fsub.f64(double [[VAL:%.*]], i32 2) #[[ATTR2]]
+; IR-DPP-NEXT:    [[TMP23:%.*]] = call double @llvm.amdgcn.wave.reduce.fadd.f64(double [[VAL:%.*]], i32 2) #[[ATTR2]]
 ; IR-DPP-NEXT:    [[TMP24:%.*]] = icmp eq i32 [[TMP8]], 0
 ; IR-DPP-NEXT:    br i1 [[TMP24]], label [[TMP25:%.*]], label [[TMP27:%.*]]
 ; IR-DPP:       11:
