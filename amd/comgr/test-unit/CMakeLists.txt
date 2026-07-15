@@ -142,6 +142,39 @@ target_include_directories(HotswapMCTests PRIVATE
 
 comgr_configure_test_target(HotswapMCTests)
 
+# -- HotswapProfileTests ------------------------------------------------------
+#
+# The opt-in HotSwap rewrite profiler (comgr-hotswap-internal.h) is compiled
+# in only under ENABLE_HOTSWAP_PROFILE, which the amd_comgr target sets
+# PRIVATE -- so the enabled #ifdef branch never reaches HotswapMCTests and is
+# dead in CI. This dedicated target defines the macro itself and exercises the
+# header-only profiler (session + sink) in both runtime-off and runtime-on
+# modes, keeping the enabled branch built and covered. It needs no MC state,
+# so it links only the lightweight ELF/Support components (comgr-env.cpp
+# supplies COMGR::env for the inline log() helper the header declares).
+
+add_executable(HotswapProfileTests
+  HotswapProfileTest.cpp
+  ../src/comgr-env.cpp)
+
+llvm_map_components_to_libnames(COMGR_TEST_UNIT_PROFILE_LIBS
+  BinaryFormat Object Support TargetParser)
+
+target_compile_definitions(HotswapProfileTests PRIVATE ENABLE_HOTSWAP_PROFILE)
+
+target_link_libraries(HotswapProfileTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  ${COMGR_TEST_UNIT_PROFILE_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_include_directories(HotswapProfileTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(HotswapProfileTests)
+
 # -- RaiserScaffoldingTests ---------------------------------------------------
 #
 # Pins the bare-bones raiser scaffolding contract (`hotswap/raiser.hpp`):
@@ -227,9 +260,10 @@ comgr_configure_test_target(LoggerTests)
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
   COMMAND $<TARGET_FILE:HotswapMCTests>
+  COMMAND $<TARGET_FILE:HotswapProfileTests>
   COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
   COMMAND $<TARGET_FILE:LoggerTests>)
-add_dependencies(test-unit HotswapElfTests HotswapMCTests
+add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapProfileTests
   RaiserScaffoldingTests DemangleSymbolNameTest LoggerTests)
 add_dependencies(check-comgr test-unit)

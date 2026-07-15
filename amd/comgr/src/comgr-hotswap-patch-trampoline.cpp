@@ -1305,21 +1305,51 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
 static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
-  if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty())
-    return patchDs2Addr(Ctx, Idx) ? 1 : 0;
-
-  if (Mnem == "tensor_load_to_lds") {
-    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0)
-      return patchTensorLoadToLdsA0(Ctx, Idx) ? 1 : 0;
-    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::B0)
-      return patchTensorLoadToLdsB0(Ctx, Idx) ? 1 : 0;
+  // Per-rule sub-buckets nested under the Trampoline parent total (which the
+  // dispatcher in comgr-hotswap-b0a0.cpp times). Each Scope reads the clock
+  // only at matching sites and only when profiling is enabled, so no cost is
+  // added scanning non-matching instructions and none inflates the parent
+  // timer (the local sample is merged once, after every scope has closed).
+  if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty()) {
+    HotswapProfile::Scope S =
+        Ctx.Profile.time(HotswapMetric::TrampolineDs2Addr);
+    const uint32_t P = patchDs2Addr(Ctx, Idx) ? 1 : 0;
+    S.addPatches(P);
+    return P;
   }
 
-  if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0 && isClusterLoad(Mnem))
-    return patchClusterLoadMaskA0(Ctx, Idx) ? 1 : 0;
+  if (Mnem == "tensor_load_to_lds") {
+    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0) {
+      HotswapProfile::Scope S =
+          Ctx.Profile.time(HotswapMetric::TrampolineTensor);
+      const uint32_t P = patchTensorLoadToLdsA0(Ctx, Idx) ? 1 : 0;
+      S.addPatches(P);
+      return P;
+    }
+    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::B0) {
+      HotswapProfile::Scope S =
+          Ctx.Profile.time(HotswapMetric::TrampolineTensor);
+      const uint32_t P = patchTensorLoadToLdsB0(Ctx, Idx) ? 1 : 0;
+      S.addPatches(P);
+      return P;
+    }
+  }
 
-  if (Ctx.Config.RunB0A0Patches && !getAddtidReplacement(Mnem).empty())
-    return patchDsAddtid(Ctx, Idx) ? 1 : 0;
+  if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0 &&
+      isClusterLoad(Mnem)) {
+    HotswapProfile::Scope S =
+        Ctx.Profile.time(HotswapMetric::TrampolineClusterLoad);
+    const uint32_t P = patchClusterLoadMaskA0(Ctx, Idx) ? 1 : 0;
+    S.addPatches(P);
+    return P;
+  }
+
+  if (Ctx.Config.RunB0A0Patches && !getAddtidReplacement(Mnem).empty()) {
+    HotswapProfile::Scope S = Ctx.Profile.time(HotswapMetric::TrampolineAddtid);
+    const uint32_t P = patchDsAddtid(Ctx, Idx) ? 1 : 0;
+    S.addPatches(P);
+    return P;
+  }
 
   return 0;
 }

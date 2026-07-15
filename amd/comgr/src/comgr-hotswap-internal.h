@@ -23,9 +23,16 @@
 #include "comgr-env.h"
 #include "comgr.h"
 
+#include <algorithm>
+#include <array>
+#include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -92,6 +99,386 @@ inline std::optional<uint64_t> checkedSubUint64(uint64_t LHS, uint64_t RHS,
   }
   return LHS - RHS;
 }
+
+// -- HotSwap rewrite profiling -----------------------------------------------
+//
+// Two-level gate:
+//   1. Compile time -- the whole facility is compiled in only when the build
+//      defines ENABLE_HOTSWAP_PROFILE (e.g. cmake -DENABLE_HOTSWAP_PROFILE=ON,
+//      which passes -DENABLE_HOTSWAP_PROFILE to the compiler). In a normal
+//      build every type below collapses to the no-op stubs in the #else
+//      branch, so there is no code, no static state, and no per-call overhead.
+//   2. Run time  -- when compiled in, it stays dormant until HOTSWAP_PROFILE is
+//      set (and not "0"); otherwise every hook is a no-op and, crucially, no
+//      clock is ever read (the Scope constructor only samples the clock when
+//      the owning session is enabled).
+//
+// Design: a typed, per-rewrite session (HotswapProfile) accumulates wall-clock
+// samples into a fixed std::array indexed by HotswapMetric -- no string keys,
+// no map lookups, and no mutex on the hot path. Each retargetCodeObject() call
+// owns one session (via HotswapProfileSession), threads it through PatchContext
+// so deep patch sites record with a single typed call, and merges the whole
+// array into the process-wide HotswapProfileSink exactly once at rewrite end
+// under a single lock. The sink aggregates across every code object rewritten
+// in the process and dumps to stderr at process exit.
+//
+// Row families (see HotswapMetric / the metricInfo() table for the full list):
+//   phase:*  coarse pipeline stages in retargetCodeObject (elf_parse, initLLVM,
+//            decode, b0a0_dispatch, grow_elf, ...). These partition
+//            phase:rewrite_total; phase:unaccounted (computed at dump time)
+//            absorbs the untimed remainder so the phases sum to the total.
+//   strat:*  the B0-to-A0 patch strategies (inplace, trampoline, wmma_*,
+//            scratch, ...). A strategy with sub-rules reports a parent total
+//            plus indented children (e.g. strat:trampoline/ds_2addr).
+//   jump:*   trampoline placement outcomes (nop_sled, short_s_branch,
+//            far_long_s_add_pc, declined_far); the "calls" column is the count.
+
+// Typed identifiers for every timed / counted bucket. HotswapProfile stores one
+// HotswapSample per value; enum order is the dump order, and children are
+// printed indented under the preceding parent (see metricInfo()). Keep \c Count
+// last: it is the array size, not a real metric.
+enum class HotswapMetric : uint8_t {
+  // phase:* -- coarse pipeline stages; these partition RewriteTotal.
+  RewriteTotal,
+  ElfParse,
+  InitLLVM,
+  Decode,
+  B0A0Dispatch,
+  NopSledScan, // child of B0A0Dispatch
+  CfgBuild,    // child of B0A0Dispatch
+  Liveness,    // child of B0A0Dispatch
+  FixupTrampolines,
+  EntryTrampolines,
+  GrowElf,
+  DebugSections,
+  KdRewrite,
+  ScratchVerify,
+  Unaccounted, // synthetic: RewriteTotal - sum(other phases), set at dump time
+  // strat:* -- B0-to-A0 patch strategies (parents followed by their children).
+  InPlace,
+  InPlaceSClause,     // child of InPlace
+  InPlaceClusterLoad, // child of InPlace
+  InPlaceSBarrier,    // child of InPlace
+  Trampoline,
+  TrampolineDs2Addr,     // child of Trampoline
+  TrampolineTensor,      // child of Trampoline
+  TrampolineClusterLoad, // child of Trampoline
+  TrampolineAddtid,      // child of Trampoline
+  WmmaSplit,
+  Scratch,
+  WmmaScale16,
+  WmmaHazard,
+  Vop3px2Src2,
+  // jump:* -- trampoline placement outcomes; the "calls" column is the count.
+  JumpNopSled,
+  JumpShort,
+  JumpLong,
+  JumpDeclined,
+  Count
+};
+
+// One accumulated bucket. Nanos / Calls / Patches are running sums; MinNanos /
+// MaxNanos bound a single timed scope's duration (kept for the richer dump).
+struct HotswapSample {
+  uint64_t Nanos = 0;
+  uint64_t Calls = 0;
+  uint64_t Patches = 0;
+  uint64_t MinNanos = std::numeric_limits<uint64_t>::max();
+  uint64_t MaxNanos = 0;
+};
+
+#ifdef ENABLE_HOTSWAP_PROFILE
+
+inline uint64_t profNowNs() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
+// Static display metadata for one metric.
+struct HotswapMetricInfo {
+  const char *Name;     // dump label, e.g. "phase:elf_parse"
+  uint8_t Indent;       // 0 = top-level row, 1 = child (printed indented)
+  bool PartitionsTotal; // true for the coarse phases that sum to RewriteTotal
+};
+
+inline const HotswapMetricInfo &metricInfo(HotswapMetric M) {
+  static constexpr HotswapMetricInfo Table[] = {
+      {"phase:rewrite_total", 0, false},
+      {"phase:elf_parse", 0, true},
+      {"phase:initLLVM", 0, true},
+      {"phase:decode", 0, true},
+      {"phase:b0a0_dispatch", 0, true},
+      {"b0a0:nop_sled_scan", 1, false},
+      {"b0a0:cfg_build", 1, false},
+      {"b0a0:liveness", 1, false},
+      {"phase:fixup_trampolines", 0, true},
+      {"phase:entry_trampolines", 0, true},
+      {"phase:grow_elf", 0, true},
+      {"phase:debug_sections", 0, true},
+      {"phase:kd_rewrite", 0, true},
+      {"phase:scratch_verify", 0, true},
+      {"phase:unaccounted", 0, false},
+      {"strat:inplace", 0, false},
+      {"strat:inplace/s_clause", 1, false},
+      {"strat:inplace/cluster_load", 1, false},
+      {"strat:inplace/s_barrier", 1, false},
+      {"strat:trampoline", 0, false},
+      {"strat:trampoline/ds_2addr", 1, false},
+      {"strat:trampoline/tensor_tdm", 1, false},
+      {"strat:trampoline/cluster_load", 1, false},
+      {"strat:trampoline/addtid", 1, false},
+      {"strat:wmma_split", 0, false},
+      {"strat:scratch_fp8", 0, false},
+      {"strat:wmma_scale16", 0, false},
+      {"strat:wmma_hazard", 0, false},
+      {"strat:vop3px2_src2", 0, false},
+      {"jump:nop_sled", 0, false},
+      {"jump:short_s_branch", 0, false},
+      {"jump:far_long_s_add_pc", 0, false},
+      {"jump:declined_far", 0, false},
+  };
+  static_assert(sizeof(Table) / sizeof(Table[0]) ==
+                    static_cast<size_t>(HotswapMetric::Count),
+                "metricInfo table must have one row per HotswapMetric");
+  return Table[static_cast<size_t>(M)];
+}
+
+// Process-wide aggregator. One instance (a function-local static in get())
+// accumulates the per-rewrite sessions merged into it and dumps at process
+// exit. All mutation goes through merge(), which takes the lock exactly once
+// per rewrite -- the hot path never touches it.
+class HotswapProfileSink {
+public:
+  static constexpr size_t NumMetrics =
+      static_cast<size_t>(HotswapMetric::Count);
+
+  static HotswapProfileSink &get() {
+    static HotswapProfileSink Instance;
+    return Instance;
+  }
+
+  void merge(const std::array<HotswapSample, NumMetrics> &Samples) {
+    std::scoped_lock Lock(Mtx);
+    for (size_t I = 0; I < NumMetrics; ++I) {
+      const HotswapSample &S = Samples[I];
+      if (S.Calls == 0 && S.Nanos == 0)
+        continue;
+      HotswapSample &D = Totals[I];
+      D.Nanos += S.Nanos;
+      D.Calls += S.Calls;
+      D.Patches += S.Patches;
+      if (S.MinNanos != std::numeric_limits<uint64_t>::max())
+        D.MinNanos = std::min(D.MinNanos, S.MinNanos);
+      D.MaxNanos = std::max(D.MaxNanos, S.MaxNanos);
+      HasData = true;
+    }
+  }
+
+  // Read access to an accumulated bucket (used by the profile unit tests).
+  const HotswapSample &total(HotswapMetric M) const {
+    return Totals[static_cast<size_t>(M)];
+  }
+
+  ~HotswapProfileSink() { dump(); }
+
+private:
+  HotswapProfileSink() = default;
+
+  void printRow(llvm::StringRef Display, const HotswapSample &S,
+                unsigned Indent) const {
+    std::string Label = std::string(Indent * 2, ' ') + Display.str();
+    const double TotalUs = S.Nanos / 1000.0;
+    const double AvgUs = S.Calls ? TotalUs / S.Calls : 0.0;
+    const double MinUs = S.MinNanos == std::numeric_limits<uint64_t>::max()
+                             ? 0.0
+                             : S.MinNanos / 1000.0;
+    const double MaxUs = S.MaxNanos / 1000.0;
+    fprintf(stderr, "%-28s %8llu %12.1f %11.3f %11.3f %11.3f %9llu\n",
+            Label.c_str(), static_cast<unsigned long long>(S.Calls), TotalUs,
+            AvgUs, MinUs, MaxUs, static_cast<unsigned long long>(S.Patches));
+  }
+
+  void dump() {
+    if (!HasData)
+      return;
+    // #4: make the phases partition rewrite_total. Everything not covered by a
+    // timed phase (input copy, pool/guard setup, symbol insertion, no-growth
+    // copy, failure paths) lands in phase:unaccounted so the phase rows sum to
+    // the total.
+    const uint64_t TotalNanos =
+        Totals[static_cast<size_t>(HotswapMetric::RewriteTotal)].Nanos;
+    uint64_t PhaseSum = 0;
+    for (size_t I = 0; I < NumMetrics; ++I)
+      if (metricInfo(static_cast<HotswapMetric>(I)).PartitionsTotal)
+        PhaseSum += Totals[I].Nanos;
+    if (TotalNanos > PhaseSum) {
+      HotswapSample &U =
+          Totals[static_cast<size_t>(HotswapMetric::Unaccounted)];
+      U.Nanos = TotalNanos - PhaseSum;
+      U.Calls = std::max<uint64_t>(U.Calls, 1);
+    }
+
+    fprintf(stderr,
+            "\n=== HotSwap COMGR rewrite profile (HOTSWAP_PROFILE) ===\n");
+    fprintf(stderr, "%-28s %8s %12s %11s %11s %11s %9s\n", "name", "calls",
+            "total_us", "avg_us", "min_us", "max_us", "patches");
+    for (size_t I = 0; I < NumMetrics; ++I) {
+      const HotswapSample &S = Totals[I];
+      if (S.Calls == 0 && S.Nanos == 0)
+        continue;
+      const HotswapMetricInfo &Info = metricInfo(static_cast<HotswapMetric>(I));
+      printRow(Info.Name, S, Info.Indent);
+    }
+    fprintf(stderr,
+            "======================================================\n");
+  }
+
+  std::mutex Mtx;
+  std::array<HotswapSample, NumMetrics> Totals{};
+  bool HasData = false;
+};
+
+// Per-rewrite session. Accumulates locally into Samples (no lock, no string
+// lookup) and, when enabled, merges into the process-wide sink once via
+// merge(). The runtime gate (HOTSWAP_PROFILE) is read once here and consulted
+// by Scope so a disabled session never reads the clock.
+class HotswapProfile {
+public:
+  static constexpr size_t NumMetrics =
+      static_cast<size_t>(HotswapMetric::Count);
+
+  HotswapProfile() {
+    const char *V = getenv("HOTSWAP_PROFILE");
+    Enabled = V && V[0] != '\0' && llvm::StringRef(V) != "0";
+  }
+  HotswapProfile(const HotswapProfile &) = delete;
+  HotswapProfile &operator=(const HotswapProfile &) = delete;
+
+  bool enabled() const { return Enabled; }
+
+  // RAII wall-clock recorder for one metric. The constructor samples the clock
+  // only when the owning session is enabled (this centralizes the runtime
+  // gate), so a disabled session reads no clock at all. Records on destruction,
+  // including any patches attributed via addPatches().
+  class Scope {
+  public:
+    Scope(HotswapProfile *Profile, HotswapMetric Metric)
+        : Profile(Profile), Metric(Metric),
+          StartNs(Profile && Profile->Enabled ? profNowNs() : 0) {}
+    Scope(const Scope &) = delete;
+    Scope &operator=(const Scope &) = delete;
+    Scope(Scope &&) = delete;
+    Scope &operator=(Scope &&) = delete;
+    ~Scope() {
+      if (!Profile || !Profile->Enabled)
+        return;
+      const uint64_t Elapsed = profNowNs() - StartNs;
+      HotswapSample &S = Profile->Samples[static_cast<size_t>(Metric)];
+      S.Nanos += Elapsed;
+      S.Calls += 1;
+      S.Patches += Patches;
+      S.MinNanos = std::min(S.MinNanos, Elapsed);
+      S.MaxNanos = std::max(S.MaxNanos, Elapsed);
+    }
+
+    // Attribute \p N applied patches to this scope's bucket.
+    void addPatches(uint64_t N) { Patches += N; }
+
+  private:
+    HotswapProfile *Profile;
+    HotswapMetric Metric;
+    uint64_t StartNs;
+    uint64_t Patches = 0;
+  };
+
+  // Time the enclosing scope under \p Metric.
+  Scope time(HotswapMetric Metric) { return Scope(this, Metric); }
+
+  // Count \p N occurrences of \p Metric with no timing (used by the count-only
+  // jump:* outcome tallies). No-op when the session is disabled.
+  void count(HotswapMetric Metric, uint64_t N = 1) {
+    if (!Enabled)
+      return;
+    Samples[static_cast<size_t>(Metric)].Calls += N;
+  }
+
+  // Merge this session's samples into the process-wide sink under a single
+  // lock. No-op when disabled.
+  void merge() {
+    if (!Enabled)
+      return;
+    HotswapProfileSink::get().merge(Samples);
+  }
+
+  // Read access to a locally accumulated bucket (used by the profile tests).
+  const HotswapSample &sample(HotswapMetric Metric) const {
+    return Samples[static_cast<size_t>(Metric)];
+  }
+
+private:
+  bool Enabled = false;
+  std::array<HotswapSample, NumMetrics> Samples{};
+};
+
+// Per-rewrite RAII: opens the RewriteTotal timer on construction and, on
+// destruction, closes it and merges the session into the process-wide sink
+// exactly once. Member declaration order makes destruction close the timer
+// (Total) before the merge (MergeAtExit) runs.
+class HotswapProfileSession {
+public:
+  HotswapProfileSession() : Total(Profile.time(HotswapMetric::RewriteTotal)) {}
+
+  HotswapProfile &profile() { return Profile; }
+
+private:
+  struct Merger {
+    HotswapProfile &Profile;
+    explicit Merger(HotswapProfile &Profile) : Profile(Profile) {}
+    ~Merger() { Profile.merge(); }
+  };
+
+  HotswapProfile Profile;
+  Merger MergeAtExit{Profile};
+  HotswapProfile::Scope Total;
+};
+
+#else // !ENABLE_HOTSWAP_PROFILE
+
+// Profiling compiled out. These no-op shims keep every hotswap-*.cpp call site
+// valid at zero cost: enabled() is always false, time() yields an inert Scope,
+// and count() / merge() vanish. No static state, no atexit dump, no per-call
+// work, and -- since the Scope constructor takes no clock -- no timing calls.
+
+class HotswapProfile {
+public:
+  class Scope {
+  public:
+    Scope() = default;
+    Scope(const Scope &) = delete;
+    Scope &operator=(const Scope &) = delete;
+    // User-declared (empty) destructor so `Scope S = time(...)` locals are
+    // treated as RAII guards and not flagged -Wunused-variable in the
+    // compiled-out build; still trivially inlined away at zero cost.
+    ~Scope() {}
+    void addPatches(uint64_t) {}
+  };
+
+  bool enabled() const { return false; }
+  Scope time(HotswapMetric) { return Scope(); }
+  void count(HotswapMetric, uint64_t = 1) {}
+  void merge() {}
+};
+
+class HotswapProfileSession {
+public:
+  HotswapProfile &profile() { return Profile; }
+
+private:
+  HotswapProfile Profile;
+};
+
+#endif // ENABLE_HOTSWAP_PROFILE
 
 // -- Trampoline and NOP sled --------------------------------------------------
 
@@ -710,6 +1097,10 @@ struct PatchContext {
   const LivenessInfo &Liveness;
   llvm::StringMap<KernelPatchStats> &KernelStats;
   std::vector<ScratchPatchInfo> &OutScratchPatches;
+  // Per-rewrite profiling session (opt-in via HOTSWAP_PROFILE; a no-op when
+  // profiling is compiled out). Patch passes record typed timings / counts
+  // through this without any string lookup or hot-path mutex.
+  HotswapProfile &Profile;
   // Required patches are transformations whose unpatched original code is
   // unsafe to return when the selected rewrite policy needs the patch.
   bool RequiredPatchFailed = false;
