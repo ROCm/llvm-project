@@ -330,8 +330,8 @@ TEST(BuildKernelEntryTrampolineFast, ForwardDeltaLandsOnEntry) {
   ASSERT_TRUE(S.Valid);
   const uint64_t StubVAddr = 0x100000;
   const uint64_t EntryVAddr = 0x180000; // forward
-  llvm::SmallVector<uint8_t> Bytes =
-      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
+  llvm::SmallVector<uint8_t> Bytes = buildKernelEntryTrampolineFast(
+      StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
   ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
   EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
 }
@@ -341,8 +341,8 @@ TEST(BuildKernelEntryTrampolineFast, BackwardDeltaLandsOnEntry) {
   ASSERT_TRUE(S.Valid);
   const uint64_t StubVAddr = 0x180000;
   const uint64_t EntryVAddr = 0x100000; // backward: negative delta
-  llvm::SmallVector<uint8_t> Bytes =
-      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
+  llvm::SmallVector<uint8_t> Bytes = buildKernelEntryTrampolineFast(
+      StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
   ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
   EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
 }
@@ -354,8 +354,8 @@ TEST(BuildKernelEntryTrampolineFast, CarryProducingDeltaLandsOnEntry) {
   // above that the low-word add overflows and must carry into the high word.
   const uint64_t StubVAddr = 0xFFFFF000;
   const uint64_t EntryVAddr = 0x1'0002'0000; // crosses the 4 GiB boundary
-  llvm::SmallVector<uint8_t> Bytes =
-      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
+  llvm::SmallVector<uint8_t> Bytes = buildKernelEntryTrampolineFast(
+      StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
   ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
   EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
 }

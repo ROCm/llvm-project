@@ -10,10 +10,11 @@
 /// no assembler, no disassembler): the stub is emitted from a pre-encoded
 /// gfx1250 byte template with the two PC-relative delta immediates and the
 /// per-kernel scratch SGPR register fields patched in. Like the MC path, the
-/// scratch pair is allocated above each kernel's SGPR count (never a live kernel
-/// input, including preloaded kernargs) and the descriptor's SGPR reservation is
-/// bumped accordingly. Idempotency and the compile-time-workaround skip are
-/// decided by raw byte comparison rather than decoding.
+/// scratch pair is allocated above each kernel's SGPR count (never a live
+/// kernel input, including preloaded kernargs) and the descriptor's SGPR
+/// reservation is bumped accordingly. Idempotency and the
+/// compile-time-workaround skip are decided by raw byte comparison rather than
+/// decoding.
 ///
 /// This path is selected automatically for pure B0->B0 entry-only rewrites
 /// (no B0->A0 instruction patches, no mask workaround). The MC-based path in
@@ -43,8 +44,8 @@ namespace hotswap {
 // of the instruction after it (s_add, at StubVAddr + FastEntryPcBaseOffset),
 // which is the base for the PC-relative delta. The template is spelled with
 // s[100:101]; buildKernelEntryTrampolineFast rewrites the six SGPR register-
-// field bytes per kernel to the allocated scratch pair (see the FastEntry*Offset
-// encoding table in comgr-hotswap-internal.h).
+// field bytes per kernel to the allocated scratch pair (see the
+// FastEntry*Offset encoding table in comgr-hotswap-internal.h).
 // clang-format off
 static constexpr uint8_t StubTemplate[FastEntryStubBodyBytes] = {
     0x7c, 0x00, 0x0b, 0xee, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // global_wb
@@ -74,8 +75,8 @@ SmallVector<uint8_t> buildKernelEntryTrampolineFast(uint64_t StubVAddr,
 
   // Patch the scratch SGPR pair s[N:N+1] into the register fields. The template
   // is spelled with s[100:101]; only the six field bytes change with N (see the
-  // FastEntry*Offset encoding table in comgr-hotswap-internal.h). ScratchSgpr is
-  // an even base <= 104 (guaranteed by the aligned-pair allocation in
+  // FastEntry*Offset encoding table in comgr-hotswap-internal.h). ScratchSgpr
+  // is an even base <= 104 (guaranteed by the aligned-pair allocation in
   // appendKernelEntryTrampolinesFast).
   const uint8_t N = static_cast<uint8_t>(ScratchSgpr);
   Bytes[FastEntryGetPcSdstOffset] = 0x80 | N;
@@ -113,9 +114,10 @@ entryHasWorkaroundPrefixFast(const ElfView &Elf,
     return std::nullopt;
   const uint8_t *EntryBytes = Elf.dataAtVAddr(*Entry, FastEntryPrefixBytes);
   if (!EntryBytes) {
-    log() << "hotswap: fast: kernel '" << KD.KernelName << "' entry vaddr 0x"
-          << Twine::utohexstr(*Entry)
-          << " is not backed by readable data; assuming no workaround prefix.\n";
+    log()
+        << "hotswap: fast: kernel '" << KD.KernelName << "' entry vaddr 0x"
+        << Twine::utohexstr(*Entry)
+        << " is not backed by readable data; assuming no workaround prefix.\n";
     return false;
   }
   return std::memcmp(EntryBytes, EntryPrefix, FastEntryPrefixBytes) == 0;
@@ -126,10 +128,8 @@ entryHasWorkaroundPrefixFast(const ElfView &Elf,
 // the correctness guarantee over a fixed s[100:101]: N is above every live
 // input (system/user SGPRs and preloaded kernargs), so the stub never clobbers
 // one. Declines (returns nullopt) if no aligned pair fits below MaxSgprs.
-static std::optional<unsigned>
-allocateEntryStubScratchSgprsFast(const ElfView &Elf,
-                                  const KernelDescriptorInfo &KD,
-                                  unsigned MaxSgprs) {
+static std::optional<unsigned> allocateEntryStubScratchSgprsFast(
+    const ElfView &Elf, const KernelDescriptorInfo &KD, unsigned MaxSgprs) {
   constexpr unsigned ScratchSgprs = 2;
   std::optional<unsigned> SgprCount = Elf.getKernelSgprCount(KD.KernelName);
   if (!SgprCount) {
@@ -236,8 +236,8 @@ std::optional<uint32_t> appendKernelEntryTrampolinesFast(
 
   for (const WorkItem &Item : Work) {
     const KernelDescriptorInfo &KD = Item.KD;
-    std::optional<uint64_t> StubVAddr =
-        checkedAddUint64(PoolVAddr, AppendOffset, "fast entry trampoline vaddr");
+    std::optional<uint64_t> StubVAddr = checkedAddUint64(
+        PoolVAddr, AppendOffset, "fast entry trampoline vaddr");
     if (!StubVAddr)
       return std::nullopt;
     std::optional<unsigned> ScratchSgpr =

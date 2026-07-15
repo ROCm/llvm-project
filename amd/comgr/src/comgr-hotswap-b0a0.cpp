@@ -2099,10 +2099,11 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   std::vector<KernelEntryTrampolineFixup> EntryFixups;
   if (Options.RunEntryTrampolines) {
     std::optional<uint32_t> EntryCount =
-        UseFastAppend ? appendKernelEntryTrampolinesFast(
-                            Elf, TargetCpu, Config.MaxSgprs, Growth, EntryFixups)
-                      : appendKernelEntryTrampolines(Elf, LS, Config.MaxSgprs,
-                                                     Growth, EntryFixups);
+        UseFastAppend
+            ? appendKernelEntryTrampolinesFast(Elf, TargetCpu, Config.MaxSgprs,
+                                               Growth, EntryFixups)
+            : appendKernelEntryTrampolines(Elf, LS, Config.MaxSgprs, Growth,
+                                           EntryFixups);
     if (!EntryCount)
       return AMD_COMGR_STATUS_ERROR;
     Count += *EntryCount;

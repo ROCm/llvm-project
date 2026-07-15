@@ -1,8 +1,8 @@
 // COM: On a pure B0-to-B0 entry-only rewrite HotSwap takes the no-MC fast path:
-// COM: it emits each entry stub from a pre-encoded template with a fixed
-// COM: s[100:101] scratch pair, leaves the descriptor SGPR reservation
-// COM: unchanged, and adds no debug-only .stub symbols. A prologue that already
-// COM: carries the workaround is skipped.
+// COM: it emits each entry stub from a pre-encoded template with a per-kernel
+// COM: scratch pair allocated above the kernel's live SGPR count, bumps the
+// COM: descriptor SGPR reservation to cover it, and adds no debug-only .stub
+// COM: symbols. A prologue that already carries the workaround is skipped.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -28,23 +28,25 @@
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_endpgm
 
-// COM: The appended stub uses the fixed s[100:101] pair, not a per-kernel pair
-// COM: like the MC path (which would emit s[8:9] here).
-// DISASM: s_get_pc_i64 s[100:101]
-// DISASM-NEXT: s_add_co_u32 s100
-// DISASM-NEXT: s_add_co_ci_u32 s101
-// DISASM-NEXT: s_set_pc_i64 s[100:101]
+// COM: The appended stub uses a per-kernel scratch pair allocated just above
+// COM: the kernel's live SGPR count (.sgpr_count 8 -> aligned pair s[8:9]),
+// COM: matching the MC path's allocation.
+// DISASM: s_get_pc_i64 s[8:9]
+// DISASM-NEXT: s_add_co_u32 s8
+// DISASM-NEXT: s_add_co_ci_u32 s9
+// DISASM-NEXT: s_set_pc_i64 s[8:9]
 
 // COM: The fast path adds no .stub symbols by default (the loader adds none;
 // COM: they are only a debugging aid).
 // RUN: %llvm-readelf -s %t.fast.elf | %FileCheck --check-prefix=NO-SYMS %s
 // NO-SYMS-NOT: .stub
 
-// COM: Fixed s[100:101] is never a live kernel input, so the logical SGPR
-// COM: reservation is left unchanged (the MC path would bump it).
+// COM: The per-kernel scratch pair s[8:9] sits above the kernel's 8 live SGPRs,
+// COM: so the descriptor SGPR reservation is bumped to cover it (8 -> 10),
+// COM: exactly like the MC path.
 // RUN: %llvm-readelf --notes %t.fast.elf | %FileCheck --check-prefix=SGPR %s
 // SGPR: .name:           plain_kernel
-// SGPR: .sgpr_count:     8
+// SGPR: .sgpr_count:     10
 
 // COM: Byte-compare idempotency: a second pass recognizes the installed stub
 // COM: (and the in-place workaround) and is a no-op.
