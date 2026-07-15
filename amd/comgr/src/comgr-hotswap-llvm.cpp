@@ -459,9 +459,9 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
   // before 64/32-bit ones), clamped to the bytes remaining in .text. Keying on
   // fewer bytes than the decoder reads is unsafe: two positions sharing a short
   // prefix but differing in later bytes can decode differently, so a short key
-  // could return a stale decode. Using a StringMap keyed on the raw window makes
-  // the available length part of the key, so a truncated tail window (e.g. 4
-  // bytes left) cannot alias a full-length window with the same prefix.
+  // could return a stale decode. Using a StringMap keyed on the raw window
+  // makes the available length part of the key, so a truncated tail window
+  // (e.g. 4 bytes left) cannot alias a full-length window with the same prefix.
   const unsigned MaxInstLen = S.MAI->getMaxInstLength(S.STI.get());
   struct DecodeCacheEntry {
     MCInst Inst;
