@@ -29,6 +29,7 @@
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 
 using namespace llvm;
 
@@ -135,6 +136,19 @@ static SmallVector<uint8_t> encodeMCInst(const MCInst &Inst,
   return SmallVector<uint8_t>(Code.begin(), Code.end());
 }
 
+// Route MC asm-parser diagnostics to the hotswap log (quiet unless verbose
+// logs are enabled) instead of letting SourceMgr print them straight to stderr.
+// initLLVM's dual-spelling opcode probe intentionally assembles the gfx12.5
+// mnemonics (s_get_pc_i64 / s_set_pc_i64) that fail on gfx12.0 / gfx10 before
+// falling back to the b64 spelling; those expected failures must not reach the
+// user's terminal.
+static void hotswapSrcMgrDiagHandler(const SMDiagnostic &Diag, void *) {
+  std::string Msg;
+  raw_string_ostream OS(Msg);
+  Diag.print(/*ProgName=*/nullptr, OS, /*ShowColors=*/false);
+  log() << OS.str();
+}
+
 /// Run the AMDGPU asm parser over \p AsmStr and return the captured MCInsts.
 /// Used by assembleSingleInst() for the full parse-and-encode path, and by
 /// initLLVM() / resolveOpcodeViaParse() for instructions where parsing the
@@ -151,6 +165,7 @@ static SmallVector<MCInst, 2> parseAsmToMCInsts(StringRef AsmStr,
   // aborts at `Either SourceMgr should be available` in MCContext.cpp.
   S.Ctx->initInlineSourceManager();
   SourceMgr *SrcMgr = S.Ctx->getInlineSourceManager();
+  SrcMgr->setDiagHandler(hotswapSrcMgrDiagHandler, nullptr);
 
   std::string FullAsm = (".text\n" + AsmStr).str();
   std::unique_ptr<MemoryBuffer> Buf =
@@ -325,11 +340,60 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   }
   S.VNopInst = VNopInsts[0];
 
-  if (!resolveRequiredOpcodeViaParse("global_wb", "global_wb", S,
-                                     S.GlobalWbOpcode))
-    return S;
-  if (!resolveRequiredOpcodeViaParse("s_get_pc_i64 s[0:1]", "s_get_pc_i64", S,
-                                     S.SGetPcI64Opcode))
+  // The global_wb writeback is a gfx12-family instruction, but the global_wb +
+  // v_nop stub prefix is only required on gfx12.5. Other subtargets build a
+  // bare PC-relative jump: gfx10.3 lacks global_wb entirely, and gfx12.0 has it
+  // but does not need the prefix. Resolve the opcode when available (used by
+  // the prefix matcher on gfx12.5) but gate the prefix on the ISA version,
+  // since gfx12.0 and gfx12.5 both provide the instruction.
+  S.GlobalWbOpcode = resolveOpcodeViaParse("global_wb", S);
+  llvm::AMDGPU::IsaVersion Version = llvm::AMDGPU::getIsaVersion(S.Cpu);
+  S.EntryStubHasWbPrefix = Version.Major == 12 && Version.Minor == 5 &&
+                           S.GlobalWbOpcode < S.MCII->getNumOpcodes();
+
+  // Resolve get-PC / set-PC by the subtarget-preferred spelling: gfx12.5 spells
+  // them s_get_pc_i64 / s_set_pc_i64, gfx12.0 / gfx10 s_getpc_b64 /
+  // s_setpc_b64. The two spellings encode identically on gfx12, so either
+  // produces the same opcode there; the cached asm spelling is reused by
+  // buildKernelEntryTrampoline.
+  auto resolveDualSpelling = [&](StringRef PreferredAsm, StringRef PreferredMnem,
+                                 StringRef FallbackAsm, StringRef FallbackMnem,
+                                 unsigned &OutOpcode,
+                                 std::string &OutAsm) -> bool {
+    OutOpcode = resolveOpcodeViaParse(PreferredAsm, S);
+    if (OutOpcode < S.MCII->getNumOpcodes()) {
+      OutAsm = PreferredMnem.str();
+      return true;
+    }
+    OutOpcode = resolveOpcodeViaParse(FallbackAsm, S);
+    if (OutOpcode < S.MCII->getNumOpcodes()) {
+      OutAsm = FallbackMnem.str();
+      return true;
+    }
+    log() << "hotswap: error: initLLVM: failed to resolve get-/set-PC opcode "
+          << "via '" << PreferredMnem << "' or '" << FallbackMnem
+          << "' for CPU '" << S.Cpu << "'.\n";
+    return false;
+  };
+
+  // The far-trampoline relocation analysis (comgr-hotswap-b0a0.cpp) runs only
+  // on the gfx1250 instruction-patch path. Its opcodes are gfx1250-specific
+  // (s_add_pc_i64 / s_call_i64 / s_swap_pc_i64 / s_prefetch_*) or gfx11+
+  // (s_delay_alu) and are absent on gfx12.0 / gfx10.3, which run only the
+  // entry-trampoline path. Require them on gfx1250; resolve best-effort
+  // elsewhere, where they are never consumed.
+  const bool IsGfx1250 = Version.Major == 12 && Version.Minor == 5;
+  auto resolveFarTrampolineOpcode = [&](StringRef Asm, StringRef Name,
+                                        unsigned &Out) -> bool {
+    if (IsGfx1250)
+      return resolveRequiredOpcodeViaParse(Asm, Name, S, Out);
+    Out = resolveOpcodeViaParse(Asm, S);
+    return true;
+  };
+
+  if (!resolveDualSpelling("s_get_pc_i64 s[0:1]", "s_get_pc_i64",
+                           "s_getpc_b64 s[0:1]", "s_getpc_b64",
+                           S.SGetPcI64Opcode, S.EntryStubGetPcAsm))
     return S;
   if (!resolveRequiredOpcodeViaParse("s_add_u32 s0, s0, 0", "s_add_u32", S,
                                      S.SAddU32Opcode))
@@ -337,14 +401,15 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_addc_u32 s1, s1, 0", "s_addc_u32", S,
                                      S.SAddcU32Opcode))
     return S;
-  if (!resolveRequiredOpcodeViaParse("s_set_pc_i64 s[0:1]", "s_set_pc_i64", S,
-                                     S.SSetPcI64Opcode))
+  if (!resolveDualSpelling("s_set_pc_i64 s[0:1]", "s_set_pc_i64",
+                           "s_setpc_b64 s[0:1]", "s_setpc_b64",
+                           S.SSetPcI64Opcode, S.EntryStubSetPcAsm))
     return S;
   if (!resolveRequiredOpcodeViaParse("s_clause 0", "s_clause", S,
                                      S.SClauseOpcode))
     return S;
-  if (!resolveRequiredOpcodeViaParse("s_delay_alu instid0(VALU_DEP_1)",
-                                     "s_delay_alu", S, S.SDelayAluOpcode))
+  if (!resolveFarTrampolineOpcode("s_delay_alu instid0(VALU_DEP_1)",
+                                  "s_delay_alu", S.SDelayAluOpcode))
     return S;
   if (!resolveRequiredOpcodeViaParse("s_endpgm", "s_endpgm", S,
                                      S.SEndPgmOpcode))
@@ -352,22 +417,22 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_endpgm_saved", "s_endpgm_saved", S,
                                      S.SEndPgmSavedOpcode))
     return S;
-  if (!resolveRequiredOpcodeViaParse("s_add_pc_i64 0", "s_add_pc_i64", S,
-                                     S.SAddPcI64Opcode))
+  if (!resolveFarTrampolineOpcode("s_add_pc_i64 0", "s_add_pc_i64",
+                                  S.SAddPcI64Opcode))
     return S;
-  if (!resolveRequiredOpcodeViaParse("s_call_i64 s[0:1], 0", "s_call_i64", S,
-                                     S.SCallI64Opcode))
+  if (!resolveFarTrampolineOpcode("s_call_i64 s[0:1], 0", "s_call_i64",
+                                  S.SCallI64Opcode))
     return S;
-  if (!resolveRequiredOpcodeViaParse("s_swap_pc_i64 s[0:1], s[2:3]",
-                                     "s_swap_pc_i64", S, S.SSwapPcI64Opcode))
+  if (!resolveFarTrampolineOpcode("s_swap_pc_i64 s[0:1], s[2:3]",
+                                  "s_swap_pc_i64", S.SSwapPcI64Opcode))
     return S;
-  if (!resolveRequiredOpcodeViaParse("s_prefetch_inst_pc_rel 100, s10, 7",
-                                     "s_prefetch_inst_pc_rel", S,
-                                     S.SPrefetchInstPcRelOpcode))
+  if (!resolveFarTrampolineOpcode("s_prefetch_inst_pc_rel 100, s10, 7",
+                                  "s_prefetch_inst_pc_rel",
+                                  S.SPrefetchInstPcRelOpcode))
     return S;
-  if (!resolveRequiredOpcodeViaParse("s_prefetch_data_pc_rel 100, s10, 7",
-                                     "s_prefetch_data_pc_rel", S,
-                                     S.SPrefetchDataPcRelOpcode))
+  if (!resolveFarTrampolineOpcode("s_prefetch_data_pc_rel 100, s10, 7",
+                                  "s_prefetch_data_pc_rel",
+                                  S.SPrefetchDataPcRelOpcode))
     return S;
 
   SmallVector<MCInst, 2> SccDefInsts =

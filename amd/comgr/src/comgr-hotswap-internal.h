@@ -522,11 +522,31 @@ struct LLVMState {
   /// initLLVM() time by parsing representative asm snippets. The idempotency
   /// matcher compares decoded opcodes against these cached values instead of
   /// matching disassembled mnemonic strings.
+  ///
+  /// GlobalWbOpcode is only meaningful when EntryStubHasWbPrefix is true (the
+  /// global_wb writeback + v_nop marker prefixes the stub only on gfx12.5;
+  /// gfx12.0 and gfx10 stubs omit it and are a pure PC-relative jump).
+  /// SGetPcI64Opcode / SSetPcI64Opcode hold the resolved get-/set-PC opcode
+  /// regardless of which mnemonic spelling the subtarget accepts (the gfx12.5
+  /// "s_get_pc_i64" and gfx12.0/gfx10 "s_getpc_b64" forms encode identically).
   unsigned GlobalWbOpcode = 0;
   unsigned SGetPcI64Opcode = 0;
   unsigned SAddU32Opcode = 0;
   unsigned SAddcU32Opcode = 0;
   unsigned SSetPcI64Opcode = 0;
+
+  /// True when the kernel-entry stub is prefixed with global_wb + v_nop. This
+  /// is gfx12.5 only: gfx10.3 lacks global_wb, and gfx12.0 has it but does not
+  /// use the prefix. When false the stub is the bare get-PC / add / addc /
+  /// set-PC jump sequence.
+  bool EntryStubHasWbPrefix = false;
+
+  /// Assembler mnemonic spellings for the get-PC / set-PC instructions that the
+  /// active subtarget accepts ("s_get_pc_i64" / "s_set_pc_i64" on gfx12.5,
+  /// "s_getpc_b64" / "s_setpc_b64" on gfx12.0 and gfx10). Used by
+  /// buildKernelEntryTrampoline so it need not rediscover the spelling per stub.
+  std::string EntryStubGetPcAsm;
+  std::string EntryStubSetPcAsm;
 
   /// MC identities used by far-trampoline relocation analysis. Each opcode is
   /// resolved once through the asm parser so policy code never compares

@@ -46,6 +46,33 @@ static bool isGfx12_5Processor(llvm::StringRef Processor) {
   return Version.Major == 12 && Version.Minor == 5;
 }
 
+// gfx12.0 (e.g. gfx1200 / gfx1201) supports the kernel-entry trampoline
+// rewrite. Like gfx10.3, its stub is a bare PC-relative jump with no global_wb
+// + v_nop prefix (that marker is emitted only on gfx12.5); gfx12.0 also spells
+// get-/set-PC as s_getpc_b64 / s_setpc_b64 (encoding identically to gfx12.5's
+// s_get_pc_i64 forms). The gfx1250 B0-to-A0 patches are NOT applied here.
+static bool isGfx12_0Processor(llvm::StringRef Processor) {
+  llvm::AMDGPU::IsaVersion Version = llvm::AMDGPU::getIsaVersion(Processor);
+  return Version.Major == 12 && Version.Minor == 0;
+}
+
+// gfx10.3 (e.g. gfx1030) supports the kernel-entry trampoline rewrite: the stub
+// is a bare PC-relative jump back to the original entrypoint, assembled from
+// instructions common to gfx10 (s_getpc_b64 / s_add_u32 / s_addc_u32 /
+// s_setpc_b64). gfx10 lacks global_wb, so the stub carries no prefix. The
+// gfx1250 B0-to-A0 patches are NOT applied here.
+static bool isGfx10_3Processor(llvm::StringRef Processor) {
+  llvm::AMDGPU::IsaVersion Version = llvm::AMDGPU::getIsaVersion(Processor);
+  return Version.Major == 10 && Version.Minor == 3;
+}
+
+// Processors for which any hotswap rewrite (entry trampolines and/or the
+// gfx1250 stepping patches) is supported.
+static bool isHotswapSupportedProcessor(llvm::StringRef Processor) {
+  return isGfx12_5Processor(Processor) || isGfx12_0Processor(Processor) ||
+         isGfx10_3Processor(Processor);
+}
+
 static amd_comgr_status_t parseHotswapIsaName(const char *IsaName,
                                               ParsedHotswapIsa &Parsed) {
   Parsed = ParsedHotswapIsa{};
@@ -208,12 +235,12 @@ hotswapRewrite(amd_comgr_data_t input, const char *source_isa_name,
       parseHotswapIsaName(target_isa_name, TargetIdent))
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
 
-  if (!isGfx12_5Processor(SourceIdent.Ident.Processor) ||
-      !isGfx12_5Processor(TargetIdent.Ident.Processor)) {
+  if (!isHotswapSupportedProcessor(SourceIdent.Ident.Processor) ||
+      !isHotswapSupportedProcessor(TargetIdent.Ident.Processor)) {
     hotswap::log() << "hotswap: error: " << ApiName
-                   << ": only gfx125x processors are supported, got source '"
-                   << SourceIdent.Ident.Processor << "' and target '"
-                   << TargetIdent.Ident.Processor << "'\n";
+                   << ": only gfx125x, gfx12.0, and gfx10.3 processors are "
+                   << "supported, got source '" << SourceIdent.Ident.Processor
+                   << "' and target '" << TargetIdent.Ident.Processor << "'\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
   if (SourceIdent.Ident.Processor != TargetIdent.Ident.Processor) {

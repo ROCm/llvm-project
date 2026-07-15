@@ -839,6 +839,12 @@ ElfView::getKernelDescriptorInstPrefSize(StringRef KernelName,
                            hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE);
   }
 
+  // COMPUTE_PGM_RSRC3.INST_PREF_SIZE was introduced on gfx11; gfx10 has no
+  // instruction-prefetch field, so there is no prefetch guard to account for
+  // after an appended entry stub. Report zero prefetch lines.
+  if (TargetCpu.starts_with("gfx10"))
+    return 0;
+
   log() << "hotswap: error: getKernelDescriptorInstPrefSize: unsupported "
         << "target CPU '" << TargetCpu << "' for kernel '" << KernelName
         << "'.\n";
@@ -855,6 +861,13 @@ bool ElfView::updateKernelDescriptorInstPrefSize(StringRef KernelName,
           << "descriptor symbol '" << KernelName << ".kd' not found.\n";
     return false;
   }
+
+  // gfx10 has no COMPUTE_PGM_RSRC3.INST_PREF_SIZE field (introduced on gfx11),
+  // so there is nothing to update after an appended entry stub. The matching
+  // getKernelDescriptorInstPrefSize() reports zero prefetch lines for gfx10, so
+  // InstPrefLines is zero here; treat the write as a successful no-op.
+  if (TargetCpu.starts_with("gfx10"))
+    return true;
 
   if (!TargetCpu.starts_with("gfx12")) {
     log() << "hotswap: error: updateKernelDescriptorInstPrefSize: unsupported "

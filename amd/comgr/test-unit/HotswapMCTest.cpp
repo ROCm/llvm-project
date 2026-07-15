@@ -71,6 +71,33 @@ static TargetIdentifier makeGfx1250Ident() {
   return TI;
 }
 
+// gfx10.3 subtarget identifier. gfx1030 lacks global_wb / s_get_pc_i64 /
+// s_set_pc_i64, so its kernel-entry stub is the prefix-less get-PC / add / addc
+// / set-PC jump assembled from the gfx10 mnemonic spellings.
+static TargetIdentifier makeGfx1030Ident() {
+  TargetIdentifier TI;
+  TI.Arch = "amdgcn";
+  TI.Vendor = "amd";
+  TI.OS = "amdhsa";
+  TI.Environ = "";
+  TI.Processor = "gfx1030";
+  return TI;
+}
+
+// gfx12.0 subtarget identifier. gfx1200 has global_wb, but the global_wb + v_nop
+// prefix is emitted only on gfx12.5; gfx1200 therefore builds a prefix-less
+// stub and accepts only the b64 get-/set-PC spelling (identical encoding to
+// gfx1250's i64 forms).
+static TargetIdentifier makeGfx1200Ident() {
+  TargetIdentifier TI;
+  TI.Arch = "amdgcn";
+  TI.Vendor = "amd";
+  TI.OS = "amdhsa";
+  TI.Environ = "";
+  TI.Processor = "gfx1200";
+  return TI;
+}
+
 // Helper: decode the little-endian 32-bit dword at \p Bytes.
 static uint32_t readDword(const uint8_t *Bytes) {
   uint32_t V;
@@ -759,6 +786,81 @@ TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
       Decoded[4].Inst,
       (llvm::Twine("s_addc_u32 s9, s9, 0x") + llvm::utohexstr(Hi)).str(), S);
   expectInstMatchesAsm(Decoded[5].Inst, "s_set_pc_i64 s[8:9]", S);
+}
+
+TEST(InitLLVM, ValidGfx1030NoWbPrefix) {
+  LLVMState S = initLLVM(makeGfx1030Ident());
+  ASSERT_TRUE(S.Valid);
+  EXPECT_EQ(S.Cpu, "gfx1030");
+  // gfx1030 has no global_wb, so the entry stub carries no prefix marker and
+  // the get-/set-PC opcodes resolve via the b64 spelling.
+  EXPECT_FALSE(S.EntryStubHasWbPrefix);
+  EXPECT_EQ(S.EntryStubGetPcAsm, "s_getpc_b64");
+  EXPECT_EQ(S.EntryStubSetPcAsm, "s_setpc_b64");
+  EXPECT_LT(S.SGetPcI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SSetPcI64Opcode, S.MCII->getNumOpcodes());
+}
+
+TEST(InitLLVM, ValidGfx1200NoWbPrefixB64Spelling) {
+  LLVMState S = initLLVM(makeGfx1200Ident());
+  ASSERT_TRUE(S.Valid);
+  EXPECT_EQ(S.Cpu, "gfx1200");
+  // gfx1200 has global_wb, but the prefix is gfx12.5-only, so gfx1200 builds a
+  // prefix-less stub and accepts only the b64 get-/set-PC spelling.
+  EXPECT_FALSE(S.EntryStubHasWbPrefix);
+  EXPECT_EQ(S.EntryStubGetPcAsm, "s_getpc_b64");
+  EXPECT_EQ(S.EntryStubSetPcAsm, "s_setpc_b64");
+  EXPECT_LT(S.SGetPcI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SSetPcI64Opcode, S.MCII->getNumOpcodes());
+}
+
+// Shared checker: a prefix-less stub is a bare get-PC / add / addc / set-PC
+// jump (no global_wb + v_nop), spelled with the b64 get-/set-PC forms.
+static void expectPrefixlessStub(const TargetIdentifier &TI) {
+  LLVMState S = initLLVM(TI);
+  ASSERT_TRUE(S.Valid);
+  ASSERT_FALSE(S.EntryStubHasWbPrefix);
+
+  constexpr uint64_t StubVAddr = 0x200000;
+  constexpr uint64_t EntryVAddr = 0x10100;
+  llvm::SmallVector<uint8_t> Bytes =
+      buildKernelEntryTrampoline(StubVAddr, EntryVAddr, /*ScratchSgpr=*/8, S);
+
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  EXPECT_TRUE(isKernelEntryTrampoline(Bytes, S));
+  EXPECT_TRUE(hasKernelEntryTrampolinePrefix(Bytes, S));
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_GE(Decoded.size(), 4u);
+  // No global_wb / v_nop prefix: the jump quartet starts at index 0.
+  EXPECT_EQ(Decoded[0].Inst.getOpcode(), S.SGetPcI64Opcode);
+  EXPECT_EQ(Decoded[1].Inst.getOpcode(), S.SAddU32Opcode);
+  EXPECT_EQ(Decoded[2].Inst.getOpcode(), S.SAddcU32Opcode);
+  EXPECT_EQ(Decoded[3].Inst.getOpcode(), S.SSetPcI64Opcode);
+
+  const uint64_t PcBase = StubVAddr + Decoded[0].Offset + Decoded[0].Size;
+  const uint64_t Delta = EntryVAddr - PcBase;
+  const uint32_t Lo = static_cast<uint32_t>(Delta);
+  const uint32_t Hi = static_cast<uint32_t>(Delta >> 32);
+  expectInstMatchesAsm(Decoded[0].Inst, "s_getpc_b64 s[8:9]", S);
+  expectInstMatchesAsm(
+      Decoded[1].Inst,
+      (llvm::Twine("s_add_u32 s8, s8, 0x") + llvm::utohexstr(Lo)).str(), S);
+  expectInstMatchesAsm(
+      Decoded[2].Inst,
+      (llvm::Twine("s_addc_u32 s9, s9, 0x") + llvm::utohexstr(Hi)).str(), S);
+  expectInstMatchesAsm(Decoded[3].Inst, "s_setpc_b64 s[8:9]", S);
+}
+
+TEST(BuildKernelEntryTrampoline, BuildsPrefixlessGfx1030Stub) {
+  expectPrefixlessStub(makeGfx1030Ident());
+}
+
+// Regression guard: a gfx12 subtarget that *has* global_wb must still build a
+// bare-jump stub, since the prefix is gfx12.5-only.
+TEST(BuildKernelEntryTrampoline, BuildsPrefixlessGfx1200Stub) {
+  expectPrefixlessStub(makeGfx1200Ident());
 }
 
 TEST(BuildKernelEntryTrampoline, PrefixPrefiltersNonStubBytes) {

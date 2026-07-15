@@ -65,11 +65,19 @@ SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
 
   // Assemble through the MC layer instead of spelling encoded bytes; the LIT
   // test pins the generated stub's disassembly.
-  if (!appendAsm(Bytes, "global_wb", LS))
-    return {};
-  if (!appendAsm(Bytes, "v_nop", LS))
-    return {};
-  if (!appendAsm(Bytes, "s_get_pc_i64 " + ScratchPair, LS))
+  //
+  // The global_wb + v_nop prefix is a gfx12.5-only marker; other subtargets
+  // (gfx12.0, which has global_wb but does not use it, and gfx10.3, which lacks
+  // it) emit a prefix-less stub that is a pure PC-relative jump back to the
+  // original entry. The get-/set-PC spelling is the one the active subtarget
+  // accepts, resolved at initLLVM() time.
+  if (LS.EntryStubHasWbPrefix) {
+    if (!appendAsm(Bytes, "global_wb", LS))
+      return {};
+    if (!appendAsm(Bytes, "v_nop", LS))
+      return {};
+  }
+  if (!appendAsm(Bytes, LS.EntryStubGetPcAsm + " " + ScratchPair, LS))
     return {};
 
   // s_get_pc_i64 returns the address of the following s_add_u32 instruction.
@@ -96,7 +104,7 @@ SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
                      utohexstr(Hi),
                  LS))
     return {};
-  if (!appendAsm(Bytes, "s_set_pc_i64 " + ScratchPair, LS))
+  if (!appendAsm(Bytes, LS.EntryStubSetPcAsm + " " + ScratchPair, LS))
     return {};
 
   SmallVector<uint8_t> CodeEnd = getCodeEndBytes(LS);
@@ -126,8 +134,23 @@ uint64_t computeKernelEntryPrefetchGuardBytes(uint32_t InstPrefLines) {
   return PrefetchBytes - KernelEntryStubStride;
 }
 
+// Number of leading marker instructions (global_wb + v_nop) in the kernel-entry
+// stub. Two on gfx12.5, zero elsewhere (gfx12.0 and gfx10.3 build a prefix-less
+// stub). The get-PC / add / addc / set-PC quartet follows the prefix.
+static unsigned entryStubPrefixInstCount(const LLVMState &LS) {
+  return LS.EntryStubHasWbPrefix ? 2u : 0u;
+}
+
+// Minimum decoded instruction count for a well-formed stub: prefix + the
+// four-instruction PC-relative jump sequence.
+static unsigned entryStubMinDecodedInsts(const LLVMState &LS) {
+  return entryStubPrefixInstCount(LS) + 4u;
+}
+
 static bool hasResolvedEntryStubState(const LLVMState &LS, StringRef Context) {
-  if (!LS.MCII || LS.GlobalWbOpcode >= LS.MCII->getNumOpcodes() ||
+  if (!LS.MCII ||
+      (LS.EntryStubHasWbPrefix &&
+       LS.GlobalWbOpcode >= LS.MCII->getNumOpcodes()) ||
       LS.SGetPcI64Opcode >= LS.MCII->getNumOpcodes() ||
       LS.SAddU32Opcode >= LS.MCII->getNumOpcodes() ||
       LS.SAddcU32Opcode >= LS.MCII->getNumOpcodes() ||
@@ -160,7 +183,7 @@ static bool decodeKernelEntryStub(ArrayRef<uint8_t> Bytes, const LLVMState &LS,
           << KernelEntryStubStride << "-byte candidate.\n";
     return false;
   }
-  return Decoded.size() >= 6;
+  return Decoded.size() >= entryStubMinDecodedInsts(LS);
 }
 
 static bool startsWithBytes(ArrayRef<uint8_t> Bytes, ArrayRef<uint8_t> Prefix) {
@@ -169,6 +192,11 @@ static bool startsWithBytes(ArrayRef<uint8_t> Bytes, ArrayRef<uint8_t> Prefix) {
 }
 
 static SmallVector<uint8_t> buildEntryStubBytePrefix(const LLVMState &LS) {
+  // Prefix-less subtargets (gfx12.0, gfx10.3) have no fixed-byte marker; the
+  // empty prefix is a valid, expected result there, not a failure.
+  if (!LS.EntryStubHasWbPrefix)
+    return {};
+
   SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", LS);
   SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", LS);
   if (GlobalWb.empty() || VNop.empty())
@@ -196,27 +224,33 @@ static bool sameRegOperand(const MCInst &LHS, unsigned LHSIndex,
 
 static bool hasEntryStubOperandShape(ArrayRef<InternalDecodedInst> Decoded,
                                      const LLVMState &LS) {
-  if (Decoded.size() < 6)
+  const unsigned Base = entryStubPrefixInstCount(LS);
+  if (Decoded.size() < entryStubMinDecodedInsts(LS))
     return false;
 
-  if (Decoded[0].Inst.getOpcode() != LS.GlobalWbOpcode ||
-      Decoded[1].Inst.getOpcode() != LS.VNopInst.getOpcode() ||
-      Decoded[2].Inst.getOpcode() != LS.SGetPcI64Opcode ||
-      Decoded[3].Inst.getOpcode() != LS.SAddU32Opcode ||
-      Decoded[4].Inst.getOpcode() != LS.SAddcU32Opcode ||
-      Decoded[5].Inst.getOpcode() != LS.SSetPcI64Opcode)
+  // The gfx12.5 prefix (global_wb + v_nop) precedes the jump quartet; on
+  // prefix-less subtargets (gfx12.0, gfx10.3) the quartet starts at index 0.
+  if (LS.EntryStubHasWbPrefix) {
+    const MCInst &GlobalWb = Decoded[0].Inst;
+    const MCInst &VNop = Decoded[1].Inst;
+    if (GlobalWb.getOpcode() != LS.GlobalWbOpcode ||
+        VNop.getOpcode() != LS.VNopInst.getOpcode())
+      return false;
+    if (GlobalWb.getNumOperands() != 1 || !GlobalWb.getOperand(0).isImm() ||
+        GlobalWb.getOperand(0).getImm() != 0 || VNop.getNumOperands() != 0)
+      return false;
+  }
+
+  if (Decoded[Base].Inst.getOpcode() != LS.SGetPcI64Opcode ||
+      Decoded[Base + 1].Inst.getOpcode() != LS.SAddU32Opcode ||
+      Decoded[Base + 2].Inst.getOpcode() != LS.SAddcU32Opcode ||
+      Decoded[Base + 3].Inst.getOpcode() != LS.SSetPcI64Opcode)
     return false;
 
-  const MCInst &GlobalWb = Decoded[0].Inst;
-  const MCInst &VNop = Decoded[1].Inst;
-  const MCInst &GetPc = Decoded[2].Inst;
-  const MCInst &AddLo = Decoded[3].Inst;
-  const MCInst &AddHi = Decoded[4].Inst;
-  const MCInst &SetPc = Decoded[5].Inst;
-
-  if (GlobalWb.getNumOperands() != 1 || !GlobalWb.getOperand(0).isImm() ||
-      GlobalWb.getOperand(0).getImm() != 0 || VNop.getNumOperands() != 0)
-    return false;
+  const MCInst &GetPc = Decoded[Base].Inst;
+  const MCInst &AddLo = Decoded[Base + 1].Inst;
+  const MCInst &AddHi = Decoded[Base + 2].Inst;
+  const MCInst &SetPc = Decoded[Base + 3].Inst;
 
   if (GetPc.getNumOperands() != 1 || SetPc.getNumOperands() != 1 ||
       !sameRegOperand(GetPc, 0, SetPc, 0))
@@ -239,9 +273,15 @@ static bool hasEntryStubOperandShape(ArrayRef<InternalDecodedInst> Decoded,
 
 static std::optional<uint64_t>
 decodeEntryStubTargetVAddr(ArrayRef<InternalDecodedInst> Decoded,
-                           uint64_t StubVAddr) {
+                           uint64_t StubVAddr, const LLVMState &LS) {
+  // Indices are relative to the (possibly empty) global_wb + v_nop prefix:
+  // get-PC at Base, then the add-lo / add-hi immediates that materialize the
+  // PC-relative delta.
+  const unsigned Base = entryStubPrefixInstCount(LS);
+  if (Decoded.size() < entryStubMinDecodedInsts(LS))
+    return std::nullopt;
   std::optional<uint64_t> PcBaseOffset =
-      checkedAddUint64(Decoded[2].Offset, Decoded[2].Size,
+      checkedAddUint64(Decoded[Base].Offset, Decoded[Base].Size,
                        "decoded kernel-entry stub PC-base offset");
   if (!PcBaseOffset)
     return std::nullopt;
@@ -251,9 +291,9 @@ decodeEntryStubTargetVAddr(ArrayRef<InternalDecodedInst> Decoded,
     return std::nullopt;
 
   const uint64_t Lo =
-      static_cast<uint32_t>(Decoded[3].Inst.getOperand(2).getImm());
+      static_cast<uint32_t>(Decoded[Base + 1].Inst.getOperand(2).getImm());
   const uint64_t Hi =
-      static_cast<uint32_t>(Decoded[4].Inst.getOperand(2).getImm());
+      static_cast<uint32_t>(Decoded[Base + 2].Inst.getOperand(2).getImm());
   const uint64_t Delta = Lo | (Hi << 32);
   return *PcBase + Delta;
 }
@@ -269,14 +309,34 @@ bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
 
 bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,
                                     const LLVMState &LS) {
-  SmallVector<uint8_t> Prefix;
-  if (!appendAsm(Prefix, "global_wb", LS))
+  // gfx12.5: the global_wb + v_nop marker is register-independent, so a
+  // byte-exact compare is a cheap, robust prefilter.
+  if (LS.EntryStubHasWbPrefix) {
+    SmallVector<uint8_t> Prefix;
+    if (!appendAsm(Prefix, "global_wb", LS))
+      return false;
+    if (!appendAsm(Prefix, "v_nop", LS))
+      return false;
+
+    return Bytes.size() >= Prefix.size() &&
+           std::equal(Prefix.begin(), Prefix.end(), Bytes.begin());
+  }
+
+  // Prefix-less subtargets (gfx12.0, gfx10.3): the stub has no fixed-byte
+  // marker because the leading s_getpc_b64 encodes its scratch register. Decode
+  // only the first instruction (one dword) -- cheap, and it avoids running the
+  // disassembler over an entire arbitrary 256-byte candidate region -- and
+  // check it is the get-PC opcode. False positives are harmless: the full
+  // isKernelEntryTrampoline matcher still validates the whole shape.
+  if (Bytes.size() < MinInstSize)
     return false;
-  if (!appendAsm(Prefix, "v_nop", LS))
+  if (!hasResolvedEntryStubState(LS, "hasKernelEntryTrampolinePrefix"))
     return false;
 
-  return Bytes.size() >= Prefix.size() &&
-         std::equal(Prefix.begin(), Prefix.end(), Bytes.begin());
+  std::vector<InternalDecodedInst> First;
+  if (!decodeTextSection(Bytes.data(), MinInstSize, LS, First) || First.empty())
+    return false;
+  return First.front().Inst.getOpcode() == LS.SGetPcI64Opcode;
 }
 
 static std::optional<uint64_t>
@@ -343,7 +403,8 @@ descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
   if (!hasEntryStubOperandShape(Decoded, LS))
     return false;
 
-  std::optional<uint64_t> Target = decodeEntryStubTargetVAddr(Decoded, *Entry);
+  std::optional<uint64_t> Target =
+      decodeEntryStubTargetVAddr(Decoded, *Entry, LS);
   if (!Target)
     return std::nullopt;
 
@@ -488,8 +549,13 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
   if (Descriptors.empty())
     return 0;
 
+  // gfx12.5 stubs carry a global_wb + v_nop byte prefix used as a cheap
+  // idempotency prefilter. Prefix-less subtargets (gfx12.0, gfx10.3) return an
+  // empty prefix here, which is expected -- the matchers fall back to decoding
+  // the leading get-PC instruction. Only treat an empty prefix as a failure
+  // when the subtarget is supposed to have one.
   SmallVector<uint8_t> EntryStubPrefix = buildEntryStubBytePrefix(LS);
-  if (EntryStubPrefix.empty()) {
+  if (LS.EntryStubHasWbPrefix && EntryStubPrefix.empty()) {
     log() << "hotswap: error: entry trampoline: failed to assemble byte "
           << "prefix for idempotency matching.\n";
     return std::nullopt;
