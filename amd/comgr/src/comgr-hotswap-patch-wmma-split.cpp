@@ -841,7 +841,7 @@ bool sourceRangeOverlapsTextSymbolExtent(const PatchContext &Ctx,
                                          uint64_t Begin, uint64_t End) {
   if (!Ctx.TextSymbolExtents)
     return true;
-  auto It =
+  ArrayRef<ElfView::TextOffsetRange>::iterator It =
       llvm::lower_bound(*Ctx.TextSymbolExtents, Begin,
                         [](const ElfView::TextOffsetRange &Extent,
                            uint64_t Offset) { return Extent.End <= Offset; });
