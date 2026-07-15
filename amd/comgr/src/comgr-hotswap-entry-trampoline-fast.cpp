@@ -6,13 +6,14 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// B0-on-B0 kernel-entry trampoline FAST PATH. Mirrors the ROCr loader
-/// trampoline: no LLVM MC layer (no initLLVM, no assembler, no disassembler).
-/// The stub is emitted from a pre-encoded gfx1250 byte template with only the
-/// two PC-relative delta immediates patched in, using a fixed s[100:101]
-/// scratch pair (so no per-kernel SGPR read and no descriptor SGPR-reservation
-/// update). Idempotency and the compile-time-workaround skip are decided by raw
-/// byte comparison rather than decoding.
+/// B0-on-B0 kernel-entry trampoline FAST PATH. No LLVM MC layer (no initLLVM,
+/// no assembler, no disassembler): the stub is emitted from a pre-encoded
+/// gfx1250 byte template with the two PC-relative delta immediates and the
+/// per-kernel scratch SGPR register fields patched in. Like the MC path, the
+/// scratch pair is allocated above each kernel's SGPR count (never a live kernel
+/// input, including preloaded kernargs) and the descriptor's SGPR reservation is
+/// bumped accordingly. Idempotency and the compile-time-workaround skip are
+/// decided by raw byte comparison rather than decoding.
 ///
 /// This path is selected automatically for pure B0->B0 entry-only rewrites
 /// (no B0->A0 instruction patches, no mask workaround). The MC-based path in
@@ -36,11 +37,14 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
-// Pre-encoded gfx1250 stub template (fixed s[100:101]). Ground-truth encodings
-// from llvm-mc -mcpu=gfx1250 (little-endian). The body is 40 bytes and is
-// padded to KernelEntryStubStride (256) with s_code_end. s_get_pc_i64 loads the
-// address of the instruction after it (s_add, at StubVAddr +
-// FastEntryPcBaseOffset), which is the base for the PC-relative delta.
+// Pre-encoded gfx1250 stub template. Ground-truth encodings from
+// llvm-mc -mcpu=gfx1250 (little-endian). The body is 40 bytes and is padded to
+// KernelEntryStubStride (256) with s_code_end. s_get_pc_i64 loads the address
+// of the instruction after it (s_add, at StubVAddr + FastEntryPcBaseOffset),
+// which is the base for the PC-relative delta. The template is spelled with
+// s[100:101]; buildKernelEntryTrampolineFast rewrites the six SGPR register-
+// field bytes per kernel to the allocated scratch pair (see the FastEntry*Offset
+// encoding table in comgr-hotswap-internal.h).
 // clang-format off
 static constexpr uint8_t StubTemplate[FastEntryStubBodyBytes] = {
     0x7c, 0x00, 0x0b, 0xee, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // global_wb
@@ -62,10 +66,24 @@ static constexpr uint8_t EntryPrefix[FastEntryPrefixBytes] = {
 // clang-format on
 
 SmallVector<uint8_t> buildKernelEntryTrampolineFast(uint64_t StubVAddr,
-                                                    uint64_t EntryVAddr) {
+                                                    uint64_t EntryVAddr,
+                                                    unsigned ScratchSgpr) {
   SmallVector<uint8_t> Bytes;
   Bytes.resize(KernelEntryStubStride);
   std::memcpy(Bytes.data(), StubTemplate, FastEntryStubBodyBytes);
+
+  // Patch the scratch SGPR pair s[N:N+1] into the register fields. The template
+  // is spelled with s[100:101]; only the six field bytes change with N (see the
+  // FastEntry*Offset encoding table in comgr-hotswap-internal.h). ScratchSgpr is
+  // an even base <= 104 (guaranteed by the aligned-pair allocation in
+  // appendKernelEntryTrampolinesFast).
+  const uint8_t N = static_cast<uint8_t>(ScratchSgpr);
+  Bytes[FastEntryGetPcSdstOffset] = 0x80 | N;
+  Bytes[FastEntryAddLoSrc0Offset] = N;
+  Bytes[FastEntryAddLoSdstOffset] = N;
+  Bytes[FastEntryAddHiSrc0Offset] = N + 1;
+  Bytes[FastEntryAddHiSdstOffset] = N + 1;
+  Bytes[FastEntrySetPcSrcOffset] = N;
 
   // Materialize EntryVAddr relative to the s_get_pc base. Two's complement, so
   // back-jumps are handled.
@@ -99,6 +117,39 @@ entryHasWorkaroundPrefixFast(const ElfView &Elf,
   return std::memcmp(EntryBytes, EntryPrefix, FastEntryPrefixBytes) == 0;
 }
 
+// Allocate an aligned scratch SGPR pair s[N:N+1] just above the kernel's live
+// SGPR count, exactly like the MC path's allocateEntryStubScratchSgprs. This is
+// the correctness guarantee over a fixed s[100:101]: N is above every live
+// input (system/user SGPRs and preloaded kernargs), so the stub never clobbers
+// one. Declines (returns nullopt) if no aligned pair fits below MaxSgprs.
+static std::optional<unsigned>
+allocateEntryStubScratchSgprsFast(const ElfView &Elf,
+                                  const KernelDescriptorInfo &KD,
+                                  unsigned MaxSgprs) {
+  constexpr unsigned ScratchSgprs = 2;
+  std::optional<unsigned> SgprCount = Elf.getKernelSgprCount(KD.KernelName);
+  if (!SgprCount) {
+    log() << "hotswap: error: fast entry trampoline: failed to read SGPR count "
+          << "for '" << KD.KernelName << "'.\n";
+    return std::nullopt;
+  }
+  if (*SgprCount > MaxSgprs) {
+    log() << "hotswap: error: fast entry trampoline: kernel '" << KD.KernelName
+          << "' uses " << *SgprCount << " SGPRs, above max " << MaxSgprs
+          << ".\n";
+    return std::nullopt;
+  }
+
+  unsigned ScratchBase = (*SgprCount + 1) & ~1u;
+  if (ScratchBase > MaxSgprs || MaxSgprs - ScratchBase < ScratchSgprs) {
+    log() << "hotswap: error: fast entry trampoline: kernel '" << KD.KernelName
+          << "' uses " << *SgprCount << " SGPRs; no aligned scratch pair fits "
+          << "below max " << MaxSgprs << ".\n";
+    return std::nullopt;
+  }
+  return ScratchBase;
+}
+
 static bool appendPaddingFast(std::vector<Trampoline> &Out, uint64_t PadBytes) {
   if (PadBytes == 0)
     return true;
@@ -116,7 +167,8 @@ static bool appendPaddingFast(std::vector<Trampoline> &Out, uint64_t PadBytes) {
 }
 
 std::optional<uint32_t> appendKernelEntryTrampolinesFast(
-    const ElfView &Elf, StringRef TargetCpu, std::vector<Trampoline> &Growth,
+    const ElfView &Elf, StringRef TargetCpu, unsigned MaxSgprs,
+    std::vector<Trampoline> &Growth,
     std::vector<KernelEntryTrampolineFixup> &OutFixups) {
   ArrayRef<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
   if (Descriptors.empty())
@@ -180,30 +232,32 @@ std::optional<uint32_t> appendKernelEntryTrampolinesFast(
 
   for (const WorkItem &Item : Work) {
     const KernelDescriptorInfo &KD = Item.KD;
-    std::optional<uint64_t> StubVAddr = checkedAddUint64(
-        PoolVAddr, AppendOffset,
-        (Twine("fast entry trampoline vaddr for '") + KD.KernelName + "'")
-            .str());
+    std::optional<uint64_t> StubVAddr =
+        checkedAddUint64(PoolVAddr, AppendOffset, "fast entry trampoline vaddr");
     if (!StubVAddr)
+      return std::nullopt;
+    std::optional<unsigned> ScratchSgpr =
+        allocateEntryStubScratchSgprsFast(Elf, KD, MaxSgprs);
+    if (!ScratchSgpr)
       return std::nullopt;
     std::optional<uint64_t> Entry = entryVAddr(KD);
     if (!Entry)
       return std::nullopt;
 
     Trampoline T;
-    T.Bytes = buildKernelEntryTrampolineFast(*StubVAddr, *Entry);
+    T.Bytes = buildKernelEntryTrampolineFast(*StubVAddr, *Entry, *ScratchSgpr);
     LocalGrowth.push_back(std::move(T));
 
-    // Fixed s[100:101]: no per-kernel SGPR read, and SkipSgprReservation tells
-    // the descriptor rewrite to leave the logical SGPR count unchanged.
-    LocalFixups.push_back({KD.KernelName, AppendOffset, /*RequiredSgprs=*/0,
+    // Per-kernel scratch pair s[*ScratchSgpr:*ScratchSgpr+1]: bump the
+    // descriptor SGPR reservation (SkipSgprReservation=false) so the shared
+    // rewriteKernelEntryDescriptorOffsets records the pair, exactly like the MC
+    // path.
+    LocalFixups.push_back({KD.KernelName, AppendOffset, *ScratchSgpr + 2,
                            Item.StubInstPrefLines,
-                           /*SkipSgprReservation=*/true});
+                           /*SkipSgprReservation=*/false});
 
     std::optional<uint64_t> NewAppendOffset = checkedAddUint64(
-        AppendOffset, KernelEntryStubStride,
-        (Twine("fast entry append offset after '") + KD.KernelName + "'")
-            .str());
+        AppendOffset, KernelEntryStubStride, "fast entry append offset");
     if (!NewAppendOffset)
       return std::nullopt;
     AppendOffset = *NewAppendOffset;
@@ -234,7 +288,7 @@ std::optional<uint32_t> appendKernelEntryTrampolinesFast(
 
   log() << "hotswap: fast: installed " << LocalFixups.size()
         << " kernel-entry trampoline" << (LocalFixups.size() == 1 ? "" : "s")
-        << " (no-disasm, fixed s[100:101]) with " << GuardBytes
+        << " (no-disasm, per-kernel scratch SGPR) with " << GuardBytes
         << " prefetch guard bytes\n";
   return static_cast<uint32_t>(LocalFixups.size());
 }

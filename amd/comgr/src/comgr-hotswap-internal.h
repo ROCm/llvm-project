@@ -133,13 +133,28 @@ static constexpr uint32_t KernelEntryStubInstPrefLines =
     KernelEntryStubStride / KernelEntryInstPrefUnitBytes;
 
 // B0->B0 fast-path stub layout (see comgr-hotswap-entry-trampoline-fast.cpp).
-// Pre-encoded gfx1250 stub, fixed s[100:101]; only the two PC-relative deltas
-// are patched per kernel. All offsets are into the 256-byte stub.
+// Pre-encoded gfx1250 stub; the two PC-relative delta immediates and the
+// per-kernel scratch SGPR register fields are patched per kernel. All offsets
+// are into the 256-byte stub.
 static constexpr uint64_t FastEntryStubBodyBytes = 40; // body: to s_set_pc_i64
 static constexpr uint64_t FastEntryPrefixBytes = 16;   // global_wb + v_nop
 static constexpr uint64_t FastEntryPcBaseOffset = 20;  // s_add (after s_get_pc)
 static constexpr uint64_t FastEntryDeltaLoOffset = 24; // s_add_co_u32 imm32
 static constexpr uint64_t FastEntryDeltaHiOffset = 32; // s_add_co_ci_u32 imm32
+
+// SGPR register-field byte offsets within the stub body. The scratch pair is
+// s[N:N+1] with N = ScratchBase (even). Verified by llvm-mc round-trip on
+// gfx1250 (see the encoding table in comgr-hotswap-entry-trampoline-fast.cpp):
+//   s_get_pc_i64 sdst         : byte = 0x80 | N
+//   s_add_co_u32 src0/sdst    : byte = N
+//   s_add_co_ci_u32 src0/sdst : byte = N + 1
+//   s_set_pc_i64 src          : byte = N
+static constexpr uint64_t FastEntryGetPcSdstOffset = 18;
+static constexpr uint64_t FastEntryAddLoSrc0Offset = 20;
+static constexpr uint64_t FastEntryAddLoSdstOffset = 22;
+static constexpr uint64_t FastEntryAddHiSrc0Offset = 28;
+static constexpr uint64_t FastEntryAddHiSdstOffset = 30;
+static constexpr uint64_t FastEntrySetPcSrcOffset = 36;
 
 struct KernelDescriptorInfo {
   std::string KernelName;
@@ -941,10 +956,10 @@ struct KernelEntryTrampolineFixup {
   uint64_t StubTextOffset = 0;
   unsigned RequiredSgprs = 0;
   uint32_t InstPrefLines = 0;
-  // The fast path uses a fixed s[100:101] scratch pair that is never a live
-  // kernel input, so the logical SGPR reservation is unchanged and the
-  // descriptor SGPR-count update is skipped. The MC path allocates a per-kernel
-  // pair and leaves this false.
+  // Both the MC path and the fast path allocate a per-kernel scratch pair above
+  // the kernel's live SGPR count and bump the descriptor SGPR reservation, so
+  // this is normally false. It stays reserved for a caller that installs a stub
+  // using a pair already counted in the reservation (no bump needed).
   bool SkipSgprReservation = false;
 };
 
@@ -998,15 +1013,17 @@ std::optional<uint64_t> checkedAlignTo(uint64_t Value, uint64_t Alignment,
                                        llvm::StringRef Context);
 
 /// B0->B0 FAST PATH (comgr-hotswap-entry-trampoline-fast.cpp): emit entry stubs
-/// from a pre-encoded gfx1250 byte template with fixed s[100:101] and no LLVM
-/// MC layer. Same append/fixup contract as appendKernelEntryTrampolines, but no
-/// per-kernel SGPR read and RequiredSgprs is left 0 (descriptor SGPR
-/// reservation unchanged). Selected automatically for pure B0->B0 entry-only
-/// rewrites.
+/// from a pre-encoded gfx1250 byte template with no LLVM MC layer. Same
+/// append/fixup contract as appendKernelEntryTrampolines: the scratch pair is
+/// allocated per kernel above its live SGPR count and \p ScratchSgpr is patched
+/// into the stub's SGPR register fields, so the descriptor SGPR reservation is
+/// bumped exactly like the MC path. Selected automatically for pure B0->B0
+/// entry-only rewrites.
 llvm::SmallVector<uint8_t> buildKernelEntryTrampolineFast(uint64_t StubVAddr,
-                                                          uint64_t EntryVAddr);
+                                                          uint64_t EntryVAddr,
+                                                          unsigned ScratchSgpr);
 std::optional<uint32_t> appendKernelEntryTrampolinesFast(
-    const ElfView &Elf, llvm::StringRef TargetCpu,
+    const ElfView &Elf, llvm::StringRef TargetCpu, unsigned MaxSgprs,
     std::vector<Trampoline> &Growth,
     std::vector<KernelEntryTrampolineFixup> &OutFixups);
 

@@ -261,17 +261,18 @@ TEST(EncodeSetPCLongBranch, RejectsMisalignedScratchPair) {
 // -- buildKernelEntryTrampolineFast ------------------------------------------
 //
 // The fast path emits its entry stub from a pre-encoded byte template, patching
-// only the two PC-relative delta immediates. These tests disassemble the
-// emitted bytes and confirm (a) the stub keeps the fixed s[100:101] scratch
-// pair the template hard-codes, and (b) the runtime PC arithmetic --
-// s_get_pc_i64 then the two-word add-with-carry -- lands exactly on the
-// original entry. Checking the decoded immediates rather than the raw template
-// guards against a bad PC-base offset or a wrong delta word, which the
-// disassembly-mnemonic lit test cannot catch.
+// the two PC-relative delta immediates and the scratch SGPR register fields.
+// These tests disassemble the emitted bytes and confirm (a) the stub names one
+// consistent scratch pair across all six SGPR fields, and (b) the runtime PC
+// arithmetic -- s_get_pc_i64 then the two-word add-with-carry -- lands exactly
+// on the original entry. They pass ScratchSgpr=100 so the decoded bytes match
+// the historical fixed-pair layout. Checking the decoded immediates rather than
+// the raw template guards against a bad PC-base offset or a wrong delta word,
+// which the disassembly-mnemonic lit test cannot catch.
 
 // Disassemble a fast stub and reconstruct the entry vaddr it jumps to,
 // modelling the on-hardware two's-complement add-with-carry across the
-// s[100:101] pair. Also asserts the fixed structure (fixed scratch pair,
+// scratch pair. Also asserts the structure (one consistent scratch pair,
 // expected opcodes).
 static uint64_t decodeFastStubTarget(const LLVMState &S, uint64_t StubVAddr,
                                      llvm::ArrayRef<uint8_t> Bytes) {
@@ -330,7 +331,7 @@ TEST(BuildKernelEntryTrampolineFast, ForwardDeltaLandsOnEntry) {
   const uint64_t StubVAddr = 0x100000;
   const uint64_t EntryVAddr = 0x180000; // forward
   llvm::SmallVector<uint8_t> Bytes =
-      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr);
+      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
   ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
   EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
 }
@@ -341,7 +342,7 @@ TEST(BuildKernelEntryTrampolineFast, BackwardDeltaLandsOnEntry) {
   const uint64_t StubVAddr = 0x180000;
   const uint64_t EntryVAddr = 0x100000; // backward: negative delta
   llvm::SmallVector<uint8_t> Bytes =
-      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr);
+      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
   ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
   EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
 }
@@ -354,9 +355,93 @@ TEST(BuildKernelEntryTrampolineFast, CarryProducingDeltaLandsOnEntry) {
   const uint64_t StubVAddr = 0xFFFFF000;
   const uint64_t EntryVAddr = 0x1'0002'0000; // crosses the 4 GiB boundary
   llvm::SmallVector<uint8_t> Bytes =
-      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr);
+      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
   ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
   EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
+}
+
+// The stub's six SGPR register fields must encode whatever scratch pair the
+// allocator picked -- not the s[100:101] the template is spelled with. Build
+// with an even base other than 100 and confirm the decoded pair matches, and
+// that the delta still lands on the entry (the field patch must not disturb the
+// delta words).
+TEST(BuildKernelEntryTrampolineFast, PatchesScratchSgprRegisterFields) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  const uint64_t StubVAddr = 0x100000;
+  const uint64_t EntryVAddr = 0x140000;
+  const unsigned ScratchSgpr = 8; // aligned pair s[8:9]
+  llvm::SmallVector<uint8_t> Bytes =
+      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr, ScratchSgpr);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+
+  std::vector<InternalDecodedInst> Dec;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Dec));
+  ASSERT_GE(Dec.size(), 6u);
+  const llvm::MCInst &GetPc = Dec[2].Inst;
+  ASSERT_TRUE(GetPc.getOperand(0).isReg());
+  // s_get_pc names the low SGPR of the pair; s[8:9] decodes as SGPR8.
+  EXPECT_EQ(GetPc.getOperand(0).getReg(), Dec[5].Inst.getOperand(0).getReg());
+  EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
+}
+
+// A kernel whose live SGPR count leaves no aligned scratch pair below MaxSgprs
+// must decline cleanly (nullopt), never clobber a live SGPR or crash. This is
+// the correctness guarantee the per-kernel scratch allocation adds over a fixed
+// pair: MetadataSgprCount is set to the top of the addressable range.
+TEST(KernelEntryTrampolineFast, DeclinesWhenNoScratchPairFits) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(EndPgm.size(), MinInstSize);
+  llvm::SmallVector<uint8_t> Text(EndPgm.begin(), EndPgm.end());
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  // 106 SGPRs used: no aligned pair fits below the 106-SGPR gfx1250 limit.
+  Opts.MetadataSgprCount = 106;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count = appendKernelEntryTrampolinesFast(
+      *View, "gfx1250", /*MaxSgprs=*/106, Growth, Fixups);
+  EXPECT_FALSE(Count.has_value());
+}
+
+// The complement of the decline case: a modest SGPR count leaves room, so the
+// fast path installs one trampoline and records the bumped scratch pair in the
+// fixup (SkipSgprReservation=false), exactly like the MC path.
+TEST(KernelEntryTrampolineFast, AllocatesPerKernelScratchAndBumpsReservation) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(EndPgm.size(), MinInstSize);
+  llvm::SmallVector<uint8_t> Text(EndPgm.begin(), EndPgm.end());
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8; // scratch pair lands at s[8:9]
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count = appendKernelEntryTrampolinesFast(
+      *View, "gfx1250", /*MaxSgprs=*/106, Growth, Fixups);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 1u);
+  ASSERT_EQ(Fixups.size(), 1u);
+  // Scratch pair is s[8:9]; the fixup records the top of the pair (base + 2).
+  EXPECT_EQ(Fixups[0].RequiredSgprs, 10u);
+  EXPECT_FALSE(Fixups[0].SkipSgprReservation);
 }
 
 TEST(IsSBranchReachable, CoversBoundariesAlignmentAndPcOverflow) {
