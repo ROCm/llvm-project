@@ -290,6 +290,11 @@ class LLVM_ABI SwingSchedulerDAG : public ScheduleDAGInstrs {
   unsigned MAX_II = 0;
   /// Set to true if a valid pipelined schedule is found for the loop.
   bool Scheduled = false;
+
+  /// Set to true if CopyToPhiMutation added an edge in the current attempt.
+  bool AddedCopyToPhiEdges = false;
+  /// Set to true while retrying this loop with CopyToPhiMutation disabled.
+  bool DisableCopyToPhi = false;
   MachineLoop &Loop;
   LiveIntervals &LIS;
   const RegisterClassInfo &RegClassInfo;
@@ -445,6 +450,12 @@ public:
     Mutations.push_back(std::move(Mutation));
   }
 
+  /// Record that CopyToPhiMutation added an edge.
+  void noteCopyToPhiEdgeAdded() { AddedCopyToPhiEdges = true; }
+
+  /// Return true if CopyToPhiMutation is disabled for this attempt.
+  bool isCopyToPhiDisabled() const { return DisableCopyToPhi; }
+
   static bool classof(const ScheduleDAGInstrs *DAG) { return true; }
 
   const SwingSchedulerDDG *getDDG() const { return DDG.get(); }
@@ -460,6 +471,8 @@ private:
     AbortEarly    ///< Bailed before searching (e.g. invalid MII).
   };
   ScheduleAttemptResult buildAndAttemptSchedule(SMSchedule &Schedule);
+  /// Reset per-attempt state so the loop can be scheduled again.
+  void resetForReschedule();
   LoopCarriedEdges addLoopCarriedDependences();
   void updatePhiDependences();
   void changeDependences();

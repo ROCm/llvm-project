@@ -112,6 +112,8 @@ STATISTIC(NumFailNoSchedule, "Pipeliner abort due to no schedule found");
 STATISTIC(NumFailZeroStage, "Pipeliner abort due to zero stage");
 STATISTIC(NumFailLargeMaxStage, "Pipeliner abort due to too many stages");
 STATISTIC(NumFailTooManyStores, "Pipeliner abort due to too many stores");
+STATISTIC(NumRetryWithoutCopyToPhi,
+          "Number of loops rescheduled without CopyToPhi");
 
 /// A command line option to turn software pipelining on or off.
 static cl::opt<bool> EnableSWP("enable-pipeliner", cl::Hidden, cl::init(true),
@@ -207,6 +209,11 @@ cl::opt<bool>
     llvm::SwpEnableCopyToPhi("pipeliner-enable-copytophi", cl::ReallyHidden,
                              cl::init(true),
                              cl::desc("Enable CopyToPhi DAG Mutation"));
+
+// Retry the loop once with CopyToPhi disabled if the first attempt fails.
+static cl::opt<bool> SwpCopyToPhiFallback(
+    "pipeliner-copytophi-fallback", cl::Hidden, cl::init(false),
+    cl::desc("Retry scheduling without CopyToPhi if the first attempt fails"));
 
 /// A command line argument to force pipeliner to use specified issue
 /// width.
@@ -758,6 +765,16 @@ void SwingSchedulerDAG::setMAX_II() {
     MAX_II = MII + SwpIISearchRange;
 }
 
+/// Clear the per-attempt state so the loop can be scheduled again.
+void SwingSchedulerDAG::resetForReschedule() {
+  InstrChanges.clear();
+  ScheduleInfo.clear();
+  NodeOrder.clear();
+  MII = 0;
+  MAX_II = 0;
+  AddedCopyToPhiEdges = false;
+}
+
 /// Build the dependence graph and attempt to find a modulo schedule once.
 SwingSchedulerDAG::ScheduleAttemptResult
 SwingSchedulerDAG::buildAndAttemptSchedule(SMSchedule &Schedule) {
@@ -867,11 +884,30 @@ SwingSchedulerDAG::buildAndAttemptSchedule(SMSchedule &Schedule) {
   return ScheduleAttemptResult::Scheduled;
 }
 
-/// We override the schedule function in ScheduleDAGInstrs to implement the
-/// scheduling part of the Swing Modulo Scheduling algorithm.
+/// Schedule the loop, retrying once without CopyToPhi if the first attempt
+/// fails and -pipeliner-copytophi-fallback is set.
 void SwingSchedulerDAG::schedule() {
   SMSchedule Schedule(Pass.MF, this);
   ScheduleAttemptResult Result = buildAndAttemptSchedule(Schedule);
+
+  // Only retry on FailedSearch: the II search exhausted its range without
+  // finding a schedule. AbortEarly (invalid or too-large MII) is not retried
+  // because MII cannot change -- ResMII depends only on resources, and
+  // CopyToPhi adds only artificial edges, which findCircuits ignores, so RecMII
+  // is unaffected. A Scheduled result needs no retry.
+  //
+  // Retrying is safe because a FailedSearch happens before any code generation,
+  // so the MachineFunction and LiveIntervals are still unmodified and
+  // buildAndAttemptSchedule() can rebuild the DAG from the original loop.
+  if (Result == ScheduleAttemptResult::FailedSearch && SwpCopyToPhiFallback &&
+      AddedCopyToPhiEdges) {
+    LLVM_DEBUG(dbgs() << "No schedule found; retrying without CopyToPhi\n");
+    ++NumRetryWithoutCopyToPhi;
+    resetForReschedule();
+    DisableCopyToPhi = true;
+    Schedule.reset();
+    Result = buildAndAttemptSchedule(Schedule);
+  }
 
   Scheduled = Result == ScheduleAttemptResult::Scheduled;
   if (!Scheduled) {
@@ -2143,6 +2179,11 @@ void SwingSchedulerDAG::findCircuits(NodeSetType &NodeSets) {
 // USEOfPHI --- SRCOfCopy---  COPY/REG_SEQUENCE.
 
 void SwingSchedulerDAG::CopyToPhiMutation::apply(ScheduleDAGInstrs *DAG) {
+  SwingSchedulerDAG *SDAG = cast<SwingSchedulerDAG>(DAG);
+  // Skip the mutation while retrying without CopyToPhi.
+  if (SDAG->isCopyToPhiDisabled())
+    return;
+
   for (SUnit &SU : DAG->SUnits) {
     // Find the COPY/REG_SEQUENCE instruction.
     if (!SU.getInstr()->isCopy() && !SU.getInstr()->isRegSequence())
@@ -2191,13 +2232,13 @@ void SwingSchedulerDAG::CopyToPhiMutation::apply(ScheduleDAGInstrs *DAG) {
     if (UseSUs.size() == 0)
       continue;
 
-    SwingSchedulerDAG *SDAG = cast<SwingSchedulerDAG>(DAG);
     // Add the artificial dependencies if it does not form a cycle.
     for (auto *I : UseSUs) {
       for (auto *Src : SrcSUs) {
         if (!SDAG->Topo.IsReachable(I, Src) && Src != I) {
           Src->addPred(SDep(I, SDep::Artificial));
           SDAG->Topo.AddPred(Src, I);
+          SDAG->noteCopyToPhiEdgeAdded();
         }
       }
     }

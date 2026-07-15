@@ -1,0 +1,83 @@
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx942 -amdgpu-enable-pipeliner \
+# RUN:   -run-pass=pipeliner -pipeliner-copytophi-fallback=1 -debug-only=pipeliner \
+# RUN:   --verify-machineinstrs -o /dev/null %s 2>&1 | \
+# RUN:   FileCheck %s --check-prefix=FALLBACK
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx942 -amdgpu-enable-pipeliner \
+# RUN:   -run-pass=pipeliner -debug-only=pipeliner -o /dev/null %s 2>&1 | \
+# RUN:   FileCheck %s --check-prefix=DEFAULT
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx942 -amdgpu-enable-pipeliner \
+# RUN:   -run-pass=pipeliner -pipeliner-enable-copytophi=0 --verify-machineinstrs \
+# RUN:   -debug-only=pipeliner -o /dev/null %s 2>&1 | \
+# RUN:   FileCheck %s --check-prefix=NOCOPYTOPHI
+# REQUIRES: asserts
+
+# Reduced from a Composable Kernels HIP kernel. CopyToPhi's artificial edges
+# block a schedule here. The opt-in fallback retries without them and pipelines
+# the loop.
+
+# FALLBACK: Schedule Found? 0
+# FALLBACK: No schedule found; retrying without CopyToPhi
+# FALLBACK: Schedule Found? 1 (II={{[0-9]+}})
+
+# DEFAULT: Schedule Found? 0
+# DEFAULT-NOT: retrying without CopyToPhi
+
+# NOCOPYTOPHI: Schedule Found? 1 (II={{[0-9]+}})
+
+--- |
+  define amdgpu_kernel void @swp_amdgpu_pipeline_copytophi() {
+    ret void
+  }
+...
+---
+name:            swp_amdgpu_pipeline_copytophi
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+  scratchRSrcReg:  '$private_rsrc_reg'
+  stackPtrOffsetReg: '$sgpr32'
+body:             |
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $vgpr0
+
+    %22:sreg_32 = S_MOV_B32 0
+    %24:vreg_64_align2 = AV_MOV_B64_IMM_PSEUDO 0, implicit $exec
+    %57:vgpr_32 = COPY $vgpr0, implicit $exec
+    %59:vgpr_32 = COPY $vgpr0, implicit $exec
+    %62:sreg_64 = IMPLICIT_DEF
+    %31:sgpr_128 = REG_SEQUENCE %22, %subreg.sub0, %22, %subreg.sub1, %22, %subreg.sub2, %22, %subreg.sub3
+
+  bb.1:
+    successors: %bb.2(0x04000000), %bb.1(0x7c000000)
+
+    %64:sreg_64 = PHI %62, %bb.0, %11, %bb.1
+    %2:vgpr_32 = PHI %57, %bb.0, %58, %bb.1
+    %3:vgpr_32 = PHI %59, %bb.0, %60, %bb.1
+    %4:av_64_align2 = PHI %24, %bb.0, %7, %bb.1
+    %5:sreg_32 = PHI %22, %bb.0, %28, %bb.1
+    %28:sreg_32 = S_MOV_B32 1
+    %29:sreg_64_xexec = V_CMP_GT_I32_e64 1, %3, implicit $exec
+    %32:vreg_64_align2 = BUFFER_LOAD_DWORDX2_OFFEN %2, %31, 0, 0, 0, 0, implicit $exec :: (dereferenceable load (s64) from `ptr addrspace(8) null`, align 1, addrspace 8)
+    %34:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, %32.sub1, %29, implicit $exec
+    %37:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, %32.sub0, %29, implicit $exec
+    %39:vreg_64_align2 = REG_SEQUENCE %37, %subreg.sub0, %34, %subreg.sub1
+    %41:vreg_64_align2 = V_ADD_F64_e64 0, %39, 0, 0, 0, 0, implicit $mode, implicit $exec
+    %7:av_64_align2 = COPY %41
+    %42:vgpr_32 = V_OR_B32_e32 1, %2, implicit $exec
+    %43:vgpr_32 = V_OR_B32_e32 1, %42, implicit $exec
+    %65:sreg_64 = S_ANDN2_B64 %64, $exec, implicit-def $scc
+    %66:sreg_64 = S_AND_B64 %29, $exec, implicit-def $scc
+    %11:sreg_64_xexec = S_OR_B64 %65, %66, implicit-def $scc
+    S_CMP_LG_U32 %5, 0, implicit-def $scc
+    %58:vgpr_32 = COPY %43, implicit $exec
+    %60:vgpr_32 = AV_MOV_B32_IMM_PSEUDO 0, implicit $exec
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.2
+
+  bb.2:
+    %10:av_64_align2 = PHI %4, %bb.1
+    %44:vgpr_32 = AV_MOV_B32_IMM_PSEUDO 0, implicit $exec
+    DS_WRITE_B64_gfx9 %44, %10, 0, 0, implicit $exec :: (store (s64) into `ptr addrspace(3) null`, addrspace 3)
+    S_ENDPGM 0
+...
