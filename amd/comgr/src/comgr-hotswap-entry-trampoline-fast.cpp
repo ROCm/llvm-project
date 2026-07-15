@@ -38,33 +38,31 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
-// Pre-encoded gfx1250 stub template. Ground-truth encodings from
-// llvm-mc -mcpu=gfx1250 (little-endian). The body is 40 bytes and is padded to
-// KernelEntryStubStride (256) with s_code_end. s_get_pc_i64 loads the address
-// of the instruction after it (s_add, at StubVAddr + FastEntryPcBaseOffset),
-// which is the base for the PC-relative delta. The template is spelled with
-// s[100:101]; buildKernelEntryTrampolineFast rewrites the six SGPR register-
-// field bytes per kernel to the allocated scratch pair (see the
-// FastEntry*Offset encoding table in comgr-hotswap-internal.h).
-// clang-format off
-static constexpr uint8_t StubTemplate[FastEntryStubBodyBytes] = {
-    0x7c, 0x00, 0x0b, 0xee, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // global_wb
-    0x00, 0x00, 0x00, 0x7e,                                                 // v_nop
-    0x00, 0x47, 0xe4, 0xbe,                                                 // s_get_pc_i64 s[100:101]
-    0x64, 0xff, 0x64, 0x80, 0x00, 0x00, 0x00, 0x00,                         // s_add_co_u32 s100,s100,imm32 (imm@24)
-    0x65, 0xff, 0x65, 0x82, 0x00, 0x00, 0x00, 0x00,                         // s_add_co_ci_u32 s101,s101,imm32 (imm@32)
-    0x64, 0x48, 0x80, 0xbe,                                                 // s_set_pc_i64 s[100:101]
-};
+// Pre-encoded gfx1250 stub template. Rather than run the MC layer at rewrite
+// time (the point of the fast path), the stub is emitted from these bytes. To
+// keep them from silently drifting from what the assembler produces -- and to
+// satisfy the "no hand-maintained encoded byte sequences" convention -- the
+// arrays live in a GENERATED .inc built by utils/gen-hotswap-fast-stub-inc.sh
+// from utils/comgr-hotswap-entry-trampoline-fast-stub.s, and
+// StubTemplateMatchesMCOutput (HotswapMCTest) proves they still equal fresh MC
+// output. The 40-byte body is padded to KernelEntryStubStride (256) with
+// s_code_end. s_get_pc_i64 loads the address of the instruction after it
+// (s_add, at StubVAddr + FastEntryPcBaseOffset), the base for the PC-relative
+// delta. The body is spelled with s[100:101]; buildKernelEntryTrampolineFast
+// rewrites the six SGPR register-field bytes per kernel to the allocated
+// scratch pair (see the FastEntry*Offset encoding table in
+// comgr-hotswap-internal.h).
+#include "comgr-hotswap-entry-trampoline-fast-stub.inc"
 
-static constexpr uint8_t SCodeEnd[4] = {0x00, 0x00, 0x9f, 0xbf};
-static constexpr uint8_t SNop[4] = {0x00, 0x00, 0x80, 0xbf};
+static_assert(sizeof(StubTemplate) == FastEntryStubBodyBytes,
+              "generated stub template must be the 40-byte body");
 
-// global_wb; v_nop prefix (16 bytes), for raw idempotency / workaround detection.
-static constexpr uint8_t EntryPrefix[FastEntryPrefixBytes] = {
-    0x7c, 0x00, 0x0b, 0xee, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x7e,
-};
-// clang-format on
+// global_wb; v_nop prefix (first FastEntryPrefixBytes of the body), for raw
+// idempotency / workaround detection. Aliased from StubTemplate so the prefix
+// can never diverge from the template it is a prefix of.
+static constexpr const uint8_t *EntryPrefix = StubTemplate;
+static_assert(sizeof(StubTemplate) >= FastEntryPrefixBytes,
+              "stub template must contain the workaround prefix");
 
 SmallVector<uint8_t> buildKernelEntryTrampolineFast(uint64_t StubVAddr,
                                                     uint64_t EntryVAddr,
