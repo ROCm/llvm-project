@@ -301,6 +301,64 @@ TEST(EvaluateDirectControlFlowTarget, EvaluatesGfx1250CallOperandFallback) {
             0x200u + Decoded[0].Size + 2 * MinInstSize);
 }
 
+TEST(CollectDirectBranchTargets, IgnoresRegisterTargetCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_swap_pc_i64 s[30:31], s[0:1]", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  ASSERT_TRUE(S.MIA->isCall(Decoded[0].Inst));
+  for (const llvm::MCOperand &Op : Decoded[0].Inst)
+    ASSERT_FALSE(Op.isImm());
+
+  std::optional<llvm::DenseSet<uint64_t>> Targets =
+      collectDirectBranchTargets(Decoded, S);
+  ASSERT_TRUE(Targets);
+  EXPECT_TRUE(Targets->empty());
+}
+
+TEST(CollectDirectBranchTargets, IgnoresImmediateAbsoluteTargetCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_swap_pc_i64 s[30:31], 10", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  ASSERT_TRUE(S.MIA->isCall(Decoded[0].Inst));
+  ASSERT_TRUE(Decoded[0].Inst.getOperand(1).isImm());
+
+  std::optional<llvm::DenseSet<uint64_t>> Targets =
+      collectDirectBranchTargets(Decoded, S);
+  ASSERT_TRUE(Targets);
+  EXPECT_TRUE(Targets->empty());
+}
+
+TEST(CollectDirectBranchTargets, CollectsPcRelativeCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_call_i64 s[30:31], 2", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  Decoded[0].Offset = 0x200;
+
+  std::optional<llvm::DenseSet<uint64_t>> Targets =
+      collectDirectBranchTargets(Decoded, S);
+  ASSERT_TRUE(Targets);
+  ASSERT_EQ(Targets->size(), 1u);
+  EXPECT_TRUE(Targets->contains(0x200u + Decoded[0].Size + 2 * MinInstSize));
+}
+
 TEST(SafeSgprScratchBlock, RejectsRegisterBeyondAddressableLimit) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

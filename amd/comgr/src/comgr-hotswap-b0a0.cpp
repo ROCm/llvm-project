@@ -842,7 +842,7 @@ evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
 
 /// Collect statically known direct branch and call destinations so an interior
 /// entry point is never swallowed by coalescing.
-static std::optional<DenseSet<uint64_t>>
+std::optional<DenseSet<uint64_t>>
 collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
                            const LLVMState &LS) {
   if (!LS.MIA) {
@@ -856,11 +856,13 @@ collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
     if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
         LS.MIA->isIndirectBranch(DI.Inst) || LS.MIA->isReturn(DI.Inst))
       continue;
-    bool HasImmediate = false;
-    for (const MCOperand &Op : DI.Inst)
-      HasImmediate |= Op.isImm();
-    if (!LS.MIA->isCall(DI.Inst) && !HasImmediate)
+
+    bool HasPcRelativeOperand = false;
+    for (const MCOperandInfo &Op : LS.MCII->get(DI.Inst.getOpcode()).operands())
+      HasPcRelativeOperand |= Op.OperandType == MCOI::OPERAND_PCREL;
+    if (!HasPcRelativeOperand)
       continue;
+
     std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
     if (!Target) {
       log() << "hotswap: MC analysis could not evaluate direct control-flow "

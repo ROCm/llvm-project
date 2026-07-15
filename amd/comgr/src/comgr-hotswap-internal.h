@@ -34,6 +34,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -848,6 +849,13 @@ bool isSBranchReachable(uint64_t From, uint64_t To);
 std::optional<uint64_t>
 evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
                                 const LLVMState &LS);
+
+/// Collect statically known branch and call targets used to protect interior
+/// entry points from trampoline coalescing. Register-target control flow has
+/// no statically known destination and must leave the returned set unchanged.
+std::optional<llvm::DenseSet<uint64_t>>
+collectDirectBranchTargets(llvm::ArrayRef<InternalDecodedInst> Decoded,
+                           const LLVMState &LS);
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
