@@ -540,6 +540,58 @@ handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Hr.Handled = true;
     return Hr;
   }
+  // f16 unary rounding (ceil/trunc/rndne) and reciprocal (rcp). true16
+  // op_sel half-select like V_TANH_F16. ceil/trunc/rndne lower to the
+  // matching llvm.* intrinsic; rcp to llvm.amdgcn.rcp.f16 (native
+  // v_rcp_f16 on the target -- the hardware approximation, not a generic
+  // fdiv, mirroring V_RCP_F32).
+  case CanonicalOp::V_CEIL_F16:
+  case CanonicalOp::V_TRUNC_F16:
+  case CanonicalOp::V_RNDNE_F16:
+  case CanonicalOp::V_RCP_F16: {
+    StringRef OpName = Di.CanonOp == CanonicalOp::V_CEIL_F16    ? "v_ceil_f16"
+                       : Di.CanonOp == CanonicalOp::V_TRUNC_F16 ? "v_trunc_f16"
+                       : Di.CanonOp == CanonicalOp::V_RNDNE_F16 ? "v_rndne_f16"
+                                                                : "v_rcp_f16";
+    if (Error Err = requireDefaultOutputModsIfPresent(Di))
+      return Err;
+
+    bool DstHigh = false;
+    unsigned Mods = 0;
+    if (Error Err = readOptionalVOP3F16SrcMods(Di, 0, OpName, Mods))
+      return Err;
+
+    DstHigh = (Mods & SISrcMods::DST_OP_SEL) != 0;
+
+    Expected<Value *> SrcOrErr = readOptionalOpSelF16(Ctx, Di, Op, 0, OpName);
+    if (!SrcOrErr)
+      return SrcOrErr.takeError();
+
+    Value *Src = *SrcOrErr;
+    Intrinsic::ID IID;
+    switch (Di.CanonOp) {
+    case CanonicalOp::V_CEIL_F16:
+      IID = Intrinsic::ceil;
+      break;
+    case CanonicalOp::V_TRUNC_F16:
+      IID = Intrinsic::trunc;
+      break;
+    case CanonicalOp::V_RNDNE_F16:
+      IID = Intrinsic::roundeven;
+      break;
+    case CanonicalOp::V_RCP_F16:
+      IID = Intrinsic::amdgcn_rcp;
+      break;
+    default:
+      llvm_unreachable("filtered by outer switch");
+    }
+    Function *Fn = Intrinsic::getOrInsertDeclaration(&Ctx.M, IID, {Ctx.F16Ty});
+    Value *Result = Ctx.B.CreateCall(Fn, {Src}, "f16_unary");
+    writeOpSelF16(Ctx, Op, Result, DstHigh, "f16_unary_merge_lo",
+                  "f16_unary_merge_hi");
+    Hr.Handled = true;
+    return Hr;
+  }
 
   // ---- 16-bit integer min/max ----
   case CanonicalOp::V_MAX_U16:

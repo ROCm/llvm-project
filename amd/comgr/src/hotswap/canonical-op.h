@@ -879,6 +879,13 @@ enum class CanonicalOp : uint16_t {
   V_LDEXP_F16,
   V_FLOOR_F16,
   V_TANH_F16,
+  // f16 unary rounding + reciprocal (true16 op_sel half-select like
+  // V_TANH_F16). ceil/trunc/rndne lower to llvm.{ceil,trunc,roundeven}.f16; rcp
+  // to llvm.amdgcn.rcp.f16 (native v_rcp_f16 on the target).
+  V_CEIL_F16,
+  V_TRUNC_F16,
+  V_RNDNE_F16,
+  V_RCP_F16,
   V_CVT_F16_U16,
   V_CVT_F16_I16,
   V_CVT_U16_F16,

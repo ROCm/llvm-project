@@ -533,6 +533,11 @@ static const Entry kCanonTable[] = {
     E(V_FREXP_MANT_F64_e64, V_FREXP_MANT_F64),
     E(V_READFIRSTLANE_B32, V_READFIRSTLANE_B32),
     E(V_FLOOR_F16_e64, V_FLOOR_F16),
+    // f16 rounding + reciprocal (t16/fake16 variants collapse to _e64).
+    E(V_CEIL_F16_e64, V_CEIL_F16),
+    E(V_TRUNC_F16_e64, V_TRUNC_F16),
+    E(V_RNDNE_F16_e64, V_RNDNE_F16),
+    E(V_RCP_F16_e64, V_RCP_F16),
     E(V_CVT_F16_U16_e64, V_CVT_F16_U16),
     E(V_CVT_F16_I16_e64, V_CVT_F16_I16),
     E(V_CVT_U16_F16_e64, V_CVT_U16_F16),
