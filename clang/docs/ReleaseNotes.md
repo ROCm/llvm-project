@@ -476,6 +476,11 @@ latest release, please see the [Clang Web Site](https://clang.llvm.org) or the
   "1". The previous functionality remains unchanged.
 - The `-fms-kernel` flag will now implicitly add `-fno-delete-null-pointer-checks`.
   Still `-fdelete-null-pointer-checks` can be used to override this behavior.
+- Extended the `-marm64x` flag to support compiling to object files. When used
+  in this mode, separate compilation jobs are run for ARM64 and ARM64EC object
+  files, which are then merged into a single file using a new `.obj.arm64ec`
+  section. Consumers must support this extension. Currently, this requires
+  LLD for linking or `llvm-ar`/`llvm-lib` for archiving.
 
 ### Removed Compiler Flags
 
@@ -933,6 +938,7 @@ latest release, please see the [Clang Web Site](https://clang.llvm.org) or the
 - Fixed a crash when using a pack indexing type (e.g. ``Ts...[0]``) imported from another module. (#GH204479)
 - Fixed an ODR-merging error in modules, where class-scope `using enum` declarations were not recognized as matching across module
   boundaries.  (#GH207066)
+- Fixed a crash when constant evaluation accessed a base class or member of an object wrapped in `_Atomic`. (#GH203328)
 
 #### Bug Fixes to AST Handling
 
