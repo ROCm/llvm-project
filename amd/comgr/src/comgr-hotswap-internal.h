@@ -850,12 +850,20 @@ std::optional<uint64_t>
 evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
                                 const LLVMState &LS);
 
-/// Collect statically known branch and call targets used to protect interior
-/// entry points from trampoline coalescing. Register-target control flow has
-/// no statically known destination and must leave the returned set unchanged.
-std::optional<llvm::DenseSet<uint64_t>>
+struct DirectControlFlowInfo {
+  llvm::DenseSet<uint64_t> Targets;
+  bool HasUnresolvedTargets = false;
+};
+
+/// Collect branch and call targets used to protect interior entry points from
+/// trampoline coalescing. Absolute addresses in TextAddr .. TextAddr +
+/// TextSize are converted to text-relative offsets. Register-target control
+/// flow sets HasUnresolvedTargets so callers can disable transformations that
+/// consume possible destinations.
+std::optional<DirectControlFlowInfo>
 collectDirectBranchTargets(llvm::ArrayRef<InternalDecodedInst> Decoded,
-                           const LLVMState &LS);
+                           const LLVMState &LS, uint64_t TextAddr,
+                           uint64_t TextSize);
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
