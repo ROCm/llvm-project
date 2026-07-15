@@ -64,7 +64,15 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           uint64_t KernelOffset, uint64_t KernelSize,
           llvm::StringRef CompilationTargetIsa = "",
           bool EnableWritelaneRewrite = true, bool EnableWaveNative = true,
-          bool AssumeHipGlobalOffsetZero = false, RaiseStats *Stats = nullptr);
+          bool AssumeHipGlobalOffsetZero = false,
+          // Text-relative extents of all function symbols in the code object
+          // (from listTextFunctionExtents). Lets the raiser follow a
+          // call/branch into an outlined helper outside the selected kernel's
+          // own extent and lift it alongside the caller. Empty (the default)
+          // keeps the legacy behavior: any out-of-extent target is a
+          // kernel-boundary violation.
+          llvm::ArrayRef<KernelSymbolExtent> FunctionExtents = {},
+          RaiseStats *Stats = nullptr);
 
 } // namespace COMGR::hotswap
 

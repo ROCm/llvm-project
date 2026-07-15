@@ -175,6 +175,16 @@ llvm::Expected<KernelSymbolExtent>
 findKernelSymbolExtent(llvm::MemoryBufferRef ElfData,
                        llvm::StringRef KernelName);
 
+/// List the byte extent of every function symbol in `.text`, sorted by
+/// ascending offset. Offsets are `.text`-relative (symbol address minus the
+/// section base), matching `findKernelSymbolExtent`. Zero-sized symbols are
+/// bounded by the next function symbol (or the end of `.text`). This lets the
+/// raiser resolve a call/branch target that lands in a *different* function
+/// (an outlined device helper) to that callee's extent so it can be decoded
+/// and lifted alongside the caller.
+llvm::Expected<llvm::SmallVector<KernelSymbolExtent>>
+listTextFunctionExtents(llvm::MemoryBufferRef ElfData);
+
 } // namespace COMGR::hotswap
 
 #endif

@@ -695,6 +695,56 @@ Expected<SetPcAnalysis> analyseSetPC(ArrayRef<DecodedInst> Insts,
         continue;
       }
 
+      case CanonicalOp::S_ADD_NC_U64: {
+        // Fused 64-bit getpc-chain completion (gfx12 / gfx1250). The
+        // older shape split the PC-relative displacement across
+        // `s_add_u32` (low) + `s_addc_u32` (high); newer codegen emits a
+        // single `s_add_nc_u64 sPair, sPair, imm64` that folds a signed
+        // 64-bit displacement into the whole pair at once:
+        //   s_get_pc_i64 s[0:1]
+        //   s_add_nc_u64 s[0:1], s[0:1], imm64
+        //   s_swap_pc_i64 s[30:31], s[0:1]
+        // Recognise it so the call/branch target resolves to DirectA
+        // instead of being refused as a pair dirtied without a chain.
+        if (Di.NumDefs < 1 || !Di.isReg(0))
+          break;
+        std::optional<unsigned> DstIdx = sgprIdx(MRI, Di.getReg(0));
+        if (!DstIdx)
+          break;
+        PcChain *Chain = State.findPc(*DstIdx);
+        if (!Chain || Chain->LowAddDone)
+          break;
+        // src0 must be the same pair the getpc produced; the other
+        // source must be a 64-bit immediate. The add is commutative, so
+        // accept (pair, imm) in either operand order.
+        if (Di.NumSrcs < 2)
+          break;
+        unsigned SrcA = Di.SrcMap[0];
+        unsigned SrcB = Di.SrcMap[1];
+        std::optional<unsigned> SrcAIdx;
+        if (Di.isReg(SrcA))
+          SrcAIdx = sgprIdx(MRI, Di.getReg(SrcA));
+        std::optional<unsigned> SrcBIdx;
+        if (Di.isReg(SrcB))
+          SrcBIdx = sgprIdx(MRI, Di.getReg(SrcB));
+        std::optional<int64_t> Disp;
+        if (SrcAIdx && *SrcAIdx == *DstIdx && !SrcBIdx)
+          Disp = evalOperandAsConst(Di.Inst, SrcB);
+        else if (SrcBIdx && *SrcBIdx == *DstIdx && !SrcAIdx)
+          Disp = evalOperandAsConst(Di.Inst, SrcA);
+        if (!Disp)
+          break;
+        uint64_t NewVal = Chain->Value + static_cast<uint64_t>(*Disp);
+        // The 64-bit add already folded both halves into NewVal; complete
+        // the chain in one step (low-add done, then finish the high half
+        // with zero additional carry).
+        State.markLowAddDone(*DstIdx, NewVal);
+        State.finishHighAdd(*DstIdx, Di.Offset, 0);
+        Result.ChainTerminators[Di.Offset] =
+            SetPcCallSiteInfo{State.findPc(*DstIdx)->Value, *DstIdx};
+        continue;
+      }
+
       case CanonicalOp::S_SWAP_PC_I64: {
         // Phase 1 already added the fallthrough to mergedBlockStarts;
         // re-record for the caller's BB-layout merge.

@@ -400,6 +400,17 @@ int main(int argc, char **argv) {
   }
   COMGR::hotswap::TextSection text = std::move(*textOrErr);
 
+  // Function-symbol extents let the raiser follow tail-calls into outlined
+  // device helpers outside a kernel's own extent. Best-effort: empty on failure
+  // keeps the strict in-extent-only behavior.
+  llvm::SmallVector<COMGR::hotswap::KernelSymbolExtent> functionExtents;
+  if (llvm::Expected<llvm::SmallVector<COMGR::hotswap::KernelSymbolExtent>>
+          extentsOrErr = COMGR::hotswap::listTextFunctionExtents(coData)) {
+    functionExtents = std::move(*extentsOrErr);
+  } else {
+    llvm::consumeError(extentsOrErr.takeError());
+  }
+
   // --emit-ir path — no fork, no stderr redirect. Used by lit tests that
   // FileCheck the raised IR on stdout and the raiser diagnostics on
   // stderr. Processes one or more kernels per invocation.
@@ -463,7 +474,8 @@ int main(int argc, char **argv) {
       llvm::Expected<COMGR::hotswap::RaiseResult> RaisedOrErr =
           COMGR::hotswap::raiseToIR(text.Bytes, isa, Target, meta, kernelOffset,
                                     kernelSize, targetIsa, EnableWritelaneRewrite,
-                                    EnableWaveNative, AssumeHipGlobalOffsetZeroOpt);
+                                    EnableWaveNative, AssumeHipGlobalOffsetZeroOpt,
+                                    functionExtents);
       if (!RaisedOrErr) {
         // raiseToIR only returns a module on the success path, so we cannot
         // dump partial IR here. Callers that need stderr diagnostics
@@ -636,7 +648,8 @@ int main(int argc, char **argv) {
           COMGR::hotswap::raiseToIR(text.Bytes, isa, kName, meta, kernelOffset,
                                     kernelSize, targetIsa,
                                     EnableWritelaneRewrite, EnableWaveNative,
-                                    AssumeHipGlobalOffsetZeroOpt, &Stats);
+                                    AssumeHipGlobalOffsetZeroOpt,
+                                    functionExtents, &Stats);
       if (RaisedOrErr) {
         COMGR::hotswap::RaiseResult Raised = std::move(*RaisedOrErr);
         shm->done = true;

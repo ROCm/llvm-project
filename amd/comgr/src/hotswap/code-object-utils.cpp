@@ -438,4 +438,80 @@ findKernelSymbolExtent(llvm::MemoryBufferRef ElfData,
   return Extent;
 }
 
+llvm::Expected<llvm::SmallVector<KernelSymbolExtent>>
+listTextFunctionExtents(llvm::MemoryBufferRef ElfData) {
+  llvm::Expected<std::unique_ptr<llvm::object::ObjectFile>> ObjOrErr =
+      llvm::object::ObjectFile::createELFObjectFile(ElfData);
+  if (!ObjOrErr)
+    return ObjOrErr.takeError();
+
+  uint64_t TextBase = UINT64_MAX;
+  uint64_t TextEnd = 0;
+  std::optional<llvm::object::SectionRef> TextSec;
+  for (const llvm::object::SectionRef &Sec : (*ObjOrErr)->sections()) {
+    llvm::Expected<llvm::StringRef> NameOrErr = Sec.getName();
+    if (!NameOrErr)
+      return NameOrErr.takeError();
+    if (*NameOrErr != ".text")
+      continue;
+    TextSec = Sec;
+    TextBase = Sec.getAddress();
+    TextEnd = TextBase + Sec.getSize();
+    break;
+  }
+  if (TextBase == UINT64_MAX)
+    return makeHotswapError("listTextFunctionExtents: .text section not found");
+
+  // Collect every function symbol's address in .text, then convert to
+  // text-relative extents. Zero-sized symbols are bounded by the next symbol
+  // address (or .text end) so an outlined helper without a recorded size still
+  // gets a usable extent.
+  struct FuncSym {
+    uint64_t Addr;
+    uint64_t Size;
+  };
+  llvm::SmallVector<FuncSym> Funcs;
+  for (const llvm::object::SymbolRef &Sym : (*ObjOrErr)->symbols()) {
+    llvm::Expected<llvm::object::SymbolRef::Type> TypeOrErr = Sym.getType();
+    if (!TypeOrErr)
+      return TypeOrErr.takeError();
+    if (*TypeOrErr != llvm::object::SymbolRef::ST_Function)
+      continue;
+    llvm::Expected<llvm::object::section_iterator> SecItOrErr = Sym.getSection();
+    if (!SecItOrErr)
+      return SecItOrErr.takeError();
+    if (*SecItOrErr == (*ObjOrErr)->section_end() || **SecItOrErr != *TextSec)
+      continue;
+    llvm::Expected<uint64_t> AddrOrErr = Sym.getAddress();
+    if (!AddrOrErr)
+      return AddrOrErr.takeError();
+    if (*AddrOrErr < TextBase || *AddrOrErr >= TextEnd)
+      continue;
+    Funcs.push_back({*AddrOrErr, llvm::object::ELFSymbolRef(Sym).getSize()});
+  }
+
+  llvm::sort(Funcs,
+             [](const FuncSym &A, const FuncSym &B) { return A.Addr < B.Addr; });
+
+  llvm::SmallVector<KernelSymbolExtent> Extents;
+  Extents.reserve(Funcs.size());
+  for (const FuncSym &F : Funcs) {
+    uint64_t Size = F.Size;
+    if (Size == 0) {
+      // No recorded size: bound the symbol by the next one with a strictly
+      // greater address (Funcs is sorted ascending), or the end of .text.
+      const FuncSym *Next = llvm::upper_bound(
+          Funcs, F.Addr,
+          [](uint64_t Addr, const FuncSym &S) { return Addr < S.Addr; });
+      uint64_t NextAddr = Next == Funcs.end() ? TextEnd : Next->Addr;
+      Size = NextAddr - F.Addr;
+    }
+    KernelSymbolExtent Extent;
+    Extent.Offset = F.Addr - TextBase;
+    Extent.Size = Size;
+    Extents.push_back(Extent);
+  }
+  return Extents;
+}
+
 } // namespace COMGR::hotswap

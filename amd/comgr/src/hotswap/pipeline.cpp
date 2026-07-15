@@ -325,11 +325,26 @@ static bool raiseAndCompileKernel(
              << llvm::utohexstr(KernelOffset) << " size 0x"
              << llvm::utohexstr(KernelSize) << "\n");
 
+  // Function-symbol extents let the raiser follow a tail-call into an outlined
+  // device helper outside this kernel's own extent (see raiseToIR). Best-effort:
+  // on failure fall back to an empty list, which keeps the strict
+  // in-extent-only behavior.
+  llvm::SmallVector<KernelSymbolExtent> FunctionExtents;
+  if (llvm::Expected<llvm::SmallVector<KernelSymbolExtent>> ExtentsOrErr =
+          listTextFunctionExtents(CodeObjectData)) {
+    FunctionExtents = std::move(*ExtentsOrErr);
+  } else {
+    LLVM_DEBUG(llvm::dbgs() << "hotswap: listTextFunctionExtents failed, "
+                               "falling back to empty extents list\n");
+    llvm::consumeError(ExtentsOrErr.takeError());
+  }
+
   RaiseStats Stats;
-  llvm::Expected<RaiseResult> RaisedOrErr = raiseToIR(
-      Text.Bytes, SourceISA, KernelName, Meta, KernelOffset, KernelSize,
-      TargetISA, Options.EnableWritelaneRewrite, Options.EnableWaveNative,
-      Options.AssumeHipGlobalOffsetZero, &Stats);
+  llvm::Expected<RaiseResult> RaisedOrErr =
+      raiseToIR(Text.Bytes, SourceISA, KernelName, Meta, KernelOffset,
+                KernelSize, TargetISA, Options.EnableWritelaneRewrite,
+                Options.EnableWaveNative, Options.AssumeHipGlobalOffsetZero,
+                FunctionExtents, &Stats);
   if (!RaisedOrErr) {
     llvm::errs() << "transpiler: Raising '" << KernelName
                  << "' to LLVM IR failed";

@@ -765,6 +765,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
               llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
               bool EnableWaveNative, bool ForceThreadLoopProjection,
               bool SuppressC5ForThreadLoopRoute, bool AssumeHipGlobalOffsetZero,
+              llvm::ArrayRef<KernelSymbolExtent> FunctionExtents,
               RaiseStats *Stats) {
   RaiseResult Result;
 
@@ -1011,9 +1012,45 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // analysis contract.
   SetPcAnalysis SetpcAnalysis;
   // SetPC analysis can discover helper/subroutine regions that ordinary linear
-  // decode did not reach. Decode every newly-discovered in-kernel target to a
-  // fixpoint; crossing the selected symbol extent is a boundary violation, and
-  // an in-extent target that cannot decode is a hard CFG recovery failure.
+  // decode did not reach. These come in two flavors:
+  //   * In-extent helpers -- a target inside the selected kernel's own byte
+  //     extent (e.g. a computed-goto region the linear scan skipped).
+  //   * Out-of-extent calls -- an `s_swap_pc_i64`/`s_set_pc_i64` target in a
+  //     DIFFERENT function symbol (an outlined device helper the kernel
+  //     tail-calls). We resolve the callee's extent from `FunctionExtents` and
+  //     decode it too, so the whole call/return CFG lifts as one function.
+  // Decode every newly-discovered target to a fixpoint. A target that is
+  // neither in an already-decoded region nor inside a known function extent is
+  // a boundary violation; an in-extent target that cannot decode is a hard CFG
+  // recovery failure.
+  //
+  // DecodedRegions tracks every [start, end) byte range we have decoded (the
+  // kernel plus any followed callees), so repeated targets and internal
+  // branches resolve without re-decoding.
+  llvm::SmallVector<std::pair<uint64_t, uint64_t>> DecodedRegions;
+  DecodedRegions.push_back({KernelOffset, DecodeLimit});
+  // Set when a call/branch target in a DIFFERENT function symbol was followed
+  // and merged. Such a callee lives at its own (often lower) offset range, so
+  // the kernel's own start is no longer guaranteed to be the lowest-addressed
+  // block; the entry-block setup below accounts for that.
+  bool FollowedOutOfExtentCallee = false;
+  auto RegionContaining =
+      [&](uint64_t A) -> std::optional<std::pair<uint64_t, uint64_t>> {
+    for (const std::pair<uint64_t, uint64_t> &R : DecodedRegions)
+      if (A >= R.first && A < R.second)
+        return R;
+    return std::nullopt;
+  };
+  auto FunctionExtentContaining =
+      [&](uint64_t A) -> std::optional<std::pair<uint64_t, uint64_t>> {
+    for (const KernelSymbolExtent &E : FunctionExtents) {
+      if (E.Size == 0)
+        continue;
+      if (A >= E.Offset && A < E.Offset + E.Size)
+        return std::make_pair(E.Offset, E.Offset + E.Size);
+    }
+    return std::nullopt;
+  };
   while (true) {
     Expected<SetPcAnalysis> SetpcAnalysisOrErr =
         analyseSetPC(Insts, BlockStarts, Mc);
@@ -1023,38 +1060,52 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     llvm::DenseSet<uint64_t> InstOffsets = collectInstructionOffsets(Insts);
     bool AddedHelperRegion = false;
     for (uint64_t Addr : SetpcAnalysis.ExtraBlockStarts) {
-      if (Addr < KernelOffset || Addr >= DecodeLimit) {
+      if (InstOffsets.count(Addr))
+        continue;
+      // Decode from Addr up to the end of whichever region it belongs to: its
+      // own already-known region if in-extent, otherwise the callee function
+      // extent that contains it.
+      std::optional<std::pair<uint64_t, uint64_t>> Region = RegionContaining(Addr);
+      bool NewCallee = false;
+      if (!Region) {
+        Region = FunctionExtentContaining(Addr);
+        NewCallee = Region.has_value();
+      }
+      if (!Region) {
         return RaiseFailure::kernelBoundaryViolation(
             KernelName, Addr,
             "s_set_pc_i64 analysis discovered a target outside the selected "
-            "kernel extent");
+            "kernel extent and any known function symbol");
       }
-      if (InstOffsets.count(Addr))
-        continue;
-      Expected<DecodeResult> HelperDecodedOrErr = decodeKernel(
-          Mc, OpcMap, ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
-          Addr, KernelEndOffset, KernelOffset);
+      Expected<DecodeResult> HelperDecodedOrErr =
+          decodeKernel(Mc, OpcMap,
+                       ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
+                       Addr, Region->second, Region->first);
       if (!HelperDecodedOrErr)
         return HelperDecodedOrErr.takeError();
       DecodeResult HelperDecoded = std::move(*HelperDecodedOrErr);
       if (HelperDecoded.Insts.empty()) {
         return RaiseFailure::kernelBoundaryViolation(
             KernelName, Addr,
-            "s_set_pc_i64 analysis discovered an in-extent target that could "
-            "not be decoded");
+            "s_set_pc_i64 analysis discovered a target that could not be "
+            "decoded");
       }
       mergeDecodeResult(Decoded, std::move(HelperDecoded));
+      if (NewCallee) {
+        DecodedRegions.push_back(*Region);
+        FollowedOutOfExtentCallee = true;
+      }
       AddedHelperRegion = true;
     }
     if (!AddedHelperRegion)
       break;
   }
   for (uint64_t Addr : SetpcAnalysis.ExtraBlockStarts) {
-    if (Addr < KernelOffset || Addr >= DecodeLimit) {
+    if (!RegionContaining(Addr)) {
       return RaiseFailure::kernelBoundaryViolation(
           KernelName, Addr,
           "s_set_pc_i64 analysis discovered a final block start outside the "
-          "selected kernel extent");
+          "selected kernel extent and any known function symbol");
     }
     BlockStarts.insert(Addr);
   }
@@ -1409,7 +1460,18 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     if (!FirstBodyBb)
       FirstBodyBb = Bb;
   }
-  BasicBlock *EntryBb = UseThreadLoop
+  // The register-seeding block must be a predecessor-free entry block that
+  // control-flows into the kernel's real start (KernelOffset). Normally the
+  // KernelOffset block is itself the lowest-addressed block, so it can serve as
+  // the entry directly. But when an out-of-extent callee was merged, a helper
+  // block at a lower offset would otherwise become the LLVM entry (BlockStarts
+  // iterates ascending) yet has predecessors (the caller's branch into it),
+  // violating the verifier. In that case (as in the thread-loop case) use a
+  // dedicated "entry" block inserted before all body blocks and branch it to
+  // KernelOffset, so the seeding is separate from -- and never mis-merged into
+  // -- the body blocks.
+  bool UseDedicatedEntry = UseThreadLoop || FollowedOutOfExtentCallee;
+  BasicBlock *EntryBb = UseDedicatedEntry
                             ? BasicBlock::Create(C, "entry", F, FirstBodyBb)
                             : OffsetToBb[KernelOffset];
 
@@ -1795,6 +1857,13 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     B.CreateRetVoid();
   }
 
+  // Non-thread-loop dedicated entry (out-of-extent callee merged): the seeding
+  // lives in a standalone "entry" block; terminate it with a branch to the
+  // kernel's real start so the body blocks are reached only via real edges.
+  // (The thread-loop path wired its own entry->body edge above.)
+  if (UseDedicatedEntry && !UseThreadLoop)
+    B.CreateBr(OffsetToBb[KernelOffset]);
+
   if (RaiseReadFailure) {
     assert(false && "Unexpected read failures before raise loop");
   }
@@ -2169,7 +2238,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
                              /*suppressC5ForThreadLoopRoute=*/true,
-                             AssumeHipGlobalOffsetZero, Stats);
+                             AssumeHipGlobalOffsetZero, FunctionExtents, Stats);
       }
       if (!ForceThreadLoopProjection &&
           TlDecision.Decision == ThreadLoopDecision::EligibleButGateOff) {
@@ -2340,7 +2409,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
                              /*suppressC5ForThreadLoopRoute=*/true,
-                             AssumeHipGlobalOffsetZero, Stats);
+                             AssumeHipGlobalOffsetZero, FunctionExtents, Stats);
       }
       errs() << "transpiler: pre-translation abort: "
              << reasonString(RaiseFailureReason::CrossWavePredicateChain)
@@ -2394,7 +2463,8 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                    /*KernelOffset=*/0,
                    /*KernelSize=*/0, CompilationTargetIsa,
                    EnableWritelaneRewrite, EnableWaveNative,
-                   /*AssumeHipGlobalOffsetZero=*/false, Stats);
+                   /*AssumeHipGlobalOffsetZero=*/false, /*FunctionExtents=*/{},
+                   Stats);
 }
 
 llvm::Expected<RaiseResult>
@@ -2403,12 +2473,14 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           uint64_t KernelOffset, uint64_t KernelSize,
           llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
           bool EnableWaveNative, bool AssumeHipGlobalOffsetZero,
+          llvm::ArrayRef<KernelSymbolExtent> FunctionExtents,
           RaiseStats *Stats) {
   return raiseToIRImpl(
       TextBytes, SourceIsa, KernelName, Meta, KernelOffset, KernelSize,
       CompilationTargetIsa, EnableWritelaneRewrite, EnableWaveNative,
       /*forceThreadLoopProjection=*/false,
-      /*suppressC5ForThreadLoopRoute=*/false, AssumeHipGlobalOffsetZero, Stats);
+      /*suppressC5ForThreadLoopRoute=*/false, AssumeHipGlobalOffsetZero,
+      FunctionExtents, Stats);
 }
 
 } // namespace COMGR::hotswap
