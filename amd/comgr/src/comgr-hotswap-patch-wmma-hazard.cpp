@@ -103,13 +103,20 @@ WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
   return {4, 4};
 }
 
+int updateWmmaHazardDeficit(DenseMap<size_t, int> &MaxDeficits,
+                            size_t ValuIndex, int Deficit) {
+  int &Maximum = MaxDeficits[ValuIndex];
+  Maximum = std::max(Maximum, Deficit);
+  return Maximum;
+}
+
 namespace {
 
-std::vector<WmmaHazard> findWmmaCoexecHazards(const PatchContext &Ctx) {
+std::optional<std::vector<WmmaHazard>>
+findWmmaCoexecHazards(const PatchContext &Ctx) {
   const MCInstrInfo &MCII = *Ctx.LS.MCII;
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-  std::vector<WmmaHazard> Hazards;
-  DenseSet<size_t> PatchedValuIndices;
+  DenseMap<size_t, int> MaxDeficitByValu;
   int WmmaScanned = 0;
 
   for (size_t WmmaIdx = 0, E = Ctx.Decoded.size(); WmmaIdx < E; ++WmmaIdx) {
@@ -125,6 +132,15 @@ std::vector<WmmaHazard> findWmmaCoexecHazards(const PatchContext &Ctx) {
     int SafeSlots = 0;
     for (size_t ValuIdx = WmmaIdx + 1; ValuIdx < E; ++ValuIdx) {
       const InternalDecodedInst &Candidate = Ctx.Decoded[ValuIdx];
+
+      if (Candidate.Mnemonic == "<unknown>" ||
+          Candidate.Mnemonic == "<replaced>") {
+        log() << "hotswap: error: cannot prove WMMA co-exec spacing from 0x"
+              << utohexstr(WmmaDI.Offset) << " across instruction at 0x"
+              << utohexstr(Candidate.Offset) << " (" << Candidate.Mnemonic
+              << ")\n";
+        return std::nullopt;
+      }
 
       if (isVNop(Candidate)) {
         ++SafeSlots;
@@ -147,14 +163,16 @@ std::vector<WmmaHazard> findWmmaCoexecHazards(const PatchContext &Ctx) {
           continue;
         }
 
-        if (SafeSlots < Req.A0Nops &&
-            PatchedValuIndices.insert(ValuIdx).second) {
-          Hazards.push_back({ValuIdx, Req.A0Nops - SafeSlots});
+        if (SafeSlots < Req.A0Nops) {
+          const int Deficit = Req.A0Nops - SafeSlots;
+          const int MaxDeficit =
+              updateWmmaHazardDeficit(MaxDeficitByValu, ValuIdx, Deficit);
           log() << "hotswap: WMMA co-exec hazard at 0x"
                 << utohexstr(WmmaDI.Offset) << ": " << WmmaDI.Mnemonic
                 << " needs " << Req.A0Nops << " v_nops, only " << SafeSlots
                 << " found before " << Candidate.Mnemonic << " at 0x"
-                << utohexstr(Candidate.Offset) << "\n";
+                << utohexstr(Candidate.Offset) << " (candidate max deficit "
+                << MaxDeficit << ")\n";
         }
         break;
       }
@@ -163,6 +181,12 @@ std::vector<WmmaHazard> findWmmaCoexecHazards(const PatchContext &Ctx) {
     }
   }
 
+  std::vector<WmmaHazard> Hazards;
+  Hazards.reserve(MaxDeficitByValu.size());
+  for (size_t I = 0, E = Ctx.Decoded.size(); I != E; ++I)
+    if (auto It = MaxDeficitByValu.find(I); It != MaxDeficitByValu.end())
+      Hazards.push_back({I, It->second});
+
   log() << "hotswap: WMMA co-exec validation: " << Hazards.size()
         << " hazards (" << WmmaScanned << " WMMA instructions scanned)\n";
   return Hazards;
@@ -170,42 +194,105 @@ std::vector<WmmaHazard> findWmmaCoexecHazards(const PatchContext &Ctx) {
 
 } // anonymous namespace
 
-static uint32_t applyWmmaHazardPatchImpl(PatchContext &Ctx) {
-  std::vector<WmmaHazard> Hazards = findWmmaCoexecHazards(Ctx);
-  if (Hazards.empty())
-    return 0;
-
-  uint32_t Patched = 0;
-  for (const WmmaHazard &H : Hazards) {
-    const InternalDecodedInst &ValuDI = Ctx.Decoded[H.ValuIdx];
-
-    uint64_t TrampolineTextOffset = Ctx.TextSize;
-    for (const Trampoline &T : Ctx.OutTrampolines)
-      TrampolineTextOffset += T.Bytes.size();
-
-    SmallVector<MCInst> Insts;
-    for (int I = 0; I < H.Deficit; ++I)
-      Insts.push_back(Ctx.LS.VNopInst);
-    Insts.push_back(ValuDI.Inst);
-
-    Trampoline T = buildTrampoline(Insts, ValuDI.Offset, ValuDI.Size,
-                                   TrampolineTextOffset, Ctx.LS);
-    if (T.Bytes.empty()) {
-      log() << "hotswap: error: WMMA hazard: buildTrampoline failed at 0x"
-            << utohexstr(ValuDI.Offset) << "\n";
-      continue;
+static bool precomputeWmmaHazardsImpl(PatchContext &Ctx) {
+  std::optional<std::vector<WmmaHazard>> Hazards =
+      findWmmaCoexecHazards(Ctx);
+  if (!Hazards) {
+    Ctx.RequiredPatchFailed = true;
+    return false;
+  }
+  for (const WmmaHazard &H : *Hazards) {
+    if (H.ValuIdx >= Ctx.Decoded.size() || H.Deficit <= 0) {
+      log() << "hotswap: error: invalid precomputed WMMA hazard candidate\n";
+      Ctx.RequiredPatchFailed = true;
+      return false;
     }
-    Ctx.OutTrampolines.push_back(std::move(T));
+    const InternalDecodedInst &DI = Ctx.Decoded[H.ValuIdx];
+    SiteReplacementState &State = Ctx.SiteReplacements[DI.Offset];
+    if (State.Committed ||
+        (State.OriginalSize != 0 && State.OriginalSize != DI.Size)) {
+      log() << "hotswap: error: WMMA hazard candidate at 0x"
+            << utohexstr(DI.Offset)
+            << " conflicts with pre-existing replacement ownership\n";
+      Ctx.RequiredPatchFailed = true;
+      return false;
+    }
+    if (State.RequiredLeadingVNops == 0)
+      Ctx.WmmaHazardSites.push_back(DI.Offset);
+    State.OriginalSize = DI.Size;
+    State.RequiredLeadingVNops =
+        std::max(State.RequiredLeadingVNops, static_cast<unsigned>(H.Deficit));
+  }
+  return true;
+}
 
-    log() << "hotswap: WMMA hazard fix at 0x" << utohexstr(ValuDI.Offset)
-          << ": inserted " << H.Deficit << " v_nop(s)\n";
-    ++Patched;
+static uint32_t applyWmmaHazardPatchImpl(PatchContext &Ctx) {
+  for (uint64_t Offset : Ctx.WmmaHazardSites) {
+    auto StateIt = Ctx.SiteReplacements.find(Offset);
+    if (StateIt == Ctx.SiteReplacements.end() ||
+        StateIt->second.RequiredLeadingVNops == 0) {
+      log() << "hotswap: error: lost precomputed WMMA hazard state at 0x"
+            << utohexstr(Offset) << "\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
+    if (StateIt->second.WmmaHazardComposed)
+      continue;
+    if (StateIt->second.Committed) {
+      log() << "hotswap: error: replacement at 0x" << utohexstr(Offset)
+            << " committed without its WMMA hazard requirement\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
+
+    auto DI = llvm::lower_bound(
+        Ctx.Decoded, Offset,
+        [](const InternalDecodedInst &Inst, uint64_t CandidateOffset) {
+          return Inst.Offset < CandidateOffset;
+        });
+    if (DI == Ctx.Decoded.end() || DI->Offset != Offset ||
+        DI->Size != StateIt->second.OriginalSize || Offset > Ctx.TextSize ||
+        DI->Size > Ctx.TextSize - Offset) {
+      log() << "hotswap: error: WMMA hazard source at 0x"
+            << utohexstr(Offset) << " is not a valid current instruction\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
+
+    // No per-instruction pass owned this site. Preserve the bytes after all
+    // same-size in-place corrections, then let the central emission helper
+    // prepend the precomputed v_nops and commit the single site owner.
+    SmallVector<uint8_t> Current(Ctx.Text + Offset,
+                                 Ctx.Text + Offset + DI->Size);
+    if (!emitReplacementCode(Ctx, Offset, DI->Size, Current)) {
+      log() << "hotswap: error: could not emit required WMMA hazard fix at 0x"
+            << utohexstr(Offset) << "\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
+
+    StateIt = Ctx.SiteReplacements.find(Offset);
+    if (StateIt == Ctx.SiteReplacements.end() ||
+        !StateIt->second.WmmaHazardComposed) {
+      log() << "hotswap: error: WMMA hazard requirement at 0x"
+            << utohexstr(Offset) << " was not composed by emission\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
   }
 
-  return Patched;
+  if (Ctx.WmmaHazardsComposed != Ctx.WmmaHazardSites.size()) {
+    log() << "hotswap: error: composed " << Ctx.WmmaHazardsComposed << " of "
+          << Ctx.WmmaHazardSites.size()
+          << " precomputed WMMA hazard requirements\n";
+    Ctx.RequiredPatchFailed = true;
+    return 0;
+  }
+  return Ctx.WmmaHazardsComposed;
 }
 
 void registerWmmaHazardPatch(HotswapPatchVTable &VT) {
+  VT.precomputeWmmaHazards = &precomputeWmmaHazardsImpl;
   VT.applyWmmaHazardPatch = &applyWmmaHazardPatchImpl;
 }
 

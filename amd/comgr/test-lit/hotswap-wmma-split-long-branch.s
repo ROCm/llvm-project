@@ -19,16 +19,12 @@
 // DISASM-LABEL: <test_wsplit_far>:
 // DISASM-NEXT: s_branch
 // DISASM: s_get_pc_i64 s[0:1]
-// DISASM-NEXT: s_add_co_u32 s0, s0,
-// DISASM-NEXT: s_add_co_ci_u32 s1, s1,
+// DISASM-NEXT: s_add_nc_u64 s[0:1], s[0:1],
 // DISASM-NEXT: s_set_pc_i64 s[0:1]
 // DISASM: v_wmma_f32_16x16x64_fp8_fp8
 // DISASM-NEXT: v_wmma_f32_16x16x64_fp8_fp8
-// DISASM-NEXT: s_cselect_b32 s2, 1, 0
 // DISASM-NEXT: s_get_pc_i64 s[0:1]
-// DISASM-NEXT: s_add_co_u32 s0, s0,
-// DISASM-NEXT: s_add_co_ci_u32 s1, s1,
-// DISASM-NEXT: s_cmp_lg_u32 s2, 0
+// DISASM-NEXT: s_add_nc_u64 s[0:1], s[0:1],
 // DISASM-NEXT: s_set_pc_i64 s[0:1]
 
 // COM: Idempotency: rewriting the output again must be a no-op.

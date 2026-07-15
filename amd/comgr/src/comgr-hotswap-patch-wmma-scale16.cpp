@@ -35,6 +35,11 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
+static uint32_t failRequiredScale16Patch(PatchContext &Ctx) {
+  Ctx.RequiredPatchFailed = true;
+  return 0;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -205,19 +210,8 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   if (DI.Size != VOP3PXSize) {
     log() << "hotswap: error: wmma_scale16: unexpected inst size " << DI.Size
           << " at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredScale16Patch(Ctx);
   }
-
-  // Skip offsets another patch has already claimed (Trampoline entries
-  // are appended to OutTrampolines before fixupTrampolineBranches
-  // overwrites the original site with s_branch). Mirrors PR #2's wrap
-  // pass; the previous `Decoded[Idx-1] == s_branch` heuristic never
-  // fired meaningfully because Decoded[] is built from the original
-  // .text and the dispatcher's mnemonic narrowing already filters out
-  // sites the patch has rewritten on a re-rewrite.
-  for (const Trampoline &T : Ctx.OutTrampolines)
-    if (T.OriginalOffset == DI.Offset)
-      return 0;
 
   const uint8_t *Raw = Ctx.Text + DI.Offset;
 
@@ -229,7 +223,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   if (!Src0Base || !Src1Base) {
     log() << "hotswap: error: wmma_scale16: unsupported non-VGPR scale "
           << "encoding at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredScale16Patch(Ctx);
   }
 
   bool NeedReductionA = true;
@@ -272,7 +266,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
       ((NeedReductionA || NeedReductionB) && (!T1 || !T2))) {
     log() << "hotswap: error: wmma_scale16: unable to allocate " << ScratchCount
           << " scratch VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredScale16Patch(Ctx);
   }
 
   // --- Build VALU preamble for scale reduction ---
@@ -292,7 +286,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
     if (PreambleBytes.empty()) {
       log() << "hotswap: error: wmma_scale16: preamble assembly failed at "
             << "offset 0x" << utohexstr(DI.Offset) << "\n";
-      return 0;
+      return failRequiredScale16Patch(Ctx);
     }
   }
 
@@ -305,7 +299,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   SmallVector<uint8_t> WmmaBytes =
       rewriteScale16ToScale(Raw, DI.Size, NewSrc0Enc, NewSrc1Enc, Ctx.LS);
   if (WmmaBytes.empty())
-    return 0;
+    return failRequiredScale16Patch(Ctx);
 
   // --- Concatenate: VALU preamble + rewritten WMMA → replacement ---
   SmallVector<uint8_t> Replacement;
@@ -314,7 +308,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   Replacement.insert(Replacement.end(), WmmaBytes.begin(), WmmaBytes.end());
 
   if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement))
-    return 0;
+    return failRequiredScale16Patch(Ctx);
 
   KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
   unsigned Extra = Alloc.extraVgprsNeeded();
@@ -501,14 +495,8 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   if (DI.Size != VOP3PXSize) {
     log() << "hotswap: error: wmma_scale16: unexpected 32x16 inst size "
           << DI.Size << " at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredScale16Patch(Ctx);
   }
-
-  // Skip offsets another patch has already claimed. Mirrors the 16x16
-  // path (see patchWmmaScale16_16x16 for the rationale).
-  for (const Trampoline &T : Ctx.OutTrampolines)
-    if (T.OriginalOffset == DI.Offset)
-      return 0;
 
   const uint8_t *Raw = Ctx.Text + DI.Offset;
 
@@ -519,7 +507,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   if (!isVgprEncoding(Src0Enc) || !isVgprEncoding(Src1Enc)) {
     log() << "hotswap: error: wmma_scale16: 32x16 non-VGPR matrix src at "
           << "offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredScale16Patch(Ctx);
   }
 
   unsigned ABase = Src0Enc - VgprEncBase;
@@ -534,7 +522,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   if (!ScaleSrc0Base || !ScaleSrc1Base) {
     log() << "hotswap: error: wmma_scale16: 32x16 unsupported non-VGPR "
           << "scale encoding at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredScale16Patch(Ctx);
   }
 
   bool NeedReductionA = true;
@@ -581,7 +569,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     log() << "hotswap: error: wmma_scale16: unable to allocate " << ScratchCount
           << " scratch VGPRs for 32x16 at offset 0x" << utohexstr(DI.Offset)
           << "\n";
-    return 0;
+    return failRequiredScale16Patch(Ctx);
   }
 
   // --- Scale reduction preamble (shared by both halves) ---
@@ -601,7 +589,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     if (PreambleBytes.empty()) {
       log() << "hotswap: error: wmma_scale16: 32x16 preamble assembly failed "
             << "at offset 0x" << utohexstr(DI.Offset) << "\n";
-      return 0;
+      return failRequiredScale16Patch(Ctx);
     }
   }
 
@@ -612,7 +600,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   if (ScaleAStr.empty() || ScaleBStr.empty()) {
     log() << "hotswap: error: wmma_scale16: 32x16 unsupported scale encoding "
           << "at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredScale16Patch(Ctx);
   }
 
   SmallVector<uint8_t> Replacement;
@@ -634,7 +622,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
       log() << "hotswap: error: wmma_scale16: 32x16 unsupported src2 "
             << "encoding 0x" << utohexstr(Src2Enc) << " at offset 0x"
             << utohexstr(DI.Offset) << "\n";
-      return 0;
+      return failRequiredScale16Patch(Ctx);
     }
 
     std::string WmmaAsm;
@@ -682,7 +670,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
       log() << "hotswap: error: wmma_scale16: 32x16 half " << Half
             << " assembly produced " << HalfBytes.size() << " bytes (expected "
             << VOP3PXSize << ") at offset 0x" << utohexstr(DI.Offset) << "\n";
-      return 0;
+      return failRequiredScale16Patch(Ctx);
     }
 
     // Same scale_src2 = 0x100 (VGPR0) bake-in as the 16x16 path. The
@@ -698,7 +686,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   }
 
   if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement))
-    return 0;
+    return failRequiredScale16Patch(Ctx);
 
   KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
   unsigned Extra = Alloc.extraVgprsNeeded();
