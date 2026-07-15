@@ -748,13 +748,10 @@ void AMDGPUAtomicOptimizerImpl::optimizeAtomic(Instruction &I,
   // For atomic sub, perform scan with add operation and allow one lane to
   // subtract the reduced value later.
   AtomicRMWInst::BinOp ScanOp = Op;
-  // Sub Reduction Intrinsics exist.
-  if (!UseWaveReductionIntrinsic) {
-    if (Op == AtomicRMWInst::Sub) {
-      ScanOp = AtomicRMWInst::Add;
-    } else if (Op == AtomicRMWInst::FSub) {
-      ScanOp = AtomicRMWInst::FAdd;
-    }
+  if (Op == AtomicRMWInst::Sub) {
+    ScanOp = AtomicRMWInst::Add;
+  } else if (Op == AtomicRMWInst::FSub) {
+    ScanOp = AtomicRMWInst::FAdd;
   }
   Value *Identity = getIdentityValueForAtomicOp(Ty, ScanOp);
 
@@ -763,9 +760,8 @@ void AMDGPUAtomicOptimizerImpl::optimizeAtomic(Instruction &I,
 
   BasicBlock *ComputeLoop = nullptr;
   BasicBlock *ComputeEnd = nullptr;
-  // TODO: Port other types to also use the wave reduction builtins.
   if (UseWaveReductionIntrinsic) {
-    // Use the wave reduction builtins.
+    // Use the wave reduction intrinsics.
     unsigned Stratergy = ScanImpl == ScanOptions::DPP         ? 2
                          : ScanImpl == ScanOptions::Iterative ? 1
                                                               : 0;
