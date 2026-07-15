@@ -9,8 +9,8 @@
 /// \file
 /// Tests for the hotswap MC/LLVM infrastructure in comgr-hotswap-llvm.cpp:
 /// initLLVM construction, LLVMState::encodeSBranch, assembleSingleInst /
-/// decodeTextSection round-trip, applyMnemonicSwap, applyByteReplace, and
-/// checkVgprOverlap.
+/// decodeTextSection round-trip, the decodeTextSection instruction-decode
+/// cache, applyMnemonicSwap, applyByteReplace, and checkVgprOverlap.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -1564,4 +1564,132 @@ TEST(AddTid, StoreTrampolineThroughBuildTrampoline) {
                                       "s_branch"};
   expectDecodedMnemonics(Decoded, Expected);
   expectDecodedBodyMatchesAsm(Decoded, AsmLines, S);
+}
+
+// -- decodeTextSection instruction-decode cache -------------------------------
+//
+// decodeTextSection caches decode results keyed on the up-to-getMaxInstLength()
+// byte window at each position, so byte-identical instructions reuse the first
+// decode instead of re-running the disassembler. The cache is unconditional (no
+// opt-in flag), so every decodeTextSection call above already exercises the
+// store path; these tests target the reuse and edge behaviour flagged in
+// review: repeated instructions must reuse decodes without corrupting the
+// per-occurrence Offset, distinct instructions of different sizes must not
+// alias one another, and a truncated final window (fewer than
+// getMaxInstLength() bytes left) must decode correctly rather than returning a
+// stale, oversized hit from an earlier full-length window.
+
+// Append the assembled bytes of each asm line in \p Lines to \p Text. Aborts
+// the test via appendSingleInstBytes if any line fails to assemble.
+static void appendInstStream(llvm::SmallVectorImpl<uint8_t> &Text,
+                             llvm::ArrayRef<const char *> Lines,
+                             const LLVMState &S) {
+  for (const char *Line : Lines)
+    ASSERT_TRUE(appendSingleInstBytes(Text, Line, S));
+}
+
+TEST(DecodeCache, RepeatedInstructionsReuseDecodeWithPerOccurrenceOffset) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // With a full getMaxInstLength() window of identical s_nops, the interior
+  // positions share one key: the first stores, the rest hit. Use enough nops
+  // that several positions still have a full (untruncated) window and hit.
+  constexpr unsigned Count = 8;
+  llvm::SmallVector<uint8_t> Text;
+  for (unsigned I = 0; I < Count; ++I)
+    ASSERT_TRUE(appendSingleInstBytes(Text, "s_nop 0", S));
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), Count);
+
+  const llvm::MCInst Ref = assembleOne("s_nop 0", S);
+  uint64_t ExpectedOffset = 0;
+  for (const InternalDecodedInst &DI : Decoded) {
+    EXPECT_EQ(DI.Mnemonic, "s_nop");
+    EXPECT_EQ(DI.Size, MinInstSize);
+    // Offset is set per occurrence and must never come from the cached entry.
+    EXPECT_EQ(DI.Offset, ExpectedOffset);
+    expectSameOperands(DI.Inst, Ref, "repeated s_nop");
+    ExpectedOffset += DI.Size;
+  }
+}
+
+TEST(DecodeCache, InterleavedDistinctSizesUseCorrectEntries) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // Mix 4-, 8- and 12-byte instructions, repeating some so both the store and
+  // the hit path run, and interleave them so a wrong key would return the
+  // wrong (differently sized) decode.
+  const char *Seq[] = {
+      "s_nop 0",                                           // 4 bytes
+      "v_cvt_pk_fp8_f32 v4, 1.0, 0.5 clamp",               // 8 bytes
+      "s_nop 0",                                           // 4 bytes (repeat)
+      "v_cvt_pk_fp8_f32 v4, 0x477f0000, 0x477f0000 clamp", // 12 bytes
+      "v_cvt_pk_fp8_f32 v4, 1.0, 0.5 clamp",               // 8 bytes (repeat)
+      "s_nop 0",                                           // 4 bytes (repeat)
+  };
+  const uint32_t ExpectedSizes[] = {MinInstSize,     2 * MinInstSize,
+                                    MinInstSize,     3 * MinInstSize,
+                                    2 * MinInstSize, MinInstSize};
+
+  llvm::SmallVector<uint8_t> Text;
+  appendInstStream(Text, Seq, S);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), std::size(Seq));
+
+  uint64_t ExpectedOffset = 0;
+  for (size_t I = 0; I < std::size(Seq); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    EXPECT_EQ(DI.Size, ExpectedSizes[I]) << "inst " << I;
+    EXPECT_EQ(DI.Offset, ExpectedOffset) << "inst " << I;
+    expectSameOperands(DI.Inst, assembleOne(Seq[I], S), Seq[I]);
+    ExpectedOffset += DI.Size;
+  }
+  EXPECT_EQ(ExpectedOffset, Text.size());
+}
+
+TEST(DecodeCache, TruncatedFinalWindowDecodesWithoutStaleHit) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // gfx1250 inspects up to a 16-byte window, so the final 4-byte s_nop below is
+  // keyed on a truncated window. If truncated-tail keys aliased earlier
+  // full-length keys, the last instruction could reuse an oversized decode and
+  // over-run the buffer; instead it must decode as a clean 4-byte s_nop, and
+  // the decoded sizes must sum to exactly the buffer length.
+  const unsigned MaxInstLen = S.MAI->getMaxInstLength(S.STI.get());
+  ASSERT_GT(MaxInstLen, static_cast<unsigned>(MinInstSize))
+      << "test assumes a multi-dword max instruction window";
+
+  const char *Seq[] = {
+      "v_cvt_pk_fp8_f32 v4, 0x477f0000, 0x477f0000 clamp", // 12 bytes
+      "s_nop 0",                                           // 4 bytes
+      "s_nop 0",                                           // final, truncated
+  };
+  // The final s_nop leaves only MinInstSize bytes, which is a truncated window
+  // (guaranteed by the MaxInstLen > MinInstSize assertion above).
+  llvm::SmallVector<uint8_t> Text;
+  appendInstStream(Text, Seq, S);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), std::size(Seq));
+
+  uint64_t Consumed = 0;
+  for (size_t I = 0; I < std::size(Seq); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    EXPECT_EQ(DI.Offset, Consumed) << "inst " << I;
+    expectSameOperands(DI.Inst, assembleOne(Seq[I], S), Seq[I]);
+    Consumed += DI.Size;
+  }
+  const InternalDecodedInst &Last = Decoded.back();
+  EXPECT_EQ(Last.Mnemonic, "s_nop");
+  EXPECT_EQ(Last.Size, MinInstSize);
+  // No over-run: the stream is consumed exactly, tail hit or miss.
+  EXPECT_EQ(Consumed, Text.size());
 }
