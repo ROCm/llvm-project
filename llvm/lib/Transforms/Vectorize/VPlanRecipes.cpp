@@ -331,7 +331,12 @@ InstructionCost VPRecipeBase::cost(ElementCount VF, VPCostContext &Ctx) {
 
   LLVM_DEBUG({
     dbgs() << "Cost of " << RecipeCost << " for VF " << VF << ": ";
-    dump();
+    if (auto SlotTracker = Ctx.getSlotTracker()) {
+      print(dbgs(), "", *SlotTracker);
+      dbgs() << "\n";
+    } else {
+      dump();
+    }
   });
   return RecipeCost;
 }
@@ -670,6 +675,9 @@ unsigned VPInstruction::getNumOperandsForOpcode() const {
   case Instruction::GetElementPtr:
   case Instruction::PHI:
   case Instruction::Switch:
+  case Instruction::AtomicRMW:
+  case Instruction::AtomicCmpXchg:
+  case Instruction::Fence:
   case VPInstruction::AnyOf:
   case VPInstruction::BuildStructVector:
   case VPInstruction::BuildVector:
@@ -2326,8 +2334,7 @@ InstructionCost VPWidenIntrinsicRecipe::computeCallCost(
 
 InstructionCost VPWidenIntrinsicRecipe::computeCost(ElementCount VF,
                                                     VPCostContext &Ctx) const {
-  SmallVector<const VPValue *> ArgOps(operands());
-  return computeCallCost(VectorIntrinsicID, ArgOps, *this, VF, Ctx);
+  return computeCallCost(VectorIntrinsicID, operands(), *this, VF, Ctx);
 }
 
 StringRef VPWidenIntrinsicRecipe::getIntrinsicName() const {
@@ -3816,9 +3823,8 @@ InstructionCost VPReplicateRecipe::computeCost(ElementCount VF,
     auto *CalledFn =
         cast<Function>(getOperand(getNumOperands() - 1)->getLiveInIRValue());
     Type *ResultTy = this->getScalarType();
-    SmallVector<const VPValue *> ArgOps(drop_end(operands()));
-    return computeCallCost(CalledFn, ResultTy, ArgOps, isSingleScalar(), VF,
-                           Ctx);
+    return computeCallCost(CalledFn, ResultTy, drop_end(operands()),
+                           isSingleScalar(), VF, Ctx);
   }
   case Instruction::Add:
   case Instruction::Sub:

@@ -5257,6 +5257,30 @@ applyUnrollHeuristic(omp::UnrollHeuristicOp op, llvm::IRBuilderBase &builder,
   return success();
 }
 
+/// Apply a `#pragma omp unroll partial` / `!$omp unroll partial`
+/// transformation using the OpenMPIRBuilder.
+static LogicalResult
+applyUnrollPartial(omp::UnrollPartialOp op, llvm::IRBuilderBase &builder,
+                   LLVM::ModuleTranslation &moduleTranslation) {
+  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+
+  Value applyee = op.getApplyee();
+  assert(applyee && "Loop to apply unrolling on required");
+
+  llvm::CanonicalLoopInfo *consBuilderCLI =
+      moduleTranslation.lookupOMPLoop(applyee);
+  llvm::OpenMPIRBuilder::LocationDescription loc(builder);
+
+  // No generatee is supported yet, so the unrolled loop's CanonicalLoopInfo is
+  // not requested and unrolling is deferred to LLVM's LoopUnroll pass.
+  int32_t factor = static_cast<int32_t>(op.getUnrollFactor());
+  ompBuilder->unrollLoopPartial(loc.DL, consBuilderCLI, factor,
+                                /*UnrolledCLI=*/nullptr);
+
+  moduleTranslation.invalidateOmpLoop(applyee);
+  return success();
+}
+
 /// Apply a `#pragma omp tile` / `!$omp tile` transformation using the
 /// OpenMPIRBuilder.
 static LogicalResult applyTile(omp::TileOp op, llvm::IRBuilderBase &builder,
@@ -6311,6 +6335,16 @@ static bool checkIfPointerMap(omp::MapInfoOp mapOp) {
   return false;
 }
 
+// A privatizeable attach map is a pointer/descriptor that is privatized and
+// passed directly as a kernel argument (target_param) rather than undergoing
+// the standard attach/parent mapping. These are handled specially in a couple
+// of places in map lowering.
+static bool isPrivatizeableAttachMap(omp::ClauseMapFlags mapType) {
+  return bitEnumContainsAll(mapType, omp::ClauseMapFlags::priv |
+                                         omp::ClauseMapFlags::target_param |
+                                         omp::ClauseMapFlags::attach);
+}
+
 // This function calculates the size to be offloaded for a specified type, given
 // its associated map clause (which can contain bounds information which affects
 // the total size), this size is calculated based on the underlying element type
@@ -6379,14 +6413,12 @@ static llvm::Value *getSizeInBytes(DataLayout &dl, const mlir::Type &type,
       // cover are:
       //
       // 1) If an argument has a null base pointer, then the size must be set to
-      // 0
-      //    to avoid the runtime exploding/complaining about an illegal pointer
-      //    map. The size returning non-zero is feasible in certain cases if for
-      //    example someone has specified there own bounds/range.
+      //    0 to avoid the runtime exploding/complaining about an illegal
+      //    pointer map. The size returning non-zero is feasible in certain
+      //    cases if for example someone has specified there own bounds/range.
       // 2) We wish to support a very specific OpenMP Fortran edge-case where a
-      // size
-      //    zero array can be legally presence checked and found to be on device
-      //    when it has been mapped. In these rare occasions the
+      //    size zero array can be legally presence checked and found to be on
+      //    device when it has been mapped. In these rare occasions the
       //    allocatable/pointer will have a size of 1 allocated for the
       //    underlying data, but this wall not be represented within the size of
       //    the descriptor, so we get a non-nullary pointer and a size of 0,
@@ -6473,6 +6505,9 @@ convertClauseMapFlags(omp::ClauseMapFlags mlirFlags) {
   if (bitEnumContainsAll(mlirFlags, omp::ClauseMapFlags::descriptor))
     mapType |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_DESCRIPTOR;
 
+  if (bitEnumContainsAll(mlirFlags, omp::ClauseMapFlags::target_param))
+    mapType |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM;
+
   if (bitEnumContainsAll(mlirFlags, omp::ClauseMapFlags::is_device_ptr)) {
     mapType |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM;
     if (!hasExplicitMap)
@@ -6514,19 +6549,25 @@ static void collectMapDataFromMapOperands(
     return false;
   };
 
+  auto checkPrivatizeableAttachPointer = [](omp::ClauseMapFlags mapType) {
+    return bitEnumContainsAll(mapType, omp::ClauseMapFlags::priv) &&
+           bitEnumContainsAll(mapType, omp::ClauseMapFlags::target_param) &&
+           bitEnumContainsAll(mapType, omp::ClauseMapFlags::attach);
+  };
+
   // Process MapOperands
   for (Value mapValue : mapVars) {
     auto mapOp = cast<omp::MapInfoOp>(mapValue.getDefiningOp());
-    bool isRefPtrOrPteeMapWithAttach =
-        checkRefPtrOrPteeMapWithAttach(mapOp.getMapType());
-    Value offloadPtr = (mapOp.getVarPtrPtr() && !isRefPtrOrPteeMapWithAttach)
+    bool isAttachStyleMap =
+        checkRefPtrOrPteeMapWithAttach(mapOp.getMapType()) ||
+        checkPrivatizeableAttachPointer(mapOp.getMapType());
+    Value offloadPtr = (mapOp.getVarPtrPtr() && !isAttachStyleMap)
                            ? mapOp.getVarPtrPtr()
                            : mapOp.getVarPtr();
     mapData.OriginalValue.push_back(moduleTranslation.lookupValue(offloadPtr));
     mapData.Pointers.push_back(
-        isRefPtrOrPteeMapWithAttach
-            ? moduleTranslation.lookupValue(mapOp.getVarPtrPtr())
-            : mapData.OriginalValue.back());
+        isAttachStyleMap ? moduleTranslation.lookupValue(mapOp.getVarPtrPtr())
+                         : mapData.OriginalValue.back());
 
     // if is declare target link OR to/enter in USM mode
     if (llvm::Value *refPtr =
@@ -6553,11 +6594,11 @@ static void collectMapDataFromMapOperands(
     // field, the pointer address for the base address field, and the pointer
     // not the data (base addresses) size. So we end up with a mix of base
     // types and sizes we wish to insert here.
-    mlir::Type sizeType = (isRefPtrOrPteeMapWithAttach || !mapOp.getVarPtrPtr())
+    mlir::Type sizeType = (isAttachStyleMap || !mapOp.getVarPtrPtr())
                               ? mapOp.getVarPtrType()
                               : mapOp.getVarPtrPtrType().value();
     mapData.Sizes.push_back(getSizeInBytes(
-        dl, sizeType, isRefPtrOrPteeMapWithAttach ? nullptr : mapOp,
+        dl, sizeType, isAttachStyleMap ? nullptr : mapOp,
         mapData.Pointers.back(), moduleTranslation.convertType(sizeType),
         builder, moduleTranslation));
     mapData.MapClause.push_back(mapOp.getOperation());
@@ -7273,16 +7314,25 @@ static void processMapWithMembersOf(LLVM::ModuleTranslation &moduleTranslation,
 
   llvm::omp::OpenMPOffloadMappingFlags memberOfFlag =
       ompBuilder.getMemberOfFlag(combinedInfo.Types.size());
-  for (size_t i = 0; i < mapInfoIdx.size(); i++) {
-    // Index == 0 is the parent map and if it gets here it's an unattachable
-    // type and should have OMP_MAP_TARGET_PARAM applied and no MEMBER_OF flag.
-    if (i == 0) {
+
+  // The first index is the parent map, the rest are its members. The parent
+  // normally undergoes the standard parent-with-members mapping, contributing
+  // the MEMBER_OF flag that binds each member to it. The one exception is a
+  // privatizeable attach map (a privatized pointer/descriptor passed directly
+  // as a kernel argument): here the parent is emitted as an individual map
+  // instead, for the time being, as it's used only in pointer/allocatable to
+  // array cases for the moment. This only ever applies to the parent, so it is
+  // checked once here rather than inside the loop below.
+  bool parentIsPrivatizeableAttach = isPrivatizeableAttachMap(parentClause.getMapType());
+  for (auto [i, idx] : llvm::enumerate(mapInfoIdx)) {
+    bool emitParentMap = i == 0 && !parentIsPrivatizeableAttach;
+    if (emitParentMap) {
       mapParentWithMembers(moduleTranslation, builder, ompBuilder, dl,
-                           combinedInfo, mapData, mapInfoIdx[i], memberOfFlag,
+                           combinedInfo, mapData, idx, memberOfFlag,
                            targetDirective);
     } else {
-      processIndividualMap(builder, ompBuilder, mapData, mapInfoIdx[i],
-                           combinedInfo, targetDirective, memberOfFlag,
+      processIndividualMap(builder, ompBuilder, mapData, idx, combinedInfo,
+                           targetDirective, memberOfFlag,
                            /*isTargetParam=*/false, mapDataIndex);
     }
   }
@@ -8823,17 +8873,24 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
 
   for (size_t i = 0, e = mapData.OriginalValue.size(); i != e; ++i) {
     // 1) Declare target arguments are not passed to kernels as arguments.
-    // 2) Attach maps are not passed in as arguments to kernels.
+    // 2) Attach maps are not passed in as arguments to kernels, except for
+    //    private attach maps used for corresponding-pointer initialization.
     // 3) Children of record objects are not passed in as arguments.
     // TODO: We currently do not handle cases where a member is explicitly
     // passed in as an argument, this will likley need to be handled in
     // the near future, rather than using IsAMember, it may be better to
     // test if the relevant BlockArg is used within the target region and
     // then use that as a basis for exclusion in the kernel inputs.
-    bool isAttachMap = (mapData.Types[i] &
-                        llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_ATTACH) ==
-                       llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_ATTACH;
-    if (!mapData.IsDeclareTarget[i] && !mapData.IsAMember[i] && !isAttachMap)
+    using MapFlags = llvm::omp::OpenMPOffloadMappingFlags;
+    bool isAttachMap = (mapData.Types[i] & MapFlags::OMP_MAP_ATTACH) ==
+                       MapFlags::OMP_MAP_ATTACH;
+    bool isPrivateTargetParam =
+        (mapData.Types[i] &
+         (MapFlags::OMP_MAP_PRIVATE | MapFlags::OMP_MAP_TARGET_PARAM)) ==
+        (MapFlags::OMP_MAP_PRIVATE | MapFlags::OMP_MAP_TARGET_PARAM);
+
+    if (!mapData.IsDeclareTarget[i] && !mapData.IsAMember[i] &&
+        (!isAttachMap || (isAttachMap && isPrivateTargetParam)))
       kernelInput.push_back(mapData.OriginalValue[i]);
   }
 
@@ -9030,14 +9087,16 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
     llvm::Module *llvmModule = moduleTranslation.getLLVMModule();
     updateDebugInfoForDeclareTargetVariables(gOp, moduleTranslation);
     if (auto *gVal = llvmModule->getNamedValue(gOp.getSymName())) {
+      auto *gVar = cast<llvm::GlobalVariable>(gVal);
       llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
       bool isDeclaration = gOp.isDeclaration();
       bool isExternallyVisible =
           gOp.getVisibility() != mlir::SymbolTable::Visibility::Private;
       auto loc = op->getLoc()->findInstanceOf<FileLineColLoc>();
       llvm::StringRef mangledName = gOp.getSymName();
-      auto captureClause =
-          convertToCaptureClauseKind(attribute.getCaptureClause().getValue());
+      mlir::omp::DeclareTargetCaptureClause captureClause =
+          attribute.getCaptureClause().getValue();
+      auto captureClauseKind = convertToCaptureClauseKind(captureClause);
       auto deviceClause =
           convertToDeviceClauseKind(attribute.getDeviceType().getValue());
       // unused for MLIR at the moment, required in Clang for book
@@ -9064,31 +9123,64 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
                                                      lineNo);
       };
 
-      llvm::vfs::FileSystem &vfs = moduleTranslation.getFileSystem();
+      bool requiresUSM = ompBuilder->Config.hasRequiresUnifiedSharedMemory();
+      bool isToOrEnter =
+          captureClause == omp::DeclareTargetCaptureClause::to ||
+          captureClause == omp::DeclareTargetCaptureClause::enter;
+      bool isHostOnly = attribute.getDeviceType().getValue() ==
+                        omp::DeclareTargetDeviceType::host;
 
+      // A to/enter declare-target variable needs a device-resident,
+      // name-resolvable copy and a host offloading entry. A local-linkage
+      // global provides neither, so we promote it to external.
+      if (isToOrEnter && !isHostOnly && !requiresUSM &&
+          gVar->hasLocalLinkage()) {
+        gVar->setLinkage(llvm::GlobalValue::ExternalLinkage);
+        isExternallyVisible = true;
+
+        // Clear the stale dso_local flag so it is referenced like a
+        // module-scope declare target global.
+        if (ompBuilder->Config.isTargetDevice())
+          gVar->setDSOLocal(false);
+      }
+
+      llvm::vfs::FileSystem &vfs = moduleTranslation.getFileSystem();
       ompBuilder->registerTargetGlobalVariable(
-          captureClause, deviceClause, isDeclaration, isExternallyVisible,
+          captureClauseKind, deviceClause, isDeclaration, isExternallyVisible,
           ompBuilder->getTargetEntryUniqueInfo(fileInfoCallBack, vfs),
           mangledName, generatedRefs, /*OpenMPSimd*/ false, targetTriple,
           /*GlobalInitializer*/ nullptr, /*VariableLinkage*/ nullptr,
           gVal->getType(), gVal);
 
-      bool requiresUSM = ompBuilder->Config.hasRequiresUnifiedSharedMemory();
       if (ompBuilder->Config.isTargetDevice() &&
-          (attribute.getCaptureClause().getValue() ==
-               mlir::omp::DeclareTargetCaptureClause::link ||
+          (captureClause == omp::DeclareTargetCaptureClause::link ||
            requiresUSM)) {
         llvm::Type *ptrTy = gVal->getType();
         // For USM the global type becomes a pointer handle, as opposed to the
         // globals original type.
         if (requiresUSM)
           ptrTy = llvm::PointerType::get(llvmModule->getContext(), 0);
-        ompBuilder->getAddrOfDeclareTargetVar(
-            captureClause, deviceClause, isDeclaration, isExternallyVisible,
+        bool addrGlobalCreated = ompBuilder->getAddrOfDeclareTargetVar(
+            captureClauseKind, deviceClause, isDeclaration, isExternallyVisible,
             ompBuilder->getTargetEntryUniqueInfo(fileInfoCallBack, vfs),
             mangledName, generatedRefs, /*OpenMPSimd*/ false, targetTriple,
             ptrTy, /*GlobalInitializer*/ nullptr,
             /*VariableLinkage*/ nullptr);
+
+        // For indirectly-accessed global pointers, we rely on "internal"
+        // linkage to optimize out the unneeded full-variable storage later,
+        // since we can't prevent the LLVM dialect from generating globals
+        // without also breaking target lowering.
+        if (addrGlobalCreated)
+          gVar->setLinkage(llvm::GlobalValue::InternalLinkage);
+      }
+
+      // Mark 'device_type(host) enter(...)' variables as external in the device
+      // since they're not supposed to have their own copy. This will cause
+      // linker errors if accesses are attempted from the target device.
+      if (ompBuilder->Config.isTargetDevice() && isHostOnly && isToOrEnter) {
+        gVar->setLinkage(llvm::GlobalValue::ExternalLinkage);
+        gVar->setInitializer(nullptr);
       }
     }
   }
@@ -9796,6 +9888,9 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
             // contained region including their transformations must occur at
             // the omp.canonical_loop.
             return applyUnrollHeuristic(op, builder, moduleTranslation);
+          })
+          .Case([&](omp::UnrollPartialOp op) {
+            return applyUnrollPartial(op, builder, moduleTranslation);
           })
           .Case([&](omp::TileOp op) {
             return applyTile(op, builder, moduleTranslation);

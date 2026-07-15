@@ -2147,6 +2147,9 @@ static ParseResult parseMapClause(OpAsmParser &parser,
     if (mapTypeMod == "is_device_ptr")
       mapTypeBits |= ClauseMapFlags::is_device_ptr;
 
+    if (mapTypeMod == "target_param")
+      mapTypeBits |= ClauseMapFlags::target_param;
+
     return success();
   };
 
@@ -2180,6 +2183,8 @@ static void printMapClause(OpAsmPrinter &p, Operation *op,
     mapTypeStrs.push_back("present");
   if (mapTypeToBool(mapFlags, ClauseMapFlags::descriptor))
     mapTypeStrs.push_back("descriptor");
+  if (mapTypeToBool(mapFlags, ClauseMapFlags::target_param))
+    mapTypeStrs.push_back("target_param");
 
   // special handling of to/from/tofrom/delete and release/alloc, release +
   // alloc are the abscense of one of the other flags, whereas tofrom requires
@@ -4233,6 +4238,56 @@ UnrollHeuristicOp ::getApplyeesODSOperandIndexAndLength() {
 
 std::pair<unsigned, unsigned>
 UnrollHeuristicOp::getGenerateesODSOperandIndexAndLength() {
+  return {0, 0};
+}
+
+//===----------------------------------------------------------------------===//
+// UnrollPartialOp
+//===----------------------------------------------------------------------===//
+
+void UnrollPartialOp::build(::mlir::OpBuilder &odsBuilder,
+                            ::mlir::OperationState &odsState, ::mlir::Value cli,
+                            uint64_t unrollFactor) {
+  odsState.addOperands(cli);
+  Properties &props = odsState.getOrAddProperties<Properties>();
+  props.unroll_factor = odsBuilder.getI64IntegerAttr(unrollFactor);
+}
+
+void UnrollPartialOp::print(OpAsmPrinter &p) {
+  p << '(' << getApplyee() << ')';
+
+  p.printOptionalAttrDict((*this)->getAttrs());
+}
+
+mlir::ParseResult UnrollPartialOp::parse(::mlir::OpAsmParser &parser,
+                                         ::mlir::OperationState &result) {
+  auto cliType = CanonicalLoopInfoType::get(parser.getContext());
+
+  if (parser.parseLParen())
+    return failure();
+
+  OpAsmParser::UnresolvedOperand applyee;
+  if (parser.parseOperand(applyee) ||
+      parser.resolveOperand(applyee, cliType, result.operands))
+    return failure();
+
+  if (parser.parseRParen())
+    return failure();
+
+  // The unroll factor is carried by the `unroll_factor` attribute.
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  return mlir::success();
+}
+
+std::pair<unsigned, unsigned>
+UnrollPartialOp::getApplyeesODSOperandIndexAndLength() {
+  return getODSOperandIndexAndLength(odsIndex_applyee);
+}
+
+std::pair<unsigned, unsigned>
+UnrollPartialOp::getGenerateesODSOperandIndexAndLength() {
   return {0, 0};
 }
 

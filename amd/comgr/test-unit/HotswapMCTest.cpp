@@ -87,6 +87,16 @@ TEST(InitLLVM, ValidGfx1250) {
   EXPECT_NE(S.Target, nullptr);
   ASSERT_NE(S.MCII, nullptr);
   EXPECT_LT(S.SBranchOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SClauseOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SDelayAluOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SEndPgmOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SEndPgmSavedOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SAddPcI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SCallI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SSwapPcI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SPrefetchInstPcRelOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SPrefetchDataPcRelOpcode, S.MCII->getNumOpcodes());
+  EXPECT_TRUE(S.SCCRegister.isValid());
   EXPECT_EQ(S.SNopBytes.size(), MinInstSize);
 }
 
@@ -182,69 +192,197 @@ TEST(EncodeSBranch, FailsOnInvalidState) {
   EXPECT_TRUE(S.encodeSBranch(0, 8).empty());
 }
 
-// -- encodeLongBranch (s_add_pc_i64) -----------------------------------------
-//
-// The long branch reaches anywhere via s_add_pc_i64, which adds a signed
-// literal to the PC of the next instruction: landing PC == From + size + imm.
-// A positive (forward) offset fits a 32-bit literal (8 bytes); a negative
-// (backward) offset needs a 64-bit literal (12 bytes). These verify the offset
-// math and encoding structurally rather than pinning exact bytes.
+// -- encodeSetPCLongBranch ---------------------------------------------------
 
-// Read the signed literal that follows the 4-byte opcode dword.
-static int64_t longBranchLiteral(llvm::ArrayRef<uint8_t> Out) {
-  if (Out.size() == LongBranchFwdBytes)
-    return static_cast<int32_t>(readDword(Out.data() + MinInstSize));
-  int64_t V = 0;
-  std::memcpy(&V, Out.data() + MinInstSize, sizeof(V));
-  return V;
-}
-
-TEST(EncodeLongBranch, ForwardLandsOnTarget) {
+TEST(EncodeSetPCLongBranch, UsesSccPreservingSequenceWithoutAddPc) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  // ~512 KB forward -- well beyond s_branch's +-128 KB reach.
-  const uint64_t From = 0x1000, To = 0x81000;
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchFwdBytes);
-  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
+
+  const uint64_t From = 0x81000;
+  const uint64_t To = 0x1004;
+  std::optional<llvm::SmallVector<uint8_t>> Out =
+      encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
+  ASSERT_TRUE(Out);
 
   std::vector<InternalDecodedInst> Dec;
-  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
-  ASSERT_EQ(Dec.size(), 1u);
-  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
+  ASSERT_TRUE(decodeTextSection(Out->data(), Out->size(), S, Dec));
+  ASSERT_EQ(Dec.size(), 6u);
+  EXPECT_EQ(Dec[0].Mnemonic, "s_cselect_b32");
+  EXPECT_EQ(Dec[1].Mnemonic, "s_get_pc_i64");
+  EXPECT_EQ(Dec[2].Mnemonic, "s_add_co_u32");
+  EXPECT_EQ(Dec[3].Mnemonic, "s_add_co_ci_u32");
+  EXPECT_EQ(Dec[4].Mnemonic, "s_cmp_lg_u32");
+  EXPECT_EQ(Dec[5].Mnemonic, "s_set_pc_i64");
+  for (const InternalDecodedInst &DI : Dec)
+    EXPECT_NE(DI.Mnemonic, "s_add_pc_i64");
+
+  // s_get_pc_i64 is the second dword and captures From + 8. The two add
+  // immediates materialize this exact two's-complement displacement.
+  uint64_t Delta = To - (From + 2 * MinInstSize);
+  EXPECT_EQ(static_cast<uint32_t>(Delta), 0xFFF7FFFCu);
+  EXPECT_EQ(static_cast<uint32_t>(Delta >> 32), 0xFFFFFFFFu);
 }
 
-TEST(EncodeLongBranch, BackwardUsesWideLiteralAndLandsOnTarget) {
+TEST(EncodeSetPCLongBranch, ForwardLandsOnTarget) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  // Backward jump (trampoline tail -> earlier return point).
-  const uint64_t From = 0x81000, To = 0x1004;
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchMaxBytes);
-  EXPECT_EQ(static_cast<int64_t>(From) + static_cast<int64_t>(Out.size()) +
-                longBranchLiteral(Out),
-            static_cast<int64_t>(To));
 
-  std::vector<InternalDecodedInst> Dec;
-  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
-  ASSERT_EQ(Dec.size(), 1u);
-  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
+  constexpr uint64_t From = 0x1000;
+  constexpr uint64_t To = 0x81000;
+  std::optional<llvm::SmallVector<uint8_t>> Out =
+      encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
+  ASSERT_TRUE(Out);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Out->data(), Out->size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 6u);
+  ASSERT_TRUE(Decoded[2].Inst.getOperand(2).isImm());
+  ASSERT_TRUE(Decoded[3].Inst.getOperand(2).isImm());
+  uint64_t Lo = static_cast<uint32_t>(Decoded[2].Inst.getOperand(2).getImm());
+  uint64_t Hi = static_cast<uint32_t>(Decoded[3].Inst.getOperand(2).getImm());
+  uint64_t Delta = Lo | (Hi << 32);
+  EXPECT_EQ(From + 2 * MinInstSize + Delta, To);
 }
 
-TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
+TEST(EncodeSetPCLongBranch, RejectsPcBaseOverflow) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  // 4 MB: s_branch rejects it, the long branch encodes it.
-  const uint64_t From = 0, To = 0x400000;
-  EXPECT_TRUE(S.encodeSBranch(From, To).empty());
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_FALSE(Out.empty());
-  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
+  EXPECT_FALSE(encodeSetPCLongBranch(
+      S, std::numeric_limits<uint64_t>::max() - MinInstSize, 0,
+      /*SgprBase=*/12));
+}
+
+TEST(EncodeSetPCLongBranch, RejectsMisalignedScratchPair) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  EXPECT_FALSE(encodeSetPCLongBranch(S, 0, 0x1000, /*SgprBase=*/3));
+}
+
+TEST(IsSBranchReachable, CoversBoundariesAlignmentAndPcOverflow) {
+  constexpr uint64_t PositiveLimit =
+      static_cast<uint64_t>(BranchOffsetMax + 1) * MinInstSize;
+  EXPECT_TRUE(isSBranchReachable(/*From=*/0, PositiveLimit));
+  EXPECT_FALSE(isSBranchReachable(/*From=*/0, PositiveLimit + MinInstSize));
+  EXPECT_FALSE(isSBranchReachable(/*From=*/0, /*To=*/7));
+
+  constexpr uint64_t NegativeFrom =
+      static_cast<uint64_t>(-(BranchOffsetMin + 1)) * MinInstSize;
+  EXPECT_TRUE(isSBranchReachable(NegativeFrom, /*To=*/0));
+  EXPECT_FALSE(isSBranchReachable(NegativeFrom + MinInstSize, /*To=*/0));
+  EXPECT_FALSE(isSBranchReachable(std::numeric_limits<uint64_t>::max() - 1,
+                                  /*To=*/0));
+}
+
+TEST(EvaluateDirectControlFlowTarget, EvaluatesImmediateBranch) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst("s_branch 1", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  Decoded[0].Offset = 0x100;
+  EXPECT_EQ(evaluateDirectControlFlowTarget(Decoded[0], S), 0x108u);
+}
+
+TEST(EvaluateDirectControlFlowTarget, EvaluatesGfx1250CallOperandFallback) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_call_i64 s[0:1], 2", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  Decoded[0].Offset = 0x200;
+  EXPECT_EQ(evaluateDirectControlFlowTarget(Decoded[0], S),
+            0x200u + Decoded[0].Size + 2 * MinInstSize);
+}
+
+TEST(SafeSgprScratchBlock, RejectsRegisterBeyondAddressableLimit) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_mov_b32 s4, s0", S);
+  ASSERT_FALSE(Text.empty());
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(View.textData(), View.textSize(), S, Decoded));
+  RewriteConfig Config;
+  Config.MaxSgprs = 4;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  PatchContext Ctx{Config,
+                   Decoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches};
+
+  EXPECT_FALSE(findSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, /*Count=*/1,
+                                        /*Alignment=*/1, "unit test"));
+}
+
+TEST(SafeSgprScratchBlock, CommitRejectsObjectWithoutKernelDescriptor) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+
+  comgr_test::KernelDescriptorElfOptions Options;
+  Options.EmitKernelDescriptorSymbol = false;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Options);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> Decoded;
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  PatchContext Ctx{Config,
+                   Decoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches};
+
+  const SafeSgprScratchBlock Block{/*Base=*/4, /*Count=*/1};
+  EXPECT_FALSE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Block, "unit test"));
 }
 
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {
-  std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64},
-                                {100, 128, 100, 100, 128}};
+  std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64}, {100, 128, 100, 100, 128}};
   EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max()),
             nullptr);
 }
@@ -278,6 +416,7 @@ TEST(AssembleDecode, SNopRoundTrip) {
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
   ASSERT_EQ(Decoded.size(), 1u);
+  EXPECT_TRUE(Decoded[0].DecodeSucceeded);
   EXPECT_EQ(Decoded[0].Size, MinInstSize);
   EXPECT_EQ(Decoded[0].Mnemonic, "s_nop");
 }
@@ -541,6 +680,44 @@ TEST(BuildTrampoline, EmptyOnBadAsm) {
   EXPECT_TRUE(T.Bytes.empty());
 }
 
+// -- DS two-address expansion ------------------------------------------------
+
+TEST(ExpandDs2Addr, PreservesAddressNeededBySecondLoad) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(
+      "ds_load_2addr_b64 v[12:15], v12 offset0:0 offset1:1", S);
+  ASSERT_FALSE(Bytes.empty());
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+
+  std::optional<std::vector<std::string>> Expanded =
+      expandDs2Addr(Decoded[0].Inst, Decoded[0].Mnemonic, "ds_load_b64", S);
+  ASSERT_TRUE(Expanded);
+  ASSERT_EQ(Expanded->size(), 2u);
+  EXPECT_EQ((*Expanded)[0], "ds_load_b64 v[14:15], v12 offset:8");
+  EXPECT_EQ((*Expanded)[1], "ds_load_b64 v[12:13], v12");
+}
+
+TEST(ExpandDs2Addr, RejectsCyclicExchangeDependency) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(
+      "ds_storexchg_2addr_rtn_b64 v[20:23], v24, v[22:23], v[20:21] "
+      "offset0:0 offset1:1",
+      S);
+  ASSERT_FALSE(Bytes.empty());
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+
+  EXPECT_FALSE(expandDs2Addr(Decoded[0].Inst, Decoded[0].Mnemonic,
+                             "ds_storexchg_rtn_b64", S));
+}
+
 // -- buildKernelEntryTrampoline -----------------------------------------------
 
 TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
@@ -616,10 +793,9 @@ TEST(BuildKernelEntryTrampoline, PrefixPrefiltersHipblasltSmokeEntryBytes) {
   // idempotency path should reject this by raw prefix before classifying it as
   // a possible appended entry stub.
   const uint8_t EntryBytes[] = {
-      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
-      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
-      0xff, 0x02, 0x3f, 0x8b, 0xff, 0xff, 0xff, 0x3f,
-      0x02, 0x9e, 0x40, 0x85, 0x03, 0x00, 0xc1, 0xbe,
+      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00, 0x1a, 0x08, 0x80,
+      0xb9, 0x02, 0x00, 0x00, 0x00, 0xff, 0x02, 0x3f, 0x8b, 0xff, 0xff,
+      0xff, 0x3f, 0x02, 0x9e, 0x40, 0x85, 0x03, 0x00, 0xc1, 0xbe,
   };
 
   llvm::SmallVector<uint8_t> Candidate;
@@ -629,8 +805,8 @@ TEST(BuildKernelEntryTrampoline, PrefixPrefiltersHipblasltSmokeEntryBytes) {
   ASSERT_EQ(Candidate.size(), KernelEntryStubStride);
 
   std::vector<InternalDecodedInst> Decoded;
-  ASSERT_TRUE(decodeTextSection(Candidate.data(), sizeof(EntryBytes), S,
-                                Decoded));
+  ASSERT_TRUE(
+      decodeTextSection(Candidate.data(), sizeof(EntryBytes), S, Decoded));
   ASSERT_GE(Decoded.size(), 5u);
   EXPECT_EQ(Decoded[0].Mnemonic, "s_setreg_imm32_b32");
   EXPECT_EQ(Decoded[1].Mnemonic, "s_setreg_imm32_b32");
@@ -708,6 +884,7 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX125_TCP_SPLIT, 5);
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.ComputePgmRsrc3 = Rsrc3;
+  Opts.MetadataSgprCount = 8;
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(Text, Opts);
   llvm::Expected<ElfView> ViewOrErr =
@@ -716,6 +893,10 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
 
   uint8_t *Kd = ViewOrErr->findKernelDescriptor("kernel");
   ASSERT_NE(Kd, nullptr);
+  uint32_t Rsrc1Before = 0;
+  std::memcpy(&Rsrc1Before,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1Before));
 
   std::vector<Trampoline> Growth;
   std::vector<KernelEntryTrampolineFixup> Fixups;
@@ -780,19 +961,211 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   std::memcpy(&OutRsrc1,
               OutKd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
               sizeof(OutRsrc1));
-  unsigned ReservedSgprs =
-      (AMDHSA_BITS_GET(OutRsrc1,
-                       hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT) +
-       1) *
-      8;
-  EXPECT_GE(ReservedSgprs, Fixups[0].RequiredSgprs);
+  EXPECT_EQ(OutRsrc1, Rsrc1Before);
+  EXPECT_EQ(OutView->getKernelSgprCount("kernel"), Fixups[0].RequiredSgprs);
 
-  std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
+  llvm::ArrayRef<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
   ASSERT_EQ(KDs.size(), 1u);
   std::optional<uint64_t> KdVAddr = OutView->getKernelDescriptorVAddr("kernel");
   ASSERT_TRUE(KdVAddr.has_value());
   const uint64_t StubVAddr = PoolVAddr + Fixups[0].StubTextOffset;
   EXPECT_EQ(KDs[0].EntryOffset, static_cast<int64_t>(StubVAddr - *KdVAddr));
+}
+
+// Count symbols named \p Name in the .symtab of the ELF held in \p Buf.
+// Returns ~0u if the ELF or its symbol table cannot be parsed, so a mis-parse
+// surfaces as a failed expectation rather than a silent zero.
+static unsigned countSymtabSymbolsNamed(llvm::WritableMemoryBuffer &Buf,
+                                        llvm::StringRef Name) {
+  using ELFT = llvm::object::ELF64LE;
+  llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
+      llvm::object::ELFFile<ELFT>::create(
+          llvm::StringRef(reinterpret_cast<const char *>(Buf.getBufferStart()),
+                          Buf.getBufferSize()));
+  if (!FileOrErr) {
+    llvm::consumeError(FileOrErr.takeError());
+    return ~0u;
+  }
+  llvm::object::ELFFile<ELFT> &File = *FileOrErr;
+  llvm::Expected<ELFT::ShdrRange> Secs = File.sections();
+  if (!Secs) {
+    llvm::consumeError(Secs.takeError());
+    return ~0u;
+  }
+  const ELFT::Shdr *Symtab = nullptr;
+  for (const ELFT::Shdr &Sh : *Secs)
+    if (Sh.sh_type == llvm::ELF::SHT_SYMTAB) {
+      Symtab = &Sh;
+      break;
+    }
+  if (!Symtab)
+    return 0;
+  llvm::Expected<ELFT::SymRange> Syms = File.symbols(Symtab);
+  llvm::Expected<llvm::StringRef> Str = File.getStringTableForSymtab(*Symtab);
+  if (!Syms || !Str) {
+    if (!Syms)
+      llvm::consumeError(Syms.takeError());
+    if (!Str)
+      llvm::consumeError(Str.takeError());
+    return ~0u;
+  }
+  unsigned Count = 0;
+  for (const ELFT::Sym &Sym : *Syms) {
+    llvm::Expected<llvm::StringRef> N = Sym.getName(*Str);
+    if (!N) {
+      llvm::consumeError(N.takeError());
+      continue;
+    }
+    if (*N == Name)
+      ++Count;
+  }
+  return Count;
+}
+
+// Covers: the entry-trampoline rewrite is idempotent -- a second pass over an
+// already-rewritten code object installs no new stub, and therefore defines no
+// duplicate `<kernel>.stub` symbol. This backs the idempotency claim made by
+// the change that adds stub symbols.
+//
+// How: run the full first pass on a synthetic gfx1250 object
+// (appendKernelEntryTrampolines -> growWithTrampolines ->
+// rewriteKernelEntryDescriptorOffsets -> addKernelEntryTrampolineSymbols) and
+// confirm exactly one "kernel.stub" symbol. Then re-parse that output and run
+// appendKernelEntryTrampolines again: because the descriptor already targets
+// the appended stub, the second pass must report zero new stubs and produce no
+// fixups, so the symbol pass never runs. Feeding those empty fixups to
+// addKernelEntryTrampolineSymbols returns nullptr (no new buffer), and
+// "kernel.stub" remains defined exactly once -- i.e. no duplicate name.
+TEST(KernelEntryTrampoline, SecondPassAddsNoDuplicateStubSymbol) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+
+  // -- First pass: append one stub, grow .text, rewrite the descriptor, and
+  //    attach the stub symbol. --
+  llvm::Expected<ElfView> View1 =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View1) << llvm::toString(View1.takeError());
+  const unsigned TextIdx = View1->textSectionIndex();
+  const uint64_t TextAddr = View1->textAddr();
+  const uint64_t OldTextSize = View1->textSize();
+
+  std::vector<Trampoline> Growth1;
+  std::vector<KernelEntryTrampolineFixup> Fixups1;
+  std::optional<uint32_t> Count1 = appendKernelEntryTrampolines(
+      *View1, S, /*MaxSgprs=*/106, Growth1, Fixups1);
+  ASSERT_TRUE(Count1.has_value());
+  ASSERT_EQ(*Count1, 1u);
+  std::optional<uint64_t> PoolVAddr = View1->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddr.has_value());
+
+  std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
+      View1->growWithTrampolines(Growth1, S.SNopBytes);
+  ASSERT_NE(Grown, nullptr);
+  ASSERT_TRUE(
+      rewriteKernelEntryDescriptorOffsets(*Grown, *PoolVAddr, S.Cpu, Fixups1));
+  std::unique_ptr<llvm::WritableMemoryBuffer> Pass1 =
+      addKernelEntryTrampolineSymbols(*Grown, TextIdx, TextAddr, OldTextSize,
+                                      Fixups1);
+  ASSERT_NE(Pass1, nullptr);
+  ASSERT_EQ(countSymtabSymbolsNamed(*Pass1, "kernel.stub"), 1u);
+
+  // -- Second pass over the already-rewritten object. --
+  uint8_t *Pass1Data = reinterpret_cast<uint8_t *>(Pass1->getBufferStart());
+  llvm::Expected<ElfView> View2 =
+      ElfView::create(Pass1Data, Pass1->getBufferSize());
+  ASSERT_TRUE((bool)View2) << llvm::toString(View2.takeError());
+
+  std::vector<Trampoline> Growth2;
+  std::vector<KernelEntryTrampolineFixup> Fixups2;
+  std::optional<uint32_t> Count2 = appendKernelEntryTrampolines(
+      *View2, S, /*MaxSgprs=*/106, Growth2, Fixups2);
+  ASSERT_TRUE(Count2.has_value());
+  // The descriptor already targets a stub, so nothing new is installed.
+  EXPECT_EQ(*Count2, 0u);
+  EXPECT_TRUE(Fixups2.empty());
+
+  // With no fixups the symbol pass is a no-op (returns nullptr, keeping the
+  // existing buffer), so no second "kernel.stub" can be defined.
+  std::unique_ptr<llvm::WritableMemoryBuffer> Pass2 =
+      addKernelEntryTrampolineSymbols(*Pass1, TextIdx, TextAddr,
+                                      View2->textSize(), Fixups2);
+  EXPECT_EQ(Pass2, nullptr);
+  EXPECT_EQ(countSymtabSymbolsNamed(*Pass1, "kernel.stub"), 1u);
+}
+
+// A `global_wb; v_nop` prologue (llvm/llvm-project#208467) already satisfies
+// the workaround, so no trampoline is installed.
+TEST(KernelEntryTrampoline, SkipsWhenPrologueAlreadyHasVmemWorkaround) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", S);
+  llvm::SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", S);
+  llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(GlobalWb.empty());
+  ASSERT_FALSE(VNop.empty());
+  ASSERT_EQ(EndPgm.size(), MinInstSize);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(GlobalWb.begin(), GlobalWb.end());
+  Text.append(VNop.begin(), VNop.end());
+  Text.append(EndPgm.begin(), EndPgm.end());
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count =
+      appendKernelEntryTrampolines(*View, S, /*MaxSgprs=*/106, Growth, Fixups);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 0u);
+  EXPECT_TRUE(Fixups.empty());
+  EXPECT_TRUE(Growth.empty());
+}
+
+// The same two instructions in the wrong order are not the workaround, so a
+// trampoline is still installed.
+TEST(KernelEntryTrampoline, InstallsWhenPrologueLacksVmemWorkaround) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", S);
+  llvm::SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", S);
+  llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(VNop.empty());
+  ASSERT_FALSE(GlobalWb.empty());
+  ASSERT_EQ(EndPgm.size(), MinInstSize);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(VNop.begin(), VNop.end());
+  Text.append(GlobalWb.begin(), GlobalWb.end());
+  Text.append(EndPgm.begin(), EndPgm.end());
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count =
+      appendKernelEntryTrampolines(*View, S, /*MaxSgprs=*/106, Growth, Fixups);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 1u);
+  EXPECT_EQ(Fixups.size(), 1u);
 }
 
 TEST(KernelEntryTrampoline, AlignsStubByVirtualAddress) {

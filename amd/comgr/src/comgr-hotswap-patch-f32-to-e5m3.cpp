@@ -539,16 +539,11 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   AsmOS << "v_max_num_f32 " << OutName << ", 0, " << Src0Str << "\n";
 
   // --- Stochastic noise injection ---
-  // Replicate ISA pseudocode: add S1[31:12] to F32 mantissa, truncate back
-  // to 23 bits, then reconstruct the perturbed F32 via v_bfi_b32.
-  AsmOS << "v_and_b32 " << TmpName << ", 0x007FFFFF, " << OutName << "\n";
-  AsmOS << "v_lshrrev_b32 " << OutName << ", 12, " << Src1Str << "\n";
-  AsmOS << "v_add_u32 " << TmpName << ", " << TmpName << ", " << OutName
+  // Add S1[31:12] as noise directly to the F32 bitpattern; carry
+  // propagates into the exponent naturally.
+  AsmOS << "v_lshrrev_b32 " << TmpName << ", 12, " << Src1Str << "\n";
+  AsmOS << "v_add_u32 " << OutName << ", " << OutName << ", " << TmpName
         << "\n";
-  AsmOS << "v_and_b32 " << TmpName << ", 0x007FFFFF, " << TmpName << "\n";
-  AsmOS << "v_max_num_f32 " << OutName << ", 0, " << Src0Str << "\n";
-  AsmOS << "v_bfi_b32 " << OutName << ", 0x007FFFFF, " << TmpName << ", "
-        << OutName << "\n";
 
   // --- High-range direct path ---
   // SR mode injects rounding noise before truncation, so exponent-31 values

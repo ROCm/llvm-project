@@ -8,7 +8,7 @@
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out.elf \
+// RUN:   --strict-mode --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
 
@@ -58,7 +58,7 @@
 // COM: Idempotency
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --check-idempotent \
+// RUN:   --strict-mode --check-idempotent \
 // RUN:   | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES
 
@@ -213,3 +213,40 @@ test_tensor_mixed_ds:
   .amdhsa_next_free_vgpr 3
   .amdhsa_next_free_sgpr 12
 .end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 3
+    - 0
+  amdhsa.kernels:
+    - .name: test_tensor_multi_different
+      .symbol: test_tensor_multi_different.kd
+      .sgpr_count: 24
+      .vgpr_count: 1
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_tensor_multi_same
+      .symbol: test_tensor_multi_same.kd
+      .sgpr_count: 12
+      .vgpr_count: 1
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_tensor_mixed_ds
+      .symbol: test_tensor_mixed_ds.kd
+      .sgpr_count: 12
+      .vgpr_count: 3
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+.end_amdgpu_metadata
