@@ -738,6 +738,102 @@ TEST(CollectDirectBranchTargets, RejectsUnboundedIndirectEntry) {
   EXPECT_TRUE(Info->HasUnresolvedTargets);
 }
 
+TEST(CollectDirectBranchTargets, BoundsCanonicalSetPcReturn) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_nop 0\n"
+                         "s_set_pc_i64 s[30:31]\n"
+                         "s_branch -2\n"
+                         "s_get_pc_i64 s[0:1]\n"
+                         "s_add_nc_u64 s[0:1], s[0:1], -16\n"
+                         "s_swap_pc_i64 s[30:31], s[0:1]",
+                         S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 6u);
+  ASSERT_EQ(Decoded[1].Inst.getOpcode(), S.SSetPcI64Opcode);
+  ASSERT_EQ(Decoded[3].Inst.getOpcode(), S.SGetPcI64Opcode);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {0, Decoded[3].Offset}};
+
+  // The helper preserves the link pair from its entry through s_set_pc_i64.
+  // The block laid out after the return can branch back into the epilogue,
+  // matching the production CFG, but it preserves the pair as well. The
+  // materialized call is therefore the return's sole possible source.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  ASSERT_EQ(Info->Targets.size(), 2u);
+  EXPECT_TRUE(Info->Targets.contains(0));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[1].Offset));
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsClobberedSetPcReturn) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_mov_b32 s31, 0\n"
+                         "s_set_pc_i64 s[30:31]\n"
+                         "s_get_pc_i64 s[0:1]\n"
+                         "s_add_nc_u64 s[0:1], s[0:1], -12\n"
+                         "s_swap_pc_i64 s[30:31], s[0:1]",
+                         S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 5u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {0, Decoded[2].Offset}};
+
+  // A partial link-pair definition makes the return target arbitrary, so the
+  // PC-materialized call must remain unresolved.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsAlternateEntryIntoReturnFunction) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_nop 0\n"
+                         "s_set_pc_i64 s[30:31]\n"
+                         "s_branch -2\n"
+                         "s_branch -2\n"
+                         "s_get_pc_i64 s[0:1]\n"
+                         "s_add_nc_u64 s[0:1], s[0:1], -20\n"
+                         "s_swap_pc_i64 s[30:31], s[0:1]",
+                         S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 7u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {0, Decoded[3].Offset}};
+
+  // The branch at the function end enters a block laid out after the return,
+  // which can branch back to the epilogue without a call-defined link pair.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.contains(Decoded[2].Offset));
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
 TEST(CollectDirectBranchTargets, HandlesImmediateAbsoluteTargetCall) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

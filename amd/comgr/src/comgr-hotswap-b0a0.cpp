@@ -945,49 +945,12 @@ collectDeclaredTextEntries(const ElfView &Elf) {
   return Entries;
 }
 
-static bool hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
-                                     const LLVMState &LS, uint64_t TextAddr,
-                                     ArrayRef<uint64_t> DeclaredEntries,
-                                     uint64_t SequenceStart,
-                                     uint64_t SequenceEnd) {
-  for (uint64_t Entry : DeclaredEntries)
-    if (Entry > SequenceStart && Entry <= SequenceEnd)
-      return true;
-
-  for (const InternalDecodedInst &DI : Decoded) {
-    // Without bounding an indirect target, it may enter at any instruction in
-    // the materialization. Keep the call unresolved rather than relying on
-    // the indirect transfer's containing function alone.
-    if (DI.DecodeSucceeded && !LS.MIA->isReturn(DI.Inst) &&
-        (LS.MIA->isIndirectBranch(DI.Inst) ||
-         DI.Inst.getOpcode() == LS.SSetPcI64Opcode ||
-         DI.Inst.getOpcode() == LS.SAddPcI64Opcode))
-      return true;
-    if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
-        LS.MIA->isReturn(DI.Inst))
-      continue;
-
-    std::optional<uint64_t> RelativeTarget;
-    bool HasPcRelativeOperand = false;
-    for (const MCOperandInfo &Operand :
-         LS.MCII->get(DI.Inst.getOpcode()).operands())
-      HasPcRelativeOperand |= Operand.OperandType == MCOI::OPERAND_PCREL;
-    if (HasPcRelativeOperand) {
-      RelativeTarget = evaluateDirectControlFlowTarget(DI, LS);
-    } else if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
-               DI.Inst.getNumOperands() != 0 &&
-               DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
-      uint64_t AbsoluteTarget = static_cast<uint64_t>(
-          DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
-      if (AbsoluteTarget >= TextAddr)
-        RelativeTarget = AbsoluteTarget - TextAddr;
-    }
-    if (RelativeTarget && *RelativeTarget > SequenceStart &&
-        *RelativeTarget <= SequenceEnd)
-      return true;
-  }
-  return false;
-}
+struct PcMaterializedCallInfo {
+  uint64_t Target = 0;
+  uint64_t SequenceStart = 0;
+  uint64_t SequenceEnd = 0;
+  MCRegister ReturnRegister;
+};
 
 /// Resolve the compiler-emitted PC materialization used by the production
 /// reproducer:
@@ -1002,14 +965,13 @@ static bool hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
 /// by llvm/test/MC/AMDGPU/gfx1250_asm_salu_lit64.s. Stop at the first
 /// overlapping definition or control-flow boundary, so any variation remains
 /// unresolved and follows the existing fail-closed policy.
-static std::optional<uint64_t>
-resolvePcMaterializedCallTarget(ArrayRef<InternalDecodedInst> Decoded,
-                                size_t CallIndex, const LLVMState &LS,
-                                uint64_t TextAddr,
-                                ArrayRef<uint64_t> DeclaredEntries) {
+static std::optional<PcMaterializedCallInfo>
+matchPcMaterializedCall(ArrayRef<InternalDecodedInst> Decoded, size_t CallIndex,
+                        const LLVMState &LS, uint64_t TextAddr) {
   const InternalDecodedInst &Call = Decoded[CallIndex];
   if (!Call.DecodeSucceeded || Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
-      Call.Inst.getNumOperands() == 0)
+      Call.Inst.getNumOperands() < 2 || !Call.Inst.getOperand(0).isReg() ||
+      !Call.Inst.getOperand(0).getReg())
     return std::nullopt;
   const MCOperand &TargetOperand =
       Call.Inst.getOperand(Call.Inst.getNumOperands() - 1);
@@ -1062,28 +1024,302 @@ resolvePcMaterializedCallTarget(ArrayRef<InternalDecodedInst> Decoded,
         *GetPcAddress, Candidate.Size, "PC-materialized call PC value");
     if (!PcValue)
       return std::nullopt;
-    if (hasKnownControlFlowEntry(Decoded, LS, TextAddr, DeclaredEntries,
-                                 Candidate.Offset, Call.Offset))
-      return std::nullopt;
-
     // s_add_nc_u64 uses modulo-2^64 arithmetic. Casting the signed MC
     // immediate to uint64_t and adding it reproduces both positive and
     // negative literals, including INT64_MIN, without signed overflow.
-    return *PcValue + static_cast<uint64_t>(AddImmediate);
+    return PcMaterializedCallInfo{
+        *PcValue + static_cast<uint64_t>(AddImmediate), Candidate.Offset,
+        Call.Offset, MCRegister(Call.Inst.getOperand(0).getReg())};
   }
   return std::nullopt;
+}
+
+struct KnownCallSite {
+  size_t InstIndex = 0;
+  uint64_t Target = 0;
+  uint64_t Continuation = 0;
+  MCRegister ReturnRegister;
+};
+
+struct BoundedSetPcReturn {
+  size_t InstIndex = 0;
+  SmallVector<uint64_t, 2> Targets;
+};
+
+static bool hasPcRelativeOperand(const InternalDecodedInst &DI,
+                                 const LLVMState &LS) {
+  for (const MCOperandInfo &Operand :
+       LS.MCII->get(DI.Inst.getOpcode()).operands())
+    if (Operand.OperandType == MCOI::OPERAND_PCREL)
+      return true;
+  return false;
+}
+
+static std::optional<MCRegister>
+getCallReturnRegister(const InternalDecodedInst &DI, const LLVMState &LS) {
+  if (!DI.DecodeSucceeded || !LS.MIA->isCall(DI.Inst) ||
+      DI.Inst.getNumOperands() == 0 || !DI.Inst.getOperand(0).isReg() ||
+      !DI.Inst.getOperand(0).getReg())
+    return std::nullopt;
+  return MCRegister(DI.Inst.getOperand(0).getReg());
+}
+
+static std::optional<uint64_t>
+getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
+                    uint64_t TextAddr, uint64_t TextEnd) {
+  if (!DI.DecodeSucceeded ||
+      (!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
+      LS.MIA->isReturn(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst))
+    return std::nullopt;
+
+  if (hasPcRelativeOperand(DI, LS))
+    return evaluateDirectControlFlowTarget(DI, LS);
+
+  if (DI.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+      DI.Inst.getNumOperands() == 0 ||
+      !DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm())
+    return std::nullopt;
+  uint64_t AbsoluteTarget = static_cast<uint64_t>(
+      DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
+  if (AbsoluteTarget < TextAddr || AbsoluteTarget >= TextEnd)
+    return std::nullopt;
+  return AbsoluteTarget - TextAddr;
+}
+
+static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextEnd,
+    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls) {
+  SmallVector<KnownCallSite, 4> Calls;
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    std::optional<MCRegister> ReturnRegister = getCallReturnRegister(DI, LS);
+    if (!ReturnRegister)
+      continue;
+
+    std::optional<uint64_t> Target;
+    if (MaterializedCalls[I]) {
+      uint64_t AbsoluteTarget = MaterializedCalls[I]->Target;
+      if (AbsoluteTarget >= TextAddr && AbsoluteTarget < TextEnd)
+        Target = AbsoluteTarget - TextAddr;
+    } else {
+      Target = getDirectTextTarget(DI, LS, TextAddr, TextEnd);
+    }
+    if (!Target)
+      continue;
+
+    std::optional<uint64_t> Continuation =
+        checkedAddUint64(DI.Offset, DI.Size, "known call continuation address");
+    if (!Continuation)
+      return std::nullopt;
+    Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+  }
+  return Calls;
+}
+
+static std::optional<SmallVector<BoundedSetPcReturn, 2>>
+collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
+                           const LLVMState &LS, uint64_t TextAddr,
+                           uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
+                           ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+                           ArrayRef<KnownCallSite> Calls) {
+  SmallVector<BoundedSetPcReturn, 2> Returns;
+  for (size_t ReturnIndex = 0; ReturnIndex != Decoded.size(); ++ReturnIndex) {
+    const InternalDecodedInst &Return = Decoded[ReturnIndex];
+    // AMDGPUMCInstLower lowers S_SETPC_B64_return to S_SETPC_B64, so the
+    // decoded instruction no longer carries MIA::isReturn identity. Recover
+    // only the bounded local-function form from its call/link dataflow.
+    if (!Return.DecodeSucceeded ||
+        Return.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+        Return.Inst.getNumOperands() != 1 ||
+        !Return.Inst.getOperand(0).isReg() ||
+        !Return.Inst.getOperand(0).getReg())
+      continue;
+    MCRegister ReturnRegister(Return.Inst.getOperand(0).getReg());
+
+    bool IsBounded = false;
+    for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
+      if (Range.Begin < TextAddr || Range.Begin >= TextEnd ||
+          Range.End <= Range.Begin || Range.End > TextEnd ||
+          (Range.Symbol && Range.Symbol->getBinding() != ELF::STB_LOCAL))
+        continue;
+      uint64_t FunctionBegin = Range.Begin - TextAddr;
+      uint64_t FunctionEnd = Range.End - TextAddr;
+      if (Return.Offset < FunctionBegin || Return.Offset >= FunctionEnd)
+        continue;
+
+      bool Safe = true;
+      for (uint64_t Entry : DeclaredEntries)
+        if (Entry > FunctionBegin && Entry < FunctionEnd) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: declared entry at 0x"
+                << utohexstr(Entry) << " bypasses the function entry\n";
+          Safe = false;
+          break;
+        }
+      if (!Safe)
+        continue;
+
+      // The link pair must retain the value written by the incoming call
+      // throughout the function. This includes blocks laid out after the
+      // return that may branch back into its epilogue.
+      for (const InternalDecodedInst &DI : Decoded) {
+        if (DI.Offset < FunctionBegin || DI.Offset >= FunctionEnd)
+          continue;
+        if (!DI.DecodeSucceeded ||
+            definesOverlappingRegister(DI, LS, ReturnRegister)) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: link register is "
+                   "unprovable at 0x"
+                << utohexstr(DI.Offset) << "\n";
+          Safe = false;
+          break;
+        }
+      }
+      if (!Safe)
+        continue;
+
+      SmallVector<uint64_t, 2> Targets;
+      for (const KnownCallSite &Call : Calls) {
+        if (Call.Target != FunctionBegin)
+          continue;
+        if (Call.ReturnRegister != ReturnRegister) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: call at 0x"
+                << utohexstr(Decoded[Call.InstIndex].Offset)
+                << " uses a different link register\n";
+          Safe = false;
+          break;
+        }
+        Targets.push_back(Call.Continuation);
+      }
+      if (!Safe || Targets.empty())
+        continue;
+
+      // A branch from outside the function would bypass the call link
+      // definition. Direct calls to the function entry are allowed only when
+      // they were collected above with this exact return register.
+      for (size_t SourceIndex = 0; SourceIndex != Decoded.size();
+           ++SourceIndex) {
+        const InternalDecodedInst &Source = Decoded[SourceIndex];
+        std::optional<uint64_t> Target =
+            getDirectTextTarget(Source, LS, TextAddr, TextEnd);
+        if (!Target || *Target < FunctionBegin || *Target >= FunctionEnd ||
+            (Source.Offset >= FunctionBegin && Source.Offset < FunctionEnd))
+          continue;
+
+        bool IsKnownEntryCall = false;
+        if (LS.MIA->isCall(Source.Inst) && *Target == FunctionBegin)
+          for (const KnownCallSite &Call : Calls)
+            IsKnownEntryCall |= Call.InstIndex == SourceIndex &&
+                                Call.ReturnRegister == ReturnRegister;
+        if (!IsKnownEntryCall) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: control flow at 0x"
+                << utohexstr(Source.Offset) << " enters at 0x"
+                << utohexstr(*Target) << "\n";
+          Safe = false;
+          break;
+        }
+      }
+      if (!Safe)
+        continue;
+
+      llvm::sort(Targets);
+      Targets.erase(std::unique(Targets.begin(), Targets.end()), Targets.end());
+      Returns.push_back({ReturnIndex, std::move(Targets)});
+      IsBounded = true;
+      break;
+    }
+    if (!IsBounded)
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+            << " remains an unbounded indirect transfer\n";
+  }
+  return Returns;
+}
+
+static const BoundedSetPcReturn *
+findBoundedSetPcReturn(ArrayRef<BoundedSetPcReturn> Returns, size_t InstIndex) {
+  for (const BoundedSetPcReturn &Return : Returns)
+    if (Return.InstIndex == InstIndex)
+      return &Return;
+  return nullptr;
+}
+
+static bool
+hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
+                         const LLVMState &LS, uint64_t TextAddr,
+                         uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
+                         ArrayRef<BoundedSetPcReturn> BoundedReturns,
+                         uint64_t SequenceStart, uint64_t SequenceEnd) {
+  for (uint64_t Entry : DeclaredEntries)
+    if (Entry > SequenceStart && Entry <= SequenceEnd)
+      return true;
+
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    if (DI.DecodeSucceeded && DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+      const BoundedSetPcReturn *Return =
+          findBoundedSetPcReturn(BoundedReturns, I);
+      if (!Return)
+        return true;
+      for (uint64_t Target : Return->Targets)
+        if (Target > SequenceStart && Target <= SequenceEnd)
+          return true;
+      continue;
+    }
+
+    // Without bounding an indirect target, it may enter at any instruction in
+    // the materialization. Keep the call unresolved rather than relying on
+    // the indirect transfer's containing function alone.
+    if (DI.DecodeSucceeded && !LS.MIA->isReturn(DI.Inst) &&
+        (LS.MIA->isIndirectBranch(DI.Inst) ||
+         DI.Inst.getOpcode() == LS.SAddPcI64Opcode))
+      return true;
+    if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
+        LS.MIA->isReturn(DI.Inst))
+      continue;
+
+    std::optional<uint64_t> RelativeTarget =
+        getDirectTextTarget(DI, LS, TextAddr, TextEnd);
+    if (RelativeTarget && *RelativeTarget > SequenceStart &&
+        *RelativeTarget <= SequenceEnd)
+      return true;
+  }
+  return false;
 }
 
 /// Collect statically known direct branch and call destinations so an interior
 /// entry point is never swallowed by coalescing.
 std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
-    uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries) {
+    uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
   if (!LS.MIA) {
     log() << "hotswap: MC branch analysis is unavailable; adjacent far "
              "trampolines will not be coalesced\n";
     return std::nullopt;
   }
+
+  std::optional<uint64_t> TextEnd =
+      checkedAddUint64(TextAddr, TextSize, "direct target text end");
+  if (!TextEnd)
+    return std::nullopt;
+
+  SmallVector<std::optional<PcMaterializedCallInfo>, 16> MaterializedCalls(
+      Decoded.size());
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
+
+  std::optional<SmallVector<KnownCallSite, 4>> Calls =
+      collectKnownCallSites(Decoded, LS, TextAddr, *TextEnd, MaterializedCalls);
+  if (!Calls)
+    return std::nullopt;
+  std::optional<SmallVector<BoundedSetPcReturn, 2>> BoundedReturns =
+      collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
+                                 DeclaredEntries, FunctionRanges, *Calls);
+  if (!BoundedReturns)
+    return std::nullopt;
 
   DirectControlFlowInfo Info;
   for (size_t InstIndex = 0; InstIndex != Decoded.size(); ++InstIndex) {
@@ -1113,9 +1349,13 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
         Target = static_cast<uint64_t>(
             DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
-      } else {
-        Target = resolvePcMaterializedCallTarget(Decoded, InstIndex, LS,
-                                                 TextAddr, DeclaredEntries);
+      } else if (MaterializedCalls[InstIndex] &&
+                 !hasKnownControlFlowEntry(
+                     Decoded, LS, TextAddr, *TextEnd, DeclaredEntries,
+                     *BoundedReturns,
+                     MaterializedCalls[InstIndex]->SequenceStart,
+                     MaterializedCalls[InstIndex]->SequenceEnd)) {
+        Target = MaterializedCalls[InstIndex]->Target;
       }
       if (!Target) {
         log() << "hotswap: unresolved call target at 0x" << utohexstr(DI.Offset)
@@ -1124,10 +1364,6 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         continue;
       }
 
-      std::optional<uint64_t> TextEnd =
-          checkedAddUint64(TextAddr, TextSize, "direct target text end");
-      if (!TextEnd)
-        return std::nullopt;
       if (*Target >= TextAddr && *Target < *TextEnd) {
         uint64_t RelativeTarget = *Target - TextAddr;
         Info.Targets.insert(RelativeTarget);
@@ -1892,9 +2128,11 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       collectDeclaredTextEntries(Elf);
   if (!DeclaredEntries)
     return std::nullopt;
+  std::vector<ElfView::FunctionTextRange> FunctionRanges =
+      Elf.functionTextRanges();
   std::optional<DirectControlFlowInfo> ControlFlow =
       collectDirectBranchTargets(Decoded, LS, Elf.textAddr(), Elf.textSize(),
-                                 *DeclaredEntries);
+                                 *DeclaredEntries, FunctionRanges);
   if (!ControlFlow)
     return std::nullopt;
   if (ControlFlow->HasUnresolvedTargets) {

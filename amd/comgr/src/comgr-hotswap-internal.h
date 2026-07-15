@@ -887,15 +887,17 @@ evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
 /// TextSize are converted to text-relative offsets. Canonical PC-materialized
 /// register calls are resolved when their target value has one provable
 /// straight-line definition and no direct, indirect, or declared entry can
-/// bypass that definition. \p DeclaredEntries contains text-relative function
-/// and kernel entry offsets. Other register-target control flow sets
-/// HasUnresolvedTargets so callers can disable transformations that consume
-/// possible destinations.
-std::optional<DirectControlFlowInfo>
-collectDirectBranchTargets(llvm::ArrayRef<InternalDecodedInst> Decoded,
-                           const LLVMState &LS, uint64_t TextAddr,
-                           uint64_t TextSize,
-                           llvm::ArrayRef<uint64_t> DeclaredEntries);
+/// bypass that definition. Canonical local-function returns are bounded to
+/// the continuations of calls that preserve the same link register. \p
+/// DeclaredEntries contains text-relative function and kernel entry offsets;
+/// \p FunctionRanges supplies the symbol ranges used for the return proof.
+/// Other register-target control flow sets HasUnresolvedTargets so callers can
+/// disable transformations that consume possible destinations.
+std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
+    llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextSize,
+    llvm::ArrayRef<uint64_t> DeclaredEntries,
+    llvm::ArrayRef<ElfView::FunctionTextRange> FunctionRanges = {});
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,

@@ -11,12 +11,16 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=LOG,API %s
-// LOG: hotswap: resolved PC-materialized call at 0x8 to .text+0x14
+// LOG: hotswap: resolved PC-materialized call at 0x{{[0-9A-F]+}} to .text+0x0
+// LOG: hotswap: resolved PC-materialized call at 0x{{[0-9A-F]+}} to .text+0x{{[1-9A-F][0-9A-F]*}}
 // LOG-NOT: hotswap: unresolved call target
 // API: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 // DISASM-LABEL: <test_pc_materialized_call>:
+// DISASM-NEXT: s_get_pc_i64 s[4:5]
+// DISASM-NEXT: s_add_nc_u64 s[4:5], s[4:5], 0xfffffffffffffefc
+// DISASM-NEXT: s_swap_pc_i64 s[0:1], s[4:5]
 // DISASM-NEXT: s_get_pc_i64 s[2:3]
 // DISASM-NEXT: s_add_nc_u64 s[2:3], s[2:3], 16
 // DISASM-NEXT: s_swap_pc_i64 s[0:1], s[2:3]
@@ -33,12 +37,32 @@
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
+
+// This is the production return shape. MC lowering turns the compiler return
+// pseudo into plain s_set_pc_i64, so the rewriter must prove its destination
+// from the incoming call's link register rather than rely on MIA::isReturn.
+.type local_return_helper,@function
+local_return_helper:
+  s_nop 0
+.Llocal_return_epilogue:
+  s_set_pc_i64 s[0:1]
+  // The production helper has later blocks that branch back into its return
+  // epilogue. They remain safe because the whole local function preserves the
+  // link pair.
+  s_branch .Llocal_return_epilogue
+.Llocal_return_helper_end:
+.size local_return_helper, .Llocal_return_helper_end-local_return_helper
+
 .globl test_pc_materialized_call
 .p2align 8
 .type test_pc_materialized_call,@function
 test_pc_materialized_call:
-  // The captured PC is .text+4; adding 16 selects .text+20, the second DS
-  // instruction below.
+  // The helper starts at .text+0. This instruction captures .text+0x104.
+  s_get_pc_i64 s[4:5]
+  s_add_nc_u64 s[4:5], s[4:5], -260
+  s_swap_pc_i64 s[0:1], s[4:5]
+
+  // Adding 16 to the captured PC selects the second DS instruction below.
   s_get_pc_i64 s[2:3]
   s_add_nc_u64 s[2:3], s[2:3], 16
   s_swap_pc_i64 s[0:1], s[2:3]
