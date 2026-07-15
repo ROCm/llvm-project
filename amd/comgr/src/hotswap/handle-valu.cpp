@@ -1681,6 +1681,34 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
 
+  // v_div_fixup_f16 dst, src0, src1, src2 -- final IEEE fixup step of the
+  // f16 divide sequence. Same true16 half-select shape as V_FMA_F16; lifts
+  // to llvm.amdgcn.div.fixup on f16.
+  if (Sop == CanonicalOp::V_DIV_FIXUP_F16) {
+    StringRef OpName = "v_div_fixup_f16";
+    bool DstHigh = false;
+    if (Error Err = requireDefaultVOP3FpValuOutputMods(Di, OpName))
+      return Err;
+
+    if (Error Err = readVOP3F16DstHigh(Di, OpName, DstHigh))
+      return Err;
+
+    SmallVector<Value *, 3> Srcs;
+    for (unsigned I = 0; I < 3; ++I) {
+      Expected<Value *> SrcOrErr = readOpSelF16(Ctx, Di, Op, I, OpName);
+      if (!SrcOrErr)
+        return SrcOrErr.takeError();
+      Srcs.push_back(*SrcOrErr);
+    }
+
+    Function *Fn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_div_fixup, {Ctx.F16Ty});
+    Value *R = Ctx.B.CreateCall(Fn, {Srcs[0], Srcs[1], Srcs[2]}, "divfixup_f16");
+    writeOpSelF16(Ctx, Op, R, DstHigh);
+    Hr.Handled = true;
+    return Hr;
+  }
+
   // ---- Division helpers (VOP3) ----
   if (Sop == CanonicalOp::V_DIV_SCALE_F32) {
     // Refuse a wave32 vcc_hi/exec_hi scratch flag destination up front,

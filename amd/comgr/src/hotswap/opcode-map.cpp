@@ -572,6 +572,10 @@ static const Entry kCanonTable[] = {
     E(V_MINIMUMMAXIMUM_F32_e64, V_MINIMUMMAXIMUM_F32),
     E(V_DIV_FIXUP_F32_e64, V_DIV_FIXUP_F32),
     E(V_DIV_FIXUP_F64_e64, V_DIV_FIXUP_F64),
+    // f16 div fixup: gfx8 base + gfx9 op_sel base (t16/fake16 collapse onto
+    // the gfx9 form via the suffix-stripping canonicalizer), like V_FMA_F16.
+    E(V_DIV_FIXUP_F16_e64, V_DIV_FIXUP_F16),
+    E(V_DIV_FIXUP_F16_gfx9_e64, V_DIV_FIXUP_F16),
     E(V_DIV_FMAS_F32_e64, V_DIV_FMAS_F32),
     E(V_DIV_FMAS_F64_e64, V_DIV_FMAS_F64),
     E(V_DIV_SCALE_F32_e64, V_DIV_SCALE_F32),

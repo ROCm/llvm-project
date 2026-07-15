@@ -800,6 +800,9 @@ enum class CanonicalOp : uint16_t {
   V_DIV_FIXUP_F64,
   V_DIV_FMAS_F64,
   V_DIV_SCALE_F64,
+  // f16 division fixup (VOP3, true16 half-select like V_FMA_F16). Lifts to
+  // llvm.amdgcn.div.fixup on f16.
+  V_DIV_FIXUP_F16,
   // Mixed-precision FMA, VOP3P (VOP3PInstructions.td:109). Both
   // variants take three sources and reduce to
   //   fma(cvt_f32(src0_part), cvt_f32(src1_part), cvt_f32(src2_part))
