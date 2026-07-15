@@ -11,7 +11,8 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=LOG,API %s
-// LOG: hotswap: unresolved control-flow target disables trampoline coalescing, source relocation, and .text gateways
+// LOG: hotswap: unresolved control-flow target disables NOP-sled emission,
+// LOG-SAME: trampoline coalescing, source relocation, and .text gateways
 // LOG: hotswap: error: no safe short-branch gateway for far site
 // API: RESULT: ERROR
 
@@ -32,8 +33,7 @@ test_indirect_call_far:
   ds_load_2addr_stride64_b64 v[4:7], v8 offset0:3 offset1:4
   s_wait_dscnt 0x0
   s_endpgm
-.Ltest_indirect_call_far_end:
-.size test_indirect_call_far, .Ltest_indirect_call_far_end-test_indirect_call_far
+.size test_indirect_call_far, .-test_indirect_call_far
 
 // Ordinarily this external zero-filled space can host long-branch gateways.
 // An unresolved target could also land here, so the conservative path cannot

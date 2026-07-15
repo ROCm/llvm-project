@@ -763,6 +763,11 @@ struct SafeSgprUsageSummary {
   unsigned HighWatermark = 0;
 };
 
+struct DirectControlFlowInfo {
+  llvm::DenseSet<uint64_t> Targets;
+  bool HasUnresolvedTargets = false;
+};
+
 /// Mutable per-run context threaded through all patch passes. Bundles the
 /// input config, decoded instruction stream, raw .text bytes, MC state,
 /// output streams (trampolines / scratch info), and the shared ELF view +
@@ -784,6 +789,7 @@ struct PatchContext {
   const LivenessInfo &Liveness;
   llvm::StringMap<KernelPatchStats> &KernelStats;
   std::vector<ScratchPatchInfo> &OutScratchPatches;
+  const DirectControlFlowInfo &DirectControlFlow;
   // Required patches are transformations whose unpatched original code is
   // unsafe to return when the selected rewrite policy needs the patch.
   bool RequiredPatchFailed = false;
@@ -849,11 +855,6 @@ bool isSBranchReachable(uint64_t From, uint64_t To);
 std::optional<uint64_t>
 evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
                                 const LLVMState &LS);
-
-struct DirectControlFlowInfo {
-  llvm::DenseSet<uint64_t> Targets;
-  bool HasUnresolvedTargets = false;
-};
 
 /// Collect branch and call targets used to protect interior entry points from
 /// trampoline coalescing. Absolute addresses in TextAddr .. TextAddr +

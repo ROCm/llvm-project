@@ -264,10 +264,16 @@ LLVM_ATTRIBUTE_WEAK void patchDebugFrame(uint8_t *, size_t, uint64_t, uint64_t,
 // -- NOP sled scanning --------------------------------------------------------
 
 static void appendNopSledIfLarge(std::vector<NopSled> &Sleds, uint64_t Start,
+                                 uint64_t End, uint64_t FunctionStart,
+                                 uint64_t FunctionEnd) {
+  if (End - Start >= MinNopSledSize)
+    Sleds.push_back({Start, End, Start, FunctionStart, FunctionEnd});
+}
+
+static void appendNopSledIfLarge(std::vector<NopSled> &Sleds, uint64_t Start,
                                  uint64_t End,
                                  const ElfView::FunctionTextRange &Range) {
-  if (End - Start >= MinNopSledSize)
-    Sleds.push_back({Start, End, Start, Range.Begin, Range.End});
+  appendNopSledIfLarge(Sleds, Start, End, Range.Begin, Range.End);
 }
 
 /// Scan \p Decoded for runs of consecutive `s_nop` instructions at least
@@ -315,6 +321,34 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
   if (HasActiveRange)
     appendNopSledIfLarge(Sleds, Start, End, ActiveRange);
   return Sleds;
+}
+
+/// A direct branch/call target into a NOP run makes that offset and every
+/// following byte in the run reachable by fallthrough, so only the prefix
+/// before the first target remains available as scratch padding.
+static void
+truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
+                                const DenseSet<uint64_t> &DirectBranchTargets) {
+  if (DirectBranchTargets.empty() || Sleds.empty())
+    return;
+
+  std::vector<NopSled> Filtered;
+  Filtered.reserve(Sleds.size());
+  uint64_t Truncated = 0;
+  for (const NopSled &Sled : Sleds) {
+    uint64_t End = Sled.End;
+    for (uint64_t Target : DirectBranchTargets)
+      if (Target >= Sled.Start && Target < End)
+        End = Target;
+    if (End != Sled.End)
+      ++Truncated;
+    appendNopSledIfLarge(Filtered, Sled.Start, End, Sled.FunctionStart,
+                         Sled.FunctionEnd);
+  }
+  if (Truncated != 0)
+    log() << "hotswap: protected " << Truncated
+          << " NOP sled(s) containing direct branch/call target(s)\n";
+  Sleds = std::move(Filtered);
 }
 
 // -- Sled-or-trampoline code emission -----------------------------------------
@@ -859,9 +893,8 @@ collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
       continue;
     // Existing indirect branches are handled by
     // collectIndirectControlFlowFunctions(), which protects their containing
-    // function from source relocation. This PR's additional unresolved case
-    // is a call, such as register-target s_swap_pc_i64, that MC does not mark
-    // as an indirect branch.
+    // function from source relocation. Calls without a statically resolvable
+    // target are handled below.
     if (LS.MIA->isIndirectBranch(DI.Inst))
       continue;
 
@@ -875,7 +908,6 @@ collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
       if (!LS.MIA->isCall(DI.Inst))
         continue;
       if (DI.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
-          DI.Inst.getNumOperands() == 0 ||
           !DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
         log() << "hotswap: unresolved call target at 0x" << utohexstr(DI.Offset)
               << " (" << DI.Mnemonic << ")\n";
@@ -1593,7 +1625,7 @@ assignLongBranchGateways(PatchContext &Ctx,
   // a later small or clause/delay-constrained source window.
   bool PoolBaseFar = !isSBranchReachable(InstOffset, Ctx.PoolBaseOffset) ||
                      !isSBranchReachable(*PoolReturnFrom, *ReturnTo);
-  if (!PoolBaseFar) {
+  if (!PoolBaseFar && !Ctx.DirectControlFlow.HasUnresolvedTargets) {
     // findNearestSled enforces sled headroom. emitToNopSled still validates
     // exact branch reachability because branch-back distance includes the
     // replacement size, not just the original instruction offset.
@@ -1643,6 +1675,18 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     const RewriteConfig &Config, bool &OutRequiredPatchApplied) {
   uint32_t Patched = 0;
   std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS, Elf);
+  std::optional<DirectControlFlowInfo> ControlFlow =
+      collectDirectBranchTargets(Decoded, LS, Elf.textAddr(), Elf.textSize());
+  if (!ControlFlow)
+    return std::nullopt;
+  if (ControlFlow->HasUnresolvedTargets) {
+    log() << "hotswap: unresolved control-flow target disables NOP-sled "
+             "emission, trampoline coalescing, source relocation, and .text "
+             "gateways\n";
+    Sleds.clear();
+  } else {
+    truncateNopSledsAtDirectTargets(Sleds, ControlFlow->Targets);
+  }
 
   CFG Cfg = buildCfg(Decoded, *LS.MCII);
   LivenessInfo Liveness =
@@ -1669,10 +1713,10 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       *PoolVAddr, Elf.textAddr(), "trampoline pool base offset");
   if (!PoolBaseOffset)
     return std::nullopt;
-  PatchContext Ctx{Config,         Decoded,         Text,
-                   TextSize,       *PoolBaseOffset, LS,
-                   OutTrampolines, Sleds,           Elf,
-                   Liveness,       KernelStats,     OutScratchPatches};
+  PatchContext Ctx{
+      Config,      Decoded,           Text,        TextSize, *PoolBaseOffset,
+      LS,          OutTrampolines,    Sleds,       Elf,      Liveness,
+      KernelStats, OutScratchPatches, *ControlFlow};
 
   const HotswapPatchVTable &VT = getHotswapPatchVTable();
 
@@ -1725,17 +1769,10 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     Patched += VT.applyVop3px2Src2Fix(Ctx);
 
   if (!OutTrampolines.empty()) {
-    std::optional<DirectControlFlowInfo> ControlFlow =
-        collectDirectBranchTargets(Decoded, LS, Elf.textAddr(), Elf.textSize());
-    if (!ControlFlow)
-      return std::nullopt;
     if (!ControlFlow->HasUnresolvedTargets) {
       mergeAdjacentLongTrampolines(OutTrampolines, ControlFlow->Targets);
       expandStraightLineTrampolines(Ctx, ControlFlow->Targets);
       mergeAdjacentLongTrampolines(OutTrampolines, ControlFlow->Targets);
-    } else {
-      log() << "hotswap: unresolved control-flow target disables trampoline "
-               "coalescing, source relocation, and .text gateways\n";
     }
     appendPoolBranchIslands(OutTrampolines);
     if (!assignLongBranchGateways(Ctx, ControlFlow->Targets,
