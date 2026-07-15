@@ -875,6 +875,157 @@ evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
                           "direct control-flow target");
 }
 
+static bool definesOverlappingRegister(const InternalDecodedInst &DI,
+                                       const LLVMState &LS,
+                                       MCRegister Register) {
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  unsigned DefCount = std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
+  for (unsigned I = 0; I != DefCount; ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (Operand.isReg() && Operand.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+      return true;
+  }
+  if (Desc.variadicOpsAreDefs()) {
+    unsigned VariadicBegin =
+        std::min(Desc.getNumOperands(), DI.Inst.getNumOperands());
+    for (unsigned I = VariadicBegin; I != DI.Inst.getNumOperands(); ++I) {
+      const MCOperand &Operand = DI.Inst.getOperand(I);
+      if (Operand.isReg() && Operand.getReg() &&
+          LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+        return true;
+    }
+  }
+  for (MCPhysReg ImplicitDef : Desc.implicit_defs())
+    if (LS.MRI->regsOverlap(MCRegister(ImplicitDef), Register))
+      return true;
+  return false;
+}
+
+static bool isControlFlowBoundary(const InternalDecodedInst &DI,
+                                  const LLVMState &LS) {
+  return DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+         DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+         LS.MIA->isBranch(DI.Inst) || LS.MIA->isCall(DI.Inst) ||
+         LS.MIA->isReturn(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst) ||
+         LS.MIA->isBarrier(DI.Inst);
+}
+
+static bool hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
+                                     const LLVMState &LS, uint64_t TextAddr,
+                                     uint64_t SequenceStart,
+                                     uint64_t SequenceEnd) {
+  for (const InternalDecodedInst &DI : Decoded) {
+    if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
+        LS.MIA->isReturn(DI.Inst))
+      continue;
+
+    std::optional<uint64_t> RelativeTarget;
+    bool HasPcRelativeOperand = false;
+    for (const MCOperandInfo &Operand :
+         LS.MCII->get(DI.Inst.getOpcode()).operands())
+      HasPcRelativeOperand |= Operand.OperandType == MCOI::OPERAND_PCREL;
+    if (HasPcRelativeOperand) {
+      RelativeTarget = evaluateDirectControlFlowTarget(DI, LS);
+    } else if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
+               DI.Inst.getNumOperands() != 0 &&
+               DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
+      uint64_t AbsoluteTarget = static_cast<uint64_t>(
+          DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
+      if (AbsoluteTarget >= TextAddr)
+        RelativeTarget = AbsoluteTarget - TextAddr;
+    }
+    if (RelativeTarget && *RelativeTarget > SequenceStart &&
+        *RelativeTarget <= SequenceEnd)
+      return true;
+  }
+  return false;
+}
+
+/// Resolve the compiler-emitted PC materialization used by the production
+/// reproducer:
+///
+///   s_get_pc_i64 Target
+///   ...                         // no Target definition or control flow
+///   s_add_nc_u64 Target, Target, Immediate
+///   ...                         // no Target definition or control flow
+///   s_swap_pc_i64 Return, Target
+///
+/// The opcode and operand layout are defined by SOPInstructions.td and pinned
+/// by llvm/test/MC/AMDGPU/gfx1250_asm_salu_lit64.s. Stop at the first
+/// overlapping definition or control-flow boundary, so any variation remains
+/// unresolved and follows the existing fail-closed policy.
+static std::optional<uint64_t>
+resolvePcMaterializedCallTarget(ArrayRef<InternalDecodedInst> Decoded,
+                                size_t CallIndex, const LLVMState &LS,
+                                uint64_t TextAddr) {
+  const InternalDecodedInst &Call = Decoded[CallIndex];
+  if (Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+      Call.Inst.getNumOperands() == 0)
+    return std::nullopt;
+  const MCOperand &TargetOperand =
+      Call.Inst.getOperand(Call.Inst.getNumOperands() - 1);
+  if (!TargetOperand.isReg() || !TargetOperand.getReg())
+    return std::nullopt;
+  MCRegister TargetRegister(TargetOperand.getReg());
+
+  std::optional<size_t> AddIndex;
+  int64_t AddImmediate = 0;
+  for (size_t I = CallIndex; I != 0;) {
+    --I;
+    const InternalDecodedInst &Candidate = Decoded[I];
+    if (isControlFlowBoundary(Candidate, LS))
+      return std::nullopt;
+    if (!definesOverlappingRegister(Candidate, LS, TargetRegister))
+      continue;
+    if (Candidate.Inst.getOpcode() != LS.SAddNcU64Opcode ||
+        Candidate.Inst.getNumOperands() != 3 ||
+        !Candidate.Inst.getOperand(0).isReg() ||
+        Candidate.Inst.getOperand(0).getReg() != TargetRegister ||
+        !Candidate.Inst.getOperand(1).isReg() ||
+        Candidate.Inst.getOperand(1).getReg() != TargetRegister ||
+        !Candidate.Inst.getOperand(2).isImm())
+      return std::nullopt;
+    AddIndex = I;
+    AddImmediate = Candidate.Inst.getOperand(2).getImm();
+    break;
+  }
+  if (!AddIndex)
+    return std::nullopt;
+
+  for (size_t I = *AddIndex; I != 0;) {
+    --I;
+    const InternalDecodedInst &Candidate = Decoded[I];
+    if (isControlFlowBoundary(Candidate, LS))
+      return std::nullopt;
+    if (!definesOverlappingRegister(Candidate, LS, TargetRegister))
+      continue;
+    if (Candidate.Inst.getOpcode() != LS.SGetPcI64Opcode ||
+        Candidate.Inst.getNumOperands() != 1 ||
+        !Candidate.Inst.getOperand(0).isReg() ||
+        Candidate.Inst.getOperand(0).getReg() != TargetRegister)
+      return std::nullopt;
+
+    std::optional<uint64_t> GetPcAddress = checkedAddUint64(
+        TextAddr, Candidate.Offset, "PC-materialized call instruction");
+    if (!GetPcAddress)
+      return std::nullopt;
+    std::optional<uint64_t> PcValue = checkedAddUint64(
+        *GetPcAddress, Candidate.Size, "PC-materialized call PC value");
+    if (!PcValue)
+      return std::nullopt;
+    if (hasKnownControlFlowEntry(Decoded, LS, TextAddr, Candidate.Offset,
+                                 Call.Offset))
+      return std::nullopt;
+
+    // s_add_nc_u64 uses modulo-2^64 arithmetic. Casting the signed MC
+    // immediate to uint64_t and adding it reproduces both positive and
+    // negative literals, including INT64_MIN, without signed overflow.
+    return *PcValue + static_cast<uint64_t>(AddImmediate);
+  }
+  return std::nullopt;
+}
+
 /// Collect statically known direct branch and call destinations so an interior
 /// entry point is never swallowed by coalescing.
 std::optional<DirectControlFlowInfo>
@@ -888,7 +1039,8 @@ collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
   }
 
   DirectControlFlowInfo Info;
-  for (const InternalDecodedInst &DI : Decoded) {
+  for (size_t InstIndex = 0; InstIndex != Decoded.size(); ++InstIndex) {
+    const InternalDecodedInst &DI = Decoded[InstIndex];
     if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
         LS.MIA->isReturn(DI.Inst))
       continue;
@@ -908,8 +1060,17 @@ collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
       // source relocation in their containing function.
       if (!LS.MIA->isCall(DI.Inst))
         continue;
-      if (DI.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
-          !DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
+      std::optional<uint64_t> Target;
+      if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
+          DI.Inst.getNumOperands() != 0 &&
+          DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
+        Target = static_cast<uint64_t>(
+            DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
+      } else {
+        Target =
+            resolvePcMaterializedCallTarget(Decoded, InstIndex, LS, TextAddr);
+      }
+      if (!Target) {
         log() << "hotswap: unresolved call target at 0x" << utohexstr(DI.Offset)
               << " (" << DI.Mnemonic << ")\n";
         Info.HasUnresolvedTargets = true;
@@ -920,10 +1081,14 @@ collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
           checkedAddUint64(TextAddr, TextSize, "direct target text end");
       if (!TextEnd)
         return std::nullopt;
-      uint64_t Target = static_cast<uint64_t>(
-          DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
-      if (Target >= TextAddr && Target < *TextEnd)
-        Info.Targets.insert(Target - TextAddr);
+      if (*Target >= TextAddr && *Target < *TextEnd) {
+        uint64_t RelativeTarget = *Target - TextAddr;
+        Info.Targets.insert(RelativeTarget);
+        if (DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isReg())
+          log() << "hotswap: resolved PC-materialized call at 0x"
+                << utohexstr(DI.Offset) << " to .text+0x"
+                << utohexstr(RelativeTarget) << "\n";
+      }
       continue;
     }
 

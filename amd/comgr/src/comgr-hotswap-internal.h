@@ -550,6 +550,7 @@ struct LLVMState {
   /// matching disassembled mnemonic strings.
   unsigned GlobalWbOpcode = 0;
   unsigned SGetPcI64Opcode = 0;
+  unsigned SAddNcU64Opcode = 0;
   unsigned SAddU32Opcode = 0;
   unsigned SAddcU32Opcode = 0;
   unsigned SSetPcI64Opcode = 0;
@@ -883,9 +884,11 @@ evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
 
 /// Collect branch and call targets used to protect interior entry points from
 /// trampoline coalescing. Absolute addresses in TextAddr .. TextAddr +
-/// TextSize are converted to text-relative offsets. Register-target control
-/// flow sets HasUnresolvedTargets so callers can disable transformations that
-/// consume possible destinations.
+/// TextSize are converted to text-relative offsets. Canonical PC-materialized
+/// register calls are resolved when their target value has one provable
+/// straight-line definition. Other register-target control flow sets
+/// HasUnresolvedTargets so callers can disable transformations that consume
+/// possible destinations.
 std::optional<DirectControlFlowInfo>
 collectDirectBranchTargets(llvm::ArrayRef<InternalDecodedInst> Decoded,
                            const LLVMState &LS, uint64_t TextAddr,

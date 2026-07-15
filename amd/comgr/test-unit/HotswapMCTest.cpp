@@ -91,6 +91,7 @@ TEST(InitLLVM, ValidGfx1250) {
   EXPECT_LT(S.SDelayAluOpcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SEndPgmOpcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SEndPgmSavedOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SAddNcU64Opcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SAddPcI64Opcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SCallI64Opcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SSwapPcI64Opcode, S.MCII->getNumOpcodes());
@@ -582,6 +583,82 @@ TEST(CollectDirectBranchTargets, IgnoresSetPcWithoutTreatingItAsCall) {
   ASSERT_TRUE(Info);
   EXPECT_TRUE(Info->Targets.empty());
   EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, ResolvesProductionPcMaterializedCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_get_pc_i64 s[0:1]\n"
+                         "s_add_nc_u64 s[0:1], s[0:1], 0xffffffffffed1230\n"
+                         "v_mov_b32 v0, v1\n"
+                         "s_swap_pc_i64 s[30:31], s[0:1]",
+                         S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+  for (InternalDecodedInst &DI : Decoded)
+    DI.Offset += 0x12EDCC;
+
+  // This is the exact address calculation from the production reproducer:
+  // 0x1a000 + 0x12edcc + 4 - 0x12edd0 = 0x1a000.
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0x1A000,
+                                 /*TextSize=*/0x150000);
+  ASSERT_TRUE(Info);
+  ASSERT_EQ(Info->Targets.size(), 1u);
+  EXPECT_TRUE(Info->Targets.contains(0));
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsClobberedPcMaterializedCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_get_pc_i64 s[0:1]\n"
+                         "s_add_nc_u64 s[0:1], s[0:1], -4\n"
+                         "s_mov_b32 s0, 0\n"
+                         "s_swap_pc_i64 s[30:31], s[0:1]",
+                         S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsAlternateEntryIntoMaterialization) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_branch 1\n"
+                         "s_get_pc_i64 s[0:1]\n"
+                         "s_add_nc_u64 s[0:1], s[0:1], 4\n"
+                         "s_swap_pc_i64 s[30:31], s[0:1]",
+                         S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+
+  // The branch enters at the add without executing s_get_pc_i64, so the
+  // apparent linear definition chain does not prove the register value.
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.contains(8));
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
 }
 
 TEST(CollectDirectBranchTargets, HandlesImmediateAbsoluteTargetCall) {
