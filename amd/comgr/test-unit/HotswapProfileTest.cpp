@@ -6,11 +6,12 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Unit tests for the opt-in HotSwap rewrite profiler (comgr-hotswap-internal.h).
-/// This translation unit is compiled with ENABLE_HOTSWAP_PROFILE defined so the
-/// enabled branch (which the default library build compiles out) is exercised,
-/// covering both runtime-off and runtime-on sessions. See review on
-/// ROCm/llvm-project#3364, comment about the enabled branch being untested.
+/// Unit tests for the opt-in HotSwap rewrite profiler
+/// (comgr-hotswap-internal.h). This translation unit is compiled with
+/// ENABLE_HOTSWAP_PROFILE defined so the enabled branch (which the default
+/// library build compiles out) is exercised, covering both runtime-off and
+/// runtime-on sessions. See review on ROCm/llvm-project#3364, comment about the
+/// enabled branch being untested.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -113,8 +114,8 @@ TEST(HotswapProfile, DisabledScopeRecordsNothing) {
 }
 
 // The static label/parent/partition table must stay in lockstep with the enum:
-// every row has a label, every child points at a valid top-level parent, and the
-// phases that partition rewrite_total exist while total/unaccounted do not.
+// every row has a label, every child points at a valid top-level parent, and
+// the phases that partition rewrite_total exist while total/unaccounted do not.
 TEST(HotswapProfile, MetricInfoTableWellFormed) {
   size_t PartitionCount = 0;
   for (size_t I = 0; I < HotswapMetricCount; ++I) {
