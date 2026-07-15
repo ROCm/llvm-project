@@ -51,10 +51,10 @@
 ; CROSS-NOT: v_cvt_scale_pk8_bf16_fp4 is a gfx1250-only VOP3
 ; CROSS-NOT: no corpus kernel exercises today
 ; REFUSE-SAME: scale_sel != 0 is outside the declared support set
-; REFUSE-SAME-SAME: matrix-translation.md §7.4
+; REFUSE-SAME-SAME: matrix-translation.md sec. 7.4
 ; REFUSE-SAME-NOT: call <8 x bfloat> @llvm.amdgcn.cvt.scale.pk8.bf16.fp4
 ; REFUSE-CROSS: scale_sel != 0 is outside the declared support set
-; REFUSE-CROSS-SAME: matrix-translation.md §7.4
+; REFUSE-CROSS-SAME: matrix-translation.md sec. 7.4
 ; REFUSE-CROSS-NOT: mxfp4_nibble
 ; REFUSE-CROSS-NOT: call <8 x bfloat> @llvm.amdgcn.cvt.scale.pk8.bf16.fp4
 

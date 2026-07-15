@@ -333,18 +333,21 @@ static bool raiseAndCompileKernel(
   auto RaiseStart = timingStart(Options.CollectTimings);
   llvm::Expected<KernelMeta> MetaOrErr =
       extractKernelMeta(CodeObjectData, KernelName);
-  if (!MetaOrErr) {
+  KernelMeta Meta;
+  if (MetaOrErr) {
+    Meta = std::move(*MetaOrErr);
+  } else {
     llvm::errs() << "transpiler: WARNING: No metadata found for '" << KernelName
                  << "': " << llvm::toString(MetaOrErr.takeError())
                  << ", using empty metadata\n";
   }
-  KernelMeta Meta = MetaOrErr ? std::move(*MetaOrErr) : KernelMeta{};
   if (Meta.Args.empty()) {
     llvm::errs() << "transpiler: WARNING: No metadata found for '" << KernelName
                  << "', using empty metadata\n";
   }
 
-  auto KernelExtentOrErr = findKernelSymbolExtent(CodeObjectData, KernelName);
+  llvm::Expected<KernelSymbolExtent> KernelExtentOrErr =
+      findKernelSymbolExtent(CodeObjectData, KernelName);
   if (!KernelExtentOrErr) {
     std::string Err = llvm::toString(KernelExtentOrErr.takeError());
     llvm::errs() << "transpiler: " << Err << "\n";
