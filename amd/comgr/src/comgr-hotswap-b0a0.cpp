@@ -27,6 +27,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "comgr-env.h"
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/DenseSet.h"
@@ -2147,10 +2148,8 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     // loader trampoline adds no such symbols). The symbols are only a debugging
     // aid, so the fast path skips them by default. Set
     // AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS=1 to re-enable (e.g. for rocgdb).
-    const bool AddStubSymbols = !UseFastAppend || []() {
-      const char *E = std::getenv("AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS");
-      return E && E[0] == '1' && E[1] == '\0';
-    }();
+    const bool AddStubSymbols =
+        !UseFastAppend || env::shouldAddEntryTrampolineSymbols();
     if (!EntryFixups.empty() && AddStubSymbols) {
       std::unique_ptr<WritableMemoryBuffer> WithSyms =
           addKernelEntryTrampolineSymbols(*Result, Elf.textSectionIndex(),

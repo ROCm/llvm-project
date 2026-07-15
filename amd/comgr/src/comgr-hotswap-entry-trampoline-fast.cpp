@@ -112,8 +112,12 @@ entryHasWorkaroundPrefixFast(const ElfView &Elf,
   if (!Entry)
     return std::nullopt;
   const uint8_t *EntryBytes = Elf.dataAtVAddr(*Entry, FastEntryPrefixBytes);
-  if (!EntryBytes)
+  if (!EntryBytes) {
+    log() << "hotswap: fast: kernel '" << KD.KernelName << "' entry vaddr 0x"
+          << Twine::utohexstr(*Entry)
+          << " is not backed by readable data; assuming no workaround prefix.\n";
     return false;
+  }
   return std::memcmp(EntryBytes, EntryPrefix, FastEntryPrefixBytes) == 0;
 }
 
