@@ -2750,9 +2750,7 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
         !UseFastAppend || env::shouldAddEntryTrampolineSymbols();
     if (!EntryFixups.empty() && AddStubSymbols) {
       std::unique_ptr<WritableMemoryBuffer> WithSyms =
-          addKernelEntryTrampolineSymbols(*Result, Elf.textSectionIndex(),
-                                          Elf.textAddr(), Elf.textSize(),
-                                          EntryFixups);
+          addKernelEntryTrampolineSymbols(*Result, PoolVAddr, EntryFixups);
       if (WithSyms)
         Result = std::move(WithSyms);
     }

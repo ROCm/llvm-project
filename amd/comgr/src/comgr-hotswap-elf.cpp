@@ -1410,8 +1410,8 @@ std::optional<uint64_t> ElfView::trampolinePoolVAddr() const {
 // -- addKernelEntryTrampolineSymbols ------------------------------------------
 
 std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
-    WritableMemoryBuffer &In, unsigned TextSectionIndex, uint64_t TextAddr,
-    uint64_t OldTextSize, ArrayRef<KernelEntryTrampolineFixup> Fixups) {
+    WritableMemoryBuffer &In, uint64_t PoolVAddr,
+    ArrayRef<KernelEntryTrampolineFixup> Fixups) {
   if (Fixups.empty())
     return nullptr;
 
@@ -1432,6 +1432,22 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
     return nullptr;
   }
   ELFT::ShdrRange Secs = *SecsOrErr;
+
+  // Locate the appended trampoline-pool section by its virtual address: the
+  // stubs live there (at PoolVAddr + StubTextOffset), not immediately after
+  // .text, so the stub symbols must reference this section, not .text.
+  unsigned PoolSectionIndex = 0;
+  for (unsigned I = 0; I < Secs.size(); ++I)
+    if ((Secs[I].sh_flags & ELF::SHF_ALLOC) && Secs[I].sh_addr == PoolVAddr) {
+      PoolSectionIndex = I;
+      break;
+    }
+  if (PoolSectionIndex == 0) {
+    log() << "hotswap: addKernelEntryTrampolineSymbols: trampoline-pool section "
+          << "at vaddr 0x" << utohexstr(PoolVAddr) << " not found; skipping "
+          << "stub symbols.\n";
+    return nullptr;
+  }
 
   // Locate .symtab and its linked string table. Scan from the end, since the
   // symbol table sits near the end of the section list in these code objects.
@@ -1479,12 +1495,8 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
     StrBlob.append(Name.begin(), Name.end());
     StrBlob.push_back(0);
 
-    std::optional<uint64_t> StubOff = checkedAddUint64(
-        OldTextSize, F.StubTextOffset, "stub symbol .text offset");
-    if (!StubOff)
-      return nullptr;
-    std::optional<uint64_t> StubVAddr =
-        checkedAddUint64(TextAddr, *StubOff, "stub symbol vaddr");
+    std::optional<uint64_t> StubVAddr = checkedAddUint64(
+        PoolVAddr, F.StubTextOffset, "stub symbol vaddr");
     if (!StubVAddr)
       return nullptr;
 
@@ -1492,7 +1504,7 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
     Sym.st_name = NameOff;
     Sym.st_info = (ELF::STB_GLOBAL << 4) | ELF::STT_FUNC;
     Sym.st_other = ELF::STV_DEFAULT;
-    Sym.st_shndx = static_cast<uint16_t>(TextSectionIndex);
+    Sym.st_shndx = static_cast<uint16_t>(PoolSectionIndex);
     Sym.st_value = *StubVAddr;
     Sym.st_size = KernelEntryStubStride;
     const uint8_t *P = reinterpret_cast<const uint8_t *>(&Sym);

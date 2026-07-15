@@ -566,10 +566,10 @@ TEST(ElfView, GrowWithTrampolinesKeepsDwarfConsistentWithSymbol) {
 // names and the two stub offsets (0 and KernelEntryStubStride). Re-parse the
 // returned buffer with llvm::object::ELFFile and, for each fixup, assert a
 // "<name>.stub" symbol exists in .symtab that is (a) STT_FUNC, (b) defined in
-// the .text section (st_shndx), (c) located at TextAddr + OldTextSize +
-// StubTextOffset, and (d) sized to KernelEntryStubStride. Two fixups (rather
-// than one) prove each stub gets its own name at its own address, not a single
-// shared or mis-placed entry.
+// the appended trampoline-pool section (st_shndx), (c) located at PoolVAddr +
+// StubTextOffset (where the dispatch entry now points), and (d) sized to
+// KernelEntryStubStride. Two fixups (rather than one) prove each stub gets its
+// own name at its own address, not a single shared or mis-placed entry.
 TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
@@ -579,9 +579,9 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   llvm::Expected<ElfView> ViewOrErr =
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  const unsigned TextIdx = ViewOrErr->textSectionIndex();
-  const uint64_t TextAddr = ViewOrErr->textAddr();
-  const uint64_t OldTextSize = ViewOrErr->textSize();
+  std::optional<uint64_t> PoolVAddrOr = ViewOrErr->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddrOr.has_value());
+  const uint64_t PoolVAddr = *PoolVAddrOr;
 
   // Grow .text by two entry-stub-sized blocks, mirroring the entry-trampoline
   // pass appending one stub per kernel.
@@ -602,8 +602,7 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
        /*RequiredSgprs=*/12},
   };
   std::unique_ptr<llvm::WritableMemoryBuffer> WithSyms =
-      addKernelEntryTrampolineSymbols(*Grown, TextIdx, TextAddr, OldTextSize,
-                                      Fixups);
+      addKernelEntryTrampolineSymbols(*Grown, PoolVAddr, Fixups);
   ASSERT_NE(WithSyms, nullptr);
 
   using ELFT = llvm::object::ELF64LE;
@@ -618,12 +617,20 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   llvm::Expected<ELFT::ShdrRange> SecsOrErr = File.sections();
   ASSERT_TRUE((bool)SecsOrErr) << llvm::toString(SecsOrErr.takeError());
   const ELFT::Shdr *SymtabShdr = nullptr;
-  for (const ELFT::Shdr &S : *SecsOrErr)
-    if (S.sh_type == llvm::ELF::SHT_SYMTAB) {
-      SymtabShdr = &S;
-      break;
+  unsigned PoolIdx = 0;
+  {
+    unsigned I = 0;
+    for (const ELFT::Shdr &S : *SecsOrErr) {
+      if (S.sh_type == llvm::ELF::SHT_SYMTAB && !SymtabShdr)
+        SymtabShdr = &S;
+      if ((S.sh_flags & llvm::ELF::SHF_ALLOC) && S.sh_addr == PoolVAddr &&
+          PoolIdx == 0)
+        PoolIdx = I;
+      ++I;
     }
+  }
   ASSERT_NE(SymtabShdr, nullptr);
+  ASSERT_NE(PoolIdx, 0u) << "trampoline-pool section not found at PoolVAddr";
   llvm::Expected<ELFT::SymRange> SymsOrErr = File.symbols(SymtabShdr);
   ASSERT_TRUE((bool)SymsOrErr) << llvm::toString(SymsOrErr.takeError());
   llvm::Expected<llvm::StringRef> StrTabOrErr =
@@ -640,14 +647,15 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   };
 
   // Every appended stub must have a <kernel>.stub STT_FUNC symbol covering the
-  // stub, in the .text section, at the stub's virtual address.
+  // stub, in the trampoline-pool section, at the stub's virtual address (where
+  // the dispatch entry now points).
   for (const KernelEntryTrampolineFixup &F : Fixups) {
     const ELFT::Sym *Sym = FindSym(F.KernelName + ".stub");
     ASSERT_NE(Sym, nullptr) << "missing stub symbol for " << F.KernelName;
     EXPECT_EQ(static_cast<unsigned>(Sym->getType()),
               static_cast<unsigned>(llvm::ELF::STT_FUNC));
-    EXPECT_EQ(Sym->st_shndx, TextIdx);
-    EXPECT_EQ(Sym->st_value, TextAddr + OldTextSize + F.StubTextOffset);
+    EXPECT_EQ(Sym->st_shndx, PoolIdx);
+    EXPECT_EQ(Sym->st_value, PoolVAddr + F.StubTextOffset);
     EXPECT_EQ(Sym->st_size, KernelEntryStubStride);
   }
 }
@@ -662,9 +670,9 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsPreservesPhdr) {
   llvm::Expected<ElfView> ViewOrErr =
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  const unsigned TextIdx = ViewOrErr->textSectionIndex();
-  const uint64_t TextAddr = ViewOrErr->textAddr();
-  const uint64_t OldTextSize = ViewOrErr->textSize();
+  std::optional<uint64_t> PoolVAddrOr = ViewOrErr->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddrOr.has_value());
+  const uint64_t PoolVAddr = *PoolVAddrOr;
 
   Trampoline Stub;
   Stub.Bytes.assign(2 * KernelEntryStubStride, 0xAA);
@@ -680,8 +688,7 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsPreservesPhdr) {
        /*RequiredSgprs=*/12},
   };
   std::unique_ptr<llvm::WritableMemoryBuffer> WithSyms =
-      addKernelEntryTrampolineSymbols(*Grown, TextIdx, TextAddr, OldTextSize,
-                                      Fixups);
+      addKernelEntryTrampolineSymbols(*Grown, PoolVAddr, Fixups);
   ASSERT_NE(WithSyms, nullptr);
 
   using ELFT = llvm::object::ELF64LE;

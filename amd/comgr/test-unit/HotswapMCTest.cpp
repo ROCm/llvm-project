@@ -1993,9 +1993,6 @@ TEST(KernelEntryTrampoline, SecondPassAddsNoDuplicateStubSymbol) {
   llvm::Expected<ElfView> View1 =
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)View1) << llvm::toString(View1.takeError());
-  const unsigned TextIdx = View1->textSectionIndex();
-  const uint64_t TextAddr = View1->textAddr();
-  const uint64_t OldTextSize = View1->textSize();
 
   std::vector<Trampoline> Growth1;
   std::vector<KernelEntryTrampolineFixup> Fixups1;
@@ -2012,8 +2009,7 @@ TEST(KernelEntryTrampoline, SecondPassAddsNoDuplicateStubSymbol) {
   ASSERT_TRUE(
       rewriteKernelEntryDescriptorOffsets(*Grown, *PoolVAddr, S.Cpu, Fixups1));
   std::unique_ptr<llvm::WritableMemoryBuffer> Pass1 =
-      addKernelEntryTrampolineSymbols(*Grown, TextIdx, TextAddr, OldTextSize,
-                                      Fixups1);
+      addKernelEntryTrampolineSymbols(*Grown, *PoolVAddr, Fixups1);
   ASSERT_NE(Pass1, nullptr);
   ASSERT_EQ(countSymtabSymbolsNamed(*Pass1, "kernel.stub"), 1u);
 
@@ -2035,8 +2031,7 @@ TEST(KernelEntryTrampoline, SecondPassAddsNoDuplicateStubSymbol) {
   // With no fixups the symbol pass is a no-op (returns nullptr, keeping the
   // existing buffer), so no second "kernel.stub" can be defined.
   std::unique_ptr<llvm::WritableMemoryBuffer> Pass2 =
-      addKernelEntryTrampolineSymbols(*Pass1, TextIdx, TextAddr,
-                                      View2->textSize(), Fixups2);
+      addKernelEntryTrampolineSymbols(*Pass1, *PoolVAddr, Fixups2);
   EXPECT_EQ(Pass2, nullptr);
   EXPECT_EQ(countSymtabSymbolsNamed(*Pass1, "kernel.stub"), 1u);
 }
