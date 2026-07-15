@@ -2821,9 +2821,9 @@ findSiteDeadOriginalPair(PatchContext &Ctx, uint64_t InstOffset,
         !ReplacementTouched->test(Pair + 1) && SiteDead->test(Pair) &&
         SiteDead->test(Pair + 1)) {
 #ifndef NDEBUG
-      assert(isSgprPairDeadFrom(
-          Continuation->first, Continuation->second, Pair, Ctx.LS,
-          ArrayRef<uint8_t>(Ctx.Text, Ctx.TextSize)));
+      assert(isSgprPairDeadFrom(Continuation->first, Continuation->second, Pair,
+                                Ctx.LS,
+                                ArrayRef<uint8_t>(Ctx.Text, Ctx.TextSize)));
 #endif
       log() << "hotswap: safe far return: reusing original site-dead s[" << Pair
             << ':' << Pair + 1 << "] after 0x" << utohexstr(InstOffset)
