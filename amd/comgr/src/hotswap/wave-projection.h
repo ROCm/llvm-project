@@ -242,6 +242,11 @@ public:
   // packed source wave's EXEC mask.
   virtual bool preservesMbcntDerivedVcmpxExec() const { return false; }
 
+  // True iff an mbcnt-derived `s_*_saveexec_b32` source mask can be projected
+  // into an independent target-width EXEC mask -- the scalar sibling of
+  // `preservesMbcntDerivedVcmpxExec`. Requires injective source-wave mapping.
+  virtual bool preservesMbcntDerivedSaveExec() const { return false; }
+
   // Number of source waves whose per-lane fragment data is present in
   // each target wave under this projection's mapping.  Callers that
   // synthesise per-source-wave passes (most notably the WMMA -> MFMA
@@ -445,6 +450,7 @@ public:
   // run two iterations under this projection.
   unsigned numSourceWavesPerTarget() const override { return 2; }
   bool preservesMbcntDerivedVcmpxExec() const override { return true; }
+  bool preservesMbcntDerivedSaveExec() const override { return true; }
 
   llvm::Value *emitInitialExec(llvm::IRBuilder<> &B) const override;
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &B,

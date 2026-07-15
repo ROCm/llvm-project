@@ -117,6 +117,8 @@ const char *rewriteIdName(RewriteId R) {
            "readlane -> ds.bpermute)";
   case RewriteId::WaveNativeMbcntCmpx:
     return "WaveNative source-wave mbcnt -> V_CMPX EXEC projection";
+  case RewriteId::WaveNativeMbcntSaveExec:
+    return "WaveNative source-wave mbcnt -> s_*_saveexec_b32 EXEC projection";
   }
   return "UnknownRewriteId";
 }
@@ -473,12 +475,46 @@ findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
       SccTainted = false;
     } else if (isSaveExecB32(Sop)) {
       if (SourceTainted) {
-        Sites.push_back(
-            {&Di, ObstructionKind::SaveExecFromLaneId, RewriteId::None,
-             /*RewriteImplemented=*/false,
-             "s_*_saveexec_b32 source mask dataflow is derived from "
-             "v_mbcnt_*; no target-width source-wave mask projection is "
-             "implemented for scalar saveexec masks"});
+        if (Projection.preservesMbcntDerivedSaveExec()) {
+          // WaveNative packs two DISTINCT source waves into one target wave
+          // (lanes L and L+W_s carry different work), so the saveexec mask
+          // needs an independent target-width EXEC mask. Project the
+          // preceding v_cmp's ballot into target-width EXEC storage.
+          Sites.push_back(
+              {&Di, ObstructionKind::SaveExecFromLaneId,
+               RewriteId::WaveNativeMbcntSaveExec, /*RewriteImplemented=*/true,
+               "s_*_saveexec_b32 source mask dataflow is derived from "
+               "v_mbcnt_*; WaveNative projects the preceding v_cmp's ballot "
+               "into target-width EXEC storage (per-lane shadow), so the "
+               "saveexec combine and old-EXEC save run at target width"});
+        } else if (Projection.numSourceWavesPerTarget() == 1 ||
+                   Projection.sourceWaveScopedLaneOps()) {
+          // A single source wave per target wave (MODREP redundant-replica /
+          // phantom-lane regime) or a source-wave-scoped iteration
+          // (ThreadLoop, one source wave per pass). mbcnt lifting already
+          // makes the lane id source-wave-relative (handle-valu-cross-lane:
+          // mbcnt_hi pass-through + mbcnt_lo mod W_s), so a lane-derived
+          // saveexec mask is already correct per source wave and needs no
+          // target-width projection.
+          Sites.push_back(
+              {&Di, ObstructionKind::SaveExecFromLaneId,
+               RewriteId::SaveExecLaneRelative, /*RewriteImplemented=*/true,
+               "s_*_saveexec_b32 source mask dataflow is derived from "
+               "v_mbcnt_*; the lane id is already source-wave-relative and "
+               "one source wave maps to each target wave, so the mask is "
+               "correct per source wave without a target-width projection"});
+        } else {
+          // A projection that packs DISTINCT source waves into lanes L and
+          // L+W_s but offers no target-width saveexec projection: one
+          // source-width mask cannot represent both waves' EXEC independently.
+          Sites.push_back(
+              {&Di, ObstructionKind::SaveExecFromLaneId,
+               RewriteId::None, /*RewriteImplemented=*/false,
+               "s_*_saveexec_b32 source mask dataflow is derived from "
+               "v_mbcnt_*; the selected projection aliases target lanes L and "
+               "L+W_s through one source-width EXEC mask, so no independent "
+               "source-wave mask projection is representable"});
+        }
       }
       ExplicitDefsTainted = OldExecTainted;
       VccTainted = false;
@@ -1173,24 +1209,18 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
     }
   }
 
-  // Second pass: emit Class-4 EXEC writers whose predicate/mask was
-  // actually proven to depend on a v_mbcnt_* result by the decoded-
-  // register provenance pre-walk. WaveNative marks mbcnt-fed V_CMPX
-  // as implemented; MODREP and scalar saveexec masks still refuse.
+  // Second pass: emit Class-4 EXEC writers whose predicate/mask was actually
+  // proven to depend on a v_mbcnt_* result by the decoded-register provenance
+  // pre-walk. findLanePredicatedExecSites already picks the projection-aware
+  // rewrite for each site (WaveNative target-width projection, lane-relative
+  // lift for single-source-wave / source-wave-scoped projections, or refuse
+  // when neither applies), so the decision is copied verbatim here.
   for (const auto &Pw : LanePredicatedExecSites) {
     ObstructionSite Site;
     Site.Inst = Pw.Inst;
     Site.Kind = Pw.Kind;
     Site.Rewrite = Pw.Rewrite;
     Site.RewriteImplemented = Pw.RewriteImplemented;
-    // mbcnt lifting already makes lane-id source-wave-relative
-    // (handle-valu-cross-lane.cpp: mbcnt_hi pass-through + mbcnt_lo mod W_s),
-    // so a saveexec mask derived from lane-id is already correct per MODREP
-    // replica and needs no further rewrite.
-    if (Pw.Kind == ObstructionKind::SaveExecFromLaneId) {
-      Site.Rewrite = RewriteId::SaveExecLaneRelative;
-      Site.RewriteImplemented = true;
-    }
     Site.Detail = Pw.Detail;
     Report.Sites.push_back(std::move(Site));
   }

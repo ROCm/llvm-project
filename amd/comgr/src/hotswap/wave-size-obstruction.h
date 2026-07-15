@@ -71,7 +71,9 @@ class WaveProjection;
 //     mnemonic level.
 //   - CmpxFromLaneId / SaveExecFromLaneId: decoded-register provenance tracks
 //     whether an EXEC writer actually consumes `v_mbcnt_*` data. WaveNative
-//     handles V_CMPX; scalar saveexec masks still refuse.
+//     projects both into target-width EXEC storage; a single-source-wave or
+//     source-wave-scoped projection lifts saveexec at source width (the mask
+//     is correct per replica); other projections refuse.
 //
 // The sound direction of the imprecision is preserved: false
 // positives (refuse a safe kernel) are benign; false negatives
@@ -236,6 +238,8 @@ enum class RewriteId : uint8_t {
                              // so the classifier lets the kernel through to
                              // Phase 6.5.
   WaveNativeMbcntCmpx,       // source-wave mbcnt -> target-width V_CMPX EXEC.
+  // source-wave mbcnt -> target-width s_*_saveexec_b32 EXEC.
+  WaveNativeMbcntSaveExec,
 };
 
 // Human-readable short label for an `ObstructionKind` -- used in the
