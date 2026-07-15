@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=amdgcn -mcpu=gfx900 -mattr=+xnack -amdgpu-max-memory-clause=0 -experimental-debug-variable-locations=false < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
+; RUN: llc -mtriple=amdgpu9.00 -mattr=+xnack -amdgpu-max-memory-clause=0 -experimental-debug-variable-locations=false < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
 
 ; Test the behavior of the post-RA soft clause bundler in the presence
 ; of debug info. The debug info should not interfere with the
