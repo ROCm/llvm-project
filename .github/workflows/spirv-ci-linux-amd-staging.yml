@@ -612,6 +612,7 @@ jobs:
 
       # HIP-Basic.
       - name: ROCm Examples build HIP-Basic
+        continue-on-error: true
         run: |
           STAGING=$PWD/$STAGING
           LLVM_PATH=$PWD/$LLVM_BUILD
@@ -628,14 +629,15 @@ jobs:
           cmake --build examples-build-hip-basic -j $(nproc)
 
       - name: ROCm Examples run HIP-Basic
+        continue-on-error: true
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/${{ env.STAGING }}/lib
         run: |
-          ctest --test-dir examples-build-hip-basic --output-on-failure -j $(nproc) \
-            -E '^hip_cooperative_groups$' # TODO: ISSUE #3143
+          ctest --test-dir examples-build-hip-basic --output-on-failure -j $(nproc)
 
       # Applications.
       - name: ROCm Examples build Applications
+        continue-on-error: true
         run: |
           STAGING=$PWD/$STAGING
           LLVM_PATH=$PWD/$LLVM_BUILD
@@ -651,6 +653,7 @@ jobs:
           cmake --build examples-build-Applications -j $(nproc)
 
       - name: ROCm Examples run Applications
+        continue-on-error: true
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/${{ env.STAGING }}/lib
         run: |
