@@ -556,7 +556,7 @@ TEST(CollectDirectBranchTargets, MarksRegisterTargetCallUnresolved) {
 
   std::optional<DirectControlFlowInfo> Info =
       collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
-                                 /*TextSize=*/0x1000);
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   EXPECT_TRUE(Info->Targets.empty());
   EXPECT_TRUE(Info->HasUnresolvedTargets);
@@ -579,7 +579,7 @@ TEST(CollectDirectBranchTargets, IgnoresSetPcWithoutTreatingItAsCall) {
 
   std::optional<DirectControlFlowInfo> Info =
       collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
-                                 /*TextSize=*/0x1000);
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   EXPECT_TRUE(Info->Targets.empty());
   EXPECT_FALSE(Info->HasUnresolvedTargets);
@@ -606,7 +606,8 @@ TEST(CollectDirectBranchTargets, ResolvesProductionPcMaterializedCall) {
   // 0x1a000 + 0x12edcc + 4 - 0x12edd0 = 0x1a000.
   std::optional<DirectControlFlowInfo> Info =
       collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0x1A000,
-                                 /*TextSize=*/0x150000);
+                                 /*TextSize=*/0x150000,
+                                 /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   ASSERT_EQ(Info->Targets.size(), 1u);
   EXPECT_TRUE(Info->Targets.contains(0));
@@ -630,7 +631,7 @@ TEST(CollectDirectBranchTargets, RejectsClobberedPcMaterializedCall) {
 
   std::optional<DirectControlFlowInfo> Info =
       collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
-                                 /*TextSize=*/0x1000);
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   EXPECT_TRUE(Info->Targets.empty());
   EXPECT_TRUE(Info->HasUnresolvedTargets);
@@ -655,9 +656,85 @@ TEST(CollectDirectBranchTargets, RejectsAlternateEntryIntoMaterialization) {
   // apparent linear definition chain does not prove the register value.
   std::optional<DirectControlFlowInfo> Info =
       collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
-                                 /*TextSize=*/0x1000);
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   EXPECT_TRUE(Info->Targets.contains(8));
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsDeclaredEntryIntoMaterialization) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_get_pc_i64 s[0:1]\n"
+                         "s_add_nc_u64 s[0:1], s[0:1], 4\n"
+                         "s_swap_pc_i64 s[30:31], s[0:1]",
+                         S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 3u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{Decoded[1].Offset};
+
+  // A function or kernel entry at the add can bypass s_get_pc_i64, even when
+  // no direct branch in .text exposes that alternate path.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsUndecodedMaterializationSlot) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_get_pc_i64 s[0:1]\n"
+                         "s_add_nc_u64 s[0:1], s[0:1], 8\n"
+                         "v_mov_b32 v0, v1\n"
+                         "s_swap_pc_i64 s[30:31], s[0:1]",
+                         S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+  Decoded[2].DecodeSucceeded = false;
+  Decoded[2].Inst = llvm::MCInst();
+  Decoded[2].Mnemonic = "<unknown>";
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000,
+                                 /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsUnboundedIndirectEntry) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_set_pc_i64 s[4:5]\n"
+                         "s_get_pc_i64 s[0:1]\n"
+                         "s_add_nc_u64 s[0:1], s[0:1], 4\n"
+                         "s_swap_pc_i64 s[30:31], s[0:1]",
+                         S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+  ASSERT_EQ(Decoded[0].Inst.getOpcode(), S.SSetPcI64Opcode);
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000,
+                                 /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
   EXPECT_TRUE(Info->HasUnresolvedTargets);
 }
 
@@ -676,7 +753,7 @@ TEST(CollectDirectBranchTargets, HandlesImmediateAbsoluteTargetCall) {
 
   std::optional<DirectControlFlowInfo> Info =
       collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0x200,
-                                 /*TextSize=*/0x40);
+                                 /*TextSize=*/0x40, /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   ASSERT_EQ(Info->Targets.size(), 1u);
   EXPECT_TRUE(Info->Targets.contains(0x10));
@@ -684,7 +761,7 @@ TEST(CollectDirectBranchTargets, HandlesImmediateAbsoluteTargetCall) {
 
   std::optional<DirectControlFlowInfo> OutsideInfo =
       collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0x220,
-                                 /*TextSize=*/0x40);
+                                 /*TextSize=*/0x40, /*DeclaredEntries=*/{});
   ASSERT_TRUE(OutsideInfo);
   EXPECT_TRUE(OutsideInfo->Targets.empty());
   EXPECT_FALSE(OutsideInfo->HasUnresolvedTargets);
@@ -693,7 +770,7 @@ TEST(CollectDirectBranchTargets, HandlesImmediateAbsoluteTargetCall) {
       collectDirectBranchTargets(
           Decoded, S,
           /*TextAddr=*/std::numeric_limits<uint64_t>::max() - 0x10,
-          /*TextSize=*/0x20);
+          /*TextSize=*/0x20, /*DeclaredEntries=*/{});
   EXPECT_FALSE(OverflowInfo);
 }
 
@@ -711,7 +788,7 @@ TEST(CollectDirectBranchTargets, CollectsPcRelativeCall) {
 
   std::optional<DirectControlFlowInfo> Info =
       collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
-                                 /*TextSize=*/0x1000);
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   ASSERT_EQ(Info->Targets.size(), 1u);
   EXPECT_TRUE(

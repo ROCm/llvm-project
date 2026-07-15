@@ -911,11 +911,58 @@ static bool isControlFlowBoundary(const InternalDecodedInst &DI,
          LS.MIA->isBarrier(DI.Inst);
 }
 
+static std::optional<SmallVector<uint64_t, 16>>
+collectDeclaredTextEntries(const ElfView &Elf) {
+  std::optional<uint64_t> TextEnd =
+      checkedAddUint64(Elf.textAddr(), Elf.textSize(), "declared text end");
+  if (!TextEnd)
+    return std::nullopt;
+
+  SmallVector<uint64_t, 16> Entries;
+  for (const ElfView::FunctionTextRange &Range : Elf.functionTextRanges())
+    if (Range.Begin >= Elf.textAddr() && Range.Begin < *TextEnd)
+      Entries.push_back(Range.Begin - Elf.textAddr());
+
+  for (const KernelDescriptorInfo &Descriptor : Elf.kernelDescriptors()) {
+    std::optional<uint64_t> EntryAddress;
+    if (Descriptor.EntryOffset >= 0) {
+      EntryAddress = checkedAddUint64(
+          Descriptor.VAddr, static_cast<uint64_t>(Descriptor.EntryOffset),
+          "kernel descriptor entry address");
+    } else {
+      uint64_t Magnitude =
+          Descriptor.EntryOffset == std::numeric_limits<int64_t>::min()
+              ? uint64_t{1} << 63
+              : static_cast<uint64_t>(-Descriptor.EntryOffset);
+      EntryAddress = checkedSubUint64(Descriptor.VAddr, Magnitude,
+                                      "kernel descriptor entry address");
+    }
+    if (!EntryAddress)
+      return std::nullopt;
+    if (*EntryAddress >= Elf.textAddr() && *EntryAddress < *TextEnd)
+      Entries.push_back(*EntryAddress - Elf.textAddr());
+  }
+  return Entries;
+}
+
 static bool hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
                                      const LLVMState &LS, uint64_t TextAddr,
+                                     ArrayRef<uint64_t> DeclaredEntries,
                                      uint64_t SequenceStart,
                                      uint64_t SequenceEnd) {
+  for (uint64_t Entry : DeclaredEntries)
+    if (Entry > SequenceStart && Entry <= SequenceEnd)
+      return true;
+
   for (const InternalDecodedInst &DI : Decoded) {
+    // Without bounding an indirect target, it may enter at any instruction in
+    // the materialization. Keep the call unresolved rather than relying on
+    // the indirect transfer's containing function alone.
+    if (DI.DecodeSucceeded && !LS.MIA->isReturn(DI.Inst) &&
+        (LS.MIA->isIndirectBranch(DI.Inst) ||
+         DI.Inst.getOpcode() == LS.SSetPcI64Opcode ||
+         DI.Inst.getOpcode() == LS.SAddPcI64Opcode))
+      return true;
     if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
         LS.MIA->isReturn(DI.Inst))
       continue;
@@ -958,9 +1005,10 @@ static bool hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
 static std::optional<uint64_t>
 resolvePcMaterializedCallTarget(ArrayRef<InternalDecodedInst> Decoded,
                                 size_t CallIndex, const LLVMState &LS,
-                                uint64_t TextAddr) {
+                                uint64_t TextAddr,
+                                ArrayRef<uint64_t> DeclaredEntries) {
   const InternalDecodedInst &Call = Decoded[CallIndex];
-  if (Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+  if (!Call.DecodeSucceeded || Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
       Call.Inst.getNumOperands() == 0)
     return std::nullopt;
   const MCOperand &TargetOperand =
@@ -974,7 +1022,7 @@ resolvePcMaterializedCallTarget(ArrayRef<InternalDecodedInst> Decoded,
   for (size_t I = CallIndex; I != 0;) {
     --I;
     const InternalDecodedInst &Candidate = Decoded[I];
-    if (isControlFlowBoundary(Candidate, LS))
+    if (!Candidate.DecodeSucceeded || isControlFlowBoundary(Candidate, LS))
       return std::nullopt;
     if (!definesOverlappingRegister(Candidate, LS, TargetRegister))
       continue;
@@ -996,7 +1044,7 @@ resolvePcMaterializedCallTarget(ArrayRef<InternalDecodedInst> Decoded,
   for (size_t I = *AddIndex; I != 0;) {
     --I;
     const InternalDecodedInst &Candidate = Decoded[I];
-    if (isControlFlowBoundary(Candidate, LS))
+    if (!Candidate.DecodeSucceeded || isControlFlowBoundary(Candidate, LS))
       return std::nullopt;
     if (!definesOverlappingRegister(Candidate, LS, TargetRegister))
       continue;
@@ -1014,8 +1062,8 @@ resolvePcMaterializedCallTarget(ArrayRef<InternalDecodedInst> Decoded,
         *GetPcAddress, Candidate.Size, "PC-materialized call PC value");
     if (!PcValue)
       return std::nullopt;
-    if (hasKnownControlFlowEntry(Decoded, LS, TextAddr, Candidate.Offset,
-                                 Call.Offset))
+    if (hasKnownControlFlowEntry(Decoded, LS, TextAddr, DeclaredEntries,
+                                 Candidate.Offset, Call.Offset))
       return std::nullopt;
 
     // s_add_nc_u64 uses modulo-2^64 arithmetic. Casting the signed MC
@@ -1028,10 +1076,9 @@ resolvePcMaterializedCallTarget(ArrayRef<InternalDecodedInst> Decoded,
 
 /// Collect statically known direct branch and call destinations so an interior
 /// entry point is never swallowed by coalescing.
-std::optional<DirectControlFlowInfo>
-collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
-                           const LLVMState &LS, uint64_t TextAddr,
-                           uint64_t TextSize) {
+std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries) {
   if (!LS.MIA) {
     log() << "hotswap: MC branch analysis is unavailable; adjacent far "
              "trampolines will not be coalesced\n";
@@ -1067,8 +1114,8 @@ collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
         Target = static_cast<uint64_t>(
             DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
       } else {
-        Target =
-            resolvePcMaterializedCallTarget(Decoded, InstIndex, LS, TextAddr);
+        Target = resolvePcMaterializedCallTarget(Decoded, InstIndex, LS,
+                                                 TextAddr, DeclaredEntries);
       }
       if (!Target) {
         log() << "hotswap: unresolved call target at 0x" << utohexstr(DI.Offset)
@@ -1841,8 +1888,13 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     const RewriteConfig &Config, bool &OutRequiredPatchApplied) {
   uint32_t Patched = 0;
   std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS, Elf);
+  std::optional<SmallVector<uint64_t, 16>> DeclaredEntries =
+      collectDeclaredTextEntries(Elf);
+  if (!DeclaredEntries)
+    return std::nullopt;
   std::optional<DirectControlFlowInfo> ControlFlow =
-      collectDirectBranchTargets(Decoded, LS, Elf.textAddr(), Elf.textSize());
+      collectDirectBranchTargets(Decoded, LS, Elf.textAddr(), Elf.textSize(),
+                                 *DeclaredEntries);
   if (!ControlFlow)
     return std::nullopt;
   if (ControlFlow->HasUnresolvedTargets) {
