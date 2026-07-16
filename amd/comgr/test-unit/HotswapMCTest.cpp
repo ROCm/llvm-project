@@ -1592,9 +1592,7 @@ TEST(DecodeCache, RepeatedInstructionsReuseDecodeWithPerOccurrenceOffset) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
-  // With a full getMaxInstLength() window of identical s_nops, the interior
-  // positions share one key: the first stores, the rest hit. Use enough nops
-  // that several positions still have a full (untruncated) window and hit.
+  // A run of identical s_nops so interior positions hit the cache.
   constexpr unsigned Count = 8;
   llvm::SmallVector<uint8_t> Text;
   for (unsigned I = 0; I < Count; ++I)
@@ -1609,8 +1607,7 @@ TEST(DecodeCache, RepeatedInstructionsReuseDecodeWithPerOccurrenceOffset) {
   for (const InternalDecodedInst &DI : Decoded) {
     EXPECT_EQ(DI.Mnemonic, "s_nop");
     EXPECT_EQ(DI.Size, MinInstSize);
-    // Cache hits (all but the first here) must still report a successful
-    // decode; downstream passes gate on DecodeSucceeded.
+    // Cache hits must still report a successful decode.
     EXPECT_TRUE(DI.DecodeSucceeded);
     // Offset is set per occurrence and must never come from the cached entry.
     EXPECT_EQ(DI.Offset, ExpectedOffset);
@@ -1623,9 +1620,8 @@ TEST(DecodeCache, InterleavedDistinctSizesUseCorrectEntries) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
-  // Mix 4-, 8- and 12-byte instructions, repeating some so both the store and
-  // the hit path run, and interleave them so a wrong key would return the
-  // wrong (differently sized) decode.
+  // Mix 4/8/12-byte instructions, repeating some, so a wrong key would return
+  // a differently sized decode.
   const char *Seq[] = {
       "s_nop 0",                                           // 4 bytes
       "v_cvt_pk_fp8_f32 v4, 1.0, 0.5 clamp",               // 8 bytes
@@ -1660,11 +1656,8 @@ TEST(DecodeCache, TruncatedFinalWindowDecodesWithoutStaleHit) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
-  // gfx1250 inspects up to a 16-byte window, so the final 4-byte s_nop below is
-  // keyed on a truncated window. If truncated-tail keys aliased earlier
-  // full-length keys, the last instruction could reuse an oversized decode and
-  // over-run the buffer; instead it must decode as a clean 4-byte s_nop, and
-  // the decoded sizes must sum to exactly the buffer length.
+  // The final s_nop is keyed on a truncated (< getMaxInstLength()) window; it
+  // must decode cleanly rather than aliasing a longer cached entry.
   const unsigned MaxInstLen = S.MAI->getMaxInstLength(S.STI.get());
   ASSERT_GT(MaxInstLen, static_cast<unsigned>(MinInstSize))
       << "test assumes a multi-dword max instruction window";
@@ -1674,8 +1667,6 @@ TEST(DecodeCache, TruncatedFinalWindowDecodesWithoutStaleHit) {
       "s_nop 0",                                           // 4 bytes
       "s_nop 0",                                           // final, truncated
   };
-  // The final s_nop leaves only MinInstSize bytes, which is a truncated window
-  // (guaranteed by the MaxInstLen > MinInstSize assertion above).
   llvm::SmallVector<uint8_t> Text;
   appendInstStream(Text, Seq, S);
 
@@ -1693,6 +1684,6 @@ TEST(DecodeCache, TruncatedFinalWindowDecodesWithoutStaleHit) {
   const InternalDecodedInst &Last = Decoded.back();
   EXPECT_EQ(Last.Mnemonic, "s_nop");
   EXPECT_EQ(Last.Size, MinInstSize);
-  // No over-run: the stream is consumed exactly, tail hit or miss.
+  // Stream consumed exactly (no over-run).
   EXPECT_EQ(Consumed, Text.size());
 }

@@ -448,20 +448,13 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
                        std::vector<InternalDecodedInst> &Decoded) {
   Decoded.reserve(Decoded.size() + TextSize / MinInstSize);
   uint64_t Pos = 0;
-  // Per-call instruction decode cache. Decode is a pure function of the
-  // instruction bytes, so byte-identical instructions (~87% of .text, almost
-  // all intra-object) reuse the first decode instead of re-running the
-  // MCDisassembler decision walk. Position-specific data lives in DI.Offset
-  // (set per occurrence), never in the cached MCInst, so reuse is safe.
-  //
-  // The key is the full window the disassembler may inspect: up to
-  // getMaxInstLength() bytes (16 on gfx1250, which tries 128/96-bit decodes
-  // before 64/32-bit ones), clamped to the bytes remaining in .text. Keying on
-  // fewer bytes than the decoder reads is unsafe: two positions sharing a short
-  // prefix but differing in later bytes can decode differently, so a short key
-  // could return a stale decode. Using a StringMap keyed on the raw window
-  // makes the available length part of the key, so a truncated tail window
-  // (e.g. 4 bytes left) cannot alias a full-length window with the same prefix.
+  // Per-call decode cache: byte-identical instructions reuse the first decode
+  // instead of re-running the disassembler; DI.Offset is set per occurrence, so
+  // reuse is safe. The key is the full window the disassembler may inspect (up
+  // to getMaxInstLength() bytes, clamped to what remains in .text); keying on
+  // fewer bytes is unsafe because two positions sharing a short prefix can
+  // decode differently. A StringMap keys on the raw window, so its length is
+  // part of the key and a truncated tail cannot alias a longer instruction.
   const unsigned MaxInstLen = S.MAI->getMaxInstLength(S.STI.get());
   struct DecodeCacheEntry {
     MCInst Inst;
@@ -482,8 +475,7 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       DI.Size = It->second.Size;
       DI.Inst = It->second.Inst;
       DI.Mnemonic = It->second.Mnemonic;
-      // Only successful decodes are ever stored (see the store guard below), so
-      // a hit is by construction a successful decode.
+      // Only successful decodes are stored, so a hit is always a success.
       DI.DecodeSucceeded = true;
       Pos += DI.Size;
       Decoded.emplace_back(std::move(DI));
@@ -514,11 +506,8 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
         DI.Mnemonic = UnknownMnemonic.str();
       }
     }
-    // Only cache successful decodes whose key window fully covers the decoded
-    // instruction (KeyN >= Size). This holds whenever getMaxInstLength() is an
-    // upper bound on the real instruction size, but the guard keeps the cache
-    // correct even if that bound is ever under-reported: a key shorter than the
-    // instruction could alias a different decode, so such entries are skipped.
+    // Cache only successful decodes whose key window covers the instruction
+    // (Size <= KeyN); a shorter key could alias a different decode.
     if (Status != MCDisassembler::Fail && DI.Size <= KeyN)
       LocalCache.try_emplace(Key,
                              DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic});
