@@ -87,8 +87,10 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineCycleAnalysis.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include <variant>
@@ -2794,17 +2796,33 @@ public:
   }
 };
 
-/// \brief Wave transform machine function pass.
-class AMDGPUWaveTransform : public MachineFunctionPass {
+/// \brief Core wave transform logic.
+class AMDGPUWaveTransform {
+public:
+  AMDGPUWaveTransform(MachineDominatorTree &DomTree,
+                      MachineCycleInfo &CycleInfo)
+      : DomTree(&DomTree), CycleInfo(&CycleInfo) {}
+
+  bool run(MachineFunction &MF);
+
+private:
+  void cleanup(MachineFunction &MF, const AccRegSet &AccumulatorRegs);
+
+  MachineDominatorTree *DomTree = nullptr;
+  MachineCycleInfo *CycleInfo;
+  const SIInstrInfo *TII;
+};
+
+/// \brief Legacy wave transform machine function pass.
+class AMDGPUWaveTransformLegacy : public MachineFunctionPass {
 public:
   static char ID;
 
-public:
-  AMDGPUWaveTransform() : MachineFunctionPass(ID) {
-    initializeAMDGPUWaveTransformPass(*PassRegistry::getPassRegistry());
+  AMDGPUWaveTransformLegacy() : MachineFunctionPass(ID) {
+    initializeAMDGPUWaveTransformLegacyPass(*PassRegistry::getPassRegistry());
   }
 
-  bool runOnMachineFunction(MachineFunction &function) override;
+  bool runOnMachineFunction(MachineFunction &MF) override;
 
   StringRef getPassName() const override {
     return "AMDGPU Control Flow Wave Transform";
@@ -2825,37 +2843,28 @@ public:
 
   MachineFunctionProperties getClearedProperties() const override {
     // New virtual registers will be introduced.
-    return MachineFunctionProperties()
-        .set(MachineFunctionProperties::Property::IsSSA)
-        .set(MachineFunctionProperties::Property::NoVRegs);
+    return MachineFunctionProperties().setIsSSA().setNoVRegs();
   }
-
-private:
-  void cleanup(MachineFunction &MF, const AccRegSet &AccumulatorRegs);
-
-  MachineDominatorTree *DomTree = nullptr;
-  // MachineConvergenceInfo ConvergenceInfo;
-  MachineCycleInfo *CycleInfo;
-  const SIInstrInfo *TII;
 };
 
 } // End anonymous namespace.
 
-INITIALIZE_PASS_BEGIN(AMDGPUWaveTransform, DEBUG_TYPE, "AMDGPU Wave Transformnsform", false,
-                      false)
+INITIALIZE_PASS_BEGIN(AMDGPUWaveTransformLegacy, DEBUG_TYPE,
+                      "AMDGPU Wave Transform", false, false)
 INITIALIZE_PASS_DEPENDENCY(MachineCycleInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(MachineDominatorTreeWrapperPass)
-INITIALIZE_PASS_END(AMDGPUWaveTransform, DEBUG_TYPE, "AMDGPU Wave Transformnsform", false,
-                    false)
+INITIALIZE_PASS_END(AMDGPUWaveTransformLegacy, DEBUG_TYPE,
+                    "AMDGPU Wave Transform", false, false)
 
-char AMDGPUWaveTransform::ID = 0;
+char AMDGPUWaveTransformLegacy::ID = 0;
+char &llvm::AMDGPUWaveTransformID = AMDGPUWaveTransformLegacy::ID;
 
 FunctionPass *llvm::createAMDGPUWaveTransformPass() {
-  return new AMDGPUWaveTransform();
+  return new AMDGPUWaveTransformLegacy();
 }
 
 /// \brief Run the wave transform.
-bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
+bool AMDGPUWaveTransform::run(MachineFunction &MF) {
   SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
   if (MF.size() <= 1) {
     // Skip this pass for MFs without control flow; set WaveCFG property first.
@@ -2863,11 +2872,7 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
     return false;
   }
 
-  DomTree = &getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
   TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
-
-  // ConvergenceInfo = computeMachineConvergenceInfo(MF, *DomTree);
-  CycleInfo = &getAnalysis<MachineCycleInfoWrapperPass>().getCycleInfo();
 
   // Step 1: Compute reconverging Wave CFG
   ReconvergeCFGHelper ReconvergeHelper(*CycleInfo, *DomTree);
@@ -3130,4 +3135,29 @@ void AMDGPUWaveTransform::cleanup(MachineFunction &MF,
       ++NumCleanupInstrsRemoved;
     }
   }
+}
+
+bool AMDGPUWaveTransformLegacy::runOnMachineFunction(MachineFunction &MF) {
+  MachineDominatorTree &DomTree =
+      getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
+  MachineCycleInfo &CycleInfo =
+      getAnalysis<MachineCycleInfoWrapperPass>().getCycleInfo();
+  return AMDGPUWaveTransform(DomTree, CycleInfo).run(MF);
+}
+
+PreservedAnalyses
+llvm::AMDGPUWaveTransformPass::run(MachineFunction &MF,
+                                   MachineFunctionAnalysisManager &MFAM) {
+  MFPropsModifier _(*this, MF);
+
+  MachineDominatorTree &DomTree =
+      MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
+  MachineCycleInfo &CycleInfo = MFAM.getResult<MachineCycleAnalysis>(MF);
+
+  if (!AMDGPUWaveTransform(DomTree, CycleInfo).run(MF))
+    return PreservedAnalyses::all();
+
+  auto PA = getMachineFunctionPassPreservedAnalyses();
+  PA.preserve<MachineDominatorTreeAnalysis>();
+  return PA;
 }
