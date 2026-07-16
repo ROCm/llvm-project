@@ -800,6 +800,36 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
 
+  // ds_add_u32 / ds_add_rtn_u32: LDS 32-bit integer atomic add. `_RTN`
+  // publishes the pre-add value to a dst VGPR (Di.NumDefs > 0); non-RTN
+  // discards it. Mirrors DS_ADD_F64 with an integer add.
+  if (Sop == CanonicalOp::DS_ADD_U32) {
+    assert(((Di.TsFlags & SIInstrFlags::IsAtomicRet) != 0) ==
+               (Di.NumDefs > 0) &&
+           "ds_add_u32: IsAtomicRet disagrees with numDefs");
+    Value *Addr = Ctx.B.CreateZExt(Op.src(0), Ctx.I64Ty, "ds_addr");
+    for (unsigned K = 1; K < Op.nSrcs(); K++) {
+      if (Di.isImm(Op.srcIdx(K))) {
+        int64_t Imm = Di.getImm(Op.srcIdx(K));
+        if (Imm != 0)
+          Addr =
+              Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm), "ds_off");
+        break;
+      }
+    }
+    Value *Ptr = Ctx.B.CreateIntToPtr(Addr, PointerType::get(Ctx.C, 3));
+    Value *Data = Op.src(1);
+    Ctx.emitUnderExec([&] {
+      auto *Rmw =
+          Ctx.B.CreateAtomicRMW(AtomicRMWInst::Add, Ptr, Data, MaybeAlign(),
+                                AtomicOrdering::SequentiallyConsistent);
+      if (Di.NumDefs > 0)
+        Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Rmw);
+    });
+    Hr.Handled = true;
+    return Hr;
+  }
+
   if (Sop == CanonicalOp::DS_BPERMUTE_B32) {
     // Backwards permute: per-lane GATHER. Each lane reads the `src1`
     // value from a *source* lane whose index is `src0 >> 2` (the

@@ -588,6 +588,8 @@ static const Entry kCanonTable[] = {
     // LLVM's no-carry 32-bit add/sub pseudos are just `V_ADD_U32` etc.; the
     // carry-in-carry-out form is the older `V_ADDC_U32`/`V_SUBB_U32` family.
     E(V_ADD_U32_e64, V_ADD_NC_U32),
+    E(V_BCNT_U32_B32_e64, V_BCNT_U32_B32),
+    E(V_BCNT_U32_B32_e32, V_BCNT_U32_B32),
     E(V_SUB_U32_e64, V_SUB_NC_U32),
     E(V_SUBREV_U32_e64, V_SUBREV_NC_U32),
     // GFX9 VOP3-only signed add/sub (saddsat/ssubsat when clamp is set,
@@ -1284,6 +1286,8 @@ static const Entry kCanonTable[] = {
     // trailing-suffix strip rule doesn't fire; alias it explicitly.
     E(DS_ADD_F64, DS_ADD_F64),
     E(DS_ADD_RTN_F64, DS_ADD_F64),
+    E(DS_ADD_U32, DS_ADD_U32),
+    E(DS_ADD_RTN_U32, DS_ADD_U32),
 
     // ---------------------------------------------------------------------
     // MUBUF direct-to-LDS loads (distinct semantics from VGPR-dest loads)

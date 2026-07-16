@@ -633,6 +633,15 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  // v_bcnt_u32_b32 dst, src0, src1: dst = popcount(src0) + src1.
+  if (Sop == CanonicalOp::V_BCNT_U32_B32) {
+    Function *Ctpop = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::ctpop, {Ctx.I32Ty});
+    Value *Pop = Ctx.B.CreateCall(Ctpop, {Op.src(0)}, "vbcnt");
+    Ctx.writeReg32(Op.dst(), Ctx.B.CreateAdd(Pop, Op.src(1), "vbcnt_add"));
+    Hr.Handled = true;
+    return Hr;
+  }
   // GFX9 VOP3-only v_add_i32 / v_sub_i32: plain add/sub when clamp=0,
   // signed saturation (saddsat/ssubsat) when clamp=1.
   if (Sop == CanonicalOp::V_ADD_I32 || Sop == CanonicalOp::V_SUB_I32) {

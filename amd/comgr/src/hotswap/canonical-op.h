@@ -656,6 +656,7 @@ enum class CanonicalOp : uint16_t {
   V_FMAMK_F32,
   V_FMAAK_F32,
   V_ADD_NC_U32,
+  V_BCNT_U32_B32,
   V_SUB_NC_U32,
   V_SUBREV_NC_U32,
   V_ADD_CO_U32,
@@ -1365,6 +1366,7 @@ enum class CanonicalOp : uint16_t {
 
   // -- DS atomics --
   DS_ADD_F64,
+  DS_ADD_U32,
 
   // -- MUBUF --
   BUFFER_LOAD_DWORD,
