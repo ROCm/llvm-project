@@ -1461,13 +1461,15 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       Sop == CanonicalOp::FLAT_STORE_DWORDX3 ||
       Sop == CanonicalOp::FLAT_STORE_DWORDX4 ||
       Sop == CanonicalOp::FLAT_STORE_BYTE ||
+      Sop == CanonicalOp::FLAT_STORE_BYTE_D16_HI ||
       Sop == CanonicalOp::FLAT_STORE_SHORT ||
       Sop == CanonicalOp::FLAT_STORE_SHORT_D16_HI) {
     int StoreDwords = 1;
     int StoreBits = 32;
-    // `FLAT_STORE_SHORT_D16_HI` stores bits [31:16] of the source
-    // VGPR, not [15:0] -- same half-register selector as
-    // `GLOBAL_STORE_SHORT_D16_HI` above; see the comment block on
+    // `FLAT_STORE_{SHORT,BYTE}_D16_HI` store the high half of the source
+    // VGPR (bits [31:16] for the short form, bits [23:16] for the byte
+    // form) rather than the low bits -- same half-register selector as
+    // `GLOBAL_STORE_{SHORT,BYTE}_D16_HI` above; see the comment block on
     // the GLOBAL_STORE_ branch for the full rationale (bf16 RNE
     // epilogue, pre-fix miscompile shape, etc.).
     bool StoreHiHalf = false;
@@ -1484,9 +1486,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       StoreBits = 16;
       StoreDwords = 0;
       StoreHiHalf = (Sop == CanonicalOp::FLAT_STORE_SHORT_D16_HI);
-    } else if (Sop == CanonicalOp::FLAT_STORE_BYTE) {
+    } else if (Sop == CanonicalOp::FLAT_STORE_BYTE ||
+               Sop == CanonicalOp::FLAT_STORE_BYTE_D16_HI) {
       StoreBits = 8;
       StoreDwords = 0;
+      StoreHiHalf = (Sop == CanonicalOp::FLAT_STORE_BYTE_D16_HI);
     }
 
     // Two operand-shape variants with distinct AS semantics; mirror
@@ -1531,11 +1535,15 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       // See emitD16HiHalfTruncI16's doc block for the shared-helper
       // rationale; this branch mirrors the GLOBAL_STORE path above
       // so both FLAT and GLOBAL `_D16_HI` variants graduate through
-      // the same emission shape.
-      Value *Val =
-          StoreHiHalf
-              ? emitD16HiHalfTruncI16(Ctx, Src32)
-              : Ctx.B.CreateTrunc(Src32, Type::getIntNTy(Ctx.C, StoreBits));
+      // the same emission shape. The b8 hi form surfaces bits [23:16]
+      // (the low byte of the high half); the b16 hi form bits [31:16].
+      Value *Val;
+      if (StoreHiHalf) {
+        Val = (StoreBits == 8) ? emitD16HiHalfTruncI8(Ctx, Src32)
+                               : emitD16HiHalfTruncI16(Ctx, Src32);
+      } else {
+        Val = Ctx.B.CreateTrunc(Src32, Type::getIntNTy(Ctx.C, StoreBits));
+      }
       Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Val, Addr); });
     } else if (StoreDwords == 1) {
       Value *Val = Ctx.Regs.readReg32(Ctx.B, StData);
