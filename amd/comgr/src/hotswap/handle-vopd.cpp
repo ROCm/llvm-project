@@ -438,9 +438,19 @@ Error lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[0], 0), Ctx.F32Ty);
     Value *S1 =
         Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[1], 1), Ctx.F32Ty);
-    // MADK VOPD encodings have only src0/vsrc1 register fields; the mandatory
-    // literal occupies a logical source slot but not a VGPR-MSB slot.
-    unsigned S2Slot = Half.CanonOp == CanonicalOp::V_FMAMK_F32 ? 1 : 2;
+    // MADK VOPD forms carry a mandatory 32-bit literal that consumes a logical
+    // source slot but no VGPR-MSB bank slot. Each register operand's bank still
+    // follows its *operand index* in LLVM's VOPD operand tables, not a
+    // compacted "register count":
+    //   V_DUAL_FMAMK_F32 (VOPDFMAMKOpsX): (src0 @0, literalK @1, vsrc1 @2)
+    //       -> Src[2] is vsrc1, so its bank comes from slot 2 (bits [5:4]).
+    //   V_DUAL_FMAAK_F32 (VOPDFMAAKOpsX): (src0 @0, vsrc1 @1, literalK @2)
+    //       -> Src[2] is the literal (Kind::Imm); the slot is inert for it.
+    // The third parsed source therefore reads slot 2 in both forms. Reading it
+    // from slot 1 for FMAMK aliased vsrc1 to the wrong physical VGPR whenever
+    // the active s_set_vgpr_msb set differing bank bits in slots 1 vs 2 -- a
+    // silent wrong-register miscompile (issue #153).
+    unsigned S2Slot = 2;
     Value *S2 = Ctx.B.CreateBitCast(readVopdSource(Ctx, Half.Src[2], S2Slot),
                                     Ctx.F32Ty);
     Function *Fma =
