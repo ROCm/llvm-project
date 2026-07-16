@@ -244,14 +244,14 @@ Error driftCheckSrcN(DecodedInst &Di, const MCInstrDesc &Desc) {
   // v_movreld_b32 / v_movrelsd_b32 are the "no true destination" VOP1 forms:
   // their profile sets HasDst=0 and hacks $vdst into the *inputs* at MC operand
   // 0 (see VOP_MOVREL in VOP1Instructions.td), so the positional source walk
-  // records SrcMap[0] = that vdst-as-source while OpName::src0 lives at index 1.
-  // That is a legitimate layout, not decoder drift -- like MADMK -- so skip the
-  // strict srcN-position check at k=0 for it. Detect it structurally from the
-  // operand tables (vdst present at operand 0 with zero declared defs) rather
-  // than by mnemonic string. Note there is no MC-level TIED_TO here: the tied
-  // vdst_in described in the ISA is added later by the custom inserter, not in
-  // the MCInstrDesc we see at decode time. v_movrels_b32 has a genuine def, so
-  // its walk matches OpName::src0 naturally and needs no exception. The
+  // records SrcMap[0] = that vdst-as-source while OpName::src0 lives at
+  // index 1. That is a legitimate layout, not decoder drift -- like MADMK -- so
+  // skip the strict srcN-position check at k=0 for it. Detect it structurally
+  // from the operand tables (vdst present at operand 0 with zero declared defs)
+  // rather than by mnemonic string. Note there is no MC-level TIED_TO here: the
+  // tied vdst_in described in the ISA is added later by the custom inserter,
+  // not in the MCInstrDesc we see at decode time. v_movrels_b32 has a genuine
+  // def, so its walk matches OpName::src0 naturally and needs no exception. The
   // v_movrel* handler reads vdst/vsrc by named operand index (not SrcMap[0]),
   // so it does not depend on the layout skipped here; a data-dependent M0 has
   // no statically-known index and fails gracefully downstream (stubbed under

@@ -1073,7 +1073,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       // Decode from Addr up to the end of whichever region it belongs to: its
       // own already-known region if in-extent, otherwise the callee function
       // extent that contains it.
-      std::optional<std::pair<uint64_t, uint64_t>> Region = RegionContaining(Addr);
+      std::optional<std::pair<uint64_t, uint64_t>> Region =
+          RegionContaining(Addr);
       bool NewCallee = false;
       if (!Region) {
         Region = FunctionExtentContaining(Addr);
@@ -1085,10 +1086,9 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
             "s_set_pc_i64 analysis discovered a target outside the selected "
             "kernel extent and any known function symbol");
       }
-      Expected<DecodeResult> HelperDecodedOrErr =
-          decodeKernel(Mc, OpcMap,
-                       ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
-                       Addr, Region->second, Region->first);
+      Expected<DecodeResult> HelperDecodedOrErr = decodeKernel(
+          Mc, OpcMap, ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
+          Addr, Region->second, Region->first);
       if (!HelperDecodedOrErr)
         return HelperDecodedOrErr.takeError();
       DecodeResult HelperDecoded = std::move(*HelperDecodedOrErr);
@@ -2509,12 +2509,12 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           bool EnableWaveNative, bool AssumeHipGlobalOffsetZero,
           llvm::ArrayRef<KernelSymbolExtent> FunctionExtents,
           RaiseStats *Stats) {
-  return raiseToIRImpl(
-      TextBytes, SourceIsa, KernelName, Meta, KernelOffset, KernelSize,
-      CompilationTargetIsa, EnableWritelaneRewrite, EnableWaveNative,
-      /*forceThreadLoopProjection=*/false,
-      /*suppressC5ForThreadLoopRoute=*/false, AssumeHipGlobalOffsetZero,
-      FunctionExtents, Stats);
+  return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta, KernelOffset,
+                       KernelSize, CompilationTargetIsa, EnableWritelaneRewrite,
+                       EnableWaveNative,
+                       /*forceThreadLoopProjection=*/false,
+                       /*suppressC5ForThreadLoopRoute=*/false,
+                       AssumeHipGlobalOffsetZero, FunctionExtents, Stats);
 }
 
 } // namespace COMGR::hotswap

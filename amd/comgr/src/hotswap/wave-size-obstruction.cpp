@@ -512,8 +512,8 @@ findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
           // L+W_s but offers no target-width saveexec projection: one
           // source-width mask cannot represent both waves' EXEC independently.
           Sites.push_back(
-              {&Di, ObstructionKind::SaveExecFromLaneId,
-               RewriteId::None, /*RewriteImplemented=*/false,
+              {&Di, ObstructionKind::SaveExecFromLaneId, RewriteId::None,
+               /*RewriteImplemented=*/false,
                "s_*_saveexec_b32 source mask dataflow is derived from "
                "v_mbcnt_*; the selected projection aliases target lanes L and "
                "L+W_s through one source-width EXEC mask, so no independent "

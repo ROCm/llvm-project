@@ -477,7 +477,8 @@ listTextFunctionExtents(llvm::MemoryBufferRef ElfData) {
       return TypeOrErr.takeError();
     if (*TypeOrErr != llvm::object::SymbolRef::ST_Function)
       continue;
-    llvm::Expected<llvm::object::section_iterator> SecItOrErr = Sym.getSection();
+    llvm::Expected<llvm::object::section_iterator> SecItOrErr =
+        Sym.getSection();
     if (!SecItOrErr)
       return SecItOrErr.takeError();
     if (*SecItOrErr == (*ObjOrErr)->section_end() || **SecItOrErr != *TextSec)
@@ -490,8 +491,9 @@ listTextFunctionExtents(llvm::MemoryBufferRef ElfData) {
     Funcs.push_back({*AddrOrErr, llvm::object::ELFSymbolRef(Sym).getSize()});
   }
 
-  llvm::sort(Funcs,
-             [](const FuncSym &A, const FuncSym &B) { return A.Addr < B.Addr; });
+  llvm::sort(Funcs, [](const FuncSym &A, const FuncSym &B) {
+    return A.Addr < B.Addr;
+  });
 
   llvm::SmallVector<KernelSymbolExtent> Extents;
   Extents.reserve(Funcs.size());
@@ -500,9 +502,10 @@ listTextFunctionExtents(llvm::MemoryBufferRef ElfData) {
     if (Size == 0) {
       // No recorded size: bound the symbol by the next one with a strictly
       // greater address (Funcs is sorted ascending), or the end of .text.
-      const FuncSym *Next = llvm::upper_bound(
-          Funcs, F.Addr,
-          [](uint64_t Addr, const FuncSym &S) { return Addr < S.Addr; });
+      const FuncSym *Next =
+          llvm::upper_bound(Funcs, F.Addr, [](uint64_t Addr, const FuncSym &S) {
+            return Addr < S.Addr;
+          });
       uint64_t NextAddr = Next == Funcs.end() ? TextEnd : Next->Addr;
       Size = NextAddr - F.Addr;
     }

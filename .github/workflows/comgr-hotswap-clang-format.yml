@@ -15,7 +15,6 @@ on:
 
 jobs:
   hotswap-clang-format:
-    # Only run on forks; the wider LLVM tree is not clang-format clean.
     if: github.repository != 'llvm/llvm-project'
     runs-on: ubuntu-latest
     container:
@@ -27,16 +26,12 @@ jobs:
       - name: Fetch sources
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          # Fetch the merge commit and its parents so the PR base commit is
-          # available for git-clang-format.
           fetch-depth: 2
           set-safe-directory: true
 
       - name: Check formatting of changed hotswap files
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          git-clang-format "$BASE_SHA" -- amd/comgr/src/hotswap
+          git-clang-format HEAD~1 -- amd/comgr/src/hotswap
           if ! git diff --quiet; then
             echo "::group::clang-format diff"
             git --no-pager diff
@@ -44,3 +39,8 @@ jobs:
             echo "::error::clang-format found formatting issues in amd/comgr/src/hotswap. Apply the diff above (or run clang-format on your changed files)."
             exit 1
           fi
+
+      - name: Check formatting of all hotswap files
+        if: github.event_name == 'push'
+        run: |
+          find amd/comgr/src/hotswap \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 clang-format -i

@@ -1712,7 +1712,8 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
 
     Function *Fn = Intrinsic::getOrInsertDeclaration(
         &Ctx.M, Intrinsic::amdgcn_div_fixup, {Ctx.F16Ty});
-    Value *R = Ctx.B.CreateCall(Fn, {Srcs[0], Srcs[1], Srcs[2]}, "divfixup_f16");
+    Value *R =
+        Ctx.B.CreateCall(Fn, {Srcs[0], Srcs[1], Srcs[2]}, "divfixup_f16");
     writeOpSelF16(Ctx, Op, R, DstHigh);
     Hr.Handled = true;
     return Hr;
