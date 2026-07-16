@@ -76,9 +76,8 @@ public:
     D.MaxTime = std::max(D.MaxTime, TimeTaken);
   }
 
-  // Fold many pre-aggregated rows in under a single lock (one acquisition per
-  // caller, not per row) so hot-path producers can accumulate lock-free and
-  // merge once.
+  // Fold many pre-aggregated rows in under a single lock so hot-path producers
+  // can accumulate lock-free and merge once.
   void mergeStats(llvm::ArrayRef<PerfStatRecord> Records) {
     std::scoped_lock Lock(Mtx);
     for (const PerfStatRecord &R : Records) {

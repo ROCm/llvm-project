@@ -106,29 +106,17 @@ inline std::optional<uint64_t> checkedSubUint64(uint64_t LHS, uint64_t RHS,
 
 // -- HotSwap rewrite profiling -----------------------------------------------
 //
-// Opt-in at run time only: it reports when Comgr time statistics are enabled
-// (AMD_COMGR_TIME_STATISTICS). A disabled session is a single branch per hook
-// and never reads the clock or takes a lock -- the same "only a branch when
-// disabled" cost as the rest of Comgr's TimeStatistics, so no compile-time gate
-// is needed.
+// Opt-in via AMD_COMGR_TIME_STATISTICS. When disabled each hook is a single
+// branch -- no clock read, no lock -- so no compile-time gate is needed.
 //
-// Design (see review on ROCm/llvm-project#3364 and #3388): a single
-// retargetCodeObject call is single-threaded internally, but many calls run
-// concurrently on different threads. So each call owns a stack-local
-// HotswapProfile whose counters live in a fixed-size array indexed by
-// HotswapMetric -- the hot path records with no lock and no string lookup. When
-// the rewrite finishes, the session merges its array once (the only lock, taken
-// once per code object) into Comgr's built-in profiler, TimeStatistics, which
-// dumps the aggregated stats at process exit. We reuse TimeStatistics rather
-// than a bespoke aggregator (per review feedback); the only addition there is a
-// mutex + a batch-merge entry point + a few extra columns.
+// retargetCodeObject is single-threaded per call but runs concurrently across
+// threads, so each call owns a stack-local HotswapProfile that records into a
+// fixed array indexed by HotswapMetric (no lock, no string lookup on the hot
+// path) and merges once into Comgr's TimeStatistics when the rewrite finishes.
 //
-// Row families (names carry one level of parent/child hierarchy via '/'):
-//   phase:*  coarse pipeline stages in retargetCodeObject. The timed stages
-//            plus phase:unaccounted partition phase:rewrite_total.
-//   strat:*  the B0-to-A0 patch strategies, with per-rule children
-//            (e.g. strat:trampoline/ds_2addr).
-//   jump:*   trampoline placement outcomes; the "calls" column is the count.
+// Row names encode one parent/child level via '/': phase:* pipeline stages
+// (timed stages + phase:unaccounted partition phase:rewrite_total), strat:*
+// patch strategies with per-rule children, and jump:* placement outcomes.
 
 /// Identity of a profiled bucket. Used as an array index so the hot path
 /// records without hashing a string. The enumerator order MUST match the
@@ -248,9 +236,7 @@ inline constexpr HotswapMetricInfo hotswapMetricInfo[HotswapMetricCount] = {
     {"jump:declined_far", HotswapMetric::Count, false},
 };
 
-/// True when the hotswap profiler is compiled in and Comgr time statistics are
-/// enabled at runtime (AMD_COMGR_TIME_STATISTICS). Hotswap timings are reported
-/// through Comgr's built-in profiler (TimeStatistics), not a bespoke sink.
+/// True when hotswap timings should be recorded (AMD_COMGR_TIME_STATISTICS).
 inline bool hotswapProfilingEnabled() { return env::needTimeStatistics(); }
 
 /// Per-rewrite profiling session. Lives on the retargetCodeObject stack and is
@@ -304,10 +290,8 @@ public:
       Samples[static_cast<size_t>(Metric)].Calls += N;
   }
 
-  /// Accumulate a pre-measured interval as one call. Used by the
-  /// per-instruction pass loop, which sums locally across the stream and
-  /// flushes one row per rewrite (so a strat:* parent's "calls" stays one per
-  /// code object).
+  /// Accumulate a pre-measured interval as one call. The pass loop sums locally
+  /// and calls this once per rewrite, so a strat:* parent's "calls" stays one.
   void add(HotswapMetric Metric, uint64_t Nanos, uint64_t Patches) {
     if (!Enabled)
       return;
@@ -341,9 +325,8 @@ private:
         Samples[static_cast<size_t>(HotswapMetric::Unaccounted)];
     Unacc.Nanos = Total.Nanos > PhaseSum ? Total.Nanos - PhaseSum : 0;
     Unacc.Calls = Total.Calls;
-    // This rewrite contributes one unaccounted sample, so set min == max == its
-    // residual; otherwise the record loop below would emit min/max of 0 for a
-    // nonzero row and skew the merged min/max across rewrites.
+    // One unaccounted sample per rewrite: min == max == residual so the merged
+    // min/max across rewrites stays correct.
     Unacc.MinNanos = Unacc.MaxNanos = Unacc.Nanos;
 
     const double UnitsPerNs = env::getGranularityUnitsPerSecond() / 1.0e9;

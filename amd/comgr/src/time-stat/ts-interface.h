@@ -30,9 +30,8 @@ private:
   bool isFinished = false;
 };
 
-// A pre-aggregated statistics row produced elsewhere (e.g. a lock-free
-// per-caller session) and folded into the shared PerfStats in one shot. Lets a
-// producer accumulate locally on a hot path and pay the global lock only once.
+// A pre-aggregated statistics row folded into the shared PerfStats in one shot,
+// so a producer can accumulate locally and pay the global lock only once.
 struct PerfStatRecord {
   llvm::StringRef Name;
   double TimeTaken = 0.0; // already in the configured granularity units

@@ -1423,10 +1423,8 @@ std::optional<std::vector<std::string>> expandDs2Addr(const MCInst &Inst,
 static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
-  // Per-rule sub-buckets nested under the "strat:trampoline" parent total
-  // (which the dispatcher in comgr-hotswap-b0a0.cpp records). Timed only at
-  // matching sites into the per-rewrite session, so there is no locking on the
-  // hot path and no cost scanning non-matching instructions.
+  // Per-rule sub-buckets under the "strat:trampoline" parent (recorded by the
+  // dispatcher in comgr-hotswap-b0a0.cpp); timed only at matching sites.
   if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty()) {
     HotswapProfile::Scope S =
         Ctx.Profile.time(HotswapMetric::TrampolineDs2Addr);

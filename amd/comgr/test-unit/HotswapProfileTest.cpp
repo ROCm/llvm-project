@@ -20,14 +20,12 @@
 
 using namespace COMGR::hotswap;
 
-// Runtime gate: with AMD_COMGR_TIME_STATISTICS unset, the session must report
-// disabled so no hot-path clock read happens.
+// Runtime gate: with AMD_COMGR_TIME_STATISTICS unset, the session is disabled.
 TEST(HotswapProfile, ProfilingDisabledByDefault) {
   EXPECT_FALSE(hotswapProfilingEnabled());
 }
 
-// A disabled session is fully inert: every hook is a no-op and nothing lands in
-// the local samples (runtime-off mode).
+// A disabled session is inert: every hook is a no-op, nothing lands in samples.
 TEST(HotswapProfile, DisabledSessionRecordsNothing) {
   HotswapProfile Profile(/*Enabled=*/false);
   EXPECT_FALSE(Profile.enabled());
@@ -85,8 +83,7 @@ TEST(HotswapProfile, ScopeRecordsOnceOnDestruction) {
   EXPECT_EQ(S.Patches, 1u);
 }
 
-// finish() is idempotent: an explicit finish() followed by destruction records
-// a single call, not two.
+// finish() is idempotent: explicit finish() then destruction records one call.
 TEST(HotswapProfile, ScopeFinishIsIdempotent) {
   HotswapProfile Profile(/*Enabled=*/true);
   {
@@ -110,9 +107,7 @@ TEST(HotswapProfile, DisabledScopeRecordsNothing) {
   EXPECT_EQ(Profile.sample(HotswapMetric::Trampoline).Calls, 0u);
 }
 
-// The static label/parent/partition table must stay in lockstep with the enum:
-// every row has a label, every child points at a valid top-level parent, and
-// the phases that partition rewrite_total exist while total/unaccounted do not.
+// The label/parent/partition table must stay in lockstep with the enum.
 TEST(HotswapProfile, MetricInfoTableWellFormed) {
   size_t PartitionCount = 0;
   for (size_t I = 0; I < HotswapMetricCount; ++I) {

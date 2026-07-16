@@ -47,10 +47,8 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
-// HotSwap rewrite profiling (always compiled, reported at runtime through Comgr
-// TimeStatistics / AMD_COMGR_TIME_STATISTICS) lives in
-// comgr-hotswap-internal.h so the sibling comgr-hotswap-patch-*.cpp TUs can
-// record per-rule timings into the same per-rewrite session.
+// HotSwap rewrite profiling lives in comgr-hotswap-internal.h so the sibling
+// comgr-hotswap-patch-*.cpp TUs can record into the same per-rewrite session.
 
 // -- GFX1250 B0-to-A0 constants -----------------------------------------------
 //
@@ -404,8 +402,7 @@ truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
     std::memcpy(Ctx.Text + InstOffset + I, LS.SNopBytes.data(), MinInstSize);
 
   Sled.WritePos += Replacement.size() + MinInstSize;
-  // Count-only row: patch placed in-line via a nearby NOP sled with a short
-  // s_branch to/from it (no appended trampoline needed).
+  // Count-only row: patch placed in-line via a nearby NOP sled, no trampoline.
   Ctx.Profile.count(HotswapMetric::JumpNopSled);
   return true;
 }
@@ -2221,11 +2218,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
   // against on these and we must not invoke the patch passes for them.
   constexpr StringLiteral UnknownMnemonic = "<unknown>";
   using PerInstPatchFn = uint32_t (*)(PatchContext &, size_t);
-  // One per-instruction pass: its dispatch function, the profiler bucket it
-  // reports under, and the locally-summed time/patches. Summing lives on the
-  // pass (not in a parallel array) so there is no index drift, and it is
-  // flushed once to the session after the loop -- no locking on the hot path,
-  // and the parent row's "calls" stays one per code object.
+  // A pass plus its metric; time/patches are summed locally and flushed once
+  // after the loop (see HotswapProfile::add).
   struct TimedPass {
     PerInstPatchFn Fn;
     HotswapMetric Metric;
@@ -2615,14 +2609,11 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     return AMD_COMGR_STATUS_SUCCESS;
   }
 
-  // One profiling session per code object. The whole rewrite is timed via RAII
-  // (phase:rewrite_total records on every return path); the session merges into
-  // the process-wide aggregator once, when it goes out of scope. Prof gates the
-  // manual per-phase clock reads so the disabled path never touches the clock.
+  // One profiling session per code object, merged into TimeStatistics when it
+  // goes out of scope. Prof gates the manual per-phase clock reads.
   HotswapProfile Profile(hotswapProfilingEnabled());
   const bool Prof = Profile.enabled();
-  // RAII: records phase:rewrite_total on every return path. maybe_unused since
-  // the stub Scope (profiling compiled out) has no observable use.
+  // RAII guard: records phase:rewrite_total on every return path.
   [[maybe_unused]] HotswapProfile::Scope TotalScope =
       Profile.time(HotswapMetric::RewriteTotal);
 

@@ -63,10 +63,8 @@ void getLogFile(std::string &PerfLog) {
 }
 
 bool InitTimeStatistics(std::string LogFile) {
-  // Thread-safe lazy init: concurrent Comgr calls (e.g. concurrent hotswap
-  // rewrites merging their stats) can reach this simultaneously. call_once
-  // guarantees PS is created and the atexit dump registered exactly once,
-  // instead of the previous unguarded `if (!PS)` check racing on both.
+  // Thread-safe lazy init: call_once creates PS and registers the atexit dump
+  // exactly once, even if concurrent Comgr calls reach here simultaneously.
   static std::once_flag InitFlag;
   std::call_once(InitFlag, [&LogFile]() {
     if (!env::needTimeStatistics())
