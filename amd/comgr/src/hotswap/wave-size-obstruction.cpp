@@ -49,42 +49,42 @@ const char *obstructionKindName(ObstructionKind K) {
   case ObstructionKind::None:
     return "None";
   case ObstructionKind::MbcntHiLaneIdLeak:
-    return "MbcntHiLaneIdLeak (\u00a73 Class 1: absolute lane-ID leak via "
+    return "MbcntHiLaneIdLeak (sec. 3 Class 1: absolute lane-ID leak via "
            "v_mbcnt_hi)";
   case ObstructionKind::OutOfRangeLaneOperand:
-    return "OutOfRangeLaneOperand (\u00a73 Class 1: readlane/writelane operand "
+    return "OutOfRangeLaneOperand (sec. 3 Class 1: readlane/writelane operand "
            ">= W_s)";
   case ObstructionKind::TtmpWaveIdLeak:
-    return "TtmpWaveIdLeak (\u00a73 Class 1: source read of ttmp8 under "
+    return "TtmpWaveIdLeak (sec. 3 Class 1: source read of ttmp8 under "
            "cross-widening -- wave_id_in_wg field)";
   case ObstructionKind::WaveIdLiftScalarized:
-    return "WaveIdLiftScalarized (\u00a73 Class 1: canonical wave_id BFE lift "
+    return "WaveIdLiftScalarized (sec. 3 Class 1: canonical wave_id BFE lift "
            "+ v_writelane/v_readlane + WMMA -- cross-lane primitive scalarises "
            "the divergent lift, collapsing per-source-wave distinction)";
   case ObstructionKind::WorkitemIdPredicateChain:
     // see hotswap/docs/modrep-predicate-chain.md sec. 5 (narrow-O1 classifier)
-    return "WorkitemIdPredicateChain (\u00a73 Class 5: workitem.id.x() feeds a "
-           "lane-position-scoped icmp against compile-time constant K \u2264 "
-           "W_s-1, gating a side effect \u2014 wave-size-sensitive predicate "
+    return "WorkitemIdPredicateChain (sec. 3 Class 5: workitem.id.x() feeds a "
+           "lane-position-scoped icmp against compile-time constant K <= "
+           "W_s-1, gating a side effect -- wave-size-sensitive predicate "
            "chain under modulo-replication)";
   case ObstructionKind::FullWaveRotate:
-    return "FullWaveRotate (\u00a73 Class 2: unrewritable v_permlane64)";
+    return "FullWaveRotate (sec. 3 Class 2: unrewritable v_permlane64)";
   case ObstructionKind::LaneGroupShuffle:
-    return "LaneGroupShuffle (\u00a73 Class 2: permlane16 / permlanex16 / "
+    return "LaneGroupShuffle (sec. 3 Class 2: permlane16 / permlanex16 / "
            "permlane*_swap)";
   case ObstructionKind::DsSwizzle:
-    return "DsSwizzle (\u00a73 Class 2: ds_swizzle_b32)";
+    return "DsSwizzle (sec. 3 Class 2: ds_swizzle_b32)";
   case ObstructionKind::DppCrossLane:
-    return "DppCrossLane (\u00a73 Class 2: DPP modifier)";
+    return "DppCrossLane (sec. 3 Class 2: DPP modifier)";
   case ObstructionKind::DsBpermuteGather:
-    return "DsBpermuteGather (\u00a73 Class 2: ds_bpermute_b32)";
+    return "DsBpermuteGather (sec. 3 Class 2: ds_bpermute_b32)";
   case ObstructionKind::NonCommutativeAtomic:
-    return "NonCommutativeAtomic (\u00a73 Class 3: cmpswap/swap/xchg, replica "
+    return "NonCommutativeAtomic (sec. 3 Class 3: cmpswap/swap/xchg, replica "
            "race)";
   case ObstructionKind::CmpxFromLaneId:
-    return "CmpxFromLaneId (\u00a73 Class 4: lane-predicated v_cmpx)";
+    return "CmpxFromLaneId (sec. 3 Class 4: lane-predicated v_cmpx)";
   case ObstructionKind::SaveExecFromLaneId:
-    return "SaveExecFromLaneId (\u00a73 Class 4: lane-predicated "
+    return "SaveExecFromLaneId (sec. 3 Class 4: lane-predicated "
            "s_*_saveexec_b32)";
   }
   return "UnknownObstructionKind";
@@ -1267,11 +1267,11 @@ std::string renderObstructionTrace(const ObstructionReport &Report,
 
   if (Report.hasUnrewritable()) {
     Os << "  outcome: (c) refuse -- at least one obstruction has no rewrite "
-          "in wave-size-translation.md \u00a77's unrewritable table\n";
+          "in wave-size-translation.md sec. 7's unrewritable table\n";
   } else if (Report.hasPendingRewrite()) {
     Os << "  outcome: (c) refuse -- rewrite(s) exist on paper but the "
           "matching handler(s) have not yet landed "
-          "(wave-size-translation.md \u00a77's pending-rewrite table)\n";
+          "(wave-size-translation.md sec. 7's pending-rewrite table)\n";
   } else {
     Os << "  outcome: (b) rewrite-then-emit -- all obstruction sites have "
           "an implemented rewrite/projection; emit selected projection\n";

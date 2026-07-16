@@ -269,7 +269,7 @@ std::string formatRefusalDetail(const ICmpInst *Cmp, unsigned SourceWaveSize,
   Os << "modulo-replication, source wave 0's lane L and target replica-1's ";
   Os << "lane L+W_s would evaluate the predicate differently despite sharing ";
   Os << "the same source EXEC bit. Refusing per hotswap/docs/"
-        "modrep-predicate-chain.md \u00a75 (narrow-O1 classifier).";
+        "modrep-predicate-chain.md sec. 5 (narrow-O1 classifier).";
   return S;
 }
 
@@ -425,7 +425,7 @@ PredicateChainClassifierReport classifyPredicateChain(
         Report.ObservedSites.push_back(
             "unexpected non-Instruction user of tid-derived Value; "
             "classifier cannot prove safety. "
-            "See hotswap/docs/modrep-predicate-chain.md \u00a75.");
+            "See hotswap/docs/modrep-predicate-chain.md sec. 5.");
         Report.Refused = true;
         Report.WaveNativePhantomRefusal = false;
         if (Report.RefusalDetail.empty())

@@ -715,7 +715,7 @@ bool emitCrossWaveWarning(const WaveProjection &Proj, const MCState &Mc,
               "uniform >= target_wave_bits). The Phase 1.4.5 classifier "
               "(wave-size-obstruction.cpp) is the principled path for "
               "deciding between outcome (a)/(b)/(c) per hotswap/docs/"
-              "wave-size-translation.md \u00a77.\n";
+              "wave-size-translation.md sec. 7.\n";
   });
   return true;
 }

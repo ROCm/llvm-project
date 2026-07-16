@@ -1197,12 +1197,12 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       // `detail` so diagnostics can carry the per-site context forward without
       // re-invoking the classifier.
       errs() << "transpiler: pre-translation abort: "
-             << llvm::toStringWithoutConsuming(F) << " \u2014 "
+             << llvm::toStringWithoutConsuming(F) << " -- "
              << (Report.firstUnrewritable()
                      ? "no rewrite in wave-size-translation.md "
-                       "\u00a77's unrewritable table"
+                       "sec. 7's unrewritable table"
                      : "rewrite pending (wave-size-translation.md "
-                       "\u00a77's pending-rewrite table)")
+                       "sec. 7's pending-rewrite table)")
              << "\n"
              << Trace;
       return std::move(F);
@@ -2325,12 +2325,12 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           KernelName,
           "classifier matched WaveIdLiftScalarized on " +
               Twine(ClassifierWaveIdLiftScalarizedSites) +
-              " site(s) but rewriteCrossLaneDivergent rewrote 0 \u2014 the "
+              " site(s) but rewriteCrossLaneDivergent rewrote 0 -- the "
               "raised IR is missing the writelane/readlane intrinsic(s) "
               "that the decoded instruction stream contained. This is a "
               "handler-emission regression, not a classifier/rewrite "
               "disagreement. Refusing rather than risk a silent "
-              "miscompile (see wave-size-translation.md \u00a75.6.3).");
+              "miscompile (see wave-size-translation.md sec. 5.6.3).");
       errs() << "transpiler: post-raise abort: "
              << llvm::toStringWithoutConsuming(F) << "\n";
       return std::move(F);

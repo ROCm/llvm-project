@@ -567,7 +567,7 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
           "analogue (the partner index wraps past the target "
           "wave).  See the P4 permlane32_swap entry in the "
           "pending-rewrite table of "
-          "hotswap/docs/wave-size-translation.md \u00a75.3.");
+          "hotswap/docs/wave-size-translation.md sec. 5.3.");
     }
     if (Ctx.Isa.isWave32()) {
       return RaiseFailure::unsupportedInstructionForm(

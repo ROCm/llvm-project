@@ -1253,7 +1253,7 @@ rewriteCrossLaneDivergent(Function &F, unsigned SourceWaveSize,
        << "). Rewriting to `ds_bpermute` here would re-introduce "
           "`v_readfirstlane` at the SGPR boundary -- refusing rather "
           "than silently miscompiling. See "
-          "hotswap/docs/wave-size-translation.md \u00a75.6.3 (use-"
+          "hotswap/docs/wave-size-translation.md sec. 5.6.3 (use-"
           "chain constraint).";
     Report.SgprForcedDetail = Os.str();
     Report.SgprForcedKind = ConsumerKind;
@@ -1307,7 +1307,7 @@ rewriteCrossLaneDivergent(Function &F, unsigned SourceWaveSize,
             "Extending the supported set requires a per-ctrl "
             "correctness argument in buildDppLaneMap and a new "
             "lit fixture; refusing rather than silently miscompiling. "
-            "See hotswap/docs/wave-size-translation.md \u00a75.3.";
+            "See hotswap/docs/wave-size-translation.md sec. 5.3.";
       Report.UnsupportedDppDetail = Os.str();
       return Report;
     }
