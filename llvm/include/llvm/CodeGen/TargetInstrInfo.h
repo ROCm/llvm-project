@@ -855,6 +855,11 @@ public:
       return std::nullopt;
     }
 
+    /// Return a target-specific cap on the minimum initiation interval (MII)
+    /// above which a loop is not pipelined, or nullopt to use the default cap.
+    /// An explicit -pipeliner-max-mii takes precedence over this hook.
+    virtual std::optional<unsigned> getMaxMII() const { return std::nullopt; }
+
     /// Create a condition to determine if the trip count of the loop is greater
     /// than TC, where TC is always one more than for the previous prologue or
     /// 0 if this is being called for the outermost prologue.

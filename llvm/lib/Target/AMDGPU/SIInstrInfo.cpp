@@ -3349,6 +3349,10 @@ public:
     return VGPRPressure > MaxArchVGPRs || AGPRPressure > MaxArchVGPRs;
   }
 
+  // The generic default of 27 is too low for real AMDGPU loops; use a wider
+  // cap that still rejects pathologically large ones.
+  std::optional<unsigned> getMaxMII() const override { return 128; }
+
   std::optional<bool> createTripCountGreaterCondition(
       int TC, MachineBasicBlock &MBB,
       SmallVectorImpl<MachineOperand> &CondParam) override {

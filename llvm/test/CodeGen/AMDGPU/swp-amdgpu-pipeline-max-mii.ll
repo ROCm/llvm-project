@@ -1,12 +1,12 @@
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -amdgpu-enable-pipeliner -pass-remarks-analysis=pipeliner %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DEFAULT
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -amdgpu-enable-pipeliner -pipeliner-max-mii=64 --verify-machineinstrs -pass-remarks-analysis=pipeliner %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=RAISED
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -amdgpu-enable-pipeliner --verify-machineinstrs -pass-remarks-analysis=pipeliner %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DEFAULT
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -amdgpu-enable-pipeliner -pipeliner-max-mii=27 -pass-remarks-analysis=pipeliner %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=CAPPED
 
 ; This loop's MII is 32: two independent accumulators each issue one MFMA per
 ; iteration, and each MFMA holds the XDL pipe for 16 cycles (res=32). That
-; exceeds the generic default cap of 27. At default, pipeliner aborts and
-; only a raised cap lets it schedule.
-; DEFAULT: Minimal Initiation Interval too large: 32 > 27
-; RAISED: Schedule found with Initiation Interval
+; exceeds the generic default cap of 27. Loop pipelines at default but an
+; explicit -pipeliner-max-mii below the MII still rejects it.
+; DEFAULT: Schedule found with Initiation Interval
+; CAPPED: Minimal Initiation Interval too large: 32 > 27
 
 declare <16 x float> @llvm.amdgcn.mfma.f32.32x32x2f32(float, float, <16 x float>, i32 immarg, i32 immarg, i32 immarg) #0
 
