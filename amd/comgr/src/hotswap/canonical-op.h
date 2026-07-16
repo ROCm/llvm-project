@@ -1051,6 +1051,7 @@ enum class CanonicalOp : uint16_t {
   // V_PK_MAD_U16:     dst = src0 * src1 + src2         (lane-wise modular
   //                   i16 multiply-add; ternary, VOP_V2I16_V2I16_V2I16_V2I16).
   // V_PK_ADD_U16:     dst = src0 + src1                (lane-wise i16 add)
+  // V_PK_SUB_I16:     dst = src0 - src1                (lane-wise i16 sub)
   // V_PK_LSHLREV_B16: dst = src1 << (src0 & 15)        (clshl_rev_16
   //                   SDAG: shift count is src0, value is src1, low 4
   //                   bits of the count select the shift amount per
@@ -1076,6 +1077,7 @@ enum class CanonicalOp : uint16_t {
   // natural lo->lo, hi->hi packing).
   V_PK_MAD_U16,
   V_PK_ADD_U16,
+  V_PK_SUB_I16,
   V_PK_LSHLREV_B16,
   V_PK_LSHRREV_B16,
   V_PK_ASHRREV_I16,

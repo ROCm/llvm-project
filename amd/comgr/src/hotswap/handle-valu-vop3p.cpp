@@ -616,6 +616,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   // and back to i32 for the VGPR write-back.
   case CanonicalOp::V_PK_MAD_U16:
   case CanonicalOp::V_PK_ADD_U16:
+  case CanonicalOp::V_PK_SUB_I16:
   case CanonicalOp::V_PK_LSHLREV_B16:
   case CanonicalOp::V_PK_LSHRREV_B16:
   case CanonicalOp::V_PK_ASHRREV_I16:
@@ -664,6 +665,11 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
     }
     case CanonicalOp::V_PK_ADD_U16:
       Res = Ctx.B.CreateAdd(S0, S1, "pk_add_u16");
+      break;
+    case CanonicalOp::V_PK_SUB_I16:
+      // Modular i16 subtract: signed vs unsigned doesn't change the low 16
+      // bits, so plain `sub` without nuw/nsw matches the AMDGPU semantics.
+      Res = Ctx.B.CreateSub(S0, S1, "pk_sub_i16");
       break;
     case CanonicalOp::V_PK_MUL_LO_U16:
       // "lo" = low 16 bits of the per-lane 32-bit multiply, i.e. modular

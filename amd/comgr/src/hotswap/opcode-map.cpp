@@ -861,6 +861,7 @@ static const Entry kCanonTable[] = {
     // Packed `<2 x i16>` int family.
     E(V_PK_MAD_U16, V_PK_MAD_U16),
     E(V_PK_ADD_U16, V_PK_ADD_U16),
+    E(V_PK_SUB_I16, V_PK_SUB_I16),
     E(V_PK_LSHLREV_B16, V_PK_LSHLREV_B16),
     E(V_PK_LSHRREV_B16, V_PK_LSHRREV_B16),
     E(V_PK_ASHRREV_I16, V_PK_ASHRREV_I16),

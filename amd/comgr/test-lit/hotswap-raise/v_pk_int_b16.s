@@ -1,7 +1,7 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && %raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_pk_int_b16_kernel 2>/dev/null | %FileCheck %s
+; RUN:   && %raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=v_pk_int_b16_kernel 2>&1 | %FileCheck %s
 
-; v_pk_lshlrev/add/lshrrev/ashrrev packed int b16 lift.
+; v_pk_lshlrev/add/sub/lshrrev/ashrrev packed int b16 lift.
 ; CHECK-LABEL: define amdgpu_kernel void @v_pk_int_b16_kernel(
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -41,6 +41,9 @@ v_pk_int_b16_kernel:
 	; CHECK: %pk_i16_pack{{[0-9]*}} = bitcast <2 x i16> %pk_add_u16{{[0-9]*}} to i32
 	; CHECK-NOT: sub <2 x i16>
 	v_pk_add_u16 v1, v0, v0
+	; CHECK: [[SUB:%.+]] = sub <2 x i16> {{.+}}
+	; CHECK: %{{.+}} = bitcast <2 x i16> [[SUB]] to i32
+	v_pk_sub_i16 v1, v1, v0
 	; CHECK: [[LSHR_AMT:%.+]] = and <2 x i16> {{.+}}, splat (i16 15)
 	; CHECK: [[LSHR:%.+]] = lshr <2 x i16> {{.+}}, [[LSHR_AMT]]
 	; CHECK: %{{.+}} = bitcast <2 x i16> [[LSHR]] to i32
