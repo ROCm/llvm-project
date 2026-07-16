@@ -14,6 +14,7 @@
 ///   comgr-hotswap-llvm.cpp      LLVM MC infrastructure (disasm/asm/encode)
 ///   comgr-hotswap-b0a0.cpp      GFX1250 B0-to-A0 policy + public API
 ///   comgr-hotswap-occupancy.cpp VGPR/workgroup capacity policy
+///   comgr-hotswap-profile.cpp   HotSwap rewrite profiler (out-of-line bodies)
 ///
 //===----------------------------------------------------------------------===//
 
@@ -259,19 +260,12 @@ public:
   /// a null back-pointer, so the clock is never read on the disabled path.
   class Scope {
   public:
-    Scope(HotswapProfile *Profile, HotswapMetric Metric)
-        : Profile(Profile), Metric(Metric), StartNs(Profile ? profNowNs() : 0) {
-    }
+    Scope(HotswapProfile *Profile, HotswapMetric Metric);
     Scope(const Scope &) = delete;
     Scope &operator=(const Scope &) = delete;
     ~Scope() { finish(); }
     void addPatches(uint64_t P) { Patches += P; }
-    void finish() {
-      if (!Profile)
-        return;
-      Profile->add(Metric, profNowNs() - StartNs, Patches);
-      Profile = nullptr;
-    }
+    void finish();
 
   private:
     HotswapProfile *Profile;
@@ -280,94 +274,26 @@ public:
     uint64_t Patches = 0;
   };
 
-  [[nodiscard]] Scope time(HotswapMetric Metric) {
-    return Scope(Enabled ? this : nullptr, Metric);
-  }
+  [[nodiscard]] Scope time(HotswapMetric Metric);
 
   /// Count-only record (e.g. jump outcomes): one call, no wall time.
-  void count(HotswapMetric Metric, uint64_t N = 1) {
-    if (Enabled)
-      Samples[static_cast<size_t>(Metric)].Calls += N;
-  }
+  void count(HotswapMetric Metric, uint64_t N = 1);
 
   /// Accumulate a pre-measured interval as one call. The pass loop sums locally
   /// and calls this once per rewrite, so a strat:* parent's "calls" stays one.
-  void add(HotswapMetric Metric, uint64_t Nanos, uint64_t Patches) {
-    if (!Enabled)
-      return;
-    HotswapSample &S = Samples[static_cast<size_t>(Metric)];
-    S.Nanos += Nanos;
-    S.Calls += 1;
-    S.Patches += Patches;
-    S.MinNanos = std::min(S.MinNanos, Nanos);
-    S.MaxNanos = std::max(S.MaxNanos, Nanos);
-  }
+  void add(HotswapMetric Metric, uint64_t Nanos, uint64_t Patches);
 
   /// Read-only view of the per-metric samples. Exposed for unit testing the
   /// session accumulation; production code reports through TimeStatistics.
-  const HotswapSample &sample(HotswapMetric Metric) const {
-    return Samples[static_cast<size_t>(Metric)];
-  }
+  const HotswapSample &sample(HotswapMetric Metric) const;
 
 private:
   /// Fold this rewrite's samples into Comgr TimeStatistics in one batch: derive
   /// phase:unaccounted, convert ns to the configured granularity unit, encode
   /// the one-level parent/child hierarchy in each row name (e.g.
-  /// "strat:trampoline/ds_2addr"), and merge under a single lock.
-  void flush() {
-    uint64_t PhaseSum = 0;
-    for (size_t I = 0; I < HotswapMetricCount; ++I)
-      if (hotswapMetricInfo[I].PartitionsTotal)
-        PhaseSum += Samples[I].Nanos;
-    HotswapSample &Total =
-        Samples[static_cast<size_t>(HotswapMetric::RewriteTotal)];
-    HotswapSample &Unacc =
-        Samples[static_cast<size_t>(HotswapMetric::Unaccounted)];
-    Unacc.Nanos = Total.Nanos > PhaseSum ? Total.Nanos - PhaseSum : 0;
-    Unacc.Calls = Total.Calls;
-    // One unaccounted sample per rewrite: min == max == residual so the merged
-    // min/max across rewrites stays correct.
-    Unacc.MinNanos = Unacc.MaxNanos = Unacc.Nanos;
-
-    const double UnitsPerNs = env::getGranularityUnitsPerSecond() / 1.0e9;
-    // Build names first (SmallVector inline storage keeps them stable), then
-    // point the records' StringRefs at them.
-    llvm::SmallVector<std::string, HotswapMetricCount> Names;
-    llvm::SmallVector<size_t, HotswapMetricCount> Rows;
-    for (size_t I = 0; I < HotswapMetricCount; ++I) {
-      const HotswapSample &S = Samples[I];
-      const HotswapMetric M = static_cast<HotswapMetric>(I);
-      if (!S.Calls && !S.Nanos && !S.Patches && M != HotswapMetric::Unaccounted)
-        continue;
-      const HotswapMetricInfo &Info = hotswapMetricInfo[I];
-      if (Info.Parent != HotswapMetric::Count)
-        Names.push_back(
-            std::string(
-                hotswapMetricInfo[static_cast<size_t>(Info.Parent)].Label) +
-            "/" + Info.Label);
-      else
-        Names.push_back(std::string(Info.Label));
-      Rows.push_back(I);
-    }
-
-    llvm::SmallVector<COMGR::TimeStatistics::PerfStatRecord, HotswapMetricCount>
-        Records;
-    Records.reserve(Rows.size());
-    for (size_t K = 0; K < Rows.size(); ++K) {
-      const HotswapSample &S = Samples[Rows[K]];
-      COMGR::TimeStatistics::PerfStatRecord R;
-      R.Name = Names[K];
-      R.TimeTaken = static_cast<double>(S.Nanos) * UnitsPerNs;
-      R.Calls = S.Calls;
-      R.Patches = S.Patches;
-      R.MinTime = S.MinNanos == std::numeric_limits<uint64_t>::max()
-                      ? 0.0
-                      : static_cast<double>(S.MinNanos) * UnitsPerNs;
-      R.MaxTime = static_cast<double>(S.MaxNanos) * UnitsPerNs;
-      Records.push_back(R);
-    }
-    COMGR::TimeStatistics::mergeStats(Records);
-  }
+  /// "strat:trampoline/ds_2addr"), and merge under a single lock. Defined in
+  /// comgr-hotswap-profile.cpp.
+  void flush();
 
   bool Enabled;
   std::array<HotswapSample, HotswapMetricCount> Samples{};

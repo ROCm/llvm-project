@@ -117,8 +117,9 @@ add_executable(HotswapMCTests
   ../src/comgr-hotswap-patch-wmma-scale16.cpp
   ../src/comgr-hotswap-patch-wmma-split.cpp
   ../src/comgr-env.cpp
-  # HotswapProfile::flush() (always compiled now) merges into Comgr
-  # TimeStatistics, so this target needs TimeStatistics::mergeStats().
+  # HotswapProfile bodies are out-of-line in comgr-hotswap-profile.cpp; its
+  # flush() merges into Comgr TimeStatistics (time-stat.cpp / mergeStats()).
+  ../src/comgr-hotswap-profile.cpp
   ../src/time-stat/time-stat.cpp)
 
 llvm_map_components_to_libnames(COMGR_TEST_UNIT_MC_LIBS
@@ -150,18 +151,20 @@ comgr_configure_test_target(HotswapMCTests)
 
 # -- HotswapProfileTests ------------------------------------------------------
 #
-# The profiler (comgr-hotswap-internal.h) is header-only and always compiled;
-# it is gated only at run time by AMD_COMGR_TIME_STATISTICS. This dedicated
-# target exercises the HotswapProfile session logic directly (accumulation and
-# flush) for both disabled and enabled sessions.
+# The profiler is declared in comgr-hotswap-internal.h with out-of-line bodies
+# in comgr-hotswap-profile.cpp; it is gated only at run time by
+# AMD_COMGR_TIME_STATISTICS. This dedicated target exercises the HotswapProfile
+# session logic directly (accumulation and flush) for both disabled and enabled
+# sessions.
 
 add_executable(HotswapProfileTests
   HotswapProfileTest.cpp
   # COMGR::env::* is referenced by the inline COMGR::hotswap::log() helper and by
   # the profiler gating, both pulled in via comgr-hotswap-internal.h.
   ../src/comgr-env.cpp
-  # HotswapProfile::flush() merges into Comgr TimeStatistics, so the enabled
-  # build needs TimeStatistics::mergeStats().
+  # HotswapProfile bodies are out-of-line in comgr-hotswap-profile.cpp; its
+  # flush() merges into Comgr TimeStatistics (time-stat.cpp / mergeStats()).
+  ../src/comgr-hotswap-profile.cpp
   ../src/time-stat/time-stat.cpp)
 
 llvm_map_components_to_libnames(COMGR_TEST_UNIT_PROFILE_LIBS
