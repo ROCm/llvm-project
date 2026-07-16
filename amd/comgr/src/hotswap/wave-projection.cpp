@@ -253,7 +253,7 @@ Value *ModuloReplicationProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
   Value *WaveMask = B.CreateCall(Ballot, {Pred}, Name);
   unsigned WantedBits = ResultTy->getPrimitiveSizeInBits();
   unsigned WaveBits = WaveMaskTy->getPrimitiveSizeInBits();
-  assert(WantedBit <= WaveBits &&
+  assert(WantedBits <= WaveBits &&
          "ballotI1ToWidth: wantedBits > waveBits (wave64 source on wave32 "
          "target) has no modulo-replication projection; this direction needs "
          "an explicit policy decision before use");
@@ -553,7 +553,7 @@ ThreadLoopProjection::ThreadLoopProjection(const ISAProfile &SrcIsa,
 }
 
 Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
-  assert(IterationAlloca
+  assert(IterationAlloca &&
          "ThreadLoopProjection::emitWorkitemIdX requires an iteration alloca; "
          "raiser must call setIterationAlloca before emitting source workitem "
          "ids");
@@ -598,7 +598,7 @@ Value *ThreadLoopProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
   Value *WaveMask = B.CreateCall(Ballot, {Pred}, Name);
   const unsigned WantedBits = ResultTy->getPrimitiveSizeInBits();
   const unsigned WaveBits = WaveMaskTy->getPrimitiveSizeInBits();
-  assert(WantedBits <= WaveBits
+  assert(WantedBits <= WaveBits &&
          "ThreadLoopProjection::ballotI1ToWidth requires resultTy <= target "
          "wave mask width");
   if (WantedBits == WaveBits)
