@@ -2690,10 +2690,10 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   if (RunInstructionPatches) {
     std::vector<InternalDecodedInst> Decoded;
     uint64_t DecodeT0 = Prof ? profNowNs() : 0;
-    bool Decoded_ok = decodeTextSection(Text, Elf.textSize(), LS, Decoded);
+    bool DecodedOk = decodeTextSection(Text, Elf.textSize(), LS, Decoded);
     if (Prof)
       Profile.add(HotswapMetric::Decode, profNowNs() - DecodeT0, 0);
-    if (!Decoded_ok) {
+    if (!DecodedOk) {
       log() << "hotswap: error: retargetCodeObject: decodeTextSection "
             << "failed on .text (" << Elf.textSize() << " bytes).\n";
       return AMD_COMGR_STATUS_ERROR;

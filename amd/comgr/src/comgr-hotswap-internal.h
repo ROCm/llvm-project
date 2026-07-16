@@ -224,12 +224,12 @@ inline constexpr HotswapMetricInfo hotswapMetricInfo[HotswapMetricCount] = {
     {"strat:wmma_scale16", HotswapMetric::Count, false},
     {"strat:wmma_hazard", HotswapMetric::Count, false},
     {"strat:vop3px2_src2", HotswapMetric::Count, false},
-    {"cluster_load", HotswapMetric::InPlace, false},
+    {"cluster_load_swap", HotswapMetric::InPlace, false},
     {"s_barrier_signal_isfirst", HotswapMetric::InPlace, false},
     {"ds_2addr", HotswapMetric::Trampoline, false},
     {"tensor_tdm", HotswapMetric::Trampoline, false},
     {"addtid", HotswapMetric::Trampoline, false},
-    {"cluster_load", HotswapMetric::Trampoline, false},
+    {"cluster_load_mask", HotswapMetric::Trampoline, false},
     {"jump:nop_sled", HotswapMetric::Count, false},
     {"jump:short_s_branch", HotswapMetric::Count, false},
     {"jump:far_set_pc_back", HotswapMetric::Count, false},
@@ -280,7 +280,7 @@ public:
     uint64_t Patches = 0;
   };
 
-  Scope time(HotswapMetric Metric) {
+  [[nodiscard]] Scope time(HotswapMetric Metric) {
     return Scope(Enabled ? this : nullptr, Metric);
   }
 
