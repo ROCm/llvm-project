@@ -283,6 +283,46 @@ Expected<Value *> decodeScratchOffset(RaiseContext &Ctx, const DecodedInst &Di,
   return Ctx.B.CreateGEP(Ctx.I8Ty, *Frame, Offset, "scratch_ptr");
 }
 
+// Lower a FLAT cache-control op (global_wb / global_inv) to a scoped fence.
+// Writeback carries release ordering, invalidate carries acquire.  CU scope
+// has no cross-wave cache level and is a no-op; DEV maps to an agent-scoped
+// fence and SYS to a system-scoped fence; SE has no gfx942 representation.
+Expected<HandlerResult> lowerFlatCacheControlFence(RaiseContext &Ctx,
+                                                   const DecodedInst &Di,
+                                                   AtomicOrdering Ordering) {
+  HandlerResult Hr;
+  std::optional<int64_t> Cpol = readNamedImmOperand(Di, AMDGPU::OpName::cpol);
+  if (!Cpol) {
+    return RaiseFailure::unsupportedInstructionForm(
+        Di, "FLAT", "missing immediate cpol/scope operand");
+  }
+
+  uint64_t RawCpol = static_cast<uint64_t>(*Cpol);
+  if ((RawCpol & ~static_cast<uint64_t>(AMDGPU::CPol::SCOPE)) != 0) {
+    return RaiseFailure::unsupportedInstructionForm(
+        Di, "FLAT", "cache-policy bits outside SCOPE are not modelled");
+  }
+
+  switch (RawCpol & AMDGPU::CPol::SCOPE) {
+  case AMDGPU::CPol::SCOPE_CU:
+    break;
+  case AMDGPU::CPol::SCOPE_DEV:
+    Ctx.B.CreateFence(Ordering, Ctx.C.getOrInsertSyncScopeID("agent"));
+    break;
+  case AMDGPU::CPol::SCOPE_SYS:
+    Ctx.B.CreateFence(Ordering, SyncScope::System);
+    break;
+  case AMDGPU::CPol::SCOPE_SE:
+    return RaiseFailure::unsupportedInstructionForm(
+        Di, "FLAT", "SCOPE_SE cannot be represented by gfx942 fences");
+  default:
+    llvm_unreachable("CPol SCOPE field has only four encodings");
+  }
+
+  Hr.Handled = true;
+  return Hr;
+}
+
 } // namespace
 
 Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
@@ -291,45 +331,11 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
   StringRef Mn(Di.Mnemonic);
   CanonicalOp Sop = Di.CanonOp;
 
-  if (Sop == CanonicalOp::GLOBAL_WB) {
-    std::optional<int64_t> Cpol = readNamedImmOperand(Di, AMDGPU::OpName::cpol);
-    if (!Cpol) {
-      return RaiseFailure::unsupportedInstructionForm(
-          Di, "FLAT", "global_wb missing immediate cpol/scope operand");
-    }
+  if (Sop == CanonicalOp::GLOBAL_WB)
+    return lowerFlatCacheControlFence(Ctx, Di, AtomicOrdering::Release);
 
-    uint64_t RawCpol = static_cast<uint64_t>(*Cpol);
-    uint64_t Scope = RawCpol & AMDGPU::CPol::SCOPE;
-    if ((RawCpol & ~static_cast<uint64_t>(AMDGPU::CPol::SCOPE)) != 0) {
-      return RaiseFailure::unsupportedInstructionForm(
-          Di, "FLAT",
-          "global_wb cache-policy bits outside SCOPE are not modelled");
-    }
-
-    // CU-scope writeback is a no-op that still returns "done"; there is no
-    // target cache operation to preserve.
-    if (Scope == AMDGPU::CPol::SCOPE_CU) {
-      Hr.Handled = true;
-      return Hr;
-    }
-
-    if (Scope == AMDGPU::CPol::SCOPE_DEV) {
-      SyncScope::ID AgentScope = Ctx.C.getOrInsertSyncScopeID("agent");
-      Ctx.B.CreateFence(AtomicOrdering::Release, AgentScope);
-      Hr.Handled = true;
-      return Hr;
-    }
-
-    if (Scope == AMDGPU::CPol::SCOPE_SYS) {
-      Ctx.B.CreateFence(AtomicOrdering::Release, SyncScope::System);
-      Hr.Handled = true;
-      return Hr;
-    }
-
-    return RaiseFailure::unsupportedInstructionForm(
-        Di, "FLAT",
-        "global_wb SCOPE_SE cannot be represented by gfx942 writeback fences");
-  }
+  if (Sop == CanonicalOp::GLOBAL_INV)
+    return lowerFlatCacheControlFence(Ctx, Di, AtomicOrdering::Acquire);
 
   // ---------------------------------------------------------------------
   // FLAT scratch family (`scratch_load_*`, `scratch_store_*`).
