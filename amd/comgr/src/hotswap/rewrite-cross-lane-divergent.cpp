@@ -143,6 +143,16 @@ bool isIntrinsicVGPRSafePropagator(Intrinsic::ID Id) {
   case Intrinsic::amdgcn_div_scale:
   case Intrinsic::amdgcn_exp2:
   case Intrinsic::amdgcn_log:
+  // Whole-wave / whole-quad execution-mode markers: value-copy ops (VGPR
+  // in, same-type VGPR out, no SGPR-forced operand) that only constrain the
+  // EXEC mask under which the source is computed, so they are VGPR-safe.
+  // This pass emits strict.wwm itself (see forceWholeWaveGather /
+  // wrapAsWWMValue), so the classifier must walk through it.
+  case Intrinsic::amdgcn_strict_wwm:
+  case Intrinsic::amdgcn_wwm:
+  case Intrinsic::amdgcn_strict_wqm:
+  case Intrinsic::amdgcn_wqm:
+  case Intrinsic::amdgcn_softwqm:
   // Cross-lane primitives the rewrite also rewrites in this same
   // pass: their post-rewrite shape is `select` / `ds_bpermute`, both
   // VGPR-safe. We can treat them as VGPR-safe propagators pre-
