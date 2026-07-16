@@ -287,12 +287,18 @@ public:
   /// session accumulation; production code reports through TimeStatistics.
   const HotswapSample &sample(HotswapMetric Metric) const;
 
+  /// Derive phase:unaccounted and convert each recorded sample into a
+  /// TimeStatistics::PerfStatRecord (ns -> configured unit, one-level
+  /// parent/child row name, e.g. "strat:trampoline/ds_2addr"). Row-name storage
+  /// is appended to \p Names, which must outlive the returned records (each
+  /// Name is a StringRef into it). flush() merges the result; unit tests
+  /// inspect it. Defined in comgr-hotswap-profile.cpp.
+  llvm::SmallVector<COMGR::TimeStatistics::PerfStatRecord, HotswapMetricCount>
+  buildRecords(llvm::SmallVectorImpl<std::string> &Names);
+
 private:
-  /// Fold this rewrite's samples into Comgr TimeStatistics in one batch: derive
-  /// phase:unaccounted, convert ns to the configured granularity unit, encode
-  /// the one-level parent/child hierarchy in each row name (e.g.
-  /// "strat:trampoline/ds_2addr"), and merge under a single lock. Defined in
-  /// comgr-hotswap-profile.cpp.
+  /// Merge this rewrite's samples into Comgr TimeStatistics in one batch under
+  /// a single lock (see buildRecords). Defined in comgr-hotswap-profile.cpp.
   void flush();
 
   bool Enabled;

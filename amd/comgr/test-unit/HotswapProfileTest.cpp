@@ -15,8 +15,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-hotswap-internal.h"
+#include "time-stat/time-stat.h"
 
 #include "gtest/gtest.h"
+
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
+
+#include <string>
+#include <thread>
+#include <vector>
 
 using namespace COMGR::hotswap;
 
@@ -133,4 +141,81 @@ TEST(HotswapProfile, MetricInfoTableWellFormed) {
   EXPECT_STREQ(
       hotswapMetricInfo[static_cast<size_t>(HotswapMetric::RewriteTotal)].Label,
       "phase:rewrite_total");
+}
+
+// flush()/buildRecords() derives phase:unaccounted = rewrite_total - sum of the
+// partitioned phases, converts each sample's ns to the configured granularity
+// unit, and encodes parent/child row names. Inspect the records against known
+// samples (flush() merges this same set into TimeStatistics).
+TEST(HotswapProfile, FlushDerivesUnaccountedAndConvertsUnits) {
+  HotswapProfile Profile(/*Enabled=*/true);
+  Profile.add(HotswapMetric::RewriteTotal, 10000, 0);
+  Profile.add(HotswapMetric::Decode, 3000, 0);
+  Profile.add(HotswapMetric::GrowElf, 2000, 0);
+  // A strat child: exercises the parent/child row name and confirms a
+  // non-partitioned row does not change the unaccounted residual.
+  Profile.add(HotswapMetric::TrampolineDs2Addr, 1000, 4);
+
+  llvm::SmallVector<std::string, HotswapMetricCount> Names;
+  llvm::SmallVector<COMGR::TimeStatistics::PerfStatRecord, HotswapMetricCount>
+      Records = Profile.buildRecords(Names);
+
+  // buildRecords() writes the derived residual back into the samples:
+  // 10000 - (3000 + 2000) = 5000. The strat child (1000) does not partition.
+  EXPECT_EQ(Profile.sample(HotswapMetric::Unaccounted).Nanos, 5000u);
+
+  llvm::StringMap<COMGR::TimeStatistics::PerfStatRecord> ByName;
+  for (const COMGR::TimeStatistics::PerfStatRecord &R : Records)
+    ByName[R.Name] = R;
+
+  const double UnitsPerNs = COMGR::env::getGranularityUnitsPerSecond() / 1.0e9;
+  ASSERT_TRUE(ByName.count("phase:rewrite_total"));
+  EXPECT_DOUBLE_EQ(ByName["phase:rewrite_total"].TimeTaken,
+                   10000.0 * UnitsPerNs);
+  EXPECT_DOUBLE_EQ(ByName["phase:decode"].TimeTaken, 3000.0 * UnitsPerNs);
+  EXPECT_DOUBLE_EQ(ByName["phase:grow_elf"].TimeTaken, 2000.0 * UnitsPerNs);
+
+  ASSERT_TRUE(ByName.count("phase:unaccounted"));
+  EXPECT_DOUBLE_EQ(ByName["phase:unaccounted"].TimeTaken, 5000.0 * UnitsPerNs);
+
+  // Child rows carry the "parent/child" name and their patch counts.
+  ASSERT_TRUE(ByName.count("strat:trampoline/ds_2addr"));
+  EXPECT_EQ(ByName["strat:trampoline/ds_2addr"].Patches, 4u);
+}
+
+// PerfStats::mergeStats is the profiler's concurrency premise: many concurrent
+// rewrites fold their local records into one shared, mutex-guarded map. Hammer
+// it from several threads and confirm every record is accounted for (and that
+// the shared map access is race-free under ASAN/TSAN).
+TEST(TimeStatisticsMerge, ConcurrentMergeStatsIsRaceFree) {
+  COMGR::TimeStatistics::PerfStats Stats;
+  constexpr unsigned NumThreads = 8;
+  constexpr unsigned MergesPerThread = 2000;
+
+  auto Worker = [&Stats]() {
+    for (unsigned I = 0; I < MergesPerThread; ++I) {
+      COMGR::TimeStatistics::PerfStatRecord R;
+      R.Name = "row";
+      R.TimeTaken = 1.0;
+      R.Calls = 1;
+      R.Patches = 2;
+      R.MinTime = 1.0;
+      R.MaxTime = 1.0;
+      Stats.mergeStats(R);
+    }
+  };
+
+  std::vector<std::thread> Threads;
+  for (unsigned T = 0; T < NumThreads; ++T)
+    Threads.emplace_back(Worker);
+  for (std::thread &T : Threads)
+    T.join();
+
+  const COMGR::TimeStatistics::ProfileData D = Stats.lookupForTest("row");
+  const unsigned Total = NumThreads * MergesPerThread;
+  EXPECT_EQ(D.Counter, static_cast<int>(Total));
+  EXPECT_EQ(D.Patches, static_cast<uint64_t>(Total) * 2);
+  EXPECT_DOUBLE_EQ(D.TimeTaken, static_cast<double>(Total));
+  EXPECT_DOUBLE_EQ(D.MinTime, 1.0);
+  EXPECT_DOUBLE_EQ(D.MaxTime, 1.0);
 }

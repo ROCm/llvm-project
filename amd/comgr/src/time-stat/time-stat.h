@@ -12,11 +12,16 @@
 #include "perf-timer.h"
 #include "ts-interface.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Format.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "amd_comgr.h"
 #include <algorithm>
+#include <functional>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <mutex>
 
 namespace COMGR {
@@ -110,6 +115,13 @@ public:
                             static_cast<unsigned long long>(D.Patches))
             << " " << Unit << "\n";
     }
+  }
+
+  // Snapshot an aggregated row by name for unit tests; returns a zeroed
+  // ProfileData when the row is absent. Locks like the other accessors.
+  ProfileData lookupForTest(llvm::StringRef Name) {
+    std::scoped_lock Lock(Mtx);
+    return ProfileDataMap.lookup(Name);
   }
 };
 

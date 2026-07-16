@@ -7,11 +7,8 @@
 ///
 /// \file
 /// Out-of-line definitions for the HotSwap rewrite profiler declared in
-/// comgr-hotswap-internal.h. The header is included by every
-/// comgr-hotswap-*.cpp translation unit, so keeping the merge/flush logic here
-/// (rather than inline) avoids recompiling it everywhere. Behavior and gating
-/// (AMD_COMGR_TIME_STATISTICS) are documented on the declarations in the
-/// header.
+/// comgr-hotswap-internal.h, kept here rather than inline so the merge/flush
+/// logic is not recompiled in every TU that includes the header.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -55,7 +52,8 @@ const HotswapSample &HotswapProfile::sample(HotswapMetric Metric) const {
   return Samples[static_cast<size_t>(Metric)];
 }
 
-void HotswapProfile::flush() {
+llvm::SmallVector<COMGR::TimeStatistics::PerfStatRecord, HotswapMetricCount>
+HotswapProfile::buildRecords(llvm::SmallVectorImpl<std::string> &Names) {
   uint64_t PhaseSum = 0;
   for (size_t I = 0; I < HotswapMetricCount; ++I)
     if (hotswapMetricInfo[I].PartitionsTotal)
@@ -71,9 +69,9 @@ void HotswapProfile::flush() {
   Unacc.MinNanos = Unacc.MaxNanos = Unacc.Nanos;
 
   const double UnitsPerNs = env::getGranularityUnitsPerSecond() / 1.0e9;
-  // Build names first (SmallVector inline storage keeps them stable), then
-  // point the records' StringRefs at them.
-  llvm::SmallVector<std::string, HotswapMetricCount> Names;
+  // Append row names to the caller's storage (keeps them stable), then point
+  // the records' StringRefs at them.
+  const size_t NameBase = Names.size();
   llvm::SmallVector<size_t, HotswapMetricCount> Rows;
   for (size_t I = 0; I < HotswapMetricCount; ++I) {
     const HotswapSample &S = Samples[I];
@@ -97,7 +95,7 @@ void HotswapProfile::flush() {
   for (size_t K = 0; K < Rows.size(); ++K) {
     const HotswapSample &S = Samples[Rows[K]];
     COMGR::TimeStatistics::PerfStatRecord R;
-    R.Name = Names[K];
+    R.Name = Names[NameBase + K];
     R.TimeTaken = static_cast<double>(S.Nanos) * UnitsPerNs;
     R.Calls = S.Calls;
     R.Patches = S.Patches;
@@ -107,7 +105,12 @@ void HotswapProfile::flush() {
     R.MaxTime = static_cast<double>(S.MaxNanos) * UnitsPerNs;
     Records.push_back(R);
   }
-  COMGR::TimeStatistics::mergeStats(Records);
+  return Records;
+}
+
+void HotswapProfile::flush() {
+  llvm::SmallVector<std::string, HotswapMetricCount> Names;
+  COMGR::TimeStatistics::mergeStats(buildRecords(Names));
 }
 
 } // namespace hotswap
