@@ -1027,18 +1027,20 @@ multiclass VRegClass<int numRegs, list<ValueType> regTypes, dag regList> {
 
 defm VReg_64 : VRegClass<2, Reg64Types.types, (add VGPR_64)>;
 defm VReg_96 : VRegClass<3, Reg96Types.types, (add VGPR_96)>;
-defm VReg_128 : VRegClass<4, Reg128Types.types, (add VGPR_128)>;
+// defm VReg_128 : VRegClass<4, Reg128Types.types, (add VGPR_128)>;
 defm VReg_160 : VRegClass<5, Reg160Types.types, (add VGPR_160)>;
 
 defm VReg_192 : VRegClass<6, Reg192Types.types, (add VGPR_192)>;
 defm VReg_224 : VRegClass<7, Reg224Types.types, (add VGPR_224)>;
-defm VReg_256 : VRegClass<8, Reg256Types.types, (add VGPR_256)>;
+//defm VReg_256 : VRegClass<8, Reg256Types.types, (add VGPR_256)>;
 defm VReg_288 : VRegClass<9, Reg288Types.types, (add VGPR_288)>;
 defm VReg_320 : VRegClass<10, Reg320Types.types, (add VGPR_320)>;
 defm VReg_352 : VRegClass<11, Reg352Types.types, (add VGPR_352)>;
 defm VReg_384 : VRegClass<12, Reg384Types.types, (add VGPR_384)>;
 
 let GlobalPriority = true in {
+defm VReg_128 : VRegClass<4, Reg128Types.types, (add VGPR_128)>;
+defm VReg_256 : VRegClass<8, Reg256Types.types, (add VGPR_256)>;
 defm VReg_512 : VRegClass<16, Reg512Types.types, (add VGPR_512)>;
 defm VReg_1024 : VRegClass<32, Reg1024Types.types, (add VGPR_1024)>;
 }
