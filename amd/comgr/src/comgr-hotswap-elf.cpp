@@ -1409,9 +1409,9 @@ std::optional<uint64_t> ElfView::trampolinePoolVAddr() const {
 
 // -- addKernelEntryTrampolineSymbols ------------------------------------------
 
-std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
-    WritableMemoryBuffer &In, uint64_t PoolVAddr,
-    ArrayRef<KernelEntryTrampolineFixup> Fixups) {
+std::unique_ptr<WritableMemoryBuffer>
+addKernelEntryTrampolineSymbols(WritableMemoryBuffer &In, uint64_t PoolVAddr,
+                                ArrayRef<KernelEntryTrampolineFixup> Fixups) {
   if (Fixups.empty())
     return nullptr;
 
@@ -1436,16 +1436,33 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
   // Locate the appended trampoline-pool section by its virtual address: the
   // stubs live there (at PoolVAddr + StubTextOffset), not immediately after
   // .text, so the stub symbols must reference this section, not .text.
+  //
+  // Match by containment (sh_addr <= PoolVAddr < sh_addr + sh_size), not by an
+  // exact sh_addr == PoolVAddr scan: a zero-sized allocatable section can begin
+  // at PoolVAddr (trampolinePoolVAddr() would still pick that address, and
+  // growWithTrampolines() appends the real pool after it). An exact-address
+  // scan could select that empty section, leaving the symbols' values outside
+  // their declared section. The pool is the only allocatable section that
+  // actually spans PoolVAddr, since PoolVAddr is aligned past every
+  // pre-existing allocatable section's end.
   unsigned PoolSectionIndex = 0;
-  for (unsigned I = 0; I < Secs.size(); ++I)
-    if ((Secs[I].sh_flags & ELF::SHF_ALLOC) && Secs[I].sh_addr == PoolVAddr) {
+  for (unsigned I = 0; I < Secs.size(); ++I) {
+    if (!(Secs[I].sh_flags & ELF::SHF_ALLOC))
+      continue;
+    std::optional<uint64_t> SecEnd = checkedAddUint64(
+        Secs[I].sh_addr, Secs[I].sh_size, "trampoline-pool section end");
+    if (!SecEnd)
+      return nullptr;
+    if (Secs[I].sh_addr <= PoolVAddr && PoolVAddr < *SecEnd) {
       PoolSectionIndex = I;
       break;
     }
+  }
   if (PoolSectionIndex == 0) {
-    log() << "hotswap: addKernelEntryTrampolineSymbols: trampoline-pool section "
-          << "at vaddr 0x" << utohexstr(PoolVAddr) << " not found; skipping "
-          << "stub symbols.\n";
+    log()
+        << "hotswap: addKernelEntryTrampolineSymbols: trampoline-pool section "
+        << "at vaddr 0x" << utohexstr(PoolVAddr) << " not found; skipping "
+        << "stub symbols.\n";
     return nullptr;
   }
 
@@ -1495,8 +1512,8 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
     StrBlob.append(Name.begin(), Name.end());
     StrBlob.push_back(0);
 
-    std::optional<uint64_t> StubVAddr = checkedAddUint64(
-        PoolVAddr, F.StubTextOffset, "stub symbol vaddr");
+    std::optional<uint64_t> StubVAddr =
+        checkedAddUint64(PoolVAddr, F.StubTextOffset, "stub symbol vaddr");
     if (!StubVAddr)
       return nullptr;
 
