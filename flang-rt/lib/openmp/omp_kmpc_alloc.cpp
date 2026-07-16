@@ -20,12 +20,14 @@
 // which gives the necessary acquire/release ordering for all subsequent
 // readers without any hand-rolled atomics or busy-waits.
 //
-// The (handle, align) pair stamped on a particular allocate cannot be
-// expressed through the AllocFct signature (`void *(*)(size_t,
-// std::int64_t *)`); we therefore stash it in a thread-local single-slot
-// pending stamp that the OpenMP allocate adapter consumes on the next call.
-// The Flang lowering guarantees the stamp call is emitted immediately before
-// the matching _FortranAAllocatableAllocate, so a single slot is sufficient.
+// The (handle, align) pair stamped on a particular allocate cannot be fully
+// expressed through the AllocFct signature (`void *(*)(size_t, size_t,
+// std::int64_t *)`) because the second parameter carries only the descriptor's
+// default alignment. We therefore stash the OpenMP-specific pair in a
+// thread-local single-slot pending stamp that the OpenMP allocate adapter
+// consumes on the next call.  The Flang lowering guarantees the stamp call is
+// emitted immediately before the matching _FortranAAllocatableAllocate, so a
+// single slot is sufficient.
 //
 //===----------------------------------------------------------------------===//
 
@@ -274,7 +276,7 @@ RT_API_ATTRS bool ConsumePendingOmpAllocStamp(
 }
 
 RT_API_ATTRS void *OmpAllocateAdapter(
-    std::size_t byteSize, std::int64_t *asyncObject) {
+    std::size_t byteSize, std::size_t defaultAlign, std::int64_t *asyncObject) {
   // The matching OmpAllocatorStamp call (emitted by the Flang lowering)
   // populated the TL slot just above us.  If the slot is empty (e.g. a
   // reallocation of a descriptor that still carries kOmpAllocatorPos but
@@ -292,7 +294,7 @@ RT_API_ATTRS void *OmpAllocateAdapter(
   // only when the allocator itself is async-aware).
   (void)asyncObject;
   std::uintptr_t handle{0};
-  std::size_t align{0};
+  std::size_t align{defaultAlign};
   ConsumePendingOmpAllocStamp(handle, align);
   return OmpAllocate(byteSize, align, handle);
 }
@@ -388,7 +390,8 @@ RT_API_ATTRS bool ConsumePendingOmpAllocStamp(
 }
 
 RT_API_ATTRS void *OmpAllocateAdapter(
-    std::size_t /*byteSize*/, std::int64_t * /*asyncObject*/) {
+    std::size_t /*byteSize*/, std::size_t /*defaultAlign*/,
+    std::int64_t * /*asyncObject*/) {
   return nullptr;
 }
 
