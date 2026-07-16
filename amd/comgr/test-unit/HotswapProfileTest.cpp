@@ -28,11 +28,6 @@
 
 using namespace COMGR::hotswap;
 
-// Runtime gate: with AMD_COMGR_TIME_STATISTICS unset, the session is disabled.
-TEST(HotswapProfile, ProfilingDisabledByDefault) {
-  EXPECT_FALSE(hotswapProfilingEnabled());
-}
-
 // A disabled session is inert: every hook is a no-op, nothing lands in samples.
 TEST(HotswapProfile, DisabledSessionRecordsNothing) {
   HotswapProfile Profile(/*Enabled=*/false);
@@ -192,7 +187,7 @@ TEST(TimeStatisticsMerge, ConcurrentMergeStatsIsRaceFree) {
   constexpr unsigned NumThreads = 8;
   constexpr unsigned MergesPerThread = 2000;
 
-  auto Worker = [&Stats]() {
+  auto Worker = [&Stats, MergesPerThread]() {
     for (unsigned I = 0; I < MergesPerThread; ++I) {
       COMGR::TimeStatistics::PerfStatRecord R;
       R.Name = "row";

@@ -778,18 +778,22 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
   }
 
   if (Far) {
-    if (InstSize < MinInstSize) {
-      // Count-only row: the "calls" column is the number of declined far sites.
+    // Every decline of a valid far site increments jump:declined_far (a
+    // count-only row) so the metric reflects all placement failures, including
+    // resource pressure, not just the size guard.
+    auto declineFar = [&](const Twine &Reason) {
       Ctx.Profile.count(HotswapMetric::JumpDeclined);
       log() << "hotswap: far trampoline site 0x" << utohexstr(InstOffset)
-            << " declined: " << InstSize << " B, smaller than " << MinInstSize
-            << " B forward branch\n";
+            << " declined: " << Reason << "\n";
       return false;
-    }
+    };
+    if (InstSize < MinInstSize)
+      return declineFar(Twine(InstSize) + " B, smaller than " +
+                        Twine(MinInstSize) + " B forward branch");
     std::optional<SafeSgprScratchBlock> Scratch =
         reserveSafeFarReturn(Ctx, InstOffset);
     if (!Scratch)
-      return false;
+      return declineFar("no safe SGPR triple for set-PC return");
     T.Bytes.insert(T.Bytes.end(), SetPcReturnReserveBytes, uint8_t{0});
     T.Long = true;
     T.UsesSetPCBack = true;
