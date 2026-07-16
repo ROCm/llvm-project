@@ -828,6 +828,12 @@ public:
                                          : I->second.Lanes[Lane];
   }
 
+  const VGPRSpillToAGPR &getVGPRToAGPRSpill(int FrameIndex) const {
+    auto I = VGPRToAGPRSpills.find(FrameIndex);
+    assert(I != VGPRToAGPRSpills.end());
+    return I->second;
+  }
+
   void setVGPRToAGPRSpillDead(int FrameIndex) {
     auto I = VGPRToAGPRSpills.find(FrameIndex);
     if (I != VGPRToAGPRSpills.end())

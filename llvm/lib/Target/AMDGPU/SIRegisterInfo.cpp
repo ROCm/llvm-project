@@ -1123,14 +1123,10 @@ bool SIRegisterInfo::isFrameOffsetLegal(const MachineInstr *MI,
                                 AMDGPU::FlatAddrSpace::FlatScratch);
 }
 
-std::optional<unsigned> SIRegisterInfo::getDwarfRegLaneSize(int64_t DwarfReg,
-                                                            bool IsEH) const {
-  if (std::optional<MCRegister> Reg = getLLVMRegNum(DwarfReg, IsEH)) {
-    const TargetRegisterClass *RC = getPhysRegBaseClass(*Reg);
-    if (RC == &AMDGPU::VGPR_32RegClass || RC == &AMDGPU::AGPR_32RegClass)
-      return 4;
-  }
-  return std::nullopt;
+bool SIRegisterInfo::isDIOpWholeRegType(Type *Ty) const {
+  if (auto *TE = dyn_cast_or_null<TargetExtType>(Ty))
+    return TE->getName().starts_with("__amdgpu_whole_reg_type");
+  return false;
 }
 
 const TargetRegisterClass *

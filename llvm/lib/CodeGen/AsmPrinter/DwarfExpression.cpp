@@ -1037,20 +1037,27 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
       return std::nullopt;
     SubRegOffset /= 8;
     SubRegSize /= 8;
+    bool IsWholeReg = TRI->isDIOpWholeRegType(Arg.getResultType());
 
-    auto focusThreadIfRequired = [this](int64_t DwarfRegNo) {
-      // FIXME: This should be represented in the DIExpression.
-      if (auto LaneSize = TRI->getDwarfRegLaneSize(DwarfRegNo, false)) {
-        emitUserOp(dwarf::DW_OP_LLVM_push_lane);
-        emitConstu(*LaneSize);
-        emitOp(dwarf::DW_OP_mul);
-        emitUserOp(dwarf::DW_OP_LLVM_offset);
-      }
+    auto focusThreadIfRequired = [&](int64_t DwarfRegNo) {
+      std::optional<MCRegister> Reg = TRI->getLLVMRegNum(DwarfRegNo, false);
+      if (!Reg)
+        return;
+      auto *RegClass = TRI->getMinimalPhysRegClass(*Reg);
+      if (!RegClass || !TRI->isDivergentRegClass(RegClass))
+        return;
+      // getRegSizeInBits is the lane size for divergent registers.
+      int64_t LaneSizeInBits = TRI->getRegSizeInBits(*RegClass).getFixedValue();
+      emitUserOp(dwarf::DW_OP_LLVM_push_lane);
+      emitConstu(LaneSizeInBits / 8);
+      emitOp(dwarf::DW_OP_mul);
+      emitUserOp(dwarf::DW_OP_LLVM_offset);
     };
 
     if (Regs.size() == 1) {
       addReg(Regs[0].DwarfRegNo, Regs[0].Comment);
-      focusThreadIfRequired(Regs[0].DwarfRegNo);
+      if (!IsWholeReg)
+        focusThreadIfRequired(Regs[0].DwarfRegNo);
 
       if (SubRegOffset) {
         emitUserOp(dwarf::DW_OP_LLVM_offset_uconst);
@@ -1066,6 +1073,10 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
     assert(SubRegOffset == 0 && SubRegSize == 0 &&
            "register piece cannot apply to multiple registers");
 
+    // FIXME: Is IsWholeReg meaningful for register sequences?
+    if (IsWholeReg)
+      return std::nullopt;
+
     // When emitting fragments, the top element on the stack might be an
     // incomplete composite. Push/drop a lit0 so that we don't add the registers
     // to the larger composite.
@@ -1077,7 +1088,7 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
         return std::nullopt;
       if (Reg.DwarfRegNo >= 0) {
         addReg(Reg.DwarfRegNo, Reg.Comment);
-        focusThreadIfRequired(Regs[0].DwarfRegNo);
+        focusThreadIfRequired(Reg.DwarfRegNo);
       }
       emitOp(dwarf::DW_OP_piece);
       emitUnsigned(Reg.SubRegSize / 8);
