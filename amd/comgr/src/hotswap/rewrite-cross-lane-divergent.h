@@ -254,6 +254,21 @@ struct CrossLaneDivergentRewriteReport {
 // Otherwise perform zero rewrites and return the refusal detail in
 // `sgprForcedDetail`. No-op when `targetWaveSize <= sourceWaveSize`.
 //
+// `ProvidesFullWaveExecInvariant` says whether the active projection
+// guarantees hardware EXEC = -1 kernel-wide (i.e.
+// `WaveProjection::providesFullWaveExecInvariant()`, true only for
+// `WaveNativeProjection` via its kernel-entry `init_whole_wave`).  It
+// governs the whole-wave gather for the `readlane` / `readfirstlane`
+// rewrites: the source ops ignore EXEC (they read the selected lane's
+// real VGPR even when that lane is inactive), but `ds_bpermute`
+// returns 0 for a read of an EXEC-inactive lane.  When the invariant
+// does NOT hold (MODREP / ThreadLoop, where hardware EXEC tracks the
+// modeled per-lane active mask), the rewritten `ds_bpermute` gather is
+// wrapped in `@llvm.amdgcn.strict.wwm` so the backend runs it under
+// HW EXEC = -1 and every lane stages its real value.  When the
+// invariant holds the wrap is omitted (it would be redundant and the
+// `SIPreAllocateWWMRegs` pressure is best avoided).
+//
 // `TM` is an optional (default-null) handle to the compilation
 // target's `TargetMachine`. It is currently unused -- the classifier
 // operates purely on the lifted IR's structural shape. The parameter
@@ -271,6 +286,7 @@ struct CrossLaneDivergentRewriteReport {
 llvm::Expected<CrossLaneDivergentRewriteReport>
 rewriteCrossLaneDivergent(llvm::Function &F, unsigned SourceWaveSize,
                           unsigned TargetWaveSize,
+                          bool ProvidesFullWaveExecInvariant = false,
                           llvm::TargetMachine *TM = nullptr);
 
 } // namespace COMGR::hotswap

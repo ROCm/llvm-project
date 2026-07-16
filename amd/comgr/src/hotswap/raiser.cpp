@@ -2232,8 +2232,12 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     // refinement. See the rewrite's header comment for the contract
     // (nullable -- null disables the gate and falls back to the
     // conservative pre-UA refusal behaviour).
+    // `providesFullWaveExecInvariant()` governs whether the readlane /
+    // readfirstlane `ds_bpermute` gathers are forced whole-wave; see the
+    // rewrite's header comment for the ignore-EXEC rationale.
     Expected<CrossLaneDivergentRewriteReport> RewriteReportOrErr =
         rewriteCrossLaneDivergent(*F, Isa.WaveSize, TargetIsa.WaveSize,
+                                  Projection.providesFullWaveExecInvariant(),
                                   Tm.get());
     if (!RewriteReportOrErr)
       return RewriteReportOrErr.takeError();

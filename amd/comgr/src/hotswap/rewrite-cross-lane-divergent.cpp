@@ -731,9 +731,23 @@ void rewriteWritelaneCall(CallInst *CI, Value *LaneId,
   CI->eraseFromParent();
 }
 
+// Force a rewritten `ds_bpermute` gather to run whole-wave unless the
+// projection already guarantees hardware EXEC = -1 kernel-wide.
+Value *forceWholeWaveGather(IRBuilder<> &B, Value *Gather,
+                            bool ProvidesFullWaveExecInvariant,
+                            const Twine &Name) {
+  if (ProvidesFullWaveExecInvariant)
+    return Gather;
+  Module *M = B.GetInsertBlock()->getModule();
+  Function *WwmFn = Intrinsic::getOrInsertDeclaration(
+      M, Intrinsic::amdgcn_strict_wwm, {Gather->getType()});
+  return B.CreateCall(WwmFn, {Gather}, Name);
+}
+
 // Rewrite one `amdgcn.readlane(src, lane)` call to
 // `ds_bpermute(((lane_id & ~(W_s-1)) | lane) << 2, src)`.
-void rewriteReadlaneCall(CallInst *CI, Value *LaneId, unsigned SourceWaveSize) {
+void rewriteReadlaneCall(CallInst *CI, Value *LaneId, unsigned SourceWaveSize,
+                         bool ProvidesFullWaveExecInvariant) {
   IRBuilder<> B(CI);
   B.SetCurrentDebugLocation(CI->getDebugLoc());
   Module *M = CI->getModule();
@@ -751,6 +765,11 @@ void rewriteReadlaneCall(CallInst *CI, Value *LaneId, unsigned SourceWaveSize) {
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_ds_bpermute);
   Value *Broadcast =
       B.CreateCall(Bpermute, {Selector, Src}, "cwd_readlane_rewritten");
+  // `v_readlane_b32` ignores EXEC; force the gather whole-wave so an
+  // EXEC-inactive source lane still contributes its real VGPR value
+  // instead of `ds_bpermute`'s inactive-lane 0.
+  Broadcast = forceWholeWaveGather(B, Broadcast, ProvidesFullWaveExecInvariant,
+                                   "cwd_readlane_wwm");
   CI->replaceAllUsesWith(Broadcast);
   CI->eraseFromParent();
 }
@@ -760,7 +779,8 @@ void rewriteReadlaneCall(CallInst *CI, Value *LaneId, unsigned SourceWaveSize) {
 // wave64 target wave instead of collapsing both halves through a single
 // hardware SGPR.
 void rewriteReadfirstlaneCall(CallInst *CI, Value *LaneId,
-                              unsigned SourceWaveSize) {
+                              unsigned SourceWaveSize,
+                              bool ProvidesFullWaveExecInvariant) {
   IRBuilder<> B(CI);
   B.SetCurrentDebugLocation(CI->getDebugLoc());
   Module *M = CI->getModule();
@@ -776,6 +796,11 @@ void rewriteReadfirstlaneCall(CallInst *CI, Value *LaneId,
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_ds_bpermute);
   Value *Broadcast =
       B.CreateCall(Bpermute, {Selector, Src}, "cwd_readfirstlane_rewritten");
+  // `v_readfirstlane_b32` ignores EXEC; force the gather whole-wave so
+  // the broadcast source lane contributes its real VGPR value even when
+  // the modeled EXEC marks it inactive.
+  Broadcast = forceWholeWaveGather(B, Broadcast, ProvidesFullWaveExecInvariant,
+                                   "cwd_readfirstlane_wwm");
   CI->replaceAllUsesWith(Broadcast);
   CI->eraseFromParent();
 }
@@ -1167,9 +1192,9 @@ Error rewriteUpdateDppI32Call(CallInst *CI, Value *LaneId,
 
 } // namespace
 
-Expected<CrossLaneDivergentRewriteReport>
-rewriteCrossLaneDivergent(Function &F, unsigned SourceWaveSize,
-                          unsigned TargetWaveSize, TargetMachine *TM) {
+Expected<CrossLaneDivergentRewriteReport> rewriteCrossLaneDivergent(
+    Function &F, unsigned SourceWaveSize, unsigned TargetWaveSize,
+    bool ProvidesFullWaveExecInvariant, TargetMachine *TM) {
   CrossLaneDivergentRewriteReport Report;
   // `TM` is reserved for a future UA-backed classifier refinement.
   // See the header doc block for the soundness analysis of why the
@@ -1338,11 +1363,13 @@ rewriteCrossLaneDivergent(Function &F, unsigned SourceWaveSize,
     ++Report.WritelaneRewritten;
   }
   for (CallInst *CI : ReadlaneSites) {
-    rewriteReadlaneCall(CI, GetLaneId(), SourceWaveSize);
+    rewriteReadlaneCall(CI, GetLaneId(), SourceWaveSize,
+                        ProvidesFullWaveExecInvariant);
     ++Report.ReadlaneRewritten;
   }
   for (CallInst *CI : ReadfirstlaneSites)
-    rewriteReadfirstlaneCall(CI, GetLaneId(), SourceWaveSize);
+    rewriteReadfirstlaneCall(CI, GetLaneId(), SourceWaveSize,
+                             ProvidesFullWaveExecInvariant);
   for (CallInst *CI : DppI32Sites) {
     // Phase B above guaranteed `isDppCtrlRewritable(ctrl)`, and
     // `rewriteUpdateDppI32Call` re-checks and returns an error

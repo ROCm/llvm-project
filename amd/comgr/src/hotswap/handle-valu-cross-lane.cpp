@@ -215,18 +215,13 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
     // `v_permlane32_swap_b32` today); if one is added in the
     // future, the SAME pattern applies with `(L & 32) == 0`.
     //
-    // Pre-Session-8 this arm emitted the symmetric cross-wire
-    // (below) unconditionally -- over-swapping the "unchanged"
-    // halves corrupted every `matmul_fp16` A-operand position
-    // because vdst_in and src0_in carry distinct data at the
-    // swap site (see sec. 12.4.7 of hotswap/docs/matrix-
-    // translation.md for the Session-8 root-cause pin).  The
-    // self-preserve idiom (`vdst_in == src0_in == seed`, Triton
-    // `tl.sort` / `tl.topk`) masqueraded as working because the
-    // per-lane select collapses to `seed` for the preserved
-    // half anyway; the transitional `rewrite_permlane16_{xor3_
-    // partner,swap_selfpreserve}` passes that papered over that
-    // aliasing are deleted along with the symmetric emission.
+    // The two retained rows must keep their tied-input values
+    // (`vdst_in` on the low row, `src0_in` on the high row).  A
+    // symmetric unconditional cross-wire would overwrite them,
+    // which is only correct when `vdst_in` and `src0_in` alias.
+    // The per-lane select below therefore keeps the tied input on
+    // the retained half and takes the cross-wired value on the
+    // moved half.
     //
     // `isLaneLow` is computed via `lane AND partnerXorMask == 0`
     // rather than `lane < partnerXorMask` so the backend can
@@ -330,11 +325,10 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   // i1 immediates encoded via `opsel_i1timm` in PermlanePat
   // (`SISrcMods::OP_SEL_0` bit of src0_modifiers / src1_modifiers):
   //
-  //   - `fi=1`: on an EXEC-inactive source lane, the kernel still
-  //     fetches that lane's VGPR value (possibly stale). This is
-  //     exactly how `llvm.amdgcn.ds.bpermute` behaves naturally
-  //     (the LDS-backed path reads the VGPR alloca regardless of
-  //     EXEC), so `fi=1` is supported directly.
+  //   - `fi=1`: an EXEC-inactive source lane still contributes its real
+  //     VGPR value. `ds_bpermute` returns 0 for such a lane, so the
+  //     gather below is forced whole-wave; that is identity when the
+  //     projection already holds hardware EXEC = -1 kernel-wide.
   //   - `bc=0`: on an "out-of-range" source lane, the target lane
   //     retains %old. For permlane16 the 4-bit selector nibble is
   //     always in [0, 16) so the source lane is always in-group;
@@ -416,6 +410,14 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *Result =
         Ctx.B.CreateCall(Bperm, {ByteAddr, Src0},
                          IsPermlaneX16 ? "permlanex16_emu" : "permlane16_emu");
+    // This emulation is only reached with `fi=1`, whose semantics fetch
+    // the source lane's real VGPR even when that lane is EXEC-inactive.
+    // `ds_bpermute` instead returns 0 for such a lane, so force the
+    // gather whole-wave; identity when the projection already holds
+    // hardware EXEC = -1 kernel-wide.
+    Result = Ctx.Projection.wrapAsWWMValue(
+        Ctx.B, Result,
+        IsPermlaneX16 ? "permlanex16_emu_wwm" : "permlane16_emu_wwm");
     Ctx.writeReg32(Op.dst(), Result);
     Hr.Handled = true;
     return Hr;
@@ -627,7 +629,15 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
           Ctx.B.CreateShl(TargetLane, Ctx.B.getInt32(2), "rfl_bperm_addr");
       Function *Bperm = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_ds_bpermute);
-      Val = Ctx.B.CreateCall(Bperm, {Addr, Src}, "readfirstlane_srcwave");
+      Value *Gathered =
+          Ctx.B.CreateCall(Bperm, {Addr, Src}, "readfirstlane_srcwave");
+      // `v_readfirstlane_b32` ignores EXEC and reads the selected lane's
+      // real VGPR even when it is inactive; `ds_bpermute` returns 0 for
+      // an EXEC-inactive lane. Force the gather whole-wave so every lane
+      // stages its real value (identity when hardware EXEC = -1 holds
+      // kernel-wide).
+      Val = Ctx.Projection.wrapAsWWMValue(Ctx.B, Gathered,
+                                          "readfirstlane_srcwave_wwm");
     } else {
       Function *Rfl = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_readfirstlane, {Ctx.I32Ty});
@@ -711,7 +721,15 @@ handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
           Ctx.B.CreateShl(TargetLane, Ctx.B.getInt32(2), "rdlane_bperm_addr");
       Function *Bperm = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_ds_bpermute);
-      Val = Ctx.B.CreateCall(Bperm, {Addr, Src}, "readlane_srcwave");
+      Value *Gathered =
+          Ctx.B.CreateCall(Bperm, {Addr, Src}, "readlane_srcwave");
+      // `v_readlane_b32` ignores EXEC and reads the selected lane's real
+      // VGPR even when it is inactive; `ds_bpermute` returns 0 for an
+      // EXEC-inactive lane. Force the gather whole-wave so the inactive
+      // source lane still contributes its value (identity when hardware
+      // EXEC = -1 holds kernel-wide).
+      Val = Ctx.Projection.wrapAsWWMValue(Ctx.B, Gathered,
+                                          "readlane_srcwave_wwm");
     } else {
       Function *Rl = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_readlane, {Ctx.I32Ty});
