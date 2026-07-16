@@ -7,11 +7,10 @@
 ///
 /// \file
 /// Unit tests for the opt-in HotSwap rewrite profiler
-/// (comgr-hotswap-internal.h). This translation unit is compiled with
-/// ENABLE_HOTSWAP_PROFILE defined so the enabled branch (which the default
-/// library build compiles out) is exercised, covering both disabled and enabled
-/// per-rewrite sessions. See review on ROCm/llvm-project#3364 and #3388,
-/// comment about the enabled branch being untested.
+/// (comgr-hotswap-internal.h). The profiler is always compiled and gated only
+/// at run time (AMD_COMGR_TIME_STATISTICS), so these tests exercise both the
+/// disabled and enabled per-rewrite sessions directly. See review on
+/// ROCm/llvm-project#3364 and #3388.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -21,10 +20,8 @@
 
 using namespace COMGR::hotswap;
 
-#ifdef ENABLE_HOTSWAP_PROFILE
-
-// Runtime gate: with the facility compiled in but AMD_COMGR_TIME_STATISTICS
-// unset, the session must report disabled so no hot-path clock read happens.
+// Runtime gate: with AMD_COMGR_TIME_STATISTICS unset, the session must report
+// disabled so no hot-path clock read happens.
 TEST(HotswapProfile, ProfilingDisabledByDefault) {
   EXPECT_FALSE(hotswapProfilingEnabled());
 }
@@ -142,10 +139,3 @@ TEST(HotswapProfile, MetricInfoTableWellFormed) {
       hotswapMetricInfo[static_cast<size_t>(HotswapMetric::RewriteTotal)].Label,
       "phase:rewrite_total");
 }
-
-#else // !ENABLE_HOTSWAP_PROFILE
-
-// Guards against the target accidentally dropping the compile definition.
-TEST(HotswapProfile, CompiledOut) { SUCCEED(); }
-
-#endif // ENABLE_HOTSWAP_PROFILE

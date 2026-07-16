@@ -116,7 +116,10 @@ add_executable(HotswapMCTests
   ../src/comgr-hotswap-patch-wmma-hazard.cpp
   ../src/comgr-hotswap-patch-wmma-scale16.cpp
   ../src/comgr-hotswap-patch-wmma-split.cpp
-  ../src/comgr-env.cpp)
+  ../src/comgr-env.cpp
+  # HotswapProfile::flush() (always compiled now) merges into Comgr
+  # TimeStatistics, so this target needs TimeStatistics::mergeStats().
+  ../src/time-stat/time-stat.cpp)
 
 llvm_map_components_to_libnames(COMGR_TEST_UNIT_MC_LIBS
   BinaryFormat
@@ -147,11 +150,10 @@ comgr_configure_test_target(HotswapMCTests)
 
 # -- HotswapProfileTests ------------------------------------------------------
 #
-# The profiler (comgr-hotswap-internal.h) is header-only and compiled out by
-# default. The library links it with a PRIVATE ENABLE_HOTSWAP_PROFILE, which
-# does not reach the unit test binaries above (they recompile the sources
-# separately). This dedicated target defines the macro so the enabled branch is
-# actually built and exercised, covering disabled and enabled sessions.
+# The profiler (comgr-hotswap-internal.h) is header-only and always compiled;
+# it is gated only at run time by AMD_COMGR_TIME_STATISTICS. This dedicated
+# target exercises the HotswapProfile session logic directly (accumulation and
+# flush) for both disabled and enabled sessions.
 
 add_executable(HotswapProfileTests
   HotswapProfileTest.cpp
@@ -164,8 +166,6 @@ add_executable(HotswapProfileTests
 
 llvm_map_components_to_libnames(COMGR_TEST_UNIT_PROFILE_LIBS
   BinaryFormat Object Support TargetParser)
-
-target_compile_definitions(HotswapProfileTests PRIVATE ENABLE_HOTSWAP_PROFILE)
 
 target_link_libraries(HotswapProfileTests PRIVATE
   ${COMGR_GTEST_LIBS}

@@ -106,14 +106,11 @@ inline std::optional<uint64_t> checkedSubUint64(uint64_t LHS, uint64_t RHS,
 
 // -- HotSwap rewrite profiling -----------------------------------------------
 //
-// Two-level gate:
-//   1. Compile time -- the instrumentation is compiled in only when the build
-//      defines ENABLE_HOTSWAP_PROFILE (e.g. cmake -DENABLE_HOTSWAP_PROFILE=ON).
-//      In a normal build every type below collapses to the no-op stubs in the
-//      #else branch, so there is no code and no per-call overhead.
-//   2. Run time  -- when compiled in, it reports only when Comgr time
-//      statistics are enabled (AMD_COMGR_TIME_STATISTICS); a disabled session
-//      never reads the clock.
+// Opt-in at run time only: it reports when Comgr time statistics are enabled
+// (AMD_COMGR_TIME_STATISTICS). A disabled session is a single branch per hook
+// and never reads the clock or takes a lock -- the same "only a branch when
+// disabled" cost as the rest of Comgr's TimeStatistics, so no compile-time gate
+// is needed.
 //
 // Design (see review on ROCm/llvm-project#3364 and #3388): a single
 // retargetCodeObject call is single-threaded internally, but many calls run
@@ -187,8 +184,6 @@ enum class HotswapMetric : uint8_t {
 
 inline constexpr size_t HotswapMetricCount =
     static_cast<size_t>(HotswapMetric::Count);
-
-#ifdef ENABLE_HOTSWAP_PROFILE
 
 inline uint64_t profNowNs() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -346,6 +341,10 @@ private:
         Samples[static_cast<size_t>(HotswapMetric::Unaccounted)];
     Unacc.Nanos = Total.Nanos > PhaseSum ? Total.Nanos - PhaseSum : 0;
     Unacc.Calls = Total.Calls;
+    // This rewrite contributes one unaccounted sample, so set min == max == its
+    // residual; otherwise the record loop below would emit min/max of 0 for a
+    // nonzero row and skew the merged min/max across rewrites.
+    Unacc.MinNanos = Unacc.MaxNanos = Unacc.Nanos;
 
     const double UnitsPerNs = env::getGranularityUnitsPerSecond() / 1.0e9;
     // Build names first (SmallVector inline storage keeps them stable), then
@@ -390,33 +389,6 @@ private:
   bool Enabled;
   std::array<HotswapSample, HotswapMetricCount> Samples{};
 };
-
-#else // !ENABLE_HOTSWAP_PROFILE
-
-// Profiling compiled out. These no-op shims keep every hotswap-*.cpp call site
-// valid at zero cost: the session is never enabled, so the timing / record
-// calls are dead-code eliminated. No static state, no atexit dump, no work.
-
-inline uint64_t profNowNs() { return 0; }
-inline bool hotswapProfilingEnabled() { return false; }
-
-class HotswapProfile {
-public:
-  class Scope {
-  public:
-    void addPatches(uint64_t) {}
-    void finish() {}
-  };
-  explicit HotswapProfile(bool = false) {}
-  HotswapProfile(const HotswapProfile &) = delete;
-  HotswapProfile &operator=(const HotswapProfile &) = delete;
-  bool enabled() const { return false; }
-  Scope time(HotswapMetric) { return Scope{}; }
-  void count(HotswapMetric, uint64_t = 1) {}
-  void add(HotswapMetric, uint64_t, uint64_t) {}
-};
-
-#endif // ENABLE_HOTSWAP_PROFILE
 
 // -- Trampoline and NOP sled --------------------------------------------------
 
@@ -1195,8 +1167,8 @@ struct PatchContext {
   llvm::StringMap<KernelPatchStats> &KernelStats;
   std::vector<ScratchPatchInfo> &OutScratchPatches;
   const DirectControlFlowInfo &DirectControlFlow;
-  // Per-rewrite profiling session (no-op stub unless ENABLE_HOTSWAP_PROFILE).
-  // Deep patch sites record into its lock-free local array.
+  // Per-rewrite profiling session (inert unless AMD_COMGR_TIME_STATISTICS is
+  // set). Deep patch sites record into its lock-free local array.
   HotswapProfile &Profile;
   // Required patches are transformations whose unpatched original code is
   // unsafe to return when the selected rewrite policy needs the patch.

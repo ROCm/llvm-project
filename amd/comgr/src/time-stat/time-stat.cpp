@@ -15,6 +15,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <stdlib.h>
 #include <system_error>
 
@@ -62,23 +63,27 @@ void getLogFile(std::string &PerfLog) {
 }
 
 bool InitTimeStatistics(std::string LogFile) {
-  if (!PS) {
-    if (!env::needTimeStatistics()) {
-      return false;
-    }
+  // Thread-safe lazy init: concurrent Comgr calls (e.g. concurrent hotswap
+  // rewrites merging their stats) can reach this simultaneously. call_once
+  // guarantees PS is created and the atexit dump registered exactly once,
+  // instead of the previous unguarded `if (!PS)` check racing on both.
+  static std::once_flag InitFlag;
+  std::call_once(InitFlag, [&LogFile]() {
+    if (!env::needTimeStatistics())
+      return;
 
-    if (LogFile == "") {
+    if (LogFile == "")
       getLogFile(LogFile);
-    }
 
-    PS = std::make_unique<PerfStats>();
-    if (!PS || !PS->Init(LogFile)) {
+    std::unique_ptr<PerfStats> Stats = std::make_unique<PerfStats>();
+    if (!Stats->Init(LogFile)) {
       std::cerr << "TimeStatistics failed to initialize\n";
-      return false;
+      return;
     }
+    PS = std::move(Stats);
     std::atexit(&dump);
-  }
-  return true;
+  });
+  return PS != nullptr;
 }
 
 void ProfilePoint::finish() {

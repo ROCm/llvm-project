@@ -136,13 +136,6 @@ set(SOURCES
 option(COMGR_ENABLE_HOTSWAP_TRANSPILE
   "Build the hotswap-transpiler-backed amd_comgr_hotswap_transpile entry point" OFF)
 
-# HotSwap profiling instrumentation, opt-in. When ON, compiles the HotSwap
-# profiling helpers (timing + decode-repetition stats) into amd_comgr; they
-# remain gated at runtime by the HOTSWAP_PROFILE env var. When OFF (default),
-# the profiling code is compiled out entirely via no-op stubs.
-option(ENABLE_HOTSWAP_PROFILE
-  "Compile in HotSwap profiling instrumentation (runtime-gated by HOTSWAP_PROFILE)" OFF)
-
 # Add Windows resource file for version info
 if(WIN32)
   # Allow users to override the DLL name via -DCOMGR_DLL_NAME
@@ -229,10 +222,6 @@ target_include_directories(amd_comgr
 # link edge"), not here.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   target_compile_definitions(amd_comgr PRIVATE COMGR_ENABLE_HOTSWAP_TRANSPILE=1)
-endif()
-
-if(ENABLE_HOTSWAP_PROFILE)
-  target_compile_definitions(amd_comgr PRIVATE ENABLE_HOTSWAP_PROFILE)
 endif()
 
 message("")
