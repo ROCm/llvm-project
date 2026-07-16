@@ -155,3 +155,6 @@ a7ba8dcad76476478100c228a31d9c48391b1e03
 
 # [hotswap][NFC] Replace non-ASCII characters with ASCII equivalents (#244)
 4a2306c129da54ebd670dc8f9a0fc6590bc164d7
+
+# [hotswap][NFC] Apply clang-format and LLVM coding standards (#242)
+4ec501b4df6460d3797c8164fb278f874aa2c55e
