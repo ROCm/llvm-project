@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-hotswap-internal.h"
+#include "comgr-test-elf-utils.h"
 #include "gtest/gtest.h"
 
 using namespace COMGR::hotswap;
@@ -70,4 +71,46 @@ TEST(HotswapOccupancy, RejectsInvalidMetadata) {
   EXPECT_EQ(computeWorkgroupCapacity(128, 2048, 32, Limits), std::nullopt);
   EXPECT_EQ(computeWorkgroupCapacity(128, 1024, 0, Limits), std::nullopt);
   EXPECT_EQ(getSubtargetOccupancyLimits("not-a-gpu"), std::nullopt);
+}
+
+TEST(HotswapOccupancy, RejectsPatchOutsideKnownKernelWithZeroReportedGrowth) {
+  const std::vector<uint8_t> Text(4);
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  RewriteConfig Config;
+  LLVMState LS;
+  std::vector<InternalDecodedInst> Decoded;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  PatchContext Ctx{Config,
+                   Decoded,
+                   ViewOrErr->textData(),
+                   ViewOrErr->textSize(),
+                   /*PoolBaseOffset=*/0,
+                   LS,
+                   Trampolines,
+                   Sleds,
+                   *ViewOrErr,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow};
+
+  EXPECT_EQ(checkKernelVgprBump(Ctx, /*KernelName=*/{}, /*ExtraVgprs=*/0,
+                                PatchRequirement::Optional),
+            VgprBumpDecision::Decline);
+  EXPECT_FALSE(Ctx.RequiredPatchFailed);
+
+  EXPECT_EQ(checkKernelVgprBump(Ctx, /*KernelName=*/{}, /*ExtraVgprs=*/0,
+                                PatchRequirement::Required),
+            VgprBumpDecision::Fail);
+  EXPECT_TRUE(Ctx.RequiredPatchFailed);
 }

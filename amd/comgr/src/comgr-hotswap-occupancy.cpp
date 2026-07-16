@@ -150,7 +150,23 @@ unsigned getKernelVgprGranuleSize(PatchContext &Ctx, StringRef KernelName) {
 VgprBumpDecision checkKernelVgprBump(PatchContext &Ctx, StringRef KernelName,
                                      unsigned ExtraVgprs,
                                      PatchRequirement Requirement) {
-  if (KernelName.empty() || ExtraVgprs == 0)
+  if (KernelName.empty()) {
+    // TODO: Build a device-function call graph and propagate the transformed
+    // function's VGPR requirement to every reachable kernel. Until then, an
+    // allocator result relative to a fallback register count cannot prove that
+    // any caller's descriptor covers the selected scratch registers.
+    log() << "hotswap: "
+          << (Requirement == PatchRequirement::Required ? "error: " : "")
+          << "cannot verify VGPR capacity for a patch site outside a known "
+             "kernel because its calling kernels are unknown; "
+          << (Requirement == PatchRequirement::Required
+                  ? "failing required patch"
+                  : "declining optional patch")
+          << ".\n";
+    return failOrDeclineVgprBump(Ctx, Requirement);
+  }
+
+  if (ExtraVgprs == 0)
     return VgprBumpDecision::Apply;
 
   unsigned AggregateExtraVgprs = ExtraVgprs;

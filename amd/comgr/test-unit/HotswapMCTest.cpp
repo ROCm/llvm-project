@@ -714,6 +714,7 @@ TEST(SafeSgprScratchBlock, RejectsAlignmentOverflow) {
   LivenessInfo Liveness;
   llvm::StringMap<KernelPatchStats> KernelStats;
   std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
   PatchContext Ctx{Config,
                    Decoded,
                    View.textData(),
@@ -725,7 +726,8 @@ TEST(SafeSgprScratchBlock, RejectsAlignmentOverflow) {
                    View,
                    Liveness,
                    KernelStats,
-                   ScratchPatches};
+                   ScratchPatches,
+                   ControlFlow};
 
   EXPECT_FALSE(findSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, /*Count=*/1,
                                         /*Alignment=*/2, "unit test"));

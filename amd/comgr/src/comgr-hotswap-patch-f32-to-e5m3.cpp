@@ -404,10 +404,9 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   }
 
   unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
-  if (!SA.KernelName.empty() &&
-      checkKernelVgprBump(Ctx, SA.KernelName, ExtraV,
+  if (checkKernelVgprBump(Ctx, SA.KernelName, ExtraV,
                           PatchRequirement::Optional) !=
-          VgprBumpDecision::Apply)
+      VgprBumpDecision::Apply)
     return 0;
 
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, ReplacementBytes))
@@ -603,10 +602,9 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   }
 
   unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
-  if (!SA.KernelName.empty() &&
-      checkKernelVgprBump(Ctx, SA.KernelName, ExtraV,
+  if (checkKernelVgprBump(Ctx, SA.KernelName, ExtraV,
                           PatchRequirement::Optional) !=
-          VgprBumpDecision::Apply)
+      VgprBumpDecision::Apply)
     return 0;
 
   if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
@@ -773,10 +771,9 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   }
 
   unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
-  if (!SA.KernelName.empty() &&
-      checkKernelVgprBump(Ctx, SA.KernelName, ExtraV,
+  if (checkKernelVgprBump(Ctx, SA.KernelName, ExtraV,
                           PatchRequirement::Optional) !=
-          VgprBumpDecision::Apply)
+      VgprBumpDecision::Apply)
     return 0;
 
   if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
