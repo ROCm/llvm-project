@@ -482,6 +482,9 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       DI.Size = It->second.Size;
       DI.Inst = It->second.Inst;
       DI.Mnemonic = It->second.Mnemonic;
+      // Only successful decodes are ever stored (see the store guard below), so
+      // a hit is by construction a successful decode.
+      DI.DecodeSucceeded = true;
       Pos += DI.Size;
       Decoded.emplace_back(std::move(DI));
       continue;

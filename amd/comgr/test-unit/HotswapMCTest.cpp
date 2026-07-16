@@ -1609,6 +1609,9 @@ TEST(DecodeCache, RepeatedInstructionsReuseDecodeWithPerOccurrenceOffset) {
   for (const InternalDecodedInst &DI : Decoded) {
     EXPECT_EQ(DI.Mnemonic, "s_nop");
     EXPECT_EQ(DI.Size, MinInstSize);
+    // Cache hits (all but the first here) must still report a successful
+    // decode; downstream passes gate on DecodeSucceeded.
+    EXPECT_TRUE(DI.DecodeSucceeded);
     // Offset is set per occurrence and must never come from the cached entry.
     EXPECT_EQ(DI.Offset, ExpectedOffset);
     expectSameOperands(DI.Inst, Ref, "repeated s_nop");
