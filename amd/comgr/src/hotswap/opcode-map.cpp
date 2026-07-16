@@ -1267,6 +1267,10 @@ static const Entry kCanonTable[] = {
     E(DS_WRITE_B16_D16_HI, DS_WRITE_B16_D16_HI),
     E(DS_WRITE_B8_D16_HI, DS_WRITE_B8_D16_HI),
     E(DS_BPERMUTE_B32, DS_BPERMUTE_B32),
+    // ds_permute_b32 -- forward cross-lane PUSH permute, mirror of the
+    // PULL ds_bpermute_b32 above. Lifted through llvm.amdgcn.ds.permute
+    // in handle-ds.cpp (see the DS_PERMUTE_B32 handler).
+    E(DS_PERMUTE_B32, DS_PERMUTE_B32),
     // ds_swizzle_b32 -- wave-width-specific cross-lane shuffle. The
     // handler refuses with `unsupportedInstructionForm` until the P6 rewrite
     // lands (see the ds_swizzle_b32 row of hotswap/docs/wave-size-

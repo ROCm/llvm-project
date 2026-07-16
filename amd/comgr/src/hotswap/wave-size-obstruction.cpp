@@ -78,6 +78,8 @@ const char *obstructionKindName(ObstructionKind K) {
     return "DppCrossLane (sec. 3 Class 2: DPP modifier)";
   case ObstructionKind::DsBpermuteGather:
     return "DsBpermuteGather (sec. 3 Class 2: ds_bpermute_b32)";
+  case ObstructionKind::DsPermuteScatter:
+    return "DsPermuteScatter (sec. 3 Class 2: ds_permute_b32)";
   case ObstructionKind::NonCommutativeAtomic:
     return "NonCommutativeAtomic (sec. 3 Class 3: cmpswap/swap/xchg, replica "
            "race)";
@@ -96,6 +98,8 @@ const char *rewriteIdName(RewriteId R) {
     return "none";
   case RewriteId::P1_DsBpermute:
     return "P1 (llvm.amdgcn.ds.bpermute)";
+  case RewriteId::P1_DsPermute:
+    return "P1 (llvm.amdgcn.ds.permute)";
   case RewriteId::P2_PermLane16:
     return "P2 (llvm.amdgcn.permlane16)";
   case RewriteId::P3_PermLane64:
@@ -997,6 +1001,21 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
       Report.Sites.push_back(std::move(Site));
       continue;
     }
+    if (Sop == CanonicalOp::DS_PERMUTE_B32) {
+      // Forward/PUSH mirror of DS_BPERMUTE_B32 above. The handler in
+      // handle-ds.cpp lifts through llvm.amdgcn.ds.permute with the
+      // same source-wave selector rebase (see lit_tests/ds_permute_b32
+      // and ds_permute_b32_wave32_rebase). Record the site so the
+      // trace shows it, and mark rewriteImplemented = true so the
+      // decider treats it as outcome (a)/(b) rather than refusal.
+      ObstructionSite Site;
+      Site.Inst = &Di;
+      Site.Kind = ObstructionKind::DsPermuteScatter;
+      Site.Rewrite = RewriteId::P1_DsPermute;
+      Site.RewriteImplemented = true;
+      Report.Sites.push_back(std::move(Site));
+      continue;
+    }
 
     // --- sec. 3 Class 3: replica races on shared state ------------------
     // The CanonicalOp set here is the complete enumeration of
@@ -1328,6 +1347,7 @@ llvm::Error selectFailureFromReport(const ObstructionReport &Report) {
     case ObstructionKind::DsSwizzle:
     case ObstructionKind::DppCrossLane:
     case ObstructionKind::DsBpermuteGather:
+    case ObstructionKind::DsPermuteScatter:
     case ObstructionKind::None:
       llvm_unreachable("ObstructionKind classified as unrewritable but "
                        "buildObstructionReport never tags it that way");

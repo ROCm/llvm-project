@@ -1,22 +1,21 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && %not raise_cli %t.hsaco \
-; RUN:     --target-isa=gfx942 --emit-ir=c2_dpp_row_ror_refuse_kernel \
-; RUN:   2>&1 \
+; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
+; RUN:     --emit-ir=c2_dpp_row_ror_kernel \
 ; RUN:   | %FileCheck %s
 
-; Refuse unsupported DPP row_ror.
-; CHECK-DAG: function 'c2_dpp_row_ror_refuse_kernel'
-; CHECK-DAG: unsupported row_ror:1
-; CHECK-DAG: wave-size-translation.md
-; CHECK-DAG: quad_perm, row_shl:N, row_shr:N and row_xmask:N
+; Lower DPP row_ror:N to a ds_bpermute selector. row_ror:1 reads the
+; within-row source lane (W - 1) mod 16, computed as (W + 15) & 15;
+; the rotation wraps inside the 16-lane row, so every target lane is
+; always in-range and the mapping is identical on wave32 and wave64.
+; CHECK-LABEL: define amdgpu_kernel void @c2_dpp_row_ror_kernel(
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
-	.globl	c2_dpp_row_ror_refuse_kernel
+	.globl	c2_dpp_row_ror_kernel
 	.p2align	8
-	.type	c2_dpp_row_ror_refuse_kernel,@function
-c2_dpp_row_ror_refuse_kernel:           ; @c2_dpp_row_ror_refuse_kernel
+	.type	c2_dpp_row_ror_kernel,@function
+c2_dpp_row_ror_kernel:           ; @c2_dpp_row_ror_kernel
 ; %bb.0:
 	s_clause 0x1
 	s_load_b32 s4, s[0:1], 0x14
@@ -36,13 +35,25 @@ c2_dpp_row_ror_refuse_kernel:           ; @c2_dpp_row_ror_refuse_kernel
 	v_mad_u32 v0, s0, s4, v0
 	global_load_b32 v1, v0, s[2:3] scale_offset
 	s_wait_loadcnt 0x0
+; The row_ror:1 update.dpp lowers to a ds_bpermute selector (no update.dpp left).
+; CHECK-NOT: call i32 @llvm.amdgcn.update.dpp.i32(
+; CHECK-DAG: %cwd_dpp_within_row = and i32 %{{.+}}, 15
+; CHECK-DAG: %cwd_dpp_row_base = and i32 %{{.+}}, -16
+; CHECK-DAG: %cwd_dpp_ror_sum = add i32 %cwd_dpp_within_row, 15
+; CHECK-DAG: %cwd_dpp_ror_src = and i32 %cwd_dpp_ror_sum, 15
+; CHECK-DAG: %cwd_dpp_src_safe = select i1 true, i32 %cwd_dpp_ror_src, i32 0
+; CHECK-DAG: %cwd_dpp_src_abs = or i32 %cwd_dpp_row_base, %cwd_dpp_src_safe
+; CHECK-DAG: %cwd_dpp_selector = shl i32 %cwd_dpp_src_abs, 2
+; CHECK: call i32 @llvm.amdgcn.ds.bpermute(i32 %cwd_dpp_selector, i32 %{{[^,]+}})
+; CHECK-NOT: call i32 @llvm.amdgcn.update.dpp.i32(
+; CHECK: declare i32 @llvm.amdgcn.ds.bpermute(i32, i32)
 	v_mov_b32_dpp v1, v1 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1
 	
 	global_store_b32 v0, v1, s[2:3] scale_offset
 	s_endpgm
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
-	.amdhsa_kernel c2_dpp_row_ror_refuse_kernel
+	.amdhsa_kernel c2_dpp_row_ror_kernel
 		.amdhsa_kernarg_size 264
 		.amdhsa_user_sgpr_count 2
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
@@ -108,10 +119,10 @@ amdhsa.kernels:
     .kernarg_segment_align: 8
     .kernarg_segment_size: 264
     .max_flat_workgroup_size: 1024
-    .name:           c2_dpp_row_ror_refuse_kernel
+    .name:           c2_dpp_row_ror_kernel
     .private_segment_fixed_size: 0
     .sgpr_count:     6
-    .symbol:         c2_dpp_row_ror_refuse_kernel.kd
+    .symbol:         c2_dpp_row_ror_kernel.kd
     .vgpr_count:     2
     .wavefront_size: 32
 amdhsa.target:   amdgcn-amd-amdhsa--gfx1250

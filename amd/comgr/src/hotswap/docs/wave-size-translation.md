@@ -277,8 +277,8 @@ same-lane "copy operand to dst" stub silently drops the remap. Every
 SemOp below is either a landed rewrite here or a §7 refusal; no
 third path.
 
-Lifted SemOps (`V_PERMLANE32_SWAP_B32`, `V_PERMLANE64_B32`,
-`DS_PERMUTE_B32` pending as P6.b are refused in §7):
+Lifted SemOps (`V_PERMLANE32_SWAP_B32`, `V_PERMLANE64_B32` are refused
+in §7):
 
 | SemOp | Handling | Landing |
 |---|---|---|
@@ -286,9 +286,10 @@ Lifted SemOps (`V_PERMLANE32_SWAP_B32`, `V_PERMLANE64_B32`,
 | `V_READLANE_B32` / `V_WRITELANE_B32` | `llvm.amdgcn.readlane` / `writelane`. Never-written source VGPRs read as `undef` (hardware-undefined on those lanes). Static const operands outside `[0, W_s)` caught by §7's `OutOfRangeLaneOperand`. | pre-SPE |
 | `V_MBCNT_LO_U32_B32` / `V_MBCNT_HI_U32_B32` | Same-wave uses `llvm.amdgcn.mbcnt.{lo,hi}`. Wave32 -> wave64 recomputes `mbcnt_lo` from the source-wave-local lane id and the current source-wave slice of EXEC/VCC/SGPR shadow masks; `mbcnt_hi` is the wave32 pass-through of `src1`. | pre-SPE + source-wave mask slice |
 | `DS_BPERMUTE_B32` (P1) | `llvm.amdgcn.ds.bpermute`. Selector assumed in `[0, source_wave)` -> naturally half-independent on wave64. | `d9bfd99626` |
+| `DS_PERMUTE_B32` (P1, forward/PUSH mirror) | `llvm.amdgcn.ds.permute`. Same operand shape, convergent contract, and source-wave selector rebase as `DS_BPERMUTE_B32`; only the intrinsic differs (push vs pull). Direction: lane `i` sends to lane `addr[i]>>2`. Regression fences `ds_permute_b32` + `ds_permute_b32_wave32_rebase`. | issue #32 |
 | `V_PERMLANE16_B32` / `V_PERMLANEX16_B32` (P2) | `ds_bpermute` emulation from decoded selector nibbles, `^ 0x10` for `permlanex16`. Only `op_sel:[1,0]` supported (`fi=0` / `bc=1` refuse). Target-independent -- gfx942 lacks native ISel. | `4ff69403f0`, `01ca97e4aa` |
 | `V_PERMLANE16_SWAP_B32` (P4) | Paired `ds_bpermute`, partner `lane_id XOR 16`. Bit-exactly verified against gfx942. | `0c3f526008`, `5b721e8c91`, `bccdccfbb2` |
-| DPP modifiers (any base VOP) (P5) | Decode lifts `dppCtrl` / `dppRowMask` / `dppBankMask` / `dppBoundCtrl` into `DecodedInst` before opcode canonicalisation. `emitUpdateDpp` emits `llvm.amdgcn.update.dpp.{i32,i64}`; `OpResolver::src*` routes src0 through `wrapDppIfNeeded`. DPP8 refuses (pending P5.b). | `2dc9aa927e`, `75cf67cc18` |
+| DPP modifiers (any base VOP) (P5) | Decode lifts `dppCtrl` / `dppRowMask` / `dppBankMask` / `dppBoundCtrl` into `DecodedInst` before opcode canonicalisation. `emitUpdateDpp` emits `llvm.amdgcn.update.dpp.{i32,i64}`; `OpResolver::src*` routes src0 through `wrapDppIfNeeded`. Under wave32->wave64 cross-widening the Phase 6.5 rewrite (`rewrite-cross-lane-divergent.cpp`) lowers the update.dpp to a `ds_bpermute` selector for the within-16-lane-row ctrl families: `quad_perm`, `row_shl:N`, `row_shr:N`, `row_xmask:N`, and `row_ror:N` (all stay inside one 16-lane row, hence wave-size-oblivious). DPP8 refuses (pending P5.b); wave-crossing ctrls (`wave_*`, `bcast15/31`) refuse. | `2dc9aa927e`, `75cf67cc18`, issue #32 (row_ror) |
 | `DS_SWIZZLE_B32` (P6) | Imm extracted at decode; accepts QUAD_PERM, BITMASK_PERM, valid FFT_MODE / ROTATE_MODE per LLVM's `Swizzle::EncBits`. Reserved envelopes and reserved-bit imms refuse. | `81e070c32b`, `4d4b2deacd`, `0e770da0dd`, `5cd9b6d210`, `af5c8ba4a4`, `2c02750f66` |
 
 Cross-lane closure on GPT-OSS is complete as of P4 (`0c3f526008`);
@@ -943,10 +944,14 @@ epic; not wave-size.
    swap) or refuse partial-EXEC sites via a static EXEC=full proof.
    Today's corpus defers both.
 4. **P5.b -- DPP8 sub-family lift** via `llvm.amdgcn.mov.dpp8`. DPP8
-   currently refuses loud (detected via `OpName::dpp8`); no GPT-OSS
-   kernel exercises it.
-5. **P6.b -- `DS_PERMUTE_B32` lift**, mirror of P1 via
-   `llvm.amdgcn.ds.permute`. No corpus demand.
+   currently refuses loud (detected via `OpName::dpp8`, leaves
+   `hasDpp == false`); no GPT-OSS kernel exercises it. Refusal fence:
+   `v_fma_mix_half_result_dpp` (DPP8 arm). Kept as an intentional loud
+   refusal (issue #32): the wave32 8-lane DPP8 permutation crosses the
+   quad/row structure the cross-widen ds_bpermute rewrite relies on,
+   and `mov.dpp8` has no wave-size-oblivious lowering here without a
+   per-selector correctness proof; no corpus demand justifies the
+   audit.
 6. **Projection ladder is a skeleton.** `ThreadLoopProjection`
    overrides refuse; scalarisation has no skeleton. Every GPT-OSS and
    AITER kernel is outcome (a) under modulo-replication -- unblocked

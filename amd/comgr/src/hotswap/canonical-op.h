@@ -1346,6 +1346,13 @@ enum class CanonicalOp : uint16_t {
   DS_WRITE_B16_D16_HI,
   DS_WRITE_B8_D16_HI,
   DS_BPERMUTE_B32,
+  // Forward cross-lane permute (PUSH semantics): lane i sends its src
+  // datum to destination lane addr[i]>>2. Mirror of DS_BPERMUTE_B32
+  // (PULL) lifted through llvm.amdgcn.ds.permute. Class 2 cross-lane
+  // (hotswap/docs/wave-size-translation.md sec. 5.3); handled in
+  // handle-ds.cpp with the same source-wave selector rebase as
+  // DS_BPERMUTE_B32 under wave32->wave64 cross-widening.
+  DS_PERMUTE_B32,
   // Class 2 DsSwizzle (hotswap/docs/wave-size-translation.md sec. 6).
   // Wave-width-specific cross-lane shuffle. The handler refuses with
   // `unsupportedInstructionForm` until the P6 rewrite (lift through
