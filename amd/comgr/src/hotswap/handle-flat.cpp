@@ -143,6 +143,31 @@ Value *emitD16HiHalfTruncI8(RaiseContext &Ctx, Value *Src32) {
   return Ctx.B.CreateTrunc(Shifted, Type::getInt8Ty(Ctx.C), "d16hi_trunc");
 }
 
+// True when a global/flat memory op's cpol scope is coherent beyond the CU,
+// i.e. any of SCOPE_SE / SCOPE_DEV / SCOPE_SYS. The lift models these as
+// *volatile* LLVM accesses so the AMDGPU backend keeps them coherent and the
+// optimizer cannot hoist/CSE/eliminate them; treating a wider-than-CU scope as
+// plain would drop a cross-workgroup handshake (see the commit that added
+// this). Only SCOPE_CU / default cpol keeps the plain, optimizable access. An
+// unknown scope value is impossible (SCOPE is a 2-bit field), so it is
+// asserted.
+bool memScopeIsCoherent(const DecodedInst &Di) {
+  std::optional<int64_t> Cpol =
+      readNamedImmOperand(Di, llvm::AMDGPU::OpName::cpol);
+  if (!Cpol)
+    return false;
+  uint64_t Scope = static_cast<uint64_t>(*Cpol) & llvm::AMDGPU::CPol::SCOPE;
+  switch (Scope) {
+  case llvm::AMDGPU::CPol::SCOPE_CU:
+    return false;
+  case llvm::AMDGPU::CPol::SCOPE_SE:
+  case llvm::AMDGPU::CPol::SCOPE_DEV:
+  case llvm::AMDGPU::CPol::SCOPE_SYS:
+    return true;
+  }
+  llvm_unreachable("SCOPE is a 2-bit field; all four values are enumerated");
+}
+
 int64_t firstScratchImm(const DecodedInst &Di, OpResolver &Op,
                         unsigned ImmStart) {
   for (unsigned K = ImmStart; K < Op.nSrcs(); ++K) {
@@ -565,11 +590,12 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     // low-level alloca path) is called inside the body rather than
     // `ctx.writeReg32` (which would wrap the write in a nested
     // `emitUnderExec` -- harmless but redundant IR).
+    bool CoherentSub = memScopeIsCoherent(Di);
     Ctx.emitUnderExec([&] {
       bool IsUnsigned = Sop == CanonicalOp::GLOBAL_LOAD_UBYTE ||
                         Sop == CanonicalOp::GLOBAL_LOAD_USHORT;
-      Value *Loaded =
-          Ctx.B.CreateAlignedLoad(LoadTy, Addr, LoadAlign, "gload_sub");
+      Value *Loaded = Ctx.B.CreateAlignedLoad(LoadTy, Addr, LoadAlign,
+                                              CoherentSub, "gload_sub");
       Value *Ext = IsUnsigned ? Ctx.B.CreateZExt(Loaded, Ctx.I32Ty)
                               : Ctx.B.CreateSExt(Loaded, Ctx.I32Ty);
       if (Sop == CanonicalOp::GLOBAL_LOAD_SHORT_D16_HI) {
@@ -613,15 +639,17 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     // error 700).  For the vector-load case (`DWORDX{2,3,4}`), the
     // single load + N extract-write pairs all go inside one
     // emitUnderExec block so inactive lanes skip the whole sequence.
+    bool Coherent = memScopeIsCoherent(Di);
     Ctx.emitUnderExec([&] {
       if (LoadDwords == 1) {
         Ctx.Regs.writeReg32(
             Ctx.B, Dest,
-            Ctx.B.CreateBitCast(Ctx.B.CreateLoad(Ctx.F32Ty, Addr, "gload"),
-                                Ctx.I32Ty));
+            Ctx.B.CreateBitCast(
+                Ctx.B.CreateLoad(Ctx.F32Ty, Addr, Coherent, "gload"),
+                Ctx.I32Ty));
       } else {
         Type *VecTy = FixedVectorType::get(Ctx.I32Ty, LoadDwords);
-        Value *Loaded = Ctx.B.CreateLoad(VecTy, Addr, "gload");
+        Value *Loaded = Ctx.B.CreateLoad(VecTy, Addr, Coherent, "gload");
         for (int D = 0; D < LoadDwords; D++) {
           ParsedReg Sub = Dest;
           Sub.BaseIdx = Dest.BaseIdx + D;
@@ -697,6 +725,7 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     FlatAddr Fa = *FaOrErr;
     Value *Addr = Fa.Ptr;
     ParsedReg StData = Fa.StData;
+    bool Coherent = memScopeIsCoherent(Di);
 
     if (StoreDwords == 0) {
       Value *Src32 = Ctx.Regs.readReg32(Ctx.B, StData);
@@ -712,14 +741,14 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       } else {
         Val = Ctx.B.CreateTrunc(Src32, Type::getIntNTy(Ctx.C, StoreBits));
       }
-      Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Val, Addr); });
+      Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Val, Addr, Coherent); });
     } else if (StoreDwords == 1) {
       Value *Val = Ctx.Regs.readReg32(Ctx.B, StData);
-      Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Val, Addr); });
+      Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Val, Addr, Coherent); });
     } else {
       auto *VecTy = FixedVectorType::get(Ctx.I32Ty, StoreDwords);
       Value *Val = Ctx.Regs.readRegVec(Ctx.B, StData, VecTy);
-      Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Val, Addr); });
+      Ctx.emitUnderExec([&] { Ctx.B.CreateStore(Val, Addr, Coherent); });
     }
     Hr.Handled = true;
     return Hr;
