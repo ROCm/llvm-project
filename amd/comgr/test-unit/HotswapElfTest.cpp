@@ -657,6 +657,12 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
     EXPECT_EQ(Sym->st_shndx, PoolIdx);
     EXPECT_EQ(Sym->st_value, PoolVAddr + F.StubTextOffset);
     EXPECT_EQ(Sym->st_size, KernelEntryStubStride);
+    // The symbol's [value, value + size) range must lie fully inside the
+    // section it claims (st_shndx), catching a symbol placed in the wrong
+    // section or past its bounds.
+    const ELFT::Shdr &StubSec = (*SecsOrErr)[Sym->st_shndx];
+    EXPECT_GE(Sym->st_value, StubSec.sh_addr);
+    EXPECT_LE(Sym->st_value + Sym->st_size, StubSec.sh_addr + StubSec.sh_size);
   }
 }
 
