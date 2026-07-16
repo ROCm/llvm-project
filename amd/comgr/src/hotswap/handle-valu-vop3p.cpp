@@ -14,7 +14,6 @@
 #include "SIDefines.h"            // SISrcMods::NEG
 #include "Utils/AMDGPUBaseInfo.h" // AMDGPU::getNamedOperandIdx, AMDGPU::OpName
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -49,19 +48,6 @@ struct PackedSrcOptions {
 StringRef diagnosticMnemonic(const DecodedInst &Di) {
   return Di.Mnemonic.empty() ? StringRef(canonicalOpName(Di.CanonOp))
                              : StringRef(Di.Mnemonic);
-}
-
-// The mnemonic of some wmma scale instructions is suffixed by the size of the
-// elements of the input matrices. For each size, we take a different number of
-// vgprs that represent the input matrix. This function converts this suffix to
-// the number of vgprs.
-// TODO: derive this from matrix_a_fmt/matrix_b_fmt instead.
-unsigned wmmaFmtSuffixToDwords(StringRef Tag) {
-  return StringSwitch<unsigned>(Tag)
-      .CaseLower("f8", 16)
-      .CaseLower("f6", 12)
-      .CaseLower("f4", 8)
-      .DefaultUnreachable();
 }
 
 Error readSourceMods(const DecodedInst &Di, OpResolver &Op, unsigned NumSrcs,
@@ -244,6 +230,149 @@ Expected<Value *> readWMMAAccumC(RaiseContext &Ctx, const DecodedInst &Di,
       "WMMA src2 inline-constant other than 0 is not yet modelled; "
       "extend readWMMAAccumC if a corpus kernel surfaces this");
 }
+
+struct WmmaScaleInputs {
+  unsigned ADwords = 0;
+  unsigned BDwords = 0;
+  unsigned CdLanes = 0;
+  ParsedReg Dest;
+  Type *ATy = nullptr;
+  Type *BTy = nullptr;
+  Type *CdTy = nullptr;
+  Value *A = nullptr;
+  Value *B = nullptr;
+  Value *C = nullptr;
+  ConstantInt *MatrixAFmt = nullptr;
+  ConstantInt *MatrixBFmt = nullptr;
+  ConstantInt *CMod = nullptr;
+  ConstantInt *MatrixAScale = nullptr;
+  ConstantInt *MatrixAScaleFmt = nullptr;
+  Value *ScaleSrc0 = nullptr;
+  ConstantInt *MatrixBScale = nullptr;
+  ConstantInt *MatrixBScaleFmt = nullptr;
+  Value *ScaleSrc1 = nullptr;
+  ConstantInt *MatrixAReuse = nullptr;
+  ConstantInt *MatrixBReuse = nullptr;
+
+  // Read matrix fragments, accumulator, and named scale operands.
+  static Expected<WmmaScaleInputs>
+  parse(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
+    WmmaScaleInputs In;
+
+    int64_t MatrixAFmtImm = namedOperandImm(Di, AMDGPU::OpName::matrix_a_fmt);
+    int64_t MatrixBFmtImm = namedOperandImm(Di, AMDGPU::OpName::matrix_b_fmt);
+    In.ADwords = matrixFmtToDwords(MatrixAFmtImm);
+    In.BDwords = matrixFmtToDwords(MatrixBFmtImm);
+    if (In.ADwords == 0 || In.BDwords == 0)
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP3P",
+          "unrecognised matrix_*_fmt "
+          "(expected FP8, BF8, FP6, BF6, or FP4)");
+
+    In.CdLanes = ScaleF32_16x16x128CdLanes;
+    In.ATy = FixedVectorType::get(Ctx.I32Ty, In.ADwords);
+    In.BTy = FixedVectorType::get(Ctx.I32Ty, In.BDwords);
+    In.CdTy = FixedVectorType::get(Ctx.F32Ty, In.CdLanes);
+
+    In.Dest = Op.dst();
+    ParsedReg SrcA = Op.srcReg(0), SrcB = Op.srcReg(1);
+    In.A = Ctx.Regs.readRegVec(Ctx.B, SrcA, In.ATy);
+    In.B = Ctx.Regs.readRegVec(Ctx.B, SrcB, In.BTy);
+    Expected<Value *> C = readWMMAAccumC(Ctx, Di, Op, In.Dest, In.CdTy);
+    if (!C)
+      return C.takeError();
+    In.C = *C;
+
+    const bool ScaleSrcIsI64 = isScale16(Di);
+
+    auto unitScalePacked = [&](int64_t ScaleFmt) -> ConstantInt * {
+      if (ScaleSrcIsI64) {
+        uint64_t Byte = ScaleFmt == 2 /*E4M3*/ ? 0x38u : 0x7fu;
+        return ConstantInt::get(Ctx.I64Ty, Byte * 0x0101010101010101ULL);
+      }
+      uint32_t Byte = ScaleFmt == 2 /*E4M3*/ ? 0x38u : 0x7fu;
+      return ConstantInt::get(Ctx.I32Ty, Byte * 0x01010101U);
+    };
+
+    auto readScaleSrc = [&](AMDGPU::OpName Name, int64_t ScaleFmt) -> Value * {
+      int Idx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
+      if (Idx < 0)
+        return unitScalePacked(ScaleFmt);
+      if (Di.isReg(Idx)) {
+        ParsedReg Pr = Ctx.parseReg(Di.getReg(Idx), Idx);
+        if (Pr.RegKind != ParsedReg::OTHER && Pr.RegKind != ParsedReg::NOREG)
+          return ScaleSrcIsI64 ? Ctx.Regs.readReg64(Ctx.B, Pr)
+                               : Ctx.Regs.readReg32(Ctx.B, Pr);
+      }
+      if (Di.isImm(Idx) && Di.getImm(Idx) == 0)
+        return unitScalePacked(ScaleFmt);
+      return nullptr;
+    };
+
+    In.MatrixAFmt = ConstantInt::get(Ctx.I32Ty, MatrixAFmtImm);
+    In.MatrixBFmt = ConstantInt::get(Ctx.I32Ty, MatrixBFmtImm);
+
+    In.CMod = ConstantInt::get(
+        Ctx.I16Ty, namedOperandImm(Di, AMDGPU::OpName::src2_modifiers));
+    In.MatrixAScale = ConstantInt::get(
+        Ctx.I32Ty, namedOperandImm(Di, AMDGPU::OpName::matrix_a_scale));
+    int64_t AScaleFmtImm =
+        namedOperandImm(Di, AMDGPU::OpName::matrix_a_scale_fmt);
+    In.MatrixAScaleFmt = ConstantInt::get(Ctx.I32Ty, AScaleFmtImm);
+    In.ScaleSrc0 = readScaleSrc(AMDGPU::OpName::scale_src0, AScaleFmtImm);
+    In.MatrixBScale = ConstantInt::get(
+        Ctx.I32Ty, namedOperandImm(Di, AMDGPU::OpName::matrix_b_scale));
+    int64_t BScaleFmtImm =
+        namedOperandImm(Di, AMDGPU::OpName::matrix_b_scale_fmt);
+    In.MatrixBScaleFmt = ConstantInt::get(Ctx.I32Ty, BScaleFmtImm);
+    In.ScaleSrc1 = readScaleSrc(AMDGPU::OpName::scale_src1, BScaleFmtImm);
+    if (!In.ScaleSrc0 || !In.ScaleSrc1)
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP3P", "scale_src0 / scale_src1 encoding not supported");
+
+    In.MatrixAReuse = ConstantInt::get(
+        Ctx.I1Ty, namedOperandImm(Di, AMDGPU::OpName::matrix_a_reuse));
+    In.MatrixBReuse = ConstantInt::get(
+        Ctx.I1Ty, namedOperandImm(Di, AMDGPU::OpName::matrix_b_reuse));
+    return In;
+  }
+
+private:
+  WmmaScaleInputs() = default;
+
+  static constexpr unsigned ScaleF32_16x16x128CdLanes = 8;
+
+  static int64_t namedOperandImm(const DecodedInst &Di, AMDGPU::OpName Name) {
+    int Idx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
+    if (Idx < 0 || !Di.isImm(Idx))
+      return 0;
+    return Di.getImm(Idx);
+  }
+
+  static bool isScale16(const DecodedInst &Di) {
+    switch (Di.CanonOp) {
+    case CanonicalOp::V_WMMA_SCALE_F32_16x16x128_F8F6F4:
+      return false;
+    default:
+      llvm_unreachable("isScale16 called on non-WMMA-scale instruction");
+    }
+  }
+
+  static unsigned matrixFmtToDwords(int64_t Fmt) {
+    switch (Fmt) {
+    case AMDGPU::WMMA::MATRIX_FMT_FP8:
+    case AMDGPU::WMMA::MATRIX_FMT_BF8:
+      return 16;
+    case AMDGPU::WMMA::MATRIX_FMT_FP6:
+    case AMDGPU::WMMA::MATRIX_FMT_BF6:
+      return 12;
+    case AMDGPU::WMMA::MATRIX_FMT_FP4:
+      return 8;
+    default:
+      return 0;
+    }
+  }
+};
 
 } // namespace
 
@@ -1176,9 +1305,9 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   // 16x16x128 scaled WMMA, f8f6f4 mantissa-format family (gfx1250-only).
   //
   // 18 MC pseudos ({f4,f6,f8} A x {f4,f6,f8} B x _twoaddr/_threeaddr) collapse
-  // onto this CanonicalOp; the `_fA_fB_w32_*` suffix encodes per-matrix width
-  // (f8 -> 16, f6 -> 12, f4 -> 8 dwords). BF8/FP8 and BF6/FP6 are distinguished
-  // by the matrix_a_fmt / matrix_b_fmt named immediates (enum MatrixFMT).
+  // onto this CanonicalOp. Per-matrix fragment width (f8 -> 16, f6 -> 12,
+  // f4 -> 8 dwords) comes from matrix_a_fmt / matrix_b_fmt (enum MatrixFMT);
+  // BF8/FP8 and BF6/FP6 are distinguished by those immediates.
   //
   // Cross-target lowering of v_wmma_scale_f32_16x16x128_f8f6f4:
   //   * gfx1250 (hasTensorOps): native int_amdgcn_wmma_scale intrinsic.
@@ -1188,105 +1317,10 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
   //     scale via emitWMMAScaleF8F6F4toMFMA.
   //   * Otherwise: refuse.
   case CanonicalOp::V_WMMA_SCALE_F32_16x16x128_F8F6F4: {
-    // Per-matrix dword count from the MC pseudo's fA_fB suffix.
-    StringRef PseudoName = Ctx.Mc.InstrInfo->getName(Di.Inst.getOpcode());
-    StringRef Body = PseudoName;
-    Body.consume_front("V_WMMA_SCALE_F32_16X16X128_F8F6F4_");
-    SmallVector<StringRef, 4> Parts;
-    Body.split(Parts, '_');
-    if (Parts.size() < 2)
-      return RaiseFailure::unsupportedInstructionForm(
-          Di, "VOP3P",
-          "v_wmma_scale_f32_16x16x128_f8f6f4: cannot parse fA_fB suffix from "
-          "MC pseudo name");
-    unsigned ADwords = wmmaFmtSuffixToDwords(Parts[0]);
-    unsigned BDwords = wmmaFmtSuffixToDwords(Parts[1]);
-    if (ADwords == 0 || BDwords == 0)
-      return RaiseFailure::unsupportedInstructionForm(
-          Di, "VOP3P",
-          "v_wmma_scale_f32_16x16x128_f8f6f4: unrecognised mantissa-format "
-          "tag in MC pseudo suffix (expected f4/f6/f8)");
-
-    auto *ATy = FixedVectorType::get(Ctx.I32Ty, ADwords);
-    auto *BTy = FixedVectorType::get(Ctx.I32Ty, BDwords);
-    auto *CdTy = FixedVectorType::get(Ctx.F32Ty, 8);
-
-    ParsedReg Dest = Op.dst();
-    ParsedReg SrcA = Op.srcReg(0), SrcB = Op.srcReg(1);
-
-    Value *A = Ctx.Regs.readRegVec(Ctx.B, SrcA, ATy);
-    Value *B = Ctx.Regs.readRegVec(Ctx.B, SrcB, BTy);
-    // readWMMAAccumC materializes a zero accumulator for an inline-0 src2
-    // and refuses other inline constants.
-    Expected<Value *> C = readWMMAAccumC(Ctx, Di, Op, Dest, CdTy);
-    if (!C)
-      return C.takeError();
-
-    // Read named operands by name so a TableGen Ins64 reshuffle flows in for
-    // free (mirrors the MFMA-scale handler).
-    auto NamedImm = [&](AMDGPU::OpName Name) -> int64_t {
-      int Idx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
-      if (Idx < 0 || !Di.isImm(Idx))
-        return 0;
-      return Di.getImm(Idx);
-    };
-    // scale_src0 / scale_src1 carry packed scale bytes. An absent or inline-0
-    // source means scale = 1.0 per K-block, whose byte encoding depends on the
-    // matrix_*_scale_fmt: E8M0 (0) -> 0x7f (2^0), E4M3 (2) -> 0x38 (1.0). The
-    // E8M0 sentinel would decode to NaN under E4M3. Other inline constants
-    // have no documented semantics and fail.
-    auto UnitScalePacked = [&](int64_t ScaleFmt) -> Value * {
-      uint32_t Byte = ScaleFmt == 2 /*E4M3*/ ? 0x38u : 0x7fu;
-      return ConstantInt::get(Ctx.I32Ty, Byte * 0x01010101U);
-    };
-    bool ScaleSrcFailed = false;
-    auto NamedScaleSrc32 = [&](AMDGPU::OpName Name,
-                               int64_t ScaleFmt) -> Value * {
-      int Idx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
-      if (Idx < 0)
-        return UnitScalePacked(ScaleFmt);
-      if (Di.isReg(Idx)) {
-        ParsedReg Pr = Ctx.parseReg(Di.getReg(Idx), Idx);
-        if (Pr.RegKind != ParsedReg::OTHER && Pr.RegKind != ParsedReg::NOREG)
-          return Ctx.Regs.readReg32(Ctx.B, Pr);
-      }
-      if (Di.isImm(Idx) && Di.getImm(Idx) == 0)
-        return UnitScalePacked(ScaleFmt);
-      ScaleSrcFailed = true;
-      return ConstantInt::get(Ctx.I32Ty, 0);
-    };
-
-    Value *MatrixAFmt =
-        ConstantInt::get(Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_a_fmt));
-    Value *MatrixBFmt =
-        ConstantInt::get(Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_b_fmt));
-    Value *CMod = ConstantInt::get(Type::getInt16Ty(Ctx.C),
-                                   NamedImm(AMDGPU::OpName::src2_modifiers));
-    Value *MatrixAScale =
-        ConstantInt::get(Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_a_scale));
-    int64_t AScaleFmtImm = NamedImm(AMDGPU::OpName::matrix_a_scale_fmt);
-    Value *MatrixAScaleFmt = ConstantInt::get(Ctx.I32Ty, AScaleFmtImm);
-    Value *ScaleSrc0 =
-        NamedScaleSrc32(AMDGPU::OpName::scale_src0, AScaleFmtImm);
-    Value *MatrixBScale =
-        ConstantInt::get(Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_b_scale));
-    int64_t BScaleFmtImm = NamedImm(AMDGPU::OpName::matrix_b_scale_fmt);
-    Value *MatrixBScaleFmt = ConstantInt::get(Ctx.I32Ty, BScaleFmtImm);
-    Value *ScaleSrc1 =
-        NamedScaleSrc32(AMDGPU::OpName::scale_src1, BScaleFmtImm);
-    if (ScaleSrcFailed)
-      return RaiseFailure::unsupportedInstructionForm(
-          Di, "VOP3P",
-          "v_wmma_scale_f32_16x16x128_f8f6f4: scale_src0 / scale_src1 "
-          "encoding not supported. Supported: register, or inline "
-          "constant 0 (decoded as scale = 1.0 per K-block in the active "
-          "scale format, per the gfx1250 programming guide). Other inline "
-          "constants have no documented WMMA-scale semantics.");
-
-    Value *MatrixAReuse = ConstantInt::get(
-        Type::getInt1Ty(Ctx.C), NamedImm(AMDGPU::OpName::matrix_a_reuse));
-    Value *MatrixBReuse = ConstantInt::get(
-        Type::getInt1Ty(Ctx.C), NamedImm(AMDGPU::OpName::matrix_b_reuse));
+    Expected<WmmaScaleInputs> MaybeIn = WmmaScaleInputs::parse(Ctx, Di, Op);
+    if (!MaybeIn)
+      return MaybeIn.takeError();
+    const WmmaScaleInputs &In = *MaybeIn;
 
     Value *ResultVal = nullptr;
 
@@ -1301,13 +1335,13 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // Overloaded on D, A, B element vector types.
       Function *WmmaFn = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_wmma_scale_f32_16x16x128_f8f6f4,
-          {CdTy, ATy, BTy});
-      ResultVal = Ctx.B.CreateCall(WmmaFn,
-                                   {MatrixAFmt, A, MatrixBFmt, B, CMod, *C,
-                                    MatrixAScale, MatrixAScaleFmt, ScaleSrc0,
-                                    MatrixBScale, MatrixBScaleFmt, ScaleSrc1,
-                                    MatrixAReuse, MatrixBReuse},
-                                   "wmma_scale");
+          {In.CdTy, In.ATy, In.BTy});
+      ResultVal = Ctx.B.CreateCall(
+          WmmaFn,
+          {In.MatrixAFmt, In.A, In.MatrixBFmt, In.B, In.CMod, In.C,
+           In.MatrixAScale, In.MatrixAScaleFmt, In.ScaleSrc0, In.MatrixBScale,
+           In.MatrixBScaleFmt, In.ScaleSrc1, In.MatrixAReuse, In.MatrixBReuse},
+          "wmma_scale");
     } else if (Ctx.TargetIsa.HasGfx950Insts) {
       // Cross-target gfx1250 -> gfx950 path: WMMA-scale -> MFMA-scale.
       //
@@ -1320,18 +1354,13 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       //
       // matrix_a_reuse / matrix_b_reuse are perf hints (not correctness)
       // and have no MFMA equivalent; the helper drops them.
-      {
-        Expected<Value *> RV = emitWMMAScaleF8F6F4toScaledMFMA(
-            Ctx, A, B, *C, MatrixAFmt, MatrixBFmt, CMod, MatrixAScale,
-            MatrixAScaleFmt, ScaleSrc0, MatrixBScale, MatrixBScaleFmt,
-            ScaleSrc1, ADwords, BDwords);
-        if (!RV)
-          return RV.takeError();
-        ResultVal = *RV;
-      }
-      // reuse hints have no MFMA equivalent; silence -Wunused-variable.
-      (void)MatrixAReuse;
-      (void)MatrixBReuse;
+      Expected<Value *> RV = emitWMMAScaleF8F6F4toScaledMFMA(
+          Ctx, In.A, In.B, In.C, In.MatrixAFmt, In.MatrixBFmt, In.CMod,
+          In.MatrixAScale, In.MatrixAScaleFmt, In.ScaleSrc0, In.MatrixBScale,
+          In.MatrixBScaleFmt, In.ScaleSrc1, In.ADwords, In.BDwords);
+      if (!RV)
+        return RV.takeError();
+      ResultVal = *RV;
 
     } else if (Ctx.TargetIsa.HasFP8Insts) {
       // Cross-target gfx1250 -> gfx942: K-decomposed unscaled FP8/BF8 MFMA
@@ -1339,14 +1368,12 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
       // gfx90a / gfx940 (MAI but no FP8 MFMA) don't take this path; gfx950
       // is already handled by the HasGfx950Insts branch above.
       Expected<Value *> RV = emitWMMAScaleF8F6F4toMFMA(
-          Ctx, A, B, *C, MatrixAFmt, MatrixBFmt, CMod, MatrixAScale,
-          MatrixAScaleFmt, ScaleSrc0, MatrixBScale, MatrixBScaleFmt, ScaleSrc1,
-          ADwords, BDwords);
+          Ctx, In.A, In.B, In.C, In.MatrixAFmt, In.MatrixBFmt, In.CMod,
+          In.MatrixAScale, In.MatrixAScaleFmt, In.ScaleSrc0, In.MatrixBScale,
+          In.MatrixBScaleFmt, In.ScaleSrc1, In.ADwords, In.BDwords);
       if (!RV)
         return RV.takeError();
       ResultVal = *RV;
-      (void)MatrixAReuse;
-      (void)MatrixBReuse;
       if (!ResultVal)
         return RaiseFailure::unsupportedInstructionForm(
             Di, "VOP3P",
@@ -1373,7 +1400,7 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
           "emitWMMAScaleF8F6F4toMFMA); this target has none.");
     }
 
-    Ctx.writeRegVec(Dest, ResultVal);
+    Ctx.writeRegVec(In.Dest, ResultVal);
     Hr.Handled = true;
     return Hr;
   }
