@@ -326,6 +326,14 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
   if (Di.TsFlags & SIInstrFlags::FlatScratch) {
     auto ScratchAccessBytes = [&]() -> unsigned {
       switch (Sop) {
+      case CanonicalOp::SCRATCH_LOAD_UBYTE:
+      case CanonicalOp::SCRATCH_LOAD_SBYTE:
+      case CanonicalOp::SCRATCH_STORE_BYTE:
+        return 1;
+      case CanonicalOp::SCRATCH_LOAD_USHORT:
+      case CanonicalOp::SCRATCH_LOAD_SSHORT:
+      case CanonicalOp::SCRATCH_STORE_SHORT:
+        return 2;
       case CanonicalOp::SCRATCH_LOAD_DWORD:
       case CanonicalOp::SCRATCH_STORE_DWORD:
         return 4;
@@ -357,6 +365,71 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
               Ctx, "scratch_* opcode is not a load/store shape Hotswap "
                    "models yet: " +
                        Di.Mnemonic));
+    }
+
+    // Sub-dword scratch loads: load i8/i16 from private memory and zero/sign
+    // extend into the 32-bit VGPR, mirroring GLOBAL_LOAD_{U,S}BYTE / SHORT.
+    if (Sop == CanonicalOp::SCRATCH_LOAD_UBYTE ||
+        Sop == CanonicalOp::SCRATCH_LOAD_SBYTE ||
+        Sop == CanonicalOp::SCRATCH_LOAD_USHORT ||
+        Sop == CanonicalOp::SCRATCH_LOAD_SSHORT) {
+      if (Op.nSrcs() < 2) {
+        return RaiseFailure::unsupportedInstructionForm(
+            Di, "FLAT", "scratch_load_* expected address/cpol operands");
+      }
+      Expected<Value *> AddrOr = decodeScratchOffset(
+          Ctx, Di, Op, /*addrStart=*/0, AccessBytes, "scratch_load");
+      if (!AddrOr)
+        return AddrOr.takeError();
+
+      Value *Addr = *AddrOr;
+      ParsedReg Dest = Op.dst();
+      bool IsByte = (Sop == CanonicalOp::SCRATCH_LOAD_UBYTE ||
+                     Sop == CanonicalOp::SCRATCH_LOAD_SBYTE);
+      bool IsSigned = (Sop == CanonicalOp::SCRATCH_LOAD_SBYTE ||
+                       Sop == CanonicalOp::SCRATCH_LOAD_SSHORT);
+      Type *MemTy = IsByte ? Ctx.I8Ty : Type::getInt16Ty(Ctx.C);
+      Ctx.emitUnderExec([&] {
+        Value *Loaded = Ctx.B.CreateAlignedLoad(MemTy, Addr, Align(AccessBytes),
+                                                "scratch_load");
+        Value *Ext = IsSigned
+                         ? Ctx.B.CreateSExt(Loaded, Ctx.I32Ty, "scratch_sext")
+                         : Ctx.B.CreateZExt(Loaded, Ctx.I32Ty, "scratch_zext");
+        Ctx.Regs.writeReg32(Ctx.B, Dest, Ext);
+      });
+      Hr.Handled = true;
+      return Hr;
+    }
+
+    // Sub-dword scratch stores: truncate the low byte/short of the VGPR and
+    // store to private memory, mirroring GLOBAL_STORE_{BYTE,SHORT}.
+    if (Sop == CanonicalOp::SCRATCH_STORE_BYTE ||
+        Sop == CanonicalOp::SCRATCH_STORE_SHORT) {
+      if (Op.nSrcs() < 3) {
+        return RaiseFailure::unsupportedInstructionForm(
+            Di, "FLAT",
+            "scratch_store_* expected data plus address/cpol operands");
+      }
+      Expected<Value *> AddrOr = decodeScratchOffset(
+          Ctx, Di, Op, /*addrStart=*/1, AccessBytes, "scratch_store");
+      if (!AddrOr)
+        return AddrOr.takeError();
+
+      Value *Addr = *AddrOr;
+      ParsedReg StData = Op.srcReg(0);
+      if (StData.RegKind != ParsedReg::VGPR) {
+        return RaiseFailure::unsupportedInstructionForm(
+            Di, "FLAT", "scratch_store_* expected VGPR data operand");
+      }
+      bool IsByte = (Sop == CanonicalOp::SCRATCH_STORE_BYTE);
+      Type *MemTy = IsByte ? Ctx.I8Ty : Type::getInt16Ty(Ctx.C);
+      Ctx.emitUnderExec([&] {
+        Value *Src32 = Ctx.Regs.readReg32(Ctx.B, StData);
+        Value *Val = Ctx.B.CreateTrunc(Src32, MemTy, "scratch_store_trunc");
+        Ctx.B.CreateAlignedStore(Val, Addr, Align(AccessBytes));
+      });
+      Hr.Handled = true;
+      return Hr;
     }
 
     if (Sop == CanonicalOp::SCRATCH_LOAD_DWORD ||
