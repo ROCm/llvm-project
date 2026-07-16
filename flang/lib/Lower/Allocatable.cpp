@@ -655,8 +655,8 @@ private:
     bool inlineAllocation = !box.isDerived() && !errorManager.hasStatSpec() &&
                             !alloc.type.IsPolymorphic() &&
                             !alloc.hasCoarraySpec() && !useAllocateRuntime &&
-                            !box.isPointer();
-    unsigned allocatorIdx = Fortran::lower::getAllocatorIdx(*cudaSymForAlloc);
+                            !box.isPointer() && !implicitManagedBacking &&
+                            !ompAllocInfo && !isOmpAllocatorTouched;
     const auto &langFeatures = converter.getFoldingContext().languageFeatures();
     bool isOpenMPAllocatorEnabled = langFeatures.IsEnabled(
         Fortran::common::LanguageFeature::OpenMPDefaultAllocator);
@@ -1140,7 +1140,8 @@ genDeallocate(fir::FirOpBuilder &builder,
   bool inlineDeallocation =
       !box.isDerived() && !box.isPolymorphic() && !box.hasAssumedRank() &&
       !box.isUnlimitedPolymorphic() && !errorManager.hasStatSpec() &&
-      !useAllocateRuntime && !box.isPointer();
+      !useAllocateRuntime && !box.isPointer() && !implicitManagedBacking &&
+      !isOmpAllocatorTouched;
   bool isCoarraySymbol = symbol && Fortran::evaluate::IsCoarray(*symbol);
 
   // Deallocate intrinsic types inline.
