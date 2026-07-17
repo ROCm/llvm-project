@@ -2324,6 +2324,8 @@ static inline const llvm::StringSet<> ValidSpirvFlags{
     "-O1",
     "-O2",
     "-O3",
+    "-vectorize-loops",
+    "-vectorize-slp",
     "--save-temps"};
 
 amd_comgr_status_t AMDGPUCompiler::extractSpirvFlags(DataSet *BcSet) {
