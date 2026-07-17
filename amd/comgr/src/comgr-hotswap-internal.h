@@ -1133,6 +1133,16 @@ struct DirectControlFlowInfo {
   bool HasUnresolvedTargets = false;
 };
 
+// Per-instruction persistent gfx1250 VGPR-MSB mode (packed src0/src1/src2/dst,
+// two bits each, values 0-255) recovered by the WMMA split pass's
+// whole-function CFG fixed point. The sentinels distinguish "not analyzed",
+// "validated unreachable", and "reachable but ambiguous" so a required WMMA
+// split can fail closed when the incoming mode cannot be proven. See
+// comgr-hotswap-patch-wmma-split.cpp.
+inline constexpr int8_t VgprMsbUnanalyzed = -3;
+inline constexpr int8_t VgprMsbUnreachable = -2;
+inline constexpr int8_t VgprMsbUnknown = -1;
+
 /// Mutable per-run context threaded through all patch passes. Bundles the
 /// input config, decoded instruction stream, raw .text bytes, MC state,
 /// output streams (trampolines / scratch info), and the shared ELF view +
@@ -1158,10 +1168,21 @@ struct PatchContext {
   // Per-rewrite profiling session (inert unless AMD_COMGR_TIME_STATISTICS is
   // set). Deep patch sites record into its lock-free local array.
   HotswapProfile &Profile;
+  // Text-relative declared entry offsets (function symbol starts and kernel
+  // descriptor entries) from collectDeclaredTextEntries(). The WMMA split
+  // pass's VGPR-MSB analysis seeds each in-range entry as an ABI entry point so
+  // an interior kernel-descriptor entry is analyzed from the real entry mode
+  // instead of being misclassified as unreachable.
+  llvm::ArrayRef<uint64_t> DeclaredEntries;
   // Required patches are transformations whose unpatched original code is
   // unsafe to return when the selected rewrite policy needs the patch.
   bool RequiredPatchFailed = false;
   bool RequiredPatchApplied = false;
+  // Packed per-instruction gfx1250 VGPR-MSB mode, lazily populated by the WMMA
+  // split pass (empty until then). Indexed by position in Decoded; each entry
+  // is a VgprMsb* sentinel or a 0-255 mode. See
+  // comgr-hotswap-patch-wmma-split.cpp.
+  std::vector<int16_t> VgprMsbModeBefore;
   // Sum of the bytes already queued in OutTrampolines. Keeping this in the
   // per-rewrite context makes each new pool-position calculation constant
   // time even for code objects with many thousands of patch sites.
@@ -1276,6 +1297,27 @@ bool isSBranchReachable(uint64_t From, uint64_t To);
 std::optional<uint64_t>
 evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
                                 const LLVMState &LS);
+
+/// A canonical get-PC/add materialized address feeding a PC-materialized
+/// transfer (s_get_pc_i64 / s_add_nc_u64 / s_{swap,set}_pc_i64). \p Target is
+/// the absolute in-.text virtual address; \p SequenceStart is the .text offset
+/// of the s_get_pc_i64 that begins the sequence.
+struct MaterializedPcSequence {
+  uint64_t Target = 0;
+  uint64_t SequenceStart = 0;
+};
+
+/// Resolve the target of a PC-materialized transfer whose target register is
+/// \p TargetReg and whose transfer instruction (an s_swap_pc_i64 call or an
+/// s_set_pc_i64 jump) is \p Decoded[TransferIndex]. Scans backward for the
+/// single s_add_nc_u64 then s_get_pc_i64 that define \p TargetReg, stopping at
+/// the first control-flow boundary or unexpected clobber so any variation
+/// stays unresolved (nullopt) for fail-closed callers. \p TextAddr is the
+/// .text base virtual address.
+std::optional<MaterializedPcSequence>
+resolveMaterializedPcTarget(llvm::ArrayRef<InternalDecodedInst> Decoded,
+                            size_t TransferIndex, llvm::MCRegister TargetReg,
+                            const LLVMState &LS, uint64_t TextAddr);
 
 /// Collect branch and call targets used to protect interior entry points from
 /// trampoline coalescing. Absolute addresses in TextAddr .. TextAddr +

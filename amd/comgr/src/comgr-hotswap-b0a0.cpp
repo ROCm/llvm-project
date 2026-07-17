@@ -989,23 +989,18 @@ struct PcMaterializedCallInfo {
 /// by llvm/test/MC/AMDGPU/gfx1250_asm_salu_lit64.s. Stop at the first
 /// overlapping definition or control-flow boundary, so any variation remains
 /// unresolved and follows the existing fail-closed policy.
-static std::optional<PcMaterializedCallInfo>
-matchPcMaterializedCall(ArrayRef<InternalDecodedInst> Decoded, size_t CallIndex,
-                        const LLVMState &LS, uint64_t TextAddr) {
-  const InternalDecodedInst &Call = Decoded[CallIndex];
-  if (!Call.DecodeSucceeded || Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
-      Call.Inst.getNumOperands() < 2 || !Call.Inst.getOperand(0).isReg() ||
-      !Call.Inst.getOperand(0).getReg())
-    return std::nullopt;
-  const MCOperand &TargetOperand =
-      Call.Inst.getOperand(Call.Inst.getNumOperands() - 1);
-  if (!TargetOperand.isReg() || !TargetOperand.getReg())
-    return std::nullopt;
-  MCRegister TargetRegister(TargetOperand.getReg());
-
+// Shared get-PC/add resolver behind matchPcMaterializedCall (s_swap_pc_i64
+// calls) and the WMMA split pass's s_set_pc_i64 jump handling. The backward
+// scan and fail-closed policy are identical for both transfer kinds; only the
+// terminating opcode and the return-register semantics differ, which the
+// callers handle.
+std::optional<MaterializedPcSequence>
+resolveMaterializedPcTarget(ArrayRef<InternalDecodedInst> Decoded,
+                            size_t TransferIndex, MCRegister TargetRegister,
+                            const LLVMState &LS, uint64_t TextAddr) {
   std::optional<size_t> AddIndex;
   int64_t AddImmediate = 0;
-  for (size_t I = CallIndex; I != 0;) {
+  for (size_t I = TransferIndex; I != 0;) {
     --I;
     const InternalDecodedInst &Candidate = Decoded[I];
     if (!Candidate.DecodeSucceeded || isControlFlowBoundary(Candidate, LS))
@@ -1041,21 +1036,41 @@ matchPcMaterializedCall(ArrayRef<InternalDecodedInst> Decoded, size_t CallIndex,
       return std::nullopt;
 
     std::optional<uint64_t> GetPcAddress = checkedAddUint64(
-        TextAddr, Candidate.Offset, "PC-materialized call instruction");
+        TextAddr, Candidate.Offset, "PC-materialized transfer instruction");
     if (!GetPcAddress)
       return std::nullopt;
     std::optional<uint64_t> PcValue = checkedAddUint64(
-        *GetPcAddress, Candidate.Size, "PC-materialized call PC value");
+        *GetPcAddress, Candidate.Size, "PC-materialized transfer PC value");
     if (!PcValue)
       return std::nullopt;
     // s_add_nc_u64 uses modulo-2^64 arithmetic. Casting the signed MC
     // immediate to uint64_t and adding it reproduces both positive and
     // negative literals, including INT64_MIN, without signed overflow.
-    return PcMaterializedCallInfo{
-        *PcValue + static_cast<uint64_t>(AddImmediate), Candidate.Offset,
-        Call.Offset, MCRegister(Call.Inst.getOperand(0).getReg())};
+    return MaterializedPcSequence{
+        *PcValue + static_cast<uint64_t>(AddImmediate), Candidate.Offset};
   }
   return std::nullopt;
+}
+
+static std::optional<PcMaterializedCallInfo>
+matchPcMaterializedCall(ArrayRef<InternalDecodedInst> Decoded, size_t CallIndex,
+                        const LLVMState &LS, uint64_t TextAddr) {
+  const InternalDecodedInst &Call = Decoded[CallIndex];
+  if (!Call.DecodeSucceeded || Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+      Call.Inst.getNumOperands() < 2 || !Call.Inst.getOperand(0).isReg() ||
+      !Call.Inst.getOperand(0).getReg())
+    return std::nullopt;
+  const MCOperand &TargetOperand =
+      Call.Inst.getOperand(Call.Inst.getNumOperands() - 1);
+  if (!TargetOperand.isReg() || !TargetOperand.getReg())
+    return std::nullopt;
+  std::optional<MaterializedPcSequence> Sequence = resolveMaterializedPcTarget(
+      Decoded, CallIndex, MCRegister(TargetOperand.getReg()), LS, TextAddr);
+  if (!Sequence)
+    return std::nullopt;
+  return PcMaterializedCallInfo{Sequence->Target, Sequence->SequenceStart,
+                                Call.Offset,
+                                MCRegister(Call.Inst.getOperand(0).getReg())};
 }
 
 struct KnownCallSite {
@@ -2273,10 +2288,11 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       *PoolVAddr, Elf.textAddr(), "trampoline pool base offset");
   if (!PoolBaseOffset)
     return std::nullopt;
-  PatchContext Ctx{
-      Config,      Decoded,           Text,         TextSize, *PoolBaseOffset,
-      LS,          OutTrampolines,    Sleds,        Elf,      Liveness,
-      KernelStats, OutScratchPatches, *ControlFlow, Profile};
+  PatchContext Ctx{Config,         Decoded,         Text,
+                   TextSize,       *PoolBaseOffset, LS,
+                   OutTrampolines, Sleds,           Elf,
+                   Liveness,       KernelStats,     OutScratchPatches,
+                   *ControlFlow,   Profile,         DeclaredEntries->Entries};
 
   const HotswapPatchVTable &VT = getHotswapPatchVTable();
 
