@@ -252,8 +252,8 @@ llvm::Expected<llvm::Value *> emitWMMAScaleF8F6F4toScaledMFMA(
 /// fp8/bf8 MFMA family, so this decomposes K=128 into 4 K=32 MFMAs, widens
 /// FP6/BF6/FP4 to FP8/BF8 in-line, and applies the per-K-block scale via
 /// fmuladd. Covers {FP8,BF8,FP6,BF6,FP4}^2, scale formats E8M0 / E4M3
-/// (E5M3 deferred). Returns `<8 x float>` in wave32 D-layout, nullptr for
-/// unsupported configurations, or an error on an invariant violation.
+/// (E5M3 deferred). Returns `<8 x float>` in wave32 D-layout or an error for
+/// unsupported configurations / invariant violations.
 llvm::Expected<llvm::Value *> emitWMMAScaleF8F6F4toMFMA(
     RaiseContext &ctx, llvm::Value *a, llvm::Value *b, llvm::Value *c,
     llvm::Value *matrixAFmt, llvm::Value *matrixBFmt, llvm::Value *cMod,

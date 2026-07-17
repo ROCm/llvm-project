@@ -1490,25 +1490,28 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
   // matrix_*_scale is the SCL_OPSEL[0] row selector. Only ROW0 is modeled;
   // ROW1 is rejected.
   if (aScaleSel != 0 || bScaleSel != 0)
-    return nullptr;
+    return createStringError(
+        "matrix_*_scale ROW1 selector is not supported for scaled WMMA");
 
   // Scale formats: E8M0 and E4M3 supported, E5M3 not yet.
   auto SupportedScaleFmt = [](int fmt) {
     return fmt == ScaleFmtE8M0 || fmt == ScaleFmtE4M3;
   };
   if (!SupportedScaleFmt(aScaleFmt) || !SupportedScaleFmt(bScaleFmt))
-    return nullptr;
+    return createStringError(
+        "unsupported matrix_*_scale_fmt (E5M3 is not yet supported)");
 
   if (!isLegalScaleDataCombo(aFmt, aScaleFmt, bFmt, bScaleFmt))
-    return nullptr;
+    return createStringError("illegal (matrix data, scale) format combination");
 
   int aFmtEff = effectiveFmtAfterWiden(aFmt);
   int bFmtEff = effectiveFmtAfterWiden(bFmt);
   if (aFmtEff < 0 || bFmtEff < 0)
-    return nullptr;
+    return createStringError("unsupported matrix_a_fmt / matrix_b_fmt");
   Intrinsic::ID MfmaId = pickGfx942F8MfmaIntrinsic(aFmtEff, bFmtEff);
   if (MfmaId == Intrinsic::not_intrinsic)
-    return nullptr;
+    return createStringError(
+        "no gfx942 FP8 MFMA intrinsic for this matrix format pair");
 
   SmallVector<Value *, 16> aSrcDwords(aDwords);
   SmallVector<Value *, 16> bSrcDwords(bDwords);
@@ -1547,7 +1550,8 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
   // 1 wave (MODREP) or 2 (WaveNative cross-widen).
   const unsigned numSrcWaves = ctx.Projection.numSourceWavesPerTarget();
   if (numSrcWaves != 1 && numSrcWaves != 2)
-    return nullptr;
+    return createStringError(
+        "scaled WMMA decomposition supports 1 or 2 source waves only");
 
   auto *AccTy = FixedVectorType::get(ctx.F32Ty, 4);
   Function *MfmaFn = Intrinsic::getOrInsertDeclaration(&M, MfmaId);
