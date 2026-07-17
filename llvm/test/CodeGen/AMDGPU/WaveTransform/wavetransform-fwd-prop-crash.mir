@@ -1,5 +1,4 @@
-# RUN: not --crash llc -march=amdgcn-amd-amdhsa -mcpu=gfx900 -amdgpu-late-wave-transform=1 -run-pass=amdgpu-wave-transform -o /dev/null %s 2>&1 | FileCheck %s
-# CHECK: isHandleInSync() && "invalid iterator access!"
+# RUN: llc -march=amdgcn -mcpu=gfx1010 -amdgpu-late-wave-transform=1 -run-pass=amdgpu-wave-transform -o /dev/null %s
 
 # Regression test for iterator invalidation in ForwardPropSimplifier::mergeIncoming.
 #
