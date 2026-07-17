@@ -309,11 +309,9 @@ std::optional<uint64_t> entryVAddr(const KernelDescriptorInfo &KD) {
   return KD.VAddr - Magnitude;
 }
 
-static std::optional<bool>
-descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
-                                  const KernelDescriptorInfo &KD,
-                                  const LLVMState &LS,
-                                  ArrayRef<uint8_t> EntryStubPrefix) {
+static std::optional<bool> descriptorAlreadyTargetsEntryStub(
+    const ElfView &Elf, const KernelDescriptorInfo &KD, const LLVMState &LS,
+    ArrayRef<uint8_t> EntryStubPrefix) {
   std::optional<uint64_t> Entry = entryVAddr(KD);
   if (!Entry)
     return std::nullopt;
@@ -338,8 +336,8 @@ descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
     return false;
 
   std::vector<InternalDecodedInst> Decoded;
-  if (!decodeKernelEntryStub(Candidate, LS,
-                             Decoded, "entry trampoline idempotency matcher"))
+  if (!decodeKernelEntryStub(Candidate, LS, Decoded,
+                             "entry trampoline idempotency matcher"))
     return false;
   if (!hasEntryStubOperandShape(Decoded, LS))
     return false;

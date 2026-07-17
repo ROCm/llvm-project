@@ -1969,9 +1969,10 @@ static unsigned countSymtabSymbolsNamed(llvm::WritableMemoryBuffer &Buf,
 //       at (what amd-dbgapi / rocgdb resolve for the dispatch),
 //   (2) real entry-stub bytes live at that address, and
 //   (3) its [st_value, st_value + st_size) range lies inside its own section.
-static void expectStubSymbolMatchesDispatchEntry(llvm::WritableMemoryBuffer &Buf,
-                                                  llvm::StringRef KernelName,
-                                                  const LLVMState &S) {
+static void
+expectStubSymbolMatchesDispatchEntry(llvm::WritableMemoryBuffer &Buf,
+                                     llvm::StringRef KernelName,
+                                     const LLVMState &S) {
   using ELFT = llvm::object::ELF64LE;
   llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
       llvm::object::ELFFile<ELFT>::create(
@@ -1990,7 +1991,8 @@ static void expectStubSymbolMatchesDispatchEntry(llvm::WritableMemoryBuffer &Buf
   ASSERT_NE(Symtab, nullptr);
   llvm::Expected<ELFT::SymRange> Syms = File.symbols(Symtab);
   ASSERT_TRUE((bool)Syms) << llvm::toString(Syms.takeError());
-  llvm::Expected<llvm::StringRef> StrTab = File.getStringTableForSymtab(*Symtab);
+  llvm::Expected<llvm::StringRef> StrTab =
+      File.getStringTableForSymtab(*Symtab);
   ASSERT_TRUE((bool)StrTab) << llvm::toString(StrTab.takeError());
 
   const std::string StubName = (KernelName + ".stub").str();
@@ -2025,7 +2027,8 @@ static void expectStubSymbolMatchesDispatchEntry(llvm::WritableMemoryBuffer &Buf
     }
   ASSERT_NE(KD, nullptr);
   ASSERT_GE(KD->EntryOffset, 0);
-  const uint64_t EntryVAddr = KD->VAddr + static_cast<uint64_t>(KD->EntryOffset);
+  const uint64_t EntryVAddr =
+      KD->VAddr + static_cast<uint64_t>(KD->EntryOffset);
   EXPECT_EQ(Stub->st_value, EntryVAddr)
       << "stub symbol must name the descriptor's entry address";
 
