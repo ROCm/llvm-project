@@ -610,7 +610,19 @@ void initializeAMDGPUWaitSGPRHazardsLegacyPass(PassRegistry &);
 extern char &AMDGPUWaitSGPRHazardsLegacyID;
 
 FunctionPass *createAMDGPUWaveTransformPass();
-void initializeAMDGPUWaveTransformPass(PassRegistry &);
+void initializeAMDGPUWaveTransformLegacyPass(PassRegistry &);
+extern char &AMDGPUWaveTransformID;
+
+class AMDGPUWaveTransformPass
+    : public RequiredPassInfoMixin<AMDGPUWaveTransformPass> {
+public:
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+
+  MachineFunctionProperties getClearedProperties() const {
+    return MachineFunctionProperties().setIsSSA().setNoVRegs();
+  }
+};
 
 FunctionPass *createAMDGPUPreWaveTransformPass();
 void initializeAMDGPUPreWaveTransformLegacyPass(PassRegistry &);
