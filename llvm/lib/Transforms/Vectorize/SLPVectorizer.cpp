@@ -23483,6 +23483,21 @@ Value *BoUpSLP::vectorizeTree(TreeEntry *E) {
            return !SI || isCommutative(SI);
          })))
       I->setHasNoUnsignedWrap(/*b=*/false);
+    // A sub feeding icmp eq/ne 0 may have its operands swapped; nsw does not
+    // survive a - b -> b - a (a - b can be INT_MIN while b - a overflows).
+    if (!MinBWs.contains(E) && Opcode == Instruction::Sub &&
+        any_of(Scalars, [](Value *Scalar) {
+          auto *SI = dyn_cast<Instruction>(Scalar);
+          if (!SI || SI->getOpcode() != Instruction::Sub || !isCommutative(SI))
+            return false;
+          return any_of(SI->uses(), [](const Use &U) {
+            CmpPredicate Pred;
+            return match(U.getUser(),
+                         m_ICmp(Pred, m_Specific(U.get()), m_Zero())) &&
+                   ICmpInst::isEquality(Pred);
+          });
+        }))
+      I->setHasNoSignedWrap(/*b=*/false);
     // Interchanging add/sub negates the constant: nsw only survives if the
     // constant isn't INT_MIN (negating it would overflow); nuw never
     // survives a nonzero constant, since that flips the valid range from
@@ -23517,6 +23532,18 @@ Value *BoUpSLP::vectorizeTree(TreeEntry *E) {
             const auto *CI = dyn_cast<ConstantInt>(Op);
             return CI && CI->getValue().isMinSignedValue();
           });
+        }))
+      I->setHasNoSignedWrap(/*b=*/false);
+    // shl nsw X, BW-1 is not equivalent to mul nsw X, INT_MIN: shl nsw never
+    // poisons at X = -1 (shifted-out bits match the sign bit), but mul nsw
+    // does. A shl lane converted to mul this way must drop nsw.
+    if (!MinBWs.contains(E) && Opcode == Instruction::Mul &&
+        any_of(UniqueInsts, [&](Value *V) {
+          auto *SI = cast<Instruction>(V);
+          if (SI->getOpcode() != Instruction::Shl)
+            return false;
+          const auto *CI = dyn_cast<ConstantInt>(SI->getOperand(1));
+          return CI && CI->getValue() == CI->getBitWidth() - 1;
         }))
       I->setHasNoSignedWrap(/*b=*/false);
     if (auto *ICmp = dyn_cast<ICmpInst>(I); ICmp && It == MinBWs.end())
