@@ -2610,12 +2610,19 @@ class ForwardPropSimplifier {
     if (MBB.pred_empty())
       return;
 
-    for (const auto &PredOUT : OUT[*MBB.pred_begin()]) {
+    auto FirstPredIt = OUT.find(*MBB.pred_begin());
+    if (FirstPredIt == OUT.end())
+      return;
+
+    for (const auto &PredOUT : FirstPredIt->second) {
       Register Reg = PredOUT.first;
       const RegIntVariant &Expected = PredOUT.second;
       if (llvm::all_of(MBB.predecessors(), [&](MachineBasicBlock *Pred) {
-            auto It = OUT[Pred].find(Reg);
-            return It != OUT[Pred].end() && It->second == Expected;
+            auto PredIt = OUT.find(Pred);
+            if (PredIt == OUT.end())
+              return false;
+            auto RegIt = PredIt->second.find(Reg);
+            return RegIt != PredIt->second.end() && RegIt->second == Expected;
           }))
         Result[Reg] = Expected;
     }
