@@ -2535,10 +2535,10 @@ copyOutputBuffer(const void *Data, size_t Size, StringRef CopyKind) {
 
 // -- retargetCodeObject -------------------------------------------------------
 
-amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
-                                      const TargetIdentifier &TargetIdent,
-                                      const Gfx1250RewriteOptions &Options,
-                                      std::unique_ptr<MemoryBuffer> &Out) {
+static amd_comgr_status_t retargetCodeObjectImpl(
+    const void *ElfData, size_t ElfSize, const TargetIdentifier &TargetIdent,
+    const Gfx1250RewriteOptions &Options, std::unique_ptr<MemoryBuffer> &Out,
+    bool AllowTextDisplacement) {
   // The dispatcher fetches the patch vtable lazily via
   // getHotswapPatchVTable() inside applyGfx1250B0toA0Rules; the singleton's
   // initializer binds every register*Patch slot on first access, so no
@@ -2608,6 +2608,44 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     }
   }
 
+  // Direct displacement is an entry-workaround optimization only. Apply the
+  // entry prefixes before ordinary instruction rewriting so the existing
+  // NOP-sled/trampoline planner sees the final instruction offsets. If the ELF
+  // cannot be displaced safely, continue from the pristine working copy and
+  // append the established entry stubs below.
+  if (Options.RunEntryTrampolines && AllowTextDisplacement && !UseFastAppend) {
+    std::vector<DisplacementEdit> EntryDisplacements;
+    std::optional<uint32_t> EntryCount =
+        collectKernelEntryDisplacements(Elf, LS, EntryDisplacements);
+    if (!EntryCount)
+      return AMD_COMGR_STATUS_ERROR;
+
+    if (!EntryDisplacements.empty()) {
+      Expected<std::unique_ptr<WritableMemoryBuffer>> DisplacedOrErr =
+          tryApplyTextDisplacementToNewBuffer(Elf, LS, EntryDisplacements);
+      if (DisplacedOrErr) {
+        std::unique_ptr<WritableMemoryBuffer> Displaced =
+            std::move(*DisplacedOrErr);
+        if (!RunInstructionPatches) {
+          Out = std::move(Displaced);
+          return AMD_COMGR_STATUS_SUCCESS;
+        }
+
+        Gfx1250RewriteOptions RemainingOptions = Options;
+        RemainingOptions.RunEntryTrampolines = false;
+        RemainingOptions.UseB0B0EntryFastPath = false;
+        return retargetCodeObjectImpl(Displaced->getBufferStart(),
+                                      Displaced->getBufferSize(), TargetIdent,
+                                      RemainingOptions, Out,
+                                      /*AllowTextDisplacement=*/false);
+      }
+
+      log() << "hotswap: entry displacement unavailable: "
+            << toString(DisplacedOrErr.takeError())
+            << "; using appended entry stubs\n";
+    }
+  }
+
   RewriteConfig Config = makeGfx1250B0A0Config();
   Config.RunB0A0Patches = Options.RunB0A0Patches;
   Config.MaskPolicy = Options.MaskPolicy;
@@ -2660,6 +2698,7 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   if (!PoolBaseOffsetOr)
     return AMD_COMGR_STATUS_ERROR;
   const uint64_t PoolBaseOffset = *PoolBaseOffsetOr;
+
   if (!Deferred.empty()) {
     if (!fixupTrampolineBranches(Deferred, Text, PoolBaseOffset, LS)) {
       if (RequiredPatchApplied) {
@@ -2767,6 +2806,14 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
 
   Out = std::move(Result);
   return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
+                                      const TargetIdentifier &TargetIdent,
+                                      const Gfx1250RewriteOptions &Options,
+                                      std::unique_ptr<MemoryBuffer> &Out) {
+  return retargetCodeObjectImpl(ElfData, ElfSize, TargetIdent, Options, Out,
+                                /*AllowTextDisplacement=*/true);
 }
 
 } // namespace hotswap
