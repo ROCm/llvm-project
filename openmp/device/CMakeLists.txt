@@ -141,7 +141,7 @@ set_property(TARGET ompdevice.all_objs APPEND PROPERTY IMPORTED_OBJECTS
 add_library(ompdevice STATIC)
 add_dependencies(ompdevice libompdevice)
 set_target_properties(ompdevice PROPERTIES
-   ARCHIVE_OUTPUT_DIRECTORY "${OPENMP_INSTALL_LIBDIR}"
+   ARCHIVE_OUTPUT_DIRECTORY "${LLVM_LIBRARY_OUTPUT_INTDIR}/${OPENMP_TARGET_SUBDIR}"
    ARCHIVE_OUTPUT_NAME ompdevice
   LINKER_LANGUAGE CXX
 )
