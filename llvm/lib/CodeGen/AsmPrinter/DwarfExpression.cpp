@@ -1037,21 +1037,20 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
       return std::nullopt;
     SubRegOffset /= 8;
     SubRegSize /= 8;
-    bool IsWholeReg = TRI->isDIOpWholeRegType(Arg.getResultType());
 
-    auto focusThreadIfRequired = [&](int64_t DwarfRegNo) {
-      std::optional<MCRegister> Reg = TRI->getLLVMRegNum(DwarfRegNo, false);
-      if (!Reg)
-        return;
-      auto *RegClass = TRI->getMinimalPhysRegClass(*Reg);
-      if (!RegClass || !TRI->isDivergentRegClass(RegClass))
-        return;
-      // getRegSizeInBits is the lane size for divergent registers.
-      int64_t LaneSizeInBits = TRI->getRegSizeInBits(*RegClass).getFixedValue();
-      emitUserOp(dwarf::DW_OP_LLVM_push_lane);
-      emitConstu(LaneSizeInBits / 8);
-      emitOp(dwarf::DW_OP_mul);
-      emitUserOp(dwarf::DW_OP_LLVM_offset);
+    // FIXME: Need a better way of tracking divergence in DIExpression.
+    bool IsWholeReg = false;
+    if (auto *TET = dyn_cast<TargetExtType>(Arg.getResultType()))
+      IsWholeReg = TET->getName().starts_with("amdgpu.debug.whole.reg");
+
+    auto focusThreadIfRequired = [this](int64_t DwarfRegNo) {
+      // FIXME: This should be represented in the DIExpression.
+      if (auto LaneSize = TRI->getDwarfRegLaneSize(DwarfRegNo, false)) {
+        emitUserOp(dwarf::DW_OP_LLVM_push_lane);
+        emitConstu(*LaneSize);
+        emitOp(dwarf::DW_OP_mul);
+        emitUserOp(dwarf::DW_OP_LLVM_offset);
+      }
     };
 
     if (Regs.size() == 1) {
@@ -1073,7 +1072,7 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
     assert(SubRegOffset == 0 && SubRegSize == 0 &&
            "register piece cannot apply to multiple registers");
 
-    // FIXME: Is IsWholeReg meaningful for register sequences?
+    // Whole reg sequences aren't currently supported.
     if (IsWholeReg)
       return std::nullopt;
 

@@ -23,7 +23,7 @@ frameInfo:
   maxAlignment:    4
 fixedStack:
   - { id: 0, type: default, offset: 4, size: 4, alignment: 4, stack-id: default }
-  - { id: 1, type: default, offset: 4, size: 8, alignment: 4, stack-id: default }
+  - { id: 1, type: default, offset: 8, size: 8, alignment: 4, stack-id: default }
 stack:
   - { id: 0, type: spill-slot, size: 4, alignment: 4, stack-id: sgpr-spill }
   - { id: 1, type: spill-slot, size: 8, alignment: 4, stack-id: sgpr-spill }
@@ -48,18 +48,18 @@ body:             |
 
   bb.0:
     renamable $sgpr10 = IMPLICIT_DEF
-    renamable $sgpr11 = IMPLICIT_DEF
+    renamable $sgpr12_sgpr13 = IMPLICIT_DEF
     SI_SPILL_S32_SAVE killed $sgpr10, %stack.0, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
-    SI_SPILL_S32_SAVE killed $sgpr11, %stack.1, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
+    SI_SPILL_S64_SAVE killed $sgpr12_sgpr13, %stack.1, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
 
     ; Test the path we expect to work (Arg followed immediately by Deref)
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, target("__amdgpu_whole_reg_type64")), DIOpConstant(i32 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
+    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.reg64")), DIOpConstant(i32 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
     DBG_VALUE_LIST !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), %stack.0, 0, debug-location !9
     S_NOP 0
 
-    ; Test that the constant offset is correct (assumes that sgpr11 gets spilled
-    ; to next lane).
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, target("__amdgpu_whole_reg_type64")), DIOpConstant(i32 4), DIOpByteOffset(i32), DIOpArg(1, target("__amdgpu_whole_reg_type64")), DIOpConstant(i32 8), DIOpByteOffset(i32), DIOpComposite(2, i64)), [[DEF]], [[DEF]], {{.*}}
+    ; Test that the constant offset is correct (assumes that sgpr12_sgpr13 gets
+    ; spilled to next lane).
+    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.reg64")), DIOpConstant(i32 4), DIOpByteOffset(i32), DIOpArg(1, target("amdgpu.debug.whole.reg64")), DIOpConstant(i32 8), DIOpByteOffset(i32), DIOpComposite(2, i64)), [[DEF]], [[DEF]], {{.*}}
     DBG_VALUE %stack.1, 0, !10, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), debug-location !9
     S_NOP 0
 

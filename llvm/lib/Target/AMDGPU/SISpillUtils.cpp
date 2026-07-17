@@ -59,7 +59,7 @@ addOrReplaceFrameIndexOp(MachineInstr &MI, MachineOperand *Op, Register Reg) {
 /// current default).
 static Type *getWholeRegType(LLVMContext &Ctx, const GCNSubtarget &ST) {
   StringRef Name =
-      ST.isWave32() ? "__amdgpu_whole_reg_type32" : "__amdgpu_whole_reg_type64";
+      ST.isWave32() ? "amdgpu.debug.whole.reg32" : "amdgpu.debug.whole.reg64";
   return TargetExtType::get(Ctx, Name);
 }
 
@@ -69,7 +69,7 @@ static Type *getWholeRegType(LLVMContext &Ctx, const GCNSubtarget &ST) {
 ///  DBG_VALUE  %stack.8, 0, !"next", !DIExpression(DIOpArg(0, ptr addrspace(5)),
 ///                                                 DIOpDeref(i32))
 ///    --->
-///  DBG_VALUE  %249 : vgpr_32, 0, !"next", !DIExpression(DIOpArg(0, __amdgpu_whole_reg_type32),
+///  DBG_VALUE  %249 : vgpr_32, 0, !"next", !DIExpression(DIOpArg(0, amdgpu.debug.whole.reg32),
 ///                                                       DIOpConstant(i8 40),
 ///                                                       DIOpByteOffset(i32))
 ///
@@ -81,7 +81,7 @@ static Type *getWholeRegType(LLVMContext &Ctx, const GCNSubtarget &ST) {
 ///                                        DIOpAdd()),
 ///                 %stack.9, %stack.5
 ///    --->
-///  DBG_VALUE_LIST !"next", !DIExpression(DIOpArg(0, __amdgpu_whole_reg_type32),
+///  DBG_VALUE_LIST !"next", !DIExpression(DIOpArg(0, amdgpu.debug.whole.reg32),
 ///                                        DIOpConstant(i8 40),
 ///                                        DIOpByteOffset(i32),
 ///                                        DIOpArg(1, ptr addrspace(5)),
@@ -100,7 +100,7 @@ void llvm::updateDbgValueForSISpill(MachineFunction &MF, MachineInstr &MI,
     return (Opnd.isFI() && !FrInfo.isFixedObjectIndex(Opnd.getIndex()) &&
             SpillFIs[Opnd.getIndex()]);
   };
-  auto ClearSpilledOps = [&] {
+  auto ClearSpilledOpnds = [&] {
     for (MachineOperand &Op : MI.debug_operands())
       if (WasOpndSpilled(Op))
         Op.ChangeToRegister(Register(), /*isDef=*/false);
@@ -113,7 +113,7 @@ void llvm::updateDbgValueForSISpill(MachineFunction &MF, MachineInstr &MI,
   // instead, update it with the correct register value. It should be worked out
   // later.
   if (Expr->holdsOldElements()) {
-    ClearSpilledOps();
+    ClearSpilledOpnds();
     return;
   }
 
@@ -139,7 +139,7 @@ void llvm::updateDbgValueForSISpill(MachineFunction &MF, MachineInstr &MI,
     }
     auto Next = std::next(Iter);
     if (Next == End || !std::holds_alternative<DIOp::Deref>(*Next)) {
-      ClearSpilledOps();
+      ClearSpilledOpnds();
       return;
     }
     // Skip the Deref next iteration.
