@@ -152,25 +152,21 @@ All arguments must be wave-uniform.
 A DMA operation initiated by a thread does not belong to the corresponding
 instance of "singlethread" scope. Instead the DMA operation belongs to a
 corresponding DMA scope determined by the target. The following intrinsics
-return the scope at which each kind of DMA operation observes memory on the
-current target:
+return the {ref}`scope<amdgpu-scope-type>` at which each kind of DMA operation
+observes memory on the current target:
 
 ```llvm
-i32 @llvm.amdgcn.scope.lds.dma()     ; scope for LDS DMA operations
-i32 @llvm.amdgcn.scope.tensor.dma()  ; scope for tensor DMA operations
+target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
+target("amdgcn.scope") @llvm.amdgcn.scope.tensor.dma()
 ```
 
-Each of these intrinsics returns an **opaque** integer constant that identifies
-a scope. The constant itself is target defined and must not be assumed to have
-any particular numerical value.
-
-These scope identifiers can be passed to intrinsics that accept
-{ref}`amdgpu-scope-metadata`:
+These scope identifiers can be passed to any intrinsic that accepts a
+{ref}`amdgpu-scope-type` argument:
 
 ```llvm
-%lds_dma_scope = call i32 @llvm.amdgcn.scope.lds.dma()
-call void @llvm.amdgcn.make.available(metadata i32 %lds_dma_scope)
-call void @llvm.amdgcn.make.ptr.visible(ptr %p, metadata i32 %lds_dma_scope)
+%lds_dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
+call void @llvm.amdgcn.make.available(target("amdgcn.scope") %lds_dma_scope)
+call void @llvm.amdgcn.make.ptr.visible(ptr %p, target("amdgcn.scope") %lds_dma_scope)
 ```
 
 (amdgpu-dma-memory-model)=
@@ -215,10 +211,10 @@ operation that reads from the same location. The two operations are related in
 read; an explicit ``make.available`` at the DMA scope is needed.
 
 ```llvm
-%dma_scope = call i32 @llvm.amdgcn.scope.lds.dma()
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
 
 store %val, ptr %global
-call @llvm.amdgcn.make.available(%global, metadata i32 %dma_scope) ; <---
+call @llvm.amdgcn.make.ptr.available(ptr %global, target("amdgcn.scope") %dma_scope) ; <---
 call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
 call @llvm.amdgcn.asyncmark()
 call @llvm.amdgcn.wait.asyncmark(0)
@@ -228,9 +224,9 @@ call @llvm.amdgcn.wait.asyncmark(0)
 The same result can be achieved using a {ref}`amdgpu-store-available` operation:
 
 ```llvm
-%dma_scope = call i32 @llvm.amdgcn.scope.lds.dma()
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
 
-call @llvm.amdgcn.av.global.store(%global, %val, metadata i32 %dma_scope)
+call @llvm.amdgcn.global.store.available(%global, %val, target("amdgcn.scope") %dma_scope)
 call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
 call @llvm.amdgcn.asyncmark()
 call @llvm.amdgcn.wait.asyncmark(0)
@@ -240,16 +236,16 @@ call @llvm.amdgcn.wait.asyncmark(0)
 A similar pattern is required when storing to global using DMA:
 
 ```llvm
-%dma_scope = call i32 @llvm.amdgcn.scope.lds.dma()
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
 
 call @llvm.amdgcn.global.store.async.from.lds(%global, %lds)
 call @llvm.amdgcn.asyncmark()
 call @llvm.amdgcn.wait.asyncmark(0)
-call @llvm.amdgcn.make.visible(%global, metadata i32 %dma_scope) ; <---
+call @llvm.amdgcn.make.ptr.visible(ptr %global, target("amdgcn.scope") %dma_scope) ; <---
 %val = load ptr %global
 ```
 
-The ``make.visible`` at the DMA scope is necessary because the DMA write is
+The ``make.ptr.visible`` at the DMA scope is necessary because the DMA write is
 not automatically visible to the subsequent global read.
 
 #### Workgroup Scope
@@ -263,11 +259,11 @@ the DMA do not have inclusive scopes. An explicit ``make.available`` at the DMA
 scope is needed.
 
 ```llvm
-%dma_scope = call i32 @llvm.amdgcn.scope.lds.dma()
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
 
 ; wave 1
 store %val, ptr addrspace(1) %global
-call @llvm.amdgcn.make.available(%global, metadata i32 %dma_scope) ; <---
+call @llvm.amdgcn.make.ptr.available(ptr %global, target("amdgcn.scope") %dma_scope) ; <---
 fence release syncscope("workgroup")
 
 ; wave 2
@@ -284,7 +280,7 @@ DMA scope is needed. The workgroup fence's *MakeVisible* cannot observe the DMA
 write because the DMA is not contained in the workgroup scope instance.
 
 ```llvm
-%dma_scope = call i32 @llvm.amdgcn.scope.lds.dma()
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
 
 ; wave 1
 call @llvm.amdgcn.global.store.async.from.lds(%global, %lds)
@@ -294,7 +290,7 @@ fence release syncscope("workgroup")
 
 ; wave 2
 fence acquire syncscope("workgroup")
-call @llvm.amdgcn.make.visible(%global, metadata i32 %dma_scope) ; <---
+call @llvm.amdgcn.make.ptr.visible(ptr %global, target("amdgcn.scope") %dma_scope) ; <---
 %val = load ptr addrspace(1) %global
 ```
 
