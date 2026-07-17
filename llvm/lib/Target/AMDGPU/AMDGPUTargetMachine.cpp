@@ -2637,16 +2637,19 @@ void AMDGPUCodeGenPassBuilder::addPreISel(PassManagerWrapper &PMW) const {
   addFunctionPass(AMDGPUUnifyDivergentExitNodesPass(), PMW);
   addFunctionPass(FixIrreduciblePass(), PMW);
   addFunctionPass(UnifyLoopExitsPass(), PMW);
-  addFunctionPass(StructurizeCFGPass(/*SkipUniformRegions=*/false), PMW);
+  if (!LateWaveTransform)
+    addFunctionPass(StructurizeCFGPass(/*SkipUniformRegions=*/false), PMW);
 
   addFunctionPass(AMDGPUAnnotateUniformValuesPass(), PMW);
 
-  addFunctionPass(SIAnnotateControlFlowPass(TM), PMW );
+  if (!LateWaveTransform) {
+    addFunctionPass(SIAnnotateControlFlowPass(TM), PMW);
 
-  // TODO: Move this right after structurizeCFG to avoid extra divergence
-  // analysis. This depends on stopping SIAnnotateControlFlow from making
-  // control flow modifications.
-  addFunctionPass(AMDGPURewriteUndefForPHIPass(), PMW);
+    // TODO: Move this right after structurizeCFG to avoid extra divergence
+    // analysis. This depends on stopping SIAnnotateControlFlow from making
+    // control flow modifications.
+    addFunctionPass(AMDGPURewriteUndefForPHIPass(), PMW);
+  }
 
   if (getCGPassBuilderOption().EnableGlobalISelOption !=
           cl::boolOrDefault::BOU_TRUE ||
@@ -2688,7 +2691,10 @@ void AMDGPUCodeGenPassBuilder::addAsmPrinterEnd(PassManagerWrapper &PMW) const {
 Error AMDGPUCodeGenPassBuilder::addInstSelector(PassManagerWrapper &PMW) const {
   addMachineFunctionPass(AMDGPUISelDAGToDAGPass(TM), PMW);
   addMachineFunctionPass(SIFixSGPRCopiesPass(), PMW);
-  addMachineFunctionPass(SILowerI1CopiesPass(), PMW);
+  if (!LateWaveTransform)
+    addMachineFunctionPass(SILowerI1CopiesPass(), PMW);
+  else
+    addMachineFunctionPass(AMDGPUFinalizeISelWaveTransformPass(), PMW);
   return Error::success();
 }
 
@@ -2720,9 +2726,13 @@ void AMDGPUCodeGenPassBuilder::addMachineSSAOptimization(
 }
 
 Error AMDGPUCodeGenPassBuilder::addFastRegAlloc(PassManagerWrapper &PMW) const {
-  insertPass<PHIEliminationPass>(SILowerControlFlowPass());
-
-  insertPass<TwoAddressInstructionPass>(SIWholeQuadModePass());
+  // In LWT, si-wqm runs post-WaveTransform so it sees the wave-level CFG
+  // with flow blocks, matching the legacy pipeline's post-SILowerControlFlow
+  // CFG structure.
+  if (!LateWaveTransform) {
+    insertPass<PHIEliminationPass>(SILowerControlFlowPass());
+    insertPass<TwoAddressInstructionPass>(SIWholeQuadModePass());
+  }
 
   return Base::addFastRegAlloc(PMW);
 }
@@ -2734,6 +2744,40 @@ Error AMDGPUCodeGenPassBuilder::addRegAssignmentFast(
 
   addMachineFunctionPass(GCNPreRALongBranchRegPass(), PMW);
 
+  if (LateWaveTransform) {
+    // Lower strict WWM/WQM operations (STRICT_WWM, STRICT_WQM,
+    // V_SET_INACTIVE) before pre-allocation so that ENTER/EXIT brackets
+    // are visible to SIPreAllocateWWMRegs.
+    addMachineFunctionPass(AMDGPULowerStrictWQMPass(), PMW);
+
+    // To Allocate wwm registers used in whole quad mode operations (for
+    // shaders). Scheduling it early before the AMDGPUPartitionVGPRs pass so
+    // that this custom allocation will always have enough registers.
+    addMachineFunctionPass(SIPreAllocateWWMRegsPass(), PMW);
+
+    // TODO-WAVETRANSFORM: If there are performance concerns, the current
+    // partition strategy has to be improved.
+    addMachineFunctionPass(AMDGPUPartitionVGPRsForRAPass(), PMW);
+
+    // Perlane VGPR allocation pipeline.
+    if (VGPRRegAllocNPM == RegAllocType::Greedy)
+      addMachineFunctionPass(RAGreedyPass({onlyAllocateVGPRs, "vgpr"}), PMW);
+    else
+      addMachineFunctionPass(RegAllocFastPass({onlyAllocateVGPRs, "vgpr"}),
+                             PMW);
+
+    // Prepare the machine function for WaveTransform.
+    addMachineFunctionPass(AMDGPUPreWaveTransformPass(), PMW);
+
+    // Perform the WaveTransform now.
+    addMachineFunctionPass(AMDGPUWaveTransformPass(), PMW);
+
+    // Lower WQM/Exact transitions post-WaveTransform so it sees the
+    // wave-level CFG with flow blocks. This matches the legacy pipeline
+    // where si-wqm runs after SILowerControlFlow.
+    addMachineFunctionPass(AMDGPULowerWQMOperationsPass(), PMW);
+  }
+
   // SGPR allocation - default to fast at -O0.
   if (SGPRRegAllocNPM == RegAllocType::Greedy)
     addMachineFunctionPass(RAGreedyPass({onlyAllocateSGPRs, "sgpr"}), PMW);
@@ -2741,12 +2785,21 @@ Error AMDGPUCodeGenPassBuilder::addRegAssignmentFast(
     addMachineFunctionPass(RegAllocFastPass({onlyAllocateSGPRs, "sgpr", false}),
                            PMW);
 
+  // In LWT flow, it reserves the physical VGPRs allocated for the perlane VGPR.
+  // This is needed as the Subsequent passes like, SILowerSGPRSpills, WWM
+  // regalloc, PEI/scavenger consult getReservedRegs() and must not reuse those
+  // already allocated VGPRs for the SGPR spills or other WWM allocations.
+  if (LateWaveTransform)
+    addMachineFunctionPass(AMDGPUReserveAllocatedVGPRsPass(), PMW);
+
   // Equivalent of PEI for SGPRs.
   addMachineFunctionPass(SILowerSGPRSpillsPass(), PMW);
 
   // To Allocate wwm registers used in whole quad mode operations (for shaders).
-  addMachineFunctionPass(SIPreAllocateWWMRegsPass(), PMW);
+  if (!LateWaveTransform)
+    addMachineFunctionPass(SIPreAllocateWWMRegsPass(), PMW);
 
+  // For allocating other wwm register operands.
   // WWM allocation - default to fast at -O0.
   if (WWMRegAllocNPM == RegAllocType::Greedy)
     addMachineFunctionPass(RAGreedyPass({onlyAllocateWWMRegs, "wwm"}), PMW);
@@ -2757,11 +2810,15 @@ Error AMDGPUCodeGenPassBuilder::addRegAssignmentFast(
   addMachineFunctionPass(SILowerWWMCopiesPass(), PMW);
   addMachineFunctionPass(AMDGPUReserveWWMRegsPass(), PMW);
 
-  // VGPR allocation - default to fast at -O0.
-  if (VGPRRegAllocNPM == RegAllocType::Greedy)
-    addMachineFunctionPass(RAGreedyPass({onlyAllocateVGPRs, "vgpr"}), PMW);
-  else
-    addMachineFunctionPass(RegAllocFastPass({onlyAllocateVGPRs, "vgpr"}), PMW);
+  // For allocating perlane VGPRs.
+  if (!LateWaveTransform) {
+    // VGPR allocation - default to fast at -O0.
+    if (VGPRRegAllocNPM == RegAllocType::Greedy)
+      addMachineFunctionPass(RAGreedyPass({onlyAllocateVGPRs, "vgpr"}), PMW);
+    else
+      addMachineFunctionPass(RegAllocFastPass({onlyAllocateVGPRs, "vgpr"}),
+                             PMW);
+  }
 
   return Error::success();
 }
@@ -2782,19 +2839,25 @@ Error AMDGPUCodeGenPassBuilder::addOptimizedRegAlloc(
   // This must be run immediately after phi elimination and before
   // TwoAddressInstructions, otherwise the processing of the tied operand of
   // SI_ELSE will introduce a copy of the tied operand source after the else.
-  insertPass<PHIEliminationPass>(SILowerControlFlowPass());
+  if (!LateWaveTransform)
+    insertPass<PHIEliminationPass>(SILowerControlFlowPass());
 
   if (EnableRewritePartialRegUses)
     insertPass<RenameIndependentSubregsPass>(GCNRewritePartialRegUsesPass());
 
-  if (isPassEnabled(EnablePreRAOptimizations))
+  // LWT runs pre-RA opts later, before SGPR alloc.
+  if (isPassEnabled(EnablePreRAOptimizations) && !LateWaveTransform)
     insertPass<MachineSchedulerPass>(GCNPreRAOptimizationsPass());
 
   // Allow the scheduler to run before SIWholeQuadMode inserts exec manipulation
   // instructions that cause scheduling barriers.
-  insertPass<MachineSchedulerPass>(SIWholeQuadModePass());
+  // In LWT, si-wqm runs post-WaveTransform so it sees the wave-level CFG
+  // with flow blocks, matching the legacy pipeline's post-SILowerControlFlow
+  // CFG structure.
+  if (!LateWaveTransform)
+    insertPass<MachineSchedulerPass>(SIWholeQuadModePass());
 
-  if (OptExecMaskPreRA)
+  if (!LateWaveTransform && OptExecMaskPreRA)
     insertPass<MachineSchedulerPass>(SIOptimizeExecMaskingPreRAPass());
 
   // This is not an essential optimization and it has a noticeable impact on
@@ -2817,6 +2880,67 @@ Error AMDGPUCodeGenPassBuilder::addRegAssignmentOptimized(
 
   addMachineFunctionPass(GCNPreRALongBranchRegPass(), PMW);
 
+  if (LateWaveTransform) {
+    // Lower strict WWM/WQM operations (STRICT_WWM, STRICT_WQM,
+    // V_SET_INACTIVE) before pre-allocation so that ENTER/EXIT brackets
+    // are visible to SIPreAllocateWWMRegs.
+    addMachineFunctionPass(AMDGPULowerStrictWQMPass(), PMW);
+
+    // To Allocate wwm registers used in whole quad mode operations (for
+    // shaders). Scheduling it early before the AMDGPUPartitionVGPRs pass so
+    // that this custom allocation will always have enough registers.
+    addMachineFunctionPass(SIPreAllocateWWMRegsPass(), PMW);
+
+    // TODO-WAVETRANSFORM: If there are performance concerns, the current
+    // partition strategy has to be improved.
+    addMachineFunctionPass(AMDGPUPartitionVGPRsForRAPass(), PMW);
+
+    // Add True16 COPY hints, AGPR copy propagation, and BVH stack
+    // optimization before VGPR allocation so the hints are visible to
+    // the allocator.
+    if (isPassEnabled(EnablePreRAVectorRegHints))
+      addMachineFunctionPass(AMDGPUPreRAVectorRegHintsPass(), PMW);
+
+    // Perlane VGPR allocation pipeline.
+    if (VGPRRegAllocNPM == RegAllocType::Fast)
+      addMachineFunctionPass(RegAllocFastPass({onlyAllocateVGPRs, "vgpr"}),
+                             PMW);
+    else
+      addMachineFunctionPass(RAGreedyPass({onlyAllocateVGPRs, "vgpr"}), PMW);
+
+    addPreRewrite(PMW);
+    addMachineFunctionPass(VirtRegRewriterPass(false), PMW);
+
+    // Emit debug values into MIR before WaveTransform invalidates LDV.
+    // This rewrites allocated VGPR locations to physical registers while
+    // keeping unallocated SGPR vregs for re-collection after WaveTransform.
+    addMachineFunctionPass(AMDGPUEmitLiveDebugVarsPass(), PMW);
+
+    // Prepare the machine function for WaveTransform.
+    addMachineFunctionPass(AMDGPUPreWaveTransformPass(), PMW);
+
+    // Perform the WaveTransform now.
+    addMachineFunctionPass(AMDGPUWaveTransformPass(), PMW);
+
+    // Lower WQM/Exact transitions post-WaveTransform so it sees the
+    // wave-level CFG with flow blocks. This matches the legacy pipeline
+    // where si-wqm runs after SILowerControlFlow.
+    addMachineFunctionPass(AMDGPULowerWQMOperationsPass(), PMW);
+
+    // Optimize EXEC-mask related instructions around SGPR register class.
+    if (OptExecMaskPreRA)
+      addMachineFunctionPass(SIOptimizeExecMaskingPreRAPass(), PMW);
+
+    // Now we can perform register-coalescing on remaining copies,
+    // mainly sgpr copies and wwm-vgpr copies.
+    addMachineFunctionPass(RegisterCoalescerPass(), PMW);
+
+    // SGPR copies are coalesced here in LWT; fuse split 64-bit constants
+    // into a rematerializable S_MOV_B64_IMM_PSEUDO so they aren't spilled.
+    if (isPassEnabled(EnablePreRASGPROptimizations))
+      addMachineFunctionPass(AMDGPUPreRASGPROptimizationsPass(), PMW);
+  }
+
   // SGPR allocation - default to greedy at -O1 and above.
   if (SGPRRegAllocNPM == RegAllocType::Fast)
     addMachineFunctionPass(RegAllocFastPass({onlyAllocateSGPRs, "sgpr", false}),
@@ -2835,12 +2959,21 @@ Error AMDGPUCodeGenPassBuilder::addRegAssignmentOptimized(
   // attempting the custom SGPR spill lowering.
   addMachineFunctionPass(StackSlotColoringPass(), PMW);
 
+  // In LWT flow, it reserves the physical VGPRs allocated for the perlane VGPR.
+  // This is needed as the subsequent passes like, SILowerSGPRSpills, WWM
+  // regalloc, PEI/scavenger consult getReservedRegs() and must not reuse those
+  // already allocated VGPRs for the SGPR spills or other WWM allocations.
+  if (LateWaveTransform)
+    addMachineFunctionPass(AMDGPUReserveAllocatedVGPRsPass(), PMW);
+
   // Equivalent of PEI for SGPRs.
   addMachineFunctionPass(SILowerSGPRSpillsPass(), PMW);
 
   // To Allocate wwm registers used in whole quad mode operations (for shaders).
-  addMachineFunctionPass(SIPreAllocateWWMRegsPass(), PMW);
+  if (!LateWaveTransform)
+    addMachineFunctionPass(SIPreAllocateWWMRegsPass(), PMW);
 
+  // For allocating other whole wave mode registers.
   // WWM allocation - default to greedy at -O1 and above.
   if (WWMRegAllocNPM == RegAllocType::Fast)
     addMachineFunctionPass(
@@ -2848,17 +2981,21 @@ Error AMDGPUCodeGenPassBuilder::addRegAssignmentOptimized(
   else
     addMachineFunctionPass(RAGreedyPass({onlyAllocateWWMRegs, "wwm"}), PMW);
   addMachineFunctionPass(SILowerWWMCopiesPass(), PMW);
-  addMachineFunctionPass(VirtRegRewriterPass(false), PMW);
+  addMachineFunctionPass(VirtRegRewriterPass(LateWaveTransform), PMW);
   addMachineFunctionPass(AMDGPUReserveWWMRegsPass(), PMW);
 
-  // VGPR allocation - default to greedy at -O1 and above.
-  if (VGPRRegAllocNPM == RegAllocType::Fast)
-    addMachineFunctionPass(RegAllocFastPass({onlyAllocateVGPRs, "vgpr"}), PMW);
-  else
-    addMachineFunctionPass(RAGreedyPass({onlyAllocateVGPRs, "vgpr"}), PMW);
+  if (!LateWaveTransform) {
+    // Perlane VGPR allocation pipeline.
+    // VGPR allocation - default to greedy at -O1 and above.
+    if (VGPRRegAllocNPM == RegAllocType::Fast)
+      addMachineFunctionPass(RegAllocFastPass({onlyAllocateVGPRs, "vgpr"}),
+                             PMW);
+    else
+      addMachineFunctionPass(RAGreedyPass({onlyAllocateVGPRs, "vgpr"}), PMW);
 
-  addPreRewrite(PMW);
-  addMachineFunctionPass(VirtRegRewriterPass(true), PMW);
+    addPreRewrite(PMW);
+    addMachineFunctionPass(VirtRegRewriterPass(true), PMW);
+  }
 
   addMachineFunctionPass(AMDGPUMarkLastScratchLoadPass(), PMW);
   return Error::success();
