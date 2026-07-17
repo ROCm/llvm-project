@@ -284,9 +284,11 @@ TEST(FindNearestSetPcGateway, FitsActualSixteenByteEncoding) {
   std::vector<NopSled> Gateways = {
       {/*Start=*/0x100, /*End=*/0x110, /*WritePos=*/0x100,
        /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
-  std::optional<EncodedSetPcGateway> Gateway = findNearestSetPcGateway(
-      Gateways, S, /*FromOffset=*/0, /*TargetOffset=*/0x81000,
-      /*SgprBase=*/12);
+  llvm::Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
+      findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0,
+                              /*TargetOffset=*/0x81000, /*SgprBase=*/12);
+  ASSERT_TRUE((bool)GatewayOrErr) << llvm::toString(GatewayOrErr.takeError());
+  std::optional<EncodedSetPcGateway> &Gateway = *GatewayOrErr;
   ASSERT_TRUE(Gateway);
   EXPECT_EQ(Gateway->Sled, &Gateways[0]);
   EXPECT_EQ(Gateway->Bytes.size(), 16u);
@@ -302,14 +304,60 @@ TEST(FindNearestSetPcGateway, SkipsNearerUndersizedCandidate) {
        /*FunctionStart=*/0, /*FunctionEnd=*/0x100000},
       {/*Start=*/0x80200, /*End=*/0x80214, /*WritePos=*/0x80200,
        /*FunctionStart=*/0, /*FunctionEnd=*/0x100000}};
-  std::optional<EncodedSetPcGateway> Gateway = findNearestSetPcGateway(
-      Gateways, S, /*FromOffset=*/0x80000, /*TargetOffset=*/0x1004,
-      /*SgprBase=*/12);
+  llvm::Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
+      findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0x80000,
+                              /*TargetOffset=*/0x1004, /*SgprBase=*/12);
+  ASSERT_TRUE((bool)GatewayOrErr) << llvm::toString(GatewayOrErr.takeError());
+  std::optional<EncodedSetPcGateway> &Gateway = *GatewayOrErr;
   ASSERT_TRUE(Gateway);
   EXPECT_EQ(Gateway->Sled, &Gateways[1]);
   EXPECT_EQ(Gateway->Bytes.size(), SetPcReturnReserveBytes);
   EXPECT_EQ(Gateways[0].WritePos, 0x80100u);
   EXPECT_EQ(Gateways[1].WritePos, 0x80200u);
+}
+
+TEST(FindNearestSetPcGateway, DistinguishesNoFitFromEncodingFailure) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x108, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+  llvm::Expected<std::optional<EncodedSetPcGateway>> NoFit =
+      findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0,
+                              /*TargetOffset=*/0x81000, /*SgprBase=*/12);
+  ASSERT_TRUE((bool)NoFit) << llvm::toString(NoFit.takeError());
+  EXPECT_FALSE(*NoFit);
+
+  llvm::Expected<std::optional<EncodedSetPcGateway>> EncodingFailure =
+      findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0,
+                              /*TargetOffset=*/0x81000, /*SgprBase=*/3);
+  ASSERT_FALSE((bool)EncodingFailure);
+  std::string Error = llvm::toString(EncodingFailure.takeError());
+  EXPECT_NE(Error.find("failed to encode set-PC gateway at candidate"),
+            std::string::npos);
+}
+
+TEST(CountReachableSetPcGatewaySlots, DistinguishesZeroFromEncodingFailure) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x108, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+  llvm::Expected<uint64_t> NoSlots = countReachableSetPcGatewaySlots(
+      Gateways, S, /*FromOffset=*/0, /*TargetOffset=*/0x81000,
+      /*SgprBase=*/12, /*MaxSlots=*/1);
+  ASSERT_TRUE((bool)NoSlots) << llvm::toString(NoSlots.takeError());
+  EXPECT_EQ(*NoSlots, 0u);
+
+  llvm::Expected<uint64_t> EncodingFailure = countReachableSetPcGatewaySlots(
+      Gateways, S, /*FromOffset=*/0, /*TargetOffset=*/0x81000,
+      /*SgprBase=*/3, /*MaxSlots=*/1);
+  ASSERT_FALSE((bool)EncodingFailure);
+  std::string Error = llvm::toString(EncodingFailure.takeError());
+  EXPECT_NE(Error.find("failed to encode set-PC gateway while counting"),
+            std::string::npos);
 }
 
 TEST(EncodeSetPCLongBranch, RejectsPcBaseOverflow) {

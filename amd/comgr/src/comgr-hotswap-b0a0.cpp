@@ -32,6 +32,7 @@
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -438,7 +439,7 @@ std::optional<SmallVector<uint8_t>> encodeSetPCLongBranch(const LLVMState &LS,
   return Bytes;
 }
 
-std::optional<EncodedSetPcGateway>
+Expected<std::optional<EncodedSetPcGateway>>
 findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
                         uint64_t FromOffset, uint64_t TargetOffset,
                         unsigned SgprBase) {
@@ -458,7 +459,11 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
       continue;
     std::optional<SmallVector<uint8_t>> Bytes =
         encodeSetPCLongBranch(LS, Sled.WritePos, TargetOffset, SgprBase);
-    if (!Bytes || Bytes->size() > UsableEnd - Sled.WritePos)
+    if (!Bytes)
+      return createStringError(
+          Twine("failed to encode set-PC gateway at candidate offset 0x") +
+          utohexstr(Sled.WritePos));
+    if (Bytes->size() > UsableEnd - Sled.WritePos)
       continue;
     Best = &Sled;
     BestBytes = std::move(*Bytes);
@@ -466,7 +471,8 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
   }
   if (!Best)
     return std::nullopt;
-  return EncodedSetPcGateway{Best, std::move(BestBytes)};
+  return std::optional<EncodedSetPcGateway>(
+      EncodedSetPcGateway{Best, std::move(BestBytes)});
 }
 
 static std::optional<unsigned> numberedSgprIndex(const MCRegisterInfo &MRI,
@@ -1862,10 +1868,10 @@ buildExternalGatewaySleds(ArrayRef<InternalDecodedInst> Decoded,
   return Sleds;
 }
 
-static uint64_t
-countReachableGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
-                           uint64_t FromOffset, uint64_t TargetOffset,
-                           unsigned SgprBase, uint64_t MaxSlots) {
+Expected<uint64_t>
+countReachableSetPcGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
+                                uint64_t FromOffset, uint64_t TargetOffset,
+                                unsigned SgprBase, uint64_t MaxSlots) {
   uint64_t Slots = 0;
   for (const NopSled &Sled : Gateways) {
     if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd)
@@ -1880,7 +1886,12 @@ countReachableGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
         break;
       std::optional<SmallVector<uint8_t>> Bytes =
           encodeSetPCLongBranch(LS, Candidate, TargetOffset, SgprBase);
-      if (!Bytes || Bytes->size() > UsableEnd - Candidate)
+      if (!Bytes)
+        return createStringError(
+            Twine("failed to encode set-PC gateway while counting candidate "
+                  "offset 0x") +
+            utohexstr(Candidate));
+      if (Bytes->size() > UsableEnd - Candidate)
         break;
       ++Slots;
       Candidate += Bytes->size();
@@ -2006,9 +2017,16 @@ assignLongBranchGateways(PatchContext &Ctx,
   }
   for (PendingGateway &P : Pending) {
     const Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
-    P.InitialCandidateSlots = countReachableGatewaySlots(
+    Expected<uint64_t> CandidateSlots = countReachableSetPcGatewaySlots(
         Gateways, Ctx.LS, T.OriginalOffset, P.TargetOffset,
         T.LongBranchSgprBase, Pending.size());
+    if (!CandidateSlots) {
+      log() << "hotswap: error: failed to count gateways for far site 0x"
+            << utohexstr(T.OriginalOffset) << ": "
+            << toString(CandidateSlots.takeError()) << "\n";
+      return false;
+    }
+    P.InitialCandidateSlots = *CandidateSlots;
   }
 
   std::vector<PendingGateway> StillPending;
@@ -2038,9 +2056,16 @@ assignLongBranchGateways(PatchContext &Ctx,
   uint64_t AssignedGateways = 0;
   for (const PendingGateway &P : Pending) {
     Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
-    std::optional<EncodedSetPcGateway> Gateway =
+    Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
         findNearestSetPcGateway(Gateways, Ctx.LS, T.OriginalOffset,
                                 P.TargetOffset, T.LongBranchSgprBase);
+    if (!GatewayOrErr) {
+      log() << "hotswap: error: failed to plan gateway for far site 0x"
+            << utohexstr(T.OriginalOffset) << ": "
+            << toString(GatewayOrErr.takeError()) << "\n";
+      return false;
+    }
+    std::optional<EncodedSetPcGateway> Gateway = std::move(*GatewayOrErr);
     if (!Gateway) {
       log() << "hotswap: error: no safe short-branch gateway for far site 0x"
             << utohexstr(T.OriginalOffset) << " (" << P.InitialCandidateSlots
