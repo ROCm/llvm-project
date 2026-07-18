@@ -25,9 +25,10 @@ struct mg_info {
     uint num_grids;
     ulong prev_sum;
     ulong all_sum;
-
-    struct mg_sync sgs;
     uint num_wg;
+    uint pad0[23];          // pad so sgs starts on a new 128B cache line
+    struct mg_sync sgs;     // offset 128, alone on its line
+    uint pad1[30];          // keep the rest of the line to itself
 };
 
 static inline size_t
