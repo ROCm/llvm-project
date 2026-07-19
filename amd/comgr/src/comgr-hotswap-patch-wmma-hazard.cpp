@@ -104,22 +104,24 @@ WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
   return {4, 4};
 }
 
+int updateWmmaHazardDeficit(DenseMap<size_t, int> &MaxDeficits,
+                            size_t ValuIndex, int Deficit) {
+  int &Maximum = MaxDeficits[ValuIndex];
+  Maximum = std::max(Maximum, Deficit);
+  return Maximum;
+}
+
 namespace {
 
-// Scan a decoded stream for WMMA/SWMMAC -> overlapping co-executable VALU
-// hazards, returning the nop deficits keyed by VALU index (into \p Stream).
-//
-// \p RequireAbsolute picks the nop budget. The original kernel stream (false)
-// already carries the compiler-inserted spacing, so only the extra deficit
-// beyond that matters; freshly emitted trampoline bodies (true) have no such
-// baseline, so the full required count is enforced.
-std::vector<WmmaHazard> scanCoexecHazards(ArrayRef<InternalDecodedInst> Stream,
-                                          const MCInstrInfo &MCII,
-                                          const MCRegisterInfo &MRI,
-                                          bool RequireAbsolute,
-                                          int *WmmaScannedOut = nullptr) {
-  std::vector<WmmaHazard> Hazards;
-  DenseSet<size_t> PatchedValuIndices;
+// Scan one decoded stream for WMMA/SWMMAC -> overlapping co-executable VALU
+// hazards. Original code uses its compiler-provided baseline as the scan gate;
+// freshly emitted trampoline bodies must satisfy the absolute target budget.
+// Multiple WMMAs may converge on one VALU, so retain the maximum deficit.
+static std::optional<std::vector<WmmaHazard>> scanCoexecHazards(
+    ArrayRef<InternalDecodedInst> Stream, const MCInstrInfo &MCII,
+    const MCRegisterInfo &MRI, bool RequireAbsolute,
+    int *WmmaScannedOut = nullptr) {
+  DenseMap<size_t, int> MaxDeficitByValu;
   int WmmaScanned = 0;
 
   for (size_t WmmaIdx = 0, E = Stream.size(); WmmaIdx < E; ++WmmaIdx) {
@@ -128,18 +130,22 @@ std::vector<WmmaHazard> scanCoexecHazards(ArrayRef<InternalDecodedInst> Stream,
       continue;
 
     ++WmmaScanned;
-    WmmaNopReq Req = classifyWmmaNops(WmmaDI.Mnemonic);
-    // Target is always the full required count. For the original stream, the
-    // compiler-inserted baseline only gates whether a scan is needed: if the
-    // requirement is no more than that baseline, the existing spacing suffices.
-    // Trampoline bodies have no baseline, so the full count is always enforced.
+    const WmmaNopReq Req = classifyWmmaNops(WmmaDI.Mnemonic);
     if (!RequireAbsolute && Req.A0Nops <= Req.B0Nops)
       continue;
-    int Target = Req.A0Nops;
+    const int Target = Req.A0Nops;
 
     int SafeSlots = 0;
     for (size_t ValuIdx = WmmaIdx + 1; ValuIdx < E; ++ValuIdx) {
       const InternalDecodedInst &Candidate = Stream[ValuIdx];
+      if (Candidate.Mnemonic == "<unknown>" ||
+          Candidate.Mnemonic == "<replaced>") {
+        log() << "hotswap: error: cannot prove WMMA co-exec spacing from 0x"
+              << utohexstr(WmmaDI.Offset) << " across instruction at 0x"
+              << utohexstr(Candidate.Offset) << " (" << Candidate.Mnemonic
+              << ")\n";
+        return std::nullopt;
+      }
 
       if (isVNop(Candidate)) {
         ++SafeSlots;
@@ -162,13 +168,16 @@ std::vector<WmmaHazard> scanCoexecHazards(ArrayRef<InternalDecodedInst> Stream,
           continue;
         }
 
-        if (SafeSlots < Target && PatchedValuIndices.insert(ValuIdx).second) {
-          Hazards.push_back({ValuIdx, Target - SafeSlots});
+        if (SafeSlots < Target) {
+          const int Deficit = Target - SafeSlots;
+          const int MaxDeficit =
+              updateWmmaHazardDeficit(MaxDeficitByValu, ValuIdx, Deficit);
           log() << "hotswap: WMMA co-exec hazard at 0x"
                 << utohexstr(WmmaDI.Offset) << ": " << WmmaDI.Mnemonic
                 << " needs " << Target << " v_nops, only " << SafeSlots
                 << " found before " << Candidate.Mnemonic << " at 0x"
-                << utohexstr(Candidate.Offset) << "\n";
+                << utohexstr(Candidate.Offset) << " (candidate max deficit "
+                << MaxDeficit << ")\n";
         }
         break;
       }
@@ -177,49 +186,64 @@ std::vector<WmmaHazard> scanCoexecHazards(ArrayRef<InternalDecodedInst> Stream,
     }
   }
 
+  std::vector<WmmaHazard> Hazards;
+  Hazards.reserve(MaxDeficitByValu.size());
+  for (size_t I = 0, E = Stream.size(); I != E; ++I)
+    if (auto It = MaxDeficitByValu.find(I); It != MaxDeficitByValu.end())
+      Hazards.push_back({I, It->second});
   if (WmmaScannedOut)
     *WmmaScannedOut = WmmaScanned;
   return Hazards;
 }
 
-std::vector<WmmaHazard> findWmmaCoexecHazards(const PatchContext &Ctx) {
+static std::optional<std::vector<WmmaHazard>>
+findWmmaCoexecHazards(const PatchContext &Ctx) {
   int WmmaScanned = 0;
-  std::vector<WmmaHazard> Hazards =
-      scanCoexecHazards(Ctx.Decoded, *Ctx.LS.MCII, *Ctx.LS.MRI,
-                        /*RequireAbsolute=*/false, &WmmaScanned);
-  log() << "hotswap: WMMA co-exec validation: " << Hazards.size()
+  std::optional<std::vector<WmmaHazard>> Hazards = scanCoexecHazards(
+      Ctx.Decoded, *Ctx.LS.MCII, *Ctx.LS.MRI,
+      /*RequireAbsolute=*/false, &WmmaScanned);
+  if (!Hazards)
+    return std::nullopt;
+  log() << "hotswap: WMMA co-exec validation: " << Hazards->size()
         << " hazards (" << WmmaScanned << " WMMA instructions scanned)\n";
   return Hazards;
 }
 
-// Fail-closed safety net for trampoline bodies emitted by other passes (e.g.
-// the exact scale16 K-split): they contain their own WMMAs but were never in
-// Ctx.Decoded, so findWmmaCoexecHazards cannot see them, and they carry no
-// compiler-inserted spacing, so each is checked against the full required
-// count. A residual deficit means a pass shipped an unsafe WMMA/VALU ordering,
-// so we refuse the rewrite. Runs before branch fixup/coalescing, so each
-// T.Bytes is still {body, reserved-return-slot}; the reserved tail is trimmed
-// before decoding since its zero bytes are not real instructions.
-void validateTrampolineCoexec(PatchContext &Ctx) {
+// Emitted trampoline bodies were not present in Ctx.Decoded and carry no
+// compiler spacing baseline. Validate their absolute WMMA/VALU separation
+// before branch fixup and coalescing; malformed bodies fail the rewrite closed.
+static void validateTrampolineCoexec(PatchContext &Ctx) {
   const MCInstrInfo &MCII = *Ctx.LS.MCII;
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
 
   for (const Trampoline &T : Ctx.OutTrampolines) {
-    unsigned Reserve = T.Long ? SetPcReturnReserveBytes : MinInstSize;
+    const unsigned Reserve = T.Long ? SetPcReturnReserveBytes : MinInstSize;
     if (T.Bytes.size() <= Reserve)
       continue;
-    size_t BodySize = T.Bytes.size() - Reserve;
+    const size_t BodySize = T.Bytes.size() - Reserve;
 
     std::vector<InternalDecodedInst> Body;
-    if (!decodeTextSection(T.Bytes.data(), BodySize, Ctx.LS, Body))
+    if (!decodeTextSection(T.Bytes.data(), BodySize, Ctx.LS, Body)) {
+      log() << "hotswap: error: could not decode trampoline body for WMMA "
+               "co-exec validation at site 0x"
+            << utohexstr(T.OriginalOffset) << "\n";
+      Ctx.RequiredPatchFailed = true;
       continue;
+    }
 
-    std::vector<WmmaHazard> TH =
-        scanCoexecHazards(Body, MCII, MRI, /*RequireAbsolute=*/true);
-    if (!TH.empty()) {
+    std::optional<std::vector<WmmaHazard>> Hazards = scanCoexecHazards(
+        Body, MCII, MRI, /*RequireAbsolute=*/true);
+    if (!Hazards) {
+      log() << "hotswap: error: indeterminate WMMA co-exec spacing in "
+               "trampoline for site 0x"
+            << utohexstr(T.OriginalOffset) << "\n";
+      Ctx.RequiredPatchFailed = true;
+      continue;
+    }
+    if (!Hazards->empty()) {
       log() << "hotswap: error: WMMA co-exec hazard unmitigated in trampoline "
                "for site 0x"
-            << utohexstr(T.OriginalOffset) << " (" << TH.size()
+            << utohexstr(T.OriginalOffset) << " (" << Hazards->size()
             << " site(s)); failing closed\n";
       Ctx.RequiredPatchFailed = true;
     }
@@ -228,50 +252,111 @@ void validateTrampolineCoexec(PatchContext &Ctx) {
 
 } // anonymous namespace
 
+static bool precomputeWmmaHazardsImpl(PatchContext &Ctx) {
+  std::optional<std::vector<WmmaHazard>> Hazards =
+      findWmmaCoexecHazards(Ctx);
+  if (!Hazards) {
+    Ctx.RequiredPatchFailed = true;
+    return false;
+  }
+  for (const WmmaHazard &H : *Hazards) {
+    if (H.ValuIdx >= Ctx.Decoded.size() || H.Deficit <= 0) {
+      log() << "hotswap: error: invalid precomputed WMMA hazard candidate\n";
+      Ctx.RequiredPatchFailed = true;
+      return false;
+    }
+    const InternalDecodedInst &DI = Ctx.Decoded[H.ValuIdx];
+    SiteReplacementState &State = Ctx.SiteReplacements[DI.Offset];
+    if (State.Committed ||
+        (State.OriginalSize != 0 && State.OriginalSize != DI.Size)) {
+      log() << "hotswap: error: WMMA hazard candidate at 0x"
+            << utohexstr(DI.Offset)
+            << " conflicts with pre-existing replacement ownership\n";
+      Ctx.RequiredPatchFailed = true;
+      return false;
+    }
+    if (State.RequiredLeadingVNops == 0)
+      Ctx.WmmaHazardSites.push_back(DI.Offset);
+    State.OriginalSize = DI.Size;
+    State.RequiredLeadingVNops =
+        std::max(State.RequiredLeadingVNops, static_cast<unsigned>(H.Deficit));
+  }
+  return true;
+}
+
 static uint32_t applyWmmaHazardPatchImpl(PatchContext &Ctx) {
-  std::vector<WmmaHazard> Hazards = findWmmaCoexecHazards(Ctx);
-  if (Hazards.empty()) {
-    // Even with no original-stream hazards, other passes may have emitted
-    // WMMA-bearing trampolines that need their own separation validated.
-    validateTrampolineCoexec(Ctx);
+  for (uint64_t Offset : Ctx.WmmaHazardSites) {
+    auto StateIt = Ctx.SiteReplacements.find(Offset);
+    if (StateIt == Ctx.SiteReplacements.end() ||
+        StateIt->second.RequiredLeadingVNops == 0) {
+      log() << "hotswap: error: lost precomputed WMMA hazard state at 0x"
+            << utohexstr(Offset) << "\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
+    if (StateIt->second.WmmaHazardComposed)
+      continue;
+    if (StateIt->second.Committed) {
+      log() << "hotswap: error: replacement at 0x" << utohexstr(Offset)
+            << " committed without its WMMA hazard requirement\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
+
+    auto DI = llvm::lower_bound(
+        Ctx.Decoded, Offset,
+        [](const InternalDecodedInst &Inst, uint64_t CandidateOffset) {
+          return Inst.Offset < CandidateOffset;
+        });
+    if (DI == Ctx.Decoded.end() || DI->Offset != Offset ||
+        DI->Size != StateIt->second.OriginalSize || Offset > Ctx.TextSize ||
+        DI->Size > Ctx.TextSize - Offset) {
+      log() << "hotswap: error: WMMA hazard source at 0x"
+            << utohexstr(Offset) << " is not a valid current instruction\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
+
+    // No per-instruction pass owned this site. Preserve the bytes after all
+    // same-size in-place corrections, then let the central emission helper
+    // prepend the precomputed v_nops and commit the single site owner.
+    SmallVector<uint8_t> Current(Ctx.Text + Offset,
+                                 Ctx.Text + Offset + DI->Size);
+    if (!emitReplacementCode(Ctx, Offset, DI->Size, Current)) {
+      log() << "hotswap: error: could not emit required WMMA hazard fix at 0x"
+            << utohexstr(Offset) << "\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
+
+    StateIt = Ctx.SiteReplacements.find(Offset);
+    if (StateIt == Ctx.SiteReplacements.end() ||
+        !StateIt->second.WmmaHazardComposed) {
+      log() << "hotswap: error: WMMA hazard requirement at 0x"
+            << utohexstr(Offset) << " was not composed by emission\n";
+      Ctx.RequiredPatchFailed = true;
+      return 0;
+    }
+  }
+
+  if (Ctx.WmmaHazardsComposed != Ctx.WmmaHazardSites.size()) {
+    log() << "hotswap: error: composed " << Ctx.WmmaHazardsComposed << " of "
+          << Ctx.WmmaHazardSites.size()
+          << " precomputed WMMA hazard requirements\n";
+    Ctx.RequiredPatchFailed = true;
     return 0;
   }
 
-  uint32_t Patched = 0;
-  for (const WmmaHazard &H : Hazards) {
-    const InternalDecodedInst &ValuDI = Ctx.Decoded[H.ValuIdx];
-
-    uint64_t TrampolineTextOffset = Ctx.TextSize;
-    for (const Trampoline &T : Ctx.OutTrampolines)
-      TrampolineTextOffset += T.Bytes.size();
-
-    SmallVector<MCInst> Insts;
-    for (int I = 0; I < H.Deficit; ++I)
-      Insts.push_back(Ctx.LS.VNopInst);
-    Insts.push_back(ValuDI.Inst);
-
-    Trampoline T = buildTrampoline(Insts, ValuDI.Offset, ValuDI.Size,
-                                   TrampolineTextOffset, Ctx.LS);
-    if (T.Bytes.empty()) {
-      log() << "hotswap: error: WMMA hazard: buildTrampoline failed at 0x"
-            << utohexstr(ValuDI.Offset) << "\n";
-      continue;
-    }
-    Ctx.OutTrampolines.push_back(std::move(T));
-
-    log() << "hotswap: WMMA hazard fix at 0x" << utohexstr(ValuDI.Offset)
-          << ": inserted " << H.Deficit << " v_nop(s)\n";
-    ++Patched;
-  }
-
-  // Validate every emitted trampoline (including the ones just added above and
-  // any WMMA-bearing bodies from other passes) against the full required
-  // budget.
+  // Scale16 and other patch families can emit WMMA-bearing bodies that were
+  // absent from the immutable source stream. Enforce their full target spacing.
   validateTrampolineCoexec(Ctx);
-  return Patched;
+  if (Ctx.RequiredPatchFailed)
+    return 0;
+  return Ctx.WmmaHazardsComposed;
 }
 
 void registerWmmaHazardPatch(HotswapPatchVTable &VT) {
+  VT.precomputeWmmaHazards = &precomputeWmmaHazardsImpl;
   VT.applyWmmaHazardPatch = &applyWmmaHazardPatchImpl;
 }
 

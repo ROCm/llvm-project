@@ -20,10 +20,10 @@
 // DISASM-LABEL: <test_ds_nowait>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
 // DISASM: s_endpgm
 // DISASM: ds_load_b32 v0
 // DISASM: ds_load_b32 v1
-// DISASM: s_wait_dscnt 0x0
 // DISASM: s_branch
 
 // COM: Idempotency

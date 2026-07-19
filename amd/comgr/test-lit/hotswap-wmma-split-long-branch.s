@@ -1,6 +1,6 @@
 // COM: WMMA-split shares emitToTrampoline with the other patch families. A
-// COM: split site beyond s_branch's +-128 KB reach uses SGPR-backed set-PC
-// COM: sequences on both edges and never executes s_add_pc_i64. External NOP
+// COM: split site beyond s_branch's +-128 KB reach uses SGPR-backed PC
+// COM: transfers on both edges and never executes s_add_pc_i64. External NOP
 // COM: space supplies the forward gateway; non-NOP filler forces the far case.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
@@ -17,9 +17,8 @@
 // COM: The site redirects through a safe gateway to two K=64 halves and
 // COM: returns through the SCC-neutral set-PC sequence.
 // DISASM-LABEL: <test_wsplit_far>:
-// DISASM-NEXT: s_branch
-// DISASM: s_get_pc_i64 s[0:1]
-// DISASM-NEXT: s_add_nc_u64 s[0:1], s[0:1],
+// DISASM-NEXT: s_call_i64 s[0:1],
+// DISASM: s_add_nc_u64 s[0:1], s[0:1],
 // DISASM-NEXT: s_set_pc_i64 s[0:1]
 // DISASM: v_wmma_f32_16x16x64_fp8_fp8
 // DISASM-NEXT: v_wmma_f32_16x16x64_fp8_fp8

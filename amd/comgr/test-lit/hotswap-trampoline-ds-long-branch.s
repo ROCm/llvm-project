@@ -7,10 +7,10 @@
 // COM: forwarding in another wave on the same SIMD, causing wrong results,
 // COM: hangs, or a GPU page fault.
 // COM:
-// COM: Fix: use the gfx12 SCC-neutral SGPR-backed set-PC sequence on both
-// COM: edges. Merge adjacent sites and bounded straight-line neighbors when
-// COM: they provide enough source bytes; otherwise short-branch through safe
-// COM: NOP padding.
+// COM: Fix: use the pre-Gen5 SGPR-backed set-PC sequence on both edges. Merge
+// COM: adjacent sites and bounded straight-line neighbors when they provide
+// COM: enough source bytes; otherwise call through safe NOP padding and use
+// COM: its link value for a compact add/set-PC tail.
 // COM: No path emits the broken instruction.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
@@ -27,7 +27,7 @@
 // COM: Case 1 (2-address load, RCCL's pattern).
 // DISASM-NOT: s_add_pc_i64
 // DISASM-LABEL: <test_ds2addr_far_load>:
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64 s[2:3],
 
 // COM: Case 2 (adjacent sites coalesced into a set-PC forward gateway).
 // DISASM-LABEL: <test_ds2addr_far_adjacent>:
@@ -38,20 +38,20 @@
 // COM: Case 3 (an interior direct-branch target must prevent coalescing).
 // DISASM-LABEL: <test_ds2addr_far_branch_target>:
 // DISASM-NEXT: s_cbranch_scc1
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64 s[2:3],
 // DISASM-NEXT: s_nop 0
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64 s[2:3],
 
 // COM: Case 4 (a direct-call target is also an interior entry point).
 // DISASM-LABEL: <test_ds2addr_far_call_target>:
 // DISASM-NEXT: s_call_i64
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64 s[2:3],
 // DISASM-NEXT: s_nop 0
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64 s[2:3],
 
 // COM: Case 5 (2-address store).
 // DISASM-LABEL: <test_ds2addr_far_store>:
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64 s[2:3],
 
 // DISASM-NOT: ds_load_2addr
 // DISASM-NOT: ds_store_2addr

@@ -1,8 +1,5 @@
 // COM: Splitting a compound DS instruction must preserve its read-before-write
 // COM: semantics when the address or data registers overlap a destination.
-// COM: This kernel deliberately has no nop sled, forcing the appended
-// COM: trampoline/growth path. Its cyclic exchange is the intentional no-op
-// COM: case: the original instruction must remain byte-stable.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \

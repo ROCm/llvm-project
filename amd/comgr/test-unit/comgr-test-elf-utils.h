@@ -79,6 +79,9 @@ struct KernelDescriptorElfOptions {
   // When non-empty, emit these kernel metadata entries instead of the single
   // entry described by MetadataKernelName / MetadataSgprCount.
   std::vector<MetadataKernel> MetadataKernels;
+  // Emit a real PT_PHDR entry before PT_LOAD, with both the ELF and program
+  // header tables covered by the load segment.
+  bool EmitPhdrSegment = false;
   bool MetadataOmitVgprCount = false;
   bool MetadataVgprCountAsString = false;
   // When set, emit an extra zero-sized SHF_ALLOC section (".pad") at this
@@ -225,10 +228,15 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
       alignTo8(SymTabOff + SymCount * sizeof(Elf64_Sym));
   const uint64_t NoteOff =
       HasMetadataNote ? alignTo4(ShStrTabOff + sizeof(ShStrTab)) : 0;
-  const uint64_t PhOff =
-      HasMetadataNote ? alignTo8(NoteOff + MetadataNote.size()) : 0;
-  const uint64_t ContentEnd = HasMetadataNote ? PhOff + sizeof(Elf64_Phdr)
-                                              : ShStrTabOff + sizeof(ShStrTab);
+  const bool HasTextLoad = Options.ElfType != ET_REL;
+  const uint16_t PhNum = static_cast<uint16_t>(Options.EmitPhdrSegment) +
+                         static_cast<uint16_t>(HasTextLoad) +
+                         static_cast<uint16_t>(HasMetadataNote);
+  const uint64_t BeforePhdrs = HasMetadataNote ? NoteOff + MetadataNote.size()
+                                               : ShStrTabOff + sizeof(ShStrTab);
+  const uint64_t PhOff = PhNum ? alignTo8(BeforePhdrs) : 0;
+  const uint64_t ContentEnd =
+      PhNum ? PhOff + PhNum * sizeof(Elf64_Phdr) : BeforePhdrs;
   const uint64_t BufSize = alignTo8(ContentEnd + 64);
 
   KernelDescriptorElf Result;
@@ -253,10 +261,10 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   Ehdr.e_type = Options.ElfType;
   Ehdr.e_version = EV_CURRENT;
   Ehdr.e_shoff = ShOff;
-  if (HasMetadataNote) {
+  if (PhNum) {
     Ehdr.e_phoff = PhOff;
     Ehdr.e_phentsize = sizeof(Elf64_Phdr);
-    Ehdr.e_phnum = 1;
+    Ehdr.e_phnum = PhNum;
   }
   Ehdr.e_ehsize = sizeof(Elf64_Ehdr);
   Ehdr.e_shentsize = sizeof(Elf64_Shdr);
@@ -323,6 +331,45 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
     std::memcpy(Buf + ShOff + 6 * sizeof(Elf64_Shdr), &PadSh, sizeof(PadSh));
   }
 
+  uint64_t PhdrOff = PhOff;
+  if (Options.EmitPhdrSegment) {
+    assert(HasTextLoad && Options.TextAddr >= TextOffset);
+    const uint64_t LoadVAddr = Options.TextAddr - TextOffset;
+    Elf64_Phdr HeaderPhdr{};
+    HeaderPhdr.p_type = PT_PHDR;
+    HeaderPhdr.p_flags = PF_R;
+    HeaderPhdr.p_offset = PhOff;
+    HeaderPhdr.p_vaddr = LoadVAddr + PhOff;
+    HeaderPhdr.p_paddr = HeaderPhdr.p_vaddr;
+    HeaderPhdr.p_filesz = PhNum * sizeof(Elf64_Phdr);
+    HeaderPhdr.p_memsz = HeaderPhdr.p_filesz;
+    HeaderPhdr.p_align = alignof(Elf64_Phdr);
+    std::memcpy(Buf + PhdrOff, &HeaderPhdr, sizeof(HeaderPhdr));
+    PhdrOff += sizeof(Elf64_Phdr);
+  }
+
+  if (HasTextLoad) {
+    Elf64_Phdr TextPhdr{};
+    TextPhdr.p_type = PT_LOAD;
+    TextPhdr.p_flags = PF_R | PF_X;
+    if (Options.EmitPhdrSegment) {
+      TextPhdr.p_offset = 0;
+      TextPhdr.p_vaddr = Options.TextAddr - TextOffset;
+      TextPhdr.p_paddr = TextPhdr.p_vaddr;
+      TextPhdr.p_filesz = ContentEnd;
+      TextPhdr.p_memsz = ContentEnd;
+    } else {
+      TextPhdr.p_offset = TextOffset;
+      TextPhdr.p_vaddr = Options.TextAddr;
+      TextPhdr.p_paddr = Options.TextAddr;
+      TextPhdr.p_filesz = Text.size();
+      TextPhdr.p_memsz = Text.size();
+    }
+    TextPhdr.p_align = 4;
+    std::memcpy(Buf + PhdrOff, &TextPhdr, sizeof(TextPhdr));
+    PhdrOff += sizeof(Elf64_Phdr);
+  }
+
   if (HasMetadataNote) {
     Elf64_Phdr NotePhdr{};
     NotePhdr.p_type = PT_NOTE;
@@ -330,7 +377,7 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
     NotePhdr.p_filesz = MetadataNote.size();
     NotePhdr.p_memsz = MetadataNote.size();
     NotePhdr.p_align = 4;
-    std::memcpy(Buf + PhOff, &NotePhdr, sizeof(NotePhdr));
+    std::memcpy(Buf + PhdrOff, &NotePhdr, sizeof(NotePhdr));
   }
 
   std::memcpy(

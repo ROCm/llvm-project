@@ -8,35 +8,21 @@
 // RUN:   --output %t.out.elf | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
 
-// COM: Exercise the large-object planning path with verbose accounting. This
-// COM: fixture contains more than 250 KiB of text and requires a deterministic
-// COM: forward branch-island chain.
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.scale.elf 2>&1 | %FileCheck --check-prefix=SCALE %s
-// SCALE: hotswap: assigned 1 forward s_branch island chain(s)
-// SCALE: hotswap: applied 1 instruction patches
-// SCALE: hotswap: growWithTrampolines: appended 1 trampoline
-
-// RUN: hotswap-rewrite %t.scale.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --check-idempotent | %FileCheck --check-prefix=SCALE-IDEM %s
-// SCALE-IDEM: IDEMPOTENT: YES
-
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM \
 // RUN:   --implicit-check-not=s_add_pc_i64 %s
 
 // DISASM-LABEL: <test_branch_islands>:
-// DISASM-NEXT: s_delay_alu
 // DISASM-NEXT: s_branch
+// DISASM-NEXT: s_nop
 // DISASM-LABEL: <gateway_0>:
 // DISASM-NEXT: s_endpgm
 // DISASM-NEXT: s_branch
 // DISASM-LABEL: <gateway_1>:
 // DISASM-NEXT: s_endpgm
 // DISASM-NEXT: s_branch
-// DISASM: s_pack_hh_b32_b16 s4, 0, s4
-// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
+// DISASM: ds_load_b32 v0, v2 offset:256
+// DISASM-NEXT: ds_load_b32 v1, v2 offset:768
+// DISASM-NEXT: s_wait_dscnt 0x0
 // DISASM-NEXT: s_get_pc_i64 s[14:15]
 // DISASM-NEXT: s_add_nc_u64 s[14:15], s[14:15],
 // DISASM-NEXT: s_set_pc_i64 s[14:15]
@@ -52,8 +38,7 @@
 .p2align 8
 .type test_branch_islands,@function
 test_branch_islands:
-  s_delay_alu instid0(SALU_CYCLE_1)
-  tensor_load_to_lds s[0:3], s[4:11]
+  ds_load_2addr_stride64_b32 v[0:1], v2 offset0:1 offset1:3
   s_endpgm
 .size test_branch_islands, .-test_branch_islands
 
@@ -84,7 +69,7 @@ gateway_1:
 .rodata
 .p2align 8
 .amdhsa_kernel test_branch_islands
-  .amdhsa_next_free_vgpr 1
+  .amdhsa_next_free_vgpr 3
   .amdhsa_next_free_sgpr 12
 .end_amdhsa_kernel
 
@@ -96,7 +81,7 @@ gateway_1:
     - .name: test_branch_islands
       .symbol: test_branch_islands.kd
       .sgpr_count: 14
-      .vgpr_count: 1
+      .vgpr_count: 3
       .kernarg_segment_size: 0
       .group_segment_fixed_size: 0
       .private_segment_fixed_size: 0

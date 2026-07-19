@@ -15,9 +15,10 @@
 
 // DISASM-LABEL: <test_absolute_call>:
 // DISASM-NEXT: s_swap_pc_i64 s[0:1], 0x1010
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64
 // DISASM-NEXT: s_nop 0
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64
+// DISASM-NEXT: s_nop 0
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

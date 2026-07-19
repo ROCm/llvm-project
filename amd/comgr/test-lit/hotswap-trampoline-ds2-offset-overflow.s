@@ -29,26 +29,27 @@
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefix=LOG %s
 // COM: Pin the message shape (mnemonic, both raw + scaled values, the
-// COM: 16-bit limit, and the required-rewrite failure closer) so a regression
-// COM: in the message format or the limit constant fails here, not in some
-// COM: downstream-symptoms test. The helper's specific message is the only
-// COM: diagnostic; patchDs2Addr does not add a second generic failure.
-// COM: RESULT: ERROR comes last because leaving the required A0 rewrite
-// COM: unapplied would be unsafe.
+// COM: 16-bit limit, and the "required A0 rewrite cannot continue"
+// COM: closer) so a regression in the message format or the limit
+// COM: constant fails here, not in some downstream-symptoms test. The
+// COM: generic "ds_2addr expansion failed" line is the patchDs2Addr-level
+// COM: error that follows naturally from the overflow guard returning
+// COM: an empty expansion; pin it too so a refactor that reroutes the
+// COM: error path is caught. RESULT: ERROR comes last because leaving the
+// COM: required A0 rewrite unpatched must fail the rewrite as a whole.
 // LOG:      hotswap: error: ds_load_2addr_stride64_b64 scaled offsets exceed
 // LOG-SAME: the single-address DS 16-bit field
 // LOG-SAME: off0=raw 128 * scale 512 = 65536
 // LOG-SAME: off1=raw 255 * scale 512 = 130560
 // LOG-SAME: max 65535
 // LOG-SAME: required A0 rewrite cannot continue
+// LOG:      hotswap: error: ds_2addr expansion failed for: ds_load_2addr_stride64_b64
 // LOG:      RESULT: ERROR
 
-// ---- Kernel 1: out-of-range -- patch must NOT fire --------------------------
+// ---- Kernel 1: out-of-range -- rewrite must fail ----------------------------
 // COM: Both per-operand indices scale past 0xFFFF (off0:128 -> 65536,
-// COM: off1:255 -> 130560). The trampoline must reject the patch and
-// COM: leave ds_load_2addr_stride64_b64 in the kernel verbatim. No
-// COM: s_branch is inserted, no replacement ds_load_b64 appears, the
-// COM: NOP sled is unused. The DISASM-NOT lines pin all three negatives.
+// COM: off1:255 -> 130560). The trampoline must reject the patch and fail
+// COM: the rewrite instead of emitting a silently truncated replacement.
 // DISASM-LABEL: <test_ds_load_b64_overflow>:
 // DISASM:       ds_load_2addr_stride64_b64 v[0:3], v4 offset0:128 offset1:255
 // DISASM-NEXT:  s_wait_dscnt 0x0

@@ -34,6 +34,11 @@ namespace hotswap {
 
 namespace {
 
+uint32_t failRequiredFp8Patch(PatchContext &Ctx) {
+  Ctx.RequiredPatchFailed = true;
+  return 0;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -282,42 +287,54 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   const MCInst &Inst = DI.Inst;
   const VOP3Fp8TwoSrcLayout &L = TwoSrcFp8Layout;
 
+  if (DI.Size != 8 && DI.Size != 12) {
+    log() << "hotswap: error: cvt_pk_fp8_f32: unexpected inst size " << DI.Size
+          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return failRequiredFp8Patch(Ctx);
+  }
+
   if (Inst.getNumOperands() < L.NumOperands) {
     log() << "hotswap: error: cvt_pk_fp8_f32: operand count mismatch: "
           << "expected " << L.NumOperands << ", got " << Inst.getNumOperands()
           << " at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   if (!Inst.getOperand(L.Clamp).isImm() ||
-      Inst.getOperand(L.Clamp).getImm() == 0)
-    return 0;
-
-  if (DI.Size != 8 && DI.Size != 12) {
-    log() << "hotswap: error: cvt_pk_fp8_f32: unexpected inst size " << DI.Size
-          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+      (Inst.getOperand(L.Clamp).getImm() != 0 &&
+       Inst.getOperand(L.Clamp).getImm() != 1)) {
+    log() << "hotswap: error: cvt_pk_fp8_f32: malformed CLAMP operand at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return failRequiredFp8Patch(Ctx);
   }
+  if (Inst.getOperand(L.Clamp).getImm() == 0)
+    return 0;
 
   // OPSEL[3] (write-high) is folded into src0_mods by the disassembler.
   // SISrcMods encodes OP_SEL_1 at bit 3 (value 8).
-  unsigned Src0Mods = Inst.getOperand(L.Src0Mods).isImm()
-                          ? Inst.getOperand(L.Src0Mods).getImm()
-                          : 0;
+  if (!Inst.getOperand(L.Src0Mods).isImm() ||
+      !Inst.getOperand(L.Src1Mods).isImm() ||
+      !Inst.getOperand(L.VDstIn).isReg() ||
+      !Inst.getOperand(L.VDst).isReg() ||
+      Inst.getOperand(L.VDstIn).getReg() !=
+          Inst.getOperand(L.VDst).getReg()) {
+    log() << "hotswap: error: cvt_pk_fp8_f32: malformed modifier or tied "
+             "destination operand at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return failRequiredFp8Patch(Ctx);
+  }
+  unsigned Src0Mods = Inst.getOperand(L.Src0Mods).getImm();
   bool WriteHigh = (Src0Mods >> 3) & 1;
 
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-  if (!Inst.getOperand(L.VDst).isReg() ||
-      !isRegOrImm(Inst.getOperand(L.Src0)) ||
+  if (!isRegOrImm(Inst.getOperand(L.Src0)) ||
       !isRegOrImm(Inst.getOperand(L.Src1))) {
     log() << "hotswap: error: cvt_pk_fp8_f32: unexpected imm operand at 0x"
           << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
   std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
-  unsigned Src1Mods = Inst.getOperand(L.Src1Mods).isImm()
-                          ? Inst.getOperand(L.Src1Mods).getImm()
-                          : 0;
+  unsigned Src1Mods = Inst.getOperand(L.Src1Mods).getImm();
 
   ScratchAllocation SA = allocateScratch(Ctx, Idx);
 
@@ -330,7 +347,7 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   if (!T0 || !T1 || !T2 || !T3) {
     log() << "hotswap: error: cvt_pk_fp8_f32: unable to allocate 4 scratch "
           << "VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   std::string T0Name = vgprName(*T0);
@@ -345,7 +362,7 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   if (!NaN0Sgpr || !NaN1Sgpr || !TopSgpr || !VccSaveSgpr) {
     log() << "hotswap: error: cvt_pk_fp8_f32: unable to allocate 4 scratch "
           << "SGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   std::string NaN0Name = sgprName(*NaN0Sgpr);
@@ -369,7 +386,7 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
       !materializeF32Source(AsmOS, Inst.getOperand(L.Src1), Src1Mods, T1Name,
                             MRI, DI.Offset, "cvt_pk_fp8_f32", Src1Bare,
                             Src1Str))
-    return 0;
+    return failRequiredFp8Patch(Ctx);
 
   // --- src0 to byte in T0 (scratch: T2) ---
   emitF32ToUE5M3(AsmOS, Src0Str, Src0Bare, T0Name, T2Name, T3Name, NaN0Name,
@@ -400,7 +417,7 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   if (ReplacementBytes.empty()) {
     log() << "hotswap: error: cvt_pk_fp8_f32: assembly failed for "
           << "replacement at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
@@ -410,7 +427,7 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
 
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, ReplacementBytes))
-    return 0;
+    return failRequiredFp8Patch(Ctx);
 
   if (!SA.KernelName.empty()) {
     KernelPatchStats &Stats = Ctx.KernelStats[SA.KernelName];
@@ -454,7 +471,7 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   if (DI.Size != 8) {
     log() << "hotswap: error: cvt_sr_fp8_f32: unexpected inst size " << DI.Size
           << " at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   const MCInst &Inst = DI.Inst;
@@ -464,11 +481,17 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
     log() << "hotswap: error: cvt_sr_fp8_f32: operand count mismatch: "
           << "expected " << L.NumOperands << ", got " << Inst.getNumOperands()
           << " at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   if (!Inst.getOperand(L.Clamp).isImm() ||
-      Inst.getOperand(L.Clamp).getImm() == 0)
+      (Inst.getOperand(L.Clamp).getImm() != 0 &&
+       Inst.getOperand(L.Clamp).getImm() != 1)) {
+    log() << "hotswap: error: cvt_sr_fp8_f32: malformed CLAMP operand at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return failRequiredFp8Patch(Ctx);
+  }
+  if (Inst.getOperand(L.Clamp).getImm() == 0)
     return 0;
 
   // byte_sel = OPSEL[3:2] in the VOP3 dword-0 encoding (bits [13:12]).
@@ -478,16 +501,23 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   const uint8_t *Raw = Ctx.Text + DI.Offset;
   unsigned ByteSel = (Raw[1] >> 5) & 0x3;
 
-  unsigned Src0Mods = Inst.getOperand(L.Src0Mods).isImm()
-                          ? Inst.getOperand(L.Src0Mods).getImm()
-                          : 0;
+  if (!Inst.getOperand(L.Src0Mods).isImm() ||
+      !Inst.getOperand(L.VDstIn).isReg() ||
+      !Inst.getOperand(L.VDst).isReg() ||
+      Inst.getOperand(L.VDstIn).getReg() !=
+          Inst.getOperand(L.VDst).getReg()) {
+    log() << "hotswap: error: cvt_sr_fp8_f32: malformed modifier or tied "
+             "destination operand at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return failRequiredFp8Patch(Ctx);
+  }
+  unsigned Src0Mods = Inst.getOperand(L.Src0Mods).getImm();
 
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-  if (!Inst.getOperand(L.VDst).isReg() || !Inst.getOperand(L.Src0).isReg() ||
-      !Inst.getOperand(L.Src1).isReg()) {
+  if (!Inst.getOperand(L.Src0).isReg() || !Inst.getOperand(L.Src1).isReg()) {
     log() << "hotswap: error: cvt_sr_fp8_f32: unexpected imm operand at 0x"
           << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
   std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
   std::string Src0Bare = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
@@ -507,7 +537,7 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   if (!Out || !Tmp || !TopByte) {
     log() << "hotswap: error: cvt_sr_fp8_f32: unable to allocate 3 scratch "
           << "VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   std::string OutName = vgprName(*Out);
@@ -520,7 +550,7 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   if (!NaNSgpr || !TopSgpr || !VccSaveSgpr) {
     log() << "hotswap: error: cvt_sr_fp8_f32: unable to allocate 3 scratch "
           << "SGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   std::string NaNName = sgprName(*NaNSgpr);
@@ -598,7 +628,7 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   if (ReplacementBytes.empty()) {
     log() << "hotswap: error: cvt_sr_fp8_f32: assembly failed for "
           << "replacement at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
@@ -608,7 +638,7 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
 
   if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
-    return 0;
+    return failRequiredFp8Patch(Ctx);
 
   if (!SA.KernelName.empty()) {
     KernelPatchStats &Stats = Ctx.KernelStats[SA.KernelName];
@@ -652,32 +682,48 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
 uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
   // VOP1 (4 bytes) has no CLAMP bit; only VOP3 (8 bytes) needs patching.
-  if (DI.Size != 8)
+  if (DI.Size == 4)
     return 0;
+  if (DI.Size != 8) {
+    log() << "hotswap: error: cvt_f32_fp8: unexpected inst size " << DI.Size
+          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return failRequiredFp8Patch(Ctx);
+  }
 
   const MCInst &Inst = DI.Inst;
   const VOP3Fp8UnpackLayout &L = UnpackFp8Layout;
 
-  if (Inst.getNumOperands() < L.NumOperands) {
+  if (Inst.getNumOperands() != L.NumOperands) {
     log() << "hotswap: error: cvt_f32_fp8: operand count mismatch: "
           << "expected " << L.NumOperands << ", got " << Inst.getNumOperands()
           << " at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   if (!Inst.getOperand(L.Clamp).isImm() ||
-      Inst.getOperand(L.Clamp).getImm() == 0)
+      (Inst.getOperand(L.Clamp).getImm() != 0 &&
+       Inst.getOperand(L.Clamp).getImm() != 1)) {
+    log() << "hotswap: error: cvt_f32_fp8: malformed CLAMP operand at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return failRequiredFp8Patch(Ctx);
+  }
+  if (Inst.getOperand(L.Clamp).getImm() == 0)
     return 0;
 
-  unsigned ByteSel = Inst.getOperand(L.ByteSel).isImm()
-                         ? Inst.getOperand(L.ByteSel).getImm()
-                         : 0;
+  if (!Inst.getOperand(L.ByteSel).isImm() ||
+      Inst.getOperand(L.ByteSel).getImm() < 0 ||
+      Inst.getOperand(L.ByteSel).getImm() > 3) {
+    log() << "hotswap: error: cvt_f32_fp8: malformed byte_sel at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return failRequiredFp8Patch(Ctx);
+  }
+  unsigned ByteSel = Inst.getOperand(L.ByteSel).getImm();
 
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
   if (!Inst.getOperand(L.VDst).isReg() || !Inst.getOperand(L.Src0).isReg()) {
     log() << "hotswap: error: cvt_f32_fp8: unexpected imm operand at 0x"
           << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
   std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
   std::string Src0Str = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
@@ -691,7 +737,7 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   if (!Out || !Tmp) {
     log() << "hotswap: error: cvt_f32_fp8: unable to allocate 2 scratch "
           << "VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   std::string OutName = vgprName(*Out);
@@ -703,7 +749,7 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   if (!NaNSgpr || !Exp31Sgpr || !VccSaveSgpr) {
     log() << "hotswap: error: cvt_f32_fp8: unable to allocate 3 scratch "
           << "SGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   std::string NaNName = sgprName(*NaNSgpr);
@@ -767,7 +813,7 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   if (ReplacementBytes.empty()) {
     log() << "hotswap: error: cvt_f32_fp8: assembly failed for "
           << "replacement at offset 0x" << utohexstr(DI.Offset) << "\n";
-    return 0;
+    return failRequiredFp8Patch(Ctx);
   }
 
   unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
@@ -777,7 +823,7 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
     return 0;
 
   if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
-    return 0;
+    return failRequiredFp8Patch(Ctx);
 
   if (!SA.KernelName.empty()) {
     KernelPatchStats &Stats = Ctx.KernelStats[SA.KernelName];

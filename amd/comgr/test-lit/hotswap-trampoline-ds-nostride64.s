@@ -285,7 +285,7 @@ test_ds_xchg_b64_nostride64:
 // DISASM-NOT: ds_storexchg_2addr_rtn_b32
 // DISASM: s_branch
 // DISASM: s_branch
-// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
 // DISASM: s_wait_dscnt 0x0
 // COM: Sled 1: load expansion.
 // DISASM: ds_load_b32 v0, v8 offset:4

@@ -27,12 +27,13 @@
 // ENTRY-NEXT: global_wb
 // ENTRY-NEXT: v_nop
 // ENTRY-NEXT: s_branch
-// ENTRY-NEXT: s_nop 0
+// COM: The split replacement keeps its source-tail drain before the original
+// COM: downstream drain in the displaced layout.
+// ENTRY-NEXT: s_wait_dscnt 0x0
 // ENTRY-NEXT: s_wait_dscnt 0x0
 // ENTRY-NEXT: s_endpgm
 // ENTRY: ds_load_b32 v0, v2 offset:256
 // ENTRY-NEXT: ds_load_b32 v1, v2 offset:768
-// ENTRY-NEXT: s_wait_dscnt 0x0
 // ENTRY-NEXT: s_branch
 // ENTRY-NOT: s_get_pc_i64
 

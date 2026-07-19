@@ -67,15 +67,29 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCSchedule.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <cstring>
+#include <limits>
 #include <optional>
 
 using namespace llvm;
 
 namespace COMGR {
 namespace hotswap {
+
+bool hasDirectControlFlowTargetInWindowInterior(
+    const std::optional<DenseSet<uint64_t>> &Targets, uint64_t Begin,
+    uint64_t End) {
+  if (!Targets || Begin >= End)
+    return true;
+  return llvm::any_of(*Targets, [=](uint64_t Target) {
+    return Target > Begin && Target < End;
+  });
+}
+
 namespace {
 
 // -- Split family table ------------------------------------------------------
@@ -430,6 +444,53 @@ std::string formatVgprRange(int Base, int Count) {
   return formatv("v[{0}:{1}]", Base, Base + Count - 1).str();
 }
 
+// Recover the persistent VGPR-MSB mode from the immutable whole-function CFG
+// fixed point. Equal predecessor states, including loop backedges, retain an
+// exact mode; conflicting paths, opaque calls, and unknown MODE writes remain
+// unknown and fail closed.
+std::optional<unsigned> findActiveVgprMsbMode(const PatchContext &Ctx,
+                                              size_t Idx) {
+  if (Idx >= Ctx.VgprMsbModeBefore.size())
+    return std::nullopt;
+  // A mandatory A0-incompatible WMMA must still be rewritten in a block that
+  // a fully validated CFG proves unreachable. Its MODE is semantically
+  // unobservable, so use the ABI entry value. Unanalyzed functions and
+  // reachable paths with conflicting MODE values continue to fail closed.
+  if (Ctx.VgprMsbModeBefore[Idx] == VgprMsbUnreachable)
+    return 0;
+  if (Ctx.VgprMsbModeBefore[Idx] < 0)
+    return std::nullopt;
+  return static_cast<unsigned>(Ctx.VgprMsbModeBefore[Idx]);
+}
+
+enum class VgprMsbOperand : unsigned {
+  Src0 = 0,
+  Src1 = 2,
+  Src2 = 4,
+  Dst = 6,
+};
+
+unsigned getVgprMsbs(unsigned Mode, VgprMsbOperand Operand) {
+  return (Mode >> static_cast<unsigned>(Operand)) & 0x3;
+}
+
+void setVgprMsbs(unsigned &Mode, VgprMsbOperand Operand, unsigned Msbs) {
+  const unsigned Shift = static_cast<unsigned>(Operand);
+  Mode = (Mode & ~(0x3u << Shift)) | (Msbs << Shift);
+}
+
+bool advanceVgprMsbMode(int &Base, VgprMsbOperand Operand, unsigned OldMode,
+                        unsigned &NewMode) {
+  unsigned OldMsbs = getVgprMsbs(OldMode, Operand);
+  unsigned PhysicalBase = (OldMsbs << 8) + static_cast<unsigned>(Base);
+  unsigned NewMsbs = PhysicalBase >> 8;
+  if (NewMsbs > 3)
+    return false;
+  Base = static_cast<int>(PhysicalBase & 0xff);
+  setVgprMsbs(NewMode, Operand, NewMsbs);
+  return true;
+}
+
 // -- Operand validation -----------------------------------------------------
 
 bool validateSplitOperands(SplitKind Kind, const WmmaOps &R,
@@ -479,7 +540,9 @@ bool validateSplitOperands(SplitKind Kind, const WmmaOps &R,
 // second half, src2 = dst (the carry from the first half).
 std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
                                               const PrintedAsm &P,
-                                              const WmmaOps &R) {
+                                              const WmmaOps &R,
+                                              unsigned ActiveVgprMsbMode,
+                                              bool &UsesVgprMsbTransition) {
   assert(R.Dst.second > 0 && (R.Src2IsImm || R.Src2.second == R.Dst.second));
   assert(R.Src0.second > 0 && R.Src0.second % 2 == 0);
   assert(R.Src1.second > 0 && R.Src1.second % 2 == 0);
@@ -496,18 +559,44 @@ std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
     return {};
 
   std::vector<std::string> Out;
-  Out.reserve(2);
+  Out.reserve(5);
+  UsesVgprMsbTransition = false;
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement, Dst,
                         formatVgprRange(R.Src0.first, AHalf),
                         formatVgprRange(R.Src1.first, BHalf), Src2Printed,
                         *ModFirst)
                     .str());
+
+  int Src0HiBase = R.Src0.first + AHalf;
+  int Src1HiBase = R.Src1.first + BHalf;
+  unsigned OldMode = ActiveVgprMsbMode;
+  unsigned NewMode = OldMode;
+  if (!advanceVgprMsbMode(Src0HiBase, VgprMsbOperand::Src0, OldMode, NewMode) ||
+      !advanceVgprMsbMode(Src1HiBase, VgprMsbOperand::Src1, OldMode, NewMode))
+    return {};
+
+  // The upper half uses dst as src2, so src2 must select the incoming
+  // destination bank even when neither source slice crossed v255.
+  setVgprMsbs(NewMode, VgprMsbOperand::Src2,
+              getVgprMsbs(OldMode, VgprMsbOperand::Dst));
+
+  if (NewMode != OldMode) {
+    UsesVgprMsbTransition = true;
+    // Immediate bits [15:8] record the previous mode. Restore the exact
+    // incoming mode before returning from the split trampoline.
+    unsigned SetUpperMode = NewMode | (OldMode << 8);
+    Out.push_back(formatv("s_set_vgpr_msb {0}", SetUpperMode).str());
+  }
+
   // Second half: src2 = dst (the carry).
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement, Dst,
-                        formatVgprRange(R.Src0.first + AHalf, AHalf),
-                        formatVgprRange(R.Src1.first + BHalf, BHalf), Dst,
-                        *ModSecond)
+                        formatVgprRange(Src0HiBase, AHalf),
+                        formatVgprRange(Src1HiBase, BHalf), Dst, *ModSecond)
                     .str());
+  if (UsesVgprMsbTransition) {
+    unsigned RestoreMode = OldMode | (NewMode << 8);
+    Out.push_back(formatv("s_set_vgpr_msb {0}", RestoreMode).str());
+  }
   return Out;
 }
 
@@ -515,9 +604,9 @@ std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
 // src2 are split in half by M. The replacement uses the f8f6f4 WMMA with
 // both matrix format modifiers forced to MATRIX_FMT_FP4 so the data layout
 // matches the original f4 instruction.
-std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
-                                            const PrintedAsm &P,
-                                            const WmmaOps &R) {
+std::vector<std::string>
+buildSplit32x16Asm(StringRef Replacement, const PrintedAsm &P, const WmmaOps &R,
+                   unsigned ActiveVgprMsbMode, bool &UsesVgprMsbTransition) {
   assert(R.Dst.second > 0 && R.Dst.second % 2 == 0);
   assert(R.Src2IsImm || R.Src2.second == R.Dst.second);
   assert(R.Src0.second > 0 && R.Src0.second % 2 == 0);
@@ -526,12 +615,22 @@ std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
   int DstHalf = R.Dst.second / 2;
   int AHalf = R.Src0.second / 2;
   StringRef B = P.Operands[2]; // broadcast: same printer-canonical form
+  int DstHiBase = R.Dst.first + DstHalf;
+  int Src0HiBase = R.Src0.first + AHalf;
+  int Src2HiBase = R.Src2IsImm ? 0 : R.Src2.first + DstHalf;
+  unsigned OldMode = ActiveVgprMsbMode;
+  unsigned NewMode = OldMode;
+  if (!advanceVgprMsbMode(DstHiBase, VgprMsbOperand::Dst, OldMode, NewMode) ||
+      !advanceVgprMsbMode(Src0HiBase, VgprMsbOperand::Src0, OldMode, NewMode) ||
+      (!R.Src2IsImm &&
+       !advanceVgprMsbMode(Src2HiBase, VgprMsbOperand::Src2, OldMode, NewMode)))
+    return {};
+
   // src2 is preserved on both halves when imm; sliced when VGPR.
   std::string CLo = R.Src2IsImm ? P.Operands[3].str()
                                 : formatVgprRange(R.Src2.first, DstHalf);
-  std::string CHi = R.Src2IsImm
-                        ? P.Operands[3].str()
-                        : formatVgprRange(R.Src2.first + DstHalf, DstHalf);
+  std::string CHi =
+      R.Src2IsImm ? P.Operands[3].str() : formatVgprRange(Src2HiBase, DstHalf);
   // Matrix format modifiers are required by the f8f6f4 destination opcode
   // and not present on the f4 source opcode, so the splitter appends them
   // explicitly. Modifier suffix from the source is preserved on both halves
@@ -544,49 +643,449 @@ std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
     return {};
 
   std::vector<std::string> Out;
-  Out.reserve(2);
+  Out.reserve(4);
+  UsesVgprMsbTransition = NewMode != OldMode;
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}{6}", Replacement,
                         formatVgprRange(R.Dst.first, DstHalf),
                         formatVgprRange(R.Src0.first, AHalf), B, CLo, FmtSuffix,
                         *Mod)
                     .str());
+  if (UsesVgprMsbTransition) {
+    unsigned SetUpperMode = NewMode | (OldMode << 8);
+    Out.push_back(formatv("s_set_vgpr_msb {0}", SetUpperMode).str());
+  }
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}{6}", Replacement,
-                        formatVgprRange(R.Dst.first + DstHalf, DstHalf),
-                        formatVgprRange(R.Src0.first + AHalf, AHalf), B, CHi,
-                        FmtSuffix, *Mod)
+                        formatVgprRange(DstHiBase, DstHalf),
+                        formatVgprRange(Src0HiBase, AHalf), B, CHi, FmtSuffix,
+                        *Mod)
                     .str());
+  if (UsesVgprMsbTransition) {
+    unsigned RestoreMode = OldMode | (NewMode << 8);
+    Out.push_back(formatv("s_set_vgpr_msb {0}", RestoreMode).str());
+  }
   return Out;
+}
+
+struct ProtectedWmmaSourceWindow {
+  uint64_t Offset = 0;
+  uint32_t Size = 0;
+  size_t DelayIndex = 0;
+  size_t LastMovedIndex = 0;
+  size_t SecondTargetIndex = 0;
+  unsigned FirstInstId = 0;
+  unsigned SecondInstId = 0;
+  bool RetainsSecondTarget = false;
+
+  bool demergesCombinedDelay() const { return SecondInstId != 0; }
+};
+
+struct CombinedDelayFields {
+  unsigned FirstInstId = 0;
+  unsigned Skip = 0;
+  unsigned SecondInstId = 0;
+};
+
+std::optional<CombinedDelayFields>
+decodeDelayFields(const InternalDecodedInst &Delay) {
+  if (Delay.Mnemonic != "s_delay_alu" || Delay.Inst.getNumOperands() != 1 ||
+      !Delay.Inst.getOperand(0).isImm())
+    return std::nullopt;
+
+  uint64_t Imm = static_cast<uint64_t>(Delay.Inst.getOperand(0).getImm());
+  if ((Imm & ~uint64_t{0x7FF}) != 0)
+    return std::nullopt;
+
+  CombinedDelayFields Fields{static_cast<unsigned>(Imm & 0xF),
+                             static_cast<unsigned>((Imm >> 4) & 0x7),
+                             static_cast<unsigned>((Imm >> 7) & 0xF)};
+  if (Fields.FirstInstId >= 12 || Fields.SecondInstId >= 12 ||
+      Fields.Skip > 5 || (Fields.SecondInstId == 0 && Fields.Skip != 0))
+    return std::nullopt;
+  return Fields;
+}
+
+std::optional<InternalDecodedInst>
+decodeCurrentWindowMember(const PatchContext &Ctx,
+                          const InternalDecodedInst &Original) {
+  if (Original.Mnemonic == "<unknown>" || Original.Mnemonic == "<replaced>" ||
+      Original.Offset > Ctx.TextSize ||
+      Original.Size > Ctx.TextSize - Original.Offset)
+    return std::nullopt;
+  std::vector<InternalDecodedInst> Current;
+  if (!decodeTextSection(Ctx.Text + Original.Offset, Original.Size, Ctx.LS,
+                         Current) ||
+      Current.size() != 1 || Current.front().Offset != 0 ||
+      Current.front().Size != Original.Size)
+    return std::nullopt;
+  Current.front().Offset = Original.Offset;
+  return std::move(Current.front());
+}
+
+namespace AmdgpuDelayTSFlags {
+static constexpr uint64_t TRANS = UINT64_C(1) << 16;
+static constexpr uint64_t IsWMMA = UINT64_C(1) << 59;
+static constexpr uint64_t IsSWMMAC = UINT64_C(1) << 63;
+} // namespace AmdgpuDelayTSFlags
+
+struct DelayPipelineResources {
+  bool HasValu = false;
+  bool HasTransValu = false;
+  bool HasXdl = false;
+};
+
+std::optional<DelayPipelineResources>
+getDelayPipelineResources(const InternalDecodedInst &DI,
+                          const PatchContext &Ctx) {
+  if (!Ctx.LS.STI || !Ctx.LS.MCII)
+    return std::nullopt;
+  const MCSchedModel &Model = Ctx.LS.STI->getSchedModel();
+  if (!Model.hasInstrSchedModel())
+    return std::nullopt;
+
+  unsigned SchedClass = Ctx.LS.MCII->get(DI.Inst.getOpcode()).getSchedClass();
+  for (unsigned Depth = 0; Depth != 8; ++Depth) {
+    if (SchedClass >= Model.NumSchedClasses)
+      return std::nullopt;
+    const MCSchedClassDesc *Desc = Model.getSchedClassDesc(SchedClass);
+    if (!Desc->isValid())
+      return std::nullopt;
+    if (!Desc->isVariant()) {
+      DelayPipelineResources Resources;
+      for (const MCWriteProcResEntry *
+               It = Ctx.LS.STI->getWriteProcResBegin(Desc),
+              *End = Ctx.LS.STI->getWriteProcResEnd(Desc);
+           It != End; ++It) {
+        unsigned ResourceIndex = It->ProcResourceIdx;
+        for (unsigned ResourceDepth = 0;
+             ResourceIndex != 0 &&
+             ResourceDepth != Model.getNumProcResourceKinds();
+             ++ResourceDepth) {
+          if (ResourceIndex >= Model.getNumProcResourceKinds())
+            return std::nullopt;
+          const MCProcResourceDesc *Resource =
+              Model.getProcResource(ResourceIndex);
+          StringRef Name = Resource->Name ? Resource->Name : "";
+          Resources.HasValu |= Name == "HWVALU";
+          Resources.HasTransValu |= Name == "HWTransVALU";
+          Resources.HasXdl |= Name == "HWXDL";
+          ResourceIndex = Resource->SuperIdx;
+        }
+      }
+      if (Desc->NumWriteProcResEntries == 0)
+        return std::nullopt;
+      return Resources;
+    }
+
+    unsigned Resolved = Ctx.LS.STI->resolveVariantSchedClass(
+        SchedClass, &DI.Inst, Ctx.LS.MCII.get(), Model.getProcessorID());
+    if (Resolved == 0 || Resolved == SchedClass)
+      return std::nullopt;
+    SchedClass = Resolved;
+  }
+  return std::nullopt;
+}
+
+// Match AMDGPUInsertDelayAlu's dependency class without duplicating an opcode
+// list. TRANS32 uses the transcendental pipeline without the ordinary VALU
+// pipeline, while gfx1250 XDL WMMA uses HWXDL. In particular, F64 DPMACC and
+// non-XDL WMMA must not advance the TRANS ordinal. An incomplete scheduling
+// model is unknown rather than silently selecting the wrong producer.
+std::optional<bool> isDelayTransInstruction(const InternalDecodedInst &DI,
+                                            const PatchContext &Ctx) {
+  uint64_t Flags = Ctx.LS.MCII->get(DI.Inst.getOpcode()).TSFlags;
+  const bool HasTransFlag = (Flags & AmdgpuDelayTSFlags::TRANS) != 0;
+  const bool IsWmmaLike =
+      (Flags & (AmdgpuDelayTSFlags::IsWMMA | AmdgpuDelayTSFlags::IsSWMMAC)) !=
+      0;
+  if (!HasTransFlag && !IsWmmaLike)
+    return false;
+
+  std::optional<DelayPipelineResources> Resources =
+      getDelayPipelineResources(DI, Ctx);
+  if (!Resources)
+    return std::nullopt;
+  if (IsWmmaLike)
+    return Resources->HasXdl;
+  if (!Resources->HasTransValu)
+    return std::nullopt;
+  return !Resources->HasValu;
+}
+
+bool isPcIndependentDelayWindowMember(const InternalDecodedInst &DI,
+                                      const PatchContext &Ctx) {
+  if (!Ctx.LS.MIA || DI.Mnemonic == "<unknown>" ||
+      DI.Mnemonic == "<replaced>" || DI.Mnemonic == "s_delay_alu" ||
+      DI.Mnemonic == "s_clause" || DI.Mnemonic == "s_set_vgpr_msb" ||
+      // Tensor DMA instructions are explicitly linked-PC-sensitive on A0.
+      DI.Mnemonic == "tensor_load_to_lds" ||
+      StringRef(DI.Mnemonic).contains("_pc_"))
+    return false;
+  const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
+  return !Desc.isTerminator() && !Desc.isBranch() && !Desc.isCall() &&
+         !Desc.isReturn() &&
+         !Ctx.LS.MIA->mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI);
+}
+
+bool sourceRangeOverlapsQueuedReplacement(const PatchContext &Ctx,
+                                          uint64_t Begin, uint64_t End) {
+  for (const Trampoline &T : Ctx.OutTrampolines) {
+    std::optional<uint64_t> TEnd = checkedAddUint64(
+        T.OriginalOffset, T.OriginalSize, "queued replacement source end");
+    if (!TEnd || (Begin < *TEnd && T.OriginalOffset < End))
+      return true;
+  }
+  return false;
+}
+
+bool sourceRangeOverlapsTextSymbolExtent(const PatchContext &Ctx,
+                                         uint64_t Begin, uint64_t End) {
+  if (!Ctx.TextSymbolExtents)
+    return true;
+  auto It =
+      llvm::lower_bound(*Ctx.TextSymbolExtents, Begin,
+                        [](const ElfView::TextOffsetRange &Extent,
+                           uint64_t Offset) { return Extent.End <= Offset; });
+  return It != Ctx.TextSymbolExtents->end() && It->Begin < End;
+}
+
+// A delay-protected WMMA cannot be replaced at its linked address alone: the
+// surviving s_delay_alu would describe the source branch rather than the
+// replacement. Recover the unique owner from the encoded instruction span.
+// For a combined delay, move every position-independent member before the
+// second target, split the WMMA in that ordered stream, and use the last moved
+// dword for the reconstructed second delay. No instruction mnemonic or kernel
+// schedule determines the geometry.
+std::optional<ProtectedWmmaSourceWindow>
+findProtectedWmmaSourceWindow(const PatchContext &Ctx, size_t WmmaIndex) {
+  const InternalDecodedInst &Wmma = Ctx.Decoded[WmmaIndex];
+  auto Fail =
+      [&](StringRef Reason) -> std::optional<ProtectedWmmaSourceWindow> {
+    log() << "hotswap: error: WMMA split: protected site at 0x"
+          << utohexstr(Wmma.Offset) << " " << Reason << "\n";
+    return std::nullopt;
+  };
+
+  if (WmmaIndex == 0 || !Ctx.LS.MIA || !Ctx.DirectControlFlowTargets)
+    return Fail("has no supported preceding delay window");
+  if (Ctx.HasUnknownArbitraryIndirectTarget)
+    return Fail("cannot be relocated with an unresolved indirect entry");
+
+  constexpr size_t MaxClauseSpan = 64;
+  const size_t FirstPossibleOwner =
+      WmmaIndex > MaxClauseSpan ? WmmaIndex - MaxClauseSpan : 0;
+  size_t DelayIndex = 0;
+  unsigned DelayOwners = 0;
+  std::optional<CombinedDelayFields> Fields;
+  for (size_t I = FirstPossibleOwner; I != WmmaIndex; ++I) {
+    const InternalDecodedInst &Candidate = Ctx.Decoded[I];
+    const size_t Distance = WmmaIndex - I;
+    if (Candidate.Mnemonic == "s_delay_alu" &&
+        getDelayProtectedSpan(Candidate) >= Distance) {
+      ++DelayOwners;
+      std::optional<InternalDecodedInst> Current =
+          decodeCurrentWindowMember(Ctx, Candidate);
+      std::optional<CombinedDelayFields> CandidateFields =
+          Current ? decodeDelayFields(*Current) : std::nullopt;
+      if (!CandidateFields || getDelayProtectedSpan(*Current) < Distance)
+        continue;
+      DelayIndex = I;
+      Fields = *CandidateFields;
+      continue;
+    }
+    if (Candidate.Mnemonic == "s_clause" &&
+        Candidate.Inst.getNumOperands() == 1 &&
+        Candidate.Inst.getOperand(0).isImm()) {
+      const unsigned ClauseSpan =
+          (static_cast<unsigned>(Candidate.Inst.getOperand(0).getImm()) & 63u) +
+          1;
+      if (ClauseSpan >= Distance)
+        return Fail("overlaps another delay or hard clause");
+    }
+  }
+  if (DelayOwners != 1 || !Fields)
+    return Fail(DelayOwners > 1 ? "has ambiguous delay ownership"
+                                : "has no supported preceding delay window");
+
+  const InternalDecodedInst *Delay = &Ctx.Decoded[DelayIndex];
+  const unsigned Span = getDelayProtectedSpan(*Delay);
+  if (Span == 0 || Span > Ctx.Decoded.size() - DelayIndex - 1)
+    return Fail("has an invalid delay target layout");
+  const size_t SecondTargetIndex = DelayIndex + Span;
+  if (WmmaIndex > SecondTargetIndex)
+    return Fail("has an invalid delay target layout");
+
+  const bool DemergeCombinedDelay = Span > 1;
+  if (DemergeCombinedDelay &&
+      (Fields->FirstInstId == 0 || Fields->SecondInstId == 0 ||
+       Span != Fields->Skip + 1))
+    return Fail("has an unsupported combined dependency graph");
+  const bool RetainsSecondTarget =
+      DemergeCombinedDelay && WmmaIndex < SecondTargetIndex;
+  const size_t LastMovedIndex =
+      RetainsSecondTarget ? SecondTargetIndex - 1 : WmmaIndex;
+  if (RetainsSecondTarget && Ctx.Decoded[LastMovedIndex].Size != MinInstSize)
+    return Fail("has no dword slot for the reconstructed second delay");
+
+  // collectRelocationProtectedOffsets does not mark the directive itself.
+  // Therefore a protected Delay proves that an earlier clause or another
+  // delay overlaps this two-instruction window.
+  if (Ctx.RelocationProtectedOffsets.contains(Delay->Offset))
+    return Fail("overlaps another delay or hard clause");
+
+  std::optional<ElfView::FunctionTextRange> DelayFunction =
+      Ctx.Elf.findFunctionTextRangeAtOffset(Delay->Offset);
+  std::optional<ElfView::FunctionTextRange> WmmaFunction =
+      Ctx.Elf.findFunctionTextRangeAtOffset(Wmma.Offset);
+  if (!DelayFunction || !WmmaFunction ||
+      DelayFunction->Begin != WmmaFunction->Begin ||
+      DelayFunction->End != WmmaFunction->End)
+    return Fail("does not share a proven function with its delay");
+  if (Ctx.IndirectControlFlowFunctions.contains(WmmaFunction->Begin))
+    return Fail("is in a function with an ambiguous indirect entry");
+
+  std::optional<uint64_t> End =
+      RetainsSecondTarget
+          ? std::optional<uint64_t>(Ctx.Decoded[LastMovedIndex].Offset)
+          : checkedAddUint64(Wmma.Offset, Wmma.Size,
+                             "delay-protected WMMA window end");
+  if (!End || *End <= Delay->Offset ||
+      *End - Delay->Offset > std::numeric_limits<uint32_t>::max())
+    return Fail("has an invalid source-window extent");
+  std::optional<uint64_t> ClaimEnd = checkedAddUint64(
+      Ctx.Decoded[LastMovedIndex].Offset, Ctx.Decoded[LastMovedIndex].Size,
+      "delay-protected WMMA claimed-window end");
+  const uint64_t EntryCheckEnd =
+      RetainsSecondTarget ? Ctx.Decoded[SecondTargetIndex].Offset : *End;
+  if (!ClaimEnd ||
+      sourceRangeOverlapsQueuedReplacement(Ctx, Delay->Offset, *ClaimEnd))
+    return Fail("overlaps an existing replacement source");
+  if (sourceRangeOverlapsTextSymbolExtent(Ctx, Delay->Offset, *ClaimEnd))
+    return Fail("overlaps a sized non-callable text symbol");
+  if (hasDirectControlFlowTargetInWindowInterior(Ctx.DirectControlFlowTargets,
+                                                 Delay->Offset, EntryCheckEnd))
+    return Fail("has a direct entry into the source-window interior "
+                "(including symbol entries)");
+  if (Delay->Offset > Ctx.TextSize || EntryCheckEnd > Ctx.TextSize)
+    return Fail("has a source window outside .text");
+
+  uint64_t ExpectedOffset = Delay->Offset;
+  for (size_t I = DelayIndex; I <= SecondTargetIndex; ++I) {
+    const InternalDecodedInst &Original = Ctx.Decoded[I];
+    std::optional<InternalDecodedInst> Current =
+        decodeCurrentWindowMember(Ctx, Original);
+    std::optional<ElfView::FunctionTextRange> Function =
+        Ctx.Elf.findFunctionTextRangeAtOffset(Original.Offset);
+    if (!Current || !Function || Function->Begin != DelayFunction->Begin ||
+        Function->End != DelayFunction->End ||
+        Original.Offset != ExpectedOffset)
+      return Fail("has a non-contiguous current instruction window");
+    ExpectedOffset += Original.Size;
+
+    if (I == WmmaIndex && Current->Inst.getOpcode() != Wmma.Inst.getOpcode())
+      return Fail("has a modified WMMA source instruction");
+
+    if (I <= LastMovedIndex &&
+        Ctx.ClaimedReplacementOffsets.contains(Original.Offset))
+      return Fail("overlaps an existing atomic replacement window");
+    if (I != DelayIndex && I != WmmaIndex && I <= LastMovedIndex &&
+        !isPcIndependentDelayWindowMember(*Current, Ctx))
+      return Fail("has a non-relocatable instruction in its delay window");
+    if (I != DelayIndex && (Current->Mnemonic == "s_delay_alu" ||
+                            Current->Mnemonic == "s_clause" ||
+                            Current->Mnemonic == "s_set_vgpr_msb"))
+      return Fail("has an unsupported nested dependency graph");
+    // Every moved position is claimed after this atomic relocation. A later
+    // per-instruction patch there would be silently skipped by the outer
+    // dispatcher, so reject before mutating bytes. The retained second target
+    // is deliberately excluded: it remains at its linked address and can
+    // compose with the reconstructed delay (tensor masking relies on this).
+    if (I != DelayIndex && I != WmmaIndex && I <= LastMovedIndex &&
+        requiresIndependentInstructionRewrite(Ctx, I)) {
+      log() << "hotswap: error: WMMA split: delay-window member at 0x"
+            << utohexstr(Original.Offset)
+            << " requires a separate HotSwap patch\n";
+      return Fail("would suppress another required HotSwap patch");
+    }
+  }
+
+  return ProtectedWmmaSourceWindow{
+      Delay->Offset,
+      static_cast<uint32_t>(*End - Delay->Offset),
+      DelayIndex,
+      LastMovedIndex,
+      SecondTargetIndex,
+      DemergeCombinedDelay ? Fields->FirstInstId : 0,
+      DemergeCombinedDelay ? Fields->SecondInstId : 0,
+      RetainsSecondTarget};
+}
+
+std::optional<unsigned> remapSecondDelayDependency(
+    const PatchContext &Ctx, const ProtectedWmmaSourceWindow &Window,
+    size_t WmmaIndex, ArrayRef<uint8_t> WmmaReplacement) {
+  unsigned Dependency = Window.SecondInstId;
+  if (!Window.RetainsSecondTarget || Dependency < 5 || Dependency > 7)
+    return Dependency;
+
+  std::optional<InternalDecodedInst> Source =
+      decodeCurrentWindowMember(Ctx, Ctx.Decoded[WmmaIndex]);
+  std::optional<bool> SourceIsTrans =
+      Source ? isDelayTransInstruction(*Source, Ctx) : std::nullopt;
+  if (!SourceIsTrans || !*SourceIsTrans)
+    return std::nullopt;
+
+  std::vector<InternalDecodedInst> Split;
+  if (!decodeTextSection(WmmaReplacement.data(), WmmaReplacement.size(), Ctx.LS,
+                         Split))
+    return std::nullopt;
+  unsigned ReplacementTrans = 0;
+  for (const InternalDecodedInst &DI : Split) {
+    std::optional<bool> IsTrans = isDelayTransInstruction(DI, Ctx);
+    if (!IsTrans)
+      return std::nullopt;
+    ReplacementTrans += *IsTrans;
+  }
+  if (ReplacementTrans == 0)
+    return std::nullopt;
+
+  // Instid counts prior operations in its dependency class. Instructions
+  // after the source WMMA retain their ordinal. The original WMMA maps to the
+  // last TRANS in its replacement and therefore also retains its ordinal.
+  // Only a producer older than the source shifts by the net extra TRANS count.
+  unsigned LaterTrans = 0;
+  for (size_t I = WmmaIndex + 1; I <= Window.LastMovedIndex; ++I) {
+    std::optional<InternalDecodedInst> Current =
+        decodeCurrentWindowMember(Ctx, Ctx.Decoded[I]);
+    if (!Current)
+      return std::nullopt;
+    std::optional<bool> IsTrans = isDelayTransInstruction(*Current, Ctx);
+    if (!IsTrans)
+      return std::nullopt;
+    LaterTrans += *IsTrans;
+  }
+
+  unsigned Ordinal = Dependency - 4;
+  if (Ordinal <= LaterTrans + 1)
+    return Dependency;
+  const unsigned ExtraTrans = ReplacementTrans - 1;
+  if (ExtraTrans > 3 || Ordinal > 3 - ExtraTrans)
+    return std::nullopt;
+  return 4 + Ordinal + ExtraTrans;
 }
 
 } // anonymous namespace
 
-// Return-value semantics (current shared dispatcher API in b0a0.cpp):
-//   0  = either "this patch did not match the instruction" OR "matched
-//        but failed to apply" -- the dispatcher cannot distinguish the
-//        two and will fall through to the next patch class. For WMMA
-//        split mnemonics no other patch class will match, so a
-//        matched-but-failed case results in the rewriter returning
-//        SUCCESS at the API level with the original A0-incompatible
-//        opcode left in .text. The runtime will then fail to load (or
-//        worse, mis-execute) the kernel with no clear error attribution.
-//   N>0 = "matched, applied N patches" (this splitter only ever returns
-//        1 since it splits one source WMMA into one trampoline).
-//
-// chinmaydd flagged this on PR #2379 as a cross-cutting concern across
-// every patch in the hotswap subsystem: the shared `uint32_t (*)(
-// PatchContext&, size_t)` signature in b0a0.cpp's weak-stub dispatcher
-// has the same ambiguity for in-place patches (#2222), the WMMA hazard
-// patch (#2265), and any future patch. A proper fix is a separate
-// follow-up that changes the dispatcher's return type to an enum
-// (NoMatch / Patched / Failed) or threads a `bool *Aborted` through
-// PatchContext, with the dispatcher checking the failure flag and
-// short-circuiting the rewrite with AMD_COMGR_STATUS_ERROR rather than
-// silently leaving the original opcode in .text.
-//
-// For now: every "matched but failed" path below logs an error via
-// log() (so the failure is at least visible when AMD_COMGR_EMIT_VERBOSE_LOGS
-// is set) and returns 0. The early "did not match" path returns 0
-// without logging.
+bool isWmmaSplitPatchCandidate(StringRef Mnemonic) {
+  return lookupSplitRule(Mnemonic).has_value();
+}
+
+// The dispatcher uses zero for both "no match" and "failed". Once a split
+// rule matches, set RequiredPatchFailed on every failure so the original
+// A0-incompatible WMMA can never be returned as a successful rewrite.
+static uint32_t failWmmaSplit(PatchContext &Ctx) {
+  Ctx.RequiredPatchFailed = true;
+  return 0;
+}
+
 static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
 
@@ -594,11 +1093,16 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (!Match)
     return 0; // Did NOT match -- correct dispatcher fall-through.
 
-  // ----- All return-0 paths below are MATCHED-BUT-FAILED -----
-  // Until the dispatcher API is refactored to distinguish these cleanly,
-  // each of these is a silent miscompile risk for the runtime; the log()
-  // line is the only signal the user gets that a recognized opcode was
-  // left in .text.
+  // Snapshot the original relocation constraint before VGPR-MSB handling adds
+  // the split site to the set to protect its generated mode transitions.
+  const bool WasRelocationProtected =
+      Ctx.RelocationProtectedOffsets.contains(DI.Offset);
+  std::optional<ProtectedWmmaSourceWindow> ProtectedWindow;
+  if (WasRelocationProtected) {
+    ProtectedWindow = findProtectedWmmaSourceWindow(Ctx, Idx);
+    if (!ProtectedWindow)
+      return failWmmaSplit(Ctx);
+  }
 
   // Structural sanity check against the opcode side. Every WMMA variant this
   // patch handles has exactly one destination operand at the MCInstrDesc
@@ -609,7 +1113,7 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (MCID.getNumDefs() != 1) {
     log() << "hotswap: error: WMMA split: " << DI.Mnemonic << " has "
           << MCID.getNumDefs() << " defs, expected 1\n";
-    return 0; // matched-but-failed
+    return failWmmaSplit(Ctx);
   }
 
   std::optional<WmmaOps> Ops =
@@ -617,11 +1121,11 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (!Ops) {
     log() << "hotswap: error: WMMA split: could not extract operands from "
           << DI.Mnemonic << "\n";
-    return 0; // matched-but-failed
+    return failWmmaSplit(Ctx);
   }
 
   if (!validateSplitOperands(Match->Kind, *Ops, DI.Mnemonic))
-    return 0; // matched-but-failed (validateSplitOperands logs the reason)
+    return failWmmaSplit(Ctx);
 
   // Print the source instruction in canonical asm form. The printer is the
   // authoritative source for src2 inline-immediate formatting (FP inline
@@ -636,20 +1140,48 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (!P) {
     log() << "hotswap: error: WMMA split: could not parse printed form of "
           << DI.Mnemonic << ": " << StringRef(PrintedBuf).trim() << "\n";
-    return 0; // matched-but-failed
+    return failWmmaSplit(Ctx);
+  }
+
+  bool UsesVgprMsbTransition = false;
+  bool NeedsKnownVgprMsbMode = Match->Kind == SplitKind::Split128to64FP8BF8;
+  if (Match->Kind == SplitKind::Split32x16to16x16F4) {
+    NeedsKnownVgprMsbMode =
+        Ops->Dst.first + Ops->Dst.second / 2 > 255 ||
+        Ops->Src0.first + Ops->Src0.second / 2 > 255 ||
+        (!Ops->Src2IsImm && Ops->Src2.first + Ops->Dst.second / 2 > 255);
+  }
+
+  unsigned ActiveVgprMsbMode = 0;
+  if (NeedsKnownVgprMsbMode) {
+    std::optional<unsigned> Mode = findActiveVgprMsbMode(Ctx, Idx);
+    if (!Mode) {
+      log() << "hotswap: error: WMMA split: cannot determine VGPR-MSB mode "
+               "for "
+            << DI.Mnemonic << " at offset 0x" << utohexstr(DI.Offset) << "\n";
+      return failWmmaSplit(Ctx);
+    }
+    ActiveVgprMsbMode = *Mode;
   }
 
   std::vector<std::string> AsmLines;
   switch (Match->Kind) {
   case SplitKind::Split128to64FP8BF8:
-    AsmLines = buildSplit128to64Asm(Match->Replacement, *P, *Ops);
+    AsmLines = buildSplit128to64Asm(Match->Replacement, *P, *Ops,
+                                    ActiveVgprMsbMode, UsesVgprMsbTransition);
     break;
   case SplitKind::Split32x16to16x16F4:
-    AsmLines = buildSplit32x16Asm(Match->Replacement, *P, *Ops);
+    AsmLines = buildSplit32x16Asm(Match->Replacement, *P, *Ops,
+                                  ActiveVgprMsbMode, UsesVgprMsbTransition);
     break;
   }
-  if (AsmLines.empty())
-    return 0; // matched-but-failed (build*Asm rejected an unsupported modifier)
+  if (AsmLines.empty()) {
+    log() << "hotswap: error: WMMA split: could not build replacement for "
+          << DI.Mnemonic << "\n";
+    return failWmmaSplit(Ctx);
+  }
+  if (UsesVgprMsbTransition)
+    protectNonClauseRelocationOffset(Ctx, DI.Offset);
 
   // Assemble the split sequence and defer trampoline emission to
   // emitToTrampoline, which picks a short s_branch or an SGPR-backed set-PC
@@ -659,16 +1191,101 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (Replacement.empty()) {
     log() << "hotswap: error: WMMA split: trampoline assembly failed for "
           << DI.Mnemonic << "\n";
-    return 0; // matched-but-failed
-  }
-  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement)) {
-    log() << "hotswap: error: WMMA split: could not emit trampoline for "
-          << DI.Mnemonic << "\n";
-    return 0; // matched-but-failed
+    return failWmmaSplit(Ctx);
   }
 
+  uint64_t SourceOffset = DI.Offset;
+  uint32_t SourceSize = DI.Size;
+  SmallVector<uint8_t> DeferredDelayBytes;
+  if (ProtectedWindow) {
+    const InternalDecodedInst &Delay = Ctx.Decoded[ProtectedWindow->DelayIndex];
+    SmallVector<uint8_t> WithDelay;
+    if (ProtectedWindow->demergesCombinedDelay()) {
+      std::optional<unsigned> SecondInstId =
+          remapSecondDelayDependency(Ctx, *ProtectedWindow, Idx, Replacement);
+      if (!SecondInstId) {
+        log() << "hotswap: error: WMMA split: combined s_delay_alu at 0x"
+              << utohexstr(Delay.Offset)
+              << " has an unrepresentable TRANS dependency after split\n";
+        return failWmmaSplit(Ctx);
+      }
+      SmallVector<uint8_t> FirstDelayBytes = assembleSingleInst(
+          "s_delay_alu " + std::to_string(ProtectedWindow->FirstInstId),
+          Ctx.LS);
+      DeferredDelayBytes = assembleSingleInst(
+          "s_delay_alu " + std::to_string(*SecondInstId), Ctx.LS);
+      if (FirstDelayBytes.size() != MinInstSize ||
+          DeferredDelayBytes.size() != MinInstSize) {
+        log() << "hotswap: error: WMMA split: could not demerge combined "
+                 "s_delay_alu at 0x"
+              << utohexstr(Delay.Offset) << "\n";
+        return failWmmaSplit(Ctx);
+      }
+
+      WithDelay.append(FirstDelayBytes.begin(), FirstDelayBytes.end());
+      for (size_t I = ProtectedWindow->DelayIndex + 1;
+           I <= ProtectedWindow->LastMovedIndex; ++I) {
+        if (!ProtectedWindow->RetainsSecondTarget &&
+            I == ProtectedWindow->SecondTargetIndex)
+          WithDelay.append(DeferredDelayBytes.begin(),
+                           DeferredDelayBytes.end());
+        if (I == Idx) {
+          WithDelay.append(Replacement.begin(), Replacement.end());
+          continue;
+        }
+        const InternalDecodedInst &Member = Ctx.Decoded[I];
+        WithDelay.append(Ctx.Text + Member.Offset,
+                         Ctx.Text + Member.Offset + Member.Size);
+      }
+    } else {
+      WithDelay.append(Ctx.Text + Delay.Offset,
+                       Ctx.Text + Delay.Offset + Delay.Size);
+      WithDelay.append(Replacement.begin(), Replacement.end());
+    }
+    Replacement = std::move(WithDelay);
+    SourceOffset = ProtectedWindow->Offset;
+    SourceSize = ProtectedWindow->Size;
+  }
+
+  if (ProtectedWindow && ProtectedWindow->RetainsSecondTarget &&
+      !canEmitShortTrampoline(Ctx, SourceOffset, SourceSize,
+                              Replacement.size())) {
+    log() << "hotswap: error: WMMA split: combined-delay demerge at 0x"
+          << utohexstr(SourceOffset) << " requires a short trampoline\n";
+    return failWmmaSplit(Ctx);
+  }
+
+  if (!emitToTrampoline(Ctx, SourceOffset, SourceSize, Replacement)) {
+    log() << "hotswap: error: WMMA split: could not emit trampoline for "
+          << DI.Mnemonic << "\n";
+    return failWmmaSplit(Ctx);
+  }
+
+  if (ProtectedWindow && ProtectedWindow->RetainsSecondTarget) {
+    const InternalDecodedInst &LastMoved =
+        Ctx.Decoded[ProtectedWindow->LastMovedIndex];
+    std::memcpy(Ctx.Text + LastMoved.Offset, DeferredDelayBytes.data(),
+                MinInstSize);
+  }
+  if (ProtectedWindow) {
+    for (size_t I = ProtectedWindow->DelayIndex;
+         I <= ProtectedWindow->LastMovedIndex; ++I) {
+      const uint64_t Offset = Ctx.Decoded[I].Offset;
+      Ctx.ClaimedReplacementOffsets.insert(Offset);
+      protectNonClauseRelocationOffset(Ctx, Offset);
+    }
+  }
+
+  Ctx.RequiredPatchApplied = true;
   log() << "hotswap: WMMA split: patched " << DI.Mnemonic << " at offset 0x"
-        << utohexstr(DI.Offset) << "\n";
+        << utohexstr(DI.Offset);
+  if (ProtectedWindow && ProtectedWindow->demergesCombinedDelay())
+    log() << " by demerging combined delay in source window at 0x"
+          << utohexstr(SourceOffset);
+  else if (ProtectedWindow)
+    log() << " with preceding delay in source window at 0x"
+          << utohexstr(SourceOffset);
+  log() << "\n";
   return 1;
 }
 

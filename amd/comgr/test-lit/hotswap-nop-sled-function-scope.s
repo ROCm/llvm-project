@@ -1,5 +1,6 @@
-// COM: A NOP sled belongs to its containing kernel. The patchable DS
-// COM: instruction in second_kernel must not borrow first_kernel padding.
+// COM: A symbol in post-function NOP padding prevents that range from being
+// COM: certified as global relocation storage. The patchable DS instruction
+// COM: in second_kernel must not borrow the protected first-kernel padding.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -21,6 +22,9 @@
 // DISASM-NEXT: s_nop 0
 // DISASM-NEXT: s_nop 0
 // DISASM-NEXT: s_endpgm
+
+// DISASM-LABEL: <first_padding_entry>:
+// DISASM-NEXT: s_nop 0
 
 // DISASM-LABEL: <second_kernel>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
@@ -51,6 +55,8 @@ first_kernel:
 .Lfirst_kernel_end:
 .size first_kernel, .Lfirst_kernel_end-first_kernel
 
+.globl first_padding_entry
+first_padding_entry:
 .globl second_kernel
 .p2align 8
 .type second_kernel,@function

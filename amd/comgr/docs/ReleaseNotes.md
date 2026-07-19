@@ -40,6 +40,9 @@ File System (VFS).
 
 Bug Fixes
 ---------
+- Added conservative control-flow, register-liveness, patch-ownership, and
+  idempotency checks to GFX1250 HotSwap stepping rewrites, including safe
+  handling of entry trampolines and generated executable pools.
 
 New APIs
 --------

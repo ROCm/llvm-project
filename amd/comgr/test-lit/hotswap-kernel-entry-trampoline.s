@@ -55,7 +55,7 @@
 // DISASM-NEXT: s_get_pc_i64
 
 // METADATA: .name:           entry_tramp_kernel
-// METADATA: .sgpr_count:     10
+// METADATA: .sgpr_count:     12
 
 // COM: The alignment fallback records each appended stub for debuggers.
 // RUN: %llvm-readelf -s %t.out.elf | %FileCheck --check-prefix=SYMS %s
@@ -70,15 +70,38 @@
 // API2: RESULT: SUCCESS
 // RUN: cmp %t.out.elf %t.out2.elf
 
-// COM: The alignment fallback needs a scratch SGPR pair for its appended stubs.
+// COM: .sgpr_count includes VCC. When no numbered scratch pair remains, the MC
+// COM: path uses VCC as its entry-only temporary and reserves the full total.
 // RUN: sed 's/.sgpr_count: 8/.sgpr_count: 105/' %s > %t.highsgpr.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
 // RUN:   %t.highsgpr.s -o %t.highsgpr.elf
 // RUN: hotswap-rewrite %t.highsgpr.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
+// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
+// RUN:   --entry-trampolines --output %t.highsgpr.out.elf \
+// RUN:   | %FileCheck --check-prefix=API %s
+// RUN: %llvm-objdump -d %t.highsgpr.out.elf \
+// RUN:   | %FileCheck --check-prefix=VCC-SCRATCH %s
+// RUN: %llvm-readelf --notes %t.highsgpr.out.elf \
+// RUN:   | %FileCheck --check-prefix=VCC-METADATA %s
+// VCC-SCRATCH: s_get_pc_i64 vcc
+// VCC-SCRATCH-NEXT: s_add_co_u32 vcc_lo
+// VCC-SCRATCH-NEXT: s_add_co_ci_u32 vcc_hi
+// VCC-SCRATCH-NEXT: s_set_pc_i64 vcc
+// VCC-METADATA: .name:           entry_tramp_kernel
+// VCC-METADATA: .sgpr_count:     108
+
+// COM: A total above the numbered SGPRs plus VCC is malformed and still fails
+// COM: closed without producing a partial rewrite.
+// RUN: sed 's/.sgpr_count: 8/.sgpr_count: 109/' %s > %t.badsgpr.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.badsgpr.s -o %t.badsgpr.elf
+// RUN: hotswap-rewrite %t.badsgpr.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
+// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
 // RUN:   --entry-trampolines --expect-status ERROR \
-// RUN:   | %FileCheck --check-prefix=NO-SCRATCH %s
-// NO-SCRATCH: RESULT: ERROR
+// RUN:   | %FileCheck --check-prefix=BAD-SGPR %s
+// BAD-SGPR: RESULT: ERROR
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

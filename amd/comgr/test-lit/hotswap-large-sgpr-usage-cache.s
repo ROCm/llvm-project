@@ -18,12 +18,16 @@
 
 // DISASM-LABEL: <test_large_usage_cache>:
 // DISASM: s_get_pc_i64
+// DISASM: s_add_nc_u64
 // DISASM: s_set_pc_i64
 // DISASM: s_call_i64
 // DISASM: s_get_pc_i64
+// DISASM: s_add_nc_u64
 // DISASM: s_set_pc_i64
-// DISASM: tensor_load_to_lds
-// DISASM: tensor_load_to_lds
+// DISASM: ds_load_b32 v0, v2 offset:256
+// DISASM-NEXT: ds_load_b32 v1, v2 offset:768
+// DISASM: ds_load_b32 v4, v6 offset:256
+// DISASM-NEXT: ds_load_b32 v5, v6 offset:768
 
 // META: .name:           test_large_usage_cache
 // META: .sgpr_count:     38
@@ -39,7 +43,7 @@
 .p2align 8
 .type test_large_usage_cache,@function
 test_large_usage_cache:
-  tensor_load_to_lds s[0:3], s[4:11]
+  ds_load_2addr_stride64_b32 v[0:1], v2 offset0:1 offset1:3
   s_mov_b32 s30, s30
   s_mov_b32 s30, s30
   s_mov_b32 s30, s30
@@ -47,7 +51,7 @@ test_large_usage_cache:
   s_mov_b32 s30, s30
   s_mov_b32 s30, s30
   s_call_i64 s[20:21], cache_helper
-  tensor_load_to_lds s[0:3], s[4:11]
+  ds_load_2addr_stride64_b32 v[4:5], v6 offset0:1 offset1:3
   s_mov_b32 s31, s31
   s_mov_b32 s31, s31
   s_mov_b32 s31, s31
@@ -73,7 +77,7 @@ cache_helper:
 .rodata
 .p2align 8
 .amdhsa_kernel test_large_usage_cache
-  .amdhsa_next_free_vgpr 1
+  .amdhsa_next_free_vgpr 7
   .amdhsa_next_free_sgpr 34
 .end_amdhsa_kernel
 
@@ -85,7 +89,7 @@ cache_helper:
     - .name: test_large_usage_cache
       .symbol: test_large_usage_cache.kd
       .sgpr_count: 34
-      .vgpr_count: 1
+      .vgpr_count: 7
       .kernarg_segment_size: 0
       .group_segment_fixed_size: 0
       .private_segment_fixed_size: 0

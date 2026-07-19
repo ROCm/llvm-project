@@ -10,9 +10,9 @@
 /// no assembler, no disassembler): the stub is emitted from a pre-encoded
 /// gfx1250 byte template with the two PC-relative delta immediates and the
 /// per-kernel scratch SGPR register fields patched in. Like the MC path, the
-/// scratch pair is allocated above each kernel's SGPR count (never a live
-/// kernel input, including preloaded kernargs) and the descriptor's SGPR
-/// reservation is bumped accordingly. Idempotency and the
+/// scratch pair is selected from numbered SGPRs or logical VCC (never a live
+/// kernel input, including preloaded kernargs) and the metadata SGPR total is
+/// bumped conservatively. Idempotency and the
 /// compile-time-workaround skip are decided by raw byte comparison rather than
 /// decoding.
 ///
@@ -67,6 +67,13 @@ static_assert(sizeof(StubTemplate) >= FastEntryPrefixBytes,
 SmallVector<uint8_t> buildKernelEntryTrampolineFast(uint64_t StubVAddr,
                                                     uint64_t EntryVAddr,
                                                     unsigned ScratchSgpr) {
+  if ((ScratchSgpr & 1u) != 0 || ScratchSgpr > Gfx1250MaxNumberedSgprs) {
+    log() << "hotswap: error: fast kernel-entry stub requires an aligned "
+             "scratch SGPR pair at or below logical base "
+          << Gfx1250MaxNumberedSgprs << ", got " << ScratchSgpr << ".\n";
+    return {};
+  }
+
   SmallVector<uint8_t> Bytes;
   Bytes.resize(KernelEntryStubStride);
   std::memcpy(Bytes.data(), StubTemplate, FastEntryStubBodyBytes);
@@ -74,8 +81,9 @@ SmallVector<uint8_t> buildKernelEntryTrampolineFast(uint64_t StubVAddr,
   // Patch the scratch SGPR pair s[N:N+1] into the register fields. The template
   // is spelled with s[100:101]; only the six field bytes change with N (see the
   // FastEntry*Offset encoding table in comgr-hotswap-internal.h). ScratchSgpr
-  // is an even base <= 104 (guaranteed by the aligned-pair allocation in
-  // appendKernelEntryTrampolinesFast).
+  // is an even base <= 106 (guaranteed by the aligned-pair allocation in
+  // appendKernelEntryTrampolinesFast). Logical base 106 encodes the
+  // non-numbered VCC/VCC_LO/VCC_HI registers in these same fields.
   const uint8_t N = static_cast<uint8_t>(ScratchSgpr);
   Bytes[FastEntryGetPcSdstOffset] = 0x80 | N;
   Bytes[FastEntryAddLoSrc0Offset] = N;
@@ -125,31 +133,37 @@ entryHasWorkaroundPrefixFast(const ElfView &Elf,
 // SGPR count, exactly like the MC path's allocateEntryStubScratchSgprs. This is
 // the correctness guarantee over a fixed s[100:101]: N is above every live
 // input (system/user SGPRs and preloaded kernargs), so the stub never clobbers
-// one. Declines (returns nullopt) if no aligned pair fits below MaxSgprs.
+// one. At the top of the numbered file, logical base 106 selects VCC. Declines
+// (returns nullopt) only for malformed metadata or when a non-gfx1250 limit has
+// no aligned pair.
 static std::optional<unsigned> allocateEntryStubScratchSgprsFast(
     const ElfView &Elf, const KernelDescriptorInfo &KD, unsigned MaxSgprs) {
-  constexpr unsigned ScratchSgprs = 2;
   std::optional<unsigned> SgprCount = Elf.getKernelSgprCount(KD.KernelName);
   if (!SgprCount) {
     log() << "hotswap: error: fast entry trampoline: failed to read SGPR count "
           << "for '" << KD.KernelName << "'.\n";
     return std::nullopt;
   }
-  if (*SgprCount > MaxSgprs) {
+  const unsigned MaxTotalSgprs =
+      MaxSgprs == Gfx1250MaxNumberedSgprs ? Gfx1250MaxTotalSgprs : MaxSgprs;
+  if (*SgprCount > MaxTotalSgprs) {
     log() << "hotswap: error: fast entry trampoline: kernel '" << KD.KernelName
-          << "' uses " << *SgprCount << " SGPRs, above max " << MaxSgprs
-          << ".\n";
+          << "' declares malformed total SGPR count " << *SgprCount
+          << ", above max " << MaxTotalSgprs << ".\n";
     return std::nullopt;
   }
 
   unsigned ScratchBase = (*SgprCount + 1) & ~1u;
-  if (ScratchBase > MaxSgprs || MaxSgprs - ScratchBase < ScratchSgprs) {
-    log() << "hotswap: error: fast entry trampoline: kernel '" << KD.KernelName
-          << "' uses " << *SgprCount << " SGPRs; no aligned scratch pair fits "
-          << "below max " << MaxSgprs << ".\n";
-    return std::nullopt;
-  }
-  return ScratchBase;
+  if (ScratchBase <= MaxSgprs &&
+      MaxSgprs - ScratchBase >= EntryStubScratchSgprs)
+    return ScratchBase;
+  if (MaxSgprs == Gfx1250MaxNumberedSgprs)
+    return Gfx1250MaxNumberedSgprs;
+
+  log() << "hotswap: error: fast entry trampoline: kernel '" << KD.KernelName
+        << "' uses " << *SgprCount << " SGPRs; no aligned scratch pair fits "
+        << "below max numbered count " << MaxSgprs << ".\n";
+  return std::nullopt;
 }
 
 static bool appendPaddingFast(std::vector<Trampoline> &Out, uint64_t PadBytes) {
@@ -172,6 +186,11 @@ std::optional<uint32_t> appendKernelEntryTrampolinesFast(
     const ElfView &Elf, StringRef TargetCpu, unsigned MaxSgprs,
     std::vector<Trampoline> &Growth,
     std::vector<KernelEntryTrampolineFixup> &OutFixups) {
+  if (!Elf.kernelDescriptorCacheIsComplete()) {
+    log() << "hotswap: error: fast entry trampoline: kernel descriptor set is "
+             "incomplete or ambiguous\n";
+    return std::nullopt;
+  }
   ArrayRef<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
   if (Descriptors.empty())
     return 0;
@@ -248,13 +267,14 @@ std::optional<uint32_t> appendKernelEntryTrampolinesFast(
 
     Trampoline T;
     T.Bytes = buildKernelEntryTrampolineFast(*StubVAddr, *Entry, *ScratchSgpr);
+    if (T.Bytes.empty())
+      return std::nullopt;
     LocalGrowth.push_back(std::move(T));
 
-    // Per-kernel scratch pair s[*ScratchSgpr:*ScratchSgpr+1]: bump the
-    // descriptor SGPR reservation (SkipSgprReservation=false) so the shared
-    // rewriteKernelEntryDescriptorOffsets records the pair, exactly like the MC
-    // path.
-    LocalFixups.push_back({KD.KernelName, AppendOffset, *ScratchSgpr + 2,
+    // Conservatively reserve VCC alongside a numbered pair because metadata
+    // reports only the combined total. Logical base 106 is VCC itself.
+    LocalFixups.push_back({KD.KernelName, AppendOffset,
+                           requiredEntryStubSgprCount(*ScratchSgpr),
                            Item.StubInstPrefLines,
                            /*SkipSgprReservation=*/false});
 

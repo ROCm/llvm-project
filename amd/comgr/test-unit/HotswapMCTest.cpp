@@ -395,6 +395,94 @@ TEST(EncodeSBranch, FailsOnInvalidState) {
   EXPECT_TRUE(S.encodeSBranch(0, 8).empty());
 }
 
+// -- encodeSCallI64 ----------------------------------------------------------
+
+static uint64_t decodeSCallTarget(uint64_t From,
+                                  const InternalDecodedInst &Decoded) {
+  const uint64_t Encoded =
+      static_cast<uint64_t>(Decoded.Inst.getOperand(1).getImm()) & 0xFFFFu;
+  const int64_t DwordDelta = Encoded < 0x8000u
+                                 ? static_cast<int64_t>(Encoded)
+                                 : static_cast<int64_t>(Encoded) - 0x10000;
+  const uint64_t PcBase = From + MinInstSize;
+  return DwordDelta >= 0
+             ? PcBase + static_cast<uint64_t>(DwordDelta) * MinInstSize
+             : PcBase - static_cast<uint64_t>(-DwordDelta) * MinInstSize;
+}
+
+TEST(EncodeSCallI64, WritesNextPcAndPreservesScc) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  constexpr uint64_t From = 0x20000;
+  constexpr uint64_t To = 0x1F000;
+  llvm::SmallVector<uint8_t> Out =
+      encodeSCallI64(S, From, To, /*SgprBase=*/12);
+  ASSERT_EQ(Out.size(), MinInstSize);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "s_call_i64");
+  EXPECT_EQ(Decoded[0].Inst.getOpcode(), S.SCallI64Opcode);
+  ASSERT_EQ(Decoded[0].Inst.getNumOperands(), 2u);
+  EXPECT_EQ(decodeSCallTarget(From, Decoded[0]), To);
+
+  // RDNA4 S_CALL_B64 writes PC+4 to its explicit SDST operand. Its ISA
+  // definition has no SCC operand, and LLVM's descriptor must agree.
+  const llvm::MCInstrDesc &Desc = S.MCII->get(Decoded[0].Inst.getOpcode());
+  EXPECT_TRUE(Desc.isCall());
+  EXPECT_EQ(Desc.getNumDefs(), 1u);
+  EXPECT_TRUE(Decoded[0].Inst.getOperand(0).isReg());
+  for (llvm::MCPhysReg Reg : Desc.implicit_defs())
+    EXPECT_NE(llvm::StringRef(S.MRI->getName(Reg)), "SCC");
+}
+
+TEST(EncodeSCallI64, EnforcesSignedDwordRangeAndAlignment) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  constexpr uint64_t ForwardFrom = 0x1000;
+  constexpr uint64_t ForwardLimit =
+      ForwardFrom + MinInstSize +
+      static_cast<uint64_t>(BranchOffsetMax) * MinInstSize;
+  EXPECT_EQ(encodeSCallI64(S, ForwardFrom, ForwardLimit, /*SgprBase=*/12)
+                .size(),
+            MinInstSize);
+  EXPECT_TRUE(encodeSCallI64(S, ForwardFrom, ForwardLimit + MinInstSize,
+                            /*SgprBase=*/12)
+                  .empty());
+
+  constexpr uint64_t BackwardFrom = 0x40000;
+  constexpr uint64_t BackwardLimit =
+      BackwardFrom + MinInstSize -
+      static_cast<uint64_t>(-BranchOffsetMin) * MinInstSize;
+  EXPECT_EQ(encodeSCallI64(S, BackwardFrom, BackwardLimit, /*SgprBase=*/12)
+                .size(),
+            MinInstSize);
+  EXPECT_TRUE(encodeSCallI64(S, BackwardFrom, BackwardLimit - MinInstSize,
+                            /*SgprBase=*/12)
+                  .empty());
+  EXPECT_TRUE(
+      encodeSCallI64(S, ForwardFrom, ForwardFrom + 5, /*SgprBase=*/12).empty());
+}
+
+TEST(EncodeSCallI64, SupportsVccScratchPair) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Out =
+      encodeSCallI64(S, 0x1000, 0x1100, Gfx1250MaxSgprs);
+  ASSERT_EQ(Out.size(), MinInstSize);
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  ASSERT_TRUE(Decoded[0].Inst.getOperand(0).isReg());
+  EXPECT_EQ(llvm::StringRef(
+                S.MRI->getName(Decoded[0].Inst.getOperand(0).getReg())),
+            "VCC");
+}
+
 // -- encodeSetPCLongBranch ---------------------------------------------------
 
 TEST(EncodeSetPCLongBranch, BackwardLandsOnTarget) {
@@ -403,13 +491,12 @@ TEST(EncodeSetPCLongBranch, BackwardLandsOnTarget) {
 
   const uint64_t From = 0x81000;
   const uint64_t To = 0x1004;
-  std::optional<llvm::SmallVector<uint8_t>> Out =
+  llvm::SmallVector<uint8_t> Out =
       encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
-  ASSERT_TRUE(Out);
-  EXPECT_EQ(Out->size(), SetPcReturnReserveBytes);
+  ASSERT_FALSE(Out.empty());
 
   std::vector<InternalDecodedInst> Dec;
-  ASSERT_TRUE(decodeTextSection(Out->data(), Out->size(), S, Dec));
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
   ASSERT_EQ(Dec.size(), 3u);
   EXPECT_EQ(Dec[0].Mnemonic, "s_get_pc_i64");
   EXPECT_EQ(Dec[1].Mnemonic, "s_add_nc_u64");
@@ -432,24 +519,133 @@ TEST(EncodeSetPCLongBranch, BackwardLandsOnTarget) {
   EXPECT_EQ(static_cast<uint32_t>(Delta >> 32), 0xFFFFFFFFu);
 }
 
+TEST(EncodeSetPCLongBranch, RejectsMisalignedScratchPair) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  EXPECT_TRUE(encodeSetPCLongBranch(S, 0, 0x1000, /*SgprBase=*/3).empty());
+}
+
+static InternalDecodedInst decodeDelay(llvm::StringRef Assembly) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Assembly, S);
+  std::vector<InternalDecodedInst> Decoded;
+  if (Bytes.empty() ||
+      !decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded) ||
+      Decoded.size() != 1)
+    return {};
+  return std::move(Decoded.front());
+}
+
+TEST(RelocationDelaySpan, ProtectsOnlyEncodedDependencySpan) {
+  InternalDecodedInst First = decodeDelay("s_delay_alu instid0(VALU_DEP_1)");
+  ASSERT_EQ(First.Mnemonic, "s_delay_alu");
+  EXPECT_EQ(getDelayProtectedSpan(First), 1u);
+
+  InternalDecodedInst Third =
+      decodeDelay("s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | "
+                  "instid1(SALU_CYCLE_1)");
+  ASSERT_EQ(Third.Mnemonic, "s_delay_alu");
+  EXPECT_EQ(getDelayProtectedSpan(Third), 3u);
+
+  InternalDecodedInst Sixth =
+      decodeDelay("s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_4) | "
+                  "instid1(SALU_CYCLE_1)");
+  ASSERT_EQ(Sixth.Mnemonic, "s_delay_alu");
+  EXPECT_EQ(getDelayProtectedSpan(Sixth), 6u);
+}
+
+TEST(RelocationDelaySpan, MalformedEncodingUsesConservativeMaximum) {
+  InternalDecodedInst Delay;
+  Delay.Mnemonic = "s_delay_alu";
+  EXPECT_EQ(getDelayProtectedSpan(Delay), 6u);
+
+  Delay.Inst.addOperand(llvm::MCOperand::createImm(12));
+  EXPECT_EQ(getDelayProtectedSpan(Delay), 6u);
+  Delay.Inst.getOperand(0).setImm(12u << 7);
+  EXPECT_EQ(getDelayProtectedSpan(Delay), 6u);
+  Delay.Inst.getOperand(0).setImm(6u << 4 | 1u << 7);
+  EXPECT_EQ(getDelayProtectedSpan(Delay), 6u);
+  Delay.Inst.getOperand(0).setImm(0x8001);
+  EXPECT_EQ(getDelayProtectedSpan(Delay), 6u);
+}
+
+TEST(WmmaSourceWindow, RejectsEveryInteriorEntryIncludingLiteralSlots) {
+  std::optional<llvm::DenseSet<uint64_t>> Targets;
+  Targets.emplace();
+  Targets->insert(0x100); // The replacement branch remains at the window head.
+  Targets->insert(0x114); // The return address is outside the open interval.
+  EXPECT_FALSE(
+      hasDirectControlFlowTargetInWindowInterior(Targets, 0x100, 0x114));
+
+  Targets->insert(0x108); // A literal slot in the original 16-byte WMMA.
+  EXPECT_TRUE(
+      hasDirectControlFlowTargetInWindowInterior(Targets, 0x100, 0x114));
+}
+
+TEST(WmmaSourceWindow, FailsClosedWithoutUsableTargetInformation) {
+  std::optional<llvm::DenseSet<uint64_t>> Targets;
+  EXPECT_TRUE(
+      hasDirectControlFlowTargetInWindowInterior(Targets, 0x100, 0x114));
+  Targets.emplace();
+  EXPECT_TRUE(
+      hasDirectControlFlowTargetInWindowInterior(Targets, 0x114, 0x100));
+}
+
+// -- encodeSetPCLongBranch geometry ------------------------------------------
+
+static uint64_t
+decodeSetPCLongBranchTarget(uint64_t From,
+                            llvm::ArrayRef<InternalDecodedInst> Decoded) {
+  const uint64_t PcBase = From + Decoded[0].Size;
+  const uint64_t Delta =
+      static_cast<uint64_t>(Decoded[1].Inst.getOperand(2).getImm());
+  return PcBase + Delta;
+}
+
+TEST(EncodeSetPCLongBranch, BackwardLandsOnTargetWithoutDefiningScc) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  constexpr uint64_t From = 0x81000;
+  constexpr uint64_t To = 0x1008;
+  llvm::SmallVector<uint8_t> Out =
+      encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
+  ASSERT_FALSE(Out.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 3u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "s_get_pc_i64");
+  EXPECT_EQ(Decoded[1].Mnemonic, "s_add_nc_u64");
+  EXPECT_EQ(Decoded[2].Mnemonic, "s_set_pc_i64");
+  EXPECT_EQ(decodeSetPCLongBranchTarget(From, Decoded), To);
+
+  const llvm::MCRegister Pair = Decoded[0].Inst.getOperand(0).getReg();
+  EXPECT_EQ(Decoded[1].Inst.getOperand(0).getReg(), Pair);
+  EXPECT_EQ(Decoded[1].Inst.getOperand(1).getReg(), Pair);
+  EXPECT_EQ(Decoded[2].Inst.getOperand(0).getReg(), Pair);
+  for (const InternalDecodedInst &DI : Decoded) {
+    const llvm::MCInstrDesc &Desc = S.MCII->get(DI.Inst.getOpcode());
+    for (llvm::MCPhysReg Reg : Desc.implicit_defs())
+      EXPECT_NE(llvm::StringRef(S.MRI->getName(Reg)), "SCC");
+  }
+}
+
 TEST(EncodeSetPCLongBranch, ForwardLandsOnTarget) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
   constexpr uint64_t From = 0x1000;
   constexpr uint64_t To = 0x81000;
-  std::optional<llvm::SmallVector<uint8_t>> Out =
+  llvm::SmallVector<uint8_t> Out =
       encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
-  ASSERT_TRUE(Out);
-  EXPECT_EQ(Out->size(), 16u);
+  ASSERT_FALSE(Out.empty());
+  EXPECT_EQ(Out.size(), 16u);
 
   std::vector<InternalDecodedInst> Decoded;
-  ASSERT_TRUE(decodeTextSection(Out->data(), Out->size(), S, Decoded));
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Decoded));
   ASSERT_EQ(Decoded.size(), 3u);
-  ASSERT_TRUE(Decoded[1].Inst.getOperand(2).isImm());
-  uint64_t Delta =
-      static_cast<uint64_t>(Decoded[1].Inst.getOperand(2).getImm());
-  EXPECT_EQ(From + MinInstSize + Delta, To);
+  EXPECT_EQ(decodeSetPCLongBranchTarget(From, Decoded), To);
 }
 
 TEST(EncodeSetPCLongBranch, InlineDisplacementUsesTwelveBytes) {
@@ -478,7 +674,7 @@ TEST(FindNearestSetPcGateway, FitsActualSixteenByteEncoding) {
 
   std::vector<NopSled> Gateways = {
       {/*Start=*/0x100, /*End=*/0x110, /*WritePos=*/0x100,
-       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+       /*OwnerStart=*/0, /*OwnerEnd=*/0x1000}};
   llvm::Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
       findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0,
                               /*TargetOffset=*/0x81000, /*SgprBase=*/12);
@@ -496,9 +692,9 @@ TEST(FindNearestSetPcGateway, SkipsNearerUndersizedCandidate) {
 
   std::vector<NopSled> Gateways = {
       {/*Start=*/0x80100, /*End=*/0x80110, /*WritePos=*/0x80100,
-       /*FunctionStart=*/0, /*FunctionEnd=*/0x100000},
+       /*OwnerStart=*/0, /*OwnerEnd=*/0x100000},
       {/*Start=*/0x80200, /*End=*/0x80214, /*WritePos=*/0x80200,
-       /*FunctionStart=*/0, /*FunctionEnd=*/0x100000}};
+       /*OwnerStart=*/0, /*OwnerEnd=*/0x100000}};
   llvm::Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
       findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0x80000,
                               /*TargetOffset=*/0x1004, /*SgprBase=*/12);
@@ -517,7 +713,7 @@ TEST(FindNearestSetPcGateway, DistinguishesNoFitFromEncodingFailure) {
 
   std::vector<NopSled> Gateways = {
       {/*Start=*/0x100, /*End=*/0x108, /*WritePos=*/0x100,
-       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+       /*OwnerStart=*/0, /*OwnerEnd=*/0x1000}};
   llvm::Expected<std::optional<EncodedSetPcGateway>> NoFit =
       findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0,
                               /*TargetOffset=*/0x81000, /*SgprBase=*/12);
@@ -539,7 +735,7 @@ TEST(CountReachableSetPcGatewaySlots, DistinguishesZeroFromEncodingFailure) {
 
   std::vector<NopSled> Gateways = {
       {/*Start=*/0x100, /*End=*/0x108, /*WritePos=*/0x100,
-       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+       /*OwnerStart=*/0, /*OwnerEnd=*/0x1000}};
   llvm::Expected<uint64_t> NoSlots = countReachableSetPcGatewaySlots(
       Gateways, S, /*FromOffset=*/0, /*TargetOffset=*/0x81000,
       /*SgprBase=*/12, /*MaxSlots=*/1);
@@ -558,15 +754,92 @@ TEST(CountReachableSetPcGatewaySlots, DistinguishesZeroFromEncodingFailure) {
 TEST(EncodeSetPCLongBranch, RejectsPcBaseOverflow) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  EXPECT_FALSE(encodeSetPCLongBranch(
-      S, std::numeric_limits<uint64_t>::max() - MinInstSize + 1, 0,
-      /*SgprBase=*/12));
+  EXPECT_TRUE(encodeSetPCLongBranch(
+                  S, std::numeric_limits<uint64_t>::max() - MinInstSize + 1, 0,
+                  /*SgprBase=*/12)
+                  .empty());
 }
 
-TEST(EncodeSetPCLongBranch, RejectsMisalignedScratchPair) {
+TEST(EncodeSetPCLongBranch, WideForwardDeltaUsesFullReservation) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  EXPECT_FALSE(encodeSetPCLongBranch(S, 0, 0x1000, /*SgprBase=*/3));
+
+  constexpr uint64_t From = 0x1000;
+  constexpr uint64_t To = 0x100002000ULL;
+  llvm::SmallVector<uint8_t> Out =
+      encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
+  ASSERT_FALSE(Out.empty());
+  EXPECT_EQ(Out.size(), SetPcForwardSequenceBytes);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 3u);
+  EXPECT_EQ(decodeSetPCLongBranchTarget(From, Decoded), To);
+}
+
+TEST(EncodeSetPCLongBranch, CallTailSizeIsOwnerStableAtLiteralBoundaries) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  constexpr uint64_t Source = 0x20000;
+  constexpr uint64_t CompactTarget = Source + 0x80000000ULL;
+  llvm::SmallVector<uint8_t> CompactAtSource =
+      encodeSetPCLongBranch(S, Source, CompactTarget, /*SgprBase=*/12);
+  llvm::SmallVector<uint8_t> WideAtEarlierSled =
+      encodeSetPCLongBranch(S, Source - MinInstSize, CompactTarget,
+                            /*SgprBase=*/12);
+  ASSERT_EQ(CompactAtSource.size(), 16u);
+  ASSERT_EQ(WideAtEarlierSled.size(), SetPcForwardSequenceBytes);
+  EXPECT_EQ(CompactAtSource.size() - MinInstSize, 12u);
+  EXPECT_EQ(encodeSCallI64(S, Source, Source - MinInstSize, /*SgprBase=*/12)
+                .size(),
+            MinInstSize);
+
+  constexpr uint64_t WideTarget = Source + 0x80000008ULL;
+  llvm::SmallVector<uint8_t> WideAtSource =
+      encodeSetPCLongBranch(S, Source, WideTarget, /*SgprBase=*/12);
+  llvm::SmallVector<uint8_t> CompactAtLaterSled =
+      encodeSetPCLongBranch(S, Source + 2 * MinInstSize, WideTarget,
+                            /*SgprBase=*/12);
+  ASSERT_EQ(WideAtSource.size(), SetPcForwardSequenceBytes);
+  ASSERT_EQ(CompactAtLaterSled.size(), 16u);
+  EXPECT_EQ(WideAtSource.size() - MinInstSize, 16u);
+  EXPECT_EQ(encodeSCallI64(S, Source, Source + 2 * MinInstSize,
+                          /*SgprBase=*/12)
+                .size(),
+            MinInstSize);
+
+  std::vector<InternalDecodedInst> Full;
+  ASSERT_TRUE(decodeTextSection(CompactAtSource.data(), CompactAtSource.size(),
+                                S, Full));
+  ASSERT_EQ(Full.size(), 3u);
+  EXPECT_EQ(Full[0].Inst.getOpcode(), S.SGetPcI64Opcode);
+  EXPECT_EQ(Full[0].Size, MinInstSize);
+  EXPECT_EQ(decodeSetPCLongBranchTarget(Source, Full), CompactTarget);
+
+  std::vector<InternalDecodedInst> Tail;
+  ASSERT_TRUE(decodeTextSection(CompactAtSource.data() + MinInstSize,
+                                CompactAtSource.size() - MinInstSize, S, Tail));
+  ASSERT_EQ(Tail.size(), 2u);
+  EXPECT_EQ(Tail[0].Inst.getOpcode(), S.SAddNcU64Opcode);
+  EXPECT_EQ(Tail[1].Inst.getOpcode(), S.SSetPcI64Opcode);
+  const unsigned Pair = Full[0].Inst.getOperand(0).getReg();
+  EXPECT_EQ(Tail[0].Inst.getOperand(0).getReg(), Pair);
+  EXPECT_EQ(Tail[0].Inst.getOperand(1).getReg(), Pair);
+  EXPECT_EQ(Tail[1].Inst.getOperand(0).getReg(), Pair);
+}
+
+TEST(EncodeSetPCLongBranch, RejectsUnalignedPairAndPcOverflow) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  EXPECT_TRUE(encodeSetPCLongBranch(S, 0x1000, 0x2000,
+                                    /*SgprBase=*/13)
+                  .empty());
+  EXPECT_TRUE(encodeSetPCLongBranch(S, std::numeric_limits<uint64_t>::max() - 1,
+                                    0,
+                                    /*SgprBase=*/12)
+                  .empty());
 }
 
 // -- buildKernelEntryTrampolineFast ------------------------------------------
@@ -634,6 +907,64 @@ static uint64_t decodeFastStubTarget(const LLVMState &S, uint64_t StubVAddr,
   const uint32_t Carry = static_cast<uint32_t>(SumLo >> 32);
   const uint32_t ResHi = BaseHi + Hi + Carry;
   return (static_cast<uint64_t>(ResHi) << 32) | ResLo;
+}
+
+static llvm::SmallVector<uint8_t>
+getAppendedEntryStub(const std::vector<Trampoline> &Growth,
+                     const KernelEntryTrampolineFixup &Fixup) {
+  llvm::SmallVector<uint8_t> Flat;
+  for (const Trampoline &T : Growth)
+    Flat.append(T.Bytes.begin(), T.Bytes.end());
+  if (Fixup.StubTextOffset > Flat.size() ||
+      Flat.size() - Fixup.StubTextOffset < KernelEntryStubStride)
+    return {};
+  return llvm::SmallVector<uint8_t>(Flat.begin() + Fixup.StubTextOffset,
+                                    Flat.begin() + Fixup.StubTextOffset +
+                                        KernelEntryStubStride);
+}
+
+static void expectEntryStubUsesVcc(llvm::ArrayRef<uint8_t> Bytes,
+                                   const LLVMState &S) {
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_GE(Decoded.size(), 6u);
+  ASSERT_NE(S.MRI, nullptr);
+  ASSERT_TRUE(Decoded[2].Inst.getOperand(0).isReg());
+  ASSERT_TRUE(Decoded[3].Inst.getOperand(0).isReg());
+  ASSERT_TRUE(Decoded[4].Inst.getOperand(0).isReg());
+  ASSERT_TRUE(Decoded[5].Inst.getOperand(0).isReg());
+  EXPECT_EQ(
+      llvm::StringRef(S.MRI->getName(Decoded[2].Inst.getOperand(0).getReg())),
+      "VCC");
+  EXPECT_EQ(
+      llvm::StringRef(S.MRI->getName(Decoded[3].Inst.getOperand(0).getReg())),
+      "VCC_LO");
+  EXPECT_EQ(
+      llvm::StringRef(S.MRI->getName(Decoded[4].Inst.getOperand(0).getReg())),
+      "VCC_HI");
+  EXPECT_EQ(
+      llvm::StringRef(S.MRI->getName(Decoded[5].Inst.getOperand(0).getReg())),
+      "VCC");
+}
+
+static void expectEntryStubUsesTopNumberedPair(llvm::ArrayRef<uint8_t> Bytes,
+                                               const LLVMState &S) {
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_GE(Decoded.size(), 6u);
+  ASSERT_NE(S.MRI, nullptr);
+  EXPECT_EQ(
+      llvm::StringRef(S.MRI->getName(Decoded[2].Inst.getOperand(0).getReg())),
+      "SGPR104_SGPR105");
+  EXPECT_EQ(
+      llvm::StringRef(S.MRI->getName(Decoded[3].Inst.getOperand(0).getReg())),
+      "SGPR104");
+  EXPECT_EQ(
+      llvm::StringRef(S.MRI->getName(Decoded[4].Inst.getOperand(0).getReg())),
+      "SGPR105");
+  EXPECT_EQ(
+      llvm::StringRef(S.MRI->getName(Decoded[5].Inst.getOperand(0).getReg())),
+      "SGPR104_SGPR105");
 }
 
 TEST(BuildKernelEntryTrampolineFast, ForwardDeltaLandsOnEntry) {
@@ -747,11 +1078,24 @@ TEST(BuildKernelEntryTrampolineFast, PatchesScratchSgprRegisterFields) {
   EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
 }
 
-// A kernel whose live SGPR count leaves no aligned scratch pair below MaxSgprs
-// must decline cleanly (nullopt), never clobber a live SGPR or crash. This is
-// the correctness guarantee the per-kernel scratch allocation adds over a fixed
-// pair: MetadataSgprCount is set to the top of the addressable range.
-TEST(KernelEntryTrampolineFast, DeclinesWhenNoScratchPairFits) {
+TEST(BuildKernelEntryTrampolineFast, EncodesLogicalTopPairAsVcc) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  constexpr uint64_t StubVAddr = 0x180000;
+  constexpr uint64_t EntryVAddr = 0x100000;
+  llvm::SmallVector<uint8_t> Bytes =
+      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr,
+                                     /*ScratchSgpr=*/Gfx1250MaxNumberedSgprs);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  expectEntryStubUsesVcc(Bytes, S);
+  EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
+}
+
+// .sgpr_count is a total that includes VCC. Counts 105 through 108 have no
+// unused numbered pair, but may use the entry-only VCC temporary and must
+// reserve the complete 108-SGPR metadata total.
+TEST(KernelEntryTrampolineFast, UsesVccForValidTopMetadataCounts) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
@@ -759,9 +1103,42 @@ TEST(KernelEntryTrampolineFast, DeclinesWhenNoScratchPairFits) {
   ASSERT_EQ(EndPgm.size(), MinInstSize);
   llvm::SmallVector<uint8_t> Text(EndPgm.begin(), EndPgm.end());
 
+  for (unsigned SgprCount : {105u, 106u, 107u, 108u}) {
+    SCOPED_TRACE(SgprCount);
+    comgr_test::KernelDescriptorElfOptions Opts;
+    Opts.MetadataSgprCount = SgprCount;
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(Text, Opts);
+    llvm::Expected<ElfView> View =
+        ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+    ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+    std::vector<Trampoline> Growth;
+    std::vector<KernelEntryTrampolineFixup> Fixups;
+    std::optional<uint32_t> Count = appendKernelEntryTrampolinesFast(
+        *View, "gfx1250", /*MaxSgprs=*/Gfx1250MaxNumberedSgprs, Growth, Fixups);
+    ASSERT_TRUE(Count.has_value());
+    EXPECT_EQ(*Count, 1u);
+    ASSERT_EQ(Fixups.size(), 1u);
+    EXPECT_EQ(Fixups[0].RequiredSgprs, Gfx1250MaxTotalSgprs);
+    EXPECT_FALSE(Fixups[0].SkipSgprReservation);
+    llvm::SmallVector<uint8_t> Stub = getAppendedEntryStub(Growth, Fixups[0]);
+    ASSERT_EQ(Stub.size(), KernelEntryStubStride);
+    expectEntryStubUsesVcc(Stub, S);
+  }
+}
+
+TEST(KernelEntryTrampolineFast,
+     TopNumberedPairConservativelyReservesPossibleVcc) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+
   comgr_test::KernelDescriptorElfOptions Opts;
-  // 106 SGPRs used: no aligned pair fits below the 106-SGPR gfx1250 limit.
-  Opts.MetadataSgprCount = 106;
+  // A total of 104 may mean 102 numbered SGPRs plus VCC. The conservative
+  // allocation still selects s[104:105], then reserves VCC as well.
+  Opts.MetadataSgprCount = 104;
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(Text, Opts);
   llvm::Expected<ElfView> View =
@@ -771,13 +1148,42 @@ TEST(KernelEntryTrampolineFast, DeclinesWhenNoScratchPairFits) {
   std::vector<Trampoline> Growth;
   std::vector<KernelEntryTrampolineFixup> Fixups;
   std::optional<uint32_t> Count = appendKernelEntryTrampolinesFast(
-      *View, "gfx1250", /*MaxSgprs=*/106, Growth, Fixups);
-  EXPECT_FALSE(Count.has_value());
+      *View, "gfx1250", /*MaxSgprs=*/Gfx1250MaxNumberedSgprs, Growth, Fixups);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 1u);
+  ASSERT_EQ(Fixups.size(), 1u);
+  EXPECT_EQ(Fixups[0].RequiredSgprs, Gfx1250MaxTotalSgprs);
+  llvm::SmallVector<uint8_t> Stub = getAppendedEntryStub(Growth, Fixups[0]);
+  ASSERT_EQ(Stub.size(), KernelEntryStubStride);
+  expectEntryStubUsesTopNumberedPair(Stub, S);
 }
 
-// The complement of the decline case: a modest SGPR count leaves room, so the
-// fast path installs one trampoline and records the bumped scratch pair in the
-// fixup (SkipSgprReservation=false), exactly like the MC path.
+TEST(KernelEntryTrampolineFast, RejectsMalformedTotalSgprCount) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = Gfx1250MaxTotalSgprs + 1;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  EXPECT_FALSE(appendKernelEntryTrampolinesFast(
+                   *View, "gfx1250",
+                   /*MaxSgprs=*/Gfx1250MaxNumberedSgprs, Growth, Fixups)
+                   .has_value());
+  EXPECT_TRUE(Growth.empty());
+  EXPECT_TRUE(Fixups.empty());
+}
+
+// A modest SGPR count leaves a numbered pair, so the fast path installs one
+// trampoline and records the conservative metadata total in the fixup.
 TEST(KernelEntryTrampolineFast, AllocatesPerKernelScratchAndBumpsReservation) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -801,9 +1207,39 @@ TEST(KernelEntryTrampolineFast, AllocatesPerKernelScratchAndBumpsReservation) {
   ASSERT_TRUE(Count.has_value());
   EXPECT_EQ(*Count, 1u);
   ASSERT_EQ(Fixups.size(), 1u);
-  // Scratch pair is s[8:9]; the fixup records the top of the pair (base + 2).
-  EXPECT_EQ(Fixups[0].RequiredSgprs, 10u);
+  // Keep room for VCC because .sgpr_count does not separate special SGPRs.
+  EXPECT_EQ(Fixups[0].RequiredSgprs, 12u);
   EXPECT_FALSE(Fixups[0].SkipSgprReservation);
+}
+
+TEST(KernelEntryTrampoline, RejectsAmbiguousDescriptorNamesOnBothPaths) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  comgr_test::MultiKernelDescriptorElfOptions Opts;
+  Opts.Kernels = {
+      {"kernel", 0x1000, 0x2000, /*EntryOffset=*/-0x1000},
+      {"kernel", 0x1100, 0x2100, /*EntryOffset=*/-0x1000},
+  };
+  std::vector<uint8_t> Bytes = comgr_test::makeMultiKernelDescriptorElf(Opts);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Bytes.data(), Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  ASSERT_FALSE(View->kernelDescriptorCacheIsComplete());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  EXPECT_FALSE(appendKernelEntryTrampolines(
+                   *View, S, /*MaxSgprs=*/106, Growth, Fixups)
+                   .has_value());
+  EXPECT_TRUE(Growth.empty());
+  EXPECT_TRUE(Fixups.empty());
+
+  EXPECT_FALSE(appendKernelEntryTrampolinesFast(
+                   *View, "gfx1250", /*MaxSgprs=*/106, Growth, Fixups)
+                   .has_value());
+  EXPECT_TRUE(Growth.empty());
+  EXPECT_TRUE(Fixups.empty());
 }
 
 TEST(IsSBranchReachable, CoversBoundariesAlignmentAndPcOverflow) {
@@ -1548,6 +1984,40 @@ TEST(FindNearestSled, HandlesLargeUnsignedOffsets) {
   EXPECT_EQ(Sled, &Sleds[1]);
 }
 
+TEST(GatewaySlotReachability, CursorCanCrossLowerReachBoundary) {
+  const uint64_t Source = MaxSledDistance + 0x1000;
+  const uint64_t Start = Source - MaxSledDistance;
+  NopSled Sled = {Start, Start + 24, Start, 0,
+                  std::numeric_limits<uint64_t>::max()};
+  Sled.GlobalGateway = true;
+
+  // The initial cursor is exactly out of range, but advancing one dword leaves
+  // a complete 20-byte gateway at a reachable address.
+  EXPECT_TRUE(canEverReachGatewaySlot(Sled, Source, /*Needed=*/20));
+  NopSled FourByteAdvance = Sled;
+  FourByteAdvance.WritePos += MinInstSize;
+  EXPECT_TRUE(canEverReachGatewaySlot(FourByteAdvance, Source, /*Needed=*/20));
+  NopSled TwentyByteAdvance = Sled;
+  TwentyByteAdvance.WritePos += 20;
+  EXPECT_FALSE(
+      canEverReachGatewaySlot(TwentyByteAdvance, Source, /*Needed=*/20));
+
+  Sled.End = Start + 20;
+  EXPECT_FALSE(canEverReachGatewaySlot(Sled, Source, /*Needed=*/20));
+}
+
+TEST(GatewaySlotReachability, CursorCannotMoveBackIntoUpperReachBoundary) {
+  const uint64_t Source = 0x1000;
+  NopSled Sled = {Source + MaxSledDistance - MinInstSize,
+                  Source + MaxSledDistance + 64, Source + MaxSledDistance, 0,
+                  std::numeric_limits<uint64_t>::max()};
+  Sled.GlobalGateway = true;
+
+  EXPECT_FALSE(canEverReachGatewaySlot(Sled, Source, /*Needed=*/20));
+  Sled.WritePos -= MinInstSize;
+  EXPECT_TRUE(canEverReachGatewaySlot(Sled, Source, /*Needed=*/20));
+}
+
 // -- assembleSingleInst / decodeTextSection round-trip ------------------------
 
 TEST(AssembleDecode, SNopRoundTrip) {
@@ -1563,7 +2033,6 @@ TEST(AssembleDecode, SNopRoundTrip) {
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
   ASSERT_EQ(Decoded.size(), 1u);
-  EXPECT_TRUE(Decoded[0].DecodeSucceeded);
   EXPECT_EQ(Decoded[0].Size, MinInstSize);
   EXPECT_EQ(Decoded[0].Mnemonic, "s_nop");
 }
@@ -1784,6 +2253,425 @@ static bool appendSingleInstBytes(llvm::SmallVectorImpl<uint8_t> &Bytes,
   return true;
 }
 
+static std::vector<InternalDecodedInst>
+decodeInstSequence(llvm::ArrayRef<llvm::StringRef> Instructions,
+                   const LLVMState &S) {
+  llvm::SmallVector<uint8_t> Bytes;
+  for (llvm::StringRef Inst : Instructions)
+    if (!appendSingleInstBytes(Bytes, Inst, S))
+      return {};
+  std::vector<InternalDecodedInst> Decoded;
+  EXPECT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  return Decoded;
+}
+
+static void expectCachedSiteDeadMatchesOracle(
+    llvm::ArrayRef<llvm::StringRef> Instructions, size_t ResumeIndex,
+    const LLVMState &S) {
+  llvm::SmallVector<uint8_t> Text;
+  for (llvm::StringRef Inst : Instructions)
+    ASSERT_TRUE(appendSingleInstBytes(Text, Inst, S));
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 106;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(ViewOrErr->textData(), ViewOrErr->textSize(), S,
+                                Decoded));
+  ASSERT_EQ(Decoded.size(), Instructions.size());
+  ASSERT_GT(ResumeIndex, 0u);
+  ASSERT_LT(ResumeIndex, Decoded.size());
+
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config, Decoded, ViewOrErr->textData(),
+                   ViewOrErr->textSize(), 0, S, Trampolines, Sleds,
+                   *ViewOrErr, Liveness, KernelStats, ScratchPatches,
+                   ControlFlow, Prof};
+  precomputeSiteDeadSgprFacts(Ctx);
+
+  const InternalDecodedInst &Previous = Decoded[ResumeIndex - 1];
+  std::optional<llvm::BitVector> Cached = getSiteDeadNumberedSgprs(
+      Ctx, Previous.Offset, Previous.Size);
+  ASSERT_TRUE(Cached);
+  for (unsigned Pair = 0; Pair + 1 < Config.MaxSgprs; Pair += 2) {
+    bool CachedPair = Cached->test(Pair) && Cached->test(Pair + 1);
+    bool OraclePair = isSgprPairDeadFrom(
+        Decoded, ResumeIndex, Pair, S,
+        llvm::ArrayRef<uint8_t>(ViewOrErr->textData(), ViewOrErr->textSize()));
+    EXPECT_EQ(CachedPair, OraclePair) << "pair s[" << Pair << ':' << Pair + 1
+                                      << ']';
+  }
+}
+
+TEST(CollectTouchedNumberedSgprs, ChecksTheCompleteReplacement) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Clean;
+  ASSERT_TRUE(appendSingleInstBytes(Clean, "s_wait_dscnt 0", S));
+  ASSERT_TRUE(appendSingleInstBytes(Clean, "v_add_u32 v0, v1, v2", S));
+  std::optional<llvm::BitVector> CleanTouched =
+      collectTouchedNumberedSgprs(Clean, /*NumberedSgprLimit=*/106, S);
+  ASSERT_TRUE(CleanTouched);
+  EXPECT_FALSE(CleanTouched->test(62));
+  EXPECT_FALSE(CleanTouched->test(63));
+
+  llvm::SmallVector<uint8_t> TouchesPair = Clean;
+  ASSERT_TRUE(
+      appendSingleInstBytes(TouchesPair, "s_mov_b64 s[62:63], s[0:1]", S));
+  std::optional<llvm::BitVector> PairTouched =
+      collectTouchedNumberedSgprs(TouchesPair,
+                                  /*NumberedSgprLimit=*/106, S);
+  ASSERT_TRUE(PairTouched);
+  EXPECT_TRUE(PairTouched->test(0));
+  EXPECT_TRUE(PairTouched->test(1));
+  EXPECT_TRUE(PairTouched->test(62));
+  EXPECT_TRUE(PairTouched->test(63));
+}
+
+TEST(SgprPairDeadFrom, AcceptsDefsBeforeUsesOnEveryDirectPath) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_cbranch_scc0 2", "s_cselect_b32 s62, -1, 0", "s_branch 1",
+       "s_cselect_b32 s62, -1, 0", "s_cselect_b32 s63, -1, 0",
+       "s_cmp_lg_u64 s[62:63], 0", "s_endpgm"},
+      S);
+  ASSERT_EQ(Decoded.size(), 8u);
+  EXPECT_TRUE(isSgprPairDeadFrom(Decoded, /*ResumeIndex=*/1,
+                                 /*SgprBase=*/62, S));
+}
+
+TEST(SgprPairDeadFrom, RejectsUseBeforeDefOnOneDirectPath) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_cbranch_scc0 2", "s_cselect_b32 s62, -1, 0", "s_branch 1",
+       "s_cmp_lg_u32 s62, 0", "s_cselect_b32 s63, -1, 0", "s_endpgm"},
+      S);
+  ASSERT_EQ(Decoded.size(), 7u);
+  EXPECT_FALSE(isSgprPairDeadFrom(Decoded, /*ResumeIndex=*/1,
+                                  /*SgprBase=*/62, S));
+}
+
+TEST(SgprPairDeadFrom, RejectsHiddenTiedUseBeforeDefinition) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_bitset0_b64 s[62:63], 1", "s_endpgm"}, S);
+  ASSERT_EQ(Decoded.size(), 3u);
+  EXPECT_FALSE(isSgprPairDeadFrom(Decoded, /*ResumeIndex=*/1,
+                                  /*SgprBase=*/62, S));
+}
+
+TEST(SgprPairDeadFrom, SwapPcCallFullyDefinesLinkPair) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded =
+      decodeInstSequence({"s_nop 0", "s_swap_pc_i64 s[30:31], s[2:3]",
+                          "s_cmp_lg_u64 s[30:31], 0", "s_endpgm"},
+                         S);
+  ASSERT_EQ(Decoded.size(), 4u);
+  EXPECT_TRUE(isSgprPairDeadFrom(Decoded, /*ResumeIndex=*/1,
+                                 /*SgprBase=*/30, S));
+}
+
+TEST(SgprPairDeadFrom, TracksTheTwoHalvesIndependently) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Safe = decodeInstSequence(
+      {"s_nop 0", "s_cselect_b32 s62, -1, 0", "s_cselect_b32 s63, -1, 0",
+       "s_cmp_lg_u64 s[62:63], 0", "s_endpgm"},
+      S);
+  ASSERT_EQ(Safe.size(), 5u);
+  EXPECT_TRUE(isSgprPairDeadFrom(Safe, /*ResumeIndex=*/1,
+                                 /*SgprBase=*/62, S));
+
+  std::vector<InternalDecodedInst> HighLive =
+      decodeInstSequence({"s_nop 0", "s_cselect_b32 s62, -1, 0",
+                          "s_cmp_lg_u32 s63, 0", "s_endpgm"},
+                         S);
+  ASSERT_EQ(HighLive.size(), 4u);
+  EXPECT_FALSE(isSgprPairDeadFrom(HighLive, /*ResumeIndex=*/1,
+                                  /*SgprBase=*/62, S));
+}
+
+TEST(SgprPairDeadFrom, ConvergesAcrossABackedge) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_cselect_b32 s62, -1, 0", "s_cbranch_scc0 -2",
+       "s_cselect_b32 s63, -1, 0", "s_cmp_lg_u64 s[62:63], 0", "s_endpgm"},
+      S);
+  ASSERT_EQ(Decoded.size(), 6u);
+  EXPECT_TRUE(isSgprPairDeadFrom(Decoded, /*ResumeIndex=*/1,
+                                 /*SgprBase=*/62, S));
+}
+
+TEST(SgprPairDeadFrom, RejectsUnboundedControlFlow) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Indirect =
+      decodeInstSequence({"s_nop 0", "s_setpc_b64 s[40:41]", "s_endpgm"}, S);
+  ASSERT_EQ(Indirect.size(), 3u);
+  EXPECT_FALSE(isSgprPairDeadFrom(Indirect, /*ResumeIndex=*/1,
+                                  /*SgprBase=*/62, S));
+
+  std::vector<InternalDecodedInst> Outside =
+      decodeInstSequence({"s_nop 0", "s_branch 10", "s_endpgm"}, S);
+  ASSERT_EQ(Outside.size(), 3u);
+  EXPECT_FALSE(isSgprPairDeadFrom(Outside, /*ResumeIndex=*/1,
+                                  /*SgprBase=*/62, S));
+}
+
+TEST(SgprPairDeadFrom, RejectsLivePairAtCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Live = decodeInstSequence(
+      {"s_nop 0", "s_call_i64 s[30:31], 0", "s_endpgm"}, S);
+  ASSERT_EQ(Live.size(), 3u);
+  EXPECT_FALSE(isSgprPairDeadFrom(Live, /*ResumeIndex=*/1,
+                                  /*SgprBase=*/62, S));
+
+  std::vector<InternalDecodedInst> Killed = decodeInstSequence(
+      {"s_nop 0", "s_mov_b64 s[62:63], 0", "s_call_i64 s[30:31], 0",
+       "s_endpgm"},
+      S);
+  ASSERT_EQ(Killed.size(), 4u);
+  EXPECT_TRUE(isSgprPairDeadFrom(Killed, /*ResumeIndex=*/1,
+                                 /*SgprBase=*/62, S));
+}
+
+TEST(SgprPairDeadFrom, RejectsLivePairAtFunctionExit) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_set_pc_i64 s[30:31]"}, S);
+  ASSERT_EQ(Decoded.size(), 2u);
+  EXPECT_FALSE(isSgprPairDeadFrom(Decoded, /*ResumeIndex=*/1,
+                                  /*SgprBase=*/62, S));
+}
+
+TEST(SgprPairDeadFrom, RequiresDefinitionOnEveryExitPath) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Bypass = decodeInstSequence(
+      {"s_nop 0", "s_cbranch_scc0 2", "s_mov_b64 s[62:63], 0",
+       "s_branch 1", "s_nop 0", "s_endpgm"},
+      S);
+  ASSERT_EQ(Bypass.size(), 6u);
+  EXPECT_FALSE(isSgprPairDeadFrom(Bypass, /*ResumeIndex=*/1,
+                                  /*SgprBase=*/62, S));
+
+  std::vector<InternalDecodedInst> BothDefined = decodeInstSequence(
+      {"s_nop 0", "s_cbranch_scc0 2", "s_mov_b64 s[62:63], 0",
+       "s_branch 1", "s_mov_b64 s[62:63], 0", "s_endpgm"},
+      S);
+  ASSERT_EQ(BothDefined.size(), 6u);
+  EXPECT_TRUE(isSgprPairDeadFrom(BothDefined, /*ResumeIndex=*/1,
+                                 /*SgprBase=*/62, S));
+}
+
+TEST(VccPairDeadFrom, AcceptsWave32LowDefinitionAndStandardReturn) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "v_cmp_lt_u32_e32 vcc_lo, v0, v1",
+       "s_and_b32 s0, s1, vcc_lo", "s_set_pc_i64 s[30:31]"},
+      S);
+  ASSERT_EQ(Decoded.size(), 4u);
+  // The implicit wave32 compare kills VCC_LO. VCC_HI is unused until the
+  // exact ABI return, where caller-clobbered VCC stops being observable.
+  EXPECT_TRUE(isVccPairDeadFrom(Decoded, /*ResumeIndex=*/1, S));
+}
+
+TEST(VccPairDeadFrom, RejectsUseBeforeDefinitionOnOnePath) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_cbranch_scc0 2",
+       "v_cmp_lt_u32_e32 vcc_lo, v0, v1", "s_branch 1",
+       "s_and_b32 s0, s1, vcc_lo", "s_set_pc_i64 s[30:31]"},
+      S);
+  ASSERT_EQ(Decoded.size(), 6u);
+  EXPECT_FALSE(isVccPairDeadFrom(Decoded, /*ResumeIndex=*/1, S));
+}
+
+TEST(VccPairDeadFrom, RejectsExplicitHighUseBeforeDefinition) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_cmp_lg_u32 vcc_hi, 0",
+       "v_cmp_lt_u32_e32 vcc_lo, v0, v1", "s_set_pc_i64 s[30:31]"},
+      S);
+  ASSERT_EQ(Decoded.size(), 4u);
+  EXPECT_FALSE(isVccPairDeadFrom(Decoded, /*ResumeIndex=*/1, S));
+}
+
+TEST(VccPairDeadFrom, RejectsImplicitPredicateUseBeforeDefinition) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_cbranch_vccz 1",
+       "v_cmp_lt_u32_e32 vcc_lo, v0, v1", "s_set_pc_i64 s[30:31]"},
+      S);
+  ASSERT_EQ(Decoded.size(), 4u);
+  EXPECT_FALSE(isVccPairDeadFrom(Decoded, /*ResumeIndex=*/1, S));
+}
+
+TEST(VccPairDeadFrom, RejectsUnknownIndirectTransfer) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_setpc_b64 s[40:41]"}, S);
+  ASSERT_EQ(Decoded.size(), 2u);
+  EXPECT_FALSE(isVccPairDeadFrom(Decoded, /*ResumeIndex=*/1, S));
+}
+
+TEST(VccPairDeadFrom, AcceptsStandardLinkCallBoundary) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeInstSequence(
+      {"s_nop 0", "s_swap_pc_i64 s[30:31], s[2:3]"}, S);
+  ASSERT_EQ(Decoded.size(), 2u);
+  EXPECT_TRUE(isVccPairDeadFrom(Decoded, /*ResumeIndex=*/1, S));
+}
+
+TEST(SiteDeadSgprFacts, CachedMasksMatchPathOracle) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_cbranch_scc0 2", "s_cselect_b32 s62, -1, 0",
+       "s_branch 1", "s_cselect_b32 s62, -1, 0",
+       "s_cselect_b32 s63, -1, 0", "s_cmp_lg_u64 s[62:63], 0",
+       "s_endpgm"},
+      1, S);
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_cbranch_scc0 2", "s_cselect_b32 s62, -1, 0",
+       "s_branch 1", "s_cmp_lg_u32 s62, 0", "s_cselect_b32 s63, -1, 0",
+       "s_endpgm"},
+      1, S);
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_bitset0_b64 s[62:63], 1", "s_endpgm"}, 1, S);
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_swap_pc_i64 s[30:31], s[2:3]",
+       "s_cmp_lg_u64 s[30:31], 0", "s_endpgm"},
+      1, S);
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_cselect_b32 s62, -1, 0", "s_cbranch_scc0 -2",
+       "s_cselect_b32 s63, -1, 0", "s_cmp_lg_u64 s[62:63], 0",
+       "s_endpgm"},
+      1, S);
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_setpc_b64 s[40:41]", "s_endpgm"}, 1, S);
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_call_i64 s[30:31], 0", "s_endpgm"}, 1, S);
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_mov_b64 s[62:63], 0", "s_call_i64 s[30:31], 0",
+       "s_endpgm"},
+      1, S);
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_cbranch_scc0 2", "s_mov_b64 s[62:63], 0",
+       "s_branch 1", "s_nop 0", "s_endpgm"},
+      1, S);
+  expectCachedSiteDeadMatchesOracle(
+      {"s_nop 0", "s_cbranch_scc0 2", "s_mov_b64 s[62:63], 0",
+       "s_branch 1", "s_mov_b64 s[62:63], 0", "s_endpgm"},
+      1, S);
+}
+
+TEST(SiteDeadSgprFacts, ProofPoisonDoesNotInflateNumberedLimit) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = {0xff, 0xff, 0xff, 0xff};
+  ASSERT_TRUE(appendSingleInstBytes(Text, "s_mov_b32 s5, 0", S));
+  ASSERT_TRUE(appendSingleInstBytes(Text, "s_endpgm", S));
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.EmitKernelDescriptorSymbol = false;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(ViewOrErr->textData(), ViewOrErr->textSize(), S,
+                                Decoded));
+  ASSERT_EQ(Decoded.size(), 3u);
+  ASSERT_EQ(Decoded[0].Mnemonic, "<unknown>");
+
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config, Decoded, ViewOrErr->textData(),
+                   ViewOrErr->textSize(), 0, S, Trampolines, Sleds,
+                   *ViewOrErr, Liveness, KernelStats, ScratchPatches,
+                   ControlFlow, Prof};
+  precomputeSiteDeadSgprFacts(Ctx);
+
+  auto It = Ctx.SiteDeadSgprFacts.find({0, ViewOrErr->textSize()});
+  ASSERT_NE(It, Ctx.SiteDeadSgprFacts.end());
+  EXPECT_EQ(It->second.NumberedLimit, 6u);
+}
+
+TEST(FindSafeSgprScratchBlock, RejectsUndecodedInstructions) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = {0xff, 0xff, 0xff, 0xff};
+  ASSERT_TRUE(appendSingleInstBytes(Text, "s_endpgm", S));
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(ViewOrErr->textData(), ViewOrErr->textSize(), S,
+                                Decoded));
+  ASSERT_EQ(Decoded.size(), 2u);
+  ASSERT_EQ(Decoded[0].Mnemonic, "<unknown>");
+
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config, Decoded, ViewOrErr->textData(),
+                   ViewOrErr->textSize(), 0, S, Trampolines, Sleds,
+                   *ViewOrErr, Liveness, KernelStats, ScratchPatches,
+                   ControlFlow, Prof};
+
+  EXPECT_FALSE(findSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, /*Count=*/2,
+                                        /*Alignment=*/2, "unit test"));
+}
+
 TEST(CheckVgprOverlap, DetectsDirectOverlap) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -1850,44 +2738,6 @@ TEST(BuildTrampoline, EmptyOnBadAsm) {
   EXPECT_TRUE(T.Bytes.empty());
 }
 
-// -- DS two-address expansion ------------------------------------------------
-
-TEST(ExpandDs2Addr, PreservesAddressNeededBySecondLoad) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(
-      "ds_load_2addr_b64 v[12:15], v12 offset0:0 offset1:1", S);
-  ASSERT_FALSE(Bytes.empty());
-  std::vector<InternalDecodedInst> Decoded;
-  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 1u);
-
-  std::optional<std::vector<std::string>> Expanded =
-      expandDs2Addr(Decoded[0].Inst, Decoded[0].Mnemonic, "ds_load_b64", S);
-  ASSERT_TRUE(Expanded);
-  ASSERT_EQ(Expanded->size(), 2u);
-  EXPECT_EQ((*Expanded)[0], "ds_load_b64 v[14:15], v12 offset:8");
-  EXPECT_EQ((*Expanded)[1], "ds_load_b64 v[12:13], v12");
-}
-
-TEST(ExpandDs2Addr, RejectsCyclicExchangeDependency) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(
-      "ds_storexchg_2addr_rtn_b64 v[20:23], v24, v[22:23], v[20:21] "
-      "offset0:0 offset1:1",
-      S);
-  ASSERT_FALSE(Bytes.empty());
-  std::vector<InternalDecodedInst> Decoded;
-  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 1u);
-
-  EXPECT_FALSE(expandDs2Addr(Decoded[0].Inst, Decoded[0].Mnemonic,
-                             "ds_storexchg_rtn_b64", S));
-}
-
 // -- buildKernelEntryTrampoline -----------------------------------------------
 
 TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
@@ -1929,6 +2779,23 @@ TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
       Decoded[4].Inst,
       (llvm::Twine("s_addc_u32 s9, s9, 0x") + llvm::utohexstr(Hi)).str(), S);
   expectInstMatchesAsm(Decoded[5].Inst, "s_set_pc_i64 s[8:9]", S);
+}
+
+TEST(BuildKernelEntryTrampoline, SpellsLogicalTopPairAsVcc) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  constexpr uint64_t StubVAddr = 0x200000;
+  constexpr uint64_t EntryVAddr = 0x10100;
+  llvm::SmallVector<uint8_t> Bytes =
+      buildKernelEntryTrampoline(StubVAddr, EntryVAddr,
+                                 /*ScratchSgpr=*/Gfx1250MaxNumberedSgprs, S);
+
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  EXPECT_TRUE(isKernelEntryTrampoline(Bytes, S));
+  EXPECT_EQ(getKernelEntryTrampolineTargetVAddr(Bytes, StubVAddr, S),
+            EntryVAddr);
+  expectEntryStubUsesVcc(Bytes, S);
 }
 
 TEST(BuildKernelEntryTrampoline, PrefixPrefiltersNonStubBytes) {
@@ -2477,7 +3344,8 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
             ExpectedStubOffset + KernelEntryStubStride + ExpectedGuard);
 
   std::unique_ptr<llvm::WritableMemoryBuffer> Out =
-      ViewOrErr->growWithTrampolines(Growth, S.SNopBytes);
+      ViewOrErr->growWithTrampolines(
+          Growth, S.SNopBytes, ExecutablePoolTargetState::Neutral);
   ASSERT_NE(Out, nullptr);
 
   ASSERT_TRUE(
@@ -2503,7 +3371,7 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
                             hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_INST_PREF_SIZE),
             KernelEntryStubInstPrefLines);
   EXPECT_NE(OutRsrc3 & hsa::COMPUTE_PGM_RSRC3_GFX12_PLUS_GLG_EN, 0u);
-  EXPECT_EQ(Fixups[0].RequiredSgprs, 10u);
+  EXPECT_EQ(Fixups[0].RequiredSgprs, 12u);
   uint32_t OutRsrc1 = 0;
   std::memcpy(&OutRsrc1,
               OutKd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
@@ -2764,7 +3632,8 @@ TEST(KernelEntryTrampoline, SecondPassAddsNoDuplicateStubSymbol) {
   ASSERT_TRUE(PoolVAddr.has_value());
 
   std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
-      View1->growWithTrampolines(Growth1, S.SNopBytes);
+      View1->growWithTrampolines(
+          Growth1, S.SNopBytes, ExecutablePoolTargetState::Neutral);
   ASSERT_NE(Grown, nullptr);
   ASSERT_TRUE(
       rewriteKernelEntryDescriptorOffsets(*Grown, *PoolVAddr, S.Cpu, Fixups1));
@@ -2923,15 +3792,74 @@ TEST(KernelEntryTrampoline, AppendReturnsZeroWhenNoDescriptorsExist) {
   EXPECT_TRUE(Fixups.empty());
 }
 
-TEST(KernelEntryTrampoline, AppendFailsWithoutSgprScratchPair) {
+TEST(KernelEntryTrampoline, UsesVccForValidTopMetadataCounts) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
   llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
   ASSERT_EQ(Text.size(), MinInstSize);
 
+  for (unsigned SgprCount : {105u, 106u, 107u, 108u}) {
+    SCOPED_TRACE(SgprCount);
+    comgr_test::KernelDescriptorElfOptions Opts;
+    Opts.MetadataSgprCount = SgprCount;
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(Text, Opts);
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+    std::vector<Trampoline> Growth;
+    std::vector<KernelEntryTrampolineFixup> Fixups;
+    std::optional<uint32_t> Count = appendKernelEntryTrampolines(
+        *ViewOrErr, S, /*MaxSgprs=*/Gfx1250MaxNumberedSgprs, Growth, Fixups);
+
+    ASSERT_TRUE(Count.has_value());
+    EXPECT_EQ(*Count, 1u);
+    ASSERT_EQ(Fixups.size(), 1u);
+    EXPECT_EQ(Fixups[0].RequiredSgprs, Gfx1250MaxTotalSgprs);
+    EXPECT_FALSE(Fixups[0].SkipSgprReservation);
+    llvm::SmallVector<uint8_t> Stub = getAppendedEntryStub(Growth, Fixups[0]);
+    ASSERT_EQ(Stub.size(), KernelEntryStubStride);
+    expectEntryStubUsesVcc(Stub, S);
+  }
+}
+
+TEST(KernelEntryTrampoline, TopNumberedPairConservativelyReservesPossibleVcc) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+
   comgr_test::KernelDescriptorElfOptions Opts;
-  Opts.MetadataSgprCount = 105;
+  Opts.MetadataSgprCount = 104;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count = appendKernelEntryTrampolines(
+      *ViewOrErr, S, /*MaxSgprs=*/Gfx1250MaxNumberedSgprs, Growth, Fixups);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 1u);
+  ASSERT_EQ(Fixups.size(), 1u);
+  EXPECT_EQ(Fixups[0].RequiredSgprs, Gfx1250MaxTotalSgprs);
+  llvm::SmallVector<uint8_t> Stub = getAppendedEntryStub(Growth, Fixups[0]);
+  ASSERT_EQ(Stub.size(), KernelEntryStubStride);
+  expectEntryStubUsesTopNumberedPair(Stub, S);
+}
+
+TEST(KernelEntryTrampoline, RejectsMalformedTotalSgprCountTransactionally) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = Gfx1250MaxTotalSgprs + 1;
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(Text, Opts);
   llvm::Expected<ElfView> ViewOrErr =
@@ -2943,10 +3871,10 @@ TEST(KernelEntryTrampoline, AppendFailsWithoutSgprScratchPair) {
   std::vector<Trampoline> Growth;
   Growth.push_back(Existing);
   std::vector<KernelEntryTrampolineFixup> Fixups;
-  std::optional<uint32_t> Count = appendKernelEntryTrampolines(
-      *ViewOrErr, S, /*MaxSgprs=*/106, Growth, Fixups);
-
-  EXPECT_FALSE(Count.has_value());
+  EXPECT_FALSE(appendKernelEntryTrampolines(
+                   *ViewOrErr, S,
+                   /*MaxSgprs=*/Gfx1250MaxNumberedSgprs, Growth, Fixups)
+                   .has_value());
   ASSERT_EQ(Growth.size(), 1u);
   EXPECT_EQ(llvm::ArrayRef<uint8_t>(Growth[0].Bytes),
             llvm::ArrayRef<uint8_t>(Existing.Bytes));
@@ -3069,6 +3997,16 @@ TEST(ClassifyWmmaNops, CoversKnownMnemonics) {
     EXPECT_EQ(Req.A0Nops, C.A0Nops) << C.Mnemonic.str();
     EXPECT_EQ(Req.B0Nops, C.B0Nops) << C.Mnemonic.str();
   }
+}
+
+TEST(WmmaHazardDeficit, KeepsStrongestRequirementPerCandidate) {
+  llvm::DenseMap<size_t, int> MaxDeficits;
+  EXPECT_EQ(updateWmmaHazardDeficit(MaxDeficits, 7, 3), 3);
+  EXPECT_EQ(updateWmmaHazardDeficit(MaxDeficits, 7, 8), 8);
+  EXPECT_EQ(updateWmmaHazardDeficit(MaxDeficits, 7, 2), 8);
+  EXPECT_EQ(updateWmmaHazardDeficit(MaxDeficits, 11, 4), 4);
+  EXPECT_EQ(MaxDeficits.lookup(7), 8);
+  EXPECT_EQ(MaxDeficits.lookup(11), 4);
 }
 
 // -- patchScaleSrc2 -----------------------------------------------------------
@@ -3351,6 +4289,548 @@ TEST(AddTid, StoreTrampolineThroughBuildTrampoline) {
                                       "s_branch"};
   expectDecodedMnemonics(Decoded, Expected);
   expectDecodedBodyMatchesAsm(Decoded, AsmLines, S);
+}
+
+// -- tensor external control-flow provenance --------------------------------
+
+static InternalDecodedInst decodeTensorTestInstruction(
+    llvm::ArrayRef<uint8_t> Bytes, uint64_t Offset, const LLVMState &S) {
+  std::vector<InternalDecodedInst> Decoded;
+  EXPECT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  EXPECT_EQ(Decoded.size(), 1u);
+  if (Decoded.empty())
+    return {};
+  Decoded.front().Offset = Offset;
+  return std::move(Decoded.front());
+}
+
+static InternalDecodedInst decodeTensorTestInstruction(
+    llvm::StringRef Assembly, uint64_t Offset, const LLVMState &S) {
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Assembly, S);
+  EXPECT_FALSE(Bytes.empty()) << Assembly.str();
+  return decodeTensorTestInstruction(Bytes, Offset, S);
+}
+
+static std::vector<InternalDecodedInst>
+decodeTensorTestBlock(llvm::ArrayRef<uint8_t> Bytes, uint64_t Offset,
+                      const LLVMState &S) {
+  std::vector<InternalDecodedInst> Decoded;
+  EXPECT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  for (InternalDecodedInst &DI : Decoded)
+    DI.Offset += Offset;
+  return Decoded;
+}
+
+static std::vector<InternalDecodedInst>
+buildTensorProvenanceBody(const LLVMState &S,
+                          std::optional<uint64_t> ExternalTarget =
+                              std::nullopt,
+                          bool SplitRelay = false) {
+  std::vector<InternalDecodedInst> Result;
+  uint64_t Offset = 0;
+  auto Add = [&](llvm::StringRef Assembly) {
+    InternalDecodedInst DI =
+        decodeTensorTestInstruction(Assembly, Offset, S);
+    Offset += DI.Size;
+    Result.push_back(std::move(DI));
+  };
+  Add("v_mov_b32 v0, 0");
+  Add("v_readfirstlane_b32 s4, v0");
+  if (SplitRelay)
+    Add("s_get_pc_i64 s[0:1]");
+  if (ExternalTarget) {
+    llvm::SmallVector<uint8_t> Branch = S.encodeSBranch(Offset, *ExternalTarget);
+    InternalDecodedInst DI =
+        decodeTensorTestInstruction(Branch, Offset, S);
+    Offset += DI.Size;
+    Result.push_back(std::move(DI));
+  }
+  Add("tensor_load_to_lds s[24:27], s[4:11]");
+  Add("s_endpgm");
+  return Result;
+}
+
+static TensorDescriptorMustAnalysis runTensorProvenanceAnalysis(
+    llvm::ArrayRef<InternalDecodedInst> Body,
+    llvm::ArrayRef<InternalDecodedInst> External,
+    llvm::ArrayRef<TensorDispatchStub> DispatchStubs,
+    llvm::ArrayRef<uint64_t> DirectTargetOffsets,
+    llvm::ArrayRef<uint64_t> ForeignExternalEntries, const LLVMState &S,
+    llvm::ArrayRef<uint64_t> VirtualExternalEntries = {},
+    llvm::ArrayRef<std::pair<uint64_t, uint64_t>> OriginalControlFlowEdges = {},
+    llvm::ArrayRef<uint64_t> OriginalCodeEntries = {},
+    std::optional<uint64_t> RangeEnd = std::nullopt) {
+  std::vector<InternalDecodedInst> All(Body.begin(), Body.end());
+  All.insert(All.end(), External.begin(), External.end());
+  llvm::sort(All, [](const InternalDecodedInst &L,
+                     const InternalDecodedInst &R) {
+    return L.Offset < R.Offset;
+  });
+  const InternalDecodedInst &Last = Body.back();
+  TensorAnalysisRange Range{0, RangeEnd.value_or(Last.Offset + Last.Size)};
+  Range.ForeignExternalEntries.assign(ForeignExternalEntries.begin(),
+                                      ForeignExternalEntries.end());
+  Range.VirtualExternalEntries.assign(VirtualExternalEntries.begin(),
+                                      VirtualExternalEntries.end());
+  Range.OriginalControlFlowEdges.assign(OriginalControlFlowEdges.begin(),
+                                        OriginalControlFlowEdges.end());
+  Range.OriginalCodeEntries.assign(OriginalCodeEntries.begin(),
+                                   OriginalCodeEntries.end());
+  Range.DispatchStubs.assign(DispatchStubs.begin(), DispatchStubs.end());
+  llvm::DenseSet<uint64_t> DirectTargets;
+  for (uint64_t Target : DirectTargetOffsets)
+    DirectTargets.insert(Target);
+  return computeTensorDescriptorMustAnalysis(
+      Body, All, llvm::ArrayRef<TensorAnalysisRange>(Range), S, DirectTargets,
+      /*MaxSgprs=*/106, /*MaxVgprs=*/1024);
+}
+
+static size_t tensorInstructionIndex(
+    llvm::ArrayRef<InternalDecodedInst> Body) {
+  auto It = llvm::find_if(Body, [](const InternalDecodedInst &DI) {
+    return DI.Mnemonic == "tensor_load_to_lds";
+  });
+  EXPECT_NE(It, Body.end());
+  return It == Body.end() ? 0 : It - Body.begin();
+}
+
+class TensorExternalProvenance : public ::testing::Test {
+protected:
+  void SetUp() override { ASSERT_TRUE(S.Valid); }
+
+  void expectExternalInstructionRejected(llvm::StringRef Assembly) {
+    SCOPED_TRACE(Assembly.str());
+    std::vector<InternalDecodedInst> Body = buildTensorProvenanceBody(S);
+    std::vector<InternalDecodedInst> External{
+        decodeTensorTestInstruction(Assembly, 0x1000, S)};
+    TensorDescriptorMustAnalysis Analysis =
+        runTensorProvenanceAnalysis(Body, External, {}, {}, {}, S);
+    EXPECT_FALSE(Analysis.Low16KnownZero.test(tensorInstructionIndex(Body)));
+  }
+
+  LLVMState S = initLLVM(makeGfx1250Ident());
+};
+
+TEST_F(TensorExternalProvenance, ExactDispatchStubIsOnlyEntryException) {
+  std::vector<InternalDecodedInst> Body = buildTensorProvenanceBody(S);
+  TensorDescriptorMustAnalysis Basic =
+      runTensorProvenanceAnalysis(Body, {}, {}, {}, {}, S);
+  ASSERT_TRUE(Basic.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  constexpr uint64_t StubBegin = 0x1000;
+  llvm::SmallVector<uint8_t> StubBytes =
+      buildKernelEntryTrampoline(StubBegin, 0, /*ScratchSgpr=*/32, S);
+  ASSERT_EQ(StubBytes.size(), KernelEntryStubStride);
+  std::optional<KernelEntryTrampolineInfo> Info =
+      getKernelEntryTrampolineInfo(StubBytes, StubBegin, S);
+  ASSERT_TRUE(Info);
+  std::vector<InternalDecodedInst> Stub;
+  ASSERT_TRUE(decodeTextSection(StubBytes.data(), StubBytes.size(), S, Stub));
+  for (InternalDecodedInst &DI : Stub)
+    DI.Offset += StubBegin;
+  TensorDispatchStub Dispatch{StubBegin, StubBegin + KernelEntryStubStride,
+                              Info->TerminalVAddr, 0};
+
+  TensorDescriptorMustAnalysis Analysis = runTensorProvenanceAnalysis(
+      Body, Stub, llvm::ArrayRef<TensorDispatchStub>(Dispatch), {}, {}, S);
+  EXPECT_TRUE(Analysis.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  constexpr uint64_t ForeignSource = 0x1200;
+  const uint64_t StubInterior = Stub[2].Offset;
+  TensorDescriptorMustAnalysis InteriorRoot = runTensorProvenanceAnalysis(
+      Body, Stub, llvm::ArrayRef<TensorDispatchStub>(Dispatch), {}, {}, S,
+      {StubInterior});
+  EXPECT_FALSE(
+      InteriorRoot.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  std::vector<InternalDecodedInst> BeginIngress = Stub;
+  BeginIngress.push_back(decodeTensorTestInstruction(
+      S.encodeSBranch(ForeignSource, StubBegin), ForeignSource, S));
+  TensorDescriptorMustAnalysis ForeignBegin = runTensorProvenanceAnalysis(
+      Body, BeginIngress, llvm::ArrayRef<TensorDispatchStub>(Dispatch),
+      {StubBegin}, {}, S);
+  EXPECT_FALSE(
+      ForeignBegin.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  Stub.push_back(decodeTensorTestInstruction(
+      S.encodeSBranch(ForeignSource, StubInterior), ForeignSource, S));
+  TensorDescriptorMustAnalysis ForeignIngress = runTensorProvenanceAnalysis(
+      Body, Stub, llvm::ArrayRef<TensorDispatchStub>(Dispatch), {StubInterior},
+      {}, S);
+  EXPECT_FALSE(
+      ForeignIngress.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  StubBytes.back() ^= 1;
+  EXPECT_FALSE(getKernelEntryTrampolineInfo(StubBytes, StubBegin, S));
+}
+
+TEST_F(TensorExternalProvenance, NonDispatchCarryReturnToEntryRejected) {
+  std::vector<InternalDecodedInst> Body = buildTensorProvenanceBody(S);
+  constexpr uint64_t ExternalBegin = 0x1000;
+  llvm::SmallVector<uint8_t> Bytes =
+      buildKernelEntryTrampoline(ExternalBegin, 0, /*ScratchSgpr=*/32, S);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  std::vector<InternalDecodedInst> External;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, External));
+  for (InternalDecodedInst &DI : External)
+    DI.Offset += ExternalBegin;
+
+  TensorDescriptorMustAnalysis Analysis =
+      runTensorProvenanceAnalysis(Body, External, {}, {}, {}, S);
+  EXPECT_FALSE(Analysis.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, UnresolvedExternalIndirectRejected) {
+  expectExternalInstructionRejected("s_set_pc_i64 s[0:1]");
+}
+
+TEST_F(TensorExternalProvenance, ForeignAppendedPredecessorRejected) {
+  constexpr uint64_t PathBegin = 0x100;
+  constexpr uint64_t ForeignBegin = 0x200;
+  std::vector<InternalDecodedInst> Body =
+      buildTensorProvenanceBody(S, PathBegin);
+  const uint64_t Resume = Body[tensorInstructionIndex(Body)].Offset;
+  std::vector<InternalDecodedInst> Path{
+      decodeTensorTestInstruction(S.encodeSBranch(PathBegin, Resume),
+                                  PathBegin, S)};
+  TensorDescriptorMustAnalysis Positive = runTensorProvenanceAnalysis(
+      Body, Path, {}, {PathBegin, Resume}, {}, S);
+  EXPECT_TRUE(Positive.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  Path.push_back(decodeTensorTestInstruction(
+      S.encodeSBranch(ForeignBegin, PathBegin), ForeignBegin, S));
+  TensorDescriptorMustAnalysis Negative = runTensorProvenanceAnalysis(
+      Body, Path, {}, {PathBegin, Resume}, {}, S);
+  EXPECT_FALSE(Negative.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, VirtualKernelRootIntoModeledPathRejected) {
+  constexpr uint64_t PathBegin = 0x100;
+  std::vector<InternalDecodedInst> Body =
+      buildTensorProvenanceBody(S, PathBegin);
+  const uint64_t Resume = Body[tensorInstructionIndex(Body)].Offset;
+  std::vector<InternalDecodedInst> Path{
+      decodeTensorTestInstruction(S.encodeSBranch(PathBegin, Resume),
+                                  PathBegin, S)};
+  TensorDescriptorMustAnalysis Analysis = runTensorProvenanceAnalysis(
+      Body, Path, {}, {PathBegin, Resume}, {}, S, {PathBegin});
+  EXPECT_FALSE(Analysis.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, ForeignRelayTailEntryRejected) {
+  constexpr uint64_t RelayBegin = 0x100;
+  constexpr uint64_t PathBegin = 0x120;
+  std::vector<InternalDecodedInst> Body =
+      buildTensorProvenanceBody(S, RelayBegin, /*SplitRelay=*/true);
+  const size_t GetPcIndex = 2;
+  const uint64_t GetPcOffset = Body[GetPcIndex].Offset;
+  const uint64_t Resume = Body[tensorInstructionIndex(Body)].Offset;
+
+  llvm::SmallVector<uint8_t> LongBranch = encodeSetPCLongBranch(
+      S, GetPcOffset, PathBegin, /*SgprBase=*/0);
+  std::vector<InternalDecodedInst> LongDecoded;
+  ASSERT_TRUE(decodeTextSection(LongBranch.data(), LongBranch.size(), S,
+                                LongDecoded));
+  ASSERT_EQ(LongDecoded.size(), 3u);
+  std::vector<InternalDecodedInst> External;
+  LongDecoded[1].Offset = RelayBegin;
+  LongDecoded[2].Offset = RelayBegin + LongDecoded[1].Size;
+  External.push_back(LongDecoded[1]);
+  External.push_back(LongDecoded[2]);
+  External.push_back(decodeTensorTestInstruction(
+      S.encodeSBranch(PathBegin, Resume), PathBegin, S));
+
+  TensorDescriptorMustAnalysis Positive = runTensorProvenanceAnalysis(
+      Body, External, {}, {RelayBegin, Resume}, {}, S);
+  EXPECT_TRUE(Positive.Low16KnownZero.test(tensorInstructionIndex(Body)));
+  TensorDescriptorMustAnalysis Negative = runTensorProvenanceAnalysis(
+      Body, External, {}, {RelayBegin, Resume}, {RelayBegin}, S);
+  EXPECT_FALSE(Negative.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  const uint64_t RelayBranch = Body[GetPcIndex + 1].Offset;
+  const std::pair<uint64_t, uint64_t> ExactRelayEdge{RelayBranch, RelayBegin};
+  TensorDescriptorMustAnalysis ExactRelay = runTensorProvenanceAnalysis(
+      Body, External, {}, {RelayBegin, Resume}, {}, S, {}, {ExactRelayEdge});
+  EXPECT_TRUE(ExactRelay.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  const std::pair<uint64_t, uint64_t> WrongRelayEdge{Body.front().Offset,
+                                                     RelayBegin};
+  TensorDescriptorMustAnalysis WrongRelay = runTensorProvenanceAnalysis(
+      Body, External, {}, {RelayBegin, Resume}, {}, S, {}, {WrongRelayEdge});
+  EXPECT_FALSE(WrongRelay.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  TensorDescriptorMustAnalysis RelayBranchRoot = runTensorProvenanceAnalysis(
+      Body, External, {}, {RelayBegin, Resume}, {}, S, {}, {}, {RelayBranch});
+  EXPECT_FALSE(
+      RelayBranchRoot.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  TensorDescriptorMustAnalysis RelayTailRoot = runTensorProvenanceAnalysis(
+      Body, External, {}, {RelayBegin, Resume}, {}, S, {RelayBegin});
+  EXPECT_FALSE(
+      RelayTailRoot.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, SplitRelayDirectReentryKeepsTensorPredecessor) {
+  constexpr uint64_t RelayBegin = 0x100;
+  std::vector<InternalDecodedInst> Body;
+  uint64_t Offset = 0;
+  auto Add = [&](llvm::StringRef Assembly) {
+    const size_t Index = Body.size();
+    InternalDecodedInst DI = decodeTensorTestInstruction(Assembly, Offset, S);
+    Offset += DI.Size;
+    Body.push_back(std::move(DI));
+    return Index;
+  };
+
+  const size_t ConditionalIndex = Add("s_cbranch_scc1 0");
+  Add("v_mov_b32 v0, 0");
+  Add("v_readfirstlane_b32 s4, v0");
+  const size_t NormalBranchIndex = Add("s_branch 0");
+  const uint64_t RelayGetPc = Offset;
+  Add("s_get_pc_i64 s[0:1]");
+  const size_t RelayBranchIndex = Add("s_branch 0");
+  const uint64_t TensorOffset = Offset;
+  Add("tensor_load_to_lds s[24:27], s[4:11]");
+  const size_t PostTensorBranchIndex = Add("s_branch 0");
+  Add("s_nop 0");
+  const uint64_t JoinOffset = Offset;
+  Add("s_endpgm");
+
+  const InternalDecodedInst &Conditional = Body[ConditionalIndex];
+  ASSERT_EQ((RelayGetPc - Conditional.Offset - Conditional.Size) %
+                MinInstSize,
+            0u);
+  const uint64_t ConditionalDelta =
+      (RelayGetPc - Conditional.Offset - Conditional.Size) / MinInstSize;
+  Body[ConditionalIndex] = decodeTensorTestInstruction(
+      "s_cbranch_scc1 " + std::to_string(ConditionalDelta),
+      Conditional.Offset, S);
+  Body[NormalBranchIndex] = decodeTensorTestInstruction(
+      S.encodeSBranch(Body[NormalBranchIndex].Offset, TensorOffset),
+      Body[NormalBranchIndex].Offset, S);
+  Body[RelayBranchIndex] = decodeTensorTestInstruction(
+      S.encodeSBranch(Body[RelayBranchIndex].Offset, RelayBegin),
+      Body[RelayBranchIndex].Offset, S);
+  Body[PostTensorBranchIndex] = decodeTensorTestInstruction(
+      S.encodeSBranch(Body[PostTensorBranchIndex].Offset, JoinOffset),
+      Body[PostTensorBranchIndex].Offset, S);
+
+  llvm::SmallVector<uint8_t> LongBranch = encodeSetPCLongBranch(
+      S, RelayGetPc, TensorOffset, /*SgprBase=*/0);
+  std::vector<InternalDecodedInst> LongDecoded =
+      decodeTensorTestBlock(LongBranch, 0, S);
+  ASSERT_EQ(LongDecoded.size(), 3u);
+  LongDecoded[1].Offset = RelayBegin;
+  LongDecoded[2].Offset = RelayBegin + LongDecoded[1].Size;
+  std::vector<InternalDecodedInst> External{LongDecoded[1], LongDecoded[2]};
+
+  const std::pair<uint64_t, uint64_t> RelayEdge{
+      Body[RelayBranchIndex].Offset, RelayBegin};
+  TensorDescriptorMustAnalysis Analysis = runTensorProvenanceAnalysis(
+      Body, External, {}, {RelayGetPc, RelayBegin, TensorOffset, JoinOffset},
+      {}, S, {}, {RelayEdge}, {0});
+  EXPECT_FALSE(Analysis.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, CallableOriginalHelperPathRejected) {
+  constexpr uint64_t HelperBegin = 0x80;
+  constexpr uint64_t ExternalBegin = 0x100;
+  std::vector<InternalDecodedInst> Body;
+  uint64_t Offset = 0;
+  auto Add = [&](llvm::StringRef Assembly) {
+    const size_t Index = Body.size();
+    InternalDecodedInst DI = decodeTensorTestInstruction(Assembly, Offset, S);
+    Offset += DI.Size;
+    Body.push_back(std::move(DI));
+    return Index;
+  };
+
+  Add("v_mov_b32 v0, 0");
+  Add("v_readfirstlane_b32 s4, v0");
+  const size_t ConditionalIndex = Add("s_cbranch_scc1 0");
+  const size_t HelperBranchIndex = Add("s_branch 0");
+  const uint64_t TensorOffset = Offset;
+  Add("tensor_load_to_lds s[24:27], s[4:11]");
+  Add("s_endpgm");
+  const uint64_t CandidateEnd = Offset;
+
+  const uint64_t ConditionalOffset = Body[ConditionalIndex].Offset;
+  const uint64_t ConditionalSize = Body[ConditionalIndex].Size;
+  ASSERT_GT(TensorOffset, ConditionalOffset + ConditionalSize);
+  ASSERT_EQ((TensorOffset - ConditionalOffset - ConditionalSize) % MinInstSize,
+            0u);
+  const uint64_t ConditionalDelta =
+      (TensorOffset - ConditionalOffset - ConditionalSize) / MinInstSize;
+  Body[ConditionalIndex] = decodeTensorTestInstruction(
+      "s_cbranch_scc1 " + std::to_string(ConditionalDelta),
+      ConditionalOffset, S);
+  Body[HelperBranchIndex] = decodeTensorTestInstruction(
+      S.encodeSBranch(Body[HelperBranchIndex].Offset, HelperBegin),
+      Body[HelperBranchIndex].Offset, S);
+  Body.push_back(decodeTensorTestInstruction(
+      S.encodeSBranch(HelperBegin, ExternalBegin), HelperBegin, S));
+
+  llvm::SmallVector<uint8_t> ExternalBytes = encodeSetPCLongBranch(
+      S, ExternalBegin, TensorOffset, /*SgprBase=*/0);
+  std::vector<InternalDecodedInst> External =
+      decodeTensorTestBlock(ExternalBytes, ExternalBegin, S);
+  ASSERT_EQ(External.size(), 3u);
+
+  const std::pair<uint64_t, uint64_t> HelperEdge{HelperBegin, ExternalBegin};
+  TensorDescriptorMustAnalysis Analysis = runTensorProvenanceAnalysis(
+      Body, External, {}, {HelperBegin, ExternalBegin, TensorOffset}, {}, S,
+      {}, {HelperEdge}, {0, HelperBegin}, CandidateEnd);
+  EXPECT_FALSE(Analysis.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, ComputedPcInteriorIngressRejected) {
+  constexpr uint64_t SequenceBegin = 0x100;
+  std::vector<InternalDecodedInst> Body =
+      buildTensorProvenanceBody(S, SequenceBegin);
+  const uint64_t Resume = Body[tensorInstructionIndex(Body)].Offset;
+  llvm::SmallVector<uint8_t> SequenceBytes =
+      encodeSetPCLongBranch(S, SequenceBegin, Resume, /*SgprBase=*/0);
+  ASSERT_FALSE(SequenceBytes.empty());
+  std::vector<InternalDecodedInst> External =
+      decodeTensorTestBlock(SequenceBytes, SequenceBegin, S);
+  ASSERT_EQ(External.size(), 3u);
+
+  TensorDescriptorMustAnalysis Positive = runTensorProvenanceAnalysis(
+      Body, External, {}, {SequenceBegin, Resume}, {}, S);
+  EXPECT_TRUE(Positive.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  constexpr uint64_t ForeignSource = 0x200;
+  const uint64_t AddInterior = External[1].Offset;
+  External.push_back(decodeTensorTestInstruction(
+      S.encodeSBranch(ForeignSource, AddInterior), ForeignSource, S));
+  TensorDescriptorMustAnalysis ForeignEdge = runTensorProvenanceAnalysis(
+      Body, External, {}, {SequenceBegin, Resume}, {}, S);
+  EXPECT_FALSE(
+      ForeignEdge.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  External.pop_back();
+  TensorDescriptorMustAnalysis VirtualRoot = runTensorProvenanceAnalysis(
+      Body, External, {}, {SequenceBegin, Resume}, {}, S, {AddInterior});
+  EXPECT_FALSE(
+      VirtualRoot.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, OriginalCodeRootMustEnterComputedPcPrefix) {
+  llvm::SmallVector<uint8_t> Probe =
+      encodeSetPCLongBranch(S, 0, 0, /*SgprBase=*/0);
+  ASSERT_FALSE(Probe.empty());
+  const uint64_t Resume = Probe.size();
+  llvm::SmallVector<uint8_t> SequenceBytes =
+      encodeSetPCLongBranch(S, 0, Resume, /*SgprBase=*/0);
+  ASSERT_EQ(SequenceBytes.size(), Resume);
+  std::vector<InternalDecodedInst> Body =
+      decodeTensorTestBlock(SequenceBytes, 0, S);
+  ASSERT_EQ(Body.size(), 3u);
+  uint64_t Offset = Resume;
+  auto Add = [&](llvm::StringRef Assembly) {
+    InternalDecodedInst DI = decodeTensorTestInstruction(Assembly, Offset, S);
+    Offset += DI.Size;
+    Body.push_back(std::move(DI));
+  };
+  Add("v_mov_b32 v0, 0");
+  Add("v_readfirstlane_b32 s4, v0");
+  Add("tensor_load_to_lds s[24:27], s[4:11]");
+  Add("s_endpgm");
+
+  TensorDescriptorMustAnalysis PrefixRoot = runTensorProvenanceAnalysis(
+      Body, {}, {}, {Resume}, {}, S, {}, {}, {0});
+  EXPECT_TRUE(PrefixRoot.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  const uint64_t AddInterior = Body[1].Offset;
+  TensorDescriptorMustAnalysis InteriorRoot = runTensorProvenanceAnalysis(
+      Body, {}, {}, {Resume}, {}, S, {}, {}, {AddInterior});
+  EXPECT_FALSE(
+      InteriorRoot.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, ExternalTargetMustBeDecodedBoundary) {
+  std::vector<InternalDecodedInst> Body = buildTensorProvenanceBody(S);
+  constexpr uint64_t Source = 0x100;
+  constexpr uint64_t MissingTarget = 0x200;
+  std::vector<InternalDecodedInst> External{decodeTensorTestInstruction(
+      S.encodeSBranch(Source, MissingTarget), Source, S)};
+  TensorDescriptorMustAnalysis Missing =
+      runTensorProvenanceAnalysis(Body, External, {}, {}, {}, S);
+  EXPECT_FALSE(Missing.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  InternalDecodedInst Literal = decodeTensorTestInstruction(
+      "s_mov_b32 s0, 0x12345678", MissingTarget, S);
+  ASSERT_GT(Literal.Size, MinInstSize);
+  External.push_back(Literal);
+  External.push_back(decodeTensorTestInstruction(
+      "s_endpgm", MissingTarget + Literal.Size, S));
+  External.front() = decodeTensorTestInstruction(
+      S.encodeSBranch(Source, MissingTarget + MinInstSize), Source, S);
+  TensorDescriptorMustAnalysis Interior =
+      runTensorProvenanceAnalysis(Body, External, {}, {}, {}, S);
+  EXPECT_FALSE(Interior.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, OutOfRangeFallthroughRejected) {
+  std::vector<InternalDecodedInst> Body = buildTensorProvenanceBody(S);
+  const uint64_t LastOffset = Body.back().Offset;
+  Body.back() = decodeTensorTestInstruction("s_nop 0", LastOffset, S);
+  TensorDescriptorMustAnalysis Analysis =
+      runTensorProvenanceAnalysis(Body, {}, {}, {}, {}, S);
+  EXPECT_FALSE(Analysis.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, ExternalBoundaryFallthroughRejected) {
+  expectExternalInstructionRejected("s_nop 0");
+}
+
+TEST_F(TensorExternalProvenance, ExternalTrapRejected) {
+  expectExternalInstructionRejected("s_trap 0");
+}
+
+TEST_F(TensorExternalProvenance, ExternalRfeRejected) {
+  expectExternalInstructionRejected("s_rfe_i64 s[0:1]");
+}
+
+TEST_F(TensorExternalProvenance, CandidateRfeRejected) {
+  std::vector<InternalDecodedInst> Body = buildTensorProvenanceBody(S);
+  Body.back() =
+      decodeTensorTestInstruction("s_rfe_i64 s[0:1]", Body.back().Offset, S);
+  TensorDescriptorMustAnalysis Analysis =
+      runTensorProvenanceAnalysis(Body, {}, {}, {}, {}, S);
+  EXPECT_FALSE(Analysis.Low16KnownZero.test(tensorInstructionIndex(Body)));
+}
+
+TEST_F(TensorExternalProvenance, ForeignIngressIntoAnyDispatchStubRejected) {
+  std::vector<InternalDecodedInst> Body = buildTensorProvenanceBody(S);
+  constexpr uint64_t StubBegin = 0x1000;
+  constexpr uint64_t UnrelatedTarget = 0x300;
+  llvm::SmallVector<uint8_t> StubBytes = buildKernelEntryTrampoline(
+      StubBegin, UnrelatedTarget, /*ScratchSgpr=*/32, S);
+  ASSERT_EQ(StubBytes.size(), KernelEntryStubStride);
+  std::optional<KernelEntryTrampolineInfo> Info =
+      getKernelEntryTrampolineInfo(StubBytes, StubBegin, S);
+  ASSERT_TRUE(Info);
+  std::vector<InternalDecodedInst> Stub;
+  ASSERT_TRUE(decodeTextSection(StubBytes.data(), StubBytes.size(), S, Stub));
+  for (InternalDecodedInst &DI : Stub)
+    DI.Offset += StubBegin;
+  Stub.push_back(
+      decodeTensorTestInstruction("s_endpgm", UnrelatedTarget, S));
+  TensorDispatchStub Dispatch{StubBegin, StubBegin + KernelEntryStubStride,
+                              Info->TerminalVAddr, UnrelatedTarget};
+  TensorDescriptorMustAnalysis Positive = runTensorProvenanceAnalysis(
+      Body, Stub, llvm::ArrayRef<TensorDispatchStub>(Dispatch), {}, {}, S);
+  EXPECT_TRUE(Positive.Low16KnownZero.test(tensorInstructionIndex(Body)));
+
+  constexpr uint64_t ForeignSource = 0x1200;
+  const uint64_t StubInterior = Stub[2].Offset;
+  Stub.push_back(decodeTensorTestInstruction(
+      S.encodeSBranch(ForeignSource, StubInterior), ForeignSource, S));
+  TensorDescriptorMustAnalysis Negative = runTensorProvenanceAnalysis(
+      Body, Stub, llvm::ArrayRef<TensorDispatchStub>(Dispatch), {StubInterior},
+      {}, S);
+  EXPECT_FALSE(Negative.Low16KnownZero.test(tensorInstructionIndex(Body)));
 }
 
 // -- decodeTextSection instruction-decode cache -------------------------------

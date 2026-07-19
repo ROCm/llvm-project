@@ -42,11 +42,31 @@
 // NO-SYMS-NOT: .stub
 
 // COM: The per-kernel scratch pair s[8:9] sits above the kernel's 8 live SGPRs,
-// COM: so the descriptor SGPR reservation is bumped to cover it (8 -> 10),
-// COM: exactly like the MC path.
+// COM: so the metadata total is conservatively bumped to cover both the pair
+// COM: and a possible existing VCC reservation (8 -> 12), like the MC path.
 // RUN: %llvm-readelf --notes %t.fast.elf | %FileCheck --check-prefix=SGPR %s
 // SGPR: .name:           plain_kernel
-// SGPR: .sgpr_count:     10
+// SGPR: .sgpr_count:     12
+
+// COM: The fast byte template uses the same logical base 106 for VCC when the
+// COM: metadata total leaves no numbered pair, and bumps the total to 108.
+// RUN: sed 's/.sgpr_count: 8/.sgpr_count: 105/' %s > %t.vcc.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.vcc.s -o %t.vcc.elf
+// RUN: hotswap-rewrite %t.vcc.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
+// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
+// RUN:   --entry-trampolines --output %t.vcc.out.elf \
+// RUN:   | %FileCheck --check-prefix=API %s
+// RUN: %llvm-objdump -d %t.vcc.out.elf | %FileCheck --check-prefix=VCC %s
+// RUN: %llvm-readelf --notes %t.vcc.out.elf \
+// RUN:   | %FileCheck --check-prefix=VCC-METADATA %s
+// VCC: s_get_pc_i64 vcc
+// VCC-NEXT: s_add_co_u32 vcc_lo
+// VCC-NEXT: s_add_co_ci_u32 vcc_hi
+// VCC-NEXT: s_set_pc_i64 vcc
+// VCC-METADATA: .name:           plain_kernel
+// VCC-METADATA: .sgpr_count:     108
 
 // COM: Byte-compare idempotency: a second pass recognizes the installed stub
 // COM: (and the in-place workaround) and is a no-op.

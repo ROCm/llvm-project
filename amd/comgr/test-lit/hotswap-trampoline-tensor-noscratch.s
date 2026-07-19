@@ -1,15 +1,27 @@
-// COM: Live tensor_load_to_lds descriptor SGPRs require save/restore around
-// COM: the A0 D# Group 1 mask clear. If the kernel consumes all addressable
-// COM: SGPRs, hotswap must fail instead of returning unsafe code.
+// COM: Replacing the canonical delay in place needs no scratch register. A
+// COM: kernel declaring all user-addressable SGPRs must therefore rewrite
+// COM: successfully without changing SGPR metadata.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
+// RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --expect-status ERROR 2>&1 \
-// RUN:   | %FileCheck --check-prefixes=LOG,API %s
-// LOG: hotswap: error: tensor_load_to_lds descriptor save: no aligned block of 1 safe SGPRs fits below s106
-// API: RESULT: ERROR
+// RUN:   --output %t.out.elf \
+// RUN:   | %FileCheck --check-prefix=API %s
+// API: RESULT: SUCCESS
+
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=METADATA %s
+
+// DISASM-LABEL: <test_tensor_no_scratch>:
+// DISASM-NOT: s_branch
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
+// DISASM-NEXT: s_mov_b32 s0, s4
+// DISASM-NEXT: s_endpgm
+
+// METADATA: .name:           test_tensor_no_scratch
+// METADATA: .sgpr_count:     106
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
@@ -17,6 +29,7 @@
 .p2align 8
 .type test_tensor_no_scratch,@function
 test_tensor_no_scratch:
+  s_delay_alu instid0(SALU_CYCLE_1)
   tensor_load_to_lds s[0:3], s[4:11]
   s_mov_b32 s0, s4
   s_endpgm

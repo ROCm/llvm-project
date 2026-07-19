@@ -51,18 +51,23 @@ SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
                                                 uint64_t EntryVAddr,
                                                 unsigned ScratchSgpr,
                                                 const LLVMState &LS) {
-  if (ScratchSgpr == std::numeric_limits<unsigned>::max()) {
-    log() << "hotswap: error: kernel-entry stub scratch SGPR pair overflows "
-          << "unsigned.\n";
+  if ((ScratchSgpr & 1u) != 0 || ScratchSgpr > Gfx1250MaxNumberedSgprs) {
+    log() << "hotswap: error: kernel-entry stub requires an aligned scratch "
+             "SGPR pair at or below logical base "
+          << Gfx1250MaxNumberedSgprs << ", got " << ScratchSgpr << ".\n";
     return {};
   }
 
   SmallVector<uint8_t> Bytes;
-  std::string ScratchPair =
-      (Twine("s[") + Twine(ScratchSgpr) + ":" + Twine(ScratchSgpr + 1) + "]")
-          .str();
-  std::string ScratchLo = (Twine("s") + Twine(ScratchSgpr)).str();
-  std::string ScratchHi = (Twine("s") + Twine(ScratchSgpr + 1)).str();
+  const bool UsesVcc = ScratchSgpr == Gfx1250MaxNumberedSgprs;
+  std::string ScratchPair = UsesVcc ? "vcc"
+                                    : (Twine("s[") + Twine(ScratchSgpr) + ":" +
+                                       Twine(ScratchSgpr + 1) + "]")
+                                          .str();
+  std::string ScratchLo =
+      UsesVcc ? "vcc_lo" : (Twine("s") + Twine(ScratchSgpr)).str();
+  std::string ScratchHi =
+      UsesVcc ? "vcc_hi" : (Twine("s") + Twine(ScratchSgpr + 1)).str();
 
   // Assemble through the MC layer instead of spelling encoded bytes; the LIT
   // test pins the generated stub's disassembly.
@@ -259,13 +264,59 @@ decodeEntryStubTargetVAddr(ArrayRef<InternalDecodedInst> Decoded,
   return *PcBase + Delta;
 }
 
-bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
-  if (!hasKernelEntryTrampolinePrefix(Bytes, LS))
+static bool hasExactEntryStubPadding(ArrayRef<uint8_t> Bytes,
+                                     ArrayRef<InternalDecodedInst> Decoded,
+                                     const LLVMState &LS) {
+  if (Decoded.size() < 6 ||
+      Decoded[5].Offset > std::numeric_limits<uint64_t>::max() -
+                              Decoded[5].Size)
     return false;
+  const uint64_t BodyEnd = Decoded[5].Offset + Decoded[5].Size;
+  SmallVector<uint8_t> CodeEnd = getCodeEndBytes(LS);
+  if (CodeEnd.empty() || BodyEnd > KernelEntryStubStride ||
+      (KernelEntryStubStride - BodyEnd) % CodeEnd.size() != 0)
+    return false;
+  for (uint64_t Offset = BodyEnd; Offset < KernelEntryStubStride;
+       Offset += CodeEnd.size())
+    if (!Bytes.slice(Offset, CodeEnd.size()).equals(CodeEnd))
+      return false;
+  return true;
+}
+
+bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
+  return getKernelEntryTrampolineInfo(Bytes, 0, LS).has_value();
+}
+
+std::optional<KernelEntryTrampolineInfo>
+getKernelEntryTrampolineInfo(ArrayRef<uint8_t> Bytes, uint64_t StubVAddr,
+                             const LLVMState &LS) {
+  if (!hasKernelEntryTrampolinePrefix(Bytes, LS))
+    return std::nullopt;
 
   std::vector<InternalDecodedInst> Decoded;
-  return decodeKernelEntryStub(Bytes, LS, Decoded, "isKernelEntryTrampoline") &&
-         hasEntryStubOperandShape(Decoded, LS);
+  if (!decodeKernelEntryStub(Bytes, LS, Decoded,
+                             "kernel entry target matcher") ||
+      !hasEntryStubOperandShape(Decoded, LS) ||
+      !hasExactEntryStubPadding(Bytes, Decoded, LS))
+    return std::nullopt;
+  std::optional<uint64_t> Target =
+      decodeEntryStubTargetVAddr(Decoded, StubVAddr);
+  std::optional<uint64_t> Terminal = checkedAddUint64(
+      StubVAddr, Decoded[5].Offset, "kernel entry terminal address");
+  if (!Target || !Terminal)
+    return std::nullopt;
+  return KernelEntryTrampolineInfo{*Target, *Terminal};
+}
+
+std::optional<uint64_t>
+getKernelEntryTrampolineTargetVAddr(ArrayRef<uint8_t> Bytes,
+                                    uint64_t StubVAddr,
+                                    const LLVMState &LS) {
+  std::optional<KernelEntryTrampolineInfo> Info =
+      getKernelEntryTrampolineInfo(Bytes, StubVAddr, LS);
+  if (!Info)
+    return std::nullopt;
+  return Info->TargetVAddr;
 }
 
 bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,
@@ -428,17 +479,18 @@ std::optional<int64_t> checkedSignedDifference(uint64_t LHS, uint64_t RHS,
 
 static std::optional<unsigned> allocateEntryStubScratchSgprs(
     const ElfView &Elf, const KernelDescriptorInfo &KD, unsigned MaxSgprs) {
-  constexpr unsigned ScratchSgprs = 2;
   std::optional<unsigned> SgprCount = Elf.getKernelSgprCount(KD.KernelName);
   if (!SgprCount) {
     log() << "hotswap: error: entry trampoline: failed to read SGPR count for '"
           << KD.KernelName << "'.\n";
     return std::nullopt;
   }
-  if (*SgprCount > MaxSgprs) {
+  const unsigned MaxTotalSgprs =
+      MaxSgprs == Gfx1250MaxNumberedSgprs ? Gfx1250MaxTotalSgprs : MaxSgprs;
+  if (*SgprCount > MaxTotalSgprs) {
     log() << "hotswap: error: entry trampoline: kernel '" << KD.KernelName
-          << "' uses " << *SgprCount << " SGPRs, above max " << MaxSgprs
-          << ".\n";
+          << "' declares malformed total SGPR count " << *SgprCount
+          << ", above max " << MaxTotalSgprs << ".\n";
     return std::nullopt;
   }
 
@@ -448,13 +500,20 @@ static std::optional<unsigned> allocateEntryStubScratchSgprs(
   // non-numbered. Treat the full metadata count as numbered and possibly skip
   // two usable SGPRs rather than risk overlapping a declared register.
   unsigned ScratchBase = (*SgprCount + 1) & ~1u;
-  if (ScratchBase > MaxSgprs || MaxSgprs - ScratchBase < ScratchSgprs) {
-    log() << "hotswap: error: entry trampoline: kernel '" << KD.KernelName
-          << "' uses " << *SgprCount << " SGPRs; no aligned scratch pair fits "
-          << "below max " << MaxSgprs << ".\n";
-    return std::nullopt;
-  }
-  return ScratchBase;
+  if (ScratchBase <= MaxSgprs &&
+      MaxSgprs - ScratchBase >= EntryStubScratchSgprs)
+    return ScratchBase;
+
+  // .sgpr_count includes the two non-numbered VCC halves. At the top of the
+  // numbered file, use VCC as the entry-only temporary and reserve the full
+  // metadata total. VCC has no defined kernel-entry value to preserve.
+  if (MaxSgprs == Gfx1250MaxNumberedSgprs)
+    return Gfx1250MaxNumberedSgprs;
+
+  log() << "hotswap: error: entry trampoline: kernel '" << KD.KernelName
+        << "' uses " << *SgprCount << " SGPRs; no aligned scratch pair fits "
+        << "below max numbered count " << MaxSgprs << ".\n";
+  return std::nullopt;
 }
 
 static bool appendPaddingTrampoline(std::vector<Trampoline> &Out,
@@ -555,6 +614,11 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     const ElfView &Elf, const LLVMState &LS, unsigned MaxSgprs,
     std::vector<Trampoline> &Growth,
     std::vector<KernelEntryTrampolineFixup> &OutFixups) {
+  if (!Elf.kernelDescriptorCacheIsComplete()) {
+    log() << "hotswap: error: entry trampoline: kernel descriptor set is "
+             "incomplete or ambiguous\n";
+    return std::nullopt;
+  }
   ArrayRef<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
   if (Descriptors.empty())
     return 0;
@@ -660,7 +724,8 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     Trampoline T;
     T.Bytes.assign(Stub.begin(), Stub.end());
     LocalGrowth.push_back(std::move(T));
-    LocalFixups.push_back({KD.KernelName, AppendOffset, *ScratchSgpr + 2,
+    LocalFixups.push_back({KD.KernelName, AppendOffset,
+                           requiredEntryStubSgprCount(*ScratchSgpr),
                            Item.StubInstPrefLines});
     std::optional<uint64_t> NewAppendOffset = checkedAddUint64(
         AppendOffset, KernelEntryStubStride,

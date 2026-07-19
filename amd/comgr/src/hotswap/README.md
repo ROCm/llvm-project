@@ -5,6 +5,12 @@ HotSwap is COMGR's AMDGPU code-object rewriting support. The public
 target ISA names, then returns a new executable code object with the applicable
 rewrite applied. The input code object is not modified.
 
+Input code objects must obey the AMDGPU callable-control-flow ABI. In
+particular, `s_swap_pc_i64` writing the standard link pair `s[30:31]` must be a
+call to a callable function entry represented by the code object. Using that
+ABI call form for an arbitrary interior transfer is unsupported and may produce
+invalid rewritten code.
+
 This directory contains COMGR's hotswap transpiler scaffolding, the raiser-based
 path for heavier cross-ISA transformations. The same-family stepping patches and
 entry trampolines are implemented in the surrounding COMGR source files and are
@@ -34,6 +40,18 @@ of returning the original unpatched code object.
 necessarily that the output bytes changed. If the source/target ISA pair and
 rewrite options select no enabled transformation, the output is a copy of the
 input.
+
+## Generated executable pools
+
+When a rewrite grows executable code, COMGR records the generated pool's
+layout and target stepping in an ELF note. A later rewrite accepts that pool
+only when its section, load segment, note, and target state agree; malformed,
+overlapping, unmarked, or target-mismatched pools fail closed.
+
+This note is a structural provenance and state certificate, not an
+authentication mechanism. HotSwap assumes its input comes from a trusted
+compiler or an earlier trusted HotSwap invocation; callers must not use the
+note to establish the integrity of an untrusted code object.
 
 ## Register accounting
 

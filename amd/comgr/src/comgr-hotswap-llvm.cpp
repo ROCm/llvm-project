@@ -413,7 +413,6 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
           << S.Cpu << "'.\n";
     return S;
   }
-
   S.Valid = true;
   return S;
 }

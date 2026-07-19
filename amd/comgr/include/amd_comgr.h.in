@@ -2935,6 +2935,18 @@ amd_comgr_map_elf_virtual_address_to_code_object_offset(
  * @{
  *
  * APIs for load-time GPU ISA binary rewriting and transpilation.
+ *
+ * Input code objects must follow the AMDGPU callable-control-flow ABI. In
+ * particular, an @c s_swap_pc_i64 instruction that writes the standard link
+ * register pair @c s[30:31] must be a call whose register target is a callable
+ * function entry represented by the code object. Using that ABI call form for
+ * an arbitrary interior transfer is unsupported and may produce invalid
+ * rewritten code.
+ *
+ * HotSwap assumes the input was produced by a trusted compiler or an earlier
+ * trusted HotSwap invocation. Structural provenance notes written by HotSwap
+ * describe generated layout and rewrite state; they do not authenticate an
+ * otherwise untrusted code object.
  */
 
 /**

@@ -315,11 +315,6 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   if (DI.Size != VOP3PXSize)
     return failClosed(Ctx, DI, "unexpected instruction size " + Twine(DI.Size));
 
-  // Skip offsets a prior pass/rewrite already claimed (idempotency).
-  for (const Trampoline &T : Ctx.OutTrampolines)
-    if (T.OriginalOffset == DI.Offset)
-      return 0;
-
   const uint8_t *Raw = Ctx.Text + DI.Offset;
 
   std::optional<unsigned> ScaleABase =

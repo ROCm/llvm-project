@@ -1,8 +1,8 @@
 // COM: Production activation, quantization, and shared-expert objects exposed
-// COM: gateway fragments that can hold the 20-byte SCC-neutral gfx12 set-PC
-// COM: sequence but not the former 28-byte SCC save/restore sequence. Keep SCC
-// COM: live across this required DS2 rewrite and provide exactly one 20-byte
-// COM: gateway. The pool is beyond s_branch range and no island chain exists.
+// COM: gateway fragments that can hold the 12-byte source-relative call tail.
+// COM: Keep SCC live across this required DS2 rewrite and provide exactly one
+// COM: 20-byte gateway. The pool is beyond s_branch range and no island chain
+// COM: exists.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
@@ -18,11 +18,10 @@
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=META %s
 
 // DISASM-LABEL: <fragmented_gateway>:
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64
 // DISASM-NEXT: s_nop
 // DISASM-LABEL: <gateway_barrier>:
 // DISASM-NEXT: s_endpgm
-// DISASM-NEXT: s_get_pc_i64 s[0:1]
 // DISASM-NEXT: s_add_nc_u64 s[0:1], s[0:1],
 // DISASM-NEXT: s_set_pc_i64 s[0:1]
 // DISASM: ds_load_b32 v0, v2 offset:256

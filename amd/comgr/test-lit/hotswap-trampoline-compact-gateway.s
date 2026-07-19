@@ -1,7 +1,6 @@
 // COM: A far required DS2 rewrite has exactly one safe 16-byte external
-// COM: gateway. The gfx1250 SCC-neutral set-PC sequence encodes in 16 bytes
-// COM: for this forward displacement, so planning must use its MC-encoded
-// COM: size instead of requiring the 20-byte worst-case reservation.
+// COM: gateway. The source-relative call tail needs only a 12-byte
+// COM: add-nc/set-PC sequence, so it fits without a full get-PC prefix.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
@@ -17,11 +16,10 @@
 // RUN: %llvm-readelf --notes %t.out.elf | %FileCheck --check-prefix=META %s
 
 // DISASM-LABEL: <compact_gateway>:
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64
 // DISASM-NEXT: s_nop
 // DISASM-LABEL: <gateway_barrier>:
 // DISASM-NEXT: s_endpgm
-// DISASM-NEXT: s_get_pc_i64 s[0:1]
 // DISASM-NEXT: s_add_nc_u64 s[0:1], s[0:1],
 // DISASM-NEXT: s_set_pc_i64 s[0:1]
 // DISASM: ds_load_b32 v0, v2 offset:256
