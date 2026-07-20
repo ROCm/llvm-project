@@ -1425,7 +1425,17 @@ void AMDGPUAsmPrinter::getSIProgramInfo(SIProgramInfo &ProgInfo,
                              MCConstantExpr::create(0, Ctx), Ctx),
       ProgInfo.DynamicCallStack, Ctx);
 
-  ProgInfo.UserSGPR = MFI->getNumUserSGPRs();
+  // getNumUserSGPRs() counts only user SGPRs an allocator claimed a register
+  // for. The assembler re-derives an implied count from the enabled
+  // kernel_code_properties fields plus the kernarg preload length and rejects
+  // the object when the emitted count is below it ("amdgpu_user_sgpr_count
+  // smaller than implied by enabled user SGPRs"). Add up the same two pieces
+  // and emit the max, so the count is never too small even when a field or the
+  // preload was enabled without its allocator bumping the add-driven count.
+  const GCNUserSGPRUsageInfo &UserSGPRInfo = MFI->getUserSGPRInfo();
+  unsigned ImpliedUserSGPRs = UserSGPRInfo.getNumEnabledUserSGPRs() +
+                              UserSGPRInfo.getNumKernargPreloadSGPRs();
+  ProgInfo.UserSGPR = std::max(MFI->getNumUserSGPRs(), ImpliedUserSGPRs);
   // For AMDHSA, TRAP_HANDLER must be zero, as it is populated by the CP.
   ProgInfo.TrapHandlerEnable = STM.isAmdHsaOS() ? 0 : STM.hasTrapHandler();
   ProgInfo.TGIdXEnable = MFI->hasWorkGroupIDX();

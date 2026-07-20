@@ -1,0 +1,76 @@
+# The emitted .amdhsa_user_sgpr_count must be at least the count the assembler
+# re-derives from the enabled user-SGPR fields plus the kernarg_preload_length,
+# otherwise the object is rejected with "amdgpu_user_sgpr_count smaller than
+# implied by enabled user SGPRs". getSIProgramInfo emits the max of the
+# add-driven SIMachineFunctionInfo count (bumped only when an argument field
+# claims a register) and that implied count. See getSIProgramInfo in
+# AMDGPUAsmPrinter.cpp.
+
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1250 -start-after=finalize-isel %s -o - | FileCheck %s
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1250 -start-after=finalize-isel %s -o - | \
+# RUN:   llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -filetype=obj -o /dev/null
+
+--- |
+  define amdgpu_kernel void @enabled_fields(ptr addrspace(1) %p) {
+    ret void
+  }
+  define amdgpu_kernel void @enabled_fields_and_preload(ptr addrspace(1) %p) {
+    ret void
+  }
+  define amdgpu_kernel void @preload_max(ptr addrspace(1) %p) {
+    ret void
+  }
+...
+
+# dispatch_ptr + queue_ptr + kernarg_segment_ptr + dispatch_id are enabled by
+# attribute (implied 8), but argumentInfo is empty so the add-driven count is 0.
+# CHECK-LABEL: enabled_fields:
+# CHECK: .amdhsa_user_sgpr_count 8
+# CHECK: .amdhsa_user_sgpr_dispatch_ptr 1
+# CHECK: .amdhsa_user_sgpr_queue_ptr 1
+# CHECK: .amdhsa_user_sgpr_kernarg_segment_ptr 1
+# CHECK: .amdhsa_user_sgpr_dispatch_id 1
+---
+name:            enabled_fields
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+body:             |
+  bb.0:
+    S_ENDPGM 0
+...
+
+# The enabled fields imply 8 and the preload length is 4, so the count is 8 + 4;
+# the preload length must be added on top of the enabled-field count. A count
+# taken from the enabled fields alone (8) is rejected by the assembler. The
+# add-driven count is still 0.
+# CHECK-LABEL: enabled_fields_and_preload:
+# CHECK: .amdhsa_user_sgpr_count 12
+# CHECK: .amdhsa_user_sgpr_kernarg_preload_length 4
+---
+name:            enabled_fields_and_preload
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction:        true
+  numKernargPreloadSGPRs: 4
+body:             |
+  bb.0:
+    S_ENDPGM 0
+...
+
+# 24 preloaded kernarg SGPRs on top of the 8 implied by the enabled fields drive
+# the count to 32, the gfx1250 maximum (a 6-bit field). The add-driven count is
+# still 0.
+# CHECK-LABEL: preload_max:
+# CHECK: .amdhsa_user_sgpr_count 32
+# CHECK: .amdhsa_user_sgpr_kernarg_preload_length 24
+---
+name:            preload_max
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction:        true
+  numKernargPreloadSGPRs: 24
+body:             |
+  bb.0:
+    S_ENDPGM 0
+...

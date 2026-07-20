@@ -1039,6 +1039,28 @@ public:
 
   unsigned getNumUsedUserSGPRs() const { return NumUsedUserSGPRs; }
 
+  // SGPRs implied by the enabled kernel_code_properties fields alone, excluding
+  // the kernarg preload length. This mirrors the enabled-field half of the
+  // count the assembler re-derives from the directives.
+  unsigned getNumEnabledUserSGPRs() const {
+    unsigned Num = 0;
+    if (hasPrivateSegmentBuffer())
+      Num += getNumUserSGPRForField(PrivateSegmentBufferID);
+    if (hasDispatchPtr())
+      Num += getNumUserSGPRForField(DispatchPtrID);
+    if (hasQueuePtr())
+      Num += getNumUserSGPRForField(QueuePtrID);
+    if (hasKernargSegmentPtr())
+      Num += getNumUserSGPRForField(KernargSegmentPtrID);
+    if (hasDispatchID())
+      Num += getNumUserSGPRForField(DispatchIdID);
+    if (hasFlatScratchInit())
+      Num += getNumUserSGPRForField(FlatScratchInitID);
+    if (hasPrivateSegmentSize())
+      Num += getNumUserSGPRForField(PrivateSegmentSizeID);
+    return Num;
+  }
+
   unsigned getNumFreeUserSGPRs();
 
   void allocKernargPreloadSGPRs(unsigned NumSGPRs);
