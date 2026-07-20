@@ -389,9 +389,8 @@ RT_API_ATTRS bool ConsumePendingOmpAllocStamp(
   return false;
 }
 
-RT_API_ATTRS void *OmpAllocateAdapter(
-    std::size_t /*byteSize*/, std::size_t /*defaultAlign*/,
-    std::int64_t * /*asyncObject*/) {
+RT_API_ATTRS void *OmpAllocateAdapter(std::size_t /*byteSize*/,
+    std::size_t /*defaultAlign*/, std::int64_t * /*asyncObject*/) {
   return nullptr;
 }
 
