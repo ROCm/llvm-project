@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx908 < %s | FileCheck -check-prefixes=GFX908 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08 < %s | FileCheck -check-prefixes=GFX908 %s
 
 ; GFX908-LABEL: {{^}}max_27_vgprs_used_5a:
 ; GFX908-NOT: s_mov_b32 s{{[0-9]+}}, SCRATCH_RSRC_DWORD0

@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdhsa -mcpu=gfx700 < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu7.00--amdhsa < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
 
 ; FIXME: merge with trap.ll
 

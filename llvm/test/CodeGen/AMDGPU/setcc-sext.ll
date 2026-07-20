@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}setcc_sgt_true_sext:
 ; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}

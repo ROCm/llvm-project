@@ -1,12 +1,12 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgcn -mcpu=gfx1010 -mattr=-nsa-encoding < %s | FileCheck -check-prefixes=GCN,NONSA,GFX10-NONSA %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -mcpu=gfx1010 -amdgpu-nsa-threshold=32 < %s | FileCheck -check-prefixes=GCN,NONSA,GFX10-NONSA %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -mcpu=gfx1010 -amdgpu-nsa-threshold=2 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T2 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgcn -mcpu=gfx1010 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T3,GFX1010-NSA %s
-; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgcn -mcpu=gfx1030 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T3,GFX1030-NSA %s
-; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgcn -mcpu=gfx1100 -mattr=-nsa-encoding < %s | FileCheck -check-prefixes=GCN,NONSA,GFX11-NONSA %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-nsa-threshold=32 < %s | FileCheck -check-prefixes=GCN,NONSA,GFX11-NONSA %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-nsa-threshold=2 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T2 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgcn -mcpu=gfx1100 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T3,GFX11-NSA %s
+; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgpu10.10 -mattr=-nsa-encoding < %s | FileCheck -check-prefixes=GCN,NONSA,GFX10-NONSA %s
+; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu10.10 -amdgpu-nsa-threshold=32 < %s | FileCheck -check-prefixes=GCN,NONSA,GFX10-NONSA %s
+; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu10.10 -amdgpu-nsa-threshold=2 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T2 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgpu10.10 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T3,GFX1010-NSA %s
+; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgpu10.30 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T3,GFX1030-NSA %s
+; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgpu11.00 -mattr=-nsa-encoding < %s | FileCheck -check-prefixes=GCN,NONSA,GFX11-NONSA %s
+; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu11.00 -amdgpu-nsa-threshold=32 < %s | FileCheck -check-prefixes=GCN,NONSA,GFX11-NONSA %s
+; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu11.00 -amdgpu-nsa-threshold=2 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T2 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgpu11.00 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T3,GFX11-NSA %s
 
 ; TODO-WAVETRANSFORM: LWT crashes in AMDGPULowerWQMOperations due to missing
 ; undef subreg defs in physical register tuples post-regalloc. Revisit after

@@ -8,13 +8,16 @@
 ///
 /// \file
 /// Implementation of hotswap::ElfView and the free-function ELF helpers.
-/// Parses are delegated to llvm::object::ELFFile; there is no hand-rolled
-/// section/symbol cache.
+/// Parses are delegated to llvm::object::ELFFile. ElfView caches immutable
+/// symbol ranges and metadata-derived SGPR counts for the duration of one
+/// rewrite so large code objects do not repeatedly parse the same ELF data.
 ///
 //===----------------------------------------------------------------------===//
 
 #include "comgr-hotswap-internal.h"
 
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
@@ -50,7 +53,7 @@ static constexpr unsigned SgprEncodingGranule = 8;
 // offset, so its PT_LOAD segment maps consistently.
 static constexpr uint64_t TrampolinePoolAlign = 4096;
 
-enum class MetadataSgprUpdateStatus {
+enum class MetadataCountUpdateStatus {
   NotFound,
   Found,
   Error,
@@ -112,23 +115,30 @@ readUnsignedMetadataNode(const msgpack::DocNode &Node, StringRef KernelName,
   return std::nullopt;
 }
 
-static std::optional<unsigned>
-readSgprCountMetadataNode(const msgpack::DocNode &SgprNode,
-                          StringRef KernelName, StringRef Context) {
-  return readUnsignedMetadataNode(SgprNode, KernelName, ".sgpr_count", Context);
-}
+using MetadataNoteMutator = function_ref<std::optional<bool>(
+    msgpack::Document &, msgpack::MapDocNode &)>;
+using MetadataNoteValidator = function_ref<bool(bool)>;
 
-static MetadataSgprUpdateStatus
-updateKernelMetadataSgprCount(uint8_t *Elf, const ELFFileT &File,
-                              StringRef KernelName, unsigned RequiredSgprs) {
+struct PendingMetadataWrite {
+  size_t Offset = 0;
+  std::string Blob;
+};
+
+/// Parse each AMDGPU metadata note, invoke \p Mutator on its root map, and
+/// defer changed writes until \p Validator accepts the complete traversal.
+/// This keeps multi-note updates atomic while sharing the parsing, encoded-size
+/// and destination validation for every metadata mutation.
+static bool rewriteMetadataNotes(uint8_t *Elf, const ELFFileT &File,
+                                 StringRef Context, MetadataNoteMutator Mutator,
+                                 MetadataNoteValidator Validator,
+                                 bool &SawMetadataNote) {
   Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
   if (!PhdrsOrErr) {
-    log() << "hotswap: error: updateKernelMetadataSgprCount: failed to read "
-          << "program headers: " << toString(PhdrsOrErr.takeError()) << "\n";
-    return MetadataSgprUpdateStatus::Error;
+    log() << "hotswap: error: " << Context << ": failed to read program "
+          << "headers: " << toString(PhdrsOrErr.takeError()) << "\n";
+    return false;
   }
-
-  bool SawMetadataNote = false;
+  std::vector<PendingMetadataWrite> PendingWrites;
   for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
     if (Phdr.p_type != ELF::PT_NOTE)
       continue;
@@ -142,100 +152,179 @@ updateKernelMetadataSgprCount(uint8_t *Elf, const ELFFileT &File,
 
       ArrayRef<uint8_t> Desc = Note.getDesc(4);
       if (Desc.empty()) {
-        log() << "hotswap: error: updateKernelMetadataSgprCount: AMDGPU "
-              << "metadata note has an empty descriptor.\n";
-        return MetadataSgprUpdateStatus::Error;
+        log() << "hotswap: error: " << Context
+              << ": AMDGPU metadata note has an empty descriptor.\n";
+        return false;
       }
 
       StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
       msgpack::Document Doc;
       if (!Doc.readFromBlob(Blob, false)) {
-        log() << "hotswap: error: updateKernelMetadataSgprCount: failed to "
-              << "parse AMDGPU metadata note.\n";
-        return MetadataSgprUpdateStatus::Error;
+        log() << "hotswap: error: " << Context
+              << ": failed to parse AMDGPU metadata note.\n";
+        return false;
       }
 
       msgpack::DocNode Root = Doc.getRoot();
       if (!Root.isMap()) {
-        log() << "hotswap: error: updateKernelMetadataSgprCount: AMDGPU "
-              << "metadata root is not a map.\n";
-        return MetadataSgprUpdateStatus::Error;
+        log() << "hotswap: error: " << Context
+              << ": AMDGPU metadata root is not a map.\n";
+        return false;
       }
 
-      msgpack::MapDocNode &RootMap = Root.getMap();
-      msgpack::DocNode::MapTy::iterator KernelsIt =
-          RootMap.find("amdhsa.kernels");
-      if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
+      std::optional<bool> Changed = Mutator(Doc, Root.getMap());
+      if (!Changed)
+        return false;
+      if (!*Changed)
         continue;
 
-      msgpack::ArrayDocNode &KernelArray = KernelsIt->second.getArray();
-      for (msgpack::DocNode &KNode : KernelArray) {
-        if (!KNode.isMap())
-          continue;
-
-        msgpack::MapDocNode &KMap = KNode.getMap();
-        msgpack::DocNode::MapTy::iterator NameIt = KMap.find(".name");
-        if (NameIt == KMap.end() || !NameIt->second.isString() ||
-            NameIt->second.getString() != KernelName)
-          continue;
-
-        msgpack::DocNode::MapTy::iterator SgprIt = KMap.find(".sgpr_count");
-        if (SgprIt == KMap.end()) {
-          log() << "hotswap: error: updateKernelMetadataSgprCount: metadata "
-                << "for kernel '" << KernelName << "' has no .sgpr_count.\n";
-          return MetadataSgprUpdateStatus::Error;
-        }
-
-        std::optional<unsigned> CurrentSgprs = readSgprCountMetadataNode(
-            SgprIt->second, KernelName, "updateKernelMetadataSgprCount");
-        if (!CurrentSgprs)
-          return MetadataSgprUpdateStatus::Error;
-        if (RequiredSgprs <= *CurrentSgprs)
-          return MetadataSgprUpdateStatus::Found;
-
-        SgprIt->second = static_cast<uint64_t>(RequiredSgprs);
-        std::string NewBlob;
-        Doc.writeToBlob(NewBlob);
-        if (NewBlob.size() != Blob.size()) {
-          log() << "hotswap: error: updateKernelMetadataSgprCount: updating "
-                << ".sgpr_count for '" << KernelName << "' changes metadata "
-                << "note size from " << Blob.size() << " to " << NewBlob.size()
-                << " bytes; in-place rewrite cannot preserve ELF layout.\n";
-          return MetadataSgprUpdateStatus::Error;
-        }
-
-        const uint8_t *DescBegin = Desc.data();
-        if (DescBegin < File.base() || DescBegin >= File.end()) {
-          log() << "hotswap: error: updateKernelMetadataSgprCount: metadata "
-                << "descriptor pointer is outside the ELF buffer.\n";
-          return MetadataSgprUpdateStatus::Error;
-        }
-        size_t DescOffset = DescBegin - File.base();
-        if (Desc.size() > File.getBufSize() ||
-            DescOffset > File.getBufSize() - Desc.size()) {
-          log() << "hotswap: error: updateKernelMetadataSgprCount: metadata "
-                << "descriptor extends past the ELF buffer.\n";
-          return MetadataSgprUpdateStatus::Error;
-        }
-
-        std::memcpy(Elf + DescOffset, NewBlob.data(), NewBlob.size());
-        return MetadataSgprUpdateStatus::Found;
+      std::string NewBlob;
+      Doc.writeToBlob(NewBlob);
+      if (NewBlob.size() != Blob.size()) {
+        log() << "hotswap: error: " << Context
+              << ": updating AMDGPU metadata changes note size from "
+              << Blob.size() << " to " << NewBlob.size()
+              << " bytes; in-place rewrite cannot preserve ELF layout.\n";
+        return false;
       }
+
+      const uint8_t *DescBegin = Desc.data();
+      if (DescBegin < File.base() || DescBegin >= File.end()) {
+        log() << "hotswap: error: " << Context
+              << ": metadata descriptor pointer is outside the ELF buffer.\n";
+        return false;
+      }
+      size_t DescOffset = DescBegin - File.base();
+      if (Desc.size() > File.getBufSize() ||
+          DescOffset > File.getBufSize() - Desc.size()) {
+        log() << "hotswap: error: " << Context
+              << ": metadata descriptor extends past the ELF buffer.\n";
+        return false;
+      }
+      PendingWrites.push_back({DescOffset, std::move(NewBlob)});
     }
 
     if (Err) {
-      log() << "hotswap: error: updateKernelMetadataSgprCount: failed to "
-            << "iterate AMDGPU notes: " << toString(std::move(Err)) << "\n";
-      return MetadataSgprUpdateStatus::Error;
+      log() << "hotswap: error: " << Context
+            << ": failed to iterate AMDGPU notes: " << toString(std::move(Err))
+            << "\n";
+      return false;
     }
   }
 
-  if (SawMetadataNote) {
-    log() << "hotswap: error: updateKernelMetadataSgprCount: AMDGPU metadata "
-          << "has no entry for kernel '" << KernelName << "'.\n";
-    return MetadataSgprUpdateStatus::Error;
-  }
-  return MetadataSgprUpdateStatus::NotFound;
+  if (!Validator(SawMetadataNote))
+    return false;
+  for (const PendingMetadataWrite &Write : PendingWrites)
+    std::memcpy(Elf + Write.Offset, Write.Blob.data(), Write.Blob.size());
+  return true;
+}
+
+static MetadataCountUpdateStatus
+rewriteKernelMetadataCounts(uint8_t *Elf, const ELFFileT &File,
+                            const StringMap<unsigned> &RequiredCounts,
+                            StringRef MetadataKey, StringRef Context) {
+  if (RequiredCounts.empty())
+    return MetadataCountUpdateStatus::Found;
+
+  bool SawMetadataNote = false;
+  StringMap<bool> Found;
+  bool Rewritten = rewriteMetadataNotes(
+      Elf, File, Context,
+      [&](msgpack::Document &,
+          msgpack::MapDocNode &RootMap) -> std::optional<bool> {
+        msgpack::DocNode::MapTy::iterator KernelsIt =
+            RootMap.find("amdhsa.kernels");
+        if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
+          return false;
+
+        bool Changed = false;
+        for (msgpack::DocNode &KNode : KernelsIt->second.getArray()) {
+          if (!KNode.isMap())
+            continue;
+          msgpack::MapDocNode &KMap = KNode.getMap();
+          msgpack::DocNode::MapTy::iterator NameIt = KMap.find(".name");
+          if (NameIt == KMap.end() || !NameIt->second.isString())
+            continue;
+
+          StringRef KernelName = NameIt->second.getString();
+          StringMap<unsigned>::const_iterator Required =
+              RequiredCounts.find(KernelName);
+          if (Required == RequiredCounts.end() || Found.contains(KernelName))
+            continue;
+
+          msgpack::DocNode::MapTy::iterator CountIt = KMap.find(MetadataKey);
+          if (CountIt == KMap.end()) {
+            log() << "hotswap: error: " << Context << ": metadata for kernel '"
+                  << KernelName << "' has no " << MetadataKey << ".\n";
+            return std::nullopt;
+          }
+
+          std::optional<unsigned> CurrentCount = readUnsignedMetadataNode(
+              CountIt->second, KernelName, MetadataKey, Context);
+          if (!CurrentCount)
+            return std::nullopt;
+          Found.try_emplace(KernelName, true);
+          if (Required->second <= *CurrentCount)
+            continue;
+
+          CountIt->second = static_cast<uint64_t>(Required->second);
+          Changed = true;
+        }
+        return Changed;
+      },
+      [&](bool SawMetadata) {
+        if (!SawMetadata)
+          return true;
+        for (const StringMapEntry<unsigned> &Required : RequiredCounts) {
+          if (Found.contains(Required.first()))
+            continue;
+          log() << "hotswap: error: " << Context
+                << ": AMDGPU metadata has no entry for kernel '"
+                << Required.first() << "'.\n";
+          return false;
+        }
+        return true;
+      },
+      SawMetadataNote);
+  if (!Rewritten)
+    return MetadataCountUpdateStatus::Error;
+  return SawMetadataNote ? MetadataCountUpdateStatus::Found
+                         : MetadataCountUpdateStatus::NotFound;
+}
+
+bool ElfView::updateGfx1250RevisionMetadata(StringRef Revision) {
+  bool SawMetadataNote = false;
+  return rewriteMetadataNotes(
+      data(), File, "updateGfx1250RevisionMetadata",
+      [&](msgpack::Document &Doc,
+          msgpack::MapDocNode &RootMap) -> std::optional<bool> {
+        msgpack::DocNode::MapTy::iterator KernelsIt =
+            RootMap.find("amdhsa.kernels");
+        if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
+          return false;
+
+        bool Changed = false;
+        for (msgpack::DocNode &KNode : KernelsIt->second.getArray()) {
+          if (!KNode.isMap())
+            continue;
+          msgpack::MapDocNode &KMap = KNode.getMap();
+          msgpack::DocNode::MapTy::iterator RevisionIt =
+              KMap.find(".gfx1250_revision");
+          if (RevisionIt == KMap.end())
+            continue;
+          if (!RevisionIt->second.isString()) {
+            log() << "hotswap: error: updateGfx1250RevisionMetadata: "
+                  << ".gfx1250_revision is not a string.\n";
+            return std::nullopt;
+          }
+          if (RevisionIt->second.getString() == Revision)
+            continue;
+          RevisionIt->second = Doc.getNode(Revision, /*Copy=*/true);
+          Changed = true;
+        }
+        return Changed;
+      },
+      [](bool) { return true; }, SawMetadataNote);
 }
 
 // -- applyByteReplace ---------------------------------------------------------
@@ -340,14 +429,18 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
 
 // -- ElfView::functionTextRanges ---------------------------------------------
 
-std::vector<ElfView::FunctionTextRange> ElfView::functionTextRanges() const {
+ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
+  if (FunctionRangeCache)
+    return *FunctionRangeCache;
+
   std::vector<FunctionTextRange> Ranges;
   uint64_t TextBegin = textAddr();
   uint64_t TextSizeValue = textSize();
   if (TextSizeValue > std::numeric_limits<uint64_t>::max() - TextBegin) {
     log() << "hotswap: error: function text range scan: .text virtual "
           << "address range overflows uint64_t.\n";
-    return Ranges;
+    FunctionRangeCache.emplace();
+    return *FunctionRangeCache;
   }
   uint64_t TextEnd = TextBegin + TextSizeValue;
 
@@ -400,32 +493,57 @@ std::vector<ElfView::FunctionTextRange> ElfView::functionTextRanges() const {
     }
   }
 
-  return Ranges;
+  llvm::stable_sort(
+      Ranges, [](const FunctionTextRange &LHS, const FunctionTextRange &RHS) {
+        return LHS.Begin < RHS.Begin;
+      });
+  FunctionRangeCache = std::move(Ranges);
+  return *FunctionRangeCache;
+}
+
+std::vector<ElfView::FunctionTextRange> ElfView::functionTextRanges() const {
+  ArrayRef<FunctionTextRange> Ranges = cachedFunctionTextRanges();
+  return std::vector<FunctionTextRange>(Ranges.begin(), Ranges.end());
 }
 
 // -- ElfView::findKernelAtAddress ---------------------------------------------
 
+const ElfView::FunctionTextRange *
+ElfView::findFunctionTextRangeAtAddress(uint64_t TextAddress) const {
+  ArrayRef<FunctionTextRange> Ranges = cachedFunctionTextRanges();
+  ArrayRef<FunctionTextRange>::const_iterator GroupEnd =
+      std::upper_bound(Ranges.begin(), Ranges.end(), TextAddress,
+                       [](uint64_t Address, const FunctionTextRange &Range) {
+                         return Address < Range.Begin;
+                       });
+
+  // Prefer the covering range with the greatest start address, matching the
+  // previous full scan. Preserve the stable symbol-table order for duplicate
+  // starts so aliases resolve exactly as before.
+  while (GroupEnd != Ranges.begin()) {
+    ArrayRef<FunctionTextRange>::const_iterator GroupBegin = GroupEnd - 1;
+    uint64_t Begin = GroupBegin->Begin;
+    while (GroupBegin != Ranges.begin() && (GroupBegin - 1)->Begin == Begin)
+      --GroupBegin;
+    for (ArrayRef<FunctionTextRange>::const_iterator It = GroupBegin;
+         It != GroupEnd; ++It)
+      if (TextAddress < It->End)
+        return &*It;
+    GroupEnd = GroupBegin;
+  }
+  return nullptr;
+}
+
 std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
-  bool Found = false;
-  uint64_t BestValue = 0;
-  std::string BestName;
-
-  std::vector<FunctionTextRange> Ranges = functionTextRanges();
-  for (const FunctionTextRange &Range : Ranges) {
-    if (TextAddress < Range.Begin || TextAddress >= Range.End)
-      continue;
-
-    const ELFT::Sym &Sym = *Range.Symbol;
-    if (Found && Sym.st_value <= BestValue)
-      continue;
-
+  const FunctionTextRange *Range = findFunctionTextRangeAtAddress(TextAddress);
+  if (Range) {
+    const ELFT::Sym &Sym = *Range->Symbol;
     Expected<StringRef> StrTabOrErr =
-        File.getStringTableForSymtab(*Range.Symtab, Sections);
+        File.getStringTableForSymtab(*Range->Symtab, Sections);
     if (!StrTabOrErr) {
       consumeError(StrTabOrErr.takeError());
-      continue;
+      return "";
     }
-
     Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
     if (!NameOrErr) {
       log() << "hotswap: error: findKernelAtAddress: function symbol "
@@ -434,12 +552,7 @@ std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
             << "\n";
       return "";
     }
-    Found = true;
-    BestValue = Sym.st_value;
-    BestName = NameOrErr->str();
-  }
-
-  if (Found) {
+    std::string BestName = NameOrErr->str();
     // Confirm the selected symbol is actually a kernel: every kernel carries a
     // "<name>.kd" descriptor symbol, whereas a plain device function does not.
     // This is the same descriptor lookup getKernelVgprCount performs, so a real
@@ -461,90 +574,27 @@ std::string ElfView::findKernelAtAddress(uint64_t TextAddress) const {
 
 std::optional<ElfView::FunctionTextRange>
 ElfView::findFunctionTextRangeAtOffset(uint64_t TextOffset) const {
-  for (const ELFT::Shdr &SymShdr : Sections) {
-    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
-        SymShdr.sh_type != ELF::SHT_DYNSYM)
-      continue;
-
-    Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
-    if (!SymsOrErr) {
-      consumeError(SymsOrErr.takeError());
-      continue;
-    }
-
-    for (const ELFT::Sym &Sym : *SymsOrErr) {
-      if (Sym.getType() != ELF::STT_FUNC && Sym.getType() != ELF::STT_GNU_IFUNC)
-        continue;
-      if (Sym.st_shndx != TextSectionIndex || Sym.st_size == 0)
-        continue;
-      if (Sym.st_value < textAddr())
-        continue;
-
-      uint64_t Start = Sym.st_value - textAddr();
-      if (Sym.st_size > std::numeric_limits<uint64_t>::max() - Start)
-        continue;
-      uint64_t End = Start + Sym.st_size;
-      if (TextOffset >= Start && TextOffset < End)
-        return ElfView::FunctionTextRange{Start, End};
-    }
-  }
-  return std::nullopt;
-}
-
-// -- ElfView::findKernelDescriptor --------------------------------------------
-
-uint8_t *ElfView::findKernelDescriptor(StringRef KernelName) {
-  std::string KdName = (KernelName + ".kd").str();
-  for (const ELFT::Shdr &SymShdr : Sections) {
-    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
-        SymShdr.sh_type != ELF::SHT_DYNSYM)
-      continue;
-
-    Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
-    if (!SymsOrErr) {
-      consumeError(SymsOrErr.takeError());
-      continue;
-    }
-    Expected<StringRef> StrTabOrErr =
-        File.getStringTableForSymtab(SymShdr, Sections);
-    if (!StrTabOrErr) {
-      consumeError(StrTabOrErr.takeError());
-      continue;
-    }
-
-    for (const ELFT::Sym &Sym : *SymsOrErr) {
-      Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
-      if (!NameOrErr) {
-        consumeError(NameOrErr.takeError());
-        continue;
-      }
-      if (*NameOrErr != KdName)
-        continue;
-      unsigned Shndx = Sym.st_shndx;
-      Expected<const ELFT::Shdr *> HostShdrOrErr = File.getSection(Shndx);
-      if (!HostShdrOrErr) {
-        consumeError(HostShdrOrErr.takeError());
-        continue;
-      }
-      const ELFT::Shdr &HostShdr = **HostShdrOrErr;
-      std::optional<uint64_t> FileOffset = checkedSectionFileOffset(
-          HostShdr, Sym.st_value, KdSize, size(),
-          (Twine("findKernelDescriptor: descriptor symbol '") + *NameOrErr +
-           "'")
-              .str());
-      if (!FileOffset)
-        continue;
-      return data() + *FileOffset;
-    }
-  }
-  return nullptr;
+  if (TextOffset >= textSize() ||
+      TextOffset > std::numeric_limits<uint64_t>::max() - textAddr())
+    return std::nullopt;
+  const FunctionTextRange *Range =
+      findFunctionTextRangeAtAddress(textAddr() + TextOffset);
+  if (!Range || Range->Begin < textAddr() || Range->End < textAddr())
+    return std::nullopt;
+  return FunctionTextRange{Range->Begin - textAddr(), Range->End - textAddr(),
+                           Range->Symbol, Range->Symtab};
 }
 
 // -- ElfView::kernelDescriptors -----------------------------------------------
 
-std::vector<KernelDescriptorInfo> ElfView::kernelDescriptors() const {
+void ElfView::initializeKernelDescriptorCache() const {
+  if (KernelDescriptorCache)
+    return;
+
   namespace hsa = amdhsa;
   std::vector<KernelDescriptorInfo> Result;
+  StringMap<uint64_t> FileOffsets;
+  StringMap<DenseSet<uint64_t>> SeenVAddr;
 
   for (const ELFT::Shdr &SymShdr : Sections) {
     if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
@@ -598,26 +648,54 @@ std::vector<KernelDescriptorInfo> ElfView::kernelDescriptors() const {
               offsetof(hsa::kernel_descriptor_t, kernel_code_entry_byte_offset),
           sizeof(EntryOffset));
 
-      std::string KernelName = NameOrErr->drop_back(3).str();
-      const bool Seen = std::any_of(
-          Result.begin(), Result.end(), [&](const KernelDescriptorInfo &Info) {
-            return Info.KernelName == KernelName && Info.VAddr == Sym.st_value;
-          });
-      if (!Seen)
+      StringRef KernelNameRef = NameOrErr->drop_back(3);
+      std::string KernelName = KernelNameRef.str();
+      // Dedup by (name, vaddr): a kernel name can legitimately map to more than
+      // one vaddr, so track the full vaddr set per name rather than only the
+      // last one. (The previous per-symbol linear scan over Result made cache
+      // init O(n^2).)
+      if (SeenVAddr[KernelNameRef].insert(Sym.st_value).second)
         Result.push_back({std::move(KernelName), Sym.st_value, EntryOffset});
+      FileOffsets.try_emplace(KernelNameRef, *FileOffset);
     }
   }
 
-  return Result;
+  KernelDescriptorFileOffsetCache = std::move(FileOffsets);
+  KernelDescriptorCache = std::move(Result);
+
+  // Name -> vaddr map so getKernelDescriptorVAddr() is O(1) per call instead of
+  // a linear scan (O(n^2) over ~1000 per-fixup lookups). When a name has more
+  // than one descriptor (the dedup set tracks (name, vaddr) pairs), try_emplace
+  // keeps the first in symtab order -- the same descriptor the prior linear
+  // scan returned, so the single-value lookup is unchanged. The multi-vaddr set
+  // matters only for enumeration/dedup, not this name->vaddr resolution.
+  KernelDescriptorVAddrCache.clear();
+  for (const KernelDescriptorInfo &Info : *KernelDescriptorCache)
+    KernelDescriptorVAddrCache.try_emplace(Info.KernelName, Info.VAddr);
+}
+
+uint8_t *ElfView::findKernelDescriptor(StringRef KernelName) {
+  initializeKernelDescriptorCache();
+  StringMap<uint64_t>::const_iterator It =
+      KernelDescriptorFileOffsetCache.find(KernelName);
+  if (It == KernelDescriptorFileOffsetCache.end())
+    return nullptr;
+  return data() + It->second;
+}
+
+ArrayRef<KernelDescriptorInfo> ElfView::kernelDescriptors() const {
+  initializeKernelDescriptorCache();
+  return *KernelDescriptorCache;
 }
 
 std::optional<uint64_t>
 ElfView::getKernelDescriptorVAddr(StringRef KernelName) const {
-  for (const KernelDescriptorInfo &Info : kernelDescriptors()) {
-    if (Info.KernelName == KernelName)
-      return Info.VAddr;
-  }
-  return std::nullopt;
+  initializeKernelDescriptorCache();
+  StringMap<uint64_t>::const_iterator It =
+      KernelDescriptorVAddrCache.find(KernelName);
+  if (It == KernelDescriptorVAddrCache.end())
+    return std::nullopt;
+  return It->second;
 }
 
 bool ElfView::updateKernelDescriptorEntryOffset(StringRef KernelName,
@@ -632,6 +710,12 @@ bool ElfView::updateKernelDescriptorEntryOffset(StringRef KernelName,
   std::memcpy(
       Kd + offsetof(hsa::kernel_descriptor_t, kernel_code_entry_byte_offset),
       &NewEntryOffset, sizeof(NewEntryOffset));
+  for (KernelDescriptorInfo &Info : *KernelDescriptorCache) {
+    if (Info.KernelName != KernelName)
+      continue;
+    Info.EntryOffset = NewEntryOffset;
+    break;
+  }
   return true;
 }
 
@@ -680,12 +764,15 @@ bool ElfView::updateKernelDescriptorSgprCount(StringRef KernelName,
     }
   }
 
-  MetadataSgprUpdateStatus MetadataStatus =
-      updateKernelMetadataSgprCount(data(), File, KernelName, RequiredSgprs);
-  if (MetadataStatus == MetadataSgprUpdateStatus::Error)
+  StringMap<unsigned> RequiredSgprCounts;
+  RequiredSgprCounts.try_emplace(KernelName, RequiredSgprs);
+  MetadataCountUpdateStatus MetadataStatus = rewriteKernelMetadataCounts(
+      data(), File, RequiredSgprCounts, ".sgpr_count",
+      "updateKernelDescriptorSgprCount");
+  if (MetadataStatus == MetadataCountUpdateStatus::Error)
     return false;
   if (!UpdateDescriptor &&
-      MetadataStatus == MetadataSgprUpdateStatus::NotFound) {
+      MetadataStatus == MetadataCountUpdateStatus::NotFound) {
     log() << "hotswap: error: updateKernelDescriptorSgprCount: kernel '"
           << KernelName << "' requires " << RequiredSgprs
           << " SGPRs, but gfx10+ code objects must carry .sgpr_count metadata "
@@ -695,6 +782,16 @@ bool ElfView::updateKernelDescriptorSgprCount(StringRef KernelName,
   // On pre-gfx10 targets, NotFound is allowed for minimal code objects without
   // AMDGPU metadata because the descriptor remains the canonical count.
 
+  if (SgprCacheState == KernelSgprCacheState::Metadata &&
+      MetadataStatus == MetadataCountUpdateStatus::Found) {
+    StringMap<std::optional<unsigned>>::iterator Cached =
+        KernelSgprCountCache.find(KernelName);
+    if (Cached == KernelSgprCountCache.end())
+      KernelSgprCountCache.try_emplace(KernelName, RequiredSgprs);
+    else if (!Cached->second || RequiredSgprs > *Cached->second)
+      Cached->second = RequiredSgprs;
+  }
+
   if (!RequiredGranulated)
     return true;
 
@@ -702,6 +799,49 @@ bool ElfView::updateKernelDescriptorSgprCount(StringRef KernelName,
                   *RequiredGranulated);
   std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
               &Rsrc1, sizeof(Rsrc1));
+  if (SgprCacheState == KernelSgprCacheState::NoMetadata)
+    KernelSgprCountCache.erase(KernelName);
+  return true;
+}
+
+bool ElfView::updateKernelMetadataSgprCounts(
+    const StringMap<unsigned> &RequiredSgprs) {
+  MetadataCountUpdateStatus MetadataStatus =
+      rewriteKernelMetadataCounts(data(), File, RequiredSgprs, ".sgpr_count",
+                                  "updateKernelMetadataSgprCounts");
+  if (MetadataStatus == MetadataCountUpdateStatus::Error)
+    return false;
+  if (MetadataStatus == MetadataCountUpdateStatus::NotFound) {
+    log() << "hotswap: error: updateKernelMetadataSgprCounts: code object "
+             "has no AMDGPU metadata note.\n";
+    return false;
+  }
+
+  if (SgprCacheState == KernelSgprCacheState::Metadata) {
+    for (const StringMapEntry<unsigned> &Required : RequiredSgprs) {
+      StringMap<std::optional<unsigned>>::iterator Cached =
+          KernelSgprCountCache.find(Required.first());
+      if (Cached == KernelSgprCountCache.end())
+        KernelSgprCountCache.try_emplace(Required.first(), Required.second);
+      else if (!Cached->second || Required.second > *Cached->second)
+        Cached->second = Required.second;
+    }
+  }
+  return true;
+}
+
+bool ElfView::updateKernelMetadataVgprCounts(
+    const StringMap<unsigned> &RequiredVgprs) {
+  MetadataCountUpdateStatus MetadataStatus =
+      rewriteKernelMetadataCounts(data(), File, RequiredVgprs, ".vgpr_count",
+                                  "updateKernelMetadataVgprCounts");
+  if (MetadataStatus == MetadataCountUpdateStatus::Error)
+    return false;
+  if (MetadataStatus == MetadataCountUpdateStatus::NotFound) {
+    log() << "hotswap: error: updateKernelMetadataVgprCounts: code object "
+             "has no AMDGPU metadata note.\n";
+    return false;
+  }
   return true;
 }
 
@@ -782,7 +922,7 @@ ElfView::getKernelVgprCount(StringRef KernelName,
   }
   namespace hsa = amdhsa;
   // findKernelDescriptor never writes through the returned pointer in this
-  // call path but is shared (non-const) with updateKernelDescriptor. The
+  // call path but is shared (non-const) with descriptor update helpers. The
   // const_cast on `this` keeps the read-only accessor const-correct without
   // duplicating the lookup helper.
   uint8_t *Kd = const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
@@ -807,6 +947,102 @@ ElfView::getKernelVgprCount(StringRef KernelName,
   return static_cast<unsigned>(VgprCount);
 }
 
+static std::optional<unsigned> getKernelUnsignedMetadata(const ELFFileT &File,
+                                                         StringRef KernelName,
+                                                         StringRef Key,
+                                                         StringRef Context) {
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (!PhdrsOrErr) {
+    log() << "hotswap: error: " << Context
+          << ": failed to read program headers: "
+          << toString(PhdrsOrErr.takeError()) << "\n";
+    return std::nullopt;
+  }
+
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_type != ELF::PT_NOTE)
+      continue;
+
+    Error Err = Error::success();
+    for (ELFT::Note Note : File.notes(Phdr, Err)) {
+      if (Note.getName() != "AMDGPU" ||
+          Note.getType() != ELF::NT_AMDGPU_METADATA)
+        continue;
+
+      ArrayRef<uint8_t> Desc = Note.getDesc(4);
+      if (Desc.empty()) {
+        log() << "hotswap: error: " << Context
+              << ": AMDGPU metadata note has an empty descriptor.\n";
+        return std::nullopt;
+      }
+
+      StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
+      msgpack::Document Doc;
+      if (!Doc.readFromBlob(Blob, false)) {
+        log() << "hotswap: error: " << Context
+              << ": failed to parse AMDGPU metadata note.\n";
+        return std::nullopt;
+      }
+
+      msgpack::DocNode Root = Doc.getRoot();
+      if (!Root.isMap()) {
+        log() << "hotswap: error: " << Context
+              << ": AMDGPU metadata root is not a map.\n";
+        return std::nullopt;
+      }
+
+      msgpack::MapDocNode &RootMap = Root.getMap();
+      msgpack::DocNode::MapTy::iterator KernelsIt =
+          RootMap.find("amdhsa.kernels");
+      if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
+        continue;
+
+      msgpack::ArrayDocNode &KernelArray = KernelsIt->second.getArray();
+      for (msgpack::DocNode &KernelNode : KernelArray) {
+        if (!KernelNode.isMap())
+          continue;
+        msgpack::MapDocNode &KernelMap = KernelNode.getMap();
+        msgpack::DocNode::MapTy::iterator NameIt = KernelMap.find(".name");
+        if (NameIt == KernelMap.end() || !NameIt->second.isString() ||
+            NameIt->second.getString() != KernelName)
+          continue;
+
+        msgpack::DocNode::MapTy::iterator ValueIt = KernelMap.find(Key);
+        if (ValueIt == KernelMap.end())
+          return std::nullopt;
+        return readUnsignedMetadataNode(ValueIt->second, KernelName, Key,
+                                        Context);
+      }
+    }
+
+    if (Err) {
+      log() << "hotswap: error: " << Context
+            << ": failed to iterate AMDGPU notes: " << toString(std::move(Err))
+            << "\n";
+      return std::nullopt;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<unsigned>
+ElfView::getKernelMaxFlatWorkgroupSize(StringRef KernelName) const {
+  return getKernelUnsignedMetadata(File, KernelName, ".max_flat_workgroup_size",
+                                   "getKernelMaxFlatWorkgroupSize");
+}
+
+std::optional<unsigned>
+ElfView::getKernelMetadataVgprCount(StringRef KernelName) const {
+  return getKernelUnsignedMetadata(File, KernelName, ".vgpr_count",
+                                   "getKernelMetadataVgprCount");
+}
+
+std::optional<unsigned>
+ElfView::getKernelWavefrontSize(StringRef KernelName) const {
+  return getKernelUnsignedMetadata(File, KernelName, ".wavefront_size",
+                                   "getKernelWavefrontSize");
+}
+
 // Reads the static (compile-time-fixed) LDS allocation from the kernel
 // descriptor's group_segment_fixed_size field. Dynamic LDS is added by the
 // host at dispatch time and is not visible here -- see the declaration's
@@ -816,7 +1052,7 @@ std::optional<uint32_t>
 ElfView::getKernelStaticLdsSize(StringRef KernelName) const {
   namespace hsa = amdhsa;
   // findKernelDescriptor never writes through the returned pointer in this
-  // call path but is shared (non-const) with updateKernelDescriptor. The
+  // call path but is shared (non-const) with descriptor update helpers. The
   // const_cast on `this` keeps the read-only accessor const-correct without
   // duplicating the lookup helper.
   const uint8_t *Kd =
@@ -841,9 +1077,13 @@ ElfView::getKernelStaticLdsSize(StringRef KernelName) const {
 // preferred source. Falls back to the KD field when no metadata note is
 // present (e.g. minimal test ELFs assembled with -nostdlib).
 
-std::optional<unsigned>
-ElfView::getKernelSgprCount(StringRef KernelName) const {
-  // --- Try msgpack metadata note first. ---
+void ElfView::initializeKernelSgprCountCache() const {
+  if (SgprCacheState != KernelSgprCacheState::Uninitialized)
+    return;
+
+  // Default to Error so every malformed-note early return leaves an explicit
+  // terminal cache state instead of reparsing the same large blob.
+  SgprCacheState = KernelSgprCacheState::Error;
   Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
   bool SawMetadataNote = false;
   if (PhdrsOrErr) {
@@ -859,25 +1099,25 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
 
         ArrayRef<uint8_t> Desc = Note.getDesc(4);
         if (Desc.empty()) {
-          log() << "hotswap: error: getKernelSgprCount: AMDGPU metadata note "
+          log() << "hotswap: error: SGPR cache: AMDGPU metadata note "
                 << "has an empty descriptor.\n";
-          return std::nullopt;
+          return;
         }
 
         StringRef Blob(reinterpret_cast<const char *>(Desc.data()),
                        Desc.size());
         msgpack::Document Doc;
         if (!Doc.readFromBlob(Blob, false)) {
-          log() << "hotswap: error: getKernelSgprCount: failed to parse "
+          log() << "hotswap: error: SGPR cache: failed to parse "
                 << "AMDGPU metadata note.\n";
-          return std::nullopt;
+          return;
         }
 
         msgpack::DocNode Root = Doc.getRoot();
         if (!Root.isMap()) {
-          log() << "hotswap: error: getKernelSgprCount: AMDGPU metadata root "
+          log() << "hotswap: error: SGPR cache: AMDGPU metadata root "
                 << "is not a map.\n";
-          return std::nullopt;
+          return;
         }
         msgpack::MapDocNode &RootMap = Root.getMap();
         msgpack::DocNode::MapTy::iterator KernelsIt =
@@ -892,36 +1132,60 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
           msgpack::MapDocNode &KMap = KNode.getMap();
           msgpack::DocNode::MapTy::iterator NameIt = KMap.find(".name");
           if (NameIt == KMap.end() || !NameIt->second.isString() ||
-              NameIt->second.getString() != KernelName)
+              KernelSgprCountCache.find(NameIt->second.getString()) !=
+                  KernelSgprCountCache.end())
             continue;
 
           msgpack::DocNode::MapTy::iterator SgprIt = KMap.find(".sgpr_count");
           if (SgprIt == KMap.end()) {
-            log() << "hotswap: error: getKernelSgprCount: metadata for kernel '"
-                  << KernelName << "' has no .sgpr_count.\n";
-            return std::nullopt;
+            KernelSgprCountCache.try_emplace(NameIt->second.getString(),
+                                             std::nullopt);
+            continue;
           }
-          return readSgprCountMetadataNode(SgprIt->second, KernelName,
-                                           "getKernelSgprCount");
+          StringRef Name = NameIt->second.getString();
+          KernelSgprCountCache.try_emplace(
+              Name, readUnsignedMetadataNode(SgprIt->second, Name,
+                                             ".sgpr_count", "SGPR cache"));
         }
       }
       if (Err) {
-        log() << "hotswap: error: getKernelSgprCount: failed to iterate "
+        log() << "hotswap: error: SGPR cache: failed to iterate "
               << "AMDGPU notes: " << toString(std::move(Err)) << "\n";
-        return std::nullopt;
+        return;
       }
     }
   } else {
-    log() << "hotswap: error: getKernelSgprCount: failed to read program "
+    log() << "hotswap: error: SGPR cache: failed to read program "
           << "headers: " << toString(PhdrsOrErr.takeError()) << "\n";
-    return std::nullopt;
+    return;
   }
 
-  if (SawMetadataNote) {
+  SgprCacheState = SawMetadataNote ? KernelSgprCacheState::Metadata
+                                   : KernelSgprCacheState::NoMetadata;
+}
+
+std::optional<unsigned>
+ElfView::getKernelSgprCount(StringRef KernelName) const {
+  initializeKernelSgprCountCache();
+  if (SgprCacheState == KernelSgprCacheState::Error)
+    return std::nullopt;
+
+  StringMap<std::optional<unsigned>>::const_iterator Cached =
+      KernelSgprCountCache.find(KernelName);
+  if (SgprCacheState == KernelSgprCacheState::Metadata) {
+    if (Cached != KernelSgprCountCache.end()) {
+      if (!Cached->second)
+        log() << "hotswap: error: getKernelSgprCount: metadata for kernel '"
+              << KernelName << "' has no valid .sgpr_count.\n";
+      return Cached->second;
+    }
     log() << "hotswap: error: getKernelSgprCount: AMDGPU metadata has no "
           << ".sgpr_count entry for kernel '" << KernelName << "'.\n";
     return std::nullopt;
   }
+
+  if (Cached != KernelSgprCountCache.end())
+    return Cached->second;
 
   // --- Fallback: read the KD field. ---
   // The LLVM assembler populates GRANULATED_WAVEFRONT_SGPR_COUNT even on
@@ -929,8 +1193,10 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
   // ROCm-compiled code objects that lack a metadata note.
   namespace hsa = amdhsa;
   uint8_t *Kd = const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
-  if (!Kd)
+  if (!Kd) {
+    KernelSgprCountCache.try_emplace(KernelName, std::nullopt);
     return std::nullopt;
+  }
   uint32_t Rsrc1;
   std::memcpy(&Rsrc1,
               Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
@@ -944,7 +1210,9 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
           << KernelName << "' exceeds unsigned.\n";
     return std::nullopt;
   }
-  return static_cast<unsigned>(SgprCount);
+  std::optional<unsigned> Result = static_cast<unsigned>(SgprCount);
+  KernelSgprCountCache.try_emplace(KernelName, Result);
+  return Result;
 }
 
 // -- ElfView::getKernelClusterDims --------------------------------------------
@@ -1050,39 +1318,56 @@ ElfView::getKernelClusterDims(StringRef KernelName) const {
   return std::nullopt;
 }
 
-// -- ElfView::updateKernelDescriptor ------------------------------------------
+// -- ElfView::updateKernelDescriptorVgprCount ---------------------------------
 
-void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
-                                     unsigned VgprGranuleSize) {
+bool ElfView::updateKernelDescriptorVgprCount(StringRef KernelName,
+                                              unsigned RequiredVgprs,
+                                              unsigned VgprGranuleSize) {
   namespace hsa = amdhsa;
-  uint8_t *Kd = findKernelDescriptor(KernelName);
-  if (!Kd) {
-    log() << "hotswap: error: updateKernelDescriptor: kernel descriptor "
-          << "symbol '" << KernelName << ".kd' not found; requested +"
-          << ExtraVgprs << " VGPRs silently dropped.\n";
-    return;
+  if (VgprGranuleSize == 0) {
+    log() << "hotswap: error: updateKernelDescriptorVgprCount: VGPR granule "
+             "is zero for kernel '"
+          << KernelName << "'.\n";
+    return false;
   }
 
-  if (ExtraVgprs == 0 || VgprGranuleSize == 0)
-    return;
+  uint8_t *Kd = findKernelDescriptor(KernelName);
+  if (!Kd) {
+    log() << "hotswap: error: updateKernelDescriptorVgprCount: kernel "
+             "descriptor symbol '"
+          << KernelName << ".kd' not found.\n";
+    return false;
+  }
 
   uint32_t Rsrc1;
   std::memcpy(&Rsrc1,
               Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
               sizeof(Rsrc1));
-  uint32_t Current = AMDHSA_BITS_GET(
+  uint32_t CurrentGranulated = AMDHSA_BITS_GET(
       Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT);
+  uint64_t CurrentVgprs =
+      (static_cast<uint64_t>(CurrentGranulated) + 1) * VgprGranuleSize;
+  if (RequiredVgprs <= CurrentVgprs)
+    return true;
+
   uint32_t MaxGran = static_cast<uint32_t>(
       hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT >>
       hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT_SHIFT);
-  uint64_t Extra = (static_cast<uint64_t>(ExtraVgprs) + VgprGranuleSize - 1) /
-                   VgprGranuleSize;
   uint64_t NewGranulated =
-      std::min<uint64_t>(static_cast<uint64_t>(Current) + Extra, MaxGran);
+      (static_cast<uint64_t>(RequiredVgprs) + VgprGranuleSize - 1) /
+          VgprGranuleSize -
+      1;
+  if (NewGranulated > MaxGran) {
+    log() << "hotswap: error: updateKernelDescriptorVgprCount: kernel '"
+          << KernelName << "' needs " << RequiredVgprs
+          << " VGPRs, which exceeds the descriptor encoding limit.\n";
+    return false;
+  }
   AMDHSA_BITS_SET(Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT,
                   static_cast<uint32_t>(NewGranulated));
   std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
               &Rsrc1, sizeof(Rsrc1));
+  return true;
 }
 
 // -- ElfView::dataAtVAddr -----------------------------------------------------
@@ -1124,9 +1409,9 @@ std::optional<uint64_t> ElfView::trampolinePoolVAddr() const {
 
 // -- addKernelEntryTrampolineSymbols ------------------------------------------
 
-std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
-    WritableMemoryBuffer &In, unsigned TextSectionIndex, uint64_t TextAddr,
-    uint64_t OldTextSize, ArrayRef<KernelEntryTrampolineFixup> Fixups) {
+std::unique_ptr<WritableMemoryBuffer>
+addKernelEntryTrampolineSymbols(WritableMemoryBuffer &In, uint64_t PoolVAddr,
+                                ArrayRef<KernelEntryTrampolineFixup> Fixups) {
   if (Fixups.empty())
     return nullptr;
 
@@ -1147,6 +1432,39 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
     return nullptr;
   }
   ELFT::ShdrRange Secs = *SecsOrErr;
+
+  // Locate the appended trampoline-pool section by its virtual address: the
+  // stubs live there (at PoolVAddr + StubTextOffset), not immediately after
+  // .text, so the stub symbols must reference this section, not .text.
+  //
+  // Match by containment (sh_addr <= PoolVAddr < sh_addr + sh_size), not by an
+  // exact sh_addr == PoolVAddr scan: a zero-sized allocatable section can begin
+  // at PoolVAddr (trampolinePoolVAddr() would still pick that address, and
+  // growWithTrampolines() appends the real pool after it). An exact-address
+  // scan could select that empty section, leaving the symbols' values outside
+  // their declared section. The pool is the only allocatable section that
+  // actually spans PoolVAddr, since PoolVAddr is aligned past every
+  // pre-existing allocatable section's end.
+  unsigned PoolSectionIndex = 0;
+  for (unsigned I = 0; I < Secs.size(); ++I) {
+    if (!(Secs[I].sh_flags & ELF::SHF_ALLOC))
+      continue;
+    std::optional<uint64_t> SecEnd = checkedAddUint64(
+        Secs[I].sh_addr, Secs[I].sh_size, "trampoline-pool section end");
+    if (!SecEnd)
+      return nullptr;
+    if (Secs[I].sh_addr <= PoolVAddr && PoolVAddr < *SecEnd) {
+      PoolSectionIndex = I;
+      break;
+    }
+  }
+  if (PoolSectionIndex == 0) {
+    log()
+        << "hotswap: addKernelEntryTrampolineSymbols: trampoline-pool section "
+        << "at vaddr 0x" << utohexstr(PoolVAddr) << " not found; skipping "
+        << "stub symbols.\n";
+    return nullptr;
+  }
 
   // Locate .symtab and its linked string table. Scan from the end, since the
   // symbol table sits near the end of the section list in these code objects.
@@ -1190,17 +1508,12 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
   SmallVector<uint8_t> StrBlob, SymBlob;
   for (const KernelEntryTrampolineFixup &F : Fixups) {
     std::string Name = F.KernelName + ".stub";
-    uint32_t NameOff =
-        static_cast<uint32_t>(StrShdr.sh_size + StrBlob.size());
+    uint32_t NameOff = static_cast<uint32_t>(StrShdr.sh_size + StrBlob.size());
     StrBlob.append(Name.begin(), Name.end());
     StrBlob.push_back(0);
 
-    std::optional<uint64_t> StubOff = checkedAddUint64(
-        OldTextSize, F.StubTextOffset, "stub symbol .text offset");
-    if (!StubOff)
-      return nullptr;
     std::optional<uint64_t> StubVAddr =
-        checkedAddUint64(TextAddr, *StubOff, "stub symbol vaddr");
+        checkedAddUint64(PoolVAddr, F.StubTextOffset, "stub symbol vaddr");
     if (!StubVAddr)
       return nullptr;
 
@@ -1208,7 +1521,7 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
     Sym.st_name = NameOff;
     Sym.st_info = (ELF::STB_GLOBAL << 4) | ELF::STT_FUNC;
     Sym.st_other = ELF::STV_DEFAULT;
-    Sym.st_shndx = static_cast<uint16_t>(TextSectionIndex);
+    Sym.st_shndx = static_cast<uint16_t>(PoolSectionIndex);
     Sym.st_value = *StubVAddr;
     Sym.st_size = KernelEntryStubStride;
     const uint8_t *P = reinterpret_cast<const uint8_t *>(&Sym);
@@ -1268,8 +1581,18 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
   std::memcpy(&Shoff, O + offsetof(Ehdr, e_shoff), sizeof(Shoff));
   std::memcpy(&Shentsize, O + offsetof(Ehdr, e_shentsize), sizeof(Shentsize));
   std::memcpy(&Shnum, O + offsetof(Ehdr, e_shnum), sizeof(Shnum));
+
+  uint64_t Phoff;
+  uint16_t Phentsize, Phnum;
+  std::memcpy(&Phoff, O + offsetof(Ehdr, e_phoff), sizeof(Phoff));
+  std::memcpy(&Phentsize, O + offsetof(Ehdr, e_phentsize), sizeof(Phentsize));
+  std::memcpy(&Phnum, O + offsetof(Ehdr, e_phnum), sizeof(Phnum));
+
   uint64_t NewShoff = Shift(Shoff);
   std::memcpy(O + offsetof(Ehdr, e_shoff), &NewShoff, sizeof(NewShoff));
+  uint64_t NewPhoff = Shift(Phoff);
+  std::memcpy(O + offsetof(Ehdr, e_phoff), &NewPhoff, sizeof(NewPhoff));
+
   if (Shentsize < sizeof(Shdr))
     return nullptr;
 
@@ -1288,6 +1611,20 @@ std::unique_ptr<WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
       std::memcpy(&ShSize, Sh + offsetof(Shdr, sh_size), sizeof(ShSize));
       ShSize += (I == SymIdx) ? SymDelta : StrDelta;
       std::memcpy(Sh + offsetof(Shdr, sh_size), &ShSize, sizeof(ShSize));
+    }
+  }
+
+  if (Phentsize >= sizeof(Phdr)) {
+    for (uint16_t I = 0; I < Phnum; ++I) {
+      uint64_t P = NewPhoff + static_cast<uint64_t>(I) * Phentsize;
+      if (P + sizeof(Phdr) > NewSize)
+        break;
+      uint8_t *Ph = O + P;
+      uint64_t POffset;
+      std::memcpy(&POffset, Ph + offsetof(Phdr, p_offset), sizeof(POffset));
+      uint64_t NewPOffset = Shift(POffset);
+      std::memcpy(Ph + offsetof(Phdr, p_offset), &NewPOffset,
+                  sizeof(NewPOffset));
     }
   }
 

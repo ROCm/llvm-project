@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 -mattr=+mad-mac-f32-insts < %s | FileCheck -check-prefix=GCN -check-prefix=SI %s
-; XUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN -check-prefix=VI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 -mattr=+mad-mac-f32-insts < %s | FileCheck -check-prefix=GCN -check-prefix=SI %s
+; XUN: llc -mtriple=amdgpu8.02 -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN -check-prefix=VI %s
 
  ; FIXME: None of these trigger madmk emission anymore. It is still
  ; possible, but requires the correct registers to be used which is

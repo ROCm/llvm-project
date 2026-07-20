@@ -1,9 +1,9 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=bonaire < %s | FileCheck -check-prefixes=GCN,GCN-SDAG,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=bonaire < %s | FileCheck -check-prefixes=GCN,GCN-GISEL,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefixes=GCN,GCN-SDAG,VIGFX9,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefixes=GCN,GCN-GISEL,VIGFX9,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck -check-prefixes=GCN,GCN-SDAG,VIGFX9,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck -check-prefixes=GCN,GCN-GISEL,VIGFX9,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu7.04 < %s | FileCheck -check-prefixes=GCN,GCN-SDAG,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.04 < %s | FileCheck -check-prefixes=GCN,GCN-GISEL,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,GCN-SDAG,VIGFX9,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,GCN-GISEL,VIGFX9,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GCN-SDAG,VIGFX9,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GCN-GISEL,VIGFX9,FUNC %s
 
 ; FUNC-LABEL: {{^}}ds_ordered_swap:
 ; GCN: s_mov_b32 m0, s0

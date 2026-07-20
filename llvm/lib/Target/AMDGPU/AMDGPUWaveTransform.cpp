@@ -175,7 +175,7 @@ struct LaneEdge {
 /// \brief Representation of a node / basic block in the wave CFG.
 struct WaveNode {
   MachineBasicBlock *Block = nullptr;
-  MachineCycle *Cycle = nullptr;
+  CycleRef Cycle;
   WaveNodeVec Predecessors;
   WaveNodeVec Successors;
   SmallVector<LaneEdge, 4> LanePredecessors;
@@ -192,9 +192,9 @@ struct WaveNode {
 
   Register RejoinMask;
 
-  WaveNode(MachineBasicBlock *Block, MachineCycle *Cycle)
+  WaveNode(MachineBasicBlock *Block, CycleRef Cycle)
       : Block(Block), Cycle(Cycle), LatestPostDom(this) {}
-  WaveNode(MachineCycle *Cycle, unsigned FlowNum)
+  WaveNode(CycleRef Cycle, unsigned FlowNum)
       : Cycle(Cycle), FlowNum(FlowNum), LatestPostDom(this) {}
   WaveNode(const WaveNode &) = delete;
   WaveNode(WaveNode &&) = delete;
@@ -312,9 +312,9 @@ public:
 private:
   void cleanupSimpleFlowNodes();
 
-  MachineBasicBlock *getEffectiveHeart(const MachineCycle *Cycle);
+  MachineBasicBlock *getEffectiveHeart(CycleRef Cycle);
   void prepareNodesEnterCycle(WaveNode *HeaderNode);
-  void prepareNodesExitCycle(MachineCycle *Cycle, WaveNode *NextNode);
+  void prepareNodesExitCycle(CycleRef Cycle, WaveNode *NextNode);
   bool appendOpenSet(WaveNode *Grom, WaveNode *Nound,
                      SmallVectorImpl<WaveNode *> &OpenSet);
   void reroute(ArrayRef<WaveNode *> FromList, WaveNode *ToNode,
@@ -328,13 +328,17 @@ private:
 
 } // anonymous namespace
 
-static MachineBasicBlock *getHeartBlock(const MachineCycle *Cycle) {
-  return nullptr;
+static MachineBasicBlock *getHeartBlock(CycleRef Cycle) { return nullptr; }
+
+/// Check if Outer contains Inner, where Inner may be an invalid CycleRef
+/// (i.e. a block not in any cycle). Returns false if Inner is invalid.
+static bool cycleContains(const MachineCycleInfo &CI, CycleRef Outer,
+                          CycleRef Inner) {
+  return Inner.isValid() && CI.contains(Outer, Inner);
 }
 
 class HeartAdjustedPostOrder {
 public:
-  using CycleT = MachineCycle;
   using BlockT = MachineBasicBlock;
   using DominatorTreeT = MachineDominatorTree;
   using CycleInfoT = MachineCycleInfo;
@@ -367,14 +371,13 @@ public:
     // We also maintain a linked list of cycles that are active in the sense
     // that we're currently visiting blocks inside them.
     struct HapoCycle {
-      const CycleT *Cycle;
+      CycleRef Cycle;
       BlockT *Heart;
       unsigned ParentStackIdx;
       std::vector<BlockT *> Order;
       SmallVector<BlockT *, 4> PostponedBlocks;
 
-      explicit HapoCycle(const CycleT *Cycle, BlockT *Heart,
-                         unsigned ParentStackIdx)
+      explicit HapoCycle(CycleRef Cycle, BlockT *Heart, unsigned ParentStackIdx)
           : Cycle(Cycle), Heart(Heart), ParentStackIdx(ParentStackIdx) {}
     };
 
@@ -392,7 +395,7 @@ public:
     unsigned CurrentCycleStackIdx = 0;
 
     BlockT *EntryBlock = domTree.getRootNode()->getBlock();
-    CycleStack.emplace_back(nullptr, nullptr, 0);
+    CycleStack.emplace_back(CycleRef(), nullptr, 0);
     BlockStack.push_back(EntryBlock);
 
     // The entry block is not marked as a cycle header, so that we don't attempt
@@ -449,9 +452,9 @@ public:
       }
 
       // Pre-order visit of the block.
-      const CycleT *CurrentCycle = CycleStack[CurrentCycleStackIdx].Cycle;
+      CycleRef CurrentCycle = CycleStack[CurrentCycleStackIdx].Cycle;
       BlockT *CurrentHeart = CycleStack[CurrentCycleStackIdx].Heart;
-      const CycleT *BlockCycle = CycleInfo.getCycle(Block);
+      CycleRef BlockCycle = CycleInfo.getCycle(Block);
 
       if (BlockCycle == CurrentCycle ||
           (CurrentHeart && CurrentHeart == getHeartBlock(BlockCycle))) {
@@ -460,16 +463,18 @@ public:
         continue;
       }
 
-      if (!CurrentCycle || CurrentCycle->contains(BlockCycle)) {
+      if (!CurrentCycle || cycleContains(CycleInfo, CurrentCycle, BlockCycle)) {
         // Entering a child cycle. In the case of irreducible control flow,
         // BlockCycle might not be a direct child -- find it.
-        while ((BlockCycle->getParentCycle() != CurrentCycle) &&
+        while ((CycleInfo.getParentCycle(BlockCycle) != CurrentCycle) &&
                (!CurrentHeart ||
-                CurrentHeart != getHeartBlock(BlockCycle->getParentCycle())))
-          BlockCycle = BlockCycle->getParentCycle();
+                CurrentHeart !=
+                    getHeartBlock(CycleInfo.getParentCycle(BlockCycle))))
+          BlockCycle = CycleInfo.getParentCycle(BlockCycle);
 
         BlockT *Heart = getHeartBlock(BlockCycle);
-        BlockT *EffectiveHeart = Heart ? Heart : BlockCycle->getHeader();
+        BlockT *EffectiveHeart =
+            Heart ? Heart : CycleInfo.getHeader(BlockCycle);
 
         CycleStack.emplace_back(BlockCycle, Heart, CurrentCycleStackIdx);
         CurrentCycleStackIdx = CycleStack.size() - 1;
@@ -494,7 +499,8 @@ public:
       HapoCycle *PostponeCycle = &CycleStack[CurrentCycleStackIdx];
       for (;;) {
         HapoCycle *parent = &CycleStack[PostponeCycle->ParentStackIdx];
-        if (!parent->Cycle || parent->Cycle->contains(BlockCycle))
+        if (!parent->Cycle ||
+            cycleContains(CycleInfo, parent->Cycle, BlockCycle))
           break;
         PostponeCycle = parent;
       }
@@ -550,7 +556,7 @@ void ReconvergeCFGHelper::run() {
   for (unsigned Index = 0; Index != Nodes.size(); ++Index)
     Nodes[Index]->OrderIndex = Index;
 
-  MachineCycle *CurrentCycle = nullptr;
+  CycleRef CurrentCycle;
 
   NextNodes.reserve(Nodes.size());
 
@@ -558,15 +564,15 @@ void ReconvergeCFGHelper::run() {
     WaveNode *Node = NodePtr.get();
 
     if (Node->Cycle != CurrentCycle) {
-      while (CurrentCycle && !CurrentCycle->contains(Node->Cycle)) {
+      while (CurrentCycle &&
+             !cycleContains(CycleInfo, CurrentCycle, Node->Cycle)) {
 
         prepareNodesExitCycle(CurrentCycle, Node);
-        CurrentCycle = CurrentCycle->getParentCycle();
-
+        CurrentCycle = CycleInfo.getParentCycle(CurrentCycle);
       }
 
       if (Node->Cycle != CurrentCycle) {
-        assert(Node->Cycle->getParentCycle() == CurrentCycle);
+        assert(CycleInfo.getParentCycle(Node->Cycle) == CurrentCycle);
 
         prepareNodesEnterCycle(Node);
         CurrentCycle = Node->Cycle;
@@ -806,15 +812,14 @@ void ReconvergeCFGHelper::cleanupSimpleFlowNodes() {
 /// Return the given cycle's effective heart. If a cycle has no explicitly
 /// specified heart, with use the cycle header as heart. This leads to a more
 /// intuitive wave transform on natural loops with multiple back edges.
-MachineBasicBlock *
-ReconvergeCFGHelper::getEffectiveHeart(const MachineCycle *Cycle) {
+MachineBasicBlock *ReconvergeCFGHelper::getEffectiveHeart(CycleRef Cycle) {
   if (!Cycle)
     return nullptr;
 
   MachineBasicBlock *Heart = nullptr; // ConvergenceInfo.getHeartBlock(Cycle);
   if (Heart)
     return Heart;
-  return Cycle->getHeader();
+  return CycleInfo.getHeader(Cycle);
 }
 
 /// \brief Insert preparatory flow nodes for entering a cycle.
@@ -860,23 +865,25 @@ ReconvergeCFGHelper::getEffectiveHeart(const MachineCycle *Cycle) {
 //       heart and that have two back edges. Keep various possible heart
 //       structures in mind.
 void ReconvergeCFGHelper::prepareNodesEnterCycle(WaveNode *headerNode) {
-  MachineCycle *Cycle = headerNode->Cycle;
+  CycleRef Cycle = headerNode->Cycle;
   WaveNodeVec Entering;
 
   assert(Cycle);
   for (unsigned Index = headerNode->OrderIndex;
-       Index < Nodes.size() && Cycle->contains(Nodes[Index]->Cycle); ++Index) {
+       Index < Nodes.size() &&
+       cycleContains(CycleInfo, Cycle, Nodes[Index]->Cycle);
+       ++Index) {
     // Check whether this is an entry block, and collect out-of-cycle
     // predecessors.
     WaveNode *Entry = Nodes[Index].get();
     for (WaveNode *Pred : Entry->Predecessors) {
-      if (!Cycle->contains(Pred->Cycle))
+      if (!cycleContains(CycleInfo, Cycle, Pred->Cycle))
         Entering.push_back(Pred);
     }
 
     if (!Entering.empty()) {
-      NextNodes.push_back(
-          std::make_unique<WaveNode>(Cycle->getParentCycle(), ++NumFlowNodes));
+      NextNodes.push_back(std::make_unique<WaveNode>(
+          CycleInfo.getParentCycle(Cycle), ++NumFlowNodes));
       WaveNode *FlowNode = NextNodes.back().get();
       FlowNode->OrderIndex = headerNode->OrderIndex;
       reroute(Entering, Entry, FlowNode);
@@ -937,19 +944,19 @@ void ReconvergeCFGHelper::prepareNodesEnterCycle(WaveNode *headerNode) {
 /// Note: Nodes in the pre-heart region with multiple back edges need to be
 ///       handled separately!
 ///
-void ReconvergeCFGHelper::prepareNodesExitCycle(MachineCycle *Cycle,
+void ReconvergeCFGHelper::prepareNodesExitCycle(CycleRef Cycle,
                                                 WaveNode *nextNode) {
   WaveNodeVec FromNodes;
   WaveNodeVec ToNodes;
 
   assert(Cycle);
   MachineBasicBlock *Heart = getEffectiveHeart(Cycle);
-  if (Heart && Heart != getEffectiveHeart(Cycle->getParentCycle())) {
+  if (Heart && Heart != getEffectiveHeart(CycleInfo.getParentCycle(Cycle))) {
     WaveNode *HeartNode = NodeForBlock.lookup(Heart);
 
     for (unsigned nextIndex = NextNodes.size() - 1;; nextIndex--) {
       WaveNode *Node = NextNodes[nextIndex].get();
-      assert(Cycle->contains(Node->Cycle));
+      assert(cycleContains(CycleInfo, Cycle, Node->Cycle));
 
       bool isFromNode = false;
       for (WaveNode *Succ : Node->Successors) {
@@ -974,11 +981,11 @@ void ReconvergeCFGHelper::prepareNodesExitCycle(MachineCycle *Cycle,
     });
 
     for (WaveNode *ToNode : ToNodes) {
-      MachineCycle *toCycle;
-      if (Cycle->contains(ToNode->Cycle))
+      CycleRef toCycle;
+      if (cycleContains(CycleInfo, Cycle, ToNode->Cycle))
         toCycle = Cycle;
       else
-        toCycle = Cycle->getParentCycle();
+        toCycle = CycleInfo.getParentCycle(Cycle);
 
       NextNodes.push_back(std::make_unique<WaveNode>(toCycle, ++NumFlowNodes));
       WaveNode *FlowNode = NextNodes.back().get();

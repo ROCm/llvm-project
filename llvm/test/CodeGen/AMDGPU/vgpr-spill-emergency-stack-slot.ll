@@ -1,6 +1,6 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-- -mcpu=tahiti < %s | FileCheck -check-prefix=GCN -check-prefix=SI %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-- -mcpu=fiji < %s | FileCheck -check-prefix=GCN -check-prefix=VI %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-- -mcpu=gfx900 < %s | FileCheck -check-prefix=GCN -check-prefix=GFX9 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00-- < %s | FileCheck -check-prefix=GCN -check-prefix=SI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.03-- < %s | FileCheck -check-prefix=GCN -check-prefix=VI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00-- < %s | FileCheck -check-prefix=GCN -check-prefix=GFX9 %s
 
 ; This ends up using all 255 registers and requires register
 ; scavenging which will fail to find an unsued register.

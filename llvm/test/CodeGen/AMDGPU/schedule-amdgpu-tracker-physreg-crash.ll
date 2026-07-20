@@ -1,5 +1,5 @@
-; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -mattr=+xnack -amdgpu-use-amdgpu-trackers=1  2>&1  < %s | FileCheck -check-prefixes=ERR-GCNTRACKERS %s
-; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -mattr=+xnack 2>&1  < %s | FileCheck -check-prefixes=GCN %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00-amd-amdhsa -mattr=+xnack -amdgpu-use-amdgpu-trackers=1  2>&1  < %s | FileCheck -check-prefixes=ERR-GCNTRACKERS %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00-amd-amdhsa -mattr=+xnack 2>&1  < %s | FileCheck -check-prefixes=GCN %s
 
 ; TODO-WAVETRANSFORM: We should ensure the second RUN line is consistent with the early structurizer-based flow. This should be addressed when we upstream the wave transform-enabled pass pipeline.
 

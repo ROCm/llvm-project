@@ -1,6 +1,6 @@
-;RUN: llc < %s -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=verde -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,SDAG %s
-;RUN: llc < %s -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=tonga -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,SDAG %s
-;RUN: llc < %s -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=tonga -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,GISEL %s
+;RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel=0 -mtriple=amdgpu6.01 -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,SDAG %s
+;RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel=0 -mtriple=amdgpu8.02 -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,SDAG %s
+;RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel=1 -mtriple=amdgpu8.02 -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,GISEL %s
 
 ;CHECK-LABEL: {{^}}test1:
 ;CHECK-NOT: s_waitcnt

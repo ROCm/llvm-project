@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -stop-after=amdgpu-isel -o - %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08-amd-amdhsa -stop-after=amdgpu-isel -o - %s | FileCheck -check-prefix=GCN %s
 define void @test(i1 %c0) #1 {
   ; Clean up the unreachable blocks introduced with LowerSwitch pass.
   ; This test ensures that, in the pass flow, UnreachableBlockElim pass

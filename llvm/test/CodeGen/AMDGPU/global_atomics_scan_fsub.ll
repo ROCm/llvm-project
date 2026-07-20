@@ -1289,12 +1289,13 @@ define amdgpu_kernel void @global_atomic_fsub_uni_address_div_value_agent_scope_
 ; GFX1164-DPP-NEXT:    v_permlanex16_b32 v2, v1, 0, 0
 ; GFX1164-DPP-NEXT:    v_add_f32_e32 v1, v1, v2
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
-; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_4) | instid1(SALU_CYCLE_1)
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    v_permlane64_b32 v2, v1
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
 ; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_vdst(0)
@@ -2790,12 +2791,13 @@ define amdgpu_kernel void @global_atomic_fsub_uni_address_div_value_one_as_scope
 ; GFX1164-DPP-NEXT:    v_permlanex16_b32 v2, v1, 0, 0
 ; GFX1164-DPP-NEXT:    v_add_f32_e32 v1, v1, v2
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
-; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_4) | instid1(SALU_CYCLE_1)
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    v_permlane64_b32 v2, v1
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
 ; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_vdst(0)
@@ -4291,12 +4293,13 @@ define amdgpu_kernel void @global_atomic_fsub_uni_address_div_value_agent_scope_
 ; GFX1164-DPP-NEXT:    v_permlanex16_b32 v2, v1, 0, 0
 ; GFX1164-DPP-NEXT:    v_add_f32_e32 v1, v1, v2
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
-; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_4) | instid1(SALU_CYCLE_1)
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    v_permlane64_b32 v2, v1
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
 ; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_vdst(0)
@@ -5214,12 +5217,13 @@ define amdgpu_kernel void @global_atomic_fsub_uni_address_div_value_agent_scope_
 ; GFX1164-DPP-NEXT:    v_permlanex16_b32 v2, v1, 0, 0
 ; GFX1164-DPP-NEXT:    v_add_f32_e32 v1, v1, v2
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
-; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_4) | instid1(SALU_CYCLE_1)
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    v_permlane64_b32 v2, v1
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
 ; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_vdst(0)
@@ -6714,12 +6718,13 @@ define amdgpu_kernel void @global_atomic_fsub_uni_address_div_value_default_scop
 ; GFX1164-DPP-NEXT:    v_permlanex16_b32 v2, v1, 0, 0
 ; GFX1164-DPP-NEXT:    v_add_f32_e32 v1, v1, v2
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
-; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_4) | instid1(SALU_CYCLE_1)
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    v_permlane64_b32 v2, v1
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    s_or_saveexec_b64 s[0:1], -1
 ; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_vdst(0)
@@ -8227,8 +8232,8 @@ define amdgpu_kernel void @global_atomic_fsub_double_uni_address_div_value_agent
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v0, v2
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    s_xor_b64 s[2:3], s[0:1], exec
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[2:3]
@@ -9824,8 +9829,8 @@ define amdgpu_kernel void @global_atomic_fsub_double_uni_address_div_value_one_a
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v0, v2
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    s_xor_b64 s[2:3], s[0:1], exec
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[2:3]
@@ -11422,8 +11427,8 @@ define amdgpu_kernel void @global_atomic_fsub_double_uni_address_div_value_agent
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v0, v2
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    s_xor_b64 s[2:3], s[0:1], exec
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[2:3]
@@ -12428,8 +12433,8 @@ define amdgpu_kernel void @global_atomic_fsub_double_uni_address_div_value_agent
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v0, v2
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    s_xor_b64 s[2:3], s[0:1], exec
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[2:3]
@@ -14025,8 +14030,8 @@ define amdgpu_kernel void @global_atomic_fsub_double_uni_address_div_value_defau
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1164-DPP-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-DPP-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
-; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v0, v2
+; GFX1164-DPP-NEXT:    s_waitcnt_depctr depctr_va_sdst(0)
 ; GFX1164-DPP-NEXT:    s_xor_b64 s[2:3], s[0:1], exec
 ; GFX1164-DPP-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-DPP-NEXT:    s_mov_b64 exec, s[2:3]

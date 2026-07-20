@@ -1,11 +1,11 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=gfx1100 -verify-misched < %s | FileCheck --check-prefixes=GFX11-PAL %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=gfx1100 -amdgpu-use-amdgpu-trackers=1 -verify-misched < %s | FileCheck --check-prefixes=GFX11-PAL-GCNTRACKERS %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -amdgpu-scalarize-global-loads=false -verify-misched < %s | FileCheck --check-prefixes=TONGA %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -amdgpu-scalarize-global-loads=false -amdgpu-use-amdgpu-trackers=1 -verify-misched < %s | FileCheck --check-prefixes=TONGA-GCNTRACKERS %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx908 -verify-misched < %s | FileCheck --check-prefixes=GFX908 %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx908 -amdgpu-use-amdgpu-trackers=1 -verify-misched < %s | FileCheck --check-prefixes=GFX908-GCNTRACKERS %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 -verify-misched < %s | FileCheck --check-prefixes=GENERIC %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 -amdgpu-use-amdgpu-trackers=1 -verify-misched < %s | FileCheck --check-prefixes=GENERIC-GCNTRACKERS %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00--amdpal -verify-misched < %s | FileCheck --check-prefixes=GFX11-PAL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00--amdpal -amdgpu-use-amdgpu-trackers=1 -verify-misched < %s | FileCheck --check-prefixes=GFX11-PAL-GCNTRACKERS %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -amdgpu-scalarize-global-loads=false -verify-misched < %s | FileCheck --check-prefixes=TONGA %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -amdgpu-scalarize-global-loads=false -amdgpu-use-amdgpu-trackers=1 -verify-misched < %s | FileCheck --check-prefixes=TONGA-GCNTRACKERS %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08 -verify-misched < %s | FileCheck --check-prefixes=GFX908 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08 -amdgpu-use-amdgpu-trackers=1 -verify-misched < %s | FileCheck --check-prefixes=GFX908-GCNTRACKERS %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 -verify-misched < %s | FileCheck --check-prefixes=GENERIC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 -amdgpu-use-amdgpu-trackers=1 -verify-misched < %s | FileCheck --check-prefixes=GENERIC-GCNTRACKERS %s
 
 ; GCN Trackers are sensitive to minor changes in RP, and will avoid scheduling certain instructions, which, if scheduled,
 ; allow scheduling of other instructions which reduce RP

@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx700 -stress-regalloc=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu7.00-amd-amdhsa -stress-regalloc=1 < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}spill_csr_s5_copy:
 ; GCN: s_mov_b32 [[FP_SCRATCH_COPY:s[0-9]+]], s33

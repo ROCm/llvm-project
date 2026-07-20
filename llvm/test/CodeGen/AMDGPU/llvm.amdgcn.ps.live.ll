@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -check-prefixes=CHECK,CHECK-SDAG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -check-prefixes=CHECK,CHECK-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefixes=CHECK,CHECK-SDAG %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefixes=CHECK,CHECK-GISEL %s
 
 ; CHECK-LABEL: {{^}}test1:
 ; CHECK: s_mov_b64 s[0:1], exec

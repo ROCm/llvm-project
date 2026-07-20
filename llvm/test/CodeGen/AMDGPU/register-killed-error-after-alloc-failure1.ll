@@ -1,4 +1,4 @@
-; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx908 -filetype=null %s 2>&1 | FileCheck -check-prefix=ERR -implicit-check-not=error %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08 -filetype=null %s 2>&1 | FileCheck -check-prefix=ERR -implicit-check-not=error %s
 
 ; ERR: error: inline assembly requires more registers than available
 ; ERR-NOT: ERROR

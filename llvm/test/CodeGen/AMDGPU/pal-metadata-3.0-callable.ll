@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=gfx1100 < %s | FileCheck --check-prefixes=CHECK,GFX11 %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=gfx1200 < %s | FileCheck --check-prefixes=CHECK,GFX12 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00--amdpal < %s | FileCheck --check-prefixes=CHECK,GFX11 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu12.00--amdpal < %s | FileCheck --check-prefixes=CHECK,GFX12 %s
 
 ; CHECK:           .amdgpu_pal_metadata
 ; CHECK-NEXT: ---
