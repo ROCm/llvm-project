@@ -56,6 +56,16 @@ static Value *rebaseSourceWaveLaneSelector(RaiseContext &Ctx, Value *Selector,
                         NamePrefix + "_srcwave_addr");
 }
 
+// Materialise an addrspace(3) LDS pointer from an integer byte address,
+// freezing it first so a cross-widening inactive-lane undef address cannot
+// reach the memory op as poison (see RaiseContext::freezeMemAddr). Every LDS
+// pointer that feeds an emitUnderExec-gated load/store/atomic goes through
+// here.
+static Value *toLdsPtr(RaiseContext &Ctx, Value *Addr, const Twine &Name = "") {
+  return Ctx.B.CreateIntToPtr(Ctx.freezeMemAddr(Addr),
+                              PointerType::get(Ctx.C, 3), Name);
+}
+
 Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
                                  OpResolver &Op) {
   HandlerResult Hr;
@@ -544,14 +554,13 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       int64_t ByteOff1 = RawOff1 * ds2UnitBytes;
 
       Value *Vaddr = Ctx.B.CreateZExt(Op.src(0), Ctx.I64Ty, "ds2_addr");
-      auto *LdsPtrTy = PointerType::get(Ctx.C, 3);
       auto MakePtr = [&](int64_t ByteOff, const char *Name) -> Value * {
         Value *A =
             ByteOff == 0
                 ? Vaddr
                 : Ctx.B.CreateAdd(Vaddr, ConstantInt::get(Ctx.I64Ty, ByteOff),
                                   "ds2_off");
-        return Ctx.B.CreateIntToPtr(A, LdsPtrTy, Name);
+        return toLdsPtr(Ctx, A, Name);
       };
       Value *Ptr0 = MakePtr(ByteOff0, "ds2_p0");
       Value *Ptr1 = MakePtr(ByteOff1, "ds2_p1");
@@ -659,7 +668,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
       }
     }
 
-    Value *Ptr = Ctx.B.CreateIntToPtr(Addr, PointerType::get(Ctx.C, 3));
+    Value *Ptr = toLdsPtr(Ctx, Addr);
 
     if (IsDsRead) {
       ParsedReg Dest = Op.dst();
@@ -742,7 +751,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
         break;
       }
     }
-    Value *Ptr = Ctx.B.CreateIntToPtr(Addr, PointerType::get(Ctx.C, 3));
+    Value *Ptr = toLdsPtr(Ctx, Addr);
 
     ParsedReg StData = Op.srcReg(1);
     Value *Raw = Ctx.Regs.readReg32(Ctx.B, StData);
@@ -782,7 +791,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
         break;
       }
     }
-    Value *Ptr = Ctx.B.CreateIntToPtr(Addr, PointerType::get(Ctx.C, 3));
+    Value *Ptr = toLdsPtr(Ctx, Addr);
     // vdata is a 2-VGPR pair; read as i64, bitcast to f64 for the FP
     // atomic.
     ParsedReg StData = Op.srcReg(1);
@@ -817,7 +826,7 @@ Expected<HandlerResult> handleDS(RaiseContext &Ctx, const DecodedInst &Di,
         break;
       }
     }
-    Value *Ptr = Ctx.B.CreateIntToPtr(Addr, PointerType::get(Ctx.C, 3));
+    Value *Ptr = toLdsPtr(Ctx, Addr);
     Value *Data = Op.src(1);
     Ctx.emitUnderExec([&] {
       auto *Rmw =

@@ -215,6 +215,27 @@ struct RaiseContext {
   // Target-hardware lane id (i32), emitted once per kernel and reused.
   llvm::Value *emitLaneIdx();
 
+  // Neutralise a per-lane memory ADDRESS against poison on inactive lanes
+  // when cross-widening wave32 -> wave64.
+  //
+  // A per-lane address VGPR is produced under one EXEC-gated `emitUnderExec`
+  // region and consumed by a memory op under a later, possibly different one.
+  // On lanes that were inactive when the address was produced, the alloca
+  // reg-file carries `undef` (the inactive arm of the first-def phi after
+  // mem2reg). Those lanes never commit the memory op -- the op is itself
+  // wrapped in `emitUnderExec` -- but feeding `undef`/poison through
+  // `inttoptr` into a load/store is UB, which the AMDGPU backend is entitled
+  // to exploit (it may drop the divergent branch and issue the access at the
+  // wave-native HW EXEC = -1 forced by `init_whole_wave`, faulting on the
+  // undef address). Freezing the address integer replaces poison with an
+  // arbitrary but well-defined value, removing the UB while leaving the
+  // per-lane `emitUnderExec` gate to keep the access off inactive lanes.
+  //
+  // Gated on cross-widening (`Isa.isWave32() && !TargetIsa.isWave32()`) so
+  // same-wave and narrowing lifts keep byte-identical codegen. `Addr` is the
+  // integer address (returned unchanged when not cross-widening).
+  llvm::Value *freezeMemAddr(llvm::Value *Addr);
+
   // ==== SIMT Predicated Execution (SPE) helpers
   // (see hotswap/docs/wave-size-translation.md sec. 5.1). ================
   //

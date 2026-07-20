@@ -6,7 +6,10 @@
 ; CHECK:      %voff_sext = sext i32 %{{[^ ,]+}} to i64
 ; CHECK-NEXT: %scaled_voff = mul i64 %voff_sext, 2
 ; CHECK-NEXT: %saddr_vaddr = add i64 %{{[^ ,]+}}, %scaled_voff
-; CHECK:      %{{[^ ]+}} = inttoptr i64 %saddr_vaddr to ptr addrspace(1)
+; The per-lane global address is frozen (cross-widening undef-address
+; neutralisation, rocm-systems#157) before the pointer is materialised.
+; CHECK:      %mem_addr_frozen = freeze i64 %saddr_vaddr
+; CHECK:      %{{[^ ]+}} = inttoptr i64 %mem_addr_frozen to ptr addrspace(1)
 ; CHECK:      %gload_sub = load i16, ptr addrspace(1) %{{[^ ,]+}}, align 2
 ; CHECK:      %{{[^ ]+}} = zext i16 %gload_sub to i32
 ; CHECK-NOT:  mul i64 %voff_sext, 4

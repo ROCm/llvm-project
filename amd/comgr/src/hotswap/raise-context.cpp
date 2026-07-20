@@ -615,6 +615,15 @@ Value *RaiseContext::emitLaneIdx() {
   return Projection.emitLaneIdx(B);
 }
 
+Value *RaiseContext::freezeMemAddr(Value *Addr) {
+  // See the header for the correctness argument. Only cross-widening
+  // wave32 -> wave64 lifts can leak an undef address into a memory op via
+  // the reg-file first-def phi; other directions keep byte-identical IR.
+  if (!Isa.isWave32() || TargetIsa.isWave32())
+    return Addr;
+  return B.CreateFreeze(Addr, "mem_addr_frozen");
+}
+
 Value *RaiseContext::emitLaneActiveBit() {
   // Memoisation (see RaiseContext::resetLaneActiveCache docs).
   //

@@ -22,7 +22,10 @@ phantom_lane_workitem_clamp_kernel:
 ; CHECK: %vlshl = shl i32 %tid_phantom_clamp, 2
 ; CHECK: %[[VOFF:[A-Za-z0-9._]+]] = sext i32 %vlshl to i64
 ; CHECK: %[[VADDR:[A-Za-z0-9._]+]] = add i64 %{{[A-Za-z0-9._]+}}, %[[VOFF]]
-; CHECK: %[[PTR:[0-9]+]] = inttoptr i64 %[[VADDR]] to ptr addrspace(1)
+; The per-lane store address is frozen (cross-widening undef-address
+; neutralisation, rocm-systems#157) before the pointer is materialised.
+; CHECK: %mem_addr_frozen = freeze i64 %[[VADDR]]
+; CHECK: %[[PTR:[0-9]+]] = inttoptr i64 %mem_addr_frozen to ptr addrspace(1)
 ; CHECK: store i32 %tid_phantom_clamp, ptr addrspace(1) %[[PTR]]
 	global_store_b32 v1, v0, s[2:3]
 	s_endpgm

@@ -37,8 +37,11 @@ int64_t DecodeGlobalFlatOffset(int64_t RawOffset) {
 // can legitimately leave the base allocation (e.g. compiler-scheduled
 // prefetches, negative strides); `inbounds` would turn that into UB.
 Value *toGlobalPtr(RaiseContext &Ctx, Value *Addr, int64_t MemOffset) {
-  if (Addr->getType() != Ctx.PtrGlobalTy)
-    Addr = Ctx.B.CreateIntToPtr(Addr, Ctx.PtrGlobalTy);
+  if (Addr->getType() != Ctx.PtrGlobalTy) {
+    // Neutralise a cross-widening inactive-lane undef address before the
+    // pointer is materialised (see RaiseContext::freezeMemAddr).
+    Addr = Ctx.B.CreateIntToPtr(Ctx.freezeMemAddr(Addr), Ctx.PtrGlobalTy);
+  }
   if (MemOffset != 0)
     Addr = Ctx.B.CreateGEP(Ctx.I8Ty, Addr, Ctx.B.getInt64(MemOffset));
   return Addr;
