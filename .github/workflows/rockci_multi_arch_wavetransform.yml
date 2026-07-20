@@ -1,0 +1,64 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Multi-Arch CI
+#
+# This is a staging workflow for the sharded multi-arch build pipeline.
+# It mirrors ci.yml but uses multi_arch_build_portable_linux.yml instead of
+# ci_linux.yml. Once validated, ci.yml will be updated to use the multi-arch
+# sub-workflows directly.
+#
+# Same `ci:skip` rules as rockci-amd-staging.yml: only automated LLVM_MAIN_REVISION PRs
+# (matching title/body) skip presubmit; label alone is not enough.
+
+name: Multi-Arch CI wavetransform
+
+on:
+  pull_request:
+    branches:
+      - amd-feature/wave-transform
+    types:
+      - labeled
+      - opened
+      - synchronize
+      - reopened
+  workflow_dispatch:
+    inputs:
+      linux_amdgpu_families:
+        type: string
+        default: ""
+      linux_test_labels:
+        type: string
+        default: ""
+      windows_amdgpu_families:
+        type: string
+        default: ""
+      windows_test_labels:
+        type: string
+        default: ""
+      prebuilt_stages:
+        type: string
+        default: ""
+      baseline_run_id:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  rockci:
+    uses: ROCm/llvm-project/.github/workflows/rockci_multi_arch_amd_staging.yml@amd/dev/kirthana14m/ci_reusability
+    secrets: inherit
+    with:
+      linux_amdgpu_families: ${{ inputs.linux_amdgpu_families || '' }}
+      linux_test_labels: ${{ inputs.linux_test_labels || '' }}
+      windows_amdgpu_families: ${{ inputs.windows_amdgpu_families || '' }}
+      windows_test_labels: ${{ inputs.windows_test_labels || '' }}
+      prebuilt_stages: ${{ inputs.prebuilt_stages || '' }}
+      baseline_run_id: ${{ inputs.baseline_run_id || '' }}
