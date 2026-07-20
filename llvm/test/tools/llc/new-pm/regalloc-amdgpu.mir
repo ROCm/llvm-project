@@ -1,27 +1,27 @@
 # REQUIRES: amdgpu-registered-target
-# RUN: llc -mtriple=amdgcn --passes='regallocfast<filter=sgpr>,regallocfast<filter=wwm>,regallocfast<filter=vgpr>' --print-pipeline-passes --filetype=null %s | FileCheck %s --check-prefix=PASS
-# RUN: not llc -mtriple=amdgcn --passes='regallocfast<filter=bad-filter>' --print-pipeline-passes --filetype=null %s 2>&1 | FileCheck %s --check-prefix=BAD-FILTER
+# RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn --passes='regallocfast<filter=sgpr>,regallocfast<filter=wwm>,regallocfast<filter=vgpr>' --print-pipeline-passes --filetype=null %s | FileCheck %s --check-prefix=PASS
+# RUN: not llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn --passes='regallocfast<filter=bad-filter>' --print-pipeline-passes --filetype=null %s 2>&1 | FileCheck %s --check-prefix=BAD-FILTER
 
 # Test default behavior at -O0: uses fast allocator
-# RUN: llc -mtriple=amdgcn -enable-new-pm -O0 -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=DEFAULT-O0
+# RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -enable-new-pm -O0 -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=DEFAULT-O0
 
 # Test default behavior at -O2: uses greedy allocator
-# RUN: llc -mtriple=amdgcn -enable-new-pm -O2 -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=DEFAULT-O2
+# RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -enable-new-pm -O2 -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=DEFAULT-O2
 
 # Test AMDGPU-specific NPM regalloc options
-# RUN: llc -mtriple=amdgcn -enable-new-pm -sgpr-regalloc-npm=fast -wwm-regalloc-npm=fast -vgpr-regalloc-npm=fast -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=NPM-FAST
-# RUN: llc -mtriple=amdgcn -enable-new-pm -O3 -sgpr-regalloc-npm=greedy -wwm-regalloc-npm=greedy -vgpr-regalloc-npm=greedy -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=NPM-GREEDY
-# RUN: llc -mtriple=amdgcn -enable-new-pm -O3 -sgpr-regalloc-npm=fast -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=NPM-MIXED
+# RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -enable-new-pm -sgpr-regalloc-npm=fast -wwm-regalloc-npm=fast -vgpr-regalloc-npm=fast -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=NPM-FAST
+# RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -enable-new-pm -O3 -sgpr-regalloc-npm=greedy -wwm-regalloc-npm=greedy -vgpr-regalloc-npm=greedy -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=NPM-GREEDY
+# RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -enable-new-pm -O3 -sgpr-regalloc-npm=fast -print-pipeline-passes -filetype=null %s 2>&1 | FileCheck %s --check-prefix=NPM-MIXED
 
 # Test error cases for unsupported allocators
-# RUN: not llc -mtriple=amdgcn -enable-new-pm -sgpr-regalloc-npm=basic -filetype=null %s 2>&1 | FileCheck %s --check-prefix=ERR-BASIC
-# RUN: not llc -mtriple=amdgcn -enable-new-pm -vgpr-regalloc-npm=pbqp -filetype=null %s 2>&1 | FileCheck %s --check-prefix=ERR-PBQP
+# RUN: not llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -enable-new-pm -sgpr-regalloc-npm=basic -filetype=null %s 2>&1 | FileCheck %s --check-prefix=ERR-BASIC
+# RUN: not llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -enable-new-pm -vgpr-regalloc-npm=pbqp -filetype=null %s 2>&1 | FileCheck %s --check-prefix=ERR-PBQP
 
 # Test error when legacy PM options are used with NPM
-# RUN: not llc -mtriple=amdgcn -enable-new-pm -sgpr-regalloc=greedy -filetype=null %s 2>&1 | FileCheck %s --check-prefix=ERR-LEGACY
+# RUN: not llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -enable-new-pm -sgpr-regalloc=greedy -filetype=null %s 2>&1 | FileCheck %s --check-prefix=ERR-LEGACY
 
 # Test error when generic --regalloc-npm is used with AMDGPU
-# RUN: not llc -mtriple=amdgcn -enable-new-pm -regalloc-npm=fast -filetype=null %s 2>&1 | FileCheck %s --check-prefix=ERR-GENERIC
+# RUN: not llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -enable-new-pm -regalloc-npm=fast -filetype=null %s 2>&1 | FileCheck %s --check-prefix=ERR-GENERIC
 
 # PASS: regallocfast<filter=sgpr>
 # PASS: regallocfast<filter=wwm>
