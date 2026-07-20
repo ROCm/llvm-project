@@ -36,11 +36,16 @@ RaiseContext::RaiseContext(
     ISAProfile TargetIsa, unsigned TargetCodeObjectVersion,
     KernargLayout &Kernargs, const UserSgprLayout *Layout, Function *Kernel,
     BasicBlock *ThreadLoopLatch, DenseMap<uint64_t, BasicBlock *> &OffsetToBb,
+    ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
+    ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset)
     : C(C), M(M), B(B), Regs(Regs), Projection(Projection), Mc(Mc), Isa(Isa),
       TargetIsa(TargetIsa), TargetCodeObjectVersion(TargetCodeObjectVersion),
       Kernargs(Kernargs), Layout(Layout), Kernel(Kernel),
       ThreadLoopLatch(ThreadLoopLatch), OffsetToBb(OffsetToBb),
+      SourceTextBytes(SourceTextBytes),
+      SourceTextBaseAddress(SourceTextBaseAddress),
+      SourceImageSections(SourceImageSections),
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {
   I1Ty = Type::getInt1Ty(C);
   I8Ty = Type::getInt8Ty(C);

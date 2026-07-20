@@ -162,6 +162,7 @@ add_library(hotswap-transpiler OBJECT
   reg-file.cpp
   kernarg-layout.cpp
   user-sgpr-layout.cpp
+  source-image-address.cpp
   wave-projection.cpp
   setpc-analysis.cpp
   handle-sopp.cpp

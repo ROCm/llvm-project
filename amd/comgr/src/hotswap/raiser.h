@@ -52,11 +52,17 @@ struct RaiseResult {
   bool HasEnumeratedSetpcDispatch = false;
 };
 
+// Raise one kernel from extracted source code-object sections. `TextBytes`
+// remains the disassembly image; `TextBaseAddress` and `SourceImageSections`
+// let PC-relative SMEM literal loads resolve source code-object addresses at
+// raise time.
 llvm::Expected<RaiseResult>
 raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           llvm::StringRef KernelName, const KernelMeta &Meta,
           llvm::StringRef CompilationTargetIsa = "",
           bool EnableWritelaneRewrite = true, bool EnableWaveNative = true,
+          uint64_t TextBaseAddress = 0,
+          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections = {},
           RaiseStats *Stats = nullptr);
 
 llvm::Expected<RaiseResult>
@@ -65,7 +71,8 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           uint64_t KernelOffset, uint64_t KernelSize,
           llvm::StringRef CompilationTargetIsa = "",
           bool EnableWritelaneRewrite = true, bool EnableWaveNative = true,
-          bool AssumeHipGlobalOffsetZero = false,
+          bool AssumeHipGlobalOffsetZero = false, uint64_t TextBaseAddress = 0,
+          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections = {},
           // Text-relative extents of all function symbols in the code object
           // (from listTextFunctionExtents). Lets the raiser follow a
           // call/branch into an outlined helper outside the selected kernel's

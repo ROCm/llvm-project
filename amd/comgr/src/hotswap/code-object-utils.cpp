@@ -205,19 +205,27 @@ llvm::Expected<TextSection> extractTextSection(llvm::MemoryBufferRef ElfData) {
       llvm::object::ObjectFile::createELFObjectFile(ElfData);
   if (!ObjOrErr)
     return ObjOrErr.takeError();
+  TextSection Result;
   for (const llvm::object::SectionRef &Sec : (*ObjOrErr)->sections()) {
     llvm::Expected<llvm::StringRef> NameOrErr = Sec.getName();
     if (!NameOrErr)
       return NameOrErr.takeError();
-    if (*NameOrErr != ".text")
-      continue;
-    llvm::Expected<llvm::StringRef> ContentsOrErr = Sec.getContents();
-    if (!ContentsOrErr)
-      return ContentsOrErr.takeError();
-    TextSection Result;
-    Result.Bytes.assign(ContentsOrErr->begin(), ContentsOrErr->end());
-    return Result;
+    if (*NameOrErr == ".rodata" || *NameOrErr == ".text") {
+      llvm::Expected<llvm::StringRef> ContentsOrErr = Sec.getContents();
+      if (!ContentsOrErr)
+        return ContentsOrErr.takeError();
+      TextSection::ImageSection Image;
+      Image.Bytes.assign(ContentsOrErr->begin(), ContentsOrErr->end());
+      Image.Address = Sec.getAddress();
+      Result.ImageSections.push_back(std::move(Image));
+      if (*NameOrErr == ".text") {
+        Result.Bytes.assign(ContentsOrErr->begin(), ContentsOrErr->end());
+        Result.Address = Sec.getAddress();
+      }
+    }
   }
+  if (!Result.Bytes.empty())
+    return Result;
   return makeHotswapError("extractTextSection: .text section not found in ELF");
 }
 

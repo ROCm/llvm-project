@@ -758,15 +758,15 @@ threadLoopUnsupportedWorkgroupMemoryOrBarrier(ArrayRef<DecodedInst> Insts,
 // Main raising function
 // ============================================================================
 
-static Expected<RaiseResult>
-raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
-              llvm::StringRef KernelName, const KernelMeta &Meta,
-              uint64_t KernelOffset, uint64_t KernelSize,
-              llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
-              bool EnableWaveNative, bool ForceThreadLoopProjection,
-              bool SuppressC5ForThreadLoopRoute, bool AssumeHipGlobalOffsetZero,
-              llvm::ArrayRef<KernelSymbolExtent> FunctionExtents,
-              RaiseStats *Stats) {
+static Expected<RaiseResult> raiseToIRImpl(
+    llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
+    llvm::StringRef KernelName, const KernelMeta &Meta, uint64_t KernelOffset,
+    uint64_t KernelSize, uint64_t TextBaseAddress,
+    llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
+    llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
+    bool EnableWaveNative, bool ForceThreadLoopProjection,
+    bool SuppressC5ForThreadLoopRoute, bool AssumeHipGlobalOffsetZero,
+    llvm::ArrayRef<KernelSymbolExtent> FunctionExtents, RaiseStats *Stats) {
   RaiseResult Result;
 
   // Reject obviously-bad ISA inputs before reaching the MC stack -- an
@@ -1762,6 +1762,9 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                    F,
                    nullptr,
                    OffsetToBb,
+                   ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
+                   TextBaseAddress,
+                   SourceImageSections,
                    KernelOffset,
                    KernelEndOffset};
   Ctx.SetpcAnalysis = &SetpcAnalysis;
@@ -2267,7 +2270,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
         errs() << "transpiler: thread-loop fallback trigger: "
                << RewriteReport.SgprForcedDetail << "\n";
         return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta,
-                             KernelOffset, KernelSize, CompilationTargetIsa,
+                             KernelOffset, KernelSize, TextBaseAddress,
+                             SourceImageSections, CompilationTargetIsa,
                              /*enableWritelaneRewrite=*/false,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
@@ -2438,7 +2442,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
         errs() << "transpiler: thread-loop fallback trigger: "
                << PredReport.RefusalDetail << "\n";
         return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta,
-                             KernelOffset, KernelSize, CompilationTargetIsa,
+                             KernelOffset, KernelSize, TextBaseAddress,
+                             SourceImageSections, CompilationTargetIsa,
                              /*enableWritelaneRewrite=*/false,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
@@ -2492,25 +2497,28 @@ llvm::Expected<RaiseResult>
 raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           llvm::StringRef KernelName, const KernelMeta &Meta,
           llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
-          bool EnableWaveNative, RaiseStats *Stats) {
+          bool EnableWaveNative, uint64_t TextBaseAddress,
+          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
+          RaiseStats *Stats) {
   return raiseToIR(TextBytes, SourceIsa, KernelName, Meta,
                    /*KernelOffset=*/0,
                    /*KernelSize=*/0, CompilationTargetIsa,
                    EnableWritelaneRewrite, EnableWaveNative,
-                   /*AssumeHipGlobalOffsetZero=*/false, /*FunctionExtents=*/{},
-                   Stats);
+                   /*AssumeHipGlobalOffsetZero=*/false, TextBaseAddress,
+                   SourceImageSections, /*FunctionExtents=*/{}, Stats);
 }
 
-llvm::Expected<RaiseResult>
-raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
-          llvm::StringRef KernelName, const KernelMeta &Meta,
-          uint64_t KernelOffset, uint64_t KernelSize,
-          llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
-          bool EnableWaveNative, bool AssumeHipGlobalOffsetZero,
-          llvm::ArrayRef<KernelSymbolExtent> FunctionExtents,
-          RaiseStats *Stats) {
+llvm::Expected<RaiseResult> raiseToIR(
+    llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
+    llvm::StringRef KernelName, const KernelMeta &Meta, uint64_t KernelOffset,
+    uint64_t KernelSize, llvm::StringRef CompilationTargetIsa,
+    bool EnableWritelaneRewrite, bool EnableWaveNative,
+    bool AssumeHipGlobalOffsetZero, uint64_t TextBaseAddress,
+    llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
+    llvm::ArrayRef<KernelSymbolExtent> FunctionExtents, RaiseStats *Stats) {
   return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta, KernelOffset,
-                       KernelSize, CompilationTargetIsa, EnableWritelaneRewrite,
+                       KernelSize, TextBaseAddress, SourceImageSections,
+                       CompilationTargetIsa, EnableWritelaneRewrite,
                        EnableWaveNative,
                        /*forceThreadLoopProjection=*/false,
                        /*suppressC5ForThreadLoopRoute=*/false,

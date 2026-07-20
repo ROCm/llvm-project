@@ -9,11 +9,11 @@
 #include "canonical-op-attrs.h"
 #include "handlers.h"
 #include "hotswap/raise-failure.h"
+#include "source-image-address.h"
 
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
-#include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
 
@@ -604,10 +604,49 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
         }
       }
     }
+    auto SrcSourceImageAddr = [&](unsigned I) -> std::optional<uint64_t> {
+      if (!Op.isSrcReg(I))
+        return std::nullopt;
+      ParsedReg SrcPr = Op.srcReg(I);
+      if (SrcPr.RegKind != ParsedReg::SGPR || SrcPr.BaseIdx < 0)
+        return std::nullopt;
+      return Ctx.lookupSourceImageSgprPairAddr(SrcPr.BaseIdx);
+    };
+    auto SrcSignedImm = [&](unsigned I) -> std::optional<int64_t> {
+      if (Op.isSrcReg(I))
+        return std::nullopt;
+      return evalOperandAsConst(Di.Inst, Op.srcIdx(I));
+    };
     Value *Result = Sop == CanonicalOp::S_ADD_NC_U64
                         ? Ctx.B.CreateAdd(Op.src64(0), Op.src64(1), "sadd64")
                         : Ctx.B.CreateSub(Op.src64(0), Op.src64(1), "ssub64");
-    Ctx.Regs.writeReg64(Ctx.B, Op.dst(), Result);
+    ParsedReg Dst = Op.dst();
+    Ctx.Regs.writeReg64(Ctx.B, Dst, Result);
+    std::optional<uint64_t> SourceImageResult;
+    std::optional<uint64_t> Src0SourceAddr = SrcSourceImageAddr(0);
+    std::optional<uint64_t> Src1SourceAddr = SrcSourceImageAddr(1);
+    std::optional<int64_t> Src0Imm = SrcSignedImm(0);
+    std::optional<int64_t> Src1Imm = SrcSignedImm(1);
+    if (Src0SourceAddr && Src1Imm) {
+      Expected<uint64_t> NewSourceAddr =
+          Sop == CanonicalOp::S_ADD_NC_U64
+              ? applySourceImageByteOffset(Di, "SOP2", *Src0SourceAddr,
+                                           *Src1Imm)
+              : subtractSourceImageByteOffset(Di, "SOP2", *Src0SourceAddr,
+                                              *Src1Imm);
+      if (!NewSourceAddr)
+        return NewSourceAddr.takeError();
+      SourceImageResult = *NewSourceAddr;
+    } else if (Sop == CanonicalOp::S_ADD_NC_U64 && Src1SourceAddr && Src0Imm) {
+      Expected<uint64_t> NewSourceAddr =
+          applySourceImageByteOffset(Di, "SOP2", *Src1SourceAddr, *Src0Imm);
+      if (!NewSourceAddr)
+        return NewSourceAddr.takeError();
+      SourceImageResult = *NewSourceAddr;
+    }
+    if (SourceImageResult) {
+      Ctx.recordSourceImageSgprPairAddr(Dst.BaseIdx, *SourceImageResult);
+    }
     if (UpdatesEntryKernargOffset)
       Ctx.setKernargPtrLiveEntryByteOffset(NewEntryKernargOffset);
     else if (PreservesNonEntryKernarg)

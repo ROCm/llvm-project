@@ -9,6 +9,7 @@
 #include "handlers.h"
 #include "pipeline.h" // isStrictMode()
 #include "source-hidden-args.h"
+#include "source-image-address.h"
 
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/IR/BasicBlock.h"
@@ -17,6 +18,8 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
+#include "llvm/Support/CheckedArithmetic.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
@@ -30,6 +33,8 @@ using namespace llvm;
 namespace COMGR::hotswap {
 
 namespace {
+
+constexpr uint64_t kSourceDwordBytes = sizeof(uint32_t);
 
 // Add the decoded static SMEM byte immediate to an already 64-bit dynamic
 // offset, preserving `Offset` when the instruction has no non-zero immediate.
@@ -99,6 +104,38 @@ Value *alignDwordAddress64(RaiseContext &Ctx, Value *Addr, const Twine &Name) {
 Value *alignDwordOffset32(RaiseContext &Ctx, Value *Offset, const Twine &Name) {
   return Ctx.B.CreateAnd(Offset, ConstantInt::get(Ctx.I32Ty, ~uint32_t(3)),
                          Name);
+}
+
+// Read a little-endian dword from `.text` using a text-relative byte offset.
+// Kept as the fallback for older callers that only carried the text image.
+uint32_t readSourceTextDword(RaiseContext &Ctx, uint64_t ByteOffset) {
+  assert(ByteOffset <= Ctx.SourceTextBytes.size() &&
+         kSourceDwordBytes <= Ctx.SourceTextBytes.size() - ByteOffset &&
+         "source text dword read must be bounds-checked first");
+  return support::endian::read32le(Ctx.SourceTextBytes.data() + ByteOffset);
+}
+
+// Read a dword from the captured source code-object image by source address.
+// PC-relative literal tables in clang/rocPRIM live in allocatable sections
+// such as .rodata, not necessarily in .text.
+std::optional<uint32_t> readSourceImageDword(RaiseContext &Ctx,
+                                             uint64_t Address) {
+  for (const TextSection::ImageSection &Section : Ctx.SourceImageSections) {
+    if (Address < Section.Address)
+      continue;
+    uint64_t Offset = Address - Section.Address;
+    uint64_t SectionSize = static_cast<uint64_t>(Section.Bytes.size());
+    if (Offset > SectionSize || kSourceDwordBytes > SectionSize - Offset)
+      continue;
+    return support::endian::read32le(Section.Bytes.data() + Offset);
+  }
+  if (Address >= Ctx.SourceTextBaseAddress) {
+    uint64_t Offset = Address - Ctx.SourceTextBaseAddress;
+    uint64_t TextSize = static_cast<uint64_t>(Ctx.SourceTextBytes.size());
+    if (Offset <= TextSize && kSourceDwordBytes <= TextSize - Offset)
+      return readSourceTextDword(Ctx, Offset);
+  }
+  return std::nullopt;
 }
 
 // Emit a branch to llvm.trap when a dynamic translation contract is violated.
@@ -392,6 +429,46 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
     // memory path from the pointer value's uniformity and provenance.
     {
       Value *BaseAddr = Ctx.Regs.loadSGPR64(Ctx.B, Base.BaseIdx);
+      std::optional<uint64_t> SourceImageBase =
+          Ctx.lookupSourceImageSgprPairAddr(Base.BaseIdx);
+      if (SourceImageBase) {
+        if (!ImmOffset) {
+          return RaiseFailure::unsupportedInstructionForm(
+              Di, "SMEM",
+              "source-image SMEM base with dynamic offset cannot be resolved "
+              "at raise time");
+        }
+
+        Expected<uint64_t> SourceAddr = applySourceImageByteOffset(
+            Di, "SMEM", *SourceImageBase, ByteOffset);
+        if (!SourceAddr)
+          return SourceAddr.takeError();
+
+        // Source PC-relative literal tables are not target GPU memory.
+        // Resolve proven source-image loads here; otherwise the backend would
+        // turn the source code-object address into a target VMEM access.
+        for (int D = 0; D < LoadDwords; D++) {
+          std::optional<uint64_t> DwordAddr = checkedMulAddUnsigned<uint64_t>(
+              static_cast<uint64_t>(D), kSourceDwordBytes, *SourceAddr);
+          if (!DwordAddr)
+            return RaiseFailure::unsupportedInstructionForm(
+                Di, "SMEM",
+                "source-image SMEM dword address overflows while "
+                "materialising a multi-dword load");
+          std::optional<uint32_t> Dword = readSourceImageDword(Ctx, *DwordAddr);
+          if (!Dword) {
+            return RaiseFailure::unsupportedInstructionForm(
+                Di, "SMEM",
+                "constant SMEM address does not point inside a supported "
+                "source code-object section");
+          }
+          Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + D,
+                               ConstantInt::get(Ctx.I32Ty, *Dword));
+        }
+        Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx, LoadDwords);
+        Hr.Handled = true;
+        return Hr;
+      }
       Value *Ptr = Ctx.B.CreateIntToPtr(BaseAddr, Ctx.PtrGlobalTy);
       if (ImmOffset) {
         if (ByteOffset != 0)

@@ -9,6 +9,7 @@
 #ifndef HOTSWAP_TRANSPILER_RAISE_CONTEXT_H
 #define HOTSWAP_TRANSPILER_RAISE_CONTEXT_H
 
+#include "code-object-utils.h"
 #include "decoded-inst.h"
 #include "isa-profile.h"
 #include "kernarg-layout.h"
@@ -28,6 +29,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCRegister.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #include <cassert>
 #include <map>
@@ -111,6 +113,12 @@ struct RaiseContext {
   llvm::Type *PtrGlobalTy;
 
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb;
+  // Source code-object bytes used to materialise proven PC-relative literals.
+  // `SourceTextBytes` remains the disassembly image; `SourceImageSections`
+  // carries allocated sections addressable by source code-object address.
+  llvm::ArrayRef<uint8_t> SourceTextBytes;
+  uint64_t SourceTextBaseAddress = 0;
+  llvm::ArrayRef<TextSection::ImageSection> SourceImageSections;
   uint64_t KernelStartOffset = 0;
   uint64_t KernelEndOffset = 0;
 
@@ -121,6 +129,9 @@ struct RaiseContext {
                const UserSgprLayout *Layout, llvm::Function *Kernel,
                llvm::BasicBlock *ThreadLoopLatch,
                llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb,
+               llvm::ArrayRef<uint8_t> SourceTextBytes,
+               uint64_t SourceTextBaseAddress,
+               llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
                uint64_t KernelStartOffset, uint64_t KernelEndOffset);
 
   // Source KD private/scratch allocation. `handle-flat.cpp` sets
@@ -555,6 +566,12 @@ struct RaiseContext {
   llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskValidShadow;
   llvm::SmallVector<llvm::AllocaInst *> SourceWaveSgprPairShadow;
   llvm::SmallVector<llvm::AllocaInst *> SourceWaveSgprPairValidShadow;
+  // Same-BB source-image address facts for PC-relative literal loads. This is
+  // not a generic constant tracker: only s_get_pc_i64 seeds it, only constant
+  // s_add/sub_nc_u64 propagates it, and only SMEM literal materialisation reads
+  // it.
+  llvm::DenseMap<int, uint64_t> SourceImageSgprPairAddrShadow =
+      llvm::DenseMap<int, uint64_t>();
 
   // Raise-time constant shadow of M0; see updateM0Const / getM0Const.
   std::optional<uint64_t> M0Const;
@@ -692,6 +709,7 @@ struct RaiseContext {
   void invalidateSgprWaveMaskI1(int BaseIdx) {
     noteSgprWriteForKernargProvenance(BaseIdx);
     LastSgprWaveMaskI1.erase(BaseIdx);
+    SourceImageSgprPairAddrShadow.erase(BaseIdx);
     if (BaseIdx >= 0 &&
         static_cast<size_t>(BaseIdx) < SgprWaveMaskValidShadow.size())
       B.CreateStore(B.getFalse(), SgprWaveMaskValidShadow[BaseIdx]);
@@ -708,6 +726,7 @@ struct RaiseContext {
       if (static_cast<size_t>(BaseIdx - 1) <
           SourceWaveSgprPairValidShadow.size())
         B.CreateStore(B.getFalse(), SourceWaveSgprPairValidShadow[BaseIdx - 1]);
+      SourceImageSgprPairAddrShadow.erase(BaseIdx - 1);
     }
   }
 
@@ -718,7 +737,31 @@ struct RaiseContext {
   // the consumer. A future reaching-definitions pass on the raised
   // IR (see sgpr-wave-mask-translation.md section 7 evolution
   // path) can upgrade this to a proper per-BB merge.
-  void clearSgprWaveMaskShadow() { LastSgprWaveMaskI1.clear(); }
+  void clearSgprWaveMaskShadow() {
+    LastSgprWaveMaskI1.clear();
+    SourceImageSgprPairAddrShadow.clear();
+  }
+
+  // Record that SGPR pair [BaseIdx:BaseIdx+1] currently holds a source
+  // code-object address, in the same address domain as s_get_pc_i64. This is
+  // used only for PC-relative literal-table sequences and is cleared on any
+  // overlapping SGPR write or BB boundary.
+  void recordSourceImageSgprPairAddr(int BaseIdx, uint64_t Value) {
+    if (BaseIdx < 0)
+      llvm::report_fatal_error(
+          "transpiler: source-image SGPR pair record has invalid base index");
+    SourceImageSgprPairAddrShadow[BaseIdx] = Value;
+  }
+
+  // Return the source-image address fact for SGPR pair [BaseIdx:BaseIdx+1], if
+  // the current BB has proven one. Absence means the SMEM handler must use the
+  // ordinary runtime memory path or refuse according to its own operand rules.
+  std::optional<uint64_t> lookupSourceImageSgprPairAddr(int BaseIdx) const {
+    auto It = SourceImageSgprPairAddrShadow.find(BaseIdx);
+    if (It == SourceImageSgprPairAddrShadow.end())
+      return std::nullopt;
+    return It->second;
+  }
 
   // --- M0 raise-time constant shadow ---------------------------------------
   // v_movrel* resolve their VGPR index from `base + M0`. Because the reg

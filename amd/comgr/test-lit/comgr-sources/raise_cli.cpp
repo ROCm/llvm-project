@@ -473,9 +473,10 @@ int main(int argc, char **argv) {
       uint64_t kernelSize = kernelExtentOrErr->Size;
       llvm::Expected<COMGR::hotswap::RaiseResult> RaisedOrErr =
           COMGR::hotswap::raiseToIR(text.Bytes, isa, Target, meta, kernelOffset,
-                                    kernelSize, targetIsa, EnableWritelaneRewrite,
-                                    EnableWaveNative, AssumeHipGlobalOffsetZeroOpt,
-                                    functionExtents);
+                                    kernelSize, targetIsa,
+                                    EnableWritelaneRewrite, EnableWaveNative,
+                                    AssumeHipGlobalOffsetZeroOpt, text.Address,
+                                    text.ImageSections, functionExtents);
       if (!RaisedOrErr) {
         // raiseToIR only returns a module on the success path, so we cannot
         // dump partial IR here. Callers that need stderr diagnostics
@@ -645,11 +646,11 @@ int main(int argc, char **argv) {
       }
       COMGR::hotswap::RaiseStats Stats;
       llvm::Expected<COMGR::hotswap::RaiseResult> RaisedOrErr =
-          COMGR::hotswap::raiseToIR(text.Bytes, isa, kName, meta, kernelOffset,
-                                    kernelSize, targetIsa,
-                                    EnableWritelaneRewrite, EnableWaveNative,
-                                    AssumeHipGlobalOffsetZeroOpt,
-                                    functionExtents, &Stats);
+          COMGR::hotswap::raiseToIR(
+              text.Bytes, isa, kName, meta, kernelOffset, kernelSize, targetIsa,
+              EnableWritelaneRewrite, EnableWaveNative,
+              AssumeHipGlobalOffsetZeroOpt, text.Address, text.ImageSections,
+              functionExtents, &Stats);
       if (RaisedOrErr) {
         COMGR::hotswap::RaiseResult Raised = std::move(*RaisedOrErr);
         shm->done = true;

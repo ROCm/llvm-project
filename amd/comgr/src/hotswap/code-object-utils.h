@@ -36,7 +36,22 @@ namespace COMGR::hotswap {
 /// `extractTextSection`. The byte buffer is owned by the `TextSection` --
 /// the underlying ELF MemoryBuffer is not borrowed across the call.
 struct TextSection {
+  /// Raw `.text` bytes, indexed by text-relative decoded instruction offsets.
   llvm::SmallVector<uint8_t> Bytes;
+  /// Runtime address of `.text`; PC-relative instructions use this source
+  /// code-object address domain.
+  uint64_t Address = 0;
+
+  /// Allocated source sections whose bytes may be read through PC-relative
+  /// SMEM.
+  struct ImageSection {
+    /// Section bytes, indexed by source code-object address minus `Address`.
+    llvm::SmallVector<uint8_t> Bytes;
+    /// Runtime address of this source code-object section.
+    uint64_t Address = 0;
+  };
+  /// Minimal source image used for literal-table materialisation.
+  llvm::SmallVector<ImageSection> ImageSections;
 };
 
 /// Resolved text-section extent for a kernel symbol. `Offset` is relative to
