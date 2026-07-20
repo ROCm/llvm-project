@@ -19,7 +19,7 @@ add_library(PluginCommon OBJECT
   src/Utils/ELF.cpp
   src/GenericProfiler.cpp
 )
-add_dependencies(PluginCommon intrinsics_gen PluginErrcodes)
+add_dependencies(PluginCommon intrinsics_gen PluginErrcodes OffloadAPI)
 
 # Only enable JIT for those targets that LLVM can support.
 set(supported_jit_targets AMDGPU NVPTX)
@@ -74,6 +74,7 @@ endif()
 target_include_directories(PluginCommon PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_BINARY_DIR}/include
+  ${CMAKE_CURRENT_BINARY_DIR}/../../liboffload/API
   ${LIBOMPTARGET_LLVM_INCLUDE_DIRS}
   ${LIBOMPTARGET_BINARY_INCLUDE_DIR}
   ${LIBOMPTARGET_INCLUDE_DIR}
