@@ -234,6 +234,7 @@ add_comgr_test(fail_to_build_driver c)
 add_comgr_test(file_map c)
 add_comgr_test(symbolize_test c)
 add_comgr_test(mangled_names_test c)
+add_comgr_test(time_stat_symlink_test c)
 # Disabled due to AddressSanitizer limitation with multithreaded programs
 add_comgr_test(multithread_test cpp)
 add_comgr_test(nested_kernel_test c)

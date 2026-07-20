@@ -11,6 +11,7 @@
 
 #include "perf-timer.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/FileSystem.h"
 
 #include "amd_comgr.h"
 #include <iostream>
@@ -18,6 +19,7 @@
 #ifndef _WIN32
 #include <cerrno>
 #include <fcntl.h>
+#include <unistd.h>
 #endif
 
 namespace COMGR {
@@ -45,25 +47,32 @@ public:
     // Open with O_NOFOLLOW so a symlink pre-planted at the log path is not
     // followed. The path may be caller-influenced (AMD_COMGR_REDIRECT_LOGS) or
     // default to a CWD-relative file, so refuse to write through a symlink.
+    // The mode matches raw_fd_ostream's default (all_read | all_write); the
+    // process umask applies as usual.
     int FD = ::open(LogFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW,
-                    0644);
+                    llvm::sys::fs::all_read | llvm::sys::fs::all_write);
     if (FD < 0) {
       EC = std::error_code(errno, std::generic_category());
     } else {
       LogF.reset(new (std::nothrow)
                      llvm::raw_fd_ostream(FD, /*shouldClose=*/true));
+      if (!LogF) {
+        ::close(FD);
+        EC = std::make_error_code(std::errc::not_enough_memory);
+      }
     }
 #else
     LogF.reset(new (std::nothrow)
                    llvm::raw_fd_ostream(LogFile, EC, llvm::sys::fs::OF_Text));
+    if (!EC && !LogF)
+      EC = std::make_error_code(std::errc::not_enough_memory);
 #endif
     if (EC) {
-      std::cerr << "Failed to open log file " << LogFile << "for perf stats "
+      std::cerr << "Failed to open log file " << LogFile << " for perf stats "
                 << EC.message() << "\n ";
       return false;
-    } else {
-      pLog = std::move(LogF);
     }
+    pLog = std::move(LogF);
 
     // Initialize Timer
     if (!PT.Init())
