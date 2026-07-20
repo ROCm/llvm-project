@@ -103,7 +103,11 @@ set(SOURCES
   src/comgr-env.cpp
   src/comgr-hotswap.cpp
   src/comgr-hotswap-b0a0.cpp
+  src/comgr-hotswap-profile.cpp
+  src/comgr-hotswap-displacement.cpp
   src/comgr-hotswap-entry-trampoline.cpp
+  src/comgr-hotswap-entry-trampoline-fast.cpp
+  src/comgr-hotswap-occupancy.cpp
   src/comgr-hotswap-patch-trampoline.cpp
   src/comgr-hotswap-elf.cpp
   src/comgr-hotswap-llvm.cpp
@@ -114,6 +118,7 @@ set(SOURCES
   src/comgr-hotswap-patch-wmma-scale16.cpp
   src/comgr-hotswap-patch-wmma-split.cpp
   src/comgr-libcxx-headers.cpp
+  src/comgr-logger.cpp
   src/comgr-metadata.cpp
   src/comgr-signal.cpp
   src/comgr-spirv-command.cpp

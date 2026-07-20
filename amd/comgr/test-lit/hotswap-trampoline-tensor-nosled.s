@@ -1,8 +1,7 @@
 // COM: Test the true trampoline fallback path for tensor_load_to_lds
 // COM: when no NOP sled is available. Two variants:
-// COM:   dead SGPR — s_pack_hh + tensor_load appended via growWithTrampolines
-// COM:   live SGPR — save/pack/tensor/restore (4-instruction sequence)
-// COM:              appended via growWithTrampolines, the largest replacement
+// COM:   dead SGPR - s_pack_hh + tensor_load appended via growWithTrampolines
+// COM:   live SGPR - save/pack/tensor/restore appended via growWithTrampolines
 // COM: Both force emitReplacementCode to use emitToTrampoline.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
@@ -44,9 +43,8 @@
 // DISASM-NEXT: tensor_load_to_lds
 // DISASM-NEXT: s_branch
 
-// COM: Live-SGPR trampoline body (for kernel 2): also placed in the
-// COM: appended trampoline region. save + pack + tensor + restore +
-// COM: branch-back.
+// COM: Live-SGPR trampoline body (for kernel 2): save + pack + tensor + restore
+// COM: followed by branch-back.
 // DISASM-NEXT: s_mov_b32 [[SCRATCH:s[0-9]+]], s4
 // DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds
@@ -71,7 +69,7 @@ test_tensor_trampoline:
 .Ltest_tensor_trampoline_end:
 .size test_tensor_trampoline, .Ltest_tensor_trampoline_end-test_tensor_trampoline
 
-// ---- Kernel 2: live SGPR, no NOP sled (trampoline + save/restore) ----------
+// ---- Kernel 2: live SGPR, no NOP sled (persistent mask trampoline) --------
 
 .globl test_tensor_trampoline_live
 .p2align 8
@@ -95,3 +93,30 @@ test_tensor_trampoline_live:
   .amdhsa_next_free_vgpr 1
   .amdhsa_next_free_sgpr 12
 .end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 3
+    - 0
+  amdhsa.kernels:
+    - .name: test_tensor_trampoline
+      .symbol: test_tensor_trampoline.kd
+      .sgpr_count: 12
+      .vgpr_count: 1
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_tensor_trampoline_live
+      .symbol: test_tensor_trampoline_live.kd
+      .sgpr_count: 12
+      .vgpr_count: 1
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+.end_amdgpu_metadata

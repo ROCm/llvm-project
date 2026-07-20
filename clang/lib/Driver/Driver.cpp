@@ -2461,17 +2461,15 @@ static void PrintLocalVersionInfo(StringRef ExecutablePath, raw_ostream &OS) {
     return;
 
   // Print the additional version info
-  OS << Contents.trim() << " ";
+  OS << "Distribution: " << Contents.trim() << "\n";
 }
 
 void Driver::PrintVersion(const Compilation &C, raw_ostream &OS) const {
   if (IsFlangMode()) {
-    PrintLocalVersionInfo(DriverExecutable, OS);
     OS << getClangToolFullVersion("flang") << '\n';
   } else {
     // FIXME: The following handlers should use a callback mechanism, we don't
     // know what the client would like to do.
-    PrintLocalVersionInfo(DriverExecutable, OS);
     OS << getClangFullVersion() << '\n';
   }
   const ToolChain &TC = C.getDefaultToolChain();
@@ -2498,6 +2496,8 @@ void Driver::PrintVersion(const Compilation &C, raw_ostream &OS) const {
   // If configuration files were used, print their paths.
   for (auto ConfigFile : ConfigFiles)
     OS << "Configuration file: " << ConfigFile << '\n';
+
+  PrintLocalVersionInfo(DriverExecutable, OS);
 }
 
 /// PrintDiagnosticCategories - Implement the --print-diagnostic-categories
@@ -3592,9 +3592,6 @@ class OffloadingActionBuilder final {
       CudaDeviceActions.clear();
     }
 
-    virtual std::optional<std::pair<llvm::StringRef, llvm::StringRef>>
-    getConflictOffloadArchCombination(const std::set<StringRef> &GpuArchs) = 0;
-
     bool initialize() override {
       assert(AssociatedOffloadKind == Action::OFK_Cuda ||
              AssociatedOffloadKind == Action::OFK_HIP);
@@ -3651,12 +3648,6 @@ class OffloadingActionBuilder final {
                       const InputList &Inputs)
         : CudaActionBuilderBase(C, Args, Inputs, Action::OFK_Cuda) {
       DefaultOffloadArch = OffloadArch::CudaDefault;
-    }
-
-    std::optional<std::pair<llvm::StringRef, llvm::StringRef>>
-    getConflictOffloadArchCombination(
-        const std::set<StringRef> &GpuArchs) override {
-      return std::nullopt;
     }
 
     ActionBuilderReturnCode
@@ -3811,12 +3802,6 @@ class OffloadingActionBuilder final {
     }
 
     bool canUseBundlerUnbundler() const override { return true; }
-
-    std::optional<std::pair<llvm::StringRef, llvm::StringRef>>
-    getConflictOffloadArchCombination(
-        const std::set<StringRef> &GpuArchs) override {
-      return getConflictTargetIDCombination(GpuArchs);
-    }
 
     ActionBuilderReturnCode
     getDeviceDependences(OffloadAction::DeviceDependences &DA,
@@ -4601,11 +4586,6 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
 
     for (phases::ID Phase : PL) {
 
-#if FIXME
-      // We are done if this step is past what the user requested.
-      if (Phase > FinalPhase)
-        break;
-#endif
       // Add any offload action the host action depends on.
       if (!UseNewOffloadingDriver)
         Current = OffloadBuilder->addDeviceDependencesToHostAction(
@@ -6367,9 +6347,6 @@ InputInfoList Driver::BuildJobsForActionNoCache(
                                  UI.DependentOffloadKind == Action::OFK_HIP,
                              OffloadingPrefix),
           BaseInput);
-      if (UI.DependentOffloadKind == Action::OFK_Host &&
-          llvm::sys::path::extension(InputInfos[0].getFilename()) == ".a")
-        CurI = InputInfos[0];
       // Save the unbundling result.
       UnbundlingResults.push_back(CurI);
 
@@ -6767,11 +6744,8 @@ const char *Driver::GetNamedOutputPath(Compilation &C, const JobAction &JA,
     NamedOutput =
         MakeCLOutputFilename(C.getArgs(), Val, BaseName, types::TY_Object);
   } else {
-    const char *Suffix = nullptr;
-    if (BaseName.ends_with(".a"))
-      Suffix = "a";
-    else
-      Suffix = types::getTypeTempSuffix(JA.getType(), IsCLMode() || IsDXCMode());
+    const char *Suffix =
+        types::getTypeTempSuffix(JA.getType(), IsCLMode() || IsDXCMode());
     assert(Suffix && "All types used for output should have a suffix.");
 
     std::string::size_type End = std::string::npos;
@@ -6839,10 +6813,9 @@ const char *Driver::GetNamedOutputPath(Compilation &C, const JobAction &JA,
     // Must share the same path to conflict.
     if (SameFile) {
       StringRef Name = llvm::sys::path::filename(BaseInput);
-      size_t pos = Name.find_last_of(".");
-      StringRef PrefixName = Name.substr(0, pos);
+      std::pair<StringRef, StringRef> Split = Name.split('.');
       std::string TmpName = GetTemporaryPath(
-          PrefixName,
+          Split.first,
           types::getTypeTempSuffix(JA.getType(), IsCLMode() || IsDXCMode()));
       return C.addTempFile(C.getArgs().MakeArgString(TmpName));
     }

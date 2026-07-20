@@ -16,6 +16,7 @@
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/Twine.h"
 
 #include <algorithm>
@@ -279,8 +280,8 @@ bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,
          std::equal(Prefix.begin(), Prefix.end(), Bytes.begin());
 }
 
-static std::optional<uint64_t>
-checkedAlignTo(uint64_t Value, uint64_t Alignment, StringRef Context) {
+std::optional<uint64_t> checkedAlignTo(uint64_t Value, uint64_t Alignment,
+                                       StringRef Context) {
   if (Alignment == 0)
     return Value;
 
@@ -290,7 +291,7 @@ checkedAlignTo(uint64_t Value, uint64_t Alignment, StringRef Context) {
   return checkedAddUint64(Value, Alignment - Remainder, Context);
 }
 
-static std::optional<uint64_t> entryVAddr(const KernelDescriptorInfo &KD) {
+std::optional<uint64_t> entryVAddr(const KernelDescriptorInfo &KD) {
   if (KD.EntryOffset >= 0)
     return checkedAddUint64(
         KD.VAddr, static_cast<uint64_t>(KD.EntryOffset),
@@ -308,11 +309,9 @@ static std::optional<uint64_t> entryVAddr(const KernelDescriptorInfo &KD) {
   return KD.VAddr - Magnitude;
 }
 
-static std::optional<bool>
-descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
-                                  const KernelDescriptorInfo &KD,
-                                  const LLVMState &LS,
-                                  ArrayRef<uint8_t> EntryStubPrefix) {
+static std::optional<bool> descriptorAlreadyTargetsEntryStub(
+    const ElfView &Elf, const KernelDescriptorInfo &KD, const LLVMState &LS,
+    ArrayRef<uint8_t> EntryStubPrefix) {
   std::optional<uint64_t> Entry = entryVAddr(KD);
   if (!Entry)
     return std::nullopt;
@@ -337,8 +336,8 @@ descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
     return false;
 
   std::vector<InternalDecodedInst> Decoded;
-  if (!decodeKernelEntryStub(Candidate, LS,
-                             Decoded, "entry trampoline idempotency matcher"))
+  if (!decodeKernelEntryStub(Candidate, LS, Decoded,
+                             "entry trampoline idempotency matcher"))
     return false;
   if (!hasEntryStubOperandShape(Decoded, LS))
     return false;
@@ -349,6 +348,43 @@ descriptorAlreadyTargetsEntryStub(const ElfView &Elf,
 
   // A genuine entry stub jumps back to the original kernel body in .text.
   return *Target >= Elf.textAddr() && *Target < *TextEnd;
+}
+
+// True when the prologue already begins with the compile-time GFX1250
+// unclaused-VMEM workaround (llvm/llvm-project#208467): `global_wb` (cpol 0)
+// then `v_nop`. Unlike descriptorAlreadyTargetsEntryStub(), the descriptor
+// still points at the real kernel body, not a hotswap stub.
+static std::optional<bool> entryPrologueHasVmemWorkaround(
+    const ElfView &Elf, const KernelDescriptorInfo &KD, const LLVMState &LS,
+    ArrayRef<uint8_t> EntryStubPrefix) {
+  if (EntryStubPrefix.empty())
+    return false;
+
+  std::optional<uint64_t> Entry = entryVAddr(KD);
+  if (!Entry)
+    return std::nullopt;
+
+  const uint8_t *Bytes = Elf.dataAtVAddr(*Entry, EntryStubPrefix.size());
+  if (!Bytes)
+    return false;
+  ArrayRef<uint8_t> Candidate(Bytes, EntryStubPrefix.size());
+  if (!startsWithBytes(Candidate, EntryStubPrefix))
+    return false;
+
+  // Confirm the prefix decodes to global_wb (cpol 0) + v_nop, not a byte match.
+  if (!hasResolvedEntryStubState(LS, "entry prologue workaround matcher"))
+    return false;
+  std::vector<InternalDecodedInst> Decoded;
+  if (!decodeTextSection(Bytes, EntryStubPrefix.size(), LS, Decoded) ||
+      Decoded.size() < 2)
+    return false;
+  const MCInst &GlobalWb = Decoded[0].Inst;
+  const MCInst &VNop = Decoded[1].Inst;
+  return GlobalWb.getOpcode() == LS.GlobalWbOpcode &&
+         GlobalWb.getNumOperands() == 1 && GlobalWb.getOperand(0).isImm() &&
+         GlobalWb.getOperand(0).getImm() == 0 &&
+         VNop.getOpcode() == LS.VNopInst.getOpcode() &&
+         VNop.getNumOperands() == 0;
 }
 
 static std::optional<uint64_t>
@@ -365,8 +401,8 @@ totalTrampolineBytes(ArrayRef<Trampoline> Trampolines) {
   return Total;
 }
 
-static std::optional<int64_t>
-checkedSignedDifference(uint64_t LHS, uint64_t RHS, StringRef Context) {
+std::optional<int64_t> checkedSignedDifference(uint64_t LHS, uint64_t RHS,
+                                               StringRef Context) {
   if (LHS >= RHS) {
     uint64_t Diff = LHS - RHS;
     if (Diff > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
@@ -406,6 +442,11 @@ static std::optional<unsigned> allocateEntryStubScratchSgprs(
     return std::nullopt;
   }
 
+  // getKernelSgprCount includes VCC's two implicit SGPRs when the kernel uses
+  // VCC. Unlike findSafeSgprScratchBlock, this pre-decode entry-stub path has
+  // no instruction usage summary that can prove whether those two slots are
+  // non-numbered. Treat the full metadata count as numbered and possibly skip
+  // two usable SGPRs rather than risk overlapping a declared register.
   unsigned ScratchBase = (*SgprCount + 1) & ~1u;
   if (ScratchBase > MaxSgprs || MaxSgprs - ScratchBase < ScratchSgprs) {
     log() << "hotswap: error: entry trampoline: kernel '" << KD.KernelName
@@ -443,11 +484,78 @@ static bool appendPaddingTrampoline(std::vector<Trampoline> &Out,
   return true;
 }
 
+std::optional<uint32_t>
+collectKernelEntryDisplacements(const ElfView &Elf, const LLVMState &LS,
+                                std::vector<DisplacementEdit> &OutEdits) {
+  ArrayRef<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
+  if (Descriptors.empty())
+    return 0;
+
+  SmallVector<uint8_t> Prefix = buildEntryStubBytePrefix(LS);
+  if (Prefix.empty())
+    return std::nullopt;
+
+  std::optional<uint64_t> TextEnd = checkedAddUint64(
+      Elf.textAddr(), Elf.textSize(), "entry displacement text end");
+  if (!TextEnd)
+    return std::nullopt;
+
+  uint32_t Added = 0;
+  for (const KernelDescriptorInfo &KD : Descriptors) {
+    std::optional<bool> AlreadyHasEntryStub =
+        descriptorAlreadyTargetsEntryStub(Elf, KD, LS, Prefix);
+    if (!AlreadyHasEntryStub)
+      return std::nullopt;
+    if (*AlreadyHasEntryStub)
+      continue;
+
+    std::optional<bool> PrologueHasWorkaround =
+        entryPrologueHasVmemWorkaround(Elf, KD, LS, Prefix);
+    if (!PrologueHasWorkaround)
+      return std::nullopt;
+    if (*PrologueHasWorkaround)
+      continue;
+
+    std::optional<uint64_t> Entry = entryVAddr(KD);
+    if (!Entry)
+      return std::nullopt;
+    if (*Entry < Elf.textAddr() || *Entry >= *TextEnd) {
+      log() << "hotswap: error: kernel-entry displacement for '"
+            << KD.KernelName << "' points outside .text at vaddr 0x"
+            << utohexstr(*Entry) << ".\n";
+      return std::nullopt;
+    }
+    const uint64_t TextOffset = *Entry - Elf.textAddr();
+
+    bool DuplicateOffset = false;
+    for (const DisplacementEdit &Existing : OutEdits) {
+      if (Existing.Offset == TextOffset && Existing.OriginalSize == 0) {
+        DuplicateOffset = true;
+        break;
+      }
+    }
+    if (DuplicateOffset)
+      continue;
+
+    DisplacementEdit Edit;
+    Edit.Offset = TextOffset;
+    Edit.OriginalSize = 0;
+    Edit.ReplacementBytes.assign(Prefix.begin(), Prefix.end());
+    OutEdits.push_back(std::move(Edit));
+    ++Added;
+  }
+
+  if (Added > 0)
+    log() << "hotswap: queued " << Added << " kernel-entry displacement"
+          << (Added == 1 ? "" : "s") << "\n";
+  return Added;
+}
+
 std::optional<uint32_t> appendKernelEntryTrampolines(
     const ElfView &Elf, const LLVMState &LS, unsigned MaxSgprs,
     std::vector<Trampoline> &Growth,
     std::vector<KernelEntryTrampolineFixup> &OutFixups) {
-  std::vector<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
+  ArrayRef<KernelDescriptorInfo> Descriptors = Elf.kernelDescriptors();
   if (Descriptors.empty())
     return 0;
 
@@ -472,6 +580,18 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
       return std::nullopt;
     if (*AlreadyHasEntryStub)
       continue;
+    // Skip if the compiler already applied the workaround (#208467)
+    // in-prologue.
+    std::optional<bool> PrologueHasWorkaround =
+        entryPrologueHasVmemWorkaround(Elf, KD, LS, EntryStubPrefix);
+    if (!PrologueHasWorkaround)
+      return std::nullopt;
+    if (*PrologueHasWorkaround) {
+      log() << "hotswap: kernel '" << KD.KernelName
+            << "' prologue already carries the unclaused-VMEM workaround "
+            << "(global_wb; v_nop); skipping entry trampoline\n";
+      continue;
+    }
     std::optional<uint32_t> OriginalInstPrefLines =
         Elf.getKernelDescriptorInstPrefSize(KD.KernelName, LS.Cpu);
     if (!OriginalInstPrefLines)
@@ -595,6 +715,9 @@ bool rewriteKernelEntryDescriptorOffsets(
 
   bool Ok = true;
   ElfView &OutElf = *ViewOrErr;
+  // Collect SGPR bumps and apply them in one batched metadata rewrite after the
+  // loop; a per-fixup update reparses/reserializes the whole note (O(n^2)).
+  StringMap<unsigned> SgprBumps;
   for (const KernelEntryTrampolineFixup &Fixup : Fixups) {
     std::optional<uint64_t> KdVAddr =
         OutElf.getKernelDescriptorVAddr(Fixup.KernelName);
@@ -622,12 +745,17 @@ bool rewriteKernelEntryDescriptorOffsets(
     }
     bool UpdatedEntry =
         OutElf.updateKernelDescriptorEntryOffset(Fixup.KernelName, *NewOffset);
-    bool UpdatedSgprs = OutElf.updateKernelDescriptorSgprCount(
-        Fixup.KernelName, Fixup.RequiredSgprs);
+    if (!Fixup.SkipSgprReservation && Fixup.RequiredSgprs != 0) {
+      unsigned &Bump = SgprBumps[Fixup.KernelName];
+      Bump = std::max(Bump, Fixup.RequiredSgprs);
+    }
     bool UpdatedInstPref = OutElf.updateKernelDescriptorInstPrefSize(
         Fixup.KernelName, TargetCpu, Fixup.InstPrefLines);
-    Ok = UpdatedEntry && UpdatedSgprs && UpdatedInstPref && Ok;
+    Ok = UpdatedEntry && UpdatedInstPref && Ok;
   }
+
+  if (!SgprBumps.empty())
+    Ok = OutElf.updateKernelMetadataSgprCounts(SgprBumps) && Ok;
   return Ok;
 }
 

@@ -1077,8 +1077,7 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         // Add promote kernel arguments pass to the opt pipeline right before
         // infer address spaces which is needed to do actual address space
         // rewriting.
-        if (Level.getSpeedupLevel() > OptimizationLevel::O1.getSpeedupLevel() &&
-            EnablePromoteKernelArguments)
+        if (Level > OptimizationLevel::O1 && EnablePromoteKernelArguments)
           FPM.addPass(AMDGPUPromoteKernelArgumentsPass());
 
         // Add infer address spaces pass to the opt pipeline after inlining
@@ -1119,6 +1118,13 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         FunctionPassManager FPM;
         FPM.addPass(AMDGPUPromoteKernelArgumentsPass());
         PM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+
+        // Clean up redundant memory round-trips that the full-LTO pipeline,
+        // unlike the non-LTO/ThinLTO ones, otherwise leaves for codegen.
+        if (Level != OptimizationLevel::O0) {
+          PM.addPass(createModuleToFunctionPassAdaptor(
+              EarlyCSEPass(/*UseMemorySSA=*/true)));
+        }
 
         // When we are using -fgpu-rdc, we can only run accelerator code
         // selection after linking to prevent, otherwise we end up removing
@@ -1290,7 +1296,9 @@ GCNTargetMachine::GCNTargetMachine(const Target &T, const Triple &TT,
                                    std::optional<Reloc::Model> RM,
                                    std::optional<CodeModel::Model> CM,
                                    CodeGenOptLevel OL, bool JIT)
-    : AMDGPUTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL) {}
+    : AMDGPUTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL) {
+  setEnableDefaultMachineVerifier(false);
+}
 
 enum class OOBFlagValue {
   Any = 0,

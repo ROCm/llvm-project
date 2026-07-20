@@ -9,8 +9,8 @@
 /// \file
 /// Tests for the hotswap MC/LLVM infrastructure in comgr-hotswap-llvm.cpp:
 /// initLLVM construction, LLVMState::encodeSBranch, assembleSingleInst /
-/// decodeTextSection round-trip, applyMnemonicSwap, applyByteReplace, and
-/// checkVgprOverlap.
+/// decodeTextSection round-trip, the decodeTextSection instruction-decode
+/// cache, applyMnemonicSwap, applyByteReplace, and checkVgprOverlap.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -78,6 +78,201 @@ static uint32_t readDword(const uint8_t *Bytes) {
   return V;
 }
 
+static uint64_t alignTo8(uint64_t V) { return (V + 7) & ~uint64_t{7}; }
+
+static std::vector<uint8_t> makeDisplacementTestElf(
+    llvm::ArrayRef<uint8_t> Text, bool AddTextRelocation = false,
+    bool AddDebugSection = false, bool AddBoundaryTextSymbol = false) {
+  using namespace llvm::ELF;
+  namespace hsa = llvm::amdhsa;
+
+  static constexpr uint64_t ShOff = sizeof(Elf64_Ehdr);
+  static constexpr uint64_t PhOff = 0x200;
+  static constexpr uint64_t TextOff = 0x280;
+  static constexpr uint64_t TextAddr = 0x1000;
+  static constexpr uint64_t RodataAddr = 0x2000;
+  static constexpr uint64_t KdBytes = sizeof(hsa::kernel_descriptor_t);
+  const uint64_t SymCount = AddBoundaryTextSymbol ? 4 : 3;
+
+  const char StrTab[] = "\0kernel\0kernel.kd\0";
+  const char ShStrTabNoRel[] =
+      "\0.text\0.rodata\0.strtab\0.symtab\0.shstrtab\0";
+  const char ShStrTabRel[] =
+      "\0.text\0.rodata\0.strtab\0.symtab\0.rela.text\0.shstrtab\0";
+  const char ShStrTabDebug[] =
+      "\0.text\0.rodata\0.strtab\0.symtab\0.debug_info\0.shstrtab\0";
+
+  const uint64_t RodataOff = alignTo8(TextOff + Text.size());
+  const uint64_t StrTabOff = alignTo8(RodataOff + KdBytes);
+  const uint64_t SymTabOff = alignTo8(StrTabOff + sizeof(StrTab));
+  const uint64_t RelOff =
+      AddTextRelocation ? alignTo8(SymTabOff + SymCount * sizeof(Elf64_Sym))
+                        : 0;
+  const uint64_t DebugOff =
+      AddDebugSection ? alignTo8(SymTabOff + SymCount * sizeof(Elf64_Sym)) : 0;
+  const uint64_t ShStrTabOff =
+      AddTextRelocation ? alignTo8(RelOff + sizeof(Elf64_Rela))
+      : AddDebugSection ? alignTo8(DebugOff + 4)
+                        : alignTo8(SymTabOff + SymCount * sizeof(Elf64_Sym));
+  const uint64_t ShStrTabSize = AddTextRelocation ? sizeof(ShStrTabRel)
+                                : AddDebugSection ? sizeof(ShStrTabDebug)
+                                                  : sizeof(ShStrTabNoRel);
+  const uint64_t BufSize = alignTo8(ShStrTabOff + ShStrTabSize + 64);
+
+  std::vector<uint8_t> Buf(BufSize, 0);
+  const char *ShStrTab = AddTextRelocation ? ShStrTabRel
+                         : AddDebugSection ? ShStrTabDebug
+                                           : ShStrTabNoRel;
+  std::memcpy(Buf.data() + ShStrTabOff, ShStrTab, ShStrTabSize);
+  std::memcpy(Buf.data() + StrTabOff, StrTab, sizeof(StrTab));
+  std::memcpy(Buf.data() + TextOff, Text.data(), Text.size());
+
+  Elf64_Ehdr Ehdr = comgr_test::makeElf64Ehdr(EM_AMDGPU);
+  Ehdr.e_ident[EI_OSABI] = ELFOSABI_AMDGPU_HSA;
+  Ehdr.e_type = ET_DYN;
+  Ehdr.e_version = EV_CURRENT;
+  Ehdr.e_phoff = PhOff;
+  Ehdr.e_shoff = ShOff;
+  Ehdr.e_ehsize = sizeof(Elf64_Ehdr);
+  Ehdr.e_phentsize = sizeof(Elf64_Phdr);
+  Ehdr.e_phnum = 2;
+  Ehdr.e_shentsize = sizeof(Elf64_Shdr);
+  Ehdr.e_shnum = AddTextRelocation || AddDebugSection ? 7 : 6;
+  Ehdr.e_shstrndx = AddTextRelocation || AddDebugSection ? 6 : 5;
+  std::memcpy(Buf.data(), &Ehdr, sizeof(Ehdr));
+
+  Elf64_Phdr TextPh{};
+  TextPh.p_type = PT_LOAD;
+  TextPh.p_flags = PF_R | PF_X;
+  TextPh.p_offset = TextOff;
+  TextPh.p_vaddr = TextAddr;
+  TextPh.p_paddr = TextAddr;
+  TextPh.p_filesz = Text.size();
+  TextPh.p_memsz = Text.size() + 64;
+  TextPh.p_align = 8;
+  std::memcpy(Buf.data() + PhOff, &TextPh, sizeof(TextPh));
+
+  Elf64_Phdr RodataPh{};
+  RodataPh.p_type = PT_LOAD;
+  RodataPh.p_flags = PF_R;
+  RodataPh.p_offset = RodataOff;
+  RodataPh.p_vaddr = RodataAddr;
+  RodataPh.p_paddr = RodataAddr;
+  RodataPh.p_filesz = KdBytes;
+  RodataPh.p_memsz = KdBytes;
+  RodataPh.p_align = 8;
+  std::memcpy(Buf.data() + PhOff + sizeof(Elf64_Phdr), &RodataPh,
+              sizeof(RodataPh));
+
+  Elf64_Shdr TextSh{};
+  TextSh.sh_name = 1;
+  TextSh.sh_type = SHT_PROGBITS;
+  TextSh.sh_flags = SHF_ALLOC | SHF_EXECINSTR;
+  TextSh.sh_offset = TextOff;
+  TextSh.sh_addr = TextAddr;
+  TextSh.sh_size = Text.size();
+  TextSh.sh_addralign = 4;
+  std::memcpy(Buf.data() + ShOff + 1 * sizeof(Elf64_Shdr), &TextSh,
+              sizeof(TextSh));
+
+  Elf64_Shdr RodataSh{};
+  RodataSh.sh_name = 7;
+  RodataSh.sh_type = SHT_PROGBITS;
+  RodataSh.sh_flags = SHF_ALLOC;
+  RodataSh.sh_offset = RodataOff;
+  RodataSh.sh_addr = RodataAddr;
+  RodataSh.sh_size = KdBytes;
+  RodataSh.sh_addralign = 8;
+  std::memcpy(Buf.data() + ShOff + 2 * sizeof(Elf64_Shdr), &RodataSh,
+              sizeof(RodataSh));
+
+  Elf64_Shdr StrtabSh{};
+  StrtabSh.sh_name = 15;
+  StrtabSh.sh_type = SHT_STRTAB;
+  StrtabSh.sh_offset = StrTabOff;
+  StrtabSh.sh_size = sizeof(StrTab);
+  std::memcpy(Buf.data() + ShOff + 3 * sizeof(Elf64_Shdr), &StrtabSh,
+              sizeof(StrtabSh));
+
+  Elf64_Shdr SymtabSh{};
+  SymtabSh.sh_name = 23;
+  SymtabSh.sh_type = SHT_SYMTAB;
+  SymtabSh.sh_offset = SymTabOff;
+  SymtabSh.sh_size = SymCount * sizeof(Elf64_Sym);
+  SymtabSh.sh_link = 3;
+  SymtabSh.sh_entsize = sizeof(Elf64_Sym);
+  std::memcpy(Buf.data() + ShOff + 4 * sizeof(Elf64_Shdr), &SymtabSh,
+              sizeof(SymtabSh));
+
+  unsigned ShStrIndex = AddTextRelocation || AddDebugSection ? 6 : 5;
+  if (AddTextRelocation) {
+    Elf64_Shdr RelaSh{};
+    RelaSh.sh_name = 31;
+    RelaSh.sh_type = SHT_RELA;
+    RelaSh.sh_offset = RelOff;
+    RelaSh.sh_size = sizeof(Elf64_Rela);
+    RelaSh.sh_link = 4;
+    RelaSh.sh_info = 1; // applies to .text
+    RelaSh.sh_entsize = sizeof(Elf64_Rela);
+    std::memcpy(Buf.data() + ShOff + 5 * sizeof(Elf64_Shdr), &RelaSh,
+                sizeof(RelaSh));
+  }
+  if (AddDebugSection) {
+    Elf64_Shdr DebugSh{};
+    DebugSh.sh_name = 31;
+    DebugSh.sh_type = SHT_PROGBITS;
+    DebugSh.sh_offset = DebugOff;
+    DebugSh.sh_size = 4;
+    DebugSh.sh_addralign = 1;
+    std::memcpy(Buf.data() + ShOff + 5 * sizeof(Elf64_Shdr), &DebugSh,
+                sizeof(DebugSh));
+  }
+
+  Elf64_Shdr ShstrSh{};
+  ShstrSh.sh_name = AddTextRelocation ? 42 : AddDebugSection ? 43 : 31;
+  ShstrSh.sh_type = SHT_STRTAB;
+  ShstrSh.sh_offset = ShStrTabOff;
+  ShstrSh.sh_size = ShStrTabSize;
+  std::memcpy(Buf.data() + ShOff + ShStrIndex * sizeof(Elf64_Shdr), &ShstrSh,
+              sizeof(ShstrSh));
+
+  int64_t EntryOffset = static_cast<int64_t>(TextAddr - RodataAddr);
+  std::memcpy(
+      Buf.data() + RodataOff +
+          offsetof(hsa::kernel_descriptor_t, kernel_code_entry_byte_offset),
+      &EntryOffset, sizeof(EntryOffset));
+
+  Elf64_Sym KernelSym{};
+  KernelSym.st_name = 1;
+  KernelSym.setBindingAndType(STB_GLOBAL, STT_FUNC);
+  KernelSym.st_shndx = 1;
+  KernelSym.st_value = TextAddr;
+  KernelSym.st_size = Text.size();
+  std::memcpy(Buf.data() + SymTabOff + 1 * sizeof(Elf64_Sym), &KernelSym,
+              sizeof(KernelSym));
+
+  Elf64_Sym KdSym{};
+  KdSym.st_name = 8;
+  KdSym.setBindingAndType(STB_GLOBAL, STT_OBJECT);
+  KdSym.st_shndx = 2;
+  KdSym.st_value = RodataAddr;
+  KdSym.st_size = KdBytes;
+  std::memcpy(Buf.data() + SymTabOff + 2 * sizeof(Elf64_Sym), &KdSym,
+              sizeof(KdSym));
+
+  if (AddBoundaryTextSymbol) {
+    Elf64_Sym BoundarySym{};
+    BoundarySym.setBindingAndType(STB_GLOBAL, STT_FUNC);
+    BoundarySym.st_shndx = 1;
+    BoundarySym.st_value = TextAddr;
+    BoundarySym.st_size = MinInstSize;
+    std::memcpy(Buf.data() + SymTabOff + 3 * sizeof(Elf64_Sym), &BoundarySym,
+                sizeof(BoundarySym));
+  }
+
+  return Buf;
+}
+
 // -- initLLVM ----------------------------------------------------------------
 
 TEST(InitLLVM, ValidGfx1250) {
@@ -87,6 +282,24 @@ TEST(InitLLVM, ValidGfx1250) {
   EXPECT_NE(S.Target, nullptr);
   ASSERT_NE(S.MCII, nullptr);
   EXPECT_LT(S.SBranchOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SClauseOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SDelayAluOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SEndPgmOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SEndPgmSavedOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SAddNcU64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SAddPcI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SCallI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SSwapPcI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SPrefetchInstPcRelOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SPrefetchDataPcRelOpcode, S.MCII->getNumOpcodes());
+  EXPECT_TRUE(S.SCCRegister.isValid());
+  ASSERT_TRUE(S.VCCRegister.isValid());
+  bool SawVccSubregister = false;
+  for (llvm::MCPhysReg Sub : S.MRI->subregs(S.VCCRegister)) {
+    SawVccSubregister = true;
+    EXPECT_TRUE(S.MRI->regsOverlap(S.VCCRegister, llvm::MCRegister(Sub)));
+  }
+  EXPECT_TRUE(SawVccSubregister);
   EXPECT_EQ(S.SNopBytes.size(), MinInstSize);
 }
 
@@ -182,69 +395,1141 @@ TEST(EncodeSBranch, FailsOnInvalidState) {
   EXPECT_TRUE(S.encodeSBranch(0, 8).empty());
 }
 
-// -- encodeLongBranch (s_add_pc_i64) -----------------------------------------
+// -- encodeSetPCLongBranch ---------------------------------------------------
+
+TEST(EncodeSetPCLongBranch, BackwardLandsOnTarget) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const uint64_t From = 0x81000;
+  const uint64_t To = 0x1004;
+  std::optional<llvm::SmallVector<uint8_t>> Out =
+      encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
+  ASSERT_TRUE(Out);
+  EXPECT_EQ(Out->size(), SetPcReturnReserveBytes);
+
+  std::vector<InternalDecodedInst> Dec;
+  ASSERT_TRUE(decodeTextSection(Out->data(), Out->size(), S, Dec));
+  ASSERT_EQ(Dec.size(), 3u);
+  EXPECT_EQ(Dec[0].Mnemonic, "s_get_pc_i64");
+  EXPECT_EQ(Dec[1].Mnemonic, "s_add_nc_u64");
+  EXPECT_EQ(Dec[2].Mnemonic, "s_set_pc_i64");
+  for (const InternalDecodedInst &DI : Dec)
+    EXPECT_NE(DI.Mnemonic, "s_add_pc_i64");
+
+  const llvm::MCInstrDesc &AddDesc = S.MCII->get(Dec[1].Inst.getOpcode());
+  EXPECT_FALSE(AddDesc.hasImplicitUseOfPhysReg(S.SCCRegister));
+  EXPECT_FALSE(AddDesc.hasImplicitDefOfPhysReg(S.SCCRegister, S.MRI.get()));
+
+  // s_get_pc_i64 captures the PC immediately after its own dword.
+  uint64_t Delta = To - (From + MinInstSize);
+  ASSERT_TRUE(Dec[1].Inst.getOperand(2).isImm());
+  uint64_t EncodedDelta =
+      static_cast<uint64_t>(Dec[1].Inst.getOperand(2).getImm());
+  EXPECT_EQ(EncodedDelta, Delta);
+  EXPECT_EQ(From + MinInstSize + EncodedDelta, To);
+  EXPECT_EQ(static_cast<uint32_t>(Delta), 0xFFF80000u);
+  EXPECT_EQ(static_cast<uint32_t>(Delta >> 32), 0xFFFFFFFFu);
+}
+
+TEST(EncodeSetPCLongBranch, ForwardLandsOnTarget) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  constexpr uint64_t From = 0x1000;
+  constexpr uint64_t To = 0x81000;
+  std::optional<llvm::SmallVector<uint8_t>> Out =
+      encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
+  ASSERT_TRUE(Out);
+  EXPECT_EQ(Out->size(), 16u);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Out->data(), Out->size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 3u);
+  ASSERT_TRUE(Decoded[1].Inst.getOperand(2).isImm());
+  uint64_t Delta =
+      static_cast<uint64_t>(Decoded[1].Inst.getOperand(2).getImm());
+  EXPECT_EQ(From + MinInstSize + Delta, To);
+}
+
+TEST(EncodeSetPCLongBranch, InlineDisplacementUsesTwelveBytes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  constexpr uint64_t From = 0x1000;
+  constexpr uint64_t To = From + 2 * MinInstSize;
+  std::optional<llvm::SmallVector<uint8_t>> Out =
+      encodeSetPCLongBranch(S, From, To, /*SgprBase=*/12);
+  ASSERT_TRUE(Out);
+  EXPECT_EQ(Out->size(), 12u);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Out->data(), Out->size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 3u);
+  ASSERT_TRUE(Decoded[1].Inst.getOperand(2).isImm());
+  uint64_t Delta =
+      static_cast<uint64_t>(Decoded[1].Inst.getOperand(2).getImm());
+  EXPECT_EQ(From + MinInstSize + Delta, To);
+}
+
+TEST(FindNearestSetPcGateway, FitsActualSixteenByteEncoding) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x110, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+  llvm::Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
+      findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0,
+                              /*TargetOffset=*/0x81000, /*SgprBase=*/12);
+  ASSERT_TRUE((bool)GatewayOrErr) << llvm::toString(GatewayOrErr.takeError());
+  std::optional<EncodedSetPcGateway> &Gateway = *GatewayOrErr;
+  ASSERT_TRUE(Gateway);
+  EXPECT_EQ(Gateway->Sled, &Gateways[0]);
+  EXPECT_EQ(Gateway->Bytes.size(), 16u);
+  EXPECT_EQ(Gateways[0].WritePos, 0x100u);
+}
+
+TEST(FindNearestSetPcGateway, SkipsNearerUndersizedCandidate) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x80100, /*End=*/0x80110, /*WritePos=*/0x80100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x100000},
+      {/*Start=*/0x80200, /*End=*/0x80214, /*WritePos=*/0x80200,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x100000}};
+  llvm::Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
+      findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0x80000,
+                              /*TargetOffset=*/0x1004, /*SgprBase=*/12);
+  ASSERT_TRUE((bool)GatewayOrErr) << llvm::toString(GatewayOrErr.takeError());
+  std::optional<EncodedSetPcGateway> &Gateway = *GatewayOrErr;
+  ASSERT_TRUE(Gateway);
+  EXPECT_EQ(Gateway->Sled, &Gateways[1]);
+  EXPECT_EQ(Gateway->Bytes.size(), SetPcReturnReserveBytes);
+  EXPECT_EQ(Gateways[0].WritePos, 0x80100u);
+  EXPECT_EQ(Gateways[1].WritePos, 0x80200u);
+}
+
+TEST(FindNearestSetPcGateway, DistinguishesNoFitFromEncodingFailure) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x108, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+  llvm::Expected<std::optional<EncodedSetPcGateway>> NoFit =
+      findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0,
+                              /*TargetOffset=*/0x81000, /*SgprBase=*/12);
+  ASSERT_TRUE((bool)NoFit) << llvm::toString(NoFit.takeError());
+  EXPECT_FALSE(*NoFit);
+
+  llvm::Expected<std::optional<EncodedSetPcGateway>> EncodingFailure =
+      findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0,
+                              /*TargetOffset=*/0x81000, /*SgprBase=*/3);
+  ASSERT_FALSE((bool)EncodingFailure);
+  std::string Error = llvm::toString(EncodingFailure.takeError());
+  EXPECT_NE(Error.find("failed to encode set-PC gateway at candidate"),
+            std::string::npos);
+}
+
+TEST(CountReachableSetPcGatewaySlots, DistinguishesZeroFromEncodingFailure) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x108, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+  llvm::Expected<uint64_t> NoSlots = countReachableSetPcGatewaySlots(
+      Gateways, S, /*FromOffset=*/0, /*TargetOffset=*/0x81000,
+      /*SgprBase=*/12, /*MaxSlots=*/1);
+  ASSERT_TRUE((bool)NoSlots) << llvm::toString(NoSlots.takeError());
+  EXPECT_EQ(*NoSlots, 0u);
+
+  llvm::Expected<uint64_t> EncodingFailure = countReachableSetPcGatewaySlots(
+      Gateways, S, /*FromOffset=*/0, /*TargetOffset=*/0x81000,
+      /*SgprBase=*/3, /*MaxSlots=*/1);
+  ASSERT_FALSE((bool)EncodingFailure);
+  std::string Error = llvm::toString(EncodingFailure.takeError());
+  EXPECT_NE(Error.find("failed to encode set-PC gateway while counting"),
+            std::string::npos);
+}
+
+TEST(EncodeSetPCLongBranch, RejectsPcBaseOverflow) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  EXPECT_FALSE(encodeSetPCLongBranch(
+      S, std::numeric_limits<uint64_t>::max() - MinInstSize + 1, 0,
+      /*SgprBase=*/12));
+}
+
+TEST(EncodeSetPCLongBranch, RejectsMisalignedScratchPair) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  EXPECT_FALSE(encodeSetPCLongBranch(S, 0, 0x1000, /*SgprBase=*/3));
+}
+
+// -- buildKernelEntryTrampolineFast ------------------------------------------
 //
-// The long branch reaches anywhere via s_add_pc_i64, which adds a signed
-// literal to the PC of the next instruction: landing PC == From + size + imm.
-// A positive (forward) offset fits a 32-bit literal (8 bytes); a negative
-// (backward) offset needs a 64-bit literal (12 bytes). These verify the offset
-// math and encoding structurally rather than pinning exact bytes.
+// The fast path emits its entry stub from a pre-encoded byte template, patching
+// the two PC-relative delta immediates and the scratch SGPR register fields.
+// These tests disassemble the emitted bytes and confirm (a) the stub names one
+// consistent scratch pair across all six SGPR fields, and (b) the runtime PC
+// arithmetic -- s_get_pc_i64 then the two-word add-with-carry -- lands exactly
+// on the original entry. They pass ScratchSgpr=100 so the decoded bytes match
+// the historical fixed-pair layout. Checking the decoded immediates rather than
+// the raw template guards against a bad PC-base offset or a wrong delta word,
+// which the disassembly-mnemonic lit test cannot catch.
 
-// Read the signed literal that follows the 4-byte opcode dword.
-static int64_t longBranchLiteral(llvm::ArrayRef<uint8_t> Out) {
-  if (Out.size() == LongBranchFwdBytes)
-    return static_cast<int32_t>(readDword(Out.data() + MinInstSize));
-  int64_t V = 0;
-  std::memcpy(&V, Out.data() + MinInstSize, sizeof(V));
-  return V;
+// Disassemble a fast stub and reconstruct the entry vaddr it jumps to,
+// modelling the on-hardware two's-complement add-with-carry across the
+// scratch pair. Also asserts the structure (one consistent scratch pair,
+// expected opcodes).
+static uint64_t decodeFastStubTarget(const LLVMState &S, uint64_t StubVAddr,
+                                     llvm::ArrayRef<uint8_t> Bytes) {
+  std::vector<InternalDecodedInst> Dec;
+  EXPECT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Dec));
+  EXPECT_GE(Dec.size(), 6u);
+
+  // Body layout: global_wb, v_nop, s_get_pc_i64, s_add_co_u32 (delta lo),
+  // s_add_co_ci_u32 (delta hi), s_set_pc_i64.
+  EXPECT_EQ(Dec[0].Inst.getOpcode(), S.GlobalWbOpcode);
+  EXPECT_EQ(Dec[1].Inst.getOpcode(), S.VNopInst.getOpcode());
+  EXPECT_EQ(Dec[2].Inst.getOpcode(), S.SGetPcI64Opcode);
+  EXPECT_EQ(Dec[3].Inst.getOpcode(), S.SAddU32Opcode);
+  EXPECT_EQ(Dec[4].Inst.getOpcode(), S.SAddcU32Opcode);
+  EXPECT_EQ(Dec[5].Inst.getOpcode(), S.SSetPcI64Opcode);
+  const llvm::MCInst &GetPc = Dec[2].Inst;
+  const llvm::MCInst &AddLo = Dec[3].Inst;
+  const llvm::MCInst &AddHi = Dec[4].Inst;
+  const llvm::MCInst &SetPc = Dec[5].Inst;
+
+  // s_get_pc, s_set_pc, and both add destinations must all name the same fixed
+  // scratch pair the template hard-codes (s[100:101]).
+  EXPECT_TRUE(GetPc.getOperand(0).isReg() && SetPc.getOperand(0).isReg() &&
+              AddLo.getOperand(0).isReg() && AddHi.getOperand(0).isReg());
+  const llvm::MCRegister Pair = GetPc.getOperand(0).getReg();
+  EXPECT_EQ(SetPc.getOperand(0).getReg(), Pair);
+  EXPECT_EQ(AddLo.getOperand(0).getReg(), AddLo.getOperand(1).getReg());
+  EXPECT_EQ(AddHi.getOperand(0).getReg(), AddHi.getOperand(1).getReg());
+
+  // The 32-bit literal is the trailing dword of each 8-byte add. Read it from
+  // the disassembler-reported instruction span rather than the decoded operand:
+  // the AMDGPU disassembler models s_add_co_ci_u32's literal as an expr, so
+  // getImm() on it is unreliable, while s_add_co_u32's is a plain imm.
+  EXPECT_EQ(Dec[3].Size, 8u);
+  EXPECT_EQ(Dec[4].Size, 8u);
+  const uint32_t Lo = readDword(Bytes.data() + Dec[3].Offset + Dec[3].Size - 4);
+  const uint32_t Hi = readDword(Bytes.data() + Dec[4].Offset + Dec[4].Size - 4);
+
+  // PC base is the address of the instruction after s_get_pc_i64.
+  const uint64_t PcBase = StubVAddr + Dec[2].Offset + Dec[2].Size;
+
+  // Model the hardware add-with-carry across the 64-bit pair rather than a
+  // plain 64-bit add, so a delta that carries out of the low word is exercised.
+  const uint32_t BaseLo = static_cast<uint32_t>(PcBase);
+  const uint32_t BaseHi = static_cast<uint32_t>(PcBase >> 32);
+  const uint64_t SumLo = static_cast<uint64_t>(BaseLo) + Lo;
+  const uint32_t ResLo = static_cast<uint32_t>(SumLo);
+  const uint32_t Carry = static_cast<uint32_t>(SumLo >> 32);
+  const uint32_t ResHi = BaseHi + Hi + Carry;
+  return (static_cast<uint64_t>(ResHi) << 32) | ResLo;
 }
 
-TEST(EncodeLongBranch, ForwardLandsOnTarget) {
+TEST(BuildKernelEntryTrampolineFast, ForwardDeltaLandsOnEntry) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  // ~512 KB forward -- well beyond s_branch's +-128 KB reach.
-  const uint64_t From = 0x1000, To = 0x81000;
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchFwdBytes);
-  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
+  const uint64_t StubVAddr = 0x100000;
+  const uint64_t EntryVAddr = 0x180000; // forward
+  llvm::SmallVector<uint8_t> Bytes = buildKernelEntryTrampolineFast(
+      StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
+}
+
+TEST(BuildKernelEntryTrampolineFast, BackwardDeltaLandsOnEntry) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  const uint64_t StubVAddr = 0x180000;
+  const uint64_t EntryVAddr = 0x100000; // backward: negative delta
+  llvm::SmallVector<uint8_t> Bytes = buildKernelEntryTrampolineFast(
+      StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
+}
+
+TEST(BuildKernelEntryTrampolineFast, CarryProducingDeltaLandsOnEntry) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  // Pc base low word is near the top of 32 bits, and the entry is far enough
+  // above that the low-word add overflows and must carry into the high word.
+  const uint64_t StubVAddr = 0xFFFFF000;
+  const uint64_t EntryVAddr = 0x1'0002'0000; // crosses the 4 GiB boundary
+  llvm::SmallVector<uint8_t> Bytes = buildKernelEntryTrampolineFast(
+      StubVAddr, EntryVAddr, /*ScratchSgpr=*/100);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
+  EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
+}
+
+// The fast path emits its stub body from a checked-in, generated byte template
+// (comgr-hotswap-entry-trampoline-fast-stub.inc) instead of running the MC
+// layer at rewrite time. This test is the guarantee those bytes never silently
+// drift from what the assembler produces: assemble the six body instructions
+// through the MC layer here and memcmp against the body
+// buildKernelEntryTrampolineFast emits. The two s_add immediates are the
+// PC-relative delta the runtime writes, so they are zeroed on both sides before
+// comparing (imm=0 would otherwise assemble to the shorter inline-constant form
+// -- we assemble with a literal to force the 32-bit-literal encoding the
+// template uses, then zero the words).
+TEST(BuildKernelEntryTrampolineFast, StubTemplateMatchesMCOutput) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // The template is spelled with the fixed s[100:101] scratch pair; build with
+  // that pair so the SGPR register-field bytes match the assembled
+  // instructions.
+  llvm::SmallVector<uint8_t> Stub = buildKernelEntryTrampolineFast(
+      /*StubVAddr=*/0x1000, /*EntryVAddr=*/0x2000, /*ScratchSgpr=*/100);
+  ASSERT_EQ(Stub.size(), KernelEntryStubStride);
+  llvm::SmallVector<uint8_t> Body(Stub.begin(),
+                                  Stub.begin() + FastEntryStubBodyBytes);
+
+  // Assemble the six body instructions through the MC layer. The s_add
+  // immediates use a literal to force the 32-bit-literal encoding.
+  static const char *const BodyAsm[] = {
+      "global_wb",
+      "v_nop",
+      "s_get_pc_i64 s[100:101]",
+      "s_add_co_u32 s100, s100, 0xdeadbeef",
+      "s_add_co_ci_u32 s101, s101, 0xdeadbeef",
+      "s_set_pc_i64 s[100:101]",
+  };
+  llvm::SmallVector<uint8_t> Assembled;
+  for (const char *Asm : BodyAsm) {
+    llvm::SmallVector<uint8_t> Inst = assembleSingleInst(Asm, S);
+    ASSERT_FALSE(Inst.empty()) << "failed to assemble: " << Asm;
+    Assembled.append(Inst.begin(), Inst.end());
+  }
+  ASSERT_EQ(Assembled.size(), FastEntryStubBodyBytes);
+
+  // Zero the PC-relative delta words on both sides (the runtime writes them;
+  // the template carries zero; the assembled form carries the 0xdeadbeef
+  // literal).
+  for (uint64_t Off : {FastEntryDeltaLoOffset, FastEntryDeltaHiOffset})
+    for (uint64_t I = 0; I < 4; ++I)
+      Body[Off + I] = Assembled[Off + I] = 0;
+
+  EXPECT_EQ(Body, Assembled);
+}
+
+// The stub's six SGPR register fields must encode whatever scratch pair the
+// allocator picked -- not the s[100:101] the template is spelled with. Build
+// with an even base other than 100 and confirm the decoded pair matches, and
+// that the delta still lands on the entry (the field patch must not disturb the
+// delta words).
+TEST(BuildKernelEntryTrampolineFast, PatchesScratchSgprRegisterFields) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  const uint64_t StubVAddr = 0x100000;
+  const uint64_t EntryVAddr = 0x140000;
+  const unsigned ScratchSgpr = 8; // aligned pair s[8:9]
+  llvm::SmallVector<uint8_t> Bytes =
+      buildKernelEntryTrampolineFast(StubVAddr, EntryVAddr, ScratchSgpr);
+  ASSERT_EQ(Bytes.size(), KernelEntryStubStride);
 
   std::vector<InternalDecodedInst> Dec;
-  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
-  ASSERT_EQ(Dec.size(), 1u);
-  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Dec));
+  ASSERT_GE(Dec.size(), 6u);
+  const llvm::MCInst &GetPc = Dec[2].Inst;
+  ASSERT_TRUE(GetPc.getOperand(0).isReg());
+  // s_get_pc names the low SGPR of the pair; s[8:9] decodes as SGPR8.
+  EXPECT_EQ(GetPc.getOperand(0).getReg(), Dec[5].Inst.getOperand(0).getReg());
+  EXPECT_EQ(decodeFastStubTarget(S, StubVAddr, Bytes), EntryVAddr);
 }
 
-TEST(EncodeLongBranch, BackwardUsesWideLiteralAndLandsOnTarget) {
+// A kernel whose live SGPR count leaves no aligned scratch pair below MaxSgprs
+// must decline cleanly (nullopt), never clobber a live SGPR or crash. This is
+// the correctness guarantee the per-kernel scratch allocation adds over a fixed
+// pair: MetadataSgprCount is set to the top of the addressable range.
+TEST(KernelEntryTrampolineFast, DeclinesWhenNoScratchPairFits) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  // Backward jump (trampoline tail -> earlier return point).
-  const uint64_t From = 0x81000, To = 0x1004;
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_EQ(Out.size(), LongBranchMaxBytes);
-  EXPECT_EQ(static_cast<int64_t>(From) + static_cast<int64_t>(Out.size()) +
-                longBranchLiteral(Out),
-            static_cast<int64_t>(To));
 
-  std::vector<InternalDecodedInst> Dec;
-  ASSERT_TRUE(decodeTextSection(Out.data(), Out.size(), S, Dec));
-  ASSERT_EQ(Dec.size(), 1u);
-  EXPECT_EQ(Dec[0].Mnemonic, "s_add_pc_i64");
+  llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(EndPgm.size(), MinInstSize);
+  llvm::SmallVector<uint8_t> Text(EndPgm.begin(), EndPgm.end());
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  // 106 SGPRs used: no aligned pair fits below the 106-SGPR gfx1250 limit.
+  Opts.MetadataSgprCount = 106;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count = appendKernelEntryTrampolinesFast(
+      *View, "gfx1250", /*MaxSgprs=*/106, Growth, Fixups);
+  EXPECT_FALSE(Count.has_value());
 }
 
-TEST(EncodeLongBranch, ReachesBeyondSBranchRange) {
+// The complement of the decline case: a modest SGPR count leaves room, so the
+// fast path installs one trampoline and records the bumped scratch pair in the
+// fixup (SkipSgprReservation=false), exactly like the MC path.
+TEST(KernelEntryTrampolineFast, AllocatesPerKernelScratchAndBumpsReservation) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  // 4 MB: s_branch rejects it, the long branch encodes it.
-  const uint64_t From = 0, To = 0x400000;
-  EXPECT_TRUE(S.encodeSBranch(From, To).empty());
-  llvm::SmallVector<uint8_t> Out = encodeLongBranch(S, From, To);
-  ASSERT_FALSE(Out.empty());
-  EXPECT_EQ(From + Out.size() + longBranchLiteral(Out), To);
+
+  llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(EndPgm.size(), MinInstSize);
+  llvm::SmallVector<uint8_t> Text(EndPgm.begin(), EndPgm.end());
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8; // scratch pair lands at s[8:9]
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count = appendKernelEntryTrampolinesFast(
+      *View, "gfx1250", /*MaxSgprs=*/106, Growth, Fixups);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 1u);
+  ASSERT_EQ(Fixups.size(), 1u);
+  // Scratch pair is s[8:9]; the fixup records the top of the pair (base + 2).
+  EXPECT_EQ(Fixups[0].RequiredSgprs, 10u);
+  EXPECT_FALSE(Fixups[0].SkipSgprReservation);
+}
+
+TEST(IsSBranchReachable, CoversBoundariesAlignmentAndPcOverflow) {
+  constexpr uint64_t PositiveLimit =
+      static_cast<uint64_t>(BranchOffsetMax + 1) * MinInstSize;
+  EXPECT_TRUE(isSBranchReachable(/*From=*/0, PositiveLimit));
+  EXPECT_FALSE(isSBranchReachable(/*From=*/0, PositiveLimit + MinInstSize));
+  EXPECT_FALSE(isSBranchReachable(/*From=*/0, /*To=*/7));
+
+  constexpr uint64_t NegativeFrom =
+      static_cast<uint64_t>(-(BranchOffsetMin + 1)) * MinInstSize;
+  EXPECT_TRUE(isSBranchReachable(NegativeFrom, /*To=*/0));
+  EXPECT_FALSE(isSBranchReachable(NegativeFrom + MinInstSize, /*To=*/0));
+  EXPECT_FALSE(isSBranchReachable(std::numeric_limits<uint64_t>::max() - 1,
+                                  /*To=*/0));
+}
+
+TEST(EvaluateDirectControlFlowTarget, EvaluatesImmediateBranch) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst("s_branch 1", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  Decoded[0].Offset = 0x100;
+  EXPECT_EQ(evaluateDirectControlFlowTarget(Decoded[0], S), 0x108u);
+}
+
+TEST(EvaluateDirectControlFlowTarget, EvaluatesGfx1250CallOperandFallback) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_call_i64 s[0:1], 2", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  Decoded[0].Offset = 0x200;
+  EXPECT_EQ(evaluateDirectControlFlowTarget(Decoded[0], S),
+            0x200u + Decoded[0].Size + 2 * MinInstSize);
+}
+
+TEST(CollectDirectBranchTargets, MarksRegisterTargetCallUnresolved) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_swap_pc_i64 s[30:31], s[0:1]", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  ASSERT_TRUE(S.MIA->isCall(Decoded[0].Inst));
+  ASSERT_FALSE(S.MIA->isIndirectBranch(Decoded[0].Inst));
+  for (const llvm::MCOperand &Op : Decoded[0].Inst)
+    ASSERT_FALSE(Op.isImm());
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, IgnoresSetPcWithoutTreatingItAsCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_set_pc_i64 s[8:9]", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  EXPECT_TRUE(S.MIA->isBranch(Decoded[0].Inst));
+  EXPECT_FALSE(S.MIA->isIndirectBranch(Decoded[0].Inst));
+  EXPECT_FALSE(S.MIA->isCall(Decoded[0].Inst));
+  EXPECT_TRUE(S.MIA->mayAffectControlFlow(Decoded[0].Inst, *S.MRI));
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, ResolvesProductionPcMaterializedCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], 0xffffffffffed1230\n"
+                           "v_mov_b32 v0, v1\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+  for (InternalDecodedInst &DI : Decoded)
+    DI.Offset += 0x12EDCC;
+
+  // This is the exact address calculation from the production reproducer:
+  // 0x1a000 + 0x12edcc + 4 - 0x12edd0 = 0x1a000.
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0x1A000,
+                                 /*TextSize=*/0x150000,
+                                 /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  ASSERT_EQ(Info->Targets.size(), 1u);
+  EXPECT_TRUE(Info->Targets.contains(0));
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsClobberedPcMaterializedCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], -4\n"
+                           "s_mov_b32 s0, 0\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsAlternateEntryIntoMaterialization) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_branch 1\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], 4\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+
+  // The branch enters at the add without executing s_get_pc_i64, so the
+  // apparent linear definition chain does not prove the register value.
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.contains(8));
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsDeclaredEntryIntoMaterialization) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], 4\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 3u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{Decoded[1].Offset};
+
+  // A function or kernel entry at the add can bypass s_get_pc_i64, even when
+  // no direct branch in .text exposes that alternate path.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsUndecodedMaterializationSlot) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], 8\n"
+                           "v_mov_b32 v0, v1\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+  Decoded[2].DecodeSucceeded = false;
+  Decoded[2].Inst = llvm::MCInst();
+  Decoded[2].Mnemonic = "<unknown>";
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000,
+                                 /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsUnboundedIndirectEntry) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_set_pc_i64 s[4:5]\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], 4\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+  ASSERT_EQ(Decoded[0].Inst.getOpcode(), S.SSetPcI64Opcode);
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000,
+                                 /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, BoundsCanonicalSetPcReturn) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_nop 0\n"
+                           "s_set_pc_i64 s[30:31]\n"
+                           "s_branch -2\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], -16\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 6u);
+  ASSERT_EQ(Decoded[1].Inst.getOpcode(), S.SSetPcI64Opcode);
+  ASSERT_EQ(Decoded[3].Inst.getOpcode(), S.SGetPcI64Opcode);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {0, Decoded[3].Offset}};
+
+  // The helper preserves the link pair from its entry through s_set_pc_i64.
+  // The block laid out after the return can branch back into the epilogue,
+  // matching the production CFG, but it preserves the pair as well. The
+  // materialized call is therefore the return's sole possible source.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  ASSERT_EQ(Info->Targets.size(), 2u);
+  EXPECT_TRUE(Info->Targets.contains(0));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[1].Offset));
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsClobberedSetPcReturn) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_mov_b32 s31, 0\n"
+                           "s_set_pc_i64 s[30:31]\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], -12\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 5u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {0, Decoded[2].Offset}};
+
+  // A partial link-pair definition makes the return target arbitrary, so the
+  // PC-materialized call must remain unresolved.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsNestedCallSetPcReturn) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_call_i64 s[4:5], 1\n"
+                           "s_set_pc_i64 s[30:31]\n"
+                           "s_mov_b32 s30, 0\n"
+                           "s_set_pc_i64 s[4:5]\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], -20\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 7u);
+  llvm::SmallVector<uint64_t, 3> DeclaredEntries{0, Decoded[2].Offset,
+                                                 Decoded[4].Offset};
+  llvm::SmallVector<ElfView::FunctionTextRange, 2> FunctionRanges{
+      {0, Decoded[2].Offset}, {Decoded[2].Offset, Decoded[4].Offset}};
+
+  // The nested call uses a different link pair, so its instruction does not
+  // directly define s[30:31]. Its callee can still clobber that outer return
+  // pair, making a function-local definition scan insufficient.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.contains(Decoded[2].Offset));
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsIndirectFallthroughChainEntry) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_branch -1\n"
+                           "s_nop 0\n"
+                           "s_nop 0\n"
+                           "s_set_pc_i64 s[30:31]\n"
+                           "s_set_pc_i64 s[2:3]\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], -12\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 8u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{Decoded[3].Offset};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {Decoded[3].Offset, Decoded[4].Offset}};
+
+  // The unknown s_set_pc_i64 target may enter the unreachable padding before
+  // the helper. Global indirect-entry detection must keep the materialized
+  // call unresolved even though direct and fallthrough checks accept it.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.contains(Decoded[0].Offset));
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsAlternateEntryIntoReturnFunction) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_nop 0\n"
+                           "s_set_pc_i64 s[30:31]\n"
+                           "s_branch -2\n"
+                           "s_branch -2\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], -20\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 7u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {0, Decoded[3].Offset}};
+
+  // The branch at the function end enters a block laid out after the return,
+  // which can branch back to the epilogue without a call-defined link pair.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.contains(Decoded[2].Offset));
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets,
+     RejectsInteriorPcMaterializedCallIntoReturnFunction) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_nop 0\n"
+                           "s_set_pc_i64 s[30:31]\n"
+                           "s_get_pc_i64 s[4:5]\n"
+                           "s_add_nc_u64 s[4:5], s[4:5], -12\n"
+                           "s_swap_pc_i64 s[30:31], s[4:5]\n"
+                           "s_get_pc_i64 s[6:7]\n"
+                           "s_add_nc_u64 s[6:7], s[6:7], -20\n"
+                           "s_swap_pc_i64 s[2:3], s[6:7]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 8u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {0, Decoded[2].Offset}};
+
+  // The first call enters the helper normally, but the second enters at its
+  // s_set_pc_i64 with a different link pair. Every known call into the range
+  // participates in the return proof, including register-materialized calls.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsExternalAliasAtLocalFunctionEntry) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_nop 0\n"
+                           "s_set_pc_i64 s[30:31]\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], -12\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 5u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  llvm::SmallVector<uint64_t, 1> ExternalEntries{0};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {0, Decoded[2].Offset}};
+
+  // A global function or kernel alias at the local helper's start can enter
+  // without a call-defined link pair, even though it is not an interior entry.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges, ExternalEntries);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsFallthroughIntoReturnFunction) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_nop 0\n"
+                           "s_nop 0\n"
+                           "s_set_pc_i64 s[30:31]\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], -12\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 6u);
+  llvm::SmallVector<uint64_t, 2> DeclaredEntries{0, Decoded[1].Offset};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {Decoded[1].Offset, Decoded[3].Offset}};
+
+  // The declared entry at zero reaches the local helper by fallthrough and
+  // does not define s[30:31], so the helper's return cannot be bounded.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, AllowsUnreachablePaddingBeforeReturnFunction) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_branch -1\n"
+                           "s_nop 0\n"
+                           "s_nop 0\n"
+                           "s_nop 0\n"
+                           "s_set_pc_i64 s[30:31]\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], -12\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 8u);
+  llvm::SmallVector<uint64_t, 2> DeclaredEntries{0, Decoded[3].Offset};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {Decoded[3].Offset, Decoded[5].Offset}};
+
+  // The nops before the helper are unreachable because their backward
+  // fallthrough chain terminates at an unconditional branch. This mirrors the
+  // padding before the production HSACO's second helper.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
+      FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.contains(Decoded[3].Offset));
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, HandlesImmediateAbsoluteTargetCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_swap_pc_i64 s[30:31], 0x210", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  ASSERT_TRUE(S.MIA->isCall(Decoded[0].Inst));
+  ASSERT_TRUE(Decoded[0].Inst.getOperand(1).isImm());
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0x200,
+                                 /*TextSize=*/0x40, /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  ASSERT_EQ(Info->Targets.size(), 1u);
+  EXPECT_TRUE(Info->Targets.contains(0x10));
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+
+  std::optional<DirectControlFlowInfo> OutsideInfo =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0x220,
+                                 /*TextSize=*/0x40, /*DeclaredEntries=*/{});
+  ASSERT_TRUE(OutsideInfo);
+  EXPECT_TRUE(OutsideInfo->Targets.empty());
+  EXPECT_FALSE(OutsideInfo->HasUnresolvedTargets);
+
+  std::optional<DirectControlFlowInfo> OverflowInfo =
+      collectDirectBranchTargets(
+          Decoded, S,
+          /*TextAddr=*/std::numeric_limits<uint64_t>::max() - 0x10,
+          /*TextSize=*/0x20, /*DeclaredEntries=*/{});
+  EXPECT_FALSE(OverflowInfo);
+}
+
+TEST(CollectDirectBranchTargets, CollectsPcRelativeCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_call_i64 s[30:31], 2", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  Decoded[0].Offset = 0x200;
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000, /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  ASSERT_EQ(Info->Targets.size(), 1u);
+  EXPECT_TRUE(
+      Info->Targets.contains(0x200u + Decoded[0].Size + 2 * MinInstSize));
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(SafeSgprScratchBlock, RejectsRegisterBeyondAddressableLimit) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_mov_b32 s4, s0", S);
+  ASSERT_FALSE(Text.empty());
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(View.textData(), View.textSize(), S, Decoded));
+  RewriteConfig Config;
+  Config.MaxSgprs = 4;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   Decoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  EXPECT_FALSE(findSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, /*Count=*/1,
+                                        /*Alignment=*/1, "unit test"));
+}
+
+TEST(SafeSgprScratchBlock, RejectsAlignmentOverflow) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_mov_b32 s4, s0", S);
+  ASSERT_FALSE(Text.empty());
+
+  comgr_test::KernelDescriptorElfOptions Options;
+  Options.MetadataSgprCount = std::numeric_limits<unsigned>::max();
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Options);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(View.textData(), View.textSize(), S, Decoded));
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   Decoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  EXPECT_FALSE(findSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, /*Count=*/1,
+                                        /*Alignment=*/2, "unit test"));
+}
+
+TEST(SafeSgprScratchBlock, CommitRejectsObjectWithoutKernelDescriptor) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+
+  comgr_test::KernelDescriptorElfOptions Options;
+  Options.EmitKernelDescriptorSymbol = false;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Options);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> Decoded;
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   Decoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  const SafeSgprScratchBlock Block{/*Base=*/4, /*Count=*/1};
+  EXPECT_FALSE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Block, "unit test"));
 }
 
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {
-  std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64},
-                                {100, 128, 100, 100, 128}};
+  std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64}, {100, 128, 100, 100, 128}};
   EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max()),
             nullptr);
 }
@@ -278,8 +1563,32 @@ TEST(AssembleDecode, SNopRoundTrip) {
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
   ASSERT_EQ(Decoded.size(), 1u);
+  EXPECT_TRUE(Decoded[0].DecodeSucceeded);
   EXPECT_EQ(Decoded[0].Size, MinInstSize);
   EXPECT_EQ(Decoded[0].Mnemonic, "s_nop");
+}
+
+TEST(AssembleDecode, SingleInstructionRejectsSequence) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst("s_nop 0\ns_endpgm", S);
+  EXPECT_TRUE(Bytes.empty());
+}
+
+TEST(AssembleDecode, InstructionSequenceRoundTrip) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_nop 0\ns_endpgm", S);
+  ASSERT_EQ(Bytes.size(), 2u * MinInstSize);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 2u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "s_nop");
+  EXPECT_EQ(Decoded[1].Mnemonic, "s_endpgm");
 }
 
 TEST(AssembleDecode, CvtPkFp8LiteralSourcesDecodeAsTwelveBytes) {
@@ -541,6 +1850,44 @@ TEST(BuildTrampoline, EmptyOnBadAsm) {
   EXPECT_TRUE(T.Bytes.empty());
 }
 
+// -- DS two-address expansion ------------------------------------------------
+
+TEST(ExpandDs2Addr, PreservesAddressNeededBySecondLoad) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(
+      "ds_load_2addr_b64 v[12:15], v12 offset0:0 offset1:1", S);
+  ASSERT_FALSE(Bytes.empty());
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+
+  std::optional<std::vector<std::string>> Expanded =
+      expandDs2Addr(Decoded[0].Inst, Decoded[0].Mnemonic, "ds_load_b64", S);
+  ASSERT_TRUE(Expanded);
+  ASSERT_EQ(Expanded->size(), 2u);
+  EXPECT_EQ((*Expanded)[0], "ds_load_b64 v[14:15], v12 offset:8");
+  EXPECT_EQ((*Expanded)[1], "ds_load_b64 v[12:13], v12");
+}
+
+TEST(ExpandDs2Addr, RejectsCyclicExchangeDependency) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(
+      "ds_storexchg_2addr_rtn_b64 v[20:23], v24, v[22:23], v[20:21] "
+      "offset0:0 offset1:1",
+      S);
+  ASSERT_FALSE(Bytes.empty());
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+
+  EXPECT_FALSE(expandDs2Addr(Decoded[0].Inst, Decoded[0].Mnemonic,
+                             "ds_storexchg_rtn_b64", S));
+}
+
 // -- buildKernelEntryTrampoline -----------------------------------------------
 
 TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
@@ -616,10 +1963,9 @@ TEST(BuildKernelEntryTrampoline, PrefixPrefiltersHipblasltSmokeEntryBytes) {
   // idempotency path should reject this by raw prefix before classifying it as
   // a possible appended entry stub.
   const uint8_t EntryBytes[] = {
-      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
-      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00,
-      0xff, 0x02, 0x3f, 0x8b, 0xff, 0xff, 0xff, 0x3f,
-      0x02, 0x9e, 0x40, 0x85, 0x03, 0x00, 0xc1, 0xbe,
+      0x1a, 0x08, 0x80, 0xb9, 0x02, 0x00, 0x00, 0x00, 0x1a, 0x08, 0x80,
+      0xb9, 0x02, 0x00, 0x00, 0x00, 0xff, 0x02, 0x3f, 0x8b, 0xff, 0xff,
+      0xff, 0x3f, 0x02, 0x9e, 0x40, 0x85, 0x03, 0x00, 0xc1, 0xbe,
   };
 
   llvm::SmallVector<uint8_t> Candidate;
@@ -629,8 +1975,8 @@ TEST(BuildKernelEntryTrampoline, PrefixPrefiltersHipblasltSmokeEntryBytes) {
   ASSERT_EQ(Candidate.size(), KernelEntryStubStride);
 
   std::vector<InternalDecodedInst> Decoded;
-  ASSERT_TRUE(decodeTextSection(Candidate.data(), sizeof(EntryBytes), S,
-                                Decoded));
+  ASSERT_TRUE(
+      decodeTextSection(Candidate.data(), sizeof(EntryBytes), S, Decoded));
   ASSERT_GE(Decoded.size(), 5u);
   EXPECT_EQ(Decoded[0].Mnemonic, "s_setreg_imm32_b32");
   EXPECT_EQ(Decoded[1].Mnemonic, "s_setreg_imm32_b32");
@@ -692,6 +2038,383 @@ TEST(BuildKernelEntryTrampoline, MatcherRejectsWrongOperandShape) {
   EXPECT_FALSE(isKernelEntryTrampoline(Bytes, S));
 }
 
+// -- DisplacementPlan ---------------------------------------------------------
+
+TEST(DisplacementPlan, MapsInsertionAndReplacementBoundaries) {
+  std::vector<uint8_t> Text(16, 0);
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Insert;
+  Insert.Offset = 4;
+  Insert.OriginalSize = 0;
+  Insert.ReplacementBytes.assign(8, 0x11);
+
+  DisplacementEdit Replace;
+  Replace.Offset = 8;
+  Replace.OriginalSize = 4;
+  Replace.ReplacementBytes.assign(8, 0x22);
+
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {Insert, Replace});
+  ASSERT_TRUE((bool)PlanOrErr) << llvm::toString(PlanOrErr.takeError());
+
+  uint64_t Mapped = 0;
+  ASSERT_TRUE(PlanOrErr->mapOffset(4, DisplacementMapBias::BeforeInsertedBytes,
+                                   Mapped));
+  EXPECT_EQ(Mapped, 4u);
+  ASSERT_TRUE(
+      PlanOrErr->mapOffset(4, DisplacementMapBias::AfterInsertedBytes, Mapped));
+  EXPECT_EQ(Mapped, 12u);
+  ASSERT_TRUE(PlanOrErr->mapOffset(8, DisplacementMapBias::BeforeInsertedBytes,
+                                   Mapped));
+  EXPECT_EQ(Mapped, 16u);
+  ASSERT_TRUE(PlanOrErr->mapOffset(12, DisplacementMapBias::AfterInsertedBytes,
+                                   Mapped));
+  EXPECT_EQ(Mapped, 24u);
+  EXPECT_FALSE(PlanOrErr->mapOffset(
+      10, DisplacementMapBias::BeforeInsertedBytes, Mapped));
+}
+
+TEST(DisplacementPlan, RejectsOverlappingEdits) {
+  std::vector<uint8_t> Text(16, 0);
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit A;
+  A.Offset = 4;
+  A.OriginalSize = 8;
+  A.ReplacementBytes.assign(12, 0x11);
+
+  DisplacementEdit B;
+  B.Offset = 8;
+  B.OriginalSize = 4;
+  B.ReplacementBytes.assign(8, 0x22);
+
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {A, B});
+  ASSERT_FALSE((bool)PlanOrErr);
+  std::string Reason = llvm::toString(PlanOrErr.takeError());
+  EXPECT_NE(Reason.find("overlap"), std::string::npos) << Reason;
+}
+
+TEST(DisplacementPlan, RebuildsTextAndPadsToPostTextAlignment) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<uint8_t> Text(16);
+  for (unsigned I = 0; I < Text.size(); ++I)
+    Text[I] = I;
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 4;
+  Edit.OriginalSize = 4;
+  Edit.ReplacementBytes.assign(
+      {0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7});
+
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {Edit});
+  ASSERT_TRUE((bool)PlanOrErr) << llvm::toString(PlanOrErr.takeError());
+  EXPECT_EQ(PlanOrErr->rawGrowth(), 4u);
+  EXPECT_EQ(PlanOrErr->paddedGrowth(), 8u);
+
+  llvm::SmallVector<uint8_t> NewText = PlanOrErr->buildText(Text, S.SNopBytes);
+  ASSERT_EQ(NewText.size(), 24u);
+  EXPECT_EQ(llvm::ArrayRef<uint8_t>(NewText.data(), 4),
+            llvm::ArrayRef<uint8_t>(Text.data(), 4));
+  EXPECT_EQ(NewText[4], 0xA0);
+  EXPECT_EQ(NewText[11], 0xA7);
+  EXPECT_EQ(llvm::ArrayRef<uint8_t>(NewText.data() + 12, 8),
+            llvm::ArrayRef<uint8_t>(Text.data() + 8, 8));
+  EXPECT_EQ(std::memcmp(NewText.data() + 20, S.SNopBytes.data(), MinInstSize),
+            0);
+}
+
+TEST(TextDisplacement, ReencodesForwardSBranchAcrossInsertion) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  llvm::SmallVector<uint8_t> Br = S.encodeSBranch(0, 8);
+  ASSERT_EQ(Br.size(), MinInstSize);
+  Text.append(Br.begin(), Br.end());
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::SmallVector<uint8_t> End = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(End.size(), MinInstSize);
+  Text.append(End.begin(), End.end());
+
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 4;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(
+      decodeTextSection(OutView->textData(), OutView->textSize(), S, Decoded));
+  ASSERT_GE(Decoded.size(), 4u);
+  ASSERT_TRUE(Decoded[0].Inst.getOperand(0).isImm());
+  EXPECT_EQ(Decoded[0].Inst.getOperand(0).getImm(), 2);
+  EXPECT_EQ(Decoded[3].Mnemonic, "s_endpgm");
+}
+
+TEST(TextDisplacement, PreservesSymbolEndingAtInsertionBoundary) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::SmallVector<uint8_t> End = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(End.size(), MinInstSize);
+  Text.append(End.begin(), End.end());
+
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+      Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
+      /*AddBoundaryTextSymbol=*/true);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = MinInstSize;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  bool SawBoundarySymbol = false;
+  for (const ElfView::ELFT::Shdr &Shdr : OutView->sections()) {
+    if (Shdr.sh_type != llvm::ELF::SHT_SYMTAB)
+      continue;
+    llvm::Expected<ElfView::ELFT::SymRange> Symbols =
+        OutView->file().symbols(&Shdr);
+    ASSERT_TRUE((bool)Symbols) << llvm::toString(Symbols.takeError());
+    for (const ElfView::ELFT::Sym &Sym : *Symbols) {
+      if (Sym.st_shndx == OutView->textSectionIndex() &&
+          Sym.st_value == OutView->textAddr() && Sym.st_size == MinInstSize)
+        SawBoundarySymbol = true;
+    }
+  }
+  EXPECT_TRUE(SawBoundarySymbol);
+}
+
+TEST(TextDisplacement, UpdatesKernelDescriptorEntryOffset) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  const ElfView::ELFT::Shdr *OldRodata = nullptr;
+  for (const ElfView::ELFT::Shdr &Shdr : ViewOrErr->sections()) {
+    llvm::Expected<llvm::StringRef> Name =
+        ViewOrErr->file().getSectionName(Shdr);
+    ASSERT_TRUE((bool)Name) << llvm::toString(Name.takeError());
+    if (*Name == ".rodata")
+      OldRodata = &Shdr;
+  }
+  ASSERT_NE(OldRodata, nullptr);
+  const uint64_t OldRodataOffset = OldRodata->sh_offset;
+
+  llvm::Expected<ElfView::ELFT::PhdrRange> OldPhdrs =
+      ViewOrErr->file().program_headers();
+  ASSERT_TRUE((bool)OldPhdrs) << llvm::toString(OldPhdrs.takeError());
+  const ElfView::ELFT::Phdr *OldRodataLoad = nullptr;
+  const ElfView::ELFT::Phdr *OldTextLoad = nullptr;
+  for (const ElfView::ELFT::Phdr &Phdr : *OldPhdrs) {
+    if (Phdr.p_type == llvm::ELF::PT_LOAD && Phdr.p_vaddr == 0x1000)
+      OldTextLoad = &Phdr;
+    if (Phdr.p_type == llvm::ELF::PT_LOAD && Phdr.p_vaddr == 0x2000)
+      OldRodataLoad = &Phdr;
+  }
+  ASSERT_NE(OldTextLoad, nullptr);
+  ASSERT_NE(OldRodataLoad, nullptr);
+  const uint64_t OldRodataLoadOffset = OldRodataLoad->p_offset;
+
+  llvm::SmallVector<uint8_t> Prefix =
+      assembleInstructions("global_wb\nv_nop", S);
+  ASSERT_FALSE(Prefix.empty());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(Prefix.begin(), Prefix.end());
+
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
+  ASSERT_EQ(KDs.size(), 1u);
+  EXPECT_EQ(KDs[0].KernelName, "kernel");
+  EXPECT_EQ(KDs[0].VAddr, 0x2000u);
+  EXPECT_EQ(KDs[0].EntryOffset, static_cast<int64_t>(0x1000 - 0x2000));
+
+  const ElfView::ELFT::Shdr *NewRodata = nullptr;
+  for (const ElfView::ELFT::Shdr &Shdr : OutView->sections()) {
+    llvm::Expected<llvm::StringRef> Name = OutView->file().getSectionName(Shdr);
+    ASSERT_TRUE((bool)Name) << llvm::toString(Name.takeError());
+    if (*Name == ".rodata")
+      NewRodata = &Shdr;
+  }
+  ASSERT_NE(NewRodata, nullptr);
+  EXPECT_EQ(NewRodata->sh_addr, OldRodata->sh_addr);
+  EXPECT_EQ(NewRodata->sh_offset, OldRodataOffset + Prefix.size());
+
+  llvm::Expected<ElfView::ELFT::PhdrRange> NewPhdrs =
+      OutView->file().program_headers();
+  ASSERT_TRUE((bool)NewPhdrs) << llvm::toString(NewPhdrs.takeError());
+  const ElfView::ELFT::Phdr *NewRodataLoad = nullptr;
+  const ElfView::ELFT::Phdr *NewTextLoad = nullptr;
+  for (const ElfView::ELFT::Phdr &Phdr : *NewPhdrs) {
+    if (Phdr.p_type == llvm::ELF::PT_LOAD && Phdr.p_vaddr == 0x1000)
+      NewTextLoad = &Phdr;
+    if (Phdr.p_type == llvm::ELF::PT_LOAD && Phdr.p_vaddr == 0x2000)
+      NewRodataLoad = &Phdr;
+  }
+  ASSERT_NE(NewTextLoad, nullptr);
+  ASSERT_NE(NewRodataLoad, nullptr);
+  EXPECT_EQ(NewTextLoad->p_filesz, OldTextLoad->p_filesz + Prefix.size());
+  EXPECT_EQ(NewTextLoad->p_memsz, OldTextLoad->p_memsz);
+  EXPECT_EQ(NewRodataLoad->p_vaddr, OldRodataLoad->p_vaddr);
+  EXPECT_EQ(NewRodataLoad->p_paddr, OldRodataLoad->p_paddr);
+  EXPECT_EQ(NewRodataLoad->p_offset, OldRodataLoadOffset + Prefix.size());
+  EXPECT_EQ(NewRodataLoad->p_offset % NewRodataLoad->p_align,
+            NewRodataLoad->p_vaddr % NewRodataLoad->p_align);
+  EXPECT_EQ(llvm::ArrayRef<uint8_t>(OutView->textData(), Prefix.size()),
+            llvm::ArrayRef<uint8_t>(Prefix));
+}
+
+TEST(TextDisplacement, RejectsPcSensitiveAddressMaterialization) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text =
+      assembleSingleInst("s_get_pc_i64 s[8:9]", S);
+  ASSERT_FALSE(Text.empty());
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("pc-sensitive"), std::string::npos) << Reason;
+}
+
+TEST(TextDisplacement, RejectsLaterFileContentInTextLoadSegment) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  llvm::Expected<ElfView::ELFT::PhdrRange> Phdrs =
+      ViewOrErr->file().program_headers();
+  ASSERT_TRUE((bool)Phdrs) << llvm::toString(Phdrs.takeError());
+  const ElfView::ELFT::Phdr *TextLoad = nullptr;
+  for (const ElfView::ELFT::Phdr &Phdr : *Phdrs)
+    if (Phdr.p_type == llvm::ELF::PT_LOAD && Phdr.p_vaddr == 0x1000)
+      TextLoad = &Phdr;
+  ASSERT_NE(TextLoad, nullptr);
+
+  const size_t TextLoadOffset =
+      reinterpret_cast<const uint8_t *>(TextLoad) - ElfBytes.data();
+  llvm::ELF::Elf64_Phdr RawTextLoad;
+  std::memcpy(&RawTextLoad, ElfBytes.data() + TextLoadOffset,
+              sizeof(RawTextLoad));
+  RawTextLoad.p_filesz += 8;
+  RawTextLoad.p_memsz += 8;
+  std::memcpy(ElfBytes.data() + TextLoadOffset, &RawTextLoad,
+              sizeof(RawTextLoad));
+
+  ViewOrErr = ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {Edit});
+  EXPECT_FALSE((bool)PlanOrErr);
+  EXPECT_NE(
+      llvm::toString(PlanOrErr.takeError()).find("last file-backed content"),
+      std::string::npos);
+}
+
+TEST(TextDisplacement, RejectsDebugSectionsUntilAddressesCanBeRemapped) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+      Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/true);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find(".debug_info"), std::string::npos) << Reason;
+}
+
 TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   namespace hsa = llvm::amdhsa;
 
@@ -708,6 +2431,7 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   AMDHSA_BITS_SET(Rsrc3, hsa::COMPUTE_PGM_RSRC3_GFX125_TCP_SPLIT, 5);
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.ComputePgmRsrc3 = Rsrc3;
+  Opts.MetadataSgprCount = 8;
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(Text, Opts);
   llvm::Expected<ElfView> ViewOrErr =
@@ -716,6 +2440,10 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
 
   uint8_t *Kd = ViewOrErr->findKernelDescriptor("kernel");
   ASSERT_NE(Kd, nullptr);
+  uint32_t Rsrc1Before = 0;
+  std::memcpy(&Rsrc1Before,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1Before));
 
   std::vector<Trampoline> Growth;
   std::vector<KernelEntryTrampolineFixup> Fixups;
@@ -780,19 +2508,90 @@ TEST(KernelEntryTrampoline, ClampsInstPrefSizeAndAvoidsPrefetchGuard) {
   std::memcpy(&OutRsrc1,
               OutKd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
               sizeof(OutRsrc1));
-  unsigned ReservedSgprs =
-      (AMDHSA_BITS_GET(OutRsrc1,
-                       hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT) +
-       1) *
-      8;
-  EXPECT_GE(ReservedSgprs, Fixups[0].RequiredSgprs);
+  EXPECT_EQ(OutRsrc1, Rsrc1Before);
+  EXPECT_EQ(OutView->getKernelSgprCount("kernel"), Fixups[0].RequiredSgprs);
 
-  std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
+  llvm::ArrayRef<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
   ASSERT_EQ(KDs.size(), 1u);
   std::optional<uint64_t> KdVAddr = OutView->getKernelDescriptorVAddr("kernel");
   ASSERT_TRUE(KdVAddr.has_value());
   const uint64_t StubVAddr = PoolVAddr + Fixups[0].StubTextOffset;
   EXPECT_EQ(KDs[0].EntryOffset, static_cast<int64_t>(StubVAddr - *KdVAddr));
+}
+
+// rewriteKernelEntryDescriptorOffsets aggregates per-kernel SGPR bumps into a
+// single batched metadata update. Drive it with a fixup list covering the
+// aggregation cases: a kernel appearing twice (take the max), a kernel that
+// skips the reservation, and a kernel with a zero requirement. Only the
+// max-aggregated kernel's metadata SGPR count should be raised.
+TEST(RewriteKernelEntryDescriptorOffsets, AggregatesSgprBumpsMaxSkipZero) {
+  comgr_test::MultiKernelDescriptorElfOptions Opts;
+  Opts.Kernels = {
+      {"k_max", 0x1000, 0x2000, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true, /*MetadataSgprCount=*/8},
+      {"k_skip", 0x1100, 0x2100, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true, /*MetadataSgprCount=*/8},
+      {"k_zero", 0x1200, 0x2200, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true, /*MetadataSgprCount=*/8},
+  };
+  std::vector<uint8_t> Bytes = comgr_test::makeMultiKernelDescriptorElf(Opts);
+
+  std::unique_ptr<llvm::WritableMemoryBuffer> Buf =
+      llvm::WritableMemoryBuffer::getNewUninitMemBuffer(Bytes.size());
+  ASSERT_NE(Buf, nullptr);
+  std::memcpy(Buf->getBufferStart(), Bytes.data(), Bytes.size());
+
+  // Two fixups name k_max with different RequiredSgprs -> aggregate to the max
+  // (12). k_skip sets SkipSgprReservation, k_zero has RequiredSgprs == 0; both
+  // must leave the metadata count untouched.
+  const uint64_t PoolVAddr = 0x4000;
+  std::vector<KernelEntryTrampolineFixup> Fixups = {
+      {"k_max", /*StubTextOffset=*/0, /*RequiredSgprs=*/10, /*InstPrefLines=*/0,
+       /*SkipSgprReservation=*/false},
+      {"k_max", /*StubTextOffset=*/KernelEntryStubStride, /*RequiredSgprs=*/12,
+       /*InstPrefLines=*/0, /*SkipSgprReservation=*/false},
+      {"k_skip", /*StubTextOffset=*/2 * KernelEntryStubStride,
+       /*RequiredSgprs=*/20, /*InstPrefLines=*/0, /*SkipSgprReservation=*/true},
+      {"k_zero", /*StubTextOffset=*/3 * KernelEntryStubStride,
+       /*RequiredSgprs=*/0, /*InstPrefLines=*/0, /*SkipSgprReservation=*/false},
+  };
+
+  ASSERT_TRUE(
+      rewriteKernelEntryDescriptorOffsets(*Buf, PoolVAddr, "gfx1250", Fixups));
+
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Buf->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Buf->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+  EXPECT_EQ(OutView->getKernelSgprCount("k_max"), 12u);
+  EXPECT_EQ(OutView->getKernelSgprCount("k_skip"), 8u);
+  EXPECT_EQ(OutView->getKernelSgprCount("k_zero"), 8u);
+}
+
+// A fixup naming a kernel with no descriptor must fail the whole rewrite, even
+// when another fixup in the batch is valid.
+TEST(RewriteKernelEntryDescriptorOffsets, PropagatesMissingDescriptorFailure) {
+  comgr_test::MultiKernelDescriptorElfOptions Opts;
+  Opts.Kernels = {
+      {"present", 0x1000, 0x2000, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true, /*MetadataSgprCount=*/8},
+  };
+  std::vector<uint8_t> Bytes = comgr_test::makeMultiKernelDescriptorElf(Opts);
+
+  std::unique_ptr<llvm::WritableMemoryBuffer> Buf =
+      llvm::WritableMemoryBuffer::getNewUninitMemBuffer(Bytes.size());
+  ASSERT_NE(Buf, nullptr);
+  std::memcpy(Buf->getBufferStart(), Bytes.data(), Bytes.size());
+
+  std::vector<KernelEntryTrampolineFixup> Fixups = {
+      {"present", /*StubTextOffset=*/0, /*RequiredSgprs=*/10,
+       /*InstPrefLines=*/0, /*SkipSgprReservation=*/false},
+      {"absent", /*StubTextOffset=*/KernelEntryStubStride, /*RequiredSgprs=*/10,
+       /*InstPrefLines=*/0, /*SkipSgprReservation=*/false},
+  };
+
+  EXPECT_FALSE(rewriteKernelEntryDescriptorOffsets(*Buf, /*PoolVAddr=*/0x4000,
+                                                   "gfx1250", Fixups));
 }
 
 // Count symbols named \p Name in the .symtab of the ELF held in \p Buf.
@@ -802,9 +2601,9 @@ static unsigned countSymtabSymbolsNamed(llvm::WritableMemoryBuffer &Buf,
                                         llvm::StringRef Name) {
   using ELFT = llvm::object::ELF64LE;
   llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
-      llvm::object::ELFFile<ELFT>::create(llvm::StringRef(
-          reinterpret_cast<const char *>(Buf.getBufferStart()),
-          Buf.getBufferSize()));
+      llvm::object::ELFFile<ELFT>::create(
+          llvm::StringRef(reinterpret_cast<const char *>(Buf.getBufferStart()),
+                          Buf.getBufferSize()));
   if (!FileOrErr) {
     llvm::consumeError(FileOrErr.takeError());
     return ~0u;
@@ -845,6 +2644,84 @@ static unsigned countSymtabSymbolsNamed(llvm::WritableMemoryBuffer &Buf,
   return Count;
 }
 
+// Cross-check that the <kernel>.stub symbol in Buf resolves to exactly what the
+// debugger relies on, tying it to independently-produced artifacts rather than
+// to the address formula the symbol writer itself uses:
+//   (1) it names the address the rewritten kernel descriptor's entry now points
+//       at (what amd-dbgapi / rocgdb resolve for the dispatch),
+//   (2) real entry-stub bytes live at that address, and
+//   (3) its [st_value, st_value + st_size) range lies inside its own section.
+static void
+expectStubSymbolMatchesDispatchEntry(llvm::WritableMemoryBuffer &Buf,
+                                     llvm::StringRef KernelName,
+                                     const LLVMState &S) {
+  using ELFT = llvm::object::ELF64LE;
+  llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
+      llvm::object::ELFFile<ELFT>::create(
+          llvm::StringRef(reinterpret_cast<const char *>(Buf.getBufferStart()),
+                          Buf.getBufferSize()));
+  ASSERT_TRUE((bool)FileOrErr) << llvm::toString(FileOrErr.takeError());
+  llvm::object::ELFFile<ELFT> &File = *FileOrErr;
+  llvm::Expected<ELFT::ShdrRange> Secs = File.sections();
+  ASSERT_TRUE((bool)Secs) << llvm::toString(Secs.takeError());
+  const ELFT::Shdr *Symtab = nullptr;
+  for (const ELFT::Shdr &Sh : *Secs)
+    if (Sh.sh_type == llvm::ELF::SHT_SYMTAB) {
+      Symtab = &Sh;
+      break;
+    }
+  ASSERT_NE(Symtab, nullptr);
+  llvm::Expected<ELFT::SymRange> Syms = File.symbols(Symtab);
+  ASSERT_TRUE((bool)Syms) << llvm::toString(Syms.takeError());
+  llvm::Expected<llvm::StringRef> StrTab =
+      File.getStringTableForSymtab(*Symtab);
+  ASSERT_TRUE((bool)StrTab) << llvm::toString(StrTab.takeError());
+
+  const std::string StubName = (KernelName + ".stub").str();
+  const ELFT::Sym *Stub = nullptr;
+  for (const ELFT::Sym &Sym : *Syms) {
+    llvm::Expected<llvm::StringRef> N = Sym.getName(*StrTab);
+    ASSERT_TRUE((bool)N) << llvm::toString(N.takeError());
+    if (*N == StubName) {
+      Stub = &Sym;
+      break;
+    }
+  }
+  ASSERT_NE(Stub, nullptr) << "missing symbol " << StubName;
+
+  // (3) The symbol range lies fully inside its own section.
+  ASSERT_LT(Stub->st_shndx, Secs->size());
+  const ELFT::Shdr &Sec = (*Secs)[Stub->st_shndx];
+  EXPECT_GE(Stub->st_value, Sec.sh_addr);
+  EXPECT_LE(Stub->st_value + Stub->st_size, Sec.sh_addr + Sec.sh_size);
+
+  llvm::Expected<ElfView> ViewOrErr = ElfView::create(
+      reinterpret_cast<uint8_t *>(Buf.getBufferStart()), Buf.getBufferSize());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  // (1) The symbol names exactly the address the descriptor entry now targets.
+  const KernelDescriptorInfo *KD = nullptr;
+  for (const KernelDescriptorInfo &Info : View.kernelDescriptors())
+    if (Info.KernelName == KernelName) {
+      KD = &Info;
+      break;
+    }
+  ASSERT_NE(KD, nullptr);
+  ASSERT_GE(KD->EntryOffset, 0);
+  const uint64_t EntryVAddr =
+      KD->VAddr + static_cast<uint64_t>(KD->EntryOffset);
+  EXPECT_EQ(Stub->st_value, EntryVAddr)
+      << "stub symbol must name the descriptor's entry address";
+
+  // (2) Real entry-stub bytes live at the symbol's address.
+  const uint8_t *StubBytes =
+      View.dataAtVAddr(Stub->st_value, KernelEntryStubStride);
+  ASSERT_NE(StubBytes, nullptr);
+  EXPECT_TRUE(isKernelEntryTrampoline(
+      llvm::ArrayRef<uint8_t>(StubBytes, KernelEntryStubStride), S));
+}
+
 // Covers: the entry-trampoline rewrite is idempotent -- a second pass over an
 // already-rewritten code object installs no new stub, and therefore defines no
 // duplicate `<kernel>.stub` symbol. This backs the idempotency claim made by
@@ -866,16 +2743,16 @@ TEST(KernelEntryTrampoline, SecondPassAddsNoDuplicateStubSymbol) {
   llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
   ASSERT_EQ(Text.size(), MinInstSize);
 
-  comgr_test::KernelDescriptorElf Obj = comgr_test::makeKernelDescriptorElf(Text);
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Opts);
 
   // -- First pass: append one stub, grow .text, rewrite the descriptor, and
   //    attach the stub symbol. --
   llvm::Expected<ElfView> View1 =
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)View1) << llvm::toString(View1.takeError());
-  const unsigned TextIdx = View1->textSectionIndex();
-  const uint64_t TextAddr = View1->textAddr();
-  const uint64_t OldTextSize = View1->textSize();
 
   std::vector<Trampoline> Growth1;
   std::vector<KernelEntryTrampolineFixup> Fixups1;
@@ -883,17 +2760,21 @@ TEST(KernelEntryTrampoline, SecondPassAddsNoDuplicateStubSymbol) {
       *View1, S, /*MaxSgprs=*/106, Growth1, Fixups1);
   ASSERT_TRUE(Count1.has_value());
   ASSERT_EQ(*Count1, 1u);
+  std::optional<uint64_t> PoolVAddr = View1->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddr.has_value());
 
   std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
       View1->growWithTrampolines(Growth1, S.SNopBytes);
   ASSERT_NE(Grown, nullptr);
   ASSERT_TRUE(
-      rewriteKernelEntryDescriptorOffsets(*Grown, OldTextSize, S.Cpu, Fixups1));
+      rewriteKernelEntryDescriptorOffsets(*Grown, *PoolVAddr, S.Cpu, Fixups1));
   std::unique_ptr<llvm::WritableMemoryBuffer> Pass1 =
-      addKernelEntryTrampolineSymbols(*Grown, TextIdx, TextAddr, OldTextSize,
-                                      Fixups1);
+      addKernelEntryTrampolineSymbols(*Grown, *PoolVAddr, Fixups1);
   ASSERT_NE(Pass1, nullptr);
   ASSERT_EQ(countSymtabSymbolsNamed(*Pass1, "kernel.stub"), 1u);
+  // The stub symbol must resolve to the dispatch entry, cover real stub bytes,
+  // and stay within its section -- not merely match the writer's own formula.
+  expectStubSymbolMatchesDispatchEntry(*Pass1, "kernel", S);
 
   // -- Second pass over the already-rewritten object. --
   uint8_t *Pass1Data = reinterpret_cast<uint8_t *>(Pass1->getBufferStart());
@@ -913,10 +2794,76 @@ TEST(KernelEntryTrampoline, SecondPassAddsNoDuplicateStubSymbol) {
   // With no fixups the symbol pass is a no-op (returns nullptr, keeping the
   // existing buffer), so no second "kernel.stub" can be defined.
   std::unique_ptr<llvm::WritableMemoryBuffer> Pass2 =
-      addKernelEntryTrampolineSymbols(*Pass1, TextIdx, TextAddr,
-                                      View2->textSize(), Fixups2);
+      addKernelEntryTrampolineSymbols(*Pass1, *PoolVAddr, Fixups2);
   EXPECT_EQ(Pass2, nullptr);
   EXPECT_EQ(countSymtabSymbolsNamed(*Pass1, "kernel.stub"), 1u);
+}
+
+// A `global_wb; v_nop` prologue (llvm/llvm-project#208467) already satisfies
+// the workaround, so no trampoline is installed.
+TEST(KernelEntryTrampoline, SkipsWhenPrologueAlreadyHasVmemWorkaround) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", S);
+  llvm::SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", S);
+  llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(GlobalWb.empty());
+  ASSERT_FALSE(VNop.empty());
+  ASSERT_EQ(EndPgm.size(), MinInstSize);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(GlobalWb.begin(), GlobalWb.end());
+  Text.append(VNop.begin(), VNop.end());
+  Text.append(EndPgm.begin(), EndPgm.end());
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count =
+      appendKernelEntryTrampolines(*View, S, /*MaxSgprs=*/106, Growth, Fixups);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 0u);
+  EXPECT_TRUE(Fixups.empty());
+  EXPECT_TRUE(Growth.empty());
+}
+
+// The same two instructions in the wrong order are not the workaround, so a
+// trampoline is still installed.
+TEST(KernelEntryTrampoline, InstallsWhenPrologueLacksVmemWorkaround) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", S);
+  llvm::SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", S);
+  llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(VNop.empty());
+  ASSERT_FALSE(GlobalWb.empty());
+  ASSERT_EQ(EndPgm.size(), MinInstSize);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(VNop.begin(), VNop.end());
+  Text.append(GlobalWb.begin(), GlobalWb.end());
+  Text.append(EndPgm.begin(), EndPgm.end());
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> View =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+
+  std::vector<Trampoline> Growth;
+  std::vector<KernelEntryTrampolineFixup> Fixups;
+  std::optional<uint32_t> Count =
+      appendKernelEntryTrampolines(*View, S, /*MaxSgprs=*/106, Growth, Fixups);
+  ASSERT_TRUE(Count.has_value());
+  EXPECT_EQ(*Count, 1u);
+  EXPECT_EQ(Fixups.size(), 1u);
 }
 
 TEST(KernelEntryTrampoline, AlignsStubByVirtualAddress) {
@@ -1004,6 +2951,95 @@ TEST(KernelEntryTrampoline, AppendFailsWithoutSgprScratchPair) {
   EXPECT_EQ(llvm::ArrayRef<uint8_t>(Growth[0].Bytes),
             llvm::ArrayRef<uint8_t>(Existing.Bytes));
   EXPECT_TRUE(Fixups.empty());
+}
+
+TEST(TextDisplacement, RejectsTextRelocationSections) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+  std::vector<uint8_t> ElfBytes =
+      makeDisplacementTestElf(Text, /*AddTextRelocation=*/true);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("relocation section"), std::string::npos);
+}
+
+TEST(TextDisplacement, RejectsDynamicRelocationTargetingText) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+  std::vector<uint8_t> ElfBytes =
+      makeDisplacementTestElf(Text, /*AddTextRelocation=*/true);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  const ElfView::ELFT::Shdr *RelaShdr = nullptr;
+  for (const ElfView::ELFT::Shdr &Shdr : ViewOrErr->sections())
+    if (Shdr.sh_type == llvm::ELF::SHT_RELA)
+      RelaShdr = &Shdr;
+  ASSERT_NE(RelaShdr, nullptr);
+
+  const size_t ShdrOffset =
+      reinterpret_cast<const uint8_t *>(RelaShdr) - ElfBytes.data();
+  llvm::ELF::Elf64_Shdr RawShdr;
+  std::memcpy(&RawShdr, ElfBytes.data() + ShdrOffset, sizeof(RawShdr));
+  RawShdr.sh_info = 0;
+  std::memcpy(ElfBytes.data() + ShdrOffset, &RawShdr, sizeof(RawShdr));
+
+  llvm::ELF::Elf64_Rela Rela{};
+  Rela.r_offset = ViewOrErr->textAddr();
+  std::memcpy(ElfBytes.data() + RawShdr.sh_offset, &Rela, sizeof(Rela));
+
+  llvm::Expected<ElfView> DynamicView =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)DynamicView) << llvm::toString(DynamicView.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*DynamicView, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("dynamic relocation section"), std::string::npos);
+
+  Rela.r_offset = 0x2000;
+  std::memcpy(ElfBytes.data() + RawShdr.sh_offset, &Rela, sizeof(Rela));
+  llvm::Expected<ElfView> NonTextView =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)NonTextView) << llvm::toString(NonTextView.takeError());
+  OutOrErr = tryApplyTextDisplacementToNewBuffer(*NonTextView, S, {Edit});
+  EXPECT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+
+  Rela.setSymbolAndType(/*Symbol=*/0, llvm::ELF::R_AMDGPU_RELATIVE64);
+  Rela.r_addend = NonTextView->textAddr();
+  std::memcpy(ElfBytes.data() + RawShdr.sh_offset, &Rela, sizeof(Rela));
+  llvm::Expected<ElfView> TextAddendView =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)TextAddendView)
+      << llvm::toString(TextAddendView.takeError());
+  OutOrErr = tryApplyTextDisplacementToNewBuffer(*TextAddendView, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("addend references"), std::string::npos) << Reason;
 }
 
 // -- classifyWmmaNops ---------------------------------------------------------
@@ -1315,4 +3351,126 @@ TEST(AddTid, StoreTrampolineThroughBuildTrampoline) {
                                       "s_branch"};
   expectDecodedMnemonics(Decoded, Expected);
   expectDecodedBodyMatchesAsm(Decoded, AsmLines, S);
+}
+
+// -- decodeTextSection instruction-decode cache -------------------------------
+//
+// decodeTextSection caches decode results keyed on the up-to-getMaxInstLength()
+// byte window at each position, so byte-identical instructions reuse the first
+// decode instead of re-running the disassembler. The cache is unconditional (no
+// opt-in flag), so every decodeTextSection call above already exercises the
+// store path; these tests target the reuse and edge behaviour flagged in
+// review: repeated instructions must reuse decodes without corrupting the
+// per-occurrence Offset, distinct instructions of different sizes must not
+// alias one another, and a truncated final window (fewer than
+// getMaxInstLength() bytes left) must decode correctly rather than returning a
+// stale, oversized hit from an earlier full-length window.
+
+// Append the assembled bytes of each asm line in \p Lines to \p Text. Aborts
+// the test via appendSingleInstBytes if any line fails to assemble.
+static void appendInstStream(llvm::SmallVectorImpl<uint8_t> &Text,
+                             llvm::ArrayRef<const char *> Lines,
+                             const LLVMState &S) {
+  for (const char *Line : Lines)
+    ASSERT_TRUE(appendSingleInstBytes(Text, Line, S));
+}
+
+TEST(DecodeCache, RepeatedInstructionsReuseDecodeWithPerOccurrenceOffset) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // A run of identical s_nops so interior positions hit the cache.
+  constexpr unsigned Count = 8;
+  llvm::SmallVector<uint8_t> Text;
+  for (unsigned I = 0; I < Count; ++I)
+    ASSERT_TRUE(appendSingleInstBytes(Text, "s_nop 0", S));
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), Count);
+
+  const llvm::MCInst Ref = assembleOne("s_nop 0", S);
+  uint64_t ExpectedOffset = 0;
+  for (const InternalDecodedInst &DI : Decoded) {
+    EXPECT_EQ(DI.Mnemonic, "s_nop");
+    EXPECT_EQ(DI.Size, MinInstSize);
+    // Cache hits must still report a successful decode.
+    EXPECT_TRUE(DI.DecodeSucceeded);
+    // Offset is set per occurrence and must never come from the cached entry.
+    EXPECT_EQ(DI.Offset, ExpectedOffset);
+    expectSameOperands(DI.Inst, Ref, "repeated s_nop");
+    ExpectedOffset += DI.Size;
+  }
+}
+
+TEST(DecodeCache, InterleavedDistinctSizesUseCorrectEntries) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // Mix 4/8/12-byte instructions, repeating some, so a wrong key would return
+  // a differently sized decode.
+  const char *Seq[] = {
+      "s_nop 0",                                           // 4 bytes
+      "v_cvt_pk_fp8_f32 v4, 1.0, 0.5 clamp",               // 8 bytes
+      "s_nop 0",                                           // 4 bytes (repeat)
+      "v_cvt_pk_fp8_f32 v4, 0x477f0000, 0x477f0000 clamp", // 12 bytes
+      "v_cvt_pk_fp8_f32 v4, 1.0, 0.5 clamp",               // 8 bytes (repeat)
+      "s_nop 0",                                           // 4 bytes (repeat)
+  };
+  const uint32_t ExpectedSizes[] = {MinInstSize,     2 * MinInstSize,
+                                    MinInstSize,     3 * MinInstSize,
+                                    2 * MinInstSize, MinInstSize};
+
+  llvm::SmallVector<uint8_t> Text;
+  appendInstStream(Text, Seq, S);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), std::size(Seq));
+
+  uint64_t ExpectedOffset = 0;
+  for (size_t I = 0; I < std::size(Seq); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    EXPECT_EQ(DI.Size, ExpectedSizes[I]) << "inst " << I;
+    EXPECT_EQ(DI.Offset, ExpectedOffset) << "inst " << I;
+    expectSameOperands(DI.Inst, assembleOne(Seq[I], S), Seq[I]);
+    ExpectedOffset += DI.Size;
+  }
+  EXPECT_EQ(ExpectedOffset, Text.size());
+}
+
+TEST(DecodeCache, TruncatedFinalWindowDecodesWithoutStaleHit) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // The final s_nop is keyed on a truncated (< getMaxInstLength()) window; it
+  // must decode cleanly rather than aliasing a longer cached entry.
+  const unsigned MaxInstLen = S.MAI->getMaxInstLength(S.STI.get());
+  ASSERT_GT(MaxInstLen, static_cast<unsigned>(MinInstSize))
+      << "test assumes a multi-dword max instruction window";
+
+  const char *Seq[] = {
+      "v_cvt_pk_fp8_f32 v4, 0x477f0000, 0x477f0000 clamp", // 12 bytes
+      "s_nop 0",                                           // 4 bytes
+      "s_nop 0",                                           // final, truncated
+  };
+  llvm::SmallVector<uint8_t> Text;
+  appendInstStream(Text, Seq, S);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), std::size(Seq));
+
+  uint64_t Consumed = 0;
+  for (size_t I = 0; I < std::size(Seq); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    EXPECT_EQ(DI.Offset, Consumed) << "inst " << I;
+    expectSameOperands(DI.Inst, assembleOne(Seq[I], S), Seq[I]);
+    Consumed += DI.Size;
+  }
+  const InternalDecodedInst &Last = Decoded.back();
+  EXPECT_EQ(Last.Mnemonic, "s_nop");
+  EXPECT_EQ(Last.Size, MinInstSize);
+  // Stream consumed exactly (no over-run).
+  EXPECT_EQ(Consumed, Text.size());
 }

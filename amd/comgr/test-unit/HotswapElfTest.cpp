@@ -34,6 +34,22 @@ static unsigned readReservedSgprs(const std::vector<uint8_t> &Bytes,
          8;
 }
 
+static unsigned readReservedVgprs(const std::vector<uint8_t> &Bytes,
+                                  uint64_t KernelDescriptorOffset,
+                                  unsigned Granule) {
+  namespace hsa = llvm::amdhsa;
+
+  uint32_t Rsrc1 = 0;
+  std::memcpy(&Rsrc1,
+              Bytes.data() + KernelDescriptorOffset +
+                  offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
+  return (AMDHSA_BITS_GET(
+              Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT) +
+          1) *
+         Granule;
+}
+
 // -- ElfView::create ----------------------------------------------------------
 
 TEST(ElfView, RejectsTruncatedInput) {
@@ -72,6 +88,13 @@ TEST(ElfView, FindKernelAtAddressResolvesNearestPrecedingForZeroSizeSymbol) {
   // interior offset the zero-size symbol still resolves.
   EXPECT_EQ(ViewOrErr->findKernelAtAddress(0x1000), "zero_size_kernel");
   EXPECT_EQ(ViewOrErr->findKernelAtAddress(0x1000 + 4), "zero_size_kernel");
+  std::optional<ElfView::FunctionTextRange> Range =
+      ViewOrErr->findFunctionTextRangeAtOffset(4);
+  ASSERT_TRUE(Range.has_value());
+  EXPECT_EQ(Range->Begin, 0u);
+  EXPECT_EQ(Range->End, makeText().size());
+  EXPECT_NE(Range->Symbol, nullptr);
+  EXPECT_NE(Range->Symtab, nullptr);
   // An address before the symbol has no preceding function symbol to resolve.
   EXPECT_EQ(ViewOrErr->findKernelAtAddress(0x0FF0), "");
 }
@@ -138,7 +161,7 @@ TEST(ElfView, KernelDescriptorsEnumeratesAndUpdatesEntryOffset) {
   llvm::Expected<ElfView> ViewOrErr =
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  std::vector<KernelDescriptorInfo> KDs = ViewOrErr->kernelDescriptors();
+  llvm::ArrayRef<KernelDescriptorInfo> KDs = ViewOrErr->kernelDescriptors();
   ASSERT_EQ(KDs.size(), 1u);
   EXPECT_EQ(KDs[0].KernelName, "entry_kernel");
   EXPECT_EQ(KDs[0].VAddr, Obj.RodataAddr);
@@ -156,9 +179,15 @@ TEST(ElfView, KernelDescriptorsEnumeratesAndUpdatesEntryOffset) {
           offsetof(hsa::kernel_descriptor_t, kernel_code_entry_byte_offset),
       sizeof(ReadBack));
   EXPECT_EQ(ReadBack, NewOff);
+  ASSERT_EQ(ViewOrErr->kernelDescriptors().size(), 1u);
+  EXPECT_EQ(ViewOrErr->kernelDescriptors()[0].EntryOffset, NewOff);
 
-  ASSERT_TRUE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  // Prime the descriptor fallback cache before changing the encoded count.
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 8u);
+  ASSERT_TRUE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   EXPECT_GE(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 10u);
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 16u);
 }
 
 TEST(ElfView, KernelDescriptorsSkipsKdWhenFileOffsetOverflows) {
@@ -207,7 +236,7 @@ TEST(ElfView, GrowWithTrampolinesKeepsAllocSectionSymbols) {
   llvm::Expected<ElfView> OutView =
       ElfView::create(OutData, Out->getBufferSize());
   ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
-  std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
+  llvm::ArrayRef<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
   ASSERT_EQ(KDs.size(), 1u);
   EXPECT_EQ(KDs[0].VAddr, Obj.RodataAddr);
 }
@@ -306,7 +335,7 @@ TEST(ElfView, GrowWithTrampolinesKeepsIsaReferenceConsistentWithSymbol) {
   const uint64_t IsaResolved =
       decodeReferencedVAddr(OutView->textData(), OutView->textAddr());
   // ...vs. the address the symbol table now reports for the same global.
-  std::vector<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
+  llvm::ArrayRef<KernelDescriptorInfo> KDs = OutView->kernelDescriptors();
   ASSERT_EQ(KDs.size(), 1u);
   const uint64_t SymbolVAddr = KDs[0].VAddr;
 
@@ -537,10 +566,10 @@ TEST(ElfView, GrowWithTrampolinesKeepsDwarfConsistentWithSymbol) {
 // names and the two stub offsets (0 and KernelEntryStubStride). Re-parse the
 // returned buffer with llvm::object::ELFFile and, for each fixup, assert a
 // "<name>.stub" symbol exists in .symtab that is (a) STT_FUNC, (b) defined in
-// the .text section (st_shndx), (c) located at TextAddr + OldTextSize +
-// StubTextOffset, and (d) sized to KernelEntryStubStride. Two fixups (rather
-// than one) prove each stub gets its own name at its own address, not a single
-// shared or mis-placed entry.
+// the appended trampoline-pool section (st_shndx), (c) located at PoolVAddr +
+// StubTextOffset (where the dispatch entry now points), and (d) sized to
+// KernelEntryStubStride. Two fixups (rather than one) prove each stub gets its
+// own name at its own address, not a single shared or mis-placed entry.
 TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";
@@ -550,14 +579,14 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   llvm::Expected<ElfView> ViewOrErr =
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  const unsigned TextIdx = ViewOrErr->textSectionIndex();
-  const uint64_t TextAddr = ViewOrErr->textAddr();
-  const uint64_t OldTextSize = ViewOrErr->textSize();
+  std::optional<uint64_t> PoolVAddrOr = ViewOrErr->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddrOr.has_value());
+  const uint64_t PoolVAddr = *PoolVAddrOr;
 
   // Grow .text by two entry-stub-sized blocks, mirroring the entry-trampoline
   // pass appending one stub per kernel.
   Trampoline Stub;
-  Stub.Bytes.assign(2 * KernelEntryStubStride, 0);
+  Stub.Bytes.assign(2 * KernelEntryStubStride, 0xAA);
   std::vector<Trampoline> Growth{Stub};
   const uint8_t SNop[4] = {};
   std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
@@ -565,14 +594,15 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   ASSERT_NE(Grown, nullptr);
 
   // One fixup per appended stub; the names need not match real kernels, since
-  // addKernelEntryTrampolineSymbols only attaches a symbol at each stub address.
+  // addKernelEntryTrampolineSymbols only attaches a symbol at each stub
+  // address.
   std::vector<KernelEntryTrampolineFixup> Fixups = {
       {"kernel_a", /*StubTextOffset=*/0, /*RequiredSgprs=*/10},
-      {"kernel_b", /*StubTextOffset=*/KernelEntryStubStride, /*RequiredSgprs=*/12},
+      {"kernel_b", /*StubTextOffset=*/KernelEntryStubStride,
+       /*RequiredSgprs=*/12},
   };
   std::unique_ptr<llvm::WritableMemoryBuffer> WithSyms =
-      addKernelEntryTrampolineSymbols(*Grown, TextIdx, TextAddr, OldTextSize,
-                                      Fixups);
+      addKernelEntryTrampolineSymbols(*Grown, PoolVAddr, Fixups);
   ASSERT_NE(WithSyms, nullptr);
 
   using ELFT = llvm::object::ELF64LE;
@@ -587,12 +617,20 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   llvm::Expected<ELFT::ShdrRange> SecsOrErr = File.sections();
   ASSERT_TRUE((bool)SecsOrErr) << llvm::toString(SecsOrErr.takeError());
   const ELFT::Shdr *SymtabShdr = nullptr;
-  for (const ELFT::Shdr &S : *SecsOrErr)
-    if (S.sh_type == llvm::ELF::SHT_SYMTAB) {
-      SymtabShdr = &S;
-      break;
+  unsigned PoolIdx = 0;
+  {
+    unsigned I = 0;
+    for (const ELFT::Shdr &S : *SecsOrErr) {
+      if (S.sh_type == llvm::ELF::SHT_SYMTAB && !SymtabShdr)
+        SymtabShdr = &S;
+      if ((S.sh_flags & llvm::ELF::SHF_ALLOC) && S.sh_addr == PoolVAddr &&
+          PoolIdx == 0)
+        PoolIdx = I;
+      ++I;
     }
+  }
   ASSERT_NE(SymtabShdr, nullptr);
+  ASSERT_NE(PoolIdx, 0u) << "trampoline-pool section not found at PoolVAddr";
   llvm::Expected<ELFT::SymRange> SymsOrErr = File.symbols(SymtabShdr);
   ASSERT_TRUE((bool)SymsOrErr) << llvm::toString(SymsOrErr.takeError());
   llvm::Expected<llvm::StringRef> StrTabOrErr =
@@ -609,16 +647,159 @@ TEST(ElfView, AddKernelEntryTrampolineSymbolsNamesEachStub) {
   };
 
   // Every appended stub must have a <kernel>.stub STT_FUNC symbol covering the
-  // stub, in the .text section, at the stub's virtual address.
+  // stub, in the trampoline-pool section, at the stub's virtual address (where
+  // the dispatch entry now points).
   for (const KernelEntryTrampolineFixup &F : Fixups) {
     const ELFT::Sym *Sym = FindSym(F.KernelName + ".stub");
     ASSERT_NE(Sym, nullptr) << "missing stub symbol for " << F.KernelName;
     EXPECT_EQ(static_cast<unsigned>(Sym->getType()),
               static_cast<unsigned>(llvm::ELF::STT_FUNC));
-    EXPECT_EQ(Sym->st_shndx, TextIdx);
-    EXPECT_EQ(Sym->st_value, TextAddr + OldTextSize + F.StubTextOffset);
+    EXPECT_EQ(Sym->st_shndx, PoolIdx);
+    EXPECT_EQ(Sym->st_value, PoolVAddr + F.StubTextOffset);
     EXPECT_EQ(Sym->st_size, KernelEntryStubStride);
+    // The symbol's [value, value + size) range must lie fully inside the
+    // section it claims (st_shndx), catching a symbol placed in the wrong
+    // section or past its bounds.
+    const ELFT::Shdr &StubSec = (*SecsOrErr)[Sym->st_shndx];
+    EXPECT_GE(Sym->st_value, StubSec.sh_addr);
+    EXPECT_LE(Sym->st_value + Sym->st_size, StubSec.sh_addr + StubSec.sh_size);
   }
+}
+
+// A zero-sized allocatable section can share the trampoline pool's base
+// address: trampolinePoolVAddr() still selects that address and
+// growWithTrampolines() appends the real pool after it. The stub symbol must
+// land in the real, non-empty pool section that spans PoolVAddr -- not the
+// empty section at the same address -- so its [value, value + size) range stays
+// inside its declared section. Guards the pool-section lookup against an exact
+// sh_addr == PoolVAddr scan that could select the empty section first.
+TEST(ElfView, AddKernelEntryTrampolineSymbolsSkipsZeroSizedSectionAtPoolVAddr) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.ExtraAllocSectionAddr = 0x3000; // page-aligned, past .rodata
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  std::optional<uint64_t> PoolVAddrOr = ViewOrErr->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddrOr.has_value());
+  const uint64_t PoolVAddr = *PoolVAddrOr;
+  // The zero-sized section shares the pool base -- the scenario under test.
+  ASSERT_EQ(PoolVAddr, 0x3000u);
+
+  Trampoline Stub;
+  Stub.Bytes.assign(KernelEntryStubStride, 0xAA);
+  std::vector<Trampoline> Growth{Stub};
+  const uint8_t SNop[4] = {};
+  std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
+      ViewOrErr->growWithTrampolines(Growth, SNop);
+  ASSERT_NE(Grown, nullptr);
+
+  std::vector<KernelEntryTrampolineFixup> Fixups = {
+      {"kernel_a", /*StubTextOffset=*/0, /*RequiredSgprs=*/10}};
+  std::unique_ptr<llvm::WritableMemoryBuffer> WithSyms =
+      addKernelEntryTrampolineSymbols(*Grown, PoolVAddr, Fixups);
+  ASSERT_NE(WithSyms, nullptr);
+
+  using ELFT = llvm::object::ELF64LE;
+  llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
+      llvm::object::ELFFile<ELFT>::create(llvm::StringRef(
+          reinterpret_cast<const char *>(WithSyms->getBufferStart()),
+          WithSyms->getBufferSize()));
+  ASSERT_TRUE((bool)FileOrErr) << llvm::toString(FileOrErr.takeError());
+  llvm::object::ELFFile<ELFT> &File = *FileOrErr;
+  llvm::Expected<ELFT::ShdrRange> SecsOrErr = File.sections();
+  ASSERT_TRUE((bool)SecsOrErr) << llvm::toString(SecsOrErr.takeError());
+  const ELFT::Shdr *Symtab = nullptr;
+  for (const ELFT::Shdr &S : *SecsOrErr)
+    if (S.sh_type == llvm::ELF::SHT_SYMTAB) {
+      Symtab = &S;
+      break;
+    }
+  ASSERT_NE(Symtab, nullptr);
+  llvm::Expected<ELFT::SymRange> Syms = File.symbols(Symtab);
+  ASSERT_TRUE((bool)Syms) << llvm::toString(Syms.takeError());
+  llvm::Expected<llvm::StringRef> Str = File.getStringTableForSymtab(*Symtab);
+  ASSERT_TRUE((bool)Str) << llvm::toString(Str.takeError());
+  const ELFT::Sym *StubSym = nullptr;
+  for (const ELFT::Sym &Sym : *Syms) {
+    llvm::Expected<llvm::StringRef> N = Sym.getName(*Str);
+    ASSERT_TRUE((bool)N) << llvm::toString(N.takeError());
+    if (*N == "kernel_a.stub") {
+      StubSym = &Sym;
+      break;
+    }
+  }
+  ASSERT_NE(StubSym, nullptr);
+
+  // The symbol must reference the real pool section (non-empty, spanning
+  // PoolVAddr), not the zero-sized section at the same address.
+  ASSERT_LT(StubSym->st_shndx, SecsOrErr->size());
+  const ELFT::Shdr &Sec = (*SecsOrErr)[StubSym->st_shndx];
+  EXPECT_NE(Sec.sh_size, 0u);
+  EXPECT_GE(StubSym->st_value, Sec.sh_addr);
+  EXPECT_LT(StubSym->st_value, Sec.sh_addr + Sec.sh_size);
+  EXPECT_EQ(StubSym->st_value, PoolVAddr);
+}
+
+TEST(ElfView, AddKernelEntryTrampolineSymbolsPreservesPhdr) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  std::optional<uint64_t> PoolVAddrOr = ViewOrErr->trampolinePoolVAddr();
+  ASSERT_TRUE(PoolVAddrOr.has_value());
+  const uint64_t PoolVAddr = *PoolVAddrOr;
+
+  Trampoline Stub;
+  Stub.Bytes.assign(2 * KernelEntryStubStride, 0xAA);
+  std::vector<Trampoline> Growth{Stub};
+  const uint8_t SNop[4] = {};
+  std::unique_ptr<llvm::WritableMemoryBuffer> Grown =
+      ViewOrErr->growWithTrampolines(Growth, SNop);
+  ASSERT_NE(Grown, nullptr);
+
+  std::vector<KernelEntryTrampolineFixup> Fixups = {
+      {"kernel_a", /*StubTextOffset=*/0, /*RequiredSgprs=*/10},
+      {"kernel_b", /*StubTextOffset=*/KernelEntryStubStride,
+       /*RequiredSgprs=*/12},
+  };
+  std::unique_ptr<llvm::WritableMemoryBuffer> WithSyms =
+      addKernelEntryTrampolineSymbols(*Grown, PoolVAddr, Fixups);
+  ASSERT_NE(WithSyms, nullptr);
+
+  using ELFT = llvm::object::ELF64LE;
+  llvm::Expected<llvm::object::ELFFile<ELFT>> FileOrErr =
+      llvm::object::ELFFile<ELFT>::create(llvm::StringRef(
+          WithSyms->getBufferStart(), WithSyms->getBufferSize()));
+  ASSERT_TRUE((bool)FileOrErr) << llvm::toString(FileOrErr.takeError());
+
+  llvm::Expected<ELFT::PhdrRange> PhdrsOrErr = FileOrErr->program_headers();
+  ASSERT_TRUE((bool)PhdrsOrErr) << llvm::toString(PhdrsOrErr.takeError());
+  EXPECT_GE(PhdrsOrErr->size(), 2u);
+
+  bool FoundPoolLoad = false;
+  for (const auto &Phdr : *PhdrsOrErr) {
+    EXPECT_LE(Phdr.p_offset, WithSyms->getBufferSize());
+    if (Phdr.p_type == llvm::ELF::PT_LOAD && (Phdr.p_flags & llvm::ELF::PF_X)) {
+      FoundPoolLoad = true;
+      EXPECT_GT(Phdr.p_filesz, 0u);
+      ASSERT_LE(Phdr.p_offset + Phdr.p_filesz, WithSyms->getBufferSize());
+      const uint8_t *PoolBytes =
+          reinterpret_cast<const uint8_t *>(WithSyms->getBufferStart()) +
+          Phdr.p_offset;
+      for (uint64_t I = 0; I < Phdr.p_filesz; ++I)
+        EXPECT_EQ(PoolBytes[I], 0xAA) << "pool content mismatch at byte " << I;
+    }
+  }
+  EXPECT_TRUE(FoundPoolLoad) << "no executable PT_LOAD segment found";
 }
 
 TEST(ElfView, UpdateKernelDescriptorSgprCountUpdatesMetadataAndDescriptor) {
@@ -632,12 +813,202 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountUpdatesMetadataAndDescriptor) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  ASSERT_TRUE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  // Prime the metadata cache before the in-place update.
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 8u);
+  ASSERT_TRUE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   std::optional<unsigned> MetadataSgprs =
       ViewOrErr->getKernelSgprCount("entry_kernel");
   ASSERT_TRUE(MetadataSgprs.has_value());
   EXPECT_EQ(*MetadataSgprs, 10u);
   EXPECT_GE(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 10u);
+}
+
+TEST(ElfView, ReadsWorkgroupCapacityMetadata) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.MetadataVgprCount = 120;
+  Opts.MetadataMaxFlatWorkgroupSize = 1024;
+  Opts.MetadataWavefrontSize = 32;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getKernelMetadataVgprCount("entry_kernel"), 120u);
+  EXPECT_EQ(ViewOrErr->getKernelMaxFlatWorkgroupSize("entry_kernel"), 1024u);
+  EXPECT_EQ(ViewOrErr->getKernelWavefrontSize("entry_kernel"), 32u);
+}
+
+TEST(ElfView, UpdateKernelDescriptorVgprCountIsChecked) {
+  static constexpr unsigned Granule = 16;
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(readReservedVgprs(Obj.Bytes, Obj.KernelDescriptorOffset, Granule),
+            16u);
+  ASSERT_TRUE(
+      ViewOrErr->updateKernelDescriptorVgprCount("entry_kernel", 17, Granule));
+  EXPECT_EQ(readReservedVgprs(Obj.Bytes, Obj.KernelDescriptorOffset, Granule),
+            32u);
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorVgprCount("entry_kernel", 4096,
+                                                          Granule));
+  EXPECT_EQ(readReservedVgprs(Obj.Bytes, Obj.KernelDescriptorOffset, Granule),
+            32u);
+}
+
+TEST(ElfView, UpdateKernelMetadataVgprCountsUpdatesInPlace) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.MetadataVgprCount = 9;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  llvm::StringMap<unsigned> RequiredVgprs;
+  RequiredVgprs.try_emplace("entry_kernel", 10u);
+  ASSERT_TRUE(ViewOrErr->updateKernelMetadataVgprCounts(RequiredVgprs));
+  EXPECT_EQ(ViewOrErr->getKernelMetadataVgprCount("entry_kernel"), 10u);
+}
+
+TEST(ElfView, UpdateKernelMetadataVgprCountsRejectsMissingCount) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.MetadataOmitVgprCount = true;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  llvm::StringMap<unsigned> RequiredVgprs;
+  RequiredVgprs.try_emplace("entry_kernel", 10u);
+  EXPECT_FALSE(ViewOrErr->updateKernelMetadataVgprCounts(RequiredVgprs));
+}
+
+TEST(ElfView, UpdateGfx1250RevisionMetadataRetagsKernelInPlace) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  Opts.MetadataGfx1250Revision = "B0";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::StringRef Before(reinterpret_cast<const char *>(Obj.Bytes.data()),
+                         Obj.Bytes.size());
+  EXPECT_NE(Before.find("B0"), llvm::StringRef::npos);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ASSERT_TRUE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
+
+  llvm::StringRef After(reinterpret_cast<const char *>(Obj.Bytes.data()),
+                        Obj.Bytes.size());
+  EXPECT_EQ(After.find("B0"), llvm::StringRef::npos);
+  EXPECT_NE(After.find("A0"), llvm::StringRef::npos);
+}
+
+TEST(ElfView, UpdateKernelDescriptorSgprCountCanUpdateMetadataOnly) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  const unsigned DescriptorSgprsBefore =
+      readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset);
+
+  ASSERT_TRUE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/false));
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 10u);
+  EXPECT_EQ(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset),
+            DescriptorSgprsBefore);
+}
+
+TEST(ElfView, UpdateKernelMetadataSgprCountsKeepsPrimedCacheCoherent) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 8u);
+
+  llvm::StringMap<unsigned> RequiredSgprs;
+  RequiredSgprs.try_emplace("entry_kernel", 10u);
+  ASSERT_TRUE(ViewOrErr->updateKernelMetadataSgprCounts(RequiredSgprs));
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 10u);
+}
+
+TEST(ElfView, UpdateKernelMetadataSgprCountsBatchesMixedRequirements) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataKernels = {{"needs_update", 8}, {"already_enough", 16}};
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  llvm::StringMap<unsigned> RequiredSgprs;
+  RequiredSgprs.try_emplace("needs_update", 10u);
+  RequiredSgprs.try_emplace("already_enough", 12u);
+  ASSERT_TRUE(ViewOrErr->updateKernelMetadataSgprCounts(RequiredSgprs));
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("needs_update"), 10u);
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("already_enough"), 16u);
+}
+
+TEST(ElfView, UpdateKernelMetadataSgprCountsRejectsAbsentKernelAtomically) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataKernels = {{"needs_update", 8}, {"already_enough", 16}};
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  llvm::StringMap<unsigned> RequiredSgprs;
+  RequiredSgprs.try_emplace("needs_update", 10u);
+  RequiredSgprs.try_emplace("already_enough", 12u);
+  RequiredSgprs.try_emplace("absent_kernel", 4u);
+  EXPECT_FALSE(ViewOrErr->updateKernelMetadataSgprCounts(RequiredSgprs));
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("needs_update"), 8u);
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("already_enough"), 16u);
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("absent_kernel"), std::nullopt);
+}
+
+TEST(ElfView, UpdateKernelDescriptorSgprCountMetadataOnlyRequiresMetadata) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "entry_kernel";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  const unsigned DescriptorSgprsBefore =
+      readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset);
+
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/false));
+  EXPECT_EQ(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset),
+            DescriptorSgprsBefore);
 }
 
 TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsMissingMetadataCount) {
@@ -651,7 +1022,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsMissingMetadataCount) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   EXPECT_EQ(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 8u);
 }
 
@@ -668,7 +1040,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsMissingMetadataKernel) {
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), std::nullopt);
-  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   EXPECT_EQ(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 8u);
 }
 
@@ -684,7 +1057,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsNonIntegerMetadataCount) {
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), std::nullopt);
-  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 10));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 10, /*UpdateDescriptor=*/true));
   EXPECT_EQ(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 8u);
 }
 
@@ -699,7 +1073,8 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsMetadataSizeChange) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 128));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 128, /*UpdateDescriptor=*/true));
   std::optional<unsigned> MetadataSgprs =
       ViewOrErr->getKernelSgprCount("entry_kernel");
   ASSERT_TRUE(MetadataSgprs.has_value());
@@ -718,11 +1093,48 @@ TEST(ElfView, UpdateKernelDescriptorSgprCountRejectsDescriptorLimitFirst) {
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
-  EXPECT_FALSE(
-      ViewOrErr->updateKernelDescriptorSgprCount("entry_kernel", 100000));
+  EXPECT_FALSE(ViewOrErr->updateKernelDescriptorSgprCount(
+      "entry_kernel", 100000, /*UpdateDescriptor=*/true));
   std::optional<unsigned> MetadataSgprs =
       ViewOrErr->getKernelSgprCount("entry_kernel");
   ASSERT_TRUE(MetadataSgprs.has_value());
   EXPECT_EQ(*MetadataSgprs, 200u);
   EXPECT_EQ(readReservedSgprs(Obj.Bytes, Obj.KernelDescriptorOffset), 8u);
+}
+
+// -- kernel-descriptor cache dedup --------------------------------------------
+
+// The descriptor cache dedups by (name, vaddr): the same kernel name can appear
+// at more than one descriptor vaddr, and a repeat of an already-seen
+// (name, vaddr) pair must be dropped regardless of ordering. This pins the
+// A@x, A@y, A@x case, which a "remember only the last vaddr per name" dedup
+// would mishandle by re-adding the trailing A@x.
+TEST(ElfView, KernelDescriptorCacheDedupsByNameAndVAddrAcrossOrdering) {
+  comgr_test::MultiKernelDescriptorElfOptions Opts;
+  Opts.TextAddr = 0x1000;
+  Opts.TextSize = 0x400;
+  Opts.RodataAddr = 0x2000;
+  // Distinct descriptor vaddrs for the two "A" instances, and a "B" in between,
+  // then a duplicate of the first A. Expect three unique descriptors:
+  // A@0x2000, B@0x2100, A@0x2200 -- the trailing A@0x2000 duplicate is dropped.
+  Opts.Kernels = {
+      {"kern_a", 0x1000, 0x2000, /*EntryOffset=*/-0x1000},
+      {"kern_b", 0x1100, 0x2100, /*EntryOffset=*/-0x1000},
+      {"kern_a", 0x1200, 0x2200, /*EntryOffset=*/-0x1000},
+      {"kern_a", 0x1000, 0x2000, /*EntryOffset=*/-0x1000}, // dup of first
+  };
+  std::vector<uint8_t> Bytes = comgr_test::makeMultiKernelDescriptorElf(Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Bytes.data(), Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  llvm::ArrayRef<KernelDescriptorInfo> KDs = ViewOrErr->kernelDescriptors();
+  ASSERT_EQ(KDs.size(), 3u);
+  EXPECT_EQ(KDs[0].KernelName, "kern_a");
+  EXPECT_EQ(KDs[0].VAddr, 0x2000u);
+  EXPECT_EQ(KDs[1].KernelName, "kern_b");
+  EXPECT_EQ(KDs[1].VAddr, 0x2100u);
+  EXPECT_EQ(KDs[2].KernelName, "kern_a");
+  EXPECT_EQ(KDs[2].VAddr, 0x2200u);
 }

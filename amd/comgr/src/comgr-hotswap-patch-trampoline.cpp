@@ -222,7 +222,7 @@ extractDsOperands(const MCInst &Inst, StringRef FromMnem, const LLVMState &LS) {
           << RawOff0 << " * scale " << Scale << " = " << Scaled0
           << ", off1=raw " << RawOff1 << " * scale " << Scale << " = "
           << Scaled1 << ", max " << Ds1AddrOffsetMax
-          << "); leaving original instruction in place\n";
+          << "); required A0 rewrite cannot continue\n";
     return std::nullopt;
   }
   Ops.Off0 = static_cast<uint32_t>(Scaled0);
@@ -233,75 +233,145 @@ extractDsOperands(const MCInst &Inst, StringRef FromMnem, const LLVMState &LS) {
 
 // Split a compound destination register into two formatted destination strings.
 // b32: VReg_64 -> ("v0", "v1"); b64: VReg_128 -> ("v[0:1]", "v[2:3]")
-std::pair<std::string, std::string>
+std::optional<std::pair<std::string, std::string>>
 splitDstPair(MCRegister CompoundReg, bool IsB64, const MCRegisterInfo &MRI) {
   SmallVector<MCRegister, 4> Subs = getDirectSubRegs(CompoundReg, MRI);
   if (IsB64) {
-    if (Subs.size() < 4)
-      return {};
-    return {fmtRegPair(MRI, Subs[0], Subs[1]),
-            fmtRegPair(MRI, Subs[2], Subs[3])};
+    if (Subs.size() < 4) {
+      log() << "hotswap: error: DS b64 destination " << MRI.getName(CompoundReg)
+            << " has " << Subs.size()
+            << " direct subregisters; expected at least 4\n";
+      return std::nullopt;
+    }
+    return std::pair<std::string, std::string>{
+        fmtRegPair(MRI, Subs[0], Subs[1]), fmtRegPair(MRI, Subs[2], Subs[3])};
   }
-  if (Subs.size() < 2)
-    return {};
-  return {toAsmRegName(MRI, Subs[0]), toAsmRegName(MRI, Subs[1])};
+  if (Subs.size() < 2) {
+    log() << "hotswap: error: DS b32 destination " << MRI.getName(CompoundReg)
+          << " has " << Subs.size()
+          << " direct subregisters; expected at least 2\n";
+    return std::nullopt;
+  }
+  return std::pair<std::string, std::string>{toAsmRegName(MRI, Subs[0]),
+                                             toAsmRegName(MRI, Subs[1])};
 }
 
 // Expand a DS 2-address load into two single-address loads (dst, addr).
-std::vector<std::string> expandDs2AddrLoad(const DsOperands &Ops,
-                                           StringRef ToMnem) {
-  if (Ops.Regs.size() < 2)
-    return {};
-  std::pair<std::string, std::string> Dst =
+std::optional<std::vector<std::string>> expandDs2AddrLoad(const DsOperands &Ops,
+                                                          StringRef ToMnem) {
+  if (Ops.Regs.size() < 2) {
+    log() << "hotswap: error: " << ToMnem << " expansion found "
+          << Ops.Regs.size() << " register operands; expected at least 2\n";
+    return std::nullopt;
+  }
+  std::optional<std::pair<std::string, std::string>> Dst =
       splitDstPair(Ops.Regs[0], Ops.IsB64, *Ops.MRI);
-  if (Dst.first.empty())
-    return {};
+  if (!Dst)
+    return std::nullopt;
   std::string Addr = toAsmRegName(*Ops.MRI, Ops.Regs[1]);
-  return {
-      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1),
-  };
+  std::string First =
+      ToMnem.str() + " " + Dst->first + ", " + Addr + fmtOffset(Ops.Off0);
+  std::string Second =
+      ToMnem.str() + " " + Dst->second + ", " + Addr + fmtOffset(Ops.Off1);
+
+  // A compound DS load reads its address once before writing either half of
+  // the destination. After splitting, the first single-address load must not
+  // overwrite the address needed by the second. If the address overlaps the
+  // first destination half, issue the independent second half first and put
+  // the self-overlapping load last. (If it overlaps the second half, the
+  // natural order is already safe.)
+  SmallVector<MCRegister, 4> DstSubs = getDirectSubRegs(Ops.Regs[0], *Ops.MRI);
+  const unsigned FirstHalfWidth = Ops.IsB64 ? 2 : 1;
+  bool AddrOverlapsFirst = llvm::any_of(
+      ArrayRef(DstSubs).take_front(FirstHalfWidth),
+      [&](MCRegister Reg) { return Ops.MRI->regsOverlap(Reg, Ops.Regs[1]); });
+  if (AddrOverlapsFirst)
+    return std::vector<std::string>{std::move(Second), std::move(First)};
+  return std::vector<std::string>{std::move(First), std::move(Second)};
 }
 
 // Expand a DS 2-address store into two single-address stores (addr, data).
-std::vector<std::string> expandDs2AddrStore(const DsOperands &Ops,
-                                            StringRef ToMnem) {
-  if (Ops.Regs.size() < 3)
-    return {};
+std::optional<std::vector<std::string>>
+expandDs2AddrStore(const DsOperands &Ops, StringRef ToMnem) {
+  if (Ops.Regs.size() < 3) {
+    log() << "hotswap: error: " << ToMnem << " expansion found "
+          << Ops.Regs.size() << " register operands; expected at least 3\n";
+    return std::nullopt;
+  }
   const MCRegisterInfo &MRI = *Ops.MRI;
   std::string Addr = toAsmRegName(MRI, Ops.Regs[0]);
   std::string Data0 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[1])
                                 : toAsmRegName(MRI, Ops.Regs[1]);
   std::string Data1 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[2])
                                 : toAsmRegName(MRI, Ops.Regs[2]);
-  return {
+  return std::vector<std::string>{
       ToMnem.str() + " " + Addr + ", " + Data0 + fmtOffset(Ops.Off0),
       ToMnem.str() + " " + Addr + ", " + Data1 + fmtOffset(Ops.Off1),
   };
 }
 
+bool registerSliceOverlaps(ArrayRef<MCRegister> Registers, unsigned Begin,
+                           unsigned Count, MCRegister Reg,
+                           const MCRegisterInfo &MRI) {
+  return llvm::any_of(Registers.slice(Begin, Count), [&](MCRegister DstReg) {
+    return MRI.regsOverlap(DstReg, Reg);
+  });
+}
+
 // Expand a DS 2-address exchange into two single-address exchanges
 // (dst, addr, data).
-std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
-                                           StringRef ToMnem) {
-  if (Ops.Regs.size() < 4)
-    return {};
+std::optional<std::vector<std::string>> expandDs2AddrXchg(const DsOperands &Ops,
+                                                          StringRef ToMnem) {
+  if (Ops.Regs.size() < 4) {
+    log() << "hotswap: error: " << ToMnem << " expansion found "
+          << Ops.Regs.size() << " register operands; expected at least 4\n";
+    return std::nullopt;
+  }
   const MCRegisterInfo &MRI = *Ops.MRI;
-  std::pair<std::string, std::string> Dst =
+  std::optional<std::pair<std::string, std::string>> Dst =
       splitDstPair(Ops.Regs[0], Ops.IsB64, MRI);
-  if (Dst.first.empty())
-    return {};
+  if (!Dst)
+    return std::nullopt;
   std::string Addr = toAsmRegName(MRI, Ops.Regs[1]);
   std::string Data0 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[2])
                                 : toAsmRegName(MRI, Ops.Regs[2]);
   std::string Data1 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[3])
                                 : toAsmRegName(MRI, Ops.Regs[3]);
-  return {
-      ToMnem.str() + " " + Dst.first + ", " + Addr + ", " + Data0 +
-          fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + Dst.second + ", " + Addr + ", " + Data1 +
-          fmtOffset(Ops.Off1),
-  };
+  std::string First = ToMnem.str() + " " + Dst->first + ", " + Addr + ", " +
+                      Data0 + fmtOffset(Ops.Off0);
+  std::string Second = ToMnem.str() + " " + Dst->second + ", " + Addr + ", " +
+                       Data1 + fmtOffset(Ops.Off1);
+
+  SmallVector<MCRegister, 4> DstSubs = getDirectSubRegs(Ops.Regs[0], MRI);
+  const unsigned HalfWidth = Ops.IsB64 ? 2 : 1;
+  if (DstSubs.size() < 2 * HalfWidth) {
+    log() << "hotswap: error: " << ToMnem << " destination "
+          << MRI.getName(Ops.Regs[0]) << " has " << DstSubs.size()
+          << " direct subregisters; expected at least " << 2 * HalfWidth
+          << "\n";
+    return std::nullopt;
+  }
+
+  // Op0 writes the first destination half and op1 still needs addr + data1;
+  // op1 writes the second half and op0 still needs addr + data0. Pick the safe
+  // order when only one direction has a dependency. If both directions do,
+  // neither ordering preserves the compound instruction's read-before-write
+  // semantics without a scratch VGPR, so decline the rewrite.
+  const bool FirstClobbersSecond =
+      registerSliceOverlaps(DstSubs, 0, HalfWidth, Ops.Regs[1], MRI) ||
+      registerSliceOverlaps(DstSubs, 0, HalfWidth, Ops.Regs[3], MRI);
+  const bool SecondClobbersFirst =
+      registerSliceOverlaps(DstSubs, HalfWidth, HalfWidth, Ops.Regs[1], MRI) ||
+      registerSliceOverlaps(DstSubs, HalfWidth, HalfWidth, Ops.Regs[2], MRI);
+  if (FirstClobbersSecond && SecondClobbersFirst) {
+    log() << "hotswap: error: ds_storexchg_2addr has cyclic "
+             "destination/source overlap and cannot be split without scratch "
+             "VGPRs\n";
+    return std::nullopt;
+  }
+  if (FirstClobbersSecond)
+    return std::vector<std::string>{std::move(Second), std::move(First)};
+  return std::vector<std::string>{std::move(First), std::move(Second)};
 }
 
 // -- expandDs2Addr ----------------------------------------------------------
@@ -309,11 +379,13 @@ std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
 // Top-level expansion: extracts operands from the decoded MCInst, computes
 // scaled offsets, then dispatches to the appropriate layout-specific helper.
 
-std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
-                                       StringRef ToMnem, const LLVMState &LS) {
+std::optional<std::vector<std::string>> expandDs2AddrImpl(const MCInst &Inst,
+                                                          StringRef FromMnem,
+                                                          StringRef ToMnem,
+                                                          const LLVMState &LS) {
   std::optional<DsOperands> Ops = extractDsOperands(Inst, FromMnem, LS);
   if (!Ops)
-    return {};
+    return std::nullopt;
 
   // Use the trailing underscore so the three prefixes are disjoint
   // ("ds_load_", "ds_store_", "ds_storexchg_"); without it "ds_store" is a
@@ -326,7 +398,7 @@ std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
     return expandDs2AddrStore(*Ops, ToMnem);
 
   log() << "hotswap: error: unrecognized DS mnemonic: " << FromMnem << "\n";
-  return {};
+  return std::nullopt;
 }
 
 // -- patchDs2Addr -----------------------------------------------------------
@@ -343,16 +415,13 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   StringRef ToMnem = getDs2AddrReplacement(DI.Mnemonic);
   if (ToMnem.empty())
     return false;
-  std::vector<std::string> Expanded =
-      expandDs2Addr(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
-  if (Expanded.empty()) {
-    log() << "hotswap: error: ds_2addr expansion failed for: " << DI.Mnemonic
-          << "\n";
-    return false;
-  }
+  std::optional<std::vector<std::string>> Expanded =
+      expandDs2AddrImpl(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
+  if (!Expanded)
+    return failRequiredPatch(Ctx);
 
   std::string Combined;
-  for (const std::string &Line : Expanded)
+  for (const std::string &Line : *Expanded)
     Combined += Line + "\n";
   // Drain the DS counter right after the split pair so both halves are
   // guaranteed complete before any downstream consumer. The original code
@@ -366,15 +435,15 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   // local drain is unconditionally correct; a precise per-wait dataflow
   // recomputation is the eventual optimization (tracked separately).
   Combined += "s_wait_dscnt 0\n";
-  SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
+  SmallVector<uint8_t> Bytes = assembleInstructions(Combined, Ctx.LS);
   if (Bytes.empty()) {
     log() << "hotswap: error: ds_2addr: assembly failed: " << Combined << "\n";
-    return false;
+    return failRequiredPatch(Ctx);
   }
 
   SmallVector<uint8_t> Replacement(Bytes.begin(), Bytes.end());
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
-    return false;
+    return failRequiredPatch(Ctx);
 
   DI.Mnemonic = "<replaced>";
   return true;
@@ -619,8 +688,8 @@ std::optional<ScratchAlloc> tryAllocScratchVgpr(PatchContext &Ctx, size_t Idx) {
   std::string KernelName =
       Ctx.Elf.findKernelAtAddress(DI.Offset + Ctx.Elf.textAddr());
   unsigned KdVgprs = 0;
-  if (std::optional<unsigned> Opt =
-          Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize))
+  if (std::optional<unsigned> Opt = Ctx.Elf.getKernelVgprCount(
+          KernelName, getKernelVgprGranuleSize(Ctx, KernelName)))
     KdVgprs = *Opt;
 
   VgprAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdVgprs,
@@ -697,10 +766,9 @@ void commitScratchSgpr(PatchContext &Ctx, const SgprScratchAlloc &Alloc) {
 // -- patchTensorLoadToLdsA0 -------------------------------------------------
 //
 // Prepend s_pack_hh_b32_b16 to clear multicast routing bits in the group
-// descriptor's base SGPR. If the SGPR is live after the tensor_load, bracket
-// the sequence with s_mov_b32 through a scratch SGPR to save/restore it. (An
-// earlier version used a VGPR lane, but occupancy-1 kernels have no free VGPR
-// so the patch declined; a scratch SGPR is always available.)
+// descriptor's base SGPR. Preserve the architectural SGPR value when it is live
+// after the tensor instruction: the descriptor is a source operand, so the
+// rewrite must not make its temporary normalization visible to later code.
 
 bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
@@ -716,8 +784,6 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
   if (isAlreadyTensorMaskPatched(Ctx, Idx, BaseMCReg))
     return false;
 
-  SmallVector<unsigned, 8> DescriptorSgprs =
-      getDescriptorSgprIndices(DI.Inst, MRI);
   std::string BaseSreg = toAsmRegName(MRI, BaseMCReg);
 
   std::string PackAsm = "s_pack_hh_b32_b16 " + BaseSreg + ", 0, " + BaseSreg;
@@ -729,25 +795,27 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
   }
 
   bool SgprLive = isSgprLiveAfter(Ctx, Idx, BaseMCReg);
-
   const uint8_t *OrigInst = Ctx.Text + DI.Offset;
 
   if (SgprLive) {
-    std::optional<SgprScratchAlloc> ScratchSgpr =
-        tryAllocScratchSgpr(Ctx, Idx, DescriptorSgprs);
-    if (!ScratchSgpr) {
+    std::optional<SafeSgprScratchBlock> Scratch =
+        findSafeSgprScratchBlock(Ctx, DI.Offset, /*Count=*/1, /*Alignment=*/1,
+                                 "tensor_load_to_lds descriptor save");
+    if (!Scratch) {
       log() << "hotswap: error: tensor_load_to_lds: no scratch SGPR "
                "available\n";
       return failRequiredPatch(Ctx);
     }
 
-    std::string S = "s" + std::to_string(ScratchSgpr->Sgpr);
-    std::string SaveAsm = "s_mov_b32 " + S + ", " + BaseSreg;
-    std::string RestoreAsm = "s_mov_b32 " + BaseSreg + ", " + S;
-    SmallVector<uint8_t> Save = assembleSingleInst(SaveAsm, Ctx.LS);
-    SmallVector<uint8_t> Restore = assembleSingleInst(RestoreAsm, Ctx.LS);
+    std::string ScratchName = "s" + std::to_string(Scratch->Base);
+    SmallVector<uint8_t> Save = assembleSingleInst(
+        "s_mov_b32 " + ScratchName + ", " + BaseSreg, Ctx.LS);
+    SmallVector<uint8_t> Restore = assembleSingleInst(
+        "s_mov_b32 " + BaseSreg + ", " + ScratchName, Ctx.LS);
     if (Save.empty() || Restore.empty()) {
-      log() << "hotswap: tensor_load_to_lds: save/restore assembly failed\n";
+      log() << "hotswap: error: tensor_load_to_lds: failed to assemble "
+               "descriptor save/restore through "
+            << ScratchName << "\n";
       return failRequiredPatch(Ctx);
     }
 
@@ -756,21 +824,18 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
     Replacement.append(PackBytes.begin(), PackBytes.end());
     Replacement.append(OrigInst, OrigInst + DI.Size);
     Replacement.append(Restore.begin(), Restore.end());
-
     if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
       return failRequiredPatch(Ctx);
 
-    // SGPRs above .sgpr_count need no KD bump on GFX10+; commit only after
-    // the patch is emitted, to keep per-kernel stats accurate.
-    commitScratchSgpr(Ctx, *ScratchSgpr);
-
+    if (!commitSafeSgprScratchBlock(Ctx, DI.Offset, *Scratch,
+                                    "tensor_load_to_lds descriptor save"))
+      return failRequiredPatch(Ctx);
     log() << "hotswap: tensor_load_to_lds: " << BaseSreg
-          << " live, save/restore via " << S << "\n";
+          << " live, save/restore via " << ScratchName << "\n";
   } else {
     SmallVector<uint8_t> Replacement;
     Replacement.append(PackBytes.begin(), PackBytes.end());
     Replacement.append(OrigInst, OrigInst + DI.Size);
-
     if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
       return failRequiredPatch(Ctx);
 
@@ -1293,10 +1358,16 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
     AsmLines = buildAddtidStoreAsm(TmpName, RegName, Offset, ToMnem);
   }
 
+  if (StoreScratch && checkKernelVgprBump(Ctx, StoreScratch->KernelName,
+                                          StoreScratch->ExtraVgprsNeeded,
+                                          PatchRequirement::Optional) !=
+                          VgprBumpDecision::Apply)
+    return false;
+
   std::string Combined;
   for (const std::string &Line : AsmLines)
     Combined += Line + "\n";
-  SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
+  SmallVector<uint8_t> Bytes = assembleInstructions(Combined, Ctx.LS);
   if (Bytes.empty()) {
     log() << "hotswap: error: " << DI.Mnemonic
           << " trampoline assembly failed at 0x" << utohexstr(DI.Offset)
@@ -1329,6 +1400,13 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
 
 } // anonymous namespace
 
+std::optional<std::vector<std::string>> expandDs2Addr(const MCInst &Inst,
+                                                      StringRef FromMnem,
+                                                      StringRef ToMnem,
+                                                      const LLVMState &LS) {
+  return expandDs2AddrImpl(Inst, FromMnem, ToMnem, LS);
+}
+
 // -- applyTrampolinePatches -------------------------------------------------
 //
 // Strong-symbol override. Handles B0 errata that produce replacement code
@@ -1345,21 +1423,48 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
 static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
-  if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty())
-    return patchDs2Addr(Ctx, Idx) ? 1 : 0;
-
-  if (Mnem == "tensor_load_to_lds") {
-    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0)
-      return patchTensorLoadToLdsA0(Ctx, Idx) ? 1 : 0;
-    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::B0)
-      return patchTensorLoadToLdsB0(Ctx, Idx) ? 1 : 0;
+  // Per-rule sub-buckets under the "strat:trampoline" parent (recorded by the
+  // dispatcher in comgr-hotswap-b0a0.cpp); timed only at matching sites.
+  if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty()) {
+    HotswapProfile::Scope S =
+        Ctx.Profile.time(HotswapMetric::TrampolineDs2Addr);
+    const uint32_t P = patchDs2Addr(Ctx, Idx) ? 1 : 0;
+    S.addPatches(P);
+    return P;
   }
 
-  if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0 && isClusterLoad(Mnem))
-    return patchClusterLoadMaskA0(Ctx, Idx) ? 1 : 0;
+  if (Mnem == "tensor_load_to_lds") {
+    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0) {
+      HotswapProfile::Scope S =
+          Ctx.Profile.time(HotswapMetric::TrampolineTensorTdm);
+      const uint32_t P = patchTensorLoadToLdsA0(Ctx, Idx) ? 1 : 0;
+      S.addPatches(P);
+      return P;
+    }
+    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::B0) {
+      HotswapProfile::Scope S =
+          Ctx.Profile.time(HotswapMetric::TrampolineTensorTdm);
+      const uint32_t P = patchTensorLoadToLdsB0(Ctx, Idx) ? 1 : 0;
+      S.addPatches(P);
+      return P;
+    }
+  }
 
-  if (Ctx.Config.RunB0A0Patches && !getAddtidReplacement(Mnem).empty())
-    return patchDsAddtid(Ctx, Idx) ? 1 : 0;
+  if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0 &&
+      isClusterLoad(Mnem)) {
+    HotswapProfile::Scope S =
+        Ctx.Profile.time(HotswapMetric::TrampolineClusterLoad);
+    const uint32_t P = patchClusterLoadMaskA0(Ctx, Idx) ? 1 : 0;
+    S.addPatches(P);
+    return P;
+  }
+
+  if (Ctx.Config.RunB0A0Patches && !getAddtidReplacement(Mnem).empty()) {
+    HotswapProfile::Scope S = Ctx.Profile.time(HotswapMetric::TrampolineAddtid);
+    const uint32_t P = patchDsAddtid(Ctx, Idx) ? 1 : 0;
+    S.addPatches(P);
+    return P;
+  }
 
   return 0;
 }

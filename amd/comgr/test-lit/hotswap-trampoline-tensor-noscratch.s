@@ -1,14 +1,14 @@
 // COM: Live tensor_load_to_lds descriptor SGPRs require save/restore around
-// COM: the A0 D# Group 1 mask clear. If the kernel already consumes all
-// COM: user-addressable SGPRs, hotswap must fail instead of returning
-// COM: unsafe code.
+// COM: the A0 D# Group 1 mask clear. If the kernel consumes all addressable
+// COM: SGPRs, hotswap must fail instead of returning unsafe code.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --expect-status ERROR \
-// RUN:   | %FileCheck --check-prefix=API %s
+// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=LOG,API %s
+// LOG: hotswap: error: tensor_load_to_lds descriptor save: no aligned block of 1 safe SGPRs fits below s106
 // API: RESULT: ERROR
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

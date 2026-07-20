@@ -14,9 +14,30 @@
 namespace COMGR {
 namespace env {
 
+enum class LogLevel {
+  None = 0,
+  Error,
+  Warning,
+  Info,
+  Debug,
+};
+
+/// Parse @p Requested (AMD_COMGR_LOG_LEVEL, may be empty) into a threshold.
+/// When empty or not an integer, returns Debug if @p VerboseFallback is set.
+LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
+
+/// Resolve the log level from AMD_COMGR_LOG_LEVEL, using the
+/// AMD_COMGR_EMIT_VERBOSE_LOGS back-compat fallback via parseLogLevel().
+LogLevel resolveLogLevel();
+
 /// Return whether the environment requests temps be saved.
 bool shouldSaveTemps();
 bool shouldSaveLLVMTemps();
+
+/// True when AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS is exactly "1": add the
+/// debug-only `<kernel>.stub` symbols the B0->B0 fast path skips by default.
+bool shouldAddEntryTrampolineSymbols();
+
 std::optional<bool> shouldUseVFS();
 
 /// If the environment requests logs be redirected, return the string identifier
