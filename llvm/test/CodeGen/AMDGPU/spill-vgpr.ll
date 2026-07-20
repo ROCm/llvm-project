@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx908 < %s | FileCheck -check-prefixes=GCN,GFX908 %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck -check-prefixes=GCN,GFX900 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08 < %s | FileCheck -check-prefixes=GCN,GFX908 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX900 %s
 
 ; GCN-LABEL: {{^}}max_13_vgprs:
 ; GFX900-NOT: SCRATCH_RSRC

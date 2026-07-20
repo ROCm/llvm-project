@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}if_with_kill:
 ; GCN: v_cmp_ne_u32_e32 vcc, 32, v0

@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tahiti -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
 
 ; This should end with an no-op sequence of exec mask manipulations
 ; Mask should be in original state after executed unreachable block

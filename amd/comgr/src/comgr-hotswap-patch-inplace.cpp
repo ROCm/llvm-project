@@ -9,10 +9,9 @@
 /// Strong-symbol override for applyInPlacePatches.  Handles instruction
 /// rewrites that fit in the same code size as the original:
 ///
+///   - s_clause                 -> s_nop 0
 ///   - cluster_load             -> global_load    (opcode swap via MCInst +
 ///                                                 MCCodeEmitter)
-///   - s_clause                 -> s_nop          (byte-level overwrite via
-///                                                 applyByteReplace)
 ///   - s_barrier_signal_isfirst -> s_barrier_signal
 ///                                                (opcode swap; same operand
 ///                                                 layout, drops SCC write)
@@ -119,8 +118,18 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
   StringRef Mnemonic(DI.Mnemonic);
 
+  if (DI.Inst.getOpcode() == Ctx.LS.SClauseOpcode) {
+    std::memcpy(Ctx.Text + DI.Offset, Ctx.LS.SNopBytes.data(),
+                Ctx.LS.SNopBytes.size());
+    log() << "hotswap: inplace: s_clause -> s_nop 0 at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return 1;
+  }
+
   StringRef ReplacementAsm = getClusterLoadReplacementAsm(Mnemonic);
   if (!ReplacementAsm.empty()) {
+    HotswapProfile::Scope S =
+        Ctx.Profile.time(HotswapMetric::InPlaceClusterLoad);
     // The replacement templates above are all the saddr=off encoding form
     // (global address in a 64-bit VGPR pair). The SGPR-relative (_SADDR)
     // cluster_load shares the mnemonic but has a different operand layout, so
@@ -138,19 +147,9 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
       if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
         log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << *NewOpcode
               << " at 0x" << utohexstr(DI.Offset) << "\n";
+        S.addPatches(1);
         return 1;
       }
-    }
-  }
-
-  if (Mnemonic == "s_clause") {
-    RewriteRule Rule;
-    Rule.ReplaceBytes.assign(Ctx.LS.SNopBytes.begin(), Ctx.LS.SNopBytes.end());
-    if (applyByteReplace(Rule, DI.Offset, DI.Size, Ctx.Text, Ctx.TextSize,
-                         Ctx.LS)) {
-      log() << "hotswap: inplace: s_clause -> s_nop at 0x"
-            << utohexstr(DI.Offset) << "\n";
-      return 1;
     }
   }
 
@@ -180,11 +179,14 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
   // and falls through to the dispatcher's "no match" return below.
   // The AMDGPU backend never emits the _M0 form for compute kernels.
   if (Mnemonic == "s_barrier_signal_isfirst") {
+    HotswapProfile::Scope S =
+        Ctx.Profile.time(HotswapMetric::InPlaceBarrierSignal);
     std::optional<unsigned> NewOpcode =
         resolveOpcode("s_barrier_signal -1", Ctx.LS);
     if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
       log() << "hotswap: inplace: s_barrier_signal_isfirst -> opcode "
             << *NewOpcode << " at 0x" << utohexstr(DI.Offset) << "\n";
+      S.addPatches(1);
       return 1;
     }
   }

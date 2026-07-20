@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx700 -enable-ipra=1 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx700 -enable-ipra=0 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu7.00-amd-amdhsa -enable-ipra=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu7.00-amd-amdhsa -enable-ipra=0 < %s | FileCheck -check-prefix=GCN %s
 
 ; This test is to make sure the return address registers, if clobbered in the
 ; function or the function has calls, are save/restored when IPRA is enabled/disabled.

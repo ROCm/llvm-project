@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn -mcpu=fiji < %s | FileCheck -check-prefix=GCN -check-prefix=VGPR %s
-; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn -mcpu=fiji -amdgpu-spill-sgpr-to-vgpr=0 < %s | FileCheck -check-prefix=GCN -check-prefix=VMEM %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgpu8.03 < %s | FileCheck -check-prefix=GCN -check-prefix=VGPR %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgpu8.03 -amdgpu-spill-sgpr-to-vgpr=0 < %s | FileCheck -check-prefix=GCN -check-prefix=VMEM %s
 
 ; GCN-LABEL: {{^}}spill_sgpr_x2:
 

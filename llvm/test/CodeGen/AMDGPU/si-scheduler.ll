@@ -3,8 +3,8 @@
 ; The only way the subtarget knows that the si machine scheduler is being used
 ; is to specify -mattr=si-scheduler.  If we just pass --misched=si, the backend
 ; won't know what scheduler we are using.
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tahiti --misched=si -mattr=si-scheduler < %s | FileCheck %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1010 --misched=si -mattr=si-scheduler < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 --misched=si -mattr=si-scheduler < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu10.10 --misched=si -mattr=si-scheduler < %s | FileCheck %s
 
 ; The test checks the "si" machine scheduler pass works correctly.
 

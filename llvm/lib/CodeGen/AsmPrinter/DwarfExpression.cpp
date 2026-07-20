@@ -338,17 +338,15 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
   // expression representing a value, rather than a location.
   if ((!isParameterValue() && !isMemoryLocation() && !HasComplexExpression) ||
       isEntryValue()) {
-    auto FragmentInfo = ExprCursor.getFragmentInfo();
     unsigned RegSize = 0;
     for (auto &Reg : DwarfRegs) {
       RegSize += Reg.SubRegSize;
       if (Reg.DwarfRegNo >= 0)
         addReg(Reg.DwarfRegNo, Reg.Comment);
-      if (FragmentInfo)
-        if (RegSize > FragmentInfo->SizeInBits)
-          // If the register is larger than the current fragment stop
-          // once the fragment is covered.
-          break;
+      if (Fragment && RegSize > Fragment->SizeInBits)
+        // If the register is larger than the current fragment stop
+        // once the fragment is covered.
+        break;
       addOpPiece(Reg.SubRegSize);
     }
 
@@ -391,7 +389,6 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
   }
 
   auto Reg = DwarfRegs[0];
-  bool FBReg = isFrameRegister(TRI, MachineReg);
   int SignedOffset = 0;
 
   // Pattern-match combinations for which more efficient representations exist.
@@ -422,7 +419,7 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
     }
   }
 
-  if (FBReg)
+  if (isFrameRegister(TRI, MachineReg))
     addFBReg(SignedOffset);
   else {
     addBReg(Reg.DwarfRegNo, SignedOffset);

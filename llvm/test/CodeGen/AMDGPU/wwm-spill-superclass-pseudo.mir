@@ -1,5 +1,5 @@
-# RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -start-before=si-lower-sgpr-spills -stop-after=greedy,2 -verify-machineinstrs --stress-regalloc=2 -o - %s | FileCheck -check-prefix GCN-REGALLOC %s
-# XUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -start-before=si-lower-sgpr-spills -stop-after=virtregrewriter,2 -verify-machineinstrs --stress-regalloc=2 -o - %s | FileCheck -check-prefix GCN-REWRITER %s
+# RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08-amd-amdhsa -start-before=si-lower-sgpr-spills -stop-after=greedy,2 -verify-machineinstrs --stress-regalloc=2 -o - %s | FileCheck -check-prefix GCN-REGALLOC %s
+# XUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08-amd-amdhsa -start-before=si-lower-sgpr-spills -stop-after=virtregrewriter,2 -verify-machineinstrs --stress-regalloc=2 -o - %s | FileCheck -check-prefix GCN-REWRITER %s
 
 #TODO-WAVETRANSFORM: Disabled the second run line in the late wave-transform flow. This run line stops after virtregrewriter,2, which marks
 # the end of the register allocation pipeline for AMDGPU. The final step of the virtual register rewriter attempts to clear the VRM; however,

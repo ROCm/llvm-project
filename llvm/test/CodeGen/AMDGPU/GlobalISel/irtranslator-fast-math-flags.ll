@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -mcpu=fiji -O0 -stop-after=irtranslator -global-isel %s -o - | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu8.03 -O0 -stop-after=irtranslator -global-isel %s -o - | FileCheck %s
 
 ; Check flags are preserved for a regular instruction.
 ; CHECK-LABEL: name: fadd_nnan

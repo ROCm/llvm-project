@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=verde < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.01 < %s | FileCheck %s
 
 ; Test a simple uniform loop that lives inside non-uniform control flow.
 

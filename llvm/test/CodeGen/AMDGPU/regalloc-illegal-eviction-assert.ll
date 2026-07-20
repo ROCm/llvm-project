@@ -1,4 +1,4 @@
-; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx908 -o - %s 2>%t.err | FileCheck -implicit-check-not=error %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08 -o - %s 2>%t.err | FileCheck -implicit-check-not=error %s
 ; RUN: FileCheck -check-prefix=ERR %s < %t.err
 
 ; This testcase would fail on an "illegal eviction". If the assert was

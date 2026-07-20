@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-mesa-mesa3d -mcpu=tahiti -stop-after=si-pre-allocate-wwm-regs -o %t.mir %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00-mesa-mesa3d -stop-after=si-pre-allocate-wwm-regs -o %t.mir %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -run-pass=none -verify-machineinstrs %t.mir -o - | FileCheck %s
 
 ; Test that SIMachineFunctionInfo can be round trip serialized through
