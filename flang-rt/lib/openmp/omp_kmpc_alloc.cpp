@@ -65,8 +65,8 @@ namespace Fortran::runtime::omp {
 
 namespace {
 
-using KmpcAllocFn = void *(*)(int /*gtid*/, std::size_t /*size*/,
-    std::uintptr_t /*allocator*/);
+using KmpcAllocFn = void *(*)(
+    int /*gtid*/, std::size_t /*size*/, std::uintptr_t /*allocator*/);
 using KmpcAlignedAllocFn = void *(*)(int /*gtid*/, std::size_t /*align*/,
     std::size_t /*size*/, std::uintptr_t /*allocator*/);
 using KmpcFreeFn = void (*)(int /*gtid*/, void *, std::uintptr_t /*allocator*/);
@@ -389,9 +389,8 @@ RT_API_ATTRS bool ConsumePendingOmpAllocStamp(
   return false;
 }
 
-RT_API_ATTRS void *OmpAllocateAdapter(
-    std::size_t /*byteSize*/, std::size_t /*defaultAlign*/,
-    std::int64_t * /*asyncObject*/) {
+RT_API_ATTRS void *OmpAllocateAdapter(std::size_t /*byteSize*/,
+    std::size_t /*defaultAlign*/, std::int64_t * /*asyncObject*/) {
   return nullptr;
 }
 

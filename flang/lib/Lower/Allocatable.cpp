@@ -37,8 +37,8 @@
 #include "flang/Runtime/pointer.h"
 #include "flang/Semantics/tools.h"
 #include "flang/Semantics/type.h"
-#include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "flang/Support/Fortran-features.h"
+#include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Dialect/OpenMP/OpenMPInterfaces.h"
 #include "llvm/Support/CommandLine.h"
 
