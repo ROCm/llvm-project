@@ -825,6 +825,9 @@ struct LLVMState {
   /// matcher compares decoded opcodes against these cached values instead of
   /// matching disassembled mnemonic strings.
   unsigned GlobalWbOpcode = 0;
+  /// EXPERIMENT (COMGR_PREFETCH_SWAP): opcode of the leading stub instruction
+  /// when it is a global_prefetch_b8 instead of global_wb. gfx12+ only.
+  unsigned GlobalPrefetchB8Opcode = 0;
   unsigned SGetPcI64Opcode = 0;
   unsigned SAddNcU64Opcode = 0;
   unsigned SAddU32Opcode = 0;

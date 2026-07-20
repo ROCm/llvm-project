@@ -27,6 +27,22 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
+// EXPERIMENT (COMGR_PREFETCH_SWAP): the entry stub's leading instruction was
+// `global_wb` (the #208467 unclaused-VMEM erratum drain). This build replaces it
+// with a `global_prefetch_b8` from a FIXED base register pair so the leading
+// bytes stay constant across kernels (byte-prefix idempotency still works).
+// NOTE: this changes the stub's erratum semantics -- a prefetch is NOT a drain.
+// It is an experiment to see if the stub still functions / how it performs, not
+// a correctness-preserving change.
+// Register safety: global_prefetch_b8 READS v0 (address) and s0/s1 (saddr base)
+// and writes NO destination register, so it cannot clobber the stub's scratch
+// SGPR pair or the get_pc/add/set_pc redirect chain -- even when ScratchSgpr==0
+// (pair s[0:1]) the prefetch reads s0/s1 first, then s_get_pc_i64 overwrites the
+// pair. th:TH_LOAD_RT is the default temporal hint (encoded, not echoed by the
+// disassembler); scope:SCOPE_SE sets byte6 bit 0x04.
+static constexpr const char *kEntryStubLeadInst =
+    "global_prefetch_b8 v0, [s0, s1] scope:SCOPE_SE th:TH_LOAD_RT";
+
 static bool appendAsm(SmallVectorImpl<uint8_t> &Out, StringRef Asm,
                       const LLVMState &LS) {
   SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, LS);
@@ -66,7 +82,8 @@ SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
 
   // Assemble through the MC layer instead of spelling encoded bytes; the LIT
   // test pins the generated stub's disassembly.
-  if (!appendAsm(Bytes, "global_wb", LS))
+  // EXPERIMENT (COMGR_PREFETCH_SWAP): leading global_wb -> global_prefetch_b8.
+  if (!appendAsm(Bytes, kEntryStubLeadInst, LS))
     return {};
   if (!appendAsm(Bytes, "v_nop", LS))
     return {};
@@ -129,6 +146,7 @@ uint64_t computeKernelEntryPrefetchGuardBytes(uint32_t InstPrefLines) {
 
 static bool hasResolvedEntryStubState(const LLVMState &LS, StringRef Context) {
   if (!LS.MCII || LS.GlobalWbOpcode >= LS.MCII->getNumOpcodes() ||
+      LS.GlobalPrefetchB8Opcode >= LS.MCII->getNumOpcodes() ||
       LS.SGetPcI64Opcode >= LS.MCII->getNumOpcodes() ||
       LS.SAddU32Opcode >= LS.MCII->getNumOpcodes() ||
       LS.SAddcU32Opcode >= LS.MCII->getNumOpcodes() ||
@@ -169,7 +187,24 @@ static bool startsWithBytes(ArrayRef<uint8_t> Bytes, ArrayRef<uint8_t> Prefix) {
          Bytes.take_front(Prefix.size()).equals(Prefix);
 }
 
+// EXPERIMENT (COMGR_PREFETCH_SWAP): the STUB prefix is now the leading
+// global_prefetch_b8 (fixed base) + v_nop. Constant bytes across kernels.
 static SmallVector<uint8_t> buildEntryStubBytePrefix(const LLVMState &LS) {
+  SmallVector<uint8_t> Lead = assembleSingleInst(kEntryStubLeadInst, LS);
+  SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", LS);
+  if (Lead.empty() || VNop.empty())
+    return {};
+
+  SmallVector<uint8_t> Prefix;
+  Prefix.append(Lead.begin(), Lead.end());
+  Prefix.append(VNop.begin(), VNop.end());
+  return Prefix;
+}
+
+// The prologue erratum-workaround (#208467) is still `global_wb; v_nop` -- that
+// is a property of the compiled kernel, independent of what this experimental
+// stub emits. Keep a SEPARATE prefix for detecting it.
+static SmallVector<uint8_t> buildPrologueWorkaroundBytePrefix(const LLVMState &LS) {
   SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", LS);
   SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", LS);
   if (GlobalWb.empty() || VNop.empty())
@@ -200,7 +235,9 @@ static bool hasEntryStubOperandShape(ArrayRef<InternalDecodedInst> Decoded,
   if (Decoded.size() < 6)
     return false;
 
-  if (Decoded[0].Inst.getOpcode() != LS.GlobalWbOpcode ||
+  // EXPERIMENT (COMGR_PREFETCH_SWAP): Decoded[0] is global_prefetch_b8, not
+  // global_wb.
+  if (Decoded[0].Inst.getOpcode() != LS.GlobalPrefetchB8Opcode ||
       Decoded[1].Inst.getOpcode() != LS.VNopInst.getOpcode() ||
       Decoded[2].Inst.getOpcode() != LS.SGetPcI64Opcode ||
       Decoded[3].Inst.getOpcode() != LS.SAddU32Opcode ||
@@ -208,15 +245,15 @@ static bool hasEntryStubOperandShape(ArrayRef<InternalDecodedInst> Decoded,
       Decoded[5].Inst.getOpcode() != LS.SSetPcI64Opcode)
     return false;
 
-  const MCInst &GlobalWb = Decoded[0].Inst;
   const MCInst &VNop = Decoded[1].Inst;
   const MCInst &GetPc = Decoded[2].Inst;
   const MCInst &AddLo = Decoded[3].Inst;
   const MCInst &AddHi = Decoded[4].Inst;
   const MCInst &SetPc = Decoded[5].Inst;
 
-  if (GlobalWb.getNumOperands() != 1 || !GlobalWb.getOperand(0).isImm() ||
-      GlobalWb.getOperand(0).getImm() != 0 || VNop.getNumOperands() != 0)
+  // The leading global_prefetch_b8 v0, s[0:1] has register operands (vaddr +
+  // saddr base); we don't further constrain them here. v_nop is operand-less.
+  if (VNop.getNumOperands() != 0)
     return false;
 
   if (GetPc.getNumOperands() != 1 || SetPc.getNumOperands() != 1 ||
@@ -271,7 +308,8 @@ bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
 bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,
                                     const LLVMState &LS) {
   SmallVector<uint8_t> Prefix;
-  if (!appendAsm(Prefix, "global_wb", LS))
+  // EXPERIMENT (COMGR_PREFETCH_SWAP): stub now leads with global_prefetch_b8.
+  if (!appendAsm(Prefix, kEntryStubLeadInst, LS))
     return false;
   if (!appendAsm(Prefix, "v_nop", LS))
     return false;
@@ -565,6 +603,16 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
           << "prefix for idempotency matching.\n";
     return std::nullopt;
   }
+  // EXPERIMENT (COMGR_PREFETCH_SWAP): the stub prefix (above) is now
+  // prefetch;v_nop, but the prologue erratum-workaround is still global_wb;v_nop.
+  // Keep a separate prefix so the skip check retains its original semantics.
+  SmallVector<uint8_t> PrologueWorkaroundPrefix =
+      buildPrologueWorkaroundBytePrefix(LS);
+  if (PrologueWorkaroundPrefix.empty()) {
+    log() << "hotswap: error: entry trampoline: failed to assemble prologue "
+          << "workaround byte prefix.\n";
+    return std::nullopt;
+  }
 
   struct WorkItem {
     KernelDescriptorInfo KD;
@@ -583,7 +631,7 @@ std::optional<uint32_t> appendKernelEntryTrampolines(
     // Skip if the compiler already applied the workaround (#208467)
     // in-prologue.
     std::optional<bool> PrologueHasWorkaround =
-        entryPrologueHasVmemWorkaround(Elf, KD, LS, EntryStubPrefix);
+        entryPrologueHasVmemWorkaround(Elf, KD, LS, PrologueWorkaroundPrefix);
     if (!PrologueHasWorkaround)
       return std::nullopt;
     if (*PrologueHasWorkaround) {

@@ -1628,6 +1628,34 @@ addKernelEntryTrampolineSymbols(WritableMemoryBuffer &In, uint64_t PoolVAddr,
     }
   }
 
+  // The .symtab/.strtab insertions also push everything after them -- including
+  // the relocated program-header table appended by growWithTrampolines() and
+  // the trampoline pool's PT_LOAD -- forward by SymDelta+StrDelta. e_phoff and
+  // the per-segment p_offset fields are absolute file offsets, so they must be
+  // shifted by the same rule as e_shoff / sh_offset above. Omitting this leaves
+  // e_phoff and the pool p_offset pointing 0x60 bytes short (into the pool
+  // bytes), so the loader parses garbage program headers and rejects the object
+  // with HSA_STATUS_ERROR_INVALID_CODE_OBJECT.
+  uint64_t Phoff;
+  uint16_t Phentsize, Phnum;
+  std::memcpy(&Phoff, O + offsetof(Ehdr, e_phoff), sizeof(Phoff));
+  std::memcpy(&Phentsize, O + offsetof(Ehdr, e_phentsize), sizeof(Phentsize));
+  std::memcpy(&Phnum, O + offsetof(Ehdr, e_phnum), sizeof(Phnum));
+  if (Phoff != 0 && Phentsize >= sizeof(Phdr)) {
+    uint64_t NewPhoff = Shift(Phoff);
+    std::memcpy(O + offsetof(Ehdr, e_phoff), &NewPhoff, sizeof(NewPhoff));
+    for (uint16_t I = 0; I < Phnum; ++I) {
+      uint64_t P = NewPhoff + static_cast<uint64_t>(I) * Phentsize;
+      if (P + sizeof(Phdr) > NewSize)
+        break;
+      uint8_t *Ph = O + P;
+      uint64_t POffset;
+      std::memcpy(&POffset, Ph + offsetof(Phdr, p_offset), sizeof(POffset));
+      uint64_t NewOff = Shift(POffset);
+      std::memcpy(Ph + offsetof(Phdr, p_offset), &NewOff, sizeof(NewOff));
+    }
+  }
+
   log() << "hotswap: added " << Fixups.size()
         << " kernel-entry stub symbol(s) to .symtab\n";
   return Out;

@@ -328,6 +328,13 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("global_wb", "global_wb", S,
                                      S.GlobalWbOpcode))
     return S;
+  // EXPERIMENT (COMGR_PREFETCH_SWAP): the entry stub's leading instruction is a
+  // global_prefetch_b8 (gfx12+). Resolving it as required makes this overlay
+  // gfx12-only, which is fine for the A0 trampoline experiment.
+  if (!resolveRequiredOpcodeViaParse("global_prefetch_b8 v0, s[0:1]",
+                                     "global_prefetch_b8", S,
+                                     S.GlobalPrefetchB8Opcode))
+    return S;
   if (!resolveRequiredOpcodeViaParse("s_get_pc_i64 s[0:1]", "s_get_pc_i64", S,
                                      S.SGetPcI64Opcode))
     return S;
