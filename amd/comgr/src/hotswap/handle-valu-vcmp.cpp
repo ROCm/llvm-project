@@ -92,7 +92,9 @@ Expected<HandlerResult> handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
       Src0 = Raw0;
     } else {
       FTy = Type::getDoubleTy(Ctx.C);
-      Src0 = Ctx.B.CreateBitCast(Op.src64(0), FTy, "vclassf64");
+      // src64() is raw; apply VOP3 neg/abs like the f32 path (via srcF()).
+      Src0 =
+          Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), FTy, "vclassf64"));
     }
     Value *Mask = Op.src(1);
     Function *ClassFn = Intrinsic::getOrInsertDeclaration(
@@ -115,8 +117,9 @@ Expected<HandlerResult> handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
   } else if (M->IsFloat) {
     if (M->Bits == 64) {
       auto *F64Ty = Type::getDoubleTy(Ctx.C);
-      S0 = Ctx.B.CreateBitCast(Op.src64(0), F64Ty);
-      S1 = Ctx.B.CreateBitCast(Op.src64(1), F64Ty);
+      // src64() is raw; apply VOP3 neg/abs like the f32/f16 paths (srcF()).
+      S0 = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), F64Ty));
+      S1 = Op.applyMods(1, Ctx.B.CreateBitCast(Op.src64(1), F64Ty));
     } else if (M->Bits == 32) {
       S0 = Op.srcF(0);
       S1 = Op.srcF(1);
