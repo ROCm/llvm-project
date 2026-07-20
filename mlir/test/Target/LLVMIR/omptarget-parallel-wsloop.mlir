@@ -47,9 +47,5 @@ module attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<"dlti.alloca_memo
 // CHECK:        call void @[[PARALLEL_FUNC]]({{.*}})
 // CHECK-NEXT:   ret void
 
-// CHECK:      attributes #[[ATTRS1]] = {
-// CHECK-SAME:  "target-cpu"="gfx90a"
-// CHECK-SAME:  "target-features"="+gfx9-insts,+wavefrontsize64"
-// CHECK:      attributes #[[ATTRS2]] = {
-// CHECK-SAME:  "target-cpu"="gfx90a"
-// CHECK-SAME:  "target-features"="+gfx9-insts,+wavefrontsize64"
+// CHECK-DAG:  attributes #[[ATTRS1]] = {{{.*}}"target-cpu"="gfx90a"{{.*}}"target-features"="+gfx9-insts,+wavefrontsize64"
+// CHECK-DAG:  attributes #[[ATTRS2]] = {{{.*}}"target-cpu"="gfx90a"{{.*}}"target-features"="+gfx9-insts,+wavefrontsize64"

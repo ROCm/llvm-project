@@ -985,8 +985,6 @@ void OpenMPIRBuilder::finalize(Function *Fn) {
 
     Function *OutlinedFn =
         Extractor->extractCodeRegion(CEAC, OI->Inputs, OI->Outputs);
-    if (Config.isGPU())
-      OutlinedFn->addFnAttr(Attribute::AlwaysInline);
 
     // Forward target-cpu, target-features attributes to the outlined function.
     auto TargetCpuAttr = OuterFn->getFnAttribute("target-cpu");
