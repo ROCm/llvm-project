@@ -1,11 +1,11 @@
 // COM: Test HotSwap trampoline patch: ds_*_addtid_b32 expansion.
 // COM:
-// COM: On A0 the DS unit truncates M0 to 16 bits, so ADDTID address
+// COM: On gfx1250 A0 the DS unit truncates M0 to 16 bits, so ADDTID address
 // COM: encodings (M0 + lane_id*4 + offset) silently wrap above 64KB
-// COM: (DEGFXMI400-12025). The trampoline materialises the lane-id math
-// COM: in the ALU using M0 masked to 20 bits (matching B0's DS-unit M0
-// COM: read width) and issues a regular ds_load_b32 / ds_store_b32,
-// COM: bypassing the buggy address path.
+// COM: on gfx1250. The trampoline materialises the lane-id math in the ALU
+// COM: using M0 masked to 20 bits (matching B0's DS-unit M0 read width) and
+// COM: issues a regular ds_load_b32 / ds_store_b32, bypassing the buggy
+// COM: address path.
 // COM:
 // COM: Coverage:
 // COM:   test_addtid_load        : ds_load_addtid_b32 + offset (NOP sled)
@@ -85,6 +85,7 @@ test_addtid_load:
 .amdhsa_kernel test_addtid_load
   .amdhsa_next_free_vgpr 6
   .amdhsa_next_free_sgpr 1
+  .amdhsa_wavefront_size32 1
 .end_amdhsa_kernel
 
 // ---- Kernel 2: ds_load_addtid_b32 with offset:0 ------------------------------
@@ -136,6 +137,7 @@ test_addtid_load_zero:
 .amdhsa_kernel test_addtid_load_zero
   .amdhsa_next_free_vgpr 7
   .amdhsa_next_free_sgpr 1
+  .amdhsa_wavefront_size32 1
 .end_amdhsa_kernel
 
 // ---- Kernel 3: ds_store_addtid_b32 ------------------------------------------
@@ -190,7 +192,45 @@ test_addtid_store:
 .amdhsa_kernel test_addtid_store
   .amdhsa_next_free_vgpr 9
   .amdhsa_next_free_sgpr 1
+  .amdhsa_wavefront_size32 1
 .end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 3
+    - 0
+  amdhsa.kernels:
+    - .name: test_addtid_load
+      .symbol: test_addtid_load.kd
+      .sgpr_count: 1
+      .vgpr_count: 6
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 32
+      .max_flat_workgroup_size: 256
+    - .name: test_addtid_load_zero
+      .symbol: test_addtid_load_zero.kd
+      .sgpr_count: 1
+      .vgpr_count: 7
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 32
+      .max_flat_workgroup_size: 256
+    - .name: test_addtid_store
+      .symbol: test_addtid_store.kd
+      .sgpr_count: 1
+      .vgpr_count: 9
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 32
+      .max_flat_workgroup_size: 256
+.end_amdgpu_metadata
 
 // COM: Idempotency: rewriting the output a second time must produce
 // COM: identical bytes (the patched body has no ADDTID mnemonic so the

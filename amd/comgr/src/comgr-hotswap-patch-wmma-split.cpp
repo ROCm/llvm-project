@@ -160,13 +160,13 @@ struct VOP3PWmmaLayout {
 // HasMatrixReuse=1 profile).
 constexpr VOP3PWmmaLayout LayoutK128Fp8Bf8 = {
     /*NumOperands=*/7, /*VDst=*/0, /*Src0=*/1, /*Src1=*/2,
-    /*Src2Mods=*/3, /*Src2=*/4};
+    /*Src2Mods=*/3,    /*Src2=*/4};
 
 // 32x16x128 f4: vdst, src0, src1, src2_modifiers, src2 (5 operands; no
 // matrix_*_reuse -- HasMatrixReuse=0 on the F4 profile).
 constexpr VOP3PWmmaLayout Layout32x16F4 = {
     /*NumOperands=*/5, /*VDst=*/0, /*Src0=*/1, /*Src1=*/2,
-    /*Src2Mods=*/3, /*Src2=*/4};
+    /*Src2Mods=*/3,    /*Src2=*/4};
 
 const VOP3PWmmaLayout &layoutFor(SplitKind Kind) {
   switch (Kind) {
@@ -182,8 +182,8 @@ const VOP3PWmmaLayout &layoutFor(SplitKind Kind) {
 
 constexpr unsigned VgprRegIdxMask = 0x3ff;
 
-const MCRegisterClass *
-findSmallestEnclosingClass(MCRegister Reg, const MCRegisterInfo &MRI) {
+const MCRegisterClass *findSmallestEnclosingClass(MCRegister Reg,
+                                                  const MCRegisterInfo &MRI) {
   thread_local const MCRegisterInfo *CachedMRI = nullptr;
   thread_local DenseMap<unsigned, const MCRegisterClass *> Cache;
 
@@ -236,8 +236,8 @@ struct WmmaOps {
 };
 
 std::optional<WmmaOps> extractWmmaOps(const MCInst &Inst,
-                                      const MCRegisterInfo &MRI,
-                                      SplitKind Kind, StringRef Mnemonic) {
+                                      const MCRegisterInfo &MRI, SplitKind Kind,
+                                      StringRef Mnemonic) {
   WmmaOps R;
   const VOP3PWmmaLayout &L = layoutFor(Kind);
 
@@ -285,7 +285,7 @@ std::optional<WmmaOps> extractWmmaOps(const MCInst &Inst,
 
 struct PrintedAsm {
   StringRef Mnemonic;
-  StringRef Operands[4]; // vdst, src0, src1, src2 (printer-canonical form)
+  StringRef Operands[4];    // vdst, src0, src1, src2 (printer-canonical form)
   StringRef ModifierSuffix; // includes leading space if non-empty
 };
 
@@ -392,16 +392,15 @@ std::optional<std::string> transformModifierSuffix(StringRef Suffix,
   std::string Out;
   for (StringRef T : tokenizeModifiers(Suffix)) {
     if (!isKnownSplitterModifier(T)) {
-      log() << "hotswap: error: WMMA split: unsupported modifier token \""
-            << T << "\" -- splitter modifier set must be updated\n";
+      log() << "hotswap: error: WMMA split: unsupported modifier token \"" << T
+            << "\" -- splitter modifier set must be updated\n";
       return std::nullopt;
     }
     if (T == "matrix_a_reuse" || T == "matrix_b_reuse")
       continue;
     std::array<StringRef, 3> Bits;
-    if (KSplitSecondHalf &&
-        (parsePackedModifier(T, "neg_lo", Bits) ||
-         parsePackedModifier(T, "neg_hi", Bits))) {
+    if (KSplitSecondHalf && (parsePackedModifier(T, "neg_lo", Bits) ||
+                             parsePackedModifier(T, "neg_hi", Bits))) {
       // Clear the src2 bit (third element of the [X,Y,Z] tuple). If the
       // remaining bits are all zero, drop the modifier entirely (matches
       // the printer's behavior of omitting an all-zero packed modifier).
@@ -548,8 +547,8 @@ std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
   Out.reserve(2);
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}{6}", Replacement,
                         formatVgprRange(R.Dst.first, DstHalf),
-                        formatVgprRange(R.Src0.first, AHalf), B, CLo,
-                        FmtSuffix, *Mod)
+                        formatVgprRange(R.Src0.first, AHalf), B, CLo, FmtSuffix,
+                        *Mod)
                     .str());
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}{6}", Replacement,
                         formatVgprRange(R.Dst.first + DstHalf, DstHalf),
@@ -652,21 +651,21 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (AsmLines.empty())
     return 0; // matched-but-failed (build*Asm rejected an unsupported modifier)
 
-  // Compute the trampoline's eventual .text offset so buildTrampoline can
-  // emit relative jumps. Same accumulation pattern as emitToTrampoline in
-  // b0a0.cpp.
-  uint64_t TrampTextOffset = Ctx.TextSize;
-  for (const Trampoline &T : Ctx.OutTrampolines)
-    TrampTextOffset += T.Bytes.size();
-
-  Trampoline T = buildTrampoline(AsmLines, DI.Offset, DI.Size, TrampTextOffset,
-                                 Ctx.LS);
-  if (T.Bytes.empty()) {
+  // Assemble the split sequence and defer trampoline emission to
+  // emitToTrampoline, which picks a short s_branch or an SGPR-backed set-PC
+  // gateway based on the site's distance from the appended pool.
+  SmallVector<uint8_t> Replacement =
+      assembleInstructions(joinAsmLines(AsmLines), Ctx.LS);
+  if (Replacement.empty()) {
     log() << "hotswap: error: WMMA split: trampoline assembly failed for "
           << DI.Mnemonic << "\n";
     return 0; // matched-but-failed
   }
-  Ctx.OutTrampolines.push_back(std::move(T));
+  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement)) {
+    log() << "hotswap: error: WMMA split: could not emit trampoline for "
+          << DI.Mnemonic << "\n";
+    return 0; // matched-but-failed
+  }
 
   log() << "hotswap: WMMA split: patched " << DI.Mnemonic << " at offset 0x"
         << utohexstr(DI.Offset) << "\n";

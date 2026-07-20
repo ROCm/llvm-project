@@ -11,8 +11,8 @@
 // COM:   Unpack byte_sel=3 -> v_lshrrev_b32 (shift=24)
 // COM:
 // COM: Companion tests:
-// COM:   hotswap-cvt-sr-fp8.s   — base SR conversion (byte_sel=0 and 2)
-// COM:   hotswap-cvt-f32-fp8.s  — base unpack conversion (byte_sel=0 and 2)
+// COM:   hotswap-cvt-sr-fp8.s   - base SR conversion (byte_sel=0 and 2)
+// COM:   hotswap-cvt-f32-fp8.s  - base unpack conversion (byte_sel=0 and 2)
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -34,15 +34,20 @@
 
 // ---- Kernel 1: SR byte_sel=0 (single v_bfi_b32 merge) ------------------------
 //
-// COM: byte_sel=0 merges via a single v_bfi_b32 (mask 0xFF) — no shift needed.
+// COM: byte_sel=0 merges via a single v_bfi_b32 (mask 0xFF) with no shift.
 
 // SR0-LABEL: <test_cvt_sr_fp8_byte0>:
 // SR0:       s_branch
 // COM: --- VCC save ---
 // SR0:       s_mov_b32
 // SR0-NEXT:  v_and_b32{{.*}}0x7fffffff, v1
-// COM: --- Byte merge (byte_sel=0: single bfi) ---
+// COM: --- High-range direct encode, then final NaN select ---
+// SR0:       v_cmp_le_f32{{.*}}0x47800000
 // SR0:       v_cndmask_b32
+// COM: --- Byte merge (byte_sel=0: single bfi) ---
+// SR0-NEXT:  s_mov_b32
+// SR0-NEXT:  v_mov_b32
+// SR0-NEXT:  v_cndmask_b32
 // SR0-NEXT:  v_bfi_b32 v0,
 // COM: --- VCC restore ---
 // SR0-NEXT:  s_mov_b32
@@ -67,8 +72,13 @@ test_cvt_sr_fp8_byte0:
 // SR1:       s_branch
 // COM: --- VCC save + NaN detection (anchor on unique src v4) ---
 // SR1:       v_and_b32{{.*}}0x7fffffff, v4
-// COM: --- Byte merge (byte_sel=1: shift + bfi) ---
+// COM: --- High-range direct encode, then final NaN select ---
+// SR1:       v_cmp_le_f32{{.*}}0x47800000
 // SR1:       v_cndmask_b32
+// COM: --- Byte merge (byte_sel=1: shift + bfi) ---
+// SR1-NEXT:  s_mov_b32
+// SR1-NEXT:  v_mov_b32
+// SR1-NEXT:  v_cndmask_b32
 // SR1-NEXT:  v_lshlrev_b32
 // SR1-NEXT:  v_bfi_b32 v3,
 // COM: --- VCC restore ---
@@ -96,8 +106,13 @@ test_cvt_sr_fp8_byte1:
 // SR2:       s_branch
 // COM: --- VCC save + NaN detection (anchor on unique src v7) ---
 // SR2:       v_and_b32{{.*}}0x7fffffff, v7
-// COM: --- Byte merge (byte_sel=2: shift + bfi) ---
+// COM: --- High-range direct encode, then final NaN select ---
+// SR2:       v_cmp_le_f32{{.*}}0x47800000
 // SR2:       v_cndmask_b32
+// COM: --- Byte merge (byte_sel=2: shift + bfi) ---
+// SR2-NEXT:  s_mov_b32
+// SR2-NEXT:  v_mov_b32
+// SR2-NEXT:  v_cndmask_b32
 // SR2-NEXT:  v_lshlrev_b32
 // SR2-NEXT:  v_bfi_b32 v6,
 // COM: --- VCC restore ---
@@ -125,8 +140,13 @@ test_cvt_sr_fp8_byte2:
 // SR3:       s_branch
 // COM: --- VCC save + NaN detection (anchor on unique src v10) ---
 // SR3:       v_and_b32{{.*}}0x7fffffff, v10
-// COM: --- Byte merge (byte_sel=3: shift + bfi) ---
+// COM: --- High-range direct encode, then final NaN select ---
+// SR3:       v_cmp_le_f32{{.*}}0x47800000
 // SR3:       v_cndmask_b32
+// COM: --- Byte merge (byte_sel=3: shift + bfi) ---
+// SR3-NEXT:  s_mov_b32
+// SR3-NEXT:  v_mov_b32
+// SR3-NEXT:  v_cndmask_b32
 // SR3-NEXT:  v_lshlrev_b32
 // SR3-NEXT:  v_bfi_b32 v9,
 // COM: --- VCC restore ---
@@ -279,3 +299,90 @@ test_cvt_f32_fp8_byte3:
   .amdhsa_next_free_vgpr 8
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 3
+    - 0
+  amdhsa.kernels:
+    - .name: test_cvt_sr_fp8_byte0
+      .symbol: test_cvt_sr_fp8_byte0.kd
+      .sgpr_count: 2
+      .vgpr_count: 3
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_cvt_sr_fp8_byte1
+      .symbol: test_cvt_sr_fp8_byte1.kd
+      .sgpr_count: 2
+      .vgpr_count: 6
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_cvt_sr_fp8_byte2
+      .symbol: test_cvt_sr_fp8_byte2.kd
+      .sgpr_count: 2
+      .vgpr_count: 9
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_cvt_sr_fp8_byte3
+      .symbol: test_cvt_sr_fp8_byte3.kd
+      .sgpr_count: 2
+      .vgpr_count: 12
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_cvt_f32_fp8_byte0
+      .symbol: test_cvt_f32_fp8_byte0.kd
+      .sgpr_count: 2
+      .vgpr_count: 2
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_cvt_f32_fp8_byte1
+      .symbol: test_cvt_f32_fp8_byte1.kd
+      .sgpr_count: 2
+      .vgpr_count: 4
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_cvt_f32_fp8_byte2
+      .symbol: test_cvt_f32_fp8_byte2.kd
+      .sgpr_count: 2
+      .vgpr_count: 6
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: test_cvt_f32_fp8_byte3
+      .symbol: test_cvt_f32_fp8_byte3.kd
+      .sgpr_count: 2
+      .vgpr_count: 8
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+.end_amdgpu_metadata

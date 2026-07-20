@@ -8,7 +8,7 @@
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out.elf \
+// RUN:   --strict-mode --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
 
@@ -20,16 +20,17 @@
 // DISASM-LABEL: <test_tensor_branch_guard>:
 // DISASM: s_branch
 // DISASM: s_cbranch_scc1
-// DISASM: v_writelane_b32
-// DISASM: s_pack_hh_b32_b16
-// DISASM: tensor_load_to_lds
-// DISASM: v_readlane_b32
-// DISASM: s_branch
+// DISASM: s_endpgm
+// DISASM: s_mov_b32 [[SCRATCH:s[0-9]+]], s4
+// DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// DISASM-NEXT: tensor_load_to_lds
+// DISASM-NEXT: s_mov_b32 s4, [[SCRATCH]]
+// DISASM-NEXT: s_branch
 
 // COM: Idempotency
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --check-idempotent \
+// RUN:   --strict-mode --check-idempotent \
 // RUN:   | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES
 
@@ -69,3 +70,20 @@ test_tensor_branch_guard:
   .amdhsa_next_free_vgpr 1
   .amdhsa_next_free_sgpr 12
 .end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 3
+    - 0
+  amdhsa.kernels:
+    - .name: test_tensor_branch_guard
+      .symbol: test_tensor_branch_guard.kd
+      .sgpr_count: 12
+      .vgpr_count: 1
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+.end_amdgpu_metadata
