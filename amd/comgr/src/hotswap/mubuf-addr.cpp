@@ -330,12 +330,46 @@ Expected<MubufAddr> decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
                            : ConstantInt::get(Ctx.I32Ty, 0);
   constexpr uint32_t kGfx1250RawBufferMaxRecords = 0x00ffffffu;
   constexpr uint32_t kGfx942RawBufferMaxRecords = 0x7ffffffeu;
-  Value *SourceMax = ConstantInt::get(Ctx.I32Ty, kGfx1250RawBufferMaxRecords);
-  Value *TargetMax = ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferMaxRecords);
-  Value *IsSourceMax =
-      Ctx.B.CreateICmpEQ(Dw.Dw2, SourceMax, "mubuf_raw_is_gfx125_max");
-  Value *NumRecords = Ctx.B.CreateSelect(IsSourceMax, TargetMax, Dw.Dw2,
-                                         "mubuf_raw_num_records");
+  Value *NumRecords = nullptr;
+  if (Ctx.Isa.Has45BitNumRecordsBufferResource) {
+    // gfx12+ V#: base = resource[56:0], num_records = resource[101:57] (bytes).
+    // The field starts at bit 57 (not the 64-bit dword boundary), so source
+    // dword2 alone holds num_records[38:7] -- the byte extent shifted right by
+    // 7. Reading dword2 raw yields a bound 128x too small, so every A/B tile
+    // buffer_load runs out of bounds and returns zero. Reconstruct the full
+    // 45-bit num_records (mirrors handle-smem.cpp / S_BUFFER_LOAD):
+    //   num_records[6:0]   = dword1[31:25]
+    //   num_records[38:7]  = dword2[31:0]
+    //   num_records[44:39] = dword3[5:0]
+    Value *NumLo = Ctx.B.CreateAnd(
+        Ctx.B.CreateLShr(Dw.Dw1, ConstantInt::get(Ctx.I32Ty, 25)),
+        ConstantInt::get(Ctx.I32Ty, 0x7f));
+    Value *Full = Ctx.B.CreateOr(
+        Ctx.B.CreateShl(Ctx.B.CreateZExt(Dw.Dw2, Ctx.I64Ty), Ctx.B.getInt64(7)),
+        Ctx.B.CreateZExt(NumLo, Ctx.I64Ty));
+    Value *NumHi = Ctx.B.CreateShl(
+        Ctx.B.CreateZExt(
+            Ctx.B.CreateAnd(Dw.Dw3, ConstantInt::get(Ctx.I32Ty, 0x3f)),
+            Ctx.I64Ty),
+        Ctx.B.getInt64(39));
+    Full = Ctx.B.CreateOr(Full, NumHi, "mubuf_raw_num_records_full");
+    // gfx942 raw buffers carry a 32-bit byte extent; clamp the wider source
+    // field to the native raw-buffer max (this also maps the gfx12 all-ones
+    // "OOB disabled" / effectively-unbounded encodings onto gfx942's max).
+    Value *TooBig =
+        Ctx.B.CreateICmpUGT(Full, Ctx.B.getInt64(kGfx942RawBufferMaxRecords));
+    NumRecords =
+        Ctx.B.CreateSelect(TooBig, Ctx.B.getInt64(kGfx942RawBufferMaxRecords),
+                           Full, "mubuf_raw_num_records");
+  } else {
+    Value *SourceMax = ConstantInt::get(Ctx.I32Ty, kGfx1250RawBufferMaxRecords);
+    Value *TargetMax = ConstantInt::get(Ctx.I32Ty, kGfx942RawBufferMaxRecords);
+    Value *IsSourceMax =
+        Ctx.B.CreateICmpEQ(Dw.Dw2, SourceMax, "mubuf_raw_is_gfx125_max");
+    NumRecords =
+        Ctx.B.CreateZExt(Ctx.B.CreateSelect(IsSourceMax, TargetMax, Dw.Dw2),
+                         Ctx.I64Ty, "mubuf_raw_num_records");
+  }
   Value *CleanDw1 =
       Ctx.B.CreateAnd(Dw.Dw1, ConstantInt::get(Ctx.I32Ty, 0xFFFF));
   Value *BaseLo = Ctx.B.CreateZExt(Dw.Dw0, Ctx.I64Ty);
@@ -349,8 +383,7 @@ Expected<MubufAddr> decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
   Out.RawPtrRsrc =
       Ctx.B.CreateCall(MakeRsrc,
                        {BasePtr, ConstantInt::get(Type::getInt16Ty(Ctx.C), 0),
-                        Ctx.B.CreateZExt(NumRecords, Ctx.I64Ty),
-                        ConstantInt::get(Ctx.I32Ty, 0x27000)},
+                        NumRecords, ConstantInt::get(Ctx.I32Ty, 0x27000)},
                        "mubuf_raw_ptr_rsrc");
   Out.AuxFlags = ConstantInt::get(Ctx.I32Ty, 0);
   return Out;
