@@ -261,7 +261,7 @@
 #cmakedefine01 LLVM_VERSION_PRINTER_SHOW_BUILD_CONFIG
 
 /* Define if libxml2 is supported on this platform. */
-#cmakedefine LLVM_ENABLE_LIBXML2 ${LLVM_ENABLE_LIBXML2}
+#cmakedefine01 LLVM_ENABLE_LIBXML2
 
 /* Define to the extension used for shared libraries, say, ".so". */
 #cmakedefine LTDL_SHLIB_EXT "${LTDL_SHLIB_EXT}"
