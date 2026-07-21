@@ -7256,38 +7256,33 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       else
         CmdArgs.push_back("-fno-openmp-target-no-loop");
 
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_reduction,
-                       options::OPT_fno_openmp_target_xteam_reduction, true))
-        CmdArgs.push_back("-fopenmp-target-xteam-reduction");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-reduction");
+      // The downstream cross-team ("Xteam") reduction implementation has been
+      // removed; cross-team reductions now use the upstream implementation,
+      // which is always enabled. These flags are accepted but ignored for
+      // backward compatibility, and emit a deprecation notice when explicitly
+      // specified. Note that '-fopenmp-target-xteam-reduction-blocksize=' is
+      // *not* deprecated: it still selects the block size of cross-team
+      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDHelper().
+      for (Arg *A :
+           Args.filtered(options::OPT_fopenmp_target_xteam_reduction,
+                         options::OPT_fno_openmp_target_xteam_reduction))
+        D.Diag(diag::warn_drv_deprecated_custom)
+            << A->getAsString(Args)
+            << "cross-team reductions now use the upstream implementation; the "
+               "flag is ignored";
 
-      if (Args.hasFlag(options::OPT_fopenmp_target_fast_reduction,
-                       options::OPT_fno_openmp_target_fast_reduction, false))
-        CmdArgs.push_back("-fopenmp-target-fast-reduction");
-      else
-        CmdArgs.push_back("-fno-openmp-target-fast-reduction");
-
+      // The downstream cross-team 'scan' specialization has been removed.
+      // These flags are accepted but ignored for backward compatibility, and
+      // emit a deprecation notice when explicitly specified.
       for (Arg *A : Args.filtered(options::OPT_fopenmp_target_xteam_scan,
                                   options::OPT_fno_openmp_target_xteam_scan,
                                   options::OPT_fopenmp_target_xteam_no_loop_scan,
                                   options::OPT_fno_openmp_target_xteam_no_loop_scan))
         D.Diag(diag::warn_drv_deprecated_custom)
             << A->getAsString(Args)
-            << "will be removed in a future revision of the OpenMP implementation.";
-
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_scan,
-                       options::OPT_fno_openmp_target_xteam_scan, false))
-        CmdArgs.push_back("-fopenmp-target-xteam-scan");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-scan");
-
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_no_loop_scan,
-                       options::OPT_fno_openmp_target_xteam_no_loop_scan,
-                       false))
-        CmdArgs.push_back("-fopenmp-target-xteam-no-loop-scan");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-no-loop-scan");
+            << "the cross-team 'scan' specialization has been removed; the "
+               "flag "
+               "is ignored";
       // When in OpenMP offloading mode with NVPTX target, forward
       // cuda-mode flag
       if (Args.hasFlag(options::OPT_fopenmp_cuda_mode,

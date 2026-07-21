@@ -551,20 +551,10 @@ struct GenericKernelTy {
       return true;
     // AMD-only execution modes
     case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
-    case OMP_TGT_EXEC_MODE_XTEAM_RED:
       ODBG(ODT_Tool) << "AMD-only execution mode";
       return true;
     }
     llvm_unreachable("Unknown execution mode!");
-  }
-
-  /// Indicate whether it is a specialized kernel.
-  bool isSpecializedKernel() const {
-    if (ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP ||
-        ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP ||
-        ExecutionMode == OMP_TGT_EXEC_MODE_XTEAM_RED)
-      return true;
-    return false;
   }
 
   /// Compute kernel occupancy
@@ -604,8 +594,17 @@ struct GenericKernelTy {
   bool isNoLoopMode() const {
     return ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
   }
-  bool isXTeamReductionsMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_XTEAM_RED;
+  // Note: there is deliberately no execution mode for a cross-team reduction.
+  // Such a kernel is a plain SPMD one; use doesTeamsReduction() below to detect
+  // it.
+
+  /// Indicate whether this kernel performs a cross-team (teams) reduction.
+  /// Signalled by a non-zero reduction data size emitted by CodeGen for the
+  /// upstream cross-team reduction path. This drives the AMDGPU reduction
+  /// grid-size heuristic now that the downstream Xteam reduction execution
+  /// mode is no longer generated.
+  bool doesTeamsReduction() const {
+    return KernelEnvironment.Configuration.ReductionDataSize > 0;
   }
 
   /// Indicate if the input block size is within the limit.
@@ -628,8 +627,6 @@ protected:
       return "SPMD-No-Loop";
     case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
       return "SPMD-Big-Jump-Loop";
-    case OMP_TGT_EXEC_MODE_XTEAM_RED:
-      return "XTeam-Reductions";
     }
     llvm_unreachable("Unknown execution mode!");
   }

@@ -938,13 +938,15 @@ private:
     uint32_t NumThreads = BlockSize;
 
     // If there is an override already, do nothing. Note the different
-    // default for Xteam Reductions.
-    if (!isXTeamReductionsMode() &&
+    // default for cross-team reductions.
+    const bool IsTeamsReduction = isSPMDMode() && doesTeamsReduction();
+
+    if (!IsTeamsReduction &&
         NumThreads != GenericDevice.getDefaultNumThreads() &&
         NumThreads != ConstWGSize)
       return std::make_pair(false, NumThreads);
 
-    if (isXTeamReductionsMode() &&
+    if (IsTeamsReduction &&
         NumThreads != llvm::omp::xteam_red::DefaultBlockSize &&
         NumThreads != ConstWGSize)
       return std::make_pair(false, NumThreads);
@@ -973,7 +975,11 @@ private:
     if (NumThreads == 0)
       return std::make_pair(false, BlockSize);
 
-    if (isXTeamReductionsMode())
+    // The repeated halving above can leave an awkward block size when the
+    // CodeGen-provided one is not a power of two. Round the value the plugin
+    // picked itself; a block size the user asked for is honored verbatim, see
+    // getEffectiveNumThreads().
+    if (IsTeamsReduction)
       return std::make_pair(true,
                             llvm::omp::getBlockSizeAsPowerOfTwo(NumThreads));
 
@@ -1012,19 +1018,22 @@ private:
       return ConstWGSize;
     }
 
-    if (isXTeamReductionsMode()) {
+    // Cross-team reduction kernels default to the block size CodeGen picked
+    // for them, which is larger than the generic SPMD default. A user-provided
+    // value is honored as given, as long as it fits: the upstream cross-team
+    // reduction works with any block size, unlike the removed Xteamr helpers
+    // that required a power of two.
+    if (isSPMDMode() && doesTeamsReduction()) {
       if (TeamsThreadLimitEnvVar > 0 &&
           TeamsThreadLimitEnvVar <= static_cast<int32_t>(ConstWGSize))
-        return llvm::omp::getBlockSizeAsPowerOfTwo(TeamsThreadLimitEnvVar);
+        return TeamsThreadLimitEnvVar;
       if (UserThreadLimit > 0 && UserThreadLimit != (uint32_t)-1 &&
           UserThreadLimit <= static_cast<uint32_t>(ConstWGSize))
-        return llvm::omp::getBlockSizeAsPowerOfTwo(UserThreadLimit);
+        return UserThreadLimit;
       uint32_t BlockSizeOverride = GenericDevice.getOMPXXteamBlockSize();
       if (BlockSizeOverride > 0 &&
-          BlockSizeOverride <= static_cast<int32_t>(ConstWGSize))
-        return llvm::omp::getBlockSizeAsPowerOfTwo(BlockSizeOverride);
-      assert(((ConstWGSize & (ConstWGSize - 1)) == 0) &&
-             "XTeam Reduction blocksize must be a power of two");
+          BlockSizeOverride <= static_cast<uint32_t>(ConstWGSize))
+        return BlockSizeOverride;
       return ConstWGSize;
     }
 
@@ -1127,7 +1136,12 @@ private:
                           GenericDevice.getBlockLimit(EffectiveNumThreads)));
     }
 
-    if (isXTeamReductionsMode()) {
+    // A cross-team reduction kernel is now emitted by CodeGen as a plain SPMD
+    // kernel using the upstream reduction path (the downstream Xteam reduction
+    // execution mode has been removed). Recognize it via the reduction data
+    // size so the AMDGPU reduction grid-size heuristic (which upstream has no
+    // equivalent for) still applies.
+    if (isSPMDMode() && doesTeamsReduction()) {
       // Here's the default number of teams.
       uint64_t NumGroups = DeviceNumCUs;
       // The number of teams must not exceed this upper limit.
