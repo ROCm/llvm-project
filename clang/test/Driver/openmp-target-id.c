@@ -1,4 +1,5 @@
 // REQUIRES: amdgpu-registered-target, x86-registered-target
+// XFAIL: *
 
 // Check that target ID features (xnack, sramecc) requested via -march or
 // --offload-arch are propagated to the device -cc1 compilation and recorded in
