@@ -42,6 +42,8 @@
 #include <cstdio>
 #include <limits>
 #include <mutex>
+#include <string>
+#include <unordered_map>
 
 using namespace llvm;
 
@@ -2653,6 +2655,47 @@ copyOutputBuffer(const void *Data, size_t Size, StringRef CopyKind) {
   return Result;
 }
 
+// -- LLVMState cache ----------------------------------------------------------
+//
+// initLLVM() builds a full MC stack (MCContext / disassembler / encoder /
+// printer + several asm-parser probes) on every rewrite, ~250 us of per-call
+// work that is a pure function of the TargetIdentifier (see
+// B0A0_TRANSPILE_HOTSPOTS.md, Step 2). Cache it so repeated rewrites of the
+// same target in one process pay initLLVM only once.
+//
+// Thread-safety: LLVMState is NOT immutable -- its MCContext is reset() during
+// each assemble/decode -- so a single instance cannot be shared across threads.
+// The cache is therefore thread_local: each thread keeps its own LLVMState per
+// target, which is race-free and still amortizes initLLVM across that thread's
+// rewrites. Keyed by the fully-serialized TargetIdentifier so distinct targets
+// (or feature strings) never alias.
+static std::string targetIdentityKey(const TargetIdentifier &TI) {
+  std::string Key;
+  Key.reserve(64);
+  auto Append = [&](StringRef S) {
+    Key.append(S.data(), S.size());
+    Key.push_back('\0');
+  };
+  Append(TI.Arch);
+  Append(TI.Vendor);
+  Append(TI.OS);
+  Append(TI.Environ);
+  Append(TI.Processor);
+  for (StringRef F : TI.Features)
+    Append(F);
+  return Key;
+}
+
+static const LLVMState &getCachedLLVMState(const TargetIdentifier &TI) {
+  thread_local std::unordered_map<std::string, LLVMState> Cache;
+  std::string Key = targetIdentityKey(TI);
+  auto It = Cache.find(Key);
+  if (It != Cache.end())
+    return It->second;
+  auto Res = Cache.emplace(std::move(Key), initLLVM(TI));
+  return Res.first->second;
+}
+
 // -- retargetCodeObject -------------------------------------------------------
 
 static amd_comgr_status_t retargetCodeObjectImpl(
@@ -2713,22 +2756,28 @@ static amd_comgr_status_t retargetCodeObjectImpl(
   // The MC layer (disassembler, encoder, register info) is only initialized on
   // the non-fast path. The fast path leaves LS default-constructed and unused:
   // it works entirely off TargetCpu / SNopBytes above, and every LS access
-  // below is guarded by a condition that is false on the fast path.
-  LLVMState LS;
+  // below is guarded by a condition that is false on the fast path. On the MC
+  // path LS is bound to a thread-local per-target cache (see getCachedLLVMState)
+  // so repeated rewrites of the same target reuse the MC stack instead of
+  // rebuilding it every call.
+  LLVMState FastPathLS;
+  const LLVMState *LSPtr = &FastPathLS;
   if (UseFastAppend) {
     log() << "hotswap: entry trampolines: B0->B0 fast path (no MC/.text "
              "disassembly)\n";
   } else {
     uint64_t InitT0 = Prof ? profNowNs() : 0;
-    LS = initLLVM(TargetIdent);
+    const LLVMState &Cached = getCachedLLVMState(TargetIdent);
     if (Prof)
       Profile.add(HotswapMetric::InitLLVM, profNowNs() - InitT0, 0);
-    if (!LS.Valid) {
+    if (!Cached.Valid) {
       log() << "hotswap: error: retargetCodeObject: initLLVM failed "
             << "for CPU '" << TargetIdent.Processor << "'; aborting rewrite.\n";
       return AMD_COMGR_STATUS_ERROR;
     }
+    LSPtr = &Cached;
   }
+  const LLVMState &LS = *LSPtr;
 
   // Direct displacement is an entry-workaround optimization only. Apply the
   // entry prefixes before ordinary instruction rewriting so the existing
