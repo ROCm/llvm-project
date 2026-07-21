@@ -10,6 +10,11 @@ on:
     types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
+# Least-privilege default for the automatically provided GITHUB_TOKEN. This job
+# only triggers Jenkins via a dedicated PAT secret, so read-only access suffices.
+permissions:
+  contents: read
+
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel, below is a single job called invoke jenkins jobs
 jobs:
   # This workflow contains a single job called "invoke_jenkins_PSDB"
