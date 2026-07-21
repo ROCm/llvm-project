@@ -1811,19 +1811,24 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
 
     bool Src0EqSrc2 = SameOperand(0, 2);
     bool Src0EqSrc1 = SameOperand(0, 1);
+    bool AllEqual = Src0EqSrc2 && Src0EqSrc1;
     bool ScaleNumerator;
-    if (Src0EqSrc2 && !Src0EqSrc1) {
+    if (AllEqual) {
+      if (Op.srcMod(0) != Op.srcMod(1) || Op.srcMod(0) != Op.srcMod(2)) {
+        return RaiseFailure::unsupportedInstructionForm(
+            Di, "VOP3",
+            "v_div_scale_f32 self-divide shape (src0 == src1 == src2) has "
+            "asymmetric FP modifiers across the aliased operand slots; the "
+            "lifted IR can only carry one (numer, denom) modifier set.  No "
+            "known codegen emitter produces this shape; refusing rather "
+            "than dropping a modifier silently.");
+      }
+      ScaleNumerator = false; // treat as (d, d, n) with numer == denom
+    } else if (Src0EqSrc2) {
       ScaleNumerator = true; // (n, d, n)
-    } else if (Src0EqSrc1 && !Src0EqSrc2) {
+    } else if (Src0EqSrc1) {
       ScaleNumerator = false; // (d, d, n)
     } else {
-      // All three sources matching is the degenerate `x/x` shape
-      // (ambiguous between scale-numer and scale-denom); src2 not
-      // matching either of src0/src1 would break the hardware's own
-      // divide-protocol and is unreachable from any known codegen
-      // emitter.  Refuse loudly rather than guess -- consistent with
-      // the "refuse when uncertain" rule in
-      // hotswap/docs/wave-size-translation.md.
       return RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           "v_div_scale_f32 operand triple does not match a known "
