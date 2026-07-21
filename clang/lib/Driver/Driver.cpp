@@ -1444,6 +1444,21 @@ bool Driver::loadDefaultConfigFiles(llvm::cl::ExpansionContext &ExpCtx) {
   return false;
 }
 
+// TODO: This is a short term downstream fix to ignore $ prefixed
+// entries in a clang config file. A long term fix will be
+// upstreamed that will most likely include setting
+// FinalPhase = phase::Precompile for all PCH invocations.
+static bool anyInputReachesLinkPhase(const InputList &Inputs,
+                                     phases::ID FinalPhase) {
+  for (const auto &I : Inputs) {
+    llvm::SmallVector<phases::ID, phases::MaxNumberOfPhases> PL =
+        types::getCompilationPhases(I.first, FinalPhase);
+    if (!PL.empty() && PL.back() == phases::Link)
+      return true;
+  }
+  return false;
+}
+
 Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   llvm::PrettyStackTraceString CrashInfo("Compilation construction");
 
@@ -1786,8 +1801,10 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   InputList Inputs;
   BuildInputs(C->getDefaultToolChain(), *TranslatedArgs, Inputs);
   if (HasConfigFileTail && Inputs.size()) {
-    Arg *FinalPhaseArg;
-    if (getFinalPhase(*TranslatedArgs, &FinalPhaseArg) == phases::Link) {
+    Arg *FinalPhaseArg = nullptr;
+    phases::ID FinalPhase = getFinalPhase(*TranslatedArgs, &FinalPhaseArg);
+    if (FinalPhase == phases::Link &&
+        anyInputReachesLinkPhase(Inputs, FinalPhase)) {
       DerivedArgList TranslatedLinkerIns(*CfgOptionsTail);
       for (Arg *A : *CfgOptionsTail)
         TranslatedLinkerIns.append(A);
