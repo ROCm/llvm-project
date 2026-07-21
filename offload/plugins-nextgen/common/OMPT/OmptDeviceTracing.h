@@ -22,6 +22,7 @@
 
 #include <map>
 #include <memory>
+#include <dlfcn.h>
 
 #pragma push_macro("DEBUG_PREFIX")
 #undef DEBUG_PREFIX
@@ -110,6 +111,10 @@ void setParentLibrary(const char *Filename);
 /// for FuncPtr.
 template <typename FT>
 void ensureFuncPtrLoaded(const std::string &FuncName, FT *FuncPtr) {
+  void *SymbolPtr = dlsym(RTLD_DEFAULT, FuncName.c_str());
+  if (SymbolPtr != nullptr)
+    *FuncPtr = reinterpret_cast<FT>(SymbolPtr);
+
   if (*FuncPtr == nullptr) {
     if ((ParentLibrary == nullptr && getParentLibrary() == nullptr) ||
         !ParentLibrary->isValid())
