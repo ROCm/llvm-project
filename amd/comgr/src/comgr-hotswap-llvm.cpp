@@ -136,7 +136,7 @@ static SmallVector<uint8_t> encodeMCInst(const MCInst &Inst,
 }
 
 /// Run the AMDGPU asm parser over \p AsmStr and return the captured MCInsts.
-/// Used by assembleSingleInst() for the full parse-and-encode path, and by
+/// Used by the assembly helpers for the full parse-and-encode path, and by
 /// initLLVM() / resolveOpcodeViaParse() for instructions where parsing the
 /// assembly mnemonic is the least fragile way to pick the target opcode.
 static SmallVector<MCInst, 2> parseAsmToMCInsts(StringRef AsmStr,
@@ -331,6 +331,9 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_get_pc_i64 s[0:1]", "s_get_pc_i64", S,
                                      S.SGetPcI64Opcode))
     return S;
+  if (!resolveRequiredOpcodeViaParse("s_add_nc_u64 s[0:1], s[0:1], 0",
+                                     "s_add_nc_u64", S, S.SAddNcU64Opcode))
+    return S;
   if (!resolveRequiredOpcodeViaParse("s_add_u32 s0, s0, 0", "s_add_u32", S,
                                      S.SAddU32Opcode))
     return S;
@@ -395,6 +398,22 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
     return S;
   }
 
+  SmallVector<MCInst, 2> VccDefInsts = parseAsmToMCInsts("s_mov_b64 vcc, 0", S);
+  if (VccDefInsts.size() != 1 || VccDefInsts.front().getNumOperands() == 0 ||
+      !VccDefInsts.front().getOperand(0).isReg()) {
+    log() << "hotswap: error: initLLVM: failed to recover VCC from a scalar "
+             "move for CPU '"
+          << S.Cpu << "'.\n";
+    return S;
+  }
+  S.VCCRegister = MCRegister(VccDefInsts.front().getOperand(0).getReg());
+  if (!S.VCCRegister.isValid()) {
+    log() << "hotswap: error: initLLVM: scalar move has no valid VCC "
+             "destination for CPU '"
+          << S.Cpu << "'.\n";
+    return S;
+  }
+
   S.Valid = true;
   return S;
 }
@@ -448,9 +467,39 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
                        std::vector<InternalDecodedInst> &Decoded) {
   Decoded.reserve(Decoded.size() + TextSize / MinInstSize);
   uint64_t Pos = 0;
+  // Per-call decode cache: byte-identical instructions reuse the first decode
+  // instead of re-running the disassembler; DI.Offset is set per occurrence, so
+  // reuse is safe. The key is the full window the disassembler may inspect (up
+  // to getMaxInstLength() bytes, clamped to what remains in .text); keying on
+  // fewer bytes is unsafe because two positions sharing a short prefix can
+  // decode differently. A StringMap keys on the raw window, so its length is
+  // part of the key and a truncated tail cannot alias a longer instruction.
+  const unsigned MaxInstLen = S.MAI->getMaxInstLength(S.STI.get());
+  struct DecodeCacheEntry {
+    MCInst Inst;
+    uint32_t Size;
+    std::string Mnemonic;
+  };
+  StringMap<DecodeCacheEntry> LocalCache;
   while (Pos < TextSize) {
     InternalDecodedInst DI;
     DI.Offset = Pos;
+
+    unsigned KeyN =
+        static_cast<unsigned>(std::min<uint64_t>(MaxInstLen, TextSize - Pos));
+    StringRef Key(reinterpret_cast<const char *>(Text + Pos), KeyN);
+
+    StringMap<DecodeCacheEntry>::iterator It = LocalCache.find(Key);
+    if (It != LocalCache.end() && It->second.Size <= (TextSize - Pos)) {
+      DI.Size = It->second.Size;
+      DI.Inst = It->second.Inst;
+      DI.Mnemonic = It->second.Mnemonic;
+      // Only successful decodes are stored, so a hit is always a success.
+      DI.DecodeSucceeded = true;
+      Pos += DI.Size;
+      Decoded.emplace_back(std::move(DI));
+      continue;
+    }
 
     ArrayRef<uint8_t> Bytes(Text + Pos, TextSize - Pos);
     uint64_t InstSize = 0;
@@ -476,21 +525,27 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
         DI.Mnemonic = UnknownMnemonic.str();
       }
     }
+    // Cache only successful decodes whose key window covers the instruction
+    // (Size <= KeyN); a shorter key could alias a different decode.
+    if (Status != MCDisassembler::Fail && DI.Size <= KeyN)
+      LocalCache.try_emplace(Key,
+                             DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic});
     Pos += DI.Size;
     Decoded.emplace_back(std::move(DI));
   }
   return true;
 }
 
-// -- assembleSingleInst -------------------------------------------------------
+// -- assembly helpers ---------------------------------------------------------
 
-SmallVector<uint8_t> assembleSingleInst(StringRef AsmStr, const LLVMState &S) {
+SmallVector<uint8_t> assembleInstructions(StringRef AsmStr,
+                                          const LLVMState &S) {
   // Parse \p AsmStr through the shared parseAsmToMCInsts helper, then encode
   // each captured MCInst via the cached MCCodeEmitter. Avoids the old
   // createMCObjectStreamer -> ELF parse -> extract .text round trip.
   SmallVector<MCInst, 2> Insts = parseAsmToMCInsts(AsmStr, S);
   if (Insts.empty()) {
-    log() << "hotswap: error: assembleSingleInst: parser produced no "
+    log() << "hotswap: error: assembleInstructions: parser produced no "
           << "instructions for asm:\n    " << AsmStr << "\n";
     return {};
   }
@@ -501,6 +556,22 @@ SmallVector<uint8_t> assembleSingleInst(StringRef AsmStr, const LLVMState &S) {
     Bytes.append(InstBytes.begin(), InstBytes.end());
   }
   return Bytes;
+}
+
+SmallVector<uint8_t> assembleSingleInst(StringRef AsmStr, const LLVMState &S) {
+  SmallVector<StringRef, 2> Lines;
+  AsmStr.split(Lines, '\n');
+  unsigned InstructionLines = 0;
+  for (StringRef Line : Lines)
+    if (!Line.trim().empty())
+      ++InstructionLines;
+  if (InstructionLines != 1) {
+    log() << "hotswap: error: assembleSingleInst: expected one non-empty "
+             "assembly line, got "
+          << InstructionLines << " for asm:\n    " << AsmStr << "\n";
+    return {};
+  }
+  return assembleInstructions(AsmStr, S);
 }
 
 // -- buildTrampoline ----------------------------------------------------------
@@ -521,9 +592,9 @@ Trampoline buildTrampoline(ArrayRef<std::string> AsmLines,
   Result.OriginalOffset = OriginalOffset;
   Result.OriginalSize = OriginalSize;
 
-  SmallVector<uint8_t> Bytes = assembleSingleInst(joinAsmLines(AsmLines), S);
+  SmallVector<uint8_t> Bytes = assembleInstructions(joinAsmLines(AsmLines), S);
   if (Bytes.empty()) {
-    log() << "hotswap: error: buildTrampoline: assembleSingleInst returned "
+    log() << "hotswap: error: buildTrampoline: assembleInstructions returned "
           << "empty for trampoline originating at offset 0x"
           << utohexstr(OriginalOffset) << " (" << AsmLines.size()
           << " asm lines).\n";

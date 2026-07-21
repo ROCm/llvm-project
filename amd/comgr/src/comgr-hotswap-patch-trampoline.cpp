@@ -435,7 +435,7 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   // local drain is unconditionally correct; a precise per-wait dataflow
   // recomputation is the eventual optimization (tracked separately).
   Combined += "s_wait_dscnt 0\n";
-  SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
+  SmallVector<uint8_t> Bytes = assembleInstructions(Combined, Ctx.LS);
   if (Bytes.empty()) {
     log() << "hotswap: error: ds_2addr: assembly failed: " << Combined << "\n";
     return failRequiredPatch(Ctx);
@@ -688,8 +688,8 @@ std::optional<ScratchAlloc> tryAllocScratchVgpr(PatchContext &Ctx, size_t Idx) {
   std::string KernelName =
       Ctx.Elf.findKernelAtAddress(DI.Offset + Ctx.Elf.textAddr());
   unsigned KdVgprs = 0;
-  if (std::optional<unsigned> Opt =
-          Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize))
+  if (std::optional<unsigned> Opt = Ctx.Elf.getKernelVgprCount(
+          KernelName, getKernelVgprGranuleSize(Ctx, KernelName)))
     KdVgprs = *Opt;
 
   VgprAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdVgprs,
@@ -1358,10 +1358,16 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
     AsmLines = buildAddtidStoreAsm(TmpName, RegName, Offset, ToMnem);
   }
 
+  if (StoreScratch && checkKernelVgprBump(Ctx, StoreScratch->KernelName,
+                                          StoreScratch->ExtraVgprsNeeded,
+                                          PatchRequirement::Optional) !=
+                          VgprBumpDecision::Apply)
+    return false;
+
   std::string Combined;
   for (const std::string &Line : AsmLines)
     Combined += Line + "\n";
-  SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
+  SmallVector<uint8_t> Bytes = assembleInstructions(Combined, Ctx.LS);
   if (Bytes.empty()) {
     log() << "hotswap: error: " << DI.Mnemonic
           << " trampoline assembly failed at 0x" << utohexstr(DI.Offset)
@@ -1417,21 +1423,48 @@ std::optional<std::vector<std::string>> expandDs2Addr(const MCInst &Inst,
 static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
-  if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty())
-    return patchDs2Addr(Ctx, Idx) ? 1 : 0;
-
-  if (Mnem == "tensor_load_to_lds") {
-    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0)
-      return patchTensorLoadToLdsA0(Ctx, Idx) ? 1 : 0;
-    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::B0)
-      return patchTensorLoadToLdsB0(Ctx, Idx) ? 1 : 0;
+  // Per-rule sub-buckets under the "strat:trampoline" parent (recorded by the
+  // dispatcher in comgr-hotswap-b0a0.cpp); timed only at matching sites.
+  if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty()) {
+    HotswapProfile::Scope S =
+        Ctx.Profile.time(HotswapMetric::TrampolineDs2Addr);
+    const uint32_t P = patchDs2Addr(Ctx, Idx) ? 1 : 0;
+    S.addPatches(P);
+    return P;
   }
 
-  if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0 && isClusterLoad(Mnem))
-    return patchClusterLoadMaskA0(Ctx, Idx) ? 1 : 0;
+  if (Mnem == "tensor_load_to_lds") {
+    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0) {
+      HotswapProfile::Scope S =
+          Ctx.Profile.time(HotswapMetric::TrampolineTensorTdm);
+      const uint32_t P = patchTensorLoadToLdsA0(Ctx, Idx) ? 1 : 0;
+      S.addPatches(P);
+      return P;
+    }
+    if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::B0) {
+      HotswapProfile::Scope S =
+          Ctx.Profile.time(HotswapMetric::TrampolineTensorTdm);
+      const uint32_t P = patchTensorLoadToLdsB0(Ctx, Idx) ? 1 : 0;
+      S.addPatches(P);
+      return P;
+    }
+  }
 
-  if (Ctx.Config.RunB0A0Patches && !getAddtidReplacement(Mnem).empty())
-    return patchDsAddtid(Ctx, Idx) ? 1 : 0;
+  if (Ctx.Config.MaskPolicy == MaskWorkaroundPolicy::A0 &&
+      isClusterLoad(Mnem)) {
+    HotswapProfile::Scope S =
+        Ctx.Profile.time(HotswapMetric::TrampolineClusterLoad);
+    const uint32_t P = patchClusterLoadMaskA0(Ctx, Idx) ? 1 : 0;
+    S.addPatches(P);
+    return P;
+  }
+
+  if (Ctx.Config.RunB0A0Patches && !getAddtidReplacement(Mnem).empty()) {
+    HotswapProfile::Scope S = Ctx.Profile.time(HotswapMetric::TrampolineAddtid);
+    const uint32_t P = patchDsAddtid(Ctx, Idx) ? 1 : 0;
+    S.addPatches(P);
+    return P;
+  }
 
   return 0;
 }

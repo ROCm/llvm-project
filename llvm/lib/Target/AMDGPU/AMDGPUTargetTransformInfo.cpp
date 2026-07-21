@@ -50,6 +50,11 @@ static cl::opt<unsigned> UnrollThresholdIf(
   cl::desc("Unroll threshold increment for AMDGPU for each if statement inside loop"),
   cl::init(200), cl::Hidden);
 
+static cl::opt<bool>
+    UnrollRuntimeDefault("amdgpu-unroll-runtime-default",
+                         cl::desc("Set default runtime unrolling for AMDGPU "),
+                         cl::init(false), cl::Hidden);
+
 static cl::opt<bool> UnrollRuntimeLocal(
   "amdgpu-unroll-runtime-local",
   cl::desc("Allow runtime unroll for AMDGPU if local memory used in a loop"),
@@ -127,9 +132,10 @@ void AMDGPUTTIImpl::getUnrollingPreferences(
   // We want to run unroll even for the loops which have been vectorized.
   UP.UnrollVectorizedLoop = true;
 
-  // Enable runtime unrolling for loops whose trip count is not known at
-  // compile time.
-  UP.Runtime = true;
+  // If selecte Enable runtime unrolling for loops whose trip count
+  // is not known at compile time.
+  if (UnrollRuntimeDefault.getNumOccurrences())
+    UP.Runtime = UnrollRuntimeDefault;
 
   // Maximum alloca size than can fit registers. Reserve 16 registers.
   const unsigned MaxAlloca = (256 - 16) * 4;
@@ -1570,7 +1576,14 @@ bool GCNTTIImpl::areInlineCompatible(const Function *Caller,
     if (Callee->size() == 1)
       return true;
     size_t BBSize = Caller->size() + Callee->size() - 1;
-    return BBSize <= InlineMaxBB;
+    if (BBSize > InlineMaxBB) {
+      LLVM_DEBUG(dbgs() << "AMDGPU inline max-BB rejected inlining "
+                        << Callee->getName() << " into " << Caller->getName()
+                        << ": caller BBs=" << Caller->size() << ", callee BBs="
+                        << Callee->size() << ", combined BBs=" << BBSize
+                        << ", max BBs=" << InlineMaxBB << '\n');
+      return false;
+    }
   }
 
   return true;

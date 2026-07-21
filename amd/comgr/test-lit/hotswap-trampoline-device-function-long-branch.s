@@ -1,6 +1,8 @@
-// COM: A far patch can live in an ordinary device function shared by multiple
-// COM: kernels. The tensor descriptor save and set-PC return safely reuse one
-// COM: global scratch block, charged to both possible callers.
+// COM: A far patch can live in a zero-size ordinary device function shared by
+// COM: multiple kernels. The tensor descriptor save and set-PC return safely
+// COM: reuse one global scratch block, charged to both possible callers. The
+// COM: missing .size directive exercises zero-size function-range inference on
+// COM: the far path.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
@@ -18,27 +20,21 @@
 // DISASM-NEXT: s_nop
 // DISASM-LABEL: <kernel_b>:
 // DISASM: s_endpgm
-// DISASM-NEXT: s_cselect_b32 s68, 1, 0
 // DISASM-NEXT: s_get_pc_i64 s[66:67]
-// DISASM-NEXT: s_add_co_u32 s66, s66,
-// DISASM-NEXT: s_add_co_ci_u32 s67, s67,
-// DISASM-NEXT: s_cmp_lg_u32 s68, 0
+// DISASM-NEXT: s_add_nc_u64 s[66:67], s[66:67],
 // DISASM-NEXT: s_set_pc_i64 s[66:67]
 // DISASM: s_mov_b32 s66, s4
 // DISASM-NEXT: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
 // DISASM-NEXT: s_mov_b32 s4, s66
-// DISASM-NEXT: s_cselect_b32 s68, 1, 0
 // DISASM-NEXT: s_get_pc_i64 s[66:67]
-// DISASM-NEXT: s_add_co_u32 s66, s66,
-// DISASM-NEXT: s_add_co_ci_u32 s67, s67,
-// DISASM-NEXT: s_cmp_lg_u32 s68, 0
+// DISASM-NEXT: s_add_nc_u64 s[66:67], s[66:67],
 // DISASM-NEXT: s_set_pc_i64 s[66:67]
 
 // META: .name:           kernel_a
-// META: .sgpr_count:     71
+// META: .sgpr_count:     70
 // META: .name:           kernel_b
-// META: .sgpr_count:     71
+// META: .sgpr_count:     70
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -52,8 +48,6 @@
 device_tensor:
   tensor_load_to_lds s[0:3], s[4:11]
   s_set_pc_i64 s[30:31]
-.Ldevice_tensor_end:
-.size device_tensor, .Ldevice_tensor_end-device_tensor
 
 .globl kernel_a
 .type kernel_a,@function

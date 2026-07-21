@@ -27,21 +27,29 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "comgr-env.h"
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
+#include <cstdio>
 #include <limits>
+#include <mutex>
 
 using namespace llvm;
 
 namespace COMGR {
 namespace hotswap {
+
+// HotSwap rewrite profiling lives in comgr-hotswap-internal.h so the sibling
+// comgr-hotswap-patch-*.cpp TUs can record into the same per-rewrite session.
 
 // -- GFX1250 B0-to-A0 constants -----------------------------------------------
 //
@@ -54,7 +62,8 @@ static constexpr unsigned Gfx1250MaxVgprs = 1024;
 // GFX1250 wave32 VGPR ENCODING granularity is 16 (per
 // AMDGPUBaseInfo::getVGPREncodingGranule with Feature1024AddressableVGPRs),
 // not the 8 used by earlier GFX10/11 wave32. Used by ElfView's KD
-// decode/encode helpers (getKernelVgprCount / updateKernelDescriptor) to
+// decode/encode helpers (getKernelVgprCount /
+// updateKernelDescriptorVgprCount) to
 // interpret COMPUTE_PGM_RSRC1.GRANULATED_WORKITEM_VGPR_COUNT.
 // GFX12 wave32: 106 user-addressable SGPRs (s0-s105); s106-s107 are VCC.
 static constexpr unsigned Gfx1250MaxSgprs = 106;
@@ -63,7 +72,7 @@ static constexpr unsigned Gfx1250VgprGranuleSize = 16;
 /// Build the default RewriteConfig used for the GFX1250 B0-to-A0 rewrite:
 /// fills in the identity source / target ISA (both gfx1250) and the
 /// AMDGPU register granularity constants consumed by
-/// ElfView::updateKernelDescriptor. Instruction-encoding state is not
+/// ElfView::updateKernelDescriptorVgprCount. Instruction-encoding state is not
 /// carried in RewriteConfig; see LLVMState for the s_branch opcode and
 /// pre-encoded s_nop bytes.
 static RewriteConfig makeGfx1250B0A0Config() {
@@ -264,10 +273,16 @@ LLVM_ATTRIBUTE_WEAK void patchDebugFrame(uint8_t *, size_t, uint64_t, uint64_t,
 // -- NOP sled scanning --------------------------------------------------------
 
 static void appendNopSledIfLarge(std::vector<NopSled> &Sleds, uint64_t Start,
+                                 uint64_t End, uint64_t FunctionStart,
+                                 uint64_t FunctionEnd) {
+  if (End - Start >= MinNopSledSize)
+    Sleds.push_back({Start, End, Start, FunctionStart, FunctionEnd});
+}
+
+static void appendNopSledIfLarge(std::vector<NopSled> &Sleds, uint64_t Start,
                                  uint64_t End,
                                  const ElfView::FunctionTextRange &Range) {
-  if (End - Start >= MinNopSledSize)
-    Sleds.push_back({Start, End, Start, Range.Begin, Range.End});
+  appendNopSledIfLarge(Sleds, Start, End, Range.Begin, Range.End);
 }
 
 /// Scan \p Decoded for runs of consecutive `s_nop` instructions at least
@@ -317,6 +332,34 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
   return Sleds;
 }
 
+/// A direct branch/call target into a NOP run makes that offset and every
+/// following byte in the run reachable by fallthrough, so only the prefix
+/// before the first target remains available as scratch padding.
+static void
+truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
+                                const DenseSet<uint64_t> &DirectBranchTargets) {
+  if (DirectBranchTargets.empty() || Sleds.empty())
+    return;
+
+  std::vector<NopSled> Filtered;
+  Filtered.reserve(Sleds.size());
+  uint64_t Truncated = 0;
+  for (const NopSled &Sled : Sleds) {
+    uint64_t End = Sled.End;
+    for (uint64_t Target : DirectBranchTargets)
+      if (Target >= Sled.Start && Target < End)
+        End = Target;
+    if (End != Sled.End)
+      ++Truncated;
+    appendNopSledIfLarge(Filtered, Sled.Start, End, Sled.FunctionStart,
+                         Sled.FunctionEnd);
+  }
+  if (Truncated != 0)
+    log() << "hotswap: protected " << Truncated
+          << " NOP sled(s) containing direct branch/call target(s)\n";
+  Sleds = std::move(Filtered);
+}
+
 // -- Sled-or-trampoline code emission -----------------------------------------
 
 /// Emit the replacement code for the instruction at [\p InstOffset,
@@ -360,6 +403,8 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     std::memcpy(Ctx.Text + InstOffset + I, LS.SNopBytes.data(), MinInstSize);
 
   Sled.WritePos += Replacement.size() + MinInstSize;
+  // Count-only row: patch placed in-line via a nearby NOP sled, no trampoline.
+  Ctx.Profile.count(HotswapMetric::JumpNopSled);
   return true;
 }
 
@@ -367,82 +412,75 @@ std::optional<SmallVector<uint8_t>> encodeSetPCLongBranch(const LLVMState &LS,
                                                           uint64_t FromOffset,
                                                           uint64_t TargetOffset,
                                                           unsigned SgprBase) {
-  if ((SgprBase & 1u) != 0 ||
-      SgprBase > std::numeric_limits<unsigned>::max() - 2) {
+  if ((SgprBase & 1u) != 0) {
     log() << "hotswap: error: set-PC long branch requires an aligned "
-             "three-SGPR block, got s"
+             "SGPR pair, got s"
           << SgprBase << "\n";
     return std::nullopt;
   }
 
-  const std::string Lo = "s" + std::to_string(SgprBase);
-  const std::string Hi = "s" + std::to_string(SgprBase + 1);
   const std::string Pair = "s[" + std::to_string(SgprBase) + ":" +
                            std::to_string(SgprBase + 1) + "]";
-  const std::string SccSave = "s" + std::to_string(SgprBase + 2);
-
-  // Per the AMDGPU ISA, s_get_pc_i64 captures the address immediately after
-  // itself. EncodeSetPCLongBranch.ForwardLandsOnTarget pins this PC base.
-  std::optional<uint64_t> PcBase = checkedAddUint64(
-      FromOffset, 2 * MinInstSize, "set-PC long branch PC base");
+  SmallVector<uint8_t> GetPc = assembleSingleInst("s_get_pc_i64 " + Pair, LS);
+  if (GetPc.empty())
+    return std::nullopt;
+  std::optional<uint64_t> PcBase =
+      checkedAddUint64(FromOffset, GetPc.size(), "set-PC long branch PC base");
   if (!PcBase)
     return std::nullopt;
   uint64_t Delta = TargetOffset - *PcBase;
-  uint32_t LoDelta = static_cast<uint32_t>(Delta);
-  uint32_t HiDelta = static_cast<uint32_t>(Delta >> 32);
-
-  SmallVector<std::string, 6> AsmLines;
-  AsmLines.push_back("s_cselect_b32 " + SccSave + ", 1, 0");
+  // AMDGPU/SOPInstructions.td defines S_ADD_U64 as an SOP2_64 outside the
+  // Defs = [SCC] scope and maps its gfx12 encoding to s_add_nc_u64. It can
+  // therefore add the complete PC displacement without saving or clobbering
+  // SCC.
+  SmallVector<std::string, 3> AsmLines;
   AsmLines.push_back("s_get_pc_i64 " + Pair);
-  AsmLines.push_back("s_add_u32 " + Lo + ", " + Lo + ", 0x" +
-                     utohexstr(LoDelta));
-  AsmLines.push_back("s_addc_u32 " + Hi + ", " + Hi + ", 0x" +
-                     utohexstr(HiDelta));
-  AsmLines.push_back("s_cmp_lg_u32 " + SccSave + ", 0");
+  AsmLines.push_back("s_add_nc_u64 " + Pair + ", " + Pair + ", 0x" +
+                     utohexstr(Delta));
   AsmLines.push_back("s_set_pc_i64 " + Pair);
-  SmallVector<uint8_t> Bytes = assembleSingleInst(joinAsmLines(AsmLines), LS);
-  if (Bytes.empty()) {
-    log() << "hotswap: error: failed to assemble set-PC long branch via "
+  SmallVector<uint8_t> Bytes = assembleInstructions(joinAsmLines(AsmLines), LS);
+  if (Bytes.empty() || Bytes.size() > SetPcReturnReserveBytes) {
+    log() << "hotswap: error: failed to assemble SCC-neutral set-PC branch via "
           << Pair << "\n";
     return std::nullopt;
   }
   return Bytes;
 }
 
-static std::optional<SmallVector<uint8_t>>
-encodeSetPCLongBranchClobberSCC(const LLVMState &LS, uint64_t FromOffset,
-                                uint64_t TargetOffset, unsigned SgprBase) {
-  if ((SgprBase & 1u) != 0) {
-    log() << "hotswap: error: SCC-dead set-PC branch requires an aligned "
-             "SGPR pair, got s"
-          << SgprBase << "\n";
-    return std::nullopt;
+Expected<std::optional<EncodedSetPcGateway>>
+findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
+                        uint64_t FromOffset, uint64_t TargetOffset,
+                        unsigned SgprBase) {
+  NopSled *Best = nullptr;
+  SmallVector<uint8_t> BestBytes;
+  uint64_t BestDistance = std::numeric_limits<uint64_t>::max();
+  for (NopSled &Sled : Gateways) {
+    if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd)
+      continue;
+    uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+    if (Sled.WritePos > UsableEnd)
+      continue;
+    uint64_t Distance = Sled.WritePos > FromOffset ? Sled.WritePos - FromOffset
+                                                   : FromOffset - Sled.WritePos;
+    if (Distance >= MaxSledDistance || Distance >= BestDistance ||
+        LS.encodeSBranch(FromOffset, Sled.WritePos).empty())
+      continue;
+    std::optional<SmallVector<uint8_t>> Bytes =
+        encodeSetPCLongBranch(LS, Sled.WritePos, TargetOffset, SgprBase);
+    if (!Bytes)
+      return createStringError(
+          Twine("failed to encode set-PC gateway at candidate offset 0x") +
+          utohexstr(Sled.WritePos));
+    if (Bytes->size() > UsableEnd - Sled.WritePos)
+      continue;
+    Best = &Sled;
+    BestBytes = std::move(*Bytes);
+    BestDistance = Distance;
   }
-
-  const std::string Lo = "s" + std::to_string(SgprBase);
-  const std::string Hi = "s" + std::to_string(SgprBase + 1);
-  const std::string Pair = "s[" + std::to_string(SgprBase) + ":" +
-                           std::to_string(SgprBase + 1) + "]";
-  std::optional<uint64_t> PcBase = checkedAddUint64(
-      FromOffset, MinInstSize, "SCC-dead set-PC branch PC base");
-  if (!PcBase)
+  if (!Best)
     return std::nullopt;
-  uint64_t Delta = TargetOffset - *PcBase;
-
-  SmallVector<std::string, 4> AsmLines;
-  AsmLines.push_back("s_get_pc_i64 " + Pair);
-  AsmLines.push_back("s_add_u32 " + Lo + ", " + Lo + ", 0x" +
-                     utohexstr(static_cast<uint32_t>(Delta)));
-  AsmLines.push_back("s_addc_u32 " + Hi + ", " + Hi + ", 0x" +
-                     utohexstr(static_cast<uint32_t>(Delta >> 32)));
-  AsmLines.push_back("s_set_pc_i64 " + Pair);
-  SmallVector<uint8_t> Bytes = assembleSingleInst(joinAsmLines(AsmLines), LS);
-  if (Bytes.empty()) {
-    log() << "hotswap: error: failed to assemble SCC-dead set-PC branch via "
-          << Pair << "\n";
-    return std::nullopt;
-  }
-  return Bytes;
+  return std::optional<EncodedSetPcGateway>(
+      EncodedSetPcGateway{Best, std::move(BestBytes)});
 }
 
 static std::optional<unsigned> numberedSgprIndex(const MCRegisterInfo &MRI,
@@ -484,7 +522,8 @@ static bool updateNumberedSgprHighWatermark(const MCRegisterInfo &MRI,
 }
 
 static bool isVccRegister(const LLVMState &LS, MCRegister Reg) {
-  return Reg.isValid() && StringRef(LS.MRI->getName(Reg)).starts_with("VCC");
+  return Reg.isValid() && LS.VCCRegister.isValid() &&
+         LS.MRI->regsOverlap(Reg, LS.VCCRegister);
 }
 
 static bool instructionUsesVcc(const LLVMState &LS,
@@ -697,7 +736,7 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
 static std::optional<SafeSgprScratchBlock>
 reserveSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset) {
   std::optional<SafeSgprScratchBlock> Scratch = findSafeSgprScratchBlock(
-      Ctx, InstOffset, /*Count=*/3, /*Alignment=*/2, "safe far return");
+      Ctx, InstOffset, /*Count=*/2, /*Alignment=*/2, "safe far return");
   if (!Scratch)
     return std::nullopt;
   if (!commitSafeSgprScratchBlock(Ctx, InstOffset, *Scratch, "safe far return"))
@@ -722,11 +761,11 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
 /// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
 /// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
 /// the pool layout is known. A site beyond s_branch reach of the appended pool
-/// uses an SCC-preserving get-PC/add/set-PC sequence on the backward edge.
+/// uses an SCC-neutral get-PC/add/set-PC sequence on the backward edge.
 /// Adjacent far sites are coalesced after patching to reduce gateway pressure.
 /// Every far source edge then uses a short branch to nearby safe NOP padding;
-/// that gateway uses the pre-Gen5 SGPR-backed set-PC sequence. No source or
-/// return edge executes gfx1250's broken s_add_pc_i64 instruction.
+/// that gateway uses the gfx12 SGPR-backed set-PC sequence. No source or return
+/// edge executes gfx1250's broken s_add_pc_i64 instruction.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     ArrayRef<uint8_t> Replacement) {
@@ -776,25 +815,33 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
   }
 
   if (Far) {
-    if (InstSize < MinInstSize) {
+    // Every decline of a valid far site increments jump:declined_far (a
+    // count-only row) so the metric reflects all placement failures, including
+    // resource pressure, not just the size guard.
+    auto declineFar = [&](const Twine &Reason) {
+      Ctx.Profile.count(HotswapMetric::JumpDeclined);
       log() << "hotswap: far trampoline site 0x" << utohexstr(InstOffset)
-            << " declined: " << InstSize << " B, smaller than " << MinInstSize
-            << " B forward branch\n";
+            << " declined: " << Reason << "\n";
       return false;
-    }
+    };
+    if (InstSize < MinInstSize)
+      return declineFar(Twine(InstSize) + " B, smaller than " +
+                        Twine(MinInstSize) + " B forward branch");
     std::optional<SafeSgprScratchBlock> Scratch =
         reserveSafeFarReturn(Ctx, InstOffset);
     if (!Scratch)
-      return false;
+      return declineFar("no safe SGPR triple for set-PC return");
     T.Bytes.insert(T.Bytes.end(), SetPcReturnReserveBytes, uint8_t{0});
     T.Long = true;
     T.UsesSetPCBack = true;
     T.LongBranchSgprBase = Scratch->Base;
+    Ctx.Profile.count(HotswapMetric::JumpLong);
     Ctx.OutTrampolines.emplace_back(std::move(T));
     Ctx.QueuedTrampolineBytes = *QueuedBytes;
     return true;
   }
   {
+    Ctx.Profile.count(HotswapMetric::JumpShort);
     // Reserve the short branch-back slot; fixupTrampolineBranches fills it in.
     T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
   }
@@ -840,27 +887,660 @@ evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
                           "direct control-flow target");
 }
 
+static bool definesOverlappingRegister(const InternalDecodedInst &DI,
+                                       const LLVMState &LS,
+                                       MCRegister Register) {
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  unsigned DefCount = std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
+  for (unsigned I = 0; I != DefCount; ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (Operand.isReg() && Operand.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+      return true;
+  }
+  if (Desc.variadicOpsAreDefs()) {
+    unsigned VariadicBegin =
+        std::min(Desc.getNumOperands(), DI.Inst.getNumOperands());
+    for (unsigned I = VariadicBegin; I != DI.Inst.getNumOperands(); ++I) {
+      const MCOperand &Operand = DI.Inst.getOperand(I);
+      if (Operand.isReg() && Operand.getReg() &&
+          LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+        return true;
+    }
+  }
+  for (MCPhysReg ImplicitDef : Desc.implicit_defs())
+    if (LS.MRI->regsOverlap(MCRegister(ImplicitDef), Register))
+      return true;
+  return false;
+}
+
+static bool isControlFlowBoundary(const InternalDecodedInst &DI,
+                                  const LLVMState &LS) {
+  return DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+         DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+         LS.MIA->isBranch(DI.Inst) || LS.MIA->isCall(DI.Inst) ||
+         LS.MIA->isReturn(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst) ||
+         LS.MIA->isBarrier(DI.Inst);
+}
+
+struct DeclaredTextEntryInfo {
+  SmallVector<uint64_t, 16> Entries;
+  SmallVector<uint64_t, 16> ExternalEntries;
+};
+
+static std::optional<DeclaredTextEntryInfo>
+collectDeclaredTextEntries(const ElfView &Elf) {
+  std::optional<uint64_t> TextEnd =
+      checkedAddUint64(Elf.textAddr(), Elf.textSize(), "declared text end");
+  if (!TextEnd)
+    return std::nullopt;
+
+  DeclaredTextEntryInfo Info;
+  for (const ElfView::FunctionTextRange &Range : Elf.functionTextRanges())
+    if (Range.Begin >= Elf.textAddr() && Range.Begin < *TextEnd) {
+      uint64_t Entry = Range.Begin - Elf.textAddr();
+      Info.Entries.push_back(Entry);
+      if (Range.Symbol && Range.Symbol->getBinding() != ELF::STB_LOCAL)
+        Info.ExternalEntries.push_back(Entry);
+    }
+
+  for (const KernelDescriptorInfo &Descriptor : Elf.kernelDescriptors()) {
+    std::optional<uint64_t> EntryAddress;
+    if (Descriptor.EntryOffset >= 0) {
+      EntryAddress = checkedAddUint64(
+          Descriptor.VAddr, static_cast<uint64_t>(Descriptor.EntryOffset),
+          "kernel descriptor entry address");
+    } else {
+      uint64_t Magnitude =
+          Descriptor.EntryOffset == std::numeric_limits<int64_t>::min()
+              ? uint64_t{1} << 63
+              : static_cast<uint64_t>(-Descriptor.EntryOffset);
+      EntryAddress = checkedSubUint64(Descriptor.VAddr, Magnitude,
+                                      "kernel descriptor entry address");
+    }
+    if (!EntryAddress)
+      return std::nullopt;
+    if (*EntryAddress >= Elf.textAddr() && *EntryAddress < *TextEnd) {
+      uint64_t Entry = *EntryAddress - Elf.textAddr();
+      Info.Entries.push_back(Entry);
+      Info.ExternalEntries.push_back(Entry);
+    }
+  }
+  return Info;
+}
+
+struct PcMaterializedCallInfo {
+  uint64_t Target = 0;
+  uint64_t SequenceStart = 0;
+  uint64_t SequenceEnd = 0;
+  MCRegister ReturnRegister;
+};
+
+/// Resolve the compiler-emitted PC materialization used by the production
+/// reproducer:
+///
+///   s_get_pc_i64 Target
+///   ...                         // no Target definition or control flow
+///   s_add_nc_u64 Target, Target, Immediate
+///   ...                         // no Target definition or control flow
+///   s_swap_pc_i64 Return, Target
+///
+/// The opcode and operand layout are defined by SOPInstructions.td and pinned
+/// by llvm/test/MC/AMDGPU/gfx1250_asm_salu_lit64.s. Stop at the first
+/// overlapping definition or control-flow boundary, so any variation remains
+/// unresolved and follows the existing fail-closed policy.
+static std::optional<PcMaterializedCallInfo>
+matchPcMaterializedCall(ArrayRef<InternalDecodedInst> Decoded, size_t CallIndex,
+                        const LLVMState &LS, uint64_t TextAddr) {
+  const InternalDecodedInst &Call = Decoded[CallIndex];
+  if (!Call.DecodeSucceeded || Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+      Call.Inst.getNumOperands() < 2 || !Call.Inst.getOperand(0).isReg() ||
+      !Call.Inst.getOperand(0).getReg())
+    return std::nullopt;
+  const MCOperand &TargetOperand =
+      Call.Inst.getOperand(Call.Inst.getNumOperands() - 1);
+  if (!TargetOperand.isReg() || !TargetOperand.getReg())
+    return std::nullopt;
+  MCRegister TargetRegister(TargetOperand.getReg());
+
+  std::optional<size_t> AddIndex;
+  int64_t AddImmediate = 0;
+  for (size_t I = CallIndex; I != 0;) {
+    --I;
+    const InternalDecodedInst &Candidate = Decoded[I];
+    if (!Candidate.DecodeSucceeded || isControlFlowBoundary(Candidate, LS))
+      return std::nullopt;
+    if (!definesOverlappingRegister(Candidate, LS, TargetRegister))
+      continue;
+    if (Candidate.Inst.getOpcode() != LS.SAddNcU64Opcode ||
+        Candidate.Inst.getNumOperands() != 3 ||
+        !Candidate.Inst.getOperand(0).isReg() ||
+        Candidate.Inst.getOperand(0).getReg() != TargetRegister ||
+        !Candidate.Inst.getOperand(1).isReg() ||
+        Candidate.Inst.getOperand(1).getReg() != TargetRegister ||
+        !Candidate.Inst.getOperand(2).isImm())
+      return std::nullopt;
+    AddIndex = I;
+    AddImmediate = Candidate.Inst.getOperand(2).getImm();
+    break;
+  }
+  if (!AddIndex)
+    return std::nullopt;
+
+  for (size_t I = *AddIndex; I != 0;) {
+    --I;
+    const InternalDecodedInst &Candidate = Decoded[I];
+    if (!Candidate.DecodeSucceeded || isControlFlowBoundary(Candidate, LS))
+      return std::nullopt;
+    if (!definesOverlappingRegister(Candidate, LS, TargetRegister))
+      continue;
+    if (Candidate.Inst.getOpcode() != LS.SGetPcI64Opcode ||
+        Candidate.Inst.getNumOperands() != 1 ||
+        !Candidate.Inst.getOperand(0).isReg() ||
+        Candidate.Inst.getOperand(0).getReg() != TargetRegister)
+      return std::nullopt;
+
+    std::optional<uint64_t> GetPcAddress = checkedAddUint64(
+        TextAddr, Candidate.Offset, "PC-materialized call instruction");
+    if (!GetPcAddress)
+      return std::nullopt;
+    std::optional<uint64_t> PcValue = checkedAddUint64(
+        *GetPcAddress, Candidate.Size, "PC-materialized call PC value");
+    if (!PcValue)
+      return std::nullopt;
+    // s_add_nc_u64 uses modulo-2^64 arithmetic. Casting the signed MC
+    // immediate to uint64_t and adding it reproduces both positive and
+    // negative literals, including INT64_MIN, without signed overflow.
+    return PcMaterializedCallInfo{
+        *PcValue + static_cast<uint64_t>(AddImmediate), Candidate.Offset,
+        Call.Offset, MCRegister(Call.Inst.getOperand(0).getReg())};
+  }
+  return std::nullopt;
+}
+
+struct KnownCallSite {
+  size_t InstIndex = 0;
+  uint64_t Target = 0;
+  uint64_t Continuation = 0;
+  MCRegister ReturnRegister;
+};
+
+struct BoundedSetPcReturn {
+  size_t InstIndex = 0;
+  SmallVector<uint64_t, 2> Targets;
+};
+
+static bool hasPcRelativeOperand(const InternalDecodedInst &DI,
+                                 const LLVMState &LS) {
+  for (const MCOperandInfo &Operand :
+       LS.MCII->get(DI.Inst.getOpcode()).operands())
+    if (Operand.OperandType == MCOI::OPERAND_PCREL)
+      return true;
+  return false;
+}
+
+static std::optional<MCRegister>
+getCallReturnRegister(const InternalDecodedInst &DI, const LLVMState &LS) {
+  if (!DI.DecodeSucceeded || !LS.MIA->isCall(DI.Inst) ||
+      DI.Inst.getNumOperands() == 0 || !DI.Inst.getOperand(0).isReg() ||
+      !DI.Inst.getOperand(0).getReg())
+    return std::nullopt;
+  return MCRegister(DI.Inst.getOperand(0).getReg());
+}
+
+static std::optional<uint64_t>
+getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
+                    uint64_t TextAddr, uint64_t TextEnd) {
+  if (!DI.DecodeSucceeded ||
+      (!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
+      LS.MIA->isReturn(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst))
+    return std::nullopt;
+
+  if (hasPcRelativeOperand(DI, LS))
+    return evaluateDirectControlFlowTarget(DI, LS);
+
+  if (DI.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+      DI.Inst.getNumOperands() == 0 ||
+      !DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm())
+    return std::nullopt;
+  uint64_t AbsoluteTarget = static_cast<uint64_t>(
+      DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
+  if (AbsoluteTarget < TextAddr || AbsoluteTarget >= TextEnd)
+    return std::nullopt;
+  return AbsoluteTarget - TextAddr;
+}
+
+static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextEnd,
+    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls) {
+  SmallVector<KnownCallSite, 4> Calls;
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    std::optional<MCRegister> ReturnRegister = getCallReturnRegister(DI, LS);
+    if (!ReturnRegister)
+      continue;
+
+    std::optional<uint64_t> Target;
+    if (MaterializedCalls[I]) {
+      uint64_t AbsoluteTarget = MaterializedCalls[I]->Target;
+      if (AbsoluteTarget >= TextAddr && AbsoluteTarget < TextEnd)
+        Target = AbsoluteTarget - TextAddr;
+    } else {
+      Target = getDirectTextTarget(DI, LS, TextAddr, TextEnd);
+    }
+    if (!Target)
+      continue;
+
+    std::optional<uint64_t> Continuation =
+        checkedAddUint64(DI.Offset, DI.Size, "known call continuation address");
+    if (!Continuation)
+      return std::nullopt;
+    Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+  }
+  return Calls;
+}
+
+static bool hasUnprovenFallthroughEntry(ArrayRef<InternalDecodedInst> Decoded,
+                                        const LLVMState &LS, uint64_t TextAddr,
+                                        uint64_t TextEnd,
+                                        uint64_t FunctionBegin,
+                                        uint64_t ReturnOffset,
+                                        ArrayRef<uint64_t> DeclaredEntries,
+                                        ArrayRef<KnownCallSite> Calls) {
+  if (FunctionBegin == 0)
+    return false;
+
+  size_t BeginIndex = 0;
+  while (BeginIndex != Decoded.size() &&
+         Decoded[BeginIndex].Offset < FunctionBegin)
+    ++BeginIndex;
+  if (BeginIndex == Decoded.size() ||
+      Decoded[BeginIndex].Offset != FunctionBegin) {
+    log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+          << " is not a bounded return: function entry at 0x"
+          << utohexstr(FunctionBegin) << " is not an instruction boundary\n";
+    return true;
+  }
+
+  uint64_t ChainBegin = FunctionBegin;
+  size_t PredecessorIndex = BeginIndex;
+  while (PredecessorIndex != 0) {
+    const InternalDecodedInst &Predecessor = Decoded[PredecessorIndex - 1];
+    std::optional<uint64_t> PredecessorEnd = checkedAddUint64(
+        Predecessor.Offset, Predecessor.Size, "fallthrough predecessor end");
+    if (!PredecessorEnd || *PredecessorEnd != ChainBegin ||
+        !Predecessor.DecodeSucceeded) {
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+            << " is not a bounded return: fallthrough into function entry "
+               "at 0x"
+            << utohexstr(FunctionBegin) << " is unprovable\n";
+      return true;
+    }
+    if (LS.MIA->isBarrier(Predecessor.Inst))
+      break;
+    ChainBegin = Predecessor.Offset;
+    --PredecessorIndex;
+  }
+
+  if (ChainBegin == FunctionBegin)
+    return false;
+
+  for (uint64_t Entry : DeclaredEntries)
+    if (Entry >= ChainBegin && Entry < FunctionBegin) {
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+            << " is not a bounded return: declared entry at 0x"
+            << utohexstr(Entry) << " falls through to function entry 0x"
+            << utohexstr(FunctionBegin) << "\n";
+      return true;
+    }
+
+  for (const KnownCallSite &Call : Calls) {
+    uint64_t Source = Decoded[Call.InstIndex].Offset;
+    if (Source >= ChainBegin && Source < FunctionBegin)
+      continue;
+    if ((Call.Target >= ChainBegin && Call.Target < FunctionBegin) ||
+        (Call.Continuation >= ChainBegin &&
+         Call.Continuation < FunctionBegin)) {
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+            << " is not a bounded return: call at 0x" << utohexstr(Source)
+            << " enters the fallthrough chain at 0x"
+            << utohexstr(Call.Target >= ChainBegin &&
+                                 Call.Target < FunctionBegin
+                             ? Call.Target
+                             : Call.Continuation)
+            << "\n";
+      return true;
+    }
+  }
+
+  for (const InternalDecodedInst &Source : Decoded) {
+    std::optional<uint64_t> Target =
+        getDirectTextTarget(Source, LS, TextAddr, TextEnd);
+    if (!Target || *Target < ChainBegin || *Target >= FunctionBegin ||
+        (Source.Offset >= ChainBegin && Source.Offset < FunctionBegin))
+      continue;
+    log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+          << " is not a bounded return: control flow at 0x"
+          << utohexstr(Source.Offset) << " enters the fallthrough chain at 0x"
+          << utohexstr(*Target) << "\n";
+    return true;
+  }
+  return false;
+}
+
+static std::optional<SmallVector<BoundedSetPcReturn, 2>>
+collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
+                           const LLVMState &LS, uint64_t TextAddr,
+                           uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
+                           ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+                           ArrayRef<KnownCallSite> Calls,
+                           ArrayRef<uint64_t> ExternalEntries) {
+  SmallVector<BoundedSetPcReturn, 2> Returns;
+  for (size_t ReturnIndex = 0; ReturnIndex != Decoded.size(); ++ReturnIndex) {
+    const InternalDecodedInst &Return = Decoded[ReturnIndex];
+    // AMDGPUMCInstLower lowers S_SETPC_B64_return to S_SETPC_B64, so the
+    // decoded instruction no longer carries MIA::isReturn identity. Recover
+    // only the bounded local-function form from its call/link dataflow.
+    if (!Return.DecodeSucceeded ||
+        Return.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+        Return.Inst.getNumOperands() != 1 ||
+        !Return.Inst.getOperand(0).isReg() ||
+        !Return.Inst.getOperand(0).getReg())
+      continue;
+    MCRegister ReturnRegister(Return.Inst.getOperand(0).getReg());
+
+    bool IsBounded = false;
+    for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
+      if (Range.Begin < TextAddr || Range.Begin >= TextEnd ||
+          Range.End <= Range.Begin || Range.End > TextEnd ||
+          (Range.Symbol && Range.Symbol->getBinding() != ELF::STB_LOCAL))
+        continue;
+      uint64_t FunctionBegin = Range.Begin - TextAddr;
+      uint64_t FunctionEnd = Range.End - TextAddr;
+      if (Return.Offset < FunctionBegin || Return.Offset >= FunctionEnd)
+        continue;
+
+      bool Safe = true;
+      for (uint64_t Entry : ExternalEntries)
+        if (Entry >= FunctionBegin && Entry < FunctionEnd) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: externally reachable entry at "
+                   "0x"
+                << utohexstr(Entry) << " overlaps the local function\n";
+          Safe = false;
+          break;
+        }
+      if (!Safe)
+        continue;
+
+      for (const ElfView::FunctionTextRange &Alias : FunctionRanges) {
+        if (Return.Offset + TextAddr < Alias.Begin ||
+            Return.Offset + TextAddr >= Alias.End || Alias.Begin == Range.Begin)
+          continue;
+        log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+              << " is not a bounded return: overlapping function entry at "
+                 "0x"
+              << utohexstr(Alias.Begin - TextAddr)
+              << " makes entry provenance ambiguous\n";
+        Safe = false;
+        break;
+      }
+      if (!Safe)
+        continue;
+
+      for (uint64_t Entry : DeclaredEntries)
+        if (Entry > FunctionBegin && Entry < FunctionEnd) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: declared entry at 0x"
+                << utohexstr(Entry) << " bypasses the function entry\n";
+          Safe = false;
+          break;
+        }
+      if (!Safe)
+        continue;
+
+      if (hasUnprovenFallthroughEntry(Decoded, LS, TextAddr, TextEnd,
+                                      FunctionBegin, Return.Offset,
+                                      DeclaredEntries, Calls))
+        continue;
+
+      // The link pair must retain the value written by the incoming call
+      // throughout the function. This includes blocks laid out after the
+      // return that may branch back into its epilogue.
+      for (const InternalDecodedInst &DI : Decoded) {
+        if (DI.Offset < FunctionBegin || DI.Offset >= FunctionEnd)
+          continue;
+        // MC call instructions carry no transitive callee-clobber information.
+        // Without interprocedural proof, a nested callee may overwrite the
+        // outer link pair even when the call defines a different return pair.
+        if (DI.DecodeSucceeded && LS.MIA->isCall(DI.Inst)) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: nested call at 0x"
+                << utohexstr(DI.Offset) << " may clobber the link register\n";
+          Safe = false;
+          break;
+        }
+        if (!DI.DecodeSucceeded ||
+            definesOverlappingRegister(DI, LS, ReturnRegister)) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: link register is "
+                   "unprovable at 0x"
+                << utohexstr(DI.Offset) << "\n";
+          Safe = false;
+          break;
+        }
+      }
+      if (!Safe)
+        continue;
+
+      SmallVector<uint64_t, 2> Targets;
+      for (const KnownCallSite &Call : Calls) {
+        if (Call.Target < FunctionBegin || Call.Target >= FunctionEnd)
+          continue;
+        if (Call.Target != FunctionBegin) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: call at 0x"
+                << utohexstr(Decoded[Call.InstIndex].Offset)
+                << " enters the function interior at 0x"
+                << utohexstr(Call.Target) << "\n";
+          Safe = false;
+          break;
+        }
+        if (Call.ReturnRegister != ReturnRegister) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: call at 0x"
+                << utohexstr(Decoded[Call.InstIndex].Offset)
+                << " uses a different link register\n";
+          Safe = false;
+          break;
+        }
+        Targets.push_back(Call.Continuation);
+      }
+      if (!Safe || Targets.empty())
+        continue;
+
+      // A branch from outside the function would bypass the call link
+      // definition. Direct calls to the function entry are allowed only when
+      // they were collected above with this exact return register.
+      for (size_t SourceIndex = 0; SourceIndex != Decoded.size();
+           ++SourceIndex) {
+        const InternalDecodedInst &Source = Decoded[SourceIndex];
+        std::optional<uint64_t> Target =
+            getDirectTextTarget(Source, LS, TextAddr, TextEnd);
+        if (!Target || *Target < FunctionBegin || *Target >= FunctionEnd ||
+            (Source.Offset >= FunctionBegin && Source.Offset < FunctionEnd))
+          continue;
+
+        bool IsKnownEntryCall = false;
+        if (LS.MIA->isCall(Source.Inst) && *Target == FunctionBegin)
+          for (const KnownCallSite &Call : Calls)
+            IsKnownEntryCall |= Call.InstIndex == SourceIndex &&
+                                Call.ReturnRegister == ReturnRegister;
+        if (!IsKnownEntryCall) {
+          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+                << " is not a bounded return: control flow at 0x"
+                << utohexstr(Source.Offset) << " enters at 0x"
+                << utohexstr(*Target) << "\n";
+          Safe = false;
+          break;
+        }
+      }
+      if (!Safe)
+        continue;
+
+      llvm::sort(Targets);
+      Targets.erase(std::unique(Targets.begin(), Targets.end()), Targets.end());
+      Returns.push_back({ReturnIndex, std::move(Targets)});
+      IsBounded = true;
+      break;
+    }
+    if (!IsBounded)
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+            << " remains an unbounded indirect transfer\n";
+  }
+  return Returns;
+}
+
+static const BoundedSetPcReturn *
+findBoundedSetPcReturn(ArrayRef<BoundedSetPcReturn> Returns, size_t InstIndex) {
+  for (const BoundedSetPcReturn &Return : Returns)
+    if (Return.InstIndex == InstIndex)
+      return &Return;
+  return nullptr;
+}
+
+static bool
+hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
+                         const LLVMState &LS, uint64_t TextAddr,
+                         uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
+                         ArrayRef<BoundedSetPcReturn> BoundedReturns,
+                         uint64_t SequenceStart, uint64_t SequenceEnd) {
+  for (uint64_t Entry : DeclaredEntries)
+    if (Entry > SequenceStart && Entry <= SequenceEnd)
+      return true;
+
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    if (DI.DecodeSucceeded && DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+      const BoundedSetPcReturn *Return =
+          findBoundedSetPcReturn(BoundedReturns, I);
+      if (!Return)
+        return true;
+      for (uint64_t Target : Return->Targets)
+        if (Target > SequenceStart && Target <= SequenceEnd)
+          return true;
+      continue;
+    }
+
+    // Without bounding an indirect target, it may enter at any instruction in
+    // the materialization. Keep the call unresolved rather than relying on
+    // the indirect transfer's containing function alone.
+    if (DI.DecodeSucceeded && !LS.MIA->isReturn(DI.Inst) &&
+        (LS.MIA->isIndirectBranch(DI.Inst) ||
+         DI.Inst.getOpcode() == LS.SAddPcI64Opcode))
+      return true;
+    if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
+        LS.MIA->isReturn(DI.Inst))
+      continue;
+
+    std::optional<uint64_t> RelativeTarget =
+        getDirectTextTarget(DI, LS, TextAddr, TextEnd);
+    if (RelativeTarget && *RelativeTarget > SequenceStart &&
+        *RelativeTarget <= SequenceEnd)
+      return true;
+  }
+  return false;
+}
+
 /// Collect statically known direct branch and call destinations so an interior
 /// entry point is never swallowed by coalescing.
-static std::optional<DenseSet<uint64_t>>
-collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
-                           const LLVMState &LS) {
+std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<uint64_t> ExternalEntries) {
   if (!LS.MIA) {
     log() << "hotswap: MC branch analysis is unavailable; adjacent far "
              "trampolines will not be coalesced\n";
     return std::nullopt;
   }
 
-  DenseSet<uint64_t> Targets;
-  for (const InternalDecodedInst &DI : Decoded) {
+  std::optional<uint64_t> TextEnd =
+      checkedAddUint64(TextAddr, TextSize, "direct target text end");
+  if (!TextEnd)
+    return std::nullopt;
+
+  SmallVector<std::optional<PcMaterializedCallInfo>, 16> MaterializedCalls(
+      Decoded.size());
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
+
+  std::optional<SmallVector<KnownCallSite, 4>> Calls =
+      collectKnownCallSites(Decoded, LS, TextAddr, *TextEnd, MaterializedCalls);
+  if (!Calls)
+    return std::nullopt;
+  std::optional<SmallVector<BoundedSetPcReturn, 2>> BoundedReturns =
+      collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
+                                 DeclaredEntries, FunctionRanges, *Calls,
+                                 ExternalEntries);
+  if (!BoundedReturns)
+    return std::nullopt;
+
+  DirectControlFlowInfo Info;
+  for (size_t InstIndex = 0; InstIndex != Decoded.size(); ++InstIndex) {
+    const InternalDecodedInst &DI = Decoded[InstIndex];
     if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
-        LS.MIA->isIndirectBranch(DI.Inst) || LS.MIA->isReturn(DI.Inst))
+        LS.MIA->isReturn(DI.Inst))
       continue;
-    bool HasImmediate = false;
-    for (const MCOperand &Op : DI.Inst)
-      HasImmediate |= Op.isImm();
-    if (!LS.MIA->isCall(DI.Inst) && !HasImmediate)
+    // Existing indirect branches are handled by
+    // collectIndirectControlFlowFunctions(), which protects their containing
+    // function from source relocation. Calls without a statically resolvable
+    // target are handled below.
+    if (LS.MIA->isIndirectBranch(DI.Inst))
       continue;
+
+    bool HasPcRelativeOperand = false;
+    for (const MCOperandInfo &Op : LS.MCII->get(DI.Inst.getOpcode()).operands())
+      HasPcRelativeOperand |= Op.OperandType == MCOI::OPERAND_PCREL;
+    if (!HasPcRelativeOperand) {
+      // Preserve the established handling for non-call indirect transfers
+      // such as s_set_pc_i64. collectIndirectControlFlowFunctions() prevents
+      // source relocation in their containing function.
+      if (!LS.MIA->isCall(DI.Inst))
+        continue;
+      std::optional<uint64_t> Target;
+      if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
+          DI.Inst.getNumOperands() != 0 &&
+          DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
+        Target = static_cast<uint64_t>(
+            DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
+      } else if (MaterializedCalls[InstIndex] &&
+                 !hasKnownControlFlowEntry(
+                     Decoded, LS, TextAddr, *TextEnd, DeclaredEntries,
+                     *BoundedReturns,
+                     MaterializedCalls[InstIndex]->SequenceStart,
+                     MaterializedCalls[InstIndex]->SequenceEnd)) {
+        Target = MaterializedCalls[InstIndex]->Target;
+      }
+      if (!Target) {
+        log() << "hotswap: unresolved call target at 0x" << utohexstr(DI.Offset)
+              << " (" << DI.Mnemonic << ")\n";
+        Info.HasUnresolvedTargets = true;
+        continue;
+      }
+
+      if (*Target >= TextAddr && *Target < *TextEnd) {
+        uint64_t RelativeTarget = *Target - TextAddr;
+        Info.Targets.insert(RelativeTarget);
+        if (DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isReg())
+          log() << "hotswap: resolved PC-materialized call at 0x"
+                << utohexstr(DI.Offset) << " to .text+0x"
+                << utohexstr(RelativeTarget) << "\n";
+      }
+      continue;
+    }
+
     std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
     if (!Target) {
       log() << "hotswap: MC analysis could not evaluate direct control-flow "
@@ -869,9 +1549,9 @@ collectDirectBranchTargets(ArrayRef<InternalDecodedInst> Decoded,
             << "; adjacent far trampolines will not be coalesced\n";
       return std::nullopt;
     }
-    Targets.insert(*Target);
+    Info.Targets.insert(*Target);
   }
-  return Targets;
+  return Info;
 }
 
 /// Coalesce runs of adjacent far patch sites when the same SGPR scratch block
@@ -979,11 +1659,13 @@ decodeCurrentInstruction(const PatchContext &Ctx,
 }
 
 /// Instructions covered by a hard clause or a delay directive must remain in
-/// place relative to that directive. Mark the complete encoded clause and the
-/// maximum six-instruction forward span addressable by s_delay_alu.
+/// place relative to that directive. B0-to-A0 rewrites have already replaced
+/// clauses with s_nop, so only preserve clause members when requested. Always
+/// mark the maximum six-instruction forward span addressable by s_delay_alu.
 static DenseSet<uint64_t>
 collectRelocationProtectedOffsets(ArrayRef<InternalDecodedInst> Decoded,
-                                  const LLVMState &LS) {
+                                  const LLVMState &LS,
+                                  bool ProtectClauseMembers) {
   DenseSet<uint64_t> Protected;
   unsigned ClauseRemaining = 0;
   unsigned DelayRemaining = 0;
@@ -998,7 +1680,7 @@ collectRelocationProtectedOffsets(ArrayRef<InternalDecodedInst> Decoded,
       --DelayRemaining;
     }
 
-    if (DI.Inst.getOpcode() == LS.SClauseOpcode &&
+    if (ProtectClauseMembers && DI.Inst.getOpcode() == LS.SClauseOpcode &&
         DI.Inst.getNumOperands() == 1 && DI.Inst.getOperand(0).isImm())
       ClauseRemaining =
           (static_cast<unsigned>(DI.Inst.getOperand(0).getImm()) & 63u) + 1;
@@ -1038,15 +1720,15 @@ collectIndirectControlFlowFunctions(ArrayRef<InternalDecodedInst> Decoded,
 /// Grow undersized far-site windows only through proven straight-line code.
 /// Patched neighbors are merged; ordinary instructions are copied verbatim
 /// into the trampoline body and retain their original order. This is bounded
-/// to the 28 bytes required by the accepted pre-Gen5 forward sequence.
+/// to the 20 bytes required by the gfx12 SCC-neutral forward sequence.
 static void
 expandStraightLineTrampolines(PatchContext &Ctx,
                               const DenseSet<uint64_t> &DirectBranchTargets) {
   DenseMap<uint64_t, size_t> DecodedAt;
   for (size_t I = 0; I != Ctx.Decoded.size(); ++I)
     DecodedAt[Ctx.Decoded[I].Offset] = I;
-  DenseSet<uint64_t> Protected =
-      collectRelocationProtectedOffsets(Ctx.Decoded, Ctx.LS);
+  DenseSet<uint64_t> Protected = collectRelocationProtectedOffsets(
+      Ctx.Decoded, Ctx.LS, !Ctx.Config.RunB0A0Patches);
   DenseSet<uint64_t> IndirectControlFlowFunctions =
       collectIndirectControlFlowFunctions(Ctx.Decoded, Ctx.LS, Ctx.Elf);
 
@@ -1204,93 +1886,36 @@ buildExternalGatewaySleds(ArrayRef<InternalDecodedInst> Decoded,
   return Sleds;
 }
 
-enum class SccScanResult {
-  Unresolved,
-  Used,
-  Defined,
-};
-
-static SccScanResult scanSccInstruction(const InternalDecodedInst &DI,
-                                        const LLVMState &LS, MCRegister SCC) {
-  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
-  if (Desc.hasImplicitUseOfPhysReg(SCC))
-    return SccScanResult::Used;
-  unsigned DefCount = std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
-  for (unsigned I = DefCount; I != DI.Inst.getNumOperands(); ++I) {
-    const MCOperand &Op = DI.Inst.getOperand(I);
-    if (Op.isReg() && LS.MRI->regsOverlap(Op.getReg(), SCC))
-      return SccScanResult::Used;
-  }
-
-  if (Desc.hasImplicitDefOfPhysReg(SCC, LS.MRI.get()))
-    return SccScanResult::Defined;
-  for (unsigned I = 0; I != DefCount; ++I) {
-    const MCOperand &Op = DI.Inst.getOperand(I);
-    if (Op.isReg() && LS.MRI->regsOverlap(Op.getReg(), SCC))
-      return SccScanResult::Defined;
-  }
-  return SccScanResult::Unresolved;
-}
-
-/// Prove that clobbering SCC on the forward edge cannot affect the replacement
-/// body or its continuation. Stop conservatively at unresolved control flow.
-static bool isIncomingSccDead(const PatchContext &Ctx, const Trampoline &T) {
-  MCRegister SCC = Ctx.LS.SCCRegister;
-  uint64_t TrailingBytes = SetPcReturnReserveBytes +
-                           (T.HasPoolBranchIsland ? PoolBranchIslandBytes : 0);
-  if (!SCC || T.Bytes.size() < TrailingBytes)
-    return false;
-
-  uint64_t BodySize = T.Bytes.size() - TrailingBytes;
-  std::vector<InternalDecodedInst> Body;
-  if (!decodeTextSection(T.Bytes.data(), BodySize, Ctx.LS, Body))
-    return false;
-  for (const InternalDecodedInst &DI : Body) {
-    SccScanResult Result = scanSccInstruction(DI, Ctx.LS, SCC);
-    if (Result == SccScanResult::Used)
-      return false;
-    if (Result == SccScanResult::Defined)
-      return true;
-    if (Ctx.LS.MIA && Ctx.LS.MIA->mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI))
-      return false;
-  }
-
-  std::optional<uint64_t> End = checkedAddUint64(
-      T.OriginalOffset, T.OriginalSize, "SCC-dead continuation start");
-  if (!End)
-    return false;
-  for (const InternalDecodedInst &DI : Ctx.Decoded) {
-    if (DI.Offset < *End)
-      continue;
-    if (T.HasFunctionRange && DI.Offset >= T.FunctionEnd)
-      break;
-    SccScanResult Result = scanSccInstruction(DI, Ctx.LS, SCC);
-    if (Result == SccScanResult::Used)
-      return false;
-    if (Result == SccScanResult::Defined)
-      return true;
-    if (isEndProgram(DI, Ctx.LS))
-      return true;
-    if (Ctx.LS.MIA && Ctx.LS.MIA->mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI))
-      return false;
-  }
-  return true;
-}
-
-static uint64_t countReachableGatewaySlots(ArrayRef<NopSled> Gateways,
-                                           uint64_t Offset, uint64_t Needed) {
+Expected<uint64_t>
+countReachableSetPcGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
+                                uint64_t FromOffset, uint64_t TargetOffset,
+                                unsigned SgprBase, uint64_t MaxSlots) {
   uint64_t Slots = 0;
   for (const NopSled &Sled : Gateways) {
-    if (Offset < Sled.FunctionStart || Offset >= Sled.FunctionEnd)
+    if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd)
       continue;
     uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
-    if (Sled.WritePos > UsableEnd || Needed > UsableEnd - Sled.WritePos)
-      continue;
-    uint64_t Distance = Sled.WritePos > Offset ? Sled.WritePos - Offset
-                                               : Offset - Sled.WritePos;
-    if (Distance >= MaxSledDistance)
-      continue;
-    Slots += (UsableEnd - Sled.WritePos) / Needed;
+    uint64_t Candidate = Sled.WritePos;
+    while (Candidate <= UsableEnd && Slots < MaxSlots) {
+      uint64_t Distance = Candidate > FromOffset ? Candidate - FromOffset
+                                                 : FromOffset - Candidate;
+      if (Distance >= MaxSledDistance ||
+          LS.encodeSBranch(FromOffset, Candidate).empty())
+        break;
+      std::optional<SmallVector<uint8_t>> Bytes =
+          encodeSetPCLongBranch(LS, Candidate, TargetOffset, SgprBase);
+      if (!Bytes)
+        return createStringError(
+            Twine("failed to encode set-PC gateway while counting candidate "
+                  "offset 0x") +
+            utohexstr(Candidate));
+      if (Bytes->size() > UsableEnd - Candidate)
+        break;
+      ++Slots;
+      Candidate += Bytes->size();
+    }
+    if (Slots == MaxSlots)
+      break;
   }
   return Slots;
 }
@@ -1347,12 +1972,16 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
 
 static bool
 assignLongBranchGateways(PatchContext &Ctx,
-                         const DenseSet<uint64_t> &DirectBranchTargets) {
-  std::vector<NopSled> Gateways = buildExternalGatewaySleds(
-      Ctx.Decoded, Ctx.LS, Ctx.Elf, ArrayRef<uint8_t>(Ctx.Text, Ctx.TextSize),
-      DirectBranchTargets);
-  for (const NopSled &Sled : Ctx.NopSleds)
-    Gateways.push_back(Sled);
+                         const DenseSet<uint64_t> &DirectBranchTargets,
+                         bool AllowTextGateways) {
+  std::vector<NopSled> Gateways;
+  if (AllowTextGateways) {
+    Gateways = buildExternalGatewaySleds(
+        Ctx.Decoded, Ctx.LS, Ctx.Elf, ArrayRef<uint8_t>(Ctx.Text, Ctx.TextSize),
+        DirectBranchTargets);
+    for (const NopSled &Sled : Ctx.NopSleds)
+      Gateways.push_back(Sled);
+  }
 
   DenseMap<uint64_t, size_t> PoolIslandOwners;
   uint64_t IslandLayoutOffset = Ctx.PoolBaseOffset;
@@ -1376,8 +2005,6 @@ assignLongBranchGateways(PatchContext &Ctx,
   struct PendingGateway {
     size_t TrampolineIndex = 0;
     uint64_t TargetOffset = 0;
-    bool IncomingSccDead = false;
-    uint64_t NeededBytes = 0;
     uint64_t InitialCandidateSlots = 0;
   };
   std::vector<PendingGateway> Pending;
@@ -1397,7 +2024,6 @@ assignLongBranchGateways(PatchContext &Ctx,
       T.UsesShortBranchForward = true;
       continue;
     }
-    bool IncomingSccDead = isIncomingSccDead(Ctx, T);
     std::optional<SmallVector<uint8_t>> Direct = encodeSetPCLongBranch(
         Ctx.LS, T.OriginalOffset, TP, T.LongBranchSgprBase);
     if (Direct && Direct->size() <= T.OriginalSize) {
@@ -1405,21 +2031,20 @@ assignLongBranchGateways(PatchContext &Ctx,
       T.DirectSetPCForwardBytes = std::move(*Direct);
       continue;
     }
-    if (IncomingSccDead) {
-      Direct = encodeSetPCLongBranchClobberSCC(Ctx.LS, T.OriginalOffset, TP,
-                                               T.LongBranchSgprBase);
-      if (Direct && Direct->size() <= T.OriginalSize) {
-        T.UsesDirectSetPCForward = true;
-        T.DirectSetPCForwardBytes = std::move(*Direct);
-        continue;
-      }
+    Pending.push_back({I, TP, 0});
+  }
+  for (PendingGateway &P : Pending) {
+    const Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
+    Expected<uint64_t> CandidateSlots = countReachableSetPcGatewaySlots(
+        Gateways, Ctx.LS, T.OriginalOffset, P.TargetOffset,
+        T.LongBranchSgprBase, Pending.size());
+    if (!CandidateSlots) {
+      log() << "hotswap: error: failed to count gateways for far site 0x"
+            << utohexstr(T.OriginalOffset) << ": "
+            << toString(CandidateSlots.takeError()) << "\n";
+      return false;
     }
-
-    uint64_t Needed =
-        IncomingSccDead ? SetPcMinGatewayBytes : SetPcForwardSequenceBytes;
-    Pending.push_back(
-        {I, TP, IncomingSccDead, Needed,
-         countReachableGatewaySlots(Gateways, T.OriginalOffset, Needed)});
+    P.InitialCandidateSlots = *CandidateSlots;
   }
 
   std::vector<PendingGateway> StillPending;
@@ -1440,53 +2065,40 @@ assignLongBranchGateways(PatchContext &Ctx,
   }
   Pending = std::move(StillPending);
 
-  // Allocate SCC-preserving gateways first. They need more contiguous bytes
-  // and have fewer placement options; SCC-dead gateways can fill the remaining
-  // 20-byte fragments afterward.
   std::stable_sort(Pending.begin(), Pending.end(),
                    [](const PendingGateway &LHS, const PendingGateway &RHS) {
-                     if (LHS.NeededBytes != RHS.NeededBytes)
-                       return LHS.NeededBytes > RHS.NeededBytes;
                      return LHS.InitialCandidateSlots <
                             RHS.InitialCandidateSlots;
                    });
 
-  uint64_t PreservingGateways = 0;
-  uint64_t SccDeadGateways = 0;
+  uint64_t AssignedGateways = 0;
   for (const PendingGateway &P : Pending) {
     Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
-    NopSled *Sled = findNearestSled(Gateways, T.OriginalOffset, P.NeededBytes);
-    if (!Sled ||
-        Ctx.LS.encodeSBranch(T.OriginalOffset, Sled->WritePos).empty()) {
+    Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
+        findNearestSetPcGateway(Gateways, Ctx.LS, T.OriginalOffset,
+                                P.TargetOffset, T.LongBranchSgprBase);
+    if (!GatewayOrErr) {
+      log() << "hotswap: error: failed to plan gateway for far site 0x"
+            << utohexstr(T.OriginalOffset) << ": "
+            << toString(GatewayOrErr.takeError()) << "\n";
+      return false;
+    }
+    std::optional<EncodedSetPcGateway> Gateway = std::move(*GatewayOrErr);
+    if (!Gateway) {
       log() << "hotswap: error: no safe short-branch gateway for far site 0x"
             << utohexstr(T.OriginalOffset) << " (" << P.InitialCandidateSlots
             << " initial candidate slot(s))\n";
       return false;
     }
-    std::optional<SmallVector<uint8_t>> Gateway =
-        P.IncomingSccDead
-            ? encodeSetPCLongBranchClobberSCC(
-                  Ctx.LS, Sled->WritePos, P.TargetOffset, T.LongBranchSgprBase)
-            : encodeSetPCLongBranch(Ctx.LS, Sled->WritePos, P.TargetOffset,
-                                    T.LongBranchSgprBase);
-    if (!Gateway || Gateway->size() > P.NeededBytes) {
-      log() << "hotswap: error: failed to encode far-site gateway at 0x"
-            << utohexstr(Sled->WritePos) << "\n";
-      return false;
-    }
     T.HasForwardGateway = true;
-    T.ForwardGatewayOffset = Sled->WritePos;
-    T.ForwardGatewayBytes = std::move(*Gateway);
-    Sled->WritePos += T.ForwardGatewayBytes.size();
-    if (P.IncomingSccDead)
-      ++SccDeadGateways;
-    else
-      ++PreservingGateways;
+    T.ForwardGatewayOffset = Gateway->Sled->WritePos;
+    T.ForwardGatewayBytes = std::move(Gateway->Bytes);
+    Gateway->Sled->WritePos += T.ForwardGatewayBytes.size();
+    ++AssignedGateways;
   }
   if (!Pending.empty())
-    log() << "hotswap: assigned " << PreservingGateways
-          << " SCC-preserving and " << SccDeadGateways
-          << " SCC-dead forward gateway(s)\n";
+    log() << "hotswap: assigned " << AssignedGateways
+          << " SCC-neutral forward gateway(s)\n";
   if (BranchIslandChains != 0)
     log() << "hotswap: assigned " << BranchIslandChains
           << " forward s_branch island chain(s)\n";
@@ -1556,7 +2168,7 @@ assignLongBranchGateways(PatchContext &Ctx,
   // a later small or clause/delay-constrained source window.
   bool PoolBaseFar = !isSBranchReachable(InstOffset, Ctx.PoolBaseOffset) ||
                      !isSBranchReachable(*PoolReturnFrom, *ReturnTo);
-  if (!PoolBaseFar) {
+  if (!PoolBaseFar && !Ctx.DirectControlFlow.HasUnresolvedTargets) {
     // findNearestSled enforces sled headroom. emitToNopSled still validates
     // exact branch reachability because branch-back distance includes the
     // replacement size, not just the original instruction offset.
@@ -1597,19 +2209,48 @@ static std::optional<uint32_t> runPerInstPass(uint32_t (*Fn)(PatchContext &,
 /// (in-place -> trampoline -> WMMA split -> scratch). Each pass gets a
 /// chance to claim the instruction; first non-zero return wins. Also runs
 /// the whole-function WMMA-hazard pass after the per-instruction loop and
-/// records per-kernel stats via ElfView::updateKernelDescriptor.
+/// records per-kernel stats via ElfView::updateKernelDescriptorVgprCount.
 /// Returns the total number of applied patches across all passes.
 static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     std::vector<InternalDecodedInst> &Decoded, uint8_t *Text, uint64_t TextSize,
     const LLVMState &LS, std::vector<Trampoline> &OutTrampolines, ElfView &Elf,
     std::vector<ScratchPatchInfo> &OutScratchPatches,
-    const RewriteConfig &Config, bool &OutRequiredPatchApplied) {
+    const RewriteConfig &Config, bool &OutRequiredPatchApplied,
+    HotswapProfile &Profile) {
   uint32_t Patched = 0;
-  std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS, Elf);
 
+  HotswapProfile::Scope SledScope = Profile.time(HotswapMetric::NopSledScan);
+  std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS, Elf);
+  SledScope.finish();
+
+  std::optional<DeclaredTextEntryInfo> DeclaredEntries =
+      collectDeclaredTextEntries(Elf);
+  if (!DeclaredEntries)
+    return std::nullopt;
+  std::vector<ElfView::FunctionTextRange> FunctionRanges =
+      Elf.functionTextRanges();
+  std::optional<DirectControlFlowInfo> ControlFlow = collectDirectBranchTargets(
+      Decoded, LS, Elf.textAddr(), Elf.textSize(), DeclaredEntries->Entries,
+      FunctionRanges, DeclaredEntries->ExternalEntries);
+  if (!ControlFlow)
+    return std::nullopt;
+  if (ControlFlow->HasUnresolvedTargets) {
+    log() << "hotswap: unresolved control-flow target disables NOP-sled "
+             "emission, trampoline coalescing, source relocation, and .text "
+             "gateways\n";
+    Sleds.clear();
+  } else {
+    truncateNopSledsAtDirectTargets(Sleds, ControlFlow->Targets);
+  }
+
+  HotswapProfile::Scope CfgScope = Profile.time(HotswapMetric::CfgBuild);
   CFG Cfg = buildCfg(Decoded, *LS.MCII);
+  CfgScope.finish();
+
+  HotswapProfile::Scope LiveScope = Profile.time(HotswapMetric::Liveness);
   LivenessInfo Liveness =
       computeLiveness(Decoded, Cfg, *LS.MCII, *LS.MRI, Config.MaxVgprs);
+  LiveScope.finish();
 
   if (!Liveness.Converged) {
     log() << "hotswap: error: liveness analysis did not converge, using "
@@ -1632,10 +2273,10 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       *PoolVAddr, Elf.textAddr(), "trampoline pool base offset");
   if (!PoolBaseOffset)
     return std::nullopt;
-  PatchContext Ctx{Config,         Decoded,         Text,
-                   TextSize,       *PoolBaseOffset, LS,
-                   OutTrampolines, Sleds,           Elf,
-                   Liveness,       KernelStats,     OutScratchPatches};
+  PatchContext Ctx{
+      Config,      Decoded,           Text,         TextSize, *PoolBaseOffset,
+      LS,          OutTrampolines,    Sleds,        Elf,      Liveness,
+      KernelStats, OutScratchPatches, *ControlFlow, Profile};
 
   const HotswapPatchVTable &VT = getHotswapPatchVTable();
 
@@ -1644,24 +2285,39 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
   // against on these and we must not invoke the patch passes for them.
   constexpr StringLiteral UnknownMnemonic = "<unknown>";
   using PerInstPatchFn = uint32_t (*)(PatchContext &, size_t);
-  SmallVector<PerInstPatchFn, 5> PerInstPasses;
+  // A pass plus its metric; time/patches are summed locally and flushed once
+  // after the loop (see HotswapProfile::add).
+  struct TimedPass {
+    PerInstPatchFn Fn;
+    HotswapMetric Metric;
+    uint64_t Nanos = 0;
+    uint64_t Patches = 0;
+  };
+  SmallVector<TimedPass, 5> Passes;
   if (Config.RunB0A0Patches) {
-    PerInstPasses.push_back(VT.applyInPlacePatches);
-    PerInstPasses.push_back(VT.applyTrampolinePatches);
-    PerInstPasses.push_back(VT.applyWmmaSplitPatches);
-    PerInstPasses.push_back(VT.applyScratchPatches);
-    PerInstPasses.push_back(VT.applyWmmaScale16Patches);
+    Passes.push_back({VT.applyInPlacePatches, HotswapMetric::InPlace});
+    Passes.push_back({VT.applyTrampolinePatches, HotswapMetric::Trampoline});
+    Passes.push_back({VT.applyWmmaSplitPatches, HotswapMetric::WmmaSplit});
+    Passes.push_back({VT.applyScratchPatches, HotswapMetric::ScratchFp8});
+    Passes.push_back({VT.applyWmmaScale16Patches, HotswapMetric::WmmaScale16});
   } else {
-    PerInstPasses.push_back(VT.applyTrampolinePatches);
+    Passes.push_back({VT.applyTrampolinePatches, HotswapMetric::Trampoline});
   }
+
+  const bool Prof = Ctx.Profile.enabled();
 
   for (size_t Idx = 0, E = Decoded.size(); Idx < E; ++Idx) {
     const InternalDecodedInst &DI = Decoded[Idx];
     if (DI.Mnemonic == UnknownMnemonic)
       continue;
 
-    for (PerInstPatchFn Fn : PerInstPasses) {
-      std::optional<uint32_t> P = runPerInstPass(Fn, Ctx, Idx);
+    for (TimedPass &Pass : Passes) {
+      const uint64_t T0 = Prof ? profNowNs() : 0;
+      std::optional<uint32_t> P = runPerInstPass(Pass.Fn, Ctx, Idx);
+      if (Prof) {
+        Pass.Nanos += profNowNs() - T0;
+        Pass.Patches += P.value_or(0);
+      }
       if (!P)
         return std::nullopt;
       if (*P == 0)
@@ -1670,6 +2326,10 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       break;
     }
   }
+
+  if (Prof)
+    for (const TimedPass &Pass : Passes)
+      Ctx.Profile.add(Pass.Metric, Pass.Nanos, Pass.Patches);
 
   // Whole-kernel passes below run after per-instruction patches. Earlier
   // passes may have modified Text bytes, but the Decoded stream still holds
@@ -1682,21 +2342,32 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
   //    treat a branch as WMMA/VALU/VOP3PX2.
   // If a future patch family changes instruction boundaries, the Decoded
   // stream must be rebuilt before these passes run.
-  if (Config.RunB0A0Patches && VT.applyWmmaHazardPatch)
-    Patched += VT.applyWmmaHazardPatch(Ctx);
-  if (Config.RunB0A0Patches && VT.applyVop3px2Src2Fix)
-    Patched += VT.applyVop3px2Src2Fix(Ctx);
+  if (Config.RunB0A0Patches && VT.applyWmmaHazardPatch) {
+    HotswapProfile::Scope HazardScope =
+        Ctx.Profile.time(HotswapMetric::WmmaHazard);
+    const uint32_t P = VT.applyWmmaHazardPatch(Ctx);
+    HazardScope.addPatches(P);
+    HazardScope.finish();
+    Patched += P;
+  }
+  if (Config.RunB0A0Patches && VT.applyVop3px2Src2Fix) {
+    HotswapProfile::Scope Vop3Scope =
+        Ctx.Profile.time(HotswapMetric::Vop3px2Src2);
+    const uint32_t P = VT.applyVop3px2Src2Fix(Ctx);
+    Vop3Scope.addPatches(P);
+    Vop3Scope.finish();
+    Patched += P;
+  }
 
   if (!OutTrampolines.empty()) {
-    std::optional<DenseSet<uint64_t>> DirectBranchTargets =
-        collectDirectBranchTargets(Decoded, LS);
-    if (!DirectBranchTargets)
-      return std::nullopt;
-    mergeAdjacentLongTrampolines(OutTrampolines, *DirectBranchTargets);
-    expandStraightLineTrampolines(Ctx, *DirectBranchTargets);
-    mergeAdjacentLongTrampolines(OutTrampolines, *DirectBranchTargets);
+    if (!ControlFlow->HasUnresolvedTargets) {
+      mergeAdjacentLongTrampolines(OutTrampolines, ControlFlow->Targets);
+      expandStraightLineTrampolines(Ctx, ControlFlow->Targets);
+      mergeAdjacentLongTrampolines(OutTrampolines, ControlFlow->Targets);
+    }
     appendPoolBranchIslands(OutTrampolines);
-    if (!assignLongBranchGateways(Ctx, *DirectBranchTargets))
+    if (!assignLongBranchGateways(Ctx, ControlFlow->Targets,
+                                  !ControlFlow->HasUnresolvedTargets))
       return std::nullopt;
   }
 
@@ -1705,20 +2376,42 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     unsigned Sgprs;
   };
   StringMap<ResourceCounts> CountsBefore;
+  StringMap<unsigned> VgprGranules;
+  StringMap<unsigned> RequiredVgprCounts;
   StringMap<unsigned> RequiredSgprCounts;
   for (const StringMapEntry<KernelPatchStats> &KV : KernelStats) {
     StringRef KName = KV.first();
     const KernelPatchStats &Stats = KV.second;
     if (KName.empty())
       continue;
+    unsigned VgprGranule = getKernelVgprGranuleSize(Ctx, KName);
+    VgprGranules.try_emplace(KName, VgprGranule);
     std::optional<unsigned> VgprsBefore =
-        Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
+        Elf.getKernelVgprCount(KName, VgprGranule);
     std::optional<unsigned> SgprsBefore = Elf.getKernelSgprCount(KName);
     CountsBefore.try_emplace(KName, ResourceCounts{VgprsBefore.value_or(0),
                                                    SgprsBefore.value_or(0)});
-    if (Stats.ExtraVgprs > 0)
-      Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs,
-                                 Config.VgprGranuleSize);
+    if (Stats.ExtraVgprs > 0) {
+      // Every current VGPR-growing patch preflights before emitting bytes.
+      // Keep this required-policy check as a fail-safe so a future path cannot
+      // silently emit a kernel that no longer admits one maximum workgroup.
+      if (checkKernelVgprBump(Ctx, KName, Stats.ExtraVgprs,
+                              PatchRequirement::Required) !=
+          VgprBumpDecision::Apply)
+        return std::nullopt;
+      if (!VgprsBefore) {
+        log() << "hotswap: error: failed to read VGPR count for kernel "
+              << KName << "\n";
+        return std::nullopt;
+      }
+      if (Stats.ExtraVgprs >
+          std::numeric_limits<unsigned>::max() - *VgprsBefore) {
+        log() << "hotswap: error: VGPR count for kernel " << KName
+              << " overflows unsigned after hotswap scratch allocation\n";
+        return std::nullopt;
+      }
+      RequiredVgprCounts.try_emplace(KName, *VgprsBefore + Stats.ExtraVgprs);
+    }
     if (Stats.ExtraSgprs > 0) {
       if (!SgprsBefore) {
         log() << "hotswap: error: failed to read SGPR count for kernel "
@@ -1736,9 +2429,28 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     }
   }
 
+  if (!Elf.updateKernelMetadataVgprCounts(RequiredVgprCounts)) {
+    log() << "hotswap: error: failed to update kernel VGPR metadata\n";
+    return std::nullopt;
+  }
   if (!Elf.updateKernelMetadataSgprCounts(RequiredSgprCounts)) {
     log() << "hotswap: error: failed to update kernel SGPR metadata\n";
     return std::nullopt;
+  }
+  for (const StringMapEntry<unsigned> &Required : RequiredVgprCounts) {
+    StringMap<unsigned>::const_iterator Granule =
+        VgprGranules.find(Required.first());
+    if (Granule == VgprGranules.end()) {
+      log() << "hotswap: error: missing VGPR granule for kernel "
+            << Required.first() << "\n";
+      return std::nullopt;
+    }
+    if (!Elf.updateKernelDescriptorVgprCount(Required.first(), Required.second,
+                                             Granule->second)) {
+      log() << "hotswap: error: failed to update VGPR descriptor count for "
+            << Required.first() << "\n";
+      return std::nullopt;
+    }
   }
 
   for (const StringMapEntry<KernelPatchStats> &KV : KernelStats) {
@@ -1752,8 +2464,14 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
             << KName << "\n";
       return std::nullopt;
     }
+    StringMap<unsigned>::const_iterator Granule = VgprGranules.find(KName);
+    if (Granule == VgprGranules.end()) {
+      log() << "hotswap: error: missing VGPR granule for kernel " << KName
+            << "\n";
+      return std::nullopt;
+    }
     std::optional<unsigned> VgprsAfter =
-        Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
+        Elf.getKernelVgprCount(KName, Granule->second);
     std::optional<unsigned> SgprsAfter = Elf.getKernelSgprCount(KName);
     log() << "hotswap: liveness: kernel " << KName
           << ": vgprs_before=" << Before->second.Vgprs
@@ -1937,10 +2655,10 @@ copyOutputBuffer(const void *Data, size_t Size, StringRef CopyKind) {
 
 // -- retargetCodeObject -------------------------------------------------------
 
-amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
-                                      const TargetIdentifier &TargetIdent,
-                                      const Gfx1250RewriteOptions &Options,
-                                      std::unique_ptr<MemoryBuffer> &Out) {
+static amd_comgr_status_t retargetCodeObjectImpl(
+    const void *ElfData, size_t ElfSize, const TargetIdentifier &TargetIdent,
+    const Gfx1250RewriteOptions &Options, std::unique_ptr<MemoryBuffer> &Out,
+    bool AllowTextDisplacement, HotswapProfile &Profile) {
   // The dispatcher fetches the patch vtable lazily via
   // getHotswapPatchVTable() inside applyGfx1250B0toA0Rules; the singleton's
   // initializer binds every register*Patch slot on first access, so no
@@ -1949,20 +2667,17 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   const bool RunInstructionPatches =
       Options.RunB0A0Patches ||
       Options.MaskPolicy != MaskWorkaroundPolicy::None;
-  if (!RunInstructionPatches && !Options.RunEntryTrampolines) {
-    std::unique_ptr<WritableMemoryBuffer> Result =
-        copyOutputBuffer(ElfData, ElfSize, "no-op");
-    if (!Result)
-      return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
-    Out = std::move(Result);
-    return AMD_COMGR_STATUS_SUCCESS;
-  }
+  const bool Prof = Profile.enabled();
 
   // Take a working copy so the input is preserved and we have a mutable
   // buffer to parse / patch.
+  uint64_t InputCopyT0 = Prof ? profNowNs() : 0;
   std::vector<uint8_t> Buf(static_cast<const uint8_t *>(ElfData),
                            static_cast<const uint8_t *>(ElfData) + ElfSize);
+  if (Prof)
+    Profile.add(HotswapMetric::InputCopy, profNowNs() - InputCopyT0, 0);
 
+  uint64_t ParseT0 = Prof ? profNowNs() : 0;
   Expected<ElfView> ViewOrErr = ElfView::create(Buf.data(), Buf.size());
   if (!ViewOrErr) {
     log() << "hotswap: error: retargetCodeObject: input is not a "
@@ -1975,12 +2690,82 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
   ElfView &Elf = *ViewOrErr;
+  if (Prof)
+    Profile.add(HotswapMetric::ElfParse, profNowNs() - ParseT0, 0);
 
-  LLVMState LS = initLLVM(TargetIdent);
-  if (!LS.Valid) {
-    log() << "hotswap: error: retargetCodeObject: initLLVM failed "
-          << "for CPU '" << TargetIdent.Processor << "'; aborting rewrite.\n";
-    return AMD_COMGR_STATUS_ERROR;
+  // The CPU name and s_nop padding bytes are the only rewrite state the fast
+  // path needs; both are also carried by LLVMState on the MC path. Holding them
+  // as standalone locals lets the shared tail work off them regardless of which
+  // path ran, so the fast path never builds an LLVMState.
+  const StringRef TargetCpu = TargetIdent.Processor;
+  static constexpr uint8_t SNop[4] = {0x00, 0x00, 0x80, 0xbf};
+  SmallVector<uint8_t, 4> SNopBytes(SNop, SNop + sizeof(SNop));
+
+  // B0->B0 entry-only fast path: no instruction patches means no .text decode,
+  // so skip the whole LLVM MC layer and emit entry stubs from a pre-encoded
+  // byte template. UseB0B0EntryFastPath is decided by the caller from the
+  // source/target stepping; the template bytes and the HWSD workaround are
+  // gfx1250-specific, which that flag already accounts for.
+  const bool UseFastAppend = Options.RunEntryTrampolines &&
+                             !RunInstructionPatches &&
+                             Options.UseB0B0EntryFastPath;
+
+  // The MC layer (disassembler, encoder, register info) is only initialized on
+  // the non-fast path. The fast path leaves LS default-constructed and unused:
+  // it works entirely off TargetCpu / SNopBytes above, and every LS access
+  // below is guarded by a condition that is false on the fast path.
+  LLVMState LS;
+  if (UseFastAppend) {
+    log() << "hotswap: entry trampolines: B0->B0 fast path (no MC/.text "
+             "disassembly)\n";
+  } else {
+    uint64_t InitT0 = Prof ? profNowNs() : 0;
+    LS = initLLVM(TargetIdent);
+    if (Prof)
+      Profile.add(HotswapMetric::InitLLVM, profNowNs() - InitT0, 0);
+    if (!LS.Valid) {
+      log() << "hotswap: error: retargetCodeObject: initLLVM failed "
+            << "for CPU '" << TargetIdent.Processor << "'; aborting rewrite.\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+  }
+
+  // Direct displacement is an entry-workaround optimization only. Apply the
+  // entry prefixes before ordinary instruction rewriting so the existing
+  // NOP-sled/trampoline planner sees the final instruction offsets. If the ELF
+  // cannot be displaced safely, continue from the pristine working copy and
+  // append the established entry stubs below.
+  if (Options.RunEntryTrampolines && AllowTextDisplacement && !UseFastAppend) {
+    std::vector<DisplacementEdit> EntryDisplacements;
+    std::optional<uint32_t> EntryCount =
+        collectKernelEntryDisplacements(Elf, LS, EntryDisplacements);
+    if (!EntryCount)
+      return AMD_COMGR_STATUS_ERROR;
+
+    if (!EntryDisplacements.empty()) {
+      Expected<std::unique_ptr<WritableMemoryBuffer>> DisplacedOrErr =
+          tryApplyTextDisplacementToNewBuffer(Elf, LS, EntryDisplacements);
+      if (DisplacedOrErr) {
+        std::unique_ptr<WritableMemoryBuffer> Displaced =
+            std::move(*DisplacedOrErr);
+        if (!RunInstructionPatches) {
+          Out = std::move(Displaced);
+          return AMD_COMGR_STATUS_SUCCESS;
+        }
+
+        Gfx1250RewriteOptions RemainingOptions = Options;
+        RemainingOptions.RunEntryTrampolines = false;
+        RemainingOptions.UseB0B0EntryFastPath = false;
+        return retargetCodeObjectImpl(Displaced->getBufferStart(),
+                                      Displaced->getBufferSize(), TargetIdent,
+                                      RemainingOptions, Out,
+                                      /*AllowTextDisplacement=*/false, Profile);
+      }
+
+      log() << "hotswap: entry displacement unavailable: "
+            << toString(DisplacedOrErr.takeError())
+            << "; using appended entry stubs\n";
+    }
   }
 
   RewriteConfig Config = makeGfx1250B0A0Config();
@@ -1994,15 +2779,22 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   bool RequiredPatchApplied = false;
   if (RunInstructionPatches) {
     std::vector<InternalDecodedInst> Decoded;
-    if (!decodeTextSection(Text, Elf.textSize(), LS, Decoded)) {
+    uint64_t DecodeT0 = Prof ? profNowNs() : 0;
+    bool DecodedOk = decodeTextSection(Text, Elf.textSize(), LS, Decoded);
+    if (Prof)
+      Profile.add(HotswapMetric::Decode, profNowNs() - DecodeT0, 0);
+    if (!DecodedOk) {
       log() << "hotswap: error: retargetCodeObject: decodeTextSection "
             << "failed on .text (" << Elf.textSize() << " bytes).\n";
       return AMD_COMGR_STATUS_ERROR;
     }
 
+    uint64_t DispatchT0 = Prof ? profNowNs() : 0;
     std::optional<uint32_t> Patched = applyGfx1250B0toA0Rules(
         Decoded, Text, Elf.textSize(), LS, Deferred, Elf, ScratchPatches,
-        Config, RequiredPatchApplied);
+        Config, RequiredPatchApplied, Profile);
+    if (Prof)
+      Profile.add(HotswapMetric::B0A0Dispatch, profNowNs() - DispatchT0, 0);
     if (!Patched)
       return AMD_COMGR_STATUS_ERROR;
     Count = *Patched;
@@ -2013,12 +2805,12 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
 
   // gfx1250 revision is recorded per kernel in the AMDGPU metadata note.
   // Running a B0 object on A0 requires retagging that metadata even when no
-  // machine instruction needed rewriting. Native A0 code generation preserves
-  // s_clause and emits the same instructions as B0 for valid clauses.
+  // machine instruction needed rewriting.
   if (Options.RunB0A0Patches && !Elf.updateGfx1250RevisionMetadata("A0"))
     return AMD_COMGR_STATUS_ERROR;
 
   std::unique_ptr<WritableMemoryBuffer> Result;
+  uint64_t PoolT0 = Prof ? profNowNs() : 0;
   std::vector<Trampoline> Growth = Deferred;
   // The appended pool's fresh virtual address is the single reference point for
   // all trampoline branch/stub targets (growWithTrampolines places it there).
@@ -2035,8 +2827,14 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   if (!PoolBaseOffsetOr)
     return AMD_COMGR_STATUS_ERROR;
   const uint64_t PoolBaseOffset = *PoolBaseOffsetOr;
+  if (Prof)
+    Profile.add(HotswapMetric::PoolSetup, profNowNs() - PoolT0, 0);
   if (!Deferred.empty()) {
-    if (!fixupTrampolineBranches(Deferred, Text, PoolBaseOffset, LS)) {
+    uint64_t FixupT0 = Prof ? profNowNs() : 0;
+    bool FixupOk = fixupTrampolineBranches(Deferred, Text, PoolBaseOffset, LS);
+    if (Prof)
+      Profile.add(HotswapMetric::FixupTrampolines, profNowNs() - FixupT0, 0);
+    if (!FixupOk) {
       if (RequiredPatchApplied) {
         log() << "hotswap: error: required patch trampoline branch fixup "
                  "failed; refusing to return the original unsafe code "
@@ -2070,8 +2868,16 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
 
   std::vector<KernelEntryTrampolineFixup> EntryFixups;
   if (Options.RunEntryTrampolines) {
-    std::optional<uint32_t> EntryCount = appendKernelEntryTrampolines(
-        Elf, LS, Config.MaxSgprs, Growth, EntryFixups);
+    uint64_t EntryT0 = Prof ? profNowNs() : 0;
+    std::optional<uint32_t> EntryCount =
+        UseFastAppend
+            ? appendKernelEntryTrampolinesFast(Elf, TargetCpu, Config.MaxSgprs,
+                                               Growth, EntryFixups)
+            : appendKernelEntryTrampolines(Elf, LS, Config.MaxSgprs, Growth,
+                                           EntryFixups);
+    if (Prof)
+      Profile.add(HotswapMetric::EntryTrampolines, profNowNs() - EntryT0,
+                  EntryCount.value_or(0));
     if (!EntryCount)
       return AMD_COMGR_STATUS_ERROR;
     Count += *EntryCount;
@@ -2079,12 +2885,20 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     log() << "hotswap: kernel-entry trampolines disabled for this rewrite\n";
   }
 
-  if (!Deferred.empty() &&
-      !appendDeferredTrampolinePrefetchGuard(Elf, LS, Growth))
-    return AMD_COMGR_STATUS_ERROR;
+  if (!Deferred.empty()) {
+    uint64_t GuardT0 = Prof ? profNowNs() : 0;
+    bool GuardOk = appendDeferredTrampolinePrefetchGuard(Elf, LS, Growth);
+    if (Prof)
+      Profile.add(HotswapMetric::PrefetchGuard, profNowNs() - GuardT0, 0);
+    if (!GuardOk)
+      return AMD_COMGR_STATUS_ERROR;
+  }
 
   if (!Growth.empty()) {
-    Result = Elf.growWithTrampolines(Growth, LS.SNopBytes);
+    uint64_t GrowT0 = Prof ? profNowNs() : 0;
+    Result = Elf.growWithTrampolines(Growth, SNopBytes);
+    if (Prof)
+      Profile.add(HotswapMetric::GrowElf, profNowNs() - GrowT0, 0);
     if (!Result) {
       log() << "hotswap: error: retargetCodeObject: "
             << "ElfView::growWithTrampolines returned null with "
@@ -2101,9 +2915,17 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
       }
       GrowthTotal += T.Bytes.size();
     }
+    uint64_t DbgT0 = Prof ? profNowNs() : 0;
     patchDebugSections(*Result, Deferred, Elf, GrowthTotal);
-    if (!rewriteKernelEntryDescriptorOffsets(*Result, PoolVAddr, LS.Cpu,
-                                             EntryFixups))
+    if (Prof)
+      Profile.add(HotswapMetric::DebugSections, profNowNs() - DbgT0, 0);
+
+    uint64_t KdT0 = Prof ? profNowNs() : 0;
+    bool KdOk = rewriteKernelEntryDescriptorOffsets(*Result, PoolVAddr,
+                                                    TargetCpu, EntryFixups);
+    if (Prof)
+      Profile.add(HotswapMetric::KdRewrite, profNowNs() - KdT0, 0);
+    if (!KdOk)
       return AMD_COMGR_STATUS_ERROR;
 
     // Give each appended entry stub a `<kernel>.stub` symbol so a dispatch
@@ -2111,25 +2933,68 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
     // `info dispatches`). This grows only the non-alloc .symtab/.strtab and
     // returns a new buffer; failure is non-fatal (the rewritten code object is
     // still correct, just missing the debug-only symbol).
-    if (!EntryFixups.empty()) {
+    //
+    // FAST PATH: this .symtab/.strtab rebuild + full buffer copy scales with
+    // kernel count and is pure overhead for a load-time-critical path (the ROCr
+    // loader trampoline adds no such symbols). The symbols are only a debugging
+    // aid, so the fast path skips them by default. Set
+    // AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS=1 to re-enable (e.g. for rocgdb).
+    const bool AddStubSymbols =
+        !UseFastAppend || env::shouldAddEntryTrampolineSymbols();
+    if (!EntryFixups.empty() && AddStubSymbols) {
+      uint64_t SymT0 = Prof ? profNowNs() : 0;
       std::unique_ptr<WritableMemoryBuffer> WithSyms =
-          addKernelEntryTrampolineSymbols(*Result, Elf.textSectionIndex(),
-                                          Elf.textAddr(), Elf.textSize(),
-                                          EntryFixups);
+          addKernelEntryTrampolineSymbols(*Result, PoolVAddr, EntryFixups);
+      if (Prof)
+        Profile.add(HotswapMetric::SymbolInsert, profNowNs() - SymT0, 0);
       if (WithSyms)
         Result = std::move(WithSyms);
     }
   } else {
+    uint64_t OutCopyT0 = Prof ? profNowNs() : 0;
     Result = copyOutputBuffer(Buf.data(), ElfSize, "patched");
+    if (Prof)
+      Profile.add(HotswapMetric::OutputCopy, profNowNs() - OutCopyT0, 0);
     if (!Result)
       return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
   }
 
-  if (!ScratchPatches.empty())
+  if (!ScratchPatches.empty()) {
+    uint64_t VerifyT0 = Prof ? profNowNs() : 0;
     runScratchVerification(*Result, LS, ScratchPatches, Config.MaxVgprs);
+    if (Prof)
+      Profile.add(HotswapMetric::ScratchVerify, profNowNs() - VerifyT0, 0);
+  }
 
   Out = std::move(Result);
   return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
+                                      const TargetIdentifier &TargetIdent,
+                                      const Gfx1250RewriteOptions &Options,
+                                      std::unique_ptr<MemoryBuffer> &Out) {
+  const bool RunInstructionPatches =
+      Options.RunB0A0Patches ||
+      Options.MaskPolicy != MaskWorkaroundPolicy::None;
+  if (!RunInstructionPatches && !Options.RunEntryTrampolines) {
+    std::unique_ptr<WritableMemoryBuffer> Result =
+        copyOutputBuffer(ElfData, ElfSize, "no-op");
+    if (!Result)
+      return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+    Out = std::move(Result);
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
+
+  // One profiling session per code object, merged into TimeStatistics when it
+  // goes out of scope. Prof gates the manual per-phase clock reads.
+  HotswapProfile Profile(hotswapProfilingEnabled());
+  // RAII guard: records phase:rewrite_total on every return path.
+  [[maybe_unused]] HotswapProfile::Scope TotalScope =
+      Profile.time(HotswapMetric::RewriteTotal);
+
+  return retargetCodeObjectImpl(ElfData, ElfSize, TargetIdent, Options, Out,
+                                /*AllowTextDisplacement=*/true, Profile);
 }
 
 } // namespace hotswap
