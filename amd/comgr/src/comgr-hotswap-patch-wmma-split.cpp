@@ -63,14 +63,22 @@
 
 #include "comgr-hotswap-internal.h"
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCCodeEmitter.h"
+#include "llvm/MC/MCFixup.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <map>
+#include <mutex>
 #include <optional>
+#include <string>
 
 using namespace llvm;
 
@@ -281,147 +289,112 @@ std::optional<WmmaOps> extractWmmaOps(const MCInst &Inst,
   return R;
 }
 
-// -- Printed-asm parsing and transformation ---------------------------------
+// -- Direct MCInst construction (no print / re-parse round-trip) ------------
+//
+// The splitter builds each replacement half by cloning the decoded source
+// MCInst and adjusting operands at the MC layer, then encodes via
+// MCCodeEmitter. This avoids the per-patch asm-parser spin-up that dominated
+// the pass (~89% of wmma_split time; see B0A0_TRANSPILE_HOTSPOTS.md). Cloning
+// preserves the source operands verbatim -- including an inline-immediate
+// src2 (e.g. 1.0 vs 1) -- so the byte output is identical to the text path.
+//
+// The disassembler-visible operand layouts (validated at runtime by
+// extractWmmaOps' NumOperands check and by the exact-operand lit tests in
+// test-lit/hotswap-wmma-split*.s) are:
+//   K=128 fp8/bf8 (source) and K=64 (replacement), 7 operands:
+//     [0] vdst  [1] src0  [2] src1  [3] src2_modifiers  [4] src2
+//     [5] matrix_a_reuse  [6] matrix_b_reuse
+//   32x16x128_f4 (source), 5 operands: [0..4] as above, no trailing modifiers.
+//   16x16x128_f8f6f4 (replacement), 7 operands: [0..4] as above,
+//     [5] matrix_a_fmt  [6] matrix_b_fmt.
+// For these opcodes src2_modifiers packs only the src2 neg_lo (bit0) / neg_hi
+// (bit1) flags; src0/src1 negation is not part of the splitter's supported
+// surface (a source carrying extra modifier operands changes the operand
+// count and is rejected by extractWmmaOps before reaching here).
 
-struct PrintedAsm {
-  StringRef Mnemonic;
-  StringRef Operands[4];    // vdst, src0, src1, src2 (printer-canonical form)
-  StringRef ModifierSuffix; // includes leading space if non-empty
+// MATRIX_FMT_FP4 enum value for the f8f6f4 matrix-format operands, verified
+// against the gfx1250 MC layer (printed `matrix_a_fmt:MATRIX_FMT_FP4` <-> Imm:4).
+constexpr int64_t MatrixFmtFP4 = 4;
+
+// K=128/K=64 and f8f6f4 operand slots (disassembler layout, see above).
+enum : unsigned {
+  OpVDst = 0,
+  OpSrc0 = 1,
+  OpSrc1 = 2,
+  OpSrc2Mods = 3,
+  OpSrc2 = 4,
+  OpTrailA = 5, // matrix_a_reuse (K) / matrix_a_fmt (f8f6f4)
+  OpTrailB = 6, // matrix_b_reuse (K) / matrix_b_fmt (f8f6f4)
 };
 
-// Parse the printer's output for a VOP3P WMMA instruction:
-//   `\t<mnemonic> <op0>, <op1>, <op2>, <op3>[ <modifier> ...]`
-// Returns std::nullopt if the structure does not match the expected shape
-// (e.g. fewer than 4 comma-separated operands).
-std::optional<PrintedAsm> parsePrintedAsm(StringRef S) {
-  PrintedAsm R;
-  S = S.trim();
-  size_t MnemEnd = S.find_first_of(" \t");
-  if (MnemEnd == StringRef::npos)
+// Return the sub-register of \p Super covering \p Count consecutive 32-bit
+// lanes starting \p LaneOffset lanes in, or a null MCRegister if none exists.
+// Uses only public MCRegisterInfo APIs: it walks the target's SubRegIndex
+// table and matches on the resulting register's VGPR width and base encoding,
+// so no backend-private sub-register index constants are hardcoded. Because
+// every sliced operand is a sub-range of a register already present in the
+// decoded source, the result is guaranteed to be a real VGPR tuple.
+MCRegister subVgprTuple(MCRegister Super, int LaneOffset, int Count,
+                        const MCRegisterInfo &MRI) {
+  std::pair<int, int> SR = getVgprRange(Super, MRI);
+  if (SR.first < 0)
+    return MCRegister();
+  if (LaneOffset == 0 && Count == SR.second)
+    return Super;
+  int WantBase = SR.first + LaneOffset;
+  for (unsigned Idx = 1, E = MRI.getNumSubRegIndices(); Idx < E; ++Idx) {
+    MCRegister Sub = MRI.getSubReg(Super, Idx);
+    if (!Sub)
+      continue;
+    std::pair<int, int> R = getVgprRange(Sub, MRI);
+    if (R.first == WantBase && R.second == Count)
+      return Sub;
+  }
+  return MCRegister();
+}
+
+// Encode an MCInst to raw bytes via MCCodeEmitter (mirrors the helper in
+// comgr-hotswap-patch-inplace.cpp).
+SmallVector<uint8_t> encodeMCInst(const MCInst &Inst, const LLVMState &LS) {
+  SmallVector<char, 16> Code;
+  SmallVector<MCFixup, 4> Fixups;
+  LS.MCE->encodeInstruction(Inst, Code, Fixups, *LS.STI);
+  return SmallVector<uint8_t>(Code.begin(), Code.end());
+}
+
+// Resolve the MC opcode for a replacement mnemonic and cache it. The opcode
+// is a pure function of (target, mnemonic + operand kinds), so we assemble a
+// single canonical instance per (target, mnemonic) via the asm parser and
+// cache the decoded opcode. This keeps the parser off the per-patch path
+// (at most one parse per replacement mnemonic per process) while remaining
+// correct-by-construction: the cached opcode is exactly what the assembler
+// would have produced.
+std::optional<unsigned> cachedReplacementOpcode(StringRef CanonicalAsm,
+                                                StringRef Mnemonic,
+                                                const LLVMState &LS) {
+  static std::mutex Mu;
+  static std::map<std::pair<const void *, std::string>, unsigned> Cache;
+  std::pair<const void *, std::string> Key{
+      static_cast<const void *>(LS.Target), Mnemonic.str()};
+  {
+    std::lock_guard<std::mutex> Lock(Mu);
+    auto It = Cache.find(Key);
+    if (It != Cache.end())
+      return It->second;
+  }
+  SmallVector<uint8_t> Bytes = assembleSingleInst(CanonicalAsm, LS);
+  if (Bytes.empty())
     return std::nullopt;
-  R.Mnemonic = S.substr(0, MnemEnd);
-  StringRef Rest = S.substr(MnemEnd).ltrim();
-
-  // First three operands end at a comma.
-  for (int I = 0; I < 3; ++I) {
-    size_t Comma = Rest.find(',');
-    if (Comma == StringRef::npos)
-      return std::nullopt;
-    R.Operands[I] = Rest.substr(0, Comma).trim();
-    Rest = Rest.substr(Comma + 1).ltrim();
+  std::vector<InternalDecodedInst> Decoded;
+  if (!decodeTextSection(Bytes.data(), Bytes.size(), LS, Decoded) ||
+      Decoded.empty())
+    return std::nullopt;
+  unsigned Opc = Decoded[0].Inst.getOpcode();
+  {
+    std::lock_guard<std::mutex> Lock(Mu);
+    Cache.emplace(std::move(Key), Opc);
   }
-  // Fourth operand ends at the first whitespace (modifier suffix start) or
-  // end-of-string. Modifier syntax never contains spaces inside a single
-  // modifier token (e.g. `neg_lo:[0,0,1]` has no space) so this split is
-  // unambiguous for the supported asm surface (see file header).
-  size_t ModBegin = Rest.find_first_of(" \t");
-  if (ModBegin == StringRef::npos) {
-    R.Operands[3] = Rest;
-    R.ModifierSuffix = StringRef();
-  } else {
-    R.Operands[3] = Rest.substr(0, ModBegin);
-    R.ModifierSuffix = Rest.substr(ModBegin); // includes leading space
-  }
-  return R;
-}
-
-// Tokenize a modifier suffix into individual modifier tokens. Tokens are
-// whitespace-separated; the suffix may have a leading space.
-SmallVector<StringRef, 8> tokenizeModifiers(StringRef Suffix) {
-  SmallVector<StringRef, 8> Out;
-  StringRef S = Suffix.ltrim();
-  while (!S.empty()) {
-    size_t Sp = S.find_first_of(" \t");
-    if (Sp == StringRef::npos) {
-      Out.push_back(S);
-      break;
-    }
-    Out.push_back(S.substr(0, Sp));
-    S = S.substr(Sp + 1).ltrim();
-  }
-  return Out;
-}
-
-// Returns true if `T` is a `<Name>:[X,Y,Z]` packed-modifier token; on success,
-// fills in `Bits` with three-character views of X, Y, Z (which may be 0 or 1).
-// `Name` is checked piecewise so we never have to materialize `<Name>:[` on
-// the heap for every token (this runs once per modifier per split half).
-bool parsePackedModifier(StringRef T, StringRef Name,
-                         std::array<StringRef, 3> &Bits) {
-  if (!T.starts_with(Name) || !T.ends_with("]"))
-    return false;
-  T = T.drop_front(Name.size());
-  if (!T.starts_with(":["))
-    return false;
-  StringRef Inside = T.drop_front(2).drop_back(1);
-  SmallVector<StringRef, 3> Parts;
-  Inside.split(Parts, ",");
-  if (Parts.size() != 3)
-    return false;
-  Bits[0] = Parts[0].trim();
-  Bits[1] = Parts[1].trim();
-  Bits[2] = Parts[2].trim();
-  return true;
-}
-
-// Build a modifier suffix for a split half. `KSplitSecondHalf` is true for
-// the K-split's second half: in that case the operand at the src2 position
-// is the dst register (the accumulator carry), so any neg_lo / neg_hi bit
-// targeting src2 must be cleared. `StripMatrixReuse` is always true for the
-// splitter's output: matrix_a_reuse / matrix_b_reuse refer to data layout
-// that no longer applies after a split (the original data lives in a
-// different VGPR set in each half), so preserving them would assert a
-// guarantee the splitter cannot make.
-// Closed set of modifier tokens the splitter knows how to handle on its
-// source surface (K=128 fp8/bf8 WMMAs and the 32x16x128_f4 WMMA). Anything
-// outside this set means the source mnemonic acquired a modifier the
-// splitter has not been audited for -- failing fast (returning nullopt) is
-// safer than silently carrying it through both halves, where it could
-// double-apply or apply to the wrong half. Update this set in lockstep with
-// any new K=128/M=32 source mnemonic the splitter table grows to cover.
-bool isKnownSplitterModifier(StringRef T) {
-  if (T == "matrix_a_reuse" || T == "matrix_b_reuse")
-    return true;
-  std::array<StringRef, 3> Bits;
-  return parsePackedModifier(T, "neg_lo", Bits) ||
-         parsePackedModifier(T, "neg_hi", Bits);
-}
-
-std::optional<std::string> transformModifierSuffix(StringRef Suffix,
-                                                   bool KSplitSecondHalf) {
-  std::string Out;
-  for (StringRef T : tokenizeModifiers(Suffix)) {
-    if (!isKnownSplitterModifier(T)) {
-      log() << "hotswap: error: WMMA split: unsupported modifier token \"" << T
-            << "\" -- splitter modifier set must be updated\n";
-      return std::nullopt;
-    }
-    if (T == "matrix_a_reuse" || T == "matrix_b_reuse")
-      continue;
-    std::array<StringRef, 3> Bits;
-    if (KSplitSecondHalf && (parsePackedModifier(T, "neg_lo", Bits) ||
-                             parsePackedModifier(T, "neg_hi", Bits))) {
-      // Clear the src2 bit (third element of the [X,Y,Z] tuple). If the
-      // remaining bits are all zero, drop the modifier entirely (matches
-      // the printer's behavior of omitting an all-zero packed modifier).
-      bool X = Bits[0] != "0";
-      bool Y = Bits[1] != "0";
-      if (!X && !Y)
-        continue;
-      StringRef Name = T.substr(0, T.find(':'));
-      Out += ' ';
-      Out += Name.str();
-      Out += ":[";
-      Out += Bits[0].str();
-      Out += ',';
-      Out += Bits[1].str();
-      Out += ",0]";
-      continue;
-    }
-    Out += ' ';
-    Out += T.str();
-  }
-  return Out;
+  return Opc;
 }
 
 // Format a VGPR range as `v[lo:hi]`.
@@ -473,88 +446,129 @@ bool validateSplitOperands(SplitKind Kind, const WmmaOps &R,
   return false;
 }
 
-// -- Replacement asm builders -----------------------------------------------
+// -- Replacement MCInst builders --------------------------------------------
 
-// K-dimension split: dst and src2 are unchanged on the first half. For the
-// second half, src2 = dst (the carry from the first half).
-std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
-                                              const PrintedAsm &P,
-                                              const WmmaOps &R) {
-  assert(R.Dst.second > 0 && (R.Src2IsImm || R.Src2.second == R.Dst.second));
-  assert(R.Src0.second > 0 && R.Src0.second % 2 == 0);
-  assert(R.Src1.second > 0 && R.Src1.second % 2 == 0);
-
+// Build a canonical one-line asm string for a replacement mnemonic using only
+// register operands, sufficient to resolve (and cache) the MC opcode. The
+// f8f6f4 form requires its matrix-format modifiers to parse, so they are
+// included; the opcode does not depend on the src2 operand kind, so the dst
+// register is used as a stand-in src2.
+std::string canonicalKSplitAsm(StringRef Repl, const WmmaOps &R) {
   int AHalf = R.Src0.second / 2;
   int BHalf = R.Src1.second / 2;
-  StringRef Dst = P.Operands[0]; // verbatim from printer (e.g. "v[16:23]")
-  StringRef Src2Printed = P.Operands[3];
-  std::optional<std::string> ModFirst =
-      transformModifierSuffix(P.ModifierSuffix, /*KSplitSecondHalf=*/false);
-  std::optional<std::string> ModSecond =
-      transformModifierSuffix(P.ModifierSuffix, /*KSplitSecondHalf=*/true);
-  if (!ModFirst || !ModSecond)
-    return {};
+  return formatv("{0} {1}, {2}, {3}, {1}", Repl,
+                 formatVgprRange(R.Dst.first, R.Dst.second),
+                 formatVgprRange(R.Src0.first, AHalf),
+                 formatVgprRange(R.Src1.first, BHalf))
+      .str();
+}
 
-  std::vector<std::string> Out;
-  Out.reserve(2);
-  Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement, Dst,
-                        formatVgprRange(R.Src0.first, AHalf),
-                        formatVgprRange(R.Src1.first, BHalf), Src2Printed,
-                        *ModFirst)
-                    .str());
-  // Second half: src2 = dst (the carry).
-  Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement, Dst,
-                        formatVgprRange(R.Src0.first + AHalf, AHalf),
-                        formatVgprRange(R.Src1.first + BHalf, BHalf), Dst,
-                        *ModSecond)
-                    .str());
+std::string canonicalMSplitAsm(StringRef Repl, const WmmaOps &R) {
+  int DstHalf = R.Dst.second / 2;
+  int AHalf = R.Src0.second / 2;
+  return formatv("{0} {1}, {2}, {3}, {1} matrix_a_fmt:MATRIX_FMT_FP4 "
+                 "matrix_b_fmt:MATRIX_FMT_FP4",
+                 Repl, formatVgprRange(R.Dst.first, DstHalf),
+                 formatVgprRange(R.Src0.first, AHalf),
+                 formatVgprRange(R.Src1.first, R.Src1.second))
+      .str();
+}
+
+// K-dimension split at the MCInst level. Both halves are clones of the decoded
+// source with the opcode retargeted to the K=64 replacement; src0/src1 are
+// sliced to their lower/upper halves and matrix_a/b_reuse are stripped. The
+// first half preserves src2 and its modifiers verbatim (including an inline
+// immediate); the second half sets src2 to the dst accumulator carry and
+// clears the src2 neg_lo/neg_hi modifiers (src2_modifiers -> 0), matching the
+// text path's behavior.
+std::optional<SmallVector<MCInst, 2>>
+buildSplit128to64Insts(unsigned ReplOpcode, const MCInst &Src, const WmmaOps &R,
+                       const MCRegisterInfo &MRI) {
+  int AHalf = R.Src0.second / 2;
+  int BHalf = R.Src1.second / 2;
+  MCRegister Dst = Src.getOperand(OpVDst).getReg();
+  MCRegister Src0 = Src.getOperand(OpSrc0).getReg();
+  MCRegister Src1 = Src.getOperand(OpSrc1).getReg();
+
+  MCRegister A0 = subVgprTuple(Src0, 0, AHalf, MRI);
+  MCRegister A1 = subVgprTuple(Src0, AHalf, AHalf, MRI);
+  MCRegister B0 = subVgprTuple(Src1, 0, BHalf, MRI);
+  MCRegister B1 = subVgprTuple(Src1, BHalf, BHalf, MRI);
+  if (!A0 || !A1 || !B0 || !B1) {
+    log() << "hotswap: error: WMMA split: could not slice K-split VGPR "
+             "tuples\n";
+    return std::nullopt;
+  }
+
+  MCInst H1 = Src;
+  H1.setOpcode(ReplOpcode);
+  H1.getOperand(OpSrc0) = MCOperand::createReg(A0);
+  H1.getOperand(OpSrc1) = MCOperand::createReg(B0);
+  H1.getOperand(OpTrailA) = MCOperand::createImm(0); // strip matrix_a_reuse
+  H1.getOperand(OpTrailB) = MCOperand::createImm(0); // strip matrix_b_reuse
+
+  MCInst H2 = Src;
+  H2.setOpcode(ReplOpcode);
+  H2.getOperand(OpSrc0) = MCOperand::createReg(A1);
+  H2.getOperand(OpSrc1) = MCOperand::createReg(B1);
+  H2.getOperand(OpSrc2Mods) = MCOperand::createImm(0); // clear src2 neg bits
+  H2.getOperand(OpSrc2) = MCOperand::createReg(Dst);   // carry from first half
+  H2.getOperand(OpTrailA) = MCOperand::createImm(0);
+  H2.getOperand(OpTrailB) = MCOperand::createImm(0);
+
+  SmallVector<MCInst, 2> Out;
+  Out.push_back(std::move(H1));
+  Out.push_back(std::move(H2));
   return Out;
 }
 
-// M-dimension split: A (src0) is split in half; B (src1) is broadcast; dst /
-// src2 are split in half by M. The replacement uses the f8f6f4 WMMA with
-// both matrix format modifiers forced to MATRIX_FMT_FP4 so the data layout
-// matches the original f4 instruction.
-std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
-                                            const PrintedAsm &P,
-                                            const WmmaOps &R) {
-  assert(R.Dst.second > 0 && R.Dst.second % 2 == 0);
-  assert(R.Src2IsImm || R.Src2.second == R.Dst.second);
-  assert(R.Src0.second > 0 && R.Src0.second % 2 == 0);
-  assert(R.Src1.second > 0);
-
+// M-dimension split at the MCInst level. A (src0) and dst/src2 are sliced by
+// M; B (src1) is broadcast. The 5-operand f4 source becomes a 7-operand
+// f8f6f4 instruction with both matrix-format operands forced to
+// MATRIX_FMT_FP4. src2_modifiers (neg) are preserved on both halves.
+std::optional<SmallVector<MCInst, 2>>
+buildSplit32x16Insts(unsigned ReplOpcode, const MCInst &Src, const WmmaOps &R,
+                     const MCRegisterInfo &MRI) {
   int DstHalf = R.Dst.second / 2;
   int AHalf = R.Src0.second / 2;
-  StringRef B = P.Operands[2]; // broadcast: same printer-canonical form
-  // src2 is preserved on both halves when imm; sliced when VGPR.
-  std::string CLo = R.Src2IsImm ? P.Operands[3].str()
-                                : formatVgprRange(R.Src2.first, DstHalf);
-  std::string CHi = R.Src2IsImm
-                        ? P.Operands[3].str()
-                        : formatVgprRange(R.Src2.first + DstHalf, DstHalf);
-  // Matrix format modifiers are required by the f8f6f4 destination opcode
-  // and not present on the f4 source opcode, so the splitter appends them
-  // explicitly. Modifier suffix from the source is preserved on both halves
-  // (with matrix_a_reuse / matrix_b_reuse stripped, same as K-split).
-  constexpr StringLiteral FmtSuffix =
-      " matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4";
-  std::optional<std::string> Mod =
-      transformModifierSuffix(P.ModifierSuffix, /*KSplitSecondHalf=*/false);
-  if (!Mod)
-    return {};
+  MCRegister Dst = Src.getOperand(OpVDst).getReg();
+  MCRegister Src0 = Src.getOperand(OpSrc0).getReg();
+  MCOperand Src1 = Src.getOperand(OpSrc1);     // broadcast, verbatim
+  MCOperand Src2Mods = Src.getOperand(OpSrc2Mods);
+  MCOperand Src2 = Src.getOperand(OpSrc2);     // reg (sliced) or imm (preserved)
 
-  std::vector<std::string> Out;
-  Out.reserve(2);
-  Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}{6}", Replacement,
-                        formatVgprRange(R.Dst.first, DstHalf),
-                        formatVgprRange(R.Src0.first, AHalf), B, CLo, FmtSuffix,
-                        *Mod)
-                    .str());
-  Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}{6}", Replacement,
-                        formatVgprRange(R.Dst.first + DstHalf, DstHalf),
-                        formatVgprRange(R.Src0.first + AHalf, AHalf), B, CHi,
-                        FmtSuffix, *Mod)
-                    .str());
+  MCRegister D0 = subVgprTuple(Dst, 0, DstHalf, MRI);
+  MCRegister D1 = subVgprTuple(Dst, DstHalf, DstHalf, MRI);
+  MCRegister A0 = subVgprTuple(Src0, 0, AHalf, MRI);
+  MCRegister A1 = subVgprTuple(Src0, AHalf, AHalf, MRI);
+  MCRegister C0, C1;
+  if (!R.Src2IsImm) {
+    MCRegister Src2Reg = Src2.getReg();
+    C0 = subVgprTuple(Src2Reg, 0, DstHalf, MRI);
+    C1 = subVgprTuple(Src2Reg, DstHalf, DstHalf, MRI);
+  }
+  if (!D0 || !D1 || !A0 || !A1 || (!R.Src2IsImm && (!C0 || !C1))) {
+    log() << "hotswap: error: WMMA split: could not slice M-split VGPR "
+             "tuples\n";
+    return std::nullopt;
+  }
+
+  auto Build = [&](MCRegister D, MCRegister A, MCRegister C) {
+    MCInst I;
+    I.setOpcode(ReplOpcode);
+    I.addOperand(MCOperand::createReg(D)); // vdst
+    I.addOperand(MCOperand::createReg(A)); // src0
+    I.addOperand(Src1);                    // src1 (broadcast)
+    I.addOperand(Src2Mods);                // src2_modifiers (neg preserved)
+    I.addOperand(R.Src2IsImm ? Src2 : MCOperand::createReg(C)); // src2
+    I.addOperand(MCOperand::createImm(MatrixFmtFP4)); // matrix_a_fmt
+    I.addOperand(MCOperand::createImm(MatrixFmtFP4)); // matrix_b_fmt
+    return I;
+  };
+
+  SmallVector<MCInst, 2> Out;
+  Out.push_back(Build(D0, A0, C0));
+  Out.push_back(Build(D1, A1, C1));
   return Out;
 }
 
@@ -623,43 +637,48 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (!validateSplitOperands(Match->Kind, *Ops, DI.Mnemonic))
     return 0; // matched-but-failed (validateSplitOperands logs the reason)
 
-  // Print the source instruction in canonical asm form. The printer is the
-  // authoritative source for src2 inline-immediate formatting (FP inline
-  // constants like 1.0 vs integer 1 encode differently) and for the
-  // modifier suffix (op_sel / neg_lo / neg_hi / matrix_a_reuse /
-  // matrix_b_reuse, in whatever order the printer chose).
-  SmallString<256> PrintedBuf;
-  raw_svector_ostream PrintOS(PrintedBuf);
-  Ctx.LS.MCIP->printInst(&DI.Inst, /*Address=*/0, /*Annot=*/"", *Ctx.LS.STI,
-                         PrintOS);
-  std::optional<PrintedAsm> P = parsePrintedAsm(StringRef(PrintedBuf));
-  if (!P) {
-    log() << "hotswap: error: WMMA split: could not parse printed form of "
-          << DI.Mnemonic << ": " << StringRef(PrintedBuf).trim() << "\n";
+  // Build the two split-half instructions directly at the MCInst level (clone
+  // + operand surgery + MCCodeEmitter) rather than round-tripping through the
+  // asm printer and a per-patch MCAsmParser. The replacement MC opcode is
+  // resolved once per mnemonic via a cached canonical parse; everything else
+  // is pure MCInst manipulation. Cloning preserves the source operands
+  // verbatim, so an inline-immediate src2 encodes identically to the text path.
+  std::optional<unsigned> ReplOpcode =
+      Match->Kind == SplitKind::Split128to64FP8BF8
+          ? cachedReplacementOpcode(canonicalKSplitAsm(Match->Replacement, *Ops),
+                                     Match->Replacement, Ctx.LS)
+          : cachedReplacementOpcode(canonicalMSplitAsm(Match->Replacement, *Ops),
+                                     Match->Replacement, Ctx.LS);
+  if (!ReplOpcode) {
+    log() << "hotswap: error: WMMA split: could not resolve replacement opcode "
+          << "for " << Match->Replacement << "\n";
     return 0; // matched-but-failed
   }
 
-  std::vector<std::string> AsmLines;
+  std::optional<SmallVector<MCInst, 2>> Insts;
   switch (Match->Kind) {
   case SplitKind::Split128to64FP8BF8:
-    AsmLines = buildSplit128to64Asm(Match->Replacement, *P, *Ops);
+    Insts = buildSplit128to64Insts(*ReplOpcode, DI.Inst, *Ops, *Ctx.LS.MRI);
     break;
   case SplitKind::Split32x16to16x16F4:
-    AsmLines = buildSplit32x16Asm(Match->Replacement, *P, *Ops);
+    Insts = buildSplit32x16Insts(*ReplOpcode, DI.Inst, *Ops, *Ctx.LS.MRI);
     break;
   }
-  if (AsmLines.empty())
-    return 0; // matched-but-failed (build*Asm rejected an unsupported modifier)
+  if (!Insts)
+    return 0; // matched-but-failed (builder logged the reason)
 
-  // Assemble the split sequence and defer trampoline emission to
+  // Encode the split instructions and defer trampoline emission to
   // emitToTrampoline, which picks a short s_branch or an SGPR-backed set-PC
   // gateway based on the site's distance from the appended pool.
-  SmallVector<uint8_t> Replacement =
-      assembleInstructions(joinAsmLines(AsmLines), Ctx.LS);
-  if (Replacement.empty()) {
-    log() << "hotswap: error: WMMA split: trampoline assembly failed for "
-          << DI.Mnemonic << "\n";
-    return 0; // matched-but-failed
+  SmallVector<uint8_t> Replacement;
+  for (const MCInst &I : *Insts) {
+    SmallVector<uint8_t> Bytes = encodeMCInst(I, Ctx.LS);
+    if (Bytes.empty()) {
+      log() << "hotswap: error: WMMA split: MCCodeEmitter produced no bytes "
+            << "for " << DI.Mnemonic << "\n";
+      return 0; // matched-but-failed
+    }
+    Replacement.append(Bytes.begin(), Bytes.end());
   }
   if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement)) {
     log() << "hotswap: error: WMMA split: could not emit trampoline for "
