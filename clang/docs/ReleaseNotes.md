@@ -46,6 +46,11 @@ latest release, please see the [Clang Web Site](https://clang.llvm.org) or the
 
 ### C/C++ Language Potentially Breaking Changes
 
+- `-Wunicode-whitespace` now defaults to an error.
+The previous behavior can be restored with `-Wno-error=unicode-whitespace`.
+Clang will stop accepting non-ascii whitespaces as token separators
+in a future version of Clang.
+
 ### C++ Specific Potentially Breaking Changes
 
 ### ABI Changes in This Version
@@ -309,6 +314,9 @@ latest release, please see the [Clang Web Site](https://clang.llvm.org) or the
 - Fixed a rejected-valid case that used an explicit object parameter in an out-of-line definition of a nested class member. (#GH136472)
 
 #### Bug Fixes to Compiler Builtins
+
+- Fixed a crash when classifying a call to a builtin with dependent arguments,
+  such as when the call is used as an `auto` non-type template argument.
 
 #### Bug Fixes to Attribute Support
 
