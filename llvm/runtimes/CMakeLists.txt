@@ -3,7 +3,7 @@
 # similar although simpler functionality. We should figure out how to merge
 # the two files.
 
-set(COMMON_CMAKE_ARGS "-DHAVE_LLVM_LIT=ON;-DCLANG_RESOURCE_DIR=${CLANG_RESOURCE_DIR}")
+set(COMMON_CMAKE_ARGS "-DHAVE_LLVM_LIT=ON;-DCLANG_RESOURCE_DIR=${CLANG_RESOURCE_DIR};-DLLVM_LIBDIR_SUFFIX=${LLVM_LIBDIR_SUFFIX}")
 string(REPLACE ";" "|" __cmake_prefix_path "${CMAKE_BINARY_DIR};${CMAKE_PREFIX_PATH}")
 if(APPLE AND CMAKE_OSX_SYSROOT AND (LLVM_TARGET_TRIPLE STREQUAL LLVM_HOST_TRIPLE))
   # Only propagate the host sysroot for native runtimes builds.
