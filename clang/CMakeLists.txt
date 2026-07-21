@@ -7,6 +7,10 @@ endif()
 include(${LLVM_COMMON_CMAKE_UTILS}/Modules/CMakePolicy.cmake
   NO_POLICY_SCOPE)
 
+if(POLICY CMP0146)
+  cmake_policy(SET CMP0146 OLD)
+endif()
+
 # If we are not building as a part of LLVM, build Clang as an
 # standalone project, using LLVM as an external library:
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -174,10 +178,14 @@ if(CLANG_ENABLE_LIBXML2)
   # Don't look for libxml if we're using MSan, since uninstrumented third party
   # code may call MSan interceptors like strlen, leading to false positives.
   if(NOT LLVM_USE_SANITIZER MATCHES "Memory.*")
-    set (LIBXML2_FOUND 0)
-    find_package(LibXml2 2.5.3 QUIET)
-    if (LIBXML2_FOUND)
+    find_package(LibXml2 CONFIG QUIET)
+    if(NOT LibXml2_FOUND)
+      find_package(LibXml2)
+    endif()
+    if(LibXml2_FOUND)
       set(CLANG_HAVE_LIBXML 1)
+      get_target_property(_libxml2_location LibXml2::LibXml2 LOCATION)
+      message(STATUS "Found LibXml2: ${_libxml2_location}")
     endif()
   endif()
 endif()

@@ -4,6 +4,7 @@
 # the two files.
 
 set(COMMON_CMAKE_ARGS "-DHAVE_LLVM_LIT=ON;-DCLANG_RESOURCE_DIR=${CLANG_RESOURCE_DIR}")
+string(REPLACE ";" "|" __cmake_prefix_path "${CMAKE_BINARY_DIR};${CMAKE_PREFIX_PATH}")
 foreach(proj ${LLVM_ENABLE_RUNTIMES})
   string(TOUPPER "${proj}" canon_name)
   STRING(REGEX REPLACE "-" "_" canon_name ${canon_name})
@@ -103,6 +104,7 @@ function(builtin_default_target compiler_rt_path)
                                       -DCMAKE_C_COMPILER_WORKS=ON
                                       -DCMAKE_CXX_COMPILER_WORKS=ON
                                       -DCMAKE_ASM_COMPILER_WORKS=ON
+                                      -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
                                       ${COMMON_CMAKE_ARGS}
                                       ${BUILTINS_CMAKE_ARGS}
                            PASSTHROUGH_PREFIXES COMPILER_RT
@@ -145,6 +147,7 @@ function(builtin_register_target compiler_rt_path name)
                                       -DCMAKE_CXX_COMPILER_WORKS=ON
                                       -DCMAKE_ASM_COMPILER_WORKS=ON
                                       -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
+                                      -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
                                       ${COMMON_CMAKE_ARGS}
                                       ${${name}_extra_args}
                            USE_TOOLCHAIN
@@ -297,6 +300,8 @@ function(runtime_default_target)
                                       -DCMAKE_CXX_COMPILER_WORKS=ON
                                       -DCMAKE_Fortran_COMPILER_WORKS=ON
                                       -DCMAKE_ASM_COMPILER_WORKS=ON
+                                      -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+                                      -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
                                       ${COMMON_CMAKE_ARGS}
                                       ${RUNTIMES_CMAKE_ARGS}
                                       ${ARG_CMAKE_ARGS}
@@ -444,6 +449,7 @@ function(runtime_register_target name)
                                       -DCMAKE_ASM_COMPILER_WORKS=ON
                                       -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
                                       -DLLVM_RUNTIMES_TARGET=${name}
+                                      -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
                                       ${COMMON_CMAKE_ARGS}
                                       ${${name}_extra_args}
                            EXTRA_TARGETS ${${name}_extra_targets}
@@ -551,24 +557,6 @@ if(build_runtimes)
     endif()
   endif()
 
-  # Forward user-provived system configuration to runtimes for requirement introspection.
-  # CMAKE_PREFIX_PATH is the search path for CMake packages. In order to pass through
-  # the command line interface, the CMake semicolon separator needs to be replaced
-  # with $<SEMICOLON>
-  if(CMAKE_PREFIX_PATH)
-    string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
-    # Some projects require access to the LLVM lib/cmake directory
-    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
-      string(PREPEND escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>")
-    endif()
-    list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_cmake_prefix_path}")
-  endif()
-
-  # CMAKE_PROGRAM_PATH is the search path for executables such as python.
-  if(CMAKE_PROGRAM_PATH)
-    list(APPEND extra_cmake_args "-DCMAKE_PROGRAM_PATH=${CMAKE_PROGRAM_PATH}")
-  endif()
-
   set(libclc_enabled FALSE)
   if("libclc" IN_LIST LLVM_ENABLE_RUNTIMES)
     set(libclc_enabled TRUE)
@@ -622,6 +610,7 @@ if(build_runtimes)
         CMAKE_ARGS -DBUILD_SHARED_LIBS=ON
                    -DIMAGE_SUPPORT=OFF
                    -DLLVM_RUNTIME_OPENMP=ON
+                   -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
                    ${rocr_extra_cmake_args}
                    ${extra_cmake_args})
       set(HSA_DEP rocr-runtime)
@@ -639,14 +628,16 @@ if(build_runtimes)
           CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ROCM_DEVICE_LIBS_INSTALL_PREFIX_PATH}
                      -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
                      -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn
-                     -DCMAKE_INSTALL_LIBDIR=lib
+                     -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+                     -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
                      ${extra_cmake_args})
       else()
         ExternalProject_Add(rocm-device-libs
           SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}
           DEPENDS clang llvm-link lld opt llvm-objcopy
           INSTALL_COMMAND ""
-          CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/lib/cmake
+          LIST_SEPARATOR |
+          CMAKE_ARGS -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
                      -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
                      -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn)
       endif()
@@ -768,6 +759,7 @@ if(build_runtimes)
       runtime_register_target(${name}
         DEPENDS ${builtins_dep_name} ${extra_deps}
         CMAKE_ARGS -DLLVM_DEFAULT_TARGET_TRIPLE=${name} ${extra_cmake_args}
+                   -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
         EXTRA_ARGS TARGET_TRIPLE ${name} ${extra_args})
     endforeach()
 
@@ -778,6 +770,7 @@ if(build_runtimes)
           CMAKE_ARGS -DLLVM_DEFAULT_TARGET_TRIPLE=${name}
                      -DLLVM_RUNTIMES_PREFIX=${name}/
                      -DLLVM_RUNTIMES_LIBDIR_SUBDIR=${multilib}
+                     -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
                      ${extra_cmake_args}
           BASE_NAME ${name}
           EXTRA_ARGS TARGET_TRIPLE ${name} ${extra_args})

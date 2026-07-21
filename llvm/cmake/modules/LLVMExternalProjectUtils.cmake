@@ -405,7 +405,6 @@ function(llvm_ExternalProject_Add name source_dir)
                --no-warn-unused-cli
                ${compiler_args}
                ${verbose}
-               -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
                ${sysroot_arg}
                -DLLVM_BINARY_DIR=${PROJECT_BINARY_DIR}
                -DLLVM_CONFIG_PATH=${llvm_config_path}
