@@ -136,6 +136,7 @@ jobs:
       - name: Configure ROCR-Runtime
         run: |
           cmake -G Ninja -S rocm-systems/projects/rocr-runtime -B "$ROCR_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
             -DBUILD_SHARED_LIBS=ON \
@@ -152,6 +153,7 @@ jobs:
       - name: Configure CLR (HIP runtime)
         run: |
           cmake -G Ninja -S rocm-systems/projects/clr -B "$CLR_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
             -DBUILD_SHARED_LIBS=ON \
