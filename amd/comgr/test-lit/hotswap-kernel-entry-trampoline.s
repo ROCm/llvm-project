@@ -17,7 +17,7 @@
 // NO-TRAMP: s_setreg_imm32_b32
 // NO-TRAMP-LABEL: <decoder_trip_kernel>:
 // NO-TRAMP: .long 0xffffffff
-// NO-TRAMP-NOT: global_wb
+// NO-TRAMP-NOT: global_prefetch_b8
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -44,13 +44,13 @@
 // DISASM-NEXT: s_setreg_imm32_b32
 // DISASM-LABEL: <decoder_trip_kernel>:
 // DISASM-NEXT: .long 0xffffffff
-// DISASM: global_wb
+// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_get_pc_i64
-// DISASM: global_wb
+// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_get_pc_i64
-// DISASM: global_wb
+// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_get_pc_i64
 

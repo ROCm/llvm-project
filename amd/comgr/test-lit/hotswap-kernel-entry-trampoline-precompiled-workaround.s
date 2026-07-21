@@ -1,4 +1,4 @@
-// COM: A `global_wb; v_nop` prologue (llvm/llvm-project#208467) already carries
+// COM: A `global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE; v_nop` prologue (llvm/llvm-project#208467) already carries
 // COM: the workaround, so HotSwap skips its entry trampoline; a kernel without
 // COM: it still gets one.
 
@@ -20,11 +20,11 @@
 // COM: The pre-fixed kernel keeps its in-place workaround, not a redirect stub.
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 // DISASM-LABEL: <precompiled_wa_kernel>:
-// DISASM-NEXT: global_wb
+// DISASM-NEXT: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_endpgm
 // DISASM-LABEL: <plain_kernel>:
-// DISASM-NEXT: global_wb
+// DISASM-NEXT: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_setreg_imm32_b32
 
@@ -35,7 +35,7 @@
 .p2align 8
 .type precompiled_wa_kernel,@function
 precompiled_wa_kernel:
-  global_wb
+  global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
   v_nop
   s_endpgm
 .Lprecompiled_wa_kernel_end:

@@ -50,10 +50,10 @@
 // DISASM-NEXT: s_nop 0
 // DISASM-LABEL: <mixed_second>:
 // DISASM-NEXT: v_mov_b32_e32 v0, 2
-// DISASM: global_wb
+// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_get_pc_i64
-// DISASM: global_wb
+// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_get_pc_i64
 
@@ -69,7 +69,7 @@ mixed_first:
   s_nop 0
   s_nop 0
 .else
-  global_wb
+  global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 .endif
   v_nop
   s_endpgm

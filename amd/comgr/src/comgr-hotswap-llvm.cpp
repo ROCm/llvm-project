@@ -325,8 +325,9 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   }
   S.VNopInst = VNopInsts[0];
 
-  if (!resolveRequiredOpcodeViaParse("global_wb", "global_wb", S,
-                                     S.GlobalWbOpcode))
+  if (!resolveRequiredOpcodeViaParse(KernelEntryVmemWorkaroundAsm,
+                                     "global_prefetch_b8", S,
+                                     S.GlobalPrefetchB8Opcode))
     return S;
   if (!resolveRequiredOpcodeViaParse("s_get_pc_i64 s[0:1]", "s_get_pc_i64", S,
                                      S.SGetPcI64Opcode))

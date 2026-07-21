@@ -33,7 +33,7 @@
 // API: RESULT: SUCCESS
 
 // DISASM-LABEL: <entry_tramp_family_kernel>:
-// DISASM-NEXT: global_wb
+// DISASM-NEXT: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: v_mov_b32_e32 v0, 0
 // DISASM-NEXT: s_endpgm
