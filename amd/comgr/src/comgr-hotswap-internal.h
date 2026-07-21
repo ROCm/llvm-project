@@ -825,6 +825,7 @@ struct LLVMState {
   /// matcher compares decoded opcodes against these cached values instead of
   /// matching disassembled mnemonic strings.
   unsigned GlobalWbOpcode = 0;
+  unsigned GlobalPrefetchOpcode = 0;
   unsigned SGetPcI64Opcode = 0;
   unsigned SAddNcU64Opcode = 0;
   unsigned SAddU32Opcode = 0;

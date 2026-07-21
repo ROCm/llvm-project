@@ -65,8 +65,12 @@ SmallVector<uint8_t> buildKernelEntryTrampoline(uint64_t StubVAddr,
   std::string ScratchHi = (Twine("s") + Twine(ScratchSgpr + 1)).str();
 
   // Assemble through the MC layer instead of spelling encoded bytes; the LIT
-  // test pins the generated stub's disassembly.
-  if (!appendAsm(Bytes, "global_wb", LS))
+  // test pins the generated stub's disassembly. PREFETCH-EXPERIMENT: emit
+  // global_prefetch_b8 (speculative, non-faulting L2 prefetch) instead of
+  // global_wb as the entry workaround, to measure per-dispatch execution cost.
+  if (!appendAsm(Bytes,
+                 "global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE th:TH_LOAD_RT",
+                 LS))
     return {};
   if (!appendAsm(Bytes, "v_nop", LS))
     return {};
@@ -129,6 +133,7 @@ uint64_t computeKernelEntryPrefetchGuardBytes(uint32_t InstPrefLines) {
 
 static bool hasResolvedEntryStubState(const LLVMState &LS, StringRef Context) {
   if (!LS.MCII || LS.GlobalWbOpcode >= LS.MCII->getNumOpcodes() ||
+      LS.GlobalPrefetchOpcode >= LS.MCII->getNumOpcodes() ||
       LS.SGetPcI64Opcode >= LS.MCII->getNumOpcodes() ||
       LS.SAddU32Opcode >= LS.MCII->getNumOpcodes() ||
       LS.SAddcU32Opcode >= LS.MCII->getNumOpcodes() ||
@@ -170,7 +175,13 @@ static bool startsWithBytes(ArrayRef<uint8_t> Bytes, ArrayRef<uint8_t> Prefix) {
 }
 
 static SmallVector<uint8_t> buildEntryStubBytePrefix(const LLVMState &LS) {
-  SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", LS);
+  // PREFETCH-EXPERIMENT: emit global_prefetch_b8 (speculative, non-faulting L2
+  // prefetch) instead of global_wb. This is the shared prefix used by the
+  // text-displacement path (the amd-staging default) and the trampoline
+  // fallback, so swapping it here makes the displaced kernel entry run the
+  // prefetch. Same 12-byte size as global_wb -> 16-byte prefix unchanged.
+  SmallVector<uint8_t> GlobalWb = assembleSingleInst(
+      "global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE th:TH_LOAD_RT", LS);
   SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", LS);
   if (GlobalWb.empty() || VNop.empty())
     return {};
@@ -200,7 +211,7 @@ static bool hasEntryStubOperandShape(ArrayRef<InternalDecodedInst> Decoded,
   if (Decoded.size() < 6)
     return false;
 
-  if (Decoded[0].Inst.getOpcode() != LS.GlobalWbOpcode ||
+  if (Decoded[0].Inst.getOpcode() != LS.GlobalPrefetchOpcode ||
       Decoded[1].Inst.getOpcode() != LS.VNopInst.getOpcode() ||
       Decoded[2].Inst.getOpcode() != LS.SGetPcI64Opcode ||
       Decoded[3].Inst.getOpcode() != LS.SAddU32Opcode ||
@@ -208,15 +219,18 @@ static bool hasEntryStubOperandShape(ArrayRef<InternalDecodedInst> Decoded,
       Decoded[5].Inst.getOpcode() != LS.SSetPcI64Opcode)
     return false;
 
-  const MCInst &GlobalWb = Decoded[0].Inst;
+  const MCInst &Prefetch = Decoded[0].Inst;
   const MCInst &VNop = Decoded[1].Inst;
   const MCInst &GetPc = Decoded[2].Inst;
   const MCInst &AddLo = Decoded[3].Inst;
   const MCInst &AddHi = Decoded[4].Inst;
   const MCInst &SetPc = Decoded[5].Inst;
 
-  if (GlobalWb.getNumOperands() != 1 || !GlobalWb.getOperand(0).isImm() ||
-      GlobalWb.getOperand(0).getImm() != 0 || VNop.getNumOperands() != 0)
+  // global_prefetch_b8 SADDR form: saddr pair, vaddr, offset imm, cpol imm.
+  // Operands are don't-cares (speculative, writes no regs); pin arity/shape only.
+  if (Prefetch.getNumOperands() != 4 || !Prefetch.getOperand(0).isReg() ||
+      !Prefetch.getOperand(1).isReg() || !Prefetch.getOperand(2).isImm() ||
+      !Prefetch.getOperand(3).isImm() || VNop.getNumOperands() != 0)
     return false;
 
   if (GetPc.getNumOperands() != 1 || SetPc.getNumOperands() != 1 ||
@@ -271,7 +285,7 @@ bool isKernelEntryTrampoline(ArrayRef<uint8_t> Bytes, const LLVMState &LS) {
 bool hasKernelEntryTrampolinePrefix(ArrayRef<uint8_t> Bytes,
                                     const LLVMState &LS) {
   SmallVector<uint8_t> Prefix;
-  if (!appendAsm(Prefix, "global_wb", LS))
+  if (!appendAsm(Prefix, "global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE th:TH_LOAD_RT", LS))
     return false;
   if (!appendAsm(Prefix, "v_nop", LS))
     return false;
@@ -371,20 +385,27 @@ static std::optional<bool> entryPrologueHasVmemWorkaround(
   if (!startsWithBytes(Candidate, EntryStubPrefix))
     return false;
 
-  // Confirm the prefix decodes to global_wb (cpol 0) + v_nop, not a byte match.
+  // Confirm the prefix decodes to a workaround barrier + v_nop, not a raw byte
+  // match. Accept either global_prefetch_b8 (the form comgr now injects, and the
+  // compiler's current form) or the older global_wb (cpol 0) compile-time form.
   if (!hasResolvedEntryStubState(LS, "entry prologue workaround matcher"))
     return false;
   std::vector<InternalDecodedInst> Decoded;
   if (!decodeTextSection(Bytes, EntryStubPrefix.size(), LS, Decoded) ||
       Decoded.size() < 2)
     return false;
-  const MCInst &GlobalWb = Decoded[0].Inst;
+  const MCInst &Barrier = Decoded[0].Inst;
   const MCInst &VNop = Decoded[1].Inst;
-  return GlobalWb.getOpcode() == LS.GlobalWbOpcode &&
-         GlobalWb.getNumOperands() == 1 && GlobalWb.getOperand(0).isImm() &&
-         GlobalWb.getOperand(0).getImm() == 0 &&
-         VNop.getOpcode() == LS.VNopInst.getOpcode() &&
-         VNop.getNumOperands() == 0;
+  if (VNop.getOpcode() != LS.VNopInst.getOpcode() ||
+      VNop.getNumOperands() != 0)
+    return false;
+  if (Barrier.getOpcode() == LS.GlobalPrefetchOpcode)
+    return Barrier.getNumOperands() == 4 && Barrier.getOperand(0).isReg() &&
+           Barrier.getOperand(1).isReg() && Barrier.getOperand(2).isImm() &&
+           Barrier.getOperand(3).isImm();
+  return Barrier.getOpcode() == LS.GlobalWbOpcode &&
+         Barrier.getNumOperands() == 1 && Barrier.getOperand(0).isImm() &&
+         Barrier.getOperand(0).getImm() == 0;
 }
 
 static std::optional<uint64_t>
