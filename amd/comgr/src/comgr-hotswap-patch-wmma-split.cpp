@@ -82,6 +82,20 @@
 
 using namespace llvm;
 
+// convertSetRegImmToVgprMSBs is declared in the backend-private
+// llvm/lib/Target/AMDGPU/Utils/AMDGPUBaseInfo.h, which is not installed in the
+// LLVM dist and is not on comgr's include path. The symbol has external linkage
+// and is provided by LLVMAMDGPUUtils, which comgr already links, so forward-
+// declare it here rather than mirror the HW_REG_WAVE_MODE field layout.
+// TODO: replace this forward declaration with a proper include once the helper
+// is promoted to a public TargetParser header.
+namespace llvm {
+namespace AMDGPU {
+std::optional<unsigned> convertSetRegImmToVgprMSBs(const MCInst &MI,
+                                                   bool HasSetregVGPRMSBFixup);
+} // namespace AMDGPU
+} // namespace llvm
+
 namespace COMGR {
 namespace hotswap {
 namespace {
@@ -521,22 +535,20 @@ int16_t exactVgprMsbMode(VgprMsbState State) {
                               (State.Src2 << 4) | (State.Dst << 6));
 }
 
-// gfx1250's setreg-vgpr-msb-fixup makes an immediate HW_REG_WAVE_MODE (ID 1)
-// write load all four two-bit VGPR-MSB fields from simm bits [19:12], rotated
-// into s_set_vgpr_msb order. Mirror that here rather than depend on the
-// backend-private AMDGPUBaseInfo.h.
+// gfx1250 reaches the persistent VGPR-MSB bank mode through an immediate
+// HW_REG_WAVE_MODE (ID_MODE) write. Decode it with the backend helper
+// convertSetRegImmToVgprMSBs (forward-declared above) rather than mirror the
+// field layout. gfx1250 has the setreg VGPR-MSB fixup, so pass true; the helper
+// returns std::nullopt for any non-ID_MODE write. The mnemonic guard keeps the
+// helper's opcode assertion satisfied (only S_SETREG_IMM32_B32_gfx12 reaches
+// it) and the operand guards keep its getImm() accesses in range.
 std::optional<unsigned>
 decodeSetregImmVgprMsbMode(const InternalDecodedInst &DI) {
   if (DI.Mnemonic != "s_setreg_imm32_b32" || DI.Inst.getNumOperands() != 2 ||
       !DI.Inst.getOperand(0).isImm() || !DI.Inst.getOperand(1).isImm())
     return std::nullopt;
-  constexpr unsigned ModeHwregId = 1;
-  unsigned Simm16 = static_cast<unsigned>(DI.Inst.getOperand(1).getImm());
-  if ((Simm16 & 0x3f) != ModeHwregId)
-    return std::nullopt;
-  unsigned Raw =
-      (static_cast<unsigned>(DI.Inst.getOperand(0).getImm()) >> 12) & 0xff;
-  return ((Raw >> 2) | (Raw << 6)) & 0xff;
+  return llvm::AMDGPU::convertSetRegImmToVgprMSBs(
+      DI.Inst, /*HasSetregVGPRMSBFixup=*/true);
 }
 
 std::optional<unsigned> getSetregHwregId(const InternalDecodedInst &DI) {
