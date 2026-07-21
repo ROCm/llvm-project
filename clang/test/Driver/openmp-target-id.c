@@ -14,8 +14,9 @@
 
 // LEGACY: [[CLANG:"[^"]*clang[^"]*"]] "-cc1" "-triple" "amdgcn-amd-amdhsa"
 // LEGACY-SAME: "-target-cpu" "gfx908"
-// LEGACY-SAME: "-target-feature" "+xnack"
-// LEGACY-SAME: "-target-feature" "-sramecc"
+// LEGACY-SAME: "-mxnack"
+// LEGACY-SAME: "-mno-sramecc"
+
 
 //
 // Offload-arch mode (--offload-arch) for TargetID
@@ -27,13 +28,13 @@
 
 // OFFLOAD: [[CLANG:"[^"]*clang[^"]*"]] "-cc1" "-triple" "amdgcn-amd-amdhsa"
 // OFFLOAD-SAME: "-target-cpu" "gfx908"
-// OFFLOAD-SAME: "-target-feature" "+xnack"
-// OFFLOAD-SAME: "-target-feature" "+sramecc"
+// OFFLOAD-SAME: "-mxnack"
+// OFFLOAD-SAME: "-msramecc"
 
 // OFFLOAD: [[CLANG]] "-cc1" "-triple" "amdgcn-amd-amdhsa"
 // OFFLOAD-SAME: "-target-cpu" "gfx908"
-// OFFLOAD-SAME: "-target-feature" "+xnack"
-// OFFLOAD-SAME: "-target-feature" "-sramecc"
+// OFFLOAD-SAME: "-mxnack"
+// OFFLOAD-SAME: "-mno-sramecc"
 
-// OFFLOAD: "--image=file={{.*}},triple=amdgcn-amd-amdhsa,arch=gfx908:sramecc+:xnack+,kind=openmp,feature=+xnack,feature=+sramecc"
-// OFFLOAD-SAME: "--image=file={{.*}},triple=amdgcn-amd-amdhsa,arch=gfx908:sramecc-:xnack+,kind=openmp,feature=+xnack,feature=-sramecc"
+// OFFLOAD: "--image=file={{.*}},triple=amdgcn-amd-amdhsa,arch=gfx908:sramecc+:xnack+,kind=openmp"
+// OFFLOAD-SAME: "--image=file={{.*}},triple=amdgcn-amd-amdhsa,arch=gfx908:sramecc-:xnack+,kind=openmp"
