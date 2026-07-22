@@ -27,7 +27,7 @@ The AMD ``llvm-project`` is a fork of `<https://github.com/llvm/llvm-project>`_.
     * :doc:`HIPIFY documentation <hipify:index>`
     * `LLD documentation <./LLVM/lld/html/index.html>`_
     * `LLVM documentation <./LLVM/llvm/html/index.html>`_
-    * :doc:`AMDGPU reference specifications <reference/amdgpu-ref>`
+    * :doc:`AMDGPU instruction specifications <reference/amdgpu-ref>`
 
 ROCm includes multiple compilers of varying origins and purposes as described in the following table: 
 
