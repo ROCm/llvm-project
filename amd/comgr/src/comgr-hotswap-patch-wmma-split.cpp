@@ -828,15 +828,27 @@ void computeVgprMsbModes(PatchContext &Ctx) {
         continue;
       }
       if (LS.MIA->isCall(DI.Inst)) {
-        if (!LS.MIA->isIndirectBranch(DI.Inst))
-          if (std::optional<uint64_t> Target =
-                  evaluateDirectControlFlowTarget(DI, LS))
-            if (*Target >= Begin && *Target < End) {
-              DenseMap<uint64_t, unsigned>::iterator It =
-                  OffsetToLocalIndex.find(*Target);
-              if (It != OffsetToLocalIndex.end())
-                CallableEntries.set(It->second);
-            }
+        // A call target inside this function is a fresh ABI (mode-0) entry and
+        // must be seeded like the function start. Resolve it over the same
+        // control-flow surface the interior-entry pre-pass uses (direct,
+        // absolute-immediate, and PC-materialized) rather than direct targets
+        // only: a same-function materialized/absolute call whose block is also
+        // reached by a differing-mode fallthrough/branch would otherwise drop
+        // the mode-0 contribution and let the join converge on a more specific
+        // mode than is provable. An unresolved call target could enter this
+        // function anywhere, so fail closed rather than seed too few entries.
+        std::optional<uint64_t> Target =
+            resolveInteriorEntryTarget(DI, GlobalFirst + I);
+        if (!Target) {
+          Valid = false;
+          break;
+        }
+        if (*Target >= Begin && *Target < End) {
+          DenseMap<uint64_t, unsigned>::iterator It =
+              OffsetToLocalIndex.find(*Target);
+          if (It != OffsetToLocalIndex.end())
+            CallableEntries.set(It->second);
+        }
         AddFallthrough(Out, I);
         continue;
       }
