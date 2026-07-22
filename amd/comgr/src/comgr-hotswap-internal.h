@@ -36,6 +36,7 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -140,8 +141,14 @@ enum class DisplacementMapBias {
 
 class DisplacementPlan {
 public:
+  /// \p RelocateTrailingSections lets the plan grow past a later allocatable
+  /// section: instead of failing when the grown .text would overlap trailing
+  /// allocatable content, the apply step shifts that content's virtual address
+  /// forward (used by the tier-3 whole-object grow backstop). Defaults false to
+  /// preserve the entry-workaround path's fail-closed behavior.
   static llvm::Expected<DisplacementPlan>
-  create(const ElfView &Elf, llvm::ArrayRef<DisplacementEdit> Edits);
+  create(const ElfView &Elf, llvm::ArrayRef<DisplacementEdit> Edits,
+         bool RelocateTrailingSections = false);
 
   llvm::ArrayRef<DisplacementEdit> edits() const { return Edits; }
   uint64_t oldTextSize() const { return OldTextSize; }
@@ -160,16 +167,21 @@ public:
   llvm::SmallVector<uint8_t> buildText(llvm::ArrayRef<uint8_t> OldText,
                                        llvm::ArrayRef<uint8_t> SNopBytes) const;
 
+  bool relocatesTrailingSections() const { return RelocateTrailingSections; }
+
 private:
   DisplacementPlan(uint64_t OldTextSize, uint64_t RawGrowth,
-                   uint64_t PaddedGrowth, std::vector<DisplacementEdit> Edits)
+                   uint64_t PaddedGrowth, std::vector<DisplacementEdit> Edits,
+                   bool RelocateTrailingSections)
       : OldTextSize(OldTextSize), RawGrowth(RawGrowth),
-        PaddedGrowth(PaddedGrowth), Edits(std::move(Edits)) {}
+        PaddedGrowth(PaddedGrowth), Edits(std::move(Edits)),
+        RelocateTrailingSections(RelocateTrailingSections) {}
 
   uint64_t OldTextSize = 0;
   uint64_t RawGrowth = 0;
   uint64_t PaddedGrowth = 0;
   std::vector<DisplacementEdit> Edits;
+  bool RelocateTrailingSections = false;
 };
 
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
@@ -681,9 +693,37 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 
 /// Disassemble \p Text into \p Decoded using \p LS. Unknown bytes are encoded
 /// as MinInstSize-sized entries with mnemonic "<unknown>".
+///
+/// \p WantMnemonic controls whether each decoded instruction's assembly
+/// mnemonic string is populated. Building the mnemonic (MCInstPrinter lookup
+/// plus a per-instruction std::string) is pure overhead for callers that only
+/// inspect opcodes / MCInstrAnalysis and read InternalDecodedInst::Mnemonic
+/// solely for diagnostics. Passing false leaves DI.Mnemonic empty for
+/// successful decodes (failed decodes still carry the "<unknown>" marker, which
+/// some callers key on) so those callers avoid ~1 std::string per instruction
+/// over the whole section. Defaults to true to preserve mnemonic-consuming
+/// callers.
 [[nodiscard]] bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
                                      const LLVMState &LS,
-                                     std::vector<InternalDecodedInst> &Decoded);
+                                     std::vector<InternalDecodedInst> &Decoded,
+                                     bool WantMnemonic = true);
+
+/// Streaming variant of decodeTextSection. Decodes \p Text one instruction at a
+/// time and invokes \p OnInst for each, in ascending offset order, reusing a
+/// single InternalDecodedInst so no O(TextSize) result vector is materialized.
+/// The decode logic (variable-length linear scan, per-call decode cache,
+/// unknown-byte handling, optional mnemonic) is identical to decodeTextSection;
+/// decodeTextSection is implemented on top of this by appending each callback
+/// instruction to its vector, so the two never diverge.
+///
+/// \p OnInst returns true to continue and false to stop the scan early (e.g. on
+/// the first rejection). Returns true if the scan completed or was stopped by
+/// the callback, false only if the decoder itself could not proceed. Callers
+/// carry their own error out through state captured in \p OnInst.
+[[nodiscard]] bool decodeTextSectionStreaming(
+    const uint8_t *Text, uint64_t TextSize, const LLVMState &LS,
+    bool WantMnemonic,
+    llvm::function_ref<bool(const InternalDecodedInst &)> OnInst);
 
 /// Assemble one non-empty assembly source line, returning its encoded bytes.
 /// Target pseudos may expand that source line to more than one MCInst.
@@ -945,6 +985,14 @@ struct PatchContext {
   llvm::StringMap<std::optional<KernelWorkgroupMetadata>>
       WorkgroupMetadataCache;
   llvm::StringMap<unsigned> KernelVgprGranuleCache;
+
+  // Per-kernel local displacement (tier 1): growing patches record their
+  // replacement here instead of emitting a trampoline immediately. The
+  // finalize pass groups these by owning kernel and applies all edits for a
+  // kernel together, so multiple edits in one kernel see each other's shift.
+  // A site is only collected when it provably fits the kernel's tail padding;
+  // otherwise the caller falls through to the sled/trampoline path.
+  std::vector<DisplacementEdit> DisplacementEdits;
 };
 
 /// Return occupancy limits for \p Processor from COMGR's ISA metadata table.
@@ -1229,10 +1277,15 @@ std::unique_ptr<llvm::WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
     uint64_t TextAddr, uint64_t OldTextSize,
     llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
 
-/// Apply direct .text displacement to a newly allocated output buffer.
+/// Apply direct .text displacement to a newly allocated output buffer. With
+/// \p RelocateTrailingSections, a grow that would overlap later allocatable
+/// content instead shifts that content's virtual address forward (tier-3
+/// whole-object backstop); default false preserves the entry-path fail-closed
+/// overlap check.
 llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>>
 tryApplyTextDisplacementToNewBuffer(const ElfView &Elf, const LLVMState &LS,
-                                    llvm::ArrayRef<DisplacementEdit> Edits);
+                                    llvm::ArrayRef<DisplacementEdit> Edits,
+                                    bool RelocateTrailingSections = false);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------
 
