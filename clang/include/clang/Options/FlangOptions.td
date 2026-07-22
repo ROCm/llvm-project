@@ -312,6 +312,18 @@ def fno_defer_desc_map : Flag<["-"], "fno-defer-desc-map">, Group<f_Group>,
   HelpText<"Disable deferred deferred descriptor mapping, which puts off top-level "
           " descriptor mapping till target regions">;
 
+def fomp_descriptor_elision : Flag<["-"], "fomp-descriptor-elision">, Group<f_Group>,
+  HelpText<"Enable elision of descriptors for assumed-shape arrays inside OpenMP "
+    "target regions when the descriptor is provably not required on the device">;
+
+def fno_omp_descriptor_elision : Flag<["-"], "fno-omp-descriptor-elision">, Group<f_Group>,
+  HelpText<"Disable elision of descriptors for assumed-shape arrays inside OpenMP "
+    "target regions, this is the default behaviour">;
+
+def fomp_descriptor_elision_remarks : Flag<["-"], "fomp-descriptor-elision-remarks">, Group<f_Group>,
+  HelpText<"Emit optimization remarks explaining why an assumed-shape array "
+    "descriptor could not be elided inside an OpenMP target region">;
+
 def J : JoinedOrSeparate<["-"], "J">,
   Flags<[RenderJoined]>, Group<gfortran_Group>, Alias<module_dir>;
 

@@ -159,6 +159,18 @@ static llvm::cl::opt<bool>
                                 "for top-level descriptors"),
                  llvm::cl::init(true));
 
+static llvm::cl::opt<bool> enableDescriptorElision(
+    "fomp-descriptor-elision",
+    llvm::cl::desc("enable elision of descriptors for assumed-shape arrays "
+                   "inside target regions when provably unnecessary"),
+    llvm::cl::init(false));
+
+static llvm::cl::opt<bool> emitDescriptorElisionRemarks(
+    "fomp-descriptor-elision-remarks",
+    llvm::cl::desc("emit optimization remarks explaining why an assumed-shape "
+                   "array descriptor could not be elided"),
+    llvm::cl::init(false));
+
 static llvm::cl::opt<std::string> enableDoConcurrentToOpenMPConversion(
     "fdo-concurrent",
     llvm::cl::desc(
@@ -390,6 +402,8 @@ static llvm::LogicalResult runOpenMPPasses(mlir::ModuleOp mlirModule) {
           .Case("device", DoConcurrentMappingKind::DCMK_Device)
           .Default(DoConcurrentMappingKind::DCMK_None);
   opts.deferDescMap = deferDescMap;
+  opts.enableDescriptorElision = enableDescriptorElision;
+  opts.emitDescriptorElisionRemarks = emitDescriptorElisionRemarks;
 
   fir::createOpenMPFIRPassPipeline(pm, opts);
   (void)mlir::applyPassManagerCLOptions(pm);

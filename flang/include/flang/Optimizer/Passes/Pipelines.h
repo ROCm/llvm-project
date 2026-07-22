@@ -150,6 +150,13 @@ struct OpenMPFIRPassPipelineOpts {
   /// directives.
   bool deferDescMap;
 
+  /// Activates elision of descriptors for assumed-shape arrays inside target
+  /// regions when the descriptor is provably not required on the device.
+  bool enableDescriptorElision = false;
+
+  /// Emit optimization remarks explaining why a descriptor could not be elided.
+  bool emitDescriptorElisionRemarks = false;
+
   /// Controls how to map `do concurrent` loops; to device, host, or none at
   /// all.
   Fortran::frontend::CodeGenOptions::DoConcurrentMappingKind

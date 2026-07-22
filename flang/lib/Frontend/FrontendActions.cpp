@@ -320,6 +320,10 @@ bool CodeGenAction::beginSourceFileAction() {
       ci.getInvocation().getCodeGenOpts().OffloadGlobalFiltering;
   opts.deferDescMap =
       ci.getInvocation().getCodeGenOpts().DeferDescriptorMapping;
+  opts.enableDescriptorElision =
+      ci.getInvocation().getCodeGenOpts().OpenMPDescriptorElision;
+  opts.emitDescriptorElisionRemarks =
+      ci.getInvocation().getCodeGenOpts().OpenMPDescriptorElisionRemarks;
 
   if (opts.doConcurrentMappingKind != DoConcurrentMappingKind::DCMK_None &&
       !isOpenMPEnabled) {
