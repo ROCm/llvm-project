@@ -758,14 +758,6 @@ public:
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &CC1Args) const;
 
-  /// \brief Add the flang arguments for system include paths.
-  ///
-  /// This routine is responsible for adding the -stdinc argument to
-  /// include headers and module files from standard system header directories.
-  virtual void
-  AddFlangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
-                            llvm::opt::ArgStringList &Flang1Args) const {}
-
   /// Add options that need to be passed to cc1 for this target that could add
   /// commands to the compilation to transform an input.
   virtual void
