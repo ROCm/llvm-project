@@ -3,10 +3,10 @@
   :keywords: compiler, AMDGPU, rocm-llvm, ROCm, LLVM, ROCMCC, amdclang++, Clang, hipcc, openmp
 
 ************************************************
-AMDGPU reference specifications
+AMDGPU instruction specifications
 ************************************************
 
-AMDGPU target references have their own ISO specifications organized as follows: 
+AMDGPU instruction specifications are organized by target generations as follows: 
 
 * `GFX12 documentation <./AMDGPU/AMDGPUAsmGFX12.html>`_
 * `GFX11 documentation <./AMDGPU/AMDGPUAsmGFX11.html>`_
