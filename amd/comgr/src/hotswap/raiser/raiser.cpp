@@ -32,8 +32,7 @@ constexpr llvm::StringLiteral AMDGPUTriple = "amdgcn-amd-amdhsa";
 // is not reachable from the hotswap subproject. As a stop-gap, validate
 // the AMDGPU processor name through `llvm::AMDGPU::parseArchAMDGCN`.
 RaiseFailure validateInputs(llvm::StringRef SourceISA,
-                            llvm::StringRef KernelName,
-                            const KernelMeta &Meta) {
+                            llvm::StringRef KernelName) {
   RaiseFailure F;
   if (SourceISA.empty()) {
     F.Reason = RaiseFailureReason::BadInput;
@@ -57,12 +56,6 @@ RaiseFailure validateInputs(llvm::StringRef SourceISA,
     F.Detail = "kernel name is empty";
     return F;
   }
-  if (!Meta.HasKernelDescriptor) {
-    F.Reason = RaiseFailureReason::BadInput;
-    F.Detail =
-        ("kernel '" + KernelName + "' has no parsed kernel descriptor").str();
-    return F;
-  }
   return F;
 }
 
@@ -72,8 +65,12 @@ RaiseResult raiseToIR(llvm::StringRef SourceISA, llvm::StringRef KernelName,
                       const KernelMeta &Meta) {
   using namespace llvm;
 
+  // Meta becomes load-bearing once the decoder reconstructs the kernel
+  // signature and ABI from it; the scaffolding only echoes the kernel name.
+  (void)Meta;
+
   RaiseResult Result;
-  Result.Failure = validateInputs(SourceISA, KernelName, Meta);
+  Result.Failure = validateInputs(SourceISA, KernelName);
   if (Result.Failure.hasFailed()) {
     return Result;
   }

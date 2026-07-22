@@ -43,18 +43,21 @@ template <typename ELFT> using Elf_Note = typename ELFT::Note;
 
 namespace {
 Expected<std::unique_ptr<ELFObjectFileBase>>
-getELFObjectFileBase(DataObject *DataP) {
-  std::unique_ptr<MemoryBuffer> Buf =
-      MemoryBuffer::getMemBuffer(StringRef(DataP->Data, DataP->Size));
-
+getELFObjectFileBase(MemoryBufferRef MB) {
   Expected<std::unique_ptr<ObjectFile>> ObjOrErr =
-      ObjectFile::createELFObjectFile(*Buf);
+      ObjectFile::createELFObjectFile(MB);
 
   if (auto Err = ObjOrErr.takeError()) {
     return std::move(Err);
   }
 
   return unique_dyn_cast<ELFObjectFileBase>(std::move(*ObjOrErr));
+}
+
+Expected<std::unique_ptr<ELFObjectFileBase>>
+getELFObjectFileBase(DataObject *DataP) {
+  return getELFObjectFileBase(
+      MemoryBufferRef(StringRef(DataP->Data, DataP->Size), ""));
 }
 
 // PAL currently produces MsgPack metadata in a note with this ID.
@@ -253,13 +256,8 @@ amd_comgr_status_t getElfMetadataRoot(const ELFObjectFile<ELFT> *Obj,
 }
 } // namespace
 
-amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP) {
-  auto ObjOrErr = getELFObjectFileBase(DataP);
-  if (errorToBool(ObjOrErr.takeError())) {
-    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
-  }
-  auto *Obj = ObjOrErr->get();
-
+namespace {
+amd_comgr_status_t getMetadataRoot(ELFObjectFileBase *Obj, DataMeta *MetaP) {
   if (auto *ELF32LE = dyn_cast<ELF32LEObjectFile>(Obj)) {
     return getElfMetadataRoot(ELF32LE, MetaP);
   }
@@ -271,6 +269,25 @@ amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP) {
   }
   auto *ELF64BE = dyn_cast<ELF64BEObjectFile>(Obj);
   return getElfMetadataRoot(ELF64BE, MetaP);
+}
+} // namespace
+
+amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP) {
+  auto ObjOrErr = getELFObjectFileBase(DataP);
+  if (errorToBool(ObjOrErr.takeError())) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+  return getMetadataRoot(ObjOrErr->get(), MetaP);
+}
+
+llvm::Error getMetadataRoot(MemoryBufferRef MB, DataMeta *MetaP) {
+  auto ObjOrErr = getELFObjectFileBase(MB);
+  if (!ObjOrErr)
+    return ObjOrErr.takeError();
+  if (getMetadataRoot(ObjOrErr->get(), MetaP) != AMD_COMGR_STATUS_SUCCESS)
+    return createStringError(inconvertibleErrorCode(),
+                             "failed to read AMDGPU metadata note");
+  return Error::success();
 }
 
 struct IsaInfo {
@@ -409,17 +426,32 @@ amd_comgr_status_t getElfIsaNameFromElfHeader(const ELFObjectFile<ELFT> *Obj,
 }
 } // namespace
 
+Expected<std::string> getElfIsaName(MemoryBufferRef MB) {
+  auto ObjOrErr = getELFObjectFileBase(MB);
+  if (!ObjOrErr)
+    return ObjOrErr.takeError();
+
+  auto *ELF64LE = dyn_cast<ELF64LEObjectFile>(ObjOrErr->get());
+  if (!ELF64LE)
+    return createStringError(inconvertibleErrorCode(),
+                             "code object is not a 64-bit little-endian ELF");
+
+  std::string IsaName;
+  if (getElfIsaNameFromElfHeader(ELF64LE, IsaName) != AMD_COMGR_STATUS_SUCCESS)
+    return createStringError(inconvertibleErrorCode(),
+                             "failed to derive ISA name from ELF header");
+  return IsaName;
+}
+
 amd_comgr_status_t getElfIsaName(DataObject *DataP, std::string &IsaName) {
-  auto ObjOrErr = getELFObjectFileBase(DataP);
-  if (errorToBool(ObjOrErr.takeError())) {
+  auto IsaOrErr =
+      getElfIsaName(MemoryBufferRef(StringRef(DataP->Data, DataP->Size), ""));
+  if (!IsaOrErr) {
+    consumeError(IsaOrErr.takeError());
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
-  auto *Obj = ObjOrErr->get();
-
-  if (auto *ELF64LE = dyn_cast<ELF64LEObjectFile>(Obj))
-    return getElfIsaNameFromElfHeader(ELF64LE, IsaName);
-  else
-    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  IsaName = std::move(*IsaOrErr);
+  return AMD_COMGR_STATUS_SUCCESS;
 }
 
 amd_comgr_status_t getIsaIndex(StringRef TargetIDString, size_t &Index,

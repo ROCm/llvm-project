@@ -1,0 +1,24 @@
+# REQUIRES: comgr-has-hotswap-transpile
+
+# RUN: %yaml2obj %s -o %t.o
+# RUN: not %hotswap_transpile_cli %t.o --dump-meta 2>&1 | %FileCheck %s
+
+# CHECK: no amdhsa.kernels
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS64
+  Data:    ELFDATA2LSB
+  OSABI:   ELFOSABI_AMDGPU_HSA
+  Type:    ET_DYN
+  Machine: EM_AMDGPU
+  Flags:   [ EF_AMDGPU_MACH_AMDGCN_GFX942 ]
+Sections:
+  - Name: .note
+    Type: SHT_NOTE
+    Notes:
+      - Name: AMDGPU
+        Type: 0x20
+        Desc: 81AE616D646873612E76657273696F6E920102
+Symbols:
+  - Name: meta_kernel.kd
+    Type: STT_OBJECT

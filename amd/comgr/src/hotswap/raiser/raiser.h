@@ -9,7 +9,7 @@
 #ifndef HOTSWAP_TRANSPILER_RAISER_H
 #define HOTSWAP_TRANSPILER_RAISER_H
 
-#include "hotswap/common/code_object_utils.h"
+#include "hotswap/common/kernel-meta.h"
 #include "raise_failure.h"
 
 #include "llvm/ADT/StringRef.h"
@@ -32,10 +32,10 @@ struct RaiseResult {
 };
 
 // Raise a kernel named `KernelName` whose source ISA is `SourceISA`. `Meta`
-// carries the MsgPack-derived per-kernel metadata. The scaffolding
-// implementation emits a `ret void` placeholder and refuses inputs the full
-// pipeline would also refuse: missing kernel descriptor, empty kernel name,
-// and `SourceISA` strings that don't parse via
+// carries the per-kernel metadata already loaded and validated by
+// `CodeObjectInfo`. The scaffolding implementation emits a `ret void`
+// placeholder and refuses inputs the full pipeline would also refuse: an empty
+// kernel name and `SourceISA` strings that don't parse via
 // `llvm::AMDGPU::parseArchAMDGCN`. The kernel-text bytes, kernel offset, and
 // compilation-target ISA become real parameters once the decoder is wired
 // in (subsequent commit).

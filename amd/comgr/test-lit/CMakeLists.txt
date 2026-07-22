@@ -16,6 +16,8 @@ else()
 endif()
 canonicalize_cmake_boolean(COMGR_AMDGPU_TARGET_AVAILABLE)
 
+canonicalize_cmake_boolean(COMGR_ENABLE_HOTSWAP_TRANSPILE)
+
 find_program(LLVM_LIT_PATH
   NAMES llvm-lit llvm-lit.py llvm-lit.cmd
   PATHS "${LLVM_TOOLS_BINARY_DIR}/../../bin" "${LLVM_TOOLS_BINARY_DIR}"
@@ -64,5 +66,31 @@ add_comgr_lit_binary(lookup-code-object c)
 add_comgr_lit_binary(hotswap-rewrite c)
 add_comgr_lit_binary(parse-isa-name c)
 add_comgr_lit_binary(name-expression-map c)
+
+# The hotswap transpiler driver used by the hotswap/raiser lit tests. It links
+# the hotswap-loader OBJECT library and the shared comgr-object-utils
+# objects (which carry the buffer-facing getElfIsaName / getMetadataRoot /
+# lookupSymbolByName entry points) rather than recompiling the comgr sources, so
+# the driver and amd_comgr share one set of objects and compile flags. Those
+# objects also contain amd_comgr C-API helpers the driver never calls and that
+# reference the rest of comgr; --gc-sections drops them (they were built with
+# function/data sections). MSVC's default /OPT:REF removes them the same way.
+if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
+  add_executable(hotswap_transpile_cli comgr-sources/hotswap_transpile_cli.cpp)
+  # LLVM is built without RTTI/exceptions; match it explicitly so cl::opt's
+  # OptionValue typeinfo is not emitted against the -fno-rtti Support library
+  # (llvm_update_compile_flags does not add these in a standalone comgr build).
+  target_compile_options(hotswap_transpile_cli PRIVATE -fno-rtti -fno-exceptions)
+  target_include_directories(hotswap_transpile_cli PRIVATE
+    ${LLVM_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_BINARY_DIR}/../include)
+  target_link_libraries(hotswap_transpile_cli
+    PRIVATE hotswap::common hotswap::loader comgr-object-utils)
+  if(NOT WIN32)
+    target_link_options(hotswap_transpile_cli PRIVATE -Wl,--gc-sections)
+  endif()
+  add_dependencies(test-lit hotswap_transpile_cli)
+endif()
 
 add_dependencies(check-comgr test-lit)

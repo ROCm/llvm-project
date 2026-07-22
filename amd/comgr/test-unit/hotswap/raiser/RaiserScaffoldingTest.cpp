@@ -9,8 +9,9 @@
 // Pins the scaffolding contract `raiseToIR` advertises: an empty input
 // produces a well-formed `llvm::Module` containing one `AMDGPU_KERNEL`
 // function whose body is exactly `ret void`, with the AMDGPU triple set.
-// Empty inputs succeed; missing kernel descriptor / malformed ISA inputs
-// are rejected with a structured failure.
+// Empty inputs succeed; malformed ISA inputs are rejected with a structured
+// failure. Descriptor presence is enforced upstream by the code-object loader,
+// so it is no longer a raiser precondition.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,7 +32,6 @@ namespace {
 COMGR::hotswap::KernelMeta makeKernelMeta(llvm::StringRef Name) {
   COMGR::hotswap::KernelMeta Meta;
   Meta.Name = Name.str();
-  Meta.HasKernelDescriptor = true;
   return Meta;
 }
 
@@ -74,17 +74,6 @@ TEST(RaiserScaffolding, KernelFunctionIsAMDGPUKernelWithRetVoid) {
   llvm::BasicBlock &Entry = Fn->getEntryBlock();
   ASSERT_FALSE(Entry.empty());
   EXPECT_TRUE(llvm::isa<llvm::ReturnInst>(Entry.getTerminator()));
-}
-
-TEST(RaiserScaffolding, MissingKernelDescriptorIsRejected) {
-  COMGR::hotswap::KernelMeta Meta;
-  Meta.Name = "kernel";
-  Meta.HasKernelDescriptor = false;
-  COMGR::hotswap::RaiseResult Result =
-      COMGR::hotswap::raiseToIR("gfx942", "kernel", Meta);
-
-  EXPECT_FALSE(Result.Success);
-  EXPECT_TRUE(Result.Failure.hasFailed());
 }
 
 TEST(RaiserScaffolding, EmptyTargetIsaIsRejected) {
