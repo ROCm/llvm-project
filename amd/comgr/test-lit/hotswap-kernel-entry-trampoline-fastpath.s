@@ -21,10 +21,10 @@
 // DISASM-NEXT: s_setreg_imm32_b32
 // DISASM-NEXT: s_endpgm
 
-// COM: A prologue that already has global_wb; v_nop keeps its in-place
+// COM: A prologue that already has global_prefetch_b8; v_nop keeps its in-place
 // COM: workaround and gets no redirect stub.
 // DISASM-LABEL: <precompiled_wa_kernel>:
-// DISASM-NEXT: global_wb
+// DISASM-NEXT: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_endpgm
 
@@ -84,7 +84,7 @@ plain_kernel:
 .p2align 8
 .type precompiled_wa_kernel,@function
 precompiled_wa_kernel:
-  global_wb
+  global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
   v_nop
   s_endpgm
 .Lprecompiled_wa_kernel_end:

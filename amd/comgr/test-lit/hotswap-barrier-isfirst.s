@@ -74,7 +74,7 @@
 // B0B0-NEXT: s_barrier_wait 0xffff
 // B0B0-NEXT: s_barrier_signal_isfirst -3
 // B0B0-NEXT: s_barrier_wait 0xfffd
-// B0B0: global_wb
+// B0B0: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
