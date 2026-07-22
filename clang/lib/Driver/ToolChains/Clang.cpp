@@ -8442,9 +8442,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   Args.AddAllArgs(CmdArgs, options::OPT_undef);
 
-  std::string AltPath = D.getInstalledDir();
-  AltPath += "/../alt/bin/clang-" + std::to_string(LLVM_VERSION_MAJOR);
-
   const char *Exec = D.getDriverProgramPath();
 
   // Optionally embed the -cc1 level arguments into the debug info or a
