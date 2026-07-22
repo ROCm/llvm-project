@@ -7,7 +7,7 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
 // RUN:   --strict-mode --expect-status ERROR 2>&1 | %FileCheck %s
-// CHECK: WMMA split: cannot determine VGPR-MSB mode
+// CHECK-LABEL: WMMA split: cannot determine VGPR-MSB mode
 // CHECK: RESULT: ERROR
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

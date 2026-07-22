@@ -10,7 +10,7 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefix=CHECK %s
-// CHECK: WMMA split: cannot determine VGPR-MSB mode
+// CHECK-LABEL: WMMA split: cannot determine VGPR-MSB mode
 // CHECK: RESULT: ERROR
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

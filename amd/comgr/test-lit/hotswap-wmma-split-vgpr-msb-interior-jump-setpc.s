@@ -17,7 +17,7 @@
 // RUN:   | %FileCheck %s
 // RUN: test ! -e %t.out.elf
 // CHECK-NOT: unresolved call target
-// CHECK: WMMA split: cannot determine VGPR-MSB mode
+// CHECK-LABEL: WMMA split: cannot determine VGPR-MSB mode
 // CHECK: RESULT: ERROR
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"

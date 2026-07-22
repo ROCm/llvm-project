@@ -22,7 +22,7 @@
 // failure comes from the unprovable join at the shared block, not that bail.
 // CHECK: hotswap: resolved PC-materialized call
 // CHECK-NOT: hotswap: unresolved call target
-// CHECK: WMMA split: cannot determine VGPR-MSB mode
+// CHECK-LABEL: WMMA split: cannot determine VGPR-MSB mode
 // CHECK: RESULT: ERROR
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
