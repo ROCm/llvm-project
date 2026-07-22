@@ -374,6 +374,16 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
                                      S.SPrefetchDataPcRelOpcode))
     return S;
 
+  // The gfx1250 VGPR-MSB mode instructions are resolved non-fatally: they are
+  // gfx1250-only, so on other subtargets resolveOpcodeViaParse returns the
+  // MCII::getNumOpcodes() sentinel, which never matches a decoded opcode. Only
+  // the WMMA split pass consumes them, and it only runs for gfx1250.
+  S.SSetVgprMsbOpcode = resolveOpcodeViaParse("s_set_vgpr_msb 0", S);
+  S.SSetregImm32Opcode = resolveOpcodeViaParse(
+      "s_setreg_imm32_b32 hwreg(HW_REG_MODE, 0, 1), 0", S);
+  S.SSetregB32Opcode =
+      resolveOpcodeViaParse("s_setreg_b32 hwreg(HW_REG_MODE, 0, 1), s0", S);
+
   SmallVector<MCInst, 2> SccDefInsts =
       parseAsmToMCInsts("s_cmp_eq_u32 s0, s0", S);
   if (SccDefInsts.size() != 1) {
