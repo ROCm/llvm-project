@@ -13,7 +13,11 @@
 #ifndef LLVM_LIBC_SRC___SUPPORT_RPC_EMISSARY_RPC_SERVER_H
 #define LLVM_LIBC_SRC___SUPPORT_RPC_EMISSARY_RPC_SERVER_H
 
+#if __has_include("../clang/lib/Headers/EmissaryIds.h")
 #include "../clang/lib/Headers/EmissaryIds.h"
+#else
+#include "EmissaryIds.h"
+#endif
 #include "rpc.h"
 #include "rpc_opcodes.h"
 
