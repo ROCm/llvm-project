@@ -1041,7 +1041,7 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
     // FIXME: Need a better way of tracking divergence in DIExpression.
     bool IsWholeReg = false;
     if (auto *TET = dyn_cast<TargetExtType>(Arg.getResultType()))
-      IsWholeReg = TET->getName().starts_with("amdgpu.debug.whole.reg");
+      IsWholeReg = TET->getName() == "amdgpu.debug.whole.vreg";
 
     auto focusThreadIfRequired = [this](int64_t DwarfRegNo) {
       // FIXME: This should be represented in the DIExpression.

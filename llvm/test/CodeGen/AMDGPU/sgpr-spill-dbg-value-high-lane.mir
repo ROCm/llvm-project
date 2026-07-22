@@ -4,7 +4,7 @@
 # placed on lane 16 (16 * 4 = 64).
 
 # SGPR_SPILL-LABEL: name: test_high_lane
-# SGPR_SPILL: DBG_VALUE {{.+}}, 0, {{.+}}, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.reg64")), DIOpConstant(i32 64), DIOpByteOffset(i32)), {{.+}}
+# SGPR_SPILL: DBG_VALUE {{.+}}, 0, {{.+}}, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 64), DIOpByteOffset(i32)), {{.+}}
 
 --- |
   define amdgpu_kernel void @test_high_lane() !dbg !2 { ret void }

@@ -20,6 +20,7 @@ using namespace llvm;
 /// Returns the operand that is used for Reg.
 ///
 /// If Op is a frame index, it's replaced in-place with Reg.
+/// If MI already has Reg as an operand, reuse it.
 /// If Op is not a frame index and MI is a DBG_VALUE, converts MI to
 /// DBG_VALUE_LIST and adds Reg as an additional operand.
 /// If Op is not a frame index and MI is already a DBG_VALUE_LIST, adds Reg
@@ -31,6 +32,11 @@ addOrReplaceFrameIndexOp(MachineInstr &MI, MachineOperand *Op, Register Reg) {
     Op->ChangeToRegister(Reg, /*isDef=*/false);
     return Op;
   }
+
+  // Avoid adding a duplicate operand.
+  for (MachineOperand &MO : MI.debug_operands())
+    if (MO.isReg() && MO.getReg() == Reg)
+      return &MO;
 
   // Convert DBG_VALUE to DBG_VALUE_LIST when adding additional operands.
   // This happens when a spill spans multiple registers (e.g., multi-lane SGPR
@@ -57,10 +63,10 @@ addOrReplaceFrameIndexOp(MachineInstr &MI, MachineOperand *Op, Register Reg) {
 
 /// Return a type that indicates that the register should not be focused (the
 /// current default).
-static Type *getWholeRegType(LLVMContext &Ctx, const GCNSubtarget &ST) {
-  StringRef Name =
-      ST.isWave32() ? "amdgpu.debug.whole.reg32" : "amdgpu.debug.whole.reg64";
-  return TargetExtType::get(Ctx, Name);
+static Type *getWholeRegType(LLVMContext &Ctx, Type *TypeIntLane,
+                             unsigned WFSize) {
+  return TargetExtType::get(Ctx, "amdgpu.debug.whole.vreg", {TypeIntLane},
+                            {WFSize});
 }
 
 /// Update DBG_VALUE and DBG_VALUE_LIST instructions so that they correctly
@@ -121,7 +127,7 @@ void llvm::updateDbgValueForSISpill(MachineFunction &MF, MachineInstr &MI,
   auto *FuncInfo = MF.getInfo<SIMachineFunctionInfo>();
   constexpr unsigned VGPRLaneSize = 32;
   IntegerType *TypeIntLane = IntegerType::get(Ctx, VGPRLaneSize);
-  Type *TypeWholeReg = getWholeRegType(Ctx, ST);
+  Type *TypeWholeReg = getWholeRegType(Ctx, TypeIntLane, ST.getWavefrontSize());
   IntegerType *TypeInt32 = IntegerType::get(Ctx, 32);
 
   ArrayRef<DIOp::Variant> ExprOps = *Expr->getNewElementsRef();
@@ -181,5 +187,6 @@ void llvm::updateDbgValueForSISpill(MachineFunction &MF, MachineInstr &MI,
     }
   }
 
+  ClearSpilledOpnds();
   MI.getDebugExpressionOp().setMetadata(Builder.intoExpression());
 }

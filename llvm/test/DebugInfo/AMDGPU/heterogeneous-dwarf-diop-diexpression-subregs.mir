@@ -103,7 +103,7 @@ body: |
     ; CHECK: DW_TAG_variable
     ; CHECK-NEXT: DW_AT_location (DW_OP_regx VGPR42, DW_OP_lit8, DW_OP_LLVM_user DW_OP_LLVM_offset)
     ; CHECK-NEXT: DW_AT_name ("nofocus")
-    DBG_VALUE $vgpr42, $noreg, !28, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.reg32")), DIOpConstant(i32 8), DIOpByteOffset(i64)), debug-location !16
+    DBG_VALUE $vgpr42, $noreg, !28, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 32)), DIOpConstant(i32 8), DIOpByteOffset(i64)), debug-location !16
 
     S_ENDPGM 0, debug-location !16
 

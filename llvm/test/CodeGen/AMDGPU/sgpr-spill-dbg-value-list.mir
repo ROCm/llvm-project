@@ -53,13 +53,13 @@ body:             |
     SI_SPILL_S64_SAVE killed $sgpr12_sgpr13, %stack.1, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
 
     ; Test the path we expect to work (Arg followed immediately by Deref)
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.reg64")), DIOpConstant(i32 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
+    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
     DBG_VALUE_LIST !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), %stack.0, 0, debug-location !9
     S_NOP 0
 
     ; Test that the constant offset is correct (assumes that sgpr12_sgpr13 gets
     ; spilled to next lane).
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.reg64")), DIOpConstant(i32 4), DIOpByteOffset(i32), DIOpArg(1, target("amdgpu.debug.whole.reg64")), DIOpConstant(i32 8), DIOpByteOffset(i32), DIOpComposite(2, i64)), [[DEF]], [[DEF]], {{.*}}
+    ; CHECK:   DBG_VALUE [[DEF]], 0, <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 4), DIOpByteOffset(i32), DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 8), DIOpByteOffset(i32), DIOpComposite(2, i64)),
     DBG_VALUE %stack.1, 0, !10, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), debug-location !9
     S_NOP 0
 
