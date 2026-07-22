@@ -380,37 +380,44 @@ jobs:
 
       - name: LLVM Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         run: |
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-llvm
 
       - name: Clang Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         run: |
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-clang
 
       - name: Flang Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         run: |
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-flang
 
       - name: MLIR Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         run: |
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-mlir
 
       - name: LLD Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         run: |
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-lld
 
       - name: COMGR Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         run: |
           "${BUILD_DIR}"/compiler/amd-llvm/build/bin/llvm-lit \
             "${BUILD_DIR}"/compiler/amd-comgr/build/test-lit -v
 
       - name: COMGR CTest
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         run: |
           ctest --test-dir "${BUILD_DIR}"/compiler/amd-comgr/build --output-on-failure
 
