@@ -37,7 +37,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <limits>
+#include <map>
 
 using namespace llvm;
 
@@ -2068,13 +2070,65 @@ assignLongBranchGateways(PatchContext &Ctx,
   return true;
 }
 
+/// Tier-1 per-kernel local displacement: grow the patched instruction in place
+/// by shifting the rest of its own kernel down into the kernel's trailing
+/// alignment padding (the run of s_nop bytes before the next 256-byte-aligned
+/// kernel entry). Net .text size is unchanged and nothing outside this kernel
+/// moves, so no section boundary is crossed and no descriptor changes.
+///
+/// Returns true if \p InstOffset lies in a kernel with enough trailing
+/// alignment padding to absorb this one edit's growth. Only a necessary
+/// pre-check: the final per-kernel fit (multiple edits share one pad budget)
+/// and branch repair are decided later in finalizeKernelDisplacements. Records
+/// the edit in Ctx.DisplacementEdits on success.
+[[nodiscard]] bool
+collectKernelTailDisplacement(PatchContext &Ctx, uint64_t InstOffset,
+                              uint32_t InstSize,
+                              ArrayRef<uint8_t> Replacement) {
+  const LLVMState &LS = Ctx.LS;
+  if (Replacement.size() <= InstSize)
+    return false;
+  const uint64_t Growth = Replacement.size() - InstSize;
+  if (Growth % MinInstSize != 0 || LS.SNopBytes.size() != MinInstSize)
+    return false;
+
+  std::optional<ElfView::FunctionTextRange> Range =
+      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
+  if (!Range)
+    return false;
+  if (InstOffset < Range->Begin || InstOffset + InstSize > Range->End ||
+      Range->End > Ctx.TextSize)
+    return false;
+
+  DisplacementEdit Edit;
+  Edit.Offset = InstOffset;
+  Edit.OriginalSize = InstSize;
+  Edit.ReplacementBytes.assign(Replacement.begin(), Replacement.end());
+  Ctx.DisplacementEdits.push_back(std::move(Edit));
+  return true;
+}
+
 /// Emit \p Replacement for the instruction at [\p InstOffset,
-/// \p InstOffset + \p InstSize). Prefers an in-place NOP-sled rewrite when a
-/// reachable sled with sufficient headroom exists; otherwise falls back to a
-/// deferred trampoline.
+/// \p InstOffset + \p InstSize). Prefers per-kernel local displacement into the
+/// kernel's tail padding (collected now, applied together in
+/// finalizeKernelDisplacements), then an in-place NOP-sled rewrite, otherwise
+/// falls back to a deferred trampoline.
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        ArrayRef<uint8_t> Replacement) {
+  // Tier 1: record a local-displacement edit into this kernel's own tail
+  // padding. Collected (not applied) here so multiple edits in one kernel can
+  // be applied together with cumulative offset math; the finalize pass either
+  // displaces them or, if the kernel can't fit, hands them back for
+  // trampolines. AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT forces the legacy
+  // trampoline path for A/B benchmarking (displacement vs trampoline on the
+  // same binary).
+  static const bool DisplacementDisabled =
+      getenv("AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT") != nullptr;
+  if (!DisplacementDisabled && !Ctx.DirectControlFlow.HasUnresolvedTargets &&
+      collectKernelTailDisplacement(Ctx, InstOffset, InstSize, Replacement))
+    return true;
+
   std::optional<uint64_t> ReturnTo = checkedAddUint64(
       InstOffset, InstSize, "replacement trampoline return target");
   std::optional<uint64_t> PoolReturnFrom =
@@ -2103,6 +2157,414 @@ assignLongBranchGateways(PatchContext &Ctx,
     }
   }
   return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement);
+}
+
+// -- Per-kernel local displacement finalize -----------------------------------
+
+namespace {
+
+/// Re-encode the s_add_nc_u64 immediate at \p AddOff by \p DeltaBytes so a
+/// PC-relative address computation (s_get_pc; s_add +imm) still resolves to the
+/// same absolute target after the code moved. \p AddOff is the ORIGINAL .text
+/// offset of the s_add; the returned fix carries the byte offset to patch (the
+/// NEW location, supplied by the caller as \p NewAddOff) and the new bytes.
+/// Returns false if the instruction at AddOff is not the expected
+/// s_add_nc_u64 reg,reg,imm form or re-encode changes its size.
+template <typename FixVec>
+[[nodiscard]] bool repairSGetPcAddImmediate(PatchContext &Ctx, uint64_t AddOff,
+                                            uint64_t NewAddOff,
+                                            int64_t DeltaBytes, FixVec &Fixes) {
+  const LLVMState &LS = Ctx.LS;
+  std::vector<InternalDecodedInst> One;
+  // Decode a small window starting at the s_add; the first decoded instruction
+  // is the s_add itself.
+  const uint64_t Window = 16;
+  uint64_t Avail = Ctx.TextSize - AddOff;
+  if (!decodeTextSection(Ctx.Text + AddOff, std::min(Window, Avail), LS, One) ||
+      One.empty())
+    return false;
+  const InternalDecodedInst &Add = One[0];
+  if (Add.Inst.getOpcode() != LS.SAddNcU64Opcode ||
+      Add.Inst.getNumOperands() != 3 || !Add.Inst.getOperand(2).isImm())
+    return false;
+  MCInst NewInst = Add.Inst;
+  int64_t NewImm = Add.Inst.getOperand(2).getImm() + DeltaBytes;
+  NewInst.getOperand(2).setImm(NewImm);
+  SmallVector<char, 16> Code;
+  SmallVector<MCFixup, 4> MCFixups;
+  LS.MCE->encodeInstruction(NewInst, Code, MCFixups, *LS.STI);
+  if (Code.size() != Add.Size)
+    return false;
+  typename FixVec::value_type F;
+  F.NewFrom = NewAddOff;
+  F.Bytes.assign(Code.begin(), Code.end());
+  Fixes.push_back(std::move(F));
+  return true;
+}
+
+/// One kernel's contribution to a displacement region: its original span, the
+/// end of its trailing s_nop padding, and the edits applied inside it. Kernels
+/// with no edits still appear (as movable filler) when they sit inside a ripple
+/// window between an overflowing kernel and the successor that absorbs it.
+struct DispKernel {
+  uint64_t Begin = 0;  // original .text offset of the entry
+  uint64_t End = 0;    // original end of real code
+  uint64_t PadEnd = 0; // end of the trailing s_nop run
+  std::string Name;    // kernel name (for descriptor entry-offset fixup)
+  std::vector<DisplacementEdit> Edits;
+
+  uint64_t grownCodeSize() const {
+    uint64_t G = 0;
+    for (const DisplacementEdit &E : Edits)
+      G += E.ReplacementBytes.size() - E.OriginalSize;
+    return (End - Begin) + G;
+  }
+};
+
+/// Round \p V up to the next multiple of \p A (a power of two).
+uint64_t roundUpTo(uint64_t V, uint64_t A) { return (V + A - 1) & ~(A - 1); }
+
+} // namespace
+
+/// Apply all collected displacement edits. Edits are grouped into their owning
+/// kernels; a kernel whose growth fits its own trailing padding is rewritten in
+/// place (tier 1). A kernel that overflows forms a ripple window with the
+/// following kernels: the window's byte span is held fixed (RegionEnd pinned at
+/// a kernel-padding boundary), the kernels inside it are re-laid-out
+/// 256-byte-aligned with edits spliced, and every kernel that moved gets its
+/// kernel_code_entry_byte_offset descriptor updated (tier 2). Intra-kernel
+/// s_branch targets and s_get_pc-relative data references are repaired against
+/// the new layout. A kernel that cannot be displaced locally (dense cluster
+/// with no ripple slack, or a single-kernel object) has its edits appended to
+/// \p OutDeclined for the caller's tier-3 .text-grow backstop. Returns false
+/// Move a declined kernel's edits into \p OutDeclined for the tier-3 .text
+/// grow, padding the last edit with s_nop so the kernel's TOTAL growth rounds
+/// up to a 256-byte multiple. Without this, the whole-object grow shifts later
+/// kernels by a non-stride amount and their 256-aligned entries break
+/// (validateKernelEntryMappings). Padding here keeps every downstream entry on
+/// a 256 boundary at the cost of a few dead s_nop per declined kernel.
+static void
+moveDeclinedKernelEditsPadded(std::vector<DisplacementEdit> &Edits,
+                              const LLVMState &LS,
+                              std::vector<DisplacementEdit> &OutDeclined) {
+  if (Edits.empty())
+    return;
+  uint64_t Growth = 0;
+  for (const DisplacementEdit &E : Edits)
+    Growth += E.ReplacementBytes.size() - E.OriginalSize;
+  std::optional<uint64_t> Rounded = checkedAlignTo(
+      Growth, KernelEntryStubStride, "declined-kernel displacement growth");
+  uint64_t Pad = Rounded ? *Rounded - Growth : 0;
+  if (Pad != 0 && LS.SNopBytes.size() == MinInstSize) {
+    DisplacementEdit &Last = Edits.back();
+    while (Pad >= MinInstSize) {
+      Last.ReplacementBytes.append(LS.SNopBytes.begin(), LS.SNopBytes.end());
+      Pad -= MinInstSize;
+    }
+  }
+  for (DisplacementEdit &E : Edits)
+    OutDeclined.push_back(std::move(E));
+}
+
+/// only on an unrecoverable internal error.
+[[nodiscard]] bool
+finalizeKernelDisplacements(PatchContext &Ctx,
+                            std::vector<DisplacementEdit> &OutDeclined) {
+  if (Ctx.DisplacementEdits.empty())
+    return true;
+  const LLVMState &LS = Ctx.LS;
+
+  // Build an address-ordered table of every kernel in .text with its padding
+  // extent, then attach the collected edits to their owning kernel.
+  // functionTextRanges() returns ABSOLUTE virtual addresses; convert to
+  // .text-relative offsets to match DisplacementEdit::Offset and Ctx.Text.
+  const uint64_t TextAddr = Ctx.Elf.textAddr();
+  std::vector<ElfView::FunctionTextRange> Ranges = Ctx.Elf.functionTextRanges();
+  std::sort(Ranges.begin(), Ranges.end(),
+            [](const ElfView::FunctionTextRange &A,
+               const ElfView::FunctionTextRange &B) {
+              if (A.Begin != B.Begin)
+                return A.Begin < B.Begin;
+              return A.End > B.End;
+            });
+  // functionTextRanges() scans both .symtab and .dynsym, so a kernel present in
+  // both is listed twice with the same Begin. Dedupe by Begin (keep the widest)
+  // so padding gaps are computed against the true next kernel, not a duplicate.
+  Ranges.erase(std::unique(Ranges.begin(), Ranges.end(),
+                           [](const ElfView::FunctionTextRange &A,
+                              const ElfView::FunctionTextRange &B) {
+                             return A.Begin == B.Begin;
+                           }),
+               Ranges.end());
+  std::vector<DispKernel> Kernels;
+  Kernels.reserve(Ranges.size());
+  for (size_t I = 0; I < Ranges.size(); ++I) {
+    DispKernel K;
+    K.Begin = Ranges[I].Begin - TextAddr;
+    K.End = Ranges[I].End - TextAddr;
+    K.Name = Ctx.Elf.findKernelAtAddress(Ranges[I].Begin);
+    uint64_t PadLimit =
+        (I + 1 < Ranges.size()) ? Ranges[I + 1].Begin - TextAddr : Ctx.TextSize;
+    uint64_t PadEnd = K.End;
+    while (PadEnd + MinInstSize <= PadLimit &&
+           std::memcmp(Ctx.Text + PadEnd, LS.SNopBytes.data(), MinInstSize) ==
+               0)
+      PadEnd += MinInstSize;
+    K.PadEnd = PadEnd;
+    Kernels.push_back(std::move(K));
+  }
+  auto kernelIndexOf = [&](uint64_t Off) -> std::optional<size_t> {
+    for (size_t I = 0; I < Kernels.size(); ++I)
+      if (Off >= Kernels[I].Begin && Off < Kernels[I].PadEnd)
+        return I;
+    return std::nullopt;
+  };
+  for (DisplacementEdit &E : Ctx.DisplacementEdits) {
+    std::optional<size_t> KI = kernelIndexOf(E.Offset);
+    if (!KI)
+      return false; // collection guaranteed a range; a miss is a real bug
+    Kernels[*KI].Edits.push_back(std::move(E));
+  }
+  for (DispKernel &K : Kernels)
+    std::sort(K.Edits.begin(), K.Edits.end(),
+              [](const DisplacementEdit &A, const DisplacementEdit &B) {
+                return A.Offset < B.Offset;
+              });
+
+  uint32_t DisplacedSites = 0, DisplacedKernelCount = 0, MovedKernels = 0,
+           DeclinedSites = 0;
+
+  // Walk kernels in address order. A kernel with edits either fits its own
+  // padding (region of one) or extends the region forward until the aggregate
+  // 256-aligned kernel footprints fit the region's fixed byte span.
+  for (size_t I = 0; I < Kernels.size(); ++I) {
+    if (Kernels[I].Edits.empty())
+      continue;
+
+    // Grow the region [I, J] until every kernel's 256-aligned grown footprint
+    // fits within [Kernels[I].Begin, Kernels[J].PadEnd). The last kernel's own
+    // padding is what shrinks to make room; kernels between move down by whole
+    // strides. Cap the ripple so a pathological object can't scan to the end.
+    constexpr size_t MaxRipple = 8;
+    size_t J = I;
+    bool Fits = false;
+    for (size_t Depth = 0; Depth < MaxRipple && J < Kernels.size();
+         ++Depth, ++J) {
+      const uint64_t RegionBegin = Kernels[I].Begin;
+      const uint64_t RegionEnd = Kernels[J].PadEnd;
+      uint64_t Need = 0;
+      for (size_t K = I; K < J; ++K)
+        Need += roundUpTo(Kernels[K].grownCodeSize(), KernelEntryStubStride);
+      Need += Kernels[J].grownCodeSize(); // last kernel need not be re-padded
+      if (Need <= RegionEnd - RegionBegin) {
+        Fits = true;
+        break;
+      }
+    }
+    if (!Fits) {
+      // Only kernel I is declined here; its ripple successors were candidates,
+      // not committed, and each gets its own turn as the loop advances. The
+      // declined edits go to the caller's tier-3 .text-grow backstop.
+      DeclinedSites += Kernels[I].Edits.size();
+      moveDeclinedKernelEditsPadded(Kernels[I].Edits, LS, OutDeclined);
+      log() << "hotswap: displacement declined (tier-3): kernel [0x"
+            << utohexstr(Kernels[I].Begin) << ",0x" << utohexstr(Kernels[I].End)
+            << ") growth exceeds ripple capacity\n";
+      continue;
+    }
+
+    const uint64_t RegionBegin = Kernels[I].Begin;
+    const uint64_t RegionEnd = Kernels[J].PadEnd;
+
+    // Compute each kernel's NEW begin (256-aligned) and validate no PC-relative
+    // hazard breaks. First kernel stays at RegionBegin; the rest are packed.
+    std::vector<uint64_t> NewBegin(J - I + 1);
+    uint64_t Place = RegionBegin;
+    for (size_t K = I; K <= J; ++K) {
+      NewBegin[K - I] = Place;
+      Place =
+          roundUpTo(Place + Kernels[K].grownCodeSize(), KernelEntryStubStride);
+    }
+
+    // Per-kernel shift map for offsets inside kernel K: an original offset Off
+    // in [K.Begin, K.End) maps to NewBegin[K] + (Off - K.Begin) + growth of
+    // edits before Off. Used for branch and s_get_pc repair.
+    auto newOffsetOf = [&](size_t KIdx, uint64_t Off) -> uint64_t {
+      const DispKernel &K = Kernels[KIdx];
+      uint64_t Local = Off - K.Begin;
+      uint64_t Grow = 0;
+      for (const DisplacementEdit &E : K.Edits)
+        if (E.Offset < Off)
+          Grow += E.ReplacementBytes.size() - E.OriginalSize;
+      return NewBegin[KIdx - I] + Local + Grow;
+    };
+
+    // Validate + collect repairs for every kernel in the region. Any unprovable
+    // construct aborts the whole region (its sites are declined).
+    struct Fix {
+      uint64_t NewFrom = 0;
+      SmallVector<uint8_t> Bytes;
+    };
+    std::vector<Fix> Fixes;
+    bool Bad = false;
+    for (size_t K = I; K <= J && !Bad; ++K) {
+      const DispKernel &Kern = Kernels[K];
+      std::vector<InternalDecodedInst> Insts;
+      if (!decodeTextSection(Ctx.Text + Kern.Begin, Kern.End - Kern.Begin, LS,
+                             Insts)) {
+        Bad = true;
+        break;
+      }
+      auto isReplaced = [&](uint64_t Off) -> bool {
+        for (const DisplacementEdit &E : Kern.Edits)
+          if (Off >= E.Offset && Off < E.Offset + E.OriginalSize)
+            return true;
+        return false;
+      };
+      for (size_t N = 0; N < Insts.size() && !Bad; ++N) {
+        const InternalDecodedInst &DI = Insts[N];
+        const uint64_t Off = Kern.Begin + DI.Offset;
+        if (DI.Mnemonic == "<unknown>" || isReplaced(Off))
+          continue;
+
+        // s_get_pc + s_add pair computing an absolute address (data global or
+        // GOT slot). Repair the s_add immediate by the delta between the pair's
+        // old and new positions so it still points at the (unmoved) target.
+        if (DI.Inst.getOpcode() == LS.SGetPcI64Opcode) {
+          // The following instruction must be the s_add carrying the delta.
+          if (N + 1 >= Insts.size()) {
+            Bad = true;
+            break;
+          }
+          const InternalDecodedInst &Add = Insts[N + 1];
+          const uint64_t AddOff = Kern.Begin + Add.Offset;
+          // s_get_pc captures the address of the NEXT instruction (the s_add).
+          const uint64_t OldPcBase = AddOff;
+          const uint64_t NewPcBase = newOffsetOf(K, AddOff);
+          const int64_t Shift =
+              static_cast<int64_t>(NewPcBase) - static_cast<int64_t>(OldPcBase);
+          if (Shift != 0) {
+            // The target is a global OUTSIDE .text, so it does not move. The
+            // s_add's PC-relative immediate = target - pc_base; pc_base grew by
+            // Shift, so the new immediate = old immediate - Shift.
+            if (!repairSGetPcAddImmediate(Ctx, AddOff, NewPcBase, -Shift,
+                                          Fixes)) {
+              Bad = true;
+              break;
+            }
+          }
+          continue;
+        }
+
+        if (DI.Inst.getOpcode() != LS.SBranchOpcode) {
+          if (LS.MIA &&
+              (LS.MIA->isCall(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst))) {
+            Bad = true;
+            break;
+          }
+          continue;
+        }
+        uint64_t Target = 0;
+        if (!LS.MIA || !LS.MIA->evaluateBranch(DI.Inst, Off, DI.Size, Target)) {
+          Bad = true;
+          break;
+        }
+        // Target must land in some kernel of this region (or this kernel).
+        std::optional<size_t> TgtK = kernelIndexOf(Target);
+        if (!TgtK || *TgtK < I || *TgtK > J) {
+          Bad = true; // branch leaves the region: cannot prove safe
+          break;
+        }
+        const uint64_t NewFrom = newOffsetOf(K, Off);
+        const uint64_t NewTarget = newOffsetOf(*TgtK, Target);
+        if (NewFrom == Off && NewTarget == Target)
+          continue;
+        SmallVector<uint8_t> Enc = LS.encodeSBranch(NewFrom, NewTarget);
+        if (Enc.size() != DI.Size) {
+          Bad = true;
+          break;
+        }
+        Fixes.push_back({NewFrom, std::move(Enc)});
+      }
+    }
+
+    if (Bad) {
+      // Count only kernel I as declined; its ripple successors get their own
+      // attempt as the loop advances (they may displace standalone). Declined
+      // edits go to the caller's tier-3 .text-grow backstop.
+      DeclinedSites += Kernels[I].Edits.size();
+      moveDeclinedKernelEditsPadded(Kernels[I].Edits, LS, OutDeclined);
+      log() << "hotswap: displacement declined (tier-3): region [0x"
+            << utohexstr(RegionBegin) << ",0x" << utohexstr(RegionEnd)
+            << ") has an unprovable branch or PC reference\n";
+      continue;
+    }
+
+    // Build the new region bytes: each kernel's grown code at its 256-aligned
+    // slot, gaps filled with s_nop. Region byte span is unchanged.
+    const uint64_t RegionSize = RegionEnd - RegionBegin;
+    SmallVector<uint8_t> NewRegion(RegionSize, 0);
+    for (uint64_t P = 0; P + MinInstSize <= RegionSize; P += MinInstSize)
+      std::memcpy(NewRegion.data() + P, LS.SNopBytes.data(), MinInstSize);
+    for (size_t K = I; K <= J; ++K) {
+      const DispKernel &Kern = Kernels[K];
+      uint64_t W = NewBegin[K - I] - RegionBegin;
+      uint64_t Cursor = Kern.Begin;
+      for (const DisplacementEdit &E : Kern.Edits) {
+        std::memcpy(NewRegion.data() + W, Ctx.Text + Cursor, E.Offset - Cursor);
+        W += E.Offset - Cursor;
+        std::memcpy(NewRegion.data() + W, E.ReplacementBytes.data(),
+                    E.ReplacementBytes.size());
+        W += E.ReplacementBytes.size();
+        Cursor = E.Offset + E.OriginalSize;
+      }
+      std::memcpy(NewRegion.data() + W, Ctx.Text + Cursor, Kern.End - Cursor);
+    }
+    std::memcpy(Ctx.Text + RegionBegin, NewRegion.data(), NewRegion.size());
+    for (const Fix &F : Fixes)
+      std::memcpy(Ctx.Text + F.NewFrom, F.Bytes.data(), F.Bytes.size());
+
+    // Update descriptors for every kernel that moved (all but the first).
+    for (size_t K = I + 1; K <= J; ++K) {
+      const uint64_t NewEntryVAddr = Ctx.Elf.textAddr() + NewBegin[K - I];
+      std::optional<uint64_t> KdVAddr =
+          Ctx.Elf.getKernelDescriptorVAddr(Kernels[K].Name);
+      if (!KdVAddr) {
+        log() << "hotswap: error: displacement: missing descriptor for '"
+              << Kernels[K].Name << "'\n";
+        return false;
+      }
+      int64_t NewEntryOffset =
+          static_cast<int64_t>(NewEntryVAddr) - static_cast<int64_t>(*KdVAddr);
+      if (!Ctx.Elf.updateKernelDescriptorEntryOffset(Kernels[K].Name,
+                                                     NewEntryOffset)) {
+        log() << "hotswap: error: displacement: failed descriptor update for '"
+              << Kernels[K].Name << "'\n";
+        return false;
+      }
+      ++MovedKernels;
+    }
+
+    uint32_t RegionSites = 0;
+    for (size_t K = I; K <= J; ++K) {
+      RegionSites += Kernels[K].Edits.size();
+      if (!Kernels[K].Edits.empty())
+        ++DisplacedKernelCount;
+    }
+    DisplacedSites += RegionSites;
+    log() << "hotswap: displaced " << RegionSites
+          << " site(s) across region [0x" << utohexstr(RegionBegin) << ",0x"
+          << utohexstr(RegionEnd) << "), " << (J - I)
+          << " successor kernel(s) rippled, " << Fixes.size()
+          << " branch/PC fixup(s)\n";
+    I = J; // region consumed; continue after it
+  }
+
+  log() << "hotswap: local displacement: " << DisplacedSites << " site(s) in "
+        << DisplacedKernelCount << " kernel(s), " << MovedKernels
+        << " kernel(s) rippled down, " << DeclinedSites
+        << " site(s) declined\n";
+  return true;
 }
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
@@ -2136,7 +2598,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     std::vector<InternalDecodedInst> &Decoded, uint8_t *Text, uint64_t TextSize,
     const LLVMState &LS, std::vector<Trampoline> &OutTrampolines, ElfView &Elf,
     std::vector<ScratchPatchInfo> &OutScratchPatches,
-    const RewriteConfig &Config, bool &OutRequiredPatchApplied) {
+    const RewriteConfig &Config, bool &OutRequiredPatchApplied,
+    std::vector<DisplacementEdit> &OutDeclinedDisplacements) {
   uint32_t Patched = 0;
   std::vector<NopSled> Sleds = buildNopSledMap(Decoded, LS, Elf);
   std::optional<DeclaredTextEntryInfo> DeclaredEntries =
@@ -2361,6 +2824,9 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
           << ", scratch_reused=" << Stats.ScratchReused
           << ", scratch_above_kd=" << Stats.ScratchAboveKd << "\n";
   }
+  if (!finalizeKernelDisplacements(Ctx, OutDeclinedDisplacements))
+    return std::nullopt;
+
   OutRequiredPatchApplied = Ctx.RequiredPatchApplied;
   return Patched;
 }
@@ -2654,22 +3120,70 @@ static amd_comgr_status_t retargetCodeObjectImpl(
   uint64_t Count = 0;
   std::vector<Trampoline> Deferred;
   std::vector<ScratchPatchInfo> ScratchPatches;
+  std::vector<DisplacementEdit> DeclinedDisplacements;
   bool RequiredPatchApplied = false;
   if (RunInstructionPatches) {
+    // Phase timing for benchmarking (AMD_COMGR_EMIT_VERBOSE_LOGS). Uses
+    // steady_clock; costs nothing when logs are off besides two now() calls.
+    using Clock = std::chrono::steady_clock;
+    auto ms = [](Clock::duration D) {
+      return std::chrono::duration<double, std::milli>(D).count();
+    };
+
+    Clock::time_point TDecodeStart = Clock::now();
     std::vector<InternalDecodedInst> Decoded;
     if (!decodeTextSection(Text, Elf.textSize(), LS, Decoded)) {
       log() << "hotswap: error: retargetCodeObject: decodeTextSection "
             << "failed on .text (" << Elf.textSize() << " bytes).\n";
       return AMD_COMGR_STATUS_ERROR;
     }
+    Clock::time_point TPatchStart = Clock::now();
+    log() << "hotswap: TIMING decode .text: " << ms(TPatchStart - TDecodeStart)
+          << " ms\n";
 
     std::optional<uint32_t> Patched = applyGfx1250B0toA0Rules(
         Decoded, Text, Elf.textSize(), LS, Deferred, Elf, ScratchPatches,
-        Config, RequiredPatchApplied);
+        Config, RequiredPatchApplied, DeclinedDisplacements);
     if (!Patched)
       return AMD_COMGR_STATUS_ERROR;
     Count = *Patched;
+    log() << "hotswap: TIMING apply patches + tier-1/2 finalize: "
+          << ms(Clock::now() - TPatchStart) << " ms\n";
     log() << "hotswap: applied " << Count << " instruction patches\n";
+
+    // Tier-3 backstop: any growing patch that local per-kernel displacement
+    // could not place (dense cluster with no ripple slack, or a single-kernel
+    // object) is applied by growing .text whole-object and relocating trailing
+    // allocatable sections forward. This is what lets displacement cover ANY
+    // workload with no trampoline fallback. Re-enter on the grown buffer with
+    // instruction patches already applied, so only the entry/no-op tail runs.
+    if (!DeclinedDisplacements.empty()) {
+      log() << "hotswap: tier-3: growing .text for "
+            << DeclinedDisplacements.size()
+            << " displacement edit(s) that did not fit locally\n";
+      Clock::time_point TTier3Start = Clock::now();
+      Expected<std::unique_ptr<WritableMemoryBuffer>> GrownOrErr =
+          tryApplyTextDisplacementToNewBuffer(
+              Elf, LS, DeclinedDisplacements,
+              /*RelocateTrailingSections=*/true);
+      log() << "hotswap: TIMING tier-3 grow + reloc + eh_frame remap: "
+            << ms(Clock::now() - TTier3Start) << " ms\n";
+      if (!GrownOrErr) {
+        log() << "hotswap: error: tier-3 .text grow failed: "
+              << toString(GrownOrErr.takeError()) << "\n";
+        return AMD_COMGR_STATUS_ERROR;
+      }
+      std::unique_ptr<WritableMemoryBuffer> Grown = std::move(*GrownOrErr);
+      // The grown buffer already has these edits spliced in and metadata
+      // repaired; re-run only the remaining (entry/metadata) tail against it by
+      // recursing with instruction patches disabled.
+      Gfx1250RewriteOptions RemainingOptions = Options;
+      RemainingOptions.RunB0A0Patches = false;
+      RemainingOptions.MaskPolicy = MaskWorkaroundPolicy::None;
+      return retargetCodeObjectImpl(
+          Grown->getBufferStart(), Grown->getBufferSize(), TargetIdent,
+          RemainingOptions, Out, AllowTextDisplacement);
+    }
   } else {
     log() << "hotswap: instruction patches disabled for this rewrite\n";
   }
