@@ -3,16 +3,18 @@
 #   hotswap::rewriter  byte-level rewrite path (linked unconditionally)
 #   hotswap::raiser    IR transpiler path (opt-in, COMGR_ENABLE_HOTSWAP_TRANSPILE)
 #   hotswap::loader    code-object metadata loader feeding the raiser (opt-in)
+#   hotswap::decoder   per-ISA AMDGPU MC stack + canonical-op identity (opt-in)
 #   hotswap::common    small shared pieces the transpile path links (opt-in)
 # common/ is mostly header-only (kernel-meta.h); hotswap::common compiles the
-# one out-of-line HotswapError::ID symbol the loader (and later decoder) share.
+# one out-of-line HotswapError::ID symbol the loader and decoder share.
 add_subdirectory(rewriter)
 add_subdirectory(raiser)
 
-# The loader consumes AMDGPU target-private headers an install-tree-only build
-# does not expose, so the transpile-path libraries are entered only when the
-# transpile entry point is on.
+# The loader and decoder consume AMDGPU target-private headers an
+# install-tree-only build does not expose, so the transpile-path libraries are
+# entered only when the transpile entry point is on.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   add_subdirectory(common)
   add_subdirectory(loader)
+  add_subdirectory(decoder)
 endif()
