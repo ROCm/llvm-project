@@ -266,8 +266,8 @@ define amdgpu_kernel void @memcpy_known(ptr addrspace(7) %src, ptr addrspace(7) 
 ; SDAG-GFX942-NEXT:    buffer_load_dwordx4 v[46:49], v0, s[4:7], 0 offen offset:176
 ; SDAG-GFX942-NEXT:    buffer_load_dwordx4 v[50:53], v0, s[4:7], 0 offen offset:192
 ; SDAG-GFX942-NEXT:    buffer_load_dwordx4 v[54:57], v0, s[4:7], 0 offen offset:208
-; SDAG-GFX942-NEXT:    buffer_load_dwordx4 v[58:61], v0, s[4:7], 0 offen offset:224
-; SDAG-GFX942-NEXT:    buffer_load_dwordx4 a[0:3], v0, s[4:7], 0 offen offset:240
+; SDAG-GFX942-NEXT:    buffer_load_dwordx4 a[0:3], v0, s[4:7], 0 offen offset:224
+; SDAG-GFX942-NEXT:    buffer_load_dwordx4 a[4:7], v0, s[4:7], 0 offen offset:240
 ; SDAG-GFX942-NEXT:    s_add_i32 s1, s8, s16
 ; SDAG-GFX942-NEXT:    s_addk_i32 s16, 0x100
 ; SDAG-GFX942-NEXT:    v_mov_b32_e32 v0, s1
@@ -301,9 +301,9 @@ define amdgpu_kernel void @memcpy_known(ptr addrspace(7) %src, ptr addrspace(7) 
 ; SDAG-GFX942-NEXT:    s_waitcnt vmcnt(15)
 ; SDAG-GFX942-NEXT:    buffer_store_dwordx4 v[54:57], v0, s[12:15], 0 offen offset:208
 ; SDAG-GFX942-NEXT:    s_waitcnt vmcnt(15)
-; SDAG-GFX942-NEXT:    buffer_store_dwordx4 v[58:61], v0, s[12:15], 0 offen offset:224
+; SDAG-GFX942-NEXT:    buffer_store_dwordx4 a[0:3], v0, s[12:15], 0 offen offset:224
 ; SDAG-GFX942-NEXT:    s_waitcnt vmcnt(15)
-; SDAG-GFX942-NEXT:    buffer_store_dwordx4 a[0:3], v0, s[12:15], 0 offen offset:240
+; SDAG-GFX942-NEXT:    buffer_store_dwordx4 a[4:7], v0, s[12:15], 0 offen offset:240
 ; SDAG-GFX942-NEXT:    s_cbranch_scc1 .LBB0_1
 ; SDAG-GFX942-NEXT:  ; %bb.2: ; %static-memcpy-post-expansion
 ; SDAG-GFX942-NEXT:    s_endpgm
@@ -787,8 +787,8 @@ define amdgpu_kernel void @memcpy_known_medium(ptr addrspace(7) %src, ptr addrsp
 ; SDAG-GFX942-NEXT:    buffer_load_dwordx4 v[46:49], v0, s[4:7], 0 offen offset:176
 ; SDAG-GFX942-NEXT:    buffer_load_dwordx4 v[50:53], v0, s[4:7], 0 offen offset:192
 ; SDAG-GFX942-NEXT:    buffer_load_dwordx4 v[54:57], v0, s[4:7], 0 offen offset:208
-; SDAG-GFX942-NEXT:    buffer_load_dwordx4 v[58:61], v0, s[4:7], 0 offen offset:224
-; SDAG-GFX942-NEXT:    buffer_load_dwordx4 a[0:3], v0, s[4:7], 0 offen offset:240
+; SDAG-GFX942-NEXT:    buffer_load_dwordx4 a[0:3], v0, s[4:7], 0 offen offset:224
+; SDAG-GFX942-NEXT:    buffer_load_dwordx4 a[4:7], v0, s[4:7], 0 offen offset:240
 ; SDAG-GFX942-NEXT:    s_add_i32 s1, s8, s16
 ; SDAG-GFX942-NEXT:    s_addk_i32 s16, 0x100
 ; SDAG-GFX942-NEXT:    v_mov_b32_e32 v0, s1
@@ -822,9 +822,9 @@ define amdgpu_kernel void @memcpy_known_medium(ptr addrspace(7) %src, ptr addrsp
 ; SDAG-GFX942-NEXT:    s_waitcnt vmcnt(15)
 ; SDAG-GFX942-NEXT:    buffer_store_dwordx4 v[54:57], v0, s[12:15], 0 offen offset:208
 ; SDAG-GFX942-NEXT:    s_waitcnt vmcnt(15)
-; SDAG-GFX942-NEXT:    buffer_store_dwordx4 v[58:61], v0, s[12:15], 0 offen offset:224
+; SDAG-GFX942-NEXT:    buffer_store_dwordx4 a[0:3], v0, s[12:15], 0 offen offset:224
 ; SDAG-GFX942-NEXT:    s_waitcnt vmcnt(15)
-; SDAG-GFX942-NEXT:    buffer_store_dwordx4 a[0:3], v0, s[12:15], 0 offen offset:240
+; SDAG-GFX942-NEXT:    buffer_store_dwordx4 a[4:7], v0, s[12:15], 0 offen offset:240
 ; SDAG-GFX942-NEXT:    s_cbranch_scc1 .LBB1_1
 ; SDAG-GFX942-NEXT:  ; %bb.2: ; %static-memcpy-post-expansion
 ; SDAG-GFX942-NEXT:    s_endpgm

@@ -27,8 +27,8 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    v_mov_b32_e32 v47, s5
 ; CHECK-NEXT:    s_mov_b32 s5, s4
 ; CHECK-NEXT:    s_addc_u32 s51, s35, 0
-; CHECK-NEXT:    v_accvgpr_write_b32 a33, s5
-; CHECK-NEXT:    v_accvgpr_write_b32 a32, s4
+; CHECK-NEXT:    v_accvgpr_write_b32 a35, s5
+; CHECK-NEXT:    v_accvgpr_write_b32 a34, s4
 ; CHECK-NEXT:    s_getpc_b64 s[4:5]
 ; CHECK-NEXT:    s_add_u32 s4, s4, G@gotpcrel32@lo+4
 ; CHECK-NEXT:    s_addc_u32 s5, s5, G@gotpcrel32@hi+12
@@ -48,12 +48,12 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    s_mov_b32 s33, s16
 ; CHECK-NEXT:    s_mov_b32 s52, s15
 ; CHECK-NEXT:    s_mov_b64 s[36:37], s[10:11]
-; CHECK-NEXT:    v_mov_b32_e32 v60, s66
-; CHECK-NEXT:    v_mov_b32_e32 v61, s67
-; CHECK-NEXT:    flat_store_dwordx2 v[56:57], a[32:33]
+; CHECK-NEXT:    v_accvgpr_write_b32 a32, s66
+; CHECK-NEXT:    v_accvgpr_write_b32 a33, s67
+; CHECK-NEXT:    flat_store_dwordx2 v[56:57], a[34:35]
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[54:55]
-; CHECK-NEXT:    flat_load_dwordx2 a[34:35], v[56:57]
+; CHECK-NEXT:    flat_load_dwordx2 a[36:37], v[56:57]
 ; CHECK-NEXT:    v_mov_b32_e32 v58, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v59, 0x3ff00000
 ; CHECK-NEXT:    s_mov_b64 s[4:5], s[48:49]
@@ -65,7 +65,7 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    s_mov_b32 s14, s33
 ; CHECK-NEXT:    v_mov_b32_e32 v31, v40
 ; CHECK-NEXT:    flat_store_dwordx2 v[44:45], v[58:59]
-; CHECK-NEXT:    flat_store_dwordx2 v[56:57], a[32:33]
+; CHECK-NEXT:    flat_store_dwordx2 v[56:57], a[34:35]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    ; implicit-def: $sgpr15
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[54:55]
@@ -77,9 +77,9 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    v_mov_b32_e32 v1, s67
 ; CHECK-NEXT:    v_mov_b32_e32 v0, s68
 ; CHECK-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; CHECK-NEXT:    flat_store_dwordx2 v[56:57], a[34:35]
+; CHECK-NEXT:    flat_store_dwordx2 v[56:57], a[36:37]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    flat_store_dwordx2 v[56:57], v[60:61]
+; CHECK-NEXT:    flat_store_dwordx2 v[56:57], a[32:33]
 ; CHECK-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 offen offset:4
 ; CHECK-NEXT:    buffer_store_dword v58, v0, s[0:3], 0 offen
 ; CHECK-NEXT:    ; implicit-def: $vgpr2

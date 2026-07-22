@@ -23,19 +23,21 @@
 #include "SIMachineFunctionInfo.h"
 #include "SIRegisterInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "amdgpu-partition-vgprs-for-ra"
 
-namespace {
+// Minimum number of VGPRs reserved for WWM register allocation. This is a
+// conservative estimate of the VGPRs needed for SGPR spill lanes and virtual
+// WWM registers, assuming the worst case when perlane allocation consumes all
+// remaining VGPRs.
+static cl::opt<unsigned> MinNumWWMRegs(
+    "amdgpu-min-vgprs-for-wwm-regalloc", cl::init(3), cl::Hidden,
+    cl::desc("Minimum VGPRs reserved for WWM register allocation"));
 
-// Conservatively picking the bare minimum VGPRs required for wwm-register
-// allocation initially. One for the CSR SGPR spills and the other for the
-// virtual wwm-registers introduced while lowering rest of the SGPR spills. This
-// is done by assuming the worse case when the perlane allocation phase consumes
-// all available VGPRs.
-static constexpr unsigned NumWWMRegs = 2;
+namespace {
 
 class AMDGPUPartitionVGPRsForRALegacy : public MachineFunctionPass {
 public:
@@ -88,7 +90,7 @@ bool AMDGPUPartitionVGPRsForRA::run(MachineFunction &MF) {
   const SIRegisterInfo *TRI = ST.getRegisterInfo();
 
   BitVector WwmRegMask(TRI->getNumRegs());
-  TRI->determineVGPRsForWwmAlloc(MF, WwmRegMask, NumWWMRegs);
+  TRI->determineVGPRsForWwmAlloc(MF, WwmRegMask, MinNumWWMRegs);
   MFI.updateVGPRAllocMask(WwmRegMask);
 
   return true;

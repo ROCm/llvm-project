@@ -8,9 +8,9 @@ define amdgpu_kernel void @test_spill_av_class(<4 x i32> %arg) #0 {
   ; GCN-NEXT:   liveins: $sgpr8_sgpr9
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT:   renamable $sgpr0_sgpr1_sgpr2_sgpr3 = S_LOAD_DWORDX4_IMM killed renamable $sgpr8_sgpr9, 0, 0 :: (dereferenceable invariant load (s128) from %ir.arg.kernarg.offset1, addrspace 4)
-  ; GCN-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = COPY killed renamable $sgpr0_sgpr1_sgpr2_sgpr3
   ; GCN-NEXT:   $vgpr0 = AV_MOV_B32_IMM_PSEUDO 1, implicit $exec
   ; GCN-NEXT:   $vgpr1 = AV_MOV_B32_IMM_PSEUDO 2, implicit $exec
+  ; GCN-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = COPY killed renamable $sgpr0_sgpr1_sgpr2_sgpr3
   ; GCN-NEXT:   renamable $agpr0_agpr1_agpr2_agpr3 = V_MFMA_I32_4X4X4I8_e64 killed $vgpr0, killed $vgpr1, killed $agpr0_agpr1_agpr2_agpr3, 0, 0, 0, implicit $mode, implicit $exec
   ; GCN-NEXT:   INLINEASM &"; def $0", sideeffect attdialect, regdef:VGPR_32, def $vgpr0
   ; GCN-NEXT:   renamable $agpr4 = lr-split COPY killed $vgpr0
@@ -29,4 +29,4 @@ define amdgpu_kernel void @test_spill_av_class(<4 x i32> %arg) #0 {
 
 declare <4 x i32> @llvm.amdgcn.mfma.i32.4x4x4i8(i32, i32, <4 x i32>, i32, i32, i32)
 
-attributes #0 = { nounwind "amdgpu-num-vgpr"="7" }
+attributes #0 = { nounwind "amdgpu-num-vgpr"="8" }

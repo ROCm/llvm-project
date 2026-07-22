@@ -530,18 +530,18 @@ define internal void @use256vgprs() {
 }
 
 ; GCN-LABEL: {{^}}f256:
-; GFX9: NumVgprs: 254
-; GFX90A: NumVgprs: 254
-; GFX90A: NumAgprs: 3
-; GFX90A: TotalNumVgprs: 259
-; GFX10WGP-WAVE32: NumVgprs: 254
-; GFX10WGP-WAVE64: NumVgprs: 254
-; GFX10CU-WAVE32: NumVgprs: 254
-; GFX10CU-WAVE64: NumVgprs: 254
-; GFX11WGP-WAVE32: NumVgprs: 254
-; GFX11WGP-WAVE64: NumVgprs: 254
-; GFX11CU-WAVE32: NumVgprs: 254
-; GFX11CU-WAVE64: NumVgprs: 254
+; GFX9: NumVgprs: 253
+; GFX90A: NumVgprs: 253
+; GFX90A: NumAgprs: 4
+; GFX90A: TotalNumVgprs: 260
+; GFX10WGP-WAVE32: NumVgprs: 253
+; GFX10WGP-WAVE64: NumVgprs: 253
+; GFX10CU-WAVE32: NumVgprs: 253
+; GFX10CU-WAVE64: NumVgprs: 253
+; GFX11WGP-WAVE32: NumVgprs: 253
+; GFX11WGP-WAVE64: NumVgprs: 253
+; GFX11CU-WAVE32: NumVgprs: 253
+; GFX11CU-WAVE64: NumVgprs: 253
 define amdgpu_kernel void @f256() #256 {
   call void @use256vgprs()
   ret void
@@ -549,17 +549,17 @@ define amdgpu_kernel void @f256() #256 {
 attributes #256 = { nounwind "amdgpu-flat-work-group-size"="256,256" }
 
 ; GCN-LABEL: {{^}}f512:
-; GFX9:             .set .Lf512.num_vgpr, max(127, amdgpu.max_num_vgpr)
-; GFX90A:           .set .Lf512.num_vgpr, max(127, amdgpu.max_num_vgpr)
+; GFX9:             .set .Lf512.num_vgpr, max(126, amdgpu.max_num_vgpr)
+; GFX90A:           .set .Lf512.num_vgpr, max(126, amdgpu.max_num_vgpr)
 ; GFX90A:           .set .Lf512.num_agpr, max(128, amdgpu.max_num_agpr)
-; GFX10WGP-WAVE32:  .set .Lf512.num_vgpr, max(255, amdgpu.max_num_vgpr)
-; GFX10WGP-WAVE64:  .set .Lf512.num_vgpr, max(255, amdgpu.max_num_vgpr)
-; GFX10CU-WAVE32:   .set .Lf512.num_vgpr, max(127, amdgpu.max_num_vgpr)
-; GFX10CU-WAVE64:   .set .Lf512.num_vgpr, max(127, amdgpu.max_num_vgpr)
-; GFX11WGP-WAVE32:  .set .Lf512.num_vgpr, max(255, amdgpu.max_num_vgpr)
-; GFX11WGP-WAVE64:  .set .Lf512.num_vgpr, max(255, amdgpu.max_num_vgpr)
-; GFX11CU-WAVE32:   .set .Lf512.num_vgpr, max(191, amdgpu.max_num_vgpr)
-; GFX11CU-WAVE64:   .set .Lf512.num_vgpr, max(191, amdgpu.max_num_vgpr)
+; GFX10WGP-WAVE32:  .set .Lf512.num_vgpr, max(254, amdgpu.max_num_vgpr)
+; GFX10WGP-WAVE64:  .set .Lf512.num_vgpr, max(254, amdgpu.max_num_vgpr)
+; GFX10CU-WAVE32:   .set .Lf512.num_vgpr, max(126, amdgpu.max_num_vgpr)
+; GFX10CU-WAVE64:   .set .Lf512.num_vgpr, max(126, amdgpu.max_num_vgpr)
+; GFX11WGP-WAVE32:  .set .Lf512.num_vgpr, max(254, amdgpu.max_num_vgpr)
+; GFX11WGP-WAVE64:  .set .Lf512.num_vgpr, max(254, amdgpu.max_num_vgpr)
+; GFX11CU-WAVE32:   .set .Lf512.num_vgpr, max(190, amdgpu.max_num_vgpr)
+; GFX11CU-WAVE64:   .set .Lf512.num_vgpr, max(190, amdgpu.max_num_vgpr)
 ; GCN:              NumVgprs: .Lf512.num_vgpr
 ; GFX90A:           NumAgprs: .Lf512.num_agpr
 ; GFX90A:           TotalNumVgprs: totalnumvgprs(.Lf512.num_agpr, .Lf512.num_vgpr)
@@ -571,17 +571,17 @@ define amdgpu_kernel void @f512() #512 {
 attributes #512 = { nounwind "amdgpu-flat-work-group-size"="512,512" }
 
 ; GCN-LABEL: {{^}}f1024:
-; GFX9:             .set .Lf1024.num_vgpr, max(63, amdgpu.max_num_vgpr)
-; GFX90A:           .set .Lf1024.num_vgpr, max(63, amdgpu.max_num_vgpr)
+; GFX9:             .set .Lf1024.num_vgpr, max(62, amdgpu.max_num_vgpr)
+; GFX90A:           .set .Lf1024.num_vgpr, max(62, amdgpu.max_num_vgpr)
 ; GFX90A:           .set .Lf1024.num_agpr, max(64, amdgpu.max_num_agpr)
-; GFX10WGP-WAVE32:  .set .Lf1024.num_vgpr, max(127, amdgpu.max_num_vgpr)
-; GFX10WGP-WAVE64:  .set .Lf1024.num_vgpr, max(127, amdgpu.max_num_vgpr)
-; GFX10CU-WAVE32:   .set .Lf1024.num_vgpr, max(63, amdgpu.max_num_vgpr)
-; GFX10CU-WAVE64:   .set .Lf1024.num_vgpr, max(63, amdgpu.max_num_vgpr)
-; GFX11WGP-WAVE32:  .set .Lf1024.num_vgpr, max(191, amdgpu.max_num_vgpr)
-; GFX11WGP-WAVE64:  .set .Lf1024.num_vgpr, max(191, amdgpu.max_num_vgpr)
-; GFX11CU-WAVE32:   .set .Lf1024.num_vgpr, max(95, amdgpu.max_num_vgpr)
-; GFX11CU-WAVE64:   .set .Lf1024.num_vgpr, max(95, amdgpu.max_num_vgpr)
+; GFX10WGP-WAVE32:  .set .Lf1024.num_vgpr, max(126, amdgpu.max_num_vgpr)
+; GFX10WGP-WAVE64:  .set .Lf1024.num_vgpr, max(126, amdgpu.max_num_vgpr)
+; GFX10CU-WAVE32:   .set .Lf1024.num_vgpr, max(62, amdgpu.max_num_vgpr)
+; GFX10CU-WAVE64:   .set .Lf1024.num_vgpr, max(62, amdgpu.max_num_vgpr)
+; GFX11WGP-WAVE32:  .set .Lf1024.num_vgpr, max(190, amdgpu.max_num_vgpr)
+; GFX11WGP-WAVE64:  .set .Lf1024.num_vgpr, max(190, amdgpu.max_num_vgpr)
+; GFX11CU-WAVE32:   .set .Lf1024.num_vgpr, max(94, amdgpu.max_num_vgpr)
+; GFX11CU-WAVE64:   .set .Lf1024.num_vgpr, max(94, amdgpu.max_num_vgpr)
 ; GCN:              NumVgprs: .Lf1024.num_vgpr
 ; GFX90A:           NumAgprs: .Lf1024.num_agpr
 ; GFX90A:           TotalNumVgprs: totalnumvgprs(.Lf1024.num_agpr, .Lf1024.num_vgpr)

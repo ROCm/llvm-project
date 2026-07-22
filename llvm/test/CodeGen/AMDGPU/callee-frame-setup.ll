@@ -1380,8 +1380,8 @@ define void @callee_need_to_spill_fp_to_memory() #3 {
 ; HAWAII-NEXT:    buffer_store_dword v38, off, s[0:3], s33 ; 4-byte Folded Spill
 ; HAWAII-NEXT:    s_mov_b64 exec, s[6:7]
 ; HAWAII-NEXT:    v_writelane_b32 v38, s4, 2
-; HAWAII-NEXT:    v_writelane_b32 v38, s76, 0
-; HAWAII-NEXT:    v_writelane_b32 v38, s77, 1
+; HAWAII-NEXT:    v_writelane_b32 v38, s92, 0
+; HAWAII-NEXT:    v_writelane_b32 v38, s93, 1
 ; HAWAII-NEXT:    s_addk_i32 s32, 0x200
 ; HAWAII-NEXT:    ;;#ASMSTART
 ; HAWAII-NEXT:    ; clobber nonpreserved SGPRs
@@ -1391,8 +1391,8 @@ define void @callee_need_to_spill_fp_to_memory() #3 {
 ; HAWAII-NEXT:    ;;#ASMEND
 ; HAWAII-NEXT:    s_mov_b32 s32, s33
 ; HAWAII-NEXT:    v_readlane_b32 s4, v38, 2
-; HAWAII-NEXT:    v_readlane_b32 s76, v38, 0
-; HAWAII-NEXT:    v_readlane_b32 s77, v38, 1
+; HAWAII-NEXT:    v_readlane_b32 s92, v38, 0
+; HAWAII-NEXT:    v_readlane_b32 s93, v38, 1
 ; HAWAII-NEXT:    s_xor_saveexec_b64 s[6:7], -1
 ; HAWAII-NEXT:    buffer_load_dword v38, off, s[0:3], s33 ; 4-byte Folded Reload
 ; HAWAII-NEXT:    s_mov_b64 exec, s[6:7]
@@ -2131,5 +2131,5 @@ define void @dont_save_fp_bp_for_noreturn_funcs() #4 {
 attributes #0 = { nounwind }
 attributes #1 = { nounwind "frame-pointer"="all" }
 attributes #2 = { nounwind "frame-pointer"="non-leaf" }
-attributes #3 = { nounwind "frame-pointer"="all" "amdgpu-waves-per-eu"="6,6" }
+attributes #3 = { nounwind "frame-pointer"="all" "amdgpu-waves-per-eu"="5,6" }
 attributes #4 = { nounwind noreturn }

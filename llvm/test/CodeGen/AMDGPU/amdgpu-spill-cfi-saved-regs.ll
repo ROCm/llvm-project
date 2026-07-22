@@ -189,9 +189,6 @@ define void @no_vgprs_to_spill_into() #1 {
 ; WAVE64-NEXT:  ; %bb.0:
 ; WAVE64-NEXT:    .cfi_llvm_def_aspace_cfa 64, 0, 6
 ; WAVE64-NEXT:    .cfi_llvm_register_pair 16, 62, 32, 63, 32
-; WAVE64-NEXT:    .cfi_undefined 2560
-; WAVE64-NEXT:    .cfi_undefined 2561
-; WAVE64-NEXT:    .cfi_undefined 2562
 ; WAVE64-NEXT:    .cfi_undefined 2563
 ; WAVE64-NEXT:    .cfi_undefined 2564
 ; WAVE64-NEXT:    .cfi_undefined 2565
@@ -227,9 +224,6 @@ define void @no_vgprs_to_spill_into() #1 {
 ; WAVE32-NEXT:  ; %bb.0:
 ; WAVE32-NEXT:    .cfi_llvm_def_aspace_cfa 64, 0, 6
 ; WAVE32-NEXT:    .cfi_llvm_register_pair 16, 62, 32, 63, 32
-; WAVE32-NEXT:    .cfi_undefined 1536
-; WAVE32-NEXT:    .cfi_undefined 1537
-; WAVE32-NEXT:    .cfi_undefined 1538
 ; WAVE32-NEXT:    .cfi_undefined 1539
 ; WAVE32-NEXT:    .cfi_undefined 1540
 ; WAVE32-NEXT:    .cfi_undefined 1541
@@ -259,7 +253,7 @@ define void @no_vgprs_to_spill_into() #1 {
 ; WAVE32-NEXT:    ;;#ASMEND
 ; WAVE32-NEXT:    s_setpc_b64 s[30:31]
   call void asm sideeffect "",
-    "~{v0},~{v1},~{v2},~{v3},~{v4},~{v5},~{v6},~{v7},~{v8},~{v9}
+    "~{v3},~{v4},~{v5},~{v6},~{v7},~{v8},~{v9}
     ,~{v10},~{v11},~{v12},~{v13},~{v14},~{v15},~{v16},~{v17},~{v18},~{v19}
     ,~{v20},~{v21},~{v22},~{v23},~{v24}"()
 
@@ -276,7 +270,6 @@ define void @callee_need_to_spill_fp_exec_to_memory() #2 {
 ; WAVE64-NEXT:    .cfi_llvm_def_aspace_cfa 64, 0, 6
 ; WAVE64-NEXT:    .cfi_llvm_register_pair 16, 62, 32, 63, 32
 ; WAVE64-NEXT:    .cfi_undefined 2560
-; WAVE64-NEXT:    .cfi_undefined 2562
 ; WAVE64-NEXT:    .cfi_undefined 2563
 ; WAVE64-NEXT:    .cfi_undefined 2564
 ; WAVE64-NEXT:    .cfi_undefined 2565
@@ -647,7 +640,6 @@ define void @callee_need_to_spill_fp_exec_to_memory() #2 {
 ; WAVE32-NEXT:    .cfi_llvm_def_aspace_cfa 64, 0, 6
 ; WAVE32-NEXT:    .cfi_llvm_register_pair 16, 62, 32, 63, 32
 ; WAVE32-NEXT:    .cfi_undefined 1536
-; WAVE32-NEXT:    .cfi_undefined 1538
 ; WAVE32-NEXT:    .cfi_undefined 1539
 ; WAVE32-NEXT:    .cfi_undefined 1540
 ; WAVE32-NEXT:    .cfi_undefined 1541
@@ -1024,7 +1016,7 @@ define void @callee_need_to_spill_fp_exec_to_memory() #2 {
     ,~{vcc}"()
 
   call void asm sideeffect "; clobber all VGPRs except v39",
-    "~{v2},~{v3},~{v4},~{v5},~{v6},~{v7},~{v8},~{v9}
+    "~{v3},~{v4},~{v5},~{v6},~{v7},~{v8},~{v9}
     ,~{v10},~{v11},~{v12},~{v13},~{v14},~{v15},~{v16},~{v17},~{v18},~{v19}
     ,~{v20},~{v21},~{v22},~{v23},~{v24},~{v25},~{v26},~{v27},~{v28},~{v29}
     ,~{v30},~{v31},~{v32},~{v33},~{v34},~{v35},~{v36},~{v37},~{v38}
@@ -1047,7 +1039,6 @@ define internal void @caller_needs_to_spill_pc_to_memory() #3 {
 ; WAVE64-NEXT:  ; %bb.0:
 ; WAVE64-NEXT:    .cfi_llvm_def_aspace_cfa 64, 0, 6
 ; WAVE64-NEXT:    .cfi_llvm_register_pair 16, 62, 32, 63, 32
-; WAVE64-NEXT:    .cfi_undefined 2562
 ; WAVE64-NEXT:    .cfi_undefined 2563
 ; WAVE64-NEXT:    .cfi_undefined 2564
 ; WAVE64-NEXT:    .cfi_undefined 2565
@@ -1203,7 +1194,6 @@ define internal void @caller_needs_to_spill_pc_to_memory() #3 {
 ; WAVE32-NEXT:  ; %bb.0:
 ; WAVE32-NEXT:    .cfi_llvm_def_aspace_cfa 64, 0, 6
 ; WAVE32-NEXT:    .cfi_llvm_register_pair 16, 62, 32, 63, 32
-; WAVE32-NEXT:    .cfi_undefined 1538
 ; WAVE32-NEXT:    .cfi_undefined 1539
 ; WAVE32-NEXT:    .cfi_undefined 1540
 ; WAVE32-NEXT:    .cfi_undefined 1541
@@ -1353,7 +1343,7 @@ define internal void @caller_needs_to_spill_pc_to_memory() #3 {
 ; WAVE32-NEXT:    ;;#ASMEND
 ; WAVE32-NEXT:    s_setpc_b64 s[30:31]
   call void asm sideeffect "; clobber all VGPRs",
-  "~{v2},~{v3},~{v4},~{v5},~{v6},~{v7},~{v8},~{v9}
+  "~{v3},~{v4},~{v5},~{v6},~{v7},~{v8},~{v9}
   ,~{v10},~{v11},~{v12},~{v13},~{v14},~{v15},~{v16},~{v17},~{v18},~{v19}
   ,~{v20},~{v21},~{v22},~{v23},~{v24},~{v25},~{v26},~{v27},~{v28},~{v29}
   ,~{v30},~{v31},~{v32},~{v33},~{v34},~{v35},~{v36},~{v37},~{v38},~{v39}
@@ -1390,7 +1380,6 @@ define void @need_to_spill_pc_to_mem() #3 {
 ; WAVE64-NEXT:    .cfi_llvm_def_aspace_cfa 64, 0, 6
 ; WAVE64-NEXT:    .cfi_llvm_register_pair 16, 62, 32, 63, 32
 ; WAVE64-NEXT:    .cfi_undefined 2560
-; WAVE64-NEXT:    .cfi_undefined 2562
 ; WAVE64-NEXT:    .cfi_undefined 2563
 ; WAVE64-NEXT:    .cfi_undefined 2564
 ; WAVE64-NEXT:    .cfi_undefined 2565
@@ -1897,7 +1886,6 @@ define void @need_to_spill_pc_to_mem() #3 {
 ; WAVE32-NEXT:    .cfi_llvm_def_aspace_cfa 64, 0, 6
 ; WAVE32-NEXT:    .cfi_llvm_register_pair 16, 62, 32, 63, 32
 ; WAVE32-NEXT:    .cfi_undefined 1536
-; WAVE32-NEXT:    .cfi_undefined 1538
 ; WAVE32-NEXT:    .cfi_undefined 1539
 ; WAVE32-NEXT:    .cfi_undefined 1540
 ; WAVE32-NEXT:    .cfi_undefined 1541

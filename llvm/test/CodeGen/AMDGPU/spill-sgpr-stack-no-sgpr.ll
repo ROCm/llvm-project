@@ -41,4 +41,4 @@ define amdgpu_kernel void @test() #1 {
 ; number of incoming arguments is larger than the number of permitted
 ; registers.
 attributes #0 = { nounwind }
-attributes #1 = { nounwind "amdgpu-num-sgpr"="16" "amdgpu-num-vgpr"="10" "amdgpu-no-queue-ptr" "amdgpu-no-dispatch-id" }
+attributes #1 = { nounwind "amdgpu-num-sgpr"="16" "amdgpu-num-vgpr"="11" "amdgpu-no-queue-ptr" "amdgpu-no-dispatch-id" }

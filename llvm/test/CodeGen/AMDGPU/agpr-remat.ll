@@ -48,4 +48,4 @@ define void @remat_regcopy_avoids_spill(i32 %v0, i32 %v1, i32 %v2, i32 %v3, i32 
   ret void
 }
 
-attributes #1 = { nounwind "amdgpu-num-vgpr"="12" }
+attributes #1 = { nounwind "amdgpu-num-vgpr"="13" }

@@ -4,7 +4,7 @@
 
 ; CHECK-LABEL: {{^}}max_20_vgprs:
 ; CHECK: VGPRBlocks: 4
-; CHECK: NumVGPRsForWavesPerEU: 18
+; CHECK: NumVGPRsForWavesPerEU: 17
 define amdgpu_kernel void @max_20_vgprs() #1 {
   %val0 = load volatile float, ptr addrspace(1) @var
   %val1 = load volatile float, ptr addrspace(1) @var

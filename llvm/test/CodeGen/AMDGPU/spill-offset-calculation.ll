@@ -651,6 +651,6 @@ entry:
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind "amdgpu-num-sgpr"="17" "amdgpu-num-vgpr"="10" }
-attributes #2 = { nounwind "amdgpu-num-sgpr"="16" "amdgpu-num-vgpr"="10" }
-attributes #3 = { nounwind "amdgpu-num-sgpr"="18" "amdgpu-num-vgpr"="10" }
+attributes #1 = { nounwind "amdgpu-num-sgpr"="17" "amdgpu-num-vgpr"="11" }
+attributes #2 = { nounwind "amdgpu-num-sgpr"="16" "amdgpu-num-vgpr"="11" }
+attributes #3 = { nounwind "amdgpu-num-sgpr"="18" "amdgpu-num-vgpr"="11" }

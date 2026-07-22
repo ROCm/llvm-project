@@ -99,4 +99,4 @@ main_body:
 declare float @llvm.amdgcn.image.sample.3d.f32.f32(i32, float, float, float, <8 x i32>, <4 x i32>, i1, i32, i32)
 declare float @llvm.amdgcn.image.sample.c.l.3d.f32.f32(i32, float, float, float, float, float, <8 x i32>, <4 x i32>, i1, i32, i32)
 
-attributes #0 = {"amdgpu-num-vgpr"="10"}
+attributes #0 = {"amdgpu-num-vgpr"="11"}
