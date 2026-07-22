@@ -1,5 +1,5 @@
 ; RUN: not llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx90a -filetype=null %s 2>&1 | FileCheck -check-prefix=ERR %s
-; RUN: not llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx90a -vgpr-regalloc=basic -filetype=null %s 2>&1 | FileCheck -check-prefix=ERR %s
+; RUN: not llc -enable-new-pm=0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx90a -vgpr-regalloc=basic -filetype=null %s 2>&1 | FileCheck -check-prefix=ERR %s
 
 ; ERR: error: <unknown>:0:0: no registers from class available to allocate in function 'no_free_vgprs_at_agpr_to_agpr_copy'
 
