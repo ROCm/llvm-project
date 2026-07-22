@@ -4,6 +4,7 @@
 ; RUN: not llvm-as < %t/amdgcn-named-barrier.ll -o /dev/null 2>&1 | FileCheck --check-prefix=CHECK-AMDGCN-NAMEDBARRIER %s
 ; RUN: not llvm-as < %t/amdgpu-stridemark-type-param.ll -disable-output 2>&1 | FileCheck --check-prefix=CHECK-AMDGPU-STRIDEMARK-TYPE %s
 ; RUN: not llvm-as < %t/amdgpu-stridemark-int-params.ll -disable-output 2>&1 | FileCheck --check-prefix=CHECK-AMDGPU-STRIDEMARK-INTS %s
+; RUN: not llvm-as < %t/amdgcn-scope.ll -o /dev/null 2>&1 | FileCheck --check-prefix=CHECK-AMDGCN-SCOPE %s
 ; Check target extension type properties are verified in the assembler.
 
 ;--- aarch64-svcount.ll
@@ -25,3 +26,7 @@ declare target("amdgpu.stridemark", i32) @amdgcn_stridemark_type_param()
 ;--- amdgpu-stridemark-int-params.ll
 declare target("amdgpu.stridemark", 16, 32) @amdgcn_stridemark_int_params()
 ; CHECK-AMDGPU-STRIDEMARK-INTS: target extension type amdgpu.stridemark should have no type parameters and at most one integer parameter
+
+;--- amdgcn-scope.ll
+declare target("amdgcn.scope", i32) @amdgcn_scope()
+; CHECK-AMDGCN-SCOPE: target extension type amdgcn.scope should have no parameters

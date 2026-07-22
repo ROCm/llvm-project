@@ -200,6 +200,8 @@ std::string EVT::getEVTString() const {
     return "amdgpuBufferFatPointer";
   case MVT::amdgpuBufferStridedPointer:
     return "amdgpuBufferStridedPointer";
+  case MVT::amdgcnScope:
+    return "amdgcnScope";
   case MVT::aarch64mfp8:
     return "aarch64mfp8";
   }
@@ -231,6 +233,8 @@ Type *EVT::getTypeForEVT(LLVMContext &Context) const {
   case MVT::i64x8:   return IntegerType::get(Context, 512);
   case MVT::amdgpuBufferFatPointer:  return IntegerType::get(Context, 160);
   case MVT::amdgpuBufferStridedPointer:  return IntegerType::get(Context, 192);
+  case MVT::amdgcnScope:
+    return TargetExtType::get(Context, "amdgcn.scope");
   case MVT::externref: return Type::getWasm_ExternrefTy(Context);
   case MVT::funcref: return Type::getWasm_FuncrefTy(Context);
   case MVT::Metadata: return Type::getMetadataTy(Context);
@@ -268,6 +272,8 @@ MVT MVT::getVT(Type *Ty, bool HandleUnknown){
     TargetExtType *TargetExtTy = cast<TargetExtType>(Ty);
     if (TargetExtTy->getName() == "aarch64.svcount")
       return MVT(MVT::aarch64svcount);
+    else if (TargetExtTy->getName() == "amdgcn.scope")
+      return MVT(MVT::amdgcnScope);
     else if (TargetExtTy->getName() == "wasm.externref")
       return MVT(MVT::externref);
     else if (TargetExtTy->getName() == "wasm.funcref")

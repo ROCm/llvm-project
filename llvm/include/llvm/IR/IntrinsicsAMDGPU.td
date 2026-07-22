@@ -933,6 +933,35 @@ def int_amdgcn_av_store_b128 : AMDGPUAVStore;
 def int_amdgcn_av_load_b128 : AMDGPUAVLoad;
 } // End TargetFeatures = "flat-global-insts"
 
+//===----------------------------------------------------------------------===//
+// Scope identifiers.
+//
+// The opaque type target("amdgcn.scope") identifies a scope instance. Values of
+// this type can only be produced by the scope intrinsics below and consumed by
+// intrinsics that accept a scope argument (such as make.available and
+// make.visible). In this reduced form the type is token-like: a scope value may
+// only flow from a producer intrinsic to a consumer intrinsic within a single
+// function.
+//===----------------------------------------------------------------------===//
+
+// Returns the scope at which the corresponding kind of DMA operation observes
+// memory on the current target.
+class AMDGPUDMAScope : DefaultAttrsIntrinsic<
+  [llvm_amdgcn_scope_ty], [],
+  [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+def int_amdgcn_scope_lds_dma : AMDGPUDMAScope;
+def int_amdgcn_scope_tensor_dma : AMDGPUDMAScope;
+
+// Make prior memory operations available (write-back) / visible (invalidate) at
+// the given scope.
+class AMDGPUMakeAV : Intrinsic<
+  [], [llvm_amdgcn_scope_ty],
+  [IntrHasSideEffects, IntrWillReturn, IntrNoCallback, IntrNoFree]>;
+
+def int_amdgcn_make_available : AMDGPUMakeAV;
+def int_amdgcn_make_visible : AMDGPUMakeAV;
+
 } // TargetPrefix = "amdgcn"
 
 // New-style image intrinsics

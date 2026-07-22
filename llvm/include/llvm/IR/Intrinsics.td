@@ -380,6 +380,7 @@ def IIT_V6 : IIT_Vec<6, 50>;
 def IIT_V10 : IIT_Vec<10, 51>;
 def IIT_V2048 : IIT_Vec<2048, 52>;
 def IIT_V4096 : IIT_Vec<4096, 53>;
+def IIT_AMDGCN_SCOPE : IIT_VT<amdgcnScope, 54>;
 }
 
 defvar IIT_all_FixedTypes = !filter(iit, IIT_all,
@@ -632,6 +633,8 @@ def llvm_token_ty      : LLVMType<token>;        // token
 def llvm_x86mmx_ty     : LLVMType<x86mmx>;
 
 def llvm_aarch64_svcount_ty : LLVMType<aarch64svcount>;
+
+def llvm_amdgcn_scope_ty : LLVMType<amdgcnScope>;
 
 def llvm_x86amx_ty     : LLVMType<x86amx>;
 

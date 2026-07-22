@@ -1030,6 +1030,11 @@ Expected<TargetExtType *> TargetExtType::checkParams(TargetExtType *TTy) {
                              "should have no type parameters "
                              "and at most one integer parameter");
   }
+  if (TTy->Name == "amdgcn.scope" &&
+      (TTy->getNumTypeParameters() != 0 || TTy->getNumIntParameters() != 0)) {
+    return createStringError("target extension type amdgcn.scope should have "
+                             "no parameters");
+  }
 
   return TTy;
 }
@@ -1123,6 +1128,11 @@ static TargetTypeInfo getTargetTypeInfo(const TargetExtType *Ty) {
                           TargetExtType::CanBeGlobal);
   }
   if (Name == "amdgpu.stridemark")
+    return TargetTypeInfo(Type::getVoidTy(C), TargetExtType::IsTokenLike);
+
+  // Opaque scope identifier. In this reduced form it is token-like: it may only
+  // be produced and consumed by intrinsics within a single function.
+  if (Name == "amdgcn.scope")
     return TargetTypeInfo(Type::getVoidTy(C), TargetExtType::IsTokenLike);
 
   // Type used to test vector element target extension property.

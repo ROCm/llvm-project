@@ -190,6 +190,7 @@ struct IITDescriptor {
     AMX,
     PPCQuad,
     AArch64Svcount,
+    AmdgcnScope,
     WasmExternref,
     WasmFuncref,
 

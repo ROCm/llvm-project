@@ -363,6 +363,8 @@ def amdgpuBufferFatPointer : ValueType<160>;
 // FIXME: Remove this and the getPointerType() override if MVT::i82 is added.
 def amdgpuBufferStridedPointer : ValueType<192>;
 
+def amdgcnScope : ValueType<32>; // AMDGPU opaque scope identifier
+
 def aarch64mfp8 : ValueType<8>; // 8-bit value in FPR (AArch64)
 
 // CHERI capabilities. Pointer-like values that carry additional metadata

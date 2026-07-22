@@ -287,6 +287,9 @@ DecodeIITType(unsigned &NextElt, ArrayRef<unsigned char> Infos,
   case IIT_AARCH64_SVCOUNT:
     OutputTable.push_back(IITDescriptor::get(IITDescriptor::AArch64Svcount, 0));
     return;
+  case IIT_AMDGCN_SCOPE:
+    OutputTable.push_back(IITDescriptor::get(IITDescriptor::AmdgcnScope, 0));
+    return;
   case IIT_I8:
     OutputTable.push_back(IITDescriptor::get(IITDescriptor::Integer, 8));
     return;
@@ -567,6 +570,8 @@ static Type *DecodeFixedType(ArrayRef<Intrinsic::IITDescriptor> &Infos,
     return Type::getPPC_FP128Ty(Context);
   case IITDescriptor::AArch64Svcount:
     return TargetExtType::get(Context, "aarch64.svcount");
+  case IITDescriptor::AmdgcnScope:
+    return TargetExtType::get(Context, "amdgcn.scope");
   case IITDescriptor::WasmExternref:
     return TargetExtType::get(Context, "wasm.externref");
   case IITDescriptor::WasmFuncref:
@@ -1043,6 +1048,10 @@ matchIntrinsicType(Type *Ty, ArrayRef<Intrinsic::IITDescriptor> &Infos,
     return PrintMsg(isa<TargetExtType>(Ty) &&
                         cast<TargetExtType>(Ty)->getName() == "aarch64.svcount",
                     "aarch64.svcount");
+  case IITDescriptor::AmdgcnScope:
+    return PrintMsg(isa<TargetExtType>(Ty) &&
+                        cast<TargetExtType>(Ty)->getName() == "amdgcn.scope",
+                    "amdgcn.scope");
   case IITDescriptor::WasmExternref:
     return PrintMsg(isa<TargetExtType>(Ty) &&
                         cast<TargetExtType>(Ty)->getName() == "wasm.externref",
