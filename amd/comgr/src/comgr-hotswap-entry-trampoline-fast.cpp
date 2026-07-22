@@ -57,9 +57,9 @@ namespace hotswap {
 static_assert(sizeof(StubTemplate) == FastEntryStubBodyBytes,
               "generated stub template must be the 40-byte body");
 
-// global_wb; v_nop prefix (first FastEntryPrefixBytes of the body), for raw
-// idempotency / workaround detection. Aliased from StubTemplate so the prefix
-// can never diverge from the template it is a prefix of.
+// global_prefetch_b8; v_nop prefix (first FastEntryPrefixBytes of the body),
+// for raw idempotency / workaround detection. Aliased from StubTemplate so the
+// prefix can never diverge from the template it is a prefix of.
 static constexpr const uint8_t *EntryPrefix = StubTemplate;
 static_assert(sizeof(StubTemplate) >= FastEntryPrefixBytes,
               "stub template must contain the workaround prefix");
@@ -101,8 +101,8 @@ SmallVector<uint8_t> buildKernelEntryTrampolineFast(uint64_t StubVAddr,
 }
 
 // Raw byte check: does the descriptor's current entry already begin with
-// global_wb; v_nop (either a hotswap fast stub already installed, or the
-// compile-time unclaused-VMEM workaround prologue)? Both mean "do not add a
+// global_prefetch_b8; v_nop (either a hotswap fast stub already installed, or
+// the compile-time unclaused-VMEM workaround prologue)? Both mean "do not add a
 // trampoline".
 static std::optional<bool>
 entryHasWorkaroundPrefixFast(const ElfView &Elf,
@@ -185,13 +185,15 @@ std::optional<uint32_t> appendKernelEntryTrampolinesFast(
 
   for (const KernelDescriptorInfo &KD : Descriptors) {
     // Skip if the entry already carries the workaround (already-installed fast
-    // stub, or a compile-time global_wb; v_nop prologue). Raw byte check.
+    // stub, or a compile-time global_prefetch_b8; v_nop prologue). Raw byte
+    // check.
     std::optional<bool> HasPrefix = entryHasWorkaroundPrefixFast(Elf, KD);
     if (!HasPrefix)
       return std::nullopt;
     if (*HasPrefix) {
       log() << "hotswap: fast: kernel '" << KD.KernelName
-            << "' entry already has global_wb; v_nop; skipping trampoline\n";
+            << "' entry already has global_prefetch_b8; v_nop; skipping "
+            << "trampoline\n";
       continue;
     }
     std::optional<uint32_t> OriginalInstPrefLines =

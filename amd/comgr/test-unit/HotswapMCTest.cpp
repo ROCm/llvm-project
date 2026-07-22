@@ -591,9 +591,9 @@ static uint64_t decodeFastStubTarget(const LLVMState &S, uint64_t StubVAddr,
   EXPECT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Dec));
   EXPECT_GE(Dec.size(), 6u);
 
-  // Body layout: global_wb, v_nop, s_get_pc_i64, s_add_co_u32 (delta lo),
-  // s_add_co_ci_u32 (delta hi), s_set_pc_i64.
-  EXPECT_EQ(Dec[0].Inst.getOpcode(), S.GlobalWbOpcode);
+  // Body layout: global_prefetch_b8, v_nop, s_get_pc_i64, s_add_co_u32 (delta
+  // lo), s_add_co_ci_u32 (delta hi), s_set_pc_i64.
+  EXPECT_EQ(Dec[0].Inst.getOpcode(), S.GlobalPrefetchB8Opcode);
   EXPECT_EQ(Dec[1].Inst.getOpcode(), S.VNopInst.getOpcode());
   EXPECT_EQ(Dec[2].Inst.getOpcode(), S.SGetPcI64Opcode);
   EXPECT_EQ(Dec[3].Inst.getOpcode(), S.SAddU32Opcode);
@@ -697,7 +697,7 @@ TEST(BuildKernelEntryTrampolineFast, StubTemplateMatchesMCOutput) {
   // Assemble the six body instructions through the MC layer. The s_add
   // immediates use a literal to force the 32-bit-literal encoding.
   static const char *const BodyAsm[] = {
-      "global_wb",
+      "global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE",
       "v_nop",
       "s_get_pc_i64 s[100:101]",
       "s_add_co_u32 s100, s100, 0xdeadbeef",
@@ -1896,8 +1896,9 @@ TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
 
   constexpr uint64_t StubVAddr = 0x200000;
   constexpr uint64_t EntryVAddr = 0x10100;
-  llvm::SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", S);
-  ASSERT_EQ(GlobalWb.size(), 3 * MinInstSize);
+  llvm::SmallVector<uint8_t> Prefetch =
+      assembleSingleInst("global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE", S);
+  ASSERT_EQ(Prefetch.size(), 3 * MinInstSize);
 
   llvm::SmallVector<uint8_t> Bytes =
       buildKernelEntryTrampoline(StubVAddr, EntryVAddr, /*ScratchSgpr=*/8, S);
@@ -1908,7 +1909,7 @@ TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
   ASSERT_GE(Decoded.size(), 6u);
-  EXPECT_EQ(Decoded[0].Inst.getOpcode(), S.GlobalWbOpcode);
+  EXPECT_EQ(Decoded[0].Inst.getOpcode(), S.GlobalPrefetchB8Opcode);
   EXPECT_EQ(Decoded[1].Inst.getOpcode(), S.VNopInst.getOpcode());
   EXPECT_EQ(Decoded[2].Inst.getOpcode(), S.SGetPcI64Opcode);
   EXPECT_EQ(Decoded[3].Inst.getOpcode(), S.SAddU32Opcode);
@@ -1919,7 +1920,8 @@ TEST(BuildKernelEntryTrampoline, BuildsRecognizedPcRelativeStub) {
   const uint64_t Delta = EntryVAddr - PcBase;
   const uint32_t Lo = static_cast<uint32_t>(Delta);
   const uint32_t Hi = static_cast<uint32_t>(Delta >> 32);
-  expectInstMatchesAsm(Decoded[0].Inst, "global_wb", S);
+  expectInstMatchesAsm(Decoded[0].Inst,
+                       "global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE", S);
   expectInstMatchesAsm(Decoded[1].Inst, "v_nop", S);
   expectInstMatchesAsm(Decoded[2].Inst, "s_get_pc_i64 s[8:9]", S);
   expectInstMatchesAsm(
@@ -2021,7 +2023,8 @@ TEST(BuildKernelEntryTrampoline, MatcherRejectsWrongOperandShape) {
   ASSERT_TRUE(S.Valid);
 
   llvm::SmallVector<uint8_t> Bytes;
-  ASSERT_TRUE(appendSingleInstBytes(Bytes, "global_wb", S));
+  ASSERT_TRUE(appendSingleInstBytes(
+      Bytes, "global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE", S));
   ASSERT_TRUE(appendSingleInstBytes(Bytes, "v_nop", S));
   ASSERT_TRUE(appendSingleInstBytes(Bytes, "s_get_pc_i64 s[8:9]", S));
   ASSERT_TRUE(appendSingleInstBytes(Bytes, "s_add_u32 s8, s8, 0", S));
@@ -2265,8 +2268,8 @@ TEST(TextDisplacement, UpdatesKernelDescriptorEntryOffset) {
   ASSERT_NE(OldRodataLoad, nullptr);
   const uint64_t OldRodataLoadOffset = OldRodataLoad->p_offset;
 
-  llvm::SmallVector<uint8_t> Prefix =
-      assembleInstructions("global_wb\nv_nop", S);
+  llvm::SmallVector<uint8_t> Prefix = assembleInstructions(
+      "global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE\nv_nop", S);
   ASSERT_FALSE(Prefix.empty());
 
   DisplacementEdit Edit;
@@ -2799,21 +2802,23 @@ TEST(KernelEntryTrampoline, SecondPassAddsNoDuplicateStubSymbol) {
   EXPECT_EQ(countSymtabSymbolsNamed(*Pass1, "kernel.stub"), 1u);
 }
 
-// A `global_wb; v_nop` prologue (llvm/llvm-project#208467) already satisfies
-// the workaround, so no trampoline is installed.
+// A `global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE; v_nop` prologue
+// (llvm/llvm-project#208467, updated by ROCm/llvm-project#3483) already
+// satisfies the workaround, so no trampoline is installed.
 TEST(KernelEntryTrampoline, SkipsWhenPrologueAlreadyHasVmemWorkaround) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
-  llvm::SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", S);
+  llvm::SmallVector<uint8_t> Prefetch =
+      assembleSingleInst("global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE", S);
   llvm::SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", S);
   llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
-  ASSERT_FALSE(GlobalWb.empty());
+  ASSERT_FALSE(Prefetch.empty());
   ASSERT_FALSE(VNop.empty());
   ASSERT_EQ(EndPgm.size(), MinInstSize);
 
   llvm::SmallVector<uint8_t> Text;
-  Text.append(GlobalWb.begin(), GlobalWb.end());
+  Text.append(Prefetch.begin(), Prefetch.end());
   Text.append(VNop.begin(), VNop.end());
   Text.append(EndPgm.begin(), EndPgm.end());
 
@@ -2840,15 +2845,16 @@ TEST(KernelEntryTrampoline, InstallsWhenPrologueLacksVmemWorkaround) {
   ASSERT_TRUE(S.Valid);
 
   llvm::SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", S);
-  llvm::SmallVector<uint8_t> GlobalWb = assembleSingleInst("global_wb", S);
+  llvm::SmallVector<uint8_t> Prefetch =
+      assembleSingleInst("global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE", S);
   llvm::SmallVector<uint8_t> EndPgm = assembleSingleInst("s_endpgm", S);
   ASSERT_FALSE(VNop.empty());
-  ASSERT_FALSE(GlobalWb.empty());
+  ASSERT_FALSE(Prefetch.empty());
   ASSERT_EQ(EndPgm.size(), MinInstSize);
 
   llvm::SmallVector<uint8_t> Text;
   Text.append(VNop.begin(), VNop.end());
-  Text.append(GlobalWb.begin(), GlobalWb.end());
+  Text.append(Prefetch.begin(), Prefetch.end());
   Text.append(EndPgm.begin(), EndPgm.end());
 
   comgr_test::KernelDescriptorElf Obj =

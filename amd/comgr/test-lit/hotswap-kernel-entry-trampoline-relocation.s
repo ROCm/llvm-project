@@ -14,7 +14,7 @@
 // DISASM-NEXT: s_endpgm
 // DISASM-LABEL: <pointed_helper>:
 // DISASM-NEXT: s_endpgm
-// DISASM: global_wb
+// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_get_pc_i64
 

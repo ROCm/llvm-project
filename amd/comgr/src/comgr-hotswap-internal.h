@@ -390,12 +390,20 @@ static_assert(KernelEntryStubStride % KernelEntryInstPrefUnitBytes == 0,
 static constexpr uint32_t KernelEntryStubInstPrefLines =
     KernelEntryStubStride / KernelEntryInstPrefUnitBytes;
 
+// GFX1250 unclaused-VMEM entry workaround (llvm/llvm-project#208467, updated by
+// ROCm/llvm-project#3483): the compiler now emits `global_prefetch_b8 v0,
+// s[0:1] scope:SCOPE_SE; v_nop` at every entry-function prologue. Both the
+// entry-trampoline stub prefix and the compiler-prologue skip matcher assemble
+// this exact instruction, so keep the single spelling here.
+static constexpr const char *KernelEntryVmemWorkaroundAsm =
+    "global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE";
+
 // B0->B0 fast-path stub layout (see comgr-hotswap-entry-trampoline-fast.cpp).
 // Pre-encoded gfx1250 stub; the two PC-relative delta immediates and the
 // per-kernel scratch SGPR register fields are patched per kernel. All offsets
 // are into the 256-byte stub.
 static constexpr uint64_t FastEntryStubBodyBytes = 40; // body: to s_set_pc_i64
-static constexpr uint64_t FastEntryPrefixBytes = 16;   // global_wb + v_nop
+static constexpr uint64_t FastEntryPrefixBytes = 16; // global_prefetch_b8+v_nop
 static constexpr uint64_t FastEntryPcBaseOffset = 20;  // s_add (after s_get_pc)
 static constexpr uint64_t FastEntryDeltaLoOffset = 24; // s_add_co_u32 imm32
 static constexpr uint64_t FastEntryDeltaHiOffset = 32; // s_add_co_ci_u32 imm32
@@ -824,7 +832,7 @@ struct LLVMState {
   /// initLLVM() time by parsing representative asm snippets. The idempotency
   /// matcher compares decoded opcodes against these cached values instead of
   /// matching disassembled mnemonic strings.
-  unsigned GlobalWbOpcode = 0;
+  unsigned GlobalPrefetchB8Opcode = 0;
   unsigned SGetPcI64Opcode = 0;
   unsigned SAddNcU64Opcode = 0;
   unsigned SAddU32Opcode = 0;
@@ -1414,9 +1422,9 @@ bool hasKernelEntryTrampolinePrefix(llvm::ArrayRef<uint8_t> Bytes,
 /// mapped .text bytes.
 uint64_t computeKernelEntryPrefetchGuardBytes(uint32_t InstPrefLines);
 
-/// Queue one direct insertion of `global_wb; v_nop` at each kernel descriptor
-/// entry that does not already target either a direct entry prefix or an
-/// appended HotSwap entry stub.
+/// Queue one direct insertion of `global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE;
+/// v_nop` at each kernel descriptor entry that does not already target either a
+/// direct entry prefix or an appended HotSwap entry stub.
 std::optional<uint32_t>
 collectKernelEntryDisplacements(const ElfView &Elf, const LLVMState &LS,
                                 std::vector<DisplacementEdit> &OutEdits);
