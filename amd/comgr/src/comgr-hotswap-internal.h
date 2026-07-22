@@ -844,6 +844,15 @@ struct LLVMState {
   unsigned SPrefetchInstPcRelOpcode = 0;
   unsigned SPrefetchDataPcRelOpcode = 0;
 
+  /// MC opcodes for the gfx1250 VGPR-MSB mode instructions, resolved once at
+  /// initLLVM() time so the WMMA split pass matches them by opcode instead of
+  /// disassembled mnemonic strings. These are gfx1250-only, so they are
+  /// resolved non-fatally: on subtargets without them the field keeps the
+  /// MCII::getNumOpcodes() sentinel and never matches a decoded opcode.
+  unsigned SSetVgprMsbOpcode = 0;
+  unsigned SSetregImm32Opcode = 0;
+  unsigned SSetregB32Opcode = 0;
+
   /// SCC, recovered from the implicit definition on a parsed scalar compare.
   /// This avoids scanning target register names in policy code.
   llvm::MCRegister SCCRegister;
@@ -1314,7 +1323,7 @@ struct MaterializedPcSequence {
 /// the first control-flow boundary or unexpected clobber so any variation
 /// stays unresolved (nullopt) for fail-closed callers. \p TextAddr is the
 /// .text base virtual address.
-std::optional<MaterializedPcSequence>
+[[nodiscard]] std::optional<MaterializedPcSequence>
 resolveMaterializedPcTarget(llvm::ArrayRef<InternalDecodedInst> Decoded,
                             size_t TransferIndex, llvm::MCRegister TargetReg,
                             const LLVMState &LS, uint64_t TextAddr);

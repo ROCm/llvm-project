@@ -456,7 +456,7 @@ std::string formatVgprRange(int Base, int Count) {
 
 bool validateSplitOperands(SplitKind Kind, const WmmaOps &R,
                            StringRef Mnemonic) {
-  std::function<void(StringRef)> LogError = [&](StringRef Reason) {
+  auto LogError = [&](StringRef Reason) {
     log() << "hotswap: error: WMMA split: invalid operands for " << Mnemonic
           << ": " << Reason << "\n";
   };
@@ -528,32 +528,41 @@ VgprMsbState unknownVgprMsbState() {
   return {VgprMsbUnknown, VgprMsbUnknown, VgprMsbUnknown, VgprMsbUnknown};
 }
 
-int16_t exactVgprMsbMode(VgprMsbState State) {
+[[nodiscard]] int16_t exactVgprMsbMode(VgprMsbState State) {
   if (State.Dst < 0 || State.Src0 < 0 || State.Src1 < 0 || State.Src2 < 0)
     return VgprMsbUnknown;
   return static_cast<int16_t>(State.Src0 | (State.Src1 << 2) |
                               (State.Src2 << 4) | (State.Dst << 6));
 }
 
+// True for either gfx1250 s_setreg form (register or immediate) that can write
+// the HW_REG_WAVE_MODE bank fields. Matched by cached opcode rather than
+// disassembled mnemonic string.
+bool isSetregOpcode(const InternalDecodedInst &DI, const LLVMState &LS) {
+  unsigned Opcode = DI.Inst.getOpcode();
+  return Opcode == LS.SSetregImm32Opcode || Opcode == LS.SSetregB32Opcode;
+}
+
 // gfx1250 reaches the persistent VGPR-MSB bank mode through an immediate
 // HW_REG_WAVE_MODE (ID_MODE) write. Decode it with the backend helper
 // convertSetRegImmToVgprMSBs (forward-declared above) rather than mirror the
 // field layout. gfx1250 has the setreg VGPR-MSB fixup, so pass true; the helper
-// returns std::nullopt for any non-ID_MODE write. The mnemonic guard keeps the
+// returns std::nullopt for any non-ID_MODE write. The opcode guard keeps the
 // helper's opcode assertion satisfied (only S_SETREG_IMM32_B32_gfx12 reaches
 // it) and the operand guards keep its getImm() accesses in range.
 std::optional<unsigned>
-decodeSetregImmVgprMsbMode(const InternalDecodedInst &DI) {
-  if (DI.Mnemonic != "s_setreg_imm32_b32" || DI.Inst.getNumOperands() != 2 ||
-      !DI.Inst.getOperand(0).isImm() || !DI.Inst.getOperand(1).isImm())
+decodeSetregImmVgprMsbMode(const InternalDecodedInst &DI, const LLVMState &LS) {
+  if (DI.Inst.getOpcode() != LS.SSetregImm32Opcode ||
+      DI.Inst.getNumOperands() != 2 || !DI.Inst.getOperand(0).isImm() ||
+      !DI.Inst.getOperand(1).isImm())
     return std::nullopt;
   return llvm::AMDGPU::convertSetRegImmToVgprMSBs(
       DI.Inst, /*HasSetregVGPRMSBFixup=*/true);
 }
 
-std::optional<unsigned> getSetregHwregId(const InternalDecodedInst &DI) {
-  if (!StringRef(DI.Mnemonic).starts_with("s_setreg") ||
-      DI.Inst.getNumOperands() == 0 ||
+std::optional<unsigned> getSetregHwregId(const InternalDecodedInst &DI,
+                                         const LLVMState &LS) {
+  if (!isSetregOpcode(DI, LS) || DI.Inst.getNumOperands() == 0 ||
       !DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm())
     return std::nullopt;
   return static_cast<unsigned>(
@@ -577,14 +586,14 @@ bool instructionDefinesNamedRegister(const InternalDecodedInst &DI,
   });
 }
 
-std::optional<unsigned>
-getExactVgprMsbModeWritten(const InternalDecodedInst &DI) {
-  if (DI.Mnemonic == "s_set_vgpr_msb") {
+[[nodiscard]] std::optional<unsigned>
+getExactVgprMsbModeWritten(const InternalDecodedInst &DI, const LLVMState &LS) {
+  if (DI.Inst.getOpcode() == LS.SSetVgprMsbOpcode) {
     if (DI.Inst.getNumOperands() != 1 || !DI.Inst.getOperand(0).isImm())
       return std::nullopt;
     return static_cast<unsigned>(DI.Inst.getOperand(0).getImm()) & 0xff;
   }
-  return decodeSetregImmVgprMsbMode(DI);
+  return decodeSetregImmVgprMsbMode(DI, LS);
 }
 
 bool isStandardLinkReturn(const InternalDecodedInst &DI, const LLVMState &LS) {
@@ -603,12 +612,12 @@ VgprMsbState transferVgprMsbState(VgprMsbState In,
                                   const LLVMState &LS) {
   if (In.Dst == VgprMsbUnreachable)
     return In;
-  if (std::optional<unsigned> Mode = getExactVgprMsbModeWritten(DI))
+  if (std::optional<unsigned> Mode = getExactVgprMsbModeWritten(DI, LS))
     return vgprMsbStateFromMode(*Mode);
-  if (DI.Mnemonic == "s_set_vgpr_msb")
+  if (DI.Inst.getOpcode() == LS.SSetVgprMsbOpcode)
     return unknownVgprMsbState();
-  if (StringRef(DI.Mnemonic).starts_with("s_setreg")) {
-    std::optional<unsigned> HwregId = getSetregHwregId(DI);
+  if (isSetregOpcode(DI, LS)) {
+    std::optional<unsigned> HwregId = getSetregHwregId(DI, LS);
     if (!HwregId)
       return unknownVgprMsbState();
     constexpr unsigned ModeHwregId = 1;
@@ -643,6 +652,14 @@ VgprMsbState mergeVgprMsbState(VgprMsbState Old, VgprMsbState Incoming) {
 // only exact, consistent modes are recorded; any conflict, unknown MODE write,
 // opaque call, unresolved/indirect branch, or non-start cross-function entry
 // leaves the affected sites unknown/unanalyzed so a required split declines.
+//
+// Pass-ordering invariant: this analysis reads Ctx.Decoded as an immutable
+// snapshot (per HOTSWAP_CONVENTIONS) and recovers the mode from the bytes of
+// the VGPR-MSB mode instructions (s_set_vgpr_msb and s_setreg writes to
+// HW_REG_WAVE_MODE). It must therefore run before, or be re-decoded after, any
+// pass that rewrites those specific instructions' bytes. This holds today: the
+// in-place pass only touches cluster loads / s_barrier_signal_isfirst and the
+// trampoline pass preserves instruction sizes and mode-instruction bytes.
 void computeVgprMsbModes(PatchContext &Ctx) {
   const std::vector<InternalDecodedInst> &Decoded = Ctx.Decoded;
   const LLVMState &LS = Ctx.LS;
@@ -668,10 +685,9 @@ void computeVgprMsbModes(PatchContext &Ctx) {
   // s_swap_pc_i64 / s_set_pc_i64 transfers, so an interior cross-function
   // s_swap_pc_i64 entry is caught instead of being analyzed from the wrong
   // incoming mode.
-  std::function<std::optional<uint64_t>(const InternalDecodedInst &, size_t)>
-      resolveInteriorEntryTarget =
-          [&](const InternalDecodedInst &DI,
-              size_t Index) -> std::optional<uint64_t> {
+  auto resolveInteriorEntryTarget =
+      [&](const InternalDecodedInst &DI,
+          size_t Index) -> std::optional<uint64_t> {
     if (std::optional<uint64_t> Direct =
             evaluateDirectControlFlowTarget(DI, LS))
       return Direct;
@@ -782,27 +798,26 @@ void computeVgprMsbModes(PatchContext &Ctx) {
 
     std::vector<SmallVector<unsigned, 2>> Successors(Count);
     BitVector CallableEntries(Count);
-    std::function<bool(SmallVectorImpl<unsigned> &, uint64_t)> AddTarget =
-        [&](SmallVectorImpl<unsigned> &Out, uint64_t Target) {
-          if (Target < Begin || Target >= End)
-            return true;
-          DenseMap<uint64_t, unsigned>::iterator It =
-              OffsetToLocalIndex.find(Target);
-          if (It == OffsetToLocalIndex.end())
-            return false;
-          Out.push_back(It->second);
-          return true;
-        };
-    std::function<void(SmallVectorImpl<unsigned> &, unsigned)> AddFallthrough =
-        [&](SmallVectorImpl<unsigned> &Out, unsigned I) {
-          if (I + 1 < Count)
-            Out.push_back(I + 1);
-        };
+    auto AddTarget = [&](SmallVectorImpl<unsigned> &Out, uint64_t Target) {
+      if (Target < Begin || Target >= End)
+        return true;
+      DenseMap<uint64_t, unsigned>::iterator It =
+          OffsetToLocalIndex.find(Target);
+      if (It == OffsetToLocalIndex.end())
+        return false;
+      Out.push_back(It->second);
+      return true;
+    };
+    auto AddFallthrough = [&](SmallVectorImpl<unsigned> &Out, unsigned I) {
+      if (I + 1 < Count)
+        Out.push_back(I + 1);
+    };
 
     for (unsigned I = 0; I != Count && Valid; ++I) {
       const InternalDecodedInst &DI = First[I];
       SmallVectorImpl<unsigned> &Out = Successors[I];
-      if (DI.Mnemonic == "s_endpgm" || DI.Mnemonic == "s_endpgm_saved" ||
+      if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+          DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
           LS.MIA->isReturn(DI.Inst) || isStandardLinkReturn(DI, LS))
         continue;
       // A materialized-PC jump (s_get_pc_i64 / s_add_nc_u64 / s_set_pc_i64)
@@ -890,7 +905,7 @@ void computeVgprMsbModes(PatchContext &Ctx) {
     // The gfx1250 VGPR-lowering ABI requires all four MSB fields to be zero on
     // function entry. Calls transfer to unknown (this object-level proof does
     // not inspect a callee's return), so callable entries reseed the ABI mode.
-    std::function<void(unsigned)> SeedAbiEntry = [&](unsigned I) {
+    auto SeedAbiEntry = [&](unsigned I) {
       In[I] = mergeVgprMsbState(In[I], vgprMsbStateFromMode(0));
       Worklist.push_back(I);
     };
@@ -935,8 +950,8 @@ void computeVgprMsbModes(PatchContext &Ctx) {
 // predecessor states (including loop backedges) retain an exact mode;
 // conflicting paths, opaque calls, and unknown MODE writes fail closed. A
 // mandatory WMMA in a validated-unreachable block uses the ABI entry mode.
-std::optional<unsigned> findActiveVgprMsbMode(const PatchContext &Ctx,
-                                              size_t Idx) {
+[[nodiscard]] std::optional<unsigned>
+findActiveVgprMsbMode(const PatchContext &Ctx, size_t Idx) {
   if (Idx >= Ctx.VgprMsbModeBefore.size())
     return std::nullopt;
   if (Ctx.VgprMsbModeBefore[Idx] == VgprMsbUnreachable)
@@ -965,8 +980,8 @@ void setVgprMsbs(unsigned &Mode, VgprMsbOperand Operand, unsigned Msbs) {
 // Rebase an operand's upper-half index into the [0,255] encoding field and
 // record the bank it now selects. Returns false when the physical index needs
 // a bank > 3 (unrepresentable), so the caller fails closed.
-bool advanceVgprMsbMode(int &Base, VgprMsbOperand Operand, unsigned OldMode,
-                        unsigned &NewMode) {
+[[nodiscard]] bool advanceVgprMsbMode(int &Base, VgprMsbOperand Operand,
+                                      unsigned OldMode, unsigned &NewMode) {
   unsigned OldMsbs = getVgprMsbs(OldMode, Operand);
   unsigned PhysicalBase = (OldMsbs << 8) + static_cast<unsigned>(Base);
   unsigned NewMsbs = PhysicalBase >> 8;
