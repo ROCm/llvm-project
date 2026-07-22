@@ -135,21 +135,11 @@ instance. The scope argument can be passed in one of two ways:
 New intrinsics accept only `target("amdgcn.scope")`. Deprecated intrinsics
 that accept `metadata` are documented alongside their replacements.
 
-The `target("amdgcn.scope")` type has a layout type of `i32`. Values of
-this type can be loaded from and stored to memory in any address space, passed
-as function arguments, and used in `phi` and `select` instructions.
-
-Since AMDGPU scopes are linearly ordered from smallest ("singlethread") to
-largest (*system scope*), scope values can be compared using all `icmp`
-predicates. A scope value `A` is less than `B` (using unsigned comparison)
-if `A` is a subscope of `B`.
-
-:::{note}
-If the code generator cannot determine a scope value to be a known constant
-at the point of use, it is replaced by *system scope* as a safe default.
-This ensures correctness but may result in more conservative cache
-operations.
-:::
+The `target("amdgcn.scope")` type is opaque and token-like: a scope value may
+only flow directly from a producer intrinsic to a consumer intrinsic within a
+single function. It cannot be loaded from or stored to memory, passed as a
+function argument, returned from a function, or used in `phi` or `select`
+instructions.
 
 The following intrinsics return the AMDGPU LLVM scopes:
 
