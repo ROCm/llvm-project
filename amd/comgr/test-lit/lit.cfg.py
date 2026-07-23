@@ -27,8 +27,16 @@ if config.comgr_amdgpu_target_available:
 # so guard them behind its presence in the clang resource dir; builds without
 # it (e.g. reduced builds that omit compiler-rt) skip rather than fail.
 if glob.glob(
-    os.path.join(config.llvm_tools_dir, os.pardir, "lib", "clang", "*",
-                 "lib", "amdgcn-amd-amdhsa", "libclang_rt.asan.a")
+    os.path.join(
+        config.llvm_tools_dir,
+        os.pardir,
+        "lib",
+        "clang",
+        "*",
+        "lib",
+        "amdgcn-amd-amdhsa",
+        "libclang_rt.asan.a",
+    )
 ):
     config.available_features.add("comgr-has-amdgpu-asan-runtime")
 
