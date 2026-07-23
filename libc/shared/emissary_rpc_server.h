@@ -8,6 +8,16 @@
 //
 // This file is an extension of rpc_server.h
 //
+// Consumers must add the Clang resource header directory to the include path
+// when compiling translation units that include this header (directly or via
+// <shared/emissary_rpc_server.h>). EmissaryIds.h is installed there, not under
+// lib/llvm/include:
+//
+//   -I$("$CXX" -print-resource-dir)/include
+//
+// Typical HIP/OpenMP demo builds also pass -I for lib/llvm/include (or
+// llvm/include) so that <shared/emissary_rpc_server.h> resolves.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIBC_SRC___SUPPORT_RPC_EMISSARY_RPC_SERVER_H
@@ -18,21 +28,94 @@
 #else
 #include "EmissaryIds.h"
 #endif
+
 #include "rpc.h"
 #include "rpc_opcodes.h"
+#include <EmissaryIds.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unordered_map>
 
-/// Called by EmissaryTop for all MPI emissary API functions
+//===----------------------------------------------------------------------===//
+// Emissary host handler registry (component D1 of the multi-client design)
+//
+// Runtime registry that maps an Emissary API id to the host handler that
+// services it. It lets a client library register its dispatcher at load time
+// so the RPC server (EmissaryTop) can route requests without a compile-time
+// switch over every known client.
+//
+// The registry is a fixed-size table with no dynamic allocation.
+// EmissaryRegister and EmissaryLookup have C linkage so a client shared object
+// can register against the server without C++ name-mangling coupling. The
+// backing table is a C++17 inline variable, so all translation units in a
+// program share one instance; on ELF it also merges across shared objects
+// under default visibility, letting a client .so and the server share the same
+// table.
+//===----------------------------------------------------------------------===//
+
+/// Upper bound on the number of distinct Emissary API ids. The table is indexed
+/// directly by \c emisid, so this also bounds the largest id that can be
+/// registered. It comfortably exceeds the current \c offload_emis_id_t range
+/// and leaves room for reserved/dynamic ids.
+#define EMISSARY_MAX_REGISTERED_IDS 64
+
+/// Host handler for one Emissary API id. The signature matches the per-client
+/// dispatchers (\c EmissaryMPI, \c EmissaryHDF5, ...): it receives the RPC data
+/// buffer, the decoded argument descriptor, and the unpacked argument vector.
+typedef EmissaryReturn_t (*EmissaryHandler_t)(char *data, emisArgBuf_t *ab,
+                                              emis_argptr_t *args[]);
+
+namespace emissary_registry_detail {
+/// Backing table, indexed directly by Emissary API id. As a C++17 inline
+/// variable it has exactly one instance across the whole program.
+/// \internal
+inline EmissaryHandler_t Table[EMISSARY_MAX_REGISTERED_IDS] = {};
+} // namespace emissary_registry_detail
+
 extern "C" {
-__attribute((weak)) EmissaryReturn_t EmissaryMPI(char *data, emisArgBuf_t *ab,
-                                                 emis_argptr_t *arg[]);
-/// Called by EmissaryTop for all HDF5 Emissary API functions
-__attribute((weak)) EmissaryReturn_t EmissaryHDF5(char *data, emisArgBuf_t *ab,
-                                                  emis_argptr_t *arg[]);
+
+/// Register a host handler for an Emissary API id.
+///
+/// \param emisid the Emissary API id (an \c offload_emis_id_t value or a
+///   reserved dynamic id) to associate with \p handler.
+/// \param handler the host dispatcher to invoke for \p emisid; must not be
+///   null.
+/// \returns \c true on success; \c false if \p emisid is out of range,
+///   \p handler is null, or a *different* handler is already registered for
+///   \p emisid. Re-registering the identical handler is idempotent and
+///   succeeds.
+inline bool EmissaryRegister(unsigned int emisid, EmissaryHandler_t handler) {
+  if (emisid >= EMISSARY_MAX_REGISTERED_IDS || handler == nullptr)
+    return false;
+  EmissaryHandler_t &Slot = emissary_registry_detail::Table[emisid];
+  // Reject last-wins: two libraries claiming the same id is a configuration
+  // error, not something to silently overwrite.
+  if (Slot != nullptr && Slot != handler)
+    return false;
+  Slot = handler;
+  return true;
+}
+
+/// Look up the host handler registered for an Emissary API id.
+///
+/// \param emisid the Emissary API id to look up.
+/// \returns the registered handler, or null if \p emisid is out of range or no
+///   handler is registered for it.
+inline EmissaryHandler_t EmissaryLookup(unsigned int emisid) {
+  if (emisid >= EMISSARY_MAX_REGISTERED_IDS)
+    return nullptr;
+  return emissary_registry_detail::Table[emisid];
+}
+
+} // extern "C"
+
+// EmissaryMPI and EmissaryHDF5 are no longer declared or called here: their
+// client libraries self-register with the runtime registry defined above, so
+// EmissaryTop dispatches them without a compile-time weak symbol or switch
+// case.
+extern "C" {
 /// Called by EmissaryTop to support user-defined emissary API
 __attribute((weak)) EmissaryReturn_t EmissaryReserve(char *data,
                                                      emisArgBuf_t *ab,
@@ -578,6 +661,25 @@ EmissaryTop(char *data, emisArgBuf_t *ab,
   emis_argptr_t **args = (emis_argptr_t **)aligned_alloc(
       sizeof(emis_argptr_t), ab->NumArgs * sizeof(emis_argptr_t *));
 
+  // Registry fast path (D1): if a client has registered a handler for this API
+  // id, dispatch to it and skip the per-client switch below. PRINT is handled
+  // inline by the switch (it needs no unpacked argument vector), so it is
+  // intentionally never looked up here. This is additive: ids without a
+  // registered handler fall through to the existing switch unchanged.
+  EmissaryHandler_t handler =
+      (ab->emisid == EMIS_ID_PRINT) ? nullptr : EmissaryLookup(ab->emisid);
+  if (handler != nullptr) {
+    if (EmissaryBuildVargs(ab->NumArgs, ab->keyptr, ab->argptr, ab->strptr,
+                           &(ab->data_not_used), &args[0],
+                           D2HAddrList) != _ERC_SUCCESS) {
+      free(args);
+      return (EmissaryReturn_t)0;
+    }
+    result = handler(data, ab, args);
+    free(args);
+    return result;
+  }
+
   switch (ab->emisid) {
   case EMIS_ID_INVALID: {
     fprintf(stderr, "Emissary (host execution) got invalid EMIS_ID\n");
@@ -588,23 +690,11 @@ EmissaryTop(char *data, emisArgBuf_t *ab,
     result = EmissaryPrint(data, ab);
     break;
   }
-  case EMIS_ID_MPI: {
-    if (EmissaryBuildVargs(ab->NumArgs, ab->keyptr, ab->argptr, ab->strptr,
-                           &(ab->data_not_used), &args[0],
-                           D2HAddrList) != _ERC_SUCCESS) {
-      return (EmissaryReturn_t)0;
-    }
-    result = EmissaryMPI(data, ab, args);
-    break;
-  }
-  case EMIS_ID_HDF5: {
-    if (EmissaryBuildVargs(ab->NumArgs, ab->keyptr, ab->argptr, ab->strptr,
-                           &(ab->data_not_used), &args[0],
-                           D2HAddrList) != _ERC_SUCCESS)
-      return (EmissaryReturn_t)0;
-    result = EmissaryHDF5(data, ab, args);
-    break;
-  }
+  // EMIS_ID_MPI and EMIS_ID_HDF5 are no longer handled here: libemissary_mpi
+  // and libemissary_hdf5 register their host dispatchers through the registry
+  // (D1), so they are serviced by the registry fast path above. FORTRT and
+  // RESERVE remain on the switch as the documented "still on the legacy path"
+  // example.
   case EMIS_ID_FORTRT: {
     if (EmissaryBuildVargs(ab->NumArgs, ab->keyptr, ab->argptr, ab->strptr,
                            &(ab->data_not_used), &args[0],
