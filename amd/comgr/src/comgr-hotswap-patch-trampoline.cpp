@@ -858,19 +858,108 @@ bool instructionDefinesBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
   return false;
 }
 
-// Return the mask-set s_and of every descriptor construction region reaching
-// the tensor at \p TensorIdx: the last low16-preserving s_and per region,
-// where regions are delimited by an s_mov base, 0 restart (covering the
-// separate odd/even wave branches). Fails closed if the base is written by any
-// instruction outside the recognized idiom, since the reaching value would
-// then not be the descriptor whose mask is cleared.
-std::optional<SmallVector<size_t>>
-findTensorMaskSetDefinitions(const PatchContext &Ctx, size_t TensorIdx,
-                             MCRegister BaseMCReg) {
+// True when \p DI reads \p Reg (uses its value), including implicit uses.
+bool instructionReadsRegister(const InternalDecodedInst &DI, MCRegister Reg,
+                              const LLVMState &LS) {
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  const MCRegisterInfo &MRI = *LS.MRI;
+  unsigned NumDefs = Desc.getNumDefs();
+  for (unsigned I = NumDefs, E = DI.Inst.getNumOperands(); I < E; ++I) {
+    const MCOperand &Op = DI.Inst.getOperand(I);
+    if (Op.isReg() && Op.getReg() && MRI.regsOverlap(Op.getReg(), Reg.id()))
+      return true;
+  }
+  for (MCPhysReg Implicit : Desc.implicit_uses())
+    if (MRI.regsOverlap(Implicit, Reg.id()))
+      return true;
+  return false;
+}
+
+// True when the s_and at \p Idx leaves SCC live: some later instruction reads
+// SCC before any instruction redefines it, within [Idx+1, FnEnd). Changing the
+// mask literal can flip whether the AND result is zero, so a live SCC use would
+// observe a different condition. The window extends to the end of the function
+// (not just to the tensor): SCC is dead only when a redefinition or the
+// function boundary is reached with no intervening read. An unknown/undecoded
+// instruction is treated conservatively as a reader.
+bool isSccLiveAfterMaskSet(const PatchContext &Ctx, size_t Idx, size_t FnEnd) {
+  const LLVMState &LS = Ctx.LS;
+  const MCRegisterInfo &MRI = *LS.MRI;
+  for (size_t I = Idx + 1; I < FnEnd; ++I) {
+    const InternalDecodedInst &DI = Ctx.Decoded[I];
+    if (DI.Mnemonic == "<unknown>")
+      return true;
+    const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+    for (MCPhysReg Use : Desc.implicit_uses())
+      if (isSccReg(MCRegister(Use), MRI))
+        return true;
+    for (MCPhysReg Def : Desc.implicit_defs())
+      if (isSccReg(MCRegister(Def), MRI))
+        return false;
+  }
+  return false;
+}
+
+// The result of attempting the definition-time mask clear. NotApplicable means
+// the site is safe to hand to the at-site fallback; Failed means a required
+// mutation was started and could not complete.
+enum class TensorMaskDef { Applied, NotApplicable, Failed };
+
+// Collect the mask-set s_and index of every descriptor construction region
+// reaching the tensor at \p TensorIdx, confined to the tensor's own function.
+// A region is delimited by an s_mov base, 0 restart and its last
+// low16-preserving s_and is the mask-set (covering odd/even wave branches).
+// Returns NotApplicable (deferring to the at-site fallback, no error logged)
+// whenever the definition-time transform cannot be proven safe:
+//   - the tensor is outside any known function range,
+//   - a region has no low16-preserving mask-set,
+//   - the base is written outside the recognized construction idiom
+//     (killed/mutated definition, e.g. s_add or a foreign function),
+//   - a later writer can restore nonzero low16 bits (e.g. s_or base, base, sN),
+//   - the mask-set leaves SCC live, or
+//   - the base is observed by a non-tensor consumer before the tensor.
+TensorMaskDef findTensorMaskSetDefinitions(const PatchContext &Ctx,
+                                           size_t TensorIdx,
+                                           MCRegister BaseMCReg,
+                                           SmallVectorImpl<size_t> &MaskSets) {
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
   const InternalDecodedInst &Tensor = Ctx.Decoded[TensorIdx];
 
-  SmallVector<size_t> MaskSets;
+  // Confine the scan to the tensor's function so a bare tensor cannot borrow a
+  // construction sequence from another kernel.
+  std::optional<ElfView::FunctionTextRange> Range =
+      Ctx.Elf.findFunctionTextRangeAtOffset(Tensor.Offset);
+  if (!Range)
+    return TensorMaskDef::NotApplicable;
+
+  // First decoded index at or after the function end, bounding the forward SCC
+  // liveness window.
+  size_t FnEndIdx = Ctx.Decoded.size();
+  for (size_t I = TensorIdx + 1; I < Ctx.Decoded.size(); ++I) {
+    if (Ctx.Decoded[I].Offset >= Range->End) {
+      FnEndIdx = I;
+      break;
+    }
+  }
+
+  // Any writer of the low16 after the (uncleared or cleared) mask-set that is
+  // not itself a recognized normalize can restore a nonzero mask: reject the
+  // whole site so the fallback clears it at the tensor instead.
+  for (size_t I = TensorIdx; I-- > 0;) {
+    const InternalDecodedInst &DI = Ctx.Decoded[I];
+    if (DI.Offset < Range->Begin)
+      break;
+    if (isLow16PreservingAndOnBase(DI, BaseMCReg, MRI) ||
+        isClearedMaskAndOnBase(DI, BaseMCReg, MRI))
+      break; // reached a mask-set; later writers already vetted below
+    if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS)) {
+      // A base writer between a mask-set and the tensor (walked first here)
+      // that is not the restart is an unproven low16 mutation.
+      if (!isBaseConstructionRestart(DI, BaseMCReg, MRI))
+        return TensorMaskDef::NotApplicable;
+    }
+  }
+
   bool SawMaskSetInRegion = false;
   bool RegionAlreadyCleared = false;
   bool SawAnyRegion = false;
@@ -878,19 +967,13 @@ findTensorMaskSetDefinitions(const PatchContext &Ctx, size_t TensorIdx,
 
   for (size_t I = TensorIdx; I-- > 0;) {
     const InternalDecodedInst &DI = Ctx.Decoded[I];
+    if (DI.Offset < Range->Begin)
+      break;
 
     if (isBaseConstructionRestart(DI, BaseMCReg, MRI)) {
       SawAnyRegion = true;
-      // A region whose mask-set was cleared by a prior rewrite is already
-      // satisfied and contributes no new patch (idempotence).
-      if (!SawMaskSetInRegion && !RegionAlreadyCleared) {
-        log() << "hotswap: error: tensor_load_to_lds at 0x"
-              << utohexstr(Tensor.Offset)
-              << ": descriptor construction region at 0x"
-              << utohexstr(DI.Offset)
-              << " has no low16-preserving s_and mask-set\n";
-        return std::nullopt;
-      }
+      if (!SawMaskSetInRegion && !RegionAlreadyCleared)
+        return TensorMaskDef::NotApplicable;
       if (SawMaskSetInRegion)
         MaskSets.push_back(RegionMaskSet);
       SawMaskSetInRegion = false;
@@ -898,11 +981,10 @@ findTensorMaskSetDefinitions(const PatchContext &Ctx, size_t TensorIdx,
       continue;
     }
 
-    // The last s_and touching bits [15:0] in a region decides its state: a
-    // low16-preserving literal is an uncleared mask-set to patch; an
-    // already-cleared literal marks the region done.
     if (!SawMaskSetInRegion && !RegionAlreadyCleared) {
       if (isLow16PreservingAndOnBase(DI, BaseMCReg, MRI)) {
+        if (isSccLiveAfterMaskSet(Ctx, I, FnEndIdx))
+          return TensorMaskDef::NotApplicable;
         RegionMaskSet = I;
         SawMaskSetInRegion = true;
         continue;
@@ -916,20 +998,11 @@ findTensorMaskSetDefinitions(const PatchContext &Ctx, size_t TensorIdx,
       continue;
     }
 
-    // Any other definition of the base breaks the assumption that the value
-    // reaching the tensor is the constructed descriptor whose mask we clear.
     if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS) &&
-        !isRecognizedBaseConstructionWrite(DI, BaseMCReg, MRI)) {
-      log() << "hotswap: error: tensor_load_to_lds at 0x"
-            << utohexstr(Tensor.Offset) << ": descriptor base "
-            << toAsmRegName(MRI, BaseMCReg)
-            << " is written by an unrecognized instruction at 0x"
-            << utohexstr(DI.Offset) << " (" << DI.Mnemonic << ")\n";
-      return std::nullopt;
-    }
+        !isRecognizedBaseConstructionWrite(DI, BaseMCReg, MRI))
+      return TensorMaskDef::NotApplicable;
   }
 
-  // Flush a region that reaches the start of the scan without an s_mov restart.
   if (SawMaskSetInRegion) {
     MaskSets.push_back(RegionMaskSet);
     SawAnyRegion = true;
@@ -937,23 +1010,36 @@ findTensorMaskSetDefinitions(const PatchContext &Ctx, size_t TensorIdx,
     SawAnyRegion = true;
   }
 
-  if (!SawAnyRegion) {
-    log() << "hotswap: error: tensor_load_to_lds at 0x"
-          << utohexstr(Tensor.Offset)
-          << ": no descriptor construction region found for "
-          << toAsmRegName(MRI, BaseMCReg) << "\n";
-    return std::nullopt;
+  if (!SawAnyRegion)
+    return TensorMaskDef::NotApplicable;
+
+  // The cleared descriptor is visible to every consumer, not just tensor
+  // loads. If a foreign instruction reads the base between the earliest
+  // mask-set and the tensor, defer to the at-site fallback, which restores the
+  // register when it is live. The descriptor's own construction instructions
+  // (recognized base writes) and tensor loads are not foreign observers.
+  size_t EarliestMaskSet = TensorIdx;
+  for (size_t M : MaskSets)
+    EarliestMaskSet = std::min(EarliestMaskSet, M);
+  for (size_t I = EarliestMaskSet + 1; I < TensorIdx; ++I) {
+    const InternalDecodedInst &DI = Ctx.Decoded[I];
+    if (DI.Mnemonic == "tensor_load_to_lds" ||
+        isRecognizedBaseConstructionWrite(DI, BaseMCReg, MRI))
+      continue;
+    if (instructionReadsRegister(DI, BaseMCReg, Ctx.LS))
+      return TensorMaskDef::NotApplicable;
   }
-  // Empty MaskSets with regions seen means every region is already cleared:
-  // an idempotent no-op.
-  return MaskSets;
+
+  return TensorMaskDef::Applied;
 }
 
 // Rewrite the mask literal of the s_and at \p Idx so its low 16 bits are
 // cleared, forcing the descriptor workgroup_mask to zero. The replacement is
 // the same size, so it is written directly over the original bytes: relocating
 // it into a trampoline would leave a branch where the mask-set was, defeating
-// the idempotence and reaching-definition scan on a later rewrite.
+// the idempotence and reaching-definition scan on a later rewrite. Updates the
+// decoded operand so a second tensor sharing the base sees the cleared literal
+// and does not re-patch.
 bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
@@ -970,9 +1056,10 @@ bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
     log() << "hotswap: error: tensor_load_to_lds mask clear: assembly failed "
              "or size mismatch at 0x"
           << utohexstr(DI.Offset) << ": " << Asm << "\n";
-    return failRequiredPatch(Ctx);
+    return false;
   }
   std::memcpy(Ctx.Text + DI.Offset, Bytes.data(), Bytes.size());
+  DI.Inst.getOperand(2).setImm(static_cast<int64_t>(Cleared));
 
   log() << "hotswap: tensor_load_to_lds: cleared workgroup_mask at descriptor "
            "definition 0x"
@@ -980,12 +1067,88 @@ bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
   return true;
 }
 
+// -- patchTensorMaskAtSite --------------------------------------------------
+//
+// Fallback A0 rewrite: clear the descriptor multicast bits immediately before
+// the tensor via s_pack_hh_b32_b16, saving and restoring the base through a
+// scratch SGPR when it is live after the tensor. Used when the descriptor is
+// not built by a provable in-function construction idiom (bare operand,
+// cross-function, mutated, SCC-live, or observed by other consumers).
+
+bool patchTensorMaskAtSite(PatchContext &Ctx, size_t Idx,
+                           MCRegister BaseMCReg) {
+  InternalDecodedInst &DI = Ctx.Decoded[Idx];
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  std::string BaseSreg = toAsmRegName(MRI, BaseMCReg);
+
+  std::string PackAsm = "s_pack_hh_b32_b16 " + BaseSreg + ", 0, " + BaseSreg;
+  SmallVector<uint8_t> PackBytes = assembleSingleInst(PackAsm, Ctx.LS);
+  if (PackBytes.empty()) {
+    log() << "hotswap: tensor_load_to_lds pack: assembly failed: " << PackAsm
+          << "\n";
+    return failRequiredPatch(Ctx);
+  }
+
+  bool SgprLive = isSgprLiveAfter(Ctx, Idx, BaseMCReg);
+  const uint8_t *OrigInst = Ctx.Text + DI.Offset;
+
+  if (SgprLive) {
+    std::optional<SafeSgprScratchBlock> Scratch =
+        findSafeSgprScratchBlock(Ctx, DI.Offset, /*Count=*/1, /*Alignment=*/1,
+                                 "tensor_load_to_lds descriptor save");
+    if (!Scratch) {
+      log() << "hotswap: error: tensor_load_to_lds: no scratch SGPR "
+               "available\n";
+      return failRequiredPatch(Ctx);
+    }
+
+    std::string ScratchName = "s" + std::to_string(Scratch->Base);
+    SmallVector<uint8_t> Save = assembleSingleInst(
+        "s_mov_b32 " + ScratchName + ", " + BaseSreg, Ctx.LS);
+    SmallVector<uint8_t> Restore = assembleSingleInst(
+        "s_mov_b32 " + BaseSreg + ", " + ScratchName, Ctx.LS);
+    if (Save.empty() || Restore.empty()) {
+      log() << "hotswap: error: tensor_load_to_lds: failed to assemble "
+               "descriptor save/restore through "
+            << ScratchName << "\n";
+      return failRequiredPatch(Ctx);
+    }
+
+    SmallVector<uint8_t> Replacement;
+    Replacement.append(Save.begin(), Save.end());
+    Replacement.append(PackBytes.begin(), PackBytes.end());
+    Replacement.append(OrigInst, OrigInst + DI.Size);
+    Replacement.append(Restore.begin(), Restore.end());
+    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
+      return failRequiredPatch(Ctx);
+
+    if (!commitSafeSgprScratchBlock(Ctx, DI.Offset, *Scratch,
+                                    "tensor_load_to_lds descriptor save"))
+      return failRequiredPatch(Ctx);
+    log() << "hotswap: tensor_load_to_lds: " << BaseSreg
+          << " live, save/restore via " << ScratchName << "\n";
+  } else {
+    SmallVector<uint8_t> Replacement;
+    Replacement.append(PackBytes.begin(), PackBytes.end());
+    Replacement.append(OrigInst, OrigInst + DI.Size);
+    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
+      return failRequiredPatch(Ctx);
+
+    log() << "hotswap: tensor_load_to_lds: " << BaseSreg
+          << " dead, no save/restore needed\n";
+  }
+
+  Ctx.RequiredPatchApplied = true;
+  DI.Mnemonic = "<replaced>";
+  return true;
+}
+
 // -- patchTensorLoadToLdsA0 -------------------------------------------------
 //
-// Force the group-descriptor workgroup_mask to zero at each reaching
-// descriptor definition rather than at the PC-sensitive, register-starved
-// tensor site. See the file section comment above for the construction idiom
-// and rationale.
+// Prefer clearing the group-descriptor workgroup_mask at its in-function
+// construction (no scratch, no relocation, tensor untouched). Fall back to the
+// at-site s_pack_hh rewrite when the construction cannot be proven safe. See
+// the file section comment above for the construction idiom and rationale.
 
 bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
@@ -998,24 +1161,37 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
     return failRequiredPatch(Ctx);
   }
 
-  std::optional<SmallVector<size_t>> MaskSets =
-      findTensorMaskSetDefinitions(Ctx, Idx, BaseMCReg);
-  if (!MaskSets)
-    return failRequiredPatch(Ctx);
+  if (isAlreadyTensorMaskPatched(Ctx, Idx, BaseMCReg))
+    return false;
 
-  for (size_t MaskIdx : *MaskSets) {
-    InternalDecodedInst &Mask = Ctx.Decoded[MaskIdx];
-    // Idempotent: a previously cleared literal no longer preserves low16.
-    if ((static_cast<uint64_t>(Mask.Inst.getOperand(2).getImm()) & 0xffffu) !=
-        0xffffu)
-      continue;
-    if (!clearWorkgroupMaskAtDefinition(Ctx, MaskIdx))
-      return failRequiredPatch(Ctx);
+  SmallVector<size_t> MaskSets;
+  TensorMaskDef Result =
+      findTensorMaskSetDefinitions(Ctx, Idx, BaseMCReg, MaskSets);
+  if (Result == TensorMaskDef::Applied) {
+    bool ClearedAny = false;
+    for (size_t MaskIdx : MaskSets) {
+      InternalDecodedInst &Mask = Ctx.Decoded[MaskIdx];
+      // A cleared literal (already handled, or shared and cleared by an
+      // earlier tensor this pass) contributes no new patch.
+      if ((static_cast<uint64_t>(Mask.Inst.getOperand(2).getImm()) & 0xffffu) !=
+          0xffffu)
+        continue;
+      if (!clearWorkgroupMaskAtDefinition(Ctx, MaskIdx))
+        return failRequiredPatch(Ctx);
+      ClearedAny = true;
+    }
+    DI.Mnemonic = "<replaced>";
+    // A later tensor sharing an already-cleared descriptor is a correct no-op;
+    // report no new patch so the count reflects exactly the clears applied.
+    if (!ClearedAny)
+      return false;
+    Ctx.RequiredPatchApplied = true;
+    return true;
   }
 
-  Ctx.RequiredPatchApplied = true;
-  DI.Mnemonic = "<replaced>";
-  return true;
+  // NotApplicable: the definition-time transform could not be proven safe.
+  // Use the at-site fallback, which handles bare/mutated/observed descriptors.
+  return patchTensorMaskAtSite(Ctx, Idx, BaseMCReg);
 }
 
 // -- Cluster/TDM mask helpers ------------------------------------------------
@@ -1152,8 +1328,11 @@ bool patchTensorLoadToLdsB0(PatchContext &Ctx, size_t Idx) {
   if (isAlreadyTensorMaskPatched(Ctx, Idx, BaseMCReg))
     return false;
 
+  // A known non-cluster B0 dispatch needs the same unconditional mask clear as
+  // A0. Use the at-site rewrite directly: the definition-preferring A0 entry is
+  // an A0-only transform and its in-place clear assumes the A0 dispatch model.
   if (hasKnownNonClusterDispatch(Ctx, Idx))
-    return patchTensorLoadToLdsA0(Ctx, Idx);
+    return patchTensorMaskAtSite(Ctx, Idx, BaseMCReg);
 
   SmallVector<unsigned, 8> DescriptorSgprs =
       getDescriptorSgprIndices(DI.Inst, MRI);
