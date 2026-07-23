@@ -8386,15 +8386,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  // To opt-in to faster emissary printf/fprint set -fuse-emissary-print.
-  if (!IsWindowsMSVC &&
-      Args.hasFlag(options::OPT_fuse_emissary_print,
-                   options::OPT_fno_use_emissary_print, false)) {
-    CmdArgs.push_back("-fuse-emissary-print");
-    // Tell llvm_libc_wrappers/stdio.h not to kill stderr and friends
-    CmdArgs.push_back("-D__USE_EMISSARY_PRINT__");
-  }
-
   // This needs to run after -Xclang argument forwarding to pick up the target
   // features enabled through -Xclang -target-feature flags.
   SanitizeArgs.addArgs(TC, Args, CmdArgs, InputType);
