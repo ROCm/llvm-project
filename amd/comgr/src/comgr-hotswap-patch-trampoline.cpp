@@ -38,6 +38,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 #include <optional>
 #include <string>
@@ -792,6 +793,22 @@ bool isLow16PreservingAndOnBase(const InternalDecodedInst &DI,
   return (Imm & 0xffffu) == 0xffffu;
 }
 
+// True when \p DI is s_and_b32 base, base, imm with imm[15:0] == 0, i.e. an
+// already-cleared mask-set from a prior rewrite of this object.
+bool isClearedMaskAndOnBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
+                            const MCRegisterInfo &MRI) {
+  if (DI.Mnemonic != "s_and_b32")
+    return false;
+  const MCInst &Inst = DI.Inst;
+  if (Inst.getNumOperands() < 3 || !Inst.getOperand(0).isReg() ||
+      !Inst.getOperand(1).isReg() || !Inst.getOperand(2).isImm())
+    return false;
+  if (!MRI.regsOverlap(Inst.getOperand(0).getReg(), BaseMCReg.id()) ||
+      !MRI.regsOverlap(Inst.getOperand(1).getReg(), BaseMCReg.id()))
+    return false;
+  return (static_cast<uint64_t>(Inst.getOperand(2).getImm()) & 0xffffu) == 0;
+}
+
 // True when \p DI writes \p BaseMCReg through an s_mov_b32 base, 0 that begins
 // a fresh descriptor construction region.
 bool isBaseConstructionRestart(const InternalDecodedInst &DI,
@@ -815,7 +832,8 @@ bool isRecognizedBaseConstructionWrite(const InternalDecodedInst &DI,
                                        MCRegister BaseMCReg,
                                        const MCRegisterInfo &MRI) {
   if (isBaseConstructionRestart(DI, BaseMCReg, MRI) ||
-      isLow16PreservingAndOnBase(DI, BaseMCReg, MRI))
+      isLow16PreservingAndOnBase(DI, BaseMCReg, MRI) ||
+      isClearedMaskAndOnBase(DI, BaseMCReg, MRI))
     return true;
   if (DI.Mnemonic != "s_or_b32")
     return false;
@@ -854,13 +872,18 @@ findTensorMaskSetDefinitions(const PatchContext &Ctx, size_t TensorIdx,
 
   SmallVector<size_t> MaskSets;
   bool SawMaskSetInRegion = false;
+  bool RegionAlreadyCleared = false;
+  bool SawAnyRegion = false;
   size_t RegionMaskSet = 0;
 
   for (size_t I = TensorIdx; I-- > 0;) {
     const InternalDecodedInst &DI = Ctx.Decoded[I];
 
     if (isBaseConstructionRestart(DI, BaseMCReg, MRI)) {
-      if (!SawMaskSetInRegion) {
+      SawAnyRegion = true;
+      // A region whose mask-set was cleared by a prior rewrite is already
+      // satisfied and contributes no new patch (idempotence).
+      if (!SawMaskSetInRegion && !RegionAlreadyCleared) {
         log() << "hotswap: error: tensor_load_to_lds at 0x"
               << utohexstr(Tensor.Offset)
               << ": descriptor construction region at 0x"
@@ -868,18 +891,28 @@ findTensorMaskSetDefinitions(const PatchContext &Ctx, size_t TensorIdx,
               << " has no low16-preserving s_and mask-set\n";
         return std::nullopt;
       }
-      MaskSets.push_back(RegionMaskSet);
+      if (SawMaskSetInRegion)
+        MaskSets.push_back(RegionMaskSet);
       SawMaskSetInRegion = false;
+      RegionAlreadyCleared = false;
       continue;
     }
 
-    if (isLow16PreservingAndOnBase(DI, BaseMCReg, MRI)) {
-      // Backward scan: the first low16-preserving s_and seen in a region is
-      // the last one executed, i.e. the final write to bits [15:0].
-      if (!SawMaskSetInRegion) {
+    // The last s_and touching bits [15:0] in a region decides its state: a
+    // low16-preserving literal is an uncleared mask-set to patch; an
+    // already-cleared literal marks the region done.
+    if (!SawMaskSetInRegion && !RegionAlreadyCleared) {
+      if (isLow16PreservingAndOnBase(DI, BaseMCReg, MRI)) {
         RegionMaskSet = I;
         SawMaskSetInRegion = true;
+        continue;
       }
+      if (isClearedMaskAndOnBase(DI, BaseMCReg, MRI)) {
+        RegionAlreadyCleared = true;
+        continue;
+      }
+    } else if (isLow16PreservingAndOnBase(DI, BaseMCReg, MRI) ||
+               isClearedMaskAndOnBase(DI, BaseMCReg, MRI)) {
       continue;
     }
 
@@ -896,19 +929,31 @@ findTensorMaskSetDefinitions(const PatchContext &Ctx, size_t TensorIdx,
     }
   }
 
-  if (MaskSets.empty()) {
+  // Flush a region that reaches the start of the scan without an s_mov restart.
+  if (SawMaskSetInRegion) {
+    MaskSets.push_back(RegionMaskSet);
+    SawAnyRegion = true;
+  } else if (RegionAlreadyCleared) {
+    SawAnyRegion = true;
+  }
+
+  if (!SawAnyRegion) {
     log() << "hotswap: error: tensor_load_to_lds at 0x"
           << utohexstr(Tensor.Offset)
           << ": no descriptor construction region found for "
           << toAsmRegName(MRI, BaseMCReg) << "\n";
     return std::nullopt;
   }
+  // Empty MaskSets with regions seen means every region is already cleared:
+  // an idempotent no-op.
   return MaskSets;
 }
 
 // Rewrite the mask literal of the s_and at \p Idx so its low 16 bits are
-// cleared, forcing the descriptor workgroup_mask to zero. Same-size in-place
-// edit through the assembler; no hardcoded encoding.
+// cleared, forcing the descriptor workgroup_mask to zero. The replacement is
+// the same size, so it is written directly over the original bytes: relocating
+// it into a trampoline would leave a branch where the mask-set was, defeating
+// the idempotence and reaching-definition scan on a later rewrite.
 bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
@@ -920,14 +965,14 @@ bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
   std::string Asm =
       "s_and_b32 " + Reg + ", " + Reg + ", 0x" + utohexstr(Cleared);
   SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, Ctx.LS);
-  if (Bytes.empty() || Bytes.size() != DI.Size) {
+  if (Bytes.empty() || Bytes.size() != DI.Size || DI.Offset > Ctx.TextSize ||
+      Bytes.size() > Ctx.TextSize - DI.Offset) {
     log() << "hotswap: error: tensor_load_to_lds mask clear: assembly failed "
              "or size mismatch at 0x"
           << utohexstr(DI.Offset) << ": " << Asm << "\n";
     return failRequiredPatch(Ctx);
   }
-  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Bytes))
-    return failRequiredPatch(Ctx);
+  std::memcpy(Ctx.Text + DI.Offset, Bytes.data(), Bytes.size());
 
   log() << "hotswap: tensor_load_to_lds: cleared workgroup_mask at descriptor "
            "definition 0x"
