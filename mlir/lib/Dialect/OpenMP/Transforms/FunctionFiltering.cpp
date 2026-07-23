@@ -58,8 +58,11 @@ class FunctionFilteringPass
       if (declareTargetOp && declareTargetOp.isDeclareTarget())
         declareType = declareTargetOp.getDeclareTargetDeviceType();
 
-      // Only filter host functions from device modules because the host needs
-      // to provide fallback implementations of device code.
+      // Filtering a function here means deleting it if it doesn't contain a
+      // target region. Else we explicitly set the omp.declare_target
+      // attribute. The second stage of function filtering at the MLIR to LLVM
+      // IR translation level will remove functions that contain the target
+      // region from the generated LLVM IR.
       if (declareType != omp::DeclareTargetDeviceType::host)
         return WalkResult::advance();
 
