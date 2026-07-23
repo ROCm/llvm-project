@@ -34,7 +34,7 @@ using namespace llvm;
 // WWM registers, assuming the worst case when perlane allocation consumes all
 // remaining VGPRs.
 static cl::opt<unsigned> MinNumWWMRegs(
-    "amdgpu-min-vgprs-for-wwm-regalloc", cl::init(3), cl::Hidden,
+    "amdgpu-min-vgprs-for-wwm-alloc", cl::init(3), cl::Hidden,
     cl::desc("Minimum VGPRs reserved for WWM register allocation"));
 
 namespace {
