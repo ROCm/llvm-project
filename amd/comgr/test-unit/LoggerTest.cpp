@@ -209,7 +209,7 @@ TEST(Logger, ConcurrentEmitsAreNotInterleaved) {
   const int PerThread = 200;
   std::vector<std::thread> Threads;
   for (int T = 0; T < NumThreads; ++T) {
-    Threads.emplace_back([&Log, PerThread]() {
+    Threads.emplace_back([&Log]() {
       for (int I = 0; I < PerThread; ++I)
         Log.emit(LogLevel::Error, "line");
     });
@@ -247,12 +247,12 @@ TEST(Logger, ConcurrentEmitAndSinkWritesAreSerialized) {
   const int PerThread = 200;
   std::vector<std::thread> Threads;
   for (int T = 0; T < NumThreads; ++T) {
-    Threads.emplace_back([&Log, PerThread]() {
+    Threads.emplace_back([&Log]() {
       for (int I = 0; I < PerThread; ++I)
         Log.emit(LogLevel::Error, "line");
     });
     // writeToSink writes verbatim, so the payload carries its own newline.
-    Threads.emplace_back([&Log, PerThread]() {
+    Threads.emplace_back([&Log]() {
       for (int I = 0; I < PerThread; ++I)
         Log.writeToSink("tee\n");
     });
