@@ -41,7 +41,7 @@ static cl::opt<bool> EnableSpillCFISavedRegs(
     cl::ReallyHidden, cl::init(false), cl::ZeroOrMore);
 
 static cl::opt<unsigned> MaxNumVGPRsForWwmAllocation(
-    "amdgpu-num-vgprs-for-wwm-alloc",
+    "amdgpu-max-vgprs-for-wwm-alloc",
     cl::desc("Max num VGPRs for whole-wave register allocation."),
     cl::ReallyHidden, cl::init(10));
 

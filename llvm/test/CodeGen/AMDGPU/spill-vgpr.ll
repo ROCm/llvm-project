@@ -1,7 +1,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.08 < %s | FileCheck -check-prefixes=GCN,GFX908 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX900 %s
 
-; GCN-LABEL: {{^}}max_13_vgprs:
+; GCN-LABEL: {{^}}max_14_vgprs:
 ; GFX900-NOT: SCRATCH_RSRC
 ; GFX908-NOT: SCRATCH_RSRC
 ; GFX908-DAG: v_accvgpr_write_b32 [[A_REG:a[0-9]+]], v{{[0-9]}}
@@ -17,7 +17,7 @@
 ; GCN:    VGPRBlocks: 2
 ; GFX900: NumVGPRsForWavesPerEU: 11
 ; GFX908: NumVGPRsForWavesPerEU: 10
-define amdgpu_kernel void @max_13_vgprs(ptr addrspace(1) %p) #2 {
+define amdgpu_kernel void @max_14_vgprs(ptr addrspace(1) %p) #2 {
   %tid = load volatile i32, ptr addrspace(1) poison
   %p1 = getelementptr inbounds i32, ptr addrspace(1) %p, i32 %tid
   %p2 = getelementptr inbounds i32, ptr addrspace(1) %p1, i32 4
@@ -61,8 +61,8 @@ define amdgpu_kernel void @max_13_vgprs(ptr addrspace(1) %p) #2 {
 ; GFX908-DAG: v_accvgpr_write_b32 a9, v{{[0-9]}}
 ; GCN-NOT:    a10
 
-; GFX908: NumVgprs: 10
-; GFX900: ScratchSize: 100
+; GFX908: NumVgprs: 5
+; GFX900: ScratchSize: 116
 ; GFX908: ScratchSize: 84
 ; GFX908: VGPRBlocks: 2
 ; GFX908: NumVGPRsForWavesPerEU: 10
@@ -135,13 +135,13 @@ define amdgpu_kernel void @max_256_vgprs_spill_9x32(ptr addrspace(1) %p) #1 {
 ; GFX908-NOT: buffer_
 ; GFX908-DAG: v_accvgpr_read_b32
 
-; GFX900: NumVgprs: 254
+; GFX900: NumVgprs: 252
 ; GFX908: NumVgprs: 252
 ; GFX900: ScratchSize: 164
 ; GFX908: ScratchSize: 0
-; GFX900: VGPRBlocks: 63
+; GFX900: VGPRBlocks: 62
 ; GFX908: VGPRBlocks: 62
-; GFX900: NumVGPRsForWavesPerEU: 254
+; GFX900: NumVGPRsForWavesPerEU: 252
 ; GFX908: NumVGPRsForWavesPerEU: 252
 define amdgpu_kernel void @max_256_vgprs_spill_9x32_2bb(ptr addrspace(1) %p) #1 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
@@ -182,9 +182,9 @@ st:
 ; objects and are processing VGPR spills
 
 ; GCN-LABEL: {{^}}stack_args_vgpr_spill:
+; GFX908: v_accvgpr_write_b32
 ; GFX908: buffer_load_dword v{{[0-9]+}}, off, s[0:3], s32
 ; GFX908: buffer_load_dword v{{[0-9]+}}, off, s[0:3], s32 offset:4
-; GFX908: v_accvgpr_write_b32
 define void @stack_args_vgpr_spill(<32 x float> %arg0, <32 x float> %arg1, ptr addrspace(1) %p) #1 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %p1 = getelementptr inbounds <32 x float>, ptr addrspace(1) %p, i32 %tid
@@ -221,4 +221,4 @@ declare i32 @llvm.amdgcn.workitem.id.x()
 
 attributes #0 = { nounwind "amdgpu-num-vgpr"="10" }
 attributes #1 = { "amdgpu-flat-work-group-size"="1,256" }
-attributes #2 = { nounwind "amdgpu-num-vgpr"="13" }
+attributes #2 = { nounwind "amdgpu-num-vgpr"="14" }

@@ -2496,37 +2496,37 @@ define amdgpu_kernel void @fma_v32_vs(ptr addrspace(1) %a, <32 x float> %x) {
 ; GFX900-LABEL: fma_v32_vs:
 ; GFX900:       ; %bb.0:
 ; GFX900-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; GFX900-NEXT:    v_lshlrev_b32_e32 v0, 7, v0
+; GFX900-NEXT:    v_lshlrev_b32_e32 v4, 7, v0
 ; GFX900-NEXT:    s_load_dwordx16 s[36:51], s[4:5], 0xa4
 ; GFX900-NEXT:    s_load_dwordx16 s[8:23], s[4:5], 0xe4
 ; GFX900-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX900-NEXT:    global_load_dwordx4 v[25:28], v0, s[0:1] offset:112
-; GFX900-NEXT:    global_load_dwordx4 v[29:32], v0, s[0:1] offset:96
-; GFX900-NEXT:    global_load_dwordx4 v[1:4], v0, s[0:1] offset:16
-; GFX900-NEXT:    global_load_dwordx4 v[5:8], v0, s[0:1]
-; GFX900-NEXT:    global_load_dwordx4 v[9:12], v0, s[0:1] offset:48
-; GFX900-NEXT:    global_load_dwordx4 v[13:16], v0, s[0:1] offset:32
-; GFX900-NEXT:    global_load_dwordx4 v[17:20], v0, s[0:1] offset:80
-; GFX900-NEXT:    global_load_dwordx4 v[21:24], v0, s[0:1] offset:64
+; GFX900-NEXT:    global_load_dwordx4 v[25:28], v4, s[0:1] offset:112
+; GFX900-NEXT:    global_load_dwordx4 v[29:32], v4, s[0:1] offset:96
+; GFX900-NEXT:    global_load_dwordx4 v[5:8], v4, s[0:1] offset:16
+; GFX900-NEXT:    global_load_dwordx4 v[9:12], v4, s[0:1]
+; GFX900-NEXT:    global_load_dwordx4 v[0:3], v4, s[0:1] offset:48
+; GFX900-NEXT:    global_load_dwordx4 v[13:16], v4, s[0:1] offset:32
+; GFX900-NEXT:    global_load_dwordx4 v[17:20], v4, s[0:1] offset:80
+; GFX900-NEXT:    global_load_dwordx4 v[21:24], v4, s[0:1] offset:64
 ; GFX900-NEXT:    s_waitcnt vmcnt(5)
-; GFX900-NEXT:    v_fma_f32 v4, v4, s43, s43
-; GFX900-NEXT:    v_fma_f32 v3, v3, s42, s42
-; GFX900-NEXT:    v_fma_f32 v2, v2, s41, s41
-; GFX900-NEXT:    v_fma_f32 v1, v1, s40, s40
+; GFX900-NEXT:    v_fma_f32 v8, v8, s43, s43
+; GFX900-NEXT:    v_fma_f32 v7, v7, s42, s42
+; GFX900-NEXT:    v_fma_f32 v6, v6, s41, s41
+; GFX900-NEXT:    v_fma_f32 v5, v5, s40, s40
 ; GFX900-NEXT:    v_fma_f32 v32, v32, s19, s19
 ; GFX900-NEXT:    v_fma_f32 v31, v31, s18, s18
 ; GFX900-NEXT:    v_fma_f32 v30, v30, s17, s17
 ; GFX900-NEXT:    v_fma_f32 v29, v29, s16, s16
 ; GFX900-NEXT:    s_waitcnt vmcnt(4)
-; GFX900-NEXT:    v_fma_f32 v8, v8, s39, s39
-; GFX900-NEXT:    v_fma_f32 v7, v7, s38, s38
-; GFX900-NEXT:    v_fma_f32 v6, v6, s37, s37
-; GFX900-NEXT:    v_fma_f32 v5, v5, s36, s36
+; GFX900-NEXT:    v_fma_f32 v12, v12, s39, s39
+; GFX900-NEXT:    v_fma_f32 v11, v11, s38, s38
+; GFX900-NEXT:    v_fma_f32 v10, v10, s37, s37
+; GFX900-NEXT:    v_fma_f32 v9, v9, s36, s36
 ; GFX900-NEXT:    s_waitcnt vmcnt(3)
-; GFX900-NEXT:    v_fma_f32 v12, v12, s51, s51
-; GFX900-NEXT:    v_fma_f32 v11, v11, s50, s50
-; GFX900-NEXT:    v_fma_f32 v10, v10, s49, s49
-; GFX900-NEXT:    v_fma_f32 v9, v9, s48, s48
+; GFX900-NEXT:    v_fma_f32 v3, v3, s51, s51
+; GFX900-NEXT:    v_fma_f32 v2, v2, s50, s50
+; GFX900-NEXT:    v_fma_f32 v1, v1, s49, s49
+; GFX900-NEXT:    v_fma_f32 v0, v0, s48, s48
 ; GFX900-NEXT:    s_waitcnt vmcnt(2)
 ; GFX900-NEXT:    v_fma_f32 v16, v16, s47, s47
 ; GFX900-NEXT:    v_fma_f32 v15, v15, s46, s46
@@ -2546,14 +2546,14 @@ define amdgpu_kernel void @fma_v32_vs(ptr addrspace(1) %a, <32 x float> %x) {
 ; GFX900-NEXT:    v_fma_f32 v27, v27, s22, s22
 ; GFX900-NEXT:    v_fma_f32 v26, v26, s21, s21
 ; GFX900-NEXT:    v_fma_f32 v25, v25, s20, s20
-; GFX900-NEXT:    global_store_dwordx4 v0, v[29:32], s[0:1] offset:96
-; GFX900-NEXT:    global_store_dwordx4 v0, v[25:28], s[0:1] offset:112
-; GFX900-NEXT:    global_store_dwordx4 v0, v[21:24], s[0:1] offset:64
-; GFX900-NEXT:    global_store_dwordx4 v0, v[17:20], s[0:1] offset:80
-; GFX900-NEXT:    global_store_dwordx4 v0, v[13:16], s[0:1] offset:32
-; GFX900-NEXT:    global_store_dwordx4 v0, v[9:12], s[0:1] offset:48
-; GFX900-NEXT:    global_store_dwordx4 v0, v[5:8], s[0:1]
-; GFX900-NEXT:    global_store_dwordx4 v0, v[1:4], s[0:1] offset:16
+; GFX900-NEXT:    global_store_dwordx4 v4, v[29:32], s[0:1] offset:96
+; GFX900-NEXT:    global_store_dwordx4 v4, v[25:28], s[0:1] offset:112
+; GFX900-NEXT:    global_store_dwordx4 v4, v[21:24], s[0:1] offset:64
+; GFX900-NEXT:    global_store_dwordx4 v4, v[17:20], s[0:1] offset:80
+; GFX900-NEXT:    global_store_dwordx4 v4, v[13:16], s[0:1] offset:32
+; GFX900-NEXT:    global_store_dwordx4 v4, v[0:3], s[0:1] offset:48
+; GFX900-NEXT:    global_store_dwordx4 v4, v[9:12], s[0:1]
+; GFX900-NEXT:    global_store_dwordx4 v4, v[5:8], s[0:1] offset:16
 ; GFX900-NEXT:    s_endpgm
 ;
 ; PACKED-SDAG-LABEL: fma_v32_vs:

@@ -39,7 +39,7 @@ define amdgpu_kernel void @f(ptr %ptr, i32 %arg) "amdgpu-flat-work-group-size"="
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %gep = getelementptr i32, ptr %ptr, i32 %tid
   %val = load i32, ptr %gep
-  call void asm "; clobber", "~{v[0:31]},~{v[32:63]},~{v[64:95]},~{v[96:127]},~{v[128:159]},~{v[160:191]},~{v[192:223]},~{v224},~{v225},~{v226},~{v227},~{v228},~{v229},~{v230},~{v231},~{v232},~{v233},~{v234},~{v235},~{v236},~{v237},~{v238},~{v239},~{v240},~{v241},~{v242},~{v243},~{v244},~{v245},~{v246},~{v247},~{v248},~{v249},~{v250},~{v251},~{v252},~{v253},~{memory}" ()
+  call void asm "; clobber", "~{v[0:31]},~{v[32:63]},~{v[64:95]},~{v[96:127]},~{v[128:159]},~{v[160:191]},~{v[192:223]},~{v224},~{v225},~{v226},~{v227},~{v228},~{v229},~{v230},~{v231},~{v232},~{v233},~{v234},~{v235},~{v236},~{v237},~{v238},~{v239},~{v240},~{v241},~{v242},~{v243},~{v244},~{v245},~{v246},~{v247},~{v248},~{v249},~{v250},~{v251},~{v252},~{memory}" ()
   %cond = trunc i32 %arg to i1
   br i1 %cond, label %true, label %false
 true:

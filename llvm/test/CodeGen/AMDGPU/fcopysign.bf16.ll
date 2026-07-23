@@ -2288,12 +2288,12 @@ define <32 x bfloat> @v_copysign_v32bf16(<32 x bfloat> %mag, <32 x bfloat> %sign
 ; GCN-NEXT:    buffer_load_dword v42, off, s[0:3], s32 offset:40 ; 4-byte Folded Reload
 ; GCN-NEXT:    buffer_load_dword v41, off, s[0:3], s32 offset:44 ; 4-byte Folded Reload
 ; GCN-NEXT:    buffer_load_dword v40, off, s[0:3], s32 offset:48 ; 4-byte Folded Reload
-; GCN-NEXT:    buffer_load_dword v31, off, s[0:3], s32
-; GCN-NEXT:    v_and_b32_e32 v32, 0x8000, v30
+; GCN-NEXT:    buffer_load_dword v32, off, s[0:3], s32
+; GCN-NEXT:    v_and_b32_e32 v31, 0x8000, v30
 ; GCN-NEXT:    v_and_b32_e32 v33, 0x7fff, v14
 ; GCN-NEXT:    v_and_b32_e32 v34, 0x8000, v29
 ; GCN-NEXT:    v_and_b32_e32 v35, 0x7fff, v13
-; GCN-NEXT:    v_or_b32_e32 v32, v33, v32
+; GCN-NEXT:    v_or_b32_e32 v31, v33, v31
 ; GCN-NEXT:    v_and_b32_e32 v33, 0x8000, v16
 ; GCN-NEXT:    v_or_b32_e32 v34, v35, v34
 ; GCN-NEXT:    v_and_b32_e32 v35, 0x7fff, v0
@@ -2369,10 +2369,10 @@ define <32 x bfloat> @v_copysign_v32bf16(<32 x bfloat> %mag, <32 x bfloat> %sign
 ; GCN-NEXT:    v_lshlrev_b32_e32 v8, 16, v8
 ; GCN-NEXT:    v_lshlrev_b32_e32 v9, 16, v9
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    v_and_b32_e32 v35, 0x8000, v31
-; GCN-NEXT:    v_lshrrev_b32_e32 v31, 16, v31
-; GCN-NEXT:    v_and_b32_e32 v31, 0x8000, v31
-; GCN-NEXT:    v_or_b32_e32 v15, v15, v31
+; GCN-NEXT:    v_and_b32_e32 v35, 0x8000, v32
+; GCN-NEXT:    v_lshrrev_b32_e32 v32, 16, v32
+; GCN-NEXT:    v_and_b32_e32 v32, 0x8000, v32
+; GCN-NEXT:    v_or_b32_e32 v15, v15, v32
 ; GCN-NEXT:    v_or_b32_e32 v35, v37, v35
 ; GCN-NEXT:    v_lshlrev_b32_e32 v10, 16, v10
 ; GCN-NEXT:    v_lshlrev_b32_e32 v11, 16, v11
@@ -2393,7 +2393,7 @@ define <32 x bfloat> @v_copysign_v32bf16(<32 x bfloat> %mag, <32 x bfloat> %sign
 ; GCN-NEXT:    v_or_b32_e32 v11, v38, v11
 ; GCN-NEXT:    v_or_b32_e32 v12, v36, v12
 ; GCN-NEXT:    v_or_b32_e32 v13, v34, v13
-; GCN-NEXT:    v_or_b32_e32 v14, v32, v14
+; GCN-NEXT:    v_or_b32_e32 v14, v31, v14
 ; GCN-NEXT:    v_or_b32_e32 v15, v35, v15
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2463,12 +2463,12 @@ define <32 x bfloat> @v_copysign_v32bf16(<32 x bfloat> %mag, <32 x bfloat> %sign
 ; GFX7-NEXT:    buffer_load_dword v42, off, s[0:3], s32 offset:40 ; 4-byte Folded Reload
 ; GFX7-NEXT:    buffer_load_dword v41, off, s[0:3], s32 offset:44 ; 4-byte Folded Reload
 ; GFX7-NEXT:    buffer_load_dword v40, off, s[0:3], s32 offset:48 ; 4-byte Folded Reload
-; GFX7-NEXT:    buffer_load_dword v31, off, s[0:3], s32
-; GFX7-NEXT:    v_and_b32_e32 v32, 0x8000, v30
+; GFX7-NEXT:    buffer_load_dword v32, off, s[0:3], s32
+; GFX7-NEXT:    v_and_b32_e32 v31, 0x8000, v30
 ; GFX7-NEXT:    v_and_b32_e32 v33, 0x7fff, v14
 ; GFX7-NEXT:    v_and_b32_e32 v34, 0x8000, v29
 ; GFX7-NEXT:    v_and_b32_e32 v35, 0x7fff, v13
-; GFX7-NEXT:    v_or_b32_e32 v32, v33, v32
+; GFX7-NEXT:    v_or_b32_e32 v31, v33, v31
 ; GFX7-NEXT:    v_and_b32_e32 v33, 0x8000, v16
 ; GFX7-NEXT:    v_or_b32_e32 v34, v35, v34
 ; GFX7-NEXT:    v_and_b32_e32 v35, 0x7fff, v0
@@ -2544,10 +2544,10 @@ define <32 x bfloat> @v_copysign_v32bf16(<32 x bfloat> %mag, <32 x bfloat> %sign
 ; GFX7-NEXT:    v_lshlrev_b32_e32 v8, 16, v8
 ; GFX7-NEXT:    v_lshlrev_b32_e32 v9, 16, v9
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
-; GFX7-NEXT:    v_and_b32_e32 v35, 0x8000, v31
-; GFX7-NEXT:    v_lshrrev_b32_e32 v31, 16, v31
-; GFX7-NEXT:    v_and_b32_e32 v31, 0x8000, v31
-; GFX7-NEXT:    v_or_b32_e32 v15, v15, v31
+; GFX7-NEXT:    v_and_b32_e32 v35, 0x8000, v32
+; GFX7-NEXT:    v_lshrrev_b32_e32 v32, 16, v32
+; GFX7-NEXT:    v_and_b32_e32 v32, 0x8000, v32
+; GFX7-NEXT:    v_or_b32_e32 v15, v15, v32
 ; GFX7-NEXT:    v_or_b32_e32 v35, v37, v35
 ; GFX7-NEXT:    v_lshlrev_b32_e32 v10, 16, v10
 ; GFX7-NEXT:    v_lshlrev_b32_e32 v11, 16, v11
@@ -2568,7 +2568,7 @@ define <32 x bfloat> @v_copysign_v32bf16(<32 x bfloat> %mag, <32 x bfloat> %sign
 ; GFX7-NEXT:    v_or_b32_e32 v11, v38, v11
 ; GFX7-NEXT:    v_or_b32_e32 v12, v36, v12
 ; GFX7-NEXT:    v_or_b32_e32 v13, v34, v13
-; GFX7-NEXT:    v_or_b32_e32 v14, v32, v14
+; GFX7-NEXT:    v_or_b32_e32 v14, v31, v14
 ; GFX7-NEXT:    v_or_b32_e32 v15, v35, v15
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
 ;

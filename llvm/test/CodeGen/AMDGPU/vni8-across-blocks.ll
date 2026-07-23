@@ -274,8 +274,8 @@ define amdgpu_kernel void @v256i8_liveout(ptr addrspace(1) %src1, ptr addrspace(
 ; GFX942-NEXT:    global_load_dwordx4 v[10:13], v1, s[0:1] offset:160
 ; GFX942-NEXT:    global_load_dwordx4 v[6:9], v1, s[0:1] offset:144
 ; GFX942-NEXT:    global_load_dwordx4 v[2:5], v1, s[0:1] offset:128
-; GFX942-NEXT:    global_load_dwordx4 a[0:3], v1, s[0:1] offset:112
-; GFX942-NEXT:    global_load_dwordx4 v[58:61], v1, s[0:1] offset:96
+; GFX942-NEXT:    global_load_dwordx4 a[4:7], v1, s[0:1] offset:112
+; GFX942-NEXT:    global_load_dwordx4 a[0:3], v1, s[0:1] offset:96
 ; GFX942-NEXT:    global_load_dwordx4 v[54:57], v1, s[0:1] offset:80
 ; GFX942-NEXT:    global_load_dwordx4 v[50:53], v1, s[0:1] offset:64
 ; GFX942-NEXT:    global_load_dwordx4 v[46:49], v1, s[0:1] offset:48
@@ -296,8 +296,8 @@ define amdgpu_kernel void @v256i8_liveout(ptr addrspace(1) %src1, ptr addrspace(
 ; GFX942-NEXT:    global_load_dwordx4 v[10:13], v0, s[2:3] offset:160
 ; GFX942-NEXT:    global_load_dwordx4 v[6:9], v0, s[2:3] offset:144
 ; GFX942-NEXT:    global_load_dwordx4 v[2:5], v0, s[2:3] offset:128
-; GFX942-NEXT:    global_load_dwordx4 a[0:3], v0, s[2:3] offset:112
-; GFX942-NEXT:    global_load_dwordx4 v[58:61], v0, s[2:3] offset:96
+; GFX942-NEXT:    global_load_dwordx4 a[4:7], v0, s[2:3] offset:112
+; GFX942-NEXT:    global_load_dwordx4 a[0:3], v0, s[2:3] offset:96
 ; GFX942-NEXT:    global_load_dwordx4 v[54:57], v0, s[2:3] offset:80
 ; GFX942-NEXT:    global_load_dwordx4 v[50:53], v0, s[2:3] offset:64
 ; GFX942-NEXT:    global_load_dwordx4 v[46:49], v0, s[2:3] offset:48
@@ -307,9 +307,9 @@ define amdgpu_kernel void @v256i8_liveout(ptr addrspace(1) %src1, ptr addrspace(
 ; GFX942-NEXT:  .LBB6_2: ; %bb.2
 ; GFX942-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX942-NEXT:    s_waitcnt vmcnt(7)
-; GFX942-NEXT:    global_store_dwordx4 v1, a[0:3], s[6:7] offset:112
+; GFX942-NEXT:    global_store_dwordx4 v1, a[4:7], s[6:7] offset:112
 ; GFX942-NEXT:    s_waitcnt vmcnt(7)
-; GFX942-NEXT:    global_store_dwordx4 v1, v[58:61], s[6:7] offset:96
+; GFX942-NEXT:    global_store_dwordx4 v1, a[0:3], s[6:7] offset:96
 ; GFX942-NEXT:    s_waitcnt vmcnt(7)
 ; GFX942-NEXT:    global_store_dwordx4 v1, v[54:57], s[6:7] offset:80
 ; GFX942-NEXT:    s_waitcnt vmcnt(7)

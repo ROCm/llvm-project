@@ -22,7 +22,7 @@
 ; CHECK-LABEL: {{^}}call_72xi32:
 ; GFX11-PAL:    NumSgprs: 40
 ; GFX11-PAL-GCNTRACKERS:    NumSgprs: 37
-; GFX11-PAL:    NumVgprs: 63
+; GFX11-PAL:    NumVgprs: 60
 ; GFX11-PAL-GCNTRACKERS:    NumVgprs: 62
 ; GFX11-PAL:    ScratchSize: 2792
 ; GFX11-PAL-GCNTRACKERS:    ScratchSize: 2808

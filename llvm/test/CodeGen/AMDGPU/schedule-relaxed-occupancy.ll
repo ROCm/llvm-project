@@ -9,11 +9,11 @@
 ; CHECK-LABEL: {{^}}load_fma_store:
 ; OCC:    NumVgprs: 24
 ; OCC-GCNTRACKER:    NumVgprs: 26
-; RELAX:    NumVgprs: 62
+; RELAX:    NumVgprs: 61
 ; RELAX-GCNTRACKER:    NumVgprs: 60
 ; OCC: NumVGPRsForWavesPerEU: 24
 ; OCC-GCNTRACKER: NumVGPRsForWavesPerEU: 26
-; RELAX: NumVGPRsForWavesPerEU: 62
+; RELAX: NumVGPRsForWavesPerEU: 61
 ; RELAX-GCNTRACKER: NumVGPRsForWavesPerEU: 60
 ; OCC:    Occupancy: 10
 ; OCC-GCNTRACKER:    Occupancy: 9

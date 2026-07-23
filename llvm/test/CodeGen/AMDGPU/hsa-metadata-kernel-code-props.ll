@@ -97,7 +97,7 @@ entry:
 
 ; CHECK:   .name:       num_spilled_vgprs
 ; CHECK:   .symbol:     num_spilled_vgprs.kd
-; CHECK:   .vgpr_spill_count: {{15|16}}
+; CHECK:   .vgpr_spill_count: {{16|17}}
 define amdgpu_kernel void @num_spilled_vgprs() #1 {
   %val0 = load volatile float, ptr addrspace(1) @var
   %val1 = load volatile float, ptr addrspace(1) @var

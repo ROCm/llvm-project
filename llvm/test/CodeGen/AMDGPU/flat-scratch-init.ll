@@ -152,8 +152,8 @@ define amdgpu_kernel void @test(ptr addrspace(1) %out, i32 %in) {
 ; GCN-NEXT:    ;;#ASMSTART
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    v_readlane_b32 s0, v0, 0
-; GCN-NEXT:    v_mov_b32_e32 v2, vcc_lo
-; GCN-NEXT:    v_mov_b32_e32 v3, 0
+; GCN-NEXT:    v_mov_b32_e32 v3, vcc_lo
+; GCN-NEXT:    v_mov_b32_e32 v4, 0
 ; GCN-NEXT:    v_readlane_b32 s1, v0, 1
 ; GCN-NEXT:    ;;#ASMSTART
 ; GCN-NEXT:    ;;#ASMEND
@@ -217,7 +217,7 @@ define amdgpu_kernel void @test(ptr addrspace(1) %out, i32 %in) {
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    ;;#ASMSTART
 ; GCN-NEXT:    ;;#ASMEND
-; GCN-NEXT:    global_store_dword v3, v2, s[0:1]
+; GCN-NEXT:    global_store_dword v4, v3, s[0:1]
 ; GCN-NEXT:    s_endpgm
   call void asm sideeffect "", "~{s[0:7]}" ()
   call void asm sideeffect "", "~{s[8:15]}" ()
@@ -233,7 +233,7 @@ define amdgpu_kernel void @test(ptr addrspace(1) %out, i32 %in) {
   call void asm sideeffect "", "~{s[88:95]}" ()
   call void asm sideeffect "", "~{s[96:103]}" ()
   call void asm sideeffect "", "~{s[104:105]}" ()
-  call void asm sideeffect "", "~{v[2:7]}" ()
+  call void asm sideeffect "", "~{v[3:7]}" ()
   call void asm sideeffect "", "~{v[8:15]}" ()
   call void asm sideeffect "", "~{v[16:23]}" ()
   call void asm sideeffect "", "~{v[24:31]}" ()
