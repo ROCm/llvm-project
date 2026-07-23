@@ -782,7 +782,8 @@ bool isLow16PreservingAndOnBase(const InternalDecodedInst &DI,
   if (DI.Inst.getOpcode() != LS.SAndB32Opcode)
     return false;
   const MCInst &Inst = DI.Inst;
-  if (!LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
+  if (!Inst.getOperand(2).isImm() ||
+      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
                            BaseMCReg) ||
       !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(1).getReg()), BaseMCReg))
     return false;
@@ -797,7 +798,8 @@ bool isClearedMaskAndOnBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
   if (DI.Inst.getOpcode() != LS.SAndB32Opcode)
     return false;
   const MCInst &Inst = DI.Inst;
-  if (!LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
+  if (!Inst.getOperand(2).isImm() ||
+      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
                            BaseMCReg) ||
       !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(1).getReg()), BaseMCReg))
     return false;
@@ -1253,9 +1255,11 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
     for (size_t MaskIdx : MaskSets) {
       InternalDecodedInst &Mask = Ctx.Decoded[MaskIdx];
       // A cleared literal (already handled, or shared and cleared by an
-      // earlier tensor this pass) contributes no new patch.
-      if ((static_cast<uint64_t>(Mask.Inst.getOperand(2).getImm()) & 0xffffu) !=
-          0xffffu)
+      // earlier tensor this pass) contributes no new patch. Mask-sets are
+      // always immediate-form s_and by construction; guard defensively.
+      if (!Mask.Inst.getOperand(2).isImm() ||
+          (static_cast<uint64_t>(Mask.Inst.getOperand(2).getImm()) & 0xffffu) !=
+              0xffffu)
         continue;
       if (!clearWorkgroupMaskAtDefinition(Ctx, MaskIdx))
         return failRequiredPatch(Ctx);
