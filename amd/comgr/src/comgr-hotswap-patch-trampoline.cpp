@@ -844,6 +844,27 @@ bool isRecognizedBaseConstructionWrite(const InternalDecodedInst &DI,
          MRI.regsOverlap(Inst.getOperand(1).getReg(), BaseMCReg.id());
 }
 
+// True when \p DI writes \p BaseMCReg but provably leaves bits [15:0]
+// unchanged or zero: an s_and base, base, 0xNNNN* (any AND can only clear
+// bits) or an s_or base, base, imm whose low 16 bits are zero. Such writers
+// are part of the construction after the mask-set and cannot restore a nonzero
+// workgroup_mask, so they do not disqualify the definition-time clear.
+bool writesBasePreservingZeroLow16(const InternalDecodedInst &DI,
+                                   MCRegister BaseMCReg,
+                                   const MCRegisterInfo &MRI) {
+  const MCInst &Inst = DI.Inst;
+  if (Inst.getNumOperands() < 3 || !Inst.getOperand(0).isReg() ||
+      !Inst.getOperand(1).isReg() ||
+      !MRI.regsOverlap(Inst.getOperand(0).getReg(), BaseMCReg.id()) ||
+      !MRI.regsOverlap(Inst.getOperand(1).getReg(), BaseMCReg.id()))
+    return false;
+  if (DI.Mnemonic == "s_and_b32")
+    return true; // AND can only clear bits, never set low16
+  if (DI.Mnemonic == "s_or_b32" && Inst.getOperand(2).isImm())
+    return (static_cast<uint64_t>(Inst.getOperand(2).getImm()) & 0xffffu) == 0;
+  return false;
+}
+
 // Return true if \p DI writes \p BaseMCReg (defines its value).
 bool instructionDefinesBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
                             const LLVMState &LS) {
@@ -942,20 +963,21 @@ TensorMaskDef findTensorMaskSetDefinitions(const PatchContext &Ctx,
     }
   }
 
-  // Any writer of the low16 after the (uncleared or cleared) mask-set that is
-  // not itself a recognized normalize can restore a nonzero mask: reject the
-  // whole site so the fallback clears it at the tensor instead.
+  // A base writer between the mask-set and the tensor that can set nonzero
+  // low16 bits (e.g. s_or base, base, sN) would restore the multicast mask
+  // after the clear: reject the site so the fallback handles it. Writers that
+  // provably keep low16 zero (further s_and, or s_or with a zero low half) are
+  // part of the construction and are fine.
   for (size_t I = TensorIdx; I-- > 0;) {
     const InternalDecodedInst &DI = Ctx.Decoded[I];
     if (DI.Offset < Range->Begin)
       break;
     if (isLow16PreservingAndOnBase(DI, BaseMCReg, MRI) ||
         isClearedMaskAndOnBase(DI, BaseMCReg, MRI))
-      break; // reached a mask-set; later writers already vetted below
+      break; // reached the mask-set; earlier writers are vetted by the region
     if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS)) {
-      // A base writer between a mask-set and the tensor (walked first here)
-      // that is not the restart is an unproven low16 mutation.
-      if (!isBaseConstructionRestart(DI, BaseMCReg, MRI))
+      if (!isBaseConstructionRestart(DI, BaseMCReg, MRI) &&
+          !writesBasePreservingZeroLow16(DI, BaseMCReg, MRI))
         return TensorMaskDef::NotApplicable;
     }
   }
