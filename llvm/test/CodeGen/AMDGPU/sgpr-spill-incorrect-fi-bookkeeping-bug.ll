@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=amdgpu9.00--amdhsa < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00--amdhsa < %s | FileCheck %s
 
 ; This tests for a bug that caused a crash in SIRegisterInfo::spillSGPR()
 ; which was due to incorrect book-keeping of removed dead frame indices.
@@ -53,4 +53,4 @@ define amdgpu_kernel void @kernel0(ptr addrspace(1) %out, i32 %in) #1 {
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind "amdgpu-waves-per-eu"="10,10" }
+attributes #1 = { nounwind "amdgpu-waves-per-eu"="9,9" }
