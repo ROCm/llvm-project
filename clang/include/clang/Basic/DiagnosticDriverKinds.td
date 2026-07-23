@@ -935,11 +935,6 @@ let Component = "Driver" in {
       : Warning<"[AMD] proprietary optimization compiler has been removed">,
         InGroup<UnusedCommandLineArgument>;
 
-  def warn_drv_amd_opt_not_found
-      : Warning<"[AMD] proprietary optimization compiler installation was not "
-                "found">,
-        InGroup<UnusedCommandLineArgument>;
-
   def warn_drv_moutline_unsupported_opt
       : Warning<"'%0' does not support '-moutline'; flag ignored">,
         InGroup<OptionIgnored>;
