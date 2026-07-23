@@ -3281,11 +3281,6 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
       TrappingMath = TrappingMathPresent = false;
       if (Val == "ignore" || Val == "maytrap") {
         FPExceptionBehavior = Val;
-        // AOCC Begin
-        if (Val == "maytrap") {
-	  ;
-        }
-        // AOCC End
       } else if (Val == "strict") {
         FPExceptionBehavior = Val;
         TrappingMath = TrappingMathPresent = true;

@@ -794,10 +794,6 @@ def warn_drv_global_isel_incomplete_opt : Warning<
   "-fglobal-isel support is incomplete for this architecture at the current optimization level">,
   InGroup<GlobalISel>;
 
-def warn_drv_amd_opt_removed : Warning<
-  "[AMD] proprietary optimization compiler has been removed">,
-  InGroup<UnusedCommandLineArgument>;
-
 def warn_drv_moutline_unsupported_opt : Warning<
   "'%0' does not support '-moutline'; flag ignored">,
   InGroup<OptionIgnored>;
