@@ -1,7 +1,7 @@
-!RUN: %flang_fc1 -emit-hlfir -fopenmp -fopenmp-version=50 %s -o - | FileCheck %s
-!RUN: %flang_fc1 -emit-hlfir -fopenmp -fopenmp-version=50 -fopenmp-is-target-device %s -o - | FileCheck %s  --check-prefix=DEVICE
-!RUN: bbc -emit-hlfir -fopenmp -fopenmp-version=50 %s -o - | FileCheck %s
-!RUN: bbc -emit-hlfir -fopenmp -fopenmp-version=50 -fopenmp-is-target-device %s -o - | FileCheck %s --check-prefix=DEVICE
+!RUN: %flang_fc1 -emit-hlfir -fopenmp -fopenmp-version=50 %s -o - | tco -test-gen | FileCheck %s
+!RUN: %flang_fc1 -emit-hlfir -fopenmp -fopenmp-version=50 -fopenmp-is-target-device %s -o - | tco -test-gen | FileCheck %s  --check-prefix=DEVICE
+!RUN: bbc -emit-hlfir -fopenmp -fopenmp-version=50 %s -o - | tco -test-gen | FileCheck %s
+!RUN: bbc -emit-hlfir -fopenmp -fopenmp-version=50 -fopenmp-is-target-device %s -o - | tco -test-gen | FileCheck %s --check-prefix=DEVICE
 
 program mb
    interface
@@ -14,8 +14,19 @@ program mb
       end subroutine
    end interface
 
+   integer :: tmp
+
+   tmp = target_function(.true.)
+   tmp = target_function_twice_host()
+   tmp = target_function_test_host()
+   !$omp target
+      tmp = target_function_twice_device()
+      tmp = target_function_test()
+      tmp = target_function_test_device()
+   !$omp end target
+
    contains
-   ! CHECK-LABEL: func.func private @_QFPimplicitly_captured(
+   ! CHECK-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured(
    ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured(toggle) result(k)
       integer :: i, j, k
@@ -29,7 +40,7 @@ program mb
       end if
    end function implicitly_captured
 
-   ! CHECK-LABEL: func.func private @_QFPtarget_function(
+   ! CHECK-LABEL: llvm.func{{.*}} @_QFPtarget_function(
    ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
    function target_function(toggle) result(i)
    !$omp declare target
@@ -40,7 +51,7 @@ program mb
 
    !! -----
 
-   ! CHECK-LABEL: func.func private @_QFPimplicitly_captured_twice()
+   ! CHECK-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured_twice()
    ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_twice() result(k)
       integer :: i
@@ -48,7 +59,7 @@ program mb
       k = i
    end function implicitly_captured_twice
 
-   ! CHECK-LABEL: func.func private @_QFPtarget_function_twice_host()
+   ! CHECK-LABEL: llvm.func{{.*}} @_QFPtarget_function_twice_host()
    ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (host), capture_clause = (to), automap = false>{{.*}}}
    function target_function_twice_host() result(i)
    !$omp declare target to(target_function_twice_host) device_type(host)
@@ -56,7 +67,7 @@ program mb
       i = implicitly_captured_twice()
    end function target_function_twice_host
 
-   ! DEVICE-LABEL: func.func @_QFPtarget_function_twice_device()
+   ! DEVICE-LABEL: llvm.func{{.*}} @_QFPtarget_function_twice_device()
    ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}}
    function target_function_twice_device() result(i)
    !$omp declare target to(target_function_twice_device) device_type(nohost)
@@ -66,7 +77,7 @@ program mb
 
    !! -----
 
-   ! DEVICE-LABEL: func.func @_QFPimplicitly_captured_nest()
+   ! DEVICE-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured_nest()
    ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_nest() result(k)
       integer :: i
@@ -74,13 +85,13 @@ program mb
       k = i
    end function implicitly_captured_nest
 
-   ! DEVICE-LABEL: func.func @_QFPimplicitly_captured_one()
+   ! DEVICE-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured_one()
    ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to){{.*}}}
    function implicitly_captured_one() result(k)
       k = implicitly_captured_nest()
    end function implicitly_captured_one
 
-   ! DEVICE-LABEL: func.func @_QFPimplicitly_captured_two()
+   ! DEVICE-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured_two()
    ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_two() result(k)
       integer :: i
@@ -88,7 +99,7 @@ program mb
       k = i
    end function implicitly_captured_two
 
-   ! DEVICE-LABEL: func.func @_QFPtarget_function_test()
+   ! DEVICE-LABEL: llvm.func{{.*}} @_QFPtarget_function_test()
    ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}}
    function target_function_test() result(j)
    !$omp declare target to(target_function_test) device_type(nohost)
@@ -99,7 +110,7 @@ program mb
 
    !! -----
 
-   ! CHECK-LABEL: func.func private @_QFPimplicitly_captured_nest_twice()
+   ! CHECK-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured_nest_twice()
    ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_nest_twice() result(k)
       integer :: i
@@ -107,13 +118,13 @@ program mb
       k = i
    end function implicitly_captured_nest_twice
 
-   ! CHECK-LABEL: func.func private @_QFPimplicitly_captured_one_twice()
+   ! CHECK-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured_one_twice()
    ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_one_twice() result(k)
       k = implicitly_captured_nest_twice()
    end function implicitly_captured_one_twice
 
-   ! CHECK-LABEL: func.func private @_QFPimplicitly_captured_two_twice()
+   ! CHECK-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured_two_twice()
    ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_two_twice() result(k)
       integer :: i
@@ -121,7 +132,7 @@ program mb
       k = i
    end function implicitly_captured_two_twice
 
-   ! DEVICE-LABEL: func.func @_QFPtarget_function_test_device()
+   ! DEVICE-LABEL: llvm.func{{.*}} @_QFPtarget_function_test_device()
    ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}}
    function target_function_test_device() result(j)
       !$omp declare target to(target_function_test_device) device_type(nohost)
@@ -130,7 +141,7 @@ program mb
       j = implicitly_captured_two_twice() + i
    end function target_function_test_device
 
-   ! CHECK-LABEL: func.func private @_QFPtarget_function_test_host()
+   ! CHECK-LABEL: llvm.func{{.*}} @_QFPtarget_function_test_host()
    ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (host), capture_clause = (to), automap = false>{{.*}}}
    function target_function_test_host() result(j)
       !$omp declare target to(target_function_test_host) device_type(host)
@@ -143,7 +154,7 @@ end program mb
 
 !! -----
 
-! DEVICE-NOT: func.func @_QPimplicitly_captured_with_dev_type_recursive()
+! DEVICE-NOT: llvm.func @_QPimplicitly_captured_with_dev_type_recursive()
 recursive function implicitly_captured_with_dev_type_recursive(increment) result(k)
 !$omp declare target to(implicitly_captured_with_dev_type_recursive) device_type(host)
    integer :: increment, k
@@ -154,7 +165,7 @@ recursive function implicitly_captured_with_dev_type_recursive(increment) result
    end if
 end function implicitly_captured_with_dev_type_recursive
 
-! DEVICE-LABEL: func.func @_QPtarget_function_with_dev_type_recurse()
+! DEVICE-LABEL: llvm.func @_QPtarget_function_with_dev_type_recurse()
 ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}}
 function target_function_with_dev_type_recurse() result(i)
 !$omp declare target to(target_function_with_dev_type_recurse) device_type(nohost)
@@ -166,28 +177,28 @@ end function target_function_with_dev_type_recurse
 
 module test_module
 contains
-! CHECK-LABEL: func.func @_QMtest_modulePimplicitly_captured_nest_twice()
+! CHECK-LABEL: llvm.func @_QMtest_modulePimplicitly_captured_nest_twice()
 ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_nest_twice() result(i)
       integer :: i
       i = 10
    end function implicitly_captured_nest_twice
 
-! CHECK-LABEL: func.func @_QMtest_modulePimplicitly_captured_one_twice()
+! CHECK-LABEL: llvm.func @_QMtest_modulePimplicitly_captured_one_twice()
 ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (host), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_one_twice() result(k)
       !$omp declare target to(implicitly_captured_one_twice) device_type(host)
       k = implicitly_captured_nest_twice()
    end function implicitly_captured_one_twice
 
-! DEVICE-LABEL: func.func @_QMtest_modulePimplicitly_captured_two_twice()
+! DEVICE-LABEL: llvm.func @_QMtest_modulePimplicitly_captured_two_twice()
 ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_two_twice() result(y)
       integer :: y
       y = 5
    end function implicitly_captured_two_twice
 
-! DEVICE-LABEL: func.func @_QMtest_modulePtarget_function_test_device()
+! DEVICE-LABEL: llvm.func @_QMtest_modulePtarget_function_test_device()
 ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}}
    function target_function_test_device() result(j)
       !$omp declare target to(target_function_test_device) device_type(nohost)
@@ -199,7 +210,7 @@ end module test_module
 
 !! -----
 
-! DEVICE-LABEL: func.func @_QPimplicitly_captured_recursive
+! DEVICE-LABEL: llvm.func @_QPimplicitly_captured_recursive
 ! DEVICE-SAME: {{.*}}attributes {{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
 recursive subroutine implicitly_captured_recursive(increment)
    integer :: increment
@@ -210,7 +221,7 @@ recursive subroutine implicitly_captured_recursive(increment)
    end if
 end subroutine
 
-! DEVICE-LABEL: func.func @_QPcaller_recursive
+! DEVICE-LABEL: llvm.func @_QPcaller_recursive
 ! DEVICE-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}}
 subroutine caller_recursive
 !$omp declare target to(caller_recursive) device_type(nohost)

@@ -3,7 +3,6 @@ get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 add_flang_library(FlangOpenMPTransforms
   AutomapToTargetData.cpp
   DoConcurrentConversion.cpp
-  FunctionFiltering.cpp
   GenericLoopConversion.cpp
   GlobalFiltering.cpp
   MapsForPrivatizedSymbols.cpp
@@ -13,6 +12,7 @@ add_flang_library(FlangOpenMPTransforms
   LowerWorkshare.cpp
   LowerNontemporal.cpp
   SimdOnly.cpp
+  UnimplementedDeviceCheck.cpp
 
   DEPENDS
   FIRDialect
