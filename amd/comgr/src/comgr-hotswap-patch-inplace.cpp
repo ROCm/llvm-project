@@ -55,6 +55,34 @@ StringRef getClusterLoadReplacementAsm(StringRef Mnemonic) {
       .Default("");
 }
 
+/// SGPR-relative (_SADDR) counterpart of getClusterLoadReplacementAsm.
+///
+/// The _SADDR cluster_load carries its base address in a scalar SGPR pair and
+/// a 32-bit VGPR vaddr, so it maps to the global_load_*_saddr opcode rather
+/// than the saddr=off form above. Each cluster_load_*_SADDR and its
+/// global_load_*_SADDR target share an identical MCInst operand vector (same
+/// count, kinds, and order -- verified with `llvm-mc -mcpu=gfx1250 -show-inst`
+/// for every b32/b64/b128 and async_to_lds b8/b32/b64/b128 variant), so
+/// swapOpcode's clone-and-swap re-encodes the decoded operands unchanged and
+/// only drops the cluster load's implicit M0 read. Dropping that read is the
+/// A0 neutralization: global_load never consults M0.wg_mask. The operand
+/// registers here are placeholders used only to resolve the opcode.
+StringRef getClusterLoadSaddrReplacementAsm(StringRef Mnemonic) {
+  return StringSwitch<StringRef>(Mnemonic)
+      .Case("cluster_load_b32", "global_load_b32 v0, v1, s[0:1]")
+      .Case("cluster_load_b64", "global_load_b64 v[0:1], v2, s[0:1]")
+      .Case("cluster_load_b128", "global_load_b128 v[0:3], v4, s[0:1]")
+      .Case("cluster_load_async_to_lds_b8",
+            "global_load_async_to_lds_b8 v0, v1, s[0:1]")
+      .Case("cluster_load_async_to_lds_b32",
+            "global_load_async_to_lds_b32 v0, v1, s[0:1]")
+      .Case("cluster_load_async_to_lds_b64",
+            "global_load_async_to_lds_b64 v0, v1, s[0:1]")
+      .Case("cluster_load_async_to_lds_b128",
+            "global_load_async_to_lds_b128 v0, v1, s[0:1]")
+      .Default("");
+}
+
 /// Detect the SGPR-relative (_SADDR) form of a cluster_load.
 ///
 /// The off-form cluster_load carries its global address in a 64-bit VGPR pair
@@ -130,27 +158,36 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
   if (!ReplacementAsm.empty()) {
     HotswapProfile::Scope S =
         Ctx.Profile.time(HotswapMetric::InPlaceClusterLoad);
-    // The replacement templates above are all the saddr=off encoding form
-    // (global address in a 64-bit VGPR pair). The SGPR-relative (_SADDR)
-    // cluster_load shares the mnemonic but has a different operand layout, so
-    // reusing the off-form opcode would re-encode its scalar saddr and 32-bit
-    // vaddr as a 64-bit vaddr plus an inline offset -- a corrupt address that
-    // faults the GPU at runtime. Leave the _SADDR form unchanged here so the
-    // later trampoline pass can preserve the cluster-load opcode and wrap it
-    // with the A0-required M0 wg_mask clear/restore sequence.
-    if (usesSgprBaseAddress(DI.Inst, *Ctx.LS.MRI)) {
-      log() << "hotswap: inplace: " << Mnemonic
-            << " (SGPR-relative saddr form) left unchanged at 0x"
-            << utohexstr(DI.Offset) << "\n";
-    } else {
-      std::optional<unsigned> NewOpcode = resolveOpcode(ReplacementAsm, Ctx.LS);
-      if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
-        log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << *NewOpcode
-              << " at 0x" << utohexstr(DI.Offset) << "\n";
-        S.addPatches(1);
-        return 1;
-      }
+    // Pick the addressing-form-specific replacement template. The off-form
+    // cluster_load carries its global address in a 64-bit VGPR pair
+    // (saddr=off); the SGPR-relative (_SADDR) form has a 32-bit vaddr plus a
+    // scalar saddr and a distinct MC opcode. Each cluster_load maps to the
+    // matching global_load opcode with an identical MCInst operand layout, so
+    // swapOpcode's clone-and-swap re-encodes the decoded operands unchanged and
+    // drops the cluster load's implicit M0 read -- exactly the A0
+    // neutralization needed, since global_load never consults M0.wg_mask.
+    // Reusing the off-form opcode on a _SADDR operand vector would instead
+    // re-encode the scalar saddr and 32-bit vaddr as a 64-bit vaddr plus an
+    // inline offset -- a corrupt address -- which is why the form is selected
+    // here rather than shared.
+    StringRef Template = usesSgprBaseAddress(DI.Inst, *Ctx.LS.MRI)
+                             ? getClusterLoadSaddrReplacementAsm(Mnemonic)
+                             : ReplacementAsm;
+    std::optional<unsigned> NewOpcode =
+        Template.empty() ? std::nullopt : resolveOpcode(Template, Ctx.LS);
+    if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
+      log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << *NewOpcode
+            << " at 0x" << utohexstr(DI.Offset) << "\n";
+      S.addPatches(1);
+      return 1;
     }
+    // Conversion failed (e.g. the replacement mnemonic did not assemble on
+    // this target). Do not corrupt the binary: fall through with the opcode
+    // untouched so the trampoline pass can still neutralize the cluster load
+    // via the A0 M0 wg_mask save/clear/restore sequence.
+    log() << "hotswap: error: inplace: " << Mnemonic
+          << ": failed to resolve/encode global_load replacement at 0x"
+          << utohexstr(DI.Offset) << "; deferring to trampoline mask\n";
   }
 
   // s_barrier_signal_isfirst -> s_barrier_signal: on A0, the isfirst

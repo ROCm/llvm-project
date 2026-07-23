@@ -1,6 +1,11 @@
-// COM: Test HotSwap A0 cluster_load M0 masking when SCC is live across the
-// COM: cluster load. The M0 wg_mask clear must not clobber SCC before the
-// COM: following s_cbranch_scc1.
+// COM: Test HotSwap in-place B0->A0 conversion of an SGPR-relative (_SADDR)
+// COM: cluster_load when SCC is live across it. The former workaround wrapped
+// COM: the cluster load with an M0 wg_mask save/clear/restore sequence, which
+// COM: had to avoid clobbering SCC before the following s_cbranch_scc1. The
+// COM: in-place conversion replaces that entirely: the load becomes a plain
+// COM: global_load_b32 that touches neither M0 nor SCC and stays inline, so
+// COM: SCC from s_cmp_eq_u32 flows directly to s_cbranch_scc1 with nothing in
+// COM: between.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -15,17 +20,16 @@
 
 // DISASM-LABEL: <test_cluster_scc_live>:
 // DISASM: s_cmp_eq_u32 s0, s0
-// DISASM: s_branch
-// DISASM: s_cbranch_scc1
-// DISASM: s_mov_b32 [[SCR:s[0-9]+]], m0
-// DISASM-NEXT: s_pack_hh_b32_b16 m0, 0, m0
-// DISASM-NEXT: cluster_load_b32 v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9:]+}}]
-// DISASM-NEXT: s_mov_b32 m0, [[SCR]]
-// DISASM-NEXT: s_branch
+// DISASM-NOT: s_pack_hh_b32_b16
+// DISASM: global_load_b32 v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9:]+}}]
+// DISASM-NEXT: s_cbranch_scc1
+// DISASM-NOT: cluster_load
+// DISASM-NOT: s_pack_hh_b32_b16
 // DISASM-NOT: s_and_b32 m0
 
+// COM: No scratch SGPR is reserved, so sgpr_count is unchanged.
 // METADATA: .name:           test_cluster_scc_live
-// METADATA: .sgpr_count:     9
+// METADATA: .sgpr_count:     8
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

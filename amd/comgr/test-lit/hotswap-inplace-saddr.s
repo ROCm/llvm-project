@@ -1,11 +1,11 @@
-// COM: Test HotSwap cluster_load addressing-form selectivity. The in-place
-// COM: B0->A0 replacement templates target the saddr=off (64-bit vaddr)
-// COM: encoding. The SGPR-relative (_SADDR) variant shares the display
-// COM: mnemonic but is a distinct MC opcode with a different operand layout,
-// COM: so reusing the off-form opcode would mis-encode its operands and
-// COM: corrupt the address at runtime. The in-place pass must skip _SADDR,
-// COM: then the trampoline pass must wrap that remaining cluster_load with
-// COM: the A0 M0 wg_mask save/clear/restore sequence.
+// COM: Test HotSwap cluster_load in-place conversion across addressing forms.
+// COM: Both the saddr=off (64-bit vaddr) form and the SGPR-relative (_SADDR)
+// COM: form are neutralized on A0 by swapping the opcode in place to the
+// COM: matching global_load_*: global_load never reads M0.wg_mask, so the
+// COM: multicast is removed with no trampoline, scratch SGPR, or M0
+// COM: save/clear/restore sequence. The _SADDR form maps to global_load_*_saddr
+// COM: (distinct MC opcode, identical operand layout), so its scalar saddr and
+// COM: 32-bit vaddr are preserved rather than mis-encoded as a 64-bit vaddr.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -17,20 +17,20 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: The original _SADDR site is redirected to a sled/trampoline. The
-// COM: remaining cluster_load body is bracketed by M0 save, M0 wg_mask
-// COM: clear, and M0 restore.
+// COM: The _SADDR site is converted in place to global_load_b32 with its
+// COM: scalar saddr operand preserved, and the saddr=off site to the off-form
+// COM: global_load_b32. No cluster_load survives, and no trampoline branch or
+// COM: M0 wg_mask save/clear/restore (s_pack_hh_b32_b16) is emitted.
 // DISASM-LABEL: <test_saddr_kernel>:
-// DISASM: s_branch
-// DISASM-NOT: cluster_load_b32 {{.*}}, off
-// COM: The saddr=off site that followed is rewritten to global_load_b32,
-// COM: proving the skip is specific to the _SADDR form, not a blanket opt-out.
+// DISASM-NOT: cluster_load
+// DISASM: global_load_b32 v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9:]+}}]
+// DISASM-NOT: cluster_load
 // DISASM: global_load_b32 v{{[0-9]+}}, v[{{[0-9:]+}}], off
+// DISASM-NOT: cluster_load
 // DISASM: s_endpgm
-// DISASM: s_mov_b32 [[SCRATCH:s[0-9]+]], m0
-// DISASM-NEXT: s_pack_hh_b32_b16 m0, 0, m0
-// DISASM-NEXT: cluster_load_b32 v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9:]+}}]
-// DISASM-NEXT: s_mov_b32 m0, [[SCRATCH]]
+// DISASM-NOT: cluster_load
+// DISASM-NOT: s_pack_hh_b32_b16
+// DISASM-NOT: s_branch
 
 // COM: Idempotency: output should be identical on second rewrite.
 // RUN: hotswap-rewrite %t.out.elf \
@@ -46,10 +46,10 @@
 .p2align 8
 .type test_saddr_kernel,@function
 test_saddr_kernel:
-  // SGPR-relative (SADDR) form -- must be left unchanged.
+  // SGPR-relative (SADDR) form -- converted to global_load_b32 v4, v1, s[2:3].
   cluster_load_b32 v4, v1, s[2:3]
   s_wait_loadcnt 0x0
-  // saddr=off form -- must be swapped to global_load_b32.
+  // saddr=off form -- converted to global_load_b32 v5, v[2:3], off.
   cluster_load_b32 v5, v[2:3], off
   s_wait_loadcnt 0x0
   s_endpgm

@@ -850,11 +850,16 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
 
 // -- Cluster/TDM mask helpers ------------------------------------------------
 //
-// In-place patching demotes off-form cluster_load* instructions to
-// global_load* first. Any cluster_load* that reaches this trampoline pass is
-// still a real cluster load on A0 and must see M0.wg_mask[15:0] cleared. B0
-// does not need the cluster-load M0 workaround; its hotswap mask rule applies
-// only to tensor_load_to_lds when the wave is effectively non-cluster.
+// In-place patching demotes cluster_load* instructions to global_load* first,
+// for both the off-form (saddr=off) and the SGPR-relative (_SADDR) form, which
+// inherently neutralizes the A0 multicast (global_load never reads M0.wg_mask).
+// A cluster_load* therefore only reaches this trampoline pass when the in-place
+// opcode swap could not be applied (e.g. the replacement mnemonic failed to
+// assemble). In that fallback case it is still a real cluster load on A0 and
+// must see M0.wg_mask[15:0] cleared, so the mask sequence below is retained as
+// a safety net rather than the primary path. B0 does not need the cluster-load
+// M0 workaround; its hotswap mask rule applies only to tensor_load_to_lds when
+// the wave is effectively non-cluster.
 
 // MI400 SPG section 3.4: SQ_WAVE_IB_STS2.CLUSTER_ID is bits [9:6].
 constexpr unsigned IbSts2ClusterIdOffset = 6;
