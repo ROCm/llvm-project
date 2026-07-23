@@ -30,8 +30,6 @@ const char *Action::getClassName(ActionClass AC) {
   case AnalyzeJobClass:
     return "analyzer";
   case CompileJobClass: return "compiler";
-  case FortranFrontendJobClass:
-    return "fortranfrontend";
   case BackendJobClass: return "backend";
   case AssembleJobClass: return "assembler";
   case IfsMergeJobClass: return "interface-stub-merger";
