@@ -24,7 +24,7 @@
 // ENTRY-API: RESULT: SUCCESS
 // RUN: %llvm-objdump -d %t.entry.elf | %FileCheck --check-prefix=ENTRY %s
 // ENTRY-LABEL: <test_ds_trampoline>:
-// ENTRY-NEXT: global_wb
+// ENTRY-NEXT: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 // ENTRY-NEXT: v_nop
 // ENTRY-NEXT: s_branch
 // ENTRY-NEXT: s_nop 0

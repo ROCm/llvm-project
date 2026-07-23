@@ -407,6 +407,15 @@ class SubtargetFeatureInstCacheLineSize <int Value> : SubtargetFeature <
 def FeatureInstCacheLineSize64  : SubtargetFeatureInstCacheLineSize<64>;
 def FeatureInstCacheLineSize128 : SubtargetFeatureInstCacheLineSize<128>;
 
+class SubtargetFeatureDataCacheLineSize <int Value> : SubtargetFeature <
+  "datacachelinesize"#Value,
+  "DataCacheLineSize",
+  !cast<string>(Value),
+  "Data (VMEM) cache line size in bytes."
+>;
+
+def FeatureDataCacheLineSize128 : SubtargetFeatureDataCacheLineSize<128>;
+
 defm GCN3Encoding : AMDGPUSubtargetFeature<"gcn3-encoding",
   "Encoding format for VI",
   /*GenPredicate=*/0
@@ -497,6 +506,14 @@ defm CvtPkF16F32Inst : AMDGPUSubtargetFeature<"cvt-pk-f16-f32-inst",
 
 defm McastLoadInsts : AMDGPUSubtargetFeature<"mcast-load-insts",
   "Has multicast load instructions"
+>;
+
+defm AsyncLoadToLDSInsts : AMDGPUSubtargetFeature<"async-load-to-lds-insts",
+  "Has global async load to LDS instructions"
+>;
+
+defm AsyncStoreFromLDSInsts : AMDGPUSubtargetFeature<"async-store-from-lds-insts",
+  "Has global async store from LDS instructions"
 >;
 
 defm SWakeupImm : AMDGPUSubtargetFeature<"s-wakeup-imm",
@@ -2173,6 +2190,7 @@ def FeatureISAVersion12 : FeatureSet<
    FeatureRealTrue16Insts,
    FeatureMTBUFInsts,
    FeatureFormattedMUBUFInsts,
+   FeatureDataCacheLineSize128
    ]>;
 
 def FeatureISAVersion12_50_Common : FeatureSet<
@@ -2253,6 +2271,8 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeatureClusters,
    FeatureD16Writes32BitVgpr,
    FeatureMcastLoadInsts,
+   FeatureAsyncLoadToLDSInsts,
+   FeatureAsyncStoreFromLDSInsts,
    FeatureSmemPrefetchInsts,
    FeatureNoF16PseudoScalarTransInlineConstants,
    FeatureRealTrue16Insts,
@@ -2279,6 +2299,7 @@ def FeatureISAVersion12_50 : FeatureSet<
    FeatureSWMMACGfx1250Insts,
    FeatureTransCoexecutionHazard,
    FeatureWMMACoexecutionHazards,
+   FeatureDataCacheLineSize128,
    FeatureRequiresInitialUnclausedVmem,
    ])>;
 
@@ -2307,12 +2328,14 @@ def FeatureISAVersion12_51 : FeatureSet<
    FeatureUseAddPC64Inst,
    FeatureTransCoexecutionHazard,
    FeatureWMMACoexecutionHazards,
+   FeatureDataCacheLineSize128,
    FeatureRequiresInitialUnclausedVmem,
    ])>;
 
 def FeatureISAVersion12_Generic: FeatureSet<
   !listconcat(FeatureISAVersion12.Features,
-    [FeatureRequiresCOV6])>;
+    [FeatureDataCacheLineSize128,
+     FeatureRequiresCOV6])>;
 
 def FeatureISAVersion12_5_Generic: FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
@@ -2323,6 +2346,7 @@ def FeatureISAVersion12_5_Generic: FeatureSet<
    FeatureGFX125xLowestRateWMMA,
    FeatureTransCoexecutionHazard,
    FeatureWMMACoexecutionHazards,
+   FeatureDataCacheLineSize128,
    FeatureRequiresInitialUnclausedVmem,
    ])>;
 
@@ -2389,7 +2413,8 @@ def FeatureISAVersion13 : FeatureSet<
    FeatureCvtNormInsts,
    FeatureCvtPkNormVOP2Insts,
    FeatureCvtPkNormVOP3Insts,
-   FeatureSmemPrefetchInsts
+   FeatureSmemPrefetchInsts,
+   FeatureAsyncLoadToLDSInsts,
 ]>;
 
 def FeatureISAVersion13_Generic: FeatureSet<

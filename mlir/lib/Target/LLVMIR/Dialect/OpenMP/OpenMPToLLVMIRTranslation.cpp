@@ -313,7 +313,7 @@ public:
     // Emit barrier
     builder.SetInsertPoint(linearExitBB->getTerminator());
     return moduleTranslation.getOpenMPBuilder()->createBarrier(
-        builder.saveIP(), llvm::omp::OMPD_barrier);
+        builder, llvm::omp::OMPD_barrier);
   }
 
   // Emit stores for linear variables. Useful in case of SIMD
@@ -1699,8 +1699,8 @@ static LogicalResult createReductionsAndCleanup(
   llvm::UnreachableInst *tempTerminator = builder.CreateUnreachable();
   builder.SetInsertPoint(tempTerminator);
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy contInsertPoint =
-      ompBuilder->createReductions(builder.saveIP(), allocaIP, reductionInfos,
-                                   isByRef, isNowait, isTeamsReduction);
+      ompBuilder->createReductions(builder, allocaIP, reductionInfos, isByRef,
+                                   isNowait, isTeamsReduction);
 
   if (failed(handleError(contInsertPoint, *op)))
     return failure();
@@ -2048,7 +2048,7 @@ static LogicalResult copyFirstPrivateVars(
   if (insertBarrier && !opIsInSingleThread(op)) {
     llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
     llvm::OpenMPIRBuilder::InsertPointOrErrorTy res =
-        ompBuilder->createBarrier(builder.saveIP(), llvm::omp::OMPD_barrier);
+        ompBuilder->createBarrier(builder, llvm::omp::OMPD_barrier);
     if (failed(handleError(res, *op)))
       return failure();
   }
@@ -4410,6 +4410,104 @@ convertOmpTaskgroupOp(omp::TaskgroupOp tgOp, llvm::IRBuilderBase &builder,
 }
 
 static LogicalResult
+convertOmpInteropInitOp(omp::InteropInitOp initOp, llvm::IRBuilderBase &builder,
+                        LLVM::ModuleTranslation &moduleTranslation) {
+  if (!initOp.getDependVars().empty() || initOp.getDependKinds() ||
+      !initOp.getDependIterated().empty() || initOp.getDependIteratedKinds())
+    return initOp.emitError()
+           << "not yet implemented: Unhandled clause depend in "
+           << omp::InteropInitOp::getOperationName() << " operation";
+
+  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+  llvm::Value *interopVar =
+      moduleTranslation.lookupValue(initOp.getInteropVar());
+  llvm::Value *device = initOp.getDevice()
+                            ? moduleTranslation.lookupValue(initOp.getDevice())
+                            : nullptr;
+
+  // TODO: Handle depend clauses when supported.
+  llvm::Value *numDeps = llvm::ConstantInt::get(builder.getInt32Ty(), 0);
+  llvm::Value *depArray = llvm::ConstantPointerNull::get(builder.getPtrTy());
+  bool hasNowait = initOp.getNowait();
+
+  // A single `init` clause may list both `target` and `targetsync`, but the
+  // runtime init call takes a single interop-type. Collapse the set to one
+  // value, matching Clang: if `target` is present use Target, otherwise
+  // TargetSync. The offload runtime object model supports only one type per
+  // object; representing both would require a runtime change.
+  bool hasTarget = false, hasTargetSync = false;
+  for (mlir::Attribute typeAttr : initOp.getInteropTypes()) {
+    switch (cast<omp::InteropTypeAttr>(typeAttr).getValue()) {
+    case omp::InteropType::target:
+      hasTarget = true;
+      break;
+    case omp::InteropType::targetsync:
+      hasTargetSync = true;
+      break;
+    }
+  }
+  llvm::omp::OMPInteropType interopType =
+      (!hasTarget && hasTargetSync) ? llvm::omp::OMPInteropType::TargetSync
+                                    : llvm::omp::OMPInteropType::Target;
+  ompBuilder->createOMPInteropInit(builder, interopVar, interopType, device,
+                                   numDeps, depArray, hasNowait);
+  return success();
+}
+
+static LogicalResult
+convertOmpInteropDestroyOp(omp::InteropDestroyOp destroyOp,
+                           llvm::IRBuilderBase &builder,
+                           LLVM::ModuleTranslation &moduleTranslation) {
+  if (!destroyOp.getDependVars().empty() || destroyOp.getDependKinds() ||
+      !destroyOp.getDependIterated().empty() ||
+      destroyOp.getDependIteratedKinds())
+    return destroyOp.emitError()
+           << "not yet implemented: Unhandled clause depend in "
+           << omp::InteropDestroyOp::getOperationName() << " operation";
+
+  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+  llvm::Value *interopVar =
+      moduleTranslation.lookupValue(destroyOp.getInteropVar());
+  llvm::Value *device =
+      destroyOp.getDevice()
+          ? moduleTranslation.lookupValue(destroyOp.getDevice())
+          : nullptr;
+
+  llvm::Value *numDeps = llvm::ConstantInt::get(builder.getInt32Ty(), 0);
+  llvm::Value *depArray = llvm::ConstantPointerNull::get(builder.getPtrTy());
+  bool hasNowait = destroyOp.getNowait();
+
+  ompBuilder->createOMPInteropDestroy(builder, interopVar, device, numDeps,
+                                      depArray, hasNowait);
+  return success();
+}
+
+static LogicalResult
+convertOmpInteropUseOp(omp::InteropUseOp useOp, llvm::IRBuilderBase &builder,
+                       LLVM::ModuleTranslation &moduleTranslation) {
+  if (!useOp.getDependVars().empty() || useOp.getDependKinds() ||
+      !useOp.getDependIterated().empty() || useOp.getDependIteratedKinds())
+    return useOp.emitError()
+           << "not yet implemented: Unhandled clause depend in "
+           << omp::InteropUseOp::getOperationName() << " operation";
+
+  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+  llvm::Value *interopVar =
+      moduleTranslation.lookupValue(useOp.getInteropVar());
+  llvm::Value *device = useOp.getDevice()
+                            ? moduleTranslation.lookupValue(useOp.getDevice())
+                            : nullptr;
+
+  llvm::Value *numDeps = llvm::ConstantInt::get(builder.getInt32Ty(), 0);
+  llvm::Value *depArray = llvm::ConstantPointerNull::get(builder.getPtrTy());
+  bool hasNowait = useOp.getNowait();
+
+  ompBuilder->createOMPInteropUse(builder, interopVar, device, numDeps,
+                                  depArray, hasNowait);
+  return success();
+}
+
+static LogicalResult
 convertOmpTaskwaitOp(omp::TaskwaitOp twOp, llvm::IRBuilderBase &builder,
                      LLVM::ModuleTranslation &moduleTranslation) {
   if (failed(checkImplementationStatus(*twOp)))
@@ -4422,7 +4520,7 @@ convertOmpTaskwaitOp(omp::TaskwaitOp twOp, llvm::IRBuilderBase &builder,
     return failure();
   }
 
-  moduleTranslation.getOpenMPBuilder()->createTaskwait(builder.saveIP(), dds);
+  moduleTranslation.getOpenMPBuilder()->createTaskwait(builder, dds);
   if (dds.DepArray) {
     builder.CreateFree(dds.DepArray);
   }
@@ -4583,7 +4681,7 @@ convertOmpWsloop(Operation &opInst, llvm::IRBuilderBase &builder,
                                         loopInfo->getPreheader());
     llvm::OpenMPIRBuilder::InsertPointOrErrorTy afterBarrierIP =
         moduleTranslation.getOpenMPBuilder()->createBarrier(
-            builder.saveIP(), llvm::omp::OMPD_barrier);
+            builder, llvm::omp::OMPD_barrier);
     if (failed(handleError(afterBarrierIP, *loopOp)))
       return failure();
     builder.restoreIP(*afterBarrierIP);
@@ -4780,9 +4878,10 @@ convertOmpParallel(omp::ParallelOp opInst, llvm::IRBuilderBase &builder,
       builder.SetInsertPoint(tempTerminator);
 
       llvm::OpenMPIRBuilder::InsertPointOrErrorTy contInsertPoint =
-          ompBuilder->createReductions(
-              builder.saveIP(), allocaIP, reductionInfos, isByRef,
-              /*IsNoWait=*/false, /*IsTeamsReduction=*/false);
+          ompBuilder->createReductions(builder, allocaIP, reductionInfos,
+                                       isByRef,
+                                       /*IsNoWait=*/false,
+                                       /*IsTeamsReduction=*/false);
       if (!contInsertPoint)
         return contInsertPoint.takeError();
 
@@ -9875,8 +9974,7 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
               return failure();
 
             llvm::OpenMPIRBuilder::InsertPointOrErrorTy afterIP =
-                ompBuilder->createBarrier(builder.saveIP(),
-                                          llvm::omp::OMPD_barrier);
+                ompBuilder->createBarrier(builder, llvm::omp::OMPD_barrier);
             LogicalResult res = handleError(afterIP, *op);
             if (res.succeeded()) {
               // If the barrier generated a cancellation check, the insertion
@@ -9889,7 +9987,7 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
             if (failed(checkImplementationStatus(*op)))
               return failure();
 
-            ompBuilder->createTaskyield(builder.saveIP());
+            ompBuilder->createTaskyield(builder);
             return success();
           })
           .Case([&](omp::FlushOp op) {
@@ -9904,7 +10002,7 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
             //
             // The argument list is discarded so that, flush with a list is
             // treated same as a flush without a list.
-            ompBuilder->createFlush(builder.saveIP());
+            ompBuilder->createFlush(builder);
             return success();
           })
           .Case([&](omp::ParallelOp op) {
@@ -9978,6 +10076,15 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
           })
           .Case([&](omp::TaskwaitOp op) {
             return convertOmpTaskwaitOp(op, builder, moduleTranslation);
+          })
+          .Case([&](omp::InteropInitOp op) {
+            return convertOmpInteropInitOp(op, builder, moduleTranslation);
+          })
+          .Case([&](omp::InteropDestroyOp op) {
+            return convertOmpInteropDestroyOp(op, builder, moduleTranslation);
+          })
+          .Case([&](omp::InteropUseOp op) {
+            return convertOmpInteropUseOp(op, builder, moduleTranslation);
           })
           .Case<omp::YieldOp, omp::TerminatorOp, omp::DeclareMapperOp,
                 omp::DeclareMapperInfoOp, omp::DeclareReductionOp,

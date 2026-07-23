@@ -53,7 +53,7 @@ mad_reduce(float x)
 
     struct redret ret;
     ret.hi = MATH_MAD(-piby2_l, fn, r);
-    ret.i = (int)fn & 0x3;
+    ret.i = BUILTIN_ISNAN_F32(fn) ? 0 : ((int)fn & 0x3);
     return ret;
 #endif
 }
@@ -87,7 +87,7 @@ fma_reduce(float x)
     ret.hi = r;
 #endif
 
-    ret.i =(int)fn & 0x3;
+    ret.i = BUILTIN_ISNAN_F32(fn) ? 0 : ((int)fn & 0x3);
     return ret;
 }
 

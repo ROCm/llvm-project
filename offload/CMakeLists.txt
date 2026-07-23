@@ -359,15 +359,6 @@ endif()
 include_directories(include)
 pythonize_bool(LIBOMPTARGET_OMPT_SUPPORT)
 
-if(${LLVM_LIBC_GPU_BUILD})
-  set(LIBOMPTARGET_HAS_LIBC TRUE)
-else()
-  set(LIBOMPTARGET_HAS_LIBC FALSE)
-endif()
-set(LIBOMPTARGET_GPU_LIBC_SUPPORT ${LIBOMPTARGET_HAS_LIBC} CACHE BOOL
-    "Libomptarget support for the GPU libc")
-pythonize_bool(LIBOMPTARGET_GPU_LIBC_SUPPORT)
-
 set(LIBOMPTARGET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Various LLVM_TOOLS are needed to build libomptarget

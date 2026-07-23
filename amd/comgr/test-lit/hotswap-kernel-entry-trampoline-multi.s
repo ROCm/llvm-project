@@ -18,10 +18,10 @@
 // DISASM-LABEL: <entry_tramp_second>:
 // DISASM-NEXT: v_mov_b32_e32 v0, 2
 // DISASM-NEXT: s_endpgm
-// DISASM: global_wb // {{[0-9a-fA-F]+00}}:
+// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE // {{[0-9a-fA-F]+00}}:
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_get_pc_i64
-// DISASM: global_wb // {{[0-9a-fA-F]+00}}:
+// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE // {{[0-9a-fA-F]+00}}:
 // DISASM-NEXT: v_nop
 // DISASM-NEXT: s_get_pc_i64
 
