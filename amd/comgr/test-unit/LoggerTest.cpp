@@ -205,8 +205,8 @@ TEST(Logger, ConcurrentEmitsAreNotInterleaved) {
   raw_string_ostream OS(Out);
   Logger Log(LogLevel::Debug, &OS);
 
-  const int NumThreads = 8;
-  const int PerThread = 200;
+  static constexpr int NumThreads = 8;
+  static constexpr int PerThread = 200;
   std::vector<std::thread> Threads;
   for (int T = 0; T < NumThreads; ++T) {
     Threads.emplace_back([&Log]() {
@@ -243,8 +243,8 @@ TEST(Logger, ConcurrentEmitAndSinkWritesAreSerialized) {
   raw_string_ostream OS(Out);
   Logger Log(LogLevel::Debug, &OS);
 
-  const int NumThreads = 8;
-  const int PerThread = 200;
+  static constexpr int NumThreads = 8;
+  static constexpr int PerThread = 200;
   std::vector<std::thread> Threads;
   for (int T = 0; T < NumThreads; ++T) {
     Threads.emplace_back([&Log]() {
