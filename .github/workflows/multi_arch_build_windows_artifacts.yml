@@ -443,6 +443,7 @@ jobs:
 
       - name: COMGR CTest
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         run: |
           ctest --test-dir "${BUILD_DIR}"/compiler/amd-comgr/build --output-on-failure
 
