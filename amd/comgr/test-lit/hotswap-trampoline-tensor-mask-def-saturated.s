@@ -1,9 +1,8 @@
 // COM: The motivating case: the SGPR budget is saturated to s106 and the
-// COM: descriptor SGPR is live after the tensor, so the at-site fallback would
-// COM: fail for lack of a scratch register. Because the descriptor is built by
-// COM: an in-function construction region, the definition-time clear applies
-// COM: and succeeds with no scratch and no sled -- exactly what the at-site
-// COM: strategy cannot do on the compute-bound kernels this fix targets.
+// COM: descriptor feeds two tensors, so the at-site fallback cannot safely
+// COM: modify the first use without a scratch register. The definition-time
+// COM: clear applies because both consumers require the cleared descriptor.
+// COM: There is no NOP sled or spare SGPR.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -21,6 +20,7 @@
 // DISASM: s_and_b32 s4, s4, 0xfff70000
 // DISASM-NOT: s_pack_hh_b32_b16
 // DISASM: tensor_load_to_lds s[0:3], s[4:11]
+// DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
@@ -33,16 +33,8 @@ test_tensor_mask_saturated:
   s_or_b32 s4, s4, s5
   s_and_b32 s4, s4, 0xfff7ffff
   tensor_load_to_lds s[0:3], s[4:11]
-  s_mov_b32 s8, s4
+  tensor_load_to_lds s[0:3], s[4:11]
   s_endpgm
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
 .Ltest_tensor_mask_saturated_end:
 .size test_tensor_mask_saturated, .Ltest_tensor_mask_saturated_end-test_tensor_mask_saturated
 

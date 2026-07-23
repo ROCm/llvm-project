@@ -844,6 +844,13 @@ struct LLVMState {
   unsigned SPrefetchInstPcRelOpcode = 0;
   unsigned SPrefetchDataPcRelOpcode = 0;
 
+  /// MC identities used by the tensor descriptor definition-time mask clear.
+  /// Resolve these through the assembler because the tablegen opcode names are
+  /// subtarget-specific.
+  unsigned SAndB32Opcode = 0;
+  unsigned SOrB32Opcode = 0;
+  unsigned TensorLoadToLdsOpcode = 0;
+
   /// SCC, recovered from the implicit definition on a parsed scalar compare.
   /// This avoids scanning target register names in policy code.
   llvm::MCRegister SCCRegister;

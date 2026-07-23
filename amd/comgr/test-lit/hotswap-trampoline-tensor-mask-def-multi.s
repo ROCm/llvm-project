@@ -10,6 +10,8 @@
 // RUN:   2>&1 \
 // RUN:   | %FileCheck --check-prefix=API %s
 // API: hotswap: tensor_load_to_lds: cleared workgroup_mask at descriptor definition 0x{{[0-9A-F]+}} (s4)
+// API-NOT: hotswap: tensor_load_to_lds: cleared workgroup_mask at descriptor definition
+// API: hotswap: applied 1 instruction patches
 // API: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s

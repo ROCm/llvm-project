@@ -372,6 +372,16 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
                                      "s_prefetch_data_pc_rel", S,
                                      S.SPrefetchDataPcRelOpcode))
     return S;
+  if (!resolveRequiredOpcodeViaParse("s_and_b32 s0, s0, 0xfff7ffff",
+                                     "s_and_b32", S, S.SAndB32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_or_b32 s0, s0, 0x7500000", "s_or_b32",
+                                     S, S.SOrB32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("tensor_load_to_lds s[0:3], s[4:11]",
+                                     "tensor_load_to_lds", S,
+                                     S.TensorLoadToLdsOpcode))
+    return S;
 
   SmallVector<MCInst, 2> SccDefInsts =
       parseAsmToMCInsts("s_cmp_eq_u32 s0, s0", S);

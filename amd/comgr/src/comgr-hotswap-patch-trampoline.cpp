@@ -778,16 +778,13 @@ void commitScratchSgpr(PatchContext &Ctx, const SgprScratchAlloc &Alloc) {
 // True when \p DI is s_and_b32 base, base, imm with imm[15:0] == 0xffff, i.e.
 // a normalize that leaves the descriptor's workgroup_mask bits untouched.
 bool isLow16PreservingAndOnBase(const InternalDecodedInst &DI,
-                                MCRegister BaseMCReg,
-                                const MCRegisterInfo &MRI) {
-  if (DI.Mnemonic != "s_and_b32")
+                                MCRegister BaseMCReg, const LLVMState &LS) {
+  if (DI.Inst.getOpcode() != LS.SAndB32Opcode)
     return false;
   const MCInst &Inst = DI.Inst;
-  if (Inst.getNumOperands() < 3 || !Inst.getOperand(0).isReg() ||
-      !Inst.getOperand(1).isReg() || !Inst.getOperand(2).isImm())
-    return false;
-  if (!MRI.regsOverlap(Inst.getOperand(0).getReg(), BaseMCReg.id()) ||
-      !MRI.regsOverlap(Inst.getOperand(1).getReg(), BaseMCReg.id()))
+  if (!LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
+                           BaseMCReg) ||
+      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(1).getReg()), BaseMCReg))
     return false;
   uint64_t Imm = static_cast<uint64_t>(Inst.getOperand(2).getImm());
   return (Imm & 0xffffu) == 0xffffu;
@@ -796,71 +793,34 @@ bool isLow16PreservingAndOnBase(const InternalDecodedInst &DI,
 // True when \p DI is s_and_b32 base, base, imm with imm[15:0] == 0, i.e. an
 // already-cleared mask-set from a prior rewrite of this object.
 bool isClearedMaskAndOnBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
-                            const MCRegisterInfo &MRI) {
-  if (DI.Mnemonic != "s_and_b32")
+                            const LLVMState &LS) {
+  if (DI.Inst.getOpcode() != LS.SAndB32Opcode)
     return false;
   const MCInst &Inst = DI.Inst;
-  if (Inst.getNumOperands() < 3 || !Inst.getOperand(0).isReg() ||
-      !Inst.getOperand(1).isReg() || !Inst.getOperand(2).isImm())
-    return false;
-  if (!MRI.regsOverlap(Inst.getOperand(0).getReg(), BaseMCReg.id()) ||
-      !MRI.regsOverlap(Inst.getOperand(1).getReg(), BaseMCReg.id()))
+  if (!LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
+                           BaseMCReg) ||
+      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(1).getReg()), BaseMCReg))
     return false;
   return (static_cast<uint64_t>(Inst.getOperand(2).getImm()) & 0xffffu) == 0;
 }
 
-// True when \p DI writes \p BaseMCReg through an s_mov_b32 base, 0 that begins
-// a fresh descriptor construction region.
-bool isBaseConstructionRestart(const InternalDecodedInst &DI,
-                               MCRegister BaseMCReg,
-                               const MCRegisterInfo &MRI) {
-  if (DI.Mnemonic != "s_mov_b32")
-    return false;
-  const MCInst &Inst = DI.Inst;
-  if (Inst.getNumOperands() < 2 || !Inst.getOperand(0).isReg() ||
-      !Inst.getOperand(1).isImm())
-    return false;
-  return MRI.regsOverlap(Inst.getOperand(0).getReg(), BaseMCReg.id()) &&
-         Inst.getOperand(1).getImm() == 0;
-}
-
-// True when \p DI writes \p BaseMCReg through the recognized descriptor
-// construction idiom: the s_mov base, 0 restart, a low16-preserving s_and, or
-// an s_or base, base, <src> that composes the descriptor. Any other write to
-// the base is treated as an unknown mutation.
-bool isRecognizedBaseConstructionWrite(const InternalDecodedInst &DI,
-                                       MCRegister BaseMCReg,
-                                       const MCRegisterInfo &MRI) {
-  if (isBaseConstructionRestart(DI, BaseMCReg, MRI) ||
-      isLow16PreservingAndOnBase(DI, BaseMCReg, MRI) ||
-      isClearedMaskAndOnBase(DI, BaseMCReg, MRI))
-    return true;
-  if (DI.Mnemonic != "s_or_b32")
-    return false;
-  const MCInst &Inst = DI.Inst;
-  return Inst.getNumOperands() >= 3 && Inst.getOperand(0).isReg() &&
-         Inst.getOperand(1).isReg() &&
-         MRI.regsOverlap(Inst.getOperand(0).getReg(), BaseMCReg.id()) &&
-         MRI.regsOverlap(Inst.getOperand(1).getReg(), BaseMCReg.id());
-}
-
 // True when \p DI writes \p BaseMCReg but provably leaves bits [15:0]
-// unchanged or zero: an s_and base, base, 0xNNNN* (any AND can only clear
-// bits) or an s_or base, base, imm whose low 16 bits are zero. Such writers
-// are part of the construction after the mask-set and cannot restore a nonzero
-// workgroup_mask, so they do not disqualify the definition-time clear.
+// zero: an s_and base, base, src or an s_or base, base, imm whose low 16 bits
+// are zero. Such writers cannot restore a nonzero workgroup_mask after the
+// selected mask-set, so reaching-definition analysis may traverse them.
 bool writesBasePreservingZeroLow16(const InternalDecodedInst &DI,
-                                   MCRegister BaseMCReg,
-                                   const MCRegisterInfo &MRI) {
+                                   MCRegister BaseMCReg, const LLVMState &LS) {
   const MCInst &Inst = DI.Inst;
-  if (Inst.getNumOperands() < 3 || !Inst.getOperand(0).isReg() ||
-      !Inst.getOperand(1).isReg() ||
-      !MRI.regsOverlap(Inst.getOperand(0).getReg(), BaseMCReg.id()) ||
-      !MRI.regsOverlap(Inst.getOperand(1).getReg(), BaseMCReg.id()))
+  unsigned Opcode = Inst.getOpcode();
+  if (Opcode != LS.SAndB32Opcode && Opcode != LS.SOrB32Opcode)
     return false;
-  if (DI.Mnemonic == "s_and_b32")
-    return true; // AND can only clear bits, never set low16
-  if (DI.Mnemonic == "s_or_b32" && Inst.getOperand(2).isImm())
+  if (!LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
+                           BaseMCReg) ||
+      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(1).getReg()), BaseMCReg))
+    return false;
+  if (Opcode == LS.SAndB32Opcode)
+    return true;
+  if (Inst.getOperand(2).isImm())
     return (static_cast<uint64_t>(Inst.getOperand(2).getImm()) & 0xffffu) == 0;
   return false;
 }
@@ -869,11 +829,9 @@ bool writesBasePreservingZeroLow16(const InternalDecodedInst &DI,
 bool instructionDefinesBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
                             const LLVMState &LS) {
   const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
-  const MCRegisterInfo &MRI = *LS.MRI;
   for (unsigned I = 0, E = Desc.getNumDefs(); I < E; ++I) {
     const MCOperand &Op = DI.Inst.getOperand(I);
-    if (Op.isReg() && Op.getReg() &&
-        MRI.regsOverlap(Op.getReg(), BaseMCReg.id()))
+    if (LS.MRI->regsOverlap(MCRegister(Op.getReg()), BaseMCReg))
       return true;
   }
   return false;
@@ -887,171 +845,272 @@ bool instructionReadsRegister(const InternalDecodedInst &DI, MCRegister Reg,
   unsigned NumDefs = Desc.getNumDefs();
   for (unsigned I = NumDefs, E = DI.Inst.getNumOperands(); I < E; ++I) {
     const MCOperand &Op = DI.Inst.getOperand(I);
-    if (Op.isReg() && Op.getReg() && MRI.regsOverlap(Op.getReg(), Reg.id()))
+    if (Op.isReg() && Op.getReg() &&
+        MRI.regsOverlap(MCRegister(Op.getReg()), Reg))
       return true;
   }
   for (MCPhysReg Implicit : Desc.implicit_uses())
-    if (MRI.regsOverlap(Implicit, Reg.id()))
+    if (MRI.regsOverlap(MCRegister(Implicit), Reg))
       return true;
   return false;
 }
 
-// True when the s_and at \p Idx leaves SCC live: some later instruction reads
-// SCC before any instruction redefines it, within [Idx+1, FnEnd). Changing the
-// mask literal can flip whether the AND result is zero, so a live SCC use would
-// observe a different condition. The window extends to the end of the function
-// (not just to the tensor): SCC is dead only when a redefinition or the
-// function boundary is reached with no intervening read. An unknown/undecoded
-// instruction is treated conservatively as a reader.
-bool isSccLiveAfterMaskSet(const PatchContext &Ctx, size_t Idx, size_t FnEnd) {
-  const LLVMState &LS = Ctx.LS;
-  const MCRegisterInfo &MRI = *LS.MRI;
-  for (size_t I = Idx + 1; I < FnEnd; ++I) {
-    const InternalDecodedInst &DI = Ctx.Decoded[I];
-    if (DI.Mnemonic == "<unknown>")
-      return true;
-    const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
-    for (MCPhysReg Use : Desc.implicit_uses())
-      if (isSccReg(MCRegister(Use), MRI))
-        return true;
-    for (MCPhysReg Def : Desc.implicit_defs())
-      if (isSccReg(MCRegister(Def), MRI))
-        return false;
+bool isTensorDescriptorUseOnly(const InternalDecodedInst &DI,
+                               MCRegister BaseMCReg, const LLVMState &LS) {
+  if (DI.Inst.getOpcode() != LS.TensorLoadToLdsOpcode)
+    return false;
+
+  MCRegister DescriptorBase = getDescriptorBaseSgpr(DI.Inst, *LS.MRI);
+  if (!DescriptorBase.isValid() ||
+      !LS.MRI->regsOverlap(DescriptorBase, BaseMCReg))
+    return false;
+
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  for (unsigned I = Desc.getNumDefs(), E = DI.Inst.getNumOperands(); I < E;
+       ++I) {
+    if (I == 1)
+      continue;
+    const MCOperand &Op = DI.Inst.getOperand(I);
+    if (Op.isReg() && Op.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Op.getReg()), BaseMCReg))
+      return false;
   }
-  return false;
+  for (MCPhysReg Implicit : Desc.implicit_uses())
+    if (LS.MRI->regsOverlap(MCRegister(Implicit), BaseMCReg))
+      return false;
+  return true;
 }
 
-// The result of attempting the definition-time mask clear. NotApplicable means
-// the site is safe to hand to the at-site fallback; Failed means a required
-// mutation was started and could not complete.
-enum class TensorMaskDef { Applied, NotApplicable, Failed };
+struct TensorFunctionCfg {
+  size_t BeginIndex = 0;
+  size_t EndIndex = 0;
+  SmallVector<SmallVector<size_t, 2>, 32> Successors;
+  SmallVector<SmallVector<size_t, 2>, 32> Predecessors;
 
-// Collect the mask-set s_and index of every descriptor construction region
-// reaching the tensor at \p TensorIdx, confined to the tensor's own function.
-// A region is delimited by an s_mov base, 0 restart and its last
-// low16-preserving s_and is the mask-set (covering odd/even wave branches).
-// Returns NotApplicable (deferring to the at-site fallback, no error logged)
-// whenever the definition-time transform cannot be proven safe:
-//   - the tensor is outside any known function range,
-//   - a region has no low16-preserving mask-set,
-//   - the base is written outside the recognized construction idiom
-//     (killed/mutated definition, e.g. s_add or a foreign function),
-//   - a later writer can restore nonzero low16 bits (e.g. s_or base, base, sN),
-//   - the mask-set leaves SCC live, or
-//   - the base is observed by a non-tensor consumer before the tensor.
+  void addEdge(size_t From, size_t To) {
+    Successors[From].push_back(To);
+    Predecessors[To].push_back(From);
+  }
+};
+
+std::optional<TensorFunctionCfg>
+buildTensorFunctionCfg(const PatchContext &Ctx,
+                       const ElfView::FunctionTextRange &Range) {
+  if (!Ctx.LS.MIA)
+    return std::nullopt;
+
+  size_t BeginIndex = 0;
+  while (BeginIndex < Ctx.Decoded.size() &&
+         Ctx.Decoded[BeginIndex].Offset < Range.Begin)
+    ++BeginIndex;
+  size_t EndIndex = BeginIndex;
+  while (EndIndex < Ctx.Decoded.size() &&
+         Ctx.Decoded[EndIndex].Offset < Range.End)
+    ++EndIndex;
+  if (BeginIndex == EndIndex || Ctx.Decoded[BeginIndex].Offset != Range.Begin)
+    return std::nullopt;
+
+  TensorFunctionCfg Graph;
+  Graph.BeginIndex = BeginIndex;
+  Graph.EndIndex = EndIndex;
+  Graph.Successors.resize(EndIndex - BeginIndex);
+  Graph.Predecessors.resize(EndIndex - BeginIndex);
+
+  DenseMap<uint64_t, size_t> IndexAtOffset;
+  for (size_t I = BeginIndex; I < EndIndex; ++I)
+    IndexAtOffset[Ctx.Decoded[I].Offset] = I - BeginIndex;
+
+  for (size_t I = BeginIndex; I < EndIndex; ++I) {
+    const InternalDecodedInst &DI = Ctx.Decoded[I];
+    if (!DI.DecodeSucceeded)
+      return std::nullopt;
+
+    size_t LocalIndex = I - BeginIndex;
+    bool HasFallthrough = I + 1 < EndIndex;
+    if (DI.Inst.getOpcode() == Ctx.LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == Ctx.LS.SEndPgmSavedOpcode)
+      continue;
+
+    if (Ctx.LS.MIA->isCall(DI.Inst) || Ctx.LS.MIA->isIndirectBranch(DI.Inst) ||
+        Ctx.LS.MIA->isReturn(DI.Inst))
+      return std::nullopt;
+
+    if (Ctx.LS.MIA->isBranch(DI.Inst)) {
+      uint64_t Target = 0;
+      if (!Ctx.LS.MIA->evaluateBranch(DI.Inst, DI.Offset, DI.Size, Target))
+        return std::nullopt;
+      if (Target != Range.End) {
+        DenseMap<uint64_t, size_t>::const_iterator TargetIt =
+            IndexAtOffset.find(Target);
+        if (TargetIt == IndexAtOffset.end())
+          return std::nullopt;
+        Graph.addEdge(LocalIndex, TargetIt->second);
+      }
+
+      if (Ctx.LS.MIA->isConditionalBranch(DI.Inst)) {
+        if (!HasFallthrough)
+          return std::nullopt;
+        Graph.addEdge(LocalIndex, LocalIndex + 1);
+      } else if (!Ctx.LS.MIA->isUnconditionalBranch(DI.Inst)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
+    const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
+    if (Desc.mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI))
+      return std::nullopt;
+    if (HasFallthrough)
+      Graph.addEdge(LocalIndex, LocalIndex + 1);
+  }
+
+  return Graph;
+}
+
+bool isMaskDefinitionSafe(const PatchContext &Ctx,
+                          const TensorFunctionCfg &Graph, size_t MaskIndex,
+                          MCRegister BaseMCReg) {
+  constexpr uint8_t BaseValueLive = 1;
+  constexpr uint8_t SccValueLive = 2;
+
+  size_t MaskLocal = MaskIndex - Graph.BeginIndex;
+  SmallVector<std::pair<size_t, uint8_t>, 16> Worklist;
+  for (size_t Successor : Graph.Successors[MaskLocal])
+    Worklist.push_back({Successor, BaseValueLive | SccValueLive});
+
+  SmallVector<uint8_t, 32> Seen(Graph.Successors.size(), 0);
+  while (!Worklist.empty()) {
+    std::pair<size_t, uint8_t> Item = Worklist.pop_back_val();
+    size_t LocalIndex = Item.first;
+    uint8_t State = Item.second;
+    uint8_t StateBit = static_cast<uint8_t>(1u << State);
+    if ((Seen[LocalIndex] & StateBit) != 0)
+      continue;
+    Seen[LocalIndex] |= StateBit;
+
+    const InternalDecodedInst &DI = Ctx.Decoded[Graph.BeginIndex + LocalIndex];
+    const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
+
+    bool PreservesBaseValue =
+        (State & BaseValueLive) != 0 &&
+        writesBasePreservingZeroLow16(DI, BaseMCReg, Ctx.LS);
+    if ((State & BaseValueLive) != 0) {
+      if (!PreservesBaseValue) {
+        if (instructionReadsRegister(DI, BaseMCReg, Ctx.LS) &&
+            !isTensorDescriptorUseOnly(DI, BaseMCReg, Ctx.LS))
+          return false;
+        if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS))
+          State &= ~BaseValueLive;
+      }
+    }
+
+    // A preserving writer propagates the changed base and may derive a changed
+    // SCC value from it, so its SCC definition does not end the safety check.
+    if ((State & SccValueLive) != 0) {
+      if (instReadsScc(DI.Inst, Desc, *Ctx.LS.MRI))
+        return false;
+      if (instWritesScc(DI.Inst, Desc, *Ctx.LS.MRI) && !PreservesBaseValue)
+        State &= ~SccValueLive;
+    } else if (PreservesBaseValue &&
+               instWritesScc(DI.Inst, Desc, *Ctx.LS.MRI)) {
+      State |= SccValueLive;
+    }
+
+    if (State == 0)
+      continue;
+    for (size_t Successor : Graph.Successors[LocalIndex])
+      Worklist.push_back({Successor, State});
+  }
+  return true;
+}
+
+enum class TensorMaskDef { Applied, NotApplicable };
+
+// Find the last low16-relevant descriptor-base definition on every CFG path
+// reaching the tensor. Definition-time clearing applies only when each path
+// reaches either a low16-preserving s_and or an already-cleared s_and before
+// any writer that could make the low half nonzero. Every value and SCC use
+// reachable from a changed s_and is then checked until its next relevant
+// definition, including paths after the tensor. Calls, indirect control flow,
+// undecoded instructions, and unresolved direct branches defer to the at-site
+// fallback.
 TensorMaskDef findTensorMaskSetDefinitions(const PatchContext &Ctx,
                                            size_t TensorIdx,
                                            MCRegister BaseMCReg,
                                            SmallVectorImpl<size_t> &MaskSets) {
-  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
   const InternalDecodedInst &Tensor = Ctx.Decoded[TensorIdx];
-
-  // Confine the scan to the tensor's function so a bare tensor cannot borrow a
-  // construction sequence from another kernel.
   std::optional<ElfView::FunctionTextRange> Range =
       Ctx.Elf.findFunctionTextRangeAtOffset(Tensor.Offset);
   if (!Range)
     return TensorMaskDef::NotApplicable;
 
-  // First decoded index at or after the function end, bounding the forward SCC
-  // liveness window.
-  size_t FnEndIdx = Ctx.Decoded.size();
-  for (size_t I = TensorIdx + 1; I < Ctx.Decoded.size(); ++I) {
-    if (Ctx.Decoded[I].Offset >= Range->End) {
-      FnEndIdx = I;
-      break;
-    }
-  }
-
-  // A base writer between the mask-set and the tensor that can set nonzero
-  // low16 bits (e.g. s_or base, base, sN) would restore the multicast mask
-  // after the clear: reject the site so the fallback handles it. Writers that
-  // provably keep low16 zero (further s_and, or s_or with a zero low half) are
-  // part of the construction and are fine.
-  for (size_t I = TensorIdx; I-- > 0;) {
-    const InternalDecodedInst &DI = Ctx.Decoded[I];
-    if (DI.Offset < Range->Begin)
-      break;
-    if (isLow16PreservingAndOnBase(DI, BaseMCReg, MRI) ||
-        isClearedMaskAndOnBase(DI, BaseMCReg, MRI))
-      break; // reached the mask-set; earlier writers are vetted by the region
-    if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS)) {
-      if (!isBaseConstructionRestart(DI, BaseMCReg, MRI) &&
-          !writesBasePreservingZeroLow16(DI, BaseMCReg, MRI))
-        return TensorMaskDef::NotApplicable;
-    }
-  }
-
-  bool SawMaskSetInRegion = false;
-  bool RegionAlreadyCleared = false;
-  bool SawAnyRegion = false;
-  size_t RegionMaskSet = 0;
-
-  for (size_t I = TensorIdx; I-- > 0;) {
-    const InternalDecodedInst &DI = Ctx.Decoded[I];
-    if (DI.Offset < Range->Begin)
-      break;
-
-    if (isBaseConstructionRestart(DI, BaseMCReg, MRI)) {
-      SawAnyRegion = true;
-      if (!SawMaskSetInRegion && !RegionAlreadyCleared)
-        return TensorMaskDef::NotApplicable;
-      if (SawMaskSetInRegion)
-        MaskSets.push_back(RegionMaskSet);
-      SawMaskSetInRegion = false;
-      RegionAlreadyCleared = false;
-      continue;
-    }
-
-    if (!SawMaskSetInRegion && !RegionAlreadyCleared) {
-      if (isLow16PreservingAndOnBase(DI, BaseMCReg, MRI)) {
-        if (isSccLiveAfterMaskSet(Ctx, I, FnEndIdx))
-          return TensorMaskDef::NotApplicable;
-        RegionMaskSet = I;
-        SawMaskSetInRegion = true;
-        continue;
-      }
-      if (isClearedMaskAndOnBase(DI, BaseMCReg, MRI)) {
-        RegionAlreadyCleared = true;
-        continue;
-      }
-    } else if (isLow16PreservingAndOnBase(DI, BaseMCReg, MRI) ||
-               isClearedMaskAndOnBase(DI, BaseMCReg, MRI)) {
-      continue;
-    }
-
-    if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS) &&
-        !isRecognizedBaseConstructionWrite(DI, BaseMCReg, MRI))
-      return TensorMaskDef::NotApplicable;
-  }
-
-  if (SawMaskSetInRegion) {
-    MaskSets.push_back(RegionMaskSet);
-    SawAnyRegion = true;
-  } else if (RegionAlreadyCleared) {
-    SawAnyRegion = true;
-  }
-
-  if (!SawAnyRegion)
+  std::optional<TensorFunctionCfg> Graph = buildTensorFunctionCfg(Ctx, *Range);
+  if (!Graph || TensorIdx < Graph->BeginIndex || TensorIdx >= Graph->EndIndex)
     return TensorMaskDef::NotApplicable;
 
-  // The cleared descriptor is visible to every consumer, not just tensor
-  // loads. If a foreign instruction reads the base between the earliest
-  // mask-set and the tensor, defer to the at-site fallback, which restores the
-  // register when it is live. The descriptor's own construction instructions
-  // (recognized base writes) and tensor loads are not foreign observers.
-  size_t EarliestMaskSet = TensorIdx;
-  for (size_t M : MaskSets)
-    EarliestMaskSet = std::min(EarliestMaskSet, M);
-  for (size_t I = EarliestMaskSet + 1; I < TensorIdx; ++I) {
-    const InternalDecodedInst &DI = Ctx.Decoded[I];
-    if (DI.Mnemonic == "tensor_load_to_lds" ||
-        isRecognizedBaseConstructionWrite(DI, BaseMCReg, MRI))
+  size_t TensorLocal = TensorIdx - Graph->BeginIndex;
+  SmallVector<uint8_t, 32> Reachable(Graph->Successors.size(), 0);
+  SmallVector<size_t, 16> Worklist;
+  Worklist.push_back(0);
+  while (!Worklist.empty()) {
+    size_t LocalIndex = Worklist.pop_back_val();
+    if (Reachable[LocalIndex] != 0)
       continue;
-    if (instructionReadsRegister(DI, BaseMCReg, Ctx.LS))
+    Reachable[LocalIndex] = 1;
+    for (size_t Successor : Graph->Successors[LocalIndex])
+      Worklist.push_back(Successor);
+  }
+  if (Reachable[TensorLocal] == 0)
+    return TensorMaskDef::NotApplicable;
+
+  SmallVector<uint8_t, 32> Visited(Graph->Successors.size(), 0);
+  for (size_t Predecessor : Graph->Predecessors[TensorLocal])
+    if (Reachable[Predecessor] != 0)
+      Worklist.push_back(Predecessor);
+  if (Worklist.empty())
+    return TensorMaskDef::NotApplicable;
+
+  while (!Worklist.empty()) {
+    size_t LocalIndex = Worklist.pop_back_val();
+    if (Visited[LocalIndex] != 0)
+      continue;
+    Visited[LocalIndex] = 1;
+
+    size_t InstIndex = Graph->BeginIndex + LocalIndex;
+    const InternalDecodedInst &DI = Ctx.Decoded[InstIndex];
+    bool PreservesBaseValue =
+        writesBasePreservingZeroLow16(DI, BaseMCReg, Ctx.LS);
+    if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS)) {
+      if (isLow16PreservingAndOnBase(DI, BaseMCReg, Ctx.LS)) {
+        if (!is_contained(MaskSets, InstIndex))
+          MaskSets.push_back(InstIndex);
+        continue;
+      }
+      if (isClearedMaskAndOnBase(DI, BaseMCReg, Ctx.LS))
+        continue;
+      if (!PreservesBaseValue)
+        return TensorMaskDef::NotApplicable;
+    }
+
+    if (!PreservesBaseValue &&
+        instructionReadsRegister(DI, BaseMCReg, Ctx.LS) &&
+        !isTensorDescriptorUseOnly(DI, BaseMCReg, Ctx.LS))
+      return TensorMaskDef::NotApplicable;
+
+    bool HasReachablePredecessor = false;
+    for (size_t Predecessor : Graph->Predecessors[LocalIndex]) {
+      if (Reachable[Predecessor] == 0)
+        continue;
+      HasReachablePredecessor = true;
+      Worklist.push_back(Predecessor);
+    }
+    if (!HasReachablePredecessor)
       return TensorMaskDef::NotApplicable;
   }
 
+  for (size_t MaskIndex : MaskSets)
+    if (!isMaskDefinitionSafe(Ctx, *Graph, MaskIndex, BaseMCReg))
+      return TensorMaskDef::NotApplicable;
   return TensorMaskDef::Applied;
 }
 
