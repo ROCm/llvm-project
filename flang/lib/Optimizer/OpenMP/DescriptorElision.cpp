@@ -85,6 +85,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 
@@ -524,6 +525,13 @@ public:
     mlir::Type idxTy = builder.getIndexType();
     hlfir::DeclareOp declareOp = uses.declareOp;
 
+    // Host-side alloca slots backing each per-dimension ByCopy scalar map,
+    // keyed by dimension. Recorded so that `omp.target` host_eval operands that
+    // were derived from the (now elided) descriptor can be rebound to a host
+    // load of the *same* slot, keeping the host_eval trip-count value and the
+    // mapped scalar in synch (see rebindHostEvalToScalars below).
+    llvm::DenseMap<unsigned, mlir::Value> extentSlot, lbSlot, strideSlot;
+
     // For the descriptor-slot form, recover the host box by loading the
     // descriptor slot just before the map. This dominates every host-side
     // descriptor inquiry we are about to emit.
@@ -559,6 +567,7 @@ public:
       mlir::BlockArgument arg =
           addScalarByCopyMap(builder, target, slot, "arr.extent");
       extentArg[d] = arg;
+      extentSlot[d] = slot;
       return arg;
     };
 
@@ -574,6 +583,7 @@ public:
       mlir::BlockArgument arg =
           addScalarByCopyMap(builder, target, slot, "arr.lb");
       lbArg[d] = arg;
+      lbSlot[d] = slot;
       return arg;
     };
 
@@ -610,6 +620,7 @@ public:
       mlir::BlockArgument arg =
           addScalarByCopyMap(builder, target, slot, "arr.stride");
       strideArg[d] = arg;
+      strideSlot[d] = slot;
       return arg;
     };
 
@@ -749,6 +760,119 @@ public:
       load.erase();
     declareOp.erase();
 
+    // --- Keep omp.target host_eval trip-count operands in synch with the
+    // elided descriptor. ---
+    // target teams distribute pre-computes its loop trip counts on the host and
+    // threads them into the region via `host_eval`. When a loop bound (e.g. an
+    // UBOUND used as the inner loop upper bound) is derived from the descriptor
+    // we are eliding, its host_eval operand is computed from a `fir.box_dims`
+    // of that descriptor. Once the descriptor mapping is dropped, that value is
+    // no longer backed by anything the device can recover, and the host_eval
+    // channel and the (reshaped) map list fall out of synch - producing a wrong
+    // inner-loop bound for >=2 nested loops. To fix this we rebind each such
+    // host_eval operand to a host load of the *same* ByCopy scalar slot
+    // (lb/extent/stride) that backs the corresponding in-region descriptor
+    // quantity, so the trip-count value and the mapped scalar share one source.
+    {
+      // A fir.box_dims feeding a host_eval trip count often reads a reshaped
+      // view of our descriptor rather than the exact SSA value we elided: the
+      // compiler routes the dummy through a fir.declare and/or fir.rebox (and
+      // possibly fir.convert) before inquiring its bounds. `box` and the
+      // box_dims operand may each sit at a *different* point along that
+      // declare->rebox->convert chain, so comparing them directly (in either
+      // direction) is unreliable. Instead reduce any descriptor value to a
+      // canonical root by stripping rebox/convert/declare, and treat two values
+      // as the same descriptor when their roots coincide.
+      auto rootOf = [&](mlir::Value v) -> mlir::Value {
+        llvm::DenseSet<mlir::Value> seen;
+        while (v && seen.insert(v).second) {
+          mlir::Operation *def = v.getDefiningOp();
+          if (auto rb = mlir::dyn_cast_or_null<fir::ReboxOp>(def))
+            v = rb.getBox();
+          else if (auto cv = mlir::dyn_cast_or_null<fir::ConvertOp>(def))
+            v = cv.getValue();
+          else if (auto hd = mlir::dyn_cast_or_null<hlfir::DeclareOp>(def))
+            v = hd.getMemref();
+          else if (auto fd = mlir::dyn_cast_or_null<fir::DeclareOp>(def))
+            v = fd.getMemref();
+          else
+            break;
+        }
+        return v;
+      };
+      mlir::Value boxRoot = rootOf(box);
+      auto resolvesToBox = [&](mlir::Value v) -> bool {
+        return boxRoot && rootOf(v) == boxRoot;
+      };
+
+      // Search v's backward slice for a fir.box_dims reading our descriptor and
+      // report which result (0=lb, 1=extent, 2=stride) it consumes.
+      auto findBoxDimLeaf = [&](mlir::Value v, fir::BoxDimsOp &outBd,
+                                unsigned &outIdx) -> bool {
+        llvm::SmallVector<mlir::Value> wl{v};
+        llvm::DenseSet<mlir::Value> seen;
+        while (!wl.empty()) {
+          mlir::Value cur = wl.pop_back_val();
+          if (!seen.insert(cur).second)
+            continue;
+          mlir::Operation *def = cur.getDefiningOp();
+          if (!def)
+            continue;
+          if (auto bd = mlir::dyn_cast<fir::BoxDimsOp>(def)) {
+            if (resolvesToBox(bd.getVal()))
+              for (unsigned i = 0; i < 3; ++i)
+                if (bd.getResult(i) == cur) {
+                  outBd = bd;
+                  outIdx = i;
+                  return true;
+                }
+            continue;
+          }
+          for (mlir::Value o : def->getOperands())
+            wl.push_back(o);
+        }
+        return false;
+      };
+
+      // Snapshot the host_eval operands up front: rebinding may add new ByCopy
+      // scalar maps (via getLbArg/getExtentArg/getStrideArg ->
+      // addScalarByCopyMap), which appends to the target's operand storage and
+      // would invalidate a live OperandRange over host_eval. We drive the loop
+      // from the snapshot and only touch the mutable range for the by-index
+      // assignment, whose host_eval segment length is unchanged by map appends.
+      llvm::SmallVector<mlir::Value> hostEval(target.getHostEvalVars().begin(),
+                                              target.getHostEvalVars().end());
+      for (unsigned i = 0, e = hostEval.size(); i < e; ++i) {
+        fir::BoxDimsOp bd;
+        unsigned idx = 0;
+        if (!findBoxDimLeaf(hostEval[i], bd, idx))
+          continue;
+        std::optional<int64_t> dC = mlir::getConstantIntValue(bd.getDim());
+        if (!dC)
+          continue;
+        unsigned d = static_cast<unsigned>(*dC);
+        // Ensure the matching ByCopy scalar (and its host slot) exists, then
+        // rebind the host_eval operand to a host load of that slot.
+        mlir::Value slot;
+        if (idx == 0) {
+          getLbArg(d);
+          slot = lbSlot[d];
+        } else if (idx == 1) {
+          getExtentArg(d);
+          slot = extentSlot[d];
+        } else {
+          getStrideArg(d);
+          slot = strideSlot[d];
+        }
+        if (!slot)
+          continue;
+        builder.setInsertionPoint(target);
+        mlir::Value ld = fir::LoadOp::create(builder, loc, slot);
+        mlir::Value conv = builder.createConvert(loc, hostEval[i].getType(), ld);
+        target.getHostEvalVarsMutable().slice(i, 1).assign(conv);
+      }
+    }
+
     redirectMapToBaseAddress(builder, mapOp, baseAddrTy, descriptorSlot, box,
                              seqTy);
   }
@@ -883,8 +1007,8 @@ public:
   }
 
   void runOnOperation() override {
-    if (!enableDescriptorElision)
-      return;
+    // if (!enableDescriptorElision)
+    //   return;
 
     mlir::ModuleOp module = mlir::cast<mlir::ModuleOp>(getOperation());
     fir::KindMapping kindMap = fir::getKindMapping(module);
