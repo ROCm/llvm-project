@@ -23,6 +23,7 @@ if config.comgr_spirv_translator_available:
 if config.comgr_amdgpu_target_available:
     config.available_features.add("comgr-has-amdgpu-target")
 
+
 # spirv-to-reloc-debuginfo checks that comgr forwards
 # -amdgpu-spill-cfi-saved-regs, which the AMD clang driver embeds for -g
 # amdgcnspirv compiles. That is an AMD downstream driver diff (not upstream),
@@ -37,15 +38,31 @@ def _clang_embeds_debuginfo_cfi():
         os.write(fd, b"__attribute__((global)) void k(float *p) { *p = 1.0f; }\n")
         os.close(fd)
         out = subprocess.run(
-            [clang, "-x", "hip", "--offload-arch=amdgcnspirv", "-nogpulib",
-             "-nogpuinc", "--offload-device-only", "-O3", "-g", "-c", "-###", src],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+            [
+                clang,
+                "-x",
+                "hip",
+                "--offload-arch=amdgcnspirv",
+                "-nogpulib",
+                "-nogpuinc",
+                "--offload-device-only",
+                "-O3",
+                "-g",
+                "-c",
+                "-###",
+                src,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=120,
+        )
         return b"amdgpu-spill-cfi-saved-regs" in out.stdout
     except Exception:
         return False
     finally:
         if src and os.path.exists(src):
             os.unlink(src)
+
 
 if _clang_embeds_debuginfo_cfi():
     config.available_features.add("comgr-clang-embeds-debuginfo-cfi")
