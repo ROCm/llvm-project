@@ -33,6 +33,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/MC/MCExpr.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -984,6 +985,8 @@ struct PcMaterializedCallInfo {
 ///   s_get_pc_i64 Target
 ///   ...                         // no Target definition or control flow
 ///   s_add_nc_u64 Target, Target, Immediate
+///   // or: s_add_co_u32 TargetLo, TargetLo, ImmediateLo
+///   //     s_add_co_ci_u32 TargetHi, TargetHi, ImmediateHi
 ///   ...                         // no Target definition or control flow
 ///   s_swap_pc_i64 Return, Target
 ///
@@ -1000,8 +1003,19 @@ std::optional<MaterializedPcSequence>
 resolveMaterializedPcTarget(ArrayRef<InternalDecodedInst> Decoded,
                             size_t TransferIndex, MCRegister TargetRegister,
                             const LLVMState &LS, uint64_t TextAddr) {
+  auto getAbsoluteImmediate = [](const MCOperand &Operand)
+      -> std::optional<int64_t> {
+    int64_t Value = 0;
+    if (Operand.isImm())
+      return Operand.getImm();
+    if (!Operand.isExpr() ||
+        !Operand.getExpr()->evaluateAsAbsolute(Value))
+      return std::nullopt;
+    return Value;
+  };
+
   std::optional<size_t> AddIndex;
-  int64_t AddImmediate = 0;
+  uint64_t AddImmediate = 0;
   for (size_t I = TransferIndex; I != 0;) {
     --I;
     const InternalDecodedInst &Candidate = Decoded[I];
@@ -1009,16 +1023,60 @@ resolveMaterializedPcTarget(ArrayRef<InternalDecodedInst> Decoded,
       return std::nullopt;
     if (!definesOverlappingRegister(Candidate, LS, TargetRegister))
       continue;
-    if (Candidate.Inst.getOpcode() != LS.SAddNcU64Opcode ||
+    if (Candidate.Inst.getOpcode() == LS.SAddNcU64Opcode) {
+      if (Candidate.Inst.getNumOperands() != 3 ||
+          !Candidate.Inst.getOperand(0).isReg() ||
+          Candidate.Inst.getOperand(0).getReg() != TargetRegister ||
+          !Candidate.Inst.getOperand(1).isReg() ||
+          Candidate.Inst.getOperand(1).getReg() != TargetRegister)
+        return std::nullopt;
+      std::optional<int64_t> Immediate =
+          getAbsoluteImmediate(Candidate.Inst.getOperand(2));
+      if (!Immediate)
+        return std::nullopt;
+      AddIndex = I;
+      AddImmediate = static_cast<uint64_t>(*Immediate);
+      break;
+    }
+
+    if (Candidate.Inst.getOpcode() != LS.SAddCoCiU32Opcode || I == 0 ||
         Candidate.Inst.getNumOperands() != 3 ||
         !Candidate.Inst.getOperand(0).isReg() ||
-        Candidate.Inst.getOperand(0).getReg() != TargetRegister ||
         !Candidate.Inst.getOperand(1).isReg() ||
-        Candidate.Inst.getOperand(1).getReg() != TargetRegister ||
-        !Candidate.Inst.getOperand(2).isImm())
+        Candidate.Inst.getOperand(0).getReg() !=
+            Candidate.Inst.getOperand(1).getReg())
       return std::nullopt;
-    AddIndex = I;
-    AddImmediate = Candidate.Inst.getOperand(2).getImm();
+
+    const InternalDecodedInst &LowAdd = Decoded[I - 1];
+    if (!LowAdd.DecodeSucceeded ||
+        LowAdd.Inst.getOpcode() != LS.SAddCoU32Opcode ||
+        LowAdd.Inst.getNumOperands() != 3 ||
+        !LowAdd.Inst.getOperand(0).isReg() ||
+        !LowAdd.Inst.getOperand(1).isReg() ||
+        LowAdd.Inst.getOperand(0).getReg() !=
+            LowAdd.Inst.getOperand(1).getReg())
+      return std::nullopt;
+
+    MCRegister LowReg(LowAdd.Inst.getOperand(0).getReg());
+    MCRegister HighReg(Candidate.Inst.getOperand(0).getReg());
+    std::optional<unsigned> LowIndex = numberedSgprIndex(*LS.MRI, LowReg);
+    std::optional<unsigned> HighIndex = numberedSgprIndex(*LS.MRI, HighReg);
+    if (!LowIndex || !HighIndex || *HighIndex != *LowIndex + 1 ||
+        !LS.MRI->regsOverlap(TargetRegister, LowReg) ||
+        !LS.MRI->regsOverlap(TargetRegister, HighReg))
+      return std::nullopt;
+
+    std::optional<int64_t> LowImmediate =
+        getAbsoluteImmediate(LowAdd.Inst.getOperand(2));
+    std::optional<int64_t> HighImmediate =
+        getAbsoluteImmediate(Candidate.Inst.getOperand(2));
+    if (!LowImmediate || !HighImmediate)
+      return std::nullopt;
+    const uint32_t LowWord = static_cast<uint32_t>(*LowImmediate);
+    const uint32_t HighWord = static_cast<uint32_t>(*HighImmediate);
+    AddIndex = I - 1;
+    AddImmediate = static_cast<uint64_t>(LowWord) |
+                   (static_cast<uint64_t>(HighWord) << 32);
     break;
   }
   if (!AddIndex)
@@ -1045,11 +1103,8 @@ resolveMaterializedPcTarget(ArrayRef<InternalDecodedInst> Decoded,
         *GetPcAddress, Candidate.Size, "PC-materialized transfer PC value");
     if (!PcValue)
       return std::nullopt;
-    // s_add_nc_u64 uses modulo-2^64 arithmetic. Casting the signed MC
-    // immediate to uint64_t and adding it reproduces both positive and
-    // negative literals, including INT64_MIN, without signed overflow.
-    return MaterializedPcSequence{
-        *PcValue + static_cast<uint64_t>(AddImmediate), Candidate.Offset};
+    // Both supported add forms use modulo-2^64 arithmetic.
+    return MaterializedPcSequence{*PcValue + AddImmediate, Candidate.Offset};
   }
   return std::nullopt;
 }
@@ -1448,7 +1503,9 @@ hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
                          const LLVMState &LS, uint64_t TextAddr,
                          uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
                          ArrayRef<BoundedSetPcReturn> BoundedReturns,
-                         uint64_t SequenceStart, uint64_t SequenceEnd) {
+                         uint64_t SequenceStart, uint64_t SequenceEnd,
+                         ArrayRef<std::optional<MaterializedPcSequence>>
+                             MaterializedJumps = {}) {
   for (uint64_t Entry : DeclaredEntries)
     if (Entry > SequenceStart && Entry <= SequenceEnd)
       return true;
@@ -1456,6 +1513,16 @@ hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &DI = Decoded[I];
     if (DI.DecodeSucceeded && DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+      if (MaterializedJumps.size() == Decoded.size() &&
+          MaterializedJumps[I]) {
+        uint64_t Target = MaterializedJumps[I]->Target;
+        if (Target < TextAddr || Target >= TextEnd)
+          return true;
+        uint64_t RelativeTarget = Target - TextAddr;
+        if (RelativeTarget > SequenceStart && RelativeTarget <= SequenceEnd)
+          return true;
+        continue;
+      }
       const BoundedSetPcReturn *Return =
           findBoundedSetPcReturn(BoundedReturns, I);
       if (!Return)
@@ -1510,6 +1577,25 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   for (size_t I = 0; I != Decoded.size(); ++I)
     MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
 
+  SmallVector<std::optional<MaterializedPcSequence>, 16> MaterializedJumps(
+      Decoded.size());
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    if (!DI.DecodeSucceeded || DI.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+        DI.Inst.getNumOperands() == 0)
+      continue;
+    const MCOperand &TargetOperand =
+        DI.Inst.getOperand(DI.Inst.getNumOperands() - 1);
+    if (!TargetOperand.isReg() || !TargetOperand.getReg())
+      continue;
+    std::optional<MaterializedPcSequence> Sequence =
+        resolveMaterializedPcTarget(
+            Decoded, I, MCRegister(TargetOperand.getReg()), LS, TextAddr);
+    if (Sequence && Sequence->Target >= TextAddr &&
+        Sequence->Target < *TextEnd)
+      MaterializedJumps[I] = *Sequence;
+  }
+
   std::optional<SmallVector<KnownCallSite, 4>> Calls = collectKnownCallSites(
       Decoded, LS, TextAddr, *TextEnd, MaterializedCalls, RelocationDispatches);
   if (!Calls)
@@ -1536,8 +1622,46 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     for (uint64_t Target : Return.Targets)
       Info.Targets.insert(Target);
   }
+
+  // Prove all canonical PC-materialized jumps as one closed set. Treating one
+  // candidate as finite while another candidate remained "unbounded" made the
+  // proof circular and rejected every production kernel-entry skip sequence.
+  // The group is accepted only if every s_set_pc_i64 is either an already
+  // bounded return or one of these candidates, and no declared/direct/finite
+  // indirect target enters the middle of any candidate materialization.
+  bool MaterializedJumpsAreClosed = true;
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    if (!MaterializedJumps[I])
+      continue;
+    const InternalDecodedInst &DI = Decoded[I];
+    if (hasKnownControlFlowEntry(
+            Decoded, LS, TextAddr, *TextEnd, DeclaredEntries, *BoundedReturns,
+            MaterializedJumps[I]->SequenceStart, DI.Offset,
+            MaterializedJumps)) {
+      MaterializedJumpsAreClosed = false;
+      break;
+    }
+  }
+  ArrayRef<std::optional<MaterializedPcSequence>> ProvenMaterializedJumps;
+  if (MaterializedJumpsAreClosed) {
+    ProvenMaterializedJumps = MaterializedJumps;
+    for (size_t I = 0; I != Decoded.size(); ++I) {
+      if (!MaterializedJumps[I])
+        continue;
+      const InternalDecodedInst &DI = Decoded[I];
+      uint64_t RelativeTarget = MaterializedJumps[I]->Target - TextAddr;
+      Info.RelocatableIndirectTransfers.insert(DI.Offset);
+      Info.Targets.insert(RelativeTarget);
+      log() << "hotswap: resolved PC-materialized jump at 0x"
+            << utohexstr(DI.Offset) << " to .text+0x"
+            << utohexstr(RelativeTarget) << "\n";
+    }
+  }
+
   for (size_t InstIndex = 0; InstIndex != Decoded.size(); ++InstIndex) {
     const InternalDecodedInst &DI = Decoded[InstIndex];
+    if (MaterializedJumpsAreClosed && MaterializedJumps[InstIndex])
+      continue;
     if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
         LS.MIA->isReturn(DI.Inst))
       continue;
@@ -1574,13 +1698,16 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
                      Decoded, LS, TextAddr, *TextEnd, DeclaredEntries,
                      *BoundedReturns,
                      MaterializedCalls[InstIndex]->SequenceStart,
-                     MaterializedCalls[InstIndex]->SequenceEnd)) {
+                     MaterializedCalls[InstIndex]->SequenceEnd,
+                     ProvenMaterializedJumps)) {
         Target = MaterializedCalls[InstIndex]->Target;
+        Info.RelocatableIndirectTransfers.insert(DI.Offset);
       }
       if (TableDispatch) {
         bool HasInteriorEntry = hasKnownControlFlowEntry(
             Decoded, LS, TextAddr, *TextEnd, DeclaredEntries, *BoundedReturns,
-            TableDispatch->SequenceStart, TableDispatch->SequenceEnd);
+            TableDispatch->SequenceStart, TableDispatch->SequenceEnd,
+            ProvenMaterializedJumps);
         for (const RelocationTableDispatch &Dispatch : RelocationDispatches)
           for (uint64_t TableTarget : Dispatch.Targets)
             HasInteriorEntry |= TableTarget > TableDispatch->SequenceStart &&

@@ -1,20 +1,20 @@
-// COM: An unresolved register call may target any original text instruction.
-// COM: In particular, it can target the second of two adjacent far patch sites.
-// COM: The rewriter must not coalesce those sites or consume original .text
-// COM: gateway space. This object has no safe target-independent route to the
-// COM: far trampoline pool, so it must fail closed instead of returning a
-// COM: successful object whose register call lands on rewritten padding.
+// COM: The add-with-carry PC-materialization form has one finite target. The
+// COM: rewriter can therefore protect that target while coalescing the two
+// COM: adjacent far patch sites and using original .text gateway space.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   --output %t.out.elf 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=LOG,API %s
-// LOG: hotswap: unresolved control-flow target disables NOP-sled emission,
-// LOG-SAME: trampoline coalescing, source relocation, and .text gateways
-// LOG: hotswap: error: no safe short-branch gateway for far site
-// API: RESULT: ERROR
+// LOG: hotswap: resolved PC-materialized call at 0xC to .text+0x18
+// LOG-NOT: unresolved control-flow target disables
+// API: RESULT: SUCCESS
+
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// DISASM: s_swap_pc_i64 s[0:1], s[2:3]
+// DISASM-NOT: ds_load_2addr_stride64_b64
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

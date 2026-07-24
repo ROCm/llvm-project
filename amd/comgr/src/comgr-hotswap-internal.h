@@ -858,6 +858,8 @@ struct LLVMState {
   unsigned GlobalPrefetchB8Opcode = 0;
   unsigned SGetPcI64Opcode = 0;
   unsigned SAddNcU64Opcode = 0;
+  unsigned SAddCoU32Opcode = 0;
+  unsigned SAddCoCiU32Opcode = 0;
   unsigned SAddU32Opcode = 0;
   unsigned SAddcU32Opcode = 0;
   unsigned SSetPcI64Opcode = 0;
@@ -1394,7 +1396,8 @@ evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
                                 const LLVMState &LS);
 
 /// A canonical get-PC/add materialized address feeding a PC-materialized
-/// transfer (s_get_pc_i64 / s_add_nc_u64 / s_{swap,set}_pc_i64). \p Target is
+/// transfer. Supported add forms are `s_add_nc_u64` and the adjacent
+/// `s_add_co_u32` / `s_add_co_ci_u32` carry chain. \p Target is
 /// the absolute in-.text virtual address; \p SequenceStart is the .text offset
 /// of the s_get_pc_i64 that begins the sequence.
 struct MaterializedPcSequence {
@@ -1405,10 +1408,10 @@ struct MaterializedPcSequence {
 /// Resolve the target of a PC-materialized transfer whose target register is
 /// \p TargetReg and whose transfer instruction (an s_swap_pc_i64 call or an
 /// s_set_pc_i64 jump) is \p Decoded[TransferIndex]. Scans backward for the
-/// single s_add_nc_u64 then s_get_pc_i64 that define \p TargetReg, stopping at
-/// the first control-flow boundary or unexpected clobber so any variation
-/// stays unresolved (nullopt) for fail-closed callers. \p TextAddr is the
-/// .text base virtual address.
+/// supported add sequence then s_get_pc_i64 that define \p TargetReg, stopping
+/// at the first control-flow boundary or unexpected clobber so any variation
+/// stays unresolved (nullopt) for fail-closed callers. \p TextAddr is the .text
+/// base virtual address.
 [[nodiscard]] std::optional<MaterializedPcSequence>
 resolveMaterializedPcTarget(llvm::ArrayRef<InternalDecodedInst> Decoded,
                             size_t TransferIndex, llvm::MCRegister TargetReg,

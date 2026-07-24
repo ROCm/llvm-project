@@ -1390,6 +1390,152 @@ Expected<bool> repairSGetPcPairForDisplacement(
   return true;
 }
 
+/// Repair the gfx1250 carry-chain form
+///
+///   s_get_pc_i64 Pair
+///   s_add_co_u32 PairLo, PairLo, Low
+///   s_add_co_ci_u32 PairHi, PairHi, High
+///   s_{swap,set}_pc_i64 ..., Pair
+///
+/// when whole-object displacement moves both the sequence and its in-.text
+/// target. The two adds implement one modulo-2^64 addition, so remapping only
+/// requires splitting the new PC-relative delta back into low/high words while
+/// preserving each instruction's literal encoding width.
+Expected<bool> repairSGetPcCarryPairForDisplacement(
+    const ElfView &Elf, const LLVMState &LS, const DisplacementPlan &Plan,
+    const InternalDecodedInst &Gp, SmallVectorImpl<uint8_t> &NewText) {
+  if (Gp.Inst.getNumOperands() != 1 || !Gp.Inst.getOperand(0).isReg())
+    return false;
+  MCRegister PairReg(Gp.Inst.getOperand(0).getReg());
+
+  const uint64_t LowOldOff = Gp.Offset + Gp.Size;
+  if (LowOldOff >= Elf.textSize())
+    return false;
+  SmallVector<InternalDecodedInst, 2> Adds;
+  (void)decodeTextSectionStreaming(
+      Elf.textData() + LowOldOff, Elf.textSize() - LowOldOff, LS,
+      /*WantMnemonic=*/false, [&](const InternalDecodedInst &DI) -> bool {
+        Adds.push_back(DI);
+        return Adds.size() != 2;
+      });
+  if (Adds.size() != 2)
+    return false;
+  const InternalDecodedInst &Low = Adds[0];
+  const InternalDecodedInst &High = Adds[1];
+  if (!Low.DecodeSucceeded || !High.DecodeSucceeded ||
+      Low.Inst.getOpcode() != LS.SAddCoU32Opcode ||
+      High.Inst.getOpcode() != LS.SAddCoCiU32Opcode ||
+      Low.Inst.getNumOperands() != 3 || High.Inst.getNumOperands() != 3 ||
+      !Low.Inst.getOperand(0).isReg() ||
+      !Low.Inst.getOperand(1).isReg() ||
+      !High.Inst.getOperand(0).isReg() ||
+      !High.Inst.getOperand(1).isReg() ||
+      Low.Inst.getOperand(0).getReg() !=
+          Low.Inst.getOperand(1).getReg() ||
+      High.Inst.getOperand(0).getReg() !=
+          High.Inst.getOperand(1).getReg())
+    return false;
+
+  MCRegister LowReg(Low.Inst.getOperand(0).getReg());
+  MCRegister HighReg(High.Inst.getOperand(0).getReg());
+  if (LowReg == HighReg || !LS.MRI->regsOverlap(PairReg, LowReg) ||
+      !LS.MRI->regsOverlap(PairReg, HighReg))
+    return false;
+
+  auto getU32Immediate = [](const MCOperand &Operand)
+      -> std::optional<uint32_t> {
+    int64_t Value = 0;
+    if (Operand.isImm())
+      Value = Operand.getImm();
+    else if (!Operand.isExpr() ||
+             !Operand.getExpr()->evaluateAsAbsolute(Value))
+      return std::nullopt;
+    return static_cast<uint32_t>(Value);
+  };
+  std::optional<uint32_t> OldLow =
+      getU32Immediate(Low.Inst.getOperand(2));
+  std::optional<uint32_t> OldHigh =
+      getU32Immediate(High.Inst.getOperand(2));
+  if (!OldLow || !OldHigh)
+    return false;
+  const uint64_t OldDelta = static_cast<uint64_t>(*OldLow) |
+                            (static_cast<uint64_t>(*OldHigh) << 32);
+
+  std::optional<uint64_t> OldPcBase =
+      checkedAddUint64(Elf.textAddr(), LowOldOff,
+                       "carry-chain s_get_pc old PC base");
+  if (!OldPcBase)
+    return false;
+  const uint64_t OldTarget = *OldPcBase + OldDelta;
+  Expected<uint64_t> NewTargetOrErr =
+      remapAllocatedAddress(Elf, Plan, OldTarget,
+                            /*RequireExecutable=*/true,
+                            "carry-chain s_get_pc target");
+  if (!NewTargetOrErr) {
+    consumeError(NewTargetOrErr.takeError());
+    return false;
+  }
+
+  uint64_t NewLowOff = 0;
+  const uint64_t HighOldOff = LowOldOff + Low.Size;
+  uint64_t NewHighOff = 0;
+  if (!Plan.mapOffset(LowOldOff, DisplacementMapBias::AfterInsertedBytes,
+                      NewLowOff) ||
+      !Plan.mapOffset(HighOldOff, DisplacementMapBias::AfterInsertedBytes,
+                      NewHighOff))
+    return false;
+  std::optional<uint64_t> NewPcBase =
+      checkedAddUint64(Elf.textAddr(), NewLowOff,
+                       "carry-chain s_get_pc displaced PC base");
+  if (!NewPcBase)
+    return false;
+  const uint64_t NewDelta = *NewTargetOrErr - *NewPcBase;
+  const uint32_t NewLow = static_cast<uint32_t>(NewDelta);
+  const uint32_t NewHigh = static_cast<uint32_t>(NewDelta >> 32);
+
+  auto repairAdd = [&](const InternalDecodedInst &Add, uint32_t NewImmediate,
+                       uint64_t NewOffset) -> Error {
+    if (!LS.MCIP)
+      return makeDisplacementError(
+          "MC instruction printer unavailable for carry-chain repair");
+    SmallString<256> PrintedBuf;
+    raw_svector_ostream PrintOS(PrintedBuf);
+    LS.MCIP->printInst(&Add.Inst, /*Address=*/0, /*Annot=*/"", *LS.STI,
+                       PrintOS);
+    StringRef Printed = StringRef(PrintedBuf).trim();
+    size_t LastComma = Printed.rfind(',');
+    if (LastComma == StringRef::npos)
+      return makeDisplacementError(
+          "carry-chain add has no trailing immediate operand");
+    StringRef Head = Printed.substr(0, LastComma + 1);
+    StringRef AddendTok = Printed.substr(LastComma + 1).trim();
+    std::string Hex = ("0x" + Twine::utohexstr(NewImmediate)).str();
+    std::string NewAddend;
+    if (AddendTok.starts_with("lit64("))
+      NewAddend = "lit64(" + Hex + ")";
+    else if (AddendTok.starts_with("lit("))
+      NewAddend = "lit(" + Hex + ")";
+    else
+      NewAddend = Hex;
+    SmallVector<uint8_t> Code =
+        assembleSingleInst((Head + " " + NewAddend).str(), LS);
+    if (Code.size() != Add.Size)
+      return makeDisplacementError(
+          "carry-chain add changed encoded size during re-encode");
+    if (NewOffset + Code.size() > NewText.size())
+      return makeDisplacementError(
+          "carry-chain add writes past rebuilt .text");
+    std::memcpy(NewText.data() + NewOffset, Code.data(), Code.size());
+    return Error::success();
+  };
+
+  if (Error Err = repairAdd(Low, NewLow, NewLowOff))
+    return std::move(Err);
+  if (Error Err = repairAdd(High, NewHigh, NewHighOff))
+    return std::move(Err);
+  return true;
+}
+
 /// Repair a standalone `s_add_pc_i64 lit64(delta)` under whole-object
 /// displacement. Unlike the s_get_pc pair (whose target is a global outside
 /// .text), this is a long-forward PC-relative CONTROL transfer whose target is
@@ -1533,6 +1679,14 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
         return false;
       }
       if (*RepairedOrErr)
+        return true;
+      Expected<bool> CarryRepairedOrErr =
+          repairSGetPcCarryPairForDisplacement(Elf, LS, Plan, DI, NewText);
+      if (!CarryRepairedOrErr) {
+        RepairErr.emplace(CarryRepairedOrErr.takeError());
+        return false;
+      }
+      if (*CarryRepairedOrErr)
         return true;
       // Not a repairable pair; fall through to the strict rejection.
     }
