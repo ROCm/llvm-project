@@ -276,7 +276,7 @@ TEST(ElfView, KernelDescriptorsEnumeratesAndUpdatesEntryOffset) {
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 16u);
 }
 
-TEST(ElfView, KernelDescriptorsSkipsKdWhenFileOffsetOverflows) {
+TEST(ElfView, RejectsKernelDescriptorWhenFileOffsetOverflows) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "overflow_kernel";
   Opts.RodataAddr = 0x1000;
@@ -287,9 +287,21 @@ TEST(ElfView, KernelDescriptorsSkipsKdWhenFileOffsetOverflows) {
 
   llvm::Expected<ElfView> ViewOrErr =
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
-  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  EXPECT_TRUE(ViewOrErr->kernelDescriptors().empty());
-  EXPECT_EQ(ViewOrErr->findKernelDescriptor("overflow_kernel"), nullptr);
+  EXPECT_FALSE((bool)ViewOrErr);
+  llvm::consumeError(ViewOrErr.takeError());
+}
+
+TEST(ElfView, RejectsKernelDescriptorOutsideDefiningSection) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName = "outside_kernel";
+  Opts.KernelDescriptorSymbolValue = Opts.RodataAddr + 0x1400;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  EXPECT_FALSE((bool)ViewOrErr);
+  llvm::consumeError(ViewOrErr.takeError());
 }
 
 // growWithTrampolines appends the pool at a fresh high virtual address instead

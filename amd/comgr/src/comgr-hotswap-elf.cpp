@@ -73,6 +73,12 @@ static std::optional<uint64_t> checkedSectionFileOffset(const ELFT::Shdr &Sec,
   }
 
   uint64_t Delta = VAddr - Sec.sh_addr;
+  if (Delta > Sec.sh_size || AccessSize > Sec.sh_size - Delta) {
+    log() << "hotswap: error: " << Context
+          << " extends outside its defining section.\n";
+    return std::nullopt;
+  }
+
   std::optional<uint64_t> FileOffset = checkedAddUint64(
       Sec.sh_offset, Delta, (Twine(Context) + " file offset").str());
   if (!FileOffset)
@@ -429,6 +435,51 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
         (Shdr.sh_offset > Size || Shdr.sh_size > Size - Shdr.sh_offset))
       return createStringError(object::object_error::parse_failed,
                                "section extends past end of file");
+  }
+
+  // Every descriptor symbol is an admitted address carrier. Validate all
+  // copies rather than allowing a valid DYNSYM entry to hide a malformed
+  // duplicate in SYMTAB, which could otherwise be rewritten into an object
+  // that fails a second hotswap pass.
+  for (const ELFT::Shdr &SymShdr : Sections) {
+    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+    Expected<ELFT::SymRange> SymbolsOrErr = File.symbols(&SymShdr);
+    if (!SymbolsOrErr)
+      return SymbolsOrErr.takeError();
+    Expected<StringRef> StrTabOrErr =
+        File.getStringTableForSymtab(SymShdr, Sections);
+    if (!StrTabOrErr)
+      return StrTabOrErr.takeError();
+    for (const ELFT::Sym &Sym : *SymbolsOrErr) {
+      Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
+      if (!NameOrErr)
+        return NameOrErr.takeError();
+      if (!NameOrErr->ends_with(".kd"))
+        continue;
+      if (Sym.st_shndx == ELF::SHN_UNDEF || Sym.st_shndx >= ELF::SHN_LORESERVE)
+        return createStringError(object::object_error::parse_failed,
+                                 "kernel descriptor has no defining section");
+      Expected<const ELFT::Shdr *> HostShdrOrErr =
+          File.getSection(Sym.st_shndx);
+      if (!HostShdrOrErr)
+        return HostShdrOrErr.takeError();
+      const ELFT::Shdr &HostShdr = **HostShdrOrErr;
+      uint64_t SectionOffset = Sym.st_value;
+      if (Header.e_type != ELF::ET_REL) {
+        if (Sym.st_value < HostShdr.sh_addr)
+          return createStringError(object::object_error::parse_failed,
+                                   "kernel descriptor precedes its section");
+        SectionOffset = Sym.st_value - HostShdr.sh_addr;
+      }
+      if (HostShdr.sh_type == ELF::SHT_NOBITS ||
+          SectionOffset > HostShdr.sh_size ||
+          KdSize > HostShdr.sh_size - SectionOffset)
+        return createStringError(
+            object::object_error::parse_failed,
+            "kernel descriptor extends outside its section");
+    }
   }
 
   Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
