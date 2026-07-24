@@ -24,8 +24,6 @@ namespace clang {
 namespace driver {
 namespace tools {
 
-bool needFortranLibs(const Driver &D, const llvm::opt::ArgList &Args);
-
 struct OffloadJobsOpt {
   enum class Kind { Missing, Invalid, Jobserver, Fixed };
 
