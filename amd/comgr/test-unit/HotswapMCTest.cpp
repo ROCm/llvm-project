@@ -533,6 +533,61 @@ TEST(FindNearestSetPcGateway, DistinguishesNoFitFromEncodingFailure) {
             std::string::npos);
 }
 
+TEST(FindNearestSetPcGateway, AnalyticalWidthsMatchEncodedBoundaries) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  struct WidthCase {
+    uint64_t Delta;
+    uint32_t ExpectedSize;
+  };
+  constexpr WidthCase Cases[] = {
+      {static_cast<uint64_t>(-16), 12},
+      {0, 12},
+      {64, 12},
+      {65, 16},
+      {static_cast<uint64_t>(std::numeric_limits<int32_t>::max()), 16},
+      {static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) + 1, 20},
+      {static_cast<uint64_t>(-17), 20},
+      {0x3ff0000000000000ULL, 12},
+      {0xbff0000000000000ULL, 12},
+      {0x3fe0000000000000ULL, 12},
+      {0xbfe0000000000000ULL, 12},
+      {0x4000000000000000ULL, 12},
+      {0xc000000000000000ULL, 12},
+      {0x4010000000000000ULL, 12},
+      {0xc010000000000000ULL, 12},
+      {0x3fc45f306dc9c882ULL, 12},
+  };
+
+  constexpr uint64_t GatewayOffset = 0x100;
+  constexpr uint64_t PcBase = GatewayOffset + MinInstSize;
+  for (const WidthCase &C : Cases) {
+    SCOPED_TRACE("delta=0x" + llvm::utohexstr(C.Delta));
+    uint64_t TargetOffset = PcBase + C.Delta;
+    std::optional<llvm::SmallVector<uint8_t>> Encoded =
+        encodeSetPCLongBranch(S, GatewayOffset, TargetOffset, /*SgprBase=*/12);
+    ASSERT_TRUE(Encoded);
+    ASSERT_EQ(Encoded->size(), C.ExpectedSize);
+
+    // Give the candidate exactly the space required by the real encoding.
+    // An analytical overestimate rejects the candidate; an underestimate is
+    // rejected by findNearestSetPcGateway's post-encode consistency check.
+    std::vector<NopSled> Gateways = {
+        {/*Start=*/GatewayOffset,
+         /*End=*/GatewayOffset + Encoded->size(),
+         /*WritePos=*/GatewayOffset,
+         /*FunctionStart=*/0,
+         /*FunctionEnd=*/std::numeric_limits<uint64_t>::max()}};
+    llvm::Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
+        findNearestSetPcGateway(Gateways, S, /*FromOffset=*/0, TargetOffset,
+                                /*SgprBase=*/12);
+    ASSERT_TRUE((bool)GatewayOrErr) << llvm::toString(GatewayOrErr.takeError());
+    ASSERT_TRUE(*GatewayOrErr);
+    EXPECT_EQ((*GatewayOrErr)->Bytes.size(), Encoded->size());
+  }
+}
+
 TEST(CountReachableSetPcGatewaySlots, DistinguishesZeroFromEncodingFailure) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -551,8 +606,22 @@ TEST(CountReachableSetPcGatewaySlots, DistinguishesZeroFromEncodingFailure) {
       /*SgprBase=*/3, /*MaxSlots=*/1);
   ASSERT_FALSE((bool)EncodingFailure);
   std::string Error = llvm::toString(EncodingFailure.takeError());
-  EXPECT_NE(Error.find("failed to encode set-PC gateway while counting"),
+  EXPECT_NE(Error.find("invalid set-PC gateway while counting"),
             std::string::npos);
+}
+
+TEST(CountReachableSetPcGatewaySlots, UsesExactWidthsWithoutEncoding) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x130, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+  llvm::Expected<uint64_t> Slots = countReachableSetPcGatewaySlots(
+      Gateways, S, /*FromOffset=*/0, /*TargetOffset=*/0x108,
+      /*SgprBase=*/12, /*MaxSlots=*/8);
+  ASSERT_TRUE((bool)Slots) << llvm::toString(Slots.takeError());
+  EXPECT_EQ(*Slots, 3u);
 }
 
 TEST(EncodeSetPCLongBranch, RejectsPcBaseOverflow) {
