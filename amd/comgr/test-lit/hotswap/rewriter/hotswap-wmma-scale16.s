@@ -1,8 +1,9 @@
 // COM: The target gfx1250 has no block-16 scaled WMMA, so the rewrite lowers
 // COM: 16x16x128_f8f6f4 exactly into two block-32 WMMAs chained through the
 // COM: accumulator: each pass masks matrix A to one 16-K subblock (a lane mask
-// COM: for FP8) and byte-gathers the matching block-16 scales. When the scratch
-// COM: budget is unavailable it fails closed (see the 32x16 refuse test).
+// COM: for FP8), copies matrix B into the same scratch bank, and byte-gathers
+// COM: the matching block-16 scales. When the scratch budget is unavailable it
+// COM: fails closed (see the 32x16 refuse test).
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
@@ -18,13 +19,13 @@
 // DISASM-NOT: v_wmma_scale16
 // DISASM: s_mov_b32 s{{[0-9]+}}, 0xffff {{.*$}}
 // DISASM: v_cndmask_b32_e64
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[32:47], v[0:7],
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[{{[0-9]+}}:{{[0-9]+}}], v[0:7],
 // COM: exactly one gfx1250 hazard v_nop before the pass-high lane-mask VALU that
 // COM: overwrites the masked-A scratch block.
 // DISASM-COUNT-1: v_nop
 // DISASM-NEXT: s_mov_b32 s{{[0-9]+}}, 0xffff0000
 // DISASM: v_cndmask_b32_e64
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[32:47], v[0:7],
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[{{[0-9]+}}:{{[0-9]+}}], v[0:7],
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

@@ -1134,6 +1134,35 @@ std::optional<unsigned> getActiveVgprMsbMode(PatchContext &Ctx, size_t Idx) {
   return findActiveVgprMsbMode(Ctx, Idx);
 }
 
+std::optional<unsigned> getLocallyEstablishedVgprMsbMode(PatchContext &Ctx,
+                                                         size_t Idx) {
+  while (Idx > 0) {
+    const InternalDecodedInst &Prev = Ctx.Decoded[Idx - 1];
+    const InternalDecodedInst &Current = Ctx.Decoded[Idx];
+    if (Prev.Offset + Prev.Size != Current.Offset)
+      return std::nullopt;
+
+    if (Ctx.DirectControlFlow.Targets.contains(Current.Offset))
+      return std::nullopt;
+    for (uint64_t Entry : Ctx.DeclaredEntries)
+      if (Entry == Current.Offset)
+        return std::nullopt;
+
+    if (std::optional<unsigned> Mode = getExactVgprMsbModeWritten(Prev, Ctx.LS))
+      return Mode;
+
+    if (Prev.Mnemonic == "<unknown>" ||
+        Prev.Inst.getOpcode() == Ctx.LS.SSetVgprMsbOpcode ||
+        instructionDefinesNamedRegister(Prev, "MODE", Ctx.LS) ||
+        (Ctx.LS.MIA &&
+         (Ctx.LS.MIA->isBranch(Prev.Inst) || Ctx.LS.MIA->isCall(Prev.Inst) ||
+          Ctx.LS.MIA->isReturn(Prev.Inst))))
+      return std::nullopt;
+    --Idx;
+  }
+  return std::nullopt;
+}
+
 unsigned getVgprMsbBank(unsigned Mode, VgprMsbOperand Operand) {
   return getVgprMsbs(Mode, Operand);
 }
