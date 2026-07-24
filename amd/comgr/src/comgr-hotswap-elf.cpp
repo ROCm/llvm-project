@@ -408,6 +408,14 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
     return FileOrErr.takeError();
 
   const ELFFileT &File = *FileOrErr;
+  const auto &Header = File.getHeader();
+  if (Header.e_version != ELF::EV_CURRENT ||
+      Header.e_ehsize != sizeof(ELFT::Ehdr) ||
+      (Header.e_phnum != 0 && Header.e_phentsize != sizeof(ELFT::Phdr)) ||
+      (Header.e_shnum != 0 && Header.e_shentsize != sizeof(ELFT::Shdr)))
+    return createStringError(object::object_error::parse_failed,
+                             "invalid ELF header sizes or version");
+
   Expected<ELFT::ShdrRange> SectionsOrErr = File.sections();
   if (!SectionsOrErr)
     return SectionsOrErr.takeError();
