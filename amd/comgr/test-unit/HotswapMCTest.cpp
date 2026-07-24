@@ -452,6 +452,26 @@ TEST(EncodeSetPCLongBranch, ForwardLandsOnTarget) {
   EXPECT_EQ(From + MinInstSize + Delta, To);
 }
 
+TEST(EncodeSetPCLongBranch, UsesVccWhenRequested) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::optional<llvm::SmallVector<uint8_t>> Out = encodeSetPCLongBranch(
+      S, /*FromOffset=*/0x1000, /*TargetOffset=*/0x81000, /*SgprBase=*/0,
+      /*UseVcc=*/true);
+  ASSERT_TRUE(Out);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Out->data(), Out->size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 3u);
+  for (const InternalDecodedInst &DI : Decoded) {
+    ASSERT_NE(DI.Inst.getNumOperands(), 0u);
+    ASSERT_TRUE(DI.Inst.getOperand(0).isReg());
+    EXPECT_TRUE(S.MRI->regsOverlap(
+        llvm::MCRegister(DI.Inst.getOperand(0).getReg()), S.VCCRegister));
+  }
+}
+
 TEST(EncodeSetPCLongBranch, InlineDisplacementUsesTwelveBytes) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -488,6 +508,30 @@ TEST(FindNearestSetPcGateway, FitsActualSixteenByteEncoding) {
   EXPECT_EQ(Gateway->Sled, &Gateways[0]);
   EXPECT_EQ(Gateway->Bytes.size(), 16u);
   EXPECT_EQ(Gateways[0].WritePos, 0x100u);
+}
+
+TEST(FindNearestSetPcGateway, PrependsWave32VccSave) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x118, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+  llvm::Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
+      findNearestSetPcGateway(
+          Gateways, S, /*FromOffset=*/0, /*TargetOffset=*/0x81000,
+          /*SgprBase=*/105, /*UseVcc=*/true, /*PreserveVcc=*/true);
+  ASSERT_TRUE((bool)GatewayOrErr) << llvm::toString(GatewayOrErr.takeError());
+  std::optional<EncodedSetPcGateway> &Gateway = *GatewayOrErr;
+  ASSERT_TRUE(Gateway);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Gateway->Bytes.data(), Gateway->Bytes.size(), S,
+                                Decoded));
+  ASSERT_EQ(Decoded.size(), 4u);
+  EXPECT_EQ(Decoded.front().Mnemonic, "s_mov_b32");
+  EXPECT_EQ(Decoded[1].Mnemonic, "s_get_pc_i64");
+  EXPECT_EQ(Decoded.back().Mnemonic, "s_set_pc_i64");
 }
 
 TEST(FindNearestSetPcGateway, SkipsNearerUndersizedCandidate) {

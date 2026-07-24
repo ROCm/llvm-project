@@ -313,12 +313,19 @@ struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
-  // When set, the pool is beyond s_branch reach. The source site branches to a
-  // nearby NOP gateway, which uses the scratch-backed gfx12 set-PC sequence
-  // to reach the pool without executing s_add_pc_i64.
+  // When set, the pool is beyond s_branch reach. The source and return edges
+  // use safe branch islands and, when a dead register pair is available, the
+  // scratch-backed gfx12 set-PC sequence. Neither executes s_add_pc_i64.
   bool Long = false;
   bool UsesSetPCBack = false;
   unsigned LongBranchSgprBase = 0;
+  // When numbered SGPRs are exhausted, a far edge may use VCC after proving
+  // that the replacement does not consume its incoming value and that VCC is
+  // dead at the continuation.
+  bool LongBranchUsesVcc = false;
+  // A wave32 far edge may preserve live VCC_LO in one safe numbered SGPR.
+  // Its source tail is a restore-and-fallthrough landing pad.
+  bool LongBranchPreservesVcc = false;
   bool HasPoolBranchIsland = false;
   uint64_t PoolBranchIslandOffset = 0;
   bool UsesShortBranchForward = false;
@@ -326,6 +333,8 @@ struct Trampoline {
   llvm::SmallVector<uint8_t> DirectSetPCForwardBytes;
   llvm::SmallVector<uint64_t, 4> ForwardBranchIslands;
   uint64_t ForwardBranchTargetOffset = 0;
+  llvm::SmallVector<uint64_t, 4> ReturnBranchIslands;
+  uint64_t ReturnBranchTargetOffset = 0;
   bool HasForwardGateway = false;
   uint64_t ForwardGatewayOffset = 0;
   llvm::SmallVector<uint8_t> ForwardGatewayBytes;
@@ -488,6 +497,12 @@ static constexpr uint32_t MinInstSize = 4;
 static constexpr uint32_t SetPcReturnReserveBytes = 20;
 
 static constexpr uint32_t SetPcForwardSequenceBytes = SetPcReturnReserveBytes;
+static constexpr uint32_t VccSaveRestoreBytes = MinInstSize;
+static constexpr uint32_t VccPreservingReturnReserveBytes =
+    VccSaveRestoreBytes + SetPcReturnReserveBytes;
+static constexpr uint32_t VccLandingPadBytes = MinInstSize;
+static constexpr uint32_t VccPreservingSourceBytes =
+    MinInstSize + VccLandingPadBytes;
 static constexpr uint32_t PoolBranchIslandBytes = MinInstSize;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
@@ -1380,7 +1395,8 @@ struct SafeSgprScratchBlock {
 /// nullopt after logging when no block fits below RewriteConfig::MaxSgprs.
 std::optional<SafeSgprScratchBlock>
 findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
-                         unsigned Alignment, llvm::StringRef Context);
+                         unsigned Alignment, llvm::StringRef Context,
+                         bool ReportNoSpace = true);
 
 /// Charge a previously selected global block to the kernel owning \p
 /// TextOffset. If the site is in an ordinary device function, conservatively
@@ -1399,12 +1415,15 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
                                     uint32_t InstSize,
                                     llvm::ArrayRef<uint8_t> Replacement);
 
-/// Encode an SCC-neutral indirect long branch using the aligned SGPR pair at
-/// \p SgprBase. The displacement uses gfx12's s_add_nc_u64; no s_add_pc_i64
+/// Encode an SCC-neutral indirect long branch using either the aligned
+/// numbered pair at \p SgprBase or VCC when \p UseVcc is true. The caller must
+/// prove VCC dead across the edge or preserve its wave32 low half before
+/// selecting it. The displacement uses gfx12's s_add_nc_u64; no s_add_pc_i64
 /// is emitted.
 std::optional<llvm::SmallVector<uint8_t>>
 encodeSetPCLongBranch(const LLVMState &LS, uint64_t FromOffset,
-                      uint64_t TargetOffset, unsigned SgprBase);
+                      uint64_t TargetOffset, unsigned SgprBase,
+                      bool UseVcc = false);
 
 struct EncodedSetPcGateway {
   NopSled *Sled = nullptr;
@@ -1413,19 +1432,22 @@ struct EncodedSetPcGateway {
 
 /// Find the nearest short-branch-reachable gateway whose remaining space fits
 /// the set-PC sequence. Candidate widths are computed from the displacement;
-/// only the selected candidate is encoded. The returned plan does not advance
-/// the sled or modify text.
+/// only the selected candidate is encoded. When \p PreserveVcc is true,
+/// prepend a VCC_LO save to \p SgprBase. The returned plan does not advance the
+/// sled or modify text.
 llvm::Expected<std::optional<EncodedSetPcGateway>>
 findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
                         uint64_t FromOffset, uint64_t TargetOffset,
-                        unsigned SgprBase);
+                        unsigned SgprBase, bool UseVcc = false,
+                        bool PreserveVcc = false);
 
 /// Count set-PC gateway slots reachable from \p FromOffset, up to \p MaxSlots.
 /// Candidate widths are computed without assembly. Zero means that no
 /// candidate fits; an Error means that a reachable candidate is invalid.
 llvm::Expected<uint64_t> countReachableSetPcGatewaySlots(
     llvm::ArrayRef<NopSled> Gateways, const LLVMState &LS, uint64_t FromOffset,
-    uint64_t TargetOffset, unsigned SgprBase, uint64_t MaxSlots);
+    uint64_t TargetOffset, unsigned SgprBase, uint64_t MaxSlots,
+    bool UseVcc = false, bool PreserveVcc = false);
 
 /// Return whether an s_branch at \p From can encode \p To, including the
 /// instruction-relative PC base, alignment, signed range, and overflow checks.
