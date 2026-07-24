@@ -10,6 +10,7 @@
 #include "comgr-test-elf-utils.h"
 #include "gtest/gtest.h"
 
+#include <array>
 #include <cstring>
 #include <limits>
 
@@ -830,6 +831,7 @@ TEST(ElfView, ReadsWorkgroupCapacityMetadata) {
   Opts.MetadataVgprCount = 120;
   Opts.MetadataMaxFlatWorkgroupSize = 1024;
   Opts.MetadataWavefrontSize = 32;
+  Opts.MetadataClusterDims = std::array<unsigned, 3>{2, 3, 4};
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(makeText(), Opts);
 
@@ -839,6 +841,104 @@ TEST(ElfView, ReadsWorkgroupCapacityMetadata) {
   EXPECT_EQ(ViewOrErr->getKernelMetadataVgprCount("entry_kernel"), 120u);
   EXPECT_EQ(ViewOrErr->getKernelMaxFlatWorkgroupSize("entry_kernel"), 1024u);
   EXPECT_EQ(ViewOrErr->getKernelWavefrontSize("entry_kernel"), 32u);
+  std::optional<KernelClusterDims> ClusterDims =
+      ViewOrErr->getKernelClusterDims("entry_kernel");
+  ASSERT_TRUE(ClusterDims);
+  EXPECT_EQ(ClusterDims->X, 2u);
+  EXPECT_EQ(ClusterDims->Y, 3u);
+  EXPECT_EQ(ClusterDims->Z, 4u);
+}
+
+TEST(ElfView, RejectsMalformedClusterDimsMetadata) {
+  using MalformedClusterDims =
+      comgr_test::KernelDescriptorElfOptions::MalformedClusterDims;
+  constexpr MalformedClusterDims Cases[] = {
+      MalformedClusterDims::NotArray,
+      MalformedClusterDims::WrongArity,
+      MalformedClusterDims::NonInteger,
+  };
+
+  for (MalformedClusterDims Case : Cases) {
+    SCOPED_TRACE(static_cast<unsigned>(Case));
+    comgr_test::KernelDescriptorElfOptions Opts;
+    Opts.MetadataVgprCount = 120;
+    Opts.MalformedMetadataClusterDims = Case;
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+    EXPECT_EQ(ViewOrErr->getKernelClusterDims("kernel"), std::nullopt);
+    EXPECT_EQ(ViewOrErr->getKernelMetadataVgprCount("kernel"), 120u);
+  }
+}
+
+TEST(ElfView, CachesAllMetadataFieldsPerKernelAndDeduplicatesNames) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataKernels = {
+      {"first", 8, 16, 128, 32, std::array<unsigned, 3>{1, 2, 3}},
+      {"second", 12, 24, 256, 64, std::array<unsigned, 3>{4, 5, 6}},
+      {"first", 99, 99, 999, 99, std::array<unsigned, 3>{9, 9, 9}},
+  };
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("first"), 8u);
+  EXPECT_EQ(ViewOrErr->getKernelMetadataVgprCount("first"), 16u);
+  EXPECT_EQ(ViewOrErr->getKernelMaxFlatWorkgroupSize("first"), 128u);
+  EXPECT_EQ(ViewOrErr->getKernelWavefrontSize("first"), 32u);
+  std::optional<KernelClusterDims> FirstDims =
+      ViewOrErr->getKernelClusterDims("first");
+  ASSERT_TRUE(FirstDims);
+  EXPECT_EQ(FirstDims->X, 1u);
+  EXPECT_EQ(FirstDims->Y, 2u);
+  EXPECT_EQ(FirstDims->Z, 3u);
+
+  EXPECT_EQ(ViewOrErr->getKernelSgprCount("second"), 12u);
+  EXPECT_EQ(ViewOrErr->getKernelMetadataVgprCount("second"), 24u);
+  EXPECT_EQ(ViewOrErr->getKernelMaxFlatWorkgroupSize("second"), 256u);
+  EXPECT_EQ(ViewOrErr->getKernelWavefrontSize("second"), 64u);
+  std::optional<KernelClusterDims> SecondDims =
+      ViewOrErr->getKernelClusterDims("second");
+  ASSERT_TRUE(SecondDims);
+  EXPECT_EQ(SecondDims->X, 4u);
+  EXPECT_EQ(SecondDims->Y, 5u);
+  EXPECT_EQ(SecondDims->Z, 6u);
+}
+
+TEST(ElfView, MalformedMetadataLeavesTerminalErrorCacheState) {
+  comgr_test::KernelDescriptorElfOptions ValidOpts;
+  ValidOpts.MetadataVgprCount = 120;
+  std::string ValidBlob = comgr_test::makeAmdgpuMetadataBlob(ValidOpts);
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.RawMetadataBlob = std::string(ValidBlob.size(), '\xc1');
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+  llvm::StringRef Bytes(reinterpret_cast<const char *>(Obj.Bytes.data()),
+                        Obj.Bytes.size());
+  size_t BlobOffset = Bytes.find(*Opts.RawMetadataBlob);
+  ASSERT_NE(BlobOffset, llvm::StringRef::npos);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getKernelMetadataVgprCount("kernel"), std::nullopt);
+
+  std::memcpy(Obj.Bytes.data() + BlobOffset, ValidBlob.data(),
+              ValidBlob.size());
+  EXPECT_EQ(ViewOrErr->getKernelMetadataVgprCount("kernel"), std::nullopt);
+
+  llvm::Expected<ElfView> FreshViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)FreshViewOrErr)
+      << llvm::toString(FreshViewOrErr.takeError());
+  EXPECT_EQ(FreshViewOrErr->getKernelMetadataVgprCount("kernel"), 120u);
 }
 
 TEST(ElfView, UpdateKernelDescriptorVgprCountIsChecked) {
@@ -874,6 +974,7 @@ TEST(ElfView, UpdateKernelMetadataVgprCountsUpdatesInPlace) {
   llvm::Expected<ElfView> ViewOrErr =
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getKernelMetadataVgprCount("entry_kernel"), 9u);
   llvm::StringMap<unsigned> RequiredVgprs;
   RequiredVgprs.try_emplace("entry_kernel", 10u);
   ASSERT_TRUE(ViewOrErr->updateKernelMetadataVgprCounts(RequiredVgprs));

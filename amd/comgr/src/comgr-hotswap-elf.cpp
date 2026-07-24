@@ -115,6 +115,46 @@ readUnsignedMetadataNode(const msgpack::DocNode &Node, StringRef KernelName,
   return std::nullopt;
 }
 
+static std::optional<unsigned>
+readOptionalUnsignedMetadataField(msgpack::MapDocNode &KernelMap,
+                                  StringRef KernelName, StringRef Key) {
+  msgpack::DocNode::MapTy::iterator ValueIt = KernelMap.find(Key);
+  if (ValueIt == KernelMap.end())
+    return std::nullopt;
+  return readUnsignedMetadataNode(ValueIt->second, KernelName, Key,
+                                  "metadata cache");
+}
+
+static std::optional<KernelClusterDims>
+readOptionalClusterDimsMetadataField(msgpack::MapDocNode &KernelMap,
+                                     StringRef KernelName) {
+  msgpack::DocNode::MapTy::iterator DimsIt = KernelMap.find(".cluster_dims");
+  if (DimsIt == KernelMap.end())
+    return std::nullopt;
+  if (!DimsIt->second.isArray()) {
+    log() << "hotswap: error: metadata cache: .cluster_dims for '" << KernelName
+          << "' is not an array.\n";
+    return std::nullopt;
+  }
+
+  msgpack::ArrayDocNode &Dims = DimsIt->second.getArray();
+  if (Dims.size() != 3) {
+    log() << "hotswap: error: metadata cache: .cluster_dims for '" << KernelName
+          << "' has " << Dims.size() << " entries, expected 3.\n";
+    return std::nullopt;
+  }
+
+  std::optional<unsigned> X = readUnsignedMetadataNode(
+      Dims[0], KernelName, ".cluster_dims[0]", "metadata cache");
+  std::optional<unsigned> Y = readUnsignedMetadataNode(
+      Dims[1], KernelName, ".cluster_dims[1]", "metadata cache");
+  std::optional<unsigned> Z = readUnsignedMetadataNode(
+      Dims[2], KernelName, ".cluster_dims[2]", "metadata cache");
+  if (!X || !Y || !Z)
+    return std::nullopt;
+  return KernelClusterDims{*X, *Y, *Z};
+}
+
 using MetadataNoteMutator = function_ref<std::optional<bool>(
     msgpack::Document &, msgpack::MapDocNode &)>;
 using MetadataNoteValidator = function_ref<bool(bool)>;
@@ -782,14 +822,11 @@ bool ElfView::updateKernelDescriptorSgprCount(StringRef KernelName,
   // On pre-gfx10 targets, NotFound is allowed for minimal code objects without
   // AMDGPU metadata because the descriptor remains the canonical count.
 
-  if (SgprCacheState == KernelSgprCacheState::Metadata &&
+  if (MetadataCacheState == KernelMetadataCacheState::Metadata &&
       MetadataStatus == MetadataCountUpdateStatus::Found) {
-    StringMap<std::optional<unsigned>>::iterator Cached =
-        KernelSgprCountCache.find(KernelName);
-    if (Cached == KernelSgprCountCache.end())
-      KernelSgprCountCache.try_emplace(KernelName, RequiredSgprs);
-    else if (!Cached->second || RequiredSgprs > *Cached->second)
-      Cached->second = RequiredSgprs;
+    std::optional<unsigned> &Cached = KernelMetadataCache[KernelName].SgprCount;
+    if (!Cached || RequiredSgprs > *Cached)
+      Cached = RequiredSgprs;
   }
 
   if (!RequiredGranulated)
@@ -799,8 +836,8 @@ bool ElfView::updateKernelDescriptorSgprCount(StringRef KernelName,
                   *RequiredGranulated);
   std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
               &Rsrc1, sizeof(Rsrc1));
-  if (SgprCacheState == KernelSgprCacheState::NoMetadata)
-    KernelSgprCountCache.erase(KernelName);
+  if (MetadataCacheState == KernelMetadataCacheState::NoMetadata)
+    KernelMetadataCache.erase(KernelName);
   return true;
 }
 
@@ -817,14 +854,12 @@ bool ElfView::updateKernelMetadataSgprCounts(
     return false;
   }
 
-  if (SgprCacheState == KernelSgprCacheState::Metadata) {
+  if (MetadataCacheState == KernelMetadataCacheState::Metadata) {
     for (const StringMapEntry<unsigned> &Required : RequiredSgprs) {
-      StringMap<std::optional<unsigned>>::iterator Cached =
-          KernelSgprCountCache.find(Required.first());
-      if (Cached == KernelSgprCountCache.end())
-        KernelSgprCountCache.try_emplace(Required.first(), Required.second);
-      else if (!Cached->second || Required.second > *Cached->second)
-        Cached->second = Required.second;
+      std::optional<unsigned> &Cached =
+          KernelMetadataCache[Required.first()].SgprCount;
+      if (!Cached || Required.second > *Cached)
+        Cached = Required.second;
     }
   }
   return true;
@@ -841,6 +876,15 @@ bool ElfView::updateKernelMetadataVgprCounts(
     log() << "hotswap: error: updateKernelMetadataVgprCounts: code object "
              "has no AMDGPU metadata note.\n";
     return false;
+  }
+
+  if (MetadataCacheState == KernelMetadataCacheState::Metadata) {
+    for (const StringMapEntry<unsigned> &Required : RequiredVgprs) {
+      std::optional<unsigned> &Cached =
+          KernelMetadataCache[Required.first()].VgprCount;
+      if (!Cached || Required.second > *Cached)
+        Cached = Required.second;
+    }
   }
   return true;
 }
@@ -947,100 +991,38 @@ ElfView::getKernelVgprCount(StringRef KernelName,
   return static_cast<unsigned>(VgprCount);
 }
 
-static std::optional<unsigned> getKernelUnsignedMetadata(const ELFFileT &File,
-                                                         StringRef KernelName,
-                                                         StringRef Key,
-                                                         StringRef Context) {
-  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
-  if (!PhdrsOrErr) {
-    log() << "hotswap: error: " << Context
-          << ": failed to read program headers: "
-          << toString(PhdrsOrErr.takeError()) << "\n";
-    return std::nullopt;
-  }
-
-  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
-    if (Phdr.p_type != ELF::PT_NOTE)
-      continue;
-
-    Error Err = Error::success();
-    for (ELFT::Note Note : File.notes(Phdr, Err)) {
-      if (Note.getName() != "AMDGPU" ||
-          Note.getType() != ELF::NT_AMDGPU_METADATA)
-        continue;
-
-      ArrayRef<uint8_t> Desc = Note.getDesc(4);
-      if (Desc.empty()) {
-        log() << "hotswap: error: " << Context
-              << ": AMDGPU metadata note has an empty descriptor.\n";
-        return std::nullopt;
-      }
-
-      StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
-      msgpack::Document Doc;
-      if (!Doc.readFromBlob(Blob, false)) {
-        log() << "hotswap: error: " << Context
-              << ": failed to parse AMDGPU metadata note.\n";
-        return std::nullopt;
-      }
-
-      msgpack::DocNode Root = Doc.getRoot();
-      if (!Root.isMap()) {
-        log() << "hotswap: error: " << Context
-              << ": AMDGPU metadata root is not a map.\n";
-        return std::nullopt;
-      }
-
-      msgpack::MapDocNode &RootMap = Root.getMap();
-      msgpack::DocNode::MapTy::iterator KernelsIt =
-          RootMap.find("amdhsa.kernels");
-      if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
-        continue;
-
-      msgpack::ArrayDocNode &KernelArray = KernelsIt->second.getArray();
-      for (msgpack::DocNode &KernelNode : KernelArray) {
-        if (!KernelNode.isMap())
-          continue;
-        msgpack::MapDocNode &KernelMap = KernelNode.getMap();
-        msgpack::DocNode::MapTy::iterator NameIt = KernelMap.find(".name");
-        if (NameIt == KernelMap.end() || !NameIt->second.isString() ||
-            NameIt->second.getString() != KernelName)
-          continue;
-
-        msgpack::DocNode::MapTy::iterator ValueIt = KernelMap.find(Key);
-        if (ValueIt == KernelMap.end())
-          return std::nullopt;
-        return readUnsignedMetadataNode(ValueIt->second, KernelName, Key,
-                                        Context);
-      }
-    }
-
-    if (Err) {
-      log() << "hotswap: error: " << Context
-            << ": failed to iterate AMDGPU notes: " << toString(std::move(Err))
-            << "\n";
-      return std::nullopt;
-    }
-  }
-  return std::nullopt;
-}
-
 std::optional<unsigned>
 ElfView::getKernelMaxFlatWorkgroupSize(StringRef KernelName) const {
-  return getKernelUnsignedMetadata(File, KernelName, ".max_flat_workgroup_size",
-                                   "getKernelMaxFlatWorkgroupSize");
+  initializeKernelMetadataCache();
+  if (MetadataCacheState != KernelMetadataCacheState::Metadata)
+    return std::nullopt;
+  StringMap<CachedKernelMetadata>::const_iterator Cached =
+      KernelMetadataCache.find(KernelName);
+  return Cached == KernelMetadataCache.end()
+             ? std::nullopt
+             : Cached->second.MaxFlatWorkgroupSize;
 }
 
 std::optional<unsigned>
 ElfView::getKernelMetadataVgprCount(StringRef KernelName) const {
-  return getKernelUnsignedMetadata(File, KernelName, ".vgpr_count",
-                                   "getKernelMetadataVgprCount");
+  initializeKernelMetadataCache();
+  if (MetadataCacheState != KernelMetadataCacheState::Metadata)
+    return std::nullopt;
+  StringMap<CachedKernelMetadata>::const_iterator Cached =
+      KernelMetadataCache.find(KernelName);
+  return Cached == KernelMetadataCache.end() ? std::nullopt
+                                             : Cached->second.VgprCount;
 }
 
 std::optional<unsigned>
 ElfView::getKernelWavefrontSize(StringRef KernelName) const {
-  return getKernelUnsignedMetadata(File, KernelName, ".wavefront_size",
-                                   "getKernelWavefrontSize");
+  initializeKernelMetadataCache();
+  if (MetadataCacheState != KernelMetadataCacheState::Metadata)
+    return std::nullopt;
+  StringMap<CachedKernelMetadata>::const_iterator Cached =
+      KernelMetadataCache.find(KernelName);
+  return Cached == KernelMetadataCache.end() ? std::nullopt
+                                             : Cached->second.WavefrontSize;
 }
 
 // Reads the static (compile-time-fixed) LDS allocation from the kernel
@@ -1069,21 +1051,23 @@ ElfView::getKernelStaticLdsSize(StringRef KernelName) const {
   return LdsSize;
 }
 
-// -- ElfView::getKernelSgprCount ----------------------------------------------
+// -- ElfView kernel metadata cache --------------------------------------------
 //
-// Reads .sgpr_count from the amdhsa.kernels msgpack metadata note.
-// On GFX10+ GRANULATED_WAVEFRONT_SGPR_COUNT in the kernel descriptor is
-// architecturally reserved (must be zero), so the metadata note is the
-// preferred source. Falls back to the KD field when no metadata note is
-// present (e.g. minimal test ELFs assembled with -nostdlib).
+// Materializes the metadata fields used by HotSwap in one pass. New metadata
+// consumers should extend this cache rather than add another note walker. On
+// GFX10+ GRANULATED_WAVEFRONT_SGPR_COUNT in the kernel descriptor is
+// architecturally reserved (must be zero), so .sgpr_count is preferred when
+// metadata exists. getKernelSgprCount falls back to the descriptor only when
+// the code object has no AMDGPU metadata note (e.g. minimal test ELFs assembled
+// with -nostdlib).
 
-void ElfView::initializeKernelSgprCountCache() const {
-  if (SgprCacheState != KernelSgprCacheState::Uninitialized)
+void ElfView::initializeKernelMetadataCache() const {
+  if (MetadataCacheState != KernelMetadataCacheState::Uninitialized)
     return;
 
   // Default to Error so every malformed-note early return leaves an explicit
   // terminal cache state instead of reparsing the same large blob.
-  SgprCacheState = KernelSgprCacheState::Error;
+  MetadataCacheState = KernelMetadataCacheState::Error;
   Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
   bool SawMetadataNote = false;
   if (PhdrsOrErr) {
@@ -1099,7 +1083,7 @@ void ElfView::initializeKernelSgprCountCache() const {
 
         ArrayRef<uint8_t> Desc = Note.getDesc(4);
         if (Desc.empty()) {
-          log() << "hotswap: error: SGPR cache: AMDGPU metadata note "
+          log() << "hotswap: error: metadata cache: AMDGPU metadata note "
                 << "has an empty descriptor.\n";
           return;
         }
@@ -1108,14 +1092,14 @@ void ElfView::initializeKernelSgprCountCache() const {
                        Desc.size());
         msgpack::Document Doc;
         if (!Doc.readFromBlob(Blob, false)) {
-          log() << "hotswap: error: SGPR cache: failed to parse "
+          log() << "hotswap: error: metadata cache: failed to parse "
                 << "AMDGPU metadata note.\n";
           return;
         }
 
         msgpack::DocNode Root = Doc.getRoot();
         if (!Root.isMap()) {
-          log() << "hotswap: error: SGPR cache: AMDGPU metadata root "
+          log() << "hotswap: error: metadata cache: AMDGPU metadata root "
                 << "is not a map.\n";
           return;
         }
@@ -1132,60 +1116,63 @@ void ElfView::initializeKernelSgprCountCache() const {
           msgpack::MapDocNode &KMap = KNode.getMap();
           msgpack::DocNode::MapTy::iterator NameIt = KMap.find(".name");
           if (NameIt == KMap.end() || !NameIt->second.isString() ||
-              KernelSgprCountCache.find(NameIt->second.getString()) !=
-                  KernelSgprCountCache.end())
+              KernelMetadataCache.find(NameIt->second.getString()) !=
+                  KernelMetadataCache.end())
             continue;
 
-          msgpack::DocNode::MapTy::iterator SgprIt = KMap.find(".sgpr_count");
-          if (SgprIt == KMap.end()) {
-            KernelSgprCountCache.try_emplace(NameIt->second.getString(),
-                                             std::nullopt);
-            continue;
-          }
           StringRef Name = NameIt->second.getString();
-          KernelSgprCountCache.try_emplace(
-              Name, readUnsignedMetadataNode(SgprIt->second, Name,
-                                             ".sgpr_count", "SGPR cache"));
+          CachedKernelMetadata Metadata;
+          Metadata.SgprCount =
+              readOptionalUnsignedMetadataField(KMap, Name, ".sgpr_count");
+          Metadata.VgprCount =
+              readOptionalUnsignedMetadataField(KMap, Name, ".vgpr_count");
+          Metadata.MaxFlatWorkgroupSize = readOptionalUnsignedMetadataField(
+              KMap, Name, ".max_flat_workgroup_size");
+          Metadata.WavefrontSize =
+              readOptionalUnsignedMetadataField(KMap, Name, ".wavefront_size");
+          Metadata.ClusterDims =
+              readOptionalClusterDimsMetadataField(KMap, Name);
+          KernelMetadataCache.try_emplace(Name, std::move(Metadata));
         }
       }
       if (Err) {
-        log() << "hotswap: error: SGPR cache: failed to iterate "
+        log() << "hotswap: error: metadata cache: failed to iterate "
               << "AMDGPU notes: " << toString(std::move(Err)) << "\n";
         return;
       }
     }
   } else {
-    log() << "hotswap: error: SGPR cache: failed to read program "
+    log() << "hotswap: error: metadata cache: failed to read program "
           << "headers: " << toString(PhdrsOrErr.takeError()) << "\n";
     return;
   }
 
-  SgprCacheState = SawMetadataNote ? KernelSgprCacheState::Metadata
-                                   : KernelSgprCacheState::NoMetadata;
+  MetadataCacheState = SawMetadataNote ? KernelMetadataCacheState::Metadata
+                                       : KernelMetadataCacheState::NoMetadata;
 }
 
 std::optional<unsigned>
 ElfView::getKernelSgprCount(StringRef KernelName) const {
-  initializeKernelSgprCountCache();
-  if (SgprCacheState == KernelSgprCacheState::Error)
+  initializeKernelMetadataCache();
+  if (MetadataCacheState == KernelMetadataCacheState::Error)
     return std::nullopt;
 
-  StringMap<std::optional<unsigned>>::const_iterator Cached =
-      KernelSgprCountCache.find(KernelName);
-  if (SgprCacheState == KernelSgprCacheState::Metadata) {
-    if (Cached != KernelSgprCountCache.end()) {
-      if (!Cached->second)
+  StringMap<CachedKernelMetadata>::const_iterator Cached =
+      KernelMetadataCache.find(KernelName);
+  if (MetadataCacheState == KernelMetadataCacheState::Metadata) {
+    if (Cached != KernelMetadataCache.end()) {
+      if (!Cached->second.SgprCount)
         log() << "hotswap: error: getKernelSgprCount: metadata for kernel '"
               << KernelName << "' has no valid .sgpr_count.\n";
-      return Cached->second;
+      return Cached->second.SgprCount;
     }
     log() << "hotswap: error: getKernelSgprCount: AMDGPU metadata has no "
           << ".sgpr_count entry for kernel '" << KernelName << "'.\n";
     return std::nullopt;
   }
 
-  if (Cached != KernelSgprCountCache.end())
-    return Cached->second;
+  if (Cached != KernelMetadataCache.end())
+    return Cached->second.SgprCount;
 
   // --- Fallback: read the KD field. ---
   // The LLVM assembler populates GRANULATED_WAVEFRONT_SGPR_COUNT even on
@@ -1194,7 +1181,7 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
   namespace hsa = amdhsa;
   uint8_t *Kd = const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
   if (!Kd) {
-    KernelSgprCountCache.try_emplace(KernelName, std::nullopt);
+    KernelMetadataCache[KernelName].SgprCount = std::nullopt;
     return std::nullopt;
   }
   uint32_t Rsrc1;
@@ -1211,7 +1198,7 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
     return std::nullopt;
   }
   std::optional<unsigned> Result = static_cast<unsigned>(SgprCount);
-  KernelSgprCountCache.try_emplace(KernelName, Result);
+  KernelMetadataCache[KernelName].SgprCount = Result;
   return Result;
 }
 
@@ -1223,99 +1210,13 @@ ElfView::getKernelSgprCount(StringRef KernelName) const {
 
 std::optional<KernelClusterDims>
 ElfView::getKernelClusterDims(StringRef KernelName) const {
-  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
-  if (!PhdrsOrErr) {
-    log() << "hotswap: error: getKernelClusterDims: failed to read program "
-          << "headers: " << toString(PhdrsOrErr.takeError()) << "\n";
+  initializeKernelMetadataCache();
+  if (MetadataCacheState != KernelMetadataCacheState::Metadata)
     return std::nullopt;
-  }
-
-  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
-    if (Phdr.p_type != ELF::PT_NOTE)
-      continue;
-
-    Error Err = Error::success();
-    for (ELFT::Note Note : File.notes(Phdr, Err)) {
-      if (Note.getName() != "AMDGPU" ||
-          Note.getType() != ELF::NT_AMDGPU_METADATA)
-        continue;
-
-      ArrayRef<uint8_t> Desc = Note.getDesc(4);
-      if (Desc.empty()) {
-        log() << "hotswap: error: getKernelClusterDims: AMDGPU metadata note "
-              << "has an empty descriptor.\n";
-        return std::nullopt;
-      }
-
-      StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
-      msgpack::Document Doc;
-      if (!Doc.readFromBlob(Blob, false)) {
-        log() << "hotswap: error: getKernelClusterDims: failed to parse "
-              << "AMDGPU metadata note.\n";
-        return std::nullopt;
-      }
-
-      msgpack::DocNode Root = Doc.getRoot();
-      if (!Root.isMap()) {
-        log() << "hotswap: error: getKernelClusterDims: AMDGPU metadata root "
-              << "is not a map.\n";
-        return std::nullopt;
-      }
-
-      msgpack::MapDocNode &RootMap = Root.getMap();
-      msgpack::DocNode::MapTy::iterator KernelsIt =
-          RootMap.find("amdhsa.kernels");
-      if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
-        continue;
-
-      msgpack::ArrayDocNode &KernelArray = KernelsIt->second.getArray();
-      for (msgpack::DocNode &KNode : KernelArray) {
-        if (!KNode.isMap())
-          continue;
-
-        msgpack::MapDocNode &KMap = KNode.getMap();
-        msgpack::DocNode::MapTy::iterator NameIt = KMap.find(".name");
-        if (NameIt == KMap.end() || !NameIt->second.isString() ||
-            NameIt->second.getString() != KernelName)
-          continue;
-
-        msgpack::DocNode::MapTy::iterator DimsIt = KMap.find(".cluster_dims");
-        if (DimsIt == KMap.end())
-          return std::nullopt;
-        if (!DimsIt->second.isArray()) {
-          log() << "hotswap: error: getKernelClusterDims: .cluster_dims for '"
-                << KernelName << "' is not an array.\n";
-          return std::nullopt;
-        }
-
-        msgpack::ArrayDocNode &Dims = DimsIt->second.getArray();
-        if (Dims.size() != 3) {
-          log() << "hotswap: error: getKernelClusterDims: .cluster_dims for '"
-                << KernelName << "' has " << Dims.size()
-                << " entries, expected 3.\n";
-          return std::nullopt;
-        }
-
-        std::optional<unsigned> X = readUnsignedMetadataNode(
-            Dims[0], KernelName, ".cluster_dims[0]", "getKernelClusterDims");
-        std::optional<unsigned> Y = readUnsignedMetadataNode(
-            Dims[1], KernelName, ".cluster_dims[1]", "getKernelClusterDims");
-        std::optional<unsigned> Z = readUnsignedMetadataNode(
-            Dims[2], KernelName, ".cluster_dims[2]", "getKernelClusterDims");
-        if (!X || !Y || !Z)
-          return std::nullopt;
-        return KernelClusterDims{*X, *Y, *Z};
-      }
-    }
-
-    if (Err) {
-      log() << "hotswap: error: getKernelClusterDims: failed to iterate "
-            << "AMDGPU notes: " << toString(std::move(Err)) << "\n";
-      return std::nullopt;
-    }
-  }
-
-  return std::nullopt;
+  StringMap<CachedKernelMetadata>::const_iterator Cached =
+      KernelMetadataCache.find(KernelName);
+  return Cached == KernelMetadataCache.end() ? std::nullopt
+                                             : Cached->second.ClusterDims;
 }
 
 // -- ElfView::updateKernelDescriptorVgprCount ---------------------------------
