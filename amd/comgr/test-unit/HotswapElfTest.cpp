@@ -92,6 +92,20 @@ TEST(ElfView, RejectsInvalidElfHeaderSize) {
   llvm::consumeError(ViewOrErr.takeError());
 }
 
+TEST(ElfView, RejectsExtendedProgramHeaderCount) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  ElfView::ELFT::Ehdr Header{};
+  std::memcpy(&Header, Obj.Bytes.data(), sizeof(Header));
+  Header.e_phnum = llvm::ELF::PN_XNUM;
+  std::memcpy(Obj.Bytes.data(), &Header, sizeof(Header));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  EXPECT_FALSE((bool)ViewOrErr);
+  llvm::consumeError(ViewOrErr.takeError());
+}
+
 TEST(ElfView, RejectsOverflowingTextFileRange) {
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(makeText());
