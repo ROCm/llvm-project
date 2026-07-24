@@ -1186,6 +1186,84 @@ Error validateKernelEntryMappings(const ElfView &Elf,
   return Error::success();
 }
 
+// A guarded branch island is a 256-byte pure insertion:
+//
+//   island_start:
+//     s_branch original_boundary  // ordinary fallthrough skips the island
+//     s_branch far_target         // relaxed source branches here
+//     s_nop ...
+//   original_boundary:
+//
+// Keeping the insertion at the kernel-entry alignment preserves every later
+// 256-byte entry alignment. The plan initially contains only NOP placeholders;
+// repairBranches writes the two branches after all old offsets have their final
+// mappings.
+static constexpr uint64_t BranchIslandBlockBytes = KernelEntryStubStride;
+static constexpr uint64_t BranchIslandBranchOffset = MinInstSize;
+static constexpr uint64_t MaxBranchIslands = 64;
+
+struct DisplacementBranchIsland {
+  uint64_t SourceOffset = 0;
+  uint64_t TargetOffset = 0;
+  uint64_t InsertionOffset = 0;
+};
+
+struct BranchRangeFailure {
+  uint64_t SourceOffset = 0;
+  uint32_t SourceSize = 0;
+  uint64_t TargetOffset = 0;
+  uint64_t NewSource = 0;
+  uint64_t NewTarget = 0;
+};
+
+std::optional<int64_t> shortBranchDwordOffset(uint64_t From, uint32_t Size,
+                                              uint64_t To) {
+  std::optional<uint64_t> PcBase =
+      checkedAddUint64(From, Size, "short-branch PC base");
+  if (!PcBase)
+    return std::nullopt;
+  std::optional<int64_t> ByteDelta =
+      checkedSignedDifference(To, *PcBase, "short-branch displacement");
+  if (!ByteDelta || *ByteDelta % MinInstSize != 0)
+    return std::nullopt;
+  return *ByteDelta / MinInstSize;
+}
+
+bool shortBranchCanReach(uint64_t From, uint32_t Size, uint64_t To) {
+  std::optional<int64_t> DwordOffset =
+      shortBranchDwordOffset(From, Size, To);
+  if (!DwordOffset)
+    return false;
+  return *DwordOffset >= BranchOffsetMin && *DwordOffset <= BranchOffsetMax;
+}
+
+bool shortBranchCanReachWithMargin(uint64_t From, uint32_t Size, uint64_t To,
+                                   uint64_t MarginBytes) {
+  std::optional<int64_t> DwordOffset =
+      shortBranchDwordOffset(From, Size, To);
+  if (!DwordOffset)
+    return false;
+  const uint64_t MarginDwords =
+      divideCeil(MarginBytes, static_cast<uint64_t>(MinInstSize));
+  if (MarginDwords >
+      static_cast<uint64_t>(BranchOffsetMax - BranchOffsetMin) / 2)
+    return false;
+  const int64_t MinWithMargin =
+      BranchOffsetMin + static_cast<int64_t>(MarginDwords);
+  const int64_t MaxWithMargin =
+      BranchOffsetMax - static_cast<int64_t>(MarginDwords);
+  return *DwordOffset >= MinWithMargin && *DwordOffset <= MaxWithMargin;
+}
+
+bool isRelaxableDisplacedBranch(const MCInst &Inst, const LLVMState &LS) {
+  const unsigned Opcode = Inst.getOpcode();
+  return Opcode == LS.SBranchOpcode || Opcode == LS.SCBranchScc0Opcode ||
+         Opcode == LS.SCBranchScc1Opcode || Opcode == LS.SCBranchVcczOpcode ||
+         Opcode == LS.SCBranchVccnzOpcode ||
+         Opcode == LS.SCBranchExeczOpcode ||
+         Opcode == LS.SCBranchExecnzOpcode;
+}
+
 Expected<SmallVector<uint8_t>>
 reencodePcrelBranch(const InternalDecodedInst &DI, uint64_t NewFrom,
                     uint64_t NewTarget, const LLVMState &LS) {
@@ -1629,6 +1707,8 @@ Expected<bool> repairSAddPcForDisplacement(const ElfView &Elf,
 Error repairBranches(const ElfView &Elf, const LLVMState &LS,
                      const DisplacementPlan &Plan,
                      const DirectControlFlowInfo &ControlFlow,
+                     ArrayRef<DisplacementBranchIsland> BranchIslands,
+                     SmallVectorImpl<BranchRangeFailure> *RangeFailures,
                      SmallVectorImpl<uint8_t> &NewText) {
   if (!LS.MIA) {
     return makeDisplacementError(
@@ -1767,6 +1847,83 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
       return false;
     }
 
+    const DisplacementBranchIsland *Island = nullptr;
+    for (const DisplacementBranchIsland &Candidate : BranchIslands)
+      if (Candidate.SourceOffset == DI.Offset) {
+        Island = &Candidate;
+        break;
+      }
+
+    if (!shortBranchCanReach(NewFrom, DI.Size, NewTarget)) {
+      if (!Island) {
+        if (!isRelaxableDisplacedBranch(Inst, LS)) {
+          RepairErr.emplace(makeDisplacementError(
+              "branch at old .text offset 0x" +
+              Twine::utohexstr(DI.Offset) +
+              " uses an opcode that is not eligible for guarded-island "
+              "relaxation"));
+          return false;
+        }
+        if (RangeFailures)
+          RangeFailures->push_back(
+              BranchRangeFailure{DI.Offset, DI.Size, OldTarget, NewFrom,
+                                 NewTarget});
+        return true;
+      }
+
+      uint64_t NewBoundary = 0;
+      if (!Plan.mapOffset(Island->InsertionOffset,
+                          DisplacementMapBias::BeforeInsertedBytes,
+                          NewBoundary) ||
+          NewBoundary < BranchIslandBlockBytes) {
+        RepairErr.emplace(makeDisplacementError(
+            "branch island at old .text offset 0x" +
+            Twine::utohexstr(Island->InsertionOffset) +
+            " cannot be mapped after displacement"));
+        return false;
+      }
+      const uint64_t IslandStart = NewBoundary - BranchIslandBlockBytes;
+      const uint64_t IslandBranch = IslandStart + BranchIslandBranchOffset;
+      if (!shortBranchCanReach(NewFrom, DI.Size, IslandBranch) ||
+          !shortBranchCanReach(IslandBranch, MinInstSize, NewTarget)) {
+        RepairErr.emplace(makeDisplacementError(
+            "branch island for old .text offset 0x" +
+            Twine::utohexstr(DI.Offset) +
+            " is out of range after displacement"));
+        return false;
+      }
+
+      Expected<SmallVector<uint8_t>> SourceOrErr =
+          reencodePcrelBranch(DI, NewFrom, IslandBranch, LS);
+      if (!SourceOrErr) {
+        RepairErr.emplace(SourceOrErr.takeError());
+        return false;
+      }
+      SmallVector<uint8_t> Guard =
+          LS.encodeSBranch(IslandStart, NewBoundary);
+      SmallVector<uint8_t> IslandJump =
+          LS.encodeSBranch(IslandBranch, NewTarget);
+      if (Guard.size() != MinInstSize ||
+          IslandJump.size() != MinInstSize ||
+          NewFrom + SourceOrErr->size() > NewText.size() ||
+          IslandBranch + IslandJump.size() > NewText.size()) {
+        RepairErr.emplace(makeDisplacementError(
+            "branch island encoding for old .text offset 0x" +
+            Twine::utohexstr(DI.Offset) + " is invalid"));
+        return false;
+      }
+      std::memcpy(NewText.data() + NewFrom, SourceOrErr->data(),
+                  SourceOrErr->size());
+      std::memcpy(NewText.data() + IslandStart, Guard.data(), Guard.size());
+      std::memcpy(NewText.data() + IslandBranch, IslandJump.data(),
+                  IslandJump.size());
+      log() << "hotswap: displacement: relaxed branch at old .text offset 0x"
+            << utohexstr(DI.Offset) << " through guarded island at old "
+            << ".text boundary 0x" << utohexstr(Island->InsertionOffset)
+            << "\n";
+      return true;
+    }
+
     Expected<SmallVector<uint8_t>> EncodedOrErr =
         reencodePcrelBranch(DI, NewFrom, NewTarget, LS);
     if (!EncodedOrErr) {
@@ -1787,11 +1944,18 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
 
   bool Decoded = decodeTextSectionStreaming(Elf.textData(), Elf.textSize(), LS,
                                             /*WantMnemonic=*/false, onInst);
-  if (RepairErr)
+  if (RepairErr) {
+    if (RangeFailures)
+      RangeFailures->clear();
     return std::move(*RepairErr);
+  }
   if (!Decoded)
     return makeDisplacementError(
         "failed to decode .text while validating branches");
+  if (RangeFailures && !RangeFailures->empty())
+    return makeDisplacementError(
+        Twine(RangeFailures->size()) +
+        " branch(es) are out of simm16 range after displacement");
   return Error::success();
 }
 
@@ -3550,9 +3714,11 @@ Error validateDisplacementEditBoundaries(const ElfView &Elf,
 }
 
 Error applyTextDisplacement(const ElfView &Elf, const LLVMState &LS,
-                            const DisplacementPlan &Plan,
-                            const DirectControlFlowInfo &ControlFlow,
-                            WritableMemoryBuffer &OutBuf) {
+                             const DisplacementPlan &Plan,
+                             const DirectControlFlowInfo &ControlFlow,
+                             ArrayRef<DisplacementBranchIsland> BranchIslands,
+                             SmallVectorImpl<BranchRangeFailure> *RangeFailures,
+                             WritableMemoryBuffer &OutBuf) {
   const size_t InputSize = Elf.size();
   const size_t NewSize = Plan.newElfSize(InputSize);
   if (OutBuf.getBufferSize() != NewSize) {
@@ -3575,7 +3741,8 @@ Error applyTextDisplacement(const ElfView &Elf, const LLVMState &LS,
   Clock::time_point T1 = Clock::now();
   log() << "hotswap: TIMING   displacement buildText: " << ms(T1 - T0)
         << " ms\n";
-  if (Error Err = repairBranches(Elf, LS, Plan, ControlFlow, NewText))
+  if (Error Err = repairBranches(Elf, LS, Plan, ControlFlow, BranchIslands,
+                                 RangeFailures, NewText))
     return Err;
   bool ValidNewText = true;
   bool NewTextDecoded = decodeTextSectionStreaming(
@@ -3821,6 +3988,108 @@ DisplacementPlan::buildText(ArrayRef<uint8_t> OldText,
   return Out;
 }
 
+struct PlannedBranchIslandEdit {
+  DisplacementEdit Edit;
+  DisplacementBranchIsland Island;
+};
+
+Expected<PlannedBranchIslandEdit>
+planBranchIsland(const LLVMState &LS, const DisplacementPlan &Plan,
+                 const BranchRangeFailure &Failure,
+                 ArrayRef<uint64_t> InstructionBoundaries,
+                 const DenseSet<uint64_t> &ReservedBoundaries) {
+  if (LS.SNopBytes.size() != MinInstSize ||
+      BranchIslandBlockBytes % MinInstSize != 0)
+    return makeDisplacementError(
+        "branch-island planning requires a complete s_nop encoding");
+
+  const uint64_t RangeBegin =
+      std::min(Failure.SourceOffset, Failure.TargetOffset);
+  const uint64_t RangeEnd =
+      std::max(Failure.SourceOffset, Failure.TargetOffset);
+  std::optional<uint64_t> BestBoundary;
+  uint64_t BestScore = std::numeric_limits<uint64_t>::max();
+
+  auto hasPureInsertionAt = [&](uint64_t Offset) {
+    if (ReservedBoundaries.contains(Offset))
+      return true;
+    for (const DisplacementEdit &Edit : Plan.edits())
+      if (Edit.Offset == Offset && Edit.OriginalSize == 0)
+        return true;
+    return false;
+  };
+  auto addIslandShift = [](uint64_t Offset, uint64_t Boundary,
+                           uint64_t Mapped) -> std::optional<uint64_t> {
+    if (Offset < Boundary)
+      return Mapped;
+    if (Mapped > std::numeric_limits<uint64_t>::max() -
+                     BranchIslandBlockBytes)
+      return std::nullopt;
+    return Mapped + BranchIslandBlockBytes;
+  };
+  auto distance = [](uint64_t A, uint64_t B) {
+    return A > B ? A - B : B - A;
+  };
+
+  auto Begin =
+      llvm::upper_bound(InstructionBoundaries, RangeBegin);
+  auto End = llvm::lower_bound(InstructionBoundaries, RangeEnd);
+  const uint64_t SafetyMarginBytes =
+      MaxBranchIslands * BranchIslandBlockBytes;
+  for (auto It = Begin; It != End; ++It) {
+    const uint64_t Boundary = *It;
+    if (hasPureInsertionAt(Boundary))
+      continue;
+
+    uint64_t MappedBoundary = 0;
+    if (!Plan.mapOffset(Boundary, DisplacementMapBias::BeforeInsertedBytes,
+                        MappedBoundary))
+      continue;
+    std::optional<uint64_t> NewSource =
+        addIslandShift(Failure.SourceOffset, Boundary, Failure.NewSource);
+    std::optional<uint64_t> NewTarget =
+        addIslandShift(Failure.TargetOffset, Boundary, Failure.NewTarget);
+    if (!NewSource || !NewTarget ||
+        MappedBoundary > std::numeric_limits<uint64_t>::max() -
+                             BranchIslandBranchOffset)
+      continue;
+    const uint64_t IslandBranch =
+        MappedBoundary + BranchIslandBranchOffset;
+    if (!shortBranchCanReachWithMargin(*NewSource, Failure.SourceSize,
+                                       IslandBranch, SafetyMarginBytes) ||
+        !shortBranchCanReachWithMargin(IslandBranch, MinInstSize, *NewTarget,
+                                       SafetyMarginBytes))
+      continue;
+
+    const uint64_t Score =
+        std::max(distance(*NewSource, IslandBranch),
+                 distance(IslandBranch, *NewTarget));
+    if (Score < BestScore) {
+      BestScore = Score;
+      BestBoundary = Boundary;
+    }
+  }
+  if (!BestBoundary)
+    return makeDisplacementError(
+        "no guarded branch-island boundary can relax branch at old .text "
+        "offset 0x" +
+        Twine::utohexstr(Failure.SourceOffset));
+
+  SmallVector<uint8_t> Placeholder;
+  Placeholder.reserve(BranchIslandBlockBytes);
+  while (Placeholder.size() < BranchIslandBlockBytes)
+    Placeholder.append(LS.SNopBytes.begin(), LS.SNopBytes.end());
+
+  DisplacementEdit Edit;
+  Edit.Offset = *BestBoundary;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes = std::move(Placeholder);
+  Edit.MapsOldOffsetAfterInsertion = true;
+  DisplacementBranchIsland Island{Failure.SourceOffset, Failure.TargetOffset,
+                                  *BestBoundary};
+  return PlannedBranchIslandEdit{std::move(Edit), Island};
+}
+
 Expected<std::unique_ptr<WritableMemoryBuffer>>
 tryApplyTextDisplacementToNewBuffer(const ElfView &Elf, const LLVMState &LS,
                                     ArrayRef<DisplacementEdit> Edits,
@@ -3832,15 +4101,6 @@ tryApplyTextDisplacementToNewBuffer(const ElfView &Elf, const LLVMState &LS,
           Elf, /*AllowEhFrameRemap=*/RelocateTrailingSections))
     return std::move(Err);
   if (Error Err = validateTextRelocations(Elf))
-    return std::move(Err);
-
-  Expected<DisplacementPlan> PlanOrErr =
-      DisplacementPlan::create(Elf, Edits, RelocateTrailingSections);
-  if (!PlanOrErr)
-    return PlanOrErr.takeError();
-  if (Error Err = validateDisplacementEditBoundaries(Elf, LS, *PlanOrErr))
-    return std::move(Err);
-  if (Error Err = validateKernelEntryMappings(Elf, *PlanOrErr))
     return std::move(Err);
 
   DirectControlFlowInfo ControlFlow;
@@ -3872,28 +4132,89 @@ tryApplyTextDisplacementToNewBuffer(const ElfView &Elf, const LLVMState &LS,
     ControlFlow = std::move(*Info);
   }
 
-  std::unique_ptr<WritableMemoryBuffer> Out =
-      WritableMemoryBuffer::getNewUninitMemBuffer(
-          PlanOrErr->newElfSize(Elf.size()));
-  if (!Out) {
-    return makeDisplacementError(
-        "failed to allocate displacement output buffer");
-  }
-  if (Error Err = applyTextDisplacement(Elf, LS, *PlanOrErr, ControlFlow, *Out))
-    return std::move(Err);
+  std::vector<DisplacementEdit> PlannedEdits(Edits.begin(), Edits.end());
+  std::vector<DisplacementBranchIsland> BranchIslands;
+  std::vector<uint64_t> InstructionBoundaries;
+  for (;;) {
+    Expected<DisplacementPlan> PlanOrErr = DisplacementPlan::create(
+        Elf, PlannedEdits, RelocateTrailingSections);
+    if (!PlanOrErr)
+      return PlanOrErr.takeError();
+    if (Error Err = validateDisplacementEditBoundaries(Elf, LS, *PlanOrErr))
+      return std::move(Err);
+    if (Error Err = validateKernelEntryMappings(Elf, *PlanOrErr))
+      return std::move(Err);
 
-  // .debug_line's program length can change when an address advance straddles a
-  // patch; re-synthesize it and splice the (possibly larger) section back in,
-  // shifting trailing non-allocatable sections. Only relevant when
-  // validateDebugSections admitted the debug sections.
-  if (RelocateTrailingSections) {
-    Expected<std::unique_ptr<WritableMemoryBuffer>> GrownOrErr =
-        growDebugLineForDisplacement(Elf, *PlanOrErr, std::move(Out));
-    if (!GrownOrErr)
-      return GrownOrErr.takeError();
-    return std::move(*GrownOrErr);
+    std::unique_ptr<WritableMemoryBuffer> Out =
+        WritableMemoryBuffer::getNewUninitMemBuffer(
+            PlanOrErr->newElfSize(Elf.size()));
+    if (!Out)
+      return makeDisplacementError(
+          "failed to allocate displacement output buffer");
+
+    SmallVector<BranchRangeFailure, 16> RangeFailures;
+    if (Error Err =
+            applyTextDisplacement(Elf, LS, *PlanOrErr, ControlFlow,
+                                  BranchIslands, &RangeFailures, *Out)) {
+      if (!RelocateTrailingSections || RangeFailures.empty())
+        return std::move(Err);
+      consumeError(std::move(Err));
+      if (RangeFailures.size() >
+          MaxBranchIslands - std::min<uint64_t>(BranchIslands.size(),
+                                                MaxBranchIslands))
+        return makeDisplacementError(
+            "branch-island relaxation exceeded the safety limit");
+
+      if (InstructionBoundaries.empty()) {
+        bool Decoded = decodeTextSectionStreaming(
+            Elf.textData(), Elf.textSize(), LS, /*WantMnemonic=*/false,
+            [&](const InternalDecodedInst &DI) {
+              if (!DI.DecodeSucceeded)
+                return false;
+              InstructionBoundaries.push_back(DI.Offset);
+              return true;
+            });
+        if (!Decoded)
+          return makeDisplacementError(
+              "failed to collect instruction boundaries for branch islands");
+      }
+
+      DenseSet<uint64_t> ReservedBoundaries;
+      for (const DisplacementEdit &Edit : PlanOrErr->edits())
+        if (Edit.OriginalSize == 0)
+          ReservedBoundaries.insert(Edit.Offset);
+      for (const BranchRangeFailure &RangeFailure : RangeFailures) {
+        Expected<PlannedBranchIslandEdit> IslandOrErr = planBranchIsland(
+            LS, *PlanOrErr, RangeFailure, InstructionBoundaries,
+            ReservedBoundaries);
+        if (!IslandOrErr)
+          return IslandOrErr.takeError();
+        log() << "hotswap: displacement: planned guarded branch island for old "
+              << ".text offset 0x" << utohexstr(RangeFailure.SourceOffset)
+              << " at old .text boundary 0x"
+              << utohexstr(IslandOrErr->Island.InsertionOffset) << "\n";
+        ReservedBoundaries.insert(IslandOrErr->Island.InsertionOffset);
+        PlannedEdits.push_back(std::move(IslandOrErr->Edit));
+        BranchIslands.push_back(IslandOrErr->Island);
+      }
+      log() << "hotswap: displacement: planned " << RangeFailures.size()
+            << " guarded branch island(s) in one batch\n";
+      continue;
+    }
+
+    // .debug_line's program length can change when an address advance
+    // straddles a patch; re-synthesize it and splice the (possibly larger)
+    // section back in, shifting trailing non-allocatable sections. Only
+    // relevant when validateDebugSections admitted the debug sections.
+    if (RelocateTrailingSections) {
+      Expected<std::unique_ptr<WritableMemoryBuffer>> GrownOrErr =
+          growDebugLineForDisplacement(Elf, *PlanOrErr, std::move(Out));
+      if (!GrownOrErr)
+        return GrownOrErr.takeError();
+      return std::move(*GrownOrErr);
+    }
+    return std::move(Out);
   }
-  return std::move(Out);
 }
 
 } // namespace hotswap

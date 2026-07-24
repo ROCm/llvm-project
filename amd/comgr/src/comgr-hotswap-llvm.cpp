@@ -300,6 +300,20 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
           << "via asm parser for CPU '" << S.Cpu << "'.\n";
     return S;
   }
+  if (!resolveRequiredOpcodeViaParse("s_cbranch_scc0 0", "s_cbranch_scc0", S,
+                                     S.SCBranchScc0Opcode) ||
+      !resolveRequiredOpcodeViaParse("s_cbranch_scc1 0", "s_cbranch_scc1", S,
+                                     S.SCBranchScc1Opcode) ||
+      !resolveRequiredOpcodeViaParse("s_cbranch_vccz 0", "s_cbranch_vccz", S,
+                                     S.SCBranchVcczOpcode) ||
+      !resolveRequiredOpcodeViaParse("s_cbranch_vccnz 0", "s_cbranch_vccnz", S,
+                                     S.SCBranchVccnzOpcode) ||
+      !resolveRequiredOpcodeViaParse("s_cbranch_execz 0", "s_cbranch_execz", S,
+                                     S.SCBranchExeczOpcode) ||
+      !resolveRequiredOpcodeViaParse("s_cbranch_execnz 0",
+                                     "s_cbranch_execnz", S,
+                                     S.SCBranchExecnzOpcode))
+    return S;
 
   SmallVector<MCInst, 2> NopInsts = parseAsmToMCInsts("s_nop 0", S);
   if (NopInsts.size() != 1) {

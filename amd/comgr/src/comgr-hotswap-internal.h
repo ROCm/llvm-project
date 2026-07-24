@@ -835,6 +835,12 @@ struct LLVMState {
   /// asm parser. Used by encodeSBranch() below to construct a fresh MCInst
   /// per call.
   unsigned SBranchOpcode = 0;
+  unsigned SCBranchScc0Opcode = 0;
+  unsigned SCBranchScc1Opcode = 0;
+  unsigned SCBranchVcczOpcode = 0;
+  unsigned SCBranchVccnzOpcode = 0;
+  unsigned SCBranchExeczOpcode = 0;
+  unsigned SCBranchExecnzOpcode = 0;
 
   /// MC opcode index for `s_nop`. Resolved via the asm parser at initLLVM()
   /// time so decoded-stream consumers (e.g. buildNopSledMap) can match NOPs
