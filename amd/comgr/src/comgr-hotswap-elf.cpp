@@ -410,8 +410,7 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
   const ELFFileT &File = *FileOrErr;
   const auto &Header = File.getHeader();
   if (Header.e_version != ELF::EV_CURRENT ||
-      Header.e_ehsize != sizeof(ELFT::Ehdr) ||
-      Header.e_phnum == ELF::PN_XNUM ||
+      Header.e_ehsize != sizeof(ELFT::Ehdr) || Header.e_phnum == ELF::PN_XNUM ||
       (Header.e_shnum == 0 && Header.e_shoff != 0) ||
       Header.e_shnum >= ELF::SHN_LORESERVE ||
       Header.e_shstrndx == ELF::SHN_XINDEX ||
