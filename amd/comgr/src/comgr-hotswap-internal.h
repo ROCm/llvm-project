@@ -1273,6 +1273,24 @@ struct PatchContext {
   llvm::StringMap<unsigned> KernelVgprGranuleCache;
 };
 
+enum class VgprMsbOperand : unsigned {
+  Src0 = 0,
+  Src1 = 2,
+  Src2 = 4,
+  Dst = 6,
+};
+
+/// Populate PatchContext::VgprMsbModeBefore if it has not been computed yet.
+void ensureVgprMsbModes(PatchContext &Ctx);
+
+/// Return the exact VGPR-MSB mode before Decoded[Idx] proven by whole-function
+/// CFG analysis.
+[[nodiscard]] std::optional<unsigned> getActiveVgprMsbMode(PatchContext &Ctx,
+                                                           size_t Idx);
+
+unsigned getVgprMsbBank(unsigned Mode, VgprMsbOperand Operand);
+void setVgprMsbBank(unsigned &Mode, VgprMsbOperand Operand, unsigned Bank);
+
 /// Return occupancy limits for \p Processor from COMGR's ISA metadata table.
 std::optional<SubtargetOccupancyLimits>
 getSubtargetOccupancyLimits(llvm::StringRef Processor);
