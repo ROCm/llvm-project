@@ -460,8 +460,8 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
       VgprBumpDecision::Apply)
     return 0; // checkKernelVgprBump set RequiredPatchFailed on the Fail path.
 
-  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement))
-    return failClosed(Ctx, DI, "trampoline emission failed");
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
+    return failClosed(Ctx, DI, "replacement emission failed");
 
   if (MaskSgpr && !commitSafeSgprScratchBlock(Ctx, DI.Offset, *MaskSgpr,
                                               "wmma_scale16 lane mask"))

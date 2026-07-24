@@ -5,7 +5,7 @@
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
@@ -32,7 +32,7 @@
 // METADATA: .name:           test_far
 // METADATA: .sgpr_count:     16
 
-// RUN: hotswap-rewrite %t.out.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent \
 // RUN:   | %FileCheck --check-prefix=IDEM %s
@@ -45,7 +45,7 @@
 // RUN:   -e 's/\.sgpr_count: 14/.sgpr_count: 106/' %s > %t.full-sgpr.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
 // RUN:   %t.full-sgpr.s -o %t.full-sgpr.elf
-// RUN: hotswap-rewrite %t.full-sgpr.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.full-sgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR | %FileCheck --check-prefix=FAIL %s
 // FAIL: RESULT: ERROR
@@ -55,7 +55,7 @@
 // RUN: sed '/^.amdgpu_metadata$/,/^.end_amdgpu_metadata$/d' %s > %t.nometa.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
 // RUN:   %t.nometa.s -o %t.nometa.elf
-// RUN: hotswap-rewrite %t.nometa.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.nometa.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR | %FileCheck --check-prefix=FAIL %s
 

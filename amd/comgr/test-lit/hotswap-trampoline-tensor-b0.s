@@ -4,7 +4,7 @@
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   --output %t.default.elf \
@@ -19,7 +19,7 @@
 // DEFAULTDIS: cluster_load_b32 v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9:]+}}]
 // DEFAULTDIS: s_endpgm
 
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   --strict-mode --output %t.out.elf \
@@ -47,7 +47,7 @@
 // METADATA: .name:           test_tensor_b0_dynamic
 // METADATA: .sgpr_count:     17
 
-// RUN: hotswap-rewrite %t.out.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   --strict-mode --check-idempotent \
@@ -58,7 +58,7 @@
 // RUN:     -e 's/.sgpr_count: 16/.sgpr_count: 106/' %s > %t.highsgpr.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
 // RUN:   %t.highsgpr.s -o %t.highsgpr.elf
-// RUN: hotswap-rewrite %t.highsgpr.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.highsgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   --strict-mode --expect-status ERROR \

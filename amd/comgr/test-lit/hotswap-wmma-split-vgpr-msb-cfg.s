@@ -3,7 +3,7 @@
 // non-MODE SETREG that must preserve the tracked fields.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
 // RUN:   --output %t.out.elf 2>&1 | %FileCheck --check-prefix=API %s
@@ -39,7 +39,7 @@
 // DISASM-NEXT:  s_set_vgpr_msb 0x5060
 // DISASM-NEXT:  s_branch
 
-// RUN: hotswap-rewrite %t.out.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
 // RUN:   --check-idempotent | %FileCheck --check-prefix=IDEM %s

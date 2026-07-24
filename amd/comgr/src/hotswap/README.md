@@ -35,6 +35,12 @@ necessarily that the output bytes changed. If the source/target ISA pair and
 rewrite options select no enabled transformation, the output is a copy of the
 input.
 
+For testing and A/B investigations,
+`AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT` selects the established trampoline
+placement path when set to a non-empty value other than `0`. COMGR samples this
+switch once at the start of each rewrite request, so changing it affects the
+next request but cannot change an in-flight transaction.
+
 ## Register accounting
 
 A patch that allocates VGPRs above the kernel descriptor's existing allocation

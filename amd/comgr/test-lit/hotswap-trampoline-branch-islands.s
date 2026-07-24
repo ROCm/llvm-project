@@ -3,7 +3,7 @@
 // COM: trampoline return uses the accepted SGPR-backed set-PC sequence.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
@@ -11,14 +11,14 @@
 // COM: Exercise the large-object planning path with verbose accounting. This
 // COM: fixture contains more than 250 KiB of text and requires a deterministic
 // COM: forward branch-island chain.
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.scale.elf 2>&1 | %FileCheck --check-prefix=SCALE %s
 // SCALE: hotswap: assigned 1 forward s_branch island chain(s)
 // SCALE: hotswap: applied 1 instruction patches
 // SCALE: hotswap: growWithTrampolines: appended 1 trampoline
 
-// RUN: hotswap-rewrite %t.scale.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.scale.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent | %FileCheck --check-prefix=SCALE-IDEM %s
 // SCALE-IDEM: IDEMPOTENT: YES
@@ -41,7 +41,7 @@
 // DISASM-NEXT: s_add_nc_u64 s[14:15], s[14:15],
 // DISASM-NEXT: s_set_pc_i64 s[14:15]
 
-// RUN: hotswap-rewrite %t.out.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES

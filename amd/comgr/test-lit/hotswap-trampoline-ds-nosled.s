@@ -6,7 +6,7 @@
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
@@ -17,7 +17,7 @@
 // COM: Entry displacement is applied before ordinary instruction rewriting.
 // COM: Verify that the direct entry prefix and appended DS trampoline coexist
 // COM: with branch sites calculated from the displaced instruction layout.
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --entry-trampolines --output %t.entry.elf \
 // RUN:   | %FileCheck --check-prefix=ENTRY-API %s
@@ -53,7 +53,7 @@
 // DISASM-NEXT: s_code_end
 
 // COM: Idempotency
-// RUN: hotswap-rewrite %t.out.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent \
 // RUN:   | %FileCheck --check-prefix=IDEM %s

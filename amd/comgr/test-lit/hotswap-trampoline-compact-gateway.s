@@ -4,7 +4,7 @@
 // COM: size instead of requiring the 20-byte worst-case reservation.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 | %FileCheck --check-prefix=LOG %s
 // LOG: hotswap: assigned 1 SCC-neutral forward gateway(s)
@@ -34,7 +34,7 @@
 // META: .name:           compact_gateway
 // META: .sgpr_count:     4
 
-// RUN: hotswap-rewrite %t.out.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES

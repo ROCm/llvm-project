@@ -3,7 +3,7 @@
 // incoming dst bank. Preserve and restore every other incoming mode field.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 | %FileCheck --check-prefix=API %s
 // API-COUNT-2: WMMA split: patched v_wmma_f32_16x16x128_fp8_fp8
@@ -28,7 +28,7 @@
 // DISASM-NEXT: s_set_vgpr_msb 0x5060
 // DISASM-NEXT: s_branch
 
-// RUN: hotswap-rewrite %t.out.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES

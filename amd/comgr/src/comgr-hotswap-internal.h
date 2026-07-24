@@ -785,6 +785,9 @@ struct RewriteConfig {
   unsigned MaxSgprs = 0;
   unsigned VgprGranuleSize = 0;
   bool RunB0A0Patches = true;
+  // A retry clears this flag so every growing replacement uses the established
+  // trampoline path instead of mixing deferred and displaced code.
+  bool AllowTextDisplacement = true;
   MaskWorkaroundPolicy MaskPolicy = MaskWorkaroundPolicy::None;
 };
 
@@ -1279,6 +1282,13 @@ struct PatchContext {
   llvm::StringMap<std::optional<KernelWorkgroupMetadata>>
       WorkgroupMetadataCache;
   llvm::StringMap<unsigned> KernelVgprGranuleCache;
+  // Growing replacements are collected without changing instruction
+  // boundaries. The dispatcher commits the complete set through one
+  // DisplacementPlan after all patch passes succeed.
+  std::vector<DisplacementEdit> DisplacementEdits;
+  // A growing site could not join the transaction. The caller must discard
+  // this speculative run and retry the original object with trampolines.
+  bool DisplacementDeclined = false;
 };
 
 /// Return occupancy limits for \p Processor from COMGR's ISA metadata table.

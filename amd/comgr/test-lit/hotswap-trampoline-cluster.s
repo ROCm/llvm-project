@@ -5,7 +5,7 @@
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
@@ -63,7 +63,7 @@
 // METADATA: .sgpr_count:     17
 
 // COM: Idempotency: rewriting the output again should produce identical bytes.
-// RUN: hotswap-rewrite %t.out.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent \
 // RUN:   | %FileCheck --check-prefix=IDEM %s
@@ -75,7 +75,7 @@
 // RUN:     -e 's/.sgpr_count: 16/.sgpr_count: 106/' %s > %t.highsgpr.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
 // RUN:   %t.highsgpr.s -o %t.highsgpr.elf
-// RUN: hotswap-rewrite %t.highsgpr.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.highsgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR \
 // RUN:   | %FileCheck --check-prefix=NO-SCRATCH %s

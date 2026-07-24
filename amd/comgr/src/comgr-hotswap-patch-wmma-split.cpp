@@ -1262,9 +1262,8 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
     return failWmmaSplit(Ctx);
   }
 
-  // Assemble the split sequence and defer trampoline emission to
-  // emitToTrampoline, which picks a short s_branch or an SGPR-backed set-PC
-  // gateway based on the site's distance from the appended pool.
+  // Assemble the split sequence. The shared emitter either joins the
+  // displacement transaction or selects the established trampoline path.
   SmallVector<uint8_t> Replacement =
       assembleInstructions(joinAsmLines(AsmLines), Ctx.LS);
   if (Replacement.empty()) {
@@ -1272,8 +1271,8 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
           << DI.Mnemonic << "\n";
     return failWmmaSplit(Ctx);
   }
-  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement)) {
-    log() << "hotswap: error: WMMA split: could not emit trampoline for "
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement)) {
+    log() << "hotswap: error: WMMA split: could not emit replacement for "
           << DI.Mnemonic << "\n";
     return failWmmaSplit(Ctx);
   }

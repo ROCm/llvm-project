@@ -13,6 +13,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "amd_comgr.h"
 #include "common.h"
 
@@ -34,6 +38,38 @@ runRewrite(amd_comgr_data_t InputData, const char *SourceISA,
 
   return amd_comgr_hotswap_rewrite_with_options(InputData, SourceISA, TargetISA,
                                                 &Options, OutputData);
+}
+
+static void setDisplacementDisabled(const char *Value) {
+#ifdef _WIN32
+  if (_putenv_s("AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT", Value) != 0)
+    fail("could not set AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT");
+#else
+  if (setenv("AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT", Value, 1) != 0)
+    fail("could not set AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT");
+#endif
+}
+
+static int dataEqual(amd_comgr_data_t Left, amd_comgr_data_t Right) {
+  size_t LeftSize = 0;
+  size_t RightSize = 0;
+  amd_comgr_(get_data(Left, &LeftSize, NULL));
+  amd_comgr_(get_data(Right, &RightSize, NULL));
+  if (LeftSize != RightSize)
+    return 0;
+  if (LeftSize == 0)
+    return 1;
+
+  char *LeftBytes = (char *)malloc(LeftSize);
+  char *RightBytes = (char *)malloc(RightSize);
+  if (!LeftBytes || !RightBytes)
+    fail("malloc failed while comparing rewrite outputs");
+  amd_comgr_(get_data(Left, &LeftSize, LeftBytes));
+  amd_comgr_(get_data(Right, &RightSize, RightBytes));
+  int Equal = memcmp(LeftBytes, RightBytes, LeftSize) == 0;
+  free(LeftBytes);
+  free(RightBytes);
+  return Equal;
 }
 
 int main(int argc, char *argv[]) {
@@ -59,7 +95,8 @@ int main(int argc, char *argv[]) {
         "usage: hotswap-rewrite <elf_file> <source_isa> <target_isa> "
         "[--entry-trampolines] [--strict-mode] [--bad-options-size] "
         "[--bad-options-flags] [--zero-size] [--output <path>] [--dump <file>] "
-        "[--check-idempotent] [--expect-status <status>]");
+        "[--check-idempotent] [--check-displacement-toggle] "
+        "[--expect-status <status>]");
 
   const char *ElfFile = argv[1];
   const char *SourceISA = argv[2];
@@ -69,6 +106,7 @@ int main(int argc, char *argv[]) {
   const char *DumpFile = NULL;
   const char *ExpectStatus = NULL;
   int CheckIdempotent = 0;
+  int CheckDisplacementToggle = 0;
   int BadOptionsSize = 0;
   int BadOptionsFlags = 0;
   uint64_t RewriteFlags = AMD_COMGR_HOTSWAP_REWRITE_FLAG_NONE;
@@ -90,6 +128,8 @@ int main(int argc, char *argv[]) {
       DumpFile = argv[++I];
     else if (strcmp(argv[I], "--check-idempotent") == 0)
       CheckIdempotent = 1;
+    else if (strcmp(argv[I], "--check-displacement-toggle") == 0)
+      CheckDisplacementToggle = 1;
     else if (strcmp(argv[I], "--expect-status") == 0 && I + 1 < argc)
       ExpectStatus = argv[++I];
     else {
@@ -108,6 +148,8 @@ int main(int argc, char *argv[]) {
   }
 
   amd_comgr_data_t OutputData;
+  if (CheckDisplacementToggle)
+    setDisplacementDisabled("1");
   amd_comgr_status_t Status =
       runRewrite(InputData, SourceISA, TargetISA, RewriteFlags, BadOptionsSize,
                  BadOptionsFlags, &OutputData);
@@ -135,6 +177,32 @@ int main(int argc, char *argv[]) {
 
   if (Status != AMD_COMGR_STATUS_SUCCESS)
     fail("unexpected error status %s", StatusString);
+
+  if (CheckDisplacementToggle) {
+    setDisplacementDisabled("0");
+    amd_comgr_data_t DisplacementOutput;
+    Status = runRewrite(InputData, SourceISA, TargetISA, RewriteFlags,
+                        BadOptionsSize, BadOptionsFlags, &DisplacementOutput);
+    if (Status != AMD_COMGR_STATUS_SUCCESS)
+      fail("rewrite after displacement toggle failed with status %d",
+           (int)Status);
+    if (dataEqual(OutputData, DisplacementOutput))
+      fail("displacement environment toggle was not observed by the next "
+           "rewrite request");
+
+    setDisplacementDisabled("");
+    amd_comgr_data_t EmptyValueOutput;
+    Status = runRewrite(InputData, SourceISA, TargetISA, RewriteFlags,
+                        BadOptionsSize, BadOptionsFlags, &EmptyValueOutput);
+    if (Status != AMD_COMGR_STATUS_SUCCESS)
+      fail("rewrite with empty displacement switch failed with status %d",
+           (int)Status);
+    if (!dataEqual(DisplacementOutput, EmptyValueOutput))
+      fail("empty displacement switch did not preserve the default path");
+    amd_comgr_(release_data(EmptyValueOutput));
+    amd_comgr_(release_data(DisplacementOutput));
+    printf("DISPLACEMENT_TOGGLE: OBSERVED\n");
+  }
 
   size_t OutSize = 0;
   amd_comgr_(get_data(OutputData, &OutSize, NULL));
