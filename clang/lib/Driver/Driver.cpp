@@ -138,6 +138,26 @@ template <typename F> static bool usesInput(const ArgList &Args, F &&Fn) {
   });
 }
 
+static bool isIncludeDirArg(StringRef Arg) {
+  return Arg == "-internal-isystem" || Arg == "-internal-externc-isystem" ||
+         Arg == "-isystem" || Arg == "-cxx-isystem" || Arg == "-idirafter";
+}
+
+static void printCXXStdlibIncludeDirs(const ToolChain &TC,
+                                      const ArgList &Args) {
+  ArgStringList CC1Args;
+  if (Args.hasArg(options::OPT_stdlibxx_isystem))
+    TC.AddClangCXXStdlibIsystemArgs(Args, CC1Args);
+  else
+    TC.AddClangCXXStdlibIncludeArgs(Args, CC1Args);
+
+  for (size_t I = 0; I < CC1Args.size(); ++I) {
+    StringRef Arg(CC1Args[I]);
+    if (isIncludeDirArg(Arg) && I + 1 < CC1Args.size())
+      llvm::outs() << CC1Args[++I] << '\n';
+  }
+}
+
 CUIDOptions::CUIDOptions(llvm::opt::DerivedArgList &Args, const Driver &D)
     : UseCUID(Kind::Hash) {
   if (Arg *A = Args.getLastArg(options::OPT_fuse_cuid_EQ)) {
@@ -1444,6 +1464,21 @@ bool Driver::loadDefaultConfigFiles(llvm::cl::ExpansionContext &ExpCtx) {
   return false;
 }
 
+// TODO: This is a short term downstream fix to ignore $ prefixed
+// entries in a clang config file. A long term fix will be
+// upstreamed that will most likely include setting
+// FinalPhase = phase::Precompile for all PCH invocations.
+static bool anyInputReachesLinkPhase(const InputList &Inputs,
+                                     phases::ID FinalPhase) {
+  for (const auto &I : Inputs) {
+    llvm::SmallVector<phases::ID, phases::MaxNumberOfPhases> PL =
+        types::getCompilationPhases(I.first, FinalPhase);
+    if (!PL.empty() && PL.back() == phases::Link)
+      return true;
+  }
+  return false;
+}
+
 Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   llvm::PrettyStackTraceString CrashInfo("Compilation construction");
 
@@ -1786,8 +1821,10 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   InputList Inputs;
   BuildInputs(C->getDefaultToolChain(), *TranslatedArgs, Inputs);
   if (HasConfigFileTail && Inputs.size()) {
-    Arg *FinalPhaseArg;
-    if (getFinalPhase(*TranslatedArgs, &FinalPhaseArg) == phases::Link) {
+    Arg *FinalPhaseArg = nullptr;
+    phases::ID FinalPhase = getFinalPhase(*TranslatedArgs, &FinalPhaseArg);
+    if (FinalPhase == phases::Link &&
+        anyInputReachesLinkPhase(Inputs, FinalPhase)) {
       DerivedArgList TranslatedLinkerIns(*CfgOptionsTail);
       for (Arg *A : *CfgOptionsTail)
         TranslatedLinkerIns.append(A);
@@ -2704,6 +2741,16 @@ bool Driver::HandleImmediateArgs(Compilation &C) {
         llvm::outs() << Path;
     }
     llvm::outs() << "\n";
+    return false;
+  }
+
+  if (C.getArgs().hasArg(options::OPT_print_cxx_stdlib)) {
+    llvm::outs() << TC.GetCXXStdlibName(C.getArgs()) << '\n';
+    return false;
+  }
+
+  if (C.getArgs().hasArg(options::OPT_print_cxx_stdlib_include_dirs)) {
+    printCXXStdlibIncludeDirs(TC, C.getArgs());
     return false;
   }
 

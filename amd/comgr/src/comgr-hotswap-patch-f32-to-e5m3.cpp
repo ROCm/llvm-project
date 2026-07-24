@@ -41,6 +41,17 @@ namespace {
 std::string vgprName(unsigned N) { return ("v" + Twine(N)).str(); }
 std::string sgprName(unsigned N) { return ("s" + Twine(N)).str(); }
 
+/// Real-true16 targets (e.g. gfx1250) reject the fake16 form of 16-bit
+/// converts; the 16-bit operand needs an explicit half-select. These paths
+/// keep the value in the low half, so emit ".l" when real-true16 is on.
+bool usesRealTrue16(const LLVMState &LS) {
+  return LS.STI && LS.STI->checkFeatures("+real-true16");
+}
+
+std::string f16Operand(StringRef Reg, bool RealTrue16) {
+  return RealTrue16 ? (Reg + ".l").str() : Reg.str();
+}
+
 /// Convert an MCRegister to its assembly name (e.g. VGPR0 to "v0").
 /// The MCRegisterInfo name is the tablegen C identifier (e.g. "VGPR0",
 /// "SGPR0", "VCC_LO"); we map it to the assembler name used in inline asm.
@@ -218,7 +229,7 @@ ScratchAllocation allocateScratch(PatchContext &Ctx, size_t Idx) {
 /// single integer comparison via v_bfi_b32 + v_cmp + v_add_co_ci_u32.
 void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src, StringRef BareSrc,
                     StringRef Out, StringRef Tmp, StringRef TopByte,
-                    StringRef NanSgpr, StringRef TopSgpr) {
+                    StringRef NanSgpr, StringRef TopSgpr, bool RealTrue16) {
   // NaN detection: (|src| > 0x7F800000) means NaN.
   // v_and_b32 strips the sign, so neg/abs modifiers don't affect this test.
   // VOPC form: literal in src0, VGPR in src1 (implicit VCC write).
@@ -241,7 +252,7 @@ void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src, StringRef BareSrc,
   OS << "v_add_u32 " << TopByte << ", 0xF0, " << TopByte << "\n";
   OS << "v_min_u32 " << TopByte << ", 0xFE, " << TopByte << "\n";
 
-  OS << "v_cvt_f16_f32 " << Out << ", " << Out << "\n";
+  OS << "v_cvt_f16_f32 " << f16Operand(Out, RealTrue16) << ", " << Out << "\n";
 
   // RTE rounding: extract guard_bits = F16[6:0], shift to get preliminary
   // byte, then compute round_up = (guard_bits*2 + lsb) > 128.
@@ -373,11 +384,11 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
 
   // --- src0 to byte in T0 (scratch: T2) ---
   emitF32ToUE5M3(AsmOS, Src0Str, Src0Bare, T0Name, T2Name, T3Name, NaN0Name,
-                 TopName);
+                 TopName, usesRealTrue16(Ctx.LS));
 
   // --- src1 to byte in T1 (scratch: T2) ---
   emitF32ToUE5M3(AsmOS, Src1Str, Src1Bare, T1Name, T2Name, T3Name, NaN1Name,
-                 TopName);
+                 TopName, usesRealTrue16(Ctx.LS));
 
   // Pack: T0[15:0] = { byte1, byte0 }
   AsmOS << "v_lshl_or_b32 " << T0Name << ", " << T1Name << ", 8, " << T0Name
@@ -562,7 +573,8 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
 
   // --- F32 to F16 to UE5M3 ---
   // Truncation is used here; SR noise handles rounding.
-  AsmOS << "v_cvt_f16_f32 " << OutName << ", " << OutName << "\n";
+  AsmOS << "v_cvt_f16_f32 " << f16Operand(OutName, usesRealTrue16(Ctx.LS))
+        << ", " << OutName << "\n";
   AsmOS << "v_bfe_u32 " << OutName << ", " << OutName << ", 7, 9\n";
 
   // --- Overflow clamp and high-range select ---
@@ -747,7 +759,8 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
 
   // --- F16 base path (handles bytes 0x00-0xF7 correctly) ---
   AsmOS << "v_lshlrev_b32 " << OutName << ", 7, " << OutName << "\n";
-  AsmOS << "v_cvt_f32_f16 " << OutName << ", " << OutName << "\n";
+  AsmOS << "v_cvt_f32_f16 " << OutName << ", "
+        << f16Operand(OutName, usesRealTrue16(Ctx.LS)) << "\n";
 
   // --- Select exp-31 fixup ---
   AsmOS << "s_mov_b32 vcc_lo, " << Exp31Name << "\n";

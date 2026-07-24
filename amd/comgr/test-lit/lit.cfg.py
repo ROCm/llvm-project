@@ -1,5 +1,8 @@
+import glob
 import os
 import platform
+import subprocess
+import tempfile
 
 import lit.formats
 
@@ -20,6 +23,68 @@ if config.comgr_spirv_translator_available:
     config.available_features.add("comgr-has-spirv-translator")
 if config.comgr_amdgpu_target_available:
     config.available_features.add("comgr-has-amdgpu-target")
+
+# The AMDGPU device AddressSanitizer runtime (libclang_rt.asan.a for
+# amdgcn-amd-amdhsa) is a separately built artifact. The asan tests link it,
+# so guard them behind its presence in the clang resource dir; builds without
+# it (e.g. reduced builds that omit compiler-rt) skip rather than fail.
+if glob.glob(
+    os.path.join(
+        config.llvm_tools_dir,
+        os.pardir,
+        "lib",
+        "clang",
+        "*",
+        "lib",
+        "amdgcn-amd-amdhsa",
+        "libclang_rt.asan.a",
+    )
+):
+    config.available_features.add("comgr-has-amdgpu-asan-runtime")
+
+
+# spirv-to-reloc-debuginfo checks that comgr forwards
+# -amdgpu-spill-cfi-saved-regs, which the AMD clang driver embeds for -g
+# amdgcnspirv compiles. That is an AMD downstream driver diff (not upstream),
+# so probe the driver and guard the test; builds whose clang lacks it skip.
+def _clang_embeds_debuginfo_cfi():
+    clang = os.path.join(config.llvm_tools_dir, "clang")
+    if not os.path.exists(clang):
+        return False
+    src = None
+    try:
+        fd, src = tempfile.mkstemp(suffix=".hip")
+        os.write(fd, b"__attribute__((global)) void k(float *p) { *p = 1.0f; }\n")
+        os.close(fd)
+        out = subprocess.run(
+            [
+                clang,
+                "-x",
+                "hip",
+                "--offload-arch=amdgcnspirv",
+                "-nogpulib",
+                "-nogpuinc",
+                "--offload-device-only",
+                "-O3",
+                "-g",
+                "-c",
+                "-###",
+                src,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=120,
+        )
+        return b"amdgpu-spill-cfi-saved-regs" in out.stdout
+    except Exception:
+        return False
+    finally:
+        if src and os.path.exists(src):
+            os.unlink(src)
+
+
+if _clang_embeds_debuginfo_cfi():
+    config.available_features.add("comgr-clang-embeds-debuginfo-cfi")
 
 if platform.system() == "Windows":
     config.available_features.add("system-windows")

@@ -108,3 +108,8 @@
 // CHECK-NOLINKING-MSVC: Configuration file: {{.*}}Inputs{{.}}config-l.cfg
 // CHECK-NOLINKING-MSVC: "-Wall"
 // CHECK-NOLINKING-MSVC-NO: "m.lib" "-Bstatic" "happy.lib" "-Bdynamic"
+//
+// RUN: %clang --target=aarch64-unknown-linux-gnu --config %S/Inputs/config-7.cfg \
+// RUN:   -x c++-header %s -o %t.h.pch -### 2>&1 | FileCheck %s --check-prefix=CHECK-PCH-NOLINK
+// CHECK-PCH-NOLINK: "-Wall"
+// CHECK-PCH-NOLINK-NOT: "-lm" "--as-needed" "-Bstatic" "-lhappy" "-Bdynamic"
