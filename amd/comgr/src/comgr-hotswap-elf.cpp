@@ -21,8 +21,10 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
+#include "llvm/BinaryFormat/MsgPackReader.h"
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 
 using namespace llvm;
@@ -48,6 +50,7 @@ static_assert(
     "GRANULATED_WAVEFRONT_SGPR_COUNT layout changed unexpectedly.");
 
 static constexpr unsigned SgprEncodingGranule = 8;
+static constexpr size_t MaxMetadataNestingDepth = 64;
 
 // Page alignment for the appended trampoline pool's virtual address and file
 // offset, so its PT_LOAD segment maps consistently.
@@ -72,6 +75,12 @@ static std::optional<uint64_t> checkedSectionFileOffset(const ELFT::Shdr &Sec,
   }
 
   uint64_t Delta = VAddr - Sec.sh_addr;
+  if (Delta > Sec.sh_size || AccessSize > Sec.sh_size - Delta) {
+    log() << "hotswap: error: " << Context
+          << " extends outside its defining section.\n";
+    return std::nullopt;
+  }
+
   std::optional<uint64_t> FileOffset = checkedAddUint64(
       Sec.sh_offset, Delta, (Twine(Context) + " file offset").str());
   if (!FileOffset)
@@ -164,6 +173,91 @@ struct PendingMetadataWrite {
   std::string Blob;
 };
 
+struct MetadataContainer {
+  size_t Remaining = 0;
+  bool IsMap = false;
+};
+
+// TODO: Remove this preflight after
+// https://github.com/ROCm/llvm-project/issues/3602 teaches MsgPackDocument to
+// reject composite map keys without asserting.
+/// MsgPackDocument indexes a map before it has an opportunity to reject an
+/// array or map used as the key. Preflight one top-level object so malformed
+/// metadata fails closed instead of reaching DocNode's scalar-key assertion.
+static bool hasSupportedMetadataMapKeys(StringRef Blob, StringRef Context) {
+  msgpack::Reader Reader(Blob);
+  SmallVector<MetadataContainer, 16> Stack;
+  size_t TopLevelRemaining = 1;
+
+  while (TopLevelRemaining != 0 || !Stack.empty()) {
+    msgpack::Object Object;
+    Expected<bool> ReadObject = Reader.read(Object);
+    if (!ReadObject) {
+      log() << "hotswap: error: " << Context
+            << ": invalid AMDGPU metadata MessagePack: "
+            << toString(ReadObject.takeError()) << "\n";
+      return false;
+    }
+    if (!*ReadObject) {
+      log() << "hotswap: error: " << Context
+            << ": truncated AMDGPU metadata MessagePack.\n";
+      return false;
+    }
+
+    const bool IsMapKey =
+        !Stack.empty() && Stack.back().IsMap && Stack.back().Remaining % 2 == 0;
+    if (IsMapKey && (Object.Kind == msgpack::Type::Array ||
+                     Object.Kind == msgpack::Type::Map)) {
+      log() << "hotswap: error: " << Context
+            << ": AMDGPU metadata has a non-scalar map key.\n";
+      return false;
+    }
+
+    if (Stack.empty())
+      --TopLevelRemaining;
+    else
+      --Stack.back().Remaining;
+
+    size_t ChildCount = 0;
+    bool IsMap = false;
+    if (Object.Kind == msgpack::Type::Array) {
+      ChildCount = Object.Length;
+    } else if (Object.Kind == msgpack::Type::Map) {
+      if (Object.Length > std::numeric_limits<size_t>::max() / 2) {
+        log() << "hotswap: error: " << Context
+              << ": AMDGPU metadata map size overflows.\n";
+        return false;
+      }
+      ChildCount = Object.Length * 2;
+      IsMap = true;
+    }
+
+    if (ChildCount != 0) {
+      if (Stack.size() == MaxMetadataNestingDepth) {
+        log() << "hotswap: error: " << Context
+              << ": AMDGPU metadata nesting exceeds " << MaxMetadataNestingDepth
+              << ".\n";
+        return false;
+      }
+      Stack.push_back({ChildCount, IsMap});
+    }
+    while (!Stack.empty() && Stack.back().Remaining == 0)
+      Stack.pop_back();
+  }
+  return true;
+}
+
+static bool readMetadataDocument(StringRef Blob, msgpack::Document &Doc,
+                                 StringRef Context) {
+  if (!hasSupportedMetadataMapKeys(Blob, Context))
+    return false;
+  if (Doc.readFromBlob(Blob, false))
+    return true;
+  log() << "hotswap: error: " << Context
+        << ": failed to parse AMDGPU metadata note.\n";
+  return false;
+}
+
 /// Parse each AMDGPU metadata note, invoke \p Mutator on its root map, and
 /// defer changed writes until \p Validator accepts the complete traversal.
 /// This keeps multi-note updates atomic while sharing the parsing, encoded-size
@@ -199,11 +293,8 @@ static bool rewriteMetadataNotes(uint8_t *Elf, const ELFFileT &File,
 
       StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
       msgpack::Document Doc;
-      if (!Doc.readFromBlob(Blob, false)) {
-        log() << "hotswap: error: " << Context
-              << ": failed to parse AMDGPU metadata note.\n";
+      if (!readMetadataDocument(Blob, Doc, Context))
         return false;
-      }
 
       msgpack::DocNode Root = Doc.getRoot();
       if (!Root.isMap()) {
@@ -433,16 +524,101 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
   // resulting ElfView). Once ELFFile is constructed, it owns the structural
   // view over these same bytes and we do not need to store Data/Size
   // separately -- ELFFile::base() / ELFFile::getBufSize() alias them.
+  if (!Data || Size < ELF::EI_NIDENT ||
+      std::memcmp(Data, ELF::ElfMagic, std::strlen(ELF::ElfMagic)) != 0 ||
+      Data[ELF::EI_CLASS] != ELF::ELFCLASS64 ||
+      Data[ELF::EI_DATA] != ELF::ELFDATA2LSB ||
+      Data[ELF::EI_VERSION] != ELF::EV_CURRENT)
+    return createStringError(object::object_error::parse_failed,
+                             "invalid ELF identification");
+
   Expected<ELFFileT> FileOrErr =
       ELFFileT::create(StringRef(reinterpret_cast<const char *>(Data), Size));
   if (!FileOrErr)
     return FileOrErr.takeError();
 
   const ELFFileT &File = *FileOrErr;
+  const ELFT::Ehdr &Header = File.getHeader();
+  const bool SupportedType = Header.e_type == ELF::ET_REL ||
+                             Header.e_type == ELF::ET_EXEC ||
+                             Header.e_type == ELF::ET_DYN;
+  if (Header.e_machine != ELF::EM_AMDGPU || !SupportedType ||
+      Header.e_version != ELF::EV_CURRENT ||
+      Header.e_ehsize != sizeof(ELFT::Ehdr) || Header.e_phnum == ELF::PN_XNUM ||
+      (Header.e_shnum == 0 && Header.e_shoff != 0) ||
+      Header.e_shnum >= ELF::SHN_LORESERVE ||
+      Header.e_shstrndx == ELF::SHN_XINDEX ||
+      (Header.e_phnum != 0 && Header.e_phentsize != sizeof(ELFT::Phdr)) ||
+      (Header.e_shnum != 0 && Header.e_shentsize != sizeof(ELFT::Shdr)))
+    return createStringError(object::object_error::parse_failed,
+                             "invalid or unsupported ELF header");
+
   Expected<ELFT::ShdrRange> SectionsOrErr = File.sections();
   if (!SectionsOrErr)
     return SectionsOrErr.takeError();
   ELFT::ShdrRange Sections = *SectionsOrErr;
+
+  for (const ELFT::Shdr &Shdr : Sections) {
+    if (Shdr.sh_type != ELF::SHT_NOBITS && Shdr.sh_size != 0 &&
+        (Shdr.sh_offset > Size || Shdr.sh_size > Size - Shdr.sh_offset))
+      return createStringError(object::object_error::parse_failed,
+                               "section extends past end of file");
+  }
+
+  // Every descriptor symbol is an admitted address carrier. Validate all
+  // copies rather than allowing a valid DYNSYM entry to hide a malformed
+  // duplicate in SYMTAB, which could otherwise be rewritten into an object
+  // that fails a second hotswap pass.
+  for (const ELFT::Shdr &SymShdr : Sections) {
+    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+    Expected<ELFT::SymRange> SymbolsOrErr = File.symbols(&SymShdr);
+    if (!SymbolsOrErr)
+      return SymbolsOrErr.takeError();
+    Expected<StringRef> StrTabOrErr =
+        File.getStringTableForSymtab(SymShdr, Sections);
+    if (!StrTabOrErr)
+      return StrTabOrErr.takeError();
+    for (const ELFT::Sym &Sym : *SymbolsOrErr) {
+      Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
+      if (!NameOrErr)
+        return NameOrErr.takeError();
+      if (!NameOrErr->ends_with(".kd"))
+        continue;
+      if (Sym.st_shndx == ELF::SHN_UNDEF || Sym.st_shndx >= ELF::SHN_LORESERVE)
+        return createStringError(object::object_error::parse_failed,
+                                 "kernel descriptor has no defining section");
+      Expected<const ELFT::Shdr *> HostShdrOrErr =
+          File.getSection(Sym.st_shndx);
+      if (!HostShdrOrErr)
+        return HostShdrOrErr.takeError();
+      const ELFT::Shdr &HostShdr = **HostShdrOrErr;
+      uint64_t SectionOffset = Sym.st_value;
+      if (Header.e_type != ELF::ET_REL) {
+        if (Sym.st_value < HostShdr.sh_addr)
+          return createStringError(object::object_error::parse_failed,
+                                   "kernel descriptor precedes its section");
+        SectionOffset = Sym.st_value - HostShdr.sh_addr;
+      }
+      if (HostShdr.sh_type == ELF::SHT_NOBITS ||
+          SectionOffset > HostShdr.sh_size ||
+          KdSize > HostShdr.sh_size - SectionOffset)
+        return createStringError(
+            object::object_error::parse_failed,
+            "kernel descriptor extends outside its section");
+    }
+  }
+
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (!PhdrsOrErr)
+    return PhdrsOrErr.takeError();
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_filesz != 0 &&
+        (Phdr.p_offset > Size || Phdr.p_filesz > Size - Phdr.p_offset))
+      return createStringError(object::object_error::parse_failed,
+                               "segment extends past end of file");
+  }
 
   const ELFT::Shdr *Text = nullptr;
   unsigned TextIdx = 0;
@@ -454,7 +630,16 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
       ++Idx;
       continue;
     }
-    if (*NameOrErr == ".text" && Shdr.sh_offset + Shdr.sh_size <= Size) {
+    if (*NameOrErr != ".text") {
+      ++Idx;
+      continue;
+    }
+    const uint64_t RequiredTextFlags = ELF::SHF_ALLOC | ELF::SHF_EXECINSTR;
+    if (Shdr.sh_type != ELF::SHT_PROGBITS ||
+        (Shdr.sh_flags & RequiredTextFlags) != RequiredTextFlags)
+      return createStringError(object::object_error::parse_failed,
+                               "invalid or unsupported .text section");
+    if (Shdr.sh_offset <= Size && Shdr.sh_size <= Size - Shdr.sh_offset) {
       Text = &Shdr;
       TextIdx = Idx;
       break;
@@ -1091,11 +1276,8 @@ void ElfView::initializeKernelMetadataCache() const {
         StringRef Blob(reinterpret_cast<const char *>(Desc.data()),
                        Desc.size());
         msgpack::Document Doc;
-        if (!Doc.readFromBlob(Blob, false)) {
-          log() << "hotswap: error: metadata cache: failed to parse "
-                << "AMDGPU metadata note.\n";
+        if (!readMetadataDocument(Blob, Doc, "metadata cache"))
           return;
-        }
 
         msgpack::DocNode Root = Doc.getRoot();
         if (!Root.isMap()) {

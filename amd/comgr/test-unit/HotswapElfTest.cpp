@@ -20,6 +20,84 @@ static std::vector<uint8_t> makeText(size_t Size = 16) {
   return std::vector<uint8_t>(Size, 0);
 }
 
+static ElfView::ELFT::Ehdr
+readHeader(const comgr_test::KernelDescriptorElf &Obj) {
+  ElfView::ELFT::Ehdr Header{};
+  std::memcpy(&Header, Obj.Bytes.data(), sizeof(Header));
+  return Header;
+}
+
+static void writeHeader(comgr_test::KernelDescriptorElf &Obj,
+                        const ElfView::ELFT::Ehdr &Header) {
+  std::memcpy(Obj.Bytes.data(), &Header, sizeof(Header));
+}
+
+static uint64_t
+getMetadataNoteOffset(const comgr_test::KernelDescriptorElf &Obj) {
+  ElfView::ELFT::Ehdr Header = readHeader(Obj);
+  llvm::ELF::Elf64_Phdr NoteProgram{};
+  std::memcpy(&NoteProgram, Obj.Bytes.data() + Header.e_phoff,
+              sizeof(NoteProgram));
+  return NoteProgram.p_offset;
+}
+
+static uint64_t
+getMetadataDescriptorOffset(const comgr_test::KernelDescriptorElf &Obj) {
+  const uint64_t NoteOffset = getMetadataNoteOffset(Obj);
+  llvm::ELF::Elf64_Nhdr NoteHeader{};
+  std::memcpy(&NoteHeader, Obj.Bytes.data() + NoteOffset, sizeof(NoteHeader));
+  return NoteOffset + sizeof(NoteHeader) +
+         llvm::alignTo(static_cast<uint64_t>(NoteHeader.n_namesz), 4);
+}
+
+static ElfView::ELFT::Shdr
+readSection(const comgr_test::KernelDescriptorElf &Obj, unsigned Index) {
+  ElfView::ELFT::Ehdr Header = readHeader(Obj);
+  ElfView::ELFT::Shdr Section{};
+  std::memcpy(&Section,
+              Obj.Bytes.data() + Header.e_shoff +
+                  Index * sizeof(ElfView::ELFT::Shdr),
+              sizeof(Section));
+  return Section;
+}
+
+static void writeSection(comgr_test::KernelDescriptorElf &Obj, unsigned Index,
+                         const ElfView::ELFT::Shdr &Section) {
+  ElfView::ELFT::Ehdr Header = readHeader(Obj);
+  std::memcpy(Obj.Bytes.data() + Header.e_shoff +
+                  Index * sizeof(ElfView::ELFT::Shdr),
+              &Section, sizeof(Section));
+}
+
+static ElfView::ELFT::Sym readSymbol(const comgr_test::KernelDescriptorElf &Obj,
+                                     unsigned Index) {
+  ElfView::ELFT::Shdr Symtab = readSection(Obj, 4);
+  ElfView::ELFT::Sym Symbol{};
+  std::memcpy(&Symbol,
+              Obj.Bytes.data() + Symtab.sh_offset +
+                  Index * sizeof(ElfView::ELFT::Sym),
+              sizeof(Symbol));
+  return Symbol;
+}
+
+static void writeSymbol(comgr_test::KernelDescriptorElf &Obj, unsigned Index,
+                        const ElfView::ELFT::Sym &Symbol) {
+  ElfView::ELFT::Shdr Symtab = readSection(Obj, 4);
+  std::memcpy(Obj.Bytes.data() + Symtab.sh_offset +
+                  Index * sizeof(ElfView::ELFT::Sym),
+              &Symbol, sizeof(Symbol));
+}
+
+static std::string createError(comgr_test::KernelDescriptorElf &Obj) {
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  if (ViewOrErr) {
+    ADD_FAILURE() << "expected ElfView::create to reject malformed ELF";
+    return "";
+  }
+  return llvm::toString(ViewOrErr.takeError());
+}
+
 static unsigned readReservedSgprs(const std::vector<uint8_t> &Bytes,
                                   uint64_t KernelDescriptorOffset) {
   namespace hsa = llvm::amdhsa;
@@ -65,6 +143,226 @@ TEST(ElfView, RejectsNonElfInput) {
   llvm::Expected<ElfView> ViewOrErr = ElfView::create(NotElf, sizeof(NotElf));
   EXPECT_FALSE((bool)ViewOrErr);
   llvm::consumeError(ViewOrErr.takeError());
+}
+
+TEST(ElfView, RejectsNullInput) {
+  llvm::Expected<ElfView> ViewOrErr = ElfView::create(nullptr, 64);
+  EXPECT_FALSE((bool)ViewOrErr);
+  llvm::consumeError(ViewOrErr.takeError());
+}
+
+TEST(ElfView, RejectsEachInvalidElfIdentificationField) {
+  const unsigned Fields[] = {llvm::ELF::EI_MAG0,   llvm::ELF::EI_MAG1,
+                             llvm::ELF::EI_MAG2,   llvm::ELF::EI_MAG3,
+                             llvm::ELF::EI_CLASS,  llvm::ELF::EI_DATA,
+                             llvm::ELF::EI_VERSION};
+  for (unsigned Field : Fields) {
+    SCOPED_TRACE(Field);
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText());
+    Obj.Bytes[Field] ^= 0xff;
+    EXPECT_NE(createError(Obj).find("invalid ELF identification"),
+              std::string::npos);
+  }
+}
+
+TEST(ElfView, RejectsInvalidOrUnsupportedElfHeaderFields) {
+  static constexpr unsigned CaseCount = 11;
+  for (unsigned Case = 0; Case < CaseCount; ++Case) {
+    SCOPED_TRACE(Case);
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText());
+    ElfView::ELFT::Ehdr Header = readHeader(Obj);
+    switch (Case) {
+    case 0:
+      Header.e_version = llvm::ELF::EV_NONE;
+      break;
+    case 1:
+      Header.e_ehsize = sizeof(Header) - 1;
+      break;
+    case 2:
+      Header.e_phnum = llvm::ELF::PN_XNUM;
+      break;
+    case 3:
+      Header.e_shnum = 0;
+      break;
+    case 4:
+      Header.e_shnum = llvm::ELF::SHN_LORESERVE;
+      break;
+    case 5:
+      Header.e_shstrndx = llvm::ELF::SHN_XINDEX;
+      break;
+    case 6:
+      Header.e_phnum = 1;
+      Header.e_phentsize = sizeof(ElfView::ELFT::Phdr) - 1;
+      break;
+    case 7:
+      Header.e_shentsize = sizeof(ElfView::ELFT::Shdr) - 1;
+      break;
+    case 8:
+      Header.e_machine = llvm::ELF::EM_X86_64;
+      break;
+    case 9:
+      Header.e_type = llvm::ELF::ET_CORE;
+      break;
+    case 10:
+      Header.e_type = llvm::ELF::ET_NONE;
+      break;
+    }
+    writeHeader(Obj, Header);
+    EXPECT_NE(createError(Obj).find("invalid or unsupported ELF header"),
+              std::string::npos);
+  }
+}
+
+TEST(ElfView, AcceptsSupportedElfTypes) {
+  const uint16_t SupportedTypes[] = {llvm::ELF::ET_REL, llvm::ELF::ET_EXEC,
+                                     llvm::ELF::ET_DYN};
+  for (uint16_t Type : SupportedTypes) {
+    SCOPED_TRACE(Type);
+    comgr_test::KernelDescriptorElfOptions Opts;
+    Opts.ElfType = Type;
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  }
+}
+
+TEST(ElfView, AcceptsAbsentProgramAndSectionTables) {
+  // A completely sectionless ELF uses zero offsets and zero counts. It is a
+  // structurally supported header even though ElfView later rejects it for
+  // having no .text section.
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  ElfView::ELFT::Ehdr Header = readHeader(Obj);
+  Header.e_shoff = 0;
+  Header.e_shnum = 0;
+  Header.e_shstrndx = 0;
+  Header.e_shentsize = 0;
+  writeHeader(Obj, Header);
+  EXPECT_EQ(createError(Obj).find("invalid or unsupported ELF header"),
+            std::string::npos);
+}
+
+TEST(ElfView, RejectsInvalidOrUnsupportedTextSections) {
+  static constexpr unsigned CaseCount = 3;
+  for (unsigned Case = 0; Case < CaseCount; ++Case) {
+    SCOPED_TRACE(Case);
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText());
+    ElfView::ELFT::Shdr Text = readSection(Obj, 1);
+    switch (Case) {
+    case 0:
+      Text.sh_type = llvm::ELF::SHT_NOBITS;
+      break;
+    case 1:
+      Text.sh_flags &= ~llvm::ELF::SHF_ALLOC;
+      break;
+    case 2:
+      Text.sh_flags &= ~llvm::ELF::SHF_EXECINSTR;
+      break;
+    }
+    writeSection(Obj, 1, Text);
+    EXPECT_NE(createError(Obj).find("invalid or unsupported .text section"),
+              std::string::npos);
+  }
+}
+
+TEST(ElfView, RejectsOutOfBoundsSectionFileRanges) {
+  static constexpr unsigned CaseCount = 3;
+  for (unsigned Case = 0; Case < CaseCount; ++Case) {
+    SCOPED_TRACE(Case);
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText());
+    ElfView::ELFT::Shdr Text = readSection(Obj, 1);
+    switch (Case) {
+    case 0:
+      Text.sh_offset = Obj.Bytes.size() + 1;
+      Text.sh_size = 1;
+      break;
+    case 1:
+      Text.sh_offset = Obj.Bytes.size();
+      Text.sh_size = 1;
+      break;
+    case 2:
+      Text.sh_offset = std::numeric_limits<uint64_t>::max();
+      Text.sh_size = 2;
+      break;
+    }
+    writeSection(Obj, 1, Text);
+    EXPECT_NE(createError(Obj).find("section extends past end of file"),
+              std::string::npos);
+  }
+}
+
+TEST(ElfView, AllowsNonFileBackedSectionRanges) {
+  for (unsigned Case = 0; Case < 2; ++Case) {
+    SCOPED_TRACE(Case);
+    comgr_test::KernelDescriptorElfOptions Opts;
+    Opts.ExtraAllocSectionAddr = 0x3000;
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+    ElfView::ELFT::Shdr Pad = readSection(Obj, 6);
+    Pad.sh_offset = std::numeric_limits<uint64_t>::max();
+    if (Case == 0) {
+      Pad.sh_type = llvm::ELF::SHT_NOBITS;
+      Pad.sh_size = std::numeric_limits<uint64_t>::max();
+    } else {
+      Pad.sh_type = llvm::ELF::SHT_PROGBITS;
+      Pad.sh_size = 0;
+    }
+    writeSection(Obj, 6, Pad);
+
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  }
+}
+
+TEST(ElfView, RejectsOutOfBoundsProgramFileRanges) {
+  static constexpr unsigned CaseCount = 2;
+  for (unsigned Case = 0; Case < CaseCount; ++Case) {
+    SCOPED_TRACE(Case);
+    comgr_test::KernelDescriptorElfOptions Opts;
+    Opts.MetadataSgprCount = 8;
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+    ElfView::ELFT::Ehdr Header = readHeader(Obj);
+    ElfView::ELFT::Phdr Program{};
+    std::memcpy(&Program, Obj.Bytes.data() + Header.e_phoff, sizeof(Program));
+    if (Case == 0) {
+      Program.p_offset = Obj.Bytes.size() + 1;
+      Program.p_filesz = 1;
+    } else {
+      Program.p_offset = Obj.Bytes.size();
+      Program.p_filesz = 2;
+    }
+    std::memcpy(Obj.Bytes.data() + Header.e_phoff, &Program, sizeof(Program));
+    EXPECT_NE(createError(Obj).find("segment extends past end of file"),
+              std::string::npos);
+  }
+}
+
+TEST(ElfView, AllowsEmptyProgramFileRangeAtLargeOffset) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+  ElfView::ELFT::Ehdr Header = readHeader(Obj);
+  ElfView::ELFT::Phdr Program{};
+  std::memcpy(&Program, Obj.Bytes.data() + Header.e_phoff, sizeof(Program));
+  Program.p_offset = std::numeric_limits<uint64_t>::max();
+  Program.p_filesz = 0;
+  Program.p_memsz = 0;
+  std::memcpy(Obj.Bytes.data() + Header.e_phoff, &Program, sizeof(Program));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 }
 
 // -- ElfView::findKernelAtAddress ---------------------------------------------
@@ -191,20 +489,58 @@ TEST(ElfView, KernelDescriptorsEnumeratesAndUpdatesEntryOffset) {
   EXPECT_EQ(ViewOrErr->getKernelSgprCount("entry_kernel"), 16u);
 }
 
-TEST(ElfView, KernelDescriptorsSkipsKdWhenFileOffsetOverflows) {
-  comgr_test::KernelDescriptorElfOptions Opts;
-  Opts.KernelName = "overflow_kernel";
-  Opts.RodataAddr = 0x1000;
-  Opts.KernelDescriptorSymbolValue =
-      std::numeric_limits<uint64_t>::max() - 0x20;
-  comgr_test::KernelDescriptorElf Obj =
-      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+TEST(ElfView, RejectsMalformedKernelDescriptorSymbols) {
+  static constexpr unsigned CaseCount = 7;
+  for (unsigned Case = 0; Case < CaseCount; ++Case) {
+    SCOPED_TRACE(Case);
+    comgr_test::KernelDescriptorElfOptions Opts;
+    Opts.KernelName = "bad_descriptor";
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+    ElfView::ELFT::Sym Descriptor = readSymbol(Obj, 2);
 
-  llvm::Expected<ElfView> ViewOrErr =
-      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
-  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  EXPECT_TRUE(ViewOrErr->kernelDescriptors().empty());
-  EXPECT_EQ(ViewOrErr->findKernelDescriptor("overflow_kernel"), nullptr);
+    switch (Case) {
+    case 0:
+      Descriptor.st_shndx = llvm::ELF::SHN_UNDEF;
+      break;
+    case 1:
+      Descriptor.st_shndx = llvm::ELF::SHN_LORESERVE;
+      break;
+    case 2:
+      Descriptor.st_shndx = 42;
+      break;
+    case 3:
+      Descriptor.st_value = Opts.RodataAddr - 1;
+      break;
+    case 4:
+      Descriptor.st_value = Opts.RodataAddr + 1;
+      break;
+    case 5:
+      Descriptor.st_value = std::numeric_limits<uint64_t>::max() - 0x20;
+      break;
+    case 6: {
+      ElfView::ELFT::Shdr Rodata = readSection(Obj, 2);
+      Rodata.sh_type = llvm::ELF::SHT_NOBITS;
+      writeSection(Obj, 2, Rodata);
+      break;
+    }
+    }
+    writeSymbol(Obj, 2, Descriptor);
+    EXPECT_FALSE(createError(Obj).empty());
+  }
+}
+
+TEST(ElfView, ValidDescriptorDoesNotHideMalformedDuplicate) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  ElfView::ELFT::Sym ValidDescriptor = readSymbol(Obj, 2);
+  ElfView::ELFT::Sym Duplicate = readSymbol(Obj, 1);
+  Duplicate.st_name = ValidDescriptor.st_name;
+  Duplicate.st_shndx = llvm::ELF::SHN_UNDEF;
+  writeSymbol(Obj, 1, Duplicate);
+
+  EXPECT_NE(createError(Obj).find("kernel descriptor has no defining section"),
+            std::string::npos);
 }
 
 // growWithTrampolines appends the pool at a fresh high virtual address instead
@@ -1016,6 +1352,80 @@ TEST(ElfView, UpdateGfx1250RevisionMetadataRetagsKernelInPlace) {
                         Obj.Bytes.size());
   EXPECT_EQ(After.find("B0"), llvm::StringRef::npos);
   EXPECT_NE(After.find("A0"), llvm::StringRef::npos);
+}
+
+TEST(ElfView, UpdateGfx1250RevisionMetadataRejectsCompositeMapKeys) {
+  const uint8_t CompositeKeys[][3] = {
+      {0x81, 0x90, 0xc0}, // {[]: nil}
+      {0x81, 0x80, 0xc0}, // {{}: nil}
+  };
+  for (const uint8_t (&Prefix)[3] : CompositeKeys) {
+    comgr_test::KernelDescriptorElfOptions Opts;
+    Opts.MetadataGfx1250Revision = "B0";
+    comgr_test::KernelDescriptorElf Obj =
+        comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+    const uint64_t DescriptorOffset = getMetadataDescriptorOffset(Obj);
+    ASSERT_LE(DescriptorOffset + sizeof(Prefix), Obj.Bytes.size());
+    std::memcpy(Obj.Bytes.data() + DescriptorOffset, Prefix, sizeof(Prefix));
+
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+    EXPECT_FALSE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
+  }
+}
+
+TEST(ElfView, UpdateGfx1250RevisionMetadataRejectsTruncatedMap) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataGfx1250Revision = "B0";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  const uint64_t NoteOffset = getMetadataNoteOffset(Obj);
+  llvm::ELF::Elf64_Nhdr NoteHeader{};
+  std::memcpy(&NoteHeader, Obj.Bytes.data() + NoteOffset, sizeof(NoteHeader));
+  NoteHeader.n_descsz = 1;
+  std::memcpy(Obj.Bytes.data() + NoteOffset, &NoteHeader, sizeof(NoteHeader));
+  Obj.Bytes[getMetadataDescriptorOffset(Obj)] = 0x81;
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_FALSE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
+}
+
+TEST(ElfView, UpdateGfx1250RevisionMetadataRejectsReservedTag) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataGfx1250Revision = "B0";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  Obj.Bytes[getMetadataDescriptorOffset(Obj)] = 0xc1;
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_FALSE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
+}
+
+TEST(ElfView, UpdateGfx1250RevisionMetadataRejectsExcessiveNesting) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.KernelName.assign(128, 'k');
+  Opts.MetadataGfx1250Revision = "B0";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  const uint64_t DescriptorOffset = getMetadataDescriptorOffset(Obj);
+  static constexpr size_t NestingDepth = 65;
+  ASSERT_LE(DescriptorOffset + NestingDepth + 1, Obj.Bytes.size());
+  std::memset(Obj.Bytes.data() + DescriptorOffset, 0x91, NestingDepth);
+  Obj.Bytes[DescriptorOffset + NestingDepth] = 0xc0;
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_FALSE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
 }
 
 TEST(ElfView, UpdateKernelDescriptorSgprCountCanUpdateMetadataOnly) {
