@@ -457,15 +457,39 @@ reencodeAbsoluteOperand(const InternalDecodedInst &DI, unsigned OperandIndex,
   if (Operand.isImm()) {
     Operand.setImm(NewValue);
   } else if (Operand.isExpr()) {
-    const MCConstantExpr *OldConstant =
-        dyn_cast<MCConstantExpr>(Operand.getExpr());
-    if (!OldConstant) {
-      return makeDisplacementError(Twine(Context) +
-                                   " immediate is not a constant expression");
+    // AMDGPU's disassembler represents forced literals with a backend-private
+    // target expression. Build a fresh literal through the public MC assembly
+    // path and transplant that structured operand; do not parse printer text or
+    // reproduce the target expression locally.
+    for (unsigned I = 0, E = NewInst.getNumOperands(); I != E; ++I) {
+      if (I != OperandIndex && NewInst.getOperand(I).isExpr()) {
+        return makeDisplacementError(Twine(Context) +
+                                     " has another expression operand");
+      }
     }
-    Operand.setExpr(MCConstantExpr::create(NewValue, *LS.Ctx,
-                                           OldConstant->useHexFormat(),
-                                           OldConstant->getSizeInBytes()));
+    std::string LiteralAssembly =
+        ("s_add_pc_i64 lit64(0x" +
+         Twine::utohexstr(static_cast<uint64_t>(NewValue)) + ")")
+            .str();
+    SmallVector<uint8_t> LiteralBytes = assembleSingleInst(LiteralAssembly, LS);
+    std::vector<InternalDecodedInst> LiteralDecoded;
+    if (LiteralBytes.empty() ||
+        !decodeTextSection(LiteralBytes.data(), LiteralBytes.size(), LS,
+                           LiteralDecoded, /*WantMnemonic=*/false) ||
+        LiteralDecoded.size() != 1 ||
+        LiteralDecoded[0].Inst.getNumOperands() != 1 ||
+        !LiteralDecoded[0].Inst.getOperand(0).isExpr()) {
+      return makeDisplacementError(Twine(Context) +
+                                   " could not build an MC literal operand");
+    }
+    int64_t LiteralValue = 0;
+    if (!LiteralDecoded[0].Inst.getOperand(0).getExpr()->evaluateAsAbsolute(
+            LiteralValue) ||
+        LiteralValue != NewValue) {
+      return makeDisplacementError(Twine(Context) +
+                                   " rebuilt the wrong MC literal value");
+    }
+    Operand.setExpr(LiteralDecoded[0].Inst.getOperand(0).getExpr());
   } else {
     return makeDisplacementError(Twine(Context) +
                                  " does not expose an absolute immediate");

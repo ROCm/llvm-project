@@ -2459,7 +2459,7 @@ TEST(TextDisplacement, RepairsInlineAddPcImmediateAcrossInsertion) {
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
   DisplacementEdit Edit;
-  Edit.Offset = 8;
+  Edit.Offset = 4;
   Edit.OriginalSize = 0;
   Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
 
@@ -2475,14 +2475,14 @@ TEST(TextDisplacement, RepairsInlineAddPcImmediateAcrossInsertion) {
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(
       decodeTextSection(OutView->textData(), OutView->textSize(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 4u);
+  ASSERT_EQ(Decoded.size(), 5u);
   ASSERT_EQ(Decoded[0].Inst.getOpcode(), S.SAddPcI64Opcode);
   ASSERT_TRUE(Decoded[0].Inst.getOperand(0).isImm());
-  EXPECT_EQ(Decoded[0].Inst.getOperand(0).getImm(), 8);
+  EXPECT_EQ(Decoded[0].Inst.getOperand(0).getImm(), 12);
   EXPECT_EQ(Decoded[0].Offset + Decoded[0].Size +
                 static_cast<uint64_t>(Decoded[0].Inst.getOperand(0).getImm()),
-            Decoded[3].Offset);
-  EXPECT_EQ(Decoded[3].Mnemonic, "s_endpgm");
+            Decoded[4].Offset);
+  EXPECT_EQ(Decoded[4].Mnemonic, "s_endpgm");
 }
 
 TEST(TextDisplacement, RejectsGetPcPairWithMismatchedRegisters) {
