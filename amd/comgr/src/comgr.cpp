@@ -258,6 +258,13 @@ StringRef COMGR::getComgrHashIdentifier() {
 
 amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
                                                 TargetIdentifier &Ident) {
+  // Slice out the raw triple fields as StringRefs into IdentStr. They are
+  // echoed verbatim (getIsaMetadata) and extended by callers (the hotswap
+  // pseudo-feature), so they are kept raw rather than sourced from TargetID,
+  // which would normalize the triple and reject the pseudo-feature. Triple
+  // validation is left to getIsaIndex below.
+  //
+  // TODO: Only use AMDGPU::TargetID for this parsing.
   SmallVector<StringRef, 5> IsaNameComponents;
   IdentStr.split(IsaNameComponents, '-', 4);
   if (IsaNameComponents.size() != 5) {
@@ -272,6 +279,8 @@ amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
   Ident.Features.clear();
   IsaNameComponents[4].split(Ident.Features, ':');
 
+  // The first ':'-separated token is the processor; it may be empty when the
+  // ISA is encoded in an "amdgpu<subarch>" arch instead.
   Ident.Processor = Ident.Features[0];
   Ident.Features.erase(Ident.Features.begin());
 
@@ -283,8 +292,10 @@ amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
     return AMD_COMGR_STATUS_SUCCESS;
   }
 
+  // Validate the target ID and resolve the canonical processor.
   size_t IsaIndex;
-  amd_comgr_status_t Status = metadata::getIsaIndex(IdentStr, IsaIndex);
+  amd_comgr_status_t Status =
+      metadata::getIsaIndex(IdentStr, IsaIndex, &Ident.Processor);
   if (Status != AMD_COMGR_STATUS_SUCCESS) {
     return Status;
   }
