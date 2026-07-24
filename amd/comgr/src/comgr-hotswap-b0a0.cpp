@@ -1623,15 +1623,13 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-    ArrayRef<std::optional<PcMaterializedCallInfo>> LocalCalls,
     ArrayRef<uint8_t> Text) {
   std::vector<ReachingCallTargets> Resolved(Decoded.size());
   SmallVector<ReachingCallGroup, 8> Groups;
 
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &Call = Decoded[I];
-    if (LocalCalls[I] || !Call.DecodeSucceeded ||
-        Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+    if (!Call.DecodeSucceeded || Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
         Call.Inst.getNumOperands() < 2)
       continue;
     const MCOperand &TargetOp =
@@ -2236,7 +2234,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   for (size_t I = 0; I != Decoded.size(); ++I)
     MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
   std::vector<ReachingCallTargets> ReusableCalls = resolveReusablePcCallTargets(
-      Decoded, LS, TextAddr, *TextEnd, FunctionRanges, MaterializedCalls, Text);
+      Decoded, LS, TextAddr, *TextEnd, FunctionRanges, Text);
 
   std::optional<SmallVector<KnownCallSite, 4>> Calls = collectKnownCallSites(
       Decoded, LS, TextAddr, *TextEnd, MaterializedCalls, ReusableCalls);
@@ -2248,6 +2246,24 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
                                  ExternalEntries);
   if (!BoundedReturns)
     return std::nullopt;
+  // Canonical one-shot materializations also participate in the reusable
+  // reaching-value solver so CFG joins can prove their exact path. Preserve
+  // the established fail-closed entry proof once bounded returns are known:
+  // an interior alias, fallthrough, or unbounded transfer may still bypass
+  // the materialization even when its local dataflow token is exact.
+  BitVector LocallyProvenMaterializedCalls(Decoded.size());
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    if (!MaterializedCalls[I] || ReusableCalls[I].empty())
+      continue;
+    if (hasKnownControlFlowEntry(Decoded, LS, TextAddr, *TextEnd,
+                                 DeclaredEntries, *BoundedReturns,
+                                 MaterializedCalls[I]->SequenceStart,
+                                 MaterializedCalls[I]->SequenceEnd)) {
+      ReusableCalls[I].clear();
+      continue;
+    }
+    LocallyProvenMaterializedCalls.set(I);
+  }
 
   DirectControlFlowInfo Info;
   for (size_t InstIndex = 0; InstIndex != Decoded.size(); ++InstIndex) {
@@ -2299,9 +2315,16 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         for (uint64_t ReusableTarget : ReusableCalls[InstIndex])
           Info.Targets.insert(ReusableTarget - TextAddr);
         Info.BoundedIndirectTransfers.insert(DI.Offset);
-        log() << "hotswap: resolved reusable PC-materialized call at 0x"
-              << utohexstr(DI.Offset) << " to "
-              << ReusableCalls[InstIndex].size() << " target(s)\n";
+        if (LocallyProvenMaterializedCalls.test(InstIndex)) {
+          log() << "hotswap: resolved PC-materialized call at 0x"
+                << utohexstr(DI.Offset) << " to .text+0x"
+                << utohexstr(ReusableCalls[InstIndex].front() - TextAddr)
+                << "\n";
+        } else {
+          log() << "hotswap: resolved reusable PC-materialized call at 0x"
+                << utohexstr(DI.Offset) << " to "
+                << ReusableCalls[InstIndex].size() << " target(s)\n";
+        }
         continue;
       }
       if (!Target) {
@@ -3310,6 +3333,7 @@ assignLongBranchGateways(PatchContext &Ctx,
   }
 
   DenseMap<uint64_t, size_t> PoolIslandOwners;
+  DenseMap<uint64_t, size_t> SourceTailIslandOwners;
   uint64_t IslandLayoutOffset = Ctx.PoolBaseOffset;
   for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
     Trampoline &T = Ctx.OutTrampolines[I];
@@ -3405,6 +3429,24 @@ assignLongBranchGateways(PatchContext &Ctx,
     }
     Pending.push_back({I, TP, 0});
   }
+
+  // Once a source is replaced by a one-dword branch, the remainder of its
+  // original instruction window is unreachable and can provide a safe relay.
+  // Add these only after selecting direct set-PC sources, whose longer forward
+  // sequence consumes the tail. Shared dispatch and VCC preservation likewise
+  // reserve the second dword. Relays are object-wide: unlike an arbitrary NOP
+  // sled they cannot be reached by the owning function's original fallthrough.
+  for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
+    const Trampoline &T = Ctx.OutTrampolines[I];
+    if (T.OriginalSize < 2 * MinInstSize || T.UsesDirectSetPCForward ||
+        T.UsesSharedDispatcherForward || T.LongBranchPreservesVcc)
+      continue;
+    uint64_t Tail = T.OriginalOffset + MinInstSize;
+    SourceTailIslandOwners[Tail] = I;
+    Gateways.push_back({Tail, Tail + MinInstSize, Tail, 0,
+                        std::numeric_limits<uint64_t>::max()});
+  }
+
   for (PendingGateway &P : Pending) {
     const Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
     if (!T.UsesSetPCBack)
@@ -3540,7 +3582,14 @@ assignLongBranchGateways(PatchContext &Ctx,
       }
       DenseMap<uint64_t, size_t>::const_iterator Owner =
           PoolIslandOwners.find(From);
-      if (Owner != PoolIslandOwners.end()) {
+      DenseMap<uint64_t, size_t>::const_iterator SourceOwner =
+          SourceTailIslandOwners.find(From);
+      if (SourceOwner != SourceTailIslandOwners.end()) {
+        Trampoline &OwnerT = Ctx.OutTrampolines[SourceOwner->second];
+        OwnerT.HasSourceTailBranchIsland = true;
+        OwnerT.SourceTailBranchIslandOffset = From;
+        OwnerT.SourceTailBranchTargetOffset = To;
+      } else if (Owner != PoolIslandOwners.end()) {
         Trampoline &OwnerT = Ctx.OutTrampolines[Owner->second];
         std::memcpy(OwnerT.Bytes.data() + OwnerT.Bytes.size() -
                         PoolBranchIslandBytes,
@@ -3567,7 +3616,14 @@ assignLongBranchGateways(PatchContext &Ctx,
       }
       DenseMap<uint64_t, size_t>::const_iterator Owner =
           PoolIslandOwners.find(From);
-      if (Owner != PoolIslandOwners.end()) {
+      DenseMap<uint64_t, size_t>::const_iterator SourceOwner =
+          SourceTailIslandOwners.find(From);
+      if (SourceOwner != SourceTailIslandOwners.end()) {
+        Trampoline &OwnerT = Ctx.OutTrampolines[SourceOwner->second];
+        OwnerT.HasSourceTailBranchIsland = true;
+        OwnerT.SourceTailBranchIslandOffset = From;
+        OwnerT.SourceTailBranchTargetOffset = To;
+      } else if (Owner != PoolIslandOwners.end()) {
         Trampoline &OwnerT = Ctx.OutTrampolines[Owner->second];
         std::memcpy(OwnerT.Bytes.data() + OwnerT.Bytes.size() -
                         PoolBranchIslandBytes,
@@ -4080,6 +4136,27 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
          I += MinInstSize)
       std::memcpy(Text + T.OriginalOffset + I, LS.SNopBytes.data(),
                   MinInstSize);
+    if (T.HasSourceTailBranchIsland) {
+      if (T.SourceTailBranchIslandOffset < T.OriginalOffset ||
+          T.SourceTailBranchIslandOffset - T.OriginalOffset < PadStart ||
+          T.SourceTailBranchIslandOffset - T.OriginalOffset >
+              T.OriginalSize - MinInstSize) {
+        log() << "hotswap: error: source-tail branch island overlaps the "
+                 "forward sequence at 0x"
+              << utohexstr(T.OriginalOffset) << "\n";
+        return false;
+      }
+      SmallVector<uint8_t> Relay = LS.encodeSBranch(
+          T.SourceTailBranchIslandOffset, T.SourceTailBranchTargetOffset);
+      if (Relay.size() != MinInstSize) {
+        log() << "hotswap: error: source-tail branch island encoding failed "
+                 "at 0x"
+              << utohexstr(T.SourceTailBranchIslandOffset) << "\n";
+        return false;
+      }
+      std::memcpy(Text + T.SourceTailBranchIslandOffset, Relay.data(),
+                  Relay.size());
+    }
   }
   return true;
 }
