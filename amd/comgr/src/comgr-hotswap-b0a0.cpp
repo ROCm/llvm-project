@@ -227,11 +227,9 @@ LLVM_ATTRIBUTE_WEAK CFG buildCfg(ArrayRef<InternalDecodedInst> Decoded,
 LLVM_ATTRIBUTE_WEAK LivenessInfo computeLiveness(
     ArrayRef<InternalDecodedInst> Decoded, const CFG &, const MCInstrInfo &,
     const MCRegisterInfo &, unsigned MaxVgprs) {
+  (void)Decoded;
   LivenessInfo Info;
-  BitVector AllLive(MaxVgprs);
-  AllLive.set(0, MaxVgprs);
-  Info.LiveBefore.resize(Decoded.size(), AllLive);
-  Info.LiveAfter.resize(Decoded.size(), AllLive);
+  Info.setConservativeAllLive(MaxVgprs);
   Info.Converged = true;
   return Info;
 }
@@ -2270,12 +2268,7 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
   if (!Liveness.Converged) {
     log() << "hotswap: error: liveness analysis did not converge, using "
           << "conservative all-VGPRs-live fallback\n";
-    BitVector AllVgprs(Config.MaxVgprs);
-    AllVgprs.set(0, Config.MaxVgprs);
-    for (size_t I = 0, LE = Liveness.LiveBefore.size(); I < LE; ++I) {
-      Liveness.LiveBefore[I] = AllVgprs;
-      Liveness.LiveAfter[I] = AllVgprs;
-    }
+    Liveness.setConservativeAllLive(Config.MaxVgprs);
   }
 
   StringMap<KernelPatchStats> KernelStats;

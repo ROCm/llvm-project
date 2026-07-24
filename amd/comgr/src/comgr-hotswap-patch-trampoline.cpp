@@ -693,7 +693,7 @@ std::optional<ScratchAlloc> tryAllocScratchVgpr(PatchContext &Ctx, size_t Idx) {
           KernelName, getKernelVgprGranuleSize(Ctx, KernelName)))
     KdVgprs = *Opt;
 
-  VgprAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdVgprs,
+  VgprAllocator Alloc(Ctx.Liveness.liveBefore(Idx), KdVgprs,
                       Ctx.Config.MaxVgprs);
   std::optional<unsigned> ScratchOpt = Alloc.alloc();
   if (!ScratchOpt)
