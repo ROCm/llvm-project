@@ -1,6 +1,6 @@
-// COM: A dynamic relocation can write outside .text while its addend still
-// COM: references displaced code. Direct displacement must decline this input
-// COM: and use an appended entry stub so the relocation remains valid.
+// COM: A dynamic relocation can write outside .text while its addend references
+// COM: displaced code. Direct entry displacement must move the helper and
+// COM: rewrite the R_AMDGPU_RELATIVE64 addend in the same transaction.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
@@ -11,28 +11,28 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 // DISASM-LABEL: <relocation_kernel>:
+// DISASM-NEXT: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
+// DISASM-NEXT: v_nop
 // DISASM-NEXT: s_endpgm
 // DISASM-LABEL: <pointed_helper>:
 // DISASM-NEXT: s_endpgm
-// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
-// DISASM-NEXT: v_nop
-// DISASM-NEXT: s_get_pc_i64
+// DISASM-NOT: s_get_pc_i64
 
 // RUN: (echo ORIGINAL; %llvm-readelf -Ws %t.elf; \
 // RUN:  echo REWRITTEN; %llvm-readelf -Ws %t.out.elf) \
 // RUN:  | %FileCheck --check-prefix=SYMBOL %s
 // SYMBOL: ORIGINAL
-// SYMBOL: [[HELPER:[0-9a-fA-F]+]] {{.*}} pointed_helper
+// SYMBOL: 0000000000001604 {{.*}} pointed_helper
 // SYMBOL: REWRITTEN
-// SYMBOL: [[HELPER]] {{.*}} pointed_helper
+// SYMBOL: 0000000000001614 {{.*}} pointed_helper
 
 // RUN: (echo ORIGINAL; %llvm-readelf -r %t.elf; \
 // RUN:  echo REWRITTEN; %llvm-readelf -r %t.out.elf) \
 // RUN:  | %FileCheck --check-prefix=RELOCATION %s
 // RELOCATION: ORIGINAL
-// RELOCATION: R_AMDGPU_RELATIVE64{{ +}}[[ADDEND:[0-9a-fA-F]+]]
+// RELOCATION: R_AMDGPU_RELATIVE64{{ +}}1604
 // RELOCATION: REWRITTEN
-// RELOCATION: R_AMDGPU_RELATIVE64{{ +}}[[ADDEND]]
+// RELOCATION: R_AMDGPU_RELATIVE64{{ +}}1614
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

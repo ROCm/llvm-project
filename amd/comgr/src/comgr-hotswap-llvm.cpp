@@ -365,6 +365,9 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_swap_pc_i64 s[0:1], s[2:3]",
                                      "s_swap_pc_i64", S, S.SSwapPcI64Opcode))
     return S;
+  if (!resolveRequiredOpcodeViaParse("s_load_b64 s[0:1], s[2:3], s4",
+                                     "s_load_b64", S, S.SLoadB64Opcode))
+    return S;
   if (!resolveRequiredOpcodeViaParse("s_prefetch_inst_pc_rel 100, s10, 7",
                                      "s_prefetch_inst_pc_rel", S,
                                      S.SPrefetchInstPcRelOpcode))
@@ -473,10 +476,9 @@ SmallVector<uint8_t> LLVMState::encodeSBranch(uint64_t FromOffset,
 
 // -- Instruction decode -------------------------------------------------------
 
-bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
-                       const LLVMState &S,
-                       std::vector<InternalDecodedInst> &Decoded) {
-  Decoded.reserve(Decoded.size() + TextSize / MinInstSize);
+bool decodeTextSectionStreaming(
+    const uint8_t *Text, uint64_t TextSize, const LLVMState &S,
+    bool WantMnemonic, function_ref<bool(const InternalDecodedInst &)> OnInst) {
   uint64_t Pos = 0;
   // Per-call decode cache: byte-identical instructions reuse the first decode
   // instead of re-running the disassembler; DI.Offset is set per occurrence, so
@@ -492,9 +494,14 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
     std::string Mnemonic;
   };
   StringMap<DecodeCacheEntry> LocalCache;
+  // One reused instruction record: the streaming contract only exposes DI to
+  // OnInst for the current position, so no per-instruction allocation or result
+  // vector is needed. Reset the mutable fields each iteration.
+  InternalDecodedInst DI;
   while (Pos < TextSize) {
-    InternalDecodedInst DI;
     DI.Offset = Pos;
+    DI.DecodeSucceeded = false;
+    DI.Mnemonic.clear();
 
     unsigned KeyN =
         static_cast<unsigned>(std::min<uint64_t>(MaxInstLen, TextSize - Pos));
@@ -508,10 +515,15 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       // Only successful decodes are stored, so a hit is always a success.
       DI.DecodeSucceeded = true;
       Pos += DI.Size;
-      Decoded.emplace_back(std::move(DI));
+      if (!OnInst(DI))
+        return true;
       continue;
     }
 
+    // The AMDGPU disassembler appends operands to the passed MCInst without
+    // clearing it first, so a reused DI.Inst must be reset to the same clean
+    // state a fresh per-iteration record would have before getInstruction.
+    DI.Inst = MCInst();
     ArrayRef<uint8_t> Bytes(Text + Pos, TextSize - Pos);
     uint64_t InstSize = 0;
     MCDisassembler::DecodeStatus Status =
@@ -527,13 +539,16 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       // table. Storage is process-lifetime static; the trailing whitespace
       // baked into AsmStrs must be trimmed. If the printer cannot provide an
       // assembly mnemonic, leave the instruction unmatchable instead of falling
-      // back to TableGen opcode names.
-      if (S.MCIP) {
-        std::pair<const char *, uint64_t> Mnem = S.MCIP->getMnemonic(DI.Inst);
-        DI.Mnemonic = Mnem.first ? StringRef(Mnem.first).rtrim().str()
-                                 : UnknownMnemonic.str();
-      } else {
-        DI.Mnemonic = UnknownMnemonic.str();
+      // back to TableGen opcode names. Callers that never read the mnemonic
+      // (WantMnemonic == false) skip this per-instruction std::string entirely.
+      if (WantMnemonic) {
+        if (S.MCIP) {
+          std::pair<const char *, uint64_t> Mnem = S.MCIP->getMnemonic(DI.Inst);
+          DI.Mnemonic = Mnem.first ? StringRef(Mnem.first).rtrim().str()
+                                   : UnknownMnemonic.str();
+        } else {
+          DI.Mnemonic = UnknownMnemonic.str();
+        }
       }
     }
     // Cache only successful decodes whose key window covers the instruction
@@ -542,9 +557,25 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       LocalCache.try_emplace(Key,
                              DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic});
     Pos += DI.Size;
-    Decoded.emplace_back(std::move(DI));
+    if (!OnInst(DI))
+      return true;
   }
   return true;
+}
+
+bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
+                       const LLVMState &S,
+                       std::vector<InternalDecodedInst> &Decoded,
+                       bool WantMnemonic) {
+  Decoded.reserve(Decoded.size() + TextSize / MinInstSize);
+  // Materialize the full result by copying each streamed instruction into the
+  // vector. Streaming callers that only inspect one instruction at a time avoid
+  // this O(TextSize) storage; see decodeTextSectionStreaming.
+  return decodeTextSectionStreaming(Text, TextSize, S, WantMnemonic,
+                                    [&Decoded](const InternalDecodedInst &DI) {
+                                      Decoded.push_back(DI);
+                                      return true;
+                                    });
 }
 
 // -- assembly helpers ---------------------------------------------------------

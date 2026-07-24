@@ -5,7 +5,7 @@
 // RUN:   --amdhsa-code-object-version=6 -filetype=obj %s -o %t.o
 // RUN: %ld.lld -flavor gnu -m elf64_amdgpu %t.o -o %t.elf
 
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   --output %t.default.elf \
@@ -19,7 +19,7 @@
 // DEFAULTDIS: tensor_load_to_lds s[0:3], s[4:11]
 // DEFAULTDIS: s_endpgm
 
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   --strict-mode --output %t.out.elf \
@@ -60,7 +60,7 @@
 // METADATA: .name:           test_tensor_b0_known_cluster
 // METADATA: .sgpr_count:     17
 
-// RUN: hotswap-rewrite %t.out.elf \
+// RUN: env AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT=1 hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   --strict-mode --check-idempotent \

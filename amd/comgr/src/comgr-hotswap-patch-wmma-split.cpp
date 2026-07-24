@@ -1272,7 +1272,7 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
           << DI.Mnemonic << "\n";
     return failWmmaSplit(Ctx);
   }
-  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement)) {
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement)) {
     log() << "hotswap: error: WMMA split: could not emit trampoline for "
           << DI.Mnemonic << "\n";
     return failWmmaSplit(Ctx);

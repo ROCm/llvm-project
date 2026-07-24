@@ -1,7 +1,7 @@
 // COM: Test multiple FP8 E5M3 patch sites in a single kernel.
 // COM:
-// COM: Exercises: stacking of multiple trampolines, cross-instruction-type
-// COM: coexistence, overlapping src/dst registers.
+// COM: Exercises: transactional inlining of multiple translations,
+// COM: cross-instruction-type coexistence, overlapping src/dst registers.
 // COM:
 // COM: Companion tests:
 // COM:   hotswap-cvt-pk-fp8.s   — v_cvt_pk_fp8_f32  (pack F32->E5M3)
@@ -23,24 +23,19 @@
 
 // ---- Kernel 1: two v_cvt_pk_fp8_f32 clamp sites (same type) ------------------
 //
-// COM: Both pk instructions must be replaced by s_branch, and both trampolines
-// COM: must appear in the output. Tests trampoline stacking for identical
-// COM: instruction types.
+// COM: Both pk instructions must be replaced inline, in source order.
 
 // SAME-LABEL: <test_multi_fp8_same>:
 // SAME-NOT:   v_cvt_pk_fp8_f32
-// SAME:       s_branch
-// SAME-NOT:   v_cvt_pk_fp8_f32
-// SAME:       s_branch
-// SAME:       s_endpgm
-// COM: --- First pk trampoline (vdst=v0, src0=v1, src1=v2) ---
+// COM: --- First pk translation (vdst=v0, src0=v1, src1=v2) ---
 // SAME:       v_and_b32{{.*}}0x7fffffff, v1
 // SAME:       v_lshl_or_b32
 // SAME-NEXT:  v_bfi_b32 v0,
-// COM: --- Second pk trampoline (vdst=v4, src0=v5, src1=v6) ---
+// COM: --- Second pk translation (vdst=v4, src0=v5, src1=v6) ---
 // SAME:       v_and_b32{{.*}}0x7fffffff, v5
 // SAME:       v_lshl_or_b32
 // SAME-NEXT:  v_bfi_b32 v4,
+// SAME:       s_endpgm
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
@@ -57,29 +52,26 @@ test_multi_fp8_same:
 
 // ---- Kernel 2: all three FP8 types in one kernel (mixed) ---------------------
 //
-// COM: Each instruction type gets its own s_branch + trampoline with a distinct
+// COM: Each instruction type gets an inline translation with a distinct
 // COM: signature: pk uses v_lshl_or_b32, sr uses v_lshrrev_b32 12 for noise
 // COM: injection, unpack uses v_or_b32 0x47800000 for exp-31 construction.
 
 // MIXED-LABEL: <test_multi_fp8_mixed>:
 // MIXED-NOT:  v_cvt_pk_fp8_f32
-// MIXED:      s_branch
 // MIXED-NOT:  v_cvt_sr_fp8_f32
-// MIXED:      s_branch
 // MIXED-NOT:  v_cvt_f32_fp8
-// MIXED:      s_branch
-// MIXED:      s_endpgm
-// COM: --- pk trampoline: pack via v_lshl_or_b32 + merge into v0 ---
+// COM: --- pk translation: pack via v_lshl_or_b32 + merge into v0 ---
 // MIXED:      v_and_b32{{.*}}0x7fffffff, v1
 // MIXED:      v_lshl_or_b32
 // MIXED-NEXT: v_bfi_b32 v0,
-// COM: --- sr trampoline: noise injection via v_lshrrev_b32 12 ---
+// COM: --- sr translation: noise injection via v_lshrrev_b32 12 ---
 // MIXED:      v_lshrrev_b32{{.*}}, 12, v6
 // MIXED:      v_bfi_b32 v4,
-// COM: --- unpack trampoline: byte extraction + exp-31 F32 construction ---
+// COM: --- unpack translation: byte extraction + exp-31 F32 construction ---
 // MIXED:      v_and_b32{{.*}}0xff, v9
 // MIXED:      v_or_b32{{.*}}0x47800000
 // MIXED:      v_cvt_f32_f16
+// MIXED:      s_endpgm
 
 .globl test_multi_fp8_mixed
 .p2align 8
@@ -101,8 +93,7 @@ test_multi_fp8_mixed:
 
 // OVERLAP-LABEL: <test_multi_fp8_overlap>:
 // OVERLAP-NOT:   v_cvt_pk_fp8_f32
-// OVERLAP:       s_branch
-// COM: --- Trampoline applied despite vdst==src0 overlap ---
+// COM: --- Translation applied despite vdst==src0 overlap ---
 // OVERLAP:       v_and_b32{{.*}}0x7fffffff, v0
 // OVERLAP:       v_bfi_b32 v0,
 

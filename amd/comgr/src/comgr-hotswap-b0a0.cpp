@@ -40,7 +40,9 @@
 #include <cassert>
 #include <chrono>
 #include <cstdio>
+#include <iterator>
 #include <limits>
+#include <map>
 #include <mutex>
 
 using namespace llvm;
@@ -1128,7 +1130,8 @@ getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
 static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
-    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls) {
+    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls,
+    ArrayRef<RelocationTableDispatch> RelocationDispatches) {
   SmallVector<KnownCallSite, 4> Calls;
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &DI = Decoded[I];
@@ -1144,14 +1147,18 @@ static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
     } else {
       Target = getDirectTextTarget(DI, LS, TextAddr, TextEnd);
     }
-    if (!Target)
-      continue;
-
     std::optional<uint64_t> Continuation =
         checkedAddUint64(DI.Offset, DI.Size, "known call continuation address");
     if (!Continuation)
       return std::nullopt;
-    Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+    if (Target) {
+      Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+      continue;
+    }
+    for (const RelocationTableDispatch &Dispatch : RelocationDispatches)
+      if (Dispatch.CallOffset == DI.Offset)
+        for (uint64_t TableTarget : Dispatch.Targets)
+          Calls.push_back({I, TableTarget, *Continuation, *ReturnRegister});
   }
   return Calls;
 }
@@ -1250,7 +1257,8 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
                            uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
                            ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
                            ArrayRef<KnownCallSite> Calls,
-                           ArrayRef<uint64_t> ExternalEntries) {
+                           ArrayRef<uint64_t> ExternalEntries,
+                           ArrayRef<uint64_t> TableCallableEntries) {
   SmallVector<BoundedSetPcReturn, 2> Returns;
   for (size_t ReturnIndex = 0; ReturnIndex != Decoded.size(); ++ReturnIndex) {
     const InternalDecodedInst &Return = Decoded[ReturnIndex];
@@ -1268,17 +1276,27 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
     bool IsBounded = false;
     for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
       if (Range.Begin < TextAddr || Range.Begin >= TextEnd ||
-          Range.End <= Range.Begin || Range.End > TextEnd ||
-          (Range.Symbol && Range.Symbol->getBinding() != ELF::STB_LOCAL))
+          Range.End <= Range.Begin || Range.End > TextEnd)
         continue;
       uint64_t FunctionBegin = Range.Begin - TextAddr;
       uint64_t FunctionEnd = Range.End - TextAddr;
+      // Link visibility alone does not make a device function a runtime
+      // dispatch entry. A complete relocation table supplies its closed-world
+      // callers; the table matcher separately rejects kernel-descriptor
+      // entries, which remain external.
+      const bool IsTableCallable =
+          std::binary_search(TableCallableEntries.begin(),
+                             TableCallableEntries.end(), FunctionBegin);
+      if (Range.Symbol && Range.Symbol->getBinding() != ELF::STB_LOCAL &&
+          !IsTableCallable)
+        continue;
       if (Return.Offset < FunctionBegin || Return.Offset >= FunctionEnd)
         continue;
 
       bool Safe = true;
       for (uint64_t Entry : ExternalEntries)
-        if (Entry >= FunctionBegin && Entry < FunctionEnd) {
+        if (Entry >= FunctionBegin && Entry < FunctionEnd &&
+            !(IsTableCallable && Entry == FunctionBegin)) {
           log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
                 << " is not a bounded return: externally reachable entry at "
                    "0x"
@@ -1474,7 +1492,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-    ArrayRef<uint64_t> ExternalEntries) {
+    ArrayRef<uint64_t> ExternalEntries,
+    ArrayRef<RelocationTableDispatch> RelocationDispatches) {
   if (!LS.MIA) {
     log() << "hotswap: MC branch analysis is unavailable; adjacent far "
              "trampolines will not be coalesced\n";
@@ -1491,18 +1510,32 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   for (size_t I = 0; I != Decoded.size(); ++I)
     MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
 
-  std::optional<SmallVector<KnownCallSite, 4>> Calls =
-      collectKnownCallSites(Decoded, LS, TextAddr, *TextEnd, MaterializedCalls);
+  std::optional<SmallVector<KnownCallSite, 4>> Calls = collectKnownCallSites(
+      Decoded, LS, TextAddr, *TextEnd, MaterializedCalls, RelocationDispatches);
   if (!Calls)
     return std::nullopt;
+  SmallVector<uint64_t, 16> TableCallableEntries;
+  for (const RelocationTableDispatch &Dispatch : RelocationDispatches)
+    TableCallableEntries.append(Dispatch.Targets.begin(),
+                                Dispatch.Targets.end());
+  llvm::sort(TableCallableEntries);
+  TableCallableEntries.erase(
+      std::unique(TableCallableEntries.begin(), TableCallableEntries.end()),
+      TableCallableEntries.end());
   std::optional<SmallVector<BoundedSetPcReturn, 2>> BoundedReturns =
       collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
                                  DeclaredEntries, FunctionRanges, *Calls,
-                                 ExternalEntries);
+                                 ExternalEntries, TableCallableEntries);
   if (!BoundedReturns)
     return std::nullopt;
 
   DirectControlFlowInfo Info;
+  for (const BoundedSetPcReturn &Return : *BoundedReturns) {
+    const InternalDecodedInst &DI = Decoded[Return.InstIndex];
+    Info.RelocatableIndirectTransfers.insert(DI.Offset);
+    for (uint64_t Target : Return.Targets)
+      Info.Targets.insert(Target);
+  }
   for (size_t InstIndex = 0; InstIndex != Decoded.size(); ++InstIndex) {
     const InternalDecodedInst &DI = Decoded[InstIndex];
     if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
@@ -1525,6 +1558,12 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       if (!LS.MIA->isCall(DI.Inst))
         continue;
       std::optional<uint64_t> Target;
+      const RelocationTableDispatch *TableDispatch = nullptr;
+      for (const RelocationTableDispatch &Dispatch : RelocationDispatches)
+        if (Dispatch.CallOffset == DI.Offset) {
+          TableDispatch = &Dispatch;
+          break;
+        }
       if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
           DI.Inst.getNumOperands() != 0 &&
           DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
@@ -1537,6 +1576,30 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
                      MaterializedCalls[InstIndex]->SequenceStart,
                      MaterializedCalls[InstIndex]->SequenceEnd)) {
         Target = MaterializedCalls[InstIndex]->Target;
+      }
+      if (TableDispatch) {
+        bool HasInteriorEntry = hasKnownControlFlowEntry(
+            Decoded, LS, TextAddr, *TextEnd, DeclaredEntries, *BoundedReturns,
+            TableDispatch->SequenceStart, TableDispatch->SequenceEnd);
+        for (const RelocationTableDispatch &Dispatch : RelocationDispatches)
+          for (uint64_t TableTarget : Dispatch.Targets)
+            HasInteriorEntry |= TableTarget > TableDispatch->SequenceStart &&
+                                TableTarget <= TableDispatch->SequenceEnd;
+        if (HasInteriorEntry) {
+          log() << "hotswap: relocation-table call at 0x"
+                << utohexstr(DI.Offset)
+                << " has an entry that bypasses its address proof\n";
+          TableDispatch = nullptr;
+        }
+      }
+      if (TableDispatch) {
+        Info.RelocatableIndirectTransfers.insert(DI.Offset);
+        for (uint64_t TableTarget : TableDispatch->Targets)
+          Info.Targets.insert(TableTarget);
+        log() << "hotswap: resolved relocation-table call at 0x"
+              << utohexstr(DI.Offset) << " to " << TableDispatch->Targets.size()
+              << " finite target(s)\n";
+        continue;
       }
       if (!Target) {
         log() << "hotswap: unresolved call target at 0x" << utohexstr(DI.Offset)
@@ -1567,6 +1630,28 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     Info.Targets.insert(*Target);
   }
   return Info;
+}
+
+std::optional<DirectControlFlowInfo>
+analyzeDirectControlFlow(const ElfView &Elf,
+                         ArrayRef<InternalDecodedInst> Decoded,
+                         const LLVMState &LS) {
+  std::optional<DeclaredTextEntryInfo> DeclaredEntries =
+      collectDeclaredTextEntries(Elf);
+  if (!DeclaredEntries)
+    return std::nullopt;
+  Expected<std::vector<RelocationTableDispatch>> RelocationDispatchesOrErr =
+      analyzeRelocationTableDispatches(Elf, Decoded, LS);
+  if (!RelocationDispatchesOrErr) {
+    log() << "hotswap: error: failed to analyze relocation-backed dispatch "
+             "tables: "
+          << toString(RelocationDispatchesOrErr.takeError()) << "\n";
+    return std::nullopt;
+  }
+  return collectDirectBranchTargets(
+      Decoded, LS, Elf.textAddr(), Elf.textSize(), DeclaredEntries->Entries,
+      Elf.functionTextRanges(), DeclaredEntries->ExternalEntries,
+      *RelocationDispatchesOrErr);
 }
 
 /// Coalesce runs of adjacent far patch sites when the same SGPR scratch block
@@ -2162,13 +2247,57 @@ assignLongBranchGateways(PatchContext &Ctx,
   return true;
 }
 
+/// Collect a growing replacement for the transactional displacement pass.
+/// Collection is deliberately side-effect free: all code and metadata are
+/// rebuilt later from the pristine object through one DisplacementPlan.
+[[nodiscard]] bool
+collectTransactionalDisplacement(PatchContext &Ctx, uint64_t InstOffset,
+                                 uint32_t InstSize,
+                                 ArrayRef<uint8_t> Replacement) {
+  const LLVMState &LS = Ctx.LS;
+  if (Replacement.size() <= InstSize)
+    return false;
+  const uint64_t Growth = Replacement.size() - InstSize;
+  if (Growth % MinInstSize != 0 || LS.SNopBytes.size() != MinInstSize)
+    return false;
+
+  std::optional<ElfView::FunctionTextRange> Range =
+      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
+  if (!Range)
+    return false;
+  if (InstOffset < Range->Begin || InstOffset + InstSize > Range->End ||
+      Range->End > Ctx.TextSize)
+    return false;
+
+  DisplacementEdit Edit;
+  Edit.Offset = InstOffset;
+  Edit.OriginalSize = InstSize;
+  Edit.ReplacementBytes.assign(Replacement.begin(), Replacement.end());
+  Ctx.DisplacementEdits.push_back(std::move(Edit));
+  return true;
+}
+
 /// Emit \p Replacement for the instruction at [\p InstOffset,
-/// \p InstOffset + \p InstSize). Prefers an in-place NOP-sled rewrite when a
-/// reachable sled with sufficient headroom exists; otherwise falls back to a
+/// \p InstOffset + \p InstSize). Prefer transactional straight-line
+/// displacement, then an in-place NOP-sled rewrite, otherwise fall back to a
 /// deferred trampoline.
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        ArrayRef<uint8_t> Replacement) {
+  // Collect first and mutate only after one plan has validated the complete
+  // object. AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT forces the legacy
+  // trampoline path for A/B benchmarking.
+  static const bool DisplacementDisabled =
+      getenv("AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT") != nullptr;
+  if (Ctx.Config.AllowTextDisplacement && !DisplacementDisabled &&
+      !Ctx.DirectControlFlow.HasUnresolvedTargets) {
+    if (collectTransactionalDisplacement(Ctx, InstOffset, InstSize,
+                                         Replacement))
+      return true;
+    Ctx.DisplacementDeclined = true;
+    return false;
+  }
+
   std::optional<uint64_t> ReturnTo = checkedAddUint64(
       InstOffset, InstSize, "replacement trampoline return target");
   std::optional<uint64_t> PoolReturnFrom =
@@ -2197,6 +2326,127 @@ assignLongBranchGateways(PatchContext &Ctx,
     }
   }
   return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement);
+}
+
+// -- Transactional displacement finalize -------------------------------------
+
+/// Prepare all collected edits for one whole-object transaction. Insert only
+/// the padding needed immediately before each kernel entry whose mapped address
+/// would otherwise lose its 256-byte alignment. The old entry maps after that
+/// insertion, so no padding enters the kernel's executed path. This is the
+/// unique minimal extension of the monotone displacement map that preserves
+/// every kernel-entry congruence.
+[[nodiscard]] bool finalizeTransactionalDisplacements(
+    PatchContext &Ctx, std::vector<DisplacementEdit> &OutDisplacements) {
+  if (Ctx.DisplacementEdits.empty())
+    return !Ctx.DisplacementDeclined;
+  if (Ctx.DisplacementDeclined)
+    return false;
+  if (Ctx.LS.SNopBytes.size() != MinInstSize)
+    return false;
+
+  llvm::sort(Ctx.DisplacementEdits,
+             [](const DisplacementEdit &LHS, const DisplacementEdit &RHS) {
+               return LHS.Offset < RHS.Offset;
+             });
+
+  const size_t GrowingEditCount = Ctx.DisplacementEdits.size();
+  for (const DisplacementEdit &Edit : Ctx.DisplacementEdits) {
+    std::optional<ElfView::FunctionTextRange> Range =
+        Ctx.Elf.findFunctionTextRangeAtOffset(Edit.Offset);
+    if (!Range || Edit.Offset + Edit.OriginalSize > Range->End)
+      return false;
+  }
+
+  if (Ctx.TextSize > std::numeric_limits<uint64_t>::max() - Ctx.Elf.textAddr())
+    return false;
+  const uint64_t TextEnd = Ctx.Elf.textAddr() + Ctx.TextSize;
+  SmallVector<uint64_t, 8> KernelEntries;
+  for (const KernelDescriptorInfo &Descriptor : Ctx.Elf.kernelDescriptors()) {
+    std::optional<uint64_t> EntryAddress;
+    if (Descriptor.EntryOffset >= 0) {
+      EntryAddress = checkedAddUint64(
+          Descriptor.VAddr, static_cast<uint64_t>(Descriptor.EntryOffset),
+          "transactional kernel entry");
+    } else {
+      uint64_t Magnitude =
+          Descriptor.EntryOffset == std::numeric_limits<int64_t>::min()
+              ? uint64_t{1} << 63
+              : static_cast<uint64_t>(-Descriptor.EntryOffset);
+      EntryAddress = checkedSubUint64(Descriptor.VAddr, Magnitude,
+                                      "transactional kernel entry");
+    }
+    if (!EntryAddress)
+      return false;
+    if (*EntryAddress >= Ctx.Elf.textAddr() && *EntryAddress < TextEnd)
+      KernelEntries.push_back(*EntryAddress - Ctx.Elf.textAddr());
+  }
+  llvm::sort(KernelEntries);
+  KernelEntries.erase(std::unique(KernelEntries.begin(), KernelEntries.end()),
+                      KernelEntries.end());
+
+  std::vector<DisplacementEdit> AlignmentEdits;
+  size_t EditIndex = 0;
+  uint64_t GrowingDelta = 0;
+  uint64_t AlignmentDelta = 0;
+  for (uint64_t Entry : KernelEntries) {
+    while (EditIndex != Ctx.DisplacementEdits.size() &&
+           Ctx.DisplacementEdits[EditIndex].Offset < Entry) {
+      const DisplacementEdit &Edit = Ctx.DisplacementEdits[EditIndex++];
+      if (Edit.Offset + Edit.OriginalSize > Entry)
+        return false;
+      uint64_t Growth = Edit.ReplacementBytes.size() - Edit.OriginalSize;
+      if (Growth > std::numeric_limits<uint64_t>::max() - GrowingDelta)
+        return false;
+      GrowingDelta += Growth;
+    }
+
+    std::optional<uint64_t> OldEntryAddress = checkedAddUint64(
+        Ctx.Elf.textAddr(), Entry, "transactional old kernel entry");
+    if (!OldEntryAddress)
+      return false;
+    std::optional<uint64_t> EntryAfterGrowth = checkedAddUint64(
+        *OldEntryAddress, GrowingDelta, "transactional displaced kernel entry");
+    if (!EntryAfterGrowth)
+      return false;
+    std::optional<uint64_t> MappedEntry =
+        checkedAddUint64(*EntryAfterGrowth, AlignmentDelta,
+                         "transactional aligned kernel entry");
+    if (!MappedEntry)
+      return false;
+    std::optional<uint64_t> Aligned =
+        checkedAlignTo(*MappedEntry, KernelEntryStubStride,
+                       "transactional kernel entry alignment");
+    if (!Aligned)
+      return false;
+    uint64_t Padding = *Aligned - *MappedEntry;
+    if (Padding == 0)
+      continue;
+    if (Padding % MinInstSize != 0 ||
+        Padding > std::numeric_limits<uint64_t>::max() - AlignmentDelta)
+      return false;
+
+    DisplacementEdit Alignment;
+    Alignment.Offset = Entry;
+    Alignment.MapsOldOffsetAfterInsertion = true;
+    for (uint64_t I = 0; I != Padding; I += MinInstSize)
+      Alignment.ReplacementBytes.append(Ctx.LS.SNopBytes.begin(),
+                                        Ctx.LS.SNopBytes.end());
+    AlignmentEdits.push_back(std::move(Alignment));
+    AlignmentDelta += Padding;
+  }
+
+  Ctx.DisplacementEdits.insert(Ctx.DisplacementEdits.end(),
+                               std::make_move_iterator(AlignmentEdits.begin()),
+                               std::make_move_iterator(AlignmentEdits.end()));
+  OutDisplacements.insert(
+      OutDisplacements.end(),
+      std::make_move_iterator(Ctx.DisplacementEdits.begin()),
+      std::make_move_iterator(Ctx.DisplacementEdits.end()));
+  log() << "hotswap: transactional displacement: collected " << GrowingEditCount
+        << " growing edit(s) and " << AlignmentEdits.size()
+        << " alignment insertion(s)\n";
+  return true;
 }
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
@@ -2231,7 +2481,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     const LLVMState &LS, std::vector<Trampoline> &OutTrampolines, ElfView &Elf,
     std::vector<ScratchPatchInfo> &OutScratchPatches,
     const RewriteConfig &Config, bool &OutRequiredPatchApplied,
-    HotswapProfile &Profile) {
+    HotswapProfile &Profile,
+    std::vector<DisplacementEdit> &OutTransactionalDisplacements) {
   uint32_t Patched = 0;
 
   HotswapProfile::Scope SledScope = Profile.time(HotswapMetric::NopSledScan);
@@ -2242,11 +2493,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       collectDeclaredTextEntries(Elf);
   if (!DeclaredEntries)
     return std::nullopt;
-  std::vector<ElfView::FunctionTextRange> FunctionRanges =
-      Elf.functionTextRanges();
-  std::optional<DirectControlFlowInfo> ControlFlow = collectDirectBranchTargets(
-      Decoded, LS, Elf.textAddr(), Elf.textSize(), DeclaredEntries->Entries,
-      FunctionRanges, DeclaredEntries->ExternalEntries);
+  std::optional<DirectControlFlowInfo> ControlFlow =
+      analyzeDirectControlFlow(Elf, Decoded, LS);
   if (!ControlFlow)
     return std::nullopt;
   if (ControlFlow->HasUnresolvedTargets) {
@@ -2497,6 +2745,9 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
           << ", scratch_reused=" << Stats.ScratchReused
           << ", scratch_above_kd=" << Stats.ScratchAboveKd << "\n";
   }
+  if (!finalizeTransactionalDisplacements(Ctx, OutTransactionalDisplacements))
+    return std::nullopt;
+
   OutRequiredPatchApplied = Ctx.RequiredPatchApplied;
   return Patched;
 }
@@ -2760,7 +3011,9 @@ static amd_comgr_status_t retargetCodeObjectImpl(
 
     if (!EntryDisplacements.empty()) {
       Expected<std::unique_ptr<WritableMemoryBuffer>> DisplacedOrErr =
-          tryApplyTextDisplacementToNewBuffer(Elf, LS, EntryDisplacements);
+          tryApplyTextDisplacementToNewBuffer(
+              Elf, LS, EntryDisplacements,
+              /*RelocateTrailingSections=*/true);
       if (DisplacedOrErr) {
         std::unique_ptr<WritableMemoryBuffer> Displaced =
             std::move(*DisplacedOrErr);
@@ -2786,14 +3039,24 @@ static amd_comgr_status_t retargetCodeObjectImpl(
 
   RewriteConfig Config = makeGfx1250B0A0Config();
   Config.RunB0A0Patches = Options.RunB0A0Patches;
+  Config.AllowTextDisplacement = AllowTextDisplacement;
   Config.MaskPolicy = Options.MaskPolicy;
 
   uint8_t *Text = Elf.textData();
   uint64_t Count = 0;
   std::vector<Trampoline> Deferred;
   std::vector<ScratchPatchInfo> ScratchPatches;
+  std::vector<DisplacementEdit> TransactionalDisplacements;
   bool RequiredPatchApplied = false;
   if (RunInstructionPatches) {
+    // Phase timing for benchmarking (AMD_COMGR_EMIT_VERBOSE_LOGS). Uses
+    // steady_clock; costs nothing when logs are off besides two now() calls.
+    using Clock = std::chrono::steady_clock;
+    auto ms = [](Clock::duration D) {
+      return std::chrono::duration<double, std::milli>(D).count();
+    };
+
+    Clock::time_point TDecodeStart = Clock::now();
     std::vector<InternalDecodedInst> Decoded;
     uint64_t DecodeT0 = Prof ? profNowNs() : 0;
     bool DecodedOk = decodeTextSection(Text, Elf.textSize(), LS, Decoded);
@@ -2804,17 +3067,84 @@ static amd_comgr_status_t retargetCodeObjectImpl(
             << "failed on .text (" << Elf.textSize() << " bytes).\n";
       return AMD_COMGR_STATUS_ERROR;
     }
+    Clock::time_point TPatchStart = Clock::now();
+    log() << "hotswap: TIMING decode .text: " << ms(TPatchStart - TDecodeStart)
+          << " ms\n";
 
     uint64_t DispatchT0 = Prof ? profNowNs() : 0;
     std::optional<uint32_t> Patched = applyGfx1250B0toA0Rules(
         Decoded, Text, Elf.textSize(), LS, Deferred, Elf, ScratchPatches,
-        Config, RequiredPatchApplied, Profile);
+        Config, RequiredPatchApplied, Profile, TransactionalDisplacements);
     if (Prof)
       Profile.add(HotswapMetric::B0A0Dispatch, profNowNs() - DispatchT0, 0);
+    if (!Patched && AllowTextDisplacement) {
+      log() << "hotswap: displacement collection declined; retrying the "
+               "original object with trampoline placement\n";
+      return retargetCodeObjectImpl(ElfData, ElfSize, TargetIdent, Options, Out,
+                                    /*AllowTextDisplacement=*/false, Profile);
+    }
     if (!Patched)
       return AMD_COMGR_STATUS_ERROR;
     Count = *Patched;
+    log() << "hotswap: TIMING apply patches + displacement collection: "
+          << ms(Clock::now() - TPatchStart) << " ms\n";
     log() << "hotswap: applied " << Count << " instruction patches\n";
+
+    // Commit every growing replacement through one whole-object transaction.
+    // The transaction is constructed and validated before its output becomes
+    // visible, so all address-bearing views of .text move together.
+    if (!TransactionalDisplacements.empty()) {
+      log() << "hotswap: growing .text transactionally for "
+            << TransactionalDisplacements.size() << " displacement edit(s)\n";
+      Clock::time_point TDisplacementStart = Clock::now();
+      Expected<std::unique_ptr<WritableMemoryBuffer>> GrownOrErr =
+          tryApplyTextDisplacementToNewBuffer(
+              Elf, LS, TransactionalDisplacements,
+              /*RelocateTrailingSections=*/true);
+      log() << "hotswap: TIMING transactional grow + metadata remap: "
+            << ms(Clock::now() - TDisplacementStart) << " ms\n";
+      if (!GrownOrErr) {
+        std::string Reason = toString(GrownOrErr.takeError());
+        if (AllowTextDisplacement) {
+          log() << "hotswap: transactional displacement declined: " << Reason
+                << "; retrying the original object with trampoline placement\n";
+          return retargetCodeObjectImpl(
+              ElfData, ElfSize, TargetIdent, Options, Out,
+              /*AllowTextDisplacement=*/false, Profile);
+        }
+        log() << "hotswap: error: transactional .text grow failed: " << Reason
+              << "\n";
+        return AMD_COMGR_STATUS_ERROR;
+      }
+      std::unique_ptr<WritableMemoryBuffer> Grown = std::move(*GrownOrErr);
+      // Instruction rewriting is disabled in the recursive tail below so the
+      // spliced replacements cannot be applied twice. Retag the private grown
+      // buffer first: stepping metadata is a property of the completed
+      // transaction, not another instruction patch.
+      if (Options.RunB0A0Patches) {
+        uint8_t *GrownData =
+            reinterpret_cast<uint8_t *>(Grown->getBufferStart());
+        Expected<ElfView> GrownViewOrErr =
+            ElfView::create(GrownData, Grown->getBufferSize());
+        if (!GrownViewOrErr) {
+          log() << "hotswap: error: could not parse transaction output for "
+                   "gfx1250 revision retag: "
+                << toString(GrownViewOrErr.takeError()) << "\n";
+          return AMD_COMGR_STATUS_ERROR;
+        }
+        if (!GrownViewOrErr->updateGfx1250RevisionMetadata("A0"))
+          return AMD_COMGR_STATUS_ERROR;
+      }
+      // The grown buffer already has these edits spliced in and metadata
+      // repaired; re-run only the remaining (entry/metadata) tail against it by
+      // recursing with instruction patches disabled.
+      Gfx1250RewriteOptions RemainingOptions = Options;
+      RemainingOptions.RunB0A0Patches = false;
+      RemainingOptions.MaskPolicy = MaskWorkaroundPolicy::None;
+      return retargetCodeObjectImpl(
+          Grown->getBufferStart(), Grown->getBufferSize(), TargetIdent,
+          RemainingOptions, Out, AllowTextDisplacement, Profile);
+    }
   } else {
     log() << "hotswap: instruction patches disabled for this rewrite\n";
   }
