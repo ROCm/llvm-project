@@ -1016,14 +1016,189 @@ static bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
   return true;
 }
 
-static MCRegister findPhysicalRegisterByName(const MCRegisterInfo &MRI,
-                                             StringRef Name) {
+std::optional<SmallVector<MCRegister, 128>>
+resolveNumberedSgprRegisters(const MCRegisterInfo &MRI, unsigned MaxSgprs) {
+  SmallVector<MCRegister, 128> Registers(MaxSgprs);
   for (unsigned I = 1; I != MRI.getNumRegs(); ++I) {
     MCRegister Register(I);
-    if (MRI.getName(Register) == Name)
-      return Register;
+    std::optional<unsigned> Index = numberedSgprIndex(MRI, Register);
+    if (Index && *Index < MaxSgprs)
+      Registers[*Index] = Register;
   }
-  return MCRegister();
+  if (llvm::any_of(Registers,
+                   [](MCRegister Register) { return !Register.isValid(); }))
+    return std::nullopt;
+  return Registers;
+}
+
+void getNumberedSgprUsesAndDefs(const InternalDecodedInst &DI,
+                                const LLVMState &LS,
+                                ArrayRef<MCRegister> NumberedSgprs,
+                                BitVector &Uses, BitVector &Defs) {
+  assert(Uses.size() == NumberedSgprs.size() &&
+         Defs.size() == NumberedSgprs.size());
+  for (unsigned I = 0; I != NumberedSgprs.size(); ++I) {
+    if (instructionReadsRegister(DI, LS, NumberedSgprs[I]))
+      Uses.set(I);
+    if (instructionWritesRegister(DI, LS, NumberedSgprs[I]))
+      Defs.set(I);
+  }
+}
+
+/// Return the numbered SGPRs whose incoming values can be observed by the
+/// replacement. A malformed or control-flow-bearing replacement conservatively
+/// keeps every value that has not already been overwritten.
+BitVector
+unsafeIncomingNumberedSgprsInReplacement(ArrayRef<uint8_t> Replacement,
+                                         const LLVMState &LS,
+                                         ArrayRef<MCRegister> NumberedSgprs) {
+  const unsigned MaxSgprs = NumberedSgprs.size();
+  BitVector Unsafe(MaxSgprs);
+  BitVector Incoming(MaxSgprs, true);
+  std::vector<InternalDecodedInst> Decoded;
+  if (!decodeTextSection(Replacement.data(), Replacement.size(), LS, Decoded)) {
+    Unsafe.set();
+    return Unsafe;
+  }
+
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (!DI.DecodeSucceeded || !LS.MIA) {
+      Unsafe |= Incoming;
+      break;
+    }
+    BitVector Uses(MaxSgprs);
+    BitVector Defs(MaxSgprs);
+    getNumberedSgprUsesAndDefs(DI, LS, NumberedSgprs, Uses, Defs);
+    Uses &= Incoming;
+    Unsafe |= Uses;
+    Incoming.reset(Defs);
+    if (LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI)) {
+      Unsafe |= Incoming;
+      break;
+    }
+  }
+  return Unsafe;
+}
+
+/// Analyze all numbered SGPR incoming values in one monotone CFG walk.
+/// Unsafe contains a register when some path reads its incoming value before
+/// overwriting it, or reaches control flow that cannot be bounded precisely.
+std::optional<BitVector>
+unsafeIncomingNumberedSgprsInRange(ArrayRef<InternalDecodedInst> Decoded,
+                                   const LLVMState &LS, uint64_t FunctionBegin,
+                                   uint64_t FunctionEnd, uint64_t Continuation,
+                                   ArrayRef<MCRegister> NumberedSgprs) {
+  const unsigned MaxSgprs = NumberedSgprs.size();
+  if (!LS.MIA)
+    return std::nullopt;
+
+  auto FindInstruction = [&](uint64_t Offset) -> std::optional<size_t> {
+    if (Offset < FunctionBegin || Offset >= FunctionEnd)
+      return std::nullopt;
+    auto It =
+        std::lower_bound(Decoded.begin(), Decoded.end(), Offset,
+                         [](const InternalDecodedInst &DI, uint64_t Target) {
+                           return DI.Offset < Target;
+                         });
+    if (It == Decoded.end() || It->Offset != Offset)
+      return std::nullopt;
+    return It - Decoded.begin();
+  };
+  std::optional<size_t> ContinuationIndex = FindInstruction(Continuation);
+  if (!ContinuationIndex)
+    return std::nullopt;
+
+  DenseMap<size_t, BitVector> IncomingAt;
+  IncomingAt.try_emplace(*ContinuationIndex, MaxSgprs, true);
+  SmallVector<size_t, 16> Worklist(1, *ContinuationIndex);
+  BitVector Queued(Decoded.size());
+  Queued.set(*ContinuationIndex);
+  BitVector Unsafe(MaxSgprs);
+
+  auto Propagate = [&](uint64_t Offset, const BitVector &Incoming) {
+    std::optional<size_t> Successor = FindInstruction(Offset);
+    if (!Successor) {
+      Unsafe |= Incoming;
+      return;
+    }
+    auto It = IncomingAt.try_emplace(*Successor, MaxSgprs).first;
+    BitVector NewValues = Incoming;
+    NewValues.reset(It->second);
+    if (NewValues.none())
+      return;
+    It->second |= Incoming;
+    if (!Queued.test(*Successor)) {
+      Queued.set(*Successor);
+      Worklist.push_back(*Successor);
+    }
+  };
+
+  while (!Worklist.empty()) {
+    size_t Index = Worklist.pop_back_val();
+    Queued.reset(Index);
+    const InternalDecodedInst &DI = Decoded[Index];
+    BitVector Incoming = IncomingAt.find(Index)->second;
+    if (!DI.DecodeSucceeded || DI.Offset < FunctionBegin ||
+        DI.Offset >= FunctionEnd) {
+      Unsafe |= Incoming;
+      continue;
+    }
+
+    BitVector Uses(MaxSgprs);
+    BitVector Defs(MaxSgprs);
+    getNumberedSgprUsesAndDefs(DI, LS, NumberedSgprs, Uses, Defs);
+    Uses &= Incoming;
+    Unsafe |= Uses;
+    Incoming.reset(Defs);
+    if (Incoming.none())
+      continue;
+
+    if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode)
+      continue;
+    if (LS.MIA->isCall(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst) ||
+        LS.MIA->isReturn(DI.Inst)) {
+      Unsafe |= Incoming;
+      continue;
+    }
+    if (LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
+      if (Target)
+        Propagate(*Target, Incoming);
+      else
+        Unsafe |= Incoming;
+      if (LS.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    } else if (LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI) &&
+               !LS.MIA->isBarrier(DI.Inst)) {
+      Unsafe |= Incoming;
+      continue;
+    }
+
+    std::optional<uint64_t> Fallthrough = checkedAddUint64(
+        DI.Offset, DI.Size, "far-return SGPR liveness fallthrough");
+    if (Fallthrough)
+      Propagate(*Fallthrough, Incoming);
+    else
+      Unsafe |= Incoming;
+  }
+  return Unsafe;
+}
+
+static std::optional<BitVector> unsafeIncomingNumberedSgprsAtContinuation(
+    PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
+    ArrayRef<MCRegister> NumberedSgprs) {
+  std::optional<ElfView::FunctionTextRange> FunctionRange =
+      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
+  if (!FunctionRange)
+    return std::nullopt;
+  std::optional<uint64_t> Continuation = checkedAddUint64(
+      InstOffset, InstSize, "far-return SGPR liveness continuation");
+  if (!Continuation)
+    return std::nullopt;
+  return unsafeIncomingNumberedSgprsInRange(
+      Ctx.Decoded, Ctx.LS, FunctionRange->Begin, FunctionRange->End,
+      *Continuation, NumberedSgprs);
 }
 
 static std::optional<unsigned>
@@ -1031,21 +1206,22 @@ findLocallyDeadSgprPair(PatchContext &Ctx, uint64_t InstOffset,
                         uint32_t InstSize, ArrayRef<uint8_t> Replacement) {
   if (Ctx.Config.MaxSgprs < 2)
     return std::nullopt;
-  constexpr unsigned MaxCandidatePairs = 8;
-  unsigned CandidatePairs = 0;
+  std::optional<SmallVector<MCRegister, 128>> NumberedSgprs =
+      resolveNumberedSgprRegisters(*Ctx.LS.MRI, Ctx.Config.MaxSgprs);
+  if (!NumberedSgprs)
+    return std::nullopt;
+  std::optional<BitVector> ContinuationUnsafe =
+      unsafeIncomingNumberedSgprsAtContinuation(Ctx, InstOffset, InstSize,
+                                                *NumberedSgprs);
+  if (!ContinuationUnsafe)
+    return std::nullopt;
+  BitVector Unsafe = unsafeIncomingNumberedSgprsInReplacement(
+      Replacement, Ctx.LS, *NumberedSgprs);
+  Unsafe |= *ContinuationUnsafe;
+
   unsigned Base = (Ctx.Config.MaxSgprs - 2) & ~1u;
-  for (; CandidatePairs != MaxCandidatePairs; ++CandidatePairs) {
-    MCRegister Low =
-        findPhysicalRegisterByName(*Ctx.LS.MRI, "SGPR" + std::to_string(Base));
-    MCRegister High = findPhysicalRegisterByName(
-        *Ctx.LS.MRI, "SGPR" + std::to_string(Base + 1));
-    if (Low.isValid() && High.isValid() &&
-        !replacementNeedsIncomingRegister(Replacement, Ctx.LS, Low) &&
-        !replacementNeedsIncomingRegister(Replacement, Ctx.LS, High) &&
-        isRegisterDefinitelyDeadAtContinuation(Ctx, InstOffset, InstSize,
-                                               Low) &&
-        isRegisterDefinitelyDeadAtContinuation(Ctx, InstOffset, InstSize,
-                                               High)) {
+  for (;;) {
+    if (!Unsafe.test(Base) && !Unsafe.test(Base + 1)) {
       SafeSgprScratchBlock Scratch{Base, 2};
       if (commitSafeSgprScratchBlock(Ctx, InstOffset, Scratch,
                                      "locally dead far-return SGPR pair"))

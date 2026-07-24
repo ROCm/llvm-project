@@ -1523,6 +1523,32 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
                                             const LLVMState &LS,
                                             llvm::MCRegister Register);
 
+/// Resolve s0 through s(MaxSgprs - 1) to their physical MC registers.
+std::optional<llvm::SmallVector<llvm::MCRegister, 128>>
+resolveNumberedSgprRegisters(const llvm::MCRegisterInfo &MRI,
+                             unsigned MaxSgprs);
+
+/// Collect numbered SGPR uses and definitions using MC register overlap, so
+/// tuple and subregister operands conservatively affect their numbered SGPRs.
+void getNumberedSgprUsesAndDefs(const InternalDecodedInst &DI,
+                                const LLVMState &LS,
+                                llvm::ArrayRef<llvm::MCRegister> NumberedSgprs,
+                                llvm::BitVector &Uses, llvm::BitVector &Defs);
+
+/// Return numbered SGPR incoming values observed by a replacement before a
+/// definition, conservatively retaining values at malformed or opaque control
+/// flow.
+llvm::BitVector unsafeIncomingNumberedSgprsInReplacement(
+    llvm::ArrayRef<uint8_t> Replacement, const LLVMState &LS,
+    llvm::ArrayRef<llvm::MCRegister> NumberedSgprs);
+
+/// Return numbered SGPR incoming values that may be read before a definition,
+/// or remain live at an opaque or invalid control-flow boundary.
+std::optional<llvm::BitVector> unsafeIncomingNumberedSgprsInRange(
+    llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t FunctionBegin, uint64_t FunctionEnd, uint64_t Continuation,
+    llvm::ArrayRef<llvm::MCRegister> NumberedSgprs);
+
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement);

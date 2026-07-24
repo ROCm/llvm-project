@@ -71,6 +71,106 @@ static TargetIdentifier makeGfx1250Ident() {
   return TI;
 }
 
+static std::vector<InternalDecodedInst>
+decodeAsmSequence(const LLVMState &S, llvm::ArrayRef<llvm::StringRef> Lines) {
+  llvm::SmallVector<uint8_t, 32> Bytes;
+  for (llvm::StringRef Line : Lines) {
+    llvm::SmallVector<uint8_t> Encoded = assembleSingleInst(Line, S);
+    EXPECT_FALSE(Encoded.empty()) << Line.str();
+    Bytes.append(Encoded);
+  }
+  std::vector<InternalDecodedInst> Decoded;
+  EXPECT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  return Decoded;
+}
+
+static bool scalarIncomingSgprIsUnsafe(
+    llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &S,
+    uint64_t FunctionBegin, uint64_t FunctionEnd, uint64_t Continuation,
+    llvm::ArrayRef<llvm::MCRegister> NumberedSgprs, unsigned Sgpr) {
+  auto FindInstruction = [&](uint64_t Offset) -> std::optional<size_t> {
+    if (Offset < FunctionBegin || Offset >= FunctionEnd)
+      return std::nullopt;
+    auto It = llvm::lower_bound(
+        Decoded, Offset, [](const InternalDecodedInst &DI, uint64_t Target) {
+          return DI.Offset < Target;
+        });
+    if (It == Decoded.end() || It->Offset != Offset)
+      return std::nullopt;
+    return It - Decoded.begin();
+  };
+  std::optional<size_t> Start = FindInstruction(Continuation);
+  if (!Start)
+    return true;
+
+  llvm::SmallVector<size_t, 8> Worklist(1, *Start);
+  llvm::DenseSet<size_t> Visited;
+  while (!Worklist.empty()) {
+    size_t Index = Worklist.pop_back_val();
+    if (!Visited.insert(Index).second)
+      continue;
+    const InternalDecodedInst &DI = Decoded[Index];
+    if (!DI.DecodeSucceeded || !S.MIA || DI.Offset < FunctionBegin ||
+        DI.Offset >= FunctionEnd)
+      return true;
+
+    llvm::BitVector Uses(NumberedSgprs.size());
+    llvm::BitVector Defs(NumberedSgprs.size());
+    getNumberedSgprUsesAndDefs(DI, S, NumberedSgprs, Uses, Defs);
+    if (Uses.test(Sgpr))
+      return true;
+    if (Defs.test(Sgpr) || DI.Inst.getOpcode() == S.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == S.SEndPgmSavedOpcode)
+      continue;
+
+    auto AddSuccessor = [&](uint64_t Offset) {
+      std::optional<size_t> Successor = FindInstruction(Offset);
+      if (!Successor)
+        return false;
+      Worklist.push_back(*Successor);
+      return true;
+    };
+    if (S.MIA->isCall(DI.Inst) || S.MIA->isIndirectBranch(DI.Inst) ||
+        S.MIA->isReturn(DI.Inst))
+      return true;
+    if (S.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, S);
+      if (!Target || !AddSuccessor(*Target))
+        return true;
+      if (S.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    } else if (S.MIA->mayAffectControlFlow(DI.Inst, *S.MRI) &&
+               !S.MIA->isBarrier(DI.Inst)) {
+      return true;
+    }
+    std::optional<uint64_t> Fallthrough =
+        llvm::checkedAddUnsigned(DI.Offset, static_cast<uint64_t>(DI.Size));
+    if (!Fallthrough || !AddSuccessor(*Fallthrough))
+      return true;
+  }
+  return false;
+}
+
+static void
+expectBatchSgprProofMatchesScalar(const LLVMState &S,
+                                  llvm::ArrayRef<llvm::StringRef> Lines) {
+  std::vector<InternalDecodedInst> Decoded = decodeAsmSequence(S, Lines);
+  ASSERT_FALSE(Decoded.empty());
+  std::optional<llvm::SmallVector<llvm::MCRegister, 128>> NumberedSgprs =
+      resolveNumberedSgprRegisters(*S.MRI, /*MaxSgprs=*/106);
+  ASSERT_TRUE(NumberedSgprs);
+  uint64_t FunctionEnd = Decoded.back().Offset + Decoded.back().Size;
+  std::optional<llvm::BitVector> Batch = unsafeIncomingNumberedSgprsInRange(
+      Decoded, S, /*FunctionBegin=*/0, FunctionEnd, /*Continuation=*/0,
+      *NumberedSgprs);
+  ASSERT_TRUE(Batch);
+  for (unsigned I = 0; I != NumberedSgprs->size(); ++I)
+    EXPECT_EQ(Batch->test(I), scalarIncomingSgprIsUnsafe(
+                                  Decoded, S, /*FunctionBegin=*/0, FunctionEnd,
+                                  /*Continuation=*/0, *NumberedSgprs, I))
+        << "s" << I;
+}
+
 // Helper: decode the little-endian 32-bit dword at \p Bytes.
 static uint32_t readDword(const uint8_t *Bytes) {
   uint32_t V;
@@ -1742,6 +1842,114 @@ TEST(RegisterLiveness, TiedAccumulatorDefCountsAsIncomingRead) {
 
   llvm::MCRegister Accumulator(DI.Inst.getOperand(0).getReg());
   EXPECT_TRUE(instructionReadsRegister(DI, S, Accumulator));
+}
+
+TEST(RegisterLiveness, BatchProofMatchesScalarAcrossControlFlow) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const llvm::StringRef BranchJoin[] = {"s_cbranch_scc0 1", "s_mov_b32 s30, 0",
+                                        "s_mov_b32 s0, s30", "s_endpgm"};
+  expectBatchSgprProofMatchesScalar(S, BranchJoin);
+
+  const llvm::StringRef Loop[] = {"s_mov_b32 s30, 0", "s_cbranch_scc0 -2",
+                                  "s_endpgm"};
+  expectBatchSgprProofMatchesScalar(S, Loop);
+
+  const llvm::StringRef DefBeforeOpaque[] = {"s_mov_b32 s30, 0",
+                                             "s_set_pc_i64 s[0:1]"};
+  expectBatchSgprProofMatchesScalar(S, DefBeforeOpaque);
+
+  const llvm::StringRef OpaqueBeforeDef[] = {"s_set_pc_i64 s[0:1]",
+                                             "s_mov_b32 s30, 0"};
+  expectBatchSgprProofMatchesScalar(S, OpaqueBeforeDef);
+}
+
+TEST(RegisterLiveness, NumberedSgprExtractionCoversAliasesAndTiedRmw) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<llvm::SmallVector<llvm::MCRegister, 128>> NumberedSgprs =
+      resolveNumberedSgprRegisters(*S.MRI, /*MaxSgprs=*/106);
+  ASSERT_TRUE(NumberedSgprs);
+
+  auto GetUseDef = [&](const InternalDecodedInst &DI) {
+    std::pair<llvm::BitVector, llvm::BitVector> Result{
+        llvm::BitVector(NumberedSgprs->size()),
+        llvm::BitVector(NumberedSgprs->size())};
+    getNumberedSgprUsesAndDefs(DI, S, *NumberedSgprs, Result.first,
+                               Result.second);
+    return Result;
+  };
+
+  std::vector<InternalDecodedInst> Tuple = decodeAsmSequence(
+      S, llvm::ArrayRef<llvm::StringRef>({"s_mov_b64 s[0:1], s[30:31]"}));
+  ASSERT_EQ(Tuple.size(), 1u);
+  auto [TupleUses, TupleDefs] = GetUseDef(Tuple.front());
+  EXPECT_TRUE(TupleUses.test(30));
+  EXPECT_TRUE(TupleUses.test(31));
+  EXPECT_TRUE(TupleDefs.test(0));
+  EXPECT_TRUE(TupleDefs.test(1));
+
+  std::vector<InternalDecodedInst> Rmw = decodeAsmSequence(
+      S, llvm::ArrayRef<llvm::StringRef>({"s_add_u32 s30, s30, 1"}));
+  ASSERT_EQ(Rmw.size(), 1u);
+  auto [RmwUses, RmwDefs] = GetUseDef(Rmw.front());
+  EXPECT_TRUE(RmwUses.test(30));
+  EXPECT_TRUE(RmwDefs.test(30));
+
+  llvm::MCRegister Low16;
+  for (unsigned I = 1; I != S.MRI->getNumRegs(); ++I) {
+    llvm::MCRegister Candidate(I);
+    if (llvm::StringRef(S.MRI->getName(Candidate)) == "SGPR30_LO16") {
+      Low16 = Candidate;
+      break;
+    }
+  }
+  ASSERT_TRUE(Low16.isValid());
+
+  std::vector<InternalDecodedInst> Half = decodeAsmSequence(
+      S, llvm::ArrayRef<llvm::StringRef>({"s_mov_b32 s0, s1"}));
+  ASSERT_EQ(Half.size(), 1u);
+  ASSERT_GE(Half.front().Inst.getNumOperands(), 2u);
+  Half.front().Inst.getOperand(1).setReg(Low16);
+  auto [HalfUses, HalfDefs] = GetUseDef(Half.front());
+  EXPECT_TRUE(HalfUses.test(30));
+  EXPECT_FALSE(HalfUses.test(1));
+  EXPECT_TRUE(HalfDefs.test(0));
+
+  Half.front().Inst.getOperand(0).setReg(Low16);
+  auto [HalfDefUses, HalfDefDefs] = GetUseDef(Half.front());
+  EXPECT_TRUE(HalfDefUses.test(30));
+  EXPECT_TRUE(HalfDefDefs.test(30));
+}
+
+TEST(RegisterLiveness, ReplacementTracksOnlyIncomingValues) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<llvm::SmallVector<llvm::MCRegister, 128>> NumberedSgprs =
+      resolveNumberedSgprRegisters(*S.MRI, /*MaxSgprs=*/106);
+  ASSERT_TRUE(NumberedSgprs);
+
+  llvm::SmallVector<uint8_t> UseBeforeDef =
+      assembleInstructions("s_mov_b32 s0, s30\ns_mov_b32 s30, 0", S);
+  ASSERT_FALSE(UseBeforeDef.empty());
+  llvm::BitVector UseBeforeDefUnsafe =
+      unsafeIncomingNumberedSgprsInReplacement(UseBeforeDef, S, *NumberedSgprs);
+  EXPECT_TRUE(UseBeforeDefUnsafe.test(30));
+
+  llvm::SmallVector<uint8_t> DefBeforeUse =
+      assembleInstructions("s_mov_b32 s30, 0\ns_mov_b32 s0, s30", S);
+  ASSERT_FALSE(DefBeforeUse.empty());
+  llvm::BitVector DefBeforeUseUnsafe =
+      unsafeIncomingNumberedSgprsInReplacement(DefBeforeUse, S, *NumberedSgprs);
+  EXPECT_FALSE(DefBeforeUseUnsafe.test(30));
+
+  llvm::SmallVector<uint8_t> Opaque =
+      assembleSingleInst("s_set_pc_i64 s[0:1]", S);
+  ASSERT_FALSE(Opaque.empty());
+  llvm::BitVector OpaqueUnsafe =
+      unsafeIncomingNumberedSgprsInReplacement(Opaque, S, *NumberedSgprs);
+  EXPECT_TRUE(OpaqueUnsafe.test(30));
 }
 
 TEST(AssembleDecode, SingleInstructionRejectsSequence) {
