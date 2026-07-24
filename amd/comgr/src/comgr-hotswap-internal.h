@@ -996,14 +996,63 @@ struct CFG {
   llvm::DenseMap<uint64_t, unsigned> OffsetToBlock;
 };
 
-/// Dataflow-liveness result for a kernel's VGPR set. \c LiveBefore[i] and
-/// \c LiveAfter[i] are the live-in / live-out bitvectors for Decoded[i].
+/// Dataflow-liveness result for a kernel's VGPR set. Per-instruction live-in
+/// and live-out bitvectors are accessed through \c liveBefore and \c liveAfter.
+/// Conservative mode replaces those arrays with one shared all-live vector,
+/// avoiding two identical BitVector allocations per decoded instruction in the
+/// weak fallback solver.
 /// \c Converged is false when the iterative solver hit its iteration cap;
 /// callers fall back to a conservative all-VGPRs-live analysis in that case.
 struct LivenessInfo {
+  bool Converged = false;
+
+  const llvm::BitVector &liveBefore(size_t Index) const {
+    if (IsConservative)
+      return ConservativeAllLive;
+    assert(Index < LiveBefore.size() &&
+           "live-before instruction index out of range");
+    return LiveBefore[Index];
+  }
+
+  const llvm::BitVector &liveAfter(size_t Index) const {
+    if (IsConservative)
+      return ConservativeAllLive;
+    assert(Index < LiveAfter.size() &&
+           "live-after instruction index out of range");
+    return LiveAfter[Index];
+  }
+
+  void setPerInstructionLiveness(std::vector<llvm::BitVector> Before,
+                                 std::vector<llvm::BitVector> After) {
+    assert(Before.size() == After.size() &&
+           "live-before and live-after sizes must match");
+    LiveBefore = std::move(Before);
+    LiveAfter = std::move(After);
+    ConservativeAllLive.clear();
+    IsConservative = false;
+  }
+
+  void setConservativeAllLive(unsigned MaxVgprs) {
+    LiveBefore.clear();
+    LiveAfter.clear();
+    ConservativeAllLive.resize(MaxVgprs);
+    ConservativeAllLive.set(0, MaxVgprs);
+    IsConservative = true;
+  }
+
+  bool usesConservativeAllLive() const { return IsConservative; }
+
+  size_t perInstructionCount() const {
+    assert(LiveBefore.size() == LiveAfter.size() &&
+           "live-before and live-after sizes must match");
+    return LiveBefore.size();
+  }
+
+private:
   std::vector<llvm::BitVector> LiveBefore;
   std::vector<llvm::BitVector> LiveAfter;
-  bool Converged = false;
+  llvm::BitVector ConservativeAllLive;
+  bool IsConservative = false;
 };
 
 /// Allocates scratch VGPRs for a patch point, preferring to reuse dead slots

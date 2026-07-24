@@ -3480,3 +3480,46 @@ TEST(DecodeCache, TruncatedFinalWindowDecodesWithoutStaleHit) {
   // Stream consumed exactly (no over-run).
   EXPECT_EQ(Consumed, Text.size());
 }
+
+TEST(LivenessInfo, ConservativeFallbackSharesOneAllLiveVector) {
+  LivenessInfo Info;
+  std::vector<llvm::BitVector> Before(3, llvm::BitVector(64));
+  std::vector<llvm::BitVector> After(3, llvm::BitVector(64));
+  Info.setPerInstructionLiveness(std::move(Before), std::move(After));
+  ASSERT_EQ(Info.perInstructionCount(), 3u);
+
+  Info.setConservativeAllLive(/*MaxVgprs=*/64);
+
+  EXPECT_TRUE(Info.usesConservativeAllLive());
+  EXPECT_EQ(Info.perInstructionCount(), 0u);
+  ASSERT_EQ(Info.liveBefore(0).size(), 64u);
+  EXPECT_TRUE(Info.liveBefore(0).all());
+  EXPECT_EQ(&Info.liveBefore(0), &Info.liveBefore(1));
+  EXPECT_EQ(&Info.liveBefore(1), &Info.liveAfter(2));
+}
+
+TEST(LivenessInfo, PerInstructionAccessorsReturnIndexedVectors) {
+  LivenessInfo Info;
+  std::vector<llvm::BitVector> Before(3, llvm::BitVector(64));
+  std::vector<llvm::BitVector> After(3, llvm::BitVector(64));
+  Before[1].set(7);
+  After[2].set(9);
+  Info.setPerInstructionLiveness(std::move(Before), std::move(After));
+
+  EXPECT_FALSE(Info.usesConservativeAllLive());
+  EXPECT_EQ(Info.perInstructionCount(), 3u);
+  EXPECT_FALSE(Info.liveBefore(0).test(7));
+  EXPECT_TRUE(Info.liveBefore(1).test(7));
+  EXPECT_TRUE(Info.liveAfter(2).test(9));
+  EXPECT_NE(&Info.liveBefore(0), &Info.liveBefore(1));
+}
+
+TEST(LivenessInfo, ZeroVgprConservativeModeIsExplicit) {
+  LivenessInfo Info;
+  Info.setConservativeAllLive(/*MaxVgprs=*/0);
+
+  EXPECT_TRUE(Info.usesConservativeAllLive());
+  EXPECT_EQ(Info.perInstructionCount(), 0u);
+  EXPECT_TRUE(Info.liveBefore(0).empty());
+  EXPECT_EQ(&Info.liveBefore(0), &Info.liveAfter(0));
+}
