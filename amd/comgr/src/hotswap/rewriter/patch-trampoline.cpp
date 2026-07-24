@@ -42,6 +42,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace llvm;
@@ -402,6 +403,95 @@ std::optional<std::vector<std::string>> expandDs2AddrImpl(const MCInst &Inst,
   return std::nullopt;
 }
 
+bool hasUnencodableVgprName(StringRef Asm) {
+  for (size_t Pos = Asm.find('v'); Pos != StringRef::npos;
+       Pos = Asm.find('v', Pos + 1)) {
+    StringRef Tail = Asm.substr(Pos + 1);
+    Tail.consume_front("[");
+    unsigned Index = 0;
+    if (!Tail.consumeInteger(10, Index) && Index > 255)
+      return true;
+  }
+  return false;
+}
+
+bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role, unsigned &Mode,
+                          std::string &Output) {
+  StringRef Operand = Input.trim();
+  StringRef Suffix;
+  size_t Space = Operand.find(' ');
+  if (Space != StringRef::npos) {
+    Suffix = Operand.substr(Space);
+    Operand = Operand.take_front(Space);
+  }
+  if (!Operand.consume_front("v")) {
+    Output = Input.trim().str();
+    return true;
+  }
+
+  bool IsRange = Operand.consume_front("[");
+  if (IsRange && !Operand.consume_back("]"))
+    return false;
+  StringRef LoText;
+  StringRef HiText;
+  std::tie(LoText, HiText) = Operand.split(':');
+  if (!IsRange)
+    LoText = HiText = Operand;
+  if (LoText.empty() || HiText.empty())
+    return false;
+
+  unsigned Lo = 0;
+  unsigned Hi = 0;
+  if (LoText.getAsInteger(10, Lo) || HiText.getAsInteger(10, Hi) || Hi < Lo ||
+      Lo / 256 != Hi / 256)
+    return false;
+  unsigned Bank = Lo / 256;
+  if (Bank > 3)
+    return false;
+  setVgprMsbBank(Mode, Role, Bank);
+  if (IsRange)
+    Output =
+        ("v[" + Twine(Lo & 255) + ":" + Twine(Hi & 255) + "]" + Suffix).str();
+  else
+    Output = ("v" + Twine(Lo & 255) + Suffix).str();
+  return true;
+}
+
+std::optional<std::pair<std::string, unsigned>>
+normalizeDsVgprBanks(StringRef Asm, StringRef FromMnem, unsigned OldMode) {
+  size_t MnemEnd = Asm.find(' ');
+  if (MnemEnd == StringRef::npos)
+    return std::nullopt;
+  StringRef Mnem = Asm.take_front(MnemEnd);
+  SmallVector<StringRef, 3> Operands;
+  Asm.substr(MnemEnd + 1)
+      .split(Operands, ',', /*MaxSplit=*/-1,
+             /*KeepEmpty=*/false);
+
+  SmallVector<VgprMsbOperand, 3> Roles;
+  if (FromMnem.starts_with("ds_load_"))
+    Roles = {VgprMsbOperand::Dst, VgprMsbOperand::Src0};
+  else if (FromMnem.starts_with("ds_storexchg_"))
+    Roles = {VgprMsbOperand::Dst, VgprMsbOperand::Src0, VgprMsbOperand::Src1};
+  else if (FromMnem.starts_with("ds_store_"))
+    Roles = {VgprMsbOperand::Src0, VgprMsbOperand::Src1};
+  else
+    return std::nullopt;
+  if (Operands.size() != Roles.size())
+    return std::nullopt;
+
+  unsigned NewMode = OldMode;
+  std::string Normalized = Mnem.str();
+  for (unsigned I = 0; I != Operands.size(); ++I) {
+    std::string Operand;
+    if (!normalizeVgprOperand(Operands[I], Roles[I], NewMode, Operand))
+      return std::nullopt;
+    Normalized += I == 0 ? " " : ", ";
+    Normalized += Operand;
+  }
+  return std::pair<std::string, unsigned>{std::move(Normalized), NewMode};
+}
+
 // -- patchDs2Addr -----------------------------------------------------------
 //
 // Expand one ds_*_2addr_* instruction (stride64 or non-stride64) into two
@@ -421,9 +511,44 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   if (!Expanded)
     return failRequiredPatch(Ctx);
 
+  bool NeedsBankNormalization =
+      llvm::any_of(*Expanded, [](const std::string &Asm) {
+        return hasUnencodableVgprName(Asm);
+      });
+  std::optional<unsigned> ActiveMode;
+  if (NeedsBankNormalization) {
+    ActiveMode = getActiveVgprMsbMode(Ctx, Idx);
+    if (!ActiveMode) {
+      log() << "hotswap: error: ds_2addr at 0x" << utohexstr(DI.Offset)
+            << " crosses v255 but the active VGPR-MSB mode is unknown\n";
+      return failRequiredPatch(Ctx);
+    }
+  }
+
   std::string Combined;
-  for (const std::string &Line : *Expanded)
-    Combined += Line + "\n";
+  for (const std::string &Line : *Expanded) {
+    if (!NeedsBankNormalization) {
+      Combined += Line + "\n";
+      continue;
+    }
+    std::optional<std::pair<std::string, unsigned>> Normalized =
+        normalizeDsVgprBanks(Line, DI.Mnemonic, *ActiveMode);
+    if (!Normalized) {
+      log() << "hotswap: error: ds_2addr at 0x" << utohexstr(DI.Offset)
+            << " has a VGPR operand that crosses a 256-register bank\n";
+      return failRequiredPatch(Ctx);
+    }
+    unsigned NewMode = Normalized->second;
+    if (NewMode != *ActiveMode)
+      Combined +=
+          ("s_set_vgpr_msb " + Twine(NewMode | (*ActiveMode << 8)) + "\n")
+              .str();
+    Combined += Normalized->first + "\n";
+    if (NewMode != *ActiveMode)
+      Combined +=
+          ("s_set_vgpr_msb " + Twine(*ActiveMode | (NewMode << 8)) + "\n")
+              .str();
+  }
   // Drain the DS counter right after the split pair so both halves are
   // guaranteed complete before any downstream consumer. The original code
   // tracked completion of the single 2-addr instruction via a later

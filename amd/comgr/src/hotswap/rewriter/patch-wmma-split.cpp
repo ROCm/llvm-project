@@ -966,13 +966,6 @@ findActiveVgprMsbMode(const PatchContext &Ctx, size_t Idx) {
   return static_cast<unsigned>(Ctx.VgprMsbModeBefore[Idx]);
 }
 
-enum class VgprMsbOperand : unsigned {
-  Src0 = 0,
-  Src1 = 2,
-  Src2 = 4,
-  Dst = 6,
-};
-
 unsigned getVgprMsbs(unsigned Mode, VgprMsbOperand Operand) {
   return (Mode >> static_cast<unsigned>(Operand)) & 0x3;
 }
@@ -1131,6 +1124,24 @@ buildSplit32x16Asm(StringRef Replacement, const PrintedAsm &P, const WmmaOps &R,
 
 } // anonymous namespace
 
+void ensureVgprMsbModes(PatchContext &Ctx) {
+  if (Ctx.VgprMsbModeBefore.empty())
+    computeVgprMsbModes(Ctx);
+}
+
+std::optional<unsigned> getActiveVgprMsbMode(PatchContext &Ctx, size_t Idx) {
+  ensureVgprMsbModes(Ctx);
+  return findActiveVgprMsbMode(Ctx, Idx);
+}
+
+unsigned getVgprMsbBank(unsigned Mode, VgprMsbOperand Operand) {
+  return getVgprMsbs(Mode, Operand);
+}
+
+void setVgprMsbBank(unsigned &Mode, VgprMsbOperand Operand, unsigned Bank) {
+  setVgprMsbs(Mode, Operand, Bank);
+}
+
 // Return-value semantics (current shared dispatcher API in b0a0.cpp):
 //   0  = either "this patch did not match the instruction" OR "matched
 //        but failed to apply" -- the dispatcher cannot distinguish the
@@ -1221,8 +1232,7 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   // the transition and restore it. K-splits always consult the mode (the
   // upper half reuses dst as src2). M-splits consult it only when a half
   // actually crosses v255.
-  if (Ctx.VgprMsbModeBefore.empty())
-    computeVgprMsbModes(Ctx);
+  ensureVgprMsbModes(Ctx);
 
   bool UsesVgprMsbTransition = false;
   bool NeedsKnownVgprMsbMode = Match->Kind == SplitKind::Split128to64FP8BF8;
@@ -1235,7 +1245,7 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
 
   unsigned ActiveVgprMsbMode = 0;
   if (NeedsKnownVgprMsbMode) {
-    std::optional<unsigned> Mode = findActiveVgprMsbMode(Ctx, Idx);
+    std::optional<unsigned> Mode = getActiveVgprMsbMode(Ctx, Idx);
     if (!Mode) {
       log() << "hotswap: error: WMMA split: cannot determine VGPR-MSB mode "
                "for "
