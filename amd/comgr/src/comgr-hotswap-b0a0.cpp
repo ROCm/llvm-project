@@ -1674,7 +1674,7 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
                           [](const InternalDecodedInst &DI, uint64_t Offset) {
                             return DI.Offset < Offset;
                           });
-    ArrayRef<InternalDecodedInst>::const_iterator End = llvm::lower_bound(
+    ArrayRef<InternalDecodedInst>::const_iterator End = std::lower_bound(
         Begin, Decoded.end(), Group.End,
         [](const InternalDecodedInst &DI, uint64_t Offset) {
           return DI.Offset < Offset;
