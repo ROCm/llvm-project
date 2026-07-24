@@ -297,6 +297,11 @@ bool Document::readFromBlob(
       auto &Map = Stack.back().Node.getMap();
       if (!Stack.back().MapEntry) {
         // Reading a map key.
+        // DocNode's ordering only supports scalar keys. Reject container keys
+        // before inserting them so a one-entry map cannot retain an
+        // unorderable key that asserts during a later lookup.
+        if (Node.isMap() || Node.isArray())
+          return false;
         Stack.back().MapKey = Node;
         Stack.back().MapEntry = &Map[Node];
         continue;

@@ -494,6 +494,16 @@ TEST(MsgPackDocument, TestReadMergeMap) {
   ASSERT_EQ(BayS.getInt(), 8);
 }
 
+TEST(MsgPackDocument, RejectsContainerMapKeys) {
+  Document ArrayKeyDoc;
+  EXPECT_FALSE(
+      ArrayKeyDoc.readFromBlob(StringRef("\x81\x90\xc0", 3), /*Multi=*/false));
+
+  Document MapKeyDoc;
+  EXPECT_FALSE(MapKeyDoc.readFromBlob(StringRef("\x81\x80\xc0", 3),
+                                      /*Multi=*/false));
+}
+
 TEST(MsgPackDocument, TestWriteBoolean) {
   Document Doc;
   Doc.getRoot() = true;
