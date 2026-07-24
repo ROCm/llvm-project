@@ -445,14 +445,44 @@ std::optional<uint64_t> addSignedOffset(uint64_t Base, int64_t Offset,
   return checkedSubUint64(Base, Magnitude, Context);
 }
 
-std::string formatPreservingLiteral(StringRef OldOperand, int64_t NewValue) {
-  std::string Hex =
-      ("0x" + Twine::utohexstr(static_cast<uint64_t>(NewValue))).str();
-  if (OldOperand.starts_with("lit64("))
-    return "lit64(" + Hex + ")";
-  if (OldOperand.starts_with("lit("))
-    return "lit(" + Hex + ")";
-  return Hex;
+Expected<SmallVector<uint8_t>>
+reencodeAbsoluteOperand(const InternalDecodedInst &DI, unsigned OperandIndex,
+                        int64_t NewValue, const LLVMState &LS,
+                        StringRef Context) {
+  if (OperandIndex >= DI.Inst.getNumOperands())
+    return makeDisplacementError(Twine(Context) + " has no immediate operand");
+
+  MCInst NewInst = DI.Inst;
+  MCOperand &Operand = NewInst.getOperand(OperandIndex);
+  if (Operand.isImm()) {
+    Operand.setImm(NewValue);
+  } else if (Operand.isExpr()) {
+    const MCConstantExpr *OldConstant =
+        dyn_cast<MCConstantExpr>(Operand.getExpr());
+    if (!OldConstant) {
+      return makeDisplacementError(Twine(Context) +
+                                   " immediate is not a constant expression");
+    }
+    Operand.setExpr(MCConstantExpr::create(NewValue, *LS.Ctx,
+                                           OldConstant->useHexFormat(),
+                                           OldConstant->getSizeInBytes()));
+  } else {
+    return makeDisplacementError(Twine(Context) +
+                                 " does not expose an absolute immediate");
+  }
+
+  SmallVector<char, 16> Code;
+  SmallVector<MCFixup, 4> Fixups;
+  LS.MCE->encodeInstruction(NewInst, Code, Fixups, *LS.STI);
+  if (!Fixups.empty()) {
+    return makeDisplacementError(Twine(Context) +
+                                 " produced an unresolved MC fixup");
+  }
+  if (Code.size() != DI.Size) {
+    return makeDisplacementError(Twine(Context) +
+                                 " changed encoded size during re-encode");
+  }
+  return SmallVector<uint8_t>(Code.begin(), Code.end());
 }
 
 Expected<bool> repairSGetPcPairForDisplacement(
@@ -525,31 +555,16 @@ Expected<bool> repairSGetPcPairForDisplacement(
   if (NewAddend == OldAddend)
     return true;
 
-  if (!LS.MCIP)
-    return false;
-  SmallString<256> PrintedBuffer;
-  raw_svector_ostream PrintStream(PrintedBuffer);
-  LS.MCIP->printInst(&Add.Inst, /*Address=*/0, /*Annot=*/"", *LS.STI,
-                     PrintStream);
-  StringRef Printed = StringRef(PrintedBuffer).trim();
-  size_t LastComma = Printed.rfind(',');
-  if (LastComma == StringRef::npos)
-    return false;
-  StringRef Head = Printed.substr(0, LastComma + 1);
-  StringRef OldOperand = Printed.substr(LastComma + 1).trim();
-  std::string NewOperand = formatPreservingLiteral(OldOperand, NewAddend);
-  std::string NewAssembly = (Head + " " + NewOperand).str();
-
-  SmallVector<uint8_t> Code = assembleSingleInst(NewAssembly, LS);
-  if (Code.size() != Add.Size) {
-    return makeDisplacementError("s_add for s_get_pc at old .text offset 0x" +
-                                 Twine::utohexstr(GetPc.Offset) +
-                                 " changed encoded size during re-encode");
-  }
+  std::string Context = ("s_add for s_get_pc at old .text offset 0x" +
+                         Twine::utohexstr(GetPc.Offset))
+                            .str();
+  Expected<SmallVector<uint8_t>> CodeOrErr =
+      reencodeAbsoluteOperand(Add, /*OperandIndex=*/2, NewAddend, LS, Context);
+  if (!CodeOrErr)
+    return CodeOrErr.takeError();
+  SmallVector<uint8_t> &Code = *CodeOrErr;
   if (NewAddOff > NewText.size() || Code.size() > NewText.size() - NewAddOff) {
-    return makeDisplacementError(
-        "repaired s_add for s_get_pc at old .text offset 0x" +
-        Twine::utohexstr(GetPc.Offset) + " writes past rebuilt .text");
+    return makeDisplacementError(Context + " writes past rebuilt .text");
   }
   std::memcpy(NewText.data() + NewAddOff, Code.data(), Code.size());
   return true;
@@ -609,32 +624,17 @@ Expected<bool> repairSAddPcForDisplacement(const ElfView &Elf,
   if (NewDelta == OldDelta)
     return true;
 
-  if (!LS.MCIP)
-    return false;
-  SmallString<128> PrintedBuffer;
-  raw_svector_ostream PrintStream(PrintedBuffer);
-  LS.MCIP->printInst(&AddPc.Inst, /*Address=*/0, /*Annot=*/"", *LS.STI,
-                     PrintStream);
-  StringRef Printed = StringRef(PrintedBuffer).trim();
-  size_t Space = Printed.find(' ');
-  if (Space == StringRef::npos)
-    return false;
-  StringRef Mnemonic = Printed.substr(0, Space);
-  StringRef OldOperand = Printed.substr(Space + 1).trim();
-  std::string NewOperand = formatPreservingLiteral(OldOperand, NewDelta);
-  std::string NewAssembly = (Mnemonic + " " + NewOperand).str();
-
-  SmallVector<uint8_t> Code = assembleSingleInst(NewAssembly, LS);
-  if (Code.size() != AddPc.Size) {
-    return makeDisplacementError("s_add_pc_i64 at old .text offset 0x" +
-                                 Twine::utohexstr(AddPc.Offset) +
-                                 " changed encoded size during re-encode");
-  }
+  std::string Context =
+      ("s_add_pc_i64 at old .text offset 0x" + Twine::utohexstr(AddPc.Offset))
+          .str();
+  Expected<SmallVector<uint8_t>> CodeOrErr =
+      reencodeAbsoluteOperand(AddPc, /*OperandIndex=*/0, NewDelta, LS, Context);
+  if (!CodeOrErr)
+    return CodeOrErr.takeError();
+  SmallVector<uint8_t> &Code = *CodeOrErr;
   if (NewAddPcOff > NewText.size() ||
       Code.size() > NewText.size() - NewAddPcOff) {
-    return makeDisplacementError(
-        "repaired s_add_pc_i64 at old .text offset 0x" +
-        Twine::utohexstr(AddPc.Offset) + " writes past rebuilt .text");
+    return makeDisplacementError(Context + " writes past rebuilt .text");
   }
   std::memcpy(NewText.data() + NewAddPcOff, Code.data(), Code.size());
   return true;
