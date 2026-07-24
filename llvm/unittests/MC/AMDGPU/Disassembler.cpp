@@ -64,6 +64,48 @@ TEST(AMDGPUDisassembler, Basic) {
   LLVMDisasmDispose(DCR);
 }
 
+TEST(AMDGPUDisassembler, LiteralLengthAndErrorState) {
+  LLVMInitializeAMDGPUTargetInfo();
+  LLVMInitializeAMDGPUTargetMC();
+  LLVMInitializeAMDGPUDisassembler();
+
+  // s_mov_b32 s14, 0xb0a00001. The first dword selects a literal operand and
+  // the second dword supplies it.
+  uint8_t Bytes[] = {0xff, 0x00, 0x8e, 0xbe, 0x01, 0x00, 0xa0, 0xb0};
+  char OutString[100];
+  LLVMDisasmContextRef DCR =
+      LLVMCreateDisasmCPU("amdgcn-amd-amdhsa", "gfx1250", nullptr, 0, nullptr,
+                          symbolLookupCallback);
+
+  // Skip test if AMDGPU not built.
+  if (!DCR)
+    GTEST_SKIP();
+
+  // Every truncation must fail, including buffers that contain only part of
+  // the literal dword.
+  for (size_t Size = 0; Size != sizeof(Bytes); ++Size)
+    EXPECT_EQ(LLVMDisasmInstruction(DCR, Bytes, Size, 0, OutString,
+                                    sizeof(OutString)),
+              0U)
+        << "size " << Size;
+
+  // A failed decode must not poison the next instruction decoded by the same
+  // disassembler.
+  EXPECT_EQ(LLVMDisasmInstruction(DCR, Bytes, sizeof(Bytes), 0, OutString,
+                                  sizeof(OutString)),
+            sizeof(Bytes));
+  EXPECT_TRUE(StringRef(OutString).contains("s_mov_b32"));
+
+  // Exercise the state transition in both directions once more.
+  EXPECT_EQ(LLVMDisasmInstruction(DCR, Bytes, sizeof(uint32_t), 0, OutString,
+                                  sizeof(OutString)),
+            0U);
+  EXPECT_EQ(LLVMDisasmInstruction(DCR, Bytes, sizeof(Bytes), 0, OutString,
+                                  sizeof(OutString)),
+            sizeof(Bytes));
+  LLVMDisasmDispose(DCR);
+}
+
 // Check multiple disassemblers in same MCContext.
 TEST(AMDGPUDisassembler, MultiDisassembler) {
   LLVMInitializeAMDGPUTargetInfo();

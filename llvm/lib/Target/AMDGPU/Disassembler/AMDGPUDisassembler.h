@@ -46,6 +46,7 @@ private:
   mutable ArrayRef<uint8_t> Bytes;
   mutable uint64_t Literal;
   mutable bool HasLiteral;
+  mutable bool HasDecodeError = false;
   mutable std::optional<bool> EnableWavefrontSize32;
   unsigned CodeObjectVersion;
   const MCExpr *UCVersionW64Expr;
