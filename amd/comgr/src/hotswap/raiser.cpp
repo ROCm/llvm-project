@@ -902,12 +902,7 @@ static Expected<RaiseResult> raiseToIRImpl(
   // undef-derived values -- producing addresses that fault on
   // subsequent SPE-gated loads (the active lane's pointer
   // arithmetic picks up undef data through a cross-lane op, then
-  // the gated load fires with that poisoned address).  Empirically
-  // surfaced by `compare_correctness`'s `matmul_fp16` /
-  // `matmul_fp16_16x16` Triton recipes (HIP error 700 on every
-  // shape under WaveNative; bumping `num_warps` to 2 fills the
-  // target wavefront and eliminates the fault, confirming the
-  // phantom-lane attribution).
+  // the gated load fires with that poisoned address).
   //
   // `ModuloReplicationProjection` leaves hardware EXEC at the
   // dispatcher's boot state (the source-wave-sized active mask,
@@ -926,6 +921,13 @@ static Expected<RaiseResult> raiseToIRImpl(
       Meta.MaxFlatWorkgroupSize > 0 &&
       static_cast<unsigned>(Meta.MaxFlatWorkgroupSize) < TargetIsa.WaveSize;
   const bool UseThreadLoop = ForceThreadLoopProjection;
+  // WaveNative is the default cross-widen projection for wave32 source ->
+  // wave64 target (outside the phantom-lane regime, which falls back to
+  // MODREP above). The wave_id-in-workgroup hazard -- a subgroup id read via
+  // ttmp8[29:25] whose value depends on the absolute target-lane position,
+  // not lane_id mod W_src -- is detected and refused by the obstruction
+  // analysis (ObstructionKind::TtmpWaveIdLeak in wave-size-obstruction.cpp),
+  // not by this selector, so it needs no WMMA proxy here.
   const bool UseWaveNative = !UseThreadLoop && EnableWaveNative &&
                              Isa.isWave32() && !TargetIsa.isWave32() &&
                              !PhantomLaneRegime;
@@ -1408,12 +1410,8 @@ static Expected<RaiseResult> raiseToIRImpl(
   // addrspace(3) via int-to-ptr conversion and never sets the attr
   // gets `group_segment_fixed_size: 0` in the emitted HSACO.  The
   // hardware then treats every LDS op as out-of-segment and returns
-  // zero / drops writes.  This silently miscompiled every lifted
-  // kernel with a non-trivial LDS round-trip, most visibly Triton's
-  // `matmul_fp16` (mode-5 B-only-varying input returned all zeros
-  // because the cross-thread LDS fragment shuffle read from an
-  // uninitialised segment; see matrix-translation.md sec. 12.4 for the
-  // bisection).
+  // zero / drops writes, so a raised kernel with a non-trivial LDS
+  // round-trip reads from an uninitialised segment.
   //
   // We mirror the source's `.group_segment_fixed_size` by setting the
   // per-function `amdgpu-lds-size` attribute in the source-declared
@@ -1618,15 +1616,11 @@ static Expected<RaiseResult> raiseToIRImpl(
   // `loadInputValue` path (see LLVM's `AMDGPULegalizerInfo.cpp` --
   // `WorkGroupIDY = ArgDescriptor::createRegister(TTMP7, 0xFFFFu)`,
   // `WorkGroupIDZ = ArgDescriptor::createRegister(TTMP7, 0xFFFF0000u)`).
-  // Triton-generated gfx1250 kernels read the Y component via
-  // `s_and_b32 sN, ttmp7, 0xffff` (e.g. matmul_fp16_16x16's `pid_n =
-  // tl.program_id(1)` lowering), so a kernel raised without ttmp7
-  // initialised always sees `workgroup_id_y == 0` -- only the
-  // leftmost column of workgroups in a 2D-grid kernel writes its
-  // tile, and the right-side tiles stay at whatever the destination
-  // memory held at dispatch (verified empirically: matmul_fp16_16x16
-  // M=32 with an all-1s input shows cols 0..15 = correct 32.0,
-  // cols 16..31 = poison-fill from the host's pre-launch memset).
+  // A consumer that reads the Y component via `s_and_b32 sN, ttmp7,
+  // 0xffff` in a kernel raised without ttmp7 initialised always sees
+  // `workgroup_id_y == 0`, so only the leftmost column of workgroups
+  // in a 2D-grid kernel writes its tile and the right-side tiles stay
+  // at whatever the destination memory held at dispatch.
   // gfx11 (RDNA3) passes these via SGPRs set up by the CP instead.
   std::function<void(IRBuilder<> &)> SeedTtmp8 = [](IRBuilder<> &) {};
   if (AMDGPU::isGFX12Plus(*Mc.SubtargetInfo)) {
@@ -2429,26 +2423,49 @@ static Expected<RaiseResult> raiseToIRImpl(
         }
         return false;
       };
-      constexpr bool kEnableThreadLoopC5Retry = false;
+      // C5 predicate-chain refusal -> retry under ThreadLoopProjection.
+      // TLP iterates the kernel body once per source wave with a synthetic
+      // per-iteration source tid (see ThreadLoopProjection::emitWorkitemIdX),
+      // so a workitem.id.x-derived predicate that would diverge across MODREP
+      // replicas / WaveNative packing is evaluated correctly per source wave.
+      // TLP's own C5 gate (shouldRefuseC5) returns false when
+      // SuppressThreadLoopC5 is on, precisely because the loop makes the
+      // predicate source-wave-scoped. Eligible for any cross-widen C5 refusal
+      // (multiplicative wave ratio), not just the WaveNative-equality
+      // sub-case: the MODREP multi-warp (>1 source wave) refusal -- e.g. an
+      // `icmp ult tid-derived, W_s-1` predicate -- needs the same
+      // per-source-wave iteration. Matrix ops still route to WaveNative (they
+      // need all target lanes simultaneously); TLP is refused for kernels with
+      // LDS/barriers (barrier hoisting + LDS aliasing are unimplemented) via
+      // threadLoopUnsupportedWorkgroupMemoryOrBarrier below.
       const bool CanRetryThreadLoop =
-          kEnableThreadLoopC5Retry && PredReport.WaveNativeEqualityRefusal &&
-          !ForceThreadLoopProjection && TargetIsa.WaveSize > Isa.WaveSize &&
+          PredReport.Refused && !ForceThreadLoopProjection &&
+          TargetIsa.WaveSize > Isa.WaveSize &&
           (TargetIsa.WaveSize % Isa.WaveSize) == 0 && !HasMatrixOp();
       if (CanRetryThreadLoop) {
-        errs() << "transpiler: post-raise fallback: retrying kernel '"
-               << KernelName
-               << "' under ThreadLoopProjection after WaveNative C5 equality "
-                  "refusal (analysis-triggered, no user opt-in)\n";
-        errs() << "transpiler: thread-loop fallback trigger: "
-               << PredReport.RefusalDetail << "\n";
-        return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta,
-                             KernelOffset, KernelSize, TextBaseAddress,
-                             SourceImageSections, CompilationTargetIsa,
-                             /*enableWritelaneRewrite=*/false,
-                             /*enableWaveNative=*/false,
-                             /*forceThreadLoopProjection=*/true,
-                             /*suppressC5ForThreadLoopRoute=*/true,
-                             AssumeHipGlobalOffsetZero, FunctionExtents, Stats);
+        std::string ThreadLoopUnsupportedDetail;
+        if (threadLoopUnsupportedWorkgroupMemoryOrBarrier(
+                Insts, ThreadLoopUnsupportedDetail)) {
+          errs() << "transpiler: thread-loop C5 fallback not eligible for "
+                    "kernel '"
+                 << KernelName << "': " << ThreadLoopUnsupportedDetail
+                 << "; keeping principled C5 refusal\n";
+        } else {
+          errs() << "transpiler: post-raise fallback: retrying kernel '"
+                 << KernelName
+                 << "' under ThreadLoopProjection after C5 predicate-chain "
+                    "refusal (analysis-triggered, no user opt-in)\n";
+          errs() << "transpiler: thread-loop fallback trigger: "
+                 << PredReport.RefusalDetail << "\n";
+          return raiseToIRImpl(
+              TextBytes, SourceIsa, KernelName, Meta, KernelOffset, KernelSize,
+              TextBaseAddress, SourceImageSections, CompilationTargetIsa,
+              /*enableWritelaneRewrite=*/false,
+              /*enableWaveNative=*/false,
+              /*forceThreadLoopProjection=*/true,
+              /*suppressC5ForThreadLoopRoute=*/true, AssumeHipGlobalOffsetZero,
+              FunctionExtents, Stats);
+        }
       }
       errs() << "transpiler: pre-translation abort: "
              << reasonString(RaiseFailureReason::CrossWavePredicateChain)

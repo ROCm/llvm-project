@@ -1,5 +1,5 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
-; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --disable-wave-native \
 ; RUN:     --emit-ir=c5_predicate_chain_tid_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=STDERR
@@ -8,18 +8,19 @@
 ; RUN:     --emit-ir=c5_predicate_chain_tid_kernel 2>/dev/null \
 ; RUN:   | %FileCheck %s --check-prefix=IR_WN
 
-; Refuse Class 5 workitem-id predicate chain without wave-native; wave-native lifts it.
-; STDERR: transpiler: pre-translation abort:
-; STDERR-SAME: cross-wave-predicate-chain
-; STDERR-SAME: workitem.id.x-predicate-chain-classifier
-; STDERR: icmp ult
+; Under --disable-wave-native the MODREP narrow-O1 classifier refuses this
+; Class 5 workitem-id predicate chain, then the analysis-triggered
+; ThreadLoopProjection retry rescues it (TLP iterates per source wave, so the
+; predicate is evaluated source-wave-scoped); the kernel raises instead of
+; aborting. Under the wave-native default the refusal is suppressed outright.
+; STDERR: retrying kernel 'c5_predicate_chain_tid_kernel' under ThreadLoopProjection
+; STDERR-SAME: after C5 predicate-chain refusal
+; STDERR: thread-loop fallback trigger:
+; STDERR-SAME: icmp ult
 ; STDERR-SAME: compile-time constant 16
 ; STDERR-SAME: W_s-1=31
-; STDERR: outcome: (c) refuse
-; STDERR-SAME: WorkitemIdPredicateChain
-; STDERR-SAME: Class 5
-; STDERR: raise_cli: kernel 'c5_predicate_chain_tid_kernel' failed to raise:
-; STDERR-SAME: cross-wave-predicate-chain
+; STDERR: selected ThreadLoopProjection
+; STDERR: define amdgpu_kernel void @c5_predicate_chain_tid_kernel(
 ; IR_WN-LABEL: define amdgpu_kernel void @c5_predicate_chain_tid_kernel(
 ; IR_WN: call i32 @llvm.amdgcn.workitem.id.x()
 

@@ -668,11 +668,9 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
   // only models the `bits [29:25] = wave_id` field, so a consumer
   // that reads other bits or uses a different bitfield extract
   // semantics would silently miscompile. Those sites are collected
-  // here; non-WMMA kernels have a future escape hatch through
-  // `ThreadLoopProjection` (sec. 2.2 -- iterate the body R = W_t / W_s
-  // times with a synthetic per-source-wave wave_id in ttmp8), and
-  // WMMA kernels refuse because the sec. 5.2 lane layout requires the
-  // full target wave simultaneously and cannot be TLP-split.
+  // here and refuse unconditionally at the emission point below: the
+  // hazard is the unmodeled ttmp8 read itself, not a WMMA-presence
+  // proxy, and no rewrite is implemented for these shapes.
   llvm::SmallVector<const DecodedInst *> Ttmp8ReadSites;
 
   // Co-occurrence tracking for the WaveIdLiftScalarized refusal below.
@@ -698,12 +696,12 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
   //     manufactured.
   //
   // Both buffers are emptied into `ObstructionReport::sites` after the
-  // walk completes, gated on `haveWMMA` -- the non-WMMA case has a
-  // future ThreadLoopProjection escape hatch (sec. 2.2; iterate the body
-  // R = W_t / W_s times with a synthetic per-source-wave wave_id in
-  // ttmp8) and must not be refused preemptively here. WMMA kernels
-  // cannot use TLP because sec. 5.2 WMMA lane layout requires the full
-  // target wave simultaneously, so the refusal is terminal.
+  // walk completes. `Ttmp8ReadSites` (non-canonical ttmp8 reads) refuse
+  // unconditionally -- the read itself is the unmodeled hazard. The
+  // `CanonicalWaveIdBfeSites` / `CrossLaneScalarSites` pair drives the
+  // WaveIdLiftScalarized refusal, which stays gated on `haveWMMA`
+  // because that collapse only forecloses TLP when WMMA is present
+  // (sec. 5.2 WMMA lane layout requires the full target wave).
   llvm::SmallVector<const DecodedInst *> CanonicalWaveIdBfeSites;
   llvm::SmallVector<const DecodedInst *> CrossLaneScalarSites;
 
@@ -727,12 +725,11 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
     // `s_load_dword` using ttmp8 as offset, trap-handler prologues
     // touching ttmp8..ttmp15, etc.) is still a leak: the raiser's
     // init only models the `[29:25] = wave_id` field, so consumers
-    // of other bits read either zero or a garbage pattern. We defer
-    // the site emission until after the loop has established whether
-    // the kernel also contains WMMA (see below). Without WMMA the
-    // leak is handled by ThreadLoopProjection; with WMMA it is
-    // unrewritable (TLP and WMMA are mutually exclusive -- sec. 5.2 WMMA
-    // lane layout requires the full target wave) and we refuse.
+    // of other bits read either zero or a garbage pattern. These
+    // sites are collected here and refused unconditionally at the
+    // emission point below (there is no implemented rewrite for them);
+    // the hazard is the unmodeled ttmp8 read itself, independent of
+    // whether the kernel contains WMMA.
     if (readsTtmp8Source(Di, MRI) && !isCanonicalWaveIdBfe(Di, MRI))
       Ttmp8ReadSites.push_back(&Di);
 
@@ -749,11 +746,12 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
     if (isCanonicalWaveIdBfe(Di, MRI))
       CanonicalWaveIdBfeSites.push_back(&Di);
 
-    // WMMA-family detection. If any of these show up in the kernel,
-    // the WMMA -> MFMA lowering (matrix-translation.md) is going to be
-    // invoked and the TLP escape hatch is not available -- every
-    // deferred ttmp8 site in this kernel becomes an unrewritable
-    // refusal surface.
+    // WMMA-family detection, used only by the WaveIdLiftScalarized
+    // post-loop check below: when the canonical wave_id lift feeds a
+    // cross-lane scalar primitive under WMMA, TLP is not available
+    // (sec. 5.2 WMMA lane layout requires the full target wave) so the
+    // scalarized-lift collapse is unrewritable. The non-canonical
+    // Ttmp8ReadSites path above does not consult this flag.
     switch (Sop) {
     case CanonicalOp::V_WMMA_F32_16x16x32_F16:
     case CanonicalOp::V_WMMA_F32_16x16x32_BF16:
@@ -1120,30 +1118,34 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
     // writer is an obstruction.
   }
 
-  // Deferred TtmpWaveIdLeak emission. See the pre-loop comment on
-  // `ttmp8ReadSites` for the rationale: the `s_bfe_u32 ttmp8, 0x50019`
-  // wave_id extraction is clang/hip boilerplate in every non-trivial
-  // gfx1250 kernel, so unconditionally refusing on it would collapse
-  // coverage. We only refuse when the kernel also contains WMMA --
-  // in which case ThreadLoopProjection (the sec. 2.2 escape hatch for
-  // class-4 wave_id leaks) cannot be applied because the sec. 5.2 WMMA
-  // lane layout requires the full target wave simultaneously. In the
-  // non-WMMA case, fall through silently; the caller's projection
-  // selector will pick TLP in raiser.cpp.
-  if (HaveWmma) {
-    for (const DecodedInst *Di : Ttmp8ReadSites) {
-      ObstructionSite Site;
-      Site.Inst = Di;
-      Site.Kind = ObstructionKind::TtmpWaveIdLeak;
-      Site.Rewrite = RewriteId::None;
-      Site.RewriteImplemented = false;
-      Site.Detail =
-          "source reads ttmp8 under cross-widening -- bits [29:25] carry "
-          "wave_id_in_workgroup, which is a function of the target's "
-          "absolute lane position (not of lane_id mod W_s). Kernel also "
-          "contains WMMA, so ThreadLoopProjection is not available -- refuse.";
-      Report.Sites.push_back(std::move(Site));
-    }
+  // Deferred TtmpWaveIdLeak emission. The canonical wave_id extraction
+  // `s_bfe_u32 sDST, ttmp8, 0x50019` is clang/hip boilerplate in every
+  // non-trivial gfx1250 kernel and has a principled rescue in
+  // handle-sop2.cpp; it is filtered out at collection time via
+  // isCanonicalWaveIdBfe, so it never reaches Ttmp8ReadSites. Every site
+  // that does reach here is a NON-canonical ttmp8 source read (other BFE
+  // immediates, s_and / s_lshr on ttmp8, s_load offsets, trap-handler
+  // prologues, ...). The raiser's ttmp8 init only models the
+  // bits [29:25] = wave_id field, so a consumer of any other bits or a
+  // different extract shape reads an unmodeled value -- a wave_id leak
+  // whose correct value depends on the target's absolute lane position,
+  // not lane_id mod W_s. There is no implemented rewrite for these shapes,
+  // so they are unrewritable and refuse regardless of whether the kernel
+  // contains WMMA. (The pattern is detected here, not proxied through a
+  // WMMA-presence heuristic in the projection selector.)
+  for (const DecodedInst *Di : Ttmp8ReadSites) {
+    ObstructionSite Site;
+    Site.Inst = Di;
+    Site.Kind = ObstructionKind::TtmpWaveIdLeak;
+    Site.Rewrite = RewriteId::None;
+    Site.RewriteImplemented = false;
+    Site.Detail =
+        "source reads ttmp8 under cross-widening -- bits [29:25] carry "
+        "wave_id_in_workgroup, which is a function of the target's absolute "
+        "lane position (not of lane_id mod W_s). The raiser models only the "
+        "wave_id field of ttmp8; a non-canonical ttmp8 read has no modeled "
+        "value and no implemented rewrite -- refuse.";
+    Report.Sites.push_back(std::move(Site));
   }
 
   // WaveIdLiftScalarized -- the canonical-BFE rescue collapses inside a
