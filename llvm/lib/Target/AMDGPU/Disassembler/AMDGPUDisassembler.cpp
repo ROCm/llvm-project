@@ -486,13 +486,14 @@ DecodeStatus AMDGPUDisassembler::tryDecodeInst(const uint8_t *Table, MCInst &MI,
   SmallString<64> LocalComments;
   raw_svector_ostream LocalCommentStream(LocalComments);
   CommentStream = &LocalCommentStream;
+  HasDecodeError = false;
 
   DecodeStatus Res =
       decodeInstruction(Table, TmpInst, Inst, Address, this, STI);
 
   CommentStream = nullptr;
 
-  if (Res != MCDisassembler::Fail) {
+  if (Res != MCDisassembler::Fail && !HasDecodeError) {
     MI = TmpInst;
     Comments << LocalComments;
     return MCDisassembler::Success;
@@ -835,7 +836,12 @@ DecodeStatus AMDGPUDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
 
   DecodeStatus Status = MCDisassembler::Success;
 
+  CommentStream = &CS;
+  HasDecodeError = false;
   decodeImmOperands(MI, *MCII);
+  CommentStream = nullptr;
+  if (HasDecodeError)
+    return MCDisassembler::Fail;
 
   if (SIInstrFlags::isDPP(*MCII, MI)) {
     if (isMacDPP(MI))
@@ -1552,7 +1558,9 @@ const char* AMDGPUDisassembler::getRegClassName(unsigned RegClassID) const {
 inline
 MCOperand AMDGPUDisassembler::errOperand(unsigned V,
                                          const Twine& ErrMsg) const {
-  *CommentStream << "Error: " + ErrMsg;
+  HasDecodeError = true;
+  if (CommentStream)
+    *CommentStream << "Error: " + ErrMsg;
 
   // ToDo: add support for error operands to MCInst.h
   // return MCOperand::createError(V);

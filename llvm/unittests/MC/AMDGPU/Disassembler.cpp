@@ -64,6 +64,27 @@ TEST(AMDGPUDisassembler, Basic) {
   LLVMDisasmDispose(DCR);
 }
 
+TEST(AMDGPUDisassembler, TruncatedLiteralFails) {
+  LLVMInitializeAMDGPUTargetInfo();
+  LLVMInitializeAMDGPUTargetMC();
+  LLVMInitializeAMDGPUDisassembler();
+
+  uint8_t Bytes[] = {0xff, 0x00, 0x8e, 0xbe};
+  char OutString[100];
+  LLVMDisasmContextRef DCR =
+      LLVMCreateDisasmCPU("amdgcn-amd-amdhsa", "gfx1250", nullptr, 0, nullptr,
+                          symbolLookupCallback);
+
+  // Skip test if AMDGPU not built.
+  if (!DCR)
+    GTEST_SKIP();
+
+  EXPECT_EQ(LLVMDisasmInstruction(DCR, Bytes, sizeof(Bytes), 0, OutString,
+                                  sizeof(OutString)),
+            0U);
+  LLVMDisasmDispose(DCR);
+}
+
 // Check multiple disassemblers in same MCContext.
 TEST(AMDGPUDisassembler, MultiDisassembler) {
   LLVMInitializeAMDGPUTargetInfo();
