@@ -3450,6 +3450,133 @@ static void appendInstStream(llvm::SmallVectorImpl<uint8_t> &Text,
     ASSERT_TRUE(appendSingleInstBytes(Text, Line, S));
 }
 
+TEST(DecodeStreaming, MatchesMaterializedDecode) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const char *Seq[] = {
+      "s_nop 0",
+      "v_cvt_pk_fp8_f32 v4, 1.0, 0.5 clamp",
+      "s_nop 0",
+      "v_cvt_pk_fp8_f32 v4, 0x477f0000, 0x477f0000 clamp",
+  };
+  llvm::SmallVector<uint8_t> Text;
+  appendInstStream(Text, Seq, S);
+  // No assembly source represents an intentionally undecodable dword. Append
+  // one to cover streaming's shared unknown-byte path.
+  const uint8_t UnknownDword[] = {0xff, 0xff, 0xff, 0xff};
+  Text.append(std::begin(UnknownDword), std::end(UnknownDword));
+
+  std::vector<InternalDecodedInst> Materialized;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Materialized));
+
+  std::vector<InternalDecodedInst> Streamed;
+  ASSERT_TRUE(decodeTextSectionStreaming(
+      Text.data(), Text.size(), S, /*WantMnemonic=*/true,
+      [&Streamed](const InternalDecodedInst &DI) {
+        Streamed.push_back(DI);
+        return true;
+      }));
+
+  ASSERT_EQ(Streamed.size(), Materialized.size());
+  for (size_t I = 0; I < Materialized.size(); ++I) {
+    EXPECT_EQ(Streamed[I].Offset, Materialized[I].Offset);
+    EXPECT_EQ(Streamed[I].Size, Materialized[I].Size);
+    EXPECT_EQ(Streamed[I].DecodeSucceeded, Materialized[I].DecodeSucceeded);
+    EXPECT_EQ(Streamed[I].Mnemonic, Materialized[I].Mnemonic);
+    expectSameOperands(Streamed[I].Inst, Materialized[I].Inst,
+                       "streaming decode");
+  }
+  ASSERT_FALSE(Streamed.empty());
+  EXPECT_FALSE(Streamed.back().DecodeSucceeded);
+  EXPECT_EQ(Streamed.back().Mnemonic, "<unknown>");
+}
+
+TEST(DecodeStreaming, CanSkipSuccessfulMnemonics) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  ASSERT_TRUE(appendSingleInstBytes(Text, "s_nop 0", S));
+  ASSERT_TRUE(appendSingleInstBytes(Text, "s_nop 0", S));
+  const uint8_t UnknownDword[] = {0xff, 0xff, 0xff, 0xff};
+  Text.append(std::begin(UnknownDword), std::end(UnknownDword));
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded,
+                                /*WantMnemonic=*/false));
+  ASSERT_EQ(Decoded.size(), 3u);
+  EXPECT_TRUE(Decoded[0].DecodeSucceeded);
+  EXPECT_TRUE(Decoded[0].Mnemonic.empty());
+  EXPECT_TRUE(Decoded[1].DecodeSucceeded);
+  EXPECT_TRUE(Decoded[1].Mnemonic.empty());
+  EXPECT_FALSE(Decoded[2].DecodeSucceeded);
+  EXPECT_EQ(Decoded[2].Mnemonic, "<unknown>");
+}
+
+TEST(DecodeStreaming, UniqueWindowsRemainCorrectBeyondCacheLimit) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // Give each s_nop a distinct immediate. The stream therefore exceeds
+  // InstructionDecoder's cache admission bound with unique full decode
+  // windows.
+  llvm::SmallVector<uint8_t> Text;
+  const size_t Count = InstructionDecoder::MaxCacheEntries + 32;
+  for (size_t I = 0; I < Count; ++I) {
+    std::string Asm = ("s_nop " + llvm::Twine(I)).str();
+    ASSERT_TRUE(appendSingleInstBytes(Text, Asm, S)) << "inst " << I;
+  }
+
+  size_t Seen = 0;
+  ASSERT_TRUE(decodeTextSectionStreaming(
+      Text.data(), Text.size(), S, /*WantMnemonic=*/true,
+      [&Seen](const InternalDecodedInst &DI) {
+        EXPECT_TRUE(DI.DecodeSucceeded);
+        EXPECT_EQ(DI.Size, MinInstSize);
+        EXPECT_EQ(DI.Mnemonic, "s_nop");
+        ++Seen;
+        return true;
+      }));
+  EXPECT_EQ(Seen, Count);
+}
+
+TEST(DecodeStreaming, ReportsEarlyStopAndEmptyCompletion) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  for (unsigned I = 0; I < 4; ++I)
+    ASSERT_TRUE(appendSingleInstBytes(Text, "s_nop 0", S));
+
+  unsigned Seen = 0;
+  EXPECT_FALSE(decodeTextSectionStreaming(Text.data(), Text.size(), S,
+                                          /*WantMnemonic=*/false,
+                                          [&Seen](const InternalDecodedInst &) {
+                                            ++Seen;
+                                            return false;
+                                          }));
+  EXPECT_EQ(Seen, 1u);
+
+  Seen = 0;
+  EXPECT_FALSE(decodeTextSectionStreaming(Text.data(), Text.size(), S,
+                                          /*WantMnemonic=*/false,
+                                          [&Seen](const InternalDecodedInst &) {
+                                            ++Seen;
+                                            return Seen < 2;
+                                          }));
+  EXPECT_EQ(Seen, 2u);
+
+  bool Called = false;
+  EXPECT_TRUE(
+      decodeTextSectionStreaming(nullptr, 0, S, /*WantMnemonic=*/false,
+                                 [&Called](const InternalDecodedInst &) {
+                                   Called = true;
+                                   return true;
+                                 }));
+  EXPECT_FALSE(Called);
+}
+
 TEST(DecodeCache, RepeatedInstructionsReuseDecodeWithPerOccurrenceOffset) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -3591,4 +3718,83 @@ TEST(LivenessInfo, ZeroVgprConservativeModeIsExplicit) {
   EXPECT_EQ(Info.perInstructionCount(), 0u);
   EXPECT_TRUE(Info.liveBefore(0).empty());
   EXPECT_EQ(&Info.liveBefore(0), &Info.liveAfter(0));
+}
+
+TEST(DecodeStreaming, TruncatedLiteralFailsClosed) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // This malformed tail was minimized from a HotSwap fuzzer reproducer. It
+  // selects a literal-consuming decode without providing the literal dword, so
+  // no valid assembly source can produce it.
+  const uint8_t TruncatedLiteral[] = {0xff, 0xff, 0x0a, 0xbf};
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(TruncatedLiteral, sizeof(TruncatedLiteral), S,
+                                Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  EXPECT_FALSE(Decoded[0].DecodeSucceeded);
+  EXPECT_EQ(Decoded[0].Size, MinInstSize);
+  EXPECT_EQ(Decoded[0].Mnemonic, "<unknown>");
+}
+
+TEST(DecodeStreaming, InvalidScalarRegisterFieldsFailClosed) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // This exact malformed V_READFIRSTLANE encoding was minimized from a
+  // HotSwap fuzzer crash. Its reserved high destination bit used to reach an
+  // assertion in DecodeSReg_32_XM0RegisterClass.
+  const uint8_t FuzzerCrash[] = {0x02, 0x04, 0xe0, 0x7f};
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(FuzzerCrash, sizeof(FuzzerCrash), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  EXPECT_FALSE(Decoded[0].DecodeSucceeded);
+  EXPECT_EQ(Decoded[0].Size, MinInstSize);
+  EXPECT_EQ(Decoded[0].Mnemonic, "<unknown>");
+
+  struct InvalidFieldCase {
+    const char *Assembly;
+    size_t Byte;
+  };
+  const InvalidFieldCase Cases[] = {
+      {"s_movrels_b32 s0, s0", 0},
+      {"v_readlane_b32 s0, v0, s0", 0},
+      {"v_s_exp_f32 s0, s1", 0},
+      {"tensor_load_to_lds s[0:3], s[4:11]", 8},
+      {"tensor_load_to_lds s[0:3], s[4:11]", 9},
+      {"tensor_load_to_lds s[0:3], s[4:11]", 10},
+      {"tensor_load_to_lds s[0:3], s[4:11]", 11},
+      {"tensor_store_from_lds s[0:3], s[4:11]", 8},
+  };
+  for (const InvalidFieldCase &Case : Cases) {
+    llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Case.Assembly, S);
+    ASSERT_GT(Bytes.size(), Case.Byte) << Case.Assembly;
+    Bytes[Case.Byte] |= 0x80;
+
+    Decoded.clear();
+    ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded))
+        << Case.Assembly;
+    ASSERT_FALSE(Decoded.empty()) << Case.Assembly;
+    EXPECT_FALSE(Decoded.front().DecodeSucceeded) << Case.Assembly;
+    EXPECT_EQ(Decoded.front().Size, MinInstSize) << Case.Assembly;
+    EXPECT_EQ(Decoded.front().Mnemonic, "<unknown>") << Case.Assembly;
+  }
+
+  // The same high bits are valid VGPR destination bits in other VOP1/VOP3
+  // opcodes. The fail-closed guard must identify the scalar-destination opcode,
+  // not reject every use of v128-v255.
+  const char *ValidHighVgprCases[] = {
+      "v_mov_b32 v240, s2",
+      "v_add_f32_e64 v240, v0, v1",
+  };
+  for (const char *Assembly : ValidHighVgprCases) {
+    llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Assembly, S);
+    ASSERT_FALSE(Bytes.empty()) << Assembly;
+
+    Decoded.clear();
+    ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded))
+        << Assembly;
+    ASSERT_EQ(Decoded.size(), 1u) << Assembly;
+    EXPECT_TRUE(Decoded.front().DecodeSucceeded) << Assembly;
+  }
 }

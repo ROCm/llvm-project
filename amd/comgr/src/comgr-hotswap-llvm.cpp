@@ -483,49 +483,138 @@ SmallVector<uint8_t> LLVMState::encodeSBranch(uint64_t FromOffset,
 
 // -- Instruction decode -------------------------------------------------------
 
-bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
-                       const LLVMState &S,
-                       std::vector<InternalDecodedInst> &Decoded) {
-  Decoded.reserve(Decoded.size() + TextSize / MinInstSize);
+static StringRef decodeSanitizedOpcode(ArrayRef<uint8_t> Bytes,
+                                       const LLVMState &LS, uint64_t Address) {
+  MCInst Inst;
+  uint64_t InstSize = 0;
+  MCDisassembler::DecodeStatus Status =
+      LS.MCD->getInstruction(Inst, InstSize, Bytes, Address, nulls());
+  if (Status == MCDisassembler::Fail || InstSize > Bytes.size())
+    return {};
+  return LS.MCII->getName(Inst.getOpcode());
+}
+
+static bool hasInvalidScalarRegisterEncoding(ArrayRef<uint8_t> Bytes,
+                                             const LLVMState &LS,
+                                             uint64_t Address) {
+  if (Bytes.size() < MinInstSize)
+    return false;
+
+  const unsigned MaxInstLen = LS.MAI->getMaxInstLength(LS.STI.get());
+  const size_t ProbeSize = std::min<size_t>(Bytes.size(), MaxInstLen);
+
+  // Several GFX12/GFX1250 TableGen decoders extract an eight-bit operand field
+  // and pass it to a seven-bit scalar-register decoder. Valid encodings always
+  // clear the high bit, but malformed code would otherwise trip the decoder's
+  // width assertion instead of returning MCDisassembler::Fail. Probe the same
+  // opcode with only the reserved operand bit cleared, then fail the original
+  // encoding closed when it selects one of those instruction forms.
+  if ((Bytes[3] & 0xfe) == 0x7e && (Bytes[3] & 0x01) != 0) {
+    SmallVector<uint8_t, 16> Probe(Bytes.begin(), Bytes.begin() + ProbeSize);
+    Probe[3] &= 0xfe;
+    StringRef Opcode = decodeSanitizedOpcode(Probe, LS, Address);
+    if (Opcode.starts_with("V_READFIRSTLANE_B32"))
+      return true;
+  }
+
+  const bool MaybeSop1Movrels = Bytes[3] == 0xbe && Bytes[1] == 0x40;
+  const bool MaybeVop3 = (Bytes[3] & 0xfc) == 0xd4;
+  if ((Bytes[0] & 0x80) != 0 && (MaybeSop1Movrels || MaybeVop3)) {
+    SmallVector<uint8_t, 16> Probe(Bytes.begin(), Bytes.begin() + ProbeSize);
+    Probe[0] &= 0x7f;
+    StringRef Opcode = decodeSanitizedOpcode(Probe, LS, Address);
+    if (Opcode.starts_with("S_MOVRELS_B32") ||
+        Opcode.starts_with("V_READLANE_B32") ||
+        Opcode.starts_with("V_S_EXP_") || Opcode.starts_with("V_S_LOG_") ||
+        Opcode.starts_with("V_S_RCP_") || Opcode.starts_with("V_S_RSQ_") ||
+        Opcode.starts_with("V_S_SQRT_"))
+      return true;
+  }
+
+  if (ProbeSize >= 12 && Bytes[3] == 0xd0 && Bytes[2] == 0x71 &&
+      ((Bytes[8] | Bytes[9] | Bytes[10] | Bytes[11]) & 0x80) != 0) {
+    SmallVector<uint8_t, 16> Probe(Bytes.begin(), Bytes.begin() + ProbeSize);
+    for (size_t I = 8; I != 12; ++I)
+      Probe[I] &= 0x7f;
+    StringRef Opcode = decodeSanitizedOpcode(Probe, LS, Address);
+    if (Opcode.starts_with("TENSOR_LOAD_TO_LDS_") ||
+        Opcode.starts_with("TENSOR_STORE_FROM_LDS_"))
+      return true;
+  }
+
+  return false;
+}
+
+InstructionDecoder::InstructionDecoder(const uint8_t *Text, uint64_t TextSize,
+                                       const LLVMState &LS, bool WantMnemonic)
+    : Text(Text), TextSize(TextSize), LS(LS), WantMnemonic(WantMnemonic) {}
+
+bool InstructionDecoder::decode(
+    function_ref<bool(const InternalDecodedInst &)> OnInst) {
   uint64_t Pos = 0;
-  // Per-call decode cache: byte-identical instructions reuse the first decode
-  // instead of re-running the disassembler; DI.Offset is set per occurrence, so
-  // reuse is safe. The key is the full window the disassembler may inspect (up
-  // to getMaxInstLength() bytes, clamped to what remains in .text); keying on
+  // Byte-identical instructions reuse the first decode instead of re-running
+  // the disassembler; DI.Offset is set per occurrence, so reuse is safe. The
+  // key is the full window the disassembler may inspect (up to
+  // getMaxInstLength() bytes, clamped to what remains in .text); keying on
   // fewer bytes is unsafe because two positions sharing a short prefix can
   // decode differently. A StringMap keys on the raw window, so its length is
   // part of the key and a truncated tail cannot alias a longer instruction.
-  const unsigned MaxInstLen = S.MAI->getMaxInstLength(S.STI.get());
-  struct DecodeCacheEntry {
-    MCInst Inst;
-    uint32_t Size;
-    std::string Mnemonic;
-  };
-  StringMap<DecodeCacheEntry> LocalCache;
+  //
+  // Stop admitting new entries at MaxCacheEntries. Streaming callers rely on
+  // memory remaining bounded even for large or adversarial .text containing a
+  // unique decode window at every offset.
+  const unsigned MaxInstLen = LS.MAI->getMaxInstLength(LS.STI.get());
+  // Reuse one record. OnInst receives a transient reference, so reset every
+  // mutable field before decoding the next position.
+  InternalDecodedInst DI;
   while (Pos < TextSize) {
-    InternalDecodedInst DI;
     DI.Offset = Pos;
+    DI.DecodeSucceeded = false;
+    DI.Mnemonic.clear();
 
     unsigned KeyN =
         static_cast<unsigned>(std::min<uint64_t>(MaxInstLen, TextSize - Pos));
     StringRef Key(reinterpret_cast<const char *>(Text + Pos), KeyN);
 
-    StringMap<DecodeCacheEntry>::iterator It = LocalCache.find(Key);
-    if (It != LocalCache.end() && It->second.Size <= (TextSize - Pos)) {
+    StringMap<DecodeCacheEntry>::iterator It = Cache.find(Key);
+    if (It != Cache.end() && It->second.Size <= (TextSize - Pos)) {
       DI.Size = It->second.Size;
       DI.Inst = It->second.Inst;
       DI.Mnemonic = It->second.Mnemonic;
       // Only successful decodes are stored, so a hit is always a success.
       DI.DecodeSucceeded = true;
       Pos += DI.Size;
-      Decoded.emplace_back(std::move(DI));
+      if (!OnInst(DI))
+        return false;
       continue;
     }
 
-    ArrayRef<uint8_t> Bytes(Text + Pos, TextSize - Pos);
+    // AMDGPU's disassembler appends operands to the supplied MCInst. Restore
+    // the clean state that the old per-iteration record provided.
+    DI.Inst = MCInst();
+    ArrayRef<uint8_t> RemainingBytes(Text + Pos, TextSize - Pos);
+    ArrayRef<uint8_t> DecodeBytes = RemainingBytes;
+    SmallVector<uint8_t, 16> PaddedBytes;
+    if (RemainingBytes.size() < MaxInstLen) {
+      // The AMDGPU disassembler can diagnose a truncated literal after its
+      // table decoder has returned success. That diagnostic currently
+      // dereferences a cleared comment stream. Pad only the decode window and
+      // reject any instruction that consumes padding below.
+      // TODO: Remove this workaround after
+      // https://github.com/ROCm/llvm-project/issues/3575 is fixed.
+      PaddedBytes.append(RemainingBytes.begin(), RemainingBytes.end());
+      PaddedBytes.resize(MaxInstLen, 0);
+      DecodeBytes = PaddedBytes;
+    }
     uint64_t InstSize = 0;
-    MCDisassembler::DecodeStatus Status =
-        S.MCD->getInstruction(DI.Inst, InstSize, Bytes, Pos, nulls());
+    MCDisassembler::DecodeStatus Status = MCDisassembler::Fail;
+    if (!hasInvalidScalarRegisterEncoding(DecodeBytes, LS, Pos))
+      Status =
+          LS.MCD->getInstruction(DI.Inst, InstSize, DecodeBytes, Pos, nulls());
+    if (Status != MCDisassembler::Fail && InstSize > RemainingBytes.size()) {
+      Status = MCDisassembler::Fail;
+      DI.Inst = MCInst();
+    }
 
     if (Status == MCDisassembler::Fail) {
       DI.Size = MinInstSize;
@@ -537,24 +626,49 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       // table. Storage is process-lifetime static; the trailing whitespace
       // baked into AsmStrs must be trimmed. If the printer cannot provide an
       // assembly mnemonic, leave the instruction unmatchable instead of falling
-      // back to TableGen opcode names.
-      if (S.MCIP) {
-        std::pair<const char *, uint64_t> Mnem = S.MCIP->getMnemonic(DI.Inst);
-        DI.Mnemonic = Mnem.first ? StringRef(Mnem.first).rtrim().str()
-                                 : UnknownMnemonic.str();
-      } else {
-        DI.Mnemonic = UnknownMnemonic.str();
+      // back to TableGen opcode names. Callers that only need MC information
+      // can avoid one string construction per successful instruction.
+      if (WantMnemonic) {
+        if (LS.MCIP) {
+          std::pair<const char *, uint64_t> Mnem =
+              LS.MCIP->getMnemonic(DI.Inst);
+          DI.Mnemonic = Mnem.first ? StringRef(Mnem.first).rtrim().str()
+                                   : UnknownMnemonic.str();
+        } else {
+          DI.Mnemonic = UnknownMnemonic.str();
+        }
       }
     }
     // Cache only successful decodes whose key window covers the instruction
-    // (Size <= KeyN); a shorter key could alias a different decode.
-    if (Status != MCDisassembler::Fail && DI.Size <= KeyN)
-      LocalCache.try_emplace(Key,
-                             DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic});
+    // (Size <= KeyN); a shorter key could alias a different decode. The fixed
+    // admission limit keeps streaming memory independent of TextSize.
+    if (Status != MCDisassembler::Fail && DI.Size <= KeyN &&
+        Cache.size() < MaxCacheEntries)
+      Cache.try_emplace(Key, DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic});
     Pos += DI.Size;
-    Decoded.emplace_back(std::move(DI));
+    if (!OnInst(DI))
+      return false;
   }
   return true;
+}
+
+bool decodeTextSectionStreaming(
+    const uint8_t *Text, uint64_t TextSize, const LLVMState &S,
+    bool WantMnemonic, function_ref<bool(const InternalDecodedInst &)> OnInst) {
+  InstructionDecoder Decoder(Text, TextSize, S, WantMnemonic);
+  return Decoder.decode(OnInst);
+}
+
+bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
+                       const LLVMState &S,
+                       std::vector<InternalDecodedInst> &Decoded,
+                       bool WantMnemonic) {
+  Decoded.reserve(Decoded.size() + TextSize / MinInstSize);
+  return decodeTextSectionStreaming(Text, TextSize, S, WantMnemonic,
+                                    [&Decoded](const InternalDecodedInst &DI) {
+                                      Decoded.push_back(DI);
+                                      return true;
+                                    });
 }
 
 // -- assembly helpers ---------------------------------------------------------

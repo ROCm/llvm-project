@@ -45,6 +45,7 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -909,6 +910,38 @@ struct InternalDecodedInst {
   bool DecodeSucceeded = false;
 };
 
+/// Stateful, bounded-memory instruction decoder shared by streaming and
+/// materialized HotSwap consumers. Successful byte-identical decode windows
+/// are cached, but the cache never grows beyond this fixed entry count.
+class InstructionDecoder {
+public:
+  static constexpr size_t MaxCacheEntries = 256;
+
+  InstructionDecoder(const uint8_t *Text, uint64_t TextSize,
+                     const LLVMState &LS, bool WantMnemonic);
+
+  /// Decode one instruction at a time. \p OnInst receives a transient
+  /// reference that remains valid only for the duration of the callback.
+  ///
+  /// Return true after scanning the complete input. Return false when
+  /// \p OnInst requests an early stop.
+  [[nodiscard]] bool
+  decode(llvm::function_ref<bool(const InternalDecodedInst &)> OnInst);
+
+private:
+  struct DecodeCacheEntry {
+    llvm::MCInst Inst;
+    uint32_t Size;
+    std::string Mnemonic;
+  };
+
+  const uint8_t *Text;
+  uint64_t TextSize;
+  const LLVMState &LS;
+  bool WantMnemonic;
+  llvm::StringMap<DecodeCacheEntry> Cache;
+};
+
 // -- Function declarations (LLVM MC layer) ------------------------------------
 
 /// Initialize LLVM MC infrastructure for the AMDGPU subtarget described by
@@ -922,9 +955,25 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 
 /// Disassemble \p Text into \p Decoded using \p LS. Unknown bytes are encoded
 /// as MinInstSize-sized entries with mnemonic "<unknown>".
+///
+/// \p WantMnemonic controls whether successful instructions populate their
+/// assembly mnemonic. Failed decodes retain "<unknown>" regardless.
 [[nodiscard]] bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
                                      const LLVMState &LS,
-                                     std::vector<InternalDecodedInst> &Decoded);
+                                     std::vector<InternalDecodedInst> &Decoded,
+                                     bool WantMnemonic = true);
+
+/// Decode \p Text one instruction at a time with InstructionDecoder's bounded
+/// cache and without materializing an O(TextSize) result vector. \p OnInst
+/// sees each instruction in ascending offset order; its reference is valid
+/// only for the duration of the callback.
+///
+/// Return true after scanning the complete input. Return false when \p OnInst
+/// requests an early stop.
+[[nodiscard]] bool decodeTextSectionStreaming(
+    const uint8_t *Text, uint64_t TextSize, const LLVMState &LS,
+    bool WantMnemonic,
+    llvm::function_ref<bool(const InternalDecodedInst &)> OnInst);
 
 /// Assemble one non-empty assembly source line, returning its encoded bytes.
 /// Target pseudos may expand that source line to more than one MCInst.
