@@ -3164,13 +3164,6 @@ unsigned tools::getAMDGPUCodeObjectVersion(const Driver &D,
   return CodeObjVer;
 }
 
-unsigned tools::getOrCheckAMDGPUCodeObjectVersion(
-    const Driver &D, const llvm::opt::ArgList &Args, bool Diagnose) {
-  if (Diagnose)
-    checkAMDGPUCodeObjectVersion(D, Args);
-  return getAMDGPUCodeObjectVersion(D, Args);
-}
-
 bool tools::haveAMDGPUCodeObjectVersionArgument(
     const Driver &D, const llvm::opt::ArgList &Args) {
   return getAMDGPUCodeObjectArgument(D, Args) != nullptr;
