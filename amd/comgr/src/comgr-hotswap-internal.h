@@ -1346,16 +1346,17 @@ struct EncodedSetPcGateway {
 };
 
 /// Find the nearest short-branch-reachable gateway whose remaining space fits
-/// the set-PC sequence encoded for that candidate's address. The returned
-/// plan does not advance the sled or modify text.
+/// the set-PC sequence. Candidate widths are computed from the displacement;
+/// only the selected candidate is encoded. The returned plan does not advance
+/// the sled or modify text.
 llvm::Expected<std::optional<EncodedSetPcGateway>>
 findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
                         uint64_t FromOffset, uint64_t TargetOffset,
                         unsigned SgprBase);
 
 /// Count set-PC gateway slots reachable from \p FromOffset, up to \p MaxSlots.
-/// Zero means that no candidate fits; an Error means that a reachable
-/// candidate could not be encoded.
+/// Candidate widths are computed without assembly. Zero means that no
+/// candidate fits; an Error means that a reachable candidate is invalid.
 llvm::Expected<uint64_t> countReachableSetPcGatewaySlots(
     llvm::ArrayRef<NopSled> Gateways, const LLVMState &LS, uint64_t FromOffset,
     uint64_t TargetOffset, unsigned SgprBase, uint64_t MaxSlots);

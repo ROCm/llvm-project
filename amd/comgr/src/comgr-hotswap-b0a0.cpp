@@ -445,12 +445,57 @@ std::optional<SmallVector<uint8_t>> encodeSetPCLongBranch(const LLVMState &LS,
   return Bytes;
 }
 
+static bool isSetPcDeltaInline(uint64_t Delta) {
+  int64_t SignedDelta = static_cast<int64_t>(Delta);
+  if (SignedDelta >= -16 && SignedDelta <= 64)
+    return true;
+
+  // AMDGPU::isInlinableLiteral64 is target-internal and unavailable to
+  // standalone COMGR builds. Keep this mirror in sync with it. HotSwap only
+  // invokes this gfx1250 path, whose subtarget includes the inv2pi inline
+  // immediate.
+  switch (Delta) {
+  case 0x3ff0000000000000ULL: // 1.0
+  case 0xbff0000000000000ULL: // -1.0
+  case 0x3fe0000000000000ULL: // 0.5
+  case 0xbfe0000000000000ULL: // -0.5
+  case 0x4000000000000000ULL: // 2.0
+  case 0xc000000000000000ULL: // -2.0
+  case 0x4010000000000000ULL: // 4.0
+  case 0xc010000000000000ULL: // -4.0
+  case 0x3fc45f306dc9c882ULL: // 1 / (2 * pi)
+    return true;
+  default:
+    return false;
+  }
+}
+
+static std::optional<uint32_t>
+getSetPcLongBranchLayoutSize(uint64_t FromOffset, uint64_t TargetOffset) {
+  std::optional<uint64_t> PcBase = checkedAddUint64(
+      FromOffset, MinInstSize, "set-PC long branch layout PC base");
+  if (!PcBase)
+    return std::nullopt;
+  uint64_t Delta = TargetOffset - *PcBase;
+
+  // This model is gfx1250-specific. s_get_pc_i64 and s_set_pc_i64 each occupy
+  // one dword. The intervening s_add_nc_u64 occupies one dword for an inline
+  // immediate, two for a non-negative signed-32-bit literal, and three for a
+  // 64-bit literal.
+  if (isSetPcDeltaInline(Delta))
+    return 3 * MinInstSize;
+  if (Delta <= static_cast<uint64_t>(std::numeric_limits<int32_t>::max()))
+    return 4 * MinInstSize;
+  return SetPcReturnReserveBytes;
+}
+
 Expected<std::optional<EncodedSetPcGateway>>
 findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
                         uint64_t FromOffset, uint64_t TargetOffset,
                         unsigned SgprBase) {
   NopSled *Best = nullptr;
-  SmallVector<uint8_t> BestBytes;
+  uint32_t BestLayoutSize = 0;
+  uint64_t BestUsableEnd = 0;
   uint64_t BestDistance = std::numeric_limits<uint64_t>::max();
   for (NopSled &Sled : Gateways) {
     if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd)
@@ -463,22 +508,37 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
     if (Distance >= MaxSledDistance || Distance >= BestDistance ||
         LS.encodeSBranch(FromOffset, Sled.WritePos).empty())
       continue;
-    std::optional<SmallVector<uint8_t>> Bytes =
-        encodeSetPCLongBranch(LS, Sled.WritePos, TargetOffset, SgprBase);
-    if (!Bytes)
+
+    std::optional<uint32_t> LayoutSize =
+        getSetPcLongBranchLayoutSize(Sled.WritePos, TargetOffset);
+    if ((SgprBase & 1u) != 0 || !LayoutSize)
       return createStringError(
           Twine("failed to encode set-PC gateway at candidate offset 0x") +
           utohexstr(Sled.WritePos));
-    if (Bytes->size() > UsableEnd - Sled.WritePos)
+    if (*LayoutSize > UsableEnd - Sled.WritePos)
       continue;
+
     Best = &Sled;
-    BestBytes = std::move(*Bytes);
+    BestLayoutSize = *LayoutSize;
+    BestUsableEnd = UsableEnd;
     BestDistance = Distance;
   }
   if (!Best)
     return std::nullopt;
+  std::optional<SmallVector<uint8_t>> BestBytes =
+      encodeSetPCLongBranch(LS, Best->WritePos, TargetOffset, SgprBase);
+  if (!BestBytes)
+    return createStringError(
+        Twine("failed to encode set-PC gateway at candidate offset 0x") +
+        utohexstr(Best->WritePos));
+  if (BestBytes->size() != BestLayoutSize ||
+      BestBytes->size() > BestUsableEnd - Best->WritePos)
+    return createStringError(
+        Twine("set-PC gateway layout mismatch at candidate offset 0x") +
+        utohexstr(Best->WritePos) + ": predicted " + Twine(BestLayoutSize) +
+        " bytes, encoded " + Twine(BestBytes->size()) + " bytes");
   return std::optional<EncodedSetPcGateway>(
-      EncodedSetPcGateway{Best, std::move(BestBytes)});
+      EncodedSetPcGateway{Best, std::move(*BestBytes)});
 }
 
 static std::optional<unsigned> numberedSgprIndex(const MCRegisterInfo &MRI,
@@ -1915,17 +1975,18 @@ countReachableSetPcGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
       if (Distance >= MaxSledDistance ||
           LS.encodeSBranch(FromOffset, Candidate).empty())
         break;
-      std::optional<SmallVector<uint8_t>> Bytes =
-          encodeSetPCLongBranch(LS, Candidate, TargetOffset, SgprBase);
-      if (!Bytes)
+
+      std::optional<uint32_t> LayoutSize =
+          getSetPcLongBranchLayoutSize(Candidate, TargetOffset);
+      if ((SgprBase & 1u) != 0 || !LayoutSize)
         return createStringError(
-            Twine("failed to encode set-PC gateway while counting candidate "
+            Twine("invalid set-PC gateway while counting candidate "
                   "offset 0x") +
             utohexstr(Candidate));
-      if (Bytes->size() > UsableEnd - Candidate)
+      if (*LayoutSize > UsableEnd - Candidate)
         break;
       ++Slots;
-      Candidate += Bytes->size();
+      Candidate += *LayoutSize;
     }
     if (Slots == MaxSlots)
       break;
