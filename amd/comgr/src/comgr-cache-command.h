@@ -10,11 +10,11 @@
 #define COMGR_CACHE_COMMAND_H
 
 #include "amd_comgr.h"
+#include "comgr-cache-identifier.h"
 
 #include <clang/Driver/Action.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/SHA256.h>
 
 namespace llvm {
 class raw_ostream;
@@ -39,8 +39,6 @@ public:
 
   // helper to work around the comgr-xxxxx string appearing in files
   static void addFileContents(HashAlgorithm &H, llvm::StringRef Buf);
-  static void addUInt(HashAlgorithm &H, uint64_t I);
-  static void addString(HashAlgorithm &H, llvm::StringRef S);
 
   struct ComgrTmpSearchResult {
     size_t StartPosition;

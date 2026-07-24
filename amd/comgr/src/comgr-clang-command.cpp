@@ -140,7 +140,7 @@ void ClangCommand::addOptionsIdentifier(HashAlgorithm &H) const {
            "Unexpected flag and path to comgr temporary directory");
 #endif
 
-    addString(H, Arg);
+    addCacheHashString(H, Arg);
   }
 }
 

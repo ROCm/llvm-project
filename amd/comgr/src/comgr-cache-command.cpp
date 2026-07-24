@@ -14,18 +14,15 @@
 
 #include "comgr-cache-command.h"
 #include "comgr-cache.h"
-#include "comgr-device-libs.h"
 #include "comgr-env.h"
 #include "comgr.h"
 
-#include <clang/Basic/Version.h>
 #include <llvm/ADT/StringExtras.h>
 
 #include <optional>
 
 namespace COMGR {
 using namespace llvm;
-using namespace clang;
 
 std::optional<CachedCommandAdaptor::ComgrTmpSearchResult>
 CachedCommandAdaptor::searchComgrTmpModel(StringRef S) {
@@ -85,22 +82,6 @@ CachedCommandAdaptor::searchComgrTmpModel(StringRef S) {
   return std::nullopt;
 }
 
-void CachedCommandAdaptor::addUInt(CachedCommandAdaptor::HashAlgorithm &H,
-                                   uint64_t I) {
-  uint8_t Bytes[sizeof(I)];
-  memcpy(&Bytes, &I, sizeof(I));
-  H.update(Bytes);
-}
-
-void CachedCommandAdaptor::addString(CachedCommandAdaptor::HashAlgorithm &H,
-                                     StringRef S) {
-  // hash size + contents to avoid collisions
-  // for example, we have to ensure that the result of hashing "AA" "BB" is
-  // different from "A" "ABB"
-  addUInt(H, S.size());
-  H.update(S);
-}
-
 void CachedCommandAdaptor::addFileContents(
     CachedCommandAdaptor::HashAlgorithm &H, StringRef Buf) {
   // this is a workaround temporary paths getting in the output files of the
@@ -109,12 +90,12 @@ void CachedCommandAdaptor::addFileContents(
   while (!Buf.empty()) {
     auto ComgrTmpPos = searchComgrTmpModel(Buf);
     if (!ComgrTmpPos) {
-      addString(H, Buf);
+      addCacheHashString(H, Buf);
       break;
     }
 
     StringRef ToHash = Buf.substr(0, ComgrTmpPos->StartPosition);
-    addString(H, ToHash);
+    addCacheHashString(H, ToHash);
     Buf = Buf.substr(ToHash.size() + ComgrTmpPos->MatchSize);
   }
 }
@@ -124,9 +105,7 @@ CachedCommandAdaptor::getIdentifier() const {
   CachedCommandAdaptor::HashAlgorithm H;
   H.update(getClass());
   H.update(env::shouldEmitVerboseLogs());
-  addString(H, getClangFullVersion());
-  addString(H, getComgrHashIdentifier());
-  H.update(getDeviceLibrariesIdentifier());
+  H.update(getComgrImplementationIdentifier());
 
   if (Error E = addInputIdentifier(H))
     return E;
