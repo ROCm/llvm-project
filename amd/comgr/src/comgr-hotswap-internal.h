@@ -852,6 +852,13 @@ struct LLVMState {
   unsigned SPrefetchInstPcRelOpcode = 0;
   unsigned SPrefetchDataPcRelOpcode = 0;
 
+  /// MC identities used by the tensor descriptor definition-time mask clear.
+  /// Resolve these through the assembler because the tablegen opcode names are
+  /// subtarget-specific.
+  unsigned SAndB32Opcode = 0;
+  unsigned SOrB32Opcode = 0;
+  unsigned TensorLoadToLdsOpcode = 0;
+
   /// MC opcodes for the gfx1250 VGPR-MSB mode instructions, resolved once at
   /// initLLVM() time so the WMMA split pass matches them by opcode instead of
   /// disassembled mnemonic strings. These are gfx1250-only, so they are
