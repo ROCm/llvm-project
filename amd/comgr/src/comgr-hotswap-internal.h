@@ -329,6 +329,17 @@ struct Trampoline {
   bool HasForwardGateway = false;
   uint64_t ForwardGatewayOffset = 0;
   llvm::SmallVector<uint8_t> ForwardGatewayBytes;
+  // Multiple 8-byte far sites can share one SCC-neutral gateway. Each source
+  // records its PC and branches to that gateway; a dispatcher prefixed to the
+  // first group trampoline maps the source PC to the corresponding body.
+  bool UsesSharedDispatcherForward = false;
+  uint32_t SharedDispatcherGroup = 0;
+  unsigned SharedDispatcherSgprBase = 0;
+  uint64_t SharedDispatcherGatewayOffset = 0;
+  uint64_t SharedDispatcherRelayOffset = 0;
+  uint64_t SharedDispatcherSecondaryGatewayOffset = 0;
+  llvm::SmallVector<uint8_t> SecondaryForwardGatewayBytes;
+  uint32_t PoolEntryPrefixBytes = 0;
   // A far-site run may only be coalesced within one known function. Unknown
   // ranges stay unmerged because adjacent symbols are independent entries.
   bool HasFunctionRange = false;
@@ -1228,6 +1239,10 @@ struct SafeSgprUsageSummary {
 
 struct DirectControlFlowInfo {
   llvm::DenseSet<uint64_t> Targets;
+  // Register-based transfers whose complete finite target set was proven.
+  // These do not make every instruction in their containing function a
+  // potential indirect destination.
+  llvm::DenseSet<uint64_t> BoundedIndirectTransfers;
   bool HasUnresolvedTargets = false;
 };
 
@@ -1464,7 +1479,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     uint64_t TextAddr, uint64_t TextSize,
     llvm::ArrayRef<uint64_t> DeclaredEntries,
     llvm::ArrayRef<ElfView::FunctionTextRange> FunctionRanges = {},
-    llvm::ArrayRef<uint64_t> ExternalEntries = {});
+    llvm::ArrayRef<uint64_t> ExternalEntries = {},
+    llvm::ArrayRef<uint8_t> Text = {});
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
