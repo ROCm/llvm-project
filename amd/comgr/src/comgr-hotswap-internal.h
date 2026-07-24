@@ -326,6 +326,14 @@ struct Trampoline {
   llvm::SmallVector<uint8_t> DirectSetPCForwardBytes;
   llvm::SmallVector<uint64_t, 4> ForwardBranchIslands;
   uint64_t ForwardBranchTargetOffset = 0;
+  // Dwords after the source's forward sequence are unreachable. A spare tail
+  // dword in an eight-byte or larger/coalesced source window can therefore
+  // serve as one safe, registerless relay for another far edge.
+  bool HasSourceTailBranchIsland = false;
+  uint64_t SourceTailBranchIslandOffset = 0;
+  uint64_t SourceTailBranchTargetOffset = 0;
+  llvm::SmallVector<uint64_t, 4> ReturnBranchIslands;
+  uint64_t ReturnBranchTargetOffset = 0;
   bool HasForwardGateway = false;
   uint64_t ForwardGatewayOffset = 0;
   llvm::SmallVector<uint8_t> ForwardGatewayBytes;
