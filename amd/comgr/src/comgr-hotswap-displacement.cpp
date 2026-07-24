@@ -17,6 +17,7 @@
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/Support/Alignment.h"
 
@@ -40,6 +41,73 @@ Error makeDisplacementError(const Twine &Msg) {
   std::string Message = Msg.str();
   log() << "hotswap: displacement unavailable: " << Message << "\n";
   return createStringError(object::object_error::parse_failed, Message);
+}
+
+Expected<const ELFT::Shdr *> findUniqueAllocatedSection(const ElfView &Elf,
+                                                        uint64_t Address,
+                                                        bool RequireExecutable,
+                                                        StringRef Context) {
+  const ELFT::Shdr *Owner = nullptr;
+  for (const ELFT::Shdr &Shdr : Elf.sections()) {
+    if (!(Shdr.sh_flags & ELF::SHF_ALLOC) || Shdr.sh_size == 0 ||
+        Address < Shdr.sh_addr || Address - Shdr.sh_addr >= Shdr.sh_size)
+      continue;
+    if (Owner) {
+      return makeDisplacementError(Twine(Context) +
+                                   " is covered by overlapping allocated "
+                                   "sections");
+    }
+    Owner = &Shdr;
+  }
+  if (!Owner) {
+    return makeDisplacementError(Twine(Context) +
+                                 " is outside every allocated section");
+  }
+  if (RequireExecutable && !(Owner->sh_flags & ELF::SHF_EXECINSTR)) {
+    return makeDisplacementError(Twine(Context) +
+                                 " is not in an executable section");
+  }
+  return Owner;
+}
+
+Expected<uint64_t> remapAllocatedAddress(const ElfView &Elf,
+                                         const DisplacementPlan &Plan,
+                                         uint64_t OldAddress,
+                                         bool RequireExecutable,
+                                         StringRef Context) {
+  if (Elf.textSize() > std::numeric_limits<uint64_t>::max() - Elf.textAddr()) {
+    return makeDisplacementError(Twine(Context) +
+                                 " cannot resolve an overflowing .text");
+  }
+  const uint64_t OldTextEnd = Elf.textAddr() + Elf.textSize();
+  if (OldAddress >= Elf.textAddr() && OldAddress < OldTextEnd) {
+    if (RequireExecutable &&
+        !(Elf.textSection()->sh_flags & ELF::SHF_EXECINSTR)) {
+      return makeDisplacementError(Twine(Context) +
+                                   " is not in an executable section");
+    }
+    uint64_t NewOffset = 0;
+    if (!Plan.mapOffset(OldAddress - Elf.textAddr(),
+                        DisplacementMapBias::BeforeInsertedBytes, NewOffset)) {
+      return makeDisplacementError(Twine(Context) +
+                                   " maps inside a replaced instruction");
+    }
+    if (NewOffset > std::numeric_limits<uint64_t>::max() - Elf.textAddr()) {
+      return makeDisplacementError(Twine(Context) +
+                                   " overflows after .text displacement");
+    }
+    return Elf.textAddr() + NewOffset;
+  }
+
+  Expected<const ELFT::Shdr *> OwnerOrErr =
+      findUniqueAllocatedSection(Elf, OldAddress, RequireExecutable, Context);
+  if (!OwnerOrErr)
+    return OwnerOrErr.takeError();
+
+  // The current displacement mode changes non-.text file offsets but preserves
+  // their virtual addresses. Whole-object relocation extends this mapping in a
+  // later layer.
+  return OldAddress;
 }
 
 Expected<uint64_t> requiredGrowthAlignment(const ElfView &Elf) {
@@ -359,6 +427,219 @@ reencodePcrelBranch(const InternalDecodedInst &DI, uint64_t NewFrom,
   return Encoded;
 }
 
+bool getAbsoluteOperand(const MCOperand &Operand, int64_t &Value) {
+  if (Operand.isImm()) {
+    Value = Operand.getImm();
+    return true;
+  }
+  return Operand.isExpr() && Operand.getExpr()->evaluateAsAbsolute(Value);
+}
+
+std::optional<uint64_t> addSignedOffset(uint64_t Base, int64_t Offset,
+                                        StringRef Context) {
+  if (Offset >= 0)
+    return checkedAddUint64(Base, static_cast<uint64_t>(Offset), Context);
+  const uint64_t Magnitude = Offset == std::numeric_limits<int64_t>::min()
+                                 ? uint64_t{1} << 63
+                                 : static_cast<uint64_t>(-Offset);
+  return checkedSubUint64(Base, Magnitude, Context);
+}
+
+std::string formatPreservingLiteral(StringRef OldOperand, int64_t NewValue) {
+  std::string Hex =
+      ("0x" + Twine::utohexstr(static_cast<uint64_t>(NewValue))).str();
+  if (OldOperand.starts_with("lit64("))
+    return "lit64(" + Hex + ")";
+  if (OldOperand.starts_with("lit("))
+    return "lit(" + Hex + ")";
+  return Hex;
+}
+
+Expected<bool> repairSGetPcPairForDisplacement(
+    const ElfView &Elf, const LLVMState &LS, const DisplacementPlan &Plan,
+    const InternalDecodedInst &GetPc, SmallVectorImpl<uint8_t> &NewText) {
+  if (GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg()) {
+    return false;
+  }
+
+  std::optional<uint64_t> AddOldOffOrErr =
+      checkedAddUint64(GetPc.Offset, GetPc.Size, "s_get_pc pair offset");
+  if (!AddOldOffOrErr || *AddOldOffOrErr >= Elf.textSize())
+    return false;
+  const uint64_t AddOldOff = *AddOldOffOrErr;
+
+  InternalDecodedInst Add;
+  bool GotAdd = false;
+  bool DecodeSucceeded = decodeTextSectionStreaming(
+      Elf.textData() + AddOldOff, Elf.textSize() - AddOldOff, LS,
+      /*WantMnemonic=*/false, [&](const InternalDecodedInst &DI) {
+        Add = DI;
+        GotAdd = true;
+        return false;
+      });
+  if (!DecodeSucceeded || !GotAdd || !Add.DecodeSucceeded ||
+      Add.Inst.getOpcode() != LS.SAddNcU64Opcode ||
+      Add.Inst.getNumOperands() != 3 || !Add.Inst.getOperand(0).isReg() ||
+      !Add.Inst.getOperand(1).isReg() ||
+      Add.Inst.getOperand(0).getReg() != GetPc.Inst.getOperand(0).getReg() ||
+      Add.Inst.getOperand(1).getReg() != GetPc.Inst.getOperand(0).getReg() ||
+      Plan.rangeOverlapsReplacement(AddOldOff, Add.Size)) {
+    return false;
+  }
+
+  int64_t OldAddend = 0;
+  if (!getAbsoluteOperand(Add.Inst.getOperand(2), OldAddend))
+    return false;
+
+  std::optional<uint64_t> OldPcBase =
+      checkedAddUint64(Elf.textAddr(), AddOldOff, "s_get_pc old PC base");
+  if (!OldPcBase)
+    return false;
+  std::optional<uint64_t> OldTarget =
+      addSignedOffset(*OldPcBase, OldAddend, "s_get_pc old target");
+  if (!OldTarget)
+    return false;
+
+  Expected<uint64_t> NewTargetOrErr = remapAllocatedAddress(
+      Elf, Plan, *OldTarget,
+      /*RequireExecutable=*/false, "s_get_pc materialized target");
+  if (!NewTargetOrErr) {
+    consumeError(NewTargetOrErr.takeError());
+    return false;
+  }
+
+  uint64_t NewAddOff = 0;
+  if (!Plan.mapOffset(AddOldOff, DisplacementMapBias::AfterInsertedBytes,
+                      NewAddOff)) {
+    return false;
+  }
+  std::optional<uint64_t> NewPcBase =
+      checkedAddUint64(Elf.textAddr(), NewAddOff, "s_get_pc displaced PC base");
+  if (!NewPcBase)
+    return false;
+  std::optional<int64_t> NewAddendOrErr = checkedSignedDifference(
+      *NewTargetOrErr, *NewPcBase, "s_get_pc displaced immediate");
+  if (!NewAddendOrErr)
+    return false;
+  const int64_t NewAddend = *NewAddendOrErr;
+  if (NewAddend == OldAddend)
+    return true;
+
+  if (!LS.MCIP)
+    return false;
+  SmallString<256> PrintedBuffer;
+  raw_svector_ostream PrintStream(PrintedBuffer);
+  LS.MCIP->printInst(&Add.Inst, /*Address=*/0, /*Annot=*/"", *LS.STI,
+                     PrintStream);
+  StringRef Printed = StringRef(PrintedBuffer).trim();
+  size_t LastComma = Printed.rfind(',');
+  if (LastComma == StringRef::npos)
+    return false;
+  StringRef Head = Printed.substr(0, LastComma + 1);
+  StringRef OldOperand = Printed.substr(LastComma + 1).trim();
+  std::string NewOperand = formatPreservingLiteral(OldOperand, NewAddend);
+  std::string NewAssembly = (Head + " " + NewOperand).str();
+
+  SmallVector<uint8_t> Code = assembleSingleInst(NewAssembly, LS);
+  if (Code.size() != Add.Size) {
+    return makeDisplacementError("s_add for s_get_pc at old .text offset 0x" +
+                                 Twine::utohexstr(GetPc.Offset) +
+                                 " changed encoded size during re-encode");
+  }
+  if (NewAddOff > NewText.size() || Code.size() > NewText.size() - NewAddOff) {
+    return makeDisplacementError(
+        "repaired s_add for s_get_pc at old .text offset 0x" +
+        Twine::utohexstr(GetPc.Offset) + " writes past rebuilt .text");
+  }
+  std::memcpy(NewText.data() + NewAddOff, Code.data(), Code.size());
+  return true;
+}
+
+Expected<bool> repairSAddPcForDisplacement(const ElfView &Elf,
+                                           const LLVMState &LS,
+                                           const DisplacementPlan &Plan,
+                                           const InternalDecodedInst &AddPc,
+                                           SmallVectorImpl<uint8_t> &NewText) {
+  if (AddPc.Inst.getNumOperands() != 1)
+    return false;
+  int64_t OldDelta = 0;
+  if (!getAbsoluteOperand(AddPc.Inst.getOperand(0), OldDelta))
+    return false;
+
+  std::optional<uint64_t> OldPcOffset =
+      checkedAddUint64(AddPc.Offset, AddPc.Size, "s_add_pc old PC offset");
+  if (!OldPcOffset)
+    return false;
+  std::optional<uint64_t> OldPcBase =
+      checkedAddUint64(Elf.textAddr(), *OldPcOffset, "s_add_pc old PC base");
+  if (!OldPcBase)
+    return false;
+  std::optional<uint64_t> OldTarget =
+      addSignedOffset(*OldPcBase, OldDelta, "s_add_pc old target");
+  if (!OldTarget || *OldTarget < Elf.textAddr() ||
+      *OldTarget - Elf.textAddr() >= Elf.textSize()) {
+    return false;
+  }
+
+  uint64_t NewAddPcOff = 0;
+  if (!Plan.mapOffset(AddPc.Offset, DisplacementMapBias::AfterInsertedBytes,
+                      NewAddPcOff)) {
+    return false;
+  }
+  Expected<uint64_t> NewTargetOrErr =
+      remapAllocatedAddress(Elf, Plan, *OldTarget,
+                            /*RequireExecutable=*/true, "s_add_pc target");
+  if (!NewTargetOrErr) {
+    consumeError(NewTargetOrErr.takeError());
+    return false;
+  }
+  std::optional<uint64_t> NewPcOffset =
+      checkedAddUint64(NewAddPcOff, AddPc.Size, "s_add_pc displaced PC offset");
+  if (!NewPcOffset)
+    return false;
+  std::optional<uint64_t> NewPcBase = checkedAddUint64(
+      Elf.textAddr(), *NewPcOffset, "s_add_pc displaced PC base");
+  if (!NewPcBase)
+    return false;
+  std::optional<int64_t> NewDeltaOrErr = checkedSignedDifference(
+      *NewTargetOrErr, *NewPcBase, "s_add_pc displaced immediate");
+  if (!NewDeltaOrErr)
+    return false;
+  const int64_t NewDelta = *NewDeltaOrErr;
+  if (NewDelta == OldDelta)
+    return true;
+
+  if (!LS.MCIP)
+    return false;
+  SmallString<128> PrintedBuffer;
+  raw_svector_ostream PrintStream(PrintedBuffer);
+  LS.MCIP->printInst(&AddPc.Inst, /*Address=*/0, /*Annot=*/"", *LS.STI,
+                     PrintStream);
+  StringRef Printed = StringRef(PrintedBuffer).trim();
+  size_t Space = Printed.find(' ');
+  if (Space == StringRef::npos)
+    return false;
+  StringRef Mnemonic = Printed.substr(0, Space);
+  StringRef OldOperand = Printed.substr(Space + 1).trim();
+  std::string NewOperand = formatPreservingLiteral(OldOperand, NewDelta);
+  std::string NewAssembly = (Mnemonic + " " + NewOperand).str();
+
+  SmallVector<uint8_t> Code = assembleSingleInst(NewAssembly, LS);
+  if (Code.size() != AddPc.Size) {
+    return makeDisplacementError("s_add_pc_i64 at old .text offset 0x" +
+                                 Twine::utohexstr(AddPc.Offset) +
+                                 " changed encoded size during re-encode");
+  }
+  if (NewAddPcOff > NewText.size() ||
+      Code.size() > NewText.size() - NewAddPcOff) {
+    return makeDisplacementError(
+        "repaired s_add_pc_i64 at old .text offset 0x" +
+        Twine::utohexstr(AddPc.Offset) + " writes past rebuilt .text");
+  }
+  std::memcpy(NewText.data() + NewAddPcOff, Code.data(), Code.size());
+  return true;
+}
+
 Error repairBranches(const ElfView &Elf, const LLVMState &LS,
                      const DisplacementPlan &Plan,
                      SmallVectorImpl<uint8_t> &NewText) {
@@ -367,76 +648,125 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
         "branch analysis through LLVM MC is unavailable");
   }
 
-  std::vector<InternalDecodedInst> Decoded;
-  if (!decodeTextSection(Elf.textData(), Elf.textSize(), LS, Decoded)) {
+  std::optional<Error> RepairError;
+  bool Decoded = decodeTextSectionStreaming(
+      Elf.textData(), Elf.textSize(), LS, /*WantMnemonic=*/false,
+      [&](const InternalDecodedInst &DI) {
+        if (Plan.rangeOverlapsReplacement(DI.Offset, DI.Size))
+          return true;
+        if (!DI.DecodeSucceeded) {
+          RepairError.emplace(makeDisplacementError(
+              "undecodable instruction at old .text offset 0x" +
+              Twine::utohexstr(DI.Offset)));
+          return false;
+        }
+
+        const MCInst &Inst = DI.Inst;
+        if (Inst.getOpcode() == LS.SGetPcI64Opcode) {
+          Expected<bool> RepairedOrErr =
+              repairSGetPcPairForDisplacement(Elf, LS, Plan, DI, NewText);
+          if (!RepairedOrErr) {
+            RepairError.emplace(RepairedOrErr.takeError());
+            return false;
+          }
+          if (*RepairedOrErr)
+            return true;
+        }
+        if (Inst.getOpcode() == LS.SAddPcI64Opcode) {
+          Expected<bool> RepairedOrErr =
+              repairSAddPcForDisplacement(Elf, LS, Plan, DI, NewText);
+          if (!RepairedOrErr) {
+            RepairError.emplace(RepairedOrErr.takeError());
+            return false;
+          }
+          if (*RepairedOrErr)
+            return true;
+        }
+        if (isPcSensitiveForDisplacement(DI, LS)) {
+          StringRef Mnemonic = "<unknown>";
+          if (LS.MCIP) {
+            std::pair<const char *, uint64_t> Name =
+                LS.MCIP->getMnemonic(DI.Inst);
+            if (Name.first)
+              Mnemonic = StringRef(Name.first).rtrim();
+          }
+          RepairError.emplace(makeDisplacementError(
+              "pc-sensitive instruction '" + Twine(Mnemonic) +
+              "' at old .text offset 0x" + Twine::utohexstr(DI.Offset) +
+              " requires linked-address repair"));
+          return false;
+        }
+        if (LS.MIA->isCall(Inst)) {
+          RepairError.emplace(makeDisplacementError(
+              "call at old .text offset 0x" + Twine::utohexstr(DI.Offset) +
+              " is not supported by displacement"));
+          return false;
+        }
+        if (LS.MIA->isIndirectBranch(Inst)) {
+          RepairError.emplace(
+              makeDisplacementError("indirect branch at old .text offset 0x" +
+                                    Twine::utohexstr(DI.Offset) +
+                                    " is not supported by displacement"));
+          return false;
+        }
+        if (!LS.MIA->isBranch(Inst))
+          return true;
+
+        uint64_t OldTarget = 0;
+        if (!LS.MIA->evaluateBranch(Inst, DI.Offset, DI.Size, OldTarget)) {
+          RepairError.emplace(makeDisplacementError(
+              "branch at old .text offset 0x" + Twine::utohexstr(DI.Offset) +
+              " target could not be evaluated"));
+          return false;
+        }
+        if (OldTarget >= Elf.textSize()) {
+          RepairError.emplace(makeDisplacementError(
+              "branch at old .text offset 0x" + Twine::utohexstr(DI.Offset) +
+              " targets outside .text"));
+          return false;
+        }
+
+        uint64_t NewFrom = 0;
+        uint64_t NewTarget = 0;
+        if (!Plan.mapOffset(DI.Offset, DisplacementMapBias::AfterInsertedBytes,
+                            NewFrom)) {
+          RepairError.emplace(makeDisplacementError(
+              "branch source at old .text offset 0x" +
+              Twine::utohexstr(DI.Offset) + " maps inside a replaced range"));
+          return false;
+        }
+        if (!Plan.mapOffset(OldTarget, DisplacementMapBias::BeforeInsertedBytes,
+                            NewTarget)) {
+          RepairError.emplace(makeDisplacementError(
+              "branch target at old .text offset 0x" +
+              Twine::utohexstr(OldTarget) + " maps inside a replaced range"));
+          return false;
+        }
+
+        Expected<SmallVector<uint8_t>> EncodedOrErr =
+            reencodePcrelBranch(DI, NewFrom, NewTarget, LS);
+        if (!EncodedOrErr) {
+          RepairError.emplace(EncodedOrErr.takeError());
+          return false;
+        }
+        SmallVector<uint8_t> &Encoded = *EncodedOrErr;
+
+        if (NewFrom > NewText.size() ||
+            Encoded.size() > NewText.size() - NewFrom) {
+          RepairError.emplace(makeDisplacementError(
+              "re-encoded branch at old .text offset 0x" +
+              Twine::utohexstr(DI.Offset) + " writes past rebuilt .text"));
+          return false;
+        }
+        std::memcpy(NewText.data() + NewFrom, Encoded.data(), Encoded.size());
+        return true;
+      });
+  if (!Decoded) {
     return makeDisplacementError(
         "failed to decode .text while validating branches");
   }
-
-  for (const InternalDecodedInst &DI : Decoded) {
-    if (Plan.rangeOverlapsReplacement(DI.Offset, DI.Size))
-      continue;
-
-    const MCInst &Inst = DI.Inst;
-    if (isPcSensitiveForDisplacement(DI, LS)) {
-      return makeDisplacementError(
-          "pc-sensitive instruction '" + Twine(DI.Mnemonic) +
-          "' at old .text offset 0x" + Twine::utohexstr(DI.Offset) +
-          " requires linked-address repair");
-    }
-    if (LS.MIA->isCall(Inst)) {
-      return makeDisplacementError("call at old .text offset 0x" +
-                                   Twine::utohexstr(DI.Offset) +
-                                   " is not supported by displacement");
-    }
-    if (LS.MIA->isIndirectBranch(Inst)) {
-      return makeDisplacementError("indirect branch at old .text offset 0x" +
-                                   Twine::utohexstr(DI.Offset) +
-                                   " is not supported by displacement");
-    }
-    if (!LS.MIA->isBranch(Inst))
-      continue;
-
-    uint64_t OldTarget = 0;
-    if (!LS.MIA->evaluateBranch(Inst, DI.Offset, DI.Size, OldTarget)) {
-      return makeDisplacementError("branch at old .text offset 0x" +
-                                   Twine::utohexstr(DI.Offset) +
-                                   " target could not be evaluated");
-    }
-    if (OldTarget >= Elf.textSize()) {
-      return makeDisplacementError("branch at old .text offset 0x" +
-                                   Twine::utohexstr(DI.Offset) +
-                                   " targets outside .text");
-    }
-
-    uint64_t NewFrom = 0;
-    uint64_t NewTarget = 0;
-    if (!Plan.mapOffset(DI.Offset, DisplacementMapBias::AfterInsertedBytes,
-                        NewFrom)) {
-      return makeDisplacementError("branch source at old .text offset 0x" +
-                                   Twine::utohexstr(DI.Offset) +
-                                   " maps inside a replaced range");
-    }
-    if (!Plan.mapOffset(OldTarget, DisplacementMapBias::BeforeInsertedBytes,
-                        NewTarget)) {
-      return makeDisplacementError("branch target at old .text offset 0x" +
-                                   Twine::utohexstr(OldTarget) +
-                                   " maps inside a replaced range");
-    }
-
-    Expected<SmallVector<uint8_t>> EncodedOrErr =
-        reencodePcrelBranch(DI, NewFrom, NewTarget, LS);
-    if (!EncodedOrErr)
-      return EncodedOrErr.takeError();
-    SmallVector<uint8_t> &Encoded = *EncodedOrErr;
-
-    if (NewFrom + Encoded.size() > NewText.size()) {
-      return makeDisplacementError("re-encoded branch at old .text offset 0x" +
-                                   Twine::utohexstr(DI.Offset) +
-                                   " writes past rebuilt .text");
-    }
-    std::memcpy(NewText.data() + NewFrom, Encoded.data(), Encoded.size());
-  }
+  if (RepairError)
+    return std::move(*RepairError);
   return Error::success();
 }
 
