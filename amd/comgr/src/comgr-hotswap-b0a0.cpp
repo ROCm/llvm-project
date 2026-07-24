@@ -1085,6 +1085,30 @@ struct BoundedSetPcReturn {
   SmallVector<uint64_t, 2> Targets;
 };
 
+struct DirectTextEntry {
+  uint64_t Target = 0;
+  size_t SourceIndex = 0;
+};
+
+struct KnownCallEntry {
+  uint64_t Entry = 0;
+  size_t CallIndex = 0;
+};
+
+static bool compareDirectTextEntries(const DirectTextEntry &LHS,
+                                     const DirectTextEntry &RHS) {
+  if (LHS.Target != RHS.Target)
+    return LHS.Target < RHS.Target;
+  return LHS.SourceIndex < RHS.SourceIndex;
+}
+
+static bool compareKnownCallEntries(const KnownCallEntry &LHS,
+                                    const KnownCallEntry &RHS) {
+  if (LHS.Entry != RHS.Entry)
+    return LHS.Entry < RHS.Entry;
+  return LHS.CallIndex < RHS.CallIndex;
+}
+
 static bool hasPcRelativeOperand(const InternalDecodedInst &DI,
                                  const LLVMState &LS) {
   for (const MCOperandInfo &Operand :
@@ -1156,20 +1180,35 @@ static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
   return Calls;
 }
 
-static bool hasUnprovenFallthroughEntry(ArrayRef<InternalDecodedInst> Decoded,
-                                        const LLVMState &LS, uint64_t TextAddr,
-                                        uint64_t TextEnd,
-                                        uint64_t FunctionBegin,
-                                        uint64_t ReturnOffset,
-                                        ArrayRef<uint64_t> DeclaredEntries,
-                                        ArrayRef<KnownCallSite> Calls) {
+static size_t findDecodedIndexAtOrAfter(ArrayRef<InternalDecodedInst> Decoded,
+                                        uint64_t Offset) {
+  return std::lower_bound(Decoded.begin(), Decoded.end(), Offset,
+                          [](const InternalDecodedInst &DI, uint64_t Value) {
+                            return DI.Offset < Value;
+                          }) -
+         Decoded.begin();
+}
+
+static bool isSetPcReturnCandidate(const InternalDecodedInst &DI,
+                                   const LLVMState &LS) {
+  // AMDGPUMCInstLower lowers S_SETPC_B64_return to S_SETPC_B64, so the
+  // decoded instruction no longer carries MIA::isReturn identity. Recover
+  // only the bounded local-function form from its call/link dataflow.
+  return DI.DecodeSucceeded && DI.Inst.getOpcode() == LS.SSetPcI64Opcode &&
+         DI.Inst.getNumOperands() == 1 && DI.Inst.getOperand(0).isReg() &&
+         DI.Inst.getOperand(0).getReg();
+}
+
+static bool hasUnprovenFallthroughEntry(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t FunctionBegin, uint64_t ReturnOffset,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<KnownCallSite> Calls,
+    ArrayRef<KnownCallEntry> CallEntries,
+    ArrayRef<DirectTextEntry> DirectEntries) {
   if (FunctionBegin == 0)
     return false;
 
-  size_t BeginIndex = 0;
-  while (BeginIndex != Decoded.size() &&
-         Decoded[BeginIndex].Offset < FunctionBegin)
-    ++BeginIndex;
+  size_t BeginIndex = findDecodedIndexAtOrAfter(Decoded, FunctionBegin);
   if (BeginIndex == Decoded.size() ||
       Decoded[BeginIndex].Offset != FunctionBegin) {
     log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
@@ -1201,44 +1240,50 @@ static bool hasUnprovenFallthroughEntry(ArrayRef<InternalDecodedInst> Decoded,
   if (ChainBegin == FunctionBegin)
     return false;
 
-  for (uint64_t Entry : DeclaredEntries)
-    if (Entry >= ChainBegin && Entry < FunctionBegin) {
-      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
-            << " is not a bounded return: declared entry at 0x"
-            << utohexstr(Entry) << " falls through to function entry 0x"
-            << utohexstr(FunctionBegin) << "\n";
-      return true;
-    }
+  ArrayRef<uint64_t>::iterator DeclaredEntry = std::lower_bound(
+      DeclaredEntries.begin(), DeclaredEntries.end(), ChainBegin);
+  if (DeclaredEntry != DeclaredEntries.end() &&
+      *DeclaredEntry < FunctionBegin) {
+    log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+          << " is not a bounded return: declared entry at 0x"
+          << utohexstr(*DeclaredEntry) << " falls through to function entry 0x"
+          << utohexstr(FunctionBegin) << "\n";
+    return true;
+  }
 
-  for (const KnownCallSite &Call : Calls) {
+  ArrayRef<KnownCallEntry>::iterator CallEntry =
+      std::lower_bound(CallEntries.begin(), CallEntries.end(), ChainBegin,
+                       [](const KnownCallEntry &Indexed, uint64_t Offset) {
+                         return Indexed.Entry < Offset;
+                       });
+  for (; CallEntry != CallEntries.end() && CallEntry->Entry < FunctionBegin;
+       ++CallEntry) {
+    const KnownCallSite &Call = Calls[CallEntry->CallIndex];
     uint64_t Source = Decoded[Call.InstIndex].Offset;
     if (Source >= ChainBegin && Source < FunctionBegin)
       continue;
-    if ((Call.Target >= ChainBegin && Call.Target < FunctionBegin) ||
-        (Call.Continuation >= ChainBegin &&
-         Call.Continuation < FunctionBegin)) {
-      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
-            << " is not a bounded return: call at 0x" << utohexstr(Source)
-            << " enters the fallthrough chain at 0x"
-            << utohexstr(Call.Target >= ChainBegin &&
-                                 Call.Target < FunctionBegin
-                             ? Call.Target
-                             : Call.Continuation)
-            << "\n";
-      return true;
-    }
+    log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+          << " is not a bounded return: call at 0x" << utohexstr(Source)
+          << " enters the fallthrough chain at 0x"
+          << utohexstr(CallEntry->Entry) << "\n";
+    return true;
   }
 
-  for (const InternalDecodedInst &Source : Decoded) {
-    std::optional<uint64_t> Target =
-        getDirectTextTarget(Source, LS, TextAddr, TextEnd);
-    if (!Target || *Target < ChainBegin || *Target >= FunctionBegin ||
-        (Source.Offset >= ChainBegin && Source.Offset < FunctionBegin))
+  ArrayRef<DirectTextEntry>::iterator DirectEntry =
+      std::lower_bound(DirectEntries.begin(), DirectEntries.end(), ChainBegin,
+                       [](const DirectTextEntry &Indexed, uint64_t Offset) {
+                         return Indexed.Target < Offset;
+                       });
+  for (; DirectEntry != DirectEntries.end() &&
+         DirectEntry->Target < FunctionBegin;
+       ++DirectEntry) {
+    const InternalDecodedInst &Source = Decoded[DirectEntry->SourceIndex];
+    if (Source.Offset >= ChainBegin && Source.Offset < FunctionBegin)
       continue;
     log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
           << " is not a bounded return: control flow at 0x"
           << utohexstr(Source.Offset) << " enters the fallthrough chain at 0x"
-          << utohexstr(*Target) << "\n";
+          << utohexstr(DirectEntry->Target) << "\n";
     return true;
   }
   return false;
@@ -1251,18 +1296,47 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
                            ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
                            ArrayRef<KnownCallSite> Calls,
                            ArrayRef<uint64_t> ExternalEntries) {
+  SmallVector<size_t, 2> ReturnIndices;
+  for (size_t ReturnIndex = 0; ReturnIndex != Decoded.size(); ++ReturnIndex)
+    if (isSetPcReturnCandidate(Decoded[ReturnIndex], LS))
+      ReturnIndices.push_back(ReturnIndex);
+
   SmallVector<BoundedSetPcReturn, 2> Returns;
-  for (size_t ReturnIndex = 0; ReturnIndex != Decoded.size(); ++ReturnIndex) {
+  if (ReturnIndices.empty())
+    return Returns;
+
+  SmallVector<uint64_t, 16> SortedDeclaredEntries(DeclaredEntries);
+  llvm::sort(SortedDeclaredEntries);
+  SortedDeclaredEntries.erase(
+      std::unique(SortedDeclaredEntries.begin(), SortedDeclaredEntries.end()),
+      SortedDeclaredEntries.end());
+
+  SmallVector<uint64_t, 16> SortedExternalEntries(ExternalEntries);
+  llvm::sort(SortedExternalEntries);
+  SortedExternalEntries.erase(
+      std::unique(SortedExternalEntries.begin(), SortedExternalEntries.end()),
+      SortedExternalEntries.end());
+
+  SmallVector<DirectTextEntry, 16> DirectEntries;
+  for (size_t SourceIndex = 0; SourceIndex != Decoded.size(); ++SourceIndex)
+    if (std::optional<uint64_t> Target =
+            getDirectTextTarget(Decoded[SourceIndex], LS, TextAddr, TextEnd))
+      DirectEntries.push_back({*Target, SourceIndex});
+  llvm::sort(DirectEntries, compareDirectTextEntries);
+
+  SmallVector<KnownCallEntry, 8> CallsByTarget;
+  SmallVector<KnownCallEntry, 16> CallEntries;
+  for (size_t CallIndex = 0; CallIndex != Calls.size(); ++CallIndex) {
+    const KnownCallSite &Call = Calls[CallIndex];
+    CallsByTarget.push_back({Call.Target, CallIndex});
+    CallEntries.push_back({Call.Target, CallIndex});
+    CallEntries.push_back({Call.Continuation, CallIndex});
+  }
+  llvm::sort(CallsByTarget, compareKnownCallEntries);
+  llvm::sort(CallEntries, compareKnownCallEntries);
+
+  for (size_t ReturnIndex : ReturnIndices) {
     const InternalDecodedInst &Return = Decoded[ReturnIndex];
-    // AMDGPUMCInstLower lowers S_SETPC_B64_return to S_SETPC_B64, so the
-    // decoded instruction no longer carries MIA::isReturn identity. Recover
-    // only the bounded local-function form from its call/link dataflow.
-    if (!Return.DecodeSucceeded ||
-        Return.Inst.getOpcode() != LS.SSetPcI64Opcode ||
-        Return.Inst.getNumOperands() != 1 ||
-        !Return.Inst.getOperand(0).isReg() ||
-        !Return.Inst.getOperand(0).getReg())
-      continue;
     MCRegister ReturnRegister(Return.Inst.getOperand(0).getReg());
 
     bool IsBounded = false;
@@ -1277,17 +1351,16 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
         continue;
 
       bool Safe = true;
-      for (uint64_t Entry : ExternalEntries)
-        if (Entry >= FunctionBegin && Entry < FunctionEnd) {
-          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
-                << " is not a bounded return: externally reachable entry at "
-                   "0x"
-                << utohexstr(Entry) << " overlaps the local function\n";
-          Safe = false;
-          break;
-        }
-      if (!Safe)
+      SmallVector<uint64_t, 16>::iterator ExternalEntry =
+          std::lower_bound(SortedExternalEntries.begin(),
+                           SortedExternalEntries.end(), FunctionBegin);
+      if (ExternalEntry != SortedExternalEntries.end() &&
+          *ExternalEntry < FunctionEnd) {
+        log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+              << " is not a bounded return: externally reachable entry at 0x"
+              << utohexstr(*ExternalEntry) << " overlaps the local function\n";
         continue;
+      }
 
       for (const ElfView::FunctionTextRange &Alias : FunctionRanges) {
         if (Return.Offset + TextAddr < Alias.Begin ||
@@ -1304,28 +1377,31 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       if (!Safe)
         continue;
 
-      for (uint64_t Entry : DeclaredEntries)
-        if (Entry > FunctionBegin && Entry < FunctionEnd) {
-          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
-                << " is not a bounded return: declared entry at 0x"
-                << utohexstr(Entry) << " bypasses the function entry\n";
-          Safe = false;
-          break;
-        }
-      if (!Safe)
+      SmallVector<uint64_t, 16>::iterator InteriorEntry =
+          std::upper_bound(SortedDeclaredEntries.begin(),
+                           SortedDeclaredEntries.end(), FunctionBegin);
+      if (InteriorEntry != SortedDeclaredEntries.end() &&
+          *InteriorEntry < FunctionEnd) {
+        log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+              << " is not a bounded return: declared entry at 0x"
+              << utohexstr(*InteriorEntry) << " bypasses the function entry\n";
         continue;
+      }
 
-      if (hasUnprovenFallthroughEntry(Decoded, LS, TextAddr, TextEnd,
-                                      FunctionBegin, Return.Offset,
-                                      DeclaredEntries, Calls))
+      if (hasUnprovenFallthroughEntry(Decoded, LS, FunctionBegin, Return.Offset,
+                                      SortedDeclaredEntries, Calls, CallEntries,
+                                      DirectEntries))
         continue;
 
       // The link pair must retain the value written by the incoming call
       // throughout the function. This includes blocks laid out after the
       // return that may branch back into its epilogue.
-      for (const InternalDecodedInst &DI : Decoded) {
-        if (DI.Offset < FunctionBegin || DI.Offset >= FunctionEnd)
-          continue;
+      size_t FunctionInstBegin =
+          findDecodedIndexAtOrAfter(Decoded, FunctionBegin);
+      size_t FunctionInstEnd = findDecodedIndexAtOrAfter(Decoded, FunctionEnd);
+      for (size_t InstIndex = FunctionInstBegin; InstIndex != FunctionInstEnd;
+           ++InstIndex) {
+        const InternalDecodedInst &DI = Decoded[InstIndex];
         // MC call instructions carry no transitive callee-clobber information.
         // Without interprocedural proof, a nested callee may overwrite the
         // outer link pair even when the call defines a different return pair.
@@ -1350,9 +1426,13 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
         continue;
 
       SmallVector<uint64_t, 2> Targets;
-      for (const KnownCallSite &Call : Calls) {
-        if (Call.Target < FunctionBegin || Call.Target >= FunctionEnd)
-          continue;
+      SmallVector<KnownCallEntry, 8>::iterator CallAtTarget = std::lower_bound(
+          CallsByTarget.begin(), CallsByTarget.end(),
+          KnownCallEntry{FunctionBegin, 0}, compareKnownCallEntries);
+      for (; CallAtTarget != CallsByTarget.end() &&
+             CallAtTarget->Entry < FunctionEnd;
+           ++CallAtTarget) {
+        const KnownCallSite &Call = Calls[CallAtTarget->CallIndex];
         if (Call.Target != FunctionBegin) {
           log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
                 << " is not a bounded return: call at 0x"
@@ -1378,25 +1458,34 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       // A branch from outside the function would bypass the call link
       // definition. Direct calls to the function entry are allowed only when
       // they were collected above with this exact return register.
-      for (size_t SourceIndex = 0; SourceIndex != Decoded.size();
-           ++SourceIndex) {
+      SmallVector<DirectTextEntry, 16>::iterator DirectEntry = std::lower_bound(
+          DirectEntries.begin(), DirectEntries.end(),
+          DirectTextEntry{FunctionBegin, 0}, compareDirectTextEntries);
+      for (; DirectEntry != DirectEntries.end() &&
+             DirectEntry->Target < FunctionEnd;
+           ++DirectEntry) {
+        size_t SourceIndex = DirectEntry->SourceIndex;
         const InternalDecodedInst &Source = Decoded[SourceIndex];
-        std::optional<uint64_t> Target =
-            getDirectTextTarget(Source, LS, TextAddr, TextEnd);
-        if (!Target || *Target < FunctionBegin || *Target >= FunctionEnd ||
-            (Source.Offset >= FunctionBegin && Source.Offset < FunctionEnd))
+        if (Source.Offset >= FunctionBegin && Source.Offset < FunctionEnd)
           continue;
 
         bool IsKnownEntryCall = false;
-        if (LS.MIA->isCall(Source.Inst) && *Target == FunctionBegin)
-          for (const KnownCallSite &Call : Calls)
-            IsKnownEntryCall |= Call.InstIndex == SourceIndex &&
-                                Call.ReturnRegister == ReturnRegister;
+        if (LS.MIA->isCall(Source.Inst) &&
+            DirectEntry->Target == FunctionBegin) {
+          ArrayRef<KnownCallSite>::iterator KnownCall =
+              std::lower_bound(Calls.begin(), Calls.end(), SourceIndex,
+                               [](const KnownCallSite &Call, size_t Index) {
+                                 return Call.InstIndex < Index;
+                               });
+          IsKnownEntryCall = KnownCall != Calls.end() &&
+                             KnownCall->InstIndex == SourceIndex &&
+                             KnownCall->ReturnRegister == ReturnRegister;
+        }
         if (!IsKnownEntryCall) {
           log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
                 << " is not a bounded return: control flow at 0x"
                 << utohexstr(Source.Offset) << " enters at 0x"
-                << utohexstr(*Target) << "\n";
+                << utohexstr(DirectEntry->Target) << "\n";
           Safe = false;
           break;
         }
