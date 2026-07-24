@@ -1128,6 +1128,31 @@ struct VgprAllocator {
     return Base;
   }
 
+  /// Allocate \p N contiguous VGPRs above the kernel count without crossing a
+  /// \p BankSize-register boundary. Textual AMDGPU assembly only names
+  /// v0-v255; keeping a generated operand in one physical bank lets a caller
+  /// encode its low bits under one s_set_vgpr_msb mode.
+  std::optional<unsigned>
+  allocContiguousAboveKdInBank(unsigned N, unsigned Align = 2,
+                               unsigned BankSize = 256) {
+    if (N == 0 || N > BankSize)
+      return std::nullopt;
+    unsigned OldNext = NextAboveKd;
+    unsigned Base = NextAboveKd;
+    if (Align > 1 && (Base % Align) != 0)
+      Base += Align - (Base % Align);
+    if (Base / BankSize != (Base + N - 1) / BankSize)
+      Base = ((Base / BankSize) + 1) * BankSize;
+    if (Align > 1 && (Base % Align) != 0)
+      Base += Align - (Base % Align);
+    if (Base + N > MaxVgprs)
+      return std::nullopt;
+    ExtraAllocated += (Base + N) - OldNext;
+    LiveAtPoint.set(Base, Base + N);
+    NextAboveKd = Base + N;
+    return Base;
+  }
+
   unsigned extraVgprsNeeded() const { return ExtraAllocated; }
 };
 
@@ -1301,6 +1326,14 @@ void ensureVgprMsbModes(PatchContext &Ctx);
 /// CFG analysis.
 [[nodiscard]] std::optional<unsigned> getActiveVgprMsbMode(PatchContext &Ctx,
                                                            size_t Idx);
+
+/// Recover an exact mode by scanning backward through the local straight-line
+/// instruction sequence containing \p Idx. This is intentionally separate
+/// from CFG mode recovery: only a lowering whose original operands already
+/// depend on the local setter may use it when unrelated opaque control flow
+/// prevents object-wide analysis.
+[[nodiscard]] std::optional<unsigned>
+getLocallyEstablishedVgprMsbMode(PatchContext &Ctx, size_t Idx);
 
 unsigned getVgprMsbBank(unsigned Mode, VgprMsbOperand Operand);
 void setVgprMsbBank(unsigned &Mode, VgprMsbOperand Operand, unsigned Bank);

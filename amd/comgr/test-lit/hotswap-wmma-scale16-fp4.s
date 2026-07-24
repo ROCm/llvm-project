@@ -17,14 +17,14 @@
 // COM: VGPR select, never a lane mask, so no v_cndmask appears in either pass.
 // DISASM-NOT: v_cndmask_b32_e64
 // DISASM: v_mov_b32{{(_e32)?}} v{{[0-9]+}}, 0
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[32:39], v[0:7],{{.*}}matrix_a_fmt:MATRIX_FMT_FP4
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[{{[0-9]+}}:{{[0-9]+}}], v[0:7],{{.*}}matrix_a_fmt:MATRIX_FMT_FP4
 // COM: exactly one gfx1250 hazard v_nop before the pass-high masked-A VALU.
 // DISASM-COUNT-1: v_nop
 // DISASM-NEXT: v_mov_b32{{(_e32)?}} v{{[0-9]+}}, 0
 // DISASM-NOT: v_cndmask_b32_e64
 // COM: pass-high keeps the high-16 subblock VGPRs, odd-byte scale gather,
 // COM: accumulating onto pass-low through v[0:7].
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[32:39], v[0:7],{{.*}}matrix_a_fmt:MATRIX_FMT_FP4
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[{{[0-9]+}}:{{[0-9]+}}], v[0:7],{{.*}}matrix_a_fmt:MATRIX_FMT_FP4
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
