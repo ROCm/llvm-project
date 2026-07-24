@@ -8,6 +8,10 @@ define amdgpu_kernel void @straightline_kernel(ptr addrspace(1) noalias %in, ptr
 ; GFX12-NEXT:    s_load_b64 s[6:7], s[4:5], 0x10
 ; GFX12-NEXT:    s_load_b128 s[0:3], s[4:5], 0x0
 ; GFX12-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
+; GFX12-NEXT:    ; implicit-def: $vgpr1
+; GFX12-NEXT:    ; implicit-def: $vgpr1
+; GFX12-NEXT:    ; implicit-def: $vgpr1
+; GFX12-NEXT:    ; implicit-def: $vgpr1
 ; GFX12-NEXT:    ; implicit-def: $sgpr5
 ; GFX12-NEXT:    ; implicit-def: $sgpr5
 ; GFX12-NEXT:    ; implicit-def: $sgpr5

@@ -727,9 +727,9 @@ define amdgpu_ps double @fneg_fadd_0_nsz_f64(double inreg %tmp2, double inreg %t
 ; SI-NEXT:    v_mul_f64 v[0:1], v[0:1], s[2:3]
 ; SI-NEXT:    v_mov_b32_e32 v2, s1
 ; SI-NEXT:    v_cmp_nlt_f64_e64 vcc, -v[0:1], s[0:1]
+; SI-NEXT:    v_mov_b32_e32 v3, s0
 ; SI-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
-; SI-NEXT:    v_mov_b32_e32 v2, s0
-; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v2, vcc
+; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v3, vcc
 ; SI-NEXT:    v_cmp_nlt_f64_e32 vcc, 0, v[0:1]
 ; SI-NEXT:    s_and_b64 s[0:1], vcc, exec
 ; SI-NEXT:    s_cselect_b32 s1, 0, 0x7ff80000
@@ -3604,8 +3604,9 @@ define void @v_fneg_copytoreg_f32(ptr addrspace(1) %out, float %a, float %b, flo
 ; SI-NEXT:    v_add_i32_e32 v0, vcc, v0, v6
 ; SI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
+; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; SI-NEXT:    v_mul_f32_e32 v2, v2, v3
-; SI-NEXT:    s_xor_b64 exec, vcc, exec
+; SI-NEXT:    s_mov_b64 exec, s[4:5]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB220_2
 ; SI-NEXT:  .LBB220_1: ; %if
@@ -3626,8 +3627,9 @@ define void @v_fneg_copytoreg_f32(ptr addrspace(1) %out, float %a, float %b, flo
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, v0, v6
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
+; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; VI-NEXT:    v_mul_f32_e32 v2, v2, v3
-; VI-NEXT:    s_xor_b64 exec, vcc, exec
+; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execz .LBB220_2
 ; VI-NEXT:  .LBB220_1: ; %if

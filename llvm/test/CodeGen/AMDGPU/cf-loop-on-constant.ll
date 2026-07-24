@@ -380,20 +380,20 @@ define amdgpu_kernel void @loop_arg_0(ptr addrspace(3) %ptr, i32 %n) nounwind {
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    s_mov_b32 m0, -1
 ; GCN-NEXT:    ds_read_u8 v0, v0
-; GCN-NEXT:    s_load_dword s1, s[4:5], 0x9
-; GCN-NEXT:    s_mov_b32 s0, 0
+; GCN-NEXT:    s_load_dword s0, s[4:5], 0x9
+; GCN-NEXT:    s_mov_b32 s1, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_and_b32_e32 v0, 1, v0
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
 ; GCN-NEXT:    s_and_b64 vcc, exec, vcc
 ; GCN-NEXT:  .LBB4_1: ; %for.body
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GCN-NEXT:    s_lshl_b32 s2, s0, 2
-; GCN-NEXT:    s_add_i32 s2, s1, s2
+; GCN-NEXT:    s_lshl_b32 s2, s1, 2
+; GCN-NEXT:    s_add_i32 s2, s0, s2
 ; GCN-NEXT:    s_addk_i32 s2, 0x80
 ; GCN-NEXT:    v_mov_b32_e32 v0, s2
 ; GCN-NEXT:    ds_read_b32 v1, v0
-; GCN-NEXT:    s_add_i32 s0, s0, 1
+; GCN-NEXT:    s_add_i32 s1, s1, 1
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_add_f32_e32 v1, 1.0, v1
 ; GCN-NEXT:    ds_write_b32 v0, v1

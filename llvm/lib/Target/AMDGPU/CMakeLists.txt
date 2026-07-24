@@ -54,7 +54,6 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUCodeGenPrepare.cpp
   AMDGPUCombinerHelper.cpp
   AMDGPUCtorDtorLowering.cpp
-  AMDGPUEmitLiveDebugVars.cpp
   AMDGPUExportClustering.cpp
   AMDGPUExportKernelRuntimeHandles.cpp
   AMDGPUFrameLowering.cpp
@@ -80,8 +79,6 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPULowerKernelArguments.cpp
   AMDGPULowerKernelAttributes.cpp
   AMDGPULowerModuleLDSPass.cpp
-  AMDGPULowerStrictWQM.cpp
-  AMDGPULowerWQMOperations.cpp
   AMDGPUPrepareAGPRAlloc.cpp
   AMDGPULowerExecSync.cpp
   AMDGPUSwLowerLDS.cpp
@@ -97,7 +94,6 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUMarkLastScratchLoad.cpp
   AMDGPUMIRFormatter.cpp
   AMDGPUNextUseAnalysis.cpp
-  AMDGPUPartitionVGPRsForRA.cpp
   AMDGPUPerfHintAnalysis.cpp
   AMDGPUPostLegalizerCombiner.cpp
   AMDGPUPreLegalizerCombiner.cpp
@@ -113,7 +109,6 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPURegBankSelect.cpp
   AMDGPURegisterBankInfo.cpp
   AMDGPURemoveIncompatibleFunctions.cpp
-  AMDGPUReserveAllocatedVGPRs.cpp
   AMDGPUReserveWWMRegs.cpp
   AMDGPUResourceUsageAnalysis.cpp
   AMDGPURewriteAGPRCopyMFMA.cpp
@@ -140,8 +135,6 @@ add_llvm_target(AMDGPUCodeGen
   GCNNSAReassign.cpp
   GCNPreRAOptimizations.cpp
   GCNPreRALongBranchReg.cpp
-  AMDGPUPreRAVectorRegHints.cpp
-  AMDGPUPreRASGPROptimizations.cpp
   AMDGPUPreWaveTransform.cpp
   AMDGPUFinalizeISelWaveTransform.cpp
   GCNRegPressure.cpp

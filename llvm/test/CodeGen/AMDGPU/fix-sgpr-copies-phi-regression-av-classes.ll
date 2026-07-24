@@ -8,21 +8,21 @@ define i64 @test_temporal_divergence(i32 %arg) #0 {
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_add_u32_e32 v2, 1, v0
-; CHECK-NEXT:    s_mov_b64 s[2:3], 0
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
+; CHECK-NEXT:    s_mov_b64 s[2:3], 0
 ; CHECK-NEXT:  .LBB0_1: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    v_add_u32_e32 v2, -1, v2
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    v_mov_b64_e32 v[0:1], s[2:3]
-; CHECK-NEXT:    s_mov_b64 s[2:3], 1
-; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
+; CHECK-NEXT:    v_mov_b64_e32 v[0:1], s[0:1]
+; CHECK-NEXT:    s_mov_b64 s[0:1], 1
+; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_1
 ; CHECK-NEXT:  .LBB0_2: ; %end
-; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 entry:
   br label %loop

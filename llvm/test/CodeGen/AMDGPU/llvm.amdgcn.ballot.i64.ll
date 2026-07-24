@@ -520,12 +520,14 @@ define amdgpu_ps void @non_cst_non_compare_input(ptr addrspace(1) %out, i32 %tid
 ; CHECK-LABEL: non_cst_non_compare_input:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; CHECK-NEXT:    ; implicit-def: $vgpr3
+; CHECK-NEXT:    s_mov_b64 exec, s[0:1]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB24_2
 ; CHECK-NEXT:  .LBB24_1: ; %A
 ; CHECK-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v2
-; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[0:1]
+; CHECK-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[0:1]
 ; CHECK-NEXT:  .LBB24_2:
 ; CHECK-NEXT:    s_or_b64 exec, exec, vcc
 ; CHECK-NEXT:    s_xor_b64 s[0:1], exec, vcc
@@ -534,10 +536,10 @@ define amdgpu_ps void @non_cst_non_compare_input(ptr addrspace(1) %out, i32 %tid
 ; CHECK-NEXT:    s_cbranch_execz .LBB24_4
 ; CHECK-NEXT:  .LBB24_3: ; %B
 ; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, 2, v2
-; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
+; CHECK-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
 ; CHECK-NEXT:  .LBB24_4: ; %exit
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
 ; CHECK-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v2
 ; CHECK-NEXT:    v_mov_b32_e32 v3, s1

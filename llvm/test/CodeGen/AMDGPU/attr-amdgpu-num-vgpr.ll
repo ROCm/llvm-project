@@ -1,10 +1,10 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.03--amdhsa < %s | FileCheck %s
+; RUN: llc -mtriple=amdgpu8.03--amdhsa < %s | FileCheck %s
 
 @var = addrspace(1) global float 0.0
 
 ; CHECK-LABEL: {{^}}max_20_vgprs:
 ; CHECK: VGPRBlocks: 4
-; CHECK: NumVGPRsForWavesPerEU: 17
+; CHECK: NumVGPRsForWavesPerEU: 20
 define amdgpu_kernel void @max_20_vgprs() #1 {
   %val0 = load volatile float, ptr addrspace(1) @var
   %val1 = load volatile float, ptr addrspace(1) @var

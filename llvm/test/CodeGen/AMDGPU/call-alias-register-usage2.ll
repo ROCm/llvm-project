@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck %s
+; RUN: llc -O0 -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck %s
 
 ; CallGraphAnalysis, which CodeGenSCC order depends on, does not look
 ; through aliases. If GlobalOpt is never run, we do not see direct
@@ -10,7 +10,7 @@
 ; CHECK:      .amdhsa_next_free_vgpr max(totalnumvgprs(.Lkernel2.num_agpr, .Lkernel2.num_vgpr), 1, 0)
 ; CHECK-NEXT: .amdhsa_next_free_sgpr max(.Lkernel2.numbered_sgpr+extrasgprs(.Lkernel2.uses_vcc, .Lkernel2.uses_flat_scratch, 1), 1, 0)-extrasgprs(.Lkernel2.uses_vcc, .Lkernel2.uses_flat_scratch, 1)
 
-; CHECK:      .set .Lkernel2.num_vgpr, max(32, .Laliasee_vgpr64_sgpr102.num_vgpr)
+; CHECK:      .set .Lkernel2.num_vgpr, max(41, .Laliasee_vgpr64_sgpr102.num_vgpr)
 ; CHECK-NEXT: .set .Lkernel2.num_agpr, max(0, .Laliasee_vgpr64_sgpr102.num_agpr)
 ; CHECK-NEXT: .set .Lkernel2.numbered_sgpr, max(33, .Laliasee_vgpr64_sgpr102.numbered_sgpr)
 define amdgpu_kernel void @kernel2() #0 {

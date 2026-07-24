@@ -1,14 +1,14 @@
-;RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel=0 -mtriple=amdgpu6.01 -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,SDAG %s
-;RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel=0 -mtriple=amdgpu8.02 -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,SDAG %s
-;RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel=1 -mtriple=amdgpu8.02 -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,GISEL %s
+;RUN: llc < %s -global-isel=0 -mtriple=amdgpu6.01 -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,SDAG %s
+;RUN: llc < %s -global-isel=0 -mtriple=amdgpu8.02 -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,SDAG %s
+;RUN: llc < %s -global-isel=1 -mtriple=amdgpu8.02 -amdgpu-atomic-optimizer-strategy=None | FileCheck -check-prefixes=CHECK,GISEL %s
 
 ;CHECK-LABEL: {{^}}test1:
 ;CHECK-NOT: s_waitcnt
 ;CHECK: buffer_atomic_swap v0, {{v[0-9]+}}, s[0:3], 0 idxen glc
 ;GISEL: s_movk_i32 [[SOFS:s[0-9]+]], 0x1ffc
-;SDAG: s_movk_i32 [[SOFS:s[0-9]+]], 0x1ffc
 ;CHECK: s_waitcnt vmcnt(0)
 ;CHECK: buffer_atomic_swap v0, {{v[0-9]+}}, s[0:3], 0 idxen glc
+;SDAG: s_movk_i32 [[SOFS:s[0-9]+]], 0x1ffc
 ;CHECK: s_waitcnt vmcnt(0)
 ;CHECK: buffer_atomic_swap v0, {{v\[[0-9]+:[0-9]+\]}}, s[0:3], 0 idxen offen glc
 ;CHECK: s_waitcnt vmcnt(0)
@@ -84,9 +84,9 @@ main_body:
 ;CHECK: buffer_atomic_cmpswap {{v\[[0-9]+:[0-9]+\]}}, {{v[0-9]+}}, s[0:3], 0 idxen glc
 ;CHECK: s_waitcnt vmcnt(0)
 ;GISEL: s_movk_i32 [[SOFS:s[0-9]+]], 0x1ffc
-;SDAG: s_movk_i32 [[SOFS:s[0-9]+]], 0x1ffc
 ;CHECK: buffer_atomic_cmpswap {{v\[[0-9]+:[0-9]+\]}}, {{v[0-9]+}}, s[0:3], 0 idxen glc
 ;CHECK: s_waitcnt vmcnt(0)
+;SDAG: s_movk_i32 [[SOFS:s[0-9]+]], 0x1ffc
 ;CHECK: buffer_atomic_cmpswap {{v\[[0-9]+:[0-9]+\]}}, {{v\[[0-9]+:[0-9]+\]}}, s[0:3], 0 idxen offen glc
 ;CHECK: s_waitcnt vmcnt(0)
 ;CHECK: buffer_atomic_cmpswap {{v\[[0-9]+:[0-9]+\]}}, {{v\[[0-9]+:[0-9]+\]}}, s[0:3], 0 idxen offen glc
@@ -128,9 +128,9 @@ main_body:
 ;CHECK: buffer_atomic_cmpswap_x2 {{v\[[0-9]+:[0-9]+\]}}, {{v[0-9]+}}, s[0:3], 0 idxen glc
 ;CHECK: s_waitcnt vmcnt(0)
 ;GISEL: s_movk_i32 [[SOFS:s[0-9]+]], 0x1ffc
-;SDAG: s_movk_i32 [[SOFS:s[0-9]+]], 0x1ffc
 ;CHECK: buffer_atomic_cmpswap_x2 {{v\[[0-9]+:[0-9]+\]}}, {{v[0-9]+}}, s[0:3], 0 idxen glc
 ;CHECK: s_waitcnt vmcnt(0)
+;SDAG: s_movk_i32 [[SOFS:s[0-9]+]], 0x1ffc
 ;CHECK: buffer_atomic_cmpswap_x2 {{v\[[0-9]+:[0-9]+\]}}, {{v\[[0-9]+:[0-9]+\]}}, s[0:3], 0 idxen offen glc
 ;CHECK: s_waitcnt vmcnt(0)
 ;CHECK: buffer_atomic_cmpswap_x2 {{v\[[0-9]+:[0-9]+\]}}, {{v\[[0-9]+:[0-9]+\]}}, s[0:3], 0 idxen offen glc

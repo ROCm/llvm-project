@@ -1350,6 +1350,7 @@ void SIWholeQuadMode::processBlock(MachineBasicBlock &MBB, BlockInfo &BI,
     if (FirstStrict == IE)
       FirstStrict = II;
 
+    // Adjust needs if this is first instruction of WQM requiring shader.
     if (IsEntry && Idx == 0 && (BI.InNeeds & StateWQM))
       Needs = StateWQM;
 

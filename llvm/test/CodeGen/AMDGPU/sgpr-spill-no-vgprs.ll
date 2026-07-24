@@ -234,5 +234,5 @@ ret:
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind "amdgpu-waves-per-eu"="9,10" }
+attributes #1 = { nounwind "amdgpu-waves-per-eu"="10,10" }
 

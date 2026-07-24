@@ -1,7 +1,7 @@
 ; UNSUPPORTED: expensive_checks
-; RUN: llc -O0 -mtriple=amdgcn--amdhsa -amdgpu-late-wave-transform=1 -disable-verify -debug-pass=Structure < %s 2>&1 \
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn--amdhsa -disable-verify -debug-pass=Structure < %s 2>&1 \
 ; RUN:   | FileCheck -match-full-lines -strict-whitespace -check-prefix=GCN-O0 %s
-; RUN: llc -O3 -mtriple=amdgcn--amdhsa -amdgpu-late-wave-transform=1 -disable-verify -debug-pass=Structure < %s 2>&1 \
+; RUN: llc -amdgpu-late-wave-transform=1 -O3 -mtriple=amdgcn--amdhsa -disable-verify -debug-pass=Structure < %s 2>&1 \
 ; RUN:   | FileCheck -match-full-lines -strict-whitespace -check-prefix=GCN-O3 %s
 
 ; REQUIRES: asserts
@@ -97,30 +97,26 @@
 ; GCN-O0-NEXT:        Register Usage Information Propagation
 ; GCN-O0-NEXT:        Eliminate PHI nodes for register allocation
 ; GCN-O0-NEXT:        Two-Address instruction pass
-; GCN-O0-NEXT:        AMDGPU Pre-RA Long Branch Reg
-; GCN-O0-NEXT:        MachineDominator Tree Construction
-; GCN-O0-NEXT:        Slot index numbering
-; GCN-O0-NEXT:        Live Interval Analysis
-; GCN-O0-NEXT:        AMDGPU Lower Strict WQM Operations
-; GCN-O0-NEXT:        Virtual Register Map
-; GCN-O0-NEXT:        Live Register Matrix
-; GCN-O0-NEXT:        SI Pre-allocate WWM Registers
-; GCN-O0-NEXT:        AMDGPU Partition VGPRs for RA
-; GCN-O0-NEXT:        Fast Register Allocator
 ; GCN-O0-NEXT:        AMDGPU Pre Wave Transform
 ; GCN-O0-NEXT:        Machine Cycle Info Analysis
+; GCN-O0-NEXT:        MachineDominator Tree Construction
 ; GCN-O0-NEXT:        AMDGPU Control Flow Wave Transform
 ; GCN-O0-NEXT:        Slot index numbering
 ; GCN-O0-NEXT:        Live Interval Analysis
-; GCN-O0-NEXT:        MachinePostDominator Tree Construction
-; GCN-O0-NEXT:        AMDGPU Lower WQM Operations
+; GCN-O0-NEXT:        SI Whole Quad Mode
+; GCN-O0-NEXT:        AMDGPU Pre-RA Long Branch Reg
 ; GCN-O0-NEXT:        Fast Register Allocator
-; GCN-O0-NEXT:        AMDGPU Reserve Allocated VGPRs
 ; GCN-O0-NEXT:        Machine Cycle Info Analysis
 ; GCN-O0-NEXT:        SI lower SGPR spill instructions
+; GCN-O0-NEXT:        Slot index numbering
+; GCN-O0-NEXT:        Live Interval Analysis
+; GCN-O0-NEXT:        Virtual Register Map
+; GCN-O0-NEXT:        Live Register Matrix
+; GCN-O0-NEXT:        SI Pre-allocate WWM Registers
 ; GCN-O0-NEXT:        Fast Register Allocator
 ; GCN-O0-NEXT:        SI Lower WWM Copies
 ; GCN-O0-NEXT:        AMDGPU Reserve WWM Registers
+; GCN-O0-NEXT:        Fast Register Allocator
 ; GCN-O0-NEXT:        SI Fix VGPR copies
 ; GCN-O0-NEXT:        Remove Redundant DEBUG_VALUE analysis
 ; GCN-O0-NEXT:        Fixup Statepoint Caller Saved
@@ -372,7 +368,6 @@
 ; GCN-O3-NEXT:        Remove dead machine instructions
 ; GCN-O3-NEXT:        SI Shrink Instructions
 ; GCN-O3-NEXT:        Register Usage Information Propagation
-; GCN-O3-NEXT:        AMDGPU Prepare AGPR Alloc
 ; GCN-O3-NEXT:        Detect Dead Lanes
 ; GCN-O3-NEXT:        Remove dead machine instructions
 ; GCN-O3-NEXT:        Init Undef Pass
@@ -382,42 +377,24 @@
 ; GCN-O3-NEXT:        SI Optimize VGPR LiveRange
 ; GCN-O3-NEXT:        Eliminate PHI nodes for register allocation
 ; GCN-O3-NEXT:        Two-Address instruction pass
-; GCN-O3-NEXT:        Slot index numbering
-; GCN-O3-NEXT:        Live Interval Analysis
-; GCN-O3-NEXT:        Register Coalescer
-; GCN-O3-NEXT:        Rename Disconnected Subregister Components
-; GCN-O3-NEXT:        Rewrite Partial Register Uses
-; GCN-O3-NEXT:        Machine Instruction Scheduler
-; GCN-O3-NEXT:        SI Form memory clauses
-; GCN-O3-NEXT:        AMDGPU Pre-RA Long Branch Reg
-; GCN-O3-NEXT:        AMDGPU Lower Strict WQM Operations
-; GCN-O3-NEXT:        Virtual Register Map
-; GCN-O3-NEXT:        Live Register Matrix
-; GCN-O3-NEXT:        SI Pre-allocate WWM Registers
-; GCN-O3-NEXT:        AMDGPU Partition VGPRs for RA
-; GCN-O3-NEXT:        AMDGPU Pre-RA Vector Register Hints
-; GCN-O3-NEXT:        Debug Variable Analysis
-; GCN-O3-NEXT:        Live Stack Slot Analysis
-; GCN-O3-NEXT:        Bundle Machine CFG Edges
-; GCN-O3-NEXT:        Spill Code Placement Analysis
-; GCN-O3-NEXT:        Lazy Machine Block Frequency Analysis
-; GCN-O3-NEXT:        Machine Optimization Remark Emitter
-; GCN-O3-NEXT:        Greedy Register Allocator
-; GCN-O3-NEXT:        GCN NSA Reassign
-; GCN-O3-NEXT:        AMDGPU Rewrite AGPR-Copy-MFMA
-; GCN-O3-NEXT:        Virtual Register Rewriter
-; GCN-O3-NEXT:        AMDGPU Emit Live Debug Variables
 ; GCN-O3-NEXT:        AMDGPU Pre Wave Transform
 ; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        AMDGPU Control Flow Wave Transform
+; GCN-O3-NEXT:        AMDGPU Prepare AGPR Alloc
 ; GCN-O3-NEXT:        Slot index numbering
 ; GCN-O3-NEXT:        Live Interval Analysis
-; GCN-O3-NEXT:        MachinePostDominator Tree Construction
-; GCN-O3-NEXT:        AMDGPU Lower WQM Operations
-; GCN-O3-NEXT:        SI optimize exec mask operations pre-RA
 ; GCN-O3-NEXT:        Machine Natural Loop Construction
 ; GCN-O3-NEXT:        Register Coalescer
-; GCN-O3-NEXT:        AMDGPU Pre-RA SGPR Optimizations
+; GCN-O3-NEXT:        Rename Disconnected Subregister Components
+; GCN-O3-NEXT:        Rewrite Partial Register Uses
+; GCN-O3-NEXT:        Machine Block Frequency Analysis
+; GCN-O3-NEXT:        Machine Instruction Scheduler
+; GCN-O3-NEXT:        AMDGPU Pre-RA optimizations
+; GCN-O3-NEXT:        SI Whole Quad Mode
+; GCN-O3-NEXT:        SI optimize exec mask operations pre-RA
+; GCN-O3-NEXT:        SI Form memory clauses
+; GCN-O3-NEXT:        AMDGPU Pre-RA Long Branch Reg
+; GCN-O3-NEXT:        Machine Natural Loop Construction
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        Debug Variable Analysis
 ; GCN-O3-NEXT:        Live Stack Slot Analysis
@@ -430,16 +407,22 @@
 ; GCN-O3-NEXT:        Greedy Register Allocator
 ; GCN-O3-NEXT:        Virtual Register Rewriter
 ; GCN-O3-NEXT:        Stack Slot Coloring
-; GCN-O3-NEXT:        AMDGPU Reserve Allocated VGPRs
 ; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        SI lower SGPR spill instructions
-; GCN-O3-NEXT:        Live Stack Slot Analysis
 ; GCN-O3-NEXT:        Virtual Register Map
 ; GCN-O3-NEXT:        Live Register Matrix
+; GCN-O3-NEXT:        SI Pre-allocate WWM Registers
+; GCN-O3-NEXT:        Live Stack Slot Analysis
 ; GCN-O3-NEXT:        Greedy Register Allocator
 ; GCN-O3-NEXT:        SI Lower WWM Copies
 ; GCN-O3-NEXT:        Virtual Register Rewriter
 ; GCN-O3-NEXT:        AMDGPU Reserve WWM Registers
+; GCN-O3-NEXT:        Virtual Register Map
+; GCN-O3-NEXT:        Live Register Matrix
+; GCN-O3-NEXT:        Greedy Register Allocator
+; GCN-O3-NEXT:        GCN NSA Reassign
+; GCN-O3-NEXT:        AMDGPU Rewrite AGPR-Copy-MFMA
+; GCN-O3-NEXT:        Virtual Register Rewriter
 ; GCN-O3-NEXT:        AMDGPU Mark Last Scratch Load
 ; GCN-O3-NEXT:        Stack Slot Coloring
 ; GCN-O3-NEXT:        Machine Copy Propagation Pass
@@ -498,3 +481,7 @@
 ; GCN-O3-NEXT:        Function register usage analysis
 ; GCN-O3-NEXT:        AMDGPU Assembly Printer
 ; GCN-O3-NEXT:        Free MachineFunction
+
+define void @empty() {
+  ret void
+}

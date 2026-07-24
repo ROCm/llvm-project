@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=amdgpu12.01-amd-amdhsa < %s | FileCheck %s
-; CHECK: Occupancy: 16
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu12.01-amd-amdhsa < %s | FileCheck %s
+; CHECK: Occupancy: 12
 
 %struct.zot = type { ptr }
 %struct.bar = type { i32, i32, i32, i32, i8, i32, i32, i32, i32, i32, i32, i32, i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr }

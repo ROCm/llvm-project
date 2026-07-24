@@ -8,10 +8,6 @@
 ; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu13.10 -mattr=+real-true16 -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefixes=GFX12PLUS-TRUE16 %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu13.10 -mattr=-real-true16 -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefixes=GFX12PLUS-FAKE16 %s
 
-; TODO-WAVETRANSFORM: LWT crashes in AMDGPULowerWQMOperations due to missing
-; undef subreg defs in physical register tuples post-regalloc. Revisit after
-; fixing the missing liveness problem.
-
 define amdgpu_ps <4 x float> @gather4_2d(<8 x i32> inreg %rsrc, <4 x i32> inreg %samp, half %s, half %t) {
 ; GFX9-LABEL: gather4_2d:
 ; GFX9:       ; %bb.0: ; %main_body

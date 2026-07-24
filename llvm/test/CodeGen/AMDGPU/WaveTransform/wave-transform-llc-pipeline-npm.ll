@@ -1,7 +1,7 @@
-; RUN: llc -O0 -enable-new-pm -mtriple=amdgcn--amdhsa -mcpu=gfx700 -amdgpu-late-wave-transform=1 -print-pipeline-passes=tree < %s 2>&1 \
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -enable-new-pm -mtriple=amdgcn--amdhsa -mcpu=gfx700 -print-pipeline-passes=tree < %s 2>&1 \
 ; RUN:   | FileCheck -check-prefix=GCN-O0 %s
 
-; RUN: llc -O3 -enable-new-pm -mtriple=amdgcn--amdhsa -mcpu=gfx700 -amdgpu-late-wave-transform=1 -print-pipeline-passes=tree < %s 2>&1 \
+; RUN: llc -amdgpu-late-wave-transform=1 -O3 -enable-new-pm -mtriple=amdgcn--amdhsa -mcpu=gfx700 -print-pipeline-passes=tree < %s 2>&1 \
 ; RUN:   | FileCheck -check-prefix=GCN-O3 %s
 
 ; GCN-O0: require<MachineModuleAnalysis>
@@ -65,20 +65,17 @@
 ; GCN-O0-NEXT:       reg-usage-propagation
 ; GCN-O0-NEXT:       phi-node-elimination
 ; GCN-O0-NEXT:       two-address-instruction
-; GCN-O0-NEXT:       amdgpu-pre-ra-long-branch-reg
-; GCN-O0-NEXT:       amdgpu-lower-strict-wqm
-; GCN-O0-NEXT:       si-pre-allocate-wwm-regs
-; GCN-O0-NEXT:       amdgpu-partition-vgprs-for-ra
-; GCN-O0-NEXT:       regallocfast<filter=vgpr>
 ; GCN-O0-NEXT:       amdgpu-pre-wave-transform
 ; GCN-O0-NEXT:       amdgpu-wave-transform
-; GCN-O0-NEXT:       amdgpu-lower-wqm-operations
+; GCN-O0-NEXT:       si-wqm
+; GCN-O0-NEXT:       amdgpu-pre-ra-long-branch-reg
 ; GCN-O0-NEXT:       regallocfast<filter=sgpr;no-clear-vregs>
-; GCN-O0-NEXT:       amdgpu-reserve-allocated-vgprs
 ; GCN-O0-NEXT:       si-lower-sgpr-spills
+; GCN-O0-NEXT:       si-pre-allocate-wwm-regs
 ; GCN-O0-NEXT:       regallocfast<filter=wwm;no-clear-vregs>
 ; GCN-O0-NEXT:       si-lower-wwm-copies
 ; GCN-O0-NEXT:       amdgpu-reserve-wwm-regs
+; GCN-O0-NEXT:       regallocfast<filter=vgpr>
 ; GCN-O0-NEXT:       si-fix-vgpr-copies
 ; GCN-O0-NEXT:       remove-redundant-debug-values
 ; GCN-O0-NEXT:       fixup-statepoint-caller-saved
@@ -212,7 +209,6 @@
 ; GCN-O3-NEXT:   function
 ; GCN-O3-NEXT:     machine-function
 ; GCN-O3-NEXT:       reg-usage-propagation
-; GCN-O3-NEXT:       amdgpu-prepare-agpr-alloc
 ; GCN-O3-NEXT:       detect-dead-lanes
 ; GCN-O3-NEXT:       dead-mi-elimination
 ; GCN-O3-NEXT:       init-undef
@@ -223,36 +219,31 @@
 ; GCN-O3-NEXT:       require<machine-loops>
 ; GCN-O3-NEXT:       phi-node-elimination
 ; GCN-O3-NEXT:       two-address-instruction
+; GCN-O3-NEXT:       amdgpu-pre-wave-transform
+; GCN-O3-NEXT:       amdgpu-wave-transform
+; GCN-O3-NEXT:       amdgpu-prepare-agpr-alloc
 ; GCN-O3-NEXT:       register-coalescer
 ; GCN-O3-NEXT:       rename-independent-subregs
 ; GCN-O3-NEXT:       amdgpu-rewrite-partial-reg-uses
 ; GCN-O3-NEXT:       machine-scheduler
+; GCN-O3-NEXT:       amdgpu-pre-ra-optimizations
+; GCN-O3-NEXT:       si-wqm
+; GCN-O3-NEXT:       si-optimize-exec-masking-pre-ra
 ; GCN-O3-NEXT:       si-form-memory-clauses
 ; GCN-O3-NEXT:       amdgpu-pre-ra-long-branch-reg
-; GCN-O3-NEXT:       amdgpu-lower-strict-wqm
-; GCN-O3-NEXT:       si-pre-allocate-wwm-regs
-; GCN-O3-NEXT:       amdgpu-partition-vgprs-for-ra
-; GCN-O3-NEXT:       amdgpu-pre-ra-vector-reg-hints
-; GCN-O3-NEXT:       greedy<vgpr>
-; GCN-O3-NEXT:       amdgpu-nsa-reassign
-; GCN-O3-NEXT:       amdgpu-rewrite-agpr-copy-mfma
-; GCN-O3-NEXT:       virt-reg-rewriter<no-clear-vregs>
-; GCN-O3-NEXT:       amdgpu-emit-live-debug-vars
-; GCN-O3-NEXT:       amdgpu-pre-wave-transform
-; GCN-O3-NEXT:       amdgpu-wave-transform
-; GCN-O3-NEXT:       amdgpu-lower-wqm-operations
-; GCN-O3-NEXT:       si-optimize-exec-masking-pre-ra
-; GCN-O3-NEXT:       register-coalescer
-; GCN-O3-NEXT:       amdgpu-pre-ra-sgpr-optimizations
 ; GCN-O3-NEXT:       greedy<sgpr>
 ; GCN-O3-NEXT:       virt-reg-rewriter<no-clear-vregs>
 ; GCN-O3-NEXT:       stack-slot-coloring
-; GCN-O3-NEXT:       amdgpu-reserve-allocated-vgprs
 ; GCN-O3-NEXT:       si-lower-sgpr-spills
+; GCN-O3-NEXT:       si-pre-allocate-wwm-regs
 ; GCN-O3-NEXT:       greedy<wwm>
 ; GCN-O3-NEXT:       si-lower-wwm-copies
-; GCN-O3-NEXT:       virt-reg-rewriter
+; GCN-O3-NEXT:       virt-reg-rewriter<no-clear-vregs>
 ; GCN-O3-NEXT:       amdgpu-reserve-wwm-regs
+; GCN-O3-NEXT:       greedy<vgpr>
+; GCN-O3-NEXT:       amdgpu-nsa-reassign
+; GCN-O3-NEXT:       amdgpu-rewrite-agpr-copy-mfma
+; GCN-O3-NEXT:       virt-reg-rewriter
 ; GCN-O3-NEXT:       amdgpu-mark-last-scratch-load
 ; GCN-O3-NEXT:       stack-slot-coloring
 ; GCN-O3-NEXT:       machine-cp

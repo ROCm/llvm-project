@@ -153,6 +153,7 @@ define void @nested_inf_loop_callbr(i32 %0, i32 %1) {
 ; ISA-NEXT:    ; Parent Loop BB1_1 Depth=1
 ; ISA-NEXT:    ; => This Inner Loop Header: Depth=2
 ; ISA-NEXT:    ; Label of block must be emitted
+; ISA-NEXT:    ; implicit-def: $vgpr4
 ; ISA-NEXT:  ; %bb.5: ; %TransitionBlock
 ; ISA-NEXT:    ; in Loop: Header=BB1_4 Depth=2
 ; ISA-NEXT:    ;;#ASMSTART

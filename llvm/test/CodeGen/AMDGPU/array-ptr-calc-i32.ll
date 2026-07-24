@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds < %s | FileCheck -check-prefix=SI-ALLOCA -check-prefix=SI %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=SI-PROMOTE -check-prefix=SI %s
+; RUN: llc -mtriple=amdgpu6.00 -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds < %s | FileCheck -check-prefix=SI-ALLOCA -check-prefix=SI %s
+; RUN: llc -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=SI-PROMOTE -check-prefix=SI %s
 
 declare i32 @llvm.amdgcn.mbcnt.lo(i32, i32) #1
 declare i32 @llvm.amdgcn.mbcnt.hi(i32, i32) #1
@@ -17,9 +17,10 @@ declare void @llvm.amdgcn.s.barrier() #2
 
 ; SI-ALLOCA: v_lshlrev_b32_e32 [[SIZE_SCALE:v[0-9]+]], 2, [[LOAD_A]]
 
-; SI-ALLOCA: buffer_store_dword {{v[0-9]+}}, [[SIZE_SCALE]], s[{{[0-9]+:[0-9]+}}], 0 offen offset:64
+; SI-ALLOCA: v_mov_b32_e32 [[PTRREG:v[0-9]+]], [[SIZE_SCALE]]
+; SI-ALLOCA: buffer_store_dword {{v[0-9]+}}, [[PTRREG]], s[{{[0-9]+:[0-9]+}}], 0 offen offset:64
 ; SI-ALLOCA: s_barrier
-; SI-ALLOCA: buffer_load_dword {{v[0-9]+}}, [[SIZE_SCALE]], s[{{[0-9]+:[0-9]+}}], 0 offen offset:64
+; SI-ALLOCA: buffer_load_dword {{v[0-9]+}}, [[PTRREG]], s[{{[0-9]+:[0-9]+}}], 0 offen offset:64
 ;
 ; SI-PROMOTE: LDSByteSize: 0
 define amdgpu_kernel void @test_private_array_ptr_calc(ptr addrspace(1) noalias %out, ptr addrspace(1) noalias %inA, ptr addrspace(1) noalias %inB) #0 {

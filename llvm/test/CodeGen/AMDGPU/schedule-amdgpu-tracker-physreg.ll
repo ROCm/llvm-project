@@ -1,11 +1,11 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00-amd-amdhsa -amdgpu-s-branch-bits=5 -amdgpu-long-branch-factor=0  < %s | FileCheck --check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00-amd-amdhsa -amdgpu-s-branch-bits=5 -amdgpu-long-branch-factor=0 -amdgpu-use-amdgpu-trackers=1  < %s | FileCheck --check-prefix=GCN-GCNTRACKERS %s
+; RUN: llc -mtriple=amdgpu6.00-amd-amdhsa -amdgpu-s-branch-bits=5 -amdgpu-long-branch-factor=0  < %s | FileCheck --check-prefix=GCN %s
+; RUN: llc -mtriple=amdgpu6.00-amd-amdhsa -amdgpu-s-branch-bits=5 -amdgpu-long-branch-factor=0 -amdgpu-use-amdgpu-trackers=1  < %s | FileCheck --check-prefix=GCN-GCNTRACKERS %s
 
 ; CHECK-LABEL: {{^}}spill:
 ; GCN:    NumSgprs: 104
 ; GCN-GCNTRACKERS:    NumSgprs: 104
 ; GCN:    NumVgprs: 1
-; GCN-GCNTRACKERS:    NumVgprs: 1
+; GCN-GCNTRACKERS:    NumVgprs: 2
 ; GCN:    ScratchSize: 0
 ; GCN-GCNTRACKERS:    ScratchSize: 0
 ; GCN:    Occupancy: 4
@@ -247,9 +247,9 @@ bb3:
 ; GCN:    NumSgprs: 104
 ; GCN-GCNTRACKERS:    NumSgprs: 104
 ; GCN:    NumVgprs: 2
-; GCN-GCNTRACKERS:    NumVgprs: 2
+; GCN-GCNTRACKERS:    NumVgprs: 3
 ; GCN:    ScratchSize: 8
-; GCN-GCNTRACKERS:    ScratchSize: 8
+; GCN-GCNTRACKERS:    ScratchSize: 12
 
 define void @spill_func(ptr addrspace(1) %arg) #0 {
 entry:

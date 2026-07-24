@@ -2,10 +2,9 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 < %s | FileCheck %s
 
 ; CHECK-LABEL: {{^}}else_no_execfix:
-; CHECK: s_xor_b64 exec, vcc, exec
-; CHECK: s_or_b64 exec, exec, vcc
-; CHECK-NEXT: s_xor_b64 [[DST:s\[[0-9]+:[0-9]+\]]], exec, vcc
-; CHECK-NEXT: s_mov_b64 exec, vcc
+; CHECK: s_xor_b64 [[SAVE:s\[[0-9]+:[0-9]+\]]], vcc, exec
+; CHECK: s_mov_b64 exec, [[SAVE]]
+; CHECK: s_cbranch_execz
 define amdgpu_ps float @else_no_execfix(i32 %z, float %v) #0 {
 main_body:
   %cc = icmp sgt i32 %z, 5
@@ -27,9 +26,8 @@ end:
 ; CHECK-LABEL: {{^}}else_execfix_leave_wqm:
 ; CHECK: ; %bb.0:
 ; CHECK-NEXT: s_mov_b64 [[INIT_EXEC:s\[[0-9]+:[0-9]+\]]], exec
-; CHECK: s_or_b64 exec, exec, vcc
-; CHECK-NEXT: s_xor_b64 [[DST:s\[[0-9]+:[0-9]+\]]], exec, vcc
-; CHECK-NEXT: s_mov_b64 exec, vcc
+; CHECK-NEXT: s_wqm_b64 exec, exec
+; CHECK: s_and_b64 exec, exec, [[INIT_EXEC]]
 define amdgpu_ps void @else_execfix_leave_wqm(i32 %z, float %v) #0 {
 main_body:
   %cc = icmp sgt i32 %z, 5

@@ -51,26 +51,26 @@ define amdgpu_vs void @multi_else_break(<4 x float> %vec, i32 %ub, i32 %cont) {
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[0:1]
 ; GCN-NEXT:    s_mov_b64 s[0:1], -1
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
+; GCN-NEXT:    s_mov_b64 s[6:7], 0
 ; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    s_branch .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %loop.exit.guard
 ; GCN-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[6:7]
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
+; GCN-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
+; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GCN-NEXT:    s_and_b64 s[6:7], s[6:7], exec
+; GCN-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
+; GCN-NEXT:    s_mov_b64 s[6:7], 0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_5
 ; GCN-NEXT:  .LBB0_2: ; %LOOP.outer
 ; GCN-NEXT:    ; =>This Loop Header: Depth=1
 ; GCN-NEXT:    ; Child Loop BB0_3 Depth 2
-; GCN-NEXT:    s_mov_b64 s[6:7], 0
+; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    s_and_b64 s[8:9], s[0:1], exec
 ; GCN-NEXT:  .LBB0_3: ; %LOOP
 ; GCN-NEXT:    ; Parent Loop BB0_2 Depth=1
@@ -79,7 +79,7 @@ define amdgpu_vs void @multi_else_break(<4 x float> %vec, i32 %ub, i32 %cont) {
 ; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
 ; GCN-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GCN-NEXT:    v_mov_b32_e32 v3, v1
-; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_1
@@ -90,7 +90,7 @@ define amdgpu_vs void @multi_else_break(<4 x float> %vec, i32 %ub, i32 %cont) {
 ; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
 ; GCN-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GCN-NEXT:    v_mov_b32_e32 v3, v2
-; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB0_3

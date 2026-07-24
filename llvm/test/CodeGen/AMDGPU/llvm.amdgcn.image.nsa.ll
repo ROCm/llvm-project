@@ -8,10 +8,6 @@
 ; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu11.00 -amdgpu-nsa-threshold=2 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T2 %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -amdgpu-nsa-threshold=3 -mtriple=amdgpu11.00 < %s | FileCheck -check-prefixes=GCN,NSA,NSA-T3,GFX11-NSA %s
 
-; TODO-WAVETRANSFORM: LWT crashes in AMDGPULowerWQMOperations due to missing
-; undef subreg defs in physical register tuples post-regalloc. Revisit after
-; fixing the missing liveness problem.
-
 ; Default NSA threshold is 3 addresses
 ; GCN-LABEL: {{^}}sample_2d:
 ; NONSA: v_mov_b32_e32 v2, v0

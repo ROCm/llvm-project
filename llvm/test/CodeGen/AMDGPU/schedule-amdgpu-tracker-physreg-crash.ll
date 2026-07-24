@@ -1,7 +1,5 @@
-; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00-amd-amdhsa -mattr=+xnack -amdgpu-use-amdgpu-trackers=1  2>&1  < %s | FileCheck -check-prefixes=ERR-GCNTRACKERS %s
-; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00-amd-amdhsa -mattr=+xnack 2>&1  < %s | FileCheck -check-prefixes=GCN %s
-
-; TODO-WAVETRANSFORM: We should ensure the second RUN line is consistent with the early structurizer-based flow. This should be addressed when we upstream the wave transform-enabled pass pipeline.
+; RUN: not llc -mtriple=amdgpu9.00-amd-amdhsa -mattr=+xnack -amdgpu-use-amdgpu-trackers=1  2>&1  < %s | FileCheck -check-prefixes=ERR-GCNTRACKERS %s
+; RUN: llc -mtriple=amdgpu9.00-amd-amdhsa -mattr=+xnack 2>&1  < %s | FileCheck -check-prefixes=GCN %s
 
 %asm.output = type { <16 x i32>, <16 x i32>, <16 x i32>, <8 x i32>, <2 x i32>, i32, ; sgprs
                      <16 x i32>, <7 x i32>, ; vgprs
@@ -18,15 +16,8 @@
                      i64 ; vcc
                      }
 
-; Perlane allocated VGPRs & VGPR used for CSR SGPR spills are marked reserved, so they 
-; don't appear in the allocation list.
-; ERR-GCNTRACKERS: no registers from class available to allocate
-
-; Still, its short of VGPRs required to reserve for WWM allocation, assuming atleast 1 VGPR 
-; each for CSR SGPR spills & virtual-WWM allocation.
-; GCN: cannot find enough VGPRs for wwm-regalloc
-; GCN-NOT: no registers from class available to allocate
-
+; ERR-GCNTRACKERS: ran out of registers during register allocation
+; GCN-NOT: ran out of registers during register allocation
 
 ; FIXME: GCN Trackers do not track pressure from PhysRegs, so scheduling is actually worse
 

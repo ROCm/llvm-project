@@ -14,6 +14,7 @@ define amdgpu_ps float @kill_true(i1 %.not) {
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %if1
 ; CHECK-NEXT:    s_mov_b32 s2, 0
+; CHECK-NEXT:    ; kill: def $sgpr2 killed $sgpr2 killed $exec
 ; CHECK-NEXT:    v_pk_mov_b32 v[0:1], 0, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v2, s2
 ; CHECK-NEXT:    flat_store_dword v[0:1], v2

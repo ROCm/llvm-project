@@ -590,7 +590,7 @@ private:
   // Before allocation, the VGPR registers are partitioned into two distinct
   // sets, one for WWM-values and the other for perlane-values. We should enable
   // the appropriate mask before their allocation begins.
-  BitVector VGPRAllocMask;
+  BitVector NonWWMRegMask;
 
   using ReservedRegSet = SmallSetVector<Register, 8>;
   // To track the VGPRs reserved for WWM instructions. They get stack slots
@@ -689,9 +689,9 @@ public:
                            : WWMReservedRegs.contains(Reg);
   }
 
-  void updateVGPRAllocMask(BitVector &RegMask) { VGPRAllocMask = RegMask; }
-  BitVector getVGPRAllocMask() const { return VGPRAllocMask; }
-  void clearVGPRAllocMask() { VGPRAllocMask.clear(); }
+  void updateNonWWMRegMask(BitVector &RegMask) { NonWWMRegMask = RegMask; }
+  BitVector getNonWWMRegMask() const { return NonWWMRegMask; }
+  void clearNonWWMRegAllocMask() { NonWWMRegMask.clear(); }
 
   SIModeRegisterDefaults getMode() const { return Mode; }
 

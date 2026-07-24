@@ -240,11 +240,10 @@ public:
 
 class VirtRegRewriterPass : public RequiredPassInfoMixin<VirtRegRewriterPass> {
   bool ClearVirtRegs = true;
-  bool PreserveVRM = false;
 
 public:
-  VirtRegRewriterPass(bool ClearVirtRegs = true, bool PreserveVRM = false)
-      : ClearVirtRegs(ClearVirtRegs), PreserveVRM(PreserveVRM) {}
+  VirtRegRewriterPass(bool ClearVirtRegs = true)
+      : ClearVirtRegs(ClearVirtRegs) {}
   LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM);
 

@@ -45,8 +45,6 @@ FunctionPass *createSILowerI1CopiesLegacyPass();
 FunctionPass *createSIShrinkInstructionsLegacyPass();
 FunctionPass *createSILoadStoreOptimizerLegacyPass();
 FunctionPass *createSIWholeQuadModeLegacyPass();
-FunctionPass *createAMDGPULowerStrictWQMLegacyPass();
-FunctionPass *createAMDGPULowerWQMOperationsLegacyPass();
 FunctionPass *createSIFixControlFlowLiveIntervalsPass();
 FunctionPass *createSIOptimizeExecMaskingPreRAPass();
 FunctionPass *createSIOptimizeVGPRLiveRangeLegacyPass();
@@ -65,7 +63,6 @@ ModulePass *createAMDGPURemoveIncompatibleFunctionsPass(const TargetMachine *);
 FunctionPass *createAMDGPUCodeGenPreparePass();
 FunctionPass *createAMDGPULateCodeGenPrepareLegacyPass();
 FunctionPass *createAMDGPUReserveWWMRegsPass();
-FunctionPass *createAMDGPUPartitionVGPRsForRAPass();
 FunctionPass *createAMDGPURewriteOutArgumentsPass();
 ModulePass *
 createAMDGPULowerModuleLDSLegacyPass(const AMDGPUTargetMachine *TM = nullptr);
@@ -73,8 +70,6 @@ ModulePass *createAMDGPULowerBufferFatPointersPass();
 ModulePass *createAMDGPULowerIntrinsicsLegacyPass();
 FunctionPass *createSIModeRegisterPass();
 FunctionPass *createGCNPreRAOptimizationsLegacyPass();
-FunctionPass *createAMDGPUPreRAVectorRegHintsLegacyPass();
-FunctionPass *createAMDGPUPreRASGPROptimizationsLegacyPass();
 FunctionPass *createAMDGPUPreloadKernArgPrologLegacyPass();
 ModulePass *createAMDGPUPreloadKernelArgumentsLegacyPass(const TargetMachine *);
 
@@ -181,12 +176,6 @@ private:
 void initializeAMDGPUPrepareAGPRAllocLegacyPass(PassRegistry &);
 extern char &AMDGPUPrepareAGPRAllocLegacyID;
 
-void initializeAMDGPUPartitionVGPRsForRALegacyPass(PassRegistry &);
-extern char &AMDGPUPartitionVGPRsForRALegacyID;
-
-void initializeAMDGPUReserveAllocatedVGPRsLegacyPass(PassRegistry &);
-extern char &AMDGPUReserveAllocatedVGPRsLegacyID;
-
 void initializeAMDGPUReserveWWMRegsLegacyPass(PassRegistry &);
 extern char &AMDGPUReserveWWMRegsLegacyID;
 
@@ -243,12 +232,6 @@ extern char &SILoadStoreOptimizerLegacyID;
 
 void initializeSIWholeQuadModeLegacyPass(PassRegistry &);
 extern char &SIWholeQuadModeID;
-
-void initializeAMDGPULowerStrictWQMLegacyPass(PassRegistry &);
-extern char &AMDGPULowerStrictWQMLegacyID;
-
-void initializeAMDGPULowerWQMOperationsLegacyPass(PassRegistry &);
-extern char &AMDGPULowerWQMOperationsLegacyID;
 
 void initializeSILowerControlFlowLegacyPass(PassRegistry &);
 extern char &SILowerControlFlowLegacyID;
@@ -594,12 +577,6 @@ extern char &GCNPreRALongBranchRegID;
 void initializeGCNPreRAOptimizationsLegacyPass(PassRegistry &);
 extern char &GCNPreRAOptimizationsID;
 
-void initializeAMDGPUPreRAVectorRegHintsLegacyPass(PassRegistry &);
-extern char &AMDGPUPreRAVectorRegHintsID;
-
-void initializeAMDGPUPreRASGPROptimizationsLegacyPass(PassRegistry &);
-extern char &AMDGPUPreRASGPROptimizationsID;
-
 FunctionPass *createAMDGPUSetWavePriorityPass();
 void initializeAMDGPUSetWavePriorityLegacyPass(PassRegistry &);
 
@@ -630,17 +607,6 @@ extern char &AMDGPUPreWaveTransformID;
 
 class AMDGPUPreWaveTransformPass
     : public RequiredPassInfoMixin<AMDGPUPreWaveTransformPass> {
-public:
-  PreservedAnalyses run(MachineFunction &MF,
-                        MachineFunctionAnalysisManager &MFAM);
-};
-
-FunctionPass *createAMDGPUEmitLiveDebugVarsPass();
-void initializeAMDGPUEmitLiveDebugVarsLegacyPass(PassRegistry &);
-extern char &AMDGPUEmitLiveDebugVarsLegacyID;
-
-class AMDGPUEmitLiveDebugVarsPass
-    : public OptionalPassInfoMixin<AMDGPUEmitLiveDebugVarsPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

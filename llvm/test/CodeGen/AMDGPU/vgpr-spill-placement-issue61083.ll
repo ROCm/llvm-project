@@ -17,7 +17,7 @@ define amdgpu_kernel void @__omp_offloading_16_dd2df_main_l9()  {
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0
 ; CHECK-NEXT:    global_load_ushort v2, v0, s[4:5] offset:4
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    buffer_store_dword v2, off, s[0:3], 0 ; 4-byte Folded Spill
+; CHECK-NEXT:    buffer_store_dword v2, off, s[0:3], 0 offset:4 ; 4-byte Folded Spill
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], v1, s4
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 0
@@ -27,7 +27,7 @@ define amdgpu_kernel void @__omp_offloading_16_dd2df_main_l9()  {
 ; CHECK-NEXT:    v_writelane_b32 v3, s6, 0
 ; CHECK-NEXT:    v_writelane_b32 v3, s7, 1
 ; CHECK-NEXT:    s_or_saveexec_b64 s[8:9], -1
-; CHECK-NEXT:    buffer_store_dword v3, off, s[0:3], 0 offset:4 ; 4-byte Folded Spill
+; CHECK-NEXT:    buffer_store_dword v3, off, s[0:3], 0 ; 4-byte Folded Spill
 ; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -35,13 +35,13 @@ define amdgpu_kernel void @__omp_offloading_16_dd2df_main_l9()  {
 ; CHECK-NEXT:  .LBB0_1: ; %bb193
 ; CHECK-NEXT:  .LBB0_2: ; %bb194
 ; CHECK-NEXT:    s_or_saveexec_b64 s[8:9], -1
-; CHECK-NEXT:    buffer_load_dword v3, off, s[0:3], 0 offset:4 ; 4-byte Folded Reload
+; CHECK-NEXT:    buffer_load_dword v3, off, s[0:3], 0 ; 4-byte Folded Reload
 ; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_readlane_b32 s4, v3, 0
 ; CHECK-NEXT:    v_readlane_b32 s5, v3, 1
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
-; CHECK-NEXT:    buffer_load_dword v0, off, s[0:3], 0 ; 4-byte Folded Reload
+; CHECK-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:4 ; 4-byte Folded Reload
 ; CHECK-NEXT:    s_mov_b32 s4, 0xffff
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e64 v0, s4, v0
@@ -51,7 +51,7 @@ define amdgpu_kernel void @__omp_offloading_16_dd2df_main_l9()  {
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB0_3
 ; CHECK-NEXT:    s_branch .LBB0_4
 ; CHECK-NEXT:  .LBB0_3: ; %bb201
-; CHECK-NEXT:    buffer_load_dword v1, off, s[0:3], 0 ; 4-byte Folded Reload
+; CHECK-NEXT:    buffer_load_dword v1, off, s[0:3], 0 offset:4 ; 4-byte Folded Reload
 ; CHECK-NEXT:    s_getpc_b64 s[4:5]
 ; CHECK-NEXT:    s_add_u32 s4, s4, V2@rel32@lo+4
 ; CHECK-NEXT:    s_addc_u32 s5, s5, V2@rel32@hi+12
