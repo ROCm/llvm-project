@@ -89,6 +89,29 @@ TEST(ElfView, RejectsOverflowingTextFileRange) {
   llvm::consumeError(ViewOrErr.takeError());
 }
 
+TEST(ElfView, RejectsOutOfBoundsDynamicSegment) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  ElfView::ELFT::Ehdr Header{};
+  std::memcpy(&Header, Obj.Bytes.data(), sizeof(Header));
+  Header.e_phoff = Obj.Bytes.size();
+  Header.e_phentsize = sizeof(ElfView::ELFT::Phdr);
+  Header.e_phnum = 1;
+  Obj.Bytes.resize(Obj.Bytes.size() + sizeof(ElfView::ELFT::Phdr));
+  std::memcpy(Obj.Bytes.data(), &Header, sizeof(Header));
+
+  ElfView::ELFT::Phdr BadDynamic{};
+  BadDynamic.p_type = llvm::ELF::PT_DYNAMIC;
+  BadDynamic.p_filesz = std::numeric_limits<uint32_t>::max();
+  std::memcpy(Obj.Bytes.data() + Header.e_phoff, &BadDynamic,
+              sizeof(BadDynamic));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  EXPECT_FALSE((bool)ViewOrErr);
+  llvm::consumeError(ViewOrErr.takeError());
+}
+
 // -- ElfView::findKernelAtAddress ---------------------------------------------
 
 TEST(ElfView, FindKernelAtAddressResolvesNearestPrecedingForZeroSizeSymbol) {

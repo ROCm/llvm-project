@@ -404,6 +404,23 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
     return SectionsOrErr.takeError();
   ELFT::ShdrRange Sections = *SectionsOrErr;
 
+  for (const ELFT::Shdr &Shdr : Sections) {
+    if (Shdr.sh_type != ELF::SHT_NOBITS && Shdr.sh_size != 0 &&
+        (Shdr.sh_offset > Size || Shdr.sh_size > Size - Shdr.sh_offset))
+      return createStringError(object::object_error::parse_failed,
+                               "section extends past end of file");
+  }
+
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (!PhdrsOrErr)
+    return PhdrsOrErr.takeError();
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_filesz != 0 &&
+        (Phdr.p_offset > Size || Phdr.p_filesz > Size - Phdr.p_offset))
+      return createStringError(object::object_error::parse_failed,
+                               "segment extends past end of file");
+  }
+
   const ELFT::Shdr *Text = nullptr;
   unsigned TextIdx = 0;
   unsigned Idx = 0;
