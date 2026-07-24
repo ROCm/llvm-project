@@ -17,7 +17,7 @@
 // COM: Kernel 1: two tensor_load_to_lds with different descriptors
 // COM: (s[4:11] and s[16:23]). Both should be patched independently.
 // COM: The second tensor_load's predecessor after patching is the first's
-// COM: branch-back, not its own s_pack_hh — idempotency guard must not
+// COM: branch-back, not its own s_pack_hh; the idempotency guard must not
 // COM: false-positive on it.
 // DISASM-LABEL: <test_tensor_multi_different>:
 // DISASM: s_branch
@@ -31,7 +31,7 @@
 // DISASM: s_branch
 
 // COM: Kernel 2: two tensor_load_to_lds sharing the same descriptor
-// COM: (s[4:11]). Both should still be patched — the idempotency guard
+// COM: (s[4:11]). Both should still be patched; the idempotency guard
 // COM: checks the immediately preceding instruction, and after patching
 // COM: the first, the second's predecessor is an s_branch (not s_pack_hh).
 // DISASM-LABEL: <test_tensor_multi_same>:
