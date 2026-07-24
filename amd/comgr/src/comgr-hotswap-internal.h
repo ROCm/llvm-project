@@ -350,8 +350,12 @@ enum class DisplacementMapBias {
 
 class DisplacementPlan {
 public:
+  /// When \p RelocateTrailingSections is true, allocated sections after
+  /// `.text` move forward by the padded growth. The default preserves the
+  /// existing mode in which their virtual addresses remain fixed.
   static llvm::Expected<DisplacementPlan>
-  create(const ElfView &Elf, llvm::ArrayRef<DisplacementEdit> Edits);
+  create(const ElfView &Elf, llvm::ArrayRef<DisplacementEdit> Edits,
+         bool RelocateTrailingSections = false);
 
   llvm::ArrayRef<DisplacementEdit> edits() const { return Edits; }
   uint64_t oldTextSize() const { return OldTextSize; }
@@ -370,16 +374,21 @@ public:
   llvm::SmallVector<uint8_t> buildText(llvm::ArrayRef<uint8_t> OldText,
                                        llvm::ArrayRef<uint8_t> SNopBytes) const;
 
+  bool relocatesTrailingSections() const { return RelocateTrailingSections; }
+
 private:
   DisplacementPlan(uint64_t OldTextSize, uint64_t RawGrowth,
-                   uint64_t PaddedGrowth, std::vector<DisplacementEdit> Edits)
+                   uint64_t PaddedGrowth, std::vector<DisplacementEdit> Edits,
+                   bool RelocateTrailingSections)
       : OldTextSize(OldTextSize), RawGrowth(RawGrowth),
-        PaddedGrowth(PaddedGrowth), Edits(std::move(Edits)) {}
+        PaddedGrowth(PaddedGrowth), Edits(std::move(Edits)),
+        RelocateTrailingSections(RelocateTrailingSections) {}
 
   uint64_t OldTextSize = 0;
   uint64_t RawGrowth = 0;
   uint64_t PaddedGrowth = 0;
   std::vector<DisplacementEdit> Edits;
+  bool RelocateTrailingSections = false;
 };
 
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
@@ -1575,7 +1584,8 @@ std::unique_ptr<llvm::WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
 /// Apply direct .text displacement to a newly allocated output buffer.
 llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>>
 tryApplyTextDisplacementToNewBuffer(const ElfView &Elf, const LLVMState &LS,
-                                    llvm::ArrayRef<DisplacementEdit> Edits);
+                                    llvm::ArrayRef<DisplacementEdit> Edits,
+                                    bool RelocateTrailingSections = false);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------
 

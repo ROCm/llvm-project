@@ -104,9 +104,15 @@ Expected<uint64_t> remapAllocatedAddress(const ElfView &Elf,
   if (!OwnerOrErr)
     return OwnerOrErr.takeError();
 
-  // The current displacement mode changes non-.text file offsets but preserves
-  // their virtual addresses. Whole-object relocation extends this mapping in a
-  // later layer.
+  const ELFT::Shdr &Owner = **OwnerOrErr;
+  if (Plan.relocatesTrailingSections() && Owner.sh_addr >= OldTextEnd) {
+    if (OldAddress >
+        std::numeric_limits<uint64_t>::max() - Plan.paddedGrowth()) {
+      return makeDisplacementError(Twine(Context) +
+                                   " overflows after section displacement");
+    }
+    return OldAddress + Plan.paddedGrowth();
+  }
   return OldAddress;
 }
 
@@ -207,6 +213,150 @@ Error validateVirtualGrowth(const ElfView &Elf, uint64_t PaddedGrowth) {
     if (Phdr.p_vaddr >= OldTextEnd && Phdr.p_vaddr < NewTextEnd) {
       return makeDisplacementError(
           "displaced .text would overlap a later PT_LOAD segment");
+    }
+  }
+  return Error::success();
+}
+
+Error validateTrailingRelocationLayout(const ElfView &Elf) {
+  if (Elf.file().getHeader().e_type == ELF::ET_REL) {
+    return makeDisplacementError(
+        "trailing-section relocation requires a linked ELF object");
+  }
+  if (Elf.textSize() > std::numeric_limits<uint64_t>::max() - Elf.textAddr() ||
+      Elf.textSize() >
+          std::numeric_limits<uint64_t>::max() - Elf.textOffset()) {
+    return makeDisplacementError(
+        ".text range overflows while validating trailing relocation");
+  }
+  const uint64_t TextAddressEnd = Elf.textAddr() + Elf.textSize();
+  const uint64_t TextFileEnd = Elf.textOffset() + Elf.textSize();
+
+  SmallVector<const ELFT::Shdr *, 8> AllocatedSections;
+  for (const ELFT::Shdr &Shdr : Elf.sections()) {
+    if (Shdr.sh_type == ELF::SHT_DYNAMIC) {
+      return makeDisplacementError(
+          "dynamic sections require dynamic-tag address repair");
+    }
+    if (Shdr.sh_type == ELF::SHT_REL || Shdr.sh_type == ELF::SHT_RELA) {
+      return makeDisplacementError(
+          "relocation sections require relocation-record repair");
+    }
+    if (!(Shdr.sh_flags & ELF::SHF_ALLOC) || Shdr.sh_size == 0)
+      continue;
+    if (Shdr.sh_size > std::numeric_limits<uint64_t>::max() - Shdr.sh_addr) {
+      return makeDisplacementError("allocated section address range overflows");
+    }
+    AllocatedSections.push_back(&Shdr);
+    if (&Shdr == Elf.textSection())
+      continue;
+    if (Shdr.sh_flags & ELF::SHF_EXECINSTR) {
+      return makeDisplacementError(
+          "trailing relocation supports one executable section");
+    }
+
+    const bool AddressBefore = Shdr.sh_addr + Shdr.sh_size <= Elf.textAddr();
+    const bool AddressAfter = Shdr.sh_addr >= TextAddressEnd;
+    if (!AddressBefore && !AddressAfter) {
+      return makeDisplacementError(
+          "allocated section overlaps .text in virtual memory");
+    }
+
+    if (Shdr.sh_type != ELF::SHT_NOBITS) {
+      if (Shdr.sh_size >
+          std::numeric_limits<uint64_t>::max() - Shdr.sh_offset) {
+        return makeDisplacementError("allocated section file range overflows");
+      }
+      const bool FileBefore = Shdr.sh_offset + Shdr.sh_size <= Elf.textOffset();
+      const bool FileAfter = Shdr.sh_offset >= TextFileEnd;
+      if ((!FileBefore && !FileAfter) || FileBefore != AddressBefore) {
+        return makeDisplacementError(
+            "allocated section file and virtual ordering disagree");
+      }
+    }
+  }
+
+  for (size_t I = 0; I != AllocatedSections.size(); ++I) {
+    const ELFT::Shdr &Left = *AllocatedSections[I];
+    const uint64_t LeftEnd = Left.sh_addr + Left.sh_size;
+    for (size_t J = I + 1; J != AllocatedSections.size(); ++J) {
+      const ELFT::Shdr &Right = *AllocatedSections[J];
+      const uint64_t RightEnd = Right.sh_addr + Right.sh_size;
+      if (Left.sh_addr < RightEnd && Right.sh_addr < LeftEnd) {
+        return makeDisplacementError(
+            "allocated sections overlap in virtual memory");
+      }
+    }
+  }
+
+  Expected<ELFT::PhdrRange> PhdrsOrErr = Elf.file().program_headers();
+  if (!PhdrsOrErr) {
+    return makeDisplacementError(
+        "failed to read program headers while validating trailing "
+        "relocation: " +
+        Twine(toString(PhdrsOrErr.takeError())));
+  }
+  bool FoundTextLoad = false;
+  SmallVector<const ELFT::Phdr *, 8> LoadSegments;
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_type == ELF::PT_DYNAMIC) {
+      return makeDisplacementError(
+          "PT_DYNAMIC requires dynamic-tag address repair");
+    }
+    if (Phdr.p_type != ELF::PT_LOAD)
+      continue;
+    if (Phdr.p_filesz > std::numeric_limits<uint64_t>::max() - Phdr.p_offset ||
+        Phdr.p_memsz > std::numeric_limits<uint64_t>::max() - Phdr.p_vaddr) {
+      return makeDisplacementError("PT_LOAD range overflows");
+    }
+    if (Phdr.p_align > 1 && !isPowerOf2_64(Phdr.p_align)) {
+      return makeDisplacementError("PT_LOAD alignment is not a power of two");
+    }
+    if (Phdr.p_align != 0 &&
+        Phdr.p_offset % Phdr.p_align != Phdr.p_vaddr % Phdr.p_align) {
+      return makeDisplacementError(
+          "PT_LOAD file and virtual alignment are incongruent");
+    }
+    LoadSegments.push_back(&Phdr);
+
+    const uint64_t FileEnd = Phdr.p_offset + Phdr.p_filesz;
+    const uint64_t AddressEnd = Phdr.p_vaddr + Phdr.p_memsz;
+    const bool ContainsTextFile =
+        Phdr.p_offset <= Elf.textOffset() && FileEnd >= TextFileEnd;
+    const bool ContainsTextAddress =
+        Phdr.p_vaddr <= Elf.textAddr() && AddressEnd >= TextAddressEnd;
+    if (ContainsTextFile || ContainsTextAddress) {
+      if (!ContainsTextFile || !ContainsTextAddress || FileEnd != TextFileEnd) {
+        return makeDisplacementError(
+            ".text is not the last file-backed content in its PT_LOAD");
+      }
+      FoundTextLoad = true;
+      continue;
+    }
+
+    const bool FileBefore = FileEnd <= Elf.textOffset();
+    const bool FileAfter = Phdr.p_offset >= TextFileEnd;
+    const bool AddressBefore = AddressEnd <= Elf.textAddr();
+    const bool AddressAfter = Phdr.p_vaddr >= TextAddressEnd;
+    if ((!FileBefore && !FileAfter) || (!AddressBefore && !AddressAfter) ||
+        FileBefore != AddressBefore) {
+      return makeDisplacementError(
+          "PT_LOAD file and virtual ordering around .text disagree");
+    }
+  }
+  if (!FoundTextLoad)
+    return makeDisplacementError(".text is not covered by a PT_LOAD segment");
+
+  for (size_t I = 0; I != LoadSegments.size(); ++I) {
+    const ELFT::Phdr &Left = *LoadSegments[I];
+    const uint64_t LeftEnd = Left.p_vaddr + Left.p_memsz;
+    for (size_t J = I + 1; J != LoadSegments.size(); ++J) {
+      const ELFT::Phdr &Right = *LoadSegments[J];
+      const uint64_t RightEnd = Right.p_vaddr + Right.p_memsz;
+      if (Left.p_vaddr < RightEnd && Right.p_vaddr < LeftEnd) {
+        return makeDisplacementError(
+            "PT_LOAD segments overlap in virtual memory");
+      }
     }
   }
   return Error::success();
@@ -812,7 +962,8 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
 }
 
 Error adjustSectionHeadersForTextGrowth(uint8_t *Elf, size_t ElfSize,
-                                        const ElfView &OldElf, size_t Growth) {
+                                        const ElfView &OldElf, size_t Growth,
+                                        bool RelocateAddresses) {
   if (ElfSize < sizeof(Ehdr)) {
     return makeDisplacementError(
         "displaced ELF is smaller than its ELF64 header");
@@ -821,6 +972,7 @@ Error adjustSectionHeadersForTextGrowth(uint8_t *Elf, size_t ElfSize,
   const uint64_t TextOffset = OldElf.textOffset();
   const uint64_t TextSize = OldElf.textSize();
   const uint64_t TextEnd = TextOffset + TextSize;
+  const uint64_t TextAddressEnd = OldElf.textAddr() + TextSize;
 
   uint64_t Shoff = 0;
   uint16_t Shentsize = 0;
@@ -832,8 +984,15 @@ Error adjustSectionHeadersForTextGrowth(uint8_t *Elf, size_t ElfSize,
     return makeDisplacementError(
         "displaced ELF section-header entry is too small");
   }
+  if (Shnum != OldElf.sections().size()) {
+    return makeDisplacementError(
+        "section count changed before displacement repair");
+  }
 
   if (Shoff >= TextEnd) {
+    if (Shoff > std::numeric_limits<uint64_t>::max() - Growth)
+      return makeDisplacementError(
+          "section-header offset overflows after displacement");
     uint64_t NewShoff = Shoff + Growth;
     std::memcpy(Elf + offsetof(Ehdr, e_shoff), &NewShoff, sizeof(NewShoff));
     Shoff = NewShoff;
@@ -846,24 +1005,41 @@ Error adjustSectionHeadersForTextGrowth(uint8_t *Elf, size_t ElfSize,
           "displaced ELF section-header table is out of bounds");
     }
     uint8_t *Sh = Elf + ShPos;
-    uint64_t ShOffset = 0;
-    std::memcpy(&ShOffset, Sh + offsetof(Shdr, sh_offset), sizeof(ShOffset));
+    const ELFT::Shdr &OldShdr = OldElf.sections()[I];
 
     if (I == OldElf.textSectionIndex()) {
+      if (TextSize > std::numeric_limits<uint64_t>::max() - Growth)
+        return makeDisplacementError(".text size overflows after displacement");
       uint64_t NewTextSize = TextSize + Growth;
       std::memcpy(Sh + offsetof(Shdr, sh_size), &NewTextSize,
                   sizeof(NewTextSize));
-    } else if (ShOffset >= TextEnd) {
-      uint64_t NewOffset = ShOffset + Growth;
+      continue;
+    }
+
+    if (OldShdr.sh_offset >= TextEnd) {
+      if (OldShdr.sh_offset > std::numeric_limits<uint64_t>::max() - Growth)
+        return makeDisplacementError(
+            "section file offset overflows after displacement");
+      uint64_t NewOffset = OldShdr.sh_offset + Growth;
       std::memcpy(Sh + offsetof(Shdr, sh_offset), &NewOffset,
                   sizeof(NewOffset));
+    }
+    if (RelocateAddresses && (OldShdr.sh_flags & ELF::SHF_ALLOC) &&
+        OldShdr.sh_addr >= TextAddressEnd) {
+      if (OldShdr.sh_addr > std::numeric_limits<uint64_t>::max() - Growth)
+        return makeDisplacementError(
+            "section virtual address overflows after displacement");
+      uint64_t NewAddress = OldShdr.sh_addr + Growth;
+      std::memcpy(Sh + offsetof(Shdr, sh_addr), &NewAddress,
+                  sizeof(NewAddress));
     }
   }
   return Error::success();
 }
 
 Error adjustProgramHeadersForTextGrowth(uint8_t *Elf, size_t ElfSize,
-                                        const ElfView &OldElf, size_t Growth) {
+                                        const ElfView &OldElf, size_t Growth,
+                                        bool RelocateAddresses) {
   if (ElfSize < sizeof(Ehdr)) {
     return makeDisplacementError(
         "displaced ELF is smaller than its ELF64 header");
@@ -871,6 +1047,7 @@ Error adjustProgramHeadersForTextGrowth(uint8_t *Elf, size_t ElfSize,
 
   const uint64_t TextOffset = OldElf.textOffset();
   const uint64_t TextEnd = TextOffset + OldElf.textSize();
+  const uint64_t TextAddressEnd = OldElf.textAddr() + OldElf.textSize();
 
   uint64_t Phoff = 0;
   uint16_t Phentsize = 0;
@@ -884,9 +1061,24 @@ Error adjustProgramHeadersForTextGrowth(uint8_t *Elf, size_t ElfSize,
   }
 
   if (Phoff >= TextEnd) {
+    if (Phoff > std::numeric_limits<uint64_t>::max() - Growth)
+      return makeDisplacementError(
+          "program-header offset overflows after displacement");
     uint64_t NewPhoff = Phoff + Growth;
     std::memcpy(Elf + offsetof(Ehdr, e_phoff), &NewPhoff, sizeof(NewPhoff));
     Phoff = NewPhoff;
+  }
+
+  Expected<ELFT::PhdrRange> OldPhdrsOrErr = OldElf.file().program_headers();
+  if (!OldPhdrsOrErr) {
+    return makeDisplacementError(
+        "failed to read old program headers during displacement: " +
+        Twine(toString(OldPhdrsOrErr.takeError())));
+  }
+  ELFT::PhdrRange OldPhdrs = *OldPhdrsOrErr;
+  if (Phnum != OldPhdrs.size()) {
+    return makeDisplacementError(
+        "program-header count changed before displacement repair");
   }
 
   for (uint16_t I = 0; I < Phnum; ++I) {
@@ -896,23 +1088,73 @@ Error adjustProgramHeadersForTextGrowth(uint8_t *Elf, size_t ElfSize,
           "displaced ELF program-header table is out of bounds");
     }
     uint8_t *Ph = Elf + PhPos;
-    uint64_t POffset = 0;
-    uint64_t PFilesz = 0;
-    uint64_t PMemsz = 0;
-    std::memcpy(&POffset, Ph + offsetof(Phdr, p_offset), sizeof(POffset));
-    std::memcpy(&PFilesz, Ph + offsetof(Phdr, p_filesz), sizeof(PFilesz));
-    std::memcpy(&PMemsz, Ph + offsetof(Phdr, p_memsz), sizeof(PMemsz));
+    const ELFT::Phdr &OldPhdr = OldPhdrs[I];
 
-    if (POffset <= TextOffset && POffset + PFilesz >= TextEnd) {
-      PFilesz += Growth;
-      PMemsz = std::max(PMemsz, PFilesz);
-      std::memcpy(Ph + offsetof(Phdr, p_filesz), &PFilesz, sizeof(PFilesz));
-      std::memcpy(Ph + offsetof(Phdr, p_memsz), &PMemsz, sizeof(PMemsz));
-    } else if (POffset >= TextEnd) {
-      POffset += Growth;
-      std::memcpy(Ph + offsetof(Phdr, p_offset), &POffset, sizeof(POffset));
+    if (OldPhdr.p_offset <= TextOffset &&
+        OldPhdr.p_filesz <=
+            std::numeric_limits<uint64_t>::max() - OldPhdr.p_offset &&
+        OldPhdr.p_offset + OldPhdr.p_filesz >= TextEnd) {
+      if (OldPhdr.p_filesz > std::numeric_limits<uint64_t>::max() - Growth)
+        return makeDisplacementError(
+            "program-header file size overflows after displacement");
+      uint64_t NewFileSize = OldPhdr.p_filesz + Growth;
+      uint64_t NewMemorySize =
+          std::max<uint64_t>(OldPhdr.p_memsz, NewFileSize);
+      if (RelocateAddresses) {
+        if (OldPhdr.p_memsz > std::numeric_limits<uint64_t>::max() - Growth)
+          return makeDisplacementError(
+              "program-header memory size overflows after displacement");
+        NewMemorySize = OldPhdr.p_memsz + Growth;
+      }
+      std::memcpy(Ph + offsetof(Phdr, p_filesz), &NewFileSize,
+                  sizeof(NewFileSize));
+      std::memcpy(Ph + offsetof(Phdr, p_memsz), &NewMemorySize,
+                  sizeof(NewMemorySize));
+    } else if (OldPhdr.p_offset >= TextEnd) {
+      if (OldPhdr.p_offset > std::numeric_limits<uint64_t>::max() - Growth)
+        return makeDisplacementError(
+            "program-header file offset overflows after displacement");
+      uint64_t NewOffset = OldPhdr.p_offset + Growth;
+      std::memcpy(Ph + offsetof(Phdr, p_offset), &NewOffset, sizeof(NewOffset));
+    }
+
+    if (RelocateAddresses && OldPhdr.p_memsz != 0 &&
+        OldPhdr.p_vaddr >= TextAddressEnd) {
+      if (OldPhdr.p_vaddr > std::numeric_limits<uint64_t>::max() - Growth)
+        return makeDisplacementError(
+            "program-header virtual address overflows after displacement");
+      uint64_t NewVirtualAddress = OldPhdr.p_vaddr + Growth;
+      std::memcpy(Ph + offsetof(Phdr, p_vaddr), &NewVirtualAddress,
+                  sizeof(NewVirtualAddress));
+      if (OldPhdr.p_paddr != 0) {
+        if (OldPhdr.p_paddr > std::numeric_limits<uint64_t>::max() - Growth)
+          return makeDisplacementError(
+              "program-header physical address overflows after displacement");
+        uint64_t NewPhysicalAddress = OldPhdr.p_paddr + Growth;
+        std::memcpy(Ph + offsetof(Phdr, p_paddr), &NewPhysicalAddress,
+                    sizeof(NewPhysicalAddress));
+      }
     }
   }
+  return Error::success();
+}
+
+Error adjustElfEntryForDisplacement(uint8_t *Elf, size_t ElfSize,
+                                    const ElfView &OldElf,
+                                    const DisplacementPlan &Plan) {
+  if (ElfSize < sizeof(Ehdr))
+    return makeDisplacementError(
+        "displaced ELF is too small to repair e_entry");
+  const uint64_t OldEntry = OldElf.file().getHeader().e_entry;
+  if (OldEntry == 0)
+    return Error::success();
+  Expected<uint64_t> NewEntryOrErr =
+      remapAllocatedAddress(OldElf, Plan, OldEntry,
+                            /*RequireExecutable=*/true, "ELF e_entry");
+  if (!NewEntryOrErr)
+    return NewEntryOrErr.takeError();
+  std::memcpy(Elf + offsetof(Ehdr, e_entry), &*NewEntryOrErr,
+              sizeof(*NewEntryOrErr));
   return Error::success();
 }
 
@@ -1017,12 +1259,28 @@ Error adjustSymbolValuesForDisplacement(uint8_t *Elf, size_t ElfSize,
         continue;
       }
 
-      // Existing non-text virtual addresses are immutable. Fully linked AMDGPU
-      // code objects contain baked address materializations with no
-      // relocations; moving the target symbol would silently retarget those
-      // instructions.
-      // ElfView.GrowWithTrampolinesKeepsIsaReferenceConsistentWithSymbol
-      // demonstrates the linked-address dependency.
+      // The default mode keeps non-text virtual addresses immutable. In
+      // whole-object mode, keep symbols in a relocated allocated section at
+      // the same section-relative byte.
+      if (Plan.relocatesTrailingSections() &&
+          OldElf.file().getHeader().e_type != ELF::ET_REL &&
+          Sym.st_shndx < OldElf.sections().size()) {
+        const ELFT::Shdr &OldDefShdr = OldElf.sections()[Sym.st_shndx];
+        const uint64_t OldTextEnd = OldElf.textAddr() + OldElf.textSize();
+        if ((OldDefShdr.sh_flags & ELF::SHF_ALLOC) &&
+            OldDefShdr.sh_addr >= OldTextEnd &&
+            Sym.st_value >= OldDefShdr.sh_addr &&
+            Sym.st_value - OldDefShdr.sh_addr <= OldDefShdr.sh_size) {
+          if (Sym.st_value >
+              std::numeric_limits<uint64_t>::max() - Plan.paddedGrowth()) {
+            return makeDisplacementError(
+                "non-text symbol value overflows after displacement");
+          }
+          const uint64_t NewValue = Sym.st_value + Plan.paddedGrowth();
+          std::memcpy(Elf + SymOffset + offsetof(ELFT::Sym, st_value),
+                      &NewValue, sizeof(NewValue));
+        }
+      }
     }
   }
   return Error::success();
@@ -1120,11 +1378,14 @@ Error applyTextDisplacement(const ElfView &Elf, const LLVMState &LS,
                 InputSize - TextEnd);
   }
 
-  if (Error Err = adjustSectionHeadersForTextGrowth(Out, NewSize, Elf,
-                                                    Plan.paddedGrowth()))
+  const bool RelocateAddresses = Plan.relocatesTrailingSections();
+  if (Error Err = adjustSectionHeadersForTextGrowth(
+          Out, NewSize, Elf, Plan.paddedGrowth(), RelocateAddresses))
     return Err;
-  if (Error Err = adjustProgramHeadersForTextGrowth(Out, NewSize, Elf,
-                                                    Plan.paddedGrowth()))
+  if (Error Err = adjustProgramHeadersForTextGrowth(
+          Out, NewSize, Elf, Plan.paddedGrowth(), RelocateAddresses))
+    return Err;
+  if (Error Err = adjustElfEntryForDisplacement(Out, NewSize, Elf, Plan))
     return Err;
   if (Error Err = adjustSymbolValuesForDisplacement(Out, NewSize, Elf, Plan))
     return Err;
@@ -1145,7 +1406,8 @@ Error applyTextDisplacement(const ElfView &Elf, const LLVMState &LS,
 
 Expected<DisplacementPlan>
 DisplacementPlan::create(const ElfView &Elf,
-                         ArrayRef<DisplacementEdit> InputEdits) {
+                         ArrayRef<DisplacementEdit> InputEdits,
+                         bool RelocateTrailingSections) {
   if (InputEdits.empty())
     return makeDisplacementError("no displacement edits requested");
 
@@ -1199,12 +1461,17 @@ DisplacementPlan::create(const ElfView &Elf,
   if (Padding > std::numeric_limits<uint64_t>::max() - RawGrowth)
     return makeDisplacementError("aligned displacement growth overflows");
   uint64_t PaddedGrowth = RawGrowth + Padding;
-  if (Error Err = validateVirtualGrowth(Elf, PaddedGrowth))
-    return std::move(Err);
+  if (RelocateTrailingSections) {
+    if (Error Err = validateTrailingRelocationLayout(Elf))
+      return std::move(Err);
+  } else {
+    if (Error Err = validateVirtualGrowth(Elf, PaddedGrowth))
+      return std::move(Err);
+  }
   if (PaddedGrowth > std::numeric_limits<size_t>::max() - Elf.size())
     return makeDisplacementError("displaced ELF size overflows size_t");
   return DisplacementPlan(Elf.textSize(), RawGrowth, PaddedGrowth,
-                          std::move(Sorted));
+                          std::move(Sorted), RelocateTrailingSections);
 }
 
 bool DisplacementPlan::mapOffset(uint64_t OldOffset, DisplacementMapBias Bias,
@@ -1279,13 +1546,15 @@ DisplacementPlan::buildText(ArrayRef<uint8_t> OldText,
 
 Expected<std::unique_ptr<WritableMemoryBuffer>>
 tryApplyTextDisplacementToNewBuffer(const ElfView &Elf, const LLVMState &LS,
-                                    ArrayRef<DisplacementEdit> Edits) {
+                                    ArrayRef<DisplacementEdit> Edits,
+                                    bool RelocateTrailingSections) {
   if (Error Err = validateDebugSections(Elf))
     return std::move(Err);
   if (Error Err = validateTextRelocations(Elf))
     return std::move(Err);
 
-  Expected<DisplacementPlan> PlanOrErr = DisplacementPlan::create(Elf, Edits);
+  Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(Elf, Edits, RelocateTrailingSections);
   if (!PlanOrErr)
     return PlanOrErr.takeError();
   if (Error Err = validateKernelEntryMappings(Elf, *PlanOrErr))
