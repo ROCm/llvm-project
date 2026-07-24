@@ -281,6 +281,12 @@ extern "C" {
  */
 #define AMD_COMGR_VERSION_3_5
 
+/**
+ * The function was introduced or changed in version 3.6 of the interface
+ * and has the symbol version string of ``"@amd_comgr_NAME@_3.6"``.
+ */
+#define AMD_COMGR_VERSION_3_6
+
 /** @} */
 
 /**
@@ -370,6 +376,29 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_status_string(
 void AMD_COMGR_API amd_comgr_get_version(
   size_t *major,
   size_t *minor) AMD_COMGR_VERSION_1_8;
+
+/**
+ * @brief Get an opaque identifier for Comgr cache compatibility.
+ *
+ * The identifier incorporates the Comgr and compiler implementation identity
+ * together with embedded inputs used by Comgr. It is suitable as one component
+ * of a persistent cache key. Callers must also include all action inputs and
+ * semantic options in their cache key.
+ *
+ * The identifier is stable for the lifetime of the loaded Comgr library.
+ * Callers must treat it as opaque and require exact equality when deciding
+ * whether cached output is compatible. Its format may change between Comgr
+ * versions.
+ *
+ * @param[out] identifier A pointer to a NUL-terminated identifier owned by
+ * Comgr. The pointer remains valid for the lifetime of the loaded library.
+ *
+ * @retval ::AMD_COMGR_STATUS_SUCCESS The identifier was returned.
+ * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p identifier is NULL.
+ */
+amd_comgr_status_t AMD_COMGR_API
+amd_comgr_get_cache_identifier(
+    const char **identifier) AMD_COMGR_VERSION_3_6;
 
 /**
  * @brief The kinds of data supported.

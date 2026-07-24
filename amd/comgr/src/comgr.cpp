@@ -26,12 +26,14 @@
 
 #include "clang/Basic/Version.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Support/SHA256.h"
 #include "llvm/Support/TargetSelect.h"
 #include <fstream>
 #include <mutex>
@@ -56,6 +58,36 @@ using namespace COMGR;
 using namespace COMGR::TimeStatistics;
 
 namespace {
+StringRef getCacheIdentifier() {
+  static const std::string Identifier = [] {
+    SHA256 Hash;
+    auto AddBytes = [&Hash](ArrayRef<uint8_t> Value) {
+      uint8_t Size[sizeof(uint64_t)];
+      uint64_t ValueSize = Value.size();
+      for (size_t I = 0; I != sizeof(Size); ++I) {
+        Size[I] = static_cast<uint8_t>(ValueSize >> (I * 8));
+      }
+      Hash.update(Size);
+      Hash.update(Value);
+    };
+    auto AddString = [&AddBytes](StringRef Value) {
+      AddBytes(ArrayRef<uint8_t>(
+          reinterpret_cast<const uint8_t *>(Value.data()), Value.size()));
+    };
+
+    AddString("amd_comgr_cache_identifier_v1");
+    AddString(clang::getClangFullVersion());
+    AddString(getComgrHashIdentifier());
+    AddBytes(getDeviceLibrariesIdentifier());
+    AddString(getOpenCLCBaseHeaderContents());
+
+    SmallString<64> Hex;
+    toHex(Hash.final(), true, Hex);
+    return std::string(Hex);
+  }();
+  return Identifier;
+}
+
 // Forwards writes to both the in-memory comgr.log buffer and the redirect sink.
 // The sink write goes through Logger::writeToSink to hold the mutex vs emit().
 class TeeStream : public raw_ostream {
@@ -524,6 +556,19 @@ void AMD_COMGR_API
     (size_t *Major, size_t *Minor) {
   *Major = AMD_COMGR_INTERFACE_VERSION_MAJOR;
   *Minor = AMD_COMGR_INTERFACE_VERSION_MINOR;
+}
+
+amd_comgr_status_t AMD_COMGR_API
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    amd_comgr_get_cache_identifier
+    //
+    (const char **Identifier) {
+  if (!Identifier) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  *Identifier = getCacheIdentifier().data();
+  return AMD_COMGR_STATUS_SUCCESS;
 }
 
 amd_comgr_status_t AMD_COMGR_API
