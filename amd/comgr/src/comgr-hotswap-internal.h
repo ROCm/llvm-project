@@ -559,6 +559,12 @@ public:
   /// Zero-size symbols extend to the next function symbol or `.text` end.
   std::vector<FunctionTextRange> functionTextRanges() const;
 
+  /// Validate that an object with a present, empty `.text` section contains
+  /// data only: no executable section contents, no defined function/ifunc
+  /// symbols, no kernel descriptor symbols, and no AMDGPU metadata kernel
+  /// entries. Malformed symbol tables, notes, or metadata fail closed.
+  bool isValidDataOnlyObject() const;
+
   /// Find the kernel function symbol whose range includes \p TextAddress.
   /// Returns "" if no matching function symbol exists.
   std::string findKernelAtAddress(uint64_t TextAddress) const;
