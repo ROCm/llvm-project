@@ -1669,13 +1669,18 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     OffsetToIndex[Decoded[I].Offset] = I;
 
   for (const ReachingCallGroup &Group : Groups) {
-    size_t BeginIndex = 0;
-    while (BeginIndex != Decoded.size() &&
-           Decoded[BeginIndex].Offset < Group.Begin)
-      ++BeginIndex;
-    size_t EndIndex = BeginIndex;
-    while (EndIndex != Decoded.size() && Decoded[EndIndex].Offset < Group.End)
-      ++EndIndex;
+    ArrayRef<InternalDecodedInst>::const_iterator Begin =
+        llvm::lower_bound(Decoded, Group.Begin,
+                          [](const InternalDecodedInst &DI, uint64_t Offset) {
+                            return DI.Offset < Offset;
+                          });
+    ArrayRef<InternalDecodedInst>::const_iterator End = llvm::lower_bound(
+        Begin, Decoded.end(), Group.End,
+        [](const InternalDecodedInst &DI, uint64_t Offset) {
+          return DI.Offset < Offset;
+        });
+    size_t BeginIndex = static_cast<size_t>(Begin - Decoded.begin());
+    size_t EndIndex = static_cast<size_t>(End - Decoded.begin());
     if (BeginIndex == EndIndex)
       continue;
 
