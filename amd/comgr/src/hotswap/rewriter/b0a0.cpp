@@ -34,6 +34,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <algorithm>
@@ -1131,6 +1132,331 @@ matchPcMaterializedCall(ArrayRef<InternalDecodedInst> Decoded, size_t CallIndex,
                                 MCRegister(Call.Inst.getOperand(0).getReg())};
 }
 
+using ReachingCallTargets = SmallVector<uint64_t, 8>;
+
+struct ReachingPcState {
+  bool Reached = false;
+  bool HasUnknown = false;
+  ReachingCallTargets Targets;
+  SmallVector<size_t, 4> ActiveMaterializations;
+};
+
+static bool mergeReachingPcState(ReachingPcState &Into,
+                                 const ReachingPcState &From) {
+  if (!From.Reached)
+    return false;
+  ReachingPcState Before = Into;
+  Into.Reached = true;
+  Into.HasUnknown |= From.HasUnknown;
+  for (uint64_t Target : From.Targets)
+    if (!llvm::is_contained(Into.Targets, Target))
+      Into.Targets.push_back(Target);
+  for (size_t Completion : From.ActiveMaterializations)
+    if (!llvm::is_contained(Into.ActiveMaterializations, Completion))
+      Into.ActiveMaterializations.push_back(Completion);
+  llvm::sort(Into.Targets);
+  llvm::sort(Into.ActiveMaterializations);
+  return Before.Reached != Into.Reached ||
+         Before.HasUnknown != Into.HasUnknown ||
+         Before.Targets != Into.Targets ||
+         Before.ActiveMaterializations != Into.ActiveMaterializations;
+}
+
+static bool isExactRegisterOperand(const MCInst &Inst, unsigned Index,
+                                   MCRegister Reg) {
+  return Index < Inst.getNumOperands() && Inst.getOperand(Index).isReg() &&
+         Inst.getOperand(Index).getReg() == Reg;
+}
+
+/// Recognize the two compiler-emitted ways a reusable register-call target is
+/// materialized. The first is the canonical get-PC/add-nc pair. Tensile also
+/// computes a 32-bit displacement in a temporary and propagates carry into the
+/// high half:
+///
+///   s_get_pc_i64 Pair
+///   s_add_co_i32 Tmp, Imm0, Imm1
+///   s_add_co_u32 Pair.lo, Pair.lo, Tmp
+///   s_add_co_ci_u32 Pair.hi, Pair.hi, 0
+///
+/// Return the completion instruction and absolute target. Intermediate
+/// definitions deliberately remain "unknown" in the reaching-value solver.
+static std::optional<std::pair<size_t, uint64_t>>
+matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
+                               size_t GetPcIndex, size_t FunctionEndIndex,
+                               MCRegister Pair, const LLVMState &LS,
+                               uint64_t TextAddr, ArrayRef<uint8_t> Text) {
+  const InternalDecodedInst &GetPc = Decoded[GetPcIndex];
+  if (!GetPc.DecodeSucceeded || GetPc.Inst.getOpcode() != LS.SGetPcI64Opcode ||
+      !isExactRegisterOperand(GetPc.Inst, 0, Pair))
+    return std::nullopt;
+  std::optional<uint64_t> Pc =
+      checkedAddUint64(TextAddr, GetPc.Offset, "reusable get-PC address");
+  if (!Pc)
+    return std::nullopt;
+  Pc = checkedAddUint64(*Pc, GetPc.Size, "reusable get-PC value");
+  if (!Pc)
+    return std::nullopt;
+
+  for (size_t I = GetPcIndex + 1; I < FunctionEndIndex; ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    if (!DI.DecodeSucceeded || isControlFlowBoundary(DI, LS))
+      break;
+    if (!definesOverlappingRegister(DI, LS, Pair))
+      continue;
+    if (DI.Inst.getOpcode() != LS.SAddNcU64Opcode ||
+        DI.Inst.getNumOperands() != 3 ||
+        !isExactRegisterOperand(DI.Inst, 0, Pair) ||
+        !isExactRegisterOperand(DI.Inst, 1, Pair) ||
+        !DI.Inst.getOperand(2).isImm())
+      break;
+    uint64_t Delta = static_cast<uint64_t>(DI.Inst.getOperand(2).getImm());
+    return std::make_pair(I, *Pc + Delta);
+  }
+
+  if (GetPcIndex + 3 >= FunctionEndIndex)
+    return std::nullopt;
+  const InternalDecodedInst &MakeDelta = Decoded[GetPcIndex + 1];
+  const InternalDecodedInst &AddLow = Decoded[GetPcIndex + 2];
+  const InternalDecodedInst &AddHigh = Decoded[GetPcIndex + 3];
+  if (MakeDelta.Mnemonic != "s_add_co_i32" ||
+      AddLow.Mnemonic != "s_add_co_u32" ||
+      AddHigh.Mnemonic != "s_add_co_ci_u32" ||
+      MakeDelta.Inst.getNumOperands() != 3 ||
+      !MakeDelta.Inst.getOperand(0).isReg() ||
+      !MakeDelta.Inst.getOperand(0).getReg() ||
+      !MakeDelta.Inst.getOperand(2).isImm())
+    return std::nullopt;
+  MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
+  if (AddLow.Inst.getNumOperands() != 3 || !AddLow.Inst.getOperand(0).isReg() ||
+      !AddLow.Inst.getOperand(1).isReg() ||
+      !AddLow.Inst.getOperand(0).getReg() ||
+      AddLow.Inst.getOperand(0).getReg() !=
+          AddLow.Inst.getOperand(1).getReg() ||
+      !isExactRegisterOperand(AddLow.Inst, 2, DeltaReg) ||
+      AddHigh.Inst.getNumOperands() != 3 ||
+      !AddHigh.Inst.getOperand(0).isReg() ||
+      !AddHigh.Inst.getOperand(1).isReg() ||
+      !AddHigh.Inst.getOperand(0).getReg() ||
+      AddHigh.Inst.getOperand(0).getReg() !=
+          AddHigh.Inst.getOperand(1).getReg() ||
+      !AddHigh.Inst.getOperand(2).isImm() ||
+      AddHigh.Inst.getOperand(2).getImm() != 0)
+    return std::nullopt;
+  MCRegister Low(AddLow.Inst.getOperand(0).getReg());
+  MCRegister High(AddHigh.Inst.getOperand(0).getReg());
+  std::optional<unsigned> LowIndex = numberedSgprIndex(*LS.MRI, Low);
+  std::optional<unsigned> HighIndex = numberedSgprIndex(*LS.MRI, High);
+  if (!LowIndex || !HighIndex || *HighIndex != *LowIndex + 1 ||
+      !LS.MRI->regsOverlap(Low, Pair) || !LS.MRI->regsOverlap(High, Pair))
+    return std::nullopt;
+
+  std::optional<uint32_t> FirstAddend;
+  if (MakeDelta.Inst.getOperand(1).isImm()) {
+    FirstAddend = static_cast<uint32_t>(MakeDelta.Inst.getOperand(1).getImm());
+  } else if (MakeDelta.Size >= 2 * MinInstSize &&
+             MakeDelta.Offset <= Text.size() &&
+             MakeDelta.Size <= Text.size() - MakeDelta.Offset) {
+    // The disassembler represents a SOP2 literal source as its literal
+    // register marker, not as an immediate operand. The literal dword is the
+    // final dword in this otherwise exact compiler-emitted instruction.
+    FirstAddend = support::endian::read32le(Text.data() + MakeDelta.Offset +
+                                            MakeDelta.Size - MinInstSize);
+  }
+  if (!FirstAddend)
+    return std::nullopt;
+  uint32_t Delta = *FirstAddend +
+                   static_cast<uint32_t>(MakeDelta.Inst.getOperand(2).getImm());
+  return std::make_pair(GetPcIndex + 3, *Pc + Delta);
+}
+
+struct ReachingCallGroup {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
+  MCRegister TargetRegister;
+  SmallVector<size_t, 8> Calls;
+};
+
+/// Resolve register calls whose target pair is selected once and reused across
+/// control flow. A monotone intraprocedural solver propagates finite target
+/// sets from proven get-PC materializations. Any unrecognized pair definition
+/// introduces Unknown, so a bypass around the selector remains fail-closed.
+static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextEnd,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<std::optional<PcMaterializedCallInfo>> LocalCalls,
+    ArrayRef<uint8_t> Text) {
+  std::vector<ReachingCallTargets> Resolved(Decoded.size());
+  SmallVector<ReachingCallGroup, 8> Groups;
+
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    const InternalDecodedInst &Call = Decoded[I];
+    if (LocalCalls[I] || !Call.DecodeSucceeded ||
+        Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+        Call.Inst.getNumOperands() < 2)
+      continue;
+    const MCOperand &TargetOp =
+        Call.Inst.getOperand(Call.Inst.getNumOperands() - 1);
+    if (!TargetOp.isReg() || !TargetOp.getReg())
+      continue;
+    MCRegister TargetRegister(TargetOp.getReg());
+
+    const ElfView::FunctionTextRange *Best = nullptr;
+    uint64_t Address = TextAddr + Call.Offset;
+    for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+      if (Range.Begin <= Address && Address < Range.End &&
+          (!Best || Range.Begin > Best->Begin))
+        Best = &Range;
+    if (!Best || Best->Begin < TextAddr || Best->End > TextEnd)
+      continue;
+    uint64_t Begin = Best->Begin - TextAddr;
+    uint64_t End = Best->End - TextAddr;
+    ReachingCallGroup *Group = nullptr;
+    for (ReachingCallGroup &Candidate : Groups)
+      if (Candidate.Begin == Begin && Candidate.End == End &&
+          Candidate.TargetRegister == TargetRegister) {
+        Group = &Candidate;
+        break;
+      }
+    if (!Group) {
+      Groups.push_back({Begin, End, TargetRegister, {}});
+      Group = &Groups.back();
+    }
+    Group->Calls.push_back(I);
+  }
+
+  DenseMap<uint64_t, size_t> OffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    OffsetToIndex[Decoded[I].Offset] = I;
+
+  for (const ReachingCallGroup &Group : Groups) {
+    size_t BeginIndex = 0;
+    while (BeginIndex != Decoded.size() &&
+           Decoded[BeginIndex].Offset < Group.Begin)
+      ++BeginIndex;
+    size_t EndIndex = BeginIndex;
+    while (EndIndex != Decoded.size() && Decoded[EndIndex].Offset < Group.End)
+      ++EndIndex;
+    if (BeginIndex == EndIndex)
+      continue;
+
+    DenseMap<size_t, size_t> Starters;
+    DenseMap<size_t, uint64_t> Completions;
+    DenseMap<size_t, SmallVector<size_t, 2>> Intermediates;
+    for (size_t I = BeginIndex; I != EndIndex; ++I) {
+      std::optional<std::pair<size_t, uint64_t>> Match =
+          matchReusablePcMaterialization(
+              Decoded, I, EndIndex, Group.TargetRegister, LS, TextAddr, Text);
+      if (Match) {
+        Starters[I] = Match->first;
+        Completions[Match->first] = Match->second;
+        for (size_t J = I + 1; J != Match->first; ++J)
+          if (definesOverlappingRegister(Decoded[J], LS, Group.TargetRegister))
+            Intermediates[J].push_back(Match->first);
+      }
+    }
+    if (Completions.empty())
+      continue;
+
+    std::vector<ReachingPcState> Before(EndIndex - BeginIndex);
+    Before.front().Reached = true;
+    Before.front().HasUnknown = true;
+    SmallVector<size_t, 32> Worklist;
+    BitVector Queued(EndIndex - BeginIndex);
+    Worklist.push_back(BeginIndex);
+    Queued.set(0);
+
+    while (!Worklist.empty()) {
+      size_t I = Worklist.pop_back_val();
+      Queued.reset(I - BeginIndex);
+      ReachingPcState State = Before[I - BeginIndex];
+      const InternalDecodedInst &DI = Decoded[I];
+
+      DenseMap<size_t, size_t>::const_iterator Starter = Starters.find(I);
+      DenseMap<size_t, uint64_t>::const_iterator Completion =
+          Completions.find(I);
+      if (Starter != Starters.end()) {
+        // The get-PC instruction overwrites the complete target pair. Record a
+        // token proving that this path entered the exact materialization; the
+        // completion may only produce a known target from that token.
+        State.HasUnknown = false;
+        State.Targets.clear();
+        State.ActiveMaterializations.assign(1, Starter->second);
+      } else if (Completion != Completions.end()) {
+        bool HasMatchingToken =
+            llvm::is_contained(State.ActiveMaterializations, I);
+        bool HasBypassPath =
+            State.HasUnknown || !State.Targets.empty() ||
+            llvm::any_of(State.ActiveMaterializations,
+                         [I](size_t Active) { return Active != I; });
+        State.HasUnknown = HasBypassPath || !HasMatchingToken;
+        State.Targets.clear();
+        State.ActiveMaterializations.clear();
+        if (HasMatchingToken)
+          State.Targets.push_back(Completion->second);
+      } else if (definesOverlappingRegister(DI, LS, Group.TargetRegister)) {
+        // Preserve only tokens for which this is a proven instruction inside
+        // the exact matched sequence. All other reaching values are clobbered.
+        SmallVector<size_t, 4> Preserved;
+        DenseMap<size_t, SmallVector<size_t, 2>>::const_iterator Intermediate =
+            Intermediates.find(I);
+        if (Intermediate != Intermediates.end())
+          for (size_t Active : State.ActiveMaterializations)
+            if (llvm::is_contained(Intermediate->second, Active))
+              Preserved.push_back(Active);
+        if (State.HasUnknown || !State.Targets.empty() ||
+            Preserved.size() != State.ActiveMaterializations.size())
+          State.HasUnknown = true;
+        State.Targets.clear();
+        State.ActiveMaterializations = std::move(Preserved);
+      }
+
+      if (llvm::is_contained(Group.Calls, I) && !State.HasUnknown &&
+          State.ActiveMaterializations.empty() && !State.Targets.empty())
+        Resolved[I] = State.Targets;
+
+      SmallVector<size_t, 2> Successors;
+      auto appendFallthrough = [&]() {
+        if (I + 1 < EndIndex)
+          Successors.push_back(I + 1);
+      };
+      if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+          DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+          LS.MIA->isReturn(DI.Inst)) {
+        // No successor.
+      } else if (LS.MIA->isCall(DI.Inst)) {
+        appendFallthrough();
+      } else if (LS.MIA->isIndirectBranch(DI.Inst)) {
+        // An indirect jump or bounded return leaves this intraprocedural path.
+      } else if (LS.MIA->isBranch(DI.Inst)) {
+        std::optional<uint64_t> Target =
+            evaluateDirectControlFlowTarget(DI, LS);
+        if (Target) {
+          DenseMap<uint64_t, size_t>::const_iterator TargetIndex =
+              OffsetToIndex.find(*Target);
+          if (TargetIndex != OffsetToIndex.end() &&
+              TargetIndex->second >= BeginIndex &&
+              TargetIndex->second < EndIndex)
+            Successors.push_back(TargetIndex->second);
+        }
+        if (!LS.MIA->isUnconditionalBranch(DI.Inst))
+          appendFallthrough();
+      } else {
+        appendFallthrough();
+      }
+
+      for (size_t Successor : Successors) {
+        if (mergeReachingPcState(Before[Successor - BeginIndex], State) &&
+            !Queued.test(Successor - BeginIndex)) {
+          Worklist.push_back(Successor);
+          Queued.set(Successor - BeginIndex);
+        }
+      }
+    }
+  }
+  return Resolved;
+}
+
 struct KnownCallSite {
   size_t InstIndex = 0;
   uint64_t Target = 0;
@@ -1210,7 +1536,8 @@ getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
 static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
-    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls) {
+    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls,
+    ArrayRef<ReachingCallTargets> ReusableCalls) {
   SmallVector<KnownCallSite, 4> Calls;
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &DI = Decoded[I];
@@ -1218,22 +1545,43 @@ static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
     if (!ReturnRegister)
       continue;
 
-    std::optional<uint64_t> Target;
     if (MaterializedCalls[I]) {
       uint64_t AbsoluteTarget = MaterializedCalls[I]->Target;
-      if (AbsoluteTarget >= TextAddr && AbsoluteTarget < TextEnd)
-        Target = AbsoluteTarget - TextAddr;
-    } else {
-      Target = getDirectTextTarget(DI, LS, TextAddr, TextEnd);
-    }
-    if (!Target)
+      if (AbsoluteTarget < TextAddr || AbsoluteTarget >= TextEnd)
+        continue;
+      std::optional<uint64_t> Continuation = checkedAddUint64(
+          DI.Offset, DI.Size, "known call continuation address");
+      if (!Continuation)
+        return std::nullopt;
+      Calls.push_back(
+          {I, AbsoluteTarget - TextAddr, *Continuation, *ReturnRegister});
       continue;
+    }
 
-    std::optional<uint64_t> Continuation =
-        checkedAddUint64(DI.Offset, DI.Size, "known call continuation address");
-    if (!Continuation)
-      return std::nullopt;
-    Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+    if (!ReusableCalls[I].empty()) {
+      if (llvm::any_of(ReusableCalls[I], [TextAddr, TextEnd](uint64_t Target) {
+            return Target < TextAddr || Target >= TextEnd;
+          }))
+        continue;
+      std::optional<uint64_t> Continuation = checkedAddUint64(
+          DI.Offset, DI.Size, "known call continuation address");
+      if (!Continuation)
+        return std::nullopt;
+      for (uint64_t AbsoluteTarget : ReusableCalls[I])
+        Calls.push_back(
+            {I, AbsoluteTarget - TextAddr, *Continuation, *ReturnRegister});
+      continue;
+    }
+
+    std::optional<uint64_t> Target =
+        getDirectTextTarget(DI, LS, TextAddr, TextEnd);
+    if (Target) {
+      std::optional<uint64_t> Continuation = checkedAddUint64(
+          DI.Offset, DI.Size, "known call continuation address");
+      if (!Continuation)
+        return std::nullopt;
+      Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+    }
   }
   return Calls;
 }
@@ -1621,7 +1969,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-    ArrayRef<uint64_t> ExternalEntries) {
+    ArrayRef<uint64_t> ExternalEntries, ArrayRef<uint8_t> Text) {
   if (!LS.MIA) {
     log() << "hotswap: MC branch analysis is unavailable; adjacent far "
              "trampolines will not be coalesced\n";
@@ -1637,9 +1985,11 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       Decoded.size());
   for (size_t I = 0; I != Decoded.size(); ++I)
     MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
+  std::vector<ReachingCallTargets> ReusableCalls = resolveReusablePcCallTargets(
+      Decoded, LS, TextAddr, *TextEnd, FunctionRanges, MaterializedCalls, Text);
 
-  std::optional<SmallVector<KnownCallSite, 4>> Calls =
-      collectKnownCallSites(Decoded, LS, TextAddr, *TextEnd, MaterializedCalls);
+  std::optional<SmallVector<KnownCallSite, 4>> Calls = collectKnownCallSites(
+      Decoded, LS, TextAddr, *TextEnd, MaterializedCalls, ReusableCalls);
   if (!Calls)
     return std::nullopt;
   std::optional<SmallVector<BoundedSetPcReturn, 2>> BoundedReturns =
@@ -1685,6 +2035,25 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
                      MaterializedCalls[InstIndex]->SequenceEnd)) {
         Target = MaterializedCalls[InstIndex]->Target;
       }
+      if (!ReusableCalls[InstIndex].empty()) {
+        if (llvm::any_of(ReusableCalls[InstIndex],
+                         [TextAddr, TextEnd](uint64_t ReusableTarget) {
+                           return ReusableTarget < TextAddr ||
+                                  ReusableTarget >= *TextEnd;
+                         })) {
+          log() << "hotswap: unresolved call target at 0x"
+                << utohexstr(DI.Offset) << " (reusable target outside .text)\n";
+          Info.HasUnresolvedTargets = true;
+          continue;
+        }
+        for (uint64_t ReusableTarget : ReusableCalls[InstIndex])
+          Info.Targets.insert(ReusableTarget - TextAddr);
+        Info.BoundedIndirectTransfers.insert(DI.Offset);
+        log() << "hotswap: resolved reusable PC-materialized call at 0x"
+              << utohexstr(DI.Offset) << " to "
+              << ReusableCalls[InstIndex].size() << " target(s)\n";
+        continue;
+      }
       if (!Target) {
         log() << "hotswap: unresolved call target at 0x" << utohexstr(DI.Offset)
               << " (" << DI.Mnemonic << ")\n";
@@ -1699,6 +2068,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           log() << "hotswap: resolved PC-materialized call at 0x"
                 << utohexstr(DI.Offset) << " to .text+0x"
                 << utohexstr(RelativeTarget) << "\n";
+        if (DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isReg())
+          Info.BoundedIndirectTransfers.insert(DI.Offset);
       }
       continue;
     }
@@ -1713,6 +2084,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     }
     Info.Targets.insert(*Target);
   }
+  for (const BoundedSetPcReturn &Return : *BoundedReturns)
+    Info.BoundedIndirectTransfers.insert(Decoded[Return.InstIndex].Offset);
   return Info;
 }
 
@@ -1857,12 +2230,15 @@ collectRelocationProtectedOffsets(ArrayRef<InternalDecodedInst> Decoded,
 /// indirect destination, so leave the complete function in place.
 static DenseSet<uint64_t>
 collectIndirectControlFlowFunctions(ArrayRef<InternalDecodedInst> Decoded,
-                                    const LLVMState &LS, const ElfView &Elf) {
+                                    const LLVMState &LS, const ElfView &Elf,
+                                    const DenseSet<uint64_t> &Bounded) {
   DenseSet<uint64_t> Functions;
   if (!LS.MIA)
     return Functions;
 
   for (const InternalDecodedInst &DI : Decoded) {
+    if (Bounded.contains(DI.Offset))
+      continue;
     if (LS.MIA->isBarrier(DI.Inst) || isEndProgram(DI, LS))
       continue;
     if (!LS.MIA->isIndirectBranch(DI.Inst) &&
@@ -1892,7 +2268,9 @@ expandStraightLineTrampolines(PatchContext &Ctx,
   DenseSet<uint64_t> Protected = collectRelocationProtectedOffsets(
       Ctx.Decoded, Ctx.LS, !Ctx.Config.RunB0A0Patches);
   DenseSet<uint64_t> IndirectControlFlowFunctions =
-      collectIndirectControlFlowFunctions(Ctx.Decoded, Ctx.LS, Ctx.Elf);
+      collectIndirectControlFlowFunctions(
+          Ctx.Decoded, Ctx.LS, Ctx.Elf,
+          Ctx.DirectControlFlow.BoundedIndirectTransfers);
 
   for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
     if (Ctx.OutTrampolines[I].HasFunctionRange &&
@@ -2096,6 +2474,7 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
   uint64_t Current = FromOffset;
 
   while (!isSBranchReachable(Current, TargetOffset)) {
+    bool Forward = TargetOffset > Current;
     size_t BestIndex = Gateways.size();
     uint64_t BestOffset = 0;
     for (size_t I = 0; I != Gateways.size(); ++I) {
@@ -2104,12 +2483,15 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
           FromOffset >= Sled.FunctionEnd)
         continue;
       uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
-      if (Sled.WritePos >= TargetOffset || Sled.WritePos <= Current ||
-          Sled.WritePos > UsableEnd ||
+      bool MakesProgress =
+          Forward ? Sled.WritePos > Current && Sled.WritePos < TargetOffset
+                  : Sled.WritePos < Current && Sled.WritePos > TargetOffset;
+      if (!MakesProgress || Sled.WritePos > UsableEnd ||
           MinInstSize > UsableEnd - Sled.WritePos ||
           !isSBranchReachable(Current, Sled.WritePos))
         continue;
-      if (BestIndex == Gateways.size() || Sled.WritePos > BestOffset) {
+      if (BestIndex == Gateways.size() ||
+          (Forward ? Sled.WritePos > BestOffset : Sled.WritePos < BestOffset)) {
         BestIndex = I;
         BestOffset = Sled.WritePos;
       }
@@ -2133,6 +2515,456 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
   return Islands;
 }
 
+static SmallVector<uint8_t> encodeScc1Branch(const LLVMState &LS,
+                                             uint64_t FromOffset,
+                                             uint64_t TargetOffset) {
+  std::optional<uint64_t> PcBase =
+      checkedAddUint64(FromOffset, MinInstSize, "conditional branch PC base");
+  if (!PcBase || ((TargetOffset - *PcBase) & (MinInstSize - 1)) != 0)
+    return {};
+  int64_t DwordDelta =
+      static_cast<int64_t>(TargetOffset - *PcBase) / MinInstSize;
+  if (DwordDelta < BranchOffsetMin || DwordDelta > BranchOffsetMax)
+    return {};
+  return assembleSingleInst("s_cbranch_scc1 " + std::to_string(DwordDelta), LS);
+}
+
+/// Plan common far gateways before the final pool layout. An 8-byte source
+/// cannot hold the 20-byte SCC-neutral set-PC sequence, but it can preserve
+/// its identity without touching SCC:
+///
+///   s_get_pc_i64 ScratchSource
+///   s_branch CommonGateway
+///
+/// The common gateway reaches a dispatcher in the pool through a second
+/// scratch pair. The dispatcher saves SCC, compares the recorded source PCs,
+/// restores SCC in the selected stub, and branches to the matching trampoline
+/// body. One 20-byte .text gateway can therefore serve hundreds of otherwise
+/// independent 8-byte patch sites.
+static bool planSharedDispatchGateways(PatchContext &Ctx,
+                                       std::vector<NopSled> &TextGateways) {
+  struct Candidate {
+    size_t Index = 0;
+    unsigned ScratchBase = 0;
+  };
+  SmallVector<Candidate, 64> Candidates;
+  uint64_t MissingScratchCandidates = 0;
+  uint64_t FirstMissingScratch = 0;
+  uint64_t TP = Ctx.PoolBaseOffset;
+  for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
+    Trampoline &T = Ctx.OutTrampolines[I];
+    uint64_t ThisTP = TP;
+    std::optional<uint64_t> Next =
+        checkedAddUint64(TP, T.Bytes.size(), "shared dispatcher pool layout");
+    if (!Next)
+      return false;
+    TP = *Next;
+    if (!T.Long || T.OriginalSize < 2 * MinInstSize ||
+        isSBranchReachable(T.OriginalOffset, ThisTP))
+      continue;
+    std::optional<SmallVector<uint8_t>> Direct = encodeSetPCLongBranch(
+        Ctx.LS, T.OriginalOffset, ThisTP, T.LongBranchSgprBase);
+    if (Direct && Direct->size() <= T.OriginalSize)
+      continue;
+    std::optional<SafeSgprScratchBlock> Scratch = findSafeSgprScratchBlock(
+        Ctx, T.OriginalOffset, /*Count=*/4,
+        /*Alignment=*/2, "shared far-dispatch gateway");
+    if (Scratch) {
+      Candidates.push_back({I, Scratch->Base});
+    } else {
+      if (MissingScratchCandidates == 0)
+        FirstMissingScratch = T.OriginalOffset;
+      ++MissingScratchCandidates;
+    }
+  }
+  if (MissingScratchCandidates != 0)
+    log() << "hotswap: shared far-dispatch skipped " << MissingScratchCandidates
+          << " site(s) without four safe SGPRs"
+          << " (first at 0x" << utohexstr(FirstMissingScratch) << ")\n";
+
+  // The ordinary planner is simpler and uses fewer scratch registers for
+  // small objects. Shared dispatch is a capacity mechanism for dense far-site
+  // workloads, not a replacement for individual gateways.
+  if (Candidates.size() < 8)
+    return true;
+
+  BitVector Assigned(Ctx.OutTrampolines.size());
+  SmallVector<SmallVector<size_t, 32>, 8> Groups;
+  constexpr size_t MaxGroupSites = 1024;
+  for (const Candidate &Seed : Candidates) {
+    if (Assigned.test(Seed.Index))
+      continue;
+    const Trampoline &SeedT = Ctx.OutTrampolines[Seed.Index];
+
+    size_t SledIndex = TextGateways.size();
+    uint64_t BestDistance = std::numeric_limits<uint64_t>::max();
+    for (size_t I = 0; I != TextGateways.size(); ++I) {
+      const NopSled &Sled = TextGateways[I];
+      uint64_t From = SeedT.OriginalOffset + MinInstSize;
+      if (SeedT.OriginalOffset < Sled.FunctionStart ||
+          SeedT.OriginalOffset >= Sled.FunctionEnd)
+        continue;
+      uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+      if (Sled.WritePos > UsableEnd ||
+          SetPcForwardSequenceBytes > UsableEnd - Sled.WritePos ||
+          !isSBranchReachable(From, Sled.WritePos))
+        continue;
+      uint64_t Distance =
+          From > Sled.WritePos ? From - Sled.WritePos : Sled.WritePos - From;
+      if (Distance < BestDistance) {
+        BestDistance = Distance;
+        SledIndex = I;
+      }
+    }
+    uint64_t GatewayOffset = 0;
+    uint64_t SecondaryGatewayOffset = 0;
+    std::vector<NopSled> WorkingGateways;
+    SmallVector<uint64_t, 4> SeedIslands;
+    if (SledIndex != TextGateways.size()) {
+      GatewayOffset = TextGateways[SledIndex].WritePos;
+      WorkingGateways = TextGateways;
+      WorkingGateways[SledIndex].WritePos += SetPcForwardSequenceBytes;
+    } else {
+      size_t BestIslandCount = std::numeric_limits<size_t>::max();
+      for (size_t I = 0; I != TextGateways.size(); ++I) {
+        const NopSled &Sled = TextGateways[I];
+        uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+        if (Sled.WritePos > UsableEnd ||
+            SetPcForwardSequenceBytes > UsableEnd - Sled.WritePos)
+          continue;
+        std::vector<NopSled> Trial = TextGateways;
+        uint64_t TrialGateway = Trial[I].WritePos;
+        Trial[I].WritePos += SetPcForwardSequenceBytes;
+        std::optional<SmallVector<uint64_t, 4>> Islands =
+            allocateForwardBranchIslands(
+                Trial, SeedT.OriginalOffset + MinInstSize, TrialGateway);
+        if (!Islands || Islands->empty() || Islands->size() >= BestIslandCount)
+          continue;
+        BestIslandCount = Islands->size();
+        GatewayOffset = TrialGateway;
+        WorkingGateways = std::move(Trial);
+        SeedIslands = std::move(*Islands);
+      }
+      if (WorkingGateways.empty()) {
+        // Split the SCC-neutral 20-byte sequence across an 8-byte get-PC
+        // segment and a 16-byte add/set-PC segment. This admits functions
+        // that have no single 20-byte padding window.
+        for (size_t I = 0; I != TextGateways.size() && WorkingGateways.empty();
+             ++I) {
+          const NopSled &First = TextGateways[I];
+          uint64_t FirstEnd = std::min(First.End, First.FunctionEnd);
+          uint64_t SourceBranch = SeedT.OriginalOffset + MinInstSize;
+          if (SeedT.OriginalOffset < First.FunctionStart ||
+              SeedT.OriginalOffset >= First.FunctionEnd ||
+              First.WritePos > FirstEnd ||
+              2 * MinInstSize > FirstEnd - First.WritePos ||
+              !isSBranchReachable(SourceBranch, First.WritePos))
+            continue;
+          std::vector<NopSled> FirstReserved = TextGateways;
+          GatewayOffset = FirstReserved[I].WritePos;
+          FirstReserved[I].WritePos += 2 * MinInstSize;
+          for (size_t J = 0; J != FirstReserved.size(); ++J) {
+            const NopSled &Second = FirstReserved[J];
+            uint64_t SecondEnd = std::min(Second.End, Second.FunctionEnd);
+            if (SeedT.OriginalOffset < Second.FunctionStart ||
+                SeedT.OriginalOffset >= Second.FunctionEnd ||
+                Second.WritePos > SecondEnd ||
+                4 * MinInstSize > SecondEnd - Second.WritePos ||
+                !isSBranchReachable(GatewayOffset + MinInstSize,
+                                    Second.WritePos))
+              continue;
+            WorkingGateways = FirstReserved;
+            SecondaryGatewayOffset = WorkingGateways[J].WritePos;
+            WorkingGateways[J].WritePos += 4 * MinInstSize;
+            break;
+          }
+        }
+      }
+      if (WorkingGateways.empty())
+        continue;
+    }
+
+    SmallVector<size_t, 32> Members;
+    DenseMap<size_t, SmallVector<uint64_t, 4>> MemberIslands;
+    DenseMap<size_t, uint64_t> MemberRelays;
+    uint64_t GroupBodyBytes = 0;
+    constexpr uint64_t MaxDispatcherSpan = 120 * 1024;
+    for (const Candidate &C : Candidates) {
+      if (Members.size() == MaxGroupSites || Assigned.test(C.Index) ||
+          C.ScratchBase != Seed.ScratchBase)
+        continue;
+      const Trampoline &T = Ctx.OutTrampolines[C.Index];
+      uint64_t ProposedSpan =
+          8 + 28 * (Members.size() + 1) + GroupBodyBytes + T.Bytes.size();
+      if (ProposedSpan > MaxDispatcherSpan)
+        continue;
+      uint64_t From = T.OriginalOffset + MinInstSize;
+      SmallVector<uint64_t, 4> Islands;
+      if (C.Index == Seed.Index && !SeedIslands.empty()) {
+        Islands = SeedIslands;
+      } else if (!isSBranchReachable(From, GatewayOffset)) {
+        continue;
+      }
+      Members.push_back(C.Index);
+      GroupBodyBytes += T.Bytes.size();
+      if (!Islands.empty())
+        MemberIslands[C.Index] = std::move(Islands);
+    }
+    DenseSet<size_t> LocalMembers;
+    SmallVector<std::pair<uint64_t, size_t>, 32> RelayAnchors;
+    for (size_t Index : Members) {
+      LocalMembers.insert(Index);
+      RelayAnchors.push_back(
+          {Ctx.OutTrampolines[Index].OriginalOffset + MinInstSize, Index});
+    }
+    llvm::sort(RelayAnchors);
+    for (const Candidate &C : Candidates) {
+      if (Members.size() == MaxGroupSites || Assigned.test(C.Index) ||
+          LocalMembers.contains(C.Index) || C.ScratchBase != Seed.ScratchBase)
+        continue;
+      const Trampoline &T = Ctx.OutTrampolines[C.Index];
+      uint64_t ProposedSpan =
+          8 + 28 * (Members.size() + 1) + GroupBodyBytes + T.Bytes.size();
+      if (ProposedSpan > MaxDispatcherSpan)
+        continue;
+      uint64_t From = T.OriginalOffset + MinInstSize;
+      auto It =
+          llvm::lower_bound(RelayAnchors, std::make_pair(From, size_t{0}));
+      std::optional<uint64_t> Relay;
+      if (It != RelayAnchors.end() && isSBranchReachable(From, It->first))
+        Relay = It->first;
+      if (It != RelayAnchors.begin()) {
+        --It;
+        if (isSBranchReachable(From, It->first))
+          Relay = It->first;
+      }
+      if (!Relay)
+        continue;
+      Members.push_back(C.Index);
+      LocalMembers.insert(C.Index);
+      MemberRelays[C.Index] = *Relay;
+      GroupBodyBytes += T.Bytes.size();
+      RelayAnchors.insert(
+          llvm::lower_bound(RelayAnchors, std::make_pair(From, C.Index)),
+          {From, C.Index});
+    }
+    // A single site with a normal 20-byte gateway gains nothing from the
+    // dispatcher and would unnecessarily consume two extra SGPRs. Leave it to
+    // the established direct planner. A split 8+16-byte gateway is retained
+    // because the established planner cannot represent it.
+    if (Members.size() == 1 && SecondaryGatewayOffset == 0)
+      continue;
+    if (Members.empty())
+      continue;
+    TextGateways = std::move(WorkingGateways);
+
+    uint32_t Group = Groups.size() + 1;
+    for (size_t Index : Members) {
+      Trampoline &T = Ctx.OutTrampolines[Index];
+      SafeSgprScratchBlock Scratch{Seed.ScratchBase, 4};
+      if (!commitSafeSgprScratchBlock(Ctx, T.OriginalOffset, Scratch,
+                                      "shared far-dispatch gateway"))
+        return false;
+      T.UsesSharedDispatcherForward = true;
+      T.SharedDispatcherGroup = Group;
+      T.SharedDispatcherSgprBase = Seed.ScratchBase;
+      T.SharedDispatcherGatewayOffset = GatewayOffset;
+      DenseMap<size_t, uint64_t>::const_iterator Relay =
+          MemberRelays.find(Index);
+      if (Relay != MemberRelays.end())
+        T.SharedDispatcherRelayOffset = Relay->second;
+      T.SharedDispatcherSecondaryGatewayOffset = SecondaryGatewayOffset;
+      DenseMap<size_t, SmallVector<uint64_t, 4>>::iterator Islands =
+          MemberIslands.find(Index);
+      if (Islands != MemberIslands.end()) {
+        T.ForwardBranchIslands = std::move(Islands->second);
+        T.ForwardBranchTargetOffset = GatewayOffset;
+      }
+      Assigned.set(Index);
+    }
+    Groups.push_back(std::move(Members));
+  }
+
+  if (Groups.empty())
+    return true;
+
+  std::vector<Trampoline> Reordered;
+  Reordered.reserve(Ctx.OutTrampolines.size());
+  for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I)
+    if (!Assigned.test(I))
+      Reordered.push_back(std::move(Ctx.OutTrampolines[I]));
+  for (const SmallVector<size_t, 32> &Group : Groups)
+    for (size_t Index : Group)
+      Reordered.push_back(std::move(Ctx.OutTrampolines[Index]));
+  Ctx.OutTrampolines = std::move(Reordered);
+
+  for (size_t I = 0; I != Ctx.OutTrampolines.size();) {
+    Trampoline &First = Ctx.OutTrampolines[I];
+    if (!First.UsesSharedDispatcherForward) {
+      ++I;
+      continue;
+    }
+    uint32_t Group = First.SharedDispatcherGroup;
+    size_t Count = 0;
+    while (I + Count != Ctx.OutTrampolines.size() &&
+           Ctx.OutTrampolines[I + Count].SharedDispatcherGroup == Group)
+      ++Count;
+    uint64_t Prefix = 8 + 28 * Count;
+    if (Prefix > std::numeric_limits<uint32_t>::max())
+      return false;
+    First.PoolEntryPrefixBytes = static_cast<uint32_t>(Prefix);
+    First.Bytes.insert(First.Bytes.begin(), Prefix, uint8_t{0});
+    I += Count;
+  }
+
+  log() << "hotswap: planned " << Groups.size()
+        << " shared far-dispatch gateway group(s) for " << Assigned.count()
+        << " source site(s)\n";
+  return true;
+}
+
+static bool emitSharedDispatchers(PatchContext &Ctx) {
+  DenseMap<uint32_t, SmallVector<size_t, 32>> Groups;
+  SmallVector<uint64_t, 64> PoolOffsets;
+  uint64_t TP = Ctx.PoolBaseOffset;
+  for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
+    PoolOffsets.push_back(TP);
+    Trampoline &T = Ctx.OutTrampolines[I];
+    if (T.UsesSharedDispatcherForward)
+      Groups[T.SharedDispatcherGroup].push_back(I);
+    std::optional<uint64_t> Next =
+        checkedAddUint64(TP, T.Bytes.size(), "shared dispatcher final layout");
+    if (!Next)
+      return false;
+    TP = *Next;
+  }
+
+  for (auto &KV : Groups) {
+    ArrayRef<size_t> Members = KV.second;
+    if (Members.empty())
+      continue;
+    Trampoline &Owner = Ctx.OutTrampolines[Members.front()];
+    uint64_t DispatcherOffset = PoolOffsets[Members.front()];
+    auto fail = [&](const Twine &Reason) {
+      log() << "hotswap: error: shared dispatcher group " << KV.first
+            << " at 0x" << utohexstr(DispatcherOffset) << ": " << Reason
+            << "\n";
+      return false;
+    };
+    unsigned Base = Owner.SharedDispatcherSgprBase;
+    const std::string SourceLow = "s" + std::to_string(Base);
+    const std::string CursorLow = "s" + std::to_string(Base + 2);
+    // After the SCC-neutral gateway has transferred control, only the low
+    // cursor half is needed: every source and pool address differs by less
+    // than 4 GiB, so modulo-2^32 deltas remain exact across a load-address
+    // wrap. Reuse the cursor high half to preserve SCC.
+    const std::string Save = "s" + std::to_string(Base + 3);
+
+    Owner.HasForwardGateway = true;
+    Owner.ForwardGatewayOffset = Owner.SharedDispatcherGatewayOffset;
+    if (Owner.SharedDispatcherSecondaryGatewayOffset == 0) {
+      std::optional<SmallVector<uint8_t>> Gateway =
+          encodeSetPCLongBranch(Ctx.LS, Owner.SharedDispatcherGatewayOffset,
+                                DispatcherOffset, Base + 2);
+      if (!Gateway || Gateway->size() > SetPcForwardSequenceBytes)
+        return fail("single-segment gateway encoding failed");
+      Owner.ForwardGatewayBytes = std::move(*Gateway);
+    } else {
+      const std::string GatewayPair = "s[" + std::to_string(Base + 2) + ":" +
+                                      std::to_string(Base + 3) + "]";
+      Owner.ForwardGatewayBytes =
+          assembleSingleInst("s_get_pc_i64 " + GatewayPair, Ctx.LS);
+      SmallVector<uint8_t> ToSecond =
+          Ctx.LS.encodeSBranch(Owner.SharedDispatcherGatewayOffset +
+                                   Owner.ForwardGatewayBytes.size(),
+                               Owner.SharedDispatcherSecondaryGatewayOffset);
+      if (Owner.ForwardGatewayBytes.size() != MinInstSize ||
+          ToSecond.size() != MinInstSize)
+        return fail("split gateway first segment encoding failed");
+      Owner.ForwardGatewayBytes.append(ToSecond);
+
+      uint64_t PcBase = Owner.SharedDispatcherGatewayOffset + MinInstSize;
+      uint64_t Delta = DispatcherOffset - PcBase;
+      SmallVector<std::string, 2> Lines;
+      Lines.push_back("s_add_nc_u64 " + GatewayPair + ", " + GatewayPair +
+                      ", 0x" + utohexstr(Delta));
+      Lines.push_back("s_set_pc_i64 " + GatewayPair);
+      Owner.SecondaryForwardGatewayBytes =
+          assembleInstructions(joinAsmLines(Lines), Ctx.LS);
+      if (Owner.SecondaryForwardGatewayBytes.empty() ||
+          Owner.SecondaryForwardGatewayBytes.size() > 4 * MinInstSize)
+        return fail("split gateway second segment encoding failed");
+      while (Owner.SecondaryForwardGatewayBytes.size() < 4 * MinInstSize)
+        Owner.SecondaryForwardGatewayBytes.append(Ctx.LS.SNopBytes);
+    }
+
+    SmallVector<uint64_t, 32> BodyOffsets;
+    for (size_t Member : Members)
+      BodyOffsets.push_back(PoolOffsets[Member] +
+                            Ctx.OutTrampolines[Member].PoolEntryPrefixBytes);
+
+    SmallVector<uint8_t> Bytes;
+    auto appendInst = [&](StringRef Asm) {
+      SmallVector<uint8_t> Encoded = assembleSingleInst(Asm, Ctx.LS);
+      if (Encoded.empty())
+        return false;
+      Bytes.append(Encoded);
+      return true;
+    };
+    if (!appendInst("s_cselect_b32 " + Save + ", 1, 0"))
+      return fail("SCC save encoding failed");
+
+    uint64_t CursorValue = DispatcherOffset;
+    uint64_t StubBase =
+        DispatcherOffset + 4 + 20 * Members.size() + MinInstSize;
+    for (size_t J = 0; J != Members.size(); ++J) {
+      const Trampoline &T = Ctx.OutTrampolines[Members[J]];
+      uint64_t SourcePc = T.OriginalOffset + MinInstSize;
+      uint64_t Distance = SourcePc > CursorValue ? SourcePc - CursorValue
+                                                 : CursorValue - SourcePc;
+      if (Distance >= (uint64_t{1} << 32))
+        return fail("source-to-dispatcher span exceeds 32 bits");
+      uint64_t Delta = SourcePc - CursorValue;
+      SmallVector<uint8_t> Add = assembleSingleInst(
+          "s_add_co_u32 " + CursorLow + ", " + CursorLow + ", 0x" +
+              utohexstr(static_cast<uint32_t>(Delta)),
+          Ctx.LS);
+      if (Add.empty() || Add.size() > 3 * MinInstSize)
+        return fail("source-PC cursor add encoding failed");
+      Bytes.append(Add);
+      while (Add.size() < 3 * MinInstSize) {
+        Bytes.append(Ctx.LS.SNopBytes);
+        Add.append(Ctx.LS.SNopBytes);
+      }
+      if (!appendInst("s_cmp_eq_u32 " + SourceLow + ", " + CursorLow))
+        return fail("source-PC compare encoding failed");
+      uint64_t BranchFrom = DispatcherOffset + Bytes.size();
+      SmallVector<uint8_t> Branch =
+          encodeScc1Branch(Ctx.LS, BranchFrom, StubBase + J * 2 * MinInstSize);
+      if (Branch.size() != MinInstSize)
+        return fail("source-PC conditional branch is out of range");
+      Bytes.append(Branch);
+      CursorValue = SourcePc;
+    }
+    if (!appendInst("s_trap 2"))
+      return fail("unmatched-source trap encoding failed");
+    for (size_t J = 0; J != Members.size(); ++J) {
+      if (!appendInst("s_cmp_lg_u32 " + Save + ", 0"))
+        return fail("SCC restore encoding failed");
+      uint64_t BranchFrom = DispatcherOffset + Bytes.size();
+      SmallVector<uint8_t> Branch =
+          Ctx.LS.encodeSBranch(BranchFrom, BodyOffsets[J]);
+      if (Branch.size() != MinInstSize)
+        return fail("selected trampoline body is out of branch range");
+      Bytes.append(Branch);
+    }
+    if (Bytes.size() != Owner.PoolEntryPrefixBytes)
+      return fail("dispatcher size differs from reserved prefix");
+    std::memcpy(Owner.Bytes.data(), Bytes.data(), Bytes.size());
+  }
+  return true;
+}
+
 static bool
 assignLongBranchGateways(PatchContext &Ctx,
                          const DenseSet<uint64_t> &DirectBranchTargets,
@@ -2144,6 +2976,9 @@ assignLongBranchGateways(PatchContext &Ctx,
         DirectBranchTargets);
     for (const NopSled &Sled : Ctx.NopSleds)
       Gateways.push_back(Sled);
+    if (!planSharedDispatchGateways(Ctx, Gateways) ||
+        !emitSharedDispatchers(Ctx))
+      return false;
   }
 
   DenseMap<uint64_t, size_t> PoolIslandOwners;
@@ -2182,6 +3017,8 @@ assignLongBranchGateways(PatchContext &Ctx,
     TrampOffset = *Next;
     if (!T.Long)
       continue;
+    if (T.UsesSharedDispatcherForward)
+      continue;
 
     if (isSBranchReachable(T.OriginalOffset, TP)) {
       T.UsesShortBranchForward = true;
@@ -2210,9 +3047,42 @@ assignLongBranchGateways(PatchContext &Ctx,
     P.InitialCandidateSlots = *CandidateSlots;
   }
 
+  std::stable_sort(Pending.begin(), Pending.end(),
+                   [](const PendingGateway &LHS, const PendingGateway &RHS) {
+                     return LHS.InitialCandidateSlots <
+                            RHS.InitialCandidateSlots;
+                   });
+
   std::vector<PendingGateway> StillPending;
   StillPending.reserve(Pending.size());
+  uint64_t AssignedGateways = 0;
+  for (const PendingGateway &P : Pending) {
+    Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
+    Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
+        findNearestSetPcGateway(Gateways, Ctx.LS, T.OriginalOffset,
+                                P.TargetOffset, T.LongBranchSgprBase);
+    if (!GatewayOrErr) {
+      log() << "hotswap: error: failed to plan gateway for far site 0x"
+            << utohexstr(T.OriginalOffset) << ": "
+            << toString(GatewayOrErr.takeError()) << "\n";
+      return false;
+    }
+    std::optional<EncodedSetPcGateway> Gateway = std::move(*GatewayOrErr);
+    if (!Gateway) {
+      StillPending.push_back(P);
+      continue;
+    }
+    T.HasForwardGateway = true;
+    T.ForwardGatewayOffset = Gateway->Sled->WritePos;
+    T.ForwardGatewayBytes = std::move(Gateway->Bytes);
+    Gateway->Sled->WritePos += T.ForwardGatewayBytes.size();
+    ++AssignedGateways;
+  }
+  Pending = std::move(StillPending);
+
   uint64_t BranchIslandChains = 0;
+  StillPending.clear();
+  StillPending.reserve(Pending.size());
   for (const PendingGateway &P : Pending) {
     Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
     std::optional<SmallVector<uint64_t, 4>> Islands =
@@ -2228,38 +3098,15 @@ assignLongBranchGateways(PatchContext &Ctx,
   }
   Pending = std::move(StillPending);
 
-  std::stable_sort(Pending.begin(), Pending.end(),
-                   [](const PendingGateway &LHS, const PendingGateway &RHS) {
-                     return LHS.InitialCandidateSlots <
-                            RHS.InitialCandidateSlots;
-                   });
-
-  uint64_t AssignedGateways = 0;
-  for (const PendingGateway &P : Pending) {
-    Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
-    Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
-        findNearestSetPcGateway(Gateways, Ctx.LS, T.OriginalOffset,
-                                P.TargetOffset, T.LongBranchSgprBase);
-    if (!GatewayOrErr) {
-      log() << "hotswap: error: failed to plan gateway for far site 0x"
-            << utohexstr(T.OriginalOffset) << ": "
-            << toString(GatewayOrErr.takeError()) << "\n";
-      return false;
-    }
-    std::optional<EncodedSetPcGateway> Gateway = std::move(*GatewayOrErr);
-    if (!Gateway) {
-      log() << "hotswap: error: no safe short-branch gateway for far site 0x"
-            << utohexstr(T.OriginalOffset) << " (" << P.InitialCandidateSlots
-            << " initial candidate slot(s))\n";
-      return false;
-    }
-    T.HasForwardGateway = true;
-    T.ForwardGatewayOffset = Gateway->Sled->WritePos;
-    T.ForwardGatewayBytes = std::move(Gateway->Bytes);
-    Gateway->Sled->WritePos += T.ForwardGatewayBytes.size();
-    ++AssignedGateways;
+  if (!Pending.empty()) {
+    const PendingGateway &P = Pending.front();
+    const Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
+    log() << "hotswap: error: no safe short-branch gateway for far site 0x"
+          << utohexstr(T.OriginalOffset) << " (" << P.InitialCandidateSlots
+          << " initial candidate slot(s))\n";
+    return false;
   }
-  if (!Pending.empty())
+  if (AssignedGateways != 0)
     log() << "hotswap: assigned " << AssignedGateways
           << " SCC-neutral forward gateway(s)\n";
   if (BranchIslandChains != 0)
@@ -2277,6 +3124,17 @@ assignLongBranchGateways(PatchContext &Ctx,
       }
       std::memcpy(Ctx.Text + T.ForwardGatewayOffset,
                   T.ForwardGatewayBytes.data(), T.ForwardGatewayBytes.size());
+      if (!T.SecondaryForwardGatewayBytes.empty()) {
+        uint64_t Offset = T.SharedDispatcherSecondaryGatewayOffset;
+        if (Offset > Ctx.TextSize ||
+            T.SecondaryForwardGatewayBytes.size() > Ctx.TextSize - Offset) {
+          log() << "hotswap: error: secondary forward gateway at 0x"
+                << utohexstr(Offset) << " extends past .text.\n";
+          return false;
+        }
+        std::memcpy(Ctx.Text + Offset, T.SecondaryForwardGatewayBytes.data(),
+                    T.SecondaryForwardGatewayBytes.size());
+      }
     }
     for (size_t I = 0; I != T.ForwardBranchIslands.size(); ++I) {
       uint64_t From = T.ForwardBranchIslands[I];
@@ -2394,7 +3252,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       Elf.functionTextRanges();
   std::optional<DirectControlFlowInfo> ControlFlow = collectDirectBranchTargets(
       Decoded, LS, Elf.textAddr(), Elf.textSize(), DeclaredEntries->Entries,
-      FunctionRanges, DeclaredEntries->ExternalEntries);
+      FunctionRanges, DeclaredEntries->ExternalEntries,
+      ArrayRef<uint8_t>(Text, TextSize));
   if (!ControlFlow)
     return std::nullopt;
   if (ControlFlow->HasUnresolvedTargets) {
@@ -2716,7 +3575,23 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
 
     SmallVector<uint8_t> BrFwd;
     if (T.Long) {
-      if (T.UsesShortBranchForward) {
+      if (T.UsesSharedDispatcherForward) {
+        const std::string Pair =
+            "s[" + std::to_string(T.SharedDispatcherSgprBase) + ":" +
+            std::to_string(T.SharedDispatcherSgprBase + 1) + "]";
+        BrFwd = assembleSingleInst("s_get_pc_i64 " + Pair, LS);
+        if (BrFwd.size() != MinInstSize)
+          return false;
+        uint64_t BranchTarget =
+            T.SharedDispatcherRelayOffset    ? T.SharedDispatcherRelayOffset
+            : T.ForwardBranchIslands.empty() ? T.SharedDispatcherGatewayOffset
+                                             : T.ForwardBranchIslands.front();
+        SmallVector<uint8_t> Branch =
+            LS.encodeSBranch(T.OriginalOffset + BrFwd.size(), BranchTarget);
+        if (Branch.size() != MinInstSize)
+          return false;
+        BrFwd.append(Branch);
+      } else if (T.UsesShortBranchForward) {
         BrFwd = LS.encodeSBranch(T.OriginalOffset, TP);
       } else if (!T.ForwardBranchIslands.empty()) {
         BrFwd =
