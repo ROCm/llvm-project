@@ -73,12 +73,19 @@ Expected<FlatAddr> decodeGlobalLoadAddr(RaiseContext &Ctx,
   Value *Addr = nullptr;
 
   // SADDR form: saddr(SGPR64), vaddr(VGPR32), ... -- LLVM MC places the
-  // SGPR first in the decoded operand order.
+  // SGPR first in the decoded operand order. The saddr slot is usually an SGPR
+  // pair, but the register allocator can also park the 64-bit base in the VCC
+  // pair (`s_add_nc_u64 vcc, ...` then `global_load_* vdst, vaddr, vcc`); read
+  // that back from the VCC-as-scalar shadow rather than readReg64(VCC), which
+  // would return a wave-mask ballot instead of the raw address.
   if (Op.nSrcs() >= 2 && Op.isSrcReg(0) && Op.isSrcReg(1) &&
-      Op.srcReg(0).RegKind == ParsedReg::SGPR &&
+      (Op.srcReg(0).RegKind == ParsedReg::SGPR ||
+       Op.srcReg(0).RegKind == ParsedReg::VCC) &&
       Op.srcReg(1).RegKind == ParsedReg::VGPR) {
     Out.HasSaddr = true;
-    Value *Saddr = Ctx.Regs.readReg64(Ctx.B, Op.srcReg(0));
+    Value *Saddr = Op.srcReg(0).RegKind == ParsedReg::VCC
+                       ? Ctx.Regs.loadVccScalar64(Ctx.B)
+                       : Ctx.Regs.readReg64(Ctx.B, Op.srcReg(0));
     Value *Vaddr = Ctx.B.CreateSExt(Ctx.Regs.readReg32(Ctx.B, Op.srcReg(1)),
                                     Ctx.I64Ty, "voff_sext");
     if (Di.HasScaleOffset)
@@ -116,13 +123,18 @@ Expected<FlatAddr> decodeGlobalStoreAddr(RaiseContext &Ctx,
   FlatAddr Out;
   Value *Addr = nullptr;
 
-  // SADDR form: vaddr(VGPR32), vdata(VGPR*), saddr(SGPR64), ...
+  // SADDR form: vaddr(VGPR32), vdata(VGPR*), saddr(SGPR64), ... The saddr slot
+  // can also be the VCC pair used as a general-purpose 64-bit base (see the
+  // load decoder above); read it from the VCC-as-scalar shadow in that case.
   if (Op.nSrcs() >= 3 && Op.isSrcReg(0) && Op.isSrcReg(1) && Op.isSrcReg(2) &&
       Op.srcReg(0).RegKind == ParsedReg::VGPR &&
       Op.srcReg(1).RegKind == ParsedReg::VGPR &&
-      Op.srcReg(2).RegKind == ParsedReg::SGPR) {
+      (Op.srcReg(2).RegKind == ParsedReg::SGPR ||
+       Op.srcReg(2).RegKind == ParsedReg::VCC)) {
     Out.HasSaddr = true;
-    Value *Saddr = Ctx.Regs.readReg64(Ctx.B, Op.srcReg(2));
+    Value *Saddr = Op.srcReg(2).RegKind == ParsedReg::VCC
+                       ? Ctx.Regs.loadVccScalar64(Ctx.B)
+                       : Ctx.Regs.readReg64(Ctx.B, Op.srcReg(2));
     Value *Vaddr = Ctx.B.CreateSExt(Ctx.Regs.readReg32(Ctx.B, Op.srcReg(0)),
                                     Ctx.I64Ty, "st_voff_sext");
     if (Di.HasScaleOffset)

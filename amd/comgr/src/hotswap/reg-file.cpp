@@ -132,6 +132,12 @@ void AllocaRegFile::init(IRBuilder<> &B, Type *I32Ty, Type *I1Ty,
   // subsequent `emitLaneActiveBit` call.
   Vcc = B.CreateAlloca(I1Ty, nullptr, "Vcc");
   B.CreateStore(ConstantInt::getFalse(I1Ty), Vcc);
+  // Full 64-bit VCC-as-scalar shadow (see AllocaRegFile::VccScalar). Zero-init
+  // gives a dominating store so mem2reg can lift it after collectAllocas
+  // gathers it.
+  Type *I64Ty = B.getInt64Ty();
+  VccScalar = B.CreateAlloca(I64Ty, nullptr, "VccScalar");
+  B.CreateStore(ConstantInt::get(I64Ty, 0), VccScalar);
   // Wave32-source VCC_HI scratch scalar (see ParsedReg::VCC_HI_SCRATCH).
   // Zero-initialised like the other condition scalars.
   VccHiScratch = B.CreateAlloca(I32Ty, nullptr, "VccHiScratch");
@@ -310,6 +316,16 @@ void AllocaRegFile::storeVCC(IRBuilder<> &B, Value *V) {
 
 Value *AllocaRegFile::loadVCC(IRBuilder<> &B) {
   return B.CreateLoad(B.getInt1Ty(), Vcc);
+}
+
+void AllocaRegFile::storeVccScalar64(IRBuilder<> &B, Value *V) {
+  if (V->getType() != B.getInt64Ty())
+    V = B.CreateZExtOrTrunc(V, B.getInt64Ty());
+  B.CreateStore(V, VccScalar);
+}
+
+Value *AllocaRegFile::loadVccScalar64(IRBuilder<> &B) {
+  return B.CreateLoad(B.getInt64Ty(), VccScalar);
 }
 
 void AllocaRegFile::storeSCC(IRBuilder<> &B, Value *V) {
@@ -591,7 +607,14 @@ void AllocaRegFile::writeReg64(IRBuilder<> &B, ParsedReg Pr, Value *V) {
   }
   if (Pr.RegKind == ParsedReg::VCC) {
     assert(Projection && "writeReg64(VCC) requires a WaveProjection");
+    // A 64-bit write to VCC can be either a wave-mask update (e.g.
+    // `s_and_b64 vcc, exec, vcc`) or the register allocator parking a plain
+    // 64-bit uniform scalar in the VCC pair (`s_add_nc_u64 vcc, ...`) to be
+    // consumed as a SADDR base. Update the i1 mask model AND record the raw 64
+    // bits so the flat/global address decoders can read the scalar back
+    // (readReg64(VCC) still returns the ballot mask for mask consumers).
     storeVCC(B, Projection->extractLaneBitFromWaveMask(B, V));
+    storeVccScalar64(B, V);
     return;
   }
   if (Pr.RegKind == ParsedReg::EXEC) {
@@ -756,6 +779,12 @@ void AllocaRegFile::collectAllocas(SmallVectorImpl<AllocaInst *> &Out) {
       Out.push_back(A);
   if (Vcc)
     Out.push_back(Vcc);
+  // VccScalar (the 64-bit VCC-as-scalar shadow) must be promoted for the same
+  // reason as VccHiScratch below: a surviving private alloca is moved to LDS by
+  // AMDGPUPromoteAllocaToLDS where it can alias the kernel's own LDS. Its
+  // dominating entry store (init()) lets PromoteMemToReg lift it.
+  if (VccScalar)
+    Out.push_back(VccScalar);
   // VccHiScratch (the wave32-source VCC_HI scratch scalar) must be promoted
   // too. As with the ttmps below, a surviving private alloca is moved to local
   // data share (LDS) by the AMDGPU backend's AMDGPUPromoteAllocaToLDS, where it
