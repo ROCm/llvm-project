@@ -359,7 +359,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
       KernelName, getKernelVgprGranuleSize(Ctx, KernelName));
   unsigned KdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
 
-  VgprAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
+  VgprAllocator Alloc(Ctx.Liveness.liveBefore(Idx), KdCount,
                       Ctx.Config.MaxVgprs);
 
   // Four block-32 scale VGPRs (A/B x low/high) plus one byte-extraction temp,
