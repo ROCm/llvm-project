@@ -2444,6 +2444,62 @@ TEST(TextDisplacement, RepairsAddPcTargetAcrossInsertion) {
   EXPECT_EQ(Decoded[3].Mnemonic, "s_endpgm");
 }
 
+TEST(TextDisplacement, RepairsMultipleLiteralPcReferencesAfterStreaming) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text =
+      assembleInstructions("s_add_pc_i64 lit64(0x14)\n"
+                           "s_nop 0\n"
+                           "s_add_pc_i64 lit64(0x4)\n"
+                           "s_nop 0\n"
+                           "s_endpgm",
+                           S);
+  ASSERT_EQ(Text.size(), 36u);
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 28;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+  uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
+  llvm::Expected<ElfView> OutView =
+      ElfView::create(OutData, Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(
+      decodeTextSection(OutView->textData(), OutView->textSize(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 7u);
+  ASSERT_EQ(Decoded[0].Inst.getOpcode(), S.SAddPcI64Opcode);
+  ASSERT_EQ(Decoded[2].Inst.getOpcode(), S.SAddPcI64Opcode);
+  int64_t FirstDelta = 0;
+  int64_t SecondDelta = 0;
+  ASSERT_TRUE(Decoded[0].Inst.getOperand(0).isExpr());
+  ASSERT_TRUE(Decoded[2].Inst.getOperand(0).isExpr());
+  ASSERT_TRUE(
+      Decoded[0].Inst.getOperand(0).getExpr()->evaluateAsAbsolute(FirstDelta));
+  ASSERT_TRUE(
+      Decoded[2].Inst.getOperand(0).getExpr()->evaluateAsAbsolute(SecondDelta));
+  EXPECT_EQ(FirstDelta, 0x18);
+  EXPECT_EQ(SecondDelta, 8);
+  EXPECT_EQ(Decoded[0].Offset + Decoded[0].Size +
+                static_cast<uint64_t>(FirstDelta),
+            Decoded[5].Offset);
+  EXPECT_EQ(Decoded[2].Offset + Decoded[2].Size +
+                static_cast<uint64_t>(SecondDelta),
+            Decoded[5].Offset);
+  EXPECT_EQ(Decoded[5].Mnemonic, "s_endpgm");
+}
+
 TEST(TextDisplacement, RepairsInlineAddPcImmediateAcrossInsertion) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

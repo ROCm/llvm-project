@@ -509,9 +509,24 @@ reencodeAbsoluteOperand(const InternalDecodedInst &DI, unsigned OperandIndex,
   return SmallVector<uint8_t>(Code.begin(), Code.end());
 }
 
+struct PendingAbsoluteRepair {
+  PendingAbsoluteRepair(const InternalDecodedInst &DI, unsigned OperandIndex,
+                        int64_t NewValue, uint64_t NewOffset,
+                        std::string Context)
+      : DI(DI), OperandIndex(OperandIndex), NewValue(NewValue),
+        NewOffset(NewOffset), Context(std::move(Context)) {}
+
+  InternalDecodedInst DI;
+  unsigned OperandIndex;
+  int64_t NewValue;
+  uint64_t NewOffset;
+  std::string Context;
+};
+
 Expected<bool> repairSGetPcPairForDisplacement(
     const ElfView &Elf, const LLVMState &LS, const DisplacementPlan &Plan,
-    const InternalDecodedInst &GetPc, SmallVectorImpl<uint8_t> &NewText) {
+    const InternalDecodedInst &GetPc,
+    SmallVectorImpl<PendingAbsoluteRepair> &PendingRepairs) {
   if (GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg()) {
     return false;
   }
@@ -582,23 +597,15 @@ Expected<bool> repairSGetPcPairForDisplacement(
   std::string Context = ("s_add for s_get_pc at old .text offset 0x" +
                          Twine::utohexstr(GetPc.Offset))
                             .str();
-  Expected<SmallVector<uint8_t>> CodeOrErr =
-      reencodeAbsoluteOperand(Add, /*OperandIndex=*/2, NewAddend, LS, Context);
-  if (!CodeOrErr)
-    return CodeOrErr.takeError();
-  SmallVector<uint8_t> &Code = *CodeOrErr;
-  if (NewAddOff > NewText.size() || Code.size() > NewText.size() - NewAddOff) {
-    return makeDisplacementError(Context + " writes past rebuilt .text");
-  }
-  std::memcpy(NewText.data() + NewAddOff, Code.data(), Code.size());
+  PendingRepairs.emplace_back(Add, /*OperandIndex=*/2, NewAddend, NewAddOff,
+                              std::move(Context));
   return true;
 }
 
-Expected<bool> repairSAddPcForDisplacement(const ElfView &Elf,
-                                           const LLVMState &LS,
-                                           const DisplacementPlan &Plan,
-                                           const InternalDecodedInst &AddPc,
-                                           SmallVectorImpl<uint8_t> &NewText) {
+Expected<bool> repairSAddPcForDisplacement(
+    const ElfView &Elf, const LLVMState &LS, const DisplacementPlan &Plan,
+    const InternalDecodedInst &AddPc,
+    SmallVectorImpl<PendingAbsoluteRepair> &PendingRepairs) {
   if (AddPc.Inst.getNumOperands() != 1)
     return false;
   int64_t OldDelta = 0;
@@ -651,16 +658,8 @@ Expected<bool> repairSAddPcForDisplacement(const ElfView &Elf,
   std::string Context =
       ("s_add_pc_i64 at old .text offset 0x" + Twine::utohexstr(AddPc.Offset))
           .str();
-  Expected<SmallVector<uint8_t>> CodeOrErr =
-      reencodeAbsoluteOperand(AddPc, /*OperandIndex=*/0, NewDelta, LS, Context);
-  if (!CodeOrErr)
-    return CodeOrErr.takeError();
-  SmallVector<uint8_t> &Code = *CodeOrErr;
-  if (NewAddPcOff > NewText.size() ||
-      Code.size() > NewText.size() - NewAddPcOff) {
-    return makeDisplacementError(Context + " writes past rebuilt .text");
-  }
-  std::memcpy(NewText.data() + NewAddPcOff, Code.data(), Code.size());
+  PendingRepairs.emplace_back(AddPc, /*OperandIndex=*/0, NewDelta, NewAddPcOff,
+                              std::move(Context));
   return true;
 }
 
@@ -673,6 +672,7 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
   }
 
   std::optional<Error> RepairError;
+  SmallVector<PendingAbsoluteRepair, 4> PendingRepairs;
   bool Decoded = decodeTextSectionStreaming(
       Elf.textData(), Elf.textSize(), LS, /*WantMnemonic=*/false,
       [&](const InternalDecodedInst &DI) {
@@ -687,8 +687,8 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
 
         const MCInst &Inst = DI.Inst;
         if (Inst.getOpcode() == LS.SGetPcI64Opcode) {
-          Expected<bool> RepairedOrErr =
-              repairSGetPcPairForDisplacement(Elf, LS, Plan, DI, NewText);
+          Expected<bool> RepairedOrErr = repairSGetPcPairForDisplacement(
+              Elf, LS, Plan, DI, PendingRepairs);
           if (!RepairedOrErr) {
             RepairError.emplace(RepairedOrErr.takeError());
             return false;
@@ -698,7 +698,7 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
         }
         if (Inst.getOpcode() == LS.SAddPcI64Opcode) {
           Expected<bool> RepairedOrErr =
-              repairSAddPcForDisplacement(Elf, LS, Plan, DI, NewText);
+              repairSAddPcForDisplacement(Elf, LS, Plan, DI, PendingRepairs);
           if (!RepairedOrErr) {
             RepairError.emplace(RepairedOrErr.takeError());
             return false;
@@ -791,6 +791,23 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
   }
   if (RepairError)
     return std::move(*RepairError);
+
+  // Forced AMDGPU literals are backend-private target expressions. Rebuilding
+  // one through the MC parser resets LS.Ctx, so do that only after the
+  // streaming decoder and its expression-bearing cache have been destroyed.
+  for (PendingAbsoluteRepair &Repair : PendingRepairs) {
+    Expected<SmallVector<uint8_t>> CodeOrErr = reencodeAbsoluteOperand(
+        Repair.DI, Repair.OperandIndex, Repair.NewValue, LS, Repair.Context);
+    if (!CodeOrErr)
+      return CodeOrErr.takeError();
+    SmallVector<uint8_t> &Code = *CodeOrErr;
+    if (Repair.NewOffset > NewText.size() ||
+        Code.size() > NewText.size() - Repair.NewOffset) {
+      return makeDisplacementError(Repair.Context +
+                                   " writes past rebuilt .text");
+    }
+    std::memcpy(NewText.data() + Repair.NewOffset, Code.data(), Code.size());
+  }
   return Error::success();
 }
 
