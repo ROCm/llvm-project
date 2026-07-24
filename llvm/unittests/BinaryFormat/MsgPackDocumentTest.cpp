@@ -494,6 +494,63 @@ TEST(MsgPackDocument, TestReadMergeMap) {
   ASSERT_EQ(BayS.getInt(), 8);
 }
 
+TEST(MsgPackDocument, RejectsContainerMapKeys) {
+  Document ArrayKeyDoc;
+  EXPECT_FALSE(
+      ArrayKeyDoc.readFromBlob(StringRef("\x81\x90\xc0", 3), /*Multi=*/false));
+  ASSERT_TRUE(ArrayKeyDoc.getRoot().isMap());
+  EXPECT_TRUE(ArrayKeyDoc.getRoot().getMap().empty());
+
+  Document MapKeyDoc;
+  EXPECT_FALSE(MapKeyDoc.readFromBlob(StringRef("\x81\x80\xc0", 3),
+                                      /*Multi=*/false));
+  ASSERT_TRUE(MapKeyDoc.getRoot().isMap());
+  EXPECT_TRUE(MapKeyDoc.getRoot().getMap().empty());
+
+  // Reject a container key without corrupting entries parsed before it.
+  Document PartialDoc;
+  EXPECT_FALSE(PartialDoc.readFromBlob(
+      StringRef("\x82\xa2ok\xc3\x90\xc0", 7), /*Multi=*/false));
+  ASSERT_TRUE(PartialDoc.getRoot().isMap());
+  MapDocNode PartialMap = PartialDoc.getRoot().getMap();
+  ASSERT_EQ(PartialMap.size(), 1u);
+  EXPECT_TRUE(PartialMap["ok"].getBool());
+}
+
+TEST(MsgPackDocument, AcceptsScalarMapKeysAndContainerValues) {
+  // The guard applies only to map keys. Exercise every scalar kind as a key
+  // and both container kinds as values.
+  const char Blob[] = {
+      static_cast<char>(0x87),
+      static_cast<char>(0xc0), // nil
+      static_cast<char>(0x90), // array value
+      static_cast<char>(0xff), // int
+      static_cast<char>(0x80), // map value
+      static_cast<char>(0x01), // uint
+      static_cast<char>(0xc0),
+      static_cast<char>(0xc3), // boolean
+      static_cast<char>(0xc0),
+      static_cast<char>(0xca), // float
+      static_cast<char>(0x3f),
+      static_cast<char>(0x80),
+      static_cast<char>(0x00),
+      static_cast<char>(0x00),
+      static_cast<char>(0xc0),
+      static_cast<char>(0xa1), // string
+      's',
+      static_cast<char>(0xc0),
+      static_cast<char>(0xc4), // binary
+      static_cast<char>(0x01),
+      'b',
+      static_cast<char>(0xc0),
+  };
+
+  Document Doc;
+  ASSERT_TRUE(Doc.readFromBlob(StringRef(Blob, sizeof(Blob)), /*Multi=*/false));
+  ASSERT_TRUE(Doc.getRoot().isMap());
+  EXPECT_EQ(Doc.getRoot().getMap().size(), 7u);
+}
+
 TEST(MsgPackDocument, TestWriteBoolean) {
   Document Doc;
   Doc.getRoot() = true;
