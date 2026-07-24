@@ -3480,3 +3480,85 @@ TEST(DecodeCache, TruncatedFinalWindowDecodesWithoutStaleHit) {
   // Stream consumed exactly (no over-run).
   EXPECT_EQ(Consumed, Text.size());
 }
+
+// -- decodeTextSectionStreaming ----------------------------------------------
+
+TEST(DecodeStreaming, MatchesMaterializedDecode) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const char *Seq[] = {
+      "s_nop 0",
+      "v_cvt_pk_fp8_f32 v4, 1.0, 0.5 clamp",
+      "s_nop 0",
+  };
+  llvm::SmallVector<uint8_t> Text;
+  appendInstStream(Text, Seq, S);
+
+  std::vector<InternalDecodedInst> Materialized;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Materialized));
+
+  std::vector<InternalDecodedInst> Streamed;
+  ASSERT_TRUE(decodeTextSectionStreaming(
+      Text.data(), Text.size(), S, /*WantMnemonic=*/true,
+      [&Streamed](const InternalDecodedInst &DI) {
+        Streamed.push_back(DI);
+        return true;
+      }));
+
+  ASSERT_EQ(Streamed.size(), Materialized.size());
+  for (size_t I = 0; I != Streamed.size(); ++I) {
+    EXPECT_EQ(Streamed[I].Offset, Materialized[I].Offset);
+    EXPECT_EQ(Streamed[I].Size, Materialized[I].Size);
+    EXPECT_EQ(Streamed[I].DecodeSucceeded, Materialized[I].DecodeSucceeded);
+    EXPECT_EQ(Streamed[I].Mnemonic, Materialized[I].Mnemonic);
+    expectSameOperands(Streamed[I].Inst, Materialized[I].Inst,
+                       "streamed decode");
+  }
+}
+
+TEST(DecodeStreaming, StopsWhenCallbackRequestsIt) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  for (unsigned I = 0; I != 4; ++I)
+    ASSERT_TRUE(appendSingleInstBytes(Text, "s_nop 0", S));
+
+  unsigned CallbackCount = 0;
+  ASSERT_TRUE(decodeTextSectionStreaming(
+      Text.data(), Text.size(), S, /*WantMnemonic=*/true,
+      [&CallbackCount](const InternalDecodedInst &DI) {
+        ++CallbackCount;
+        EXPECT_TRUE(DI.DecodeSucceeded);
+        return CallbackCount != 2;
+      }));
+  EXPECT_EQ(CallbackCount, 2u);
+}
+
+TEST(DecodeStreaming, OmitsSuccessfulMnemonicsOnRequest) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  ASSERT_TRUE(appendSingleInstBytes(Text, "s_nop 0", S));
+  ASSERT_TRUE(appendSingleInstBytes(Text, "s_endpgm", S));
+
+  unsigned CallbackCount = 0;
+  ASSERT_TRUE(decodeTextSectionStreaming(
+      Text.data(), Text.size(), S, /*WantMnemonic=*/false,
+      [&CallbackCount](const InternalDecodedInst &DI) {
+        ++CallbackCount;
+        EXPECT_TRUE(DI.DecodeSucceeded);
+        EXPECT_TRUE(DI.Mnemonic.empty());
+        return true;
+      }));
+  EXPECT_EQ(CallbackCount, 2u);
+
+  std::vector<InternalDecodedInst> Materialized;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Materialized,
+                                /*WantMnemonic=*/false));
+  ASSERT_EQ(Materialized.size(), 2u);
+  EXPECT_TRUE(Materialized[0].Mnemonic.empty());
+  EXPECT_TRUE(Materialized[1].Mnemonic.empty());
+}

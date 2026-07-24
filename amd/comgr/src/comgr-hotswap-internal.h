@@ -45,6 +45,7 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -907,9 +908,37 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 
 /// Disassemble \p Text into \p Decoded using \p LS. Unknown bytes are encoded
 /// as MinInstSize-sized entries with mnemonic "<unknown>".
+///
+/// \p WantMnemonic controls whether each decoded instruction's assembly
+/// mnemonic string is populated. Building the mnemonic (MCInstPrinter lookup
+/// plus a per-instruction std::string) is pure overhead for callers that only
+/// inspect opcodes / MCInstrAnalysis and read InternalDecodedInst::Mnemonic
+/// solely for diagnostics. Passing false leaves DI.Mnemonic empty for
+/// successful decodes (failed decodes still carry the "<unknown>" marker, which
+/// some callers key on) so those callers avoid ~1 std::string per instruction
+/// over the whole section. Defaults to true to preserve mnemonic-consuming
+/// callers.
 [[nodiscard]] bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
                                      const LLVMState &LS,
-                                     std::vector<InternalDecodedInst> &Decoded);
+                                     std::vector<InternalDecodedInst> &Decoded,
+                                     bool WantMnemonic = true);
+
+/// Streaming variant of decodeTextSection. Decodes \p Text one instruction at a
+/// time and invokes \p OnInst for each, in ascending offset order, reusing a
+/// single InternalDecodedInst so no O(TextSize) result vector is materialized.
+/// The decode logic (variable-length linear scan, per-call decode cache,
+/// unknown-byte handling, optional mnemonic) is identical to decodeTextSection;
+/// decodeTextSection is implemented on top of this by appending each callback
+/// instruction to its vector, so the two never diverge.
+///
+/// \p OnInst returns true to continue and false to stop the scan early (e.g. on
+/// the first rejection). Returns true if the scan completed or was stopped by
+/// the callback, false only if the decoder itself could not proceed. Callers
+/// carry their own error out through state captured in \p OnInst.
+[[nodiscard]] bool decodeTextSectionStreaming(
+    const uint8_t *Text, uint64_t TextSize, const LLVMState &LS,
+    bool WantMnemonic,
+    llvm::function_ref<bool(const InternalDecodedInst &)> OnInst);
 
 /// Assemble one non-empty assembly source line, returning its encoded bytes.
 /// Target pseudos may expand that source line to more than one MCInst.
