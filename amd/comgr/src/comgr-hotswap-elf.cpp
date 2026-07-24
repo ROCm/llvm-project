@@ -23,6 +23,7 @@
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 
 using namespace llvm;
@@ -393,6 +394,14 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
   // resulting ElfView). Once ELFFile is constructed, it owns the structural
   // view over these same bytes and we do not need to store Data/Size
   // separately -- ELFFile::base() / ELFFile::getBufSize() alias them.
+  if (Size < ELF::EI_NIDENT ||
+      std::memcmp(Data, ELF::ElfMagic, std::strlen(ELF::ElfMagic)) != 0 ||
+      Data[ELF::EI_CLASS] != ELF::ELFCLASS64 ||
+      Data[ELF::EI_DATA] != ELF::ELFDATA2LSB ||
+      Data[ELF::EI_VERSION] != ELF::EV_CURRENT)
+    return createStringError(object::object_error::parse_failed,
+                             "invalid ELF identification");
+
   Expected<ELFFileT> FileOrErr =
       ELFFileT::create(StringRef(reinterpret_cast<const char *>(Data), Size));
   if (!FileOrErr)

@@ -66,6 +66,18 @@ TEST(ElfView, RejectsNonElfInput) {
   llvm::consumeError(ViewOrErr.takeError());
 }
 
+TEST(ElfView, RejectsCorruptedElfIdentification) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  Obj.Bytes[llvm::ELF::EI_MAG2] ^= 0xff;
+  Obj.Bytes[llvm::ELF::EI_CLASS] ^= 0xff;
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  EXPECT_FALSE((bool)ViewOrErr);
+  llvm::consumeError(ViewOrErr.takeError());
+}
+
 TEST(ElfView, RejectsOverflowingTextFileRange) {
   comgr_test::KernelDescriptorElf Obj =
       comgr_test::makeKernelDescriptorElf(makeText());
