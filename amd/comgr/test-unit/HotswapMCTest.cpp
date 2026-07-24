@@ -2728,6 +2728,134 @@ TEST(TextDisplacement, WholeObjectModeRejectsRelocationRecords) {
       << Reason;
 }
 
+TEST(TextDisplacement, WholeObjectModeRequiresDynamicCodeObject) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::ELF::Elf64_Ehdr Header;
+  std::memcpy(&Header, ElfBytes.data(), sizeof(Header));
+  Header.e_type = llvm::ELF::ET_EXEC;
+  std::memcpy(ElfBytes.data(), &Header, sizeof(Header));
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {Edit},
+                               /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)PlanOrErr);
+  std::string Reason = llvm::toString(PlanOrErr.takeError());
+  EXPECT_NE(Reason.find("ET_DYN"), std::string::npos) << Reason;
+}
+
+TEST(TextDisplacement, WholeObjectModeRejectsNonPowerOfTwoAlignment) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::ELF::Elf64_Ehdr Header;
+  std::memcpy(&Header, ElfBytes.data(), sizeof(Header));
+  llvm::ELF::Elf64_Shdr Rodata;
+  const uint64_t RodataHeaderOffset =
+      Header.e_shoff + 2 * sizeof(llvm::ELF::Elf64_Shdr);
+  std::memcpy(&Rodata, ElfBytes.data() + RodataHeaderOffset, sizeof(Rodata));
+  Rodata.sh_addralign = 3;
+  std::memcpy(ElfBytes.data() + RodataHeaderOffset, &Rodata, sizeof(Rodata));
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {Edit},
+                               /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)PlanOrErr);
+  std::string Reason = llvm::toString(PlanOrErr.takeError());
+  EXPECT_NE(Reason.find("power of two"), std::string::npos) << Reason;
+}
+
+TEST(TextDisplacement, WholeObjectModeRejectsAddressBearingSection) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::ELF::Elf64_Ehdr Header;
+  std::memcpy(&Header, ElfBytes.data(), sizeof(Header));
+  llvm::ELF::Elf64_Shdr Rodata;
+  const uint64_t RodataHeaderOffset =
+      Header.e_shoff + 2 * sizeof(llvm::ELF::Elf64_Shdr);
+  std::memcpy(&Rodata, ElfBytes.data() + RodataHeaderOffset, sizeof(Rodata));
+  Rodata.sh_type = llvm::ELF::SHT_INIT_ARRAY;
+  std::memcpy(ElfBytes.data() + RodataHeaderOffset, &Rodata, sizeof(Rodata));
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {Edit},
+                               /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)PlanOrErr);
+  std::string Reason = llvm::toString(PlanOrErr.takeError());
+  EXPECT_NE(Reason.find("address-bearing section type"), std::string::npos)
+      << Reason;
+}
+
+TEST(TextDisplacement, WholeObjectModeRejectsAbsoluteFunctionSymbol) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::ELF::Elf64_Ehdr Header;
+  std::memcpy(&Header, ElfBytes.data(), sizeof(Header));
+  llvm::ELF::Elf64_Shdr Symtab;
+  const uint64_t SymtabHeaderOffset =
+      Header.e_shoff + 4 * sizeof(llvm::ELF::Elf64_Shdr);
+  std::memcpy(&Symtab, ElfBytes.data() + SymtabHeaderOffset, sizeof(Symtab));
+  llvm::ELF::Elf64_Sym KernelSymbol;
+  const uint64_t KernelSymbolOffset =
+      Symtab.sh_offset + sizeof(llvm::ELF::Elf64_Sym);
+  std::memcpy(&KernelSymbol, ElfBytes.data() + KernelSymbolOffset,
+              sizeof(KernelSymbol));
+  KernelSymbol.st_shndx = llvm::ELF::SHN_ABS;
+  std::memcpy(ElfBytes.data() + KernelSymbolOffset, &KernelSymbol,
+              sizeof(KernelSymbol));
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.OriginalSize = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {Edit},
+                               /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)PlanOrErr);
+  std::string Reason = llvm::toString(PlanOrErr.takeError());
+  EXPECT_NE(Reason.find("absolute function symbol"), std::string::npos)
+      << Reason;
+}
+
 TEST(TextDisplacement, RejectsLaterFileContentInTextLoadSegment) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

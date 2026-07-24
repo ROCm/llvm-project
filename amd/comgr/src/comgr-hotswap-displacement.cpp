@@ -218,10 +218,35 @@ Error validateVirtualGrowth(const ElfView &Elf, uint64_t PaddedGrowth) {
   return Error::success();
 }
 
+bool isKnownAllocatedSectionType(uint32_t Type) {
+  switch (Type) {
+  case ELF::SHT_PROGBITS:
+  case ELF::SHT_SYMTAB:
+  case ELF::SHT_STRTAB:
+  case ELF::SHT_HASH:
+  case ELF::SHT_NOTE:
+  case ELF::SHT_NOBITS:
+  case ELF::SHT_DYNSYM:
+  case ELF::SHT_GROUP:
+  case ELF::SHT_SYMTAB_SHNDX:
+  case ELF::SHT_GNU_HASH:
+  case ELF::SHT_GNU_verdef:
+  case ELF::SHT_GNU_verneed:
+  case ELF::SHT_GNU_versym:
+    return true;
+  }
+  return false;
+}
+
 Error validateTrailingRelocationLayout(const ElfView &Elf) {
-  if (Elf.file().getHeader().e_type == ELF::ET_REL) {
+  if (Elf.file().getHeader().e_type != ELF::ET_DYN) {
     return makeDisplacementError(
-        "trailing-section relocation requires a linked ELF object");
+        "trailing-section relocation requires a linked ET_DYN code object");
+  }
+  if (!(Elf.textSection()->sh_flags & ELF::SHF_ALLOC) ||
+      !(Elf.textSection()->sh_flags & ELF::SHF_EXECINSTR)) {
+    return makeDisplacementError(
+        ".text must be an allocated executable section");
   }
   if (Elf.textSize() > std::numeric_limits<uint64_t>::max() - Elf.textAddr() ||
       Elf.textSize() >
@@ -234,6 +259,9 @@ Error validateTrailingRelocationLayout(const ElfView &Elf) {
 
   SmallVector<const ELFT::Shdr *, 8> AllocatedSections;
   for (const ELFT::Shdr &Shdr : Elf.sections()) {
+    if (Shdr.sh_addralign > 1 && !isPowerOf2_64(Shdr.sh_addralign)) {
+      return makeDisplacementError("section alignment is not a power of two");
+    }
     if (Shdr.sh_type == ELF::SHT_DYNAMIC) {
       return makeDisplacementError(
           "dynamic sections require dynamic-tag address repair");
@@ -242,8 +270,27 @@ Error validateTrailingRelocationLayout(const ElfView &Elf) {
       return makeDisplacementError(
           "relocation sections require relocation-record repair");
     }
+    if (Shdr.sh_type == ELF::SHT_RELR || Shdr.sh_type == ELF::SHT_CREL ||
+        Shdr.sh_type == ELF::SHT_ANDROID_REL ||
+        Shdr.sh_type == ELF::SHT_ANDROID_RELA ||
+        Shdr.sh_type == ELF::SHT_ANDROID_RELR ||
+        Shdr.sh_type == ELF::SHT_INIT_ARRAY ||
+        Shdr.sh_type == ELF::SHT_FINI_ARRAY ||
+        Shdr.sh_type == ELF::SHT_PREINIT_ARRAY ||
+        Shdr.sh_type == ELF::SHT_GNU_SFRAME ||
+        Shdr.sh_type == ELF::SHT_LLVM_BB_ADDR_MAP ||
+        Shdr.sh_type == ELF::SHT_LLVM_JT_SIZES ||
+        Shdr.sh_type == ELF::SHT_LLVM_CFI_JUMP_TABLE ||
+        Shdr.sh_type == ELF::SHT_LLVM_CALL_GRAPH) {
+      return makeDisplacementError(
+          "code object has an unsupported address-bearing section type");
+    }
     if (!(Shdr.sh_flags & ELF::SHF_ALLOC) || Shdr.sh_size == 0)
       continue;
+    if (!isKnownAllocatedSectionType(Shdr.sh_type)) {
+      return makeDisplacementError(
+          "allocated section type is outside the displacement whitelist");
+    }
     if (Shdr.sh_size > std::numeric_limits<uint64_t>::max() - Shdr.sh_addr) {
       return makeDisplacementError("allocated section address range overflows");
     }
@@ -273,6 +320,10 @@ Error validateTrailingRelocationLayout(const ElfView &Elf) {
         return makeDisplacementError(
             "allocated section file and virtual ordering disagree");
       }
+    } else if ((AddressBefore && Shdr.sh_offset > Elf.textOffset()) ||
+               (AddressAfter && Shdr.sh_offset < TextFileEnd)) {
+      return makeDisplacementError(
+          "NOBITS section file and virtual ordering disagree");
     }
   }
 
@@ -289,6 +340,34 @@ Error validateTrailingRelocationLayout(const ElfView &Elf) {
     }
   }
 
+  for (const ELFT::Shdr &SymShdr : Elf.sections()) {
+    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+    Expected<ELFT::SymRange> SymbolsOrErr = Elf.file().symbols(&SymShdr);
+    if (!SymbolsOrErr) {
+      return makeDisplacementError(
+          "failed to read symbols while validating absolute addresses: " +
+          Twine(toString(SymbolsOrErr.takeError())));
+    }
+    for (const ELFT::Sym &Symbol : *SymbolsOrErr) {
+      if (Symbol.st_shndx != ELF::SHN_ABS || Symbol.st_value == 0)
+        continue;
+      if (Symbol.getType() == ELF::STT_FUNC) {
+        return makeDisplacementError(
+            "absolute function symbol is outside the displacement map");
+      }
+      for (const ELFT::Shdr &Owner : Elf.sections()) {
+        if (!(Owner.sh_flags & ELF::SHF_ALLOC) || Owner.sh_size == 0 ||
+            Symbol.st_value < Owner.sh_addr ||
+            Symbol.st_value - Owner.sh_addr >= Owner.sh_size)
+          continue;
+        return makeDisplacementError(
+            "absolute symbol aliases movable allocated content");
+      }
+    }
+  }
+
   Expected<ELFT::PhdrRange> PhdrsOrErr = Elf.file().program_headers();
   if (!PhdrsOrErr) {
     return makeDisplacementError(
@@ -299,6 +378,10 @@ Error validateTrailingRelocationLayout(const ElfView &Elf) {
   bool FoundTextLoad = false;
   SmallVector<const ELFT::Phdr *, 8> LoadSegments;
   for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_align > 1 && !isPowerOf2_64(Phdr.p_align)) {
+      return makeDisplacementError(
+          "program-header alignment is not a power of two");
+    }
     if (Phdr.p_type == ELF::PT_DYNAMIC) {
       return makeDisplacementError(
           "PT_DYNAMIC requires dynamic-tag address repair");
@@ -308,9 +391,6 @@ Error validateTrailingRelocationLayout(const ElfView &Elf) {
     if (Phdr.p_filesz > std::numeric_limits<uint64_t>::max() - Phdr.p_offset ||
         Phdr.p_memsz > std::numeric_limits<uint64_t>::max() - Phdr.p_vaddr) {
       return makeDisplacementError("PT_LOAD range overflows");
-    }
-    if (Phdr.p_align > 1 && !isPowerOf2_64(Phdr.p_align)) {
-      return makeDisplacementError("PT_LOAD alignment is not a power of two");
     }
     if (Phdr.p_align != 0 &&
         Phdr.p_offset % Phdr.p_align != Phdr.p_vaddr % Phdr.p_align) {
@@ -1098,8 +1178,7 @@ Error adjustProgramHeadersForTextGrowth(uint8_t *Elf, size_t ElfSize,
         return makeDisplacementError(
             "program-header file size overflows after displacement");
       uint64_t NewFileSize = OldPhdr.p_filesz + Growth;
-      uint64_t NewMemorySize =
-          std::max<uint64_t>(OldPhdr.p_memsz, NewFileSize);
+      uint64_t NewMemorySize = std::max<uint64_t>(OldPhdr.p_memsz, NewFileSize);
       if (RelocateAddresses) {
         if (OldPhdr.p_memsz > std::numeric_limits<uint64_t>::max() - Growth)
           return makeDisplacementError(
