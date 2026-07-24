@@ -816,6 +816,10 @@ public:
 };
 } // namespace
 
+/// TIDYUP: It is possible we might want to restrict pointers from this optimization as they have
+/// attach semantics and can be re-targetted causing some oddities e.g. attach_always test in
+/// fortran-map-tests. Or alternatively have the compiler option be a little more fine-grain
+/// and allow a user to specify there application is fine to elide pointer maps.
 std::unique_ptr<mlir::Pass>
 flangomp::createDescriptorElisionPass(bool enableDescriptorElision,
                                       bool emitDescriptorElisionRemarks) {
