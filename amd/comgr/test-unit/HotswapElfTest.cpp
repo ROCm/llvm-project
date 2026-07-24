@@ -66,6 +66,29 @@ TEST(ElfView, RejectsNonElfInput) {
   llvm::consumeError(ViewOrErr.takeError());
 }
 
+TEST(ElfView, RejectsOverflowingTextFileRange) {
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText());
+  llvm::Expected<ElfView> ValidViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ValidViewOrErr)
+      << llvm::toString(ValidViewOrErr.takeError());
+
+  const auto *Text = ValidViewOrErr->textSection();
+  ASSERT_GT(Text->sh_offset, 0u);
+  size_t TextHeaderOffset =
+      reinterpret_cast<const uint8_t *>(Text) - Obj.Bytes.data();
+  auto BadText = *Text;
+  BadText.sh_size =
+      std::numeric_limits<uint64_t>::max() - BadText.sh_offset + 1;
+  std::memcpy(Obj.Bytes.data() + TextHeaderOffset, &BadText, sizeof(BadText));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  EXPECT_FALSE((bool)ViewOrErr);
+  llvm::consumeError(ViewOrErr.takeError());
+}
+
 // -- ElfView::findKernelAtAddress ---------------------------------------------
 
 TEST(ElfView, FindKernelAtAddressResolvesNearestPrecedingForZeroSizeSymbol) {

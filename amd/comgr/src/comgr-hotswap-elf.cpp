@@ -414,7 +414,8 @@ Expected<ElfView> ElfView::create(uint8_t *Data, size_t Size) {
       ++Idx;
       continue;
     }
-    if (*NameOrErr == ".text" && Shdr.sh_offset + Shdr.sh_size <= Size) {
+    if (*NameOrErr == ".text" && Shdr.sh_offset <= Size &&
+        Shdr.sh_size <= Size - Shdr.sh_offset) {
       Text = &Shdr;
       TextIdx = Idx;
       break;
