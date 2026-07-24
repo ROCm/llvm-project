@@ -24,6 +24,7 @@
 #include "gtest/gtest.h"
 
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <mutex>
 #include <vector>
@@ -290,6 +291,7 @@ TEST(InitLLVM, ValidGfx1250) {
   EXPECT_LT(S.SAddPcI64Opcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SCallI64Opcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SSwapPcI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SLoadB64ImmOpcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SPrefetchInstPcRelOpcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SPrefetchDataPcRelOpcode, S.MCII->getNumOpcodes());
   EXPECT_TRUE(S.SCCRegister.isValid());
@@ -1136,8 +1138,10 @@ TEST(CollectDirectBranchTargets, BoundsCanonicalSetPcReturn) {
   ASSERT_EQ(Decoded[1].Inst.getOpcode(), S.SSetPcI64Opcode);
   ASSERT_EQ(Decoded[3].Inst.getOpcode(), S.SGetPcI64Opcode);
   llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  ElfView::ELFT::Sym FunctionSymbol{};
+  FunctionSymbol.setBindingAndType(llvm::ELF::STB_LOCAL, llvm::ELF::STT_FUNC);
   llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
-      {0, Decoded[3].Offset}};
+      {0, Decoded[3].Offset, &FunctionSymbol}};
 
   // The helper preserves the link pair from its entry through s_set_pc_i64.
   // The block laid out after the return can branch back into the epilogue,
@@ -1147,10 +1151,30 @@ TEST(CollectDirectBranchTargets, BoundsCanonicalSetPcReturn) {
       Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
       FunctionRanges);
   ASSERT_TRUE(Info);
-  ASSERT_EQ(Info->Targets.size(), 2u);
+  ASSERT_EQ(Info->Targets.size(), 3u);
   EXPECT_TRUE(Info->Targets.contains(0));
   EXPECT_TRUE(Info->Targets.contains(Decoded[1].Offset));
+  EXPECT_TRUE(
+      Info->Targets.contains(Decoded.back().Offset + Decoded.back().Size));
+  EXPECT_TRUE(Info->RelocatableIndirectTransfers.contains(Decoded[1].Offset));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
+
+  // A link-visible device function is still closed-world callable when a
+  // complete relocation table proves its entry and every call/return edge.
+  FunctionSymbol.setBindingAndType(llvm::ELF::STB_GLOBAL, llvm::ELF::STT_FUNC);
+  RelocationTableDispatch Dispatch;
+  Dispatch.CallOffset = Decoded.back().Offset;
+  Dispatch.SequenceStart = Decoded[3].Offset;
+  Dispatch.SequenceEnd = Decoded.back().Offset;
+  Dispatch.Targets.push_back(0);
+  llvm::SmallVector<uint64_t, 1> ExternalEntries{0};
+  Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x1000, DeclaredEntries,
+                                 FunctionRanges, ExternalEntries, {Dispatch});
+  ASSERT_TRUE(Info);
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+  EXPECT_TRUE(Info->RelocatableIndirectTransfers.contains(Decoded[1].Offset));
 }
 
 TEST(CollectDirectBranchTargets, RejectsClobberedSetPcReturn) {
@@ -1462,6 +1486,41 @@ TEST(CollectDirectBranchTargets, CollectsPcRelativeCall) {
   EXPECT_TRUE(
       Info->Targets.contains(0x200u + Decoded[0].Size + 2 * MinInstSize));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsMaterializedEntryIntoRelocationProof) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_get_pc_i64 s[4:5]\n"
+                           "s_add_nc_u64 s[4:5], s[4:5], 16\n"
+                           "s_swap_pc_i64 s[28:29], s[4:5]\n"
+                           "s_get_pc_i64 s[54:55]\n"
+                           "s_add_nc_u64 s[54:55], s[54:55], 0\n"
+                           "s_load_b64 s[0:1], s[54:55], 0\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                           "s_endpgm",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 8u);
+  ASSERT_EQ(Decoded[5].Offset, 20u);
+
+  RelocationTableDispatch Dispatch;
+  Dispatch.CallOffset = Decoded[6].Offset;
+  Dispatch.SequenceStart = Decoded[3].Offset;
+  Dispatch.SequenceEnd = Decoded[6].Offset;
+  Dispatch.Targets.push_back(Decoded[7].Offset);
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, Bytes.size(), /*DeclaredEntries=*/{},
+      /*FunctionRanges=*/{}, /*ExternalEntries=*/{}, {Dispatch});
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
+  EXPECT_TRUE(Info->Targets.contains(Decoded[5].Offset));
+  EXPECT_FALSE(
+      Info->RelocatableIndirectTransfers.contains(Dispatch.CallOffset));
 }
 
 TEST(SafeSgprScratchBlock, RejectsRegisterBeyondAddressableLimit) {
@@ -3050,6 +3109,478 @@ TEST(TextDisplacement, RejectsTextRelocationSections) {
   ASSERT_FALSE((bool)OutOrErr);
   std::string Reason = llvm::toString(OutOrErr.takeError());
   EXPECT_NE(Reason.find("relocation section"), std::string::npos);
+}
+
+struct RelocationDispatchTestObject {
+  std::vector<uint8_t> Bytes;
+  std::vector<InternalDecodedInst> Decoded;
+  uint64_t CallOffset = 0;
+  uint64_t TargetOffset = 0;
+  uint64_t RelaSectionHeaderOffset = 0;
+  uint64_t RelaOffset = 0;
+  uint64_t TableSymbolOffset = 0;
+  uint64_t TableSectionHeaderOffset = 0;
+  uint64_t TextProgramHeaderOffset = 0;
+  uint64_t TableProgramHeaderOffset = 0;
+  uint64_t TableFileOffset = 0;
+};
+
+static std::optional<RelocationDispatchTestObject>
+makeRelocationDispatchTestObject(const LLVMState &S, bool DynamicIndex = false,
+                                 uint64_t SlotOffset = 0) {
+  llvm::SmallVector<uint8_t> Text;
+  const std::function<bool(llvm::StringRef)> Append =
+      [&](llvm::StringRef Assembly) {
+        llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Assembly, S);
+        if (Bytes.empty())
+          return false;
+        Text.append(Bytes.begin(), Bytes.end());
+        return true;
+      };
+  if (!Append("s_get_pc_i64 s[54:55]") ||
+      !Append("s_add_nc_u64 s[54:55], s[54:55], 0xffc"))
+    return std::nullopt;
+  if (DynamicIndex) {
+    if (!Append("s_load_b64 s[0:1], s[54:55], s2 scale_offset"))
+      return std::nullopt;
+  } else {
+    const std::string Load =
+        (llvm::Twine("s_load_b64 s[0:1], s[54:55], ") + llvm::Twine(SlotOffset))
+            .str();
+    if (!Append(Load))
+      return std::nullopt;
+  }
+
+  RelocationDispatchTestObject Object;
+  Object.CallOffset = Text.size();
+  if (!Append("s_swap_pc_i64 s[30:31], s[0:1]"))
+    return std::nullopt;
+  Object.TargetOffset = Text.size();
+  if (!Append("s_endpgm"))
+    return std::nullopt;
+
+  Object.Bytes = makeDisplacementTestElf(Text, /*AddTextRelocation=*/true,
+                                         /*AddDebugSection=*/false,
+                                         /*AddBoundaryTextSymbol=*/true);
+  llvm::Expected<ElfView> InitialView =
+      ElfView::create(Object.Bytes.data(), Object.Bytes.size());
+  if (!InitialView) {
+    llvm::consumeError(InitialView.takeError());
+    return std::nullopt;
+  }
+
+  const ElfView::ELFT::Shdr *RelaShdr = nullptr;
+  const ElfView::ELFT::Shdr *SymtabShdr = nullptr;
+  for (const ElfView::ELFT::Shdr &Shdr : InitialView->sections()) {
+    if (Shdr.sh_type == llvm::ELF::SHT_RELA)
+      RelaShdr = &Shdr;
+    if (Shdr.sh_type == llvm::ELF::SHT_SYMTAB)
+      SymtabShdr = &Shdr;
+  }
+  if (!RelaShdr || !SymtabShdr)
+    return std::nullopt;
+
+  Object.RelaSectionHeaderOffset =
+      reinterpret_cast<const uint8_t *>(RelaShdr) - Object.Bytes.data();
+  ElfView::ELFT::Shdr RawRelaShdr = *RelaShdr;
+  RawRelaShdr.sh_flags |= llvm::ELF::SHF_ALLOC;
+  RawRelaShdr.sh_info = 0;
+  std::memcpy(Object.Bytes.data() + Object.RelaSectionHeaderOffset,
+              &RawRelaShdr, sizeof(RawRelaShdr));
+  Object.RelaOffset = RawRelaShdr.sh_offset;
+
+  Object.TableSymbolOffset =
+      SymtabShdr->sh_offset + 2 * sizeof(llvm::ELF::Elf64_Sym);
+  llvm::ELF::Elf64_Sym TableSymbol;
+  std::memcpy(&TableSymbol, Object.Bytes.data() + Object.TableSymbolOffset,
+              sizeof(TableSymbol));
+  TableSymbol.st_size = 2 * sizeof(uint64_t);
+  std::memcpy(Object.Bytes.data() + Object.TableSymbolOffset, &TableSymbol,
+              sizeof(TableSymbol));
+
+  llvm::ELF::Elf64_Rela Rela;
+  Rela.r_offset = TableSymbol.st_value;
+  Rela.r_addend = InitialView->textAddr() + Object.TargetOffset;
+  Rela.setSymbolAndType(/*Symbol=*/0, llvm::ELF::R_AMDGPU_RELATIVE64);
+  std::memcpy(Object.Bytes.data() + Object.RelaOffset, &Rela, sizeof(Rela));
+
+  const ElfView::ELFT::Shdr &TableShdr =
+      InitialView->sections()[TableSymbol.st_shndx];
+  Object.TableSectionHeaderOffset =
+      reinterpret_cast<const uint8_t *>(&TableShdr) - Object.Bytes.data();
+  Object.TableFileOffset =
+      TableShdr.sh_offset + TableSymbol.st_value - TableShdr.sh_addr;
+
+  llvm::Expected<ElfView::ELFT::PhdrRange> Phdrs =
+      InitialView->file().program_headers();
+  if (!Phdrs) {
+    llvm::consumeError(Phdrs.takeError());
+    return std::nullopt;
+  }
+  for (const ElfView::ELFT::Phdr &Phdr : *Phdrs) {
+    const uint64_t Offset =
+        reinterpret_cast<const uint8_t *>(&Phdr) - Object.Bytes.data();
+    if (Phdr.p_type == llvm::ELF::PT_LOAD &&
+        Phdr.p_vaddr <= InitialView->textAddr() &&
+        InitialView->textAddr() - Phdr.p_vaddr < Phdr.p_memsz)
+      Object.TextProgramHeaderOffset = Offset;
+    if (Phdr.p_type == llvm::ELF::PT_LOAD &&
+        Phdr.p_vaddr <= TableSymbol.st_value &&
+        TableSymbol.st_value - Phdr.p_vaddr < Phdr.p_memsz)
+      Object.TableProgramHeaderOffset = Offset;
+  }
+  if (!Object.TextProgramHeaderOffset || !Object.TableProgramHeaderOffset)
+    return std::nullopt;
+
+  llvm::Expected<ElfView> View =
+      ElfView::create(Object.Bytes.data(), Object.Bytes.size());
+  if (!View) {
+    llvm::consumeError(View.takeError());
+    return std::nullopt;
+  }
+  if (!decodeTextSection(View->textData(), View->textSize(), S, Object.Decoded))
+    return std::nullopt;
+  return Object;
+}
+
+static llvm::Expected<std::vector<RelocationTableDispatch>>
+analyzeRelocationDispatchTestObject(RelocationDispatchTestObject &Object,
+                                    const LLVMState &S) {
+  llvm::Expected<ElfView> View =
+      ElfView::create(Object.Bytes.data(), Object.Bytes.size());
+  if (!View)
+    return View.takeError();
+  return analyzeRelocationTableDispatches(*View, Object.Decoded, S);
+}
+
+static bool
+appendRelocationDispatchSection(RelocationDispatchTestObject &Object,
+                                llvm::ELF::Elf64_Shdr NewSection,
+                                llvm::ArrayRef<uint8_t> Contents) {
+  if (NewSection.sh_addralign == 0)
+    return false;
+
+  llvm::ELF::Elf64_Ehdr Header;
+  std::memcpy(&Header, Object.Bytes.data(), sizeof(Header));
+  std::vector<llvm::ELF::Elf64_Shdr> SectionHeaders(Header.e_shnum);
+  std::memcpy(SectionHeaders.data(), Object.Bytes.data() + Header.e_shoff,
+              SectionHeaders.size() * sizeof(llvm::ELF::Elf64_Shdr));
+
+  while (Object.Bytes.size() % NewSection.sh_addralign != 0)
+    Object.Bytes.push_back(0);
+  NewSection.sh_offset = Object.Bytes.size();
+  NewSection.sh_size = Contents.size();
+  Object.Bytes.insert(Object.Bytes.end(), Contents.begin(), Contents.end());
+  SectionHeaders.push_back(NewSection);
+
+  while (Object.Bytes.size() % alignof(llvm::ELF::Elf64_Shdr) != 0)
+    Object.Bytes.push_back(0);
+  if (SectionHeaders.size() >=
+      static_cast<size_t>(std::numeric_limits<uint16_t>::max()))
+    return false;
+  Header.e_shoff = Object.Bytes.size();
+  Header.e_shnum = static_cast<uint16_t>(SectionHeaders.size());
+  const size_t SectionTableSize =
+      SectionHeaders.size() * sizeof(llvm::ELF::Elf64_Shdr);
+  Object.Bytes.resize(Object.Bytes.size() + SectionTableSize);
+  std::memcpy(Object.Bytes.data() + Header.e_shoff, SectionHeaders.data(),
+              SectionTableSize);
+  std::memcpy(Object.Bytes.data(), &Header, sizeof(Header));
+  return true;
+}
+
+TEST(RelocationTableDispatch, ProvesCompleteConstantSlot) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<RelocationDispatchTestObject> ObjectOr =
+      makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  RelocationDispatchTestObject &Object = *ObjectOr;
+
+  llvm::Expected<std::vector<RelocationTableDispatch>> Dispatches =
+      analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  ASSERT_EQ(Dispatches->size(), 1u);
+  EXPECT_EQ((*Dispatches)[0].CallOffset, Object.CallOffset);
+  EXPECT_EQ((*Dispatches)[0].SequenceStart, 0u);
+  EXPECT_EQ((*Dispatches)[0].SequenceEnd, Object.CallOffset);
+  ASSERT_EQ((*Dispatches)[0].Targets.size(), 1u);
+  EXPECT_EQ((*Dispatches)[0].Targets[0], Object.TargetOffset);
+
+  llvm::Expected<ElfView> View =
+      ElfView::create(Object.Bytes.data(), Object.Bytes.size());
+  ASSERT_TRUE((bool)View) << llvm::toString(View.takeError());
+  std::optional<DirectControlFlowInfo> ControlFlow =
+      analyzeDirectControlFlow(*View, Object.Decoded, S);
+  ASSERT_TRUE(ControlFlow);
+  EXPECT_FALSE(ControlFlow->HasUnresolvedTargets);
+  EXPECT_TRUE(
+      ControlFlow->RelocatableIndirectTransfers.contains(Object.CallOffset));
+  EXPECT_TRUE(ControlFlow->Targets.contains(Object.TargetOffset));
+}
+
+TEST(RelocationTableDispatch, RejectsUnboundedOrInvalidSlot) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::optional<RelocationDispatchTestObject> DynamicObjectOr =
+      makeRelocationDispatchTestObject(S, /*DynamicIndex=*/true);
+  ASSERT_TRUE(DynamicObjectOr);
+  llvm::Expected<std::vector<RelocationTableDispatch>> Dispatches =
+      analyzeRelocationDispatchTestObject(*DynamicObjectOr, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+
+  std::optional<RelocationDispatchTestObject> NullSlotObjectOr =
+      makeRelocationDispatchTestObject(S, /*DynamicIndex=*/false,
+                                       /*SlotOffset=*/sizeof(uint64_t));
+  ASSERT_TRUE(NullSlotObjectOr);
+  Dispatches = analyzeRelocationDispatchTestObject(*NullSlotObjectOr, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+
+  std::optional<RelocationDispatchTestObject> InteriorTargetOr =
+      makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(InteriorTargetOr);
+  RelocationDispatchTestObject InteriorTarget = std::move(*InteriorTargetOr);
+  llvm::ELF::Elf64_Rela Rela;
+  std::memcpy(&Rela, InteriorTarget.Bytes.data() + InteriorTarget.RelaOffset,
+              sizeof(Rela));
+  ++Rela.r_addend;
+  std::memcpy(InteriorTarget.Bytes.data() + InteriorTarget.RelaOffset, &Rela,
+              sizeof(Rela));
+  Dispatches = analyzeRelocationDispatchTestObject(InteriorTarget, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+
+  std::optional<RelocationDispatchTestObject> UndecodedTargetOr =
+      makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(UndecodedTargetOr);
+  RelocationDispatchTestObject UndecodedTarget = std::move(*UndecodedTargetOr);
+  ASSERT_FALSE(UndecodedTarget.Decoded.empty());
+  UndecodedTarget.Decoded.back().DecodeSucceeded = false;
+  Dispatches = analyzeRelocationDispatchTestObject(UndecodedTarget, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+}
+
+TEST(RelocationTableDispatch, RequiresCompleteDynamicRelocations) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<RelocationDispatchTestObject> ObjectOr =
+      makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  RelocationDispatchTestObject Object = std::move(*ObjectOr);
+
+  ElfView::ELFT::Shdr RelaShdr;
+  std::memcpy(&RelaShdr, Object.Bytes.data() + Object.RelaSectionHeaderOffset,
+              sizeof(RelaShdr));
+  RelaShdr.sh_flags &= ~uint64_t{llvm::ELF::SHF_ALLOC};
+  std::memcpy(Object.Bytes.data() + Object.RelaSectionHeaderOffset, &RelaShdr,
+              sizeof(RelaShdr));
+  llvm::Expected<std::vector<RelocationTableDispatch>> Dispatches =
+      analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+
+  ObjectOr = makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  Object = std::move(*ObjectOr);
+  std::memcpy(&RelaShdr, Object.Bytes.data() + Object.RelaSectionHeaderOffset,
+              sizeof(RelaShdr));
+  RelaShdr.sh_info = 1;
+  std::memcpy(Object.Bytes.data() + Object.RelaSectionHeaderOffset, &RelaShdr,
+              sizeof(RelaShdr));
+  Dispatches = analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+
+  ObjectOr = makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  Object = std::move(*ObjectOr);
+  llvm::ELF::Elf64_Rela Rela;
+  std::memcpy(&Rela, Object.Bytes.data() + Object.RelaOffset, sizeof(Rela));
+  Rela.setSymbolAndType(/*Symbol=*/1, llvm::ELF::R_AMDGPU_RELATIVE64);
+  std::memcpy(Object.Bytes.data() + Object.RelaOffset, &Rela, sizeof(Rela));
+  Dispatches = analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+
+  ObjectOr = makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  Object = std::move(*ObjectOr);
+  const uint64_t NonZero = 1;
+  std::memcpy(Object.Bytes.data() + Object.TableFileOffset + sizeof(uint64_t),
+              &NonZero, sizeof(NonZero));
+  Dispatches = analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+}
+
+TEST(RelocationTableDispatch, RejectsRelocationOverlappingObjectStart) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<RelocationDispatchTestObject> ObjectOr =
+      makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  RelocationDispatchTestObject Object = std::move(*ObjectOr);
+
+  llvm::ELF::Elf64_Rela Valid;
+  std::memcpy(&Valid, Object.Bytes.data() + Object.RelaOffset, sizeof(Valid));
+  llvm::ELF::Elf64_Rela Overlap = Valid;
+  Overlap.r_offset -= sizeof(uint32_t);
+  Overlap.r_addend = 0;
+  Overlap.setSymbolAndType(/*Symbol=*/0, llvm::ELF::R_AMDGPU_ABS64);
+
+  while (Object.Bytes.size() % alignof(llvm::ELF::Elf64_Rela) != 0)
+    Object.Bytes.push_back(0);
+  const uint64_t NewRelaOffset = Object.Bytes.size();
+  const size_t OldSize = Object.Bytes.size();
+  Object.Bytes.resize(OldSize + 2 * sizeof(llvm::ELF::Elf64_Rela));
+  std::memcpy(Object.Bytes.data() + NewRelaOffset, &Valid, sizeof(Valid));
+  std::memcpy(Object.Bytes.data() + NewRelaOffset + sizeof(Valid), &Overlap,
+              sizeof(Overlap));
+
+  llvm::ELF::Elf64_Shdr RelaShdr;
+  std::memcpy(&RelaShdr, Object.Bytes.data() + Object.RelaSectionHeaderOffset,
+              sizeof(RelaShdr));
+  RelaShdr.sh_offset = NewRelaOffset;
+  RelaShdr.sh_size = 2 * sizeof(llvm::ELF::Elf64_Rela);
+  std::memcpy(Object.Bytes.data() + Object.RelaSectionHeaderOffset, &RelaShdr,
+              sizeof(RelaShdr));
+
+  llvm::Expected<std::vector<RelocationTableDispatch>> Dispatches =
+      analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+}
+
+TEST(RelocationTableDispatch, RejectsOverlappingDynamicRelRecord) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<RelocationDispatchTestObject> ObjectOr =
+      makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  RelocationDispatchTestObject Object = std::move(*ObjectOr);
+
+  llvm::ELF::Elf64_Rela Existing;
+  std::memcpy(&Existing, Object.Bytes.data() + Object.RelaOffset,
+              sizeof(Existing));
+  llvm::ELF::Elf64_Rel Rel;
+  Rel.r_offset = Existing.r_offset;
+  Rel.setSymbolAndType(/*Symbol=*/0, llvm::ELF::R_AMDGPU_ABS64);
+
+  llvm::ELF::Elf64_Shdr RelShdr{};
+  RelShdr.sh_type = llvm::ELF::SHT_REL;
+  RelShdr.sh_flags = llvm::ELF::SHF_ALLOC;
+  RelShdr.sh_link = 4;
+  RelShdr.sh_info = 0;
+  RelShdr.sh_addralign = alignof(llvm::ELF::Elf64_Rel);
+  RelShdr.sh_entsize = sizeof(Rel);
+  ASSERT_TRUE(appendRelocationDispatchSection(
+      Object, RelShdr,
+      llvm::ArrayRef<uint8_t>(reinterpret_cast<const uint8_t *>(&Rel),
+                              sizeof(Rel))));
+
+  llvm::Expected<std::vector<RelocationTableDispatch>> Dispatches =
+      analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+}
+
+TEST(RelocationTableDispatch, RejectsOpaqueDynamicRelocationSection) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<RelocationDispatchTestObject> ObjectOr =
+      makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  RelocationDispatchTestObject Object = std::move(*ObjectOr);
+
+  const uint64_t RelrEntry = 0;
+  llvm::ELF::Elf64_Shdr RelrShdr{};
+  RelrShdr.sh_type = llvm::ELF::SHT_RELR;
+  RelrShdr.sh_flags = llvm::ELF::SHF_ALLOC;
+  RelrShdr.sh_info = 0;
+  RelrShdr.sh_addralign = alignof(uint64_t);
+  RelrShdr.sh_entsize = sizeof(uint64_t);
+  ASSERT_TRUE(appendRelocationDispatchSection(
+      Object, RelrShdr,
+      llvm::ArrayRef<uint8_t>(reinterpret_cast<const uint8_t *>(&RelrEntry),
+                              sizeof(RelrEntry))));
+
+  llvm::Expected<std::vector<RelocationTableDispatch>> Dispatches =
+      analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+}
+
+TEST(RelocationTableDispatch, UsesRuntimeImmutability) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<RelocationDispatchTestObject> ObjectOr =
+      makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  RelocationDispatchTestObject Object = std::move(*ObjectOr);
+
+  // A writable section-header flag does not override a read-only PT_LOAD.
+  ElfView::ELFT::Shdr TableShdr;
+  std::memcpy(&TableShdr, Object.Bytes.data() + Object.TableSectionHeaderOffset,
+              sizeof(TableShdr));
+  TableShdr.sh_flags |= llvm::ELF::SHF_WRITE;
+  std::memcpy(Object.Bytes.data() + Object.TableSectionHeaderOffset, &TableShdr,
+              sizeof(TableShdr));
+  llvm::Expected<std::vector<RelocationTableDispatch>> Dispatches =
+      analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  ASSERT_EQ(Dispatches->size(), 1u);
+
+  ObjectOr = makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  Object = std::move(*ObjectOr);
+  ElfView::ELFT::Phdr TableLoad;
+  std::memcpy(&TableLoad, Object.Bytes.data() + Object.TableProgramHeaderOffset,
+              sizeof(TableLoad));
+  TableLoad.p_flags |= llvm::ELF::PF_W;
+  std::memcpy(Object.Bytes.data() + Object.TableProgramHeaderOffset, &TableLoad,
+              sizeof(TableLoad));
+  Dispatches = analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
+
+  // PT_GNU_RELRO makes a loader-relocated table immutable before execution.
+  ElfView::ELFT::Phdr Relro = TableLoad;
+  Relro.p_type = llvm::ELF::PT_GNU_RELRO;
+  Relro.p_flags = llvm::ELF::PF_R;
+  std::memcpy(Object.Bytes.data() + Object.TextProgramHeaderOffset, &Relro,
+              sizeof(Relro));
+  Dispatches = analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  ASSERT_EQ(Dispatches->size(), 1u);
+}
+
+TEST(RelocationTableDispatch, RejectsAmbiguousObjectOwnership) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<RelocationDispatchTestObject> ObjectOr =
+      makeRelocationDispatchTestObject(S);
+  ASSERT_TRUE(ObjectOr);
+  RelocationDispatchTestObject Object = std::move(*ObjectOr);
+
+  llvm::ELF::Elf64_Sym TableSymbol;
+  std::memcpy(&TableSymbol, Object.Bytes.data() + Object.TableSymbolOffset,
+              sizeof(TableSymbol));
+  llvm::ELF::Elf64_Sym Overlap = TableSymbol;
+  Overlap.st_value += sizeof(uint64_t);
+  Overlap.st_size = sizeof(uint64_t);
+  const uint64_t OverlapSymbolOffset =
+      Object.TableSymbolOffset + sizeof(llvm::ELF::Elf64_Sym);
+  std::memcpy(Object.Bytes.data() + OverlapSymbolOffset, &Overlap,
+              sizeof(Overlap));
+
+  llvm::Expected<std::vector<RelocationTableDispatch>> Dispatches =
+      analyzeRelocationDispatchTestObject(Object, S);
+  ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());
+  EXPECT_TRUE(Dispatches->empty());
 }
 
 TEST(TextDisplacement, RejectsDynamicRelocationTargetingText) {

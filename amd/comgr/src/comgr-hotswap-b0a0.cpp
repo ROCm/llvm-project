@@ -1210,7 +1210,8 @@ getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
 static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
-    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls) {
+    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls,
+    ArrayRef<RelocationTableDispatch> RelocationDispatches) {
   SmallVector<KnownCallSite, 4> Calls;
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &DI = Decoded[I];
@@ -1226,14 +1227,18 @@ static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
     } else {
       Target = getDirectTextTarget(DI, LS, TextAddr, TextEnd);
     }
-    if (!Target)
-      continue;
-
     std::optional<uint64_t> Continuation =
         checkedAddUint64(DI.Offset, DI.Size, "known call continuation address");
     if (!Continuation)
       return std::nullopt;
-    Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+    if (Target) {
+      Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+      continue;
+    }
+    for (const RelocationTableDispatch &Dispatch : RelocationDispatches)
+      if (Dispatch.CallOffset == DI.Offset)
+        for (uint64_t TableTarget : Dispatch.Targets)
+          Calls.push_back({I, TableTarget, *Continuation, *ReturnRegister});
   }
   return Calls;
 }
@@ -1353,7 +1358,8 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
                            uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
                            ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
                            ArrayRef<KnownCallSite> Calls,
-                           ArrayRef<uint64_t> ExternalEntries) {
+                           ArrayRef<uint64_t> ExternalEntries,
+                           ArrayRef<uint64_t> TableCallableEntries) {
   SmallVector<size_t, 2> ReturnIndices;
   for (size_t ReturnIndex = 0; ReturnIndex != Decoded.size(); ++ReturnIndex)
     if (isSetPcReturnCandidate(Decoded[ReturnIndex], LS))
@@ -1400,11 +1406,19 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
     bool IsBounded = false;
     for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
       if (Range.Begin < TextAddr || Range.Begin >= TextEnd ||
-          Range.End <= Range.Begin || Range.End > TextEnd ||
-          (Range.Symbol && Range.Symbol->getBinding() != ELF::STB_LOCAL))
+          Range.End <= Range.Begin || Range.End > TextEnd)
         continue;
       uint64_t FunctionBegin = Range.Begin - TextAddr;
       uint64_t FunctionEnd = Range.End - TextAddr;
+      // Link visibility alone does not make a device function a runtime
+      // dispatch entry. A complete relocation table supplies its closed-world
+      // callers; the table matcher separately rejects kernel entries.
+      const bool IsTableCallable =
+          std::binary_search(TableCallableEntries.begin(),
+                             TableCallableEntries.end(), FunctionBegin);
+      if (Range.Symbol && Range.Symbol->getBinding() != ELF::STB_LOCAL &&
+          !IsTableCallable)
+        continue;
       if (Return.Offset < FunctionBegin || Return.Offset >= FunctionEnd)
         continue;
 
@@ -1412,6 +1426,9 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       SmallVector<uint64_t, 16>::iterator ExternalEntry =
           std::lower_bound(SortedExternalEntries.begin(),
                            SortedExternalEntries.end(), FunctionBegin);
+      if (IsTableCallable && ExternalEntry != SortedExternalEntries.end() &&
+          *ExternalEntry == FunctionBegin)
+        ++ExternalEntry;
       if (ExternalEntry != SortedExternalEntries.end() &&
           *ExternalEntry < FunctionEnd) {
         log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
@@ -1572,18 +1589,26 @@ findBoundedSetPcReturn(ArrayRef<BoundedSetPcReturn> Returns, size_t InstIndex) {
   return nullptr;
 }
 
-static bool
-hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
-                         const LLVMState &LS, uint64_t TextAddr,
-                         uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
-                         ArrayRef<BoundedSetPcReturn> BoundedReturns,
-                         uint64_t SequenceStart, uint64_t SequenceEnd) {
+static bool hasKnownControlFlowEntry(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
+    ArrayRef<BoundedSetPcReturn> BoundedReturns,
+    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls,
+    uint64_t SequenceStart, uint64_t SequenceEnd) {
   for (uint64_t Entry : DeclaredEntries)
     if (Entry > SequenceStart && Entry <= SequenceEnd)
       return true;
 
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &DI = Decoded[I];
+    if (MaterializedCalls[I]) {
+      const uint64_t Target = MaterializedCalls[I]->Target;
+      if (Target >= TextAddr && Target < TextEnd) {
+        const uint64_t RelativeTarget = Target - TextAddr;
+        if (RelativeTarget > SequenceStart && RelativeTarget <= SequenceEnd)
+          return true;
+      }
+    }
     if (DI.DecodeSucceeded && DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
       const BoundedSetPcReturn *Return =
           findBoundedSetPcReturn(BoundedReturns, I);
@@ -1621,7 +1646,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-    ArrayRef<uint64_t> ExternalEntries) {
+    ArrayRef<uint64_t> ExternalEntries,
+    ArrayRef<RelocationTableDispatch> RelocationDispatches) {
   if (!LS.MIA) {
     log() << "hotswap: MC branch analysis is unavailable; adjacent far "
              "trampolines will not be coalesced\n";
@@ -1638,18 +1664,32 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   for (size_t I = 0; I != Decoded.size(); ++I)
     MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
 
-  std::optional<SmallVector<KnownCallSite, 4>> Calls =
-      collectKnownCallSites(Decoded, LS, TextAddr, *TextEnd, MaterializedCalls);
+  std::optional<SmallVector<KnownCallSite, 4>> Calls = collectKnownCallSites(
+      Decoded, LS, TextAddr, *TextEnd, MaterializedCalls, RelocationDispatches);
   if (!Calls)
     return std::nullopt;
+  SmallVector<uint64_t, 16> TableCallableEntries;
+  for (const RelocationTableDispatch &Dispatch : RelocationDispatches)
+    TableCallableEntries.append(Dispatch.Targets.begin(),
+                                Dispatch.Targets.end());
+  llvm::sort(TableCallableEntries);
+  TableCallableEntries.erase(
+      std::unique(TableCallableEntries.begin(), TableCallableEntries.end()),
+      TableCallableEntries.end());
   std::optional<SmallVector<BoundedSetPcReturn, 2>> BoundedReturns =
       collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
                                  DeclaredEntries, FunctionRanges, *Calls,
-                                 ExternalEntries);
+                                 ExternalEntries, TableCallableEntries);
   if (!BoundedReturns)
     return std::nullopt;
 
   DirectControlFlowInfo Info;
+  for (const BoundedSetPcReturn &Return : *BoundedReturns) {
+    const InternalDecodedInst &DI = Decoded[Return.InstIndex];
+    Info.RelocatableIndirectTransfers.insert(DI.Offset);
+    for (uint64_t Target : Return.Targets)
+      Info.Targets.insert(Target);
+  }
   for (size_t InstIndex = 0; InstIndex != Decoded.size(); ++InstIndex) {
     const InternalDecodedInst &DI = Decoded[InstIndex];
     if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
@@ -1672,6 +1712,12 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       if (!LS.MIA->isCall(DI.Inst))
         continue;
       std::optional<uint64_t> Target;
+      const RelocationTableDispatch *TableDispatch = nullptr;
+      for (const RelocationTableDispatch &Dispatch : RelocationDispatches)
+        if (Dispatch.CallOffset == DI.Offset) {
+          TableDispatch = &Dispatch;
+          break;
+        }
       if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
           DI.Inst.getNumOperands() != 0 &&
           DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
@@ -1680,10 +1726,35 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       } else if (MaterializedCalls[InstIndex] &&
                  !hasKnownControlFlowEntry(
                      Decoded, LS, TextAddr, *TextEnd, DeclaredEntries,
-                     *BoundedReturns,
+                     *BoundedReturns, MaterializedCalls,
                      MaterializedCalls[InstIndex]->SequenceStart,
                      MaterializedCalls[InstIndex]->SequenceEnd)) {
         Target = MaterializedCalls[InstIndex]->Target;
+      }
+      if (TableDispatch) {
+        bool HasInteriorEntry = hasKnownControlFlowEntry(
+            Decoded, LS, TextAddr, *TextEnd, DeclaredEntries, *BoundedReturns,
+            MaterializedCalls, TableDispatch->SequenceStart,
+            TableDispatch->SequenceEnd);
+        for (const RelocationTableDispatch &Dispatch : RelocationDispatches)
+          for (uint64_t TableTarget : Dispatch.Targets)
+            HasInteriorEntry |= TableTarget > TableDispatch->SequenceStart &&
+                                TableTarget <= TableDispatch->SequenceEnd;
+        if (HasInteriorEntry) {
+          log() << "hotswap: relocation-table call at 0x"
+                << utohexstr(DI.Offset)
+                << " has an entry that bypasses its address proof\n";
+          TableDispatch = nullptr;
+        }
+      }
+      if (TableDispatch) {
+        Info.RelocatableIndirectTransfers.insert(DI.Offset);
+        for (uint64_t TableTarget : TableDispatch->Targets)
+          Info.Targets.insert(TableTarget);
+        log() << "hotswap: resolved relocation-table call at 0x"
+              << utohexstr(DI.Offset) << " to " << TableDispatch->Targets.size()
+              << " finite target(s)\n";
+        continue;
       }
       if (!Target) {
         log() << "hotswap: unresolved call target at 0x" << utohexstr(DI.Offset)
@@ -1714,6 +1785,34 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     Info.Targets.insert(*Target);
   }
   return Info;
+}
+
+static std::optional<DirectControlFlowInfo> analyzeDirectControlFlowImpl(
+    const ElfView &Elf, ArrayRef<InternalDecodedInst> Decoded,
+    const LLVMState &LS, const DeclaredTextEntryInfo &DeclaredEntries) {
+  Expected<std::vector<RelocationTableDispatch>> RelocationDispatchesOrErr =
+      analyzeRelocationTableDispatches(Elf, Decoded, LS);
+  if (!RelocationDispatchesOrErr) {
+    log() << "hotswap: error: failed to analyze relocation-backed dispatch "
+             "tables: "
+          << toString(RelocationDispatchesOrErr.takeError()) << "\n";
+    return std::nullopt;
+  }
+  return collectDirectBranchTargets(
+      Decoded, LS, Elf.textAddr(), Elf.textSize(), DeclaredEntries.Entries,
+      Elf.functionTextRanges(), DeclaredEntries.ExternalEntries,
+      *RelocationDispatchesOrErr);
+}
+
+std::optional<DirectControlFlowInfo>
+analyzeDirectControlFlow(const ElfView &Elf,
+                         ArrayRef<InternalDecodedInst> Decoded,
+                         const LLVMState &LS) {
+  std::optional<DeclaredTextEntryInfo> DeclaredEntries =
+      collectDeclaredTextEntries(Elf);
+  if (!DeclaredEntries)
+    return std::nullopt;
+  return analyzeDirectControlFlowImpl(Elf, Decoded, LS, *DeclaredEntries);
 }
 
 /// Coalesce runs of adjacent far patch sites when the same SGPR scratch block
@@ -2390,11 +2489,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       collectDeclaredTextEntries(Elf);
   if (!DeclaredEntries)
     return std::nullopt;
-  std::vector<ElfView::FunctionTextRange> FunctionRanges =
-      Elf.functionTextRanges();
-  std::optional<DirectControlFlowInfo> ControlFlow = collectDirectBranchTargets(
-      Decoded, LS, Elf.textAddr(), Elf.textSize(), DeclaredEntries->Entries,
-      FunctionRanges, DeclaredEntries->ExternalEntries);
+  std::optional<DirectControlFlowInfo> ControlFlow =
+      analyzeDirectControlFlowImpl(Elf, Decoded, LS, *DeclaredEntries);
   if (!ControlFlow)
     return std::nullopt;
   if (ControlFlow->HasUnresolvedTargets) {

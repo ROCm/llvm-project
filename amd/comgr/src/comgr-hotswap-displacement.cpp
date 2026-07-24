@@ -19,6 +19,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/Support/Alignment.h"
+#include "llvm/Support/Endian.h"
 
 #include <algorithm>
 #include <limits>
@@ -142,6 +143,415 @@ Error validateVirtualGrowth(const ElfView &Elf, uint64_t PaddedGrowth) {
     }
   }
   return Error::success();
+}
+
+/// Linked-ELF proof object for an indirect dispatch table. Every nonzero slot
+/// must have one symbol-less RELATIVE64 relocation into .text; any other
+/// contents make the candidate ineligible.
+struct RelocationTableCandidate {
+  uint64_t Address = 0;
+  uint64_t Size = 0;
+  SmallVector<std::optional<uint64_t>, 8> Targets;
+  SmallVector<bool, 8> ZeroSlots;
+  bool Valid = true;
+};
+
+uint64_t dynamicRelocationWidth(uint32_t Type) {
+  switch (Type) {
+  case ELF::R_AMDGPU_NONE:
+    return 0;
+  case ELF::R_AMDGPU_ABS64:
+  case ELF::R_AMDGPU_REL64:
+  case ELF::R_AMDGPU_RELATIVE64:
+    return sizeof(uint64_t);
+  case ELF::R_AMDGPU_REL16:
+    return sizeof(uint16_t);
+  default:
+    // Every remaining AMDGPU ELF relocation writes a 32-bit field. Treat
+    // future unknown types as 64-bit below by returning the conservative
+    // maximum width used by the ABI.
+    if (Type <= ELF::R_AMDGPU_REL16)
+      return sizeof(uint32_t);
+    return sizeof(uint64_t);
+  }
+}
+
+bool relocationOverlapsCandidate(const RelocationTableCandidate &Candidate,
+                                 uint64_t Address, uint64_t Width) {
+  if (Width == 0)
+    return false;
+  if (Address > std::numeric_limits<uint64_t>::max() - Width)
+    return Address < Candidate.Address + Candidate.Size;
+  const uint64_t End = Address + Width;
+  return Address < Candidate.Address + Candidate.Size &&
+         End > Candidate.Address;
+}
+
+bool isOpaqueDynamicRelocationSection(uint32_t Type) {
+  switch (Type) {
+  case ELF::SHT_RELR:
+  case ELF::SHT_ANDROID_REL:
+  case ELF::SHT_ANDROID_RELA:
+  case ELF::SHT_ANDROID_RELR:
+  case ELF::SHT_CREL:
+    return true;
+  }
+  return false;
+}
+
+Expected<bool> isRuntimeImmutableRange(const ElfView &Elf, uint64_t Address,
+                                       uint64_t Size) {
+  if (Size == 0 || Size > std::numeric_limits<uint64_t>::max() - Address)
+    return false;
+  const uint64_t End = Address + Size;
+  Expected<ELFT::PhdrRange> PhdrsOrErr = Elf.file().program_headers();
+  if (!PhdrsOrErr)
+    return PhdrsOrErr.takeError();
+
+  bool CoveredByLoad = false;
+  bool HasWritableMapping = false;
+  bool CoveredByRelro = false;
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_memsz > std::numeric_limits<uint64_t>::max() - Phdr.p_vaddr)
+      return makeDisplacementError(
+          "segment range overflows while proving table immutability");
+    const uint64_t SegmentEnd = Phdr.p_vaddr + Phdr.p_memsz;
+    const bool Covers = Phdr.p_vaddr <= Address && SegmentEnd >= End;
+    const bool Overlaps = Address < SegmentEnd && Phdr.p_vaddr < End;
+    if (Phdr.p_type == ELF::PT_LOAD) {
+      CoveredByLoad |= Covers;
+      HasWritableMapping |= Overlaps && (Phdr.p_flags & ELF::PF_W);
+    } else if (Phdr.p_type == ELF::PT_GNU_RELRO) {
+      CoveredByRelro |= Covers;
+    }
+  }
+  return CoveredByLoad && (!HasWritableMapping || CoveredByRelro);
+}
+
+Expected<std::vector<RelocationTableCandidate>>
+discoverCompleteRelocationTables(const ElfView &Elf) {
+  if (Elf.textSize() > std::numeric_limits<uint64_t>::max() - Elf.textAddr())
+    return makeDisplacementError(
+        ".text virtual range overflows while discovering function tables");
+
+  std::vector<RelocationTableCandidate> Candidates;
+  for (const ELFT::Shdr &SymShdr : Elf.sections()) {
+    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+    Expected<ELFT::SymRange> SymsOrErr = Elf.file().symbols(&SymShdr);
+    if (!SymsOrErr)
+      return SymsOrErr.takeError();
+    for (const ELFT::Sym &Sym : *SymsOrErr) {
+      if (Sym.getType() != ELF::STT_OBJECT || Sym.st_size == 0 ||
+          Sym.st_size % sizeof(uint64_t) != 0 ||
+          Sym.st_shndx == ELF::SHN_UNDEF || Sym.st_shndx >= ELF::SHN_LORESERVE)
+        continue;
+      Expected<const ELFT::Shdr *> DefShdrOrErr =
+          Elf.file().getSection(Sym.st_shndx);
+      if (!DefShdrOrErr)
+        return DefShdrOrErr.takeError();
+      const ELFT::Shdr &DefShdr = **DefShdrOrErr;
+      if (DefShdr.sh_type == ELF::SHT_NOBITS ||
+          !(DefShdr.sh_flags & ELF::SHF_ALLOC) ||
+          (DefShdr.sh_flags & ELF::SHF_EXECINSTR))
+        continue;
+      Expected<bool> ImmutableOrErr =
+          isRuntimeImmutableRange(Elf, Sym.st_value, Sym.st_size);
+      if (!ImmutableOrErr)
+        return ImmutableOrErr.takeError();
+      if (!*ImmutableOrErr)
+        continue;
+      if (Sym.st_value < DefShdr.sh_addr ||
+          Sym.st_value - DefShdr.sh_addr > DefShdr.sh_size ||
+          Sym.st_size > DefShdr.sh_size - (Sym.st_value - DefShdr.sh_addr))
+        continue;
+
+      std::vector<RelocationTableCandidate>::iterator Duplicate =
+          llvm::find_if(Candidates, [&](const RelocationTableCandidate &C) {
+            return C.Address == Sym.st_value && C.Size == Sym.st_size;
+          });
+      if (Duplicate != Candidates.end())
+        continue;
+
+      const uint64_t OffsetInSection = Sym.st_value - DefShdr.sh_addr;
+      if (OffsetInSection >
+          std::numeric_limits<uint64_t>::max() - DefShdr.sh_offset)
+        return makeDisplacementError(
+            "function-table object file offset overflows");
+      const uint64_t ObjectOffset = DefShdr.sh_offset + OffsetInSection;
+      if (ObjectOffset > Elf.size() || Sym.st_size > Elf.size() - ObjectOffset)
+        return makeDisplacementError(
+            "function-table object extends outside the ELF image");
+      const size_t SlotCount = Sym.st_size / sizeof(uint64_t);
+      RelocationTableCandidate Candidate{
+          Sym.st_value, Sym.st_size,
+          SmallVector<std::optional<uint64_t>, 8>(SlotCount),
+          SmallVector<bool, 8>(SlotCount), true};
+      for (size_t I = 0; I != SlotCount; ++I) {
+        const uint64_t Value = support::endian::read64le(
+            Elf.data() + ObjectOffset + I * sizeof(uint64_t));
+        Candidate.ZeroSlots[I] = Value == 0;
+      }
+      Candidates.push_back(std::move(Candidate));
+    }
+  }
+
+  if (Candidates.empty())
+    return Candidates;
+  llvm::sort(Candidates, [](const RelocationTableCandidate &LHS,
+                            const RelocationTableCandidate &RHS) {
+    if (LHS.Address != RHS.Address)
+      return LHS.Address < RHS.Address;
+    return LHS.Size < RHS.Size;
+  });
+
+  // Ambiguous overlapping object symbols are not a sound ownership proof for
+  // a relocation slot. Reject every interval in an overlapping component and
+  // retain a sorted, disjoint set for the lookups below.
+  size_t FarthestEnd = 0;
+  for (size_t I = 1; I != Candidates.size(); ++I) {
+    const uint64_t StartDelta =
+        Candidates[I].Address - Candidates[FarthestEnd].Address;
+    if (StartDelta < Candidates[FarthestEnd].Size) {
+      Candidates[FarthestEnd].Valid = false;
+      Candidates[I].Valid = false;
+      if (Candidates[I].Size > Candidates[FarthestEnd].Size - StartDelta)
+        FarthestEnd = I;
+    } else {
+      FarthestEnd = I;
+    }
+  }
+  llvm::erase_if(Candidates, [](const RelocationTableCandidate &Candidate) {
+    return !Candidate.Valid;
+  });
+  if (Candidates.empty())
+    return Candidates;
+
+  const uint64_t TextEnd = Elf.textAddr() + Elf.textSize();
+  for (const ELFT::Shdr &RelocShdr : Elf.sections()) {
+    // Only loader-visible dynamic relocation records affect runtime table
+    // contents. RELA RELATIVE64 can prove a slot; every overlapping REL or
+    // unsupported RELA record invalidates the candidate. Packed relocation
+    // formats cannot be range-checked here, so their presence invalidates the
+    // complete-table proof rather than being silently ignored.
+    if (!(RelocShdr.sh_flags & ELF::SHF_ALLOC) || RelocShdr.sh_info != 0)
+      continue;
+    if (isOpaqueDynamicRelocationSection(RelocShdr.sh_type)) {
+      for (RelocationTableCandidate &Candidate : Candidates)
+        Candidate.Valid = false;
+      continue;
+    }
+    if (RelocShdr.sh_type != ELF::SHT_RELA && RelocShdr.sh_type != ELF::SHT_REL)
+      continue;
+
+    if (RelocShdr.sh_type == ELF::SHT_REL) {
+      Expected<ELFT::RelRange> RelsOrErr = Elf.file().rels(RelocShdr);
+      if (!RelsOrErr)
+        return RelsOrErr.takeError();
+      for (const ELFT::Rel &Rel : *RelsOrErr) {
+        const uint64_t Width = dynamicRelocationWidth(Rel.getType(false));
+        for (RelocationTableCandidate &Candidate : Candidates) {
+          if (relocationOverlapsCandidate(Candidate, Rel.r_offset, Width))
+            Candidate.Valid = false;
+        }
+      }
+      continue;
+    }
+
+    Expected<ELFT::RelaRange> RelasOrErr = Elf.file().relas(RelocShdr);
+    if (!RelasOrErr)
+      return RelasOrErr.takeError();
+    for (const ELFT::Rela &Rela : *RelasOrErr) {
+      const uint64_t Width = dynamicRelocationWidth(Rela.getType(false));
+      for (RelocationTableCandidate &Candidate : Candidates) {
+        if (!relocationOverlapsCandidate(Candidate, Rela.r_offset, Width))
+          continue;
+        if (Rela.r_offset < Candidate.Address) {
+          Candidate.Valid = false;
+          continue;
+        }
+        const uint64_t SlotOffset = Rela.r_offset - Candidate.Address;
+        if (Width != sizeof(uint64_t) ||
+            SlotOffset > Candidate.Size - sizeof(uint64_t) ||
+            SlotOffset % sizeof(uint64_t) != 0 || Rela.getSymbol(false) != 0 ||
+            Rela.getType(false) != ELF::R_AMDGPU_RELATIVE64 ||
+            Rela.r_addend < 0) {
+          Candidate.Valid = false;
+          continue;
+        }
+        const uint64_t Target = static_cast<uint64_t>(Rela.r_addend);
+        if (Target < Elf.textAddr() || Target >= TextEnd) {
+          Candidate.Valid = false;
+          continue;
+        }
+        std::optional<uint64_t> &OldTarget =
+            Candidate.Targets[SlotOffset / sizeof(uint64_t)];
+        const uint64_t TextOffset = Target - Elf.textAddr();
+        if (OldTarget && *OldTarget != TextOffset) {
+          Candidate.Valid = false;
+          continue;
+        }
+        OldTarget = TextOffset;
+      }
+    }
+  }
+
+  llvm::erase_if(Candidates, [](const RelocationTableCandidate &Candidate) {
+    if (!Candidate.Valid)
+      return true;
+    bool SawTarget = false;
+    for (size_t I = 0; I != Candidate.Targets.size(); ++I) {
+      if (Candidate.Targets[I]) {
+        SawTarget = true;
+        continue;
+      }
+      if (!Candidate.ZeroSlots[I])
+        return true;
+    }
+    return !SawTarget;
+  });
+  return Candidates;
+}
+
+bool definesRegister(const InternalDecodedInst &DI, const LLVMState &LS,
+                     MCRegister Register) {
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  const unsigned DefCount =
+      std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
+  for (unsigned I = 0; I != DefCount; ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (Operand.isReg() && Operand.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+      return true;
+  }
+  for (MCPhysReg ImplicitDef : Desc.implicit_defs())
+    if (LS.MRI->regsOverlap(MCRegister(ImplicitDef), Register))
+      return true;
+  return false;
+}
+
+bool isProvenanceBoundary(const InternalDecodedInst &DI, const LLVMState &LS) {
+  return !DI.DecodeSucceeded || LS.MIA->isBranch(DI.Inst) ||
+         LS.MIA->isCall(DI.Inst) || LS.MIA->isReturn(DI.Inst) ||
+         LS.MIA->isIndirectBranch(DI.Inst) || LS.MIA->isBarrier(DI.Inst);
+}
+
+std::optional<size_t> findDefBefore(ArrayRef<InternalDecodedInst> Decoded,
+                                    size_t Before, const LLVMState &LS,
+                                    MCRegister Register) {
+  for (size_t I = Before; I != 0;) {
+    --I;
+    const InternalDecodedInst &Candidate = Decoded[I];
+    if (isProvenanceBoundary(Candidate, LS))
+      return std::nullopt;
+    if (definesRegister(Candidate, LS, Register))
+      return I;
+  }
+  return std::nullopt;
+}
+
+std::vector<RelocationTableDispatch> matchRelocationTableDispatches(
+    const ElfView &Elf, ArrayRef<InternalDecodedInst> Decoded,
+    const LLVMState &LS, ArrayRef<RelocationTableCandidate> Tables) {
+  std::vector<RelocationTableDispatch> Dispatches;
+  DenseSet<uint64_t> KernelEntries;
+  for (const KernelDescriptorInfo &Descriptor : Elf.kernelDescriptors()) {
+    std::optional<uint64_t> Entry = entryVAddr(Descriptor);
+    if (Entry && *Entry >= Elf.textAddr() &&
+        *Entry - Elf.textAddr() < Elf.textSize())
+      KernelEntries.insert(*Entry - Elf.textAddr());
+  }
+
+  for (size_t CallIndex = 0; CallIndex != Decoded.size(); ++CallIndex) {
+    const InternalDecodedInst &Call = Decoded[CallIndex];
+    if (!Call.DecodeSucceeded || Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+        Call.Inst.getNumOperands() < 2 ||
+        !Call.Inst.getOperand(Call.Inst.getNumOperands() - 1).isReg())
+      continue;
+    const MCRegister TargetRegister(
+        Call.Inst.getOperand(Call.Inst.getNumOperands() - 1).getReg());
+    if (!TargetRegister)
+      continue;
+
+    std::optional<size_t> LoadIndex =
+        findDefBefore(Decoded, CallIndex, LS, TargetRegister);
+    if (!LoadIndex)
+      continue;
+    const InternalDecodedInst &Load = Decoded[*LoadIndex];
+    // The operand layout mirrors S_LOAD_B64_IMM: destination, base pair,
+    // byte offset, cache policy. Backend-private named-operand helpers are not
+    // installed with LLVM, so validate every mirrored slot by operand kind.
+    if (Load.Inst.getOpcode() != LS.SLoadB64ImmOpcode ||
+        Load.Inst.getNumOperands() != 4 || !Load.Inst.getOperand(0).isReg() ||
+        Load.Inst.getOperand(0).getReg() != TargetRegister ||
+        !Load.Inst.getOperand(1).isReg() || !Load.Inst.getOperand(1).getReg() ||
+        !Load.Inst.getOperand(2).isImm() ||
+        Load.Inst.getOperand(2).getImm() < 0 ||
+        !Load.Inst.getOperand(3).isImm())
+      continue;
+    const MCRegister BaseRegister(Load.Inst.getOperand(1).getReg());
+
+    std::optional<size_t> AddIndex =
+        findDefBefore(Decoded, *LoadIndex, LS, BaseRegister);
+    if (!AddIndex)
+      continue;
+    const InternalDecodedInst &Add = Decoded[*AddIndex];
+    if (Add.Inst.getOpcode() != LS.SAddNcU64Opcode ||
+        Add.Inst.getNumOperands() != 3 || !Add.Inst.getOperand(0).isReg() ||
+        Add.Inst.getOperand(0).getReg() != BaseRegister ||
+        !Add.Inst.getOperand(1).isReg() ||
+        Add.Inst.getOperand(1).getReg() != BaseRegister ||
+        !Add.Inst.getOperand(2).isImm())
+      continue;
+
+    std::optional<size_t> GetPcIndex =
+        findDefBefore(Decoded, *AddIndex, LS, BaseRegister);
+    if (!GetPcIndex)
+      continue;
+    const InternalDecodedInst &GetPc = Decoded[*GetPcIndex];
+    if (GetPc.Inst.getOpcode() != LS.SGetPcI64Opcode ||
+        GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg() ||
+        GetPc.Inst.getOperand(0).getReg() != BaseRegister)
+      continue;
+
+    // s_get_pc_i64 produces the next instruction's address; s_add_nc_u64 is
+    // modulo-2^64, so unsigned addition also handles a table below .text.
+    const uint64_t TableAddress =
+        Elf.textAddr() + GetPc.Offset + GetPc.Size +
+        static_cast<uint64_t>(Add.Inst.getOperand(2).getImm());
+    ArrayRef<RelocationTableCandidate>::iterator Table =
+        llvm::find_if(Tables, [&](const RelocationTableCandidate &T) {
+          return T.Address == TableAddress;
+        });
+    if (Table == Tables.end())
+      continue;
+
+    const uint64_t SlotOffset =
+        static_cast<uint64_t>(Load.Inst.getOperand(2).getImm());
+    if (SlotOffset % sizeof(uint64_t) != 0 || SlotOffset >= Table->Size)
+      continue;
+    const std::optional<uint64_t> &Target =
+        Table->Targets[SlotOffset / sizeof(uint64_t)];
+    if (!Target || KernelEntries.contains(*Target))
+      continue;
+    ArrayRef<InternalDecodedInst>::iterator TargetInst =
+        std::lower_bound(Decoded.begin(), Decoded.end(), *Target,
+                         [](const InternalDecodedInst &DI, uint64_t Offset) {
+                           return DI.Offset < Offset;
+                         });
+    if (TargetInst == Decoded.end() || TargetInst->Offset != *Target ||
+        !TargetInst->DecodeSucceeded)
+      continue;
+
+    RelocationTableDispatch Dispatch;
+    Dispatch.CallOffset = Call.Offset;
+    Dispatch.SequenceStart = GetPc.Offset;
+    Dispatch.SequenceEnd = Call.Offset;
+    Dispatch.Targets.push_back(*Target);
+    Dispatches.push_back(std::move(Dispatch));
+  }
+  return Dispatches;
 }
 
 Error validateTextRelocations(const ElfView &Elf) {
@@ -771,6 +1181,19 @@ Error applyTextDisplacement(const ElfView &Elf, const LLVMState &LS,
 }
 
 } // namespace
+
+Expected<std::vector<RelocationTableDispatch>>
+analyzeRelocationTableDispatches(const ElfView &Elf,
+                                 ArrayRef<InternalDecodedInst> Decoded,
+                                 const LLVMState &LS) {
+  if (!LS.MIA || !LS.MCII || !LS.MRI)
+    return std::vector<RelocationTableDispatch>();
+  Expected<std::vector<RelocationTableCandidate>> TablesOrErr =
+      discoverCompleteRelocationTables(Elf);
+  if (!TablesOrErr)
+    return TablesOrErr.takeError();
+  return matchRelocationTableDispatches(Elf, Decoded, LS, *TablesOrErr);
+}
 
 Expected<DisplacementPlan>
 DisplacementPlan::create(const ElfView &Elf,

@@ -857,6 +857,7 @@ struct LLVMState {
   unsigned SAddPcI64Opcode = 0;
   unsigned SCallI64Opcode = 0;
   unsigned SSwapPcI64Opcode = 0;
+  unsigned SLoadB64ImmOpcode = 0;
   unsigned SPrefetchInstPcRelOpcode = 0;
   unsigned SPrefetchDataPcRelOpcode = 0;
 
@@ -1211,8 +1212,25 @@ struct SafeSgprUsageSummary {
 
 struct DirectControlFlowInfo {
   llvm::DenseSet<uint64_t> Targets;
+  /// Calls/returns whose finite destination set was proved from linked ELF
+  /// metadata and straight-line register provenance.
+  llvm::DenseSet<uint64_t> RelocatableIndirectTransfers;
   bool HasUnresolvedTargets = false;
 };
+
+/// One indirect call whose target register is loaded from a relocation-backed
+/// function-table slot. Targets are .text-relative instruction offsets.
+struct RelocationTableDispatch {
+  uint64_t CallOffset = 0;
+  uint64_t SequenceStart = 0;
+  uint64_t SequenceEnd = 0;
+  llvm::SmallVector<uint64_t, 1> Targets;
+};
+
+llvm::Expected<std::vector<RelocationTableDispatch>>
+analyzeRelocationTableDispatches(const ElfView &Elf,
+                                 llvm::ArrayRef<InternalDecodedInst> Decoded,
+                                 const LLVMState &LS);
 
 // Per-instruction persistent gfx1250 VGPR-MSB mode (packed src0/src1/src2/dst,
 // two bits each, values 0-255) recovered by the WMMA split pass's
@@ -1413,15 +1431,23 @@ resolveMaterializedPcTarget(llvm::ArrayRef<InternalDecodedInst> Decoded,
 /// contains text-relative function and kernel entry offsets; \p FunctionRanges
 /// supplies the symbol ranges used for the return proof; \p ExternalEntries
 /// identifies externally reachable symbol and kernel entries, including
-/// aliases at a local function's start. Other register-target control flow
-/// sets HasUnresolvedTargets so callers can disable transformations that
-/// consume possible destinations.
+/// aliases at a local function's start. \p RelocationDispatches supplies the
+/// finite targets of structurally proved relocation-table calls. Other
+/// register-target control flow sets HasUnresolvedTargets so callers can
+/// disable transformations that consume possible destinations.
 std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextSize,
     llvm::ArrayRef<uint64_t> DeclaredEntries,
     llvm::ArrayRef<ElfView::FunctionTextRange> FunctionRanges = {},
-    llvm::ArrayRef<uint64_t> ExternalEntries = {});
+    llvm::ArrayRef<uint64_t> ExternalEntries = {},
+    llvm::ArrayRef<RelocationTableDispatch> RelocationDispatches = {});
+
+/// Run the linked-object control-flow proof used by patch placement.
+std::optional<DirectControlFlowInfo>
+analyzeDirectControlFlow(const ElfView &Elf,
+                         llvm::ArrayRef<InternalDecodedInst> Decoded,
+                         const LLVMState &LS);
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,

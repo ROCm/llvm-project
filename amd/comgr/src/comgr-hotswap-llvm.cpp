@@ -365,6 +365,9 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_swap_pc_i64 s[0:1], s[2:3]",
                                      "s_swap_pc_i64", S, S.SSwapPcI64Opcode))
     return S;
+  if (!resolveRequiredOpcodeViaParse("s_load_b64 s[0:1], s[2:3], 0",
+                                     "s_load_b64", S, S.SLoadB64ImmOpcode))
+    return S;
   if (!resolveRequiredOpcodeViaParse("s_prefetch_inst_pc_rel 100, s10, 7",
                                      "s_prefetch_inst_pc_rel", S,
                                      S.SPrefetchInstPcRelOpcode))
