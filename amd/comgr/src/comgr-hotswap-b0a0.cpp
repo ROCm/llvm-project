@@ -854,10 +854,31 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
   return true;
 }
 
-static bool instructionReadsRegister(const InternalDecodedInst &DI,
-                                     const LLVMState &LS, MCRegister Register) {
+bool instructionReadsRegister(const InternalDecodedInst &DI,
+                              const LLVMState &LS, MCRegister Register) {
   const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
   unsigned DefCount = std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
+  // A tied use makes its corresponding explicit def a read/modify/write
+  // operand. Some MCInst producers materialize a duplicate use operand while
+  // others only retain the destination operand, so consult the descriptor
+  // instead of relying on the decoded operand list to contain that duplicate.
+  for (unsigned Def = 0; Def != DefCount; ++Def) {
+    bool HasTiedUse = false;
+    for (unsigned Use = Desc.getNumDefs(); Use != Desc.getNumOperands();
+         ++Use) {
+      if (Desc.getOperandConstraint(Use, MCOI::TIED_TO) ==
+          static_cast<int>(Def)) {
+        HasTiedUse = true;
+        break;
+      }
+    }
+    if (!HasTiedUse)
+      continue;
+    const MCOperand &Operand = DI.Inst.getOperand(Def);
+    if (Operand.isReg() && Operand.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+      return true;
+  }
   for (unsigned I = DefCount; I != DI.Inst.getNumOperands(); ++I) {
     const MCOperand &Operand = DI.Inst.getOperand(I);
     if (Operand.isReg() && Operand.getReg() &&

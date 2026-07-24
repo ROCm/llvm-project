@@ -1504,6 +1504,13 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     llvm::ArrayRef<uint64_t> ExternalEntries = {},
     llvm::ArrayRef<uint8_t> Text = {});
 
+/// Return whether \p DI consumes the incoming value of \p Register, including
+/// explicit read/modify/write destinations represented by MC tied-operand
+/// constraints. This conservative query underpins scratch-register liveness.
+[[nodiscard]] bool instructionReadsRegister(const InternalDecodedInst &DI,
+                                            const LLVMState &LS,
+                                            llvm::MCRegister Register);
+
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement);

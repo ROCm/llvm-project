@@ -1681,6 +1681,33 @@ TEST(AssembleDecode, SNopRoundTrip) {
   EXPECT_EQ(Decoded[0].Mnemonic, "s_nop");
 }
 
+TEST(RegisterLiveness, TiedAccumulatorDefCountsAsIncomingRead) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("v_fmac_f32_e32 v5, v1, v2", S);
+  ASSERT_EQ(Bytes.size(), MinInstSize);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  const InternalDecodedInst &DI = Decoded[0];
+  const llvm::MCInstrDesc &Desc = S.MCII->get(DI.Inst.getOpcode());
+  ASSERT_GE(Desc.getNumDefs(), 1u);
+  ASSERT_GE(DI.Inst.getNumOperands(), 1u);
+  ASSERT_TRUE(DI.Inst.getOperand(0).isReg());
+
+  bool HasTiedAccumulatorUse = false;
+  for (unsigned I = Desc.getNumDefs(); I != Desc.getNumOperands(); ++I)
+    HasTiedAccumulatorUse |=
+        Desc.getOperandConstraint(I, llvm::MCOI::TIED_TO) == 0;
+  ASSERT_TRUE(HasTiedAccumulatorUse);
+
+  llvm::MCRegister Accumulator(DI.Inst.getOperand(0).getReg());
+  EXPECT_TRUE(instructionReadsRegister(DI, S, Accumulator));
+}
+
 TEST(AssembleDecode, SingleInstructionRejectsSequence) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
