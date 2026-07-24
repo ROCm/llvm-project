@@ -1008,6 +1008,42 @@ TEST(CollectDirectBranchTargets, IgnoresSetPcWithoutTreatingItAsCall) {
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 
+TEST(CollectDirectBranchTargets,
+     HandlesSparseSetPcAndFunctionRangesWithoutCartesianScan) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("s_set_pc_i64 s[8:9]", S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Prototype;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Prototype));
+  ASSERT_EQ(Prototype.size(), 1u);
+
+  constexpr size_t Count = 16384;
+  constexpr uint64_t TextSize = 1 << 20;
+  std::vector<InternalDecodedInst> Decoded;
+  Decoded.reserve(Count);
+  llvm::SmallVector<ElfView::FunctionTextRange, 16> FunctionRanges;
+  FunctionRanges.reserve(Count);
+  for (size_t I = 0; I != Count; ++I) {
+    Decoded.push_back(Prototype[0]);
+    Decoded.back().Offset = I * MinInstSize;
+    // These validly ordered ranges do not cover any instruction. This pins
+    // the sparse return-to-range index: a full range scan for every set-PC
+    // would perform Count squared containment checks.
+    uint64_t Begin = TextSize + I * MinInstSize;
+    FunctionRanges.push_back({Begin, Begin + MinInstSize});
+  }
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0, TextSize,
+                                 /*DeclaredEntries=*/{}, FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.empty());
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
 TEST(CollectDirectBranchTargets, ResolvesProductionPcMaterializedCall) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
