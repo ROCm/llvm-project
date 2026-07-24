@@ -833,7 +833,8 @@ bool instructionDefinesBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
   const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
   for (unsigned I = 0, E = Desc.getNumDefs(); I < E; ++I) {
     const MCOperand &Op = DI.Inst.getOperand(I);
-    if (LS.MRI->regsOverlap(MCRegister(Op.getReg()), BaseMCReg))
+    if (Op.isReg() && Op.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Op.getReg()), BaseMCReg))
       return true;
   }
   return false;
@@ -867,12 +868,19 @@ bool isTensorDescriptorUseOnly(const InternalDecodedInst &DI,
       !LS.MRI->regsOverlap(DescriptorBase, BaseMCReg))
     return false;
 
+  // Skip the descriptor operand itself by register identity rather than a
+  // literal operand index: it is the group tuple that legitimately contains
+  // BaseMCReg. Any other operand reading BaseMCReg is a foreign consumer.
+  MCRegister DescriptorTuple;
+  if (DI.Inst.getOperand(1).isReg())
+    DescriptorTuple = MCRegister(DI.Inst.getOperand(1).getReg());
+
   const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
   for (unsigned I = Desc.getNumDefs(), E = DI.Inst.getNumOperands(); I < E;
        ++I) {
-    if (I == 1)
-      continue;
     const MCOperand &Op = DI.Inst.getOperand(I);
+    if (Op.isReg() && Op.getReg() == DescriptorTuple)
+      continue;
     if (Op.isReg() && Op.getReg() &&
         LS.MRI->regsOverlap(MCRegister(Op.getReg()), BaseMCReg))
       return false;
@@ -972,6 +980,8 @@ buildTensorFunctionCfg(const PatchContext &Ctx,
 bool isMaskDefinitionSafe(const PatchContext &Ctx,
                           const TensorFunctionCfg &Graph, size_t MaskIndex,
                           MCRegister BaseMCReg) {
+  // State is a 2-bit lattice over the two values that can still be observed
+  // after the rewritten mask-set: the changed base value and the changed SCC.
   constexpr uint8_t BaseValueLive = 1;
   constexpr uint8_t SccValueLive = 2;
 
@@ -980,15 +990,17 @@ bool isMaskDefinitionSafe(const PatchContext &Ctx,
   for (size_t Successor : Graph.Successors[MaskLocal])
     Worklist.push_back({Successor, BaseValueLive | SccValueLive});
 
+  // Dedup per (node, State): a node can be reached with either or both bits
+  // live, so State (one of {1,2,3}) selects the visited bit for this node.
   SmallVector<uint8_t, 32> Seen(Graph.Successors.size(), 0);
   while (!Worklist.empty()) {
     std::pair<size_t, uint8_t> Item = Worklist.pop_back_val();
     size_t LocalIndex = Item.first;
     uint8_t State = Item.second;
-    uint8_t StateBit = static_cast<uint8_t>(1u << State);
-    if ((Seen[LocalIndex] & StateBit) != 0)
+    uint8_t VisitedBit = static_cast<uint8_t>(1u << State);
+    if ((Seen[LocalIndex] & VisitedBit) != 0)
       continue;
-    Seen[LocalIndex] |= StateBit;
+    Seen[LocalIndex] |= VisitedBit;
 
     const InternalDecodedInst &DI = Ctx.Decoded[Graph.BeginIndex + LocalIndex];
     const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
@@ -1251,16 +1263,11 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
   TensorMaskDef Result =
       findTensorMaskSetDefinitions(Ctx, Idx, BaseMCReg, MaskSets);
   if (Result == TensorMaskDef::Applied) {
+    // findTensorMaskSetDefinitions only records low16-preserving s_ands
+    // (imm[15:0] == 0xffff) and skips already-cleared ones, so every entry
+    // here is a live mask-set to clear.
     bool ClearedAny = false;
     for (size_t MaskIdx : MaskSets) {
-      InternalDecodedInst &Mask = Ctx.Decoded[MaskIdx];
-      // A cleared literal (already handled, or shared and cleared by an
-      // earlier tensor this pass) contributes no new patch. Mask-sets are
-      // always immediate-form s_and by construction; guard defensively.
-      if (!Mask.Inst.getOperand(2).isImm() ||
-          (static_cast<uint64_t>(Mask.Inst.getOperand(2).getImm()) & 0xffffu) !=
-              0xffffu)
-        continue;
       if (!clearWorkgroupMaskAtDefinition(Ctx, MaskIdx))
         return failRequiredPatch(Ctx);
       ClearedAny = true;

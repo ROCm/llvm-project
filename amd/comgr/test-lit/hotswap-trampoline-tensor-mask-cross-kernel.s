@@ -22,6 +22,14 @@
 // DISASM: s_pack_hh_b32_b16 s4, 0, s4
 // DISASM-NEXT: tensor_load_to_lds s[0:3], s[4:11]
 
+// COM: Idempotency: kernel A's definition clear and kernel B's at-site rewrite
+// COM: both round-trip byte-equal on a second rewrite.
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
+// IDEM: IDEMPOTENT: YES
+
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
 .globl test_tensor_kernel_a

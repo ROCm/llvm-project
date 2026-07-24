@@ -20,6 +20,14 @@
 // DISASM-NEXT: s_or_b32 s4, s4, 0x7500000
 // DISASM: tensor_load_to_lds s[0:3], s[4:11]
 
+// COM: Idempotency: the high-bit s_or construction round-trips byte-equal on a
+// COM: second rewrite.
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
+// IDEM: IDEMPOTENT: YES
+
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
 .globl test_tensor_mask_highbits

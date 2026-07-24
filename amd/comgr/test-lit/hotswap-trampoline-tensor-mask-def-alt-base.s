@@ -17,6 +17,14 @@
 // DISASM: s_and_b32 s16, s16, 0xfff70000
 // DISASM: tensor_load_to_lds s[0:3], s[16:23]
 
+// COM: Idempotency: a second rewrite of the alternate-base clear makes no
+// COM: further change.
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
+// IDEM: IDEMPOTENT: YES
+
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
 .globl test_tensor_mask_alt_base
