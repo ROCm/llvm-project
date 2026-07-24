@@ -26,8 +26,7 @@ MATH_MANGLE(hypot)(double x, double y)
     double u2 = u * u;
     double v2 = v * v;
     double s2h = u2 + v2;
-    double s2l = (BUILTIN_FMA_F64(u, u, -u2) + BUILTIN_FMA_F64(v, v, -v2))
-               + (v2 - (s2h - u2));
+    double s2l = (BUILTIN_FMA_F64(u, u, -u2) + BUILTIN_FMA_F64(v, v, -v2)) + (v2 - (s2h - u2));
 
     double sh = MATH_FAST_SQRT(s2h);
     double l = BUILTIN_FMA_F64(-sh, sh, s2h) + s2l;
@@ -42,7 +41,7 @@ MATH_MANGLE(hypot)(double x, double y)
         ret = (BUILTIN_ISINF_F64(x) | BUILTIN_ISINF_F64(y)) ? PINF_F64 : ret;
     }
 #else
-    double ret = BUILTIN_FLDEXP_F64(MATH_FAST_SQRT(MATH_MAD(a, a, b*b)), e);
+    double ret = BUILTIN_FLDEXP_F64(MATH_FAST_SQRT(MATH_MAD(a, a, b * b)), e);
 
     if (!FINITE_ONLY_OPT()) {
         ret = BUILTIN_ISINF_F64(t) ? PINF_F64 : ret;

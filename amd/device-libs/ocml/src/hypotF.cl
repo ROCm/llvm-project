@@ -26,8 +26,7 @@ MATH_MANGLE(hypot)(float x, float y)
     float u2 = u * u;
     float v2 = v * v;
     float s2h = u2 + v2;
-    float s2l = (BUILTIN_FMA_F32(u, u, -u2) + BUILTIN_FMA_F32(v, v, -v2))
-              + (v2 - (s2h - u2));
+    float s2l = (BUILTIN_FMA_F32(u, u, -u2) + BUILTIN_FMA_F32(v, v, -v2)) + (v2 - (s2h - u2));
 
     float sh = MATH_FAST_SQRT(s2h);
     float l = BUILTIN_FMA_F32(-sh, sh, s2h) + s2l;
