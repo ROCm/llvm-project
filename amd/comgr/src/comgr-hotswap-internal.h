@@ -1275,6 +1275,12 @@ struct DirectControlFlowInfo {
   // These do not make every instruction in their containing function a
   // potential indirect destination.
   llvm::DenseSet<uint64_t> BoundedIndirectTransfers;
+  // A reachable indirect transfer can enter bytes that are not represented
+  // by an original instruction or symbol, including synthetic source tails
+  // created while planning gateways. Keep this distinct from unresolved call
+  // targets, which conservatively disable all control-flow-sensitive
+  // mutations.
+  bool HasUnboundedIndirectEntries = false;
   bool HasUnresolvedTargets = false;
 };
 
@@ -1557,9 +1563,10 @@ resolveMaterializedPcTarget(llvm::ArrayRef<InternalDecodedInst> Decoded,
 /// contains text-relative function and kernel entry offsets; \p FunctionRanges
 /// supplies the symbol ranges used for the return proof; \p ExternalEntries
 /// identifies externally reachable symbol and kernel entries, including
-/// aliases at a local function's start. Other register-target control flow
-/// sets HasUnresolvedTargets so callers can disable transformations that
-/// consume possible destinations.
+/// aliases at a local function's start. Unresolved calls set
+/// HasUnresolvedTargets so callers can disable transformations that consume
+/// possible destinations. Other reachable register-target control flow sets
+/// HasUnboundedIndirectEntries so synthetic source tails are not created.
 std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextSize,
