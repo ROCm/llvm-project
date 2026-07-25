@@ -16,6 +16,7 @@
 #include "llvm/Support/MathExtras.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +24,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace comgr_test {
@@ -50,9 +52,30 @@ inline uint64_t alignTo4(uint64_t V) { return llvm::alignTo(V, 4); }
 inline uint64_t alignTo8(uint64_t V) { return llvm::alignTo(V, 8); }
 
 struct KernelDescriptorElfOptions {
+  enum class MalformedClusterDims {
+    None,
+    NotArray,
+    WrongArity,
+    NonInteger,
+  };
+
   struct MetadataKernel {
     std::string Name;
     unsigned SgprCount = 0;
+    std::optional<unsigned> VgprCount;
+    std::optional<unsigned> MaxFlatWorkgroupSize;
+    std::optional<unsigned> WavefrontSize;
+    std::optional<std::array<unsigned, 3>> ClusterDims;
+
+    MetadataKernel(
+        std::string Name, unsigned SgprCount,
+        std::optional<unsigned> VgprCount = std::nullopt,
+        std::optional<unsigned> MaxFlatWorkgroupSize = std::nullopt,
+        std::optional<unsigned> WavefrontSize = std::nullopt,
+        std::optional<std::array<unsigned, 3>> ClusterDims = std::nullopt)
+        : Name(std::move(Name)), SgprCount(SgprCount), VgprCount(VgprCount),
+          MaxFlatWorkgroupSize(MaxFlatWorkgroupSize),
+          WavefrontSize(WavefrontSize), ClusterDims(ClusterDims) {}
   };
 
   uint16_t ElfType = llvm::ELF::ET_DYN;
@@ -73,7 +96,11 @@ struct KernelDescriptorElfOptions {
   std::optional<unsigned> MetadataVgprCount;
   std::optional<unsigned> MetadataMaxFlatWorkgroupSize;
   std::optional<unsigned> MetadataWavefrontSize;
+  std::optional<std::array<unsigned, 3>> MetadataClusterDims;
+  MalformedClusterDims MalformedMetadataClusterDims =
+      MalformedClusterDims::None;
   std::optional<std::string> MetadataGfx1250Revision;
+  std::optional<std::string> RawMetadataBlob;
   bool MetadataOmitSgprCount = false;
   bool MetadataSgprCountAsString = false;
   // When non-empty, emit these kernel metadata entries instead of the single
@@ -106,6 +133,19 @@ makeAmdgpuMetadataBlob(const KernelDescriptorElfOptions &Options) {
       llvm::msgpack::MapDocNode Kernel = Doc.getMapNode();
       Kernel[".name"] = Doc.getNode(Spec.Name, /*Copy=*/true);
       Kernel[".sgpr_count"] = static_cast<uint64_t>(Spec.SgprCount);
+      if (Spec.VgprCount)
+        Kernel[".vgpr_count"] = static_cast<uint64_t>(*Spec.VgprCount);
+      if (Spec.MaxFlatWorkgroupSize)
+        Kernel[".max_flat_workgroup_size"] =
+            static_cast<uint64_t>(*Spec.MaxFlatWorkgroupSize);
+      if (Spec.WavefrontSize)
+        Kernel[".wavefront_size"] = static_cast<uint64_t>(*Spec.WavefrontSize);
+      if (Spec.ClusterDims) {
+        llvm::msgpack::ArrayDocNode Dims = Doc.getArrayNode();
+        for (unsigned Dim : *Spec.ClusterDims)
+          Dims.push_back(Doc.getNode(Dim));
+        Kernel[".cluster_dims"] = Dims;
+      }
       Kernels.push_back(Kernel);
     }
   } else {
@@ -134,6 +174,36 @@ makeAmdgpuMetadataBlob(const KernelDescriptorElfOptions &Options) {
     if (Options.MetadataWavefrontSize)
       Kernel[".wavefront_size"] =
           static_cast<uint64_t>(*Options.MetadataWavefrontSize);
+    if (Options.MetadataClusterDims) {
+      llvm::msgpack::ArrayDocNode Dims = Doc.getArrayNode();
+      for (unsigned Dim : *Options.MetadataClusterDims)
+        Dims.push_back(Doc.getNode(Dim));
+      Kernel[".cluster_dims"] = Dims;
+    } else if (Options.MalformedMetadataClusterDims !=
+               KernelDescriptorElfOptions::MalformedClusterDims::None) {
+      switch (Options.MalformedMetadataClusterDims) {
+      case KernelDescriptorElfOptions::MalformedClusterDims::None:
+        break;
+      case KernelDescriptorElfOptions::MalformedClusterDims::NotArray:
+        Kernel[".cluster_dims"] = static_cast<uint64_t>(3);
+        break;
+      case KernelDescriptorElfOptions::MalformedClusterDims::WrongArity: {
+        llvm::msgpack::ArrayDocNode Dims = Doc.getArrayNode();
+        Dims.push_back(Doc.getNode(2));
+        Dims.push_back(Doc.getNode(3));
+        Kernel[".cluster_dims"] = Dims;
+        break;
+      }
+      case KernelDescriptorElfOptions::MalformedClusterDims::NonInteger: {
+        llvm::msgpack::ArrayDocNode Dims = Doc.getArrayNode();
+        Dims.push_back(Doc.getNode(2));
+        Dims.push_back(Doc.getNode("not-an-integer", /*Copy=*/true));
+        Dims.push_back(Doc.getNode(4));
+        Kernel[".cluster_dims"] = Dims;
+        break;
+      }
+      }
+    }
     if (Options.MetadataGfx1250Revision)
       Kernel[".gfx1250_revision"] =
           Doc.getNode(*Options.MetadataGfx1250Revision, /*Copy=*/true);
@@ -209,11 +279,16 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
       Options.MetadataSgprCount || Options.MetadataGfx1250Revision ||
       Options.MetadataOmitSgprCount || Options.MetadataSgprCountAsString ||
       Options.MetadataMaxFlatWorkgroupSize || Options.MetadataWavefrontSize ||
-      Options.MetadataVgprCount || Options.MetadataOmitVgprCount ||
-      Options.MetadataVgprCountAsString || !Options.MetadataKernels.empty();
+      Options.MetadataClusterDims || Options.MetadataVgprCount ||
+      Options.MetadataOmitVgprCount || Options.MetadataVgprCountAsString ||
+      Options.MalformedMetadataClusterDims !=
+          KernelDescriptorElfOptions::MalformedClusterDims::None ||
+      Options.RawMetadataBlob || !Options.MetadataKernels.empty();
   std::vector<uint8_t> MetadataNote;
   if (HasMetadataNote) {
-    std::string MetadataBlob = makeAmdgpuMetadataBlob(Options);
+    std::string MetadataBlob = Options.RawMetadataBlob
+                                   ? *Options.RawMetadataBlob
+                                   : makeAmdgpuMetadataBlob(Options);
     MetadataNote = makeAmdgpuMetadataNote(MetadataBlob);
   }
 
