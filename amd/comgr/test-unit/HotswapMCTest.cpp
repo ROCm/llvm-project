@@ -1829,6 +1829,21 @@ TEST(CollectDirectBranchTargets,
   EXPECT_FALSE(LeafWithLinkScratch->HasUnresolvedTargets);
   EXPECT_FALSE(LeafWithLinkScratch->HasUnboundedIndirectEntries);
 
+  // The same canonical leaf can be reached only by an exact materialized
+  // singleton call. This is a machine-level closure, not the opaque-call ABI
+  // fallback: the call target, canonical return, and continuation must be
+  // validated together.
+  std::string ExactCaller = "s_get_pc_i64 s[0:1]\n"
+                            "s_add_nc_u64 s[0:1], s[0:1], 12\n"
+                            "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                            "s_endpgm\n";
+  std::optional<DirectControlFlowInfo> ExactCanonicalLeaf =
+      Audit(ExactCaller + LeafFrame, {}, 0, FunctionTableElfMutation::None,
+            /*CallerEndIndex=*/4);
+  ASSERT_TRUE(ExactCanonicalLeaf);
+  EXPECT_FALSE(ExactCanonicalLeaf->HasUnresolvedTargets);
+  EXPECT_FALSE(ExactCanonicalLeaf->HasUnboundedIndirectEntries);
+
   // Canonical compiler tail thunk: save the incoming link, materialize a
   // different STT_FUNC entry, restore the link, and jump without replacing
   // s[30:31]. The target returns directly to the thunk's original caller.
@@ -2269,6 +2284,17 @@ TEST(CollectDirectBranchTargets, ResolvesProductionPcMaterializedCall) {
   for (InternalDecodedInst &DI : Decoded)
     DI.Offset += 0x12EDCC;
 
+  // collectDirectBranchTargets normally sees the complete .text decode. Keep
+  // the synthetic production slice faithful to that contract by representing
+  // the resolved local target as an instruction boundary.
+  llvm::SmallVector<uint8_t> TargetBytes =
+      assembleInstructions("s_endpgm", S);
+  std::vector<InternalDecodedInst> TargetDecoded;
+  ASSERT_TRUE(decodeTextSection(TargetBytes.data(), TargetBytes.size(), S,
+                                TargetDecoded));
+  ASSERT_EQ(TargetDecoded.size(), 1u);
+  Decoded.insert(Decoded.begin(), TargetDecoded.front());
+
   // This is the exact address calculation from the production reproducer:
   // 0x1a000 + 0x12edcc + 4 - 0x12edd0 = 0x1a000.
   std::optional<DirectControlFlowInfo> Info =
@@ -2287,13 +2313,14 @@ TEST(CollectDirectBranchTargets, BoundsFiniteExternalPcMaterializedCall) {
   llvm::SmallVector<uint8_t> Bytes =
       assembleInstructions("s_get_pc_i64 s[0:1]\n"
                            "s_add_nc_u64 s[0:1], s[0:1], 0x100\n"
-                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                           "s_endpgm",
                            S);
   ASSERT_FALSE(Bytes.empty());
 
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 3u);
+  ASSERT_EQ(Decoded.size(), 4u);
 
   // The exact target is outside this deliberately short .text range. The
   // external callee may return through the link pair, so the local
@@ -2305,9 +2332,8 @@ TEST(CollectDirectBranchTargets, BoundsFiniteExternalPcMaterializedCall) {
                                  /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   ASSERT_EQ(Info->Targets.size(), 1u);
-  EXPECT_TRUE(
-      Info->Targets.contains(Decoded.back().Offset + Decoded.back().Size));
-  EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded.back().Offset));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[3].Offset));
+  EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded[2].Offset));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 
@@ -2660,6 +2686,78 @@ TEST(CollectDirectBranchTargets, BoundsCanonicalSetPcReturn) {
   EXPECT_TRUE(
       Info->Targets.contains(Decoded.back().Offset + Decoded.back().Size));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets,
+     ClosesMaterializedCallExactJumpAndCanonicalReturnTogether) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], 12\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                           "s_endpgm\n"
+                           "s_get_pc_i64 s[4:5]\n"
+                           "s_add_nc_u64 s[4:5], s[4:5], 12\n"
+                           "s_set_pc_i64 s[4:5]\n"
+                           "s_endpgm\n"
+                           "s_set_pc_i64 s[30:31]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 9u);
+  llvm::SmallVector<uint64_t, 2> DeclaredEntries{0, Decoded[4].Offset};
+  llvm::SmallVector<ElfView::FunctionTextRange, 2> FunctionRanges{
+      {0, Decoded[4].Offset}, {Decoded[4].Offset, Bytes.size()}};
+
+  // No edge is independently sufficient: the materialized call defines the
+  // helper's s30 link, its exact set-PC reaches the return, and that return
+  // reaches only the call continuation. The joint finite-control-flow audit
+  // must close all three edges without treating the register call's generic
+  // indirect-branch classification as a second unbounded edge.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, Bytes.size(), DeclaredEntries, FunctionRanges,
+      /*ExternalEntries=*/{}, Bytes);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded[2].Offset));
+  EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded[6].Offset));
+  EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded[8].Offset));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[4].Offset));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[2].Offset + Decoded[2].Size));
+  EXPECT_FALSE(Info->HasUnboundedIndirectEntries);
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets,
+     RejectsFiniteCallEntryIntoAnotherCallMaterialization) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_get_pc_i64 s[4:5]\n"
+                           "s_add_nc_u64 s[4:5], s[4:5], 12\n"
+                           "s_swap_pc_i64 s[30:31], s[4:5]\n"
+                           "s_get_pc_i64 s[0:1]\n"
+                           "s_add_nc_u64 s[0:1], s[0:1], 0x100\n"
+                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 6u);
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+
+  // The first exact call targets the add in the second call's get-PC/add
+  // materialization. Both targets are finite instruction boundaries, but the
+  // first call can bypass the second call's defining get-PC. Joint closure
+  // must therefore leave the second call unresolved.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, Bytes.size(), DeclaredEntries);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->Targets.contains(Decoded[4].Offset));
+  EXPECT_TRUE(Info->HasUnresolvedTargets);
 }
 
 TEST(CollectDirectBranchTargets, RejectsClobberedSetPcReturn) {
