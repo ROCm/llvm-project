@@ -16312,8 +16312,7 @@ Decl *Sema::ActOnStartOfFunctionDef(Scope *FnBodyScope, Decl *D,
         Context.getTargetInfo().getCXXABI().isMicrosoft()) {
       // If this is an MS ABI dllexport default constructor, instantiate any
       // default arguments.
-      if (DLLExportAttr *Attr = Ctor->getAttr<DLLExportAttr>())
-        BuildCtorClosureDefaultArgs(Attr->getLocation(), Ctor);
+      InstantiateDefaultCtorDefaultArgs(Ctor);
     }
   }
 
