@@ -5099,6 +5099,24 @@ TEST(RegisterLiveness, BatchedSgprProofPreservesReplacementUnion) {
   EXPECT_EQ(BatchedUnion, ScalarUnion);
 }
 
+TEST(RegisterLiveness, BatchedSgprProofHandlesEmptyRegisterSet) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded =
+      decodeAsmSequence(S, llvm::ArrayRef<llvm::StringRef>({"s_endpgm"}));
+  ASSERT_EQ(Decoded.size(), 1u);
+  uint64_t FunctionEnd = Decoded.front().Offset + Decoded.front().Size;
+
+  BatchedSgprContinuationTestResult Batch =
+      runBatchedSgprContinuationAnalysisForTest(
+          Decoded, S, /*FunctionBegin=*/0, FunctionEnd,
+          {Decoded.front().Offset}, /*NumberedSgprs=*/{});
+  ASSERT_EQ(Batch.Analyses, 1u);
+  ASSERT_EQ(Batch.Queries.size(), 1u);
+  ASSERT_TRUE(Batch.Queries.front());
+  EXPECT_TRUE(Batch.Queries.front()->empty());
+}
+
 TEST(RegisterLiveness, NumberedSgprExtractionCoversAliasesAndTiedRmw) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

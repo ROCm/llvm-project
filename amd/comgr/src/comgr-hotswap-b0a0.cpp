@@ -1485,9 +1485,10 @@ struct BatchedSgprContinuationAnalysis {
                                  uint64_t Continuation) const {
     if (Continuation < FunctionBegin || Continuation >= FunctionEnd)
       return std::nullopt;
-    auto Begin = Decoded.begin() + BeginIndex;
-    auto End = Begin + InstructionCount;
-    auto It = llvm::lower_bound(
+    ArrayRef<InternalDecodedInst>::iterator Begin =
+        Decoded.begin() + BeginIndex;
+    ArrayRef<InternalDecodedInst>::iterator End = Begin + InstructionCount;
+    ArrayRef<InternalDecodedInst>::iterator It = llvm::lower_bound(
         ArrayRef<InternalDecodedInst>(Begin, End), Continuation,
         [](const InternalDecodedInst &DI, uint64_t Offset) {
           return DI.Offset < Offset;
@@ -1496,8 +1497,10 @@ struct BatchedSgprContinuationAnalysis {
         It->Offset != Continuation)
       return std::nullopt;
     size_t LocalIndex = It - Begin;
-    const uint64_t *Row = UnsafeRows.data() + LocalIndex * WordsPerRow;
     BitVector Result(RegisterCount);
+    if (WordsPerRow == 0)
+      return Result;
+    const uint64_t *Row = UnsafeRows.data() + LocalIndex * WordsPerRow;
     for (unsigned Register = 0; Register != RegisterCount; ++Register)
       if ((Row[Register / 64] >> (Register % 64)) & 1)
         Result.set(Register);
@@ -1513,12 +1516,12 @@ computeBatchedSgprContinuationAnalysis(ArrayRef<InternalDecodedInst> Decoded,
                                        ArrayRef<MCRegister> NumberedSgprs) {
   if (!LS.MIA || FunctionBegin >= FunctionEnd)
     return std::nullopt;
-  auto Begin =
+  ArrayRef<InternalDecodedInst>::iterator Begin =
       llvm::lower_bound(Decoded, FunctionBegin,
                         [](const InternalDecodedInst &DI, uint64_t Offset) {
                           return DI.Offset < Offset;
                         });
-  auto End = llvm::lower_bound(
+  ArrayRef<InternalDecodedInst>::iterator End = llvm::lower_bound(
       Decoded, FunctionEnd, [](const InternalDecodedInst &DI, uint64_t Offset) {
         return DI.Offset < Offset;
       });
@@ -1730,6 +1733,9 @@ using BatchedSgprContinuationCache =
     DenseMap<std::pair<uint64_t, uint64_t>,
              std::optional<BatchedSgprContinuationAnalysis>>;
 
+// The cache is local to one assignLongBranchGateways invocation. Decoded, LS,
+// MaxSgprs, and NumberedSgprs are immutable for that lifetime, so the function
+// range is the complete varying input to the batched analysis.
 static std::optional<unsigned> findLocallyDeadSgprPairWithCache(
     PatchContext &Ctx, const ElfView::FunctionTextRange &FunctionRange,
     uint64_t InstOffset, uint32_t InstSize, ArrayRef<uint8_t> Replacement,
@@ -1741,7 +1747,7 @@ static std::optional<unsigned> findLocallyDeadSgprPairWithCache(
     return std::nullopt;
 
   std::pair<uint64_t, uint64_t> Key{FunctionRange.Begin, FunctionRange.End};
-  auto It = Cache.find(Key);
+  BatchedSgprContinuationCache::iterator It = Cache.find(Key);
   if (It == Cache.end()) {
     std::optional<BatchedSgprContinuationAnalysis> Analysis =
         computeBatchedSgprContinuationAnalysis(
