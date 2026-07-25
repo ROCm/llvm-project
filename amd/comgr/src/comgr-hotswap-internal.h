@@ -1467,6 +1467,41 @@ struct PatchContext {
   llvm::StringMap<unsigned> KernelVgprGranuleCache;
 };
 
+/// One node in the all-path proof that an incoming physical VGPR value is
+/// killed before it can be observed. Opaque nodes and unsafe exits observe
+/// every still-live value conservatively. A safe terminal (s_endpgm or the
+/// patched site on a later loop iteration) observes none.
+struct ForwardVgprProofNode {
+  llvm::BitVector Uses;
+  llvm::BitVector FullDefs;
+  llvm::SmallVector<size_t, 2> Successors;
+  bool Opaque = false;
+  bool HasUnsafeExit = false;
+  bool SafeTerminal = false;
+
+  explicit ForwardVgprProofNode(unsigned MaxVgprs = 0)
+      : Uses(MaxVgprs), FullDefs(MaxVgprs) {}
+};
+
+/// Return physical VGPR values whose incoming contents are killed on every
+/// path before a use, opaque instruction, unsafe exit, or non-killing cycle.
+/// Malformed graph inputs fail closed with std::nullopt.
+std::optional<llvm::BitVector>
+computeForwardDeadVgprs(llvm::ArrayRef<ForwardVgprProofNode> Nodes,
+                        size_t EntryNode, unsigned MaxVgprs);
+
+/// True when [Base, Base + Width) is non-empty, within MaxVgprs, and does not
+/// cross one of gfx1250's 256-register physical VGPR banks.
+bool physicalVgprRangeFitsOneBank(unsigned Base, unsigned Width,
+                                  unsigned MaxVgprs);
+
+/// Return true when \p Reg or one of its aliases belongs to a physical vector
+/// register file. Physical-VGPR proofs use this after encoded-range recovery
+/// fails: a true result must invalidate the proof rather than silently treating
+/// the operand as scalar.
+bool isVectorRegisterOrAlias(llvm::MCRegister Reg,
+                             const llvm::MCRegisterInfo &MRI);
+
 enum class VgprMsbOperand : unsigned {
   Src0 = 0,
   Src1 = 2,
@@ -1489,6 +1524,13 @@ void ensureVgprMsbModes(PatchContext &Ctx);
 /// prevents object-wide analysis.
 [[nodiscard]] std::optional<unsigned>
 getLocallyEstablishedVgprMsbMode(PatchContext &Ctx, size_t Idx);
+
+/// Apply one instruction's persistent VGPR-MSB transfer to an exact packed
+/// mode. Returns VgprMsbUnknown when the incoming state or the instruction's
+/// MODE effect is ambiguous; an exact setter can recover an exact mode.
+int16_t transferExactVgprMsbMode(int16_t Incoming,
+                                 const InternalDecodedInst &DI,
+                                 const LLVMState &LS);
 
 unsigned getVgprMsbBank(unsigned Mode, VgprMsbOperand Operand);
 void setVgprMsbBank(unsigned &Mode, VgprMsbOperand Operand, unsigned Bank);
