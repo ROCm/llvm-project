@@ -34,6 +34,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/MC/MCExpr.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/MathExtras.h"
@@ -1685,6 +1686,18 @@ static bool isExactRegisterOperand(const MCInst &Inst, unsigned Index,
          Inst.getOperand(Index).getReg() == Reg;
 }
 
+static std::optional<uint32_t>
+evaluateAbsoluteUint32Operand(const MCOperand &Operand) {
+  if (Operand.isImm())
+    return static_cast<uint32_t>(Operand.getImm());
+  if (!Operand.isExpr())
+    return std::nullopt;
+  int64_t Value = 0;
+  if (!Operand.getExpr()->evaluateAsAbsolute(Value))
+    return std::nullopt;
+  return static_cast<uint32_t>(Value);
+}
+
 /// Recognize the two compiler-emitted ways a reusable register-call target is
 /// materialized. The first is the canonical get-PC/add-nc pair. Tensile also
 /// computes a 32-bit displacement in a temporary and propagates carry into the
@@ -1701,7 +1714,7 @@ static std::optional<std::pair<size_t, uint64_t>>
 matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
                                size_t GetPcIndex, size_t FunctionEndIndex,
                                MCRegister Pair, const LLVMState &LS,
-                               uint64_t TextAddr, ArrayRef<uint8_t> Text) {
+                               uint64_t TextAddr) {
   const InternalDecodedInst &GetPc = Decoded[GetPcIndex];
   if (!GetPc.DecodeSucceeded || GetPc.Inst.getOpcode() != LS.SGetPcI64Opcode ||
       !isExactRegisterOperand(GetPc.Inst, 0, Pair))
@@ -1744,6 +1757,8 @@ matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
       !MakeDelta.Inst.getOperand(2).isImm())
     return std::nullopt;
   MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
+  if (LS.MRI->regsOverlap(DeltaReg, Pair))
+    return std::nullopt;
   if (AddLow.Inst.getNumOperands() != 3 || !AddLow.Inst.getOperand(0).isReg() ||
       !AddLow.Inst.getOperand(1).isReg() ||
       !AddLow.Inst.getOperand(0).getReg() ||
@@ -1767,18 +1782,8 @@ matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
       !LS.MRI->regsOverlap(Low, Pair) || !LS.MRI->regsOverlap(High, Pair))
     return std::nullopt;
 
-  std::optional<uint32_t> FirstAddend;
-  if (MakeDelta.Inst.getOperand(1).isImm()) {
-    FirstAddend = static_cast<uint32_t>(MakeDelta.Inst.getOperand(1).getImm());
-  } else if (MakeDelta.Size >= 2 * MinInstSize &&
-             MakeDelta.Offset <= Text.size() &&
-             MakeDelta.Size <= Text.size() - MakeDelta.Offset) {
-    // The disassembler represents a SOP2 literal source as its literal
-    // register marker, not as an immediate operand. The literal dword is the
-    // final dword in this otherwise exact compiler-emitted instruction.
-    FirstAddend = support::endian::read32le(Text.data() + MakeDelta.Offset +
-                                            MakeDelta.Size - MinInstSize);
-  }
+  std::optional<uint32_t> FirstAddend =
+      evaluateAbsoluteUint32Operand(MakeDelta.Inst.getOperand(1));
   if (!FirstAddend)
     return std::nullopt;
   uint32_t Delta = *FirstAddend +
@@ -1793,6 +1798,338 @@ struct ReachingCallGroup {
   SmallVector<size_t, 8> Calls;
 };
 
+struct FiniteSetPcTransfer {
+  size_t InstIndex = 0;
+  size_t SequenceBeginIndex = 0;
+  size_t SequenceEndIndex = 0;
+  uint64_t Target = 0;
+  std::optional<size_t> LocalTargetIndex;
+  uint64_t FunctionBegin = 0;
+  uint64_t FunctionEnd = 0;
+};
+
+static const ElfView::FunctionTextRange *
+findInnermostFunctionRange(uint64_t Address,
+                           ArrayRef<ElfView::FunctionTextRange> Ranges) {
+  const ElfView::FunctionTextRange *Best = nullptr;
+  for (const ElfView::FunctionTextRange &Range : Ranges)
+    if (Range.Begin <= Address && Address < Range.End &&
+        (!Best || Range.Begin > Best->Begin ||
+         (Range.Begin == Best->Begin && Range.End < Best->End)))
+      Best = &Range;
+  return Best;
+}
+
+/// Collect exact materialized s_set_pc_i64 transfers. These are candidates,
+/// not proofs: a later closed-world audit must still rule out an alternate
+/// entry into the materialization before the edge can authorize mutation.
+static SmallVector<FiniteSetPcTransfer, 8> collectFiniteSetPcCandidates(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextEnd,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
+  SmallVector<FiniteSetPcTransfer, 8> Candidates;
+  DenseMap<uint64_t, size_t> OffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
+
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    const InternalDecodedInst &GetPc = Decoded[I];
+    if (!GetPc.DecodeSucceeded ||
+        GetPc.Inst.getOpcode() != LS.SGetPcI64Opcode ||
+        GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg() ||
+        !GetPc.Inst.getOperand(0).getReg())
+      continue;
+    MCRegister Pair(GetPc.Inst.getOperand(0).getReg());
+    std::optional<uint64_t> GetPcAddress = checkedAddUint64(
+        TextAddr, GetPc.Offset, "finite set-PC get-PC address");
+    if (!GetPcAddress)
+      continue;
+    const ElfView::FunctionTextRange *Range =
+        findInnermostFunctionRange(*GetPcAddress, FunctionRanges);
+    if (!Range || Range->Begin < TextAddr || Range->End > TextEnd)
+      continue;
+    ArrayRef<InternalDecodedInst>::const_iterator FunctionEnd =
+        llvm::lower_bound(Decoded, Range->End - TextAddr,
+                          [](const InternalDecodedInst &DI, uint64_t Offset) {
+                            return DI.Offset < Offset;
+                          });
+    size_t FunctionEndIndex =
+        static_cast<size_t>(FunctionEnd - Decoded.begin());
+    auto appendCandidate = [&](size_t SetPcIndex, size_t SequenceEndIndex,
+                               uint64_t Target) {
+      for (size_t J = I; J <= SequenceEndIndex; ++J) {
+        if (!Decoded[J].DecodeSucceeded)
+          return;
+        if (J == SequenceEndIndex)
+          break;
+        std::optional<uint64_t> End =
+            checkedAddUint64(Decoded[J].Offset, Decoded[J].Size,
+                             "finite set-PC materialization instruction end");
+        if (!End || *End != Decoded[J + 1].Offset)
+          return;
+      }
+      std::optional<size_t> LocalTargetIndex;
+      if (Target >= TextAddr && Target < TextEnd) {
+        DenseMap<uint64_t, size_t>::const_iterator LocalTarget =
+            OffsetToIndex.find(Target - TextAddr);
+        // A local transfer to the middle of an instruction is not finite for
+        // purposes of safe rewriting.
+        if (LocalTarget == OffsetToIndex.end())
+          return;
+        LocalTargetIndex = LocalTarget->second;
+      }
+      Candidates.push_back({SetPcIndex, I, SequenceEndIndex, Target,
+                            LocalTargetIndex, Range->Begin - TextAddr,
+                            Range->End - TextAddr});
+    };
+
+    std::optional<std::pair<size_t, uint64_t>> Match =
+        matchReusablePcMaterialization(Decoded, I, FunctionEndIndex, Pair, LS,
+                                       TextAddr);
+    if (Match && Match->first + 1 < FunctionEndIndex) {
+      size_t SetPcIndex = Match->first + 1;
+      const InternalDecodedInst &SetPc = Decoded[SetPcIndex];
+      if (SetPc.DecodeSucceeded &&
+          SetPc.Inst.getOpcode() == LS.SSetPcI64Opcode &&
+          SetPc.Inst.getNumOperands() == 1 &&
+          isExactRegisterOperand(SetPc.Inst, 0, Pair))
+        appendCandidate(SetPcIndex, SetPcIndex, Match->second);
+    }
+
+    // Tensile also emits a signed-direction materialized jump. The signed
+    // displacement is a link-time constant, but the sequence uses a generic
+    // compare/abs/add-or-sub shape:
+    //
+    //   get_pc Pair
+    //   add_co_i32 Delta, Literal, Imm
+    //   cmp_ge_i32 Delta, 0
+    //   cbranch_scc1 Positive
+    //   abs_i32 Delta, Delta
+    //   sub_co_u32/sub_co_ci_u32 Pair, Pair, Delta
+    //   set_pc Pair
+    // Positive:
+    //   add_co_u32/add_co_ci_u32 Pair, Pair, Delta
+    //   set_pc Pair
+    //
+    // Both set-PC instructions have the same finite target. Keep the entire
+    // shape in one audited materialization interval so an alternate entry
+    // into either arm invalidates both candidates.
+    if (I + 10 >= FunctionEndIndex)
+      continue;
+    const InternalDecodedInst &MakeDelta = Decoded[I + 1];
+    const InternalDecodedInst &Compare = Decoded[I + 2];
+    const InternalDecodedInst &Branch = Decoded[I + 3];
+    const InternalDecodedInst &Abs = Decoded[I + 4];
+    const InternalDecodedInst &SubLow = Decoded[I + 5];
+    const InternalDecodedInst &SubHigh = Decoded[I + 6];
+    const InternalDecodedInst &NegativeSetPc = Decoded[I + 7];
+    const InternalDecodedInst &AddLow = Decoded[I + 8];
+    const InternalDecodedInst &AddHigh = Decoded[I + 9];
+    const InternalDecodedInst &PositiveSetPc = Decoded[I + 10];
+    if (!MakeDelta.DecodeSucceeded || !Compare.DecodeSucceeded ||
+        !Branch.DecodeSucceeded || !Abs.DecodeSucceeded ||
+        !SubLow.DecodeSucceeded || !SubHigh.DecodeSucceeded ||
+        !NegativeSetPc.DecodeSucceeded || !AddLow.DecodeSucceeded ||
+        !AddHigh.DecodeSucceeded || !PositiveSetPc.DecodeSucceeded ||
+        MakeDelta.Mnemonic != "s_add_co_i32" ||
+        MakeDelta.Inst.getNumOperands() != 3 ||
+        !MakeDelta.Inst.getOperand(0).isReg() ||
+        !MakeDelta.Inst.getOperand(0).getReg() ||
+        !MakeDelta.Inst.getOperand(2).isImm())
+      continue;
+    MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
+    if (LS.MRI->regsOverlap(DeltaReg, Pair))
+      continue;
+    if (Compare.Mnemonic != "s_cmp_ge_i32" ||
+        Compare.Inst.getNumOperands() != 2 ||
+        !isExactRegisterOperand(Compare.Inst, 0, DeltaReg) ||
+        !Compare.Inst.getOperand(1).isImm() ||
+        Compare.Inst.getOperand(1).getImm() != 0 ||
+        Branch.Mnemonic != "s_cbranch_scc1" || Abs.Mnemonic != "s_abs_i32" ||
+        Abs.Inst.getNumOperands() != 2 ||
+        !isExactRegisterOperand(Abs.Inst, 0, DeltaReg) ||
+        !isExactRegisterOperand(Abs.Inst, 1, DeltaReg) ||
+        NegativeSetPc.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+        NegativeSetPc.Inst.getNumOperands() != 1 ||
+        !isExactRegisterOperand(NegativeSetPc.Inst, 0, Pair) ||
+        PositiveSetPc.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+        PositiveSetPc.Inst.getNumOperands() != 1 ||
+        !isExactRegisterOperand(PositiveSetPc.Inst, 0, Pair))
+      continue;
+    std::optional<uint64_t> PositiveLabel =
+        evaluateDirectControlFlowTarget(Branch, LS);
+    if (!PositiveLabel || *PositiveLabel != AddLow.Offset)
+      continue;
+
+    auto matchesPairArithmetic = [&](const InternalDecodedInst &Low,
+                                     const InternalDecodedInst &High,
+                                     StringRef LowMnemonic,
+                                     StringRef HighMnemonic) {
+      if (Low.Mnemonic != LowMnemonic || High.Mnemonic != HighMnemonic ||
+          Low.Inst.getNumOperands() != 3 || !Low.Inst.getOperand(0).isReg() ||
+          !Low.Inst.getOperand(1).isReg() || !Low.Inst.getOperand(0).getReg() ||
+          Low.Inst.getOperand(0).getReg() != Low.Inst.getOperand(1).getReg() ||
+          !isExactRegisterOperand(Low.Inst, 2, DeltaReg) ||
+          High.Inst.getNumOperands() != 3 || !High.Inst.getOperand(0).isReg() ||
+          !High.Inst.getOperand(1).isReg() ||
+          !High.Inst.getOperand(0).getReg() ||
+          High.Inst.getOperand(0).getReg() !=
+              High.Inst.getOperand(1).getReg() ||
+          !High.Inst.getOperand(2).isImm() ||
+          High.Inst.getOperand(2).getImm() != 0)
+        return false;
+      MCRegister LowReg(Low.Inst.getOperand(0).getReg());
+      MCRegister HighReg(High.Inst.getOperand(0).getReg());
+      std::optional<unsigned> LowIndex = numberedSgprIndex(*LS.MRI, LowReg);
+      std::optional<unsigned> HighIndex = numberedSgprIndex(*LS.MRI, HighReg);
+      return LowIndex && HighIndex && *HighIndex == *LowIndex + 1 &&
+             LS.MRI->regsOverlap(LowReg, Pair) &&
+             LS.MRI->regsOverlap(HighReg, Pair);
+    };
+    if (!matchesPairArithmetic(SubLow, SubHigh, "s_sub_co_u32",
+                               "s_sub_co_ci_u32") ||
+        !matchesPairArithmetic(AddLow, AddHigh, "s_add_co_u32",
+                               "s_add_co_ci_u32"))
+      continue;
+
+    std::optional<uint32_t> FirstAddend =
+        evaluateAbsoluteUint32Operand(MakeDelta.Inst.getOperand(1));
+    if (!FirstAddend)
+      continue;
+    uint32_t DeltaBits =
+        *FirstAddend +
+        static_cast<uint32_t>(MakeDelta.Inst.getOperand(2).getImm());
+    int64_t SignedDelta = static_cast<int32_t>(DeltaBits);
+    std::optional<uint64_t> PcValue = checkedAddUint64(
+        *GetPcAddress, GetPc.Size, "signed finite set-PC get-PC value");
+    if (!PcValue)
+      continue;
+    uint64_t Target = *PcValue + static_cast<uint64_t>(SignedDelta);
+    appendCandidate(I + 7, I + 10, Target);
+    appendCandidate(I + 10, I + 10, Target);
+  }
+  llvm::sort(Candidates, [](const FiniteSetPcTransfer &LHS,
+                            const FiniteSetPcTransfer &RHS) {
+    return LHS.InstIndex < RHS.InstIndex;
+  });
+  Candidates.erase(std::unique(Candidates.begin(), Candidates.end(),
+                               [](const FiniteSetPcTransfer &LHS,
+                                  const FiniteSetPcTransfer &RHS) {
+                                 return LHS.InstIndex == RHS.InstIndex;
+                               }),
+                   Candidates.end());
+  return Candidates;
+}
+
+static BitVector computeStaticallyReachableInstructions(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges, uint64_t TextAddr,
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers) {
+  BitVector Reachable(Decoded.size());
+  DenseMap<uint64_t, size_t> OffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
+  DenseMap<size_t, const FiniteSetPcTransfer *> TransferByInst;
+  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+    TransferByInst.try_emplace(Transfer.InstIndex, &Transfer);
+
+  SmallVector<size_t, 32> Worklist;
+  auto addRoot = [&](uint64_t Offset) {
+    DenseMap<uint64_t, size_t>::const_iterator It = OffsetToIndex.find(Offset);
+    if (It != OffsetToIndex.end())
+      Worklist.push_back(It->second);
+  };
+  for (uint64_t Entry : DeclaredEntries)
+    addRoot(Entry);
+  for (uint64_t Entry : ExternalEntries)
+    addRoot(Entry);
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin >= TextAddr)
+      addRoot(Range.Begin - TextAddr);
+  if (Worklist.empty() && !Decoded.empty())
+    Worklist.push_back(0);
+
+  while (!Worklist.empty()) {
+    size_t I = Worklist.pop_back_val();
+    if (Reachable.test(I))
+      continue;
+    Reachable.set(I);
+    const InternalDecodedInst &DI = Decoded[I];
+    if (!DI.DecodeSucceeded)
+      continue;
+    auto addOffset = [&](uint64_t Offset) {
+      DenseMap<uint64_t, size_t>::const_iterator It =
+          OffsetToIndex.find(Offset);
+      if (It != OffsetToIndex.end())
+        Worklist.push_back(It->second);
+    };
+    if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+        LS.MIA->isReturn(DI.Inst))
+      continue;
+    if (LS.MIA->isCall(DI.Inst)) {
+      std::optional<uint64_t> Fallthrough = checkedAddUint64(
+          DI.Offset, DI.Size, "finite set-PC call continuation");
+      if (Fallthrough)
+        addOffset(*Fallthrough);
+      continue;
+    }
+    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode ||
+        LS.MIA->isIndirectBranch(DI.Inst)) {
+      DenseMap<size_t, const FiniteSetPcTransfer *>::const_iterator Transfer =
+          TransferByInst.find(I);
+      if (Transfer != TransferByInst.end() &&
+          Transfer->second->LocalTargetIndex)
+        Worklist.push_back(*Transfer->second->LocalTargetIndex);
+      continue;
+    }
+    if (LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
+      if (Target)
+        addOffset(*Target);
+      if (LS.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    }
+    std::optional<uint64_t> Fallthrough = checkedAddUint64(
+        DI.Offset, DI.Size, "finite set-PC reachability fallthrough");
+    if (Fallthrough)
+      addOffset(*Fallthrough);
+  }
+  return Reachable;
+}
+
+static SmallVector<FiniteSetPcTransfer, 8> selectLeastReachableSetPcCandidates(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges, uint64_t TextAddr,
+    ArrayRef<FiniteSetPcTransfer> AllCandidates,
+    const BitVector &ProvenCandidates, const BitVector &RejectedCandidates) {
+  SmallVector<FiniteSetPcTransfer, 8> Selected;
+  BitVector SelectedBits(AllCandidates.size());
+  for (size_t I = 0; I != AllCandidates.size(); ++I)
+    if (ProvenCandidates.test(I) && !RejectedCandidates.test(I)) {
+      SelectedBits.set(I);
+      Selected.push_back(AllCandidates[I]);
+    }
+  for (;;) {
+    BitVector Reachable = computeStaticallyReachableInstructions(
+        Decoded, LS, DeclaredEntries, ExternalEntries, FunctionRanges, TextAddr,
+        Selected);
+    bool Changed = false;
+    for (size_t I = 0; I != AllCandidates.size(); ++I) {
+      if (RejectedCandidates.test(I) || SelectedBits.test(I) ||
+          !Reachable.test(AllCandidates[I].InstIndex))
+        continue;
+      SelectedBits.set(I);
+      Selected.push_back(AllCandidates[I]);
+      Changed = true;
+    }
+    if (!Changed)
+      return Selected;
+  }
+}
+
 /// Resolve register calls whose target pair is selected once and reused across
 /// control flow. A monotone intraprocedural solver propagates finite target
 /// sets from proven get-PC materializations. Any unrecognized pair definition
@@ -1801,9 +2138,12 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-    ArrayRef<uint8_t> Text) {
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers = {}) {
   std::vector<ReachingCallTargets> Resolved(Decoded.size());
   SmallVector<ReachingCallGroup, 8> Groups;
+  DenseMap<size_t, const FiniteSetPcTransfer *> FiniteSetPcByInst;
+  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+    FiniteSetPcByInst.try_emplace(Transfer.InstIndex, &Transfer);
 
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &Call = Decoded[I];
@@ -1865,8 +2205,8 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     DenseMap<size_t, SmallVector<size_t, 2>> Intermediates;
     for (size_t I = BeginIndex; I != EndIndex; ++I) {
       std::optional<std::pair<size_t, uint64_t>> Match =
-          matchReusablePcMaterialization(
-              Decoded, I, EndIndex, Group.TargetRegister, LS, TextAddr, Text);
+          matchReusablePcMaterialization(Decoded, I, EndIndex,
+                                         Group.TargetRegister, LS, TextAddr);
       if (Match) {
         Starters[I] = Match->first;
         Completions[Match->first] = Match->second;
@@ -1946,8 +2286,17 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
         // No successor.
       } else if (LS.MIA->isCall(DI.Inst)) {
         appendFallthrough();
-      } else if (LS.MIA->isIndirectBranch(DI.Inst)) {
-        // An indirect jump or bounded return leaves this intraprocedural path.
+      } else if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode ||
+                 LS.MIA->isIndirectBranch(DI.Inst)) {
+        DenseMap<size_t, const FiniteSetPcTransfer *>::const_iterator
+            FiniteSetPc = FiniteSetPcByInst.find(I);
+        if (FiniteSetPc != FiniteSetPcByInst.end() &&
+            FiniteSetPc->second->LocalTargetIndex &&
+            *FiniteSetPc->second->LocalTargetIndex >= BeginIndex &&
+            *FiniteSetPc->second->LocalTargetIndex < EndIndex)
+          Successors.push_back(*FiniteSetPc->second->LocalTargetIndex);
+        // All other indirect jumps or bounded returns leave this
+        // intraprocedural path.
       } else if (LS.MIA->isBranch(DI.Inst)) {
         std::optional<uint64_t> Target =
             evaluateDirectControlFlowTarget(DI, LS);
@@ -2010,6 +2359,11 @@ struct ExternalCallContinuation {
   uint64_t Continuation = 0;
 };
 
+struct CallContinuationSource {
+  size_t InstIndex = 0;
+  uint64_t Continuation = 0;
+};
+
 struct FallthroughEntryInfo {
   bool Proven = false;
   uint64_t ChainBegin = 0;
@@ -2022,8 +2376,10 @@ struct ControlFlowScanIndex {
   SmallVector<KnownCallEntry, 8> CallsByTarget;
   SmallVector<KnownCallEntry, 16> CallEntries;
   DenseMap<size_t, MCRegister> CallReturnRegistersBySource;
+  SmallVector<CallContinuationSource, 4> CallContinuationsByOffset;
   SmallVector<ExternalCallContinuation, 4> ExternalCallContinuations;
   SmallVector<size_t, 16> SetPcIndices;
+  SmallVector<size_t, 4> UnboundedIndirectIndices;
   SmallVector<size_t, 16> BranchOrCallIndices;
   SmallVector<DirectTargetSource, 16> DirectTargetsByTarget;
   bool HasUnboundedIndirectEntry = false;
@@ -2182,8 +2538,10 @@ buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
     if (DI.DecodeSucceeded && DI.Inst.getOpcode() != LS.SSetPcI64Opcode &&
         !LS.MIA->isReturn(DI.Inst) &&
         (LS.MIA->isIndirectBranch(DI.Inst) ||
-         DI.Inst.getOpcode() == LS.SAddPcI64Opcode))
+         DI.Inst.getOpcode() == LS.SAddPcI64Opcode)) {
       Index.HasUnboundedIndirectEntry = true;
+      Index.UnboundedIndirectIndices.push_back(I);
+    }
 
     if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
         LS.MIA->isReturn(DI.Inst))
@@ -2363,7 +2721,6 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       continue;
     MCRegister ReturnRegister(Return.Inst.getOperand(0).getReg());
 
-    bool IsBounded = false;
     for (size_t RangeIndex : CandidateRanges[ReturnPosition]) {
       const ElfView::FunctionTextRange &Range = FunctionRanges[RangeIndex];
       if (Range.Begin < TextAddr || Range.Begin >= TextEnd ||
@@ -2456,6 +2813,45 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       if (!Safe)
         continue;
 
+      // A call that returns into this function does not supply its link pair
+      // at the function entry. Reject continuations at the exact entry as
+      // well as in the interior; the earlier fallthrough-chain check only
+      // covers bytes laid out before FunctionBegin.
+      SmallVector<CallContinuationSource, 4>::const_iterator Continuation =
+          llvm::lower_bound(
+              Index.CallContinuationsByOffset, FunctionBegin,
+              [](const CallContinuationSource &Source, uint64_t Offset) {
+                return Source.Continuation < Offset;
+              });
+      if (Continuation != Index.CallContinuationsByOffset.end() &&
+          Continuation->Continuation < FunctionEnd) {
+        log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+              << " is not a bounded return: call at 0x"
+              << utohexstr(Decoded[Continuation->InstIndex].Offset)
+              << " returns into the function at 0x"
+              << utohexstr(Continuation->Continuation) << "\n";
+        Safe = false;
+      }
+      if (!Safe)
+        continue;
+      SmallVector<ExternalCallContinuation, 4>::const_iterator
+          ExternalContinuation = llvm::lower_bound(
+              Index.ExternalCallContinuations, FunctionBegin,
+              [](const ExternalCallContinuation &Source, uint64_t Offset) {
+                return Source.Continuation < Offset;
+              });
+      if (ExternalContinuation != Index.ExternalCallContinuations.end() &&
+          ExternalContinuation->Continuation < FunctionEnd) {
+        log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+              << " is not a bounded return: external call at 0x"
+              << utohexstr(Decoded[ExternalContinuation->InstIndex].Offset)
+              << " returns into the function at 0x"
+              << utohexstr(ExternalContinuation->Continuation) << "\n";
+        Safe = false;
+      }
+      if (!Safe)
+        continue;
+
       SmallVector<uint64_t, 2> Targets;
       SmallVector<KnownCallEntry, 8>::const_iterator CallAtTarget =
           llvm::lower_bound(Index.CallsByTarget, FunctionBegin,
@@ -2533,14 +2929,623 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       llvm::sort(Targets);
       Targets.erase(std::unique(Targets.begin(), Targets.end()), Targets.end());
       Returns.push_back({ReturnIndex, std::move(Targets)});
-      IsBounded = true;
       break;
     }
-    if (!IsBounded)
-      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
-            << " remains an unbounded indirect transfer\n";
   }
   return Returns;
+}
+
+static BitVector computeFiniteControlFlowReachability(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries,
+    ArrayRef<uint64_t> ExternalEntries,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    const ControlFlowScanIndex &Index,
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers,
+    ArrayRef<BoundedSetPcReturn> BoundedReturns) {
+  BitVector Reachable(Decoded.size());
+  DenseMap<uint64_t, size_t> OffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
+  DenseMap<size_t, const FiniteSetPcTransfer *> TransferByInst;
+  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+    TransferByInst.try_emplace(Transfer.InstIndex, &Transfer);
+  DenseMap<size_t, const BoundedSetPcReturn *> ReturnByInst;
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
+    ReturnByInst.try_emplace(Return.InstIndex, &Return);
+  DenseMap<size_t, SmallVector<uint64_t, 2>> CallTargetsByInst;
+  for (const KnownCallSite &Call : Index.Calls) {
+    SmallVector<uint64_t, 2> &Targets = CallTargetsByInst[Call.InstIndex];
+    if (!llvm::is_contained(Targets, Call.Target))
+      Targets.push_back(Call.Target);
+  }
+
+  SmallVector<size_t, 32> Worklist;
+  auto addOffset = [&](uint64_t Offset) {
+    DenseMap<uint64_t, size_t>::const_iterator It = OffsetToIndex.find(Offset);
+    if (It != OffsetToIndex.end())
+      Worklist.push_back(It->second);
+  };
+  for (uint64_t Entry : DeclaredEntries)
+    addOffset(Entry);
+  for (uint64_t Entry : ExternalEntries)
+    addOffset(Entry);
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin >= TextAddr)
+      addOffset(Range.Begin - TextAddr);
+  if (Worklist.empty() && !Decoded.empty())
+    Worklist.push_back(0);
+
+  while (!Worklist.empty()) {
+    size_t I = Worklist.pop_back_val();
+    if (Reachable.test(I))
+      continue;
+    Reachable.set(I);
+    const InternalDecodedInst &DI = Decoded[I];
+    if (!DI.DecodeSucceeded)
+      continue;
+    if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+        LS.MIA->isReturn(DI.Inst))
+      continue;
+
+    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+      DenseMap<size_t, const FiniteSetPcTransfer *>::const_iterator Transfer =
+          TransferByInst.find(I);
+      if (Transfer != TransferByInst.end() &&
+          Transfer->second->LocalTargetIndex)
+        Worklist.push_back(*Transfer->second->LocalTargetIndex);
+      DenseMap<size_t, const BoundedSetPcReturn *>::const_iterator Return =
+          ReturnByInst.find(I);
+      if (Return != ReturnByInst.end())
+        for (uint64_t Target : Return->second->Targets)
+          if (Target < TextSize)
+            addOffset(Target);
+      continue;
+    }
+    if (LS.MIA->isCall(DI.Inst)) {
+      DenseMap<size_t, SmallVector<uint64_t, 2>>::const_iterator Targets =
+          CallTargetsByInst.find(I);
+      if (Targets != CallTargetsByInst.end())
+        for (uint64_t Target : Targets->second)
+          addOffset(Target);
+      std::optional<uint64_t> Fallthrough = checkedAddUint64(
+          DI.Offset, DI.Size, "finite call continuation reachability");
+      if (Fallthrough && *Fallthrough < TextSize)
+        addOffset(*Fallthrough);
+      continue;
+    }
+    if (LS.MIA->isIndirectBranch(DI.Inst) ||
+        DI.Inst.getOpcode() == LS.SAddPcI64Opcode)
+      continue;
+    if (LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) {
+      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
+      if (Target)
+        addOffset(*Target);
+      if (LS.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    }
+    std::optional<uint64_t> Fallthrough = checkedAddUint64(
+        DI.Offset, DI.Size, "finite control-flow reachability fallthrough");
+    if (Fallthrough && *Fallthrough < TextSize)
+      addOffset(*Fallthrough);
+  }
+  return Reachable;
+}
+
+struct SymbolLessReturnRegion {
+  uint64_t Entry = 0;
+  MCRegister LinkRegister;
+  SmallVector<size_t, 16> Instructions;
+  SmallVector<size_t, 2> Returns;
+  SmallVector<uint64_t, 8> Continuations;
+};
+
+static bool instructionMayFallThrough(const InternalDecodedInst &DI,
+                                      const LLVMState &LS) {
+  if (!DI.DecodeSucceeded)
+    return true;
+  if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+      DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+      LS.MIA->isReturn(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst))
+    return false;
+  return !LS.MIA->isBranch(DI.Inst) || !LS.MIA->isUnconditionalBranch(DI.Inst);
+}
+
+/// Prove symbol-less callable regions from finite call targets. This is
+/// intentionally based on forward CFG reachability from a concrete call
+/// target, rather than layout labels or source tails. Every entry into the
+/// resulting region must be one of the calls that supplies the exact link
+/// pair, and the pair must remain untouched until each s_set_pc_i64 return.
+static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextSize,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
+    const ControlFlowScanIndex &Index,
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers,
+    ArrayRef<BoundedSetPcReturn> PreviouslyBoundedReturns,
+    const BitVector &ReachableCallSources) {
+  struct CallGroup {
+    uint64_t Entry = 0;
+    MCRegister LinkRegister;
+    SmallVector<uint64_t, 8> Continuations;
+  };
+  SmallVector<CallGroup, 8> Groups;
+  DenseMap<std::pair<uint64_t, unsigned>, size_t> GroupPositions;
+  for (const KnownCallSite &Call : Index.Calls) {
+    if (!ReachableCallSources.test(Call.InstIndex))
+      continue;
+    std::pair<uint64_t, unsigned> Key{Call.Target, Call.ReturnRegister.id()};
+    auto Inserted = GroupPositions.try_emplace(Key, Groups.size());
+    if (Inserted.second) {
+      Groups.push_back({Call.Target, Call.ReturnRegister, {}});
+    }
+    Groups[Inserted.first->second].Continuations.push_back(Call.Continuation);
+  }
+
+  DenseMap<uint64_t, size_t> OffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
+
+  SmallVector<SymbolLessReturnRegion, 8> Regions;
+  for (CallGroup &Group : Groups) {
+    DenseMap<uint64_t, size_t>::const_iterator Entry =
+        OffsetToIndex.find(Group.Entry);
+    if (Entry == OffsetToIndex.end())
+      continue;
+
+    SymbolLessReturnRegion Region;
+    Region.Entry = Group.Entry;
+    Region.LinkRegister = Group.LinkRegister;
+    llvm::sort(Group.Continuations);
+    Group.Continuations.erase(
+        std::unique(Group.Continuations.begin(), Group.Continuations.end()),
+        Group.Continuations.end());
+    Region.Continuations = Group.Continuations;
+
+    SmallVector<size_t, 32> Worklist{Entry->second};
+    BitVector Visited(Decoded.size());
+    bool Safe = true;
+    while (!Worklist.empty() && Safe) {
+      size_t I = Worklist.pop_back_val();
+      if (Visited.test(I))
+        continue;
+      Visited.set(I);
+      Region.Instructions.push_back(I);
+      const InternalDecodedInst &DI = Decoded[I];
+      if (!DI.DecodeSucceeded) {
+        Safe = false;
+        break;
+      }
+      if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+        if (DI.Inst.getNumOperands() != 1 ||
+            !isExactRegisterOperand(DI.Inst, 0, Group.LinkRegister)) {
+          Safe = false;
+          break;
+        }
+        Region.Returns.push_back(I);
+        continue;
+      }
+      if (LS.MIA->isCall(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst) ||
+          DI.Inst.getOpcode() == LS.SAddPcI64Opcode ||
+          LS.MIA->isReturn(DI.Inst) ||
+          definesOverlappingRegister(DI, LS, Group.LinkRegister)) {
+        Safe = false;
+        break;
+      }
+      if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+          DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode)
+        continue;
+
+      auto addSuccessor = [&](uint64_t Offset) {
+        DenseMap<uint64_t, size_t>::const_iterator It =
+            OffsetToIndex.find(Offset);
+        if (It == OffsetToIndex.end()) {
+          Safe = false;
+          return;
+        }
+        Worklist.push_back(It->second);
+      };
+      if (LS.MIA->isBranch(DI.Inst)) {
+        std::optional<uint64_t> Target =
+            evaluateDirectControlFlowTarget(DI, LS);
+        if (!Target || *Target >= TextSize) {
+          Safe = false;
+          break;
+        }
+        addSuccessor(*Target);
+        if (!Safe)
+          break;
+        if (LS.MIA->isUnconditionalBranch(DI.Inst))
+          continue;
+      }
+      std::optional<uint64_t> Fallthrough = checkedAddUint64(
+          DI.Offset, DI.Size, "symbol-less return fallthrough");
+      if (!Fallthrough || *Fallthrough >= TextSize) {
+        Safe = false;
+        break;
+      }
+      addSuccessor(*Fallthrough);
+    }
+    if (!Safe || Region.Returns.empty())
+      continue;
+    llvm::sort(Region.Instructions);
+    llvm::sort(Region.Returns);
+
+    auto containsInstructionByte = [&](uint64_t Offset) {
+      for (size_t InstIndex : Region.Instructions) {
+        const InternalDecodedInst &DI = Decoded[InstIndex];
+        std::optional<uint64_t> End = checkedAddUint64(
+            DI.Offset, DI.Size, "symbol-less return instruction end");
+        // Overflow is itself unprovable; conservatively treat the queried
+        // byte as overlapping the claimed region.
+        if (!End || (Offset >= DI.Offset && Offset < *End))
+          return true;
+      }
+      return false;
+    };
+    auto sourceIsInside = [&](size_t InstIndex) {
+      return llvm::is_contained(Region.Instructions, InstIndex);
+    };
+
+    for (uint64_t EntryOffset : DeclaredEntries)
+      if (containsInstructionByte(EntryOffset)) {
+        Safe = false;
+        break;
+      }
+    if (!Safe)
+      continue;
+    for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
+      if (Range.Begin < TextAddr || Range.Begin - TextAddr >= TextSize)
+        continue;
+      uint64_t EntryOffset = Range.Begin - TextAddr;
+      if (EntryOffset != Region.Entry && containsInstructionByte(EntryOffset)) {
+        Safe = false;
+        break;
+      }
+    }
+    if (!Safe)
+      continue;
+    for (uint64_t EntryOffset : ExternalEntries)
+      if (containsInstructionByte(EntryOffset)) {
+        Safe = false;
+        break;
+      }
+    if (!Safe)
+      continue;
+
+    // Reject layout fallthrough from outside the reachable region.
+    for (size_t InstIndex : Region.Instructions) {
+      if (InstIndex == 0)
+        continue;
+      const InternalDecodedInst &DI = Decoded[InstIndex];
+      const InternalDecodedInst &Predecessor = Decoded[InstIndex - 1];
+      std::optional<uint64_t> PredecessorEnd =
+          checkedAddUint64(Predecessor.Offset, Predecessor.Size,
+                           "symbol-less return predecessor end");
+      if (sourceIsInside(InstIndex - 1))
+        continue;
+      if (!Predecessor.DecodeSucceeded || !PredecessorEnd ||
+          *PredecessorEnd != DI.Offset ||
+          instructionMayFallThrough(Predecessor, LS)) {
+        Safe = false;
+        break;
+      }
+    }
+    if (!Safe)
+      continue;
+
+    for (const KnownCallSite &Call : Index.Calls) {
+      bool TargetInside = containsInstructionByte(Call.Target);
+      bool ContinuationInside = containsInstructionByte(Call.Continuation);
+      if (!TargetInside && !ContinuationInside)
+        continue;
+      if (sourceIsInside(Call.InstIndex)) {
+        Safe = false;
+        break;
+      }
+      if (ContinuationInside || Call.Target != Region.Entry ||
+          Call.ReturnRegister != Region.LinkRegister) {
+        Safe = false;
+        break;
+      }
+    }
+    if (!Safe)
+      continue;
+    for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
+      if (containsInstructionByte(Call.Continuation)) {
+        Safe = false;
+        break;
+      }
+    if (!Safe)
+      continue;
+
+    for (const DirectTargetSource &Source : Index.DirectTargetsByTarget) {
+      if (!containsInstructionByte(Source.Target) ||
+          sourceIsInside(Source.InstIndex))
+        continue;
+      bool IsEntryCall = false;
+      for (const KnownCallSite &Call : Index.Calls)
+        IsEntryCall |= Call.InstIndex == Source.InstIndex &&
+                       Call.Target == Region.Entry &&
+                       Call.ReturnRegister == Region.LinkRegister;
+      if (!IsEntryCall) {
+        Safe = false;
+        break;
+      }
+    }
+    if (!Safe)
+      continue;
+
+    for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers) {
+      if (!Transfer.LocalTargetIndex ||
+          !llvm::is_contained(Region.Instructions,
+                              *Transfer.LocalTargetIndex) ||
+          sourceIsInside(Transfer.InstIndex))
+        continue;
+      Safe = false;
+      break;
+    }
+    if (!Safe)
+      continue;
+    for (const BoundedSetPcReturn &Return : PreviouslyBoundedReturns) {
+      if (sourceIsInside(Return.InstIndex))
+        continue;
+      for (uint64_t Target : Return.Targets)
+        if (containsInstructionByte(Target)) {
+          Safe = false;
+          break;
+        }
+      if (!Safe)
+        break;
+    }
+    if (Safe)
+      Regions.push_back(std::move(Region));
+  }
+
+  // Two independently inferred call entries may not claim a shared body.
+  BitVector Claimed(Decoded.size());
+  BitVector Overlap(Regions.size());
+  for (size_t I = 0; I != Regions.size(); ++I)
+    for (size_t InstIndex : Regions[I].Instructions) {
+      if (Claimed.test(InstIndex)) {
+        Overlap.set(I);
+        for (size_t J = 0; J != I; ++J)
+          if (llvm::is_contained(Regions[J].Instructions, InstIndex))
+            Overlap.set(J);
+      }
+      Claimed.set(InstIndex);
+    }
+  SmallVector<SymbolLessReturnRegion, 8> Disjoint;
+  for (size_t I = 0; I != Regions.size(); ++I)
+    if (!Overlap.test(I))
+      Disjoint.push_back(std::move(Regions[I]));
+  return Disjoint;
+}
+
+struct FiniteControlFlowAudit {
+  BitVector InvalidSetPcCandidates;
+  bool Closed = false;
+  bool HasUnboundedIndirectEntries = false;
+};
+
+static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextSize,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
+    const ControlFlowScanIndex &Index,
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers,
+    ArrayRef<BoundedSetPcReturn> BoundedReturns,
+    ArrayRef<SymbolLessReturnRegion> SymbolLessRegions) {
+  FiniteControlFlowAudit Audit{BitVector(FiniteSetPcTransfers.size()), true};
+  auto markUnboundedIndirectEntry = [&]() {
+    Audit.Closed = false;
+    Audit.HasUnboundedIndirectEntries = true;
+  };
+
+  for (size_t CandidateIndex = 0; CandidateIndex != FiniteSetPcTransfers.size();
+       ++CandidateIndex) {
+    const FiniteSetPcTransfer &Candidate = FiniteSetPcTransfers[CandidateIndex];
+    uint64_t SequenceStart = Decoded[Candidate.SequenceBeginIndex].Offset;
+    std::optional<uint64_t> SequenceEnd =
+        checkedAddUint64(Decoded[Candidate.SequenceEndIndex].Offset,
+                         Decoded[Candidate.SequenceEndIndex].Size,
+                         "finite set-PC materialization end");
+    auto isInteriorByte = [&](uint64_t Offset) {
+      return !SequenceEnd || (Offset > SequenceStart && Offset < *SequenceEnd);
+    };
+    auto sourceIsSequence = [&](size_t InstIndex) {
+      return InstIndex >= Candidate.SequenceBeginIndex &&
+             InstIndex <= Candidate.SequenceEndIndex;
+    };
+    bool Safe = true;
+    for (uint64_t Entry : DeclaredEntries)
+      if (isInteriorByte(Entry)) {
+        Safe = false;
+        break;
+      }
+    if (Safe)
+      for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+        if (Range.Begin >= TextAddr && isInteriorByte(Range.Begin - TextAddr)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (uint64_t Entry : ExternalEntries)
+        if (isInteriorByte(Entry)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const DirectTargetSource &Source : Index.DirectTargetsByTarget)
+        if (isInteriorByte(Source.Target) &&
+            !sourceIsSequence(Source.InstIndex)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const KnownCallSite &Call : Index.Calls)
+        if ((isInteriorByte(Call.Target) ||
+             isInteriorByte(Call.Continuation)) &&
+            !sourceIsSequence(Call.InstIndex)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const ExternalCallContinuation &Call :
+           Index.ExternalCallContinuations)
+        if (isInteriorByte(Call.Continuation) &&
+            !sourceIsSequence(Call.InstIndex)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+        if (Transfer.LocalTargetIndex &&
+            isInteriorByte(Decoded[*Transfer.LocalTargetIndex].Offset)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const BoundedSetPcReturn &Return : BoundedReturns) {
+        for (uint64_t TargetOffset : Return.Targets) {
+          if (isInteriorByte(TargetOffset)) {
+            Safe = false;
+            break;
+          }
+        }
+        if (!Safe)
+          break;
+      }
+    if (!Safe)
+      Audit.InvalidSetPcCandidates.set(CandidateIndex);
+  }
+
+  if (Audit.InvalidSetPcCandidates.any()) {
+    Audit.Closed = false;
+    return Audit;
+  }
+
+  BitVector BoundedSetPc(Decoded.size());
+  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+    BoundedSetPc.set(Transfer.InstIndex);
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
+    BoundedSetPc.set(Return.InstIndex);
+  for (const SymbolLessReturnRegion &Region : SymbolLessRegions)
+    for (size_t Return : Region.Returns)
+      BoundedSetPc.set(Return);
+
+  // Symbol-less regions are inferred together so large mutually independent
+  // helper families can reach a fixed point. Validate that joint proof before
+  // treating any provisional return as bounded: each provisional source must
+  // have exactly one owning region, and a return owned by another region (or
+  // by a symbol-backed function) may not enter any byte of this region.
+  DenseMap<size_t, unsigned> ProvisionalOwners;
+  DenseMap<size_t, unsigned> PublishedProvisionalReturns;
+  for (const SymbolLessReturnRegion &Region : SymbolLessRegions)
+    for (size_t Return : Region.Returns) {
+      ++ProvisionalOwners[Return];
+      if (!llvm::is_contained(Region.Instructions, Return))
+        markUnboundedIndirectEntry();
+    }
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
+    if (ProvisionalOwners.contains(Return.InstIndex))
+      ++PublishedProvisionalReturns[Return.InstIndex];
+  for (const auto &Owner : ProvisionalOwners)
+    if (Owner.second != 1 ||
+        PublishedProvisionalReturns.lookup(Owner.first) != 1)
+      markUnboundedIndirectEntry();
+
+  for (const SymbolLessReturnRegion &Region : SymbolLessRegions) {
+    auto containsInstructionByte = [&](uint64_t Offset) {
+      for (size_t InstIndex : Region.Instructions) {
+        const InternalDecodedInst &DI = Decoded[InstIndex];
+        std::optional<uint64_t> End = checkedAddUint64(
+            DI.Offset, DI.Size, "symbol-less joint audit instruction end");
+        if (!End || (Offset >= DI.Offset && Offset < *End))
+          return true;
+      }
+      return false;
+    };
+    for (const BoundedSetPcReturn &Return : BoundedReturns) {
+      if (llvm::is_contained(Region.Instructions, Return.InstIndex)) {
+        if (!llvm::is_contained(Region.Returns, Return.InstIndex))
+          markUnboundedIndirectEntry();
+        continue;
+      }
+      for (uint64_t Target : Return.Targets)
+        if (containsInstructionByte(Target)) {
+          markUnboundedIndirectEntry();
+          break;
+        }
+    }
+  }
+
+  BitVector Reachable = computeFiniteControlFlowReachability(
+      Decoded, LS, TextAddr, TextSize, DeclaredEntries, ExternalEntries,
+      FunctionRanges, Index, FiniteSetPcTransfers, BoundedReturns);
+  DenseSet<uint64_t> InstructionOffsets;
+  for (const InternalDecodedInst &DI : Decoded)
+    InstructionOffsets.insert(DI.Offset);
+  for (uint64_t Entry : DeclaredEntries)
+    if (Entry < TextSize && !InstructionOffsets.contains(Entry))
+      markUnboundedIndirectEntry();
+  for (uint64_t Entry : ExternalEntries)
+    if (Entry < TextSize && !InstructionOffsets.contains(Entry))
+      markUnboundedIndirectEntry();
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin >= TextAddr && Range.Begin - TextAddr < TextSize &&
+        !InstructionOffsets.contains(Range.Begin - TextAddr))
+      markUnboundedIndirectEntry();
+  for (const DirectTargetSource &Source : Index.DirectTargetsByTarget)
+    if (Reachable.test(Source.InstIndex) && Source.Target < TextSize &&
+        !InstructionOffsets.contains(Source.Target))
+      markUnboundedIndirectEntry();
+  for (const KnownCallSite &Call : Index.Calls)
+    if (Reachable.test(Call.InstIndex) &&
+        ((!InstructionOffsets.contains(Call.Target) &&
+          Call.Target < TextSize) ||
+         (!InstructionOffsets.contains(Call.Continuation) &&
+          Call.Continuation < TextSize)))
+      markUnboundedIndirectEntry();
+  for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
+    if (Reachable.test(Call.InstIndex) && Call.Continuation < TextSize &&
+        !InstructionOffsets.contains(Call.Continuation))
+      markUnboundedIndirectEntry();
+  for (size_t SetPc : Index.SetPcIndices)
+    if (Reachable.test(SetPc) && !BoundedSetPc.test(SetPc))
+      markUnboundedIndirectEntry();
+
+  for (size_t InstIndex : Index.UnboundedIndirectIndices)
+    if (Reachable.test(InstIndex))
+      markUnboundedIndirectEntry();
+
+  // Every call is also an indirect entry source until either a finite local
+  // target or a finite external target has been recorded for it.
+  BitVector FiniteCalls(Decoded.size());
+  for (const KnownCallSite &Call : Index.Calls)
+    FiniteCalls.set(Call.InstIndex);
+  for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
+    FiniteCalls.set(Call.InstIndex);
+  for (size_t InstIndex : Index.BranchOrCallIndices) {
+    if (!Reachable.test(InstIndex) || !LS.MIA->isCall(Decoded[InstIndex].Inst))
+      continue;
+    if (!FiniteCalls.test(InstIndex))
+      markUnboundedIndirectEntry();
+  }
+  for (const BoundedSetPcReturn &Return : BoundedReturns) {
+    if (!Reachable.test(Return.InstIndex))
+      continue;
+    for (uint64_t Target : Return.Targets)
+      if (Target < TextSize && !InstructionOffsets.contains(Target))
+        markUnboundedIndirectEntry();
+  }
+  for (int I = Reachable.find_first(); I >= 0; I = Reachable.find_next(I))
+    if (!Decoded[static_cast<size_t>(I)].DecodeSucceeded)
+      markUnboundedIndirectEntry();
+  return Audit;
 }
 
 static bool
@@ -2581,6 +3586,72 @@ hasKnownControlFlowEntry(ArrayRef<uint64_t> DeclaredEntries,
   return false;
 }
 
+static bool addReusableCallsToIndex(ArrayRef<InternalDecodedInst> Decoded,
+                                    const LLVMState &LS, uint64_t TextAddr,
+                                    uint64_t TextEnd,
+                                    ArrayRef<ReachingCallTargets> ReusableCalls,
+                                    ControlFlowScanIndex &Index) {
+  for (size_t I = 0; I != ReusableCalls.size(); ++I) {
+    if (ReusableCalls[I].empty() || Index.MaterializedCalls.contains(I))
+      continue;
+    std::optional<MCRegister> ReturnRegister =
+        getCallReturnRegister(Decoded[I], LS);
+    if (!ReturnRegister)
+      continue;
+    std::optional<uint64_t> Continuation =
+        checkedAddUint64(Decoded[I].Offset, Decoded[I].Size,
+                         "known reusable call continuation address");
+    if (!Continuation)
+      return false;
+    bool HasExternalTarget = false;
+    for (uint64_t Target : ReusableCalls[I])
+      if (Target >= TextAddr && Target < TextEnd) {
+        Index.Calls.push_back(
+            {I, Target - TextAddr, *Continuation, *ReturnRegister});
+      } else {
+        HasExternalTarget = true;
+      }
+    if (HasExternalTarget)
+      Index.ExternalCallContinuations.push_back({I, *Continuation});
+  }
+  return true;
+}
+
+static void finalizeCallContinuationIndex(ControlFlowScanIndex &Index) {
+  Index.CallContinuationsByOffset.clear();
+  for (const KnownCallSite &Call : Index.Calls)
+    Index.CallContinuationsByOffset.push_back(
+        {Call.InstIndex, Call.Continuation});
+  llvm::sort(
+      Index.CallContinuationsByOffset,
+      [](const CallContinuationSource &LHS, const CallContinuationSource &RHS) {
+        return std::tie(LHS.Continuation, LHS.InstIndex) <
+               std::tie(RHS.Continuation, RHS.InstIndex);
+      });
+  llvm::sort(Index.ExternalCallContinuations,
+             [](const ExternalCallContinuation &LHS,
+                const ExternalCallContinuation &RHS) {
+               return std::tie(LHS.Continuation, LHS.InstIndex) <
+                      std::tie(RHS.Continuation, RHS.InstIndex);
+             });
+}
+
+static void
+addPotentialFiniteSetPcTransfersToIndex(ArrayRef<InternalDecodedInst> Decoded,
+                                        ArrayRef<FiniteSetPcTransfer> Transfers,
+                                        const BitVector &Reachable,
+                                        ControlFlowScanIndex &Index) {
+  for (const FiniteSetPcTransfer &Transfer : Transfers)
+    if (Reachable.test(Transfer.InstIndex) && Transfer.LocalTargetIndex)
+      Index.DirectTargetsByTarget.push_back(
+          {Transfer.InstIndex, Decoded[*Transfer.LocalTargetIndex].Offset});
+  llvm::sort(Index.DirectTargetsByTarget,
+             [](const DirectTargetSource &LHS, const DirectTargetSource &RHS) {
+               return std::tie(LHS.Target, LHS.InstIndex) <
+                      std::tie(RHS.Target, RHS.InstIndex);
+             });
+}
+
 /// Collect statically known direct branch and call destinations so an interior
 /// entry point is never swallowed by coalescing.
 std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
@@ -2599,51 +3670,138 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   if (!TextEnd)
     return std::nullopt;
 
-  std::vector<ReachingCallTargets> ReusableCalls = resolveReusablePcCallTargets(
-      Decoded, LS, TextAddr, *TextEnd, FunctionRanges, Text);
+  SmallVector<FiniteSetPcTransfer, 8> AllSetPcCandidates =
+      collectFiniteSetPcCandidates(Decoded, LS, TextAddr, *TextEnd,
+                                   FunctionRanges);
+  BitVector RejectedSetPcCandidates(AllSetPcCandidates.size());
+  BitVector ProvenSetPcCandidates(AllSetPcCandidates.size());
+  SmallVector<FiniteSetPcTransfer, 8> EnabledSetPcTransfers;
+  std::vector<ReachingCallTargets> ReusableCalls;
+  std::optional<ControlFlowScanIndex> Index;
+  SmallVector<BoundedSetPcReturn, 2> BoundedReturns;
+  SmallVector<SymbolLessReturnRegion, 8> SymbolLessRegions;
+  bool IndirectControlFlowClosed = false;
+  bool HasUnboundedIndirectEntries = false;
 
-  std::optional<ControlFlowScanIndex> Index = buildControlFlowScanIndex(
-      Decoded, LS, TextAddr, *TextEnd, FunctionRanges);
-  if (!Index)
-    return std::nullopt;
-
-  // Reusable targets are intentionally lower priority than an exact canonical
-  // one-shot materialization, matching the established call-site proof. Add
-  // only the non-canonical finite target sets to the sparse call index.
-  for (size_t I = 0; I != ReusableCalls.size(); ++I) {
-    if (ReusableCalls[I].empty() || Index->MaterializedCalls.contains(I))
-      continue;
-    std::optional<MCRegister> ReturnRegister =
-        getCallReturnRegister(Decoded[I], LS);
-    if (!ReturnRegister)
-      continue;
-    std::optional<uint64_t> Continuation = checkedAddUint64(
-        Decoded[I].Offset, Decoded[I].Size,
-        "known reusable call continuation address");
-    if (!Continuation)
+  // Exact set-PC edges are an optimistic over-approximation used only to
+  // discover later finite call targets. Rebuild from scratch whenever the
+  // closed-world audit removes an edge; never let a rejected edge leave
+  // self-supporting call or return facts behind.
+  for (;;) {
+    EnabledSetPcTransfers = selectLeastReachableSetPcCandidates(
+        Decoded, LS, DeclaredEntries, ExternalEntries, FunctionRanges, TextAddr,
+        AllSetPcCandidates, ProvenSetPcCandidates, RejectedSetPcCandidates);
+    ReusableCalls = resolveReusablePcCallTargets(
+        Decoded, LS, TextAddr, *TextEnd, FunctionRanges, EnabledSetPcTransfers);
+    Index = buildControlFlowScanIndex(Decoded, LS, TextAddr, *TextEnd,
+                                      FunctionRanges);
+    if (!Index || !addReusableCallsToIndex(Decoded, LS, TextAddr, *TextEnd,
+                                           ReusableCalls, *Index))
       return std::nullopt;
-    bool HasExternalTarget = false;
-    for (uint64_t Target : ReusableCalls[I])
-      if (Target >= TextAddr && Target < *TextEnd) {
-        Index->Calls.push_back(
-            {I, Target - TextAddr, *Continuation, *ReturnRegister});
-      } else {
-        HasExternalTarget = true;
+    indexKnownCalls(*Index);
+    finalizeCallContinuationIndex(*Index);
+    BitVector PotentialSetPcSources = computeFiniteControlFlowReachability(
+        Decoded, LS, TextAddr, TextSize, DeclaredEntries, ExternalEntries,
+        FunctionRanges, *Index, EnabledSetPcTransfers,
+        /*BoundedReturns=*/ArrayRef<BoundedSetPcReturn>{});
+    addPotentialFiniteSetPcTransfersToIndex(Decoded, AllSetPcCandidates,
+                                            PotentialSetPcSources, *Index);
+
+    std::optional<SmallVector<BoundedSetPcReturn, 2>> FunctionReturns =
+        collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
+                                   DeclaredEntries, FunctionRanges,
+                                   ExternalEntries, *Index);
+    if (!FunctionReturns)
+      return std::nullopt;
+    BoundedReturns = std::move(*FunctionReturns);
+    BitVector CandidateReachability = computeFiniteControlFlowReachability(
+        Decoded, LS, TextAddr, TextSize, DeclaredEntries, ExternalEntries,
+        FunctionRanges, *Index, EnabledSetPcTransfers, BoundedReturns);
+    bool AddedCandidate = false;
+    for (size_t I = 0; I != AllSetPcCandidates.size(); ++I) {
+      if (RejectedSetPcCandidates.test(I) || ProvenSetPcCandidates.test(I) ||
+          !CandidateReachability.test(AllSetPcCandidates[I].InstIndex))
+        continue;
+      ProvenSetPcCandidates.set(I);
+      AddedCandidate = true;
+    }
+    if (AddedCandidate)
+      continue;
+    BitVector ReachableCallSources = computeFiniteControlFlowReachability(
+        Decoded, LS, TextAddr, TextSize, DeclaredEntries, ExternalEntries,
+        FunctionRanges, *Index, EnabledSetPcTransfers, BoundedReturns);
+    SymbolLessRegions = collectSymbolLessReturnRegions(
+        Decoded, LS, TextAddr, TextSize, FunctionRanges, DeclaredEntries,
+        ExternalEntries, *Index, EnabledSetPcTransfers, BoundedReturns,
+        ReachableCallSources);
+    SmallVector<BoundedSetPcReturn, 2> AllBoundedReturns = BoundedReturns;
+    for (const SymbolLessReturnRegion &Region : SymbolLessRegions)
+      for (size_t Return : Region.Returns) {
+        SmallVector<uint64_t, 2> Targets(Region.Continuations.begin(),
+                                         Region.Continuations.end());
+        AllBoundedReturns.push_back({Return, std::move(Targets)});
       }
-    if (HasExternalTarget)
-      Index->ExternalCallContinuations.push_back({I, *Continuation});
+    FiniteControlFlowAudit Audit = auditFiniteIndirectControlFlow(
+        Decoded, LS, TextAddr, TextSize, FunctionRanges, DeclaredEntries,
+        ExternalEntries, *Index, EnabledSetPcTransfers, AllBoundedReturns,
+        SymbolLessRegions);
+    if (Audit.InvalidSetPcCandidates.any()) {
+      for (size_t I = 0; I != EnabledSetPcTransfers.size(); ++I) {
+        if (!Audit.InvalidSetPcCandidates.test(I))
+          continue;
+        for (size_t J = 0; J != AllSetPcCandidates.size(); ++J)
+          if (AllSetPcCandidates[J].InstIndex ==
+              EnabledSetPcTransfers[I].InstIndex) {
+            RejectedSetPcCandidates.set(J);
+          }
+      }
+      // Every dynamic proof is conditional on the complete edge set used to
+      // reach it. A downstream candidate may have been reachable only through
+      // a just-rejected candidate, so rediscover the least fixed point from
+      // roots rather than retaining sticky proof bits.
+      ProvenSetPcCandidates.reset();
+      continue;
+    }
+    if (!Audit.Closed && !SymbolLessRegions.empty()) {
+      // Symbol-less returns depend on a closed object-wide entry proof. If
+      // any reachable entry source remains open, discard those inferred
+      // regions before finalizing; unlike symbol-backed local returns, they
+      // have no independent function boundary to constrain provenance.
+      SymbolLessRegions.clear();
+      AllBoundedReturns = BoundedReturns;
+      Audit = auditFiniteIndirectControlFlow(
+          Decoded, LS, TextAddr, TextSize, FunctionRanges, DeclaredEntries,
+          ExternalEntries, *Index, EnabledSetPcTransfers, AllBoundedReturns,
+          SymbolLessRegions);
+    }
+    if (!Audit.Closed && !EnabledSetPcTransfers.empty()) {
+      for (const FiniteSetPcTransfer &Enabled : EnabledSetPcTransfers)
+        for (size_t J = 0; J != AllSetPcCandidates.size(); ++J)
+          if (AllSetPcCandidates[J].InstIndex == Enabled.InstIndex) {
+            RejectedSetPcCandidates.set(J);
+          }
+      ProvenSetPcCandidates.reset();
+      continue;
+    }
+    IndirectControlFlowClosed = Audit.Closed;
+    HasUnboundedIndirectEntries = Audit.HasUnboundedIndirectEntries;
+    if (!Audit.Closed)
+      AllBoundedReturns.clear();
+    BoundedReturns = std::move(AllBoundedReturns);
+    break;
+  }
+
+  for (const FiniteSetPcTransfer &Transfer : EnabledSetPcTransfers) {
+    SmallVector<uint64_t, 2> Targets;
+    if (Transfer.LocalTargetIndex)
+      Targets.push_back(Decoded[*Transfer.LocalTargetIndex].Offset);
+    BoundedReturns.push_back({Transfer.InstIndex, std::move(Targets)});
   }
   indexKnownCalls(*Index);
 
-  std::optional<SmallVector<BoundedSetPcReturn, 2>> BoundedReturns =
-      collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
-                                 DeclaredEntries, FunctionRanges,
-                                 ExternalEntries, *Index);
-  if (!BoundedReturns)
-    return std::nullopt;
   DenseMap<size_t, size_t> BoundedReturnPositions;
-  for (size_t I = 0; I != BoundedReturns->size(); ++I)
-    BoundedReturnPositions.try_emplace((*BoundedReturns)[I].InstIndex, I);
+  for (size_t I = 0; I != BoundedReturns.size(); ++I)
+    BoundedReturnPositions.try_emplace(BoundedReturns[I].InstIndex, I);
 
   // Canonical one-shot materializations also participate in the reusable
   // reaching-value solver so CFG joins can prove their exact path. Preserve
@@ -2656,7 +3814,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     if (ReusableCalls[I].empty())
       continue;
     if (hasKnownControlFlowEntry(
-            DeclaredEntries, *BoundedReturns, BoundedReturnPositions, *Index,
+            DeclaredEntries, BoundedReturns, BoundedReturnPositions, *Index,
             Entry.second.SequenceStart, Entry.second.SequenceEnd)) {
       ReusableCalls[I].clear();
       continue;
@@ -2665,7 +3823,13 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   }
 
   DirectControlFlowInfo Info;
-  for (const BoundedSetPcReturn &Return : *BoundedReturns)
+  for (uint64_t Entry : DeclaredEntries)
+    if (Entry < TextSize)
+      Info.Targets.insert(Entry);
+  for (uint64_t Entry : ExternalEntries)
+    if (Entry < TextSize)
+      Info.Targets.insert(Entry);
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
     for (uint64_t Target : Return.Targets)
       Info.Targets.insert(Target);
   for (const ExternalCallContinuation &Call :
@@ -2699,7 +3863,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         DenseMap<size_t, PcMaterializedCallInfo>::const_iterator Materialized =
             Index->MaterializedCalls.find(InstIndex);
         if (Materialized != Index->MaterializedCalls.end() &&
-            !hasKnownControlFlowEntry(DeclaredEntries, *BoundedReturns,
+            !hasKnownControlFlowEntry(DeclaredEntries, BoundedReturns,
                                       BoundedReturnPositions, *Index,
                                       Materialized->second.SequenceStart,
                                       Materialized->second.SequenceEnd))
@@ -2765,8 +3929,10 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       Info.Targets.insert(*Continuation);
     }
   }
-  for (const BoundedSetPcReturn &Return : *BoundedReturns)
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
     Info.BoundedIndirectTransfers.insert(Decoded[Return.InstIndex].Offset);
+  if (!IndirectControlFlowClosed && HasUnboundedIndirectEntries)
+    Info.HasUnboundedIndirectEntries = true;
   return Info;
 }
 
@@ -3844,16 +5010,17 @@ assignLongBranchGateways(PatchContext &Ctx,
   // sequence consumes the tail. Shared dispatch and VCC preservation likewise
   // reserve the second dword. Relays are object-wide: unlike an arbitrary NOP
   // sled they cannot be reached by the owning function's original fallthrough.
-  for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
-    const Trampoline &T = Ctx.OutTrampolines[I];
-    if (T.OriginalSize < 2 * MinInstSize || T.UsesDirectSetPCForward ||
-        T.UsesSharedDispatcherForward || T.LongBranchPreservesVcc)
-      continue;
-    uint64_t Tail = T.OriginalOffset + MinInstSize;
-    SourceTailIslandOwners[Tail] = I;
-    Gateways.push_back({Tail, Tail + MinInstSize, Tail, 0,
-                        std::numeric_limits<uint64_t>::max()});
-  }
+  if (!Ctx.DirectControlFlow.HasUnboundedIndirectEntries)
+    for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
+      const Trampoline &T = Ctx.OutTrampolines[I];
+      if (T.OriginalSize < 2 * MinInstSize || T.UsesDirectSetPCForward ||
+          T.UsesSharedDispatcherForward || T.LongBranchPreservesVcc)
+        continue;
+      uint64_t Tail = T.OriginalOffset + MinInstSize;
+      SourceTailIslandOwners[Tail] = I;
+      Gateways.push_back({Tail, Tail + MinInstSize, Tail, 0,
+                          std::numeric_limits<uint64_t>::max()});
+    }
 
   for (PendingGateway &P : Pending) {
     const Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
