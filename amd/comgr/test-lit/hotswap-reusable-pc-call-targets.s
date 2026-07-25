@@ -30,8 +30,6 @@
 // OVERLAP: hotswap: unresolved call target
 // CLOBBER: hotswap: resolved reusable PC-materialized call
 // CLOBBER: hotswap: unresolved call target
-// BOOTSTRAP-CLOBBER: hotswap: resolved PC-materialized call
-// BOOTSTRAP-CLOBBER: hotswap: unresolved call target
 // TAIL: hotswap: resolved reusable PC-materialized call
 // TAIL: hotswap: unresolved call target
 // INDIRECT: hotswap: resolved reusable PC-materialized call
@@ -59,15 +57,6 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=CLOBBER,FAIL %s
-
-// RUN: sed 's/^\.set clobber_bootstrap, 0$/.set clobber_bootstrap, 1/' \
-// RUN:   %s > %t.bootstrap-clobber.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
-// RUN:   %t.bootstrap-clobber.s -o %t.bootstrap-clobber.elf
-// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite \
-// RUN:   %t.bootstrap-clobber.elf amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 --expect-status ERROR 2>&1 \
-// RUN:   | %FileCheck --check-prefixes=BOOTSTRAP-CLOBBER,FAIL %s
 
 // RUN: sed 's/^\.set tail_escape, 0$/.set tail_escape, 1/' \
 // RUN:   %s > %t.tail.s
@@ -139,7 +128,6 @@
 .set outside_selector, 0
 .set overlap_delta, 0
 .set clobber_target, 0
-.set clobber_bootstrap, 0
 .set tail_escape, 0
 .set indirect_escape, 0
 .set external_entry, 0
@@ -154,16 +142,6 @@ external_materialization_entry:
   s_endpgm
 .size external_materialization_entry, .-external_materialization_entry
 .endif
-
-.local callee_bootstrap
-.type callee_bootstrap,@function
-callee_bootstrap:
-  s_mov_b32 s8, 3
-.if clobber_bootstrap
-  s_mov_b32 s10, 0
-.endif
-  s_set_pc_i64 s[12:13]
-.size callee_bootstrap, .-callee_bootstrap
 
 .globl reusable_pc_targets
 .p2align 8

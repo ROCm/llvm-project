@@ -1643,9 +1643,8 @@ matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
       !MakeDelta.Inst.getOperand(2).isImm())
     return std::nullopt;
   MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
-  if (LS.MRI->regsOverlap(DeltaReg, Pair))
-    return std::nullopt;
-  if (AddLow.Inst.getNumOperands() != 3 || !AddLow.Inst.getOperand(0).isReg() ||
+  if (LS.MRI->regsOverlap(DeltaReg, Pair) ||
+      AddLow.Inst.getNumOperands() != 3 || !AddLow.Inst.getOperand(0).isReg() ||
       !AddLow.Inst.getOperand(1).isReg() ||
       !AddLow.Inst.getOperand(0).getReg() ||
       AddLow.Inst.getOperand(0).getReg() !=
@@ -1668,8 +1667,20 @@ matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
       !LS.MRI->regsOverlap(Low, Pair) || !LS.MRI->regsOverlap(High, Pair))
     return std::nullopt;
 
-  std::optional<uint32_t> FirstAddend =
-      evaluateAbsoluteUint32Operand(MakeDelta.Inst.getOperand(1));
+  std::optional<uint32_t> FirstAddend;
+  if (MakeDelta.Inst.getOperand(1).isImm()) {
+    FirstAddend = static_cast<uint32_t>(MakeDelta.Inst.getOperand(1).getImm());
+  } else if (MakeDelta.Size == 2 * MinInstSize &&
+             MakeDelta.Offset <= Text.size() &&
+             MakeDelta.Size <= Text.size() - MakeDelta.Offset &&
+             Text[MakeDelta.Offset] == 0xff) {
+    // The disassembler represents a SOP2 literal source as its literal
+    // register marker, not as an immediate operand. Require the gfx12 SOP2
+    // src0 literal selector before interpreting the final dword as that
+    // literal; an ordinary register source is not a constant displacement.
+    FirstAddend = support::endian::read32le(Text.data() + MakeDelta.Offset +
+                                            MakeDelta.Size - MinInstSize);
+  }
   if (!FirstAddend)
     return std::nullopt;
   uint32_t Delta = *FirstAddend +
@@ -1684,336 +1695,69 @@ struct ReachingCallGroup {
   SmallVector<size_t, 8> Calls;
 };
 
-struct FiniteSetPcTransfer {
-  size_t InstIndex = 0;
-  size_t SequenceBeginIndex = 0;
-  size_t SequenceEndIndex = 0;
-  uint64_t Target = 0;
-  std::optional<size_t> LocalTargetIndex;
-  uint64_t FunctionBegin = 0;
-  uint64_t FunctionEnd = 0;
-};
+static std::optional<uint64_t>
+getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
+                    uint64_t TextAddr, uint64_t TextEnd);
 
-static const ElfView::FunctionTextRange *
-findInnermostFunctionRange(uint64_t Address,
-                           ArrayRef<ElfView::FunctionTextRange> Ranges) {
-  const ElfView::FunctionTextRange *Best = nullptr;
-  for (const ElfView::FunctionTextRange &Range : Ranges)
-    if (Range.Begin <= Address && Address < Range.End &&
-        (!Best || Range.Begin > Best->Begin ||
-         (Range.Begin == Best->Begin && Range.End < Best->End)))
-      Best = &Range;
-  return Best;
-}
-
-/// Collect exact materialized s_set_pc_i64 transfers. These are candidates,
-/// not proofs: a later closed-world audit must still rule out an alternate
-/// entry into the materialization before the edge can authorize mutation.
-static SmallVector<FiniteSetPcTransfer, 8> collectFiniteSetPcCandidates(
+/// A reusable target value remains valid after a call only when the exact local
+/// callee is fully decoded, returns through the call's link pair, and cannot
+/// transitively or directly clobber the target pair.
+static bool calleePreservesReusableTarget(
+    uint64_t Target, MCRegister TargetRegister, MCRegister ReturnRegister,
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
-  SmallVector<FiniteSetPcTransfer, 8> Candidates;
-  DenseMap<uint64_t, size_t> OffsetToIndex;
-  for (size_t I = 0; I != Decoded.size(); ++I)
-    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
-
-  for (size_t I = 0; I != Decoded.size(); ++I) {
-    const InternalDecodedInst &GetPc = Decoded[I];
-    if (!GetPc.DecodeSucceeded ||
-        GetPc.Inst.getOpcode() != LS.SGetPcI64Opcode ||
-        GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg() ||
-        !GetPc.Inst.getOperand(0).getReg())
-      continue;
-    MCRegister Pair(GetPc.Inst.getOperand(0).getReg());
-    std::optional<uint64_t> GetPcAddress = checkedAddUint64(
-        TextAddr, GetPc.Offset, "finite set-PC get-PC address");
-    if (!GetPcAddress)
-      continue;
-    const ElfView::FunctionTextRange *Range =
-        findInnermostFunctionRange(*GetPcAddress, FunctionRanges);
-    if (!Range || Range->Begin < TextAddr || Range->End > TextEnd)
-      continue;
-    ArrayRef<InternalDecodedInst>::const_iterator FunctionEnd =
-        llvm::lower_bound(Decoded, Range->End - TextAddr,
-                          [](const InternalDecodedInst &DI, uint64_t Offset) {
-                            return DI.Offset < Offset;
-                          });
-    size_t FunctionEndIndex =
-        static_cast<size_t>(FunctionEnd - Decoded.begin());
-    auto appendCandidate = [&](size_t SetPcIndex, size_t SequenceEndIndex,
-                               uint64_t Target) {
-      for (size_t J = I; J <= SequenceEndIndex; ++J) {
-        if (!Decoded[J].DecodeSucceeded)
-          return;
-        if (J == SequenceEndIndex)
-          break;
-        std::optional<uint64_t> End =
-            checkedAddUint64(Decoded[J].Offset, Decoded[J].Size,
-                             "finite set-PC materialization instruction end");
-        if (!End || *End != Decoded[J + 1].Offset)
-          return;
-      }
-      std::optional<size_t> LocalTargetIndex;
-      if (Target >= TextAddr && Target < TextEnd) {
-        DenseMap<uint64_t, size_t>::const_iterator LocalTarget =
-            OffsetToIndex.find(Target - TextAddr);
-        // A local transfer to the middle of an instruction is not finite for
-        // purposes of safe rewriting.
-        if (LocalTarget == OffsetToIndex.end())
-          return;
-        LocalTargetIndex = LocalTarget->second;
-      }
-      Candidates.push_back({SetPcIndex, I, SequenceEndIndex, Target,
-                            LocalTargetIndex, Range->Begin - TextAddr,
-                            Range->End - TextAddr});
-    };
-
-    std::optional<std::pair<size_t, uint64_t>> Match =
-        matchReusablePcMaterialization(Decoded, I, FunctionEndIndex, Pair, LS,
-                                       TextAddr);
-    if (Match && Match->first + 1 < FunctionEndIndex) {
-      size_t SetPcIndex = Match->first + 1;
-      const InternalDecodedInst &SetPc = Decoded[SetPcIndex];
-      if (SetPc.DecodeSucceeded &&
-          SetPc.Inst.getOpcode() == LS.SSetPcI64Opcode &&
-          SetPc.Inst.getNumOperands() == 1 &&
-          isExactRegisterOperand(SetPc.Inst, 0, Pair))
-        appendCandidate(SetPcIndex, SetPcIndex, Match->second);
-    }
-
-    // Tensile also emits a signed-direction materialized jump. The signed
-    // displacement is a link-time constant, but the sequence uses a generic
-    // compare/abs/add-or-sub shape:
-    //
-    //   get_pc Pair
-    //   add_co_i32 Delta, Literal, Imm
-    //   cmp_ge_i32 Delta, 0
-    //   cbranch_scc1 Positive
-    //   abs_i32 Delta, Delta
-    //   sub_co_u32/sub_co_ci_u32 Pair, Pair, Delta
-    //   set_pc Pair
-    // Positive:
-    //   add_co_u32/add_co_ci_u32 Pair, Pair, Delta
-    //   set_pc Pair
-    //
-    // Both set-PC instructions have the same finite target. Keep the entire
-    // shape in one audited materialization interval so an alternate entry
-    // into either arm invalidates both candidates.
-    if (I + 10 >= FunctionEndIndex)
-      continue;
-    const InternalDecodedInst &MakeDelta = Decoded[I + 1];
-    const InternalDecodedInst &Compare = Decoded[I + 2];
-    const InternalDecodedInst &Branch = Decoded[I + 3];
-    const InternalDecodedInst &Abs = Decoded[I + 4];
-    const InternalDecodedInst &SubLow = Decoded[I + 5];
-    const InternalDecodedInst &SubHigh = Decoded[I + 6];
-    const InternalDecodedInst &NegativeSetPc = Decoded[I + 7];
-    const InternalDecodedInst &AddLow = Decoded[I + 8];
-    const InternalDecodedInst &AddHigh = Decoded[I + 9];
-    const InternalDecodedInst &PositiveSetPc = Decoded[I + 10];
-    if (!MakeDelta.DecodeSucceeded || !Compare.DecodeSucceeded ||
-        !Branch.DecodeSucceeded || !Abs.DecodeSucceeded ||
-        !SubLow.DecodeSucceeded || !SubHigh.DecodeSucceeded ||
-        !NegativeSetPc.DecodeSucceeded || !AddLow.DecodeSucceeded ||
-        !AddHigh.DecodeSucceeded || !PositiveSetPc.DecodeSucceeded ||
-        MakeDelta.Mnemonic != "s_add_co_i32" ||
-        MakeDelta.Inst.getNumOperands() != 3 ||
-        !MakeDelta.Inst.getOperand(0).isReg() ||
-        !MakeDelta.Inst.getOperand(0).getReg() ||
-        !MakeDelta.Inst.getOperand(2).isImm())
-      continue;
-    MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
-    if (LS.MRI->regsOverlap(DeltaReg, Pair))
-      continue;
-    if (Compare.Mnemonic != "s_cmp_ge_i32" ||
-        Compare.Inst.getNumOperands() != 2 ||
-        !isExactRegisterOperand(Compare.Inst, 0, DeltaReg) ||
-        !Compare.Inst.getOperand(1).isImm() ||
-        Compare.Inst.getOperand(1).getImm() != 0 ||
-        Branch.Mnemonic != "s_cbranch_scc1" || Abs.Mnemonic != "s_abs_i32" ||
-        Abs.Inst.getNumOperands() != 2 ||
-        !isExactRegisterOperand(Abs.Inst, 0, DeltaReg) ||
-        !isExactRegisterOperand(Abs.Inst, 1, DeltaReg) ||
-        NegativeSetPc.Inst.getOpcode() != LS.SSetPcI64Opcode ||
-        NegativeSetPc.Inst.getNumOperands() != 1 ||
-        !isExactRegisterOperand(NegativeSetPc.Inst, 0, Pair) ||
-        PositiveSetPc.Inst.getOpcode() != LS.SSetPcI64Opcode ||
-        PositiveSetPc.Inst.getNumOperands() != 1 ||
-        !isExactRegisterOperand(PositiveSetPc.Inst, 0, Pair))
-      continue;
-    std::optional<uint64_t> PositiveLabel =
-        evaluateDirectControlFlowTarget(Branch, LS);
-    if (!PositiveLabel || *PositiveLabel != AddLow.Offset)
-      continue;
-
-    auto matchesPairArithmetic = [&](const InternalDecodedInst &Low,
-                                     const InternalDecodedInst &High,
-                                     StringRef LowMnemonic,
-                                     StringRef HighMnemonic) {
-      if (Low.Mnemonic != LowMnemonic || High.Mnemonic != HighMnemonic ||
-          Low.Inst.getNumOperands() != 3 || !Low.Inst.getOperand(0).isReg() ||
-          !Low.Inst.getOperand(1).isReg() || !Low.Inst.getOperand(0).getReg() ||
-          Low.Inst.getOperand(0).getReg() != Low.Inst.getOperand(1).getReg() ||
-          !isExactRegisterOperand(Low.Inst, 2, DeltaReg) ||
-          High.Inst.getNumOperands() != 3 || !High.Inst.getOperand(0).isReg() ||
-          !High.Inst.getOperand(1).isReg() ||
-          !High.Inst.getOperand(0).getReg() ||
-          High.Inst.getOperand(0).getReg() !=
-              High.Inst.getOperand(1).getReg() ||
-          !High.Inst.getOperand(2).isImm() ||
-          High.Inst.getOperand(2).getImm() != 0)
-        return false;
-      MCRegister LowReg(Low.Inst.getOperand(0).getReg());
-      MCRegister HighReg(High.Inst.getOperand(0).getReg());
-      std::optional<unsigned> LowIndex = numberedSgprIndex(*LS.MRI, LowReg);
-      std::optional<unsigned> HighIndex = numberedSgprIndex(*LS.MRI, HighReg);
-      return LowIndex && HighIndex && *HighIndex == *LowIndex + 1 &&
-             LS.MRI->regsOverlap(LowReg, Pair) &&
-             LS.MRI->regsOverlap(HighReg, Pair);
-    };
-    if (!matchesPairArithmetic(SubLow, SubHigh, "s_sub_co_u32",
-                               "s_sub_co_ci_u32") ||
-        !matchesPairArithmetic(AddLow, AddHigh, "s_add_co_u32",
-                               "s_add_co_ci_u32"))
-      continue;
-
-    std::optional<uint32_t> FirstAddend =
-        evaluateAbsoluteUint32Operand(MakeDelta.Inst.getOperand(1));
-    if (!FirstAddend)
-      continue;
-    uint32_t DeltaBits =
-        *FirstAddend +
-        static_cast<uint32_t>(MakeDelta.Inst.getOperand(2).getImm());
-    int64_t SignedDelta = static_cast<int32_t>(DeltaBits);
-    std::optional<uint64_t> PcValue = checkedAddUint64(
-        *GetPcAddress, GetPc.Size, "signed finite set-PC get-PC value");
-    if (!PcValue)
-      continue;
-    uint64_t Target = *PcValue + static_cast<uint64_t>(SignedDelta);
-    appendCandidate(I + 7, I + 10, Target);
-    appendCandidate(I + 10, I + 10, Target);
-  }
-  llvm::sort(Candidates, [](const FiniteSetPcTransfer &LHS,
-                            const FiniteSetPcTransfer &RHS) {
-    return LHS.InstIndex < RHS.InstIndex;
-  });
-  Candidates.erase(std::unique(Candidates.begin(), Candidates.end(),
-                               [](const FiniteSetPcTransfer &LHS,
-                                  const FiniteSetPcTransfer &RHS) {
-                                 return LHS.InstIndex == RHS.InstIndex;
-                               }),
-                   Candidates.end());
-  return Candidates;
-}
-
-static BitVector computeStaticallyReachableInstructions(
-    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
-    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
-    ArrayRef<ElfView::FunctionTextRange> FunctionRanges, uint64_t TextAddr,
-    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers) {
-  BitVector Reachable(Decoded.size());
-  DenseMap<uint64_t, size_t> OffsetToIndex;
-  for (size_t I = 0; I != Decoded.size(); ++I)
-    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
-  DenseMap<size_t, const FiniteSetPcTransfer *> TransferByInst;
-  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
-    TransferByInst.try_emplace(Transfer.InstIndex, &Transfer);
-
-  SmallVector<size_t, 32> Worklist;
-  auto addRoot = [&](uint64_t Offset) {
-    DenseMap<uint64_t, size_t>::const_iterator It = OffsetToIndex.find(Offset);
-    if (It != OffsetToIndex.end())
-      Worklist.push_back(It->second);
-  };
-  for (uint64_t Entry : DeclaredEntries)
-    addRoot(Entry);
-  for (uint64_t Entry : ExternalEntries)
-    addRoot(Entry);
+  const ElfView::FunctionTextRange *Callee = nullptr;
   for (const ElfView::FunctionTextRange &Range : FunctionRanges)
-    if (Range.Begin >= TextAddr)
-      addRoot(Range.Begin - TextAddr);
-  if (Worklist.empty() && !Decoded.empty())
-    Worklist.push_back(0);
+    if (Range.Begin == Target && Range.Begin >= TextAddr &&
+        Range.End > Range.Begin && Range.End <= TextEnd &&
+        (!Callee || Range.End < Callee->End))
+      Callee = &Range;
+  if (!Callee)
+    return false;
 
-  while (!Worklist.empty()) {
-    size_t I = Worklist.pop_back_val();
-    if (Reachable.test(I))
+  uint64_t CalleeBegin = Callee->Begin - TextAddr;
+  uint64_t CalleeEnd = Callee->End - TextAddr;
+  bool SawInstruction = false;
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (DI.Offset < CalleeBegin || DI.Offset >= CalleeEnd)
       continue;
-    Reachable.set(I);
-    const InternalDecodedInst &DI = Decoded[I];
-    if (!DI.DecodeSucceeded)
+    SawInstruction = true;
+    if (!DI.DecodeSucceeded || LS.MIA->isCall(DI.Inst) ||
+        definesOverlappingRegister(DI, LS, TargetRegister))
+      return false;
+
+    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+      if (DI.Inst.getNumOperands() != 1 ||
+          !isExactRegisterOperand(DI.Inst, 0, ReturnRegister))
+        return false;
       continue;
-    auto addOffset = [&](uint64_t Offset) {
-      DenseMap<uint64_t, size_t>::const_iterator It =
-          OffsetToIndex.find(Offset);
-      if (It != OffsetToIndex.end())
-        Worklist.push_back(It->second);
-    };
+    }
     if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
         DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
         LS.MIA->isReturn(DI.Inst))
       continue;
-    if (LS.MIA->isCall(DI.Inst)) {
-      std::optional<uint64_t> Fallthrough = checkedAddUint64(
-          DI.Offset, DI.Size, "finite set-PC call continuation");
-      if (Fallthrough)
-        addOffset(*Fallthrough);
-      continue;
-    }
-    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode ||
-        LS.MIA->isIndirectBranch(DI.Inst)) {
-      DenseMap<size_t, const FiniteSetPcTransfer *>::const_iterator Transfer =
-          TransferByInst.find(I);
-      if (Transfer != TransferByInst.end() &&
-          Transfer->second->LocalTargetIndex)
-        Worklist.push_back(*Transfer->second->LocalTargetIndex);
-      continue;
-    }
-    if (LS.MIA->isBranch(DI.Inst)) {
-      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
-      if (Target)
-        addOffset(*Target);
-      if (LS.MIA->isUnconditionalBranch(DI.Inst))
-        continue;
-    }
-    std::optional<uint64_t> Fallthrough = checkedAddUint64(
-        DI.Offset, DI.Size, "finite set-PC reachability fallthrough");
-    if (Fallthrough)
-      addOffset(*Fallthrough);
-  }
-  return Reachable;
-}
+    if (LS.MIA->isIndirectBranch(DI.Inst) ||
+        DI.Inst.getOpcode() == LS.SAddPcI64Opcode)
+      return false;
 
-static SmallVector<FiniteSetPcTransfer, 8> selectLeastReachableSetPcCandidates(
-    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
-    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
-    ArrayRef<ElfView::FunctionTextRange> FunctionRanges, uint64_t TextAddr,
-    ArrayRef<FiniteSetPcTransfer> AllCandidates,
-    const BitVector &ProvenCandidates, const BitVector &RejectedCandidates) {
-  SmallVector<FiniteSetPcTransfer, 8> Selected;
-  BitVector SelectedBits(AllCandidates.size());
-  for (size_t I = 0; I != AllCandidates.size(); ++I)
-    if (ProvenCandidates.test(I) && !RejectedCandidates.test(I)) {
-      SelectedBits.set(I);
-      Selected.push_back(AllCandidates[I]);
+    bool HasFallthrough = true;
+    if (LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> BranchTarget =
+          getDirectTextTarget(DI, LS, TextAddr, TextEnd);
+      if (!BranchTarget || *BranchTarget < CalleeBegin ||
+          *BranchTarget >= CalleeEnd)
+        return false;
+      HasFallthrough = !LS.MIA->isUnconditionalBranch(DI.Inst);
     }
-  for (;;) {
-    BitVector Reachable = computeStaticallyReachableInstructions(
-        Decoded, LS, DeclaredEntries, ExternalEntries, FunctionRanges, TextAddr,
-        Selected);
-    bool Changed = false;
-    for (size_t I = 0; I != AllCandidates.size(); ++I) {
-      if (RejectedCandidates.test(I) || SelectedBits.test(I) ||
-          !Reachable.test(AllCandidates[I].InstIndex))
-        continue;
-      SelectedBits.set(I);
-      Selected.push_back(AllCandidates[I]);
-      Changed = true;
-    }
-    if (!Changed)
-      return Selected;
+    if (!HasFallthrough)
+      continue;
+    std::optional<uint64_t> Fallthrough =
+        checkedAddUint64(DI.Offset, DI.Size, "reusable callee fallthrough");
+    if (!Fallthrough || *Fallthrough >= CalleeEnd)
+      return false;
   }
+  return SawInstruction;
 }
 
 /// Resolve register calls whose target pair is selected once and reused across
@@ -2024,7 +1768,8 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers = {}) {
+    ArrayRef<std::optional<PcMaterializedCallInfo>> LocalCalls,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint8_t> Text) {
   std::vector<ReachingCallTargets> Resolved(Decoded.size());
   SmallVector<ReachingCallGroup, 8> Groups;
   DenseMap<size_t, const FiniteSetPcTransfer *> FiniteSetPcByInst;
@@ -2086,15 +1831,15 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
 
   for (const ReachingCallGroup &Group : Groups) {
     ArrayRef<InternalDecodedInst>::const_iterator Begin =
-        llvm::lower_bound(Decoded, Group.Begin,
-                          [](const InternalDecodedInst &DI, uint64_t Offset) {
-                            return DI.Offset < Offset;
-                          });
-    ArrayRef<InternalDecodedInst>::const_iterator End = std::lower_bound(
-        Begin, Decoded.end(), Group.End,
-        [](const InternalDecodedInst &DI, uint64_t Offset) {
-          return DI.Offset < Offset;
-        });
+        std::lower_bound(Decoded.begin(), Decoded.end(), Group.Begin,
+                         [](const InternalDecodedInst &DI, uint64_t Offset) {
+                           return DI.Offset < Offset;
+                         });
+    ArrayRef<InternalDecodedInst>::const_iterator End =
+        std::lower_bound(Begin, Decoded.end(), Group.End,
+                         [](const InternalDecodedInst &DI, uint64_t Offset) {
+                           return DI.Offset < Offset;
+                         });
     size_t BeginIndex = static_cast<size_t>(Begin - Decoded.begin());
     size_t EndIndex = static_cast<size_t>(End - Decoded.begin());
     if (BeginIndex == EndIndex)
@@ -2198,29 +1943,15 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
       }
 
       bool IsReusableCall = llvm::is_contained(Group.Calls, I);
-      bool HasFiniteState = !State.HasUnknown &&
-                            State.ActiveMaterializations.empty() &&
-                            !State.Targets.empty();
-      if (IsReusableCall && HasFiniteState)
+      bool HasFiniteTargets = IsReusableCall && !State.HasUnknown &&
+                              State.ActiveMaterializations.empty() &&
+                              !State.Targets.empty();
+      if (HasFiniteTargets)
         Resolved[I] = State.Targets;
 
-      // The first call after a straight-line materialization is also resolved
-      // by the one-shot matcher. Let that bootstrap call preserve the reaching
-      // value only when both analyses prove the same singleton target through
-      // this exact target pair.
-      bool IsMatchingBootstrapCall = false;
-      if (LocalCalls[I] && HasFiniteState && State.Targets.size() == 1 &&
-          State.Targets.front() == LocalCalls[I]->Target &&
-          DI.Inst.getNumOperands() >= 2) {
-        const MCOperand &TargetOp =
-            DI.Inst.getOperand(DI.Inst.getNumOperands() - 1);
-        IsMatchingBootstrapCall =
-            TargetOp.isReg() && TargetOp.getReg() == Group.TargetRegister;
-      }
-      bool CalleesPreserve = (IsReusableCall || IsMatchingBootstrapCall) &&
-                             HasFiniteState && DI.Inst.getNumOperands() != 0 &&
-                             DI.Inst.getOperand(0).isReg() &&
-                             DI.Inst.getOperand(0).getReg();
+      bool CalleesPreserve =
+          HasFiniteTargets && DI.Inst.getNumOperands() != 0 &&
+          DI.Inst.getOperand(0).isReg() && DI.Inst.getOperand(0).getReg();
       if (CalleesPreserve) {
         MCRegister ReturnRegister(DI.Inst.getOperand(0).getReg());
         uint64_t RegisterKey = static_cast<uint64_t>(Group.TargetRegister.id())
@@ -3657,18 +3388,13 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   if (!TextEnd)
     return std::nullopt;
 
-  SmallVector<FiniteSetPcTransfer, 8> AllSetPcCandidates =
-      collectFiniteSetPcCandidates(Decoded, LS, TextAddr, *TextEnd,
-                                   FunctionRanges);
-  BitVector RejectedSetPcCandidates(AllSetPcCandidates.size());
-  BitVector ProvenSetPcCandidates(AllSetPcCandidates.size());
-  SmallVector<FiniteSetPcTransfer, 8> EnabledSetPcTransfers;
-  std::vector<ReachingCallTargets> ReusableCalls;
-  std::optional<ControlFlowScanIndex> Index;
-  SmallVector<BoundedSetPcReturn, 2> BoundedReturns;
-  SmallVector<SymbolLessReturnRegion, 8> SymbolLessRegions;
-  bool IndirectControlFlowClosed = false;
-  bool HasUnboundedIndirectEntries = false;
+  SmallVector<std::optional<PcMaterializedCallInfo>, 16> MaterializedCalls(
+      Decoded.size());
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
+  std::vector<ReachingCallTargets> ReusableCalls = resolveReusablePcCallTargets(
+      Decoded, LS, TextAddr, *TextEnd, FunctionRanges, MaterializedCalls,
+      DeclaredEntries, Text);
 
   // Exact set-PC edges are an optimistic over-approximation used only to
   // discover later finite call targets. Rebuild from scratch whenever the
