@@ -243,6 +243,7 @@ static bool rewriteMetadataNotes(uint8_t *Elf, const ELFFileT &File,
       }
       PendingWrites.push_back({DescOffset, std::move(NewBlob)});
     }
+
     if (Err) {
       log() << "hotswap: error: " << Context
             << ": failed to iterate AMDGPU notes: " << toString(std::move(Err))

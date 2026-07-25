@@ -25,6 +25,18 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES
+// RUN: env AMD_COMGR_TIME_STATISTICS=1 \
+// RUN:   AMD_COMGR_TIME_STATISTICS_GRANULARITY=ns \
+// RUN:   AMD_COMGR_REDIRECT_LOGS=%t.profile.log \
+// RUN:   hotswap-rewrite %t.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --output %t.profile.elf
+// RUN: %FileCheck --check-prefix=PROFILE-PARSE \
+// RUN:   --input-file=%t.profile.log %s
+// RUN: %FileCheck --check-prefix=PROFILE-COPY \
+// RUN:   --input-file=%t.profile.log %s
+// PROFILE-PARSE: phase:elf_parse{{ +}}1 calls
+// PROFILE-COPY: phase:output_copy{{ +}}1 calls
 
 // RUN: sed 's/^\.set claimed_function, 0$/.set claimed_function, 1/' \
 // RUN:   %s > %t.function.s
