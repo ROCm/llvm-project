@@ -142,8 +142,8 @@ jobs:
       component: ${{ needs.configure_test_matrix.outputs.sanity_component }}
       release_type: ${{ inputs.release_type }}
 
-  aomp_smoke_test:
-    name: 'AOMP smoke test'
+  aomp_smoke_testA:
+    name: 'AOMP smoke test A'
     needs: test_sanity_check
     if: ${{ inputs.amdgpu_families == 'gfx94X-dcgpu' }}
     uses: './.github/workflows/test_aomp_smoke.yml'
@@ -154,6 +154,25 @@ jobs:
       test_runs_on: ${{ inputs.test_runs_on }}
       platform: 'linux'
       release_type: ${{ inputs.release_type }}
+              SUITE_LIST='smoke-limbo smoke-fort-limbo smoke-dev smoke-fort nekbone babelstream fortran-babelstream bldopenmpi openmpapps'
+              export SUITE_LIST
+              echo "SUITE_LIST=$SUITE_LIST" >> "$GITHUB_ENV"
+
+  aomp_smoke_testB:
+    name: 'AOMP smoke test B'
+    needs: test_sanity_check
+    if: ${{ inputs.amdgpu_families == 'gfx94X-dcgpu' }}
+    uses: './.github/workflows/test_aomp_smoke.yml'
+    with:
+      artifact_group: ${{ inputs.artifact_group }}
+      artifact_run_id: ${{ inputs.artifact_run_id }}
+      amdgpu_families: ${{ inputs.amdgpu_families }}
+      test_runs_on: ${{ inputs.test_runs_on }}
+      platform: 'linux'
+      release_type: ${{ inputs.release_type }}
+              SUITE_LIST='smoke'
+              export SUITE_LIST
+              echo "SUITE_LIST=$SUITE_LIST" >> "$GITHUB_ENV"
  
   test_components:
     name: 'Test ${{ matrix.components.job_name }}'
