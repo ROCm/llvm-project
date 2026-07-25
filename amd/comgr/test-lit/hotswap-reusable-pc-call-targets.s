@@ -24,10 +24,63 @@
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=BYPASS,FAIL %s
 // BYPASS: hotswap: unresolved call target
+// OVERLAP: hotswap: unresolved call target
+// CLOBBER: hotswap: resolved reusable PC-materialized call
+// CLOBBER: hotswap: unresolved call target
+// TAIL: hotswap: resolved reusable PC-materialized call
+// TAIL: hotswap: unresolved call target
+// INDIRECT: hotswap: resolved reusable PC-materialized call
+// INDIRECT: hotswap: unresolved call target
+// EXTERNAL: hotswap: unresolved call target
 // FAIL: hotswap: unresolved control-flow target disables NOP-sled emission,
 // FAIL-SAME: trampoline coalescing, source relocation, and .text gateways
 // FAIL: hotswap: error: no safe short-branch gateway for far site
 // FAIL: RESULT: ERROR
+
+// RUN: sed 's/^\.set overlap_delta, 0$/.set overlap_delta, 1/' \
+// RUN:   %s > %t.overlap.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.overlap.s -o %t.overlap.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.overlap.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=OVERLAP,FAIL %s
+
+// RUN: sed 's/^\.set clobber_target, 0$/.set clobber_target, 1/' \
+// RUN:   %s > %t.clobber.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.clobber.s -o %t.clobber.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.clobber.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=CLOBBER,FAIL %s
+
+// RUN: sed 's/^\.set tail_escape, 0$/.set tail_escape, 1/' \
+// RUN:   %s > %t.tail.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.tail.s -o %t.tail.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.tail.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=TAIL,FAIL %s
+
+// RUN: sed 's/^\.set indirect_escape, 0$/.set indirect_escape, 1/' \
+// RUN:   %s > %t.indirect.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.indirect.s -o %t.indirect.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.indirect.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=INDIRECT,FAIL %s
+
+// RUN: sed 's/^\.set external_entry, 0$/.set external_entry, 1/' \
+// RUN:   %s > %t.external.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.external.s -o %t.external.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.external.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=EXTERNAL,FAIL %s
 
 // RUN: sed 's/^\.set outside_selector, 0$/.set outside_selector, 1/' \
 // RUN:   %s > %t.outside.s
@@ -67,9 +120,23 @@
 
 .set unsafe_selector, 0
 .set outside_selector, 0
+.set overlap_delta, 0
+.set clobber_target, 0
+.set tail_escape, 0
+.set indirect_escape, 0
+.set external_entry, 0
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
+.if external_entry
+.type external_materialization_entry,@function
+external_materialization_entry:
+  // This independent function enters after get-PC and delta creation.
+  s_branch .Lfirst_add_low
+  s_endpgm
+.size external_materialization_entry, .-external_materialization_entry
+.endif
+
 .globl reusable_pc_targets
 .p2align 8
 .type reusable_pc_targets,@function
@@ -87,14 +154,27 @@ reusable_pc_targets:
   s_cbranch_scc1 .Lselect_second
 .Lselect_first:
   s_get_pc_i64 s[2:3]
+.if overlap_delta
+  // The temporary aliases the PC pair and destroys its low half.
+  s_add_co_i32 s2, callee_first-(.Lselect_first+4)-4, 4
+.Lfirst_add_low:
+  s_add_co_u32 s2, s2, s2
+.else
   s_add_co_i32 s4, callee_first-(.Lselect_first+4)-4, 4
+.Lfirst_add_low:
   s_add_co_u32 s2, s2, s4
+.endif
   s_add_co_ci_u32 s3, s3, 0
   s_branch .Lselected
 .Lselect_second:
   s_get_pc_i64 s[2:3]
+.if overlap_delta
+  s_add_co_i32 s2, callee_second-(.Lselect_second+4)-4, 4
+  s_add_co_u32 s2, s2, s2
+.else
   s_add_co_i32 s4, callee_second-(.Lselect_second+4)-4, 4
   s_add_co_u32 s2, s2, s4
+.endif
   s_add_co_ci_u32 s3, s3, 0
 .if outside_selector
   s_branch .Lselected
@@ -105,6 +185,8 @@ reusable_pc_targets:
   s_add_co_ci_u32 s3, s3, 0
 .endif
 .Lselected:
+  s_swap_pc_i64 s[6:7], s[2:3]
+  // Production kernels reuse this selected pair for multiple calls.
   s_swap_pc_i64 s[6:7], s[2:3]
   s_branch .Lpatch0
 .Lpatch0:
@@ -139,6 +221,15 @@ reusable_pc_targets:
 .type callee_first,@function
 callee_first:
   s_mov_b32 s8, 1
+.if clobber_target
+  s_mov_b32 s2, 0
+.endif
+.if tail_escape
+  s_branch clobber_helper
+.endif
+.if indirect_escape
+  s_set_pc_i64 s[10:11]
+.endif
   s_set_pc_i64 s[6:7]
 .size callee_first, .-callee_first
 
@@ -146,8 +237,26 @@ callee_first:
 .type callee_second,@function
 callee_second:
   s_mov_b32 s8, 2
+.if clobber_target
+  s_mov_b32 s2, 0
+.endif
+.if tail_escape
+  s_branch clobber_helper
+.endif
+.if indirect_escape
+  s_set_pc_i64 s[10:11]
+.endif
   s_set_pc_i64 s[6:7]
 .size callee_second, .-callee_second
+
+.if tail_escape
+.local clobber_helper
+.type clobber_helper,@function
+clobber_helper:
+  s_mov_b32 s2, 0
+  s_set_pc_i64 s[6:7]
+.size clobber_helper, .-clobber_helper
+.endif
 
 .type gateway_barrier,@function
 gateway_barrier:
