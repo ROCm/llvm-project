@@ -3570,6 +3570,7 @@ TEST(RelocationTableDispatch, RejectsAmbiguousObjectOwnership) {
   std::memcpy(&TableSymbol, Object.Bytes.data() + Object.TableSymbolOffset,
               sizeof(TableSymbol));
   llvm::ELF::Elf64_Sym Overlap = TableSymbol;
+  Overlap.st_name = 0;
   Overlap.st_value += sizeof(uint64_t);
   Overlap.st_size = sizeof(uint64_t);
   const uint64_t OverlapSymbolOffset =
