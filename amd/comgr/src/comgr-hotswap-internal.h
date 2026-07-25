@@ -1711,6 +1711,21 @@ std::optional<llvm::BitVector> unsafeIncomingNumberedSgprsInRange(
     uint64_t FunctionBegin, uint64_t FunctionEnd, uint64_t Continuation,
     llvm::ArrayRef<llvm::MCRegister> NumberedSgprs);
 
+struct BatchedSgprContinuationTestResult {
+  uint64_t Analyses = 0;
+  llvm::SmallVector<std::optional<llvm::BitVector>, 8> Queries;
+};
+
+/// Build one compact per-function numbered-SGPR continuation analysis and
+/// query it at every requested offset. Exposed for scalar-oracle and cache
+/// reuse unit coverage.
+BatchedSgprContinuationTestResult
+runBatchedSgprContinuationAnalysisForTest(
+    llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t FunctionBegin, uint64_t FunctionEnd,
+    llvm::ArrayRef<uint64_t> Continuations,
+    llvm::ArrayRef<llvm::MCRegister> NumberedSgprs);
+
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement);

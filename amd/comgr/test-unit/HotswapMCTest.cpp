@@ -244,15 +244,34 @@ expectBatchSgprProofMatchesScalar(const LLVMState &S,
       resolveNumberedSgprRegisters(*S.MRI, /*MaxSgprs=*/106);
   ASSERT_TRUE(NumberedSgprs);
   uint64_t FunctionEnd = Decoded.back().Offset + Decoded.back().Size;
-  std::optional<llvm::BitVector> Batch = unsafeIncomingNumberedSgprsInRange(
-      Decoded, S, /*FunctionBegin=*/0, FunctionEnd, /*Continuation=*/0,
-      *NumberedSgprs);
-  ASSERT_TRUE(Batch);
-  for (unsigned I = 0; I != NumberedSgprs->size(); ++I)
-    EXPECT_EQ(Batch->test(I), scalarIncomingSgprIsUnsafe(
-                                  Decoded, S, /*FunctionBegin=*/0, FunctionEnd,
-                                  /*Continuation=*/0, *NumberedSgprs, I))
-        << "s" << I;
+  llvm::SmallVector<uint64_t, 16> Continuations;
+  for (const InternalDecodedInst &DI : Decoded)
+    Continuations.push_back(DI.Offset);
+  Continuations.push_back(1);
+  BatchedSgprContinuationTestResult Batch =
+      runBatchedSgprContinuationAnalysisForTest(
+          Decoded, S, /*FunctionBegin=*/0, FunctionEnd, Continuations,
+          *NumberedSgprs);
+  EXPECT_EQ(Batch.Analyses, 1u);
+  ASSERT_EQ(Batch.Queries.size(), Continuations.size());
+  for (size_t Query = 0; Query != Decoded.size(); ++Query) {
+    std::optional<llvm::BitVector> Scalar =
+        unsafeIncomingNumberedSgprsInRange(
+            Decoded, S, /*FunctionBegin=*/0, FunctionEnd,
+            Continuations[Query], *NumberedSgprs);
+    ASSERT_TRUE(Scalar);
+    ASSERT_TRUE(Batch.Queries[Query]);
+    EXPECT_EQ(*Batch.Queries[Query], *Scalar)
+        << "continuation 0x" << llvm::utohexstr(Continuations[Query]);
+    for (unsigned I = 0; I != NumberedSgprs->size(); ++I)
+      EXPECT_EQ(Batch.Queries[Query]->test(I),
+                scalarIncomingSgprIsUnsafe(
+                    Decoded, S, /*FunctionBegin=*/0, FunctionEnd,
+                    Continuations[Query], *NumberedSgprs, I))
+          << "continuation 0x" << llvm::utohexstr(Continuations[Query])
+          << ", s" << I;
+  }
+  EXPECT_FALSE(Batch.Queries.back());
 }
 
 // Helper: decode the little-endian 32-bit dword at \p Bytes.
@@ -4452,6 +4471,106 @@ TEST(RegisterLiveness, BatchProofMatchesScalarAcrossControlFlow) {
   const llvm::StringRef OpaqueBeforeDef[] = {"s_set_pc_i64 s[0:1]",
                                              "s_mov_b32 s30, 0"};
   expectBatchSgprProofMatchesScalar(S, OpaqueBeforeDef);
+
+  const llvm::StringRef TiedAndTuple[] = {
+      "s_add_u32 s30, s30, 1", "s_mov_b64 s[30:31], s[0:1]",
+      "s_mov_b32 s2, s31", "s_endpgm"};
+  expectBatchSgprProofMatchesScalar(S, TiedAndTuple);
+
+  const llvm::StringRef InvalidBranchEdge[] = {"s_cbranch_scc0 100",
+                                               "s_endpgm"};
+  expectBatchSgprProofMatchesScalar(S, InvalidBranchEdge);
+}
+
+TEST(RegisterLiveness, BatchedSgprProofMatchesRandomizedBranchLoops) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  uint64_t State = 0x9E3779B97F4A7C15ULL;
+  auto Next = [&]() {
+    State = State * 2862933555777941757ULL + 3037000493ULL;
+    return State;
+  };
+
+  constexpr size_t InstructionCount = 10;
+  for (unsigned Trial = 0; Trial != 20; ++Trial) {
+    std::vector<std::string> Storage;
+    Storage.reserve(InstructionCount);
+    for (size_t I = 0; I + 1 < InstructionCount; ++I) {
+      unsigned Dst = Next() % 16;
+      unsigned Src = Next() % 16;
+      switch (Next() % 5) {
+      case 0:
+        Storage.push_back("s_mov_b32 s" + std::to_string(Dst) + ", s" +
+                          std::to_string(Src));
+        break;
+      case 1:
+        Storage.push_back("s_mov_b32 s" + std::to_string(Dst) + ", 0");
+        break;
+      case 2: {
+        size_t Target = Next() % InstructionCount;
+        int64_t Delta = static_cast<int64_t>(Target) -
+                        static_cast<int64_t>(I) - 1;
+        Storage.push_back("s_cbranch_scc0 " + std::to_string(Delta));
+        break;
+      }
+      case 3: {
+        size_t Target = Next() % InstructionCount;
+        int64_t Delta = static_cast<int64_t>(Target) -
+                        static_cast<int64_t>(I) - 1;
+        Storage.push_back("s_branch " + std::to_string(Delta));
+        break;
+      }
+      default:
+        Storage.push_back("s_add_u32 s" + std::to_string(Dst) + ", s" +
+                          std::to_string(Dst) + ", 1");
+        break;
+      }
+    }
+    Storage.push_back("s_endpgm");
+    llvm::SmallVector<llvm::StringRef, InstructionCount> Lines;
+    for (const std::string &Line : Storage)
+      Lines.push_back(Line);
+    expectBatchSgprProofMatchesScalar(S, Lines);
+  }
+}
+
+TEST(RegisterLiveness, BatchedSgprProofPreservesReplacementUnion) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeAsmSequence(
+      S, llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1",
+                                         "s_mov_b32 s104, 0",
+                                         "s_mov_b32 s0, s103", "s_endpgm"}));
+  ASSERT_FALSE(Decoded.empty());
+  std::optional<llvm::SmallVector<llvm::MCRegister, 128>> NumberedSgprs =
+      resolveNumberedSgprRegisters(*S.MRI, /*MaxSgprs=*/106);
+  ASSERT_TRUE(NumberedSgprs);
+  uint64_t FunctionEnd = Decoded.back().Offset + Decoded.back().Size;
+  uint64_t Continuation = Decoded[1].Offset;
+  BatchedSgprContinuationTestResult Batch =
+      runBatchedSgprContinuationAnalysisForTest(
+          Decoded, S, /*FunctionBegin=*/0, FunctionEnd, {Continuation},
+          *NumberedSgprs);
+  ASSERT_EQ(Batch.Analyses, 1u);
+  ASSERT_EQ(Batch.Queries.size(), 1u);
+  ASSERT_TRUE(Batch.Queries.front());
+  std::optional<llvm::BitVector> Scalar =
+      unsafeIncomingNumberedSgprsInRange(
+          Decoded, S, /*FunctionBegin=*/0, FunctionEnd, Continuation,
+          *NumberedSgprs);
+  ASSERT_TRUE(Scalar);
+
+  llvm::SmallVector<uint8_t> Replacement =
+      assembleInstructions("s_mov_b32 s102, 0\ns_mov_b32 s1, s101", S);
+  ASSERT_FALSE(Replacement.empty());
+  llvm::BitVector ReplacementUnsafe =
+      unsafeIncomingNumberedSgprsInReplacement(Replacement, S,
+                                               *NumberedSgprs);
+  llvm::BitVector BatchedUnion = *Batch.Queries.front();
+  BatchedUnion |= ReplacementUnsafe;
+  llvm::BitVector ScalarUnion = *Scalar;
+  ScalarUnion |= ReplacementUnsafe;
+  EXPECT_EQ(BatchedUnion, ScalarUnion);
 }
 
 TEST(RegisterLiveness, NumberedSgprExtractionCoversAliasesAndTiedRmw) {
