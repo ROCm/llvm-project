@@ -9,12 +9,9 @@ gives that process's user+system CPU and peak resident memory. Work runs in
 parallel for throughput, but rows are always **sorted by input path** before
 writing, so the CSV is deterministic and two runs diff cleanly.
 
-> ⚠️ **Disclaimer — entry trampolines are OFF by default here.** `hotswap-rewrite`
-> itself enables entry trampolines, but the current gfx1250 hotswap path
-> **segfaults on a large fraction of objects** when they are on. For that reason
-> **these scripts default `--entry-trampolines` to OFF.** Pass `--entry-trampolines`
-> only if you specifically want to reproduce the crash (expect many SIGSEGV
-> failures).
+> ⚠️ **Entry trampolines default OFF.** The `--entry-trampolines` flag is
+> considered deprecated and slated for removal, so these scripts default it to
+> off. Pass `--entry-trampolines` only to exercise the old path.
 
 ## Files
 
@@ -48,7 +45,7 @@ ninja -C build hotswap-rewrite
 ```
 
 This produces:
-- `build/tools/comgr/test-lit/hotswap-rewrite`
+- `build/tools/comgr/test-lit/hotswap-rewrite` (or `tools/amd_comgr/test-lit/...`)
 - `build/lib/libamd_comgr.so*`
 
 ## 2. Variables you need to set
@@ -58,7 +55,7 @@ following (or pass the equivalent flags):
 
 | Variable | Meaning | Required? |
 | --- | --- | --- |
-| `HOTSWAP_BUILD_DIR` | The LLVM **build** directory. The scripts derive `<dir>/tools/comgr/test-lit/hotswap-rewrite` and `<dir>/lib` from it. | **Recommended** |
+| `HOTSWAP_BUILD_DIR` | The LLVM **build** directory. The scripts derive the tool from `<dir>/tools/comgr/test-lit/hotswap-rewrite` or `<dir>/tools/amd_comgr/test-lit/hotswap-rewrite` (both comgr and amd_comgr project layouts are probed), and the library from `<dir>/lib`. | **Recommended** |
 | `HOTSWAP_REWRITE` | Explicit path to the `hotswap-rewrite` binary (overrides the above). | Optional |
 | `HOTSWAP_LIBRARY_DIR` | Directory containing `libamd_comgr.so*`. Auto-discovered from the binary if unset. | Optional |
 
@@ -122,15 +119,24 @@ A parallel run over a large corpus can spike memory. Guard it with **one** of:
 
 ## Output CSV columns (one row per code object)
 
-`input_path, filename, input_size, status, exit_code, result, cpu_seconds,
-user_cpu_seconds, system_cpu_seconds, elapsed_seconds, max_rss_kib,
-output_size, spawn_error`
+`input_path, filename, input_size, input_sha256, status, exit_code, result,
+cpu_seconds, user_cpu_seconds, system_cpu_seconds, elapsed_seconds,
+max_rss_kib, output_size, output_sha256, output_is_elf, spawn_error`
 
-- `status` — `pass` (exit 0), `fail` (non-zero exit), `timeout`, or `spawn_error`.
+- `status` — `pass`, `fail`, `timeout`, or `spawn_error`. `pass` requires the
+  process to exit 0 **and** report `RESULT: SUCCESS` **and** write a valid ELF.
 - `exit_code` — raw exit code; negative means killed by a signal (e.g. `-11` = SIGSEGV).
 - `result` — the tool's `RESULT:` line (`SUCCESS` / `INVALID_ARGUMENT`) when present.
+- `input_sha256` / `output_sha256` — content hashes so a clean diff proves the
+  same inputs were measured and detects translation divergence.
+- `output_is_elf` — whether the rewritten object begins with the ELF magic.
 - `cpu_seconds` — user + system CPU; `max_rss_kib` — peak resident memory (KiB).
 
-Pass/fail is **exit-code based**: `pass` == the process exited 0. The
-`exit_code` and `result` columns are kept separately so failures (crashes vs.
-graceful errors) can still be distinguished after the fact.
+## Run metadata sidecar
+
+Alongside the CSV, a `<csv>.meta.json` is written with run-level provenance
+that a per-row diff cannot capture: the effective configuration (ISA,
+strict-mode, entry-trampolines, timeout, jobs, globs), the resolved command
+template, and **identities** (path + size + SHA-256) for `hotswap-rewrite` and
+each `libamd_comgr.so*`. Compare both files to confirm two runs used the same
+binary, library, configuration, and workload.

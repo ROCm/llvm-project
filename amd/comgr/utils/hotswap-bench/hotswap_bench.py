@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 Advanced Micro Devices, Inc.
-# SPDX-License-Identifier: MIT
+# Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
+# amd/comgr/LICENSE.TXT in this repository for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 """Run HotSwap gfx1250 B0-to-A0 translation over a directory of .hsaco files
 and tabulate CPU time, peak RSS, and pass/fail into a single CSV.
@@ -30,8 +31,11 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import csv
+import datetime
 import functools
+import hashlib
 import io
+import json
 import os
 import pathlib
 import shutil
@@ -47,6 +51,32 @@ DEFAULT_TARGET_ISA = "amdgcn-amd-amdhsa--gfx1250"
 
 # Sentinel set on the re-exec'd child so the memory guard wraps only once.
 GUARD_ENV = "HOTSWAP_HSACO_BENCH_GUARDED"
+
+METADATA_SCHEMA_VERSION = 1
+
+
+def utc_now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def sha256_file(path: pathlib.Path) -> str | None:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
+def file_identity(path: pathlib.Path) -> dict[str, Any] | None:
+    """Return {path, size, sha256} for a file, or None if it can't be read."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    return {"path": str(path), "size": size, "sha256": sha256_file(path)}
 
 
 def find_repo_root() -> pathlib.Path | None:
@@ -72,24 +102,33 @@ def first_executable(candidates: Sequence[pathlib.Path | str]) -> str:
     return ""
 
 
+# hotswap-rewrite lands under one of these subpaths of an LLVM build dir,
+# depending on the comgr external-project name (comgr vs amd_comgr).
+HOTSWAP_BUILD_SUBPATHS = (
+    ("tools", "comgr", "test-lit", "hotswap-rewrite"),
+    ("tools", "amd_comgr", "test-lit", "hotswap-rewrite"),
+)
+
+
+def build_dir_candidates(build_dir: pathlib.Path) -> list[pathlib.Path]:
+    return [build_dir.joinpath(*subpath) for subpath in HOTSWAP_BUILD_SUBPATHS]
+
+
 def default_hotswap() -> str:
     """Locate the hotswap-rewrite binary. Precedence:
     1. $HOTSWAP_REWRITE (explicit binary path),
-    2. $HOTSWAP_BUILD_DIR/tools/comgr/test-lit/hotswap-rewrite,
-    3. an in-tree build at <repo-root>/build/tools/comgr/test-lit/hotswap-rewrite,
+    2. $HOTSWAP_BUILD_DIR/tools/{comgr,amd_comgr}/test-lit/hotswap-rewrite,
+    3. an in-tree build at <repo-root>/build/tools/{comgr,amd_comgr}/test-lit/...,
     4. `hotswap-rewrite` on PATH.
+    Both the `comgr` and `amd_comgr` external-project layouts are probed.
     Override at runtime with --hotswap."""
     candidates: list[pathlib.Path | str] = []
     if value := os.environ.get("HOTSWAP_REWRITE"):
         candidates.append(value)
     if build := os.environ.get("HOTSWAP_BUILD_DIR"):
-        candidates.append(
-            pathlib.Path(build) / "tools" / "comgr" / "test-lit" / "hotswap-rewrite"
-        )
+        candidates.extend(build_dir_candidates(pathlib.Path(build)))
     if (root := find_repo_root()) is not None:
-        candidates.append(
-            root / "build" / "tools" / "comgr" / "test-lit" / "hotswap-rewrite"
-        )
+        candidates.extend(build_dir_candidates(root / "build"))
     candidates.append("hotswap-rewrite")
     return first_executable(candidates)
 
@@ -289,6 +328,7 @@ def run_one(
         input_size = source.stat().st_size
     except OSError:
         input_size = None
+    input_sha256 = sha256_file(source)
 
     if outputs_dir is not None:
         # Preserve the input's relative directory structure so retained outputs
@@ -356,6 +396,7 @@ def run_one(
 
     output_size: int | None = None
     output_is_elf = False
+    output_sha256: str | None = None
     if output.is_file():
         output_size = output.stat().st_size
         try:
@@ -363,6 +404,9 @@ def run_one(
                 output_is_elf = stream.read(4) == b"\x7fELF"
         except OSError:
             output_is_elf = False
+        # Hash the output before it is cleaned up so translation divergence is
+        # detectable across runs.
+        output_sha256 = sha256_file(output)
 
     if spawn_error is not None:
         status = "spawn_error"
@@ -384,6 +428,7 @@ def run_one(
         "input_path": relative,
         "filename": source.name,
         "input_size": input_size,
+        "input_sha256": input_sha256,
         "status": status,
         "exit_code": process_result["return_code"],
         "result": result_line,
@@ -393,6 +438,8 @@ def run_one(
         "elapsed_seconds": process_result["elapsed_seconds"],
         "max_rss_kib": process_result["max_rss_kib"],
         "output_size": output_size,
+        "output_sha256": output_sha256,
+        "output_is_elf": output_is_elf,
         "spawn_error": spawn_error,
     }
 
@@ -401,6 +448,7 @@ CSV_FIELDS = [
     "input_path",
     "filename",
     "input_size",
+    "input_sha256",
     "status",
     "exit_code",
     "result",
@@ -410,6 +458,8 @@ CSV_FIELDS = [
     "elapsed_seconds",
     "max_rss_kib",
     "output_size",
+    "output_sha256",
+    "output_is_elf",
     "spawn_error",
 ]
 
@@ -420,6 +470,70 @@ def write_csv(path: pathlib.Path, rows: Sequence[dict[str, Any]]) -> None:
         writer = csv.DictWriter(stream, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def write_run_metadata(
+    csv_path: pathlib.Path,
+    *,
+    hotswap: pathlib.Path,
+    library_dirs: Sequence[pathlib.Path],
+    args: argparse.Namespace,
+    jobs: int,
+    include_globs: Sequence[str],
+    input_root: pathlib.Path,
+    input_count: int,
+) -> pathlib.Path:
+    """Persist run-level provenance to <csv>.meta.json so two runs can be
+    checked for the same tool, library, configuration, and workload scope
+    (things a per-row CSV diff cannot by itself guarantee)."""
+    libraries: list[dict[str, Any]] = []
+    for directory in library_dirs:
+        for lib in sorted(directory.glob("libamd_comgr.so*")):
+            if lib.is_file() and not lib.is_symlink():
+                identity = file_identity(lib)
+                if identity is not None:
+                    libraries.append(identity)
+
+    command_template = hotswap_command(
+        hotswap,
+        pathlib.Path("INPUT"),
+        pathlib.Path("OUTPUT.co"),
+        args.source_isa,
+        args.target_isa,
+        entry_trampolines=args.entry_trampolines,
+        strict_mode=args.strict_mode,
+    )
+
+    metadata = {
+        "schema_version": METADATA_SCHEMA_VERSION,
+        "generated_at": utc_now(),
+        "tool": {
+            "hotswap_rewrite": file_identity(hotswap),
+            "libraries": libraries,
+        },
+        "config": {
+            "source_isa": args.source_isa,
+            "target_isa": args.target_isa,
+            "entry_trampolines": args.entry_trampolines,
+            "strict_mode": args.strict_mode,
+            "timeout_seconds": args.timeout_seconds,
+            "jobs": jobs,
+            "include_globs": list(include_globs),
+            "recursive": args.recursive,
+            "memory_limit_gb": args.memory_limit_gb or None,
+            "oom_guard": args.oom_guard,
+        },
+        "command_template": command_template,
+        "input_root": str(input_root),
+        "input_count": input_count,
+    }
+
+    meta_path = csv_path.with_name(csv_path.name + ".meta.json")
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    with meta_path.open("w", encoding="utf-8") as stream:
+        json.dump(metadata, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+    return meta_path
 
 
 def nonnegative_float(value: str) -> float:
@@ -781,9 +895,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     rows.sort(key=lambda value: value["input_path"])
     csv_path = pathlib.Path(args.csv).expanduser().resolve()
     write_csv(csv_path, rows)
+    meta_path = write_run_metadata(
+        csv_path,
+        hotswap=hotswap,
+        library_dirs=library_dirs,
+        args=args,
+        jobs=jobs,
+        include_globs=include_globs,
+        input_root=input_root,
+        input_count=len(sources),
+    )
 
     summary = ", ".join(f"{status}={count}" for status, count in sorted(counts.items()))
     print(f"wrote {len(rows)} row(s) to {csv_path} ({summary})", file=sys.stderr)
+    print(f"wrote run metadata to {meta_path}", file=sys.stderr)
     if interrupted:
         return 130
     return 0 if counts.get("pass", 0) == len(rows) and rows else 1

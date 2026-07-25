@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 Advanced Micro Devices, Inc.
-# SPDX-License-Identifier: MIT
+# Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
+# amd/comgr/LICENSE.TXT in this repository for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 """Run HotSwap gfx1250 B0-to-A0 translation over ALL code objects (.hsaco AND
 .co) in a directory, with a 5-minute per-file timeout.
