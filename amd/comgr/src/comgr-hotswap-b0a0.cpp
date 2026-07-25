@@ -1663,18 +1663,56 @@ computeBatchedSgprContinuationAnalysis(ArrayRef<InternalDecodedInst> Decoded,
   return Result;
 }
 
+using BatchedSgprContinuationCache =
+    DenseMap<std::pair<uint64_t, uint64_t>,
+             std::optional<BatchedSgprContinuationAnalysis>>;
+
+static const std::optional<BatchedSgprContinuationAnalysis> &
+getCachedBatchedSgprContinuationAnalysis(ArrayRef<InternalDecodedInst> Decoded,
+                                         const LLVMState &LS,
+                                         uint64_t FunctionBegin,
+                                         uint64_t FunctionEnd,
+                                         ArrayRef<MCRegister> NumberedSgprs,
+                                         BatchedSgprContinuationCache &Cache,
+                                         uint64_t &AnalysisCount) {
+  std::pair<uint64_t, uint64_t> Key{FunctionBegin, FunctionEnd};
+  BatchedSgprContinuationCache::iterator It = Cache.find(Key);
+  if (It == Cache.end()) {
+    std::optional<BatchedSgprContinuationAnalysis> Analysis =
+        computeBatchedSgprContinuationAnalysis(Decoded, LS, FunctionBegin,
+                                               FunctionEnd, NumberedSgprs);
+    It = Cache.try_emplace(Key, std::move(Analysis)).first;
+    ++AnalysisCount;
+  }
+  return It->second;
+}
+
 BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t FunctionBegin, uint64_t FunctionEnd,
     ArrayRef<uint64_t> Continuations, ArrayRef<MCRegister> NumberedSgprs) {
-  BatchedSgprContinuationTestResult Result;
-  std::optional<BatchedSgprContinuationAnalysis> Analysis =
-      computeBatchedSgprContinuationAnalysis(Decoded, LS, FunctionBegin,
-                                             FunctionEnd, NumberedSgprs);
-  Result.Analyses = 1;
+  SmallVector<BatchedSgprContinuationTestRequest, 8> Requests;
   for (uint64_t Continuation : Continuations)
-    Result.Queries.push_back(Analysis ? Analysis->query(Decoded, Continuation)
-                                      : std::nullopt);
+    Requests.push_back({FunctionBegin, FunctionEnd, Continuation});
+  return runBatchedSgprContinuationCacheForTest(Decoded, LS, Requests,
+                                                NumberedSgprs);
+}
+
+BatchedSgprContinuationTestResult runBatchedSgprContinuationCacheForTest(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    ArrayRef<BatchedSgprContinuationTestRequest> Requests,
+    ArrayRef<MCRegister> NumberedSgprs) {
+  BatchedSgprContinuationTestResult Result;
+  BatchedSgprContinuationCache Cache;
+  for (const BatchedSgprContinuationTestRequest &Request : Requests) {
+    const std::optional<BatchedSgprContinuationAnalysis> &Analysis =
+        getCachedBatchedSgprContinuationAnalysis(
+            Decoded, LS, Request.FunctionBegin, Request.FunctionEnd,
+            NumberedSgprs, Cache, Result.Analyses);
+    Result.Queries.push_back(
+        Analysis ? Analysis->query(Decoded, Request.Continuation)
+                 : std::nullopt);
+  }
   return Result;
 }
 
@@ -1729,10 +1767,6 @@ findLocallyDeadSgprPair(PatchContext &Ctx, uint64_t InstOffset,
   return selectLocallyDeadSgprPair(Ctx.Config.MaxSgprs, Unsafe);
 }
 
-using BatchedSgprContinuationCache =
-    DenseMap<std::pair<uint64_t, uint64_t>,
-             std::optional<BatchedSgprContinuationAnalysis>>;
-
 // The cache is local to one assignLongBranchGateways invocation. Decoded, LS,
 // MaxSgprs, and NumberedSgprs are immutable for that lifetime, so the function
 // range is the complete varying input to the batched analysis.
@@ -1746,20 +1780,14 @@ static std::optional<unsigned> findLocallyDeadSgprPairWithCache(
   if (!Continuation)
     return std::nullopt;
 
-  std::pair<uint64_t, uint64_t> Key{FunctionRange.Begin, FunctionRange.End};
-  BatchedSgprContinuationCache::iterator It = Cache.find(Key);
-  if (It == Cache.end()) {
-    std::optional<BatchedSgprContinuationAnalysis> Analysis =
-        computeBatchedSgprContinuationAnalysis(
-            Ctx.Decoded, Ctx.LS, FunctionRange.Begin, FunctionRange.End,
-            NumberedSgprs);
-    It = Cache.try_emplace(Key, std::move(Analysis)).first;
-    ++AnalysisCount;
-  }
-  if (!It->second)
+  const std::optional<BatchedSgprContinuationAnalysis> &Analysis =
+      getCachedBatchedSgprContinuationAnalysis(
+          Ctx.Decoded, Ctx.LS, FunctionRange.Begin, FunctionRange.End,
+          NumberedSgprs, Cache, AnalysisCount);
+  if (!Analysis)
     return std::nullopt;
   std::optional<BitVector> ContinuationUnsafe =
-      It->second->query(Ctx.Decoded, *Continuation);
+      Analysis->query(Ctx.Decoded, *Continuation);
   if (!ContinuationUnsafe)
     return std::nullopt;
 

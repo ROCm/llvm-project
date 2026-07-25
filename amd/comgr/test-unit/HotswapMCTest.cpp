@@ -5062,6 +5062,50 @@ TEST(RegisterLiveness, BatchedSgprProofMatchesRandomizedBranchLoops) {
   }
 }
 
+TEST(RegisterLiveness, BatchedSgprCacheHitsAreKeyedAndMatchUncached) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::vector<InternalDecodedInst> Decoded = decodeAsmSequence(
+      S, llvm::ArrayRef<llvm::StringRef>(
+             {"s_mov_b32 s104, 0", "s_mov_b32 s0, s103", "s_endpgm",
+              "s_mov_b32 s102, 0", "s_mov_b32 s1, s101", "s_endpgm"}));
+  ASSERT_EQ(Decoded.size(), 6u);
+  std::optional<llvm::SmallVector<llvm::MCRegister, 128>> NumberedSgprs =
+      resolveNumberedSgprRegisters(*S.MRI, /*MaxSgprs=*/106);
+  ASSERT_TRUE(NumberedSgprs);
+
+  uint64_t FirstBegin = Decoded[0].Offset;
+  uint64_t FirstEnd = Decoded[3].Offset;
+  uint64_t SecondBegin = FirstEnd;
+  uint64_t SecondEnd = Decoded.back().Offset + Decoded.back().Size;
+  const BatchedSgprContinuationTestRequest Requests[] = {
+      {FirstBegin, FirstEnd, Decoded[0].Offset},
+      {FirstBegin, FirstEnd, Decoded[1].Offset},
+      {SecondBegin, SecondEnd, Decoded[3].Offset},
+      {SecondBegin, SecondEnd, Decoded[4].Offset},
+      {FirstBegin, FirstEnd, Decoded[0].Offset},
+  };
+  BatchedSgprContinuationTestResult Cached =
+      runBatchedSgprContinuationCacheForTest(Decoded, S, Requests,
+                                             *NumberedSgprs);
+
+  // The repeated first-function queries and final repeat are cache hits. The
+  // second function has a distinct range key and requires exactly one
+  // additional analysis.
+  EXPECT_EQ(Cached.Analyses, 2u);
+  ASSERT_EQ(Cached.Queries.size(), std::size(Requests));
+  for (size_t I = 0; I != std::size(Requests); ++I) {
+    std::optional<llvm::BitVector> Uncached =
+        unsafeIncomingNumberedSgprsInRange(
+            Decoded, S, Requests[I].FunctionBegin, Requests[I].FunctionEnd,
+            Requests[I].Continuation, *NumberedSgprs);
+    ASSERT_TRUE(Uncached) << "request " << I;
+    ASSERT_TRUE(Cached.Queries[I]) << "request " << I;
+    EXPECT_EQ(*Cached.Queries[I], *Uncached) << "request " << I;
+  }
+  EXPECT_EQ(*Cached.Queries.front(), *Cached.Queries.back());
+}
+
 TEST(RegisterLiveness, BatchedSgprProofPreservesReplacementUnion) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

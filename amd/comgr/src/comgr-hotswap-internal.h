@@ -1777,6 +1777,12 @@ struct BatchedSgprContinuationTestResult {
   llvm::SmallVector<std::optional<llvm::BitVector>, 8> Queries;
 };
 
+struct BatchedSgprContinuationTestRequest {
+  uint64_t FunctionBegin = 0;
+  uint64_t FunctionEnd = 0;
+  uint64_t Continuation = 0;
+};
+
 /// Build one compact per-function numbered-SGPR continuation analysis and
 /// query it at every requested offset. Exposed for scalar-oracle and cache
 /// reuse unit coverage.
@@ -1784,6 +1790,14 @@ BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
     llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t FunctionBegin, uint64_t FunctionEnd,
     llvm::ArrayRef<uint64_t> Continuations,
+    llvm::ArrayRef<llvm::MCRegister> NumberedSgprs);
+
+/// Exercise the same function-keyed cache lookup as branch promotion across
+/// several function ranges. Exposed for cache-hit, key-isolation, and
+/// cached-versus-uncached oracle coverage.
+BatchedSgprContinuationTestResult runBatchedSgprContinuationCacheForTest(
+    llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    llvm::ArrayRef<BatchedSgprContinuationTestRequest> Requests,
     llvm::ArrayRef<llvm::MCRegister> NumberedSgprs);
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
