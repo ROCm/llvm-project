@@ -3454,7 +3454,9 @@ TEST(TextDisplacement, WholeObjectModeRejectsOverlappingFileSection) {
 
   llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
   ASSERT_FALSE(Text.empty());
-  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  std::vector<uint8_t> ElfBytes =
+      makeDisplacementTestElf(Text, /*AddTextRelocation=*/false,
+                              /*AddDebugSection=*/true);
   llvm::ELF::Elf64_Ehdr Header;
   std::memcpy(&Header, ElfBytes.data(), sizeof(Header));
   llvm::ELF::Elf64_Shdr TextSection;
@@ -3462,15 +3464,15 @@ TEST(TextDisplacement, WholeObjectModeRejectsOverlappingFileSection) {
       Header.e_shoff + sizeof(llvm::ELF::Elf64_Shdr);
   std::memcpy(&TextSection, ElfBytes.data() + TextHeaderOffset,
               sizeof(TextSection));
-  llvm::ELF::Elf64_Shdr StringTable;
-  const uint64_t StringTableHeaderOffset =
-      Header.e_shoff + 3 * sizeof(llvm::ELF::Elf64_Shdr);
-  std::memcpy(&StringTable, ElfBytes.data() + StringTableHeaderOffset,
-              sizeof(StringTable));
-  StringTable.sh_offset = TextSection.sh_offset;
-  StringTable.sh_size = 1;
-  std::memcpy(ElfBytes.data() + StringTableHeaderOffset, &StringTable,
-              sizeof(StringTable));
+  llvm::ELF::Elf64_Shdr DebugSection;
+  const uint64_t DebugSectionHeaderOffset =
+      Header.e_shoff + 5 * sizeof(llvm::ELF::Elf64_Shdr);
+  std::memcpy(&DebugSection, ElfBytes.data() + DebugSectionHeaderOffset,
+              sizeof(DebugSection));
+  DebugSection.sh_offset = TextSection.sh_offset;
+  DebugSection.sh_size = 1;
+  std::memcpy(ElfBytes.data() + DebugSectionHeaderOffset, &DebugSection,
+              sizeof(DebugSection));
 
   llvm::Expected<ElfView> ViewOrErr =
       ElfView::create(ElfBytes.data(), ElfBytes.size());
