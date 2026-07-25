@@ -6112,6 +6112,8 @@ static amd_comgr_status_t retargetCodeObjectImpl(
           << "parseable ELF64 (" << toString(ViewOrErr.takeError()) << ").\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
+  if (Prof)
+    Profile.add(HotswapMetric::ElfParse, profNowNs() - ParseT0, 0);
   ElfView &Elf = *ViewOrErr;
   if (ViewOrErr->textSize() == 0) {
     if (!Elf.isValidDataOnlyObject()) {
@@ -6119,8 +6121,11 @@ static amd_comgr_status_t retargetCodeObjectImpl(
                "describe a valid data-only code object.\n";
       return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
     }
+    uint64_t OutCopyT0 = Prof ? profNowNs() : 0;
     std::unique_ptr<WritableMemoryBuffer> Result =
         copyOutputBuffer(ElfData, ElfSize, "data-only");
+    if (Prof)
+      Profile.add(HotswapMetric::OutputCopy, profNowNs() - OutCopyT0, 0);
     if (!Result)
       return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
     Out = std::move(Result);
@@ -6128,8 +6133,6 @@ static amd_comgr_status_t retargetCodeObjectImpl(
              "returning a byte-identical copy.\n";
     return AMD_COMGR_STATUS_SUCCESS;
   }
-  if (Prof)
-    Profile.add(HotswapMetric::ElfParse, profNowNs() - ParseT0, 0);
 
   // The CPU name and s_nop padding bytes are the only rewrite state the fast
   // path needs; both are also carried by LLVMState on the MC path. Holding them

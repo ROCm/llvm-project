@@ -32,10 +32,9 @@
 // RUN:   | %FileCheck --check-prefix=ZEROSIZE %s
 // ZEROSIZE: RESULT: INVALID_ARGUMENT
 
-// COM: Supported GFX1250 pair on a malformed ELF (no .text section).
-// COM: retargetCodeObject rejects inputs that fail ELF64 parsing or have
-// COM: an empty .text section with INVALID_ARGUMENT -- returning SUCCESS with
-// COM: an unchanged copy there would silently hide caller-side bugs.
+// COM: Supported GFX1250 pair on a malformed ELF (no section table and no
+// COM: .text section). retargetCodeObject rejects inputs that fail ELF64
+// COM: parsing instead of silently returning an unchanged successful copy.
 // RUN: hotswap-rewrite %t.elf amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   | %FileCheck --check-prefix=MALFORMED %s
 // MALFORMED: RESULT: INVALID_ARGUMENT
