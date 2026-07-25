@@ -72,6 +72,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -652,6 +653,34 @@ VgprMsbState mergeVgprMsbState(VgprMsbState Old, VgprMsbState Incoming) {
           mergeVgprMsbValue(Old.Src2, Incoming.Src2)};
 }
 
+// The B0 f4gemm corpus uses one legacy VOP3 encoding that the A0 gfx1250
+// decoder splits into two unknown dwords. It cannot write MODE: recognize only
+// the exact observed opcode/operand spellings, and only when no known entry
+// reaches the decoder-created continuation dword.
+bool isUndecodedB0Vop3Pair(const PatchContext &Ctx, size_t HeadIndex) {
+  if (HeadIndex + 1 >= Ctx.Decoded.size())
+    return false;
+  const InternalDecodedInst &Head = Ctx.Decoded[HeadIndex];
+  const InternalDecodedInst &Tail = Ctx.Decoded[HeadIndex + 1];
+  if (Head.DecodeSucceeded || Head.Size != MinInstSize ||
+      Tail.Offset != Head.Offset + MinInstSize ||
+      Head.Offset > Ctx.TextSize ||
+      2 * MinInstSize > Ctx.TextSize - Head.Offset)
+    return false;
+
+  uint32_t Word0 = support::endian::read32le(Ctx.Text + Head.Offset);
+  uint32_t Word1 =
+      support::endian::read32le(Ctx.Text + Head.Offset + MinInstSize);
+  constexpr uint32_t Bit14 = 1u << 14;
+  if ((Word0 & ~Bit14) != 0xd0310000u ||
+      (Word1 != 0 && Word1 != 0x00100000u))
+    return false;
+  if (Ctx.DirectControlFlow.Targets.contains(Tail.Offset) ||
+      llvm::is_contained(Ctx.DeclaredEntries, Tail.Offset))
+    return false;
+  return true;
+}
+
 // Populate Ctx.VgprMsbModeBefore with a per-instruction packed VGPR-MSB mode
 // via a forward CFG fixed point over each analyzable function. Fail-closed:
 // only exact, consistent modes are recorded; any conflict, unknown MODE write,
@@ -680,7 +709,8 @@ void computeVgprMsbModes(PatchContext &Ctx) {
   // function's s_set_vgpr_msb prefix. The incoming mode is then unprovable
   // object-wide, so decline the whole analysis and let each required split fail
   // closed rather than risk seeding a wrong mode.
-  if (Ctx.DirectControlFlow.HasUnresolvedTargets)
+  if (Ctx.DirectControlFlow.HasUnresolvedTargets ||
+      Ctx.DirectControlFlow.HasUnboundedIndirectEntries)
     return;
 
   // Functions entered at a non-start offset by a cross-function branch or call
@@ -792,11 +822,21 @@ void computeVgprMsbModes(PatchContext &Ctx) {
     const size_t Count = static_cast<size_t>(After - First);
     DenseMap<uint64_t, unsigned> OffsetToLocalIndex;
     OffsetToLocalIndex.reserve(Count);
+    BitVector UndecodedVop3Heads(Count);
+    BitVector UndecodedVop3Tails(Count);
     bool Valid = true;
     for (unsigned I = 0; I != Count; ++I) {
       OffsetToLocalIndex.try_emplace(First[I].Offset, I);
-      if (First[I].Mnemonic == "<unknown>")
+      if (First[I].Mnemonic != "<unknown>")
+        continue;
+      if (isUndecodedB0Vop3Pair(Ctx, GlobalFirst + I) && I + 1 < Count) {
+        UndecodedVop3Heads.set(I);
+        UndecodedVop3Tails.set(I + 1);
+        OffsetToLocalIndex.erase(First[I + 1].Offset);
+        ++I;
+      } else {
         Valid = false;
+      }
     }
     if (!Valid)
       continue;
@@ -821,6 +861,13 @@ void computeVgprMsbModes(PatchContext &Ctx) {
     for (unsigned I = 0; I != Count && Valid; ++I) {
       const InternalDecodedInst &DI = First[I];
       SmallVectorImpl<unsigned> &Out = Successors[I];
+      if (UndecodedVop3Tails.test(I))
+        continue;
+      if (UndecodedVop3Heads.test(I)) {
+        if (I + 2 < Count)
+          Out.push_back(I + 2);
+        continue;
+      }
       if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
           DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
           LS.MIA->isReturn(DI.Inst) || isStandardLinkReturn(DI, LS))
@@ -936,7 +983,9 @@ void computeVgprMsbModes(PatchContext &Ctx) {
     for (size_t Next = 0; Next != Worklist.size(); ++Next) {
       unsigned I = Worklist[Next];
       ModeBefore[GlobalFirst + I] = exactVgprMsbMode(In[I]);
-      VgprMsbState Out = transferVgprMsbState(In[I], First[I], LS);
+      VgprMsbState Out = UndecodedVop3Heads.test(I)
+                             ? In[I]
+                             : transferVgprMsbState(In[I], First[I], LS);
       for (unsigned Succ : Successors[I]) {
         VgprMsbState Merged = mergeVgprMsbState(In[Succ], Out);
         if (Merged.Dst != In[Succ].Dst || Merged.Src0 != In[Succ].Src0 ||
@@ -965,13 +1014,6 @@ findActiveVgprMsbMode(const PatchContext &Ctx, size_t Idx) {
     return std::nullopt;
   return static_cast<unsigned>(Ctx.VgprMsbModeBefore[Idx]);
 }
-
-enum class VgprMsbOperand : unsigned {
-  Src0 = 0,
-  Src1 = 2,
-  Src2 = 4,
-  Dst = 6,
-};
 
 unsigned getVgprMsbs(unsigned Mode, VgprMsbOperand Operand) {
   return (Mode >> static_cast<unsigned>(Operand)) & 0x3;
@@ -1131,6 +1173,76 @@ buildSplit32x16Asm(StringRef Replacement, const PrintedAsm &P, const WmmaOps &R,
 
 } // anonymous namespace
 
+void ensureVgprMsbModes(PatchContext &Ctx) {
+  if (Ctx.VgprMsbModeBefore.empty())
+    computeVgprMsbModes(Ctx);
+}
+
+std::optional<unsigned> getActiveVgprMsbMode(PatchContext &Ctx, size_t Idx) {
+  ensureVgprMsbModes(Ctx);
+  return findActiveVgprMsbMode(Ctx, Idx);
+}
+
+std::optional<unsigned> getLocallyEstablishedVgprMsbMode(PatchContext &Ctx,
+                                                         size_t Idx) {
+  // An unresolved transfer can enter at any instruction in the object, so an
+  // apparently adjacent setter is not a dominance proof in that case.
+  if (Ctx.DirectControlFlow.HasUnresolvedTargets ||
+      Ctx.DirectControlFlow.HasUnboundedIndirectEntries)
+    return std::nullopt;
+
+  while (Idx > 0) {
+    const InternalDecodedInst &Prev = Ctx.Decoded[Idx - 1];
+    const InternalDecodedInst &Current = Ctx.Decoded[Idx];
+    if (Prev.Offset + Prev.Size != Current.Offset)
+      return std::nullopt;
+
+    if (Ctx.DirectControlFlow.Targets.contains(Current.Offset))
+      return std::nullopt;
+    for (uint64_t Entry : Ctx.DeclaredEntries)
+      if (Entry == Current.Offset)
+        return std::nullopt;
+
+    // The A0 decoder represents the exact B0 legacy-VOP3 pair as two unknown
+    // dwords. It cannot change MODE, so a straight-line local dominance scan
+    // may step over the complete pair. isUndecodedB0Vop3Pair also rejects a
+    // known entry into its continuation dword.
+    if (Idx >= 2 && isUndecodedB0Vop3Pair(Ctx, Idx - 2)) {
+      Idx -= 2;
+      continue;
+    }
+
+    if (std::optional<unsigned> Mode = getExactVgprMsbModeWritten(Prev, Ctx.LS))
+      return Mode;
+
+    if (Prev.Mnemonic == "<unknown>" ||
+        Prev.Inst.getOpcode() == Ctx.LS.SSetVgprMsbOpcode ||
+        instructionDefinesNamedRegister(Prev, "MODE", Ctx.LS) ||
+        (Ctx.LS.MIA &&
+         Ctx.LS.MIA->mayAffectControlFlow(Prev.Inst, *Ctx.LS.MRI)))
+      return std::nullopt;
+    --Idx;
+  }
+  return std::nullopt;
+}
+
+int16_t transferExactVgprMsbMode(int16_t Incoming,
+                                 const InternalDecodedInst &DI,
+                                 const LLVMState &LS) {
+  VgprMsbState State =
+      Incoming >= 0 ? vgprMsbStateFromMode(static_cast<unsigned>(Incoming))
+                    : unknownVgprMsbState();
+  return exactVgprMsbMode(transferVgprMsbState(State, DI, LS));
+}
+
+unsigned getVgprMsbBank(unsigned Mode, VgprMsbOperand Operand) {
+  return getVgprMsbs(Mode, Operand);
+}
+
+void setVgprMsbBank(unsigned &Mode, VgprMsbOperand Operand, unsigned Bank) {
+  setVgprMsbs(Mode, Operand, Bank);
+}
+
 // Return-value semantics (current shared dispatcher API in b0a0.cpp):
 //   0  = either "this patch did not match the instruction" OR "matched
 //        but failed to apply" -- the dispatcher cannot distinguish the
@@ -1221,8 +1333,7 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
   // the transition and restore it. K-splits always consult the mode (the
   // upper half reuses dst as src2). M-splits consult it only when a half
   // actually crosses v255.
-  if (Ctx.VgprMsbModeBefore.empty())
-    computeVgprMsbModes(Ctx);
+  ensureVgprMsbModes(Ctx);
 
   bool UsesVgprMsbTransition = false;
   bool NeedsKnownVgprMsbMode = Match->Kind == SplitKind::Split128to64FP8BF8;
@@ -1235,7 +1346,7 @@ static uint32_t applyWmmaSplitPatchesImpl(PatchContext &Ctx, size_t Idx) {
 
   unsigned ActiveVgprMsbMode = 0;
   if (NeedsKnownVgprMsbMode) {
-    std::optional<unsigned> Mode = findActiveVgprMsbMode(Ctx, Idx);
+    std::optional<unsigned> Mode = getActiveVgprMsbMode(Ctx, Idx);
     if (!Mode) {
       log() << "hotswap: error: WMMA split: cannot determine VGPR-MSB mode "
                "for "
