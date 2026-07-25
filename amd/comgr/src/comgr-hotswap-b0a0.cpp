@@ -4544,10 +4544,6 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     if (Reachable.test(SetPc) && !BoundedSetPc.test(SetPc))
       markUnboundedIndirectEntry();
 
-  for (size_t InstIndex : Index.UnboundedIndirectIndices)
-    if (Reachable.test(InstIndex))
-      markUnboundedIndirectEntry();
-
   // Every call is also an indirect entry source until either a finite local
   // target or a finite external target has been recorded for it.
   BitVector FiniteCalls(Decoded.size());
@@ -4555,6 +4551,15 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     FiniteCalls.set(Call.InstIndex);
   for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
     FiniteCalls.set(Call.InstIndex);
+
+  // MC may also classify a register call as an indirect branch. Do not let
+  // that generic classification create a false unbounded self-edge after the
+  // exact call target and continuation have been admitted to this same joint
+  // audit. Unknown calls remain unbounded in the call-specific loop below.
+  for (size_t InstIndex : Index.UnboundedIndirectIndices)
+    if (Reachable.test(InstIndex) && !FiniteCalls.test(InstIndex))
+      markUnboundedIndirectEntry();
+
   for (size_t InstIndex : Index.BranchOrCallIndices) {
     if (!Reachable.test(InstIndex) || !LS.MIA->isCall(Decoded[InstIndex].Inst))
       continue;
@@ -4579,6 +4584,7 @@ hasKnownControlFlowEntry(ArrayRef<uint64_t> DeclaredEntries,
                          ArrayRef<BoundedSetPcReturn> BoundedReturns,
                          const DenseMap<size_t, size_t> &BoundedReturnPositions,
                          const ControlFlowScanIndex &Index,
+                         bool HasUnboundedIndirectEntries,
                          uint64_t SequenceStart, uint64_t SequenceEnd) {
   for (uint64_t Entry : DeclaredEntries)
     if (Entry > SequenceStart && Entry <= SequenceEnd)
@@ -4598,8 +4604,18 @@ hasKnownControlFlowEntry(ArrayRef<uint64_t> DeclaredEntries,
   // Without bounding an indirect target, it may enter at any instruction in
   // the materialization. Keep the call unresolved rather than relying on the
   // indirect transfer's containing function alone.
-  if (Index.HasUnboundedIndirectEntry)
+  if (HasUnboundedIndirectEntries)
     return true;
+
+  auto EntersSequence = [&](uint64_t Target) {
+    return Target > SequenceStart && Target <= SequenceEnd;
+  };
+  for (const KnownCallSite &Call : Index.Calls)
+    if (EntersSequence(Call.Target) || EntersSequence(Call.Continuation))
+      return true;
+  for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
+    if (EntersSequence(Call.Continuation))
+      return true;
 
   SmallVector<DirectTargetSource, 16>::const_iterator First =
       llvm::upper_bound(Index.DirectTargetsByTarget, SequenceStart,
@@ -5814,6 +5830,7 @@ static std::optional<WellFormedAbiEntrySet> validateWellFormedAbiEntrySet(
   // Phase 2 may now authorize only the exact source indices proven above
   // while validating ordinary s30-return functions.
   DenseSet<size_t> CanonicalAbiReturns;
+  DenseSet<uint64_t> CanonicalReturningFunctionBegins;
   for (const auto &Entry : ReturnsByFunction) {
     const ElfView::FunctionTextRange *Range =
         ReturnFunctionRanges.lookup(Entry.first);
@@ -5829,6 +5846,11 @@ static std::optional<WellFormedAbiEntrySet> validateWellFormedAbiEntrySet(
             << " does not use a provable canonical s30 call frame\n";
       return std::nullopt;
     }
+    for (size_t Return : Entry.second)
+      if (CanonicalAbiReturns.contains(Return)) {
+        CanonicalReturningFunctionBegins.insert(Entry.first.first - TextAddr);
+        break;
+      }
   }
 
   bool SawAbiCall = false;
@@ -5927,7 +5949,16 @@ static std::optional<WellFormedAbiEntrySet> validateWellFormedAbiEntrySet(
       return std::nullopt;
     }
   }
-  if (!SawAbiCall || !SawAbiReturn) {
+  bool SawExactCanonicalCall = false;
+  if (!SawAbiCall && SawAbiReturn)
+    for (const KnownCallSite &Call : Index.Calls)
+      if (Index.MaterializedCalls.contains(Call.InstIndex) &&
+          Call.ReturnRegister == AbiLinkPair &&
+          CanonicalReturningFunctionBegins.contains(Call.Target)) {
+        SawExactCanonicalCall = true;
+        break;
+      }
+  if (!SawAbiReturn || (!SawAbiCall && !SawExactCanonicalCall)) {
     log() << "hotswap: linked-code-object ABI entry-set fallback rejected: "
              "no opaque s30 call/return pair\n";
     return std::nullopt;
@@ -5975,11 +6006,12 @@ static std::optional<WellFormedAbiEntrySet> validateWellFormedAbiEntrySet(
 
   for (const auto &Call : CallContinuations)
     Result.Targets.insert(Call.second);
-  log() << "hotswap: accepted well-formed linked-code-object ABI entry set "
-           "for "
-        << Result.Calls.size() << " register call(s), " << Result.SetPcs.size()
-        << " set-PC transfer(s), and " << Result.Targets.size()
-        << " finite local entry point(s)\n";
+  log() << "hotswap: accepted "
+        << (SawAbiCall ? "well-formed linked-code-object ABI entry set"
+                       : "exact materialized-call/canonical-return closure")
+        << " for " << Result.Calls.size() << " register call(s), "
+        << Result.SetPcs.size() << " set-PC transfer(s), and "
+        << Result.Targets.size() << " finite local entry point(s)\n";
   return Result;
 }
 
@@ -6221,7 +6253,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       continue;
     if (hasKnownControlFlowEntry(
             DeclaredEntries, BoundedReturns, BoundedReturnPositions, *Index,
-            Entry.second.SequenceStart, Entry.second.SequenceEnd)) {
+            HasUnboundedIndirectEntries, Entry.second.SequenceStart,
+            Entry.second.SequenceEnd)) {
       ReusableCalls[I].clear();
       continue;
     }
@@ -6290,10 +6323,10 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         DenseMap<size_t, PcMaterializedCallInfo>::const_iterator Materialized =
             Index->MaterializedCalls.find(InstIndex);
         if (Materialized != Index->MaterializedCalls.end() &&
-            !hasKnownControlFlowEntry(DeclaredEntries, BoundedReturns,
-                                      BoundedReturnPositions, *Index,
-                                      Materialized->second.SequenceStart,
-                                      Materialized->second.SequenceEnd))
+            !hasKnownControlFlowEntry(
+                DeclaredEntries, BoundedReturns, BoundedReturnPositions, *Index,
+                HasUnboundedIndirectEntries, Materialized->second.SequenceStart,
+                Materialized->second.SequenceEnd))
           Target = Materialized->second.Target;
       }
       if (!ReusableCalls[InstIndex].empty() &&
