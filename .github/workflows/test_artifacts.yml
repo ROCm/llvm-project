@@ -11,6 +11,8 @@ on:
       artifact_run_id:
         type: string
         default: ""
+      amd_aomp_list:
+        type: string
       amdgpu_families:
         type: string
       amdgpu_targets:
@@ -43,6 +45,8 @@ on:
       artifact_run_id:
         type: string
         default: ""
+      amd_aomp_list:
+        type: string
       amdgpu_families:
         type: string
       amdgpu_targets:
@@ -115,6 +119,7 @@ jobs:
         id: configure
         env:
           ARTIFACT_GROUP: ${{ inputs.artifact_group }}
+          AMD_AOMP_LIST: ${{ inputs.amd_aomp_list }}
           AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
           TEST_TYPE: ${{ inputs.test_type }}
           TEST_LABELS: ${{ inputs.test_labels }}
@@ -135,6 +140,7 @@ jobs:
     with:
       artifact_run_id: ${{ inputs.artifact_run_id }}
       artifact_group: ${{ inputs.artifact_group }}
+      amd_aomp_list: ${{ inputs.amd_aomp_list }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
       amdgpu_targets: ${{ inputs.amdgpu_targets }}
       test_runs_on: ${{ inputs.test_runs_on }}
@@ -150,13 +156,11 @@ jobs:
     with:
       artifact_group: ${{ inputs.artifact_group }}
       artifact_run_id: ${{ inputs.artifact_run_id }}
+      amd_aomp_list: 'smoke-limbo smoke-fort-limbo smoke-dev smoke-fort nekbone babelstream fortran-babelstream bldopenmpi openmpapps'
       amdgpu_families: ${{ inputs.amdgpu_families }}
       test_runs_on: ${{ inputs.test_runs_on }}
       platform: 'linux'
       release_type: ${{ inputs.release_type }}
-              SUITE_LIST='smoke-limbo smoke-fort-limbo smoke-dev smoke-fort nekbone babelstream fortran-babelstream bldopenmpi openmpapps'
-              export SUITE_LIST
-              echo "SUITE_LIST=$SUITE_LIST" >> "$GITHUB_ENV"
 
   aomp_smoke_testB:
     name: 'AOMP smoke test B'
@@ -166,13 +170,11 @@ jobs:
     with:
       artifact_group: ${{ inputs.artifact_group }}
       artifact_run_id: ${{ inputs.artifact_run_id }}
+      amd_aomp_list: 'smoke'
       amdgpu_families: ${{ inputs.amdgpu_families }}
       test_runs_on: ${{ inputs.test_runs_on }}
       platform: 'linux'
       release_type: ${{ inputs.release_type }}
-              SUITE_LIST='smoke'
-              export SUITE_LIST
-              echo "SUITE_LIST=$SUITE_LIST" >> "$GITHUB_ENV"
  
   test_components:
     name: 'Test ${{ matrix.components.job_name }}'

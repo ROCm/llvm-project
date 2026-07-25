@@ -8,6 +8,8 @@ on:
       artifact_run_id:
         type: string
         default: ""
+      amd_aomp_list:
+        type: string
       amdgpu_families:
         type: string
         default: ""
@@ -28,6 +30,8 @@ on:
       artifact_run_id:
         type: string
         default: ""
+      amd_aomp_list:
+        type: string
       amdgpu_families:
         type: string
         default: ""
@@ -79,6 +83,7 @@ jobs:
       ARTIFACT_RUN_ID: "${{ inputs.artifact_run_id != '' && inputs.artifact_run_id || github.run_id }}"
       OUTPUT_ARTIFACTS_DIR: ${{ github.workspace }}/build
       THEROCK_BIN_DIR: ${{ github.workspace }}/build/bin
+      AMD_AOMP_LIST: ${{ inputs.amd_aomp_list }}
       AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
       AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
       ARTIFACT_GROUP: ${{ inputs.artifact_group }}
@@ -123,6 +128,7 @@ jobs:
         uses: './.github/actions/setup_test_environment'
         with:
           ARTIFACT_GROUP: ${{ inputs.artifact_group }}
+          AMD_AOMP_LIST: ${{ inputs.amd_aomp_list }}
           AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
           ARTIFACT_RUN_ID: ${{ env.ARTIFACT_RUN_ID }}
           OUTPUT_ARTIFACTS_DIR: ${{ env.OUTPUT_ARTIFACTS_DIR }}
@@ -137,6 +143,8 @@ jobs:
           set -x
           git clone https://github.com/ROCm/aomp -b amd-staging --depth 1
           cd aomp/bin
+          export SUITE_LIST=${AMD_AOMP_LIST}
+          echo ${SUITE_LIST}
           export AOMP=${OUTPUT_ARTIFACTS_DIR}/llvm
           echo ${AOMP}
           ./run_theRockCI.sh
