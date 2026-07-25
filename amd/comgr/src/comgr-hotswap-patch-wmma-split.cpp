@@ -663,8 +663,7 @@ bool isUndecodedB0Vop3Pair(const PatchContext &Ctx, size_t HeadIndex) {
   const InternalDecodedInst &Head = Ctx.Decoded[HeadIndex];
   const InternalDecodedInst &Tail = Ctx.Decoded[HeadIndex + 1];
   if (Head.DecodeSucceeded || Head.Size != MinInstSize ||
-      Tail.Offset != Head.Offset + MinInstSize ||
-      Head.Offset > Ctx.TextSize ||
+      Tail.Offset != Head.Offset + MinInstSize || Head.Offset > Ctx.TextSize ||
       2 * MinInstSize > Ctx.TextSize - Head.Offset)
     return false;
 
@@ -672,8 +671,7 @@ bool isUndecodedB0Vop3Pair(const PatchContext &Ctx, size_t HeadIndex) {
   uint32_t Word1 =
       support::endian::read32le(Ctx.Text + Head.Offset + MinInstSize);
   constexpr uint32_t Bit14 = 1u << 14;
-  if ((Word0 & ~Bit14) != 0xd0310000u ||
-      (Word1 != 0 && Word1 != 0x00100000u))
+  if ((Word0 & ~Bit14) != 0xd0310000u || (Word1 != 0 && Word1 != 0x00100000u))
     return false;
   if (Ctx.DirectControlFlow.Targets.contains(Tail.Offset) ||
       llvm::is_contained(Ctx.DeclaredEntries, Tail.Offset))

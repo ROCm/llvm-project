@@ -191,9 +191,8 @@ static SmallVector<uint8_t> rewriteScale16ToScale(const uint8_t *OrigRaw,
 
 using VgprBankRequirement = std::pair<VgprMsbOperand, unsigned>;
 
-static void
-emitModeForOperands(raw_string_ostream &OS, unsigned &CurrentMode,
-                    ArrayRef<VgprBankRequirement> Requirements) {
+static void emitModeForOperands(raw_string_ostream &OS, unsigned &CurrentMode,
+                                ArrayRef<VgprBankRequirement> Requirements) {
   unsigned NewMode = CurrentMode;
   for (const VgprBankRequirement &Requirement : Requirements)
     setVgprMsbBank(NewMode, Requirement.first, Requirement.second);
@@ -977,24 +976,24 @@ struct ScaleForwardGraph {
 // no kill, and skip the split continuation dword. This is enough to traverse
 // the instruction without relying on whether opcode 0x31 has a vector or
 // scalar destination on B0.
-static bool recognizeUndecodedB0Vop3ScalarSources(
-    PatchContext &Ctx, size_t Global, unsigned MaxVgprs,
-    BitVector &ConservativeUses) {
+static bool recognizeUndecodedB0Vop3ScalarSources(PatchContext &Ctx,
+                                                  size_t Global,
+                                                  unsigned MaxVgprs,
+                                                  BitVector &ConservativeUses) {
   if (Global + 1 >= Ctx.Decoded.size())
     return false;
   const InternalDecodedInst &Head = Ctx.Decoded[Global];
   const InternalDecodedInst &Tail = Ctx.Decoded[Global + 1];
   if (Head.DecodeSucceeded || Head.Size != MinInstSize ||
-      Tail.Offset != Head.Offset + MinInstSize ||
-      Head.Offset > Ctx.TextSize || 2 * MinInstSize > Ctx.TextSize - Head.Offset)
+      Tail.Offset != Head.Offset + MinInstSize || Head.Offset > Ctx.TextSize ||
+      2 * MinInstSize > Ctx.TextSize - Head.Offset)
     return false;
 
   const uint8_t *Raw = Ctx.Text + Head.Offset;
   uint32_t Word0 = support::endian::read32le(Raw);
   uint32_t Word1 = support::endian::read32le(Raw + MinInstSize);
   constexpr uint32_t Bit14 = 1u << 14;
-  if ((Word0 & ~Bit14) != 0xd0310000u ||
-      (Word1 != 0 && Word1 != 0x00100000u))
+  if ((Word0 & ~Bit14) != 0xd0310000u || (Word1 != 0 && Word1 != 0x00100000u))
     return false;
 
   // A direct/declared entry into the decoder-created continuation slot would
@@ -1003,8 +1002,7 @@ static bool recognizeUndecodedB0Vop3ScalarSources(
       llvm::is_contained(Ctx.DeclaredEntries, Tail.Offset))
     return false;
 
-  for (unsigned Physical = 0; Physical < MaxVgprs;
-       Physical += VgprBankSize)
+  for (unsigned Physical = 0; Physical < MaxVgprs; Physical += VgprBankSize)
     ConservativeUses.set(Physical);
   return true;
 }
@@ -1065,9 +1063,8 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
       Node.SafeTerminal = true;
       continue;
     }
-    if (!DI.DecodeSucceeded &&
-        recognizeUndecodedB0Vop3ScalarSources(Ctx, Global, MaxVgprs,
-                                              Node.Uses)) {
+    if (!DI.DecodeSucceeded && recognizeUndecodedB0Vop3ScalarSources(
+                                   Ctx, Global, MaxVgprs, Node.Uses)) {
       if (Local + 2 >= Count)
         Node.HasUnsafeExit = true;
       else
@@ -1124,12 +1121,11 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
     const ForwardVgprProofNode &Node = Graph.Nodes[Local];
     if (Node.Opaque || Node.SafeTerminal)
       continue;
-    int16_t Out =
-        Graph.UndecodedVop3Heads.test(Local)
-            ? Graph.ModeBefore[Local]
-            : transferExactVgprMsbMode(
-                  Graph.ModeBefore[Local],
-                  Ctx.Decoded[Graph.GlobalIndices[Local]], Ctx.LS);
+    int16_t Out = Graph.UndecodedVop3Heads.test(Local)
+                      ? Graph.ModeBefore[Local]
+                      : transferExactVgprMsbMode(
+                            Graph.ModeBefore[Local],
+                            Ctx.Decoded[Graph.GlobalIndices[Local]], Ctx.LS);
     for (size_t Successor : Node.Successors) {
       int16_t Old = Graph.ModeBefore[Successor];
       int16_t Merged = Old == VgprMsbUnreachable ? Out
@@ -1703,8 +1699,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   std::array<unsigned, SavedARegCount> SavedARegs;
   for (unsigned &Reg : SavedARegs) {
     std::optional<unsigned> Allocated = allocContiguousDeadOrAboveInBank(
-        Alloc, /*Count=*/1, /*Align=*/1, VgprBankSize,
-        ForwardDead.has_value());
+        Alloc, /*Count=*/1, /*Align=*/1, VgprBankSize, ForwardDead.has_value());
     if (!Allocated)
       return failClosed(Ctx, DI,
                         "fewer than four dead/above-KD VGPRs for exact M+K "
@@ -1772,8 +1767,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
         if (IsLow == !HighK)
           continue;
         unsigned Saved = SavedARegs[SavedIndex++];
-        emitVgprCopy(OS, OriginalAHalf + I, Saved, /*W=*/1, ABank,
-                     CurrentMode);
+        emitVgprCopy(OS, OriginalAHalf + I, Saved, /*W=*/1, ABank, CurrentMode);
       }
       assert(SavedIndex == SavedARegCount);
     }
@@ -1819,8 +1813,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
         << utohexstr(DI.Offset) << " (D=v" << DBase << ":" << (DBase + 15)
         << ", A=v" << ABase << ":" << (ABase + 15) << ", B=v" << BBase << ":"
         << (BBase + 7) << ", four saved-A VGPRs, tmp=v" << TmpReg << ", +"
-        << Extra << " vgpr, 4 WMMAs, "
-        << Replacement.size() << " bytes)\n";
+        << Extra << " vgpr, 4 WMMAs, " << Replacement.size() << " bytes)\n";
   return 1;
 }
 

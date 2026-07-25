@@ -418,9 +418,8 @@ bool rewriteDs2AddrOffsetsInPlaceImpl(MutableArrayRef<uint8_t> InstBytes,
   // and split-counter concerns do not apply: the opcode, register operands,
   // modifiers, instruction count, and entry behavior are unchanged.
   if (getDs2AddrReplacement(Mnemonic).empty() ||
-      Mnemonic.contains("_stride64_") ||
-      Ops.Off0 > Ds2AddrOffsetMax || Ops.Off1 > Ds2AddrOffsetMax ||
-      InstBytes.size() != 2 * MinInstSize)
+      Mnemonic.contains("_stride64_") || Ops.Off0 > Ds2AddrOffsetMax ||
+      Ops.Off1 > Ds2AddrOffsetMax || InstBytes.size() != 2 * MinInstSize)
     return false;
 
   // gfx1250 DS2 offset0/offset1 occupy instruction bits [7:0]/[15:8].
@@ -2608,8 +2607,7 @@ bool rewriteDs2AddrOffsetsInPlace(MutableArrayRef<uint8_t> InstBytes,
                                   const MCInst &Inst, StringRef Mnemonic,
                                   const LLVMState &LS) {
   std::optional<DsOperands> Ops = extractDsOperands(Inst, Mnemonic, LS);
-  return Ops &&
-         rewriteDs2AddrOffsetsInPlaceImpl(InstBytes, Mnemonic, *Ops);
+  return Ops && rewriteDs2AddrOffsetsInPlaceImpl(InstBytes, Mnemonic, *Ops);
 }
 
 // -- applyTrampolinePatches -------------------------------------------------
