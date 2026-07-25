@@ -893,16 +893,16 @@ std::optional<uint64_t> addSignedOffset(uint64_t Base, int64_t Offset,
 
 Expected<SmallVector<uint8_t>>
 reencodeAbsoluteOperand(const InternalDecodedInst &DI, unsigned OperandIndex,
-                        int64_t NewValue, const LLVMState &LS,
-                        StringRef Context) {
+                        int64_t NewValue, bool ForceLiteral,
+                        const LLVMState &LS, StringRef Context) {
   if (OperandIndex >= DI.Inst.getNumOperands())
     return makeDisplacementError(Twine(Context) + " has no immediate operand");
 
   MCInst NewInst = DI.Inst;
   MCOperand &Operand = NewInst.getOperand(OperandIndex);
-  if (Operand.isImm()) {
+  if (Operand.isImm() && !ForceLiteral) {
     Operand.setImm(NewValue);
-  } else if (Operand.isExpr()) {
+  } else if (Operand.isImm() || Operand.isExpr()) {
     // AMDGPU's disassembler represents forced literals with a backend-private
     // target expression. Build a fresh literal through the public MC assembly
     // path and transplant that structured operand; do not parse printer text or
@@ -913,29 +913,71 @@ reencodeAbsoluteOperand(const InternalDecodedInst &DI, unsigned OperandIndex,
                                      " has another expression operand");
       }
     }
-    std::string LiteralAssembly =
-        ("s_add_pc_i64 lit64(0x" +
-         Twine::utohexstr(static_cast<uint64_t>(NewValue)) + ")")
-            .str();
-    SmallVector<uint8_t> LiteralBytes = assembleSingleInst(LiteralAssembly, LS);
-    std::vector<InternalDecodedInst> LiteralDecoded;
-    if (LiteralBytes.empty() ||
-        !decodeTextSection(LiteralBytes.data(), LiteralBytes.size(), LS,
-                           LiteralDecoded) ||
-        LiteralDecoded.size() != 1 ||
-        LiteralDecoded[0].Inst.getNumOperands() != 1 ||
-        !LiteralDecoded[0].Inst.getOperand(0).isExpr()) {
+    std::string LiteralAssembly;
+    unsigned LiteralOperandIndex = 0;
+    bool IsLiteral32 = false;
+    if (DI.Inst.getOpcode() == LS.SAddPcI64Opcode) {
+      LiteralAssembly =
+          ("s_add_pc_i64 lit64(0x" +
+           Twine::utohexstr(static_cast<uint64_t>(NewValue)) + ")")
+              .str();
+    } else if (DI.Inst.getOpcode() == LS.SAddNcU64Opcode) {
+      LiteralAssembly =
+          ("s_add_nc_u64 s[0:1], s[0:1], lit64(0x" +
+           Twine::utohexstr(static_cast<uint64_t>(NewValue)) + ")")
+              .str();
+      LiteralOperandIndex = 2;
+    } else if (DI.Inst.getOpcode() == LS.SAddU32Opcode) {
+      LiteralAssembly =
+          ("s_add_u32 s0, s0, lit(0x" +
+           Twine::utohexstr(static_cast<uint32_t>(NewValue)) + ")")
+              .str();
+      LiteralOperandIndex = 2;
+      IsLiteral32 = true;
+    } else if (DI.Inst.getOpcode() == LS.SAddcU32Opcode) {
+      LiteralAssembly =
+          ("s_addc_u32 s1, s1, lit(0x" +
+           Twine::utohexstr(static_cast<uint32_t>(NewValue)) + ")")
+              .str();
+      LiteralOperandIndex = 2;
+      IsLiteral32 = true;
+    } else {
       return makeDisplacementError(Twine(Context) +
-                                   " could not build an MC literal operand");
+                                   " has no MC forced-literal builder");
     }
+
+    SmallVector<uint8_t> LiteralBytes = assembleSingleInst(LiteralAssembly, LS);
+    if (LiteralBytes.empty()) {
+      return makeDisplacementError(Twine(Context) +
+                                   " could not assemble an MC literal");
+    }
+    std::vector<InternalDecodedInst> LiteralDecoded;
+    if (!decodeTextSection(LiteralBytes.data(), LiteralBytes.size(), LS,
+                           LiteralDecoded) ||
+        LiteralDecoded.size() != 1) {
+      return makeDisplacementError(Twine(Context) +
+                                   " could not decode one MC literal");
+    }
+    if (LiteralDecoded[0].Inst.getOpcode() != DI.Inst.getOpcode()) {
+      return makeDisplacementError(Twine(Context) +
+                                   " rebuilt a different MC opcode");
+    }
+    if (LiteralOperandIndex >= LiteralDecoded[0].Inst.getNumOperands()) {
+      return makeDisplacementError(Twine(Context) +
+                                   " rebuilt an MC literal without an operand");
+    }
+    const MCOperand &LiteralOperand =
+        LiteralDecoded[0].Inst.getOperand(LiteralOperandIndex);
     int64_t LiteralValue = 0;
-    if (!LiteralDecoded[0].Inst.getOperand(0).getExpr()->evaluateAsAbsolute(
-            LiteralValue) ||
-        LiteralValue != NewValue) {
+    if (!getAbsoluteOperand(LiteralOperand, LiteralValue) ||
+        (IsLiteral32 ? static_cast<uint32_t>(LiteralValue) !=
+                           static_cast<uint32_t>(NewValue)
+                     : static_cast<uint64_t>(LiteralValue) !=
+                           static_cast<uint64_t>(NewValue))) {
       return makeDisplacementError(Twine(Context) +
                                    " rebuilt the wrong MC literal value");
     }
-    Operand.setExpr(LiteralDecoded[0].Inst.getOperand(0).getExpr());
+    Operand = LiteralOperand;
   } else {
     return makeDisplacementError(Twine(Context) +
                                  " does not expose an absolute immediate");
@@ -957,21 +999,24 @@ reencodeAbsoluteOperand(const InternalDecodedInst &DI, unsigned OperandIndex,
 
 struct PendingAbsoluteRepair {
   PendingAbsoluteRepair(const InternalDecodedInst &DI, unsigned OperandIndex,
-                        int64_t NewValue, uint64_t NewOffset,
+                        int64_t NewValue, uint64_t NewOffset, bool ForceLiteral,
                         std::string Context)
       : DI(DI), OperandIndex(OperandIndex), NewValue(NewValue),
-        NewOffset(NewOffset), Context(std::move(Context)) {}
+        NewOffset(NewOffset), ForceLiteral(ForceLiteral),
+        Context(std::move(Context)) {}
 
   InternalDecodedInst DI;
   unsigned OperandIndex;
   int64_t NewValue;
   uint64_t NewOffset;
+  bool ForceLiteral;
   std::string Context;
 };
 
 Expected<bool> repairSGetPcPairForDisplacement(
     const ElfView &Elf, const LLVMState &LS, const DisplacementPlan &Plan,
     const InternalDecodedInst &GetPc,
+    const DenseSet<uint64_t> &ProtectedEntries,
     SmallVectorImpl<PendingAbsoluteRepair> &PendingRepairs) {
   if (GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg()) {
     return false;
@@ -998,6 +1043,7 @@ Expected<bool> repairSGetPcPairForDisplacement(
       !Add.Inst.getOperand(1).isReg() ||
       Add.Inst.getOperand(0).getReg() != GetPc.Inst.getOperand(0).getReg() ||
       Add.Inst.getOperand(1).getReg() != GetPc.Inst.getOperand(0).getReg() ||
+      ProtectedEntries.contains(AddOldOff) ||
       Plan.rangeOverlapsReplacement(AddOldOff, Add.Size)) {
     return false;
   }
@@ -1058,7 +1104,129 @@ Expected<bool> repairSGetPcPairForDisplacement(
                          Twine::utohexstr(GetPc.Offset))
                             .str();
   PendingRepairs.emplace_back(Add, /*OperandIndex=*/2, NewAddend, NewAddOff,
-                              std::move(Context));
+                              /*ForceLiteral=*/false, std::move(Context));
+  return true;
+}
+
+Expected<bool> repairLegacySGetPcSetPcForDisplacement(
+    const ElfView &Elf, const LLVMState &LS, const DisplacementPlan &Plan,
+    ArrayRef<InternalDecodedInst> Decoded, size_t GetPcIndex,
+    const DenseSet<uint64_t> &ProtectedEntries,
+    SmallVectorImpl<PendingAbsoluteRepair> &PendingRepairs,
+    DenseSet<uint64_t> &RepairedPcSensitiveOffsets) {
+  if (!LS.MRI || GetPcIndex >= Decoded.size())
+    return false;
+  const InternalDecodedInst &GetPc = Decoded[GetPcIndex];
+  if (GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg() ||
+      Decoded.size() - GetPcIndex < 4)
+    return false;
+
+  const InternalDecodedInst &AddLo = Decoded[GetPcIndex + 1];
+  const InternalDecodedInst &AddHi = Decoded[GetPcIndex + 2];
+  const InternalDecodedInst &SetPc = Decoded[GetPcIndex + 3];
+  if (!AddLo.DecodeSucceeded || !AddHi.DecodeSucceeded ||
+      !SetPc.DecodeSucceeded || GetPc.Offset + GetPc.Size != AddLo.Offset ||
+      AddLo.Offset + AddLo.Size != AddHi.Offset ||
+      AddHi.Offset + AddHi.Size != SetPc.Offset ||
+      AddLo.Inst.getOpcode() != LS.SAddU32Opcode ||
+      AddHi.Inst.getOpcode() != LS.SAddcU32Opcode ||
+      SetPc.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+      AddLo.Inst.getNumOperands() != 3 || AddHi.Inst.getNumOperands() != 3 ||
+      SetPc.Inst.getNumOperands() != 1 || !AddLo.Inst.getOperand(0).isReg() ||
+      !AddLo.Inst.getOperand(1).isReg() || !AddHi.Inst.getOperand(0).isReg() ||
+      !AddHi.Inst.getOperand(1).isReg() || !SetPc.Inst.getOperand(0).isReg() ||
+      AddLo.Inst.getOperand(0).getReg() != AddLo.Inst.getOperand(1).getReg() ||
+      AddHi.Inst.getOperand(0).getReg() != AddHi.Inst.getOperand(1).getReg() ||
+      SetPc.Inst.getOperand(0).getReg() != GetPc.Inst.getOperand(0).getReg() ||
+      ProtectedEntries.contains(AddLo.Offset) ||
+      ProtectedEntries.contains(AddHi.Offset) ||
+      ProtectedEntries.contains(SetPc.Offset) ||
+      Plan.rangeOverlapsReplacement(AddLo.Offset, AddLo.Size) ||
+      Plan.rangeOverlapsReplacement(AddHi.Offset, AddHi.Size) ||
+      Plan.rangeOverlapsReplacement(SetPc.Offset, SetPc.Size))
+    return false;
+
+  const MCRegister PairReg = GetPc.Inst.getOperand(0).getReg();
+  const MCRegister LoReg = AddLo.Inst.getOperand(0).getReg();
+  const MCRegister HiReg = AddHi.Inst.getOperand(0).getReg();
+  const unsigned LoSubRegIndex = LS.MRI->getSubRegIndex(PairReg, LoReg);
+  const unsigned HiSubRegIndex = LS.MRI->getSubRegIndex(PairReg, HiReg);
+  if (LoSubRegIndex == 0 || HiSubRegIndex == 0 ||
+      LoSubRegIndex >= HiSubRegIndex)
+    return false;
+
+  const uint64_t InteriorOffsets[] = {AddLo.Offset, AddHi.Offset, SetPc.Offset};
+  for (uint64_t Offset : InteriorOffsets) {
+    uint64_t BeforeInsertions = 0;
+    uint64_t AfterInsertions = 0;
+    if (!Plan.mapOffset(Offset, DisplacementMapBias::BeforeInsertedBytes,
+                        BeforeInsertions) ||
+        !Plan.mapOffset(Offset, DisplacementMapBias::AfterInsertedBytes,
+                        AfterInsertions) ||
+        BeforeInsertions != AfterInsertions)
+      return false;
+  }
+
+  int64_t OldLo = 0;
+  int64_t OldHi = 0;
+  if (!getAbsoluteOperand(AddLo.Inst.getOperand(2), OldLo) ||
+      !getAbsoluteOperand(AddHi.Inst.getOperand(2), OldHi))
+    return false;
+  const uint64_t OldDelta =
+      static_cast<uint32_t>(OldLo) |
+      (static_cast<uint64_t>(static_cast<uint32_t>(OldHi)) << 32);
+  std::optional<uint64_t> OldPcBase = checkedAddUint64(
+      Elf.textAddr(), AddLo.Offset, "legacy s_get_pc old PC base");
+  if (!OldPcBase)
+    return false;
+  // The two 32-bit adds implement modulo-2^64 arithmetic. Unsigned addition
+  // and subtraction reproduce both positive and negative PC deltas without
+  // signed overflow.
+  const uint64_t OldTarget = *OldPcBase + OldDelta;
+  Expected<uint64_t> NewTargetOrErr = remapAllocatedAddress(
+      Elf, Plan, OldTarget,
+      /*RequireExecutable=*/true, "legacy s_get_pc jump target");
+  if (!NewTargetOrErr) {
+    consumeError(NewTargetOrErr.takeError());
+    return false;
+  }
+
+  uint64_t NewPcOffset = 0;
+  if (!Plan.mapOffset(AddLo.Offset, DisplacementMapBias::AfterInsertedBytes,
+                      NewPcOffset))
+    return false;
+  std::optional<uint64_t> NewPcBase = checkedAddUint64(
+      Elf.textAddr(), NewPcOffset, "legacy s_get_pc displaced PC base");
+  if (!NewPcBase)
+    return false;
+  const uint64_t NewDelta = *NewTargetOrErr - *NewPcBase;
+  const uint32_t NewLo = static_cast<uint32_t>(NewDelta);
+  const uint32_t NewHi = static_cast<uint32_t>(NewDelta >> 32);
+
+  if (NewLo == static_cast<uint32_t>(OldLo) &&
+      NewHi == static_cast<uint32_t>(OldHi)) {
+    RepairedPcSensitiveOffsets.insert(SetPc.Offset);
+    return true;
+  }
+
+  uint64_t NewAddHiOffset = 0;
+  if (!Plan.mapOffset(AddHi.Offset, DisplacementMapBias::AfterInsertedBytes,
+                      NewAddHiOffset))
+    return false;
+  std::string LoContext = ("s_add_co_u32 for s_get_pc at old .text offset 0x" +
+                           Twine::utohexstr(GetPc.Offset))
+                              .str();
+  PendingRepairs.emplace_back(
+      AddLo, /*OperandIndex=*/2, static_cast<int64_t>(NewLo), NewPcOffset,
+      /*ForceLiteral=*/AddLo.Size > MinInstSize, std::move(LoContext));
+  std::string HiContext =
+      ("s_add_co_ci_u32 for s_get_pc at old .text offset 0x" +
+       Twine::utohexstr(GetPc.Offset))
+          .str();
+  PendingRepairs.emplace_back(
+      AddHi, /*OperandIndex=*/2, static_cast<int64_t>(NewHi), NewAddHiOffset,
+      /*ForceLiteral=*/AddHi.Size > MinInstSize, std::move(HiContext));
+  RepairedPcSensitiveOffsets.insert(SetPc.Offset);
   return true;
 }
 
@@ -1119,7 +1287,7 @@ Expected<bool> repairSAddPcForDisplacement(
       ("s_add_pc_i64 at old .text offset 0x" + Twine::utohexstr(AddPc.Offset))
           .str();
   PendingRepairs.emplace_back(AddPc, /*OperandIndex=*/0, NewDelta, NewAddPcOff,
-                              std::move(Context));
+                              /*ForceLiteral=*/false, std::move(Context));
   return true;
 }
 
@@ -1137,8 +1305,38 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
         "failed to decode .text while validating branches");
   }
 
-  SmallVector<PendingAbsoluteRepair, 4> PendingRepairs;
+  // A repaired materialization is only valid when every path executes its
+  // defining get-PC first. Protect direct and declared entries so no branch,
+  // function alias, or kernel descriptor can bypass part of the sequence.
+  DenseSet<uint64_t> ProtectedEntries;
+  for (const ElfView::FunctionTextRange &Range : Elf.functionTextRanges()) {
+    if (Range.Begin >= Elf.textAddr() &&
+        Range.Begin - Elf.textAddr() < Elf.textSize())
+      ProtectedEntries.insert(Range.Begin - Elf.textAddr());
+  }
+  for (const KernelDescriptorInfo &Descriptor : Elf.kernelDescriptors()) {
+    std::optional<uint64_t> Entry = entryVAddr(Descriptor);
+    if (!Entry) {
+      return makeDisplacementError(
+          "failed to resolve kernel entry while protecting PC sequences");
+    }
+    if (*Entry >= Elf.textAddr() && *Entry - Elf.textAddr() < Elf.textSize())
+      ProtectedEntries.insert(*Entry - Elf.textAddr());
+  }
   for (const InternalDecodedInst &DI : Decoded) {
+    if (!DI.DecodeSucceeded ||
+        (!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)))
+      continue;
+    uint64_t Target = 0;
+    if (LS.MIA->evaluateBranch(DI.Inst, DI.Offset, DI.Size, Target) &&
+        Target < Elf.textSize())
+      ProtectedEntries.insert(Target);
+  }
+
+  SmallVector<PendingAbsoluteRepair, 4> PendingRepairs;
+  DenseSet<uint64_t> RepairedPcSensitiveOffsets;
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
     if (Plan.rangeOverlapsReplacement(DI.Offset, DI.Size))
       continue;
     if (!DI.DecodeSucceeded) {
@@ -1149,8 +1347,15 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
 
     const MCInst &Inst = DI.Inst;
     if (Inst.getOpcode() == LS.SGetPcI64Opcode) {
-      Expected<bool> RepairedOrErr =
-          repairSGetPcPairForDisplacement(Elf, LS, Plan, DI, PendingRepairs);
+      Expected<bool> RepairedOrErr = repairSGetPcPairForDisplacement(
+          Elf, LS, Plan, DI, ProtectedEntries, PendingRepairs);
+      if (!RepairedOrErr)
+        return RepairedOrErr.takeError();
+      if (*RepairedOrErr)
+        continue;
+      RepairedOrErr = repairLegacySGetPcSetPcForDisplacement(
+          Elf, LS, Plan, Decoded, I, ProtectedEntries, PendingRepairs,
+          RepairedPcSensitiveOffsets);
       if (!RepairedOrErr)
         return RepairedOrErr.takeError();
       if (*RepairedOrErr)
@@ -1164,6 +1369,8 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
       if (*RepairedOrErr)
         continue;
     }
+    if (RepairedPcSensitiveOffsets.contains(DI.Offset))
+      continue;
     if (isPcSensitiveForDisplacement(DI, LS)) {
       StringRef Mnemonic = "<unknown>";
       if (LS.MCIP) {
@@ -1234,8 +1441,9 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
   // one through the MC parser resets LS.Ctx, so do that only after the decoded
   // records are no longer inspected.
   for (PendingAbsoluteRepair &Repair : PendingRepairs) {
-    Expected<SmallVector<uint8_t>> CodeOrErr = reencodeAbsoluteOperand(
-        Repair.DI, Repair.OperandIndex, Repair.NewValue, LS, Repair.Context);
+    Expected<SmallVector<uint8_t>> CodeOrErr =
+        reencodeAbsoluteOperand(Repair.DI, Repair.OperandIndex, Repair.NewValue,
+                                Repair.ForceLiteral, LS, Repair.Context);
     if (!CodeOrErr)
       return CodeOrErr.takeError();
     SmallVector<uint8_t> &Code = *CodeOrErr;

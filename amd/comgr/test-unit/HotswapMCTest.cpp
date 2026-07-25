@@ -2576,6 +2576,278 @@ TEST(TextDisplacement, RepairsGetPcPairToAllocatedData) {
             0x2000u);
 }
 
+TEST(TextDisplacement, RepairsLegacyGetPcSetPcSequence) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text =
+      assembleInstructions("s_get_pc_i64 s[8:9]\n"
+                           "s_add_u32 s8, s8, lit(0x18)\n"
+                           "s_addc_u32 s9, s9, lit(0x0)\n"
+                           "s_set_pc_i64 s[8:9]\n"
+                           "s_nop 0\n"
+                           "s_endpgm",
+                           S);
+  ASSERT_EQ(Text.size(), 32u);
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 24;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+  llvm::Expected<ElfView> OutView = ElfView::create(
+      reinterpret_cast<uint8_t *>(Out->getBufferStart()), Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(
+      decodeTextSection(OutView->textData(), OutView->textSize(), S, Decoded));
+  ASSERT_GE(Decoded.size(), 8u);
+  ASSERT_EQ(Decoded[0].Inst.getOpcode(), S.SGetPcI64Opcode);
+  ASSERT_EQ(Decoded[1].Inst.getOpcode(), S.SAddU32Opcode);
+  ASSERT_EQ(Decoded[2].Inst.getOpcode(), S.SAddcU32Opcode);
+  ASSERT_EQ(Decoded[3].Inst.getOpcode(), S.SSetPcI64Opcode);
+  ASSERT_EQ(Decoded[1].Size, 8u);
+  ASSERT_EQ(Decoded[2].Size, 8u);
+  ASSERT_TRUE(Decoded[1].Inst.getOperand(2).isExpr());
+  ASSERT_TRUE(Decoded[2].Inst.getOperand(2).isExpr());
+  int64_t NewLo = 0;
+  int64_t NewHi = 0;
+  ASSERT_TRUE(
+      Decoded[1].Inst.getOperand(2).getExpr()->evaluateAsAbsolute(NewLo));
+  ASSERT_TRUE(
+      Decoded[2].Inst.getOperand(2).getExpr()->evaluateAsAbsolute(NewHi));
+  EXPECT_EQ(NewLo, 0x1c);
+  EXPECT_EQ(NewHi, 0);
+  EXPECT_EQ(OutView->textAddr() + Decoded[1].Offset +
+                (static_cast<uint64_t>(static_cast<uint32_t>(NewHi)) << 32) +
+                static_cast<uint32_t>(NewLo),
+            OutView->textAddr() + Decoded[6].Offset);
+  EXPECT_EQ(Decoded[6].Mnemonic, "s_endpgm");
+}
+
+TEST(TextDisplacement, RepairsBackwardLegacyGetPcSetPcSequence) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text =
+      assembleInstructions("s_endpgm\n"
+                           "s_get_pc_i64 s[8:9]\n"
+                           "s_add_u32 s8, s8, lit(0xfffffff8)\n"
+                           "s_addc_u32 s9, s9, lit(0xffffffff)\n"
+                           "s_set_pc_i64 s[8:9]",
+                           S);
+  ASSERT_EQ(Text.size(), 28u);
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 4;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+  llvm::Expected<ElfView> OutView = ElfView::create(
+      reinterpret_cast<uint8_t *>(Out->getBufferStart()), Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(
+      decodeTextSection(OutView->textData(), OutView->textSize(), S, Decoded));
+  ASSERT_GE(Decoded.size(), 6u);
+  ASSERT_EQ(Decoded[2].Inst.getOpcode(), S.SGetPcI64Opcode);
+  ASSERT_EQ(Decoded[3].Inst.getOpcode(), S.SAddU32Opcode);
+  ASSERT_EQ(Decoded[4].Inst.getOpcode(), S.SAddcU32Opcode);
+  ASSERT_EQ(Decoded[5].Inst.getOpcode(), S.SSetPcI64Opcode);
+  int64_t NewLo = 0;
+  int64_t NewHi = 0;
+  const llvm::MCOperand &LoOperand = Decoded[3].Inst.getOperand(2);
+  const llvm::MCOperand &HiOperand = Decoded[4].Inst.getOperand(2);
+  ASSERT_TRUE(LoOperand.isImm() || LoOperand.isExpr());
+  ASSERT_TRUE(HiOperand.isImm() || HiOperand.isExpr());
+  if (LoOperand.isImm())
+    NewLo = LoOperand.getImm();
+  else
+    ASSERT_TRUE(LoOperand.getExpr()->evaluateAsAbsolute(NewLo));
+  if (HiOperand.isImm())
+    NewHi = HiOperand.getImm();
+  else
+    ASSERT_TRUE(HiOperand.getExpr()->evaluateAsAbsolute(NewHi));
+  EXPECT_EQ(static_cast<uint32_t>(NewLo), 0xfffffff4u);
+  EXPECT_EQ(static_cast<uint32_t>(NewHi), 0xffffffffu);
+  const uint64_t Delta =
+      static_cast<uint32_t>(NewLo) |
+      (static_cast<uint64_t>(static_cast<uint32_t>(NewHi)) << 32);
+  EXPECT_EQ(OutView->textAddr() + Decoded[3].Offset + Delta,
+            OutView->textAddr());
+}
+
+TEST(TextDisplacement, RejectsBranchIntoLegacyGetPcSetPcSequence) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  for (unsigned BranchImmediate : {1u, 3u, 5u}) {
+    std::string Assembly = ("s_branch " + llvm::Twine(BranchImmediate) +
+                            "\n"
+                            "s_get_pc_i64 s[8:9]\n"
+                            "s_add_u32 s8, s8, lit(0x18)\n"
+                            "s_addc_u32 s9, s9, lit(0x0)\n"
+                            "s_set_pc_i64 s[8:9]\n"
+                            "s_nop 0\n"
+                            "s_endpgm")
+                               .str();
+    llvm::SmallVector<uint8_t> Text = assembleInstructions(Assembly, S);
+    ASSERT_EQ(Text.size(), 36u);
+    std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(ElfBytes.data(), ElfBytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+    DisplacementEdit Edit;
+    Edit.Offset = 28;
+    Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+    llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+        tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+    ASSERT_FALSE((bool)OutOrErr)
+        << "accepted branch immediate " << BranchImmediate;
+    std::string Reason = llvm::toString(OutOrErr.takeError());
+    EXPECT_NE(Reason.find("pc-sensitive"), std::string::npos) << Reason;
+  }
+}
+
+TEST(TextDisplacement, RejectsBranchIntoGetPcPair) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text =
+      assembleInstructions("s_branch 1\n"
+                           "s_get_pc_i64 s[8:9]\n"
+                           "s_add_nc_u64 s[8:9], s[8:9], lit64(0x10)\n"
+                           "s_nop 0\n"
+                           "s_endpgm",
+                           S);
+  ASSERT_EQ(Text.size(), 28u);
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 20;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("pc-sensitive"), std::string::npos) << Reason;
+}
+
+TEST(TextDisplacement, RejectsInsertionInsideLegacyGetPcSetPcSequence) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text =
+      assembleInstructions("s_get_pc_i64 s[8:9]\n"
+                           "s_add_u32 s8, s8, lit(0x18)\n"
+                           "s_addc_u32 s9, s9, lit(0x0)\n"
+                           "s_set_pc_i64 s[8:9]\n"
+                           "s_nop 0\n"
+                           "s_endpgm",
+                           S);
+  ASSERT_EQ(Text.size(), 32u);
+  for (uint64_t Offset : {uint64_t{4}, uint64_t{12}, uint64_t{20}}) {
+    std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(ElfBytes.data(), ElfBytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+    DisplacementEdit Edit;
+    Edit.Offset = Offset;
+    Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+    llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+        tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+    ASSERT_FALSE((bool)OutOrErr) << "accepted insertion at " << Offset;
+    std::string Reason = llvm::toString(OutOrErr.takeError());
+    EXPECT_NE(Reason.find("pc-sensitive"), std::string::npos) << Reason;
+  }
+}
+
+TEST(TextDisplacement, RejectsMalformedLegacyGetPcSetPcSequence) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const char *Cases[] = {
+      "s_get_pc_i64 s[8:9]\n"
+      "s_add_u32 s10, s10, lit(0x18)\n"
+      "s_addc_u32 s9, s9, lit(0x0)\n"
+      "s_set_pc_i64 s[8:9]\n"
+      "s_endpgm",
+      "s_get_pc_i64 s[8:9]\n"
+      "s_add_u32 s8, s8, lit(0x18)\n"
+      "s_addc_u32 s9, s9, lit(0x0)\n"
+      "s_set_pc_i64 s[10:11]\n"
+      "s_endpgm",
+      "s_get_pc_i64 s[8:9]\n"
+      "s_add_u32 s8, s8, lit(0x18)\n"
+      "s_addc_u32 s9, s9, lit(0x0)\n"
+      "s_nop 0\n"
+      "s_endpgm",
+  };
+  for (const char *Assembly : Cases) {
+    llvm::SmallVector<uint8_t> Text = assembleInstructions(Assembly, S);
+    ASSERT_FALSE(Text.empty());
+    std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(ElfBytes.data(), ElfBytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+    DisplacementEdit Edit;
+    Edit.Offset = 0;
+    Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+    llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+        tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+    ASSERT_FALSE((bool)OutOrErr);
+    std::string Reason = llvm::toString(OutOrErr.takeError());
+    EXPECT_NE(Reason.find("pc-sensitive"), std::string::npos) << Reason;
+  }
+}
+
+TEST(TextDisplacement, RejectsLegacySetPcTargetOutsideExecutableText) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text =
+      assembleInstructions("s_get_pc_i64 s[8:9]\n"
+                           "s_add_u32 s8, s8, lit(0xffc)\n"
+                           "s_addc_u32 s9, s9, lit(0x0)\n"
+                           "s_set_pc_i64 s[8:9]\n"
+                           "s_endpgm",
+                           S);
+  ASSERT_FALSE(Text.empty());
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("pc-sensitive"), std::string::npos) << Reason;
+}
+
 TEST(TextDisplacement, RejectsInsertionBetweenGetPcAndAdd) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
