@@ -105,6 +105,7 @@ add_executable(HotswapMCTests
   HotswapMCTest.cpp
   ../src/comgr-hotswap-b0a0.cpp
   ../src/comgr-hotswap-displacement.cpp
+  ../src/comgr-hotswap-eh-frame.cpp
   ../src/comgr-hotswap-entry-trampoline.cpp
   ../src/comgr-hotswap-entry-trampoline-fast.cpp
   ../src/comgr-hotswap-elf.cpp
@@ -125,6 +126,7 @@ add_executable(HotswapMCTests
 
 llvm_map_components_to_libnames(COMGR_TEST_UNIT_MC_LIBS
   BinaryFormat
+  DebugInfoDWARF
   MC
   MCDisassembler
   MCParser

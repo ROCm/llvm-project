@@ -74,8 +74,10 @@ Error validateDebugSections(const ElfView &Elf) {
           Twine(toString(NameOrErr.takeError())));
     }
     StringRef Name = *NameOrErr;
+    if (Name == ".eh_frame")
+      continue;
     if (Name.starts_with(".debug") || Name.starts_with(".zdebug") ||
-        Name == ".eh_frame" || Name == ".eh_frame_hdr") {
+        Name == ".eh_frame_hdr") {
       return makeDisplacementError("debug/unwind section '" + Twine(Name) +
                                    "' requires address remapping");
     }
@@ -760,6 +762,8 @@ Error applyTextDisplacement(const ElfView &Elf, const LLVMState &LS,
 
   if (Error Err =
           rewriteKernelDescriptorEntriesForDisplacement(OutBuf, Elf, Plan))
+    return Err;
+  if (Error Err = remapEhFrameForDisplacement(Elf, Plan, OutBuf))
     return Err;
 
   log() << "hotswap: displacement: grew ELF from " << InputSize << " to "

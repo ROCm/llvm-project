@@ -381,6 +381,13 @@ private:
   std::vector<DisplacementEdit> Edits;
 };
 
+/// Remap supported `.eh_frame` FDEs after `.text` displacement. The helper
+/// reparses the input unwind table, validates every record before writing, and
+/// updates only the already-private output buffer.
+llvm::Error remapEhFrameForDisplacement(const ElfView &OldElf,
+                                        const DisplacementPlan &Plan,
+                                        llvm::WritableMemoryBuffer &OutBuf);
+
 // Kernel-entry stubs are appended as normal .text growth. Keep each entry on
 // the same 256-byte alignment expected by AMDGPU kernel descriptors.
 static constexpr uint64_t KernelEntryStubStride = 256;
