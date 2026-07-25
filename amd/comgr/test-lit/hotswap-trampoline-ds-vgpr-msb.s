@@ -1,5 +1,6 @@
 // Verify that splitting a two-address DS load whose second destination crosses
-// v255 rebases that half to v0 under a temporary destination VGPR-MSB mode.
+// the active VGPR bank rebases that half to v0 under a temporary destination
+// VGPR-MSB mode without losing the nonzero source or destination bank.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
@@ -10,11 +11,12 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 // DISASM-LABEL: <test_ds_vgpr_msb>:
-// DISASM:      s_branch
+// DISASM:      s_set_vgpr_msb 0x41
+// DISASM-NEXT: s_branch
 // DISASM:      ds_load_b64 v[254:255], v88 offset:680
-// DISASM-NEXT: s_set_vgpr_msb 64
-// DISASM-NEXT: ds_load_b64 v[0:1]{{.*v\[256:257\].*}}v88 offset:688
-// DISASM-NEXT: s_set_vgpr_msb 0x4000
+// DISASM-NEXT: s_set_vgpr_msb 0x4181
+// DISASM-NEXT: ds_load_b64 v[0:1]{{.*v\[512:513\].*}}v88{{.*v344.*}}offset:688
+// DISASM-NEXT: s_set_vgpr_msb 0x8141
 // DISASM-NEXT: s_wait_dscnt 0x0
 // DISASM:      s_branch
 
@@ -29,7 +31,7 @@
 .p2align 8
 .type test_ds_vgpr_msb,@function
 test_ds_vgpr_msb:
-  s_set_vgpr_msb 0
+  s_set_vgpr_msb 0x41
   ds_load_2addr_b64 v[254:257], v88 offset0:85 offset1:86
   s_wait_dscnt 0x0
   s_endpgm
