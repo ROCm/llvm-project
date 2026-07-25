@@ -1360,6 +1360,11 @@ struct DirectControlFlowInfo {
   // These do not make every instruction in their containing function a
   // potential indirect destination.
   llvm::DenseSet<uint64_t> BoundedIndirectTransfers;
+  // Exact .text-relative decoded-boundary targets for each proven finite
+  // register transfer, keyed by that transfer's decoded offset. An empty
+  // target vector means the transfer is proven to leave local .text.
+  llvm::DenseMap<uint64_t, llvm::SmallVector<uint64_t, 2>>
+      BoundedIndirectTargets;
   // A reachable indirect transfer can enter bytes that are not represented
   // by an original instruction or symbol, including synthetic source tails
   // created while planning gateways. Keep this distinct from unresolved call
