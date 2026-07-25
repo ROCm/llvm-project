@@ -71,11 +71,12 @@ static constexpr unsigned Gfx1250MaxSgprs = 106;
 static constexpr unsigned Gfx1250VgprGranuleSize = 16;
 
 /// Sample the test/A-B switch once for each public rewrite. Empty and "0"
-/// preserve the default displacement path; every other non-empty value selects
-/// trampoline placement. Sampling here, rather than in a function-local
-/// static, lets long-lived COMGR clients change the mode between requests
-/// without changing it partway through one transaction.
-static bool displacementDisabledForRequest() {
+/// preserve transactional displacement for growing instruction replacements;
+/// every other non-empty value selects trampoline placement for those
+/// replacements. Sampling here, rather than in a function-local static, lets
+/// long-lived COMGR clients change the mode between requests without changing
+/// it partway through one transaction.
+static bool transactionalDisplacementDisabledForRequest() {
   const char *Value = std::getenv("AMD_COMGR_HOTSWAP_DISABLE_DISPLACEMENT");
   return Value && !StringRef(Value).empty() && StringRef(Value) != "0";
 }
@@ -2893,7 +2894,7 @@ copyOutputBuffer(const void *Data, size_t Size, StringRef CopyKind) {
 static amd_comgr_status_t retargetCodeObjectImpl(
     const void *ElfData, size_t ElfSize, const TargetIdentifier &TargetIdent,
     const Gfx1250RewriteOptions &Options, std::unique_ptr<MemoryBuffer> &Out,
-    bool AllowTextDisplacement, HotswapProfile &Profile) {
+    bool AllowTransactionalDisplacement, HotswapProfile &Profile) {
   // The dispatcher fetches the patch vtable lazily via
   // getHotswapPatchVTable() inside applyGfx1250B0toA0Rules; the singleton's
   // initializer binds every register*Patch slot on first access, so no
@@ -2970,7 +2971,7 @@ static amd_comgr_status_t retargetCodeObjectImpl(
   // NOP-sled/trampoline planner sees the final instruction offsets. If the ELF
   // cannot be displaced safely, continue from the pristine working copy and
   // append the established entry stubs below.
-  if (Options.RunEntryTrampolines && AllowTextDisplacement && !UseFastAppend) {
+  if (Options.RunEntryTrampolines && !UseFastAppend) {
     std::vector<DisplacementEdit> EntryDisplacements;
     std::optional<uint32_t> EntryCount =
         collectKernelEntryDisplacements(Elf, LS, EntryDisplacements);
@@ -2991,9 +2992,10 @@ static amd_comgr_status_t retargetCodeObjectImpl(
         Gfx1250RewriteOptions RemainingOptions = Options;
         RemainingOptions.RunEntryTrampolines = false;
         RemainingOptions.UseB0B0EntryFastPath = false;
-        return retargetCodeObjectImpl(
-            Displaced->getBufferStart(), Displaced->getBufferSize(),
-            TargetIdent, RemainingOptions, Out, AllowTextDisplacement, Profile);
+        return retargetCodeObjectImpl(Displaced->getBufferStart(),
+                                      Displaced->getBufferSize(), TargetIdent,
+                                      RemainingOptions, Out,
+                                      AllowTransactionalDisplacement, Profile);
       }
 
       log() << "hotswap: entry displacement unavailable: "
@@ -3004,7 +3006,7 @@ static amd_comgr_status_t retargetCodeObjectImpl(
 
   RewriteConfig Config = makeGfx1250B0A0Config();
   Config.RunB0A0Patches = Options.RunB0A0Patches;
-  Config.AllowTextDisplacement = AllowTextDisplacement;
+  Config.AllowTextDisplacement = AllowTransactionalDisplacement;
   Config.MaskPolicy = Options.MaskPolicy;
 
   uint8_t *Text = Elf.textData();
@@ -3033,11 +3035,12 @@ static amd_comgr_status_t retargetCodeObjectImpl(
         DisplacementDeclined, Profile);
     if (Prof)
       Profile.add(HotswapMetric::B0A0Dispatch, profNowNs() - DispatchT0, 0);
-    if (!Patched && AllowTextDisplacement && DisplacementDeclined) {
+    if (!Patched && AllowTransactionalDisplacement && DisplacementDeclined) {
       log() << "hotswap: displacement collection declined; retrying the "
                "original object with trampoline placement\n";
       return retargetCodeObjectImpl(ElfData, ElfSize, TargetIdent, Options, Out,
-                                    /*AllowTextDisplacement=*/false, Profile);
+                                    /*AllowTransactionalDisplacement=*/false,
+                                    Profile);
     }
     if (!Patched)
       return AMD_COMGR_STATUS_ERROR;
@@ -3054,9 +3057,9 @@ static amd_comgr_status_t retargetCodeObjectImpl(
         std::string Reason = toString(GrownOrErr.takeError());
         log() << "hotswap: transactional displacement declined: " << Reason
               << "; retrying the original object with trampoline placement\n";
-        return retargetCodeObjectImpl(ElfData, ElfSize, TargetIdent, Options,
-                                      Out,
-                                      /*AllowTextDisplacement=*/false, Profile);
+        return retargetCodeObjectImpl(
+            ElfData, ElfSize, TargetIdent, Options, Out,
+            /*AllowTransactionalDisplacement=*/false, Profile);
       }
 
       std::unique_ptr<WritableMemoryBuffer> Grown = std::move(*GrownOrErr);
@@ -3080,7 +3083,7 @@ static amd_comgr_status_t retargetCodeObjectImpl(
       RemainingOptions.MaskPolicy = MaskWorkaroundPolicy::None;
       return retargetCodeObjectImpl(
           Grown->getBufferStart(), Grown->getBufferSize(), TargetIdent,
-          RemainingOptions, Out, AllowTextDisplacement, Profile);
+          RemainingOptions, Out, AllowTransactionalDisplacement, Profile);
     }
   } else {
     log() << "hotswap: instruction patches disabled for this rewrite\n";
@@ -3276,9 +3279,10 @@ amd_comgr_status_t retargetCodeObject(const void *ElfData, size_t ElfSize,
   [[maybe_unused]] HotswapProfile::Scope TotalScope =
       Profile.time(HotswapMetric::RewriteTotal);
 
-  const bool AllowTextDisplacement = !displacementDisabledForRequest();
+  const bool AllowTransactionalDisplacement =
+      !transactionalDisplacementDisabledForRequest();
   return retargetCodeObjectImpl(ElfData, ElfSize, TargetIdent, Options, Out,
-                                AllowTextDisplacement, Profile);
+                                AllowTransactionalDisplacement, Profile);
 }
 
 } // namespace hotswap
