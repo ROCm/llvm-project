@@ -6159,8 +6159,37 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       Info.Targets.insert(*Continuation);
     }
   }
-  for (const BoundedSetPcReturn &Return : BoundedReturns)
-    Info.BoundedIndirectTransfers.insert(Decoded[Return.InstIndex].Offset);
+  DenseSet<uint64_t> DecodedOffsets;
+  for (const InternalDecodedInst &DI : Decoded)
+    if (DI.DecodeSucceeded)
+      DecodedOffsets.insert(DI.Offset);
+  for (const BoundedSetPcReturn &Return : BoundedReturns) {
+    uint64_t ReturnOffset = Decoded[Return.InstIndex].Offset;
+    SmallVector<uint64_t, 2> LocalTargets;
+    for (uint64_t Target : Return.Targets) {
+      if (Target >= TextSize)
+        continue;
+      if (!DecodedOffsets.contains(Target)) {
+        log() << "hotswap: audited bounded return at 0x"
+              << utohexstr(ReturnOffset) << " has non-boundary local target 0x"
+              << utohexstr(Target) << "\n";
+        return std::nullopt;
+      }
+      LocalTargets.push_back(Target);
+    }
+    llvm::sort(LocalTargets);
+    LocalTargets.erase(std::unique(LocalTargets.begin(), LocalTargets.end()),
+                       LocalTargets.end());
+    auto Inserted =
+        Info.BoundedIndirectTargets.try_emplace(ReturnOffset, LocalTargets);
+    if (!Inserted.second && Inserted.first->second != LocalTargets) {
+      log() << "hotswap: conflicting audited target sets for bounded return at "
+               "0x"
+            << utohexstr(ReturnOffset) << "\n";
+      return std::nullopt;
+    }
+    Info.BoundedIndirectTransfers.insert(ReturnOffset);
+  }
   if (!AbiEntrySet && !IndirectControlFlowClosed && HasUnboundedIndirectEntries)
     Info.HasUnboundedIndirectEntries = true;
   return Info;
