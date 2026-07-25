@@ -1525,6 +1525,15 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
                                             const LLVMState &LS,
                                             llvm::MCRegister Register);
 
+/// Prove that \p Register's incoming value is not read on any path from the
+/// instruction after [\p InstOffset, +\p InstSize) to the owning function's
+/// exits. The proof decodes the current text bytes rather than relying on the
+/// original PatchContext::Decoded snapshot.
+bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
+                                            uint64_t InstOffset,
+                                            uint32_t InstSize,
+                                            llvm::MCRegister Register);
+
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement);

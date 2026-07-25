@@ -60,6 +60,10 @@
 // FULL-DISASM: s_get_pc_i64 vcc
 // FULL-DISASM-NEXT: s_add_nc_u64 vcc, vcc,
 // FULL-DISASM-NEXT: s_set_pc_i64 vcc
+// RUN: hotswap-rewrite %t.full-sgpr.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
 
 // COM: A live VCC can instead use an already-allocated numbered pair after
 // COM: CFG liveness proves that neither half is consumed by the replacement or
@@ -74,6 +78,10 @@
 // RUN:   | %FileCheck --check-prefix=LOCAL-PAIR-LOG %s
 // LOCAL-PAIR-LOG: hotswap: safe far return: reusing locally dead s[104:105]
 // LOCAL-PAIR-LOG: RESULT: SUCCESS
+// RUN: hotswap-rewrite %t.local-pair.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
 
 // COM: When the continuation reads VCC before redefining it, a wave32 rewrite
 // COM: preserves VCC_LO in the one remaining numbered SGPR. The source reaches
@@ -97,6 +105,31 @@
 // LIVE-DISASM: s_cbranch_vccz
 // LIVE-DISASM: s_mov_b32 s105, vcc_lo
 // LIVE-DISASM-NEXT: s_get_pc_i64 vcc
+// RUN: hotswap-rewrite %t.live-vcc.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
+
+// COM: Wave64 cannot preserve live VCC in one numbered SGPR. With the same
+// COM: exhausted register file it must select the registerless island path,
+// COM: never the wave32-only VCC_LO preservation path.
+// RUN: sed -e 's/\.amdhsa_wavefront_size32 1/.amdhsa_wavefront_size32 0/' \
+// RUN:   -e 's/\.wavefront_size: 32/.wavefront_size: 64/' \
+// RUN:   %t.live-vcc.s > %t.live-vcc-wave64.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.live-vcc-wave64.s -o %t.live-vcc-wave64.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 \
+// RUN:   hotswap-rewrite %t.live-vcc-wave64.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --output %t.live-vcc-wave64.out.elf 2>&1 \
+// RUN:   | %FileCheck --check-prefix=WAVE64-LOG %s
+// WAVE64-LOG: hotswap: safe far return: no register pair
+// WAVE64-LOG-NOT: preserving live wave32 VCC_LO
+// WAVE64-LOG: RESULT: SUCCESS
+// RUN: hotswap-rewrite %t.live-vcc-wave64.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
 
 // COM: A metadata-less object also fails closed because scratch usage cannot
 // COM: be charged to its owning kernel.

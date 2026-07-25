@@ -522,8 +522,7 @@ encodeSetPcGateway(const LLVMState &LS, uint64_t FromOffset,
 
 static std::optional<uint32_t>
 getSetPcGatewayLayoutSize(uint64_t FromOffset, uint64_t TargetOffset,
-                          unsigned SgprBase, bool UseVcc,
-                          bool PreserveVcc) {
+                          unsigned SgprBase, bool UseVcc, bool PreserveVcc) {
   if (PreserveVcc && !UseVcc)
     return std::nullopt;
   if (!UseVcc && (SgprBase & 1u) != 0)
@@ -532,9 +531,9 @@ getSetPcGatewayLayoutSize(uint64_t FromOffset, uint64_t TargetOffset,
   uint64_t SetPcOffset = FromOffset;
   uint32_t PrefixBytes = 0;
   if (PreserveVcc) {
-    std::optional<uint64_t> Offset = checkedAddUint64(
-        FromOffset, VccSaveRestoreBytes,
-        "VCC-preserving set-PC gateway layout offset");
+    std::optional<uint64_t> Offset =
+        checkedAddUint64(FromOffset, VccSaveRestoreBytes,
+                         "VCC-preserving set-PC gateway layout offset");
     if (!Offset)
       return std::nullopt;
     SetPcOffset = *Offset;
@@ -567,9 +566,8 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
     if (Distance >= MaxSledDistance || Distance >= BestDistance ||
         LS.encodeSBranch(FromOffset, Sled.WritePos).empty())
       continue;
-    std::optional<uint32_t> LayoutSize =
-        getSetPcGatewayLayoutSize(Sled.WritePos, TargetOffset, SgprBase,
-                                  UseVcc, PreserveVcc);
+    std::optional<uint32_t> LayoutSize = getSetPcGatewayLayoutSize(
+        Sled.WritePos, TargetOffset, SgprBase, UseVcc, PreserveVcc);
     if (!LayoutSize)
       return createStringError(
           Twine("failed to encode set-PC gateway at candidate offset 0x") +
@@ -584,9 +582,8 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
   }
   if (!Best)
     return std::nullopt;
-  std::optional<SmallVector<uint8_t>> BestBytes =
-      encodeSetPcGateway(LS, Best->WritePos, TargetOffset, SgprBase, UseVcc,
-                         PreserveVcc);
+  std::optional<SmallVector<uint8_t>> BestBytes = encodeSetPcGateway(
+      LS, Best->WritePos, TargetOffset, SgprBase, UseVcc, PreserveVcc);
   if (!BestBytes)
     return createStringError(
         Twine("failed to encode set-PC gateway at candidate offset 0x") +
@@ -937,35 +934,87 @@ static bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
   return false;
 }
 
-static bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
-                                                   uint64_t InstOffset,
-                                                   uint32_t InstSize,
-                                                   MCRegister Register) {
+static bool
+addCurrentDecodedSuccessor(ArrayRef<InternalDecodedInst> CurrentDecoded,
+                           uint64_t FunctionBegin, uint64_t FunctionEnd,
+                           uint64_t Offset, SmallVectorImpl<size_t> &Worklist) {
+  if (Offset < FunctionBegin || Offset >= FunctionEnd) {
+    log() << "hotswap: safe far return: successor 0x" << utohexstr(Offset)
+          << " leaves function range [0x" << utohexstr(FunctionBegin) << ", 0x"
+          << utohexstr(FunctionEnd) << ")\n";
+    return false;
+  }
+  ArrayRef<InternalDecodedInst>::const_iterator Successor = std::lower_bound(
+      CurrentDecoded.begin(), CurrentDecoded.end(), Offset,
+      [](const InternalDecodedInst &Candidate, uint64_t Target) {
+        return Candidate.Offset < Target;
+      });
+  if (Successor == CurrentDecoded.end() || Successor->Offset != Offset) {
+    log() << "hotswap: safe far return: successor 0x" << utohexstr(Offset)
+          << " is not a decoded instruction boundary\n";
+    return false;
+  }
+  Worklist.push_back(Successor - CurrentDecoded.begin());
+  return true;
+}
+
+bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
+                                            uint64_t InstOffset,
+                                            uint32_t InstSize,
+                                            MCRegister Register) {
   std::optional<ElfView::FunctionTextRange> FunctionRange =
       Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
   if (!FunctionRange)
     return false;
+  if (FunctionRange->End < FunctionRange->Begin ||
+      FunctionRange->Begin > Ctx.TextSize ||
+      FunctionRange->End - FunctionRange->Begin >
+          Ctx.TextSize - FunctionRange->Begin) {
+    log() << "hotswap: safe far return: function range [0x"
+          << utohexstr(FunctionRange->Begin) << ", 0x"
+          << utohexstr(FunctionRange->End)
+          << ") is outside the current .text buffer\n";
+    return false;
+  }
+
+  // Patch passes visit source instructions in increasing address order, but an
+  // earlier pass can already have emitted replacement code into a later NOP
+  // sled. Decode the current function bytes synchronously so the proof observes
+  // those writes rather than the original Ctx.Decoded snapshot. Hotswap
+  // rewriting is single-threaded and no pass mutates Ctx.Text during this
+  // decode-and-walk operation.
+  std::vector<InternalDecodedInst> CurrentDecoded;
+  uint64_t FunctionSize = FunctionRange->End - FunctionRange->Begin;
+  if (!decodeTextSection(Ctx.Text + FunctionRange->Begin, FunctionSize, Ctx.LS,
+                         CurrentDecoded)) {
+    log() << "hotswap: safe far return: failed to decode current function "
+             "bytes at 0x"
+          << utohexstr(FunctionRange->Begin) << "\n";
+    return false;
+  }
+  for (InternalDecodedInst &DI : CurrentDecoded)
+    DI.Offset += FunctionRange->Begin;
 
   std::optional<uint64_t> Continuation = checkedAddUint64(
       InstOffset, InstSize, "far-return register liveness continuation");
   if (!Continuation)
     return false;
-  std::vector<InternalDecodedInst>::const_iterator It =
-      std::lower_bound(Ctx.Decoded.cbegin(), Ctx.Decoded.cend(), *Continuation,
-                       [](const InternalDecodedInst &DI, uint64_t Offset) {
-                         return DI.Offset < Offset;
-                       });
-  if (It == Ctx.Decoded.cend() || It->Offset != *Continuation)
+  std::vector<InternalDecodedInst>::const_iterator It = std::lower_bound(
+      CurrentDecoded.cbegin(), CurrentDecoded.cend(), *Continuation,
+      [](const InternalDecodedInst &DI, uint64_t Offset) {
+        return DI.Offset < Offset;
+      });
+  if (It == CurrentDecoded.cend() || It->Offset != *Continuation)
     return false;
 
   SmallVector<size_t, 8> Worklist;
   DenseSet<size_t> Visited;
-  Worklist.push_back(It - Ctx.Decoded.cbegin());
+  Worklist.push_back(It - CurrentDecoded.cbegin());
   while (!Worklist.empty()) {
     size_t Index = Worklist.pop_back_val();
     if (!Visited.insert(Index).second)
       continue;
-    const InternalDecodedInst &DI = Ctx.Decoded[Index];
+    const InternalDecodedInst &DI = CurrentDecoded[Index];
     if (!DI.DecodeSucceeded || !Ctx.LS.MIA ||
         DI.Offset < FunctionRange->Begin || DI.Offset >= FunctionRange->End)
       return false;
@@ -976,28 +1025,15 @@ static bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
         DI.Inst.getOpcode() == Ctx.LS.SEndPgmSavedOpcode)
       continue;
 
-    auto AddSuccessor = [&](uint64_t Offset) {
-      if (Offset < FunctionRange->Begin || Offset >= FunctionRange->End)
-        return false;
-      std::vector<InternalDecodedInst>::const_iterator Successor =
-          std::lower_bound(
-              Ctx.Decoded.cbegin(), Ctx.Decoded.cend(), Offset,
-              [](const InternalDecodedInst &Candidate, uint64_t Target) {
-                return Candidate.Offset < Target;
-              });
-      if (Successor == Ctx.Decoded.cend() || Successor->Offset != Offset)
-        return false;
-      Worklist.push_back(Successor - Ctx.Decoded.cbegin());
-      return true;
-    };
-
     if (Ctx.LS.MIA->isCall(DI.Inst) || Ctx.LS.MIA->isIndirectBranch(DI.Inst) ||
         Ctx.LS.MIA->isReturn(DI.Inst))
       return false;
     if (Ctx.LS.MIA->isBranch(DI.Inst)) {
       std::optional<uint64_t> Target =
           evaluateDirectControlFlowTarget(DI, Ctx.LS);
-      if (!Target || !AddSuccessor(*Target))
+      if (!Target ||
+          !addCurrentDecodedSuccessor(CurrentDecoded, FunctionRange->Begin,
+                                      FunctionRange->End, *Target, Worklist))
         return false;
       if (Ctx.LS.MIA->isUnconditionalBranch(DI.Inst))
         continue;
@@ -1008,7 +1044,9 @@ static bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
 
     std::optional<uint64_t> Fallthrough = checkedAddUint64(
         DI.Offset, DI.Size, "far-return register liveness fallthrough");
-    if (!Fallthrough || !AddSuccessor(*Fallthrough))
+    if (!Fallthrough ||
+        !addCurrentDecodedSuccessor(CurrentDecoded, FunctionRange->Begin,
+                                    FunctionRange->End, *Fallthrough, Worklist))
       return false;
   }
   return true;
@@ -1753,16 +1791,13 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
         Resolved[I] = State.Targets;
 
       SmallVector<size_t, 2> Successors;
-      auto appendFallthrough = [&]() {
-        if (I + 1 < EndIndex)
-          Successors.push_back(I + 1);
-      };
       if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
           DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
           LS.MIA->isReturn(DI.Inst)) {
         // No successor.
       } else if (LS.MIA->isCall(DI.Inst)) {
-        appendFallthrough();
+        if (I + 1 < EndIndex)
+          Successors.push_back(I + 1);
       } else if (LS.MIA->isIndirectBranch(DI.Inst)) {
         // An indirect jump or bounded return leaves this intraprocedural path.
       } else if (LS.MIA->isBranch(DI.Inst)) {
@@ -1776,10 +1811,11 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
               TargetIndex->second < EndIndex)
             Successors.push_back(TargetIndex->second);
         }
-        if (!LS.MIA->isUnconditionalBranch(DI.Inst))
-          appendFallthrough();
+        if (!LS.MIA->isUnconditionalBranch(DI.Inst) && I + 1 < EndIndex)
+          Successors.push_back(I + 1);
       } else {
-        appendFallthrough();
+        if (I + 1 < EndIndex)
+          Successors.push_back(I + 1);
       }
 
       for (size_t Successor : Successors) {
@@ -2831,9 +2867,8 @@ countReachableSetPcGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
       if (Distance >= MaxSledDistance ||
           LS.encodeSBranch(FromOffset, Candidate).empty())
         break;
-      std::optional<uint32_t> LayoutSize =
-          getSetPcGatewayLayoutSize(Candidate, TargetOffset, SgprBase, UseVcc,
-                                    PreserveVcc);
+      std::optional<uint32_t> LayoutSize = getSetPcGatewayLayoutSize(
+          Candidate, TargetOffset, SgprBase, UseVcc, PreserveVcc);
       if (!LayoutSize)
         return createStringError(
             Twine("invalid set-PC gateway while counting candidate "
@@ -3117,7 +3152,7 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
       if (ProposedSpan > MaxDispatcherSpan)
         continue;
       uint64_t From = T.OriginalOffset + MinInstSize;
-      auto It =
+      SmallVector<std::pair<uint64_t, size_t>, 32>::iterator It =
           llvm::lower_bound(RelayAnchors, std::make_pair(From, size_t{0}));
       std::optional<uint64_t> Relay;
       if (It != RelayAnchors.end() && isSBranchReachable(From, It->first))
@@ -3212,6 +3247,23 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
   return true;
 }
 
+static bool failSharedDispatcher(uint32_t Group, uint64_t DispatcherOffset,
+                                 StringRef Reason) {
+  log() << "hotswap: error: shared dispatcher group " << Group << " at 0x"
+        << utohexstr(DispatcherOffset) << ": " << Reason << "\n";
+  return false;
+}
+
+static bool appendSharedDispatcherInstruction(SmallVectorImpl<uint8_t> &Bytes,
+                                              StringRef Asm,
+                                              const LLVMState &LS) {
+  SmallVector<uint8_t> Encoded = assembleSingleInst(Asm, LS);
+  if (Encoded.empty())
+    return false;
+  Bytes.append(Encoded);
+  return true;
+}
+
 static bool emitSharedDispatchers(PatchContext &Ctx) {
   DenseMap<uint32_t, SmallVector<size_t, 32>> Groups;
   SmallVector<uint64_t, 64> PoolOffsets;
@@ -3228,18 +3280,12 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
     TP = *Next;
   }
 
-  for (auto &KV : Groups) {
+  for (DenseMap<uint32_t, SmallVector<size_t, 32>>::value_type &KV : Groups) {
     ArrayRef<size_t> Members = KV.second;
     if (Members.empty())
       continue;
     Trampoline &Owner = Ctx.OutTrampolines[Members.front()];
     uint64_t DispatcherOffset = PoolOffsets[Members.front()];
-    auto fail = [&](const Twine &Reason) {
-      log() << "hotswap: error: shared dispatcher group " << KV.first
-            << " at 0x" << utohexstr(DispatcherOffset) << ": " << Reason
-            << "\n";
-      return false;
-    };
     unsigned Base = Owner.SharedDispatcherSgprBase;
     const std::string SourceLow = "s" + std::to_string(Base);
     const std::string CursorLow = "s" + std::to_string(Base + 2);
@@ -3256,7 +3302,8 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
           encodeSetPCLongBranch(Ctx.LS, Owner.SharedDispatcherGatewayOffset,
                                 DispatcherOffset, Base + 2);
       if (!Gateway || Gateway->size() > SetPcForwardSequenceBytes)
-        return fail("single-segment gateway encoding failed");
+        return failSharedDispatcher(KV.first, DispatcherOffset,
+                                    "single-segment gateway encoding failed");
       Owner.ForwardGatewayBytes = std::move(*Gateway);
     } else {
       const std::string GatewayPair = "s[" + std::to_string(Base + 2) + ":" +
@@ -3269,7 +3316,9 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
                                Owner.SharedDispatcherSecondaryGatewayOffset);
       if (Owner.ForwardGatewayBytes.size() != MinInstSize ||
           ToSecond.size() != MinInstSize)
-        return fail("split gateway first segment encoding failed");
+        return failSharedDispatcher(
+            KV.first, DispatcherOffset,
+            "split gateway first segment encoding failed");
       Owner.ForwardGatewayBytes.append(ToSecond);
 
       uint64_t PcBase = Owner.SharedDispatcherGatewayOffset + MinInstSize;
@@ -3282,7 +3331,9 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
           assembleInstructions(joinAsmLines(Lines), Ctx.LS);
       if (Owner.SecondaryForwardGatewayBytes.empty() ||
           Owner.SecondaryForwardGatewayBytes.size() > 4 * MinInstSize)
-        return fail("split gateway second segment encoding failed");
+        return failSharedDispatcher(
+            KV.first, DispatcherOffset,
+            "split gateway second segment encoding failed");
       while (Owner.SecondaryForwardGatewayBytes.size() < 4 * MinInstSize)
         Owner.SecondaryForwardGatewayBytes.append(Ctx.LS.SNopBytes);
     }
@@ -3293,15 +3344,10 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
                             Ctx.OutTrampolines[Member].PoolEntryPrefixBytes);
 
     SmallVector<uint8_t> Bytes;
-    auto appendInst = [&](StringRef Asm) {
-      SmallVector<uint8_t> Encoded = assembleSingleInst(Asm, Ctx.LS);
-      if (Encoded.empty())
-        return false;
-      Bytes.append(Encoded);
-      return true;
-    };
-    if (!appendInst("s_cselect_b32 " + Save + ", 1, 0"))
-      return fail("SCC save encoding failed");
+    if (!appendSharedDispatcherInstruction(
+            Bytes, "s_cselect_b32 " + Save + ", 1, 0", Ctx.LS))
+      return failSharedDispatcher(KV.first, DispatcherOffset,
+                                  "SCC save encoding failed");
 
     uint64_t CursorValue = DispatcherOffset;
     uint64_t StubBase =
@@ -3312,43 +3358,57 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
       uint64_t Distance = SourcePc > CursorValue ? SourcePc - CursorValue
                                                  : CursorValue - SourcePc;
       if (Distance >= (uint64_t{1} << 32))
-        return fail("source-to-dispatcher span exceeds 32 bits");
+        return failSharedDispatcher(
+            KV.first, DispatcherOffset,
+            "source-to-dispatcher span exceeds 32 bits");
       uint64_t Delta = SourcePc - CursorValue;
       SmallVector<uint8_t> Add = assembleSingleInst(
           "s_add_co_u32 " + CursorLow + ", " + CursorLow + ", 0x" +
               utohexstr(static_cast<uint32_t>(Delta)),
           Ctx.LS);
       if (Add.empty() || Add.size() > 3 * MinInstSize)
-        return fail("source-PC cursor add encoding failed");
+        return failSharedDispatcher(KV.first, DispatcherOffset,
+                                    "source-PC cursor add encoding failed");
       Bytes.append(Add);
       while (Add.size() < 3 * MinInstSize) {
         Bytes.append(Ctx.LS.SNopBytes);
         Add.append(Ctx.LS.SNopBytes);
       }
-      if (!appendInst("s_cmp_eq_u32 " + SourceLow + ", " + CursorLow))
-        return fail("source-PC compare encoding failed");
+      if (!appendSharedDispatcherInstruction(
+              Bytes, "s_cmp_eq_u32 " + SourceLow + ", " + CursorLow, Ctx.LS))
+        return failSharedDispatcher(KV.first, DispatcherOffset,
+                                    "source-PC compare encoding failed");
       uint64_t BranchFrom = DispatcherOffset + Bytes.size();
       SmallVector<uint8_t> Branch =
           encodeScc1Branch(Ctx.LS, BranchFrom, StubBase + J * 2 * MinInstSize);
       if (Branch.size() != MinInstSize)
-        return fail("source-PC conditional branch is out of range");
+        return failSharedDispatcher(
+            KV.first, DispatcherOffset,
+            "source-PC conditional branch is out of range");
       Bytes.append(Branch);
       CursorValue = SourcePc;
     }
-    if (!appendInst("s_trap 2"))
-      return fail("unmatched-source trap encoding failed");
+    if (!appendSharedDispatcherInstruction(Bytes, "s_trap 2", Ctx.LS))
+      return failSharedDispatcher(KV.first, DispatcherOffset,
+                                  "unmatched-source trap encoding failed");
     for (size_t J = 0; J != Members.size(); ++J) {
-      if (!appendInst("s_cmp_lg_u32 " + Save + ", 0"))
-        return fail("SCC restore encoding failed");
+      if (!appendSharedDispatcherInstruction(
+              Bytes, "s_cmp_lg_u32 " + Save + ", 0", Ctx.LS))
+        return failSharedDispatcher(KV.first, DispatcherOffset,
+                                    "SCC restore encoding failed");
       uint64_t BranchFrom = DispatcherOffset + Bytes.size();
       SmallVector<uint8_t> Branch =
           Ctx.LS.encodeSBranch(BranchFrom, BodyOffsets[J]);
       if (Branch.size() != MinInstSize)
-        return fail("selected trampoline body is out of branch range");
+        return failSharedDispatcher(
+            KV.first, DispatcherOffset,
+            "selected trampoline body is out of branch range");
       Bytes.append(Branch);
     }
     if (Bytes.size() != Owner.PoolEntryPrefixBytes)
-      return fail("dispatcher size differs from reserved prefix");
+      return failSharedDispatcher(
+          KV.first, DispatcherOffset,
+          "dispatcher size differs from reserved prefix");
     std::memcpy(Owner.Bytes.data(), Bytes.data(), Bytes.size());
   }
   return true;

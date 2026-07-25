@@ -1708,6 +1708,78 @@ TEST(RegisterLiveness, TiedAccumulatorDefCountsAsIncomingRead) {
   EXPECT_TRUE(instructionReadsRegister(DI, S, Accumulator));
 }
 
+TEST(RegisterLiveness, UsesCurrentTextAfterEarlierPatchMutation) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleInstructions("s_nop 0\n"
+                                                         "s_mov_b32 s0, 0\n"
+                                                         "s_endpgm",
+                                                         S);
+  ASSERT_EQ(Text.size(), 3u * MinInstSize);
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> OriginalDecoded;
+  ASSERT_TRUE(
+      decodeTextSection(View.textData(), View.textSize(), S, OriginalDecoded));
+  ASSERT_EQ(OriginalDecoded.size(), 3u);
+  ASSERT_TRUE(OriginalDecoded[1].Inst.getOperand(0).isReg());
+  llvm::MCRegister Sgpr0(OriginalDecoded[1].Inst.getOperand(0).getReg());
+
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   OriginalDecoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  EXPECT_TRUE(isRegisterDefinitelyDeadAtContinuation(
+      Ctx, /*InstOffset=*/0, /*InstSize=*/MinInstSize, Sgpr0));
+
+  // An undecodable current instruction cannot support a liveness proof.
+  std::array<uint8_t, MinInstSize> Undecodable;
+  Undecodable.fill(0xff);
+  std::memcpy(View.textData() + MinInstSize, Undecodable.data(),
+              Undecodable.size());
+  EXPECT_FALSE(isRegisterDefinitelyDeadAtContinuation(
+      Ctx, /*InstOffset=*/0, /*InstSize=*/MinInstSize, Sgpr0));
+
+  // Model an earlier patch that consumed a later NOP sled. The original
+  // decoded snapshot still says the continuation overwrites s0, while the
+  // current text now reads its incoming value first.
+  llvm::SmallVector<uint8_t> Patched =
+      assembleSingleInst("s_mov_b32 s1, s0", S);
+  ASSERT_EQ(Patched.size(), MinInstSize);
+  std::memcpy(View.textData() + MinInstSize, Patched.data(), Patched.size());
+  ASSERT_EQ(OriginalDecoded[1].Mnemonic, "s_mov_b32");
+  ASSERT_TRUE(OriginalDecoded[1].Inst.getOperand(1).isImm());
+
+  EXPECT_FALSE(isRegisterDefinitelyDeadAtContinuation(
+      Ctx, /*InstOffset=*/0, /*InstSize=*/MinInstSize, Sgpr0));
+}
+
 TEST(AssembleDecode, SingleInstructionRejectsSequence) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
