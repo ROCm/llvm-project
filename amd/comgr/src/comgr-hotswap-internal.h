@@ -813,7 +813,15 @@ public:
                       llvm::ArrayRef<uint8_t> SNopBytes) const;
 
 private:
-  enum class KernelSgprCacheState {
+  struct CachedKernelMetadata {
+    std::optional<unsigned> SgprCount;
+    std::optional<unsigned> VgprCount;
+    std::optional<unsigned> MaxFlatWorkgroupSize;
+    std::optional<unsigned> WavefrontSize;
+    std::optional<KernelClusterDims> ClusterDims;
+  };
+
+  enum class KernelMetadataCacheState {
     Uninitialized,
     Metadata,
     NoMetadata,
@@ -829,7 +837,7 @@ private:
   const FunctionTextRange *
   findFunctionTextRangeAtAddress(uint64_t TextAddress) const;
   void initializeKernelDescriptorCache() const;
-  void initializeKernelSgprCountCache() const;
+  void initializeKernelMetadataCache() const;
 
   ELFFileT File;
   ELFT::ShdrRange Sections;
@@ -841,9 +849,9 @@ private:
       KernelDescriptorCache;
   mutable llvm::StringMap<uint64_t> KernelDescriptorFileOffsetCache;
   mutable llvm::StringMap<uint64_t> KernelDescriptorVAddrCache;
-  mutable KernelSgprCacheState SgprCacheState =
-      KernelSgprCacheState::Uninitialized;
-  mutable llvm::StringMap<std::optional<unsigned>> KernelSgprCountCache;
+  mutable KernelMetadataCacheState MetadataCacheState =
+      KernelMetadataCacheState::Uninitialized;
+  mutable llvm::StringMap<CachedKernelMetadata> KernelMetadataCache;
 };
 
 // -- Free-function ELF helpers (no ELF state required) ------------------------

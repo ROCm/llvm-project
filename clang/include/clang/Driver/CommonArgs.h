@@ -247,10 +247,6 @@ void addX86AlignBranchArgs(const Driver &D, const llvm::opt::ArgList &Args,
                            llvm::opt::ArgStringList &CmdArgs, bool IsLTO,
                            const StringRef PluginOptPrefix = "");
 
-unsigned getOrCheckAMDGPUCodeObjectVersion(const Driver &D,
-                              const llvm::opt::ArgList &Args,
-                              bool Diagnose = false);
-
 void checkAMDGPUCodeObjectVersion(const Driver &D,
                                   const llvm::opt::ArgList &Args);
 

@@ -3,6 +3,10 @@
 
 The AMD fork aims to contain all of [upstream LLVM](https://github.com/llvm/llvm-project), and also includes several AMD-specific additions in the `llvm-project/amd` directory:
 
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/llvm/llvm-project/badge)](https://securityscorecards.dev/viewer/?uri=github.com/llvm/llvm-project)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8273/badge)](https://www.bestpractices.dev/projects/8273)
+[![libc++](https://github.com/llvm/llvm-project/actions/workflows/libcxx-pr-conformance-tests.yaml/badge.svg?branch=main&event=schedule)](https://github.com/llvm/llvm-project/actions/workflows/libcxx-pr-conformance-tests.yaml?query=event%3Aschedule)
+
 - **amd/comgr** - The Code Object Manager API, designed to simplify linking, compiling, and inspecting code objects (code owner: [@lamb-j](https://www.github.com/lamb-j))
 - **amd/device-libs** -The sources and CMake build system for a set of AMD-specific device-side language runtime libraries (code owner: [@b-sumner](https://www.github.com/b-sumner))
 - **amd/hipcc** - A compiler driver utility that wraps clang and passes the appropriate include and library options for the target compiler and HIP infrastructure (code owner: [@david-salinas](https://www.github.com/david-salinas))
