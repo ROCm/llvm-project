@@ -9,6 +9,9 @@
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 | %FileCheck --check-prefix=LOG %s
+// LOG: hotswap: resolved PC-materialized call
+// LOG: hotswap: resolved reusable PC-materialized call
+// LOG-SAME: to 1 target(s)
 // LOG: hotswap: resolved reusable PC-materialized call
 // LOG-SAME: to 2 target(s)
 // LOG-NOT: hotswap: unresolved call target
@@ -27,6 +30,8 @@
 // OVERLAP: hotswap: unresolved call target
 // CLOBBER: hotswap: resolved reusable PC-materialized call
 // CLOBBER: hotswap: unresolved call target
+// BOOTSTRAP-CLOBBER: hotswap: resolved PC-materialized call
+// BOOTSTRAP-CLOBBER: hotswap: unresolved call target
 // TAIL: hotswap: resolved reusable PC-materialized call
 // TAIL: hotswap: unresolved call target
 // INDIRECT: hotswap: resolved reusable PC-materialized call
@@ -54,6 +59,15 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=CLOBBER,FAIL %s
+
+// RUN: sed 's/^\.set clobber_bootstrap, 0$/.set clobber_bootstrap, 1/' \
+// RUN:   %s > %t.bootstrap-clobber.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.bootstrap-clobber.s -o %t.bootstrap-clobber.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite \
+// RUN:   %t.bootstrap-clobber.elf amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 --expect-status ERROR 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=BOOTSTRAP-CLOBBER,FAIL %s
 
 // RUN: sed 's/^\.set tail_escape, 0$/.set tail_escape, 1/' \
 // RUN:   %s > %t.tail.s
@@ -100,10 +114,13 @@
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM \
 // RUN:   --implicit-check-not=s_add_pc_i64 %s
 // DISASM-LABEL: <reusable_pc_targets>:
-// DISASM: s_swap_pc_i64
-// DISASM: s_get_pc_i64
-// DISASM: s_branch
-// DISASM: s_get_pc_i64
+// DISASM: s_swap_pc_i64 s[6:7]
+// DISASM-NEXT: s_swap_pc_i64 s[6:7]
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_get_pc_i64
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_get_pc_i64
 // DISASM-NEXT: s_branch
 // DISASM-LABEL: <gateway_barrier>:
 // DISASM-NEXT: s_endpgm
@@ -122,6 +139,7 @@
 .set outside_selector, 0
 .set overlap_delta, 0
 .set clobber_target, 0
+.set clobber_bootstrap, 0
 .set tail_escape, 0
 .set indirect_escape, 0
 .set external_entry, 0
@@ -137,10 +155,27 @@ external_materialization_entry:
 .size external_materialization_entry, .-external_materialization_entry
 .endif
 
+.local callee_bootstrap
+.type callee_bootstrap,@function
+callee_bootstrap:
+  s_mov_b32 s8, 3
+.if clobber_bootstrap
+  s_mov_b32 s10, 0
+.endif
+  s_set_pc_i64 s[12:13]
+.size callee_bootstrap, .-callee_bootstrap
+
 .globl reusable_pc_targets
 .p2align 8
 .type reusable_pc_targets,@function
 reusable_pc_targets:
+  // A straight-line first call is resolved by the one-shot matcher. Its
+  // proven target remains reusable after the audited callee returns.
+.Lbootstrap_getpc:
+  s_get_pc_i64 s[10:11]
+  s_add_nc_u64 s[10:11], s[10:11], callee_bootstrap-(.Lbootstrap_getpc+4)
+  s_swap_pc_i64 s[12:13], s[10:11]
+  s_swap_pc_i64 s[12:13], s[10:11]
 .if unsafe_selector
   // This edge reaches the call without executing either get-PC sequence.
   s_cmp_eq_u32 s0, 2
@@ -273,7 +308,7 @@ outside_text_end:
 .p2align 8
 .amdhsa_kernel reusable_pc_targets
   .amdhsa_next_free_vgpr 3
-  .amdhsa_next_free_sgpr 12
+  .amdhsa_next_free_sgpr 14
 .end_amdhsa_kernel
 
 .amdgpu_metadata
@@ -283,7 +318,7 @@ outside_text_end:
   amdhsa.kernels:
     - .name: reusable_pc_targets
       .symbol: reusable_pc_targets.kd
-      .sgpr_count: 12
+      .sgpr_count: 14
       .vgpr_count: 3
       .kernarg_segment_size: 0
       .group_segment_fixed_size: 0

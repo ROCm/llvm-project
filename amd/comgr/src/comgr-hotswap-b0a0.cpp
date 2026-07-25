@@ -1525,15 +1525,29 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
       }
 
       bool IsReusableCall = llvm::is_contained(Group.Calls, I);
-      bool HasFiniteTargets = IsReusableCall && !State.HasUnknown &&
-                              State.ActiveMaterializations.empty() &&
-                              !State.Targets.empty();
-      if (HasFiniteTargets)
+      bool HasFiniteState = !State.HasUnknown &&
+                            State.ActiveMaterializations.empty() &&
+                            !State.Targets.empty();
+      if (IsReusableCall && HasFiniteState)
         Resolved[I] = State.Targets;
 
-      bool CalleesPreserve =
-          HasFiniteTargets && DI.Inst.getNumOperands() != 0 &&
-          DI.Inst.getOperand(0).isReg() && DI.Inst.getOperand(0).getReg();
+      // The first call after a straight-line materialization is also resolved
+      // by the one-shot matcher. Let that bootstrap call preserve the reaching
+      // value only when both analyses prove the same singleton target through
+      // this exact target pair.
+      bool IsMatchingBootstrapCall = false;
+      if (LocalCalls[I] && HasFiniteState && State.Targets.size() == 1 &&
+          State.Targets.front() == LocalCalls[I]->Target &&
+          DI.Inst.getNumOperands() >= 2) {
+        const MCOperand &TargetOp =
+            DI.Inst.getOperand(DI.Inst.getNumOperands() - 1);
+        IsMatchingBootstrapCall =
+            TargetOp.isReg() && TargetOp.getReg() == Group.TargetRegister;
+      }
+      bool CalleesPreserve = (IsReusableCall || IsMatchingBootstrapCall) &&
+                             HasFiniteState && DI.Inst.getNumOperands() != 0 &&
+                             DI.Inst.getOperand(0).isReg() &&
+                             DI.Inst.getOperand(0).getReg();
       if (CalleesPreserve) {
         MCRegister ReturnRegister(DI.Inst.getOperand(0).getReg());
         uint64_t RegisterKey = static_cast<uint64_t>(Group.TargetRegister.id())
