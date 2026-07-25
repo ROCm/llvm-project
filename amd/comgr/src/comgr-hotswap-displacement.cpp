@@ -280,12 +280,87 @@ Error validateVirtualGrowth(const ElfView &Elf, uint64_t PaddedGrowth) {
   return Error::success();
 }
 
+enum class DynamicTagClass {
+  Value,
+  Address,
+  UnsupportedAddress,
+  Unknown,
+};
+
+DynamicTagClass classifyDynamicTag(int64_t Tag) {
+  switch (Tag) {
+  case ELF::DT_NULL:
+  case ELF::DT_NEEDED:
+  case ELF::DT_PLTRELSZ:
+  case ELF::DT_RELASZ:
+  case ELF::DT_RELAENT:
+  case ELF::DT_STRSZ:
+  case ELF::DT_SYMENT:
+  case ELF::DT_SONAME:
+  case ELF::DT_RPATH:
+  case ELF::DT_SYMBOLIC:
+  case ELF::DT_RELSZ:
+  case ELF::DT_RELENT:
+  case ELF::DT_PLTREL:
+  case ELF::DT_TEXTREL:
+  case ELF::DT_BIND_NOW:
+  case ELF::DT_INIT_ARRAYSZ:
+  case ELF::DT_FINI_ARRAYSZ:
+  case ELF::DT_RUNPATH:
+  case ELF::DT_FLAGS:
+  case ELF::DT_PREINIT_ARRAYSZ:
+  case ELF::DT_RELRSZ:
+  case ELF::DT_RELRENT:
+  case ELF::DT_RELACOUNT:
+  case ELF::DT_RELCOUNT:
+  case ELF::DT_FLAGS_1:
+  case ELF::DT_VERDEFNUM:
+  case ELF::DT_VERNEEDNUM:
+    return DynamicTagClass::Value;
+
+  case ELF::DT_HASH:
+  case ELF::DT_STRTAB:
+  case ELF::DT_SYMTAB:
+  case ELF::DT_RELA:
+  case ELF::DT_REL:
+  case ELF::DT_SYMTAB_SHNDX:
+  case ELF::DT_GNU_HASH:
+  case ELF::DT_VERSYM:
+  case ELF::DT_VERDEF:
+  case ELF::DT_VERNEED:
+    return DynamicTagClass::Address;
+
+  // These tags introduce executable entry points, pointer arrays, GOT/PLT
+  // state, TLS callbacks, or relocation encodings outside the displacement
+  // proof. Supporting only their container address would leave the contents
+  // or an externally callable entry unproved.
+  case ELF::DT_PLTGOT:
+  case ELF::DT_INIT:
+  case ELF::DT_FINI:
+  case ELF::DT_DEBUG:
+  case ELF::DT_JMPREL:
+  case ELF::DT_INIT_ARRAY:
+  case ELF::DT_FINI_ARRAY:
+  case ELF::DT_PREINIT_ARRAY:
+  case ELF::DT_RELR:
+  case ELF::DT_CREL:
+  case ELF::DT_ANDROID_REL:
+  case ELF::DT_ANDROID_RELA:
+  case ELF::DT_ANDROID_RELR:
+  case ELF::DT_TLSDESC_PLT:
+  case ELF::DT_TLSDESC_GOT:
+    return DynamicTagClass::UnsupportedAddress;
+  }
+  return DynamicTagClass::Unknown;
+}
+
 bool isKnownAllocatedSectionType(uint32_t Type) {
   switch (Type) {
   case ELF::SHT_PROGBITS:
   case ELF::SHT_SYMTAB:
   case ELF::SHT_STRTAB:
   case ELF::SHT_HASH:
+  case ELF::SHT_DYNAMIC:
   case ELF::SHT_NOTE:
   case ELF::SHT_NOBITS:
   case ELF::SHT_DYNSYM:
@@ -296,6 +371,32 @@ bool isKnownAllocatedSectionType(uint32_t Type) {
   case ELF::SHT_GNU_verneed:
   case ELF::SHT_GNU_versym:
     return true;
+  }
+  return false;
+}
+
+bool dynamicTagMatchesSection(int64_t Tag, uint32_t Type) {
+  switch (Tag) {
+  case ELF::DT_HASH:
+    return Type == ELF::SHT_HASH;
+  case ELF::DT_STRTAB:
+    return Type == ELF::SHT_STRTAB;
+  case ELF::DT_SYMTAB:
+    return Type == ELF::SHT_DYNSYM;
+  case ELF::DT_RELA:
+    return Type == ELF::SHT_RELA;
+  case ELF::DT_REL:
+    return Type == ELF::SHT_REL;
+  case ELF::DT_SYMTAB_SHNDX:
+    return Type == ELF::SHT_SYMTAB_SHNDX;
+  case ELF::DT_GNU_HASH:
+    return Type == ELF::SHT_GNU_HASH;
+  case ELF::DT_VERSYM:
+    return Type == ELF::SHT_GNU_versym;
+  case ELF::DT_VERDEF:
+    return Type == ELF::SHT_GNU_verdef;
+  case ELF::DT_VERNEED:
+    return Type == ELF::SHT_GNU_verneed;
   }
   return false;
 }
@@ -320,13 +421,22 @@ Error validateTrailingRelocationLayout(const ElfView &Elf) {
   const uint64_t TextFileEnd = Elf.textOffset() + Elf.textSize();
 
   SmallVector<const ELFT::Shdr *, 8> AllocatedSections;
+  unsigned DynamicSectionCount = 0;
   for (const ELFT::Shdr &Shdr : Elf.sections()) {
     if (Shdr.sh_addralign > 1 && !isPowerOf2_64(Shdr.sh_addralign)) {
       return makeDisplacementError("section alignment is not a power of two");
     }
     if (Shdr.sh_type == ELF::SHT_DYNAMIC) {
-      return makeDisplacementError(
-          "dynamic sections require dynamic-tag address repair");
+      ++DynamicSectionCount;
+      if (DynamicSectionCount > 1) {
+        return makeDisplacementError(
+            "multiple dynamic sections are outside the displacement model");
+      }
+      if (!(Shdr.sh_flags & ELF::SHF_ALLOC) ||
+          Shdr.sh_entsize != sizeof(ELFT::Dyn) || Shdr.sh_size == 0 ||
+          Shdr.sh_size % sizeof(ELFT::Dyn) != 0) {
+        return makeDisplacementError("dynamic section has an invalid layout");
+      }
     }
     if (Shdr.sh_type == ELF::SHT_REL || Shdr.sh_type == ELF::SHT_RELA) {
       return makeDisplacementError(
@@ -449,19 +559,30 @@ Error validateTrailingRelocationLayout(const ElfView &Elf) {
         Twine(toString(PhdrsOrErr.takeError())));
   }
   bool FoundTextLoad = false;
+  unsigned DynamicSegmentCount = 0;
   SmallVector<const ELFT::Phdr *, 8> LoadSegments;
   for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
     if (Phdr.p_align > 1 && !isPowerOf2_64(Phdr.p_align)) {
       return makeDisplacementError(
           "program-header alignment is not a power of two");
     }
-    if (Phdr.p_type == ELF::PT_DYNAMIC) {
-      return makeDisplacementError(
-          "PT_DYNAMIC requires dynamic-tag address repair");
-    }
     if (Phdr.p_filesz > std::numeric_limits<uint64_t>::max() - Phdr.p_offset ||
         Phdr.p_memsz > std::numeric_limits<uint64_t>::max() - Phdr.p_vaddr) {
       return makeDisplacementError("program-header range overflows");
+    }
+    if (Phdr.p_type == ELF::PT_DYNAMIC) {
+      ++DynamicSegmentCount;
+      if (DynamicSegmentCount > 1) {
+        return makeDisplacementError(
+            "multiple PT_DYNAMIC segments are outside the displacement "
+            "model");
+      }
+      if (Phdr.p_filesz == 0 || Phdr.p_filesz % sizeof(ELFT::Dyn) != 0 ||
+          Phdr.p_offset > Elf.size() ||
+          Phdr.p_filesz > Elf.size() - Phdr.p_offset) {
+        return makeDisplacementError(
+            "PT_DYNAMIC has an invalid file-backed range");
+      }
     }
     const uint64_t FileEnd = Phdr.p_offset + Phdr.p_filesz;
     const uint64_t AddressEnd = Phdr.p_vaddr + Phdr.p_memsz;
@@ -1314,6 +1435,87 @@ Error adjustElfEntryForDisplacement(uint8_t *Elf, size_t ElfSize,
   return Error::success();
 }
 
+template <typename RecordT>
+Expected<uint64_t> getRecordOffset(const ELFFileT &File,
+                                   const RecordT &Record) {
+  const uint8_t *Bytes = reinterpret_cast<const uint8_t *>(&Record);
+  if (Bytes < File.base() || Bytes > File.end() ||
+      static_cast<size_t>(File.end() - Bytes) < sizeof(RecordT)) {
+    return makeDisplacementError(
+        "dynamic record is outside displaced ELF buffer");
+  }
+  return static_cast<uint64_t>(Bytes - File.base());
+}
+
+Error adjustDynamicEntriesForDisplacement(uint8_t *Elf, size_t ElfSize,
+                                          const ElfView &OldElf,
+                                          const DisplacementPlan &Plan) {
+  Expected<ELFFileT> FileOrErr =
+      ELFFileT::create(StringRef(reinterpret_cast<const char *>(Elf), ElfSize));
+  if (!FileOrErr) {
+    return makeDisplacementError(
+        "failed to parse displaced ELF for dynamic-tag repair: " +
+        Twine(toString(FileOrErr.takeError())));
+  }
+  ELFFileT File = std::move(*FileOrErr);
+  Expected<ELFT::DynRange> EntriesOrErr = File.dynamicEntries();
+  if (!EntriesOrErr) {
+    return makeDisplacementError(
+        "failed to read dynamic tags during displacement: " +
+        Twine(toString(EntriesOrErr.takeError())));
+  }
+
+  for (const ELFT::Dyn &Entry : *EntriesOrErr) {
+    const int64_t Tag = static_cast<int64_t>(Entry.d_tag);
+    DynamicTagClass Class = classifyDynamicTag(Tag);
+    if (Class == DynamicTagClass::Unknown) {
+      return makeDisplacementError("unknown dynamic tag 0x" +
+                                   Twine::utohexstr(Entry.d_tag) +
+                                   " may carry an unclassified address");
+    }
+    if (Class == DynamicTagClass::UnsupportedAddress) {
+      return makeDisplacementError(
+          "dynamic tag 0x" + Twine::utohexstr(Entry.d_tag) +
+          " introduces an unsupported address-bearing construct");
+    }
+    if (Entry.d_un.d_val != 0 &&
+        (Tag == ELF::DT_PLTRELSZ || Tag == ELF::DT_PLTREL ||
+         Tag == ELF::DT_INIT_ARRAYSZ || Tag == ELF::DT_FINI_ARRAYSZ ||
+         Tag == ELF::DT_PREINIT_ARRAYSZ || Tag == ELF::DT_RELRSZ ||
+         Tag == ELF::DT_RELRENT)) {
+      return makeDisplacementError(
+          "dynamic tag enables an unsupported pointer/relocation table");
+    }
+    if (Class != DynamicTagClass::Address || Entry.d_un.d_ptr == 0)
+      continue;
+
+    Expected<const ELFT::Shdr *> OwnerOrErr = findUniqueAllocatedSection(
+        OldElf, Entry.d_un.d_ptr, /*RequireExecutable=*/false,
+        "dynamic-tag address");
+    if (!OwnerOrErr)
+      return OwnerOrErr.takeError();
+    if (!dynamicTagMatchesSection(Tag, (**OwnerOrErr).sh_type)) {
+      return makeDisplacementError(
+          "dynamic tag points to a section of the wrong type");
+    }
+    Expected<uint64_t> NewAddressOrErr = remapAllocatedAddress(
+        OldElf, Plan, Entry.d_un.d_ptr, /*RequireExecutable=*/false,
+        "dynamic-tag address");
+    if (!NewAddressOrErr)
+      return NewAddressOrErr.takeError();
+    if (*NewAddressOrErr == Entry.d_un.d_ptr)
+      continue;
+
+    Expected<uint64_t> EntryOffsetOrErr = getRecordOffset(File, Entry);
+    if (!EntryOffsetOrErr)
+      return EntryOffsetOrErr.takeError();
+    ELFT::Dyn NewEntry = Entry;
+    NewEntry.d_un.d_ptr = *NewAddressOrErr;
+    std::memcpy(Elf + *EntryOffsetOrErr, &NewEntry, sizeof(NewEntry));
+  }
+  return Error::success();
+}
+
 Error adjustSymbolValuesForDisplacement(uint8_t *Elf, size_t ElfSize,
                                         const ElfView &OldElf,
                                         const DisplacementPlan &Plan) {
@@ -1561,6 +1763,12 @@ Error applyTextDisplacement(const ElfView &Elf, const LLVMState &LS,
     return Err;
   if (Error Err = adjustElfEntryForDisplacement(Out, NewSize, Elf, Plan))
     return Err;
+  if (RelocateAddresses) {
+    if (Error Err =
+            adjustDynamicEntriesForDisplacement(Out, NewSize, Elf, Plan)) {
+      return Err;
+    }
+  }
   if (Error Err = adjustSymbolValuesForDisplacement(Out, NewSize, Elf, Plan))
     return Err;
 

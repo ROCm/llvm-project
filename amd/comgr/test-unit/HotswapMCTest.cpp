@@ -274,6 +274,75 @@ static std::vector<uint8_t> makeDisplacementTestElf(
   return Buf;
 }
 
+static std::vector<uint8_t>
+makeDynamicDisplacementTestElf(llvm::ArrayRef<uint8_t> Text,
+                               llvm::ArrayRef<llvm::ELF::Elf64_Dyn> Entries) {
+  using namespace llvm::ELF;
+
+  std::vector<uint8_t> Buf = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr = ElfView::create(Buf.data(), Buf.size());
+  if (!ViewOrErr) {
+    llvm::consumeError(ViewOrErr.takeError());
+    return {};
+  }
+
+  const ElfView::ELFT::Shdr &Rodata = ViewOrErr->sections()[2];
+  const ElfView::ELFT::Shdr &OldSymtab = ViewOrErr->sections()[4];
+  if (Entries.size() * sizeof(Elf64_Dyn) > OldSymtab.sh_size)
+    return {};
+
+  ElfView::ELFT::Ehdr Ehdr = ViewOrErr->file().getHeader();
+  const uint64_t OldPhOff = Ehdr.e_phoff;
+  Ehdr.e_phoff = 0x1c0;
+  Ehdr.e_phnum = 3;
+  std::memcpy(Buf.data(), &Ehdr, sizeof(Ehdr));
+
+  Elf64_Phdr TextLoad;
+  Elf64_Phdr RodataLoad;
+  std::memcpy(&TextLoad, Buf.data() + OldPhOff, sizeof(TextLoad));
+  std::memcpy(&RodataLoad, Buf.data() + OldPhOff + sizeof(Elf64_Phdr),
+              sizeof(RodataLoad));
+  const uint64_t DynamicSize = Entries.size() * sizeof(Elf64_Dyn);
+  RodataLoad.p_filesz = OldSymtab.sh_offset + DynamicSize - RodataLoad.p_offset;
+  RodataLoad.p_memsz = RodataLoad.p_filesz;
+  std::memcpy(Buf.data() + Ehdr.e_phoff, &TextLoad, sizeof(TextLoad));
+  std::memcpy(Buf.data() + Ehdr.e_phoff + sizeof(Elf64_Phdr), &RodataLoad,
+              sizeof(RodataLoad));
+
+  const uint64_t DynamicAddress =
+      Rodata.sh_addr + OldSymtab.sh_offset - Rodata.sh_offset;
+  Elf64_Phdr DynamicPh{};
+  DynamicPh.p_type = PT_DYNAMIC;
+  DynamicPh.p_flags = PF_R | PF_W;
+  DynamicPh.p_offset = OldSymtab.sh_offset;
+  DynamicPh.p_vaddr = DynamicAddress;
+  DynamicPh.p_paddr = DynamicAddress;
+  DynamicPh.p_filesz = DynamicSize;
+  DynamicPh.p_memsz = DynamicSize;
+  DynamicPh.p_align = 8;
+  std::memcpy(Buf.data() + Ehdr.e_phoff + 2 * sizeof(Elf64_Phdr), &DynamicPh,
+              sizeof(DynamicPh));
+
+  ElfView::ELFT::Shdr TargetSh = Rodata;
+  TargetSh.sh_type = SHT_STRTAB;
+  std::memcpy(Buf.data() + Ehdr.e_shoff + 2 * sizeof(Elf64_Shdr), &TargetSh,
+              sizeof(TargetSh));
+
+  ElfView::ELFT::Shdr DynamicSh = OldSymtab;
+  DynamicSh.sh_type = SHT_DYNAMIC;
+  DynamicSh.sh_flags = SHF_ALLOC | SHF_WRITE;
+  DynamicSh.sh_addr = DynamicAddress;
+  DynamicSh.sh_size = DynamicSize;
+  DynamicSh.sh_link = 3;
+  DynamicSh.sh_entsize = sizeof(Elf64_Dyn);
+  DynamicSh.sh_addralign = 8;
+  std::memcpy(Buf.data() + Ehdr.e_shoff + 4 * sizeof(Elf64_Shdr), &DynamicSh,
+              sizeof(DynamicSh));
+  std::memset(Buf.data() + DynamicSh.sh_offset, 0, OldSymtab.sh_size);
+  std::memcpy(Buf.data() + DynamicSh.sh_offset, Entries.data(), DynamicSize);
+  return Buf;
+}
+
 // -- initLLVM ----------------------------------------------------------------
 
 TEST(InitLLVM, ValidGfx1250) {
@@ -2823,6 +2892,186 @@ TEST(TextDisplacement, RelocatesTrailingElfMetadataAndPcReference) {
     }
   }
   EXPECT_TRUE(SawDescriptorSymbol);
+}
+
+TEST(TextDisplacement, RemapsDynamicPointerAndSegment) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+
+  llvm::ELF::Elf64_Dyn Strtab{};
+  Strtab.d_tag = llvm::ELF::DT_STRTAB;
+  Strtab.d_un.d_ptr = 0x2000;
+  llvm::ELF::Elf64_Dyn Strsz{};
+  Strsz.d_tag = llvm::ELF::DT_STRSZ;
+  Strsz.d_un.d_val = 64;
+  llvm::ELF::Elf64_Dyn Null{};
+  Null.d_tag = llvm::ELF::DT_NULL;
+  const llvm::ELF::Elf64_Dyn Entries[] = {Strtab, Strsz, Null};
+  std::vector<uint8_t> ElfBytes = makeDynamicDisplacementTestElf(Text, Entries);
+  ASSERT_FALSE(ElfBytes.empty());
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  llvm::Expected<ElfView::ELFT::PhdrRange> OldPhdrs =
+      ViewOrErr->file().program_headers();
+  ASSERT_TRUE((bool)OldPhdrs) << llvm::toString(OldPhdrs.takeError());
+  const ElfView::ELFT::Phdr *OldDynamic = nullptr;
+  for (const ElfView::ELFT::Phdr &Phdr : *OldPhdrs) {
+    if (Phdr.p_type == llvm::ELF::PT_DYNAMIC)
+      OldDynamic = &Phdr;
+  }
+  ASSERT_NE(OldDynamic, nullptr);
+  const uint64_t OldDynamicOffset = OldDynamic->p_offset;
+  const uint64_t OldDynamicAddress = OldDynamic->p_vaddr;
+
+  DisplacementEdit Insert;
+  Insert.Offset = 0;
+  Insert.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Insert},
+                                          /*RelocateTrailingSections=*/true);
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+  llvm::Expected<ElfView> OutView = ElfView::create(
+      reinterpret_cast<uint8_t *>(Out->getBufferStart()), Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+
+  llvm::Expected<ElfView::ELFT::DynRange> Dynamic =
+      OutView->file().dynamicEntries();
+  ASSERT_TRUE((bool)Dynamic) << llvm::toString(Dynamic.takeError());
+  ASSERT_EQ(Dynamic->size(), 3u);
+  ElfView::ELFT::DynRange::iterator Entry = Dynamic->begin();
+  EXPECT_EQ(Entry->d_un.d_ptr, 0x2008u);
+  ++Entry;
+  EXPECT_EQ(Entry->d_un.d_val, 64u);
+
+  llvm::Expected<ElfView::ELFT::PhdrRange> NewPhdrs =
+      OutView->file().program_headers();
+  ASSERT_TRUE((bool)NewPhdrs) << llvm::toString(NewPhdrs.takeError());
+  const ElfView::ELFT::Phdr *NewDynamic = nullptr;
+  for (const ElfView::ELFT::Phdr &Phdr : *NewPhdrs) {
+    if (Phdr.p_type == llvm::ELF::PT_DYNAMIC)
+      NewDynamic = &Phdr;
+  }
+  ASSERT_NE(NewDynamic, nullptr);
+  EXPECT_EQ(NewDynamic->p_offset, OldDynamicOffset + 8);
+  EXPECT_EQ(NewDynamic->p_vaddr, OldDynamicAddress + 8);
+  EXPECT_EQ(NewDynamic->p_paddr, OldDynamicAddress + 8);
+}
+
+TEST(TextDisplacement, RejectsUnsupportedDynamicTagsAndPointers) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(Text.size(), MinInstSize);
+
+  llvm::ELF::Elf64_Dyn Null{};
+  Null.d_tag = llvm::ELF::DT_NULL;
+  DisplacementEdit Insert;
+  Insert.Offset = 0;
+  Insert.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+
+  llvm::ELF::Elf64_Dyn Unknown{};
+  Unknown.d_tag = 0x70000042;
+  const llvm::ELF::Elf64_Dyn UnknownEntries[] = {Unknown, Null};
+  std::vector<uint8_t> ElfBytes =
+      makeDynamicDisplacementTestElf(Text, UnknownEntries);
+  ASSERT_FALSE(ElfBytes.empty());
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Insert},
+                                          /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("unknown dynamic tag"), std::string::npos) << Reason;
+
+  llvm::ELF::Elf64_Dyn Init{};
+  Init.d_tag = llvm::ELF::DT_INIT;
+  Init.d_un.d_ptr = 0x1000;
+  const llvm::ELF::Elf64_Dyn InitEntries[] = {Init, Null};
+  ElfBytes = makeDynamicDisplacementTestElf(Text, InitEntries);
+  ASSERT_FALSE(ElfBytes.empty());
+  ViewOrErr = ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  OutOrErr = tryApplyTextDisplacementToNewBuffer(
+      *ViewOrErr, S, {Insert}, /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)OutOrErr);
+  Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("unsupported address-bearing construct"),
+            std::string::npos)
+      << Reason;
+
+  llvm::ELF::Elf64_Dyn InitArraySize{};
+  InitArraySize.d_tag = llvm::ELF::DT_INIT_ARRAYSZ;
+  InitArraySize.d_un.d_val = 8;
+  const llvm::ELF::Elf64_Dyn SizeEntries[] = {InitArraySize, Null};
+  ElfBytes = makeDynamicDisplacementTestElf(Text, SizeEntries);
+  ASSERT_FALSE(ElfBytes.empty());
+  ViewOrErr = ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  OutOrErr = tryApplyTextDisplacementToNewBuffer(
+      *ViewOrErr, S, {Insert}, /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)OutOrErr);
+  Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("unsupported pointer/relocation table"),
+            std::string::npos)
+      << Reason;
+
+  llvm::ELF::Elf64_Dyn Symtab{};
+  Symtab.d_tag = llvm::ELF::DT_SYMTAB;
+  Symtab.d_un.d_ptr = 0x2000;
+  const llvm::ELF::Elf64_Dyn MismatchedEntries[] = {Symtab, Null};
+  ElfBytes = makeDynamicDisplacementTestElf(Text, MismatchedEntries);
+  ASSERT_FALSE(ElfBytes.empty());
+  ViewOrErr = ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  OutOrErr = tryApplyTextDisplacementToNewBuffer(
+      *ViewOrErr, S, {Insert}, /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)OutOrErr);
+  Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("section of the wrong type"), std::string::npos)
+      << Reason;
+
+  llvm::ELF::Elf64_Dyn Strsz{};
+  Strsz.d_tag = llvm::ELF::DT_STRSZ;
+  Strsz.d_un.d_val = 64;
+  const llvm::ELF::Elf64_Dyn UnterminatedEntries[] = {Strsz};
+  ElfBytes = makeDynamicDisplacementTestElf(Text, UnterminatedEntries);
+  ASSERT_FALSE(ElfBytes.empty());
+  ViewOrErr = ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  OutOrErr = tryApplyTextDisplacementToNewBuffer(
+      *ViewOrErr, S, {Insert}, /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)OutOrErr);
+  Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("DT_NULL"), std::string::npos) << Reason;
+
+  const llvm::ELF::Elf64_Dyn ValidEntries[] = {Strsz, Null};
+  ElfBytes = makeDynamicDisplacementTestElf(Text, ValidEntries);
+  ASSERT_FALSE(ElfBytes.empty());
+  ViewOrErr = ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  const ElfView::ELFT::Shdr &DynamicShdr = ViewOrErr->sections()[4];
+  const size_t DynamicShdrOffset =
+      reinterpret_cast<const uint8_t *>(&DynamicShdr) - ElfBytes.data();
+  ElfView::ELFT::Shdr InvalidDynamicShdr = DynamicShdr;
+  InvalidDynamicShdr.sh_entsize = 0;
+  std::memcpy(ElfBytes.data() + DynamicShdrOffset, &InvalidDynamicShdr,
+              sizeof(InvalidDynamicShdr));
+  ViewOrErr = ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  OutOrErr = tryApplyTextDisplacementToNewBuffer(
+      *ViewOrErr, S, {Insert}, /*RelocateTrailingSections=*/true);
+  ASSERT_FALSE((bool)OutOrErr);
+  Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("dynamic section has an invalid layout"),
+            std::string::npos)
+      << Reason;
 }
 
 TEST(TextDisplacement, WholeObjectModeRejectsRelocationRecords) {
