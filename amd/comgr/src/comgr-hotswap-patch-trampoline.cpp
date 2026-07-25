@@ -42,6 +42,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace llvm;
@@ -167,6 +168,12 @@ std::string fmtOffset(uint32_t Offset) {
 // this field directly, so any scaled byte offset that exceeds it cannot
 // be represented and the patch must be skipped.
 constexpr uint32_t Ds1AddrOffsetMax = 0xFFFF;
+// The gfx1250 DS two-address encoding has two eight-bit offset fields in the
+// low 16 bits of the instruction. B0 interprets non-stride64 fields as element
+// indices, while A0 requires byte offsets aligned to the payload size. When
+// both scaled byte offsets still fit in eight bits, rewriting the two fields
+// in place is an exact, entry-local fix and avoids a trampoline entirely.
+constexpr uint32_t Ds2AddrOffsetMax = 0xFF;
 
 struct DsOperands {
   SmallVector<MCRegister, 4> Regs;
@@ -402,6 +409,115 @@ std::optional<std::vector<std::string>> expandDs2AddrImpl(const MCInst &Inst,
   return std::nullopt;
 }
 
+bool rewriteDs2AddrOffsetsInPlaceImpl(MutableArrayRef<uint8_t> InstBytes,
+                                      StringRef Mnemonic,
+                                      const DsOperands &Ops) {
+  // Every non-stride64 DS2 family uses the same two eight-bit fields. This
+  // rewrite changes only those fields, so load/exchange destination overlap
+  // and split-counter concerns do not apply: the opcode, register operands,
+  // modifiers, instruction count, and entry behavior are unchanged.
+  if (getDs2AddrReplacement(Mnemonic).empty() ||
+      Mnemonic.contains("_stride64_") ||
+      Ops.Off0 > Ds2AddrOffsetMax || Ops.Off1 > Ds2AddrOffsetMax ||
+      InstBytes.size() != 2 * MinInstSize)
+    return false;
+
+  // gfx1250 DS2 offset0/offset1 occupy instruction bits [7:0]/[15:8].
+  // Keep every opcode/register/modifier bit byte-for-byte identical.
+  InstBytes[0] = static_cast<uint8_t>(Ops.Off0);
+  InstBytes[1] = static_cast<uint8_t>(Ops.Off1);
+  return true;
+}
+
+bool hasUnencodableVgprName(StringRef Asm) {
+  for (size_t Pos = Asm.find('v'); Pos != StringRef::npos;
+       Pos = Asm.find('v', Pos + 1)) {
+    StringRef Tail = Asm.substr(Pos + 1);
+    Tail.consume_front("[");
+    unsigned Index = 0;
+    if (!Tail.consumeInteger(10, Index) && Index > 255)
+      return true;
+  }
+  return false;
+}
+
+bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role, unsigned &Mode,
+                          std::string &Output) {
+  StringRef Operand = Input.trim();
+  StringRef Suffix;
+  size_t Space = Operand.find(' ');
+  if (Space != StringRef::npos) {
+    Suffix = Operand.substr(Space);
+    Operand = Operand.take_front(Space);
+  }
+  if (!Operand.consume_front("v")) {
+    Output = Input.trim().str();
+    return true;
+  }
+
+  bool IsRange = Operand.consume_front("[");
+  if (IsRange && !Operand.consume_back("]"))
+    return false;
+  StringRef LoText;
+  StringRef HiText;
+  std::tie(LoText, HiText) = Operand.split(':');
+  if (!IsRange)
+    LoText = HiText = Operand;
+  if (LoText.empty() || HiText.empty())
+    return false;
+
+  unsigned Lo = 0;
+  unsigned Hi = 0;
+  if (LoText.getAsInteger(10, Lo) || HiText.getAsInteger(10, Hi) || Hi < Lo ||
+      Lo / 256 != Hi / 256)
+    return false;
+  unsigned Bank = Lo / 256;
+  if (Bank > 3)
+    return false;
+  setVgprMsbBank(Mode, Role, Bank);
+  if (IsRange)
+    Output =
+        ("v[" + Twine(Lo & 255) + ":" + Twine(Hi & 255) + "]" + Suffix).str();
+  else
+    Output = ("v" + Twine(Lo & 255) + Suffix).str();
+  return true;
+}
+
+std::optional<std::pair<std::string, unsigned>>
+normalizeDsVgprBanks(StringRef Asm, StringRef FromMnem, unsigned OldMode) {
+  size_t MnemEnd = Asm.find(' ');
+  if (MnemEnd == StringRef::npos)
+    return std::nullopt;
+  StringRef Mnem = Asm.take_front(MnemEnd);
+  SmallVector<StringRef, 3> Operands;
+  Asm.substr(MnemEnd + 1)
+      .split(Operands, ',', /*MaxSplit=*/-1,
+             /*KeepEmpty=*/false);
+
+  SmallVector<VgprMsbOperand, 3> Roles;
+  if (FromMnem.starts_with("ds_load_"))
+    Roles = {VgprMsbOperand::Dst, VgprMsbOperand::Src0};
+  else if (FromMnem.starts_with("ds_storexchg_"))
+    Roles = {VgprMsbOperand::Dst, VgprMsbOperand::Src0, VgprMsbOperand::Src1};
+  else if (FromMnem.starts_with("ds_store_"))
+    Roles = {VgprMsbOperand::Src0, VgprMsbOperand::Src1};
+  else
+    return std::nullopt;
+  if (Operands.size() != Roles.size())
+    return std::nullopt;
+
+  unsigned NewMode = OldMode;
+  std::string Normalized = Mnem.str();
+  for (unsigned I = 0; I != Operands.size(); ++I) {
+    std::string Operand;
+    if (!normalizeVgprOperand(Operands[I], Roles[I], NewMode, Operand))
+      return std::nullopt;
+    Normalized += I == 0 ? " " : ", ";
+    Normalized += Operand;
+  }
+  return std::pair<std::string, unsigned>{std::move(Normalized), NewMode};
+}
+
 // -- patchDs2Addr -----------------------------------------------------------
 //
 // Expand one ds_*_2addr_* instruction (stride64 or non-stride64) into two
@@ -416,14 +532,63 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   StringRef ToMnem = getDs2AddrReplacement(DI.Mnemonic);
   if (ToMnem.empty())
     return false;
+  std::optional<DsOperands> Ops =
+      extractDsOperands(DI.Inst, DI.Mnemonic, Ctx.LS);
+  if (!Ops)
+    return failRequiredPatch(Ctx);
+  if (DI.Offset <= Ctx.TextSize && DI.Size <= Ctx.TextSize - DI.Offset &&
+      rewriteDs2AddrOffsetsInPlaceImpl(
+          MutableArrayRef<uint8_t>(Ctx.Text + DI.Offset, DI.Size), DI.Mnemonic,
+          *Ops)) {
+    log() << "hotswap: rewrote " << DI.Mnemonic << " at 0x"
+          << utohexstr(DI.Offset) << " in place with A0 byte offsets "
+          << Ops->Off0 << ", " << Ops->Off1 << "\n";
+    DI.Mnemonic = "<replaced>";
+    return true;
+  }
   std::optional<std::vector<std::string>> Expanded =
       expandDs2AddrImpl(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
   if (!Expanded)
     return failRequiredPatch(Ctx);
 
+  bool NeedsBankNormalization =
+      llvm::any_of(*Expanded, [](const std::string &Asm) {
+        return hasUnencodableVgprName(Asm);
+      });
+  std::optional<unsigned> ActiveMode;
+  if (NeedsBankNormalization) {
+    ActiveMode = getActiveVgprMsbMode(Ctx, Idx);
+    if (!ActiveMode) {
+      log() << "hotswap: error: ds_2addr at 0x" << utohexstr(DI.Offset)
+            << " crosses v255 but the active VGPR-MSB mode is unknown\n";
+      return failRequiredPatch(Ctx);
+    }
+  }
+
   std::string Combined;
-  for (const std::string &Line : *Expanded)
-    Combined += Line + "\n";
+  for (const std::string &Line : *Expanded) {
+    if (!NeedsBankNormalization) {
+      Combined += Line + "\n";
+      continue;
+    }
+    std::optional<std::pair<std::string, unsigned>> Normalized =
+        normalizeDsVgprBanks(Line, DI.Mnemonic, *ActiveMode);
+    if (!Normalized) {
+      log() << "hotswap: error: ds_2addr at 0x" << utohexstr(DI.Offset)
+            << " has a VGPR operand that crosses a 256-register bank\n";
+      return failRequiredPatch(Ctx);
+    }
+    unsigned NewMode = Normalized->second;
+    if (NewMode != *ActiveMode)
+      Combined +=
+          ("s_set_vgpr_msb " + Twine(NewMode | (*ActiveMode << 8)) + "\n")
+              .str();
+    Combined += Normalized->first + "\n";
+    if (NewMode != *ActiveMode)
+      Combined +=
+          ("s_set_vgpr_msb " + Twine(*ActiveMode | (NewMode << 8)) + "\n")
+              .str();
+  }
   // Drain the DS counter right after the split pair so both halves are
   // guaranteed complete before any downstream consumer. The original code
   // tracked completion of the single 2-addr instruction via a later
@@ -1846,6 +2011,14 @@ std::optional<std::vector<std::string>> expandDs2Addr(const MCInst &Inst,
                                                       StringRef ToMnem,
                                                       const LLVMState &LS) {
   return expandDs2AddrImpl(Inst, FromMnem, ToMnem, LS);
+}
+
+bool rewriteDs2AddrOffsetsInPlace(MutableArrayRef<uint8_t> InstBytes,
+                                  const MCInst &Inst, StringRef Mnemonic,
+                                  const LLVMState &LS) {
+  std::optional<DsOperands> Ops = extractDsOperands(Inst, Mnemonic, LS);
+  return Ops &&
+         rewriteDs2AddrOffsetsInPlaceImpl(InstBytes, Mnemonic, *Ops);
 }
 
 // -- applyTrampolinePatches -------------------------------------------------

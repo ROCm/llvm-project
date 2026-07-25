@@ -243,7 +243,6 @@ static bool rewriteMetadataNotes(uint8_t *Elf, const ELFFileT &File,
       }
       PendingWrites.push_back({DescOffset, std::move(NewBlob)});
     }
-
     if (Err) {
       log() << "hotswap: error: " << Context
             << ": failed to iterate AMDGPU notes: " << toString(std::move(Err))
@@ -479,6 +478,7 @@ ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
   if (TextSizeValue > std::numeric_limits<uint64_t>::max() - TextBegin) {
     log() << "hotswap: error: function text range scan: .text virtual "
           << "address range overflows uint64_t.\n";
+    FunctionRangeCacheComplete = false;
     FunctionRangeCache.emplace();
     return *FunctionRangeCache;
   }
@@ -491,6 +491,7 @@ ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
 
     Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
     if (!SymsOrErr) {
+      FunctionRangeCacheComplete = false;
       consumeError(SymsOrErr.takeError());
       continue;
     }
@@ -544,6 +545,168 @@ ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
 std::vector<ElfView::FunctionTextRange> ElfView::functionTextRanges() const {
   ArrayRef<FunctionTextRange> Ranges = cachedFunctionTextRanges();
   return std::vector<FunctionTextRange>(Ranges.begin(), Ranges.end());
+}
+
+bool ElfView::functionTextRangesComplete() const {
+  (void)cachedFunctionTextRanges();
+  return FunctionRangeCacheComplete;
+}
+
+bool ElfView::isValidDataOnlyObject() const {
+  if (textSize() != 0) {
+    log() << "hotswap: error: data-only validation requires an empty .text "
+             "section.\n";
+    return false;
+  }
+
+  for (const ELFT::Shdr &Shdr : Sections) {
+    if ((Shdr.sh_flags & ELF::SHF_EXECINSTR) != 0 && Shdr.sh_size != 0) {
+      Expected<StringRef> NameOrErr = File.getSectionName(Shdr);
+      if (!NameOrErr) {
+        log() << "hotswap: error: data-only validation found a non-empty "
+                 "executable section with an unreadable name: "
+              << toString(NameOrErr.takeError()) << "\n";
+        return false;
+      }
+      log() << "hotswap: error: data-only object has non-empty executable "
+               "section '"
+            << *NameOrErr << "'.\n";
+      return false;
+    }
+
+    if (Shdr.sh_type != ELF::SHT_SYMTAB && Shdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+
+    Expected<ELFT::SymRange> SymsOrErr = File.symbols(&Shdr);
+    if (!SymsOrErr) {
+      log() << "hotswap: error: data-only validation failed to read symbols: "
+            << toString(SymsOrErr.takeError()) << "\n";
+      return false;
+    }
+    Expected<StringRef> StrTabOrErr =
+        File.getStringTableForSymtab(Shdr, Sections);
+    if (!StrTabOrErr) {
+      log() << "hotswap: error: data-only validation failed to read the "
+               "symbol string table: "
+            << toString(StrTabOrErr.takeError()) << "\n";
+      return false;
+    }
+
+    for (const ELFT::Sym &Sym : *SymsOrErr) {
+      Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
+      if (!NameOrErr) {
+        log() << "hotswap: error: data-only validation found an unreadable "
+                 "symbol name: "
+              << toString(NameOrErr.takeError()) << "\n";
+        return false;
+      }
+      if ((Sym.getType() == ELF::STT_FUNC ||
+           Sym.getType() == ELF::STT_GNU_IFUNC) &&
+          Sym.st_shndx != ELF::SHN_UNDEF) {
+        if (Sym.st_shndx == TextSectionIndex)
+          log() << "hotswap: error: data-only object has a function/ifunc "
+                   "symbol in empty .text.\n";
+        else
+          log() << "hotswap: error: data-only object has defined "
+                   "function/ifunc symbol '"
+                << *NameOrErr << "'.\n";
+        return false;
+      }
+      if (NameOrErr->ends_with(".kd")) {
+        log() << "hotswap: error: data-only object has kernel descriptor "
+                 "symbol '"
+              << *NameOrErr << "'.\n";
+        return false;
+      }
+    }
+  }
+
+  bool SawMetadataNote = false;
+  auto validateMetadataNote = [&](ELFT::Note Note) {
+    if (Note.getName() != "AMDGPU" || Note.getType() != ELF::NT_AMDGPU_METADATA)
+      return true;
+    SawMetadataNote = true;
+
+    ArrayRef<uint8_t> Desc = Note.getDesc(4);
+    if (Desc.empty()) {
+      log() << "hotswap: error: data-only AMDGPU metadata note has an "
+               "empty descriptor.\n";
+      return false;
+    }
+    StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
+    msgpack::Document Doc;
+    if (!Doc.readFromBlob(Blob, false)) {
+      log() << "hotswap: error: failed to parse data-only AMDGPU metadata "
+               "note.\n";
+      return false;
+    }
+
+    msgpack::DocNode Root = Doc.getRoot();
+    if (!Root.isMap()) {
+      log() << "hotswap: error: data-only AMDGPU metadata root is not a map.\n";
+      return false;
+    }
+    msgpack::MapDocNode &RootMap = Root.getMap();
+    msgpack::DocNode::MapTy::iterator KernelsIt =
+        RootMap.find("amdhsa.kernels");
+    if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray()) {
+      log() << "hotswap: error: data-only AMDGPU metadata has no valid "
+               "amdhsa.kernels array.\n";
+      return false;
+    }
+    if (!KernelsIt->second.getArray().empty()) {
+      log() << "hotswap: error: data-only AMDGPU metadata claims "
+            << KernelsIt->second.getArray().size() << " kernel(s).\n";
+      return false;
+    }
+    return true;
+  };
+
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (!PhdrsOrErr) {
+    log() << "hotswap: error: data-only validation failed to read program "
+             "headers: "
+          << toString(PhdrsOrErr.takeError()) << "\n";
+    return false;
+  }
+  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+    if (Phdr.p_type != ELF::PT_NOTE)
+      continue;
+
+    Error Err = Error::success();
+    for (ELFT::Note Note : File.notes(Phdr, Err))
+      if (!validateMetadataNote(Note))
+        return false;
+    if (Err) {
+      log() << "hotswap: error: data-only validation failed to iterate AMDGPU "
+               "notes: "
+            << toString(std::move(Err)) << "\n";
+      return false;
+    }
+  }
+
+  // Linked code objects normally expose metadata through PT_NOTE. Match
+  // COMGR's metadata lookup fallback for relocatable/unusual objects whose
+  // note exists only in the section table.
+  if (!SawMetadataNote) {
+    for (const ELFT::Shdr &Shdr : Sections) {
+      if (Shdr.sh_type != ELF::SHT_NOTE)
+        continue;
+
+      Error Err = Error::success();
+      for (ELFT::Note Note : File.notes(Shdr, Err))
+        if (!validateMetadataNote(Note))
+          return false;
+      if (Err) {
+        log()
+            << "hotswap: error: data-only validation failed to iterate AMDGPU "
+               "note sections: "
+            << toString(std::move(Err)) << "\n";
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 // -- ElfView::findKernelAtAddress ---------------------------------------------
