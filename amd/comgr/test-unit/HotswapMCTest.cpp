@@ -2344,7 +2344,8 @@ TEST(TextDisplacement, ReencodesForwardSBranchAcrossInsertion) {
   Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
 
   llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
-      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit},
+                                          /*RelocateTrailingSections=*/false);
   ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
   std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
 
@@ -2385,7 +2386,8 @@ TEST(TextDisplacement, PreservesSymbolEndingAtInsertionBoundary) {
   Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
 
   llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
-      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit},
+                                          /*RelocateTrailingSections=*/false);
   ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
   std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
 
@@ -2457,7 +2459,8 @@ TEST(TextDisplacement, UpdatesKernelDescriptorEntryOffset) {
   Edit.ReplacementBytes.assign(Prefix.begin(), Prefix.end());
 
   llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
-      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit},
+                                          /*RelocateTrailingSections=*/false);
   ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
   std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
 
@@ -2551,7 +2554,8 @@ TEST(TextDisplacement, RepairsGetPcPairToAllocatedData) {
   Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
 
   llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
-      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit},
+                                          /*RelocateTrailingSections=*/false);
   ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
   std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
   uint8_t *OutData = reinterpret_cast<uint8_t *>(Out->getBufferStart());
@@ -4584,7 +4588,8 @@ TEST(TextDisplacement, RejectsDynamicRelocationTargetingText) {
   Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
 
   llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
-      tryApplyTextDisplacementToNewBuffer(*DynamicView, S, {Edit});
+      tryApplyTextDisplacementToNewBuffer(*DynamicView, S, {Edit},
+                                          /*RelocateTrailingSections=*/false);
   ASSERT_FALSE((bool)OutOrErr);
   std::string Reason = llvm::toString(OutOrErr.takeError());
   EXPECT_NE(Reason.find("dynamic relocation section"), std::string::npos);
@@ -4594,7 +4599,8 @@ TEST(TextDisplacement, RejectsDynamicRelocationTargetingText) {
   llvm::Expected<ElfView> NonTextView =
       ElfView::create(ElfBytes.data(), ElfBytes.size());
   ASSERT_TRUE((bool)NonTextView) << llvm::toString(NonTextView.takeError());
-  OutOrErr = tryApplyTextDisplacementToNewBuffer(*NonTextView, S, {Edit});
+  OutOrErr = tryApplyTextDisplacementToNewBuffer(
+      *NonTextView, S, {Edit}, /*RelocateTrailingSections=*/false);
   EXPECT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
 
   Rela.setSymbolAndType(/*Symbol=*/0, llvm::ELF::R_AMDGPU_RELATIVE64);
@@ -4604,7 +4610,8 @@ TEST(TextDisplacement, RejectsDynamicRelocationTargetingText) {
       ElfView::create(ElfBytes.data(), ElfBytes.size());
   ASSERT_TRUE((bool)TextAddendView)
       << llvm::toString(TextAddendView.takeError());
-  OutOrErr = tryApplyTextDisplacementToNewBuffer(*TextAddendView, S, {Edit});
+  OutOrErr = tryApplyTextDisplacementToNewBuffer(
+      *TextAddendView, S, {Edit}, /*RelocateTrailingSections=*/false);
   ASSERT_FALSE((bool)OutOrErr);
   Reason = llvm::toString(OutOrErr.takeError());
   EXPECT_NE(Reason.find("addend references"), std::string::npos) << Reason;

@@ -1622,10 +1622,14 @@ std::unique_ptr<llvm::WritableMemoryBuffer> addKernelEntryTrampolineSymbols(
     llvm::ArrayRef<KernelEntryTrampolineFixup> Fixups);
 
 /// Apply direct .text displacement to a newly allocated output buffer.
+///
+/// Production callers default to relocating trailing allocated sections so
+/// every affected ELF address carrier is updated with the displacement. Pass
+/// false only when the caller has proved that the text-only layout is valid.
 llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>>
 tryApplyTextDisplacementToNewBuffer(const ElfView &Elf, const LLVMState &LS,
                                     llvm::ArrayRef<DisplacementEdit> Edits,
-                                    bool RelocateTrailingSections = false);
+                                    bool RelocateTrailingSections = true);
 
 // -- Function declarations (GFX1250 hotswap policy layer) ---------------------
 

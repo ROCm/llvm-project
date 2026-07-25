@@ -1,8 +1,6 @@
-// COM: Verify that hotswap-rewrite succeeds on a clang-assembled ELF where
-// COM: .dynamic follows .text (the layout that previously caused
-// COM: growWithTrampolines to refuse). No patches are applied here (the
-// COM: kernel contains no patchable instructions), but the rewrite pipeline
-// COM: must accept the ELF rather than returning an error.
+// COM: Verify that production entry displacement opts into whole-object
+// COM: relocation when .dynamic follows .text. This layout requires moving
+// COM: trailing section and program-header addresses.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -11,17 +9,21 @@
 // LAYOUT: .text
 // LAYOUT: .dynamic
 
-// COM: hotswap-rewrite must succeed (not reject the ELF).
-// RUN: hotswap-rewrite %t.elf \
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out.elf \
+// RUN:   --entry-trampolines --dump %t.out.elf --check-idempotent 2>&1 \
 // RUN:   | %FileCheck --check-prefix=API %s
-// API: RESULT: SUCCESS
+// API: hotswap: displacement: grew ELF
+// API-NOT: using appended entry stubs
+// API: REWRITE: SUCCESS
+// API: IDEMPOTENT: YES
 
-// COM: Output ELF is valid and disassemblable.
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
-// DISASM: file format elf64-amdgpu
-// DISASM: s_endpgm
+// DISASM-LABEL: <test_elf_growth>:
+// DISASM-NEXT: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
+// DISASM-NEXT: v_nop
+// DISASM-NEXT: v_mov_b32_e32 v0, 0
+// DISASM-NEXT: s_endpgm
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

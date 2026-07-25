@@ -2903,7 +2903,9 @@ static amd_comgr_status_t retargetCodeObjectImpl(
 
     if (!EntryDisplacements.empty()) {
       Expected<std::unique_ptr<WritableMemoryBuffer>> DisplacedOrErr =
-          tryApplyTextDisplacementToNewBuffer(Elf, LS, EntryDisplacements);
+          tryApplyTextDisplacementToNewBuffer(
+              Elf, LS, EntryDisplacements,
+              /*RelocateTrailingSections=*/true);
       if (DisplacedOrErr) {
         std::unique_ptr<WritableMemoryBuffer> Displaced =
             std::move(*DisplacedOrErr);

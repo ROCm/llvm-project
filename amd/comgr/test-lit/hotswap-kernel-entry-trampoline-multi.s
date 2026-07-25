@@ -1,6 +1,5 @@
-// COM: A 16-byte direct prefix before the first kernel would misalign the
-// COM: second kernel. HotSwap must retain the ABI's 256-byte entry alignment by
-// COM: falling back to aligned appended stubs for the whole object.
+// COM: Direct prefixes before multiple kernels must retain the ABI's 256-byte
+// COM: entry alignment by inserting padding before each displaced entry.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -13,17 +12,16 @@
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
 // DISASM-LABEL: <entry_tramp_first>:
+// DISASM-NEXT: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
+// DISASM-NEXT: v_nop
 // DISASM-NEXT: v_mov_b32_e32 v0, 1
 // DISASM-NEXT: s_endpgm
 // DISASM-LABEL: <entry_tramp_second>:
+// DISASM-NEXT: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
+// DISASM-NEXT: v_nop
 // DISASM-NEXT: v_mov_b32_e32 v0, 2
 // DISASM-NEXT: s_endpgm
-// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE // {{[0-9a-fA-F]+00}}:
-// DISASM-NEXT: v_nop
-// DISASM-NEXT: s_get_pc_i64
-// DISASM: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE // {{[0-9a-fA-F]+00}}:
-// DISASM-NEXT: v_nop
-// DISASM-NEXT: s_get_pc_i64
+// DISASM-NOT: s_get_pc_i64
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
