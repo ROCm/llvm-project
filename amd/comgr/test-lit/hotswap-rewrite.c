@@ -1,4 +1,5 @@
 // COM: Test HotSwap rewrite API
+// clang-format off
 
 // COM: Create a minimal test ELF file (ELF64 header only, no sections).
 // RUN: printf '\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00' > %t.elf
@@ -40,3 +41,4 @@
 
 // COM: End-to-end coverage on real gfx1250 code objects is covered by
 // COM: hotswap-rewrite-e2e.hip and hotswap-kernel-entry-trampoline.s.
+// clang-format on
