@@ -1000,6 +1000,49 @@ TEST(CollectDirectBranchTargets,
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 
+TEST(CollectDirectBranchTargets,
+     IndexesManyBoundedReturnsAndKnownCallsWithoutCartesianScan) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_call_i64 s[30:31], 0\n"
+                           "s_set_pc_i64 s[30:31]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Prototype;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Prototype));
+  ASSERT_EQ(Prototype.size(), 2u);
+
+  constexpr size_t Count = 16384;
+  std::vector<InternalDecodedInst> Decoded;
+  Decoded.reserve(Count * 2);
+  llvm::SmallVector<uint64_t, 16> DeclaredEntries;
+  DeclaredEntries.reserve(Count);
+  llvm::SmallVector<ElfView::FunctionTextRange, 16> FunctionRanges;
+  FunctionRanges.reserve(Count);
+  for (size_t I = 0; I != Count; ++I) {
+    uint64_t CallOffset = I * 2 * MinInstSize;
+    uint64_t FunctionBegin = CallOffset + MinInstSize;
+    Decoded.push_back(Prototype[0]);
+    Decoded.back().Offset = CallOffset;
+    Decoded.push_back(Prototype[1]);
+    Decoded.back().Offset = FunctionBegin;
+    DeclaredEntries.push_back(FunctionBegin);
+    FunctionRanges.push_back({FunctionBegin, FunctionBegin + MinInstSize});
+  }
+
+  // Each call targets the following one-instruction return function. This
+  // simultaneously pins target/continuation range queries and direct-call
+  // source membership: scanning all calls for every return is quadratic.
+  uint64_t TextSize = Count * 2 * MinInstSize;
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, TextSize, DeclaredEntries, FunctionRanges);
+  ASSERT_TRUE(Info);
+  EXPECT_EQ(Info->Targets.size(), Count);
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
 TEST(CollectDirectBranchTargets, ResolvesProductionPcMaterializedCall) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -1454,7 +1497,8 @@ TEST(CollectDirectBranchTargets, RejectsExternalAliasAtLocalFunctionEntry) {
   EXPECT_TRUE(Info->HasUnresolvedTargets);
 }
 
-TEST(CollectDirectBranchTargets, RejectsFallthroughIntoReturnFunction) {
+TEST(CollectDirectBranchTargets,
+     RejectsUnsortedDeclaredFallthroughIntoReturnFunction) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
   llvm::SmallVector<uint8_t> Bytes =
@@ -1470,12 +1514,13 @@ TEST(CollectDirectBranchTargets, RejectsFallthroughIntoReturnFunction) {
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
   ASSERT_EQ(Decoded.size(), 6u);
-  llvm::SmallVector<uint64_t, 2> DeclaredEntries{0, Decoded[1].Offset};
+  llvm::SmallVector<uint64_t, 2> DeclaredEntries{Decoded[1].Offset, 0};
   llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
       {Decoded[1].Offset, Decoded[3].Offset}};
 
-  // The declared entry at zero reaches the local helper by fallthrough and
-  // does not define s[30:31], so the helper's return cannot be bounded.
+  // The deliberately unsorted declared entry at zero reaches the local helper
+  // by fallthrough and does not define s[30:31], so the helper's return cannot
+  // be bounded.
   std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
       Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
       FunctionRanges);
