@@ -304,6 +304,65 @@ static std::vector<uint8_t> makeDisplacementTestElf(
   return Buf;
 }
 
+static void addDisplacementTestRelocationSection(
+    std::vector<uint8_t> &ElfBytes, uint32_t SectionType, uint64_t SectionFlags,
+    uint32_t SectionInfo, uint64_t RelocationOffset, uint32_t RelocationType) {
+  using namespace llvm::ELF;
+
+  Elf64_Ehdr Ehdr;
+  std::memcpy(&Ehdr, ElfBytes.data(), sizeof(Ehdr));
+  std::vector<Elf64_Shdr> ExistingShdrs(Ehdr.e_shnum);
+  std::memcpy(ExistingShdrs.data(), ElfBytes.data() + Ehdr.e_shoff,
+              ExistingShdrs.size() * sizeof(Elf64_Shdr));
+
+  const uint64_t RelocationOffsetInFile = alignTo8(ElfBytes.size());
+  Elf64_Shdr RelocationShdr{};
+  RelocationShdr.sh_type = SectionType;
+  RelocationShdr.sh_flags = SectionFlags;
+  RelocationShdr.sh_offset = RelocationOffsetInFile;
+  RelocationShdr.sh_link =
+      SectionType == SHT_REL || SectionType == SHT_RELA ? 4 : 0;
+  RelocationShdr.sh_info = SectionInfo;
+  RelocationShdr.sh_addralign = 8;
+
+  if (SectionType == SHT_RELA) {
+    Elf64_Rela Rela{};
+    Rela.r_offset = RelocationOffset;
+    const uint32_t Symbol = RelocationType == R_AMDGPU_NONE ? 0 : 2;
+    Rela.setSymbolAndType(Symbol, RelocationType);
+    RelocationShdr.sh_size = sizeof(Rela);
+    RelocationShdr.sh_entsize = sizeof(Rela);
+    ElfBytes.resize(RelocationOffsetInFile + sizeof(Rela));
+    std::memcpy(ElfBytes.data() + RelocationOffsetInFile, &Rela, sizeof(Rela));
+  } else if (SectionType == SHT_REL) {
+    Elf64_Rel Rel{};
+    Rel.r_offset = RelocationOffset;
+    const uint32_t Symbol = RelocationType == R_AMDGPU_NONE ? 0 : 2;
+    Rel.setSymbolAndType(Symbol, RelocationType);
+    RelocationShdr.sh_size = sizeof(Rel);
+    RelocationShdr.sh_entsize = sizeof(Rel);
+    ElfBytes.resize(RelocationOffsetInFile + sizeof(Rel));
+    std::memcpy(ElfBytes.data() + RelocationOffsetInFile, &Rel, sizeof(Rel));
+  } else {
+    RelocationShdr.sh_size = sizeof(RelocationOffset);
+    RelocationShdr.sh_entsize = 0;
+    ElfBytes.resize(RelocationOffsetInFile + sizeof(RelocationOffset));
+    std::memcpy(ElfBytes.data() + RelocationOffsetInFile, &RelocationOffset,
+                sizeof(RelocationOffset));
+  }
+
+  Ehdr.e_shoff = alignTo8(ElfBytes.size());
+  ++Ehdr.e_shnum;
+  ElfBytes.resize(Ehdr.e_shoff +
+                  static_cast<uint64_t>(Ehdr.e_shnum) * sizeof(Elf64_Shdr));
+  std::memcpy(ElfBytes.data() + Ehdr.e_shoff, ExistingShdrs.data(),
+              ExistingShdrs.size() * sizeof(Elf64_Shdr));
+  std::memcpy(ElfBytes.data() + Ehdr.e_shoff +
+                  ExistingShdrs.size() * sizeof(Elf64_Shdr),
+              &RelocationShdr, sizeof(RelocationShdr));
+  std::memcpy(ElfBytes.data(), &Ehdr, sizeof(Ehdr));
+}
+
 struct EhFrameFdeSpec {
   uint64_t InitialAddress;
   uint32_t AddressRange;
@@ -3197,6 +3256,151 @@ TEST(TextDisplacement, RejectsEhFrameFdePartiallyOverlappingText) {
   std::string Reason = llvm::toString(OutOrErr.takeError());
   EXPECT_NE(Reason.find("partially overlaps .text"), std::string::npos)
       << Reason;
+}
+
+TEST(TextDisplacement, RejectsDynamicRelocationWritesIntoEhFrame) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  EhFrameFdeSpec Spec = {DisplacementTextAddr, 8, {}};
+  std::vector<uint8_t> EhFrame = makeEhFrame({Spec});
+
+  struct RelocationCase {
+    uint32_t SectionType;
+    uint64_t Offset;
+    uint32_t RelocationType;
+  };
+  const RelocationCase Cases[] = {
+      {llvm::ELF::SHT_RELA, DisplacementEhFrameAddr,
+       llvm::ELF::R_AMDGPU_RELATIVE64},
+      {llvm::ELF::SHT_REL, DisplacementEhFrameAddr, llvm::ELF::R_AMDGPU_ABS64},
+      {llvm::ELF::SHT_RELA, DisplacementEhFrameAddr - 4,
+       llvm::ELF::R_AMDGPU_RELATIVE64},
+  };
+
+  for (const RelocationCase &Case : Cases) {
+    SCOPED_TRACE(testing::Message() << "section type " << Case.SectionType
+                                    << ", offset " << Case.Offset);
+    std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+        Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
+        /*AddBoundaryTextSymbol=*/false, EhFrame);
+    addDisplacementTestRelocationSection(
+        ElfBytes, Case.SectionType, llvm::ELF::SHF_ALLOC,
+        /*SectionInfo=*/0, Case.Offset, Case.RelocationType);
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(ElfBytes.data(), ElfBytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+    DisplacementEdit Edit;
+    Edit.Offset = 0;
+    Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+    llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+        tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+    ASSERT_FALSE((bool)OutOrErr);
+    std::string Reason = llvm::toString(OutOrErr.takeError());
+    EXPECT_NE(Reason.find("writes into .eh_frame"), std::string::npos)
+        << Reason;
+  }
+}
+
+TEST(TextDisplacement, AllowsNonWritingRelocationAtEhFrameAddress) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  EhFrameFdeSpec Spec = {DisplacementTextAddr, 8, {}};
+  std::vector<uint8_t> EhFrame = makeEhFrame({Spec});
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+      Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
+      /*AddBoundaryTextSymbol=*/false, EhFrame);
+  addDisplacementTestRelocationSection(
+      ElfBytes, llvm::ELF::SHT_RELA, llvm::ELF::SHF_ALLOC,
+      /*SectionInfo=*/0, DisplacementEhFrameAddr, llvm::ELF::R_AMDGPU_NONE);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  EXPECT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+}
+
+TEST(TextDisplacement, RejectsSectionSpecificEhFrameRelocations) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  EhFrameFdeSpec Spec = {DisplacementTextAddr, 8, {}};
+  std::vector<uint8_t> EhFrame = makeEhFrame({Spec});
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+      Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
+      /*AddBoundaryTextSymbol=*/false, EhFrame);
+  addDisplacementTestRelocationSection(
+      ElfBytes, llvm::ELF::SHT_RELA, /*SectionFlags=*/0,
+      /*SectionInfo=*/5, /*RelocationOffset=*/0, llvm::ELF::R_AMDGPU_ABS64);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find(".eh_frame relocation records are unsupported"),
+            std::string::npos)
+      << Reason;
+}
+
+TEST(TextDisplacement, RejectsAllocatedPackedRelocationsWithEhFrame) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  EhFrameFdeSpec Spec = {DisplacementTextAddr, 8, {}};
+  std::vector<uint8_t> EhFrame = makeEhFrame({Spec});
+  const uint32_t PackedSectionTypes[] = {
+      llvm::ELF::SHT_RELR,         llvm::ELF::SHT_ANDROID_REL,
+      llvm::ELF::SHT_ANDROID_RELA, llvm::ELF::SHT_ANDROID_RELR,
+      llvm::ELF::SHT_CREL,
+  };
+
+  for (uint32_t SectionType : PackedSectionTypes) {
+    SCOPED_TRACE(SectionType);
+    std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+        Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
+        /*AddBoundaryTextSymbol=*/false, EhFrame);
+    addDisplacementTestRelocationSection(
+        ElfBytes, SectionType, llvm::ELF::SHF_ALLOC,
+        /*SectionInfo=*/0, DisplacementEhFrameAddr, llvm::ELF::R_AMDGPU_NONE);
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(ElfBytes.data(), ElfBytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+    DisplacementEdit Edit;
+    Edit.Offset = 0;
+    Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+    llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+        tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+    ASSERT_FALSE((bool)OutOrErr);
+    std::string Reason = llvm::toString(OutOrErr.takeError());
+    EXPECT_NE(Reason.find("packed relocation records"), std::string::npos)
+        << Reason;
+  }
 }
 
 TEST(TextDisplacement, RejectsCompressedEhFrame) {

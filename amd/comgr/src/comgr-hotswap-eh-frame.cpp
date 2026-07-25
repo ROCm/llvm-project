@@ -17,6 +17,7 @@
 #include "llvm/DebugInfo/DWARF/DWARFDebugFrame.h"
 
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <type_traits>
 #include <vector>
@@ -57,6 +58,123 @@ Expected<const ELFT::Shdr *> findEhFrameSection(const ElfView &Elf) {
     Found = &Shdr;
   }
   return Found;
+}
+
+Expected<uint64_t> amdgpuRelocationWriteWidth(uint32_t Type) {
+  // TODO: Replace this target-internal width mapping when
+  // https://github.com/ROCm/llvm-project/issues/3601 exposes it through LLVM.
+  switch (Type) {
+  case ELF::R_AMDGPU_NONE:
+    return 0;
+  case ELF::R_AMDGPU_REL16:
+    return 2;
+  case ELF::R_AMDGPU_ABS32_LO:
+  case ELF::R_AMDGPU_ABS32_HI:
+  case ELF::R_AMDGPU_REL32:
+  case ELF::R_AMDGPU_ABS32:
+  case ELF::R_AMDGPU_GOTPCREL:
+  case ELF::R_AMDGPU_GOTPCREL32_LO:
+  case ELF::R_AMDGPU_GOTPCREL32_HI:
+  case ELF::R_AMDGPU_REL32_LO:
+  case ELF::R_AMDGPU_REL32_HI:
+    return 4;
+  case ELF::R_AMDGPU_ABS64:
+  case ELF::R_AMDGPU_REL64:
+  case ELF::R_AMDGPU_RELATIVE64:
+    return 8;
+  default:
+    return makeEhFrameError(
+        "dynamic relocation has unknown AMDGPU write width (type " +
+        Twine(Type) + ")");
+  }
+}
+
+Expected<bool> relocationWriteOverlaps(uint64_t Offset, uint64_t Width,
+                                       uint64_t RangeBegin, uint64_t RangeEnd) {
+  if (Width == 0)
+    return false;
+  if (Offset > std::numeric_limits<uint64_t>::max() - Width)
+    return makeEhFrameError("dynamic relocation write range overflows");
+  const uint64_t End = Offset + Width;
+  return Offset < RangeEnd && End > RangeBegin;
+}
+
+Error rejectRelocationsTargetingEhFrame(const ElfView &Elf,
+                                        uint32_t EhFrameIndex,
+                                        uint64_t EhFrameBegin,
+                                        uint64_t EhFrameEnd) {
+  for (const ELFT::Shdr &Shdr : Elf.sections()) {
+    const bool IsRel = Shdr.sh_type == ELF::SHT_REL;
+    const bool IsRela = Shdr.sh_type == ELF::SHT_RELA;
+    const bool IsOpaquePackedRelocation =
+        Shdr.sh_type == ELF::SHT_RELR || Shdr.sh_type == ELF::SHT_ANDROID_REL ||
+        Shdr.sh_type == ELF::SHT_ANDROID_RELA ||
+        Shdr.sh_type == ELF::SHT_ANDROID_RELR || Shdr.sh_type == ELF::SHT_CREL;
+
+    if ((IsRel || IsRela || IsOpaquePackedRelocation) &&
+        Shdr.sh_info == EhFrameIndex) {
+      return makeEhFrameError(".eh_frame relocation records are unsupported");
+    }
+
+    if (IsOpaquePackedRelocation) {
+      if (Shdr.sh_flags & ELF::SHF_ALLOC) {
+        return makeEhFrameError(
+            "allocated packed relocation records cannot be checked for "
+            ".eh_frame targets");
+      }
+      continue;
+    }
+
+    // Section-specific REL/RELA records were handled by sh_info above.
+    // Dynamic relocation sections use sh_info == 0 and absolute virtual
+    // addresses in r_offset, so enumerate them and reject writes that touch
+    // any byte of .eh_frame.
+    if ((!IsRel && !IsRela) || Shdr.sh_info != 0)
+      continue;
+
+    if (IsRela) {
+      Expected<ELFT::RelaRange> RelasOrErr = Elf.file().relas(Shdr);
+      if (!RelasOrErr) {
+        return makeEhFrameError(
+            "failed to read dynamic RELA records while checking .eh_frame: " +
+            Twine(toString(RelasOrErr.takeError())));
+      }
+      for (const ELFT::Rela &Rela : *RelasOrErr) {
+        Expected<uint64_t> WidthOrErr =
+            amdgpuRelocationWriteWidth(Rela.getType(false));
+        if (!WidthOrErr)
+          return WidthOrErr.takeError();
+        Expected<bool> OverlapsOrErr = relocationWriteOverlaps(
+            Rela.r_offset, *WidthOrErr, EhFrameBegin, EhFrameEnd);
+        if (!OverlapsOrErr)
+          return OverlapsOrErr.takeError();
+        if (*OverlapsOrErr) {
+          return makeEhFrameError("dynamic RELA record writes into .eh_frame");
+        }
+      }
+      continue;
+    }
+
+    Expected<ELFT::RelRange> RelsOrErr = Elf.file().rels(Shdr);
+    if (!RelsOrErr) {
+      return makeEhFrameError(
+          "failed to read dynamic REL records while checking .eh_frame: " +
+          Twine(toString(RelsOrErr.takeError())));
+    }
+    for (const ELFT::Rel &Rel : *RelsOrErr) {
+      Expected<uint64_t> WidthOrErr =
+          amdgpuRelocationWriteWidth(Rel.getType(false));
+      if (!WidthOrErr)
+        return WidthOrErr.takeError();
+      Expected<bool> OverlapsOrErr = relocationWriteOverlaps(
+          Rel.r_offset, *WidthOrErr, EhFrameBegin, EhFrameEnd);
+      if (!OverlapsOrErr)
+        return OverlapsOrErr.takeError();
+      if (*OverlapsOrErr)
+        return makeEhFrameError("dynamic REL record writes into .eh_frame");
+    }
+  }
+  return Error::success();
 }
 
 Expected<bool> cfiSetLocationRequiresRemap(const dwarf::CFIProgram &Program,
@@ -174,9 +292,9 @@ Expected<std::vector<EhFramePatch>> remapFdeCfiProgram(
   uint64_t NewLocation = NewFdeStart;
   std::vector<EhFramePatch> Patches;
 
-  auto remapAdvance = [&](uint64_t Operand, uint64_t OperandOffset,
-                          unsigned OperandSize,
-                          uint8_t PrimaryOpcode) -> Error {
+  std::function<Error(uint64_t, uint64_t, unsigned, uint8_t)> RemapAdvance =
+      [&](uint64_t Operand, uint64_t OperandOffset, unsigned OperandSize,
+          uint8_t PrimaryOpcode) -> Error {
     if (Operand >
         (std::numeric_limits<uint64_t>::max() - OldLocation) / CodeAlignment) {
       return makeEhFrameError(".eh_frame CFI advance location overflows");
@@ -232,7 +350,7 @@ Expected<std::vector<EhFramePatch>> remapFdeCfiProgram(
     const uint8_t PrimaryOpcode = EncodedOpcode & 0xc0;
     if (PrimaryOpcode != 0) {
       if (PrimaryOpcode == dwarf::DW_CFA_advance_loc) {
-        if (Error Err = remapAdvance(EncodedOpcode & 0x3f, OpcodeOffset, 1,
+        if (Error Err = RemapAdvance(EncodedOpcode & 0x3f, OpcodeOffset, 1,
                                      dwarf::DW_CFA_advance_loc))
           return std::move(Err);
       } else if (PrimaryOpcode == dwarf::DW_CFA_offset) {
@@ -279,7 +397,7 @@ Expected<std::vector<EhFramePatch>> remapFdeCfiProgram(
       if (!Cursor)
         break;
       if (Error Err =
-              remapAdvance(Operand, OperandOffset, OperandSize, /*Primary=*/0))
+              RemapAdvance(Operand, OperandOffset, OperandSize, /*Primary=*/0))
         return std::move(Err);
       break;
     }
@@ -462,12 +580,13 @@ Error remapEhFrameForDisplacement(const ElfView &OldElf,
   }
   if (!FoundOldEhFrameIndex)
     return makeEhFrameError("failed to resolve .eh_frame section index");
-  for (const ELFT::Shdr &Shdr : OldElf.sections()) {
-    if ((Shdr.sh_type == ELF::SHT_REL || Shdr.sh_type == ELF::SHT_RELA) &&
-        Shdr.sh_info == OldEhFrameIndex) {
-      return makeEhFrameError(".eh_frame relocation records are unsupported");
-    }
-  }
+  if (OldShdr->sh_size >
+      std::numeric_limits<uint64_t>::max() - OldShdr->sh_addr)
+    return makeEhFrameError(".eh_frame virtual address range overflows");
+  if (Error Err = rejectRelocationsTargetingEhFrame(
+          OldElf, OldEhFrameIndex, OldShdr->sh_addr,
+          OldShdr->sh_addr + OldShdr->sh_size))
+    return Err;
 
   uint8_t *OutData = reinterpret_cast<uint8_t *>(OutBuf.getBufferStart());
   Expected<ElfView> OutElfOrErr =
