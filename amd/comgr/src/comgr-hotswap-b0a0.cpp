@@ -1632,6 +1632,209 @@ unsafeIncomingNumberedSgprsInRange(ArrayRef<InternalDecodedInst> Decoded,
   return Unsafe;
 }
 
+struct BatchedSgprContinuationAnalysis {
+  uint64_t FunctionBegin = 0;
+  uint64_t FunctionEnd = 0;
+  size_t BeginIndex = 0;
+  size_t InstructionCount = 0;
+  unsigned RegisterCount = 0;
+  unsigned WordsPerRow = 0;
+  std::vector<uint64_t> UnsafeRows;
+
+  std::optional<BitVector> query(ArrayRef<InternalDecodedInst> Decoded,
+                                 uint64_t Continuation) const {
+    if (Continuation < FunctionBegin || Continuation >= FunctionEnd)
+      return std::nullopt;
+    auto Begin = Decoded.begin() + BeginIndex;
+    auto End = Begin + InstructionCount;
+    auto It = llvm::lower_bound(
+        ArrayRef<InternalDecodedInst>(Begin, End), Continuation,
+        [](const InternalDecodedInst &DI, uint64_t Offset) {
+          return DI.Offset < Offset;
+        });
+    if (It == ArrayRef<InternalDecodedInst>(Begin, End).end() ||
+        It->Offset != Continuation)
+      return std::nullopt;
+    size_t LocalIndex = It - Begin;
+    const uint64_t *Row = UnsafeRows.data() + LocalIndex * WordsPerRow;
+    BitVector Result(RegisterCount);
+    for (unsigned Register = 0; Register != RegisterCount; ++Register)
+      if ((Row[Register / 64] >> (Register % 64)) & 1)
+        Result.set(Register);
+    return Result;
+  }
+};
+
+static std::optional<BatchedSgprContinuationAnalysis>
+computeBatchedSgprContinuationAnalysis(ArrayRef<InternalDecodedInst> Decoded,
+                                       const LLVMState &LS,
+                                       uint64_t FunctionBegin,
+                                       uint64_t FunctionEnd,
+                                       ArrayRef<MCRegister> NumberedSgprs) {
+  if (!LS.MIA || FunctionBegin >= FunctionEnd)
+    return std::nullopt;
+  auto Begin =
+      llvm::lower_bound(Decoded, FunctionBegin,
+                        [](const InternalDecodedInst &DI, uint64_t Offset) {
+                          return DI.Offset < Offset;
+                        });
+  auto End = llvm::lower_bound(
+      Decoded, FunctionEnd, [](const InternalDecodedInst &DI, uint64_t Offset) {
+        return DI.Offset < Offset;
+      });
+  if (Begin == End)
+    return std::nullopt;
+
+  BatchedSgprContinuationAnalysis Result;
+  Result.FunctionBegin = FunctionBegin;
+  Result.FunctionEnd = FunctionEnd;
+  Result.BeginIndex = Begin - Decoded.begin();
+  Result.InstructionCount = End - Begin;
+  Result.RegisterCount = NumberedSgprs.size();
+  Result.WordsPerRow = (Result.RegisterCount + 63) / 64;
+  if (Result.WordsPerRow == 0)
+    return Result;
+  if (Result.InstructionCount >
+      std::numeric_limits<size_t>::max() / Result.WordsPerRow)
+    return std::nullopt;
+  size_t WordCount = Result.InstructionCount * Result.WordsPerRow;
+
+  std::vector<uint64_t> UsesRows(WordCount);
+  std::vector<uint64_t> DefsRows(WordCount);
+  Result.UnsafeRows.assign(WordCount, 0);
+  std::vector<SmallVector<size_t, 2>> Successors(Result.InstructionCount);
+  std::vector<SmallVector<size_t, 2>> Predecessors(Result.InstructionCount);
+  BitVector OpaqueSuccessor(Result.InstructionCount);
+
+  auto FindLocalIndex = [&](uint64_t Offset) -> std::optional<size_t> {
+    if (Offset < FunctionBegin || Offset >= FunctionEnd)
+      return std::nullopt;
+    auto It =
+        llvm::lower_bound(ArrayRef<InternalDecodedInst>(Begin, End), Offset,
+                          [](const InternalDecodedInst &DI, uint64_t Target) {
+                            return DI.Offset < Target;
+                          });
+    if (It == ArrayRef<InternalDecodedInst>(Begin, End).end() ||
+        It->Offset != Offset)
+      return std::nullopt;
+    return It - Begin;
+  };
+  auto AddSuccessor = [&](size_t From, uint64_t Offset) {
+    std::optional<size_t> To = FindLocalIndex(Offset);
+    if (!To) {
+      OpaqueSuccessor.set(From);
+      return;
+    }
+    if (!llvm::is_contained(Successors[From], *To)) {
+      Successors[From].push_back(*To);
+      Predecessors[*To].push_back(From);
+    }
+  };
+  auto StoreBits = [&](uint64_t *Row, const BitVector &Bits) {
+    for (int Bit = Bits.find_first(); Bit >= 0; Bit = Bits.find_next(Bit))
+      Row[static_cast<unsigned>(Bit) / 64] |=
+          uint64_t{1} << (static_cast<unsigned>(Bit) % 64);
+  };
+
+  for (size_t I = 0; I != Result.InstructionCount; ++I) {
+    const InternalDecodedInst &DI = Begin[I];
+    uint64_t *Uses = UsesRows.data() + I * Result.WordsPerRow;
+    uint64_t *Defs = DefsRows.data() + I * Result.WordsPerRow;
+    if (!DI.DecodeSucceeded || DI.Offset < FunctionBegin ||
+        DI.Offset >= FunctionEnd) {
+      OpaqueSuccessor.set(I);
+      continue;
+    }
+
+    BitVector UsesBits(Result.RegisterCount);
+    BitVector DefsBits(Result.RegisterCount);
+    getNumberedSgprUsesAndDefs(DI, LS, NumberedSgprs, UsesBits, DefsBits);
+    StoreBits(Uses, UsesBits);
+    StoreBits(Defs, DefsBits);
+
+    if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode)
+      continue;
+    if (LS.MIA->isCall(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst) ||
+        LS.MIA->isReturn(DI.Inst)) {
+      OpaqueSuccessor.set(I);
+      continue;
+    }
+    if (LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
+      if (Target)
+        AddSuccessor(I, *Target);
+      else
+        OpaqueSuccessor.set(I);
+      if (LS.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    } else if (LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI) &&
+               !LS.MIA->isBarrier(DI.Inst)) {
+      OpaqueSuccessor.set(I);
+      continue;
+    }
+
+    std::optional<uint64_t> Fallthrough = checkedAddUint64(
+        DI.Offset, DI.Size, "batched SGPR liveness fallthrough");
+    if (Fallthrough)
+      AddSuccessor(I, *Fallthrough);
+    else
+      OpaqueSuccessor.set(I);
+  }
+
+  SmallVector<size_t, 32> Worklist;
+  Worklist.reserve(Result.InstructionCount);
+  BitVector Queued(Result.InstructionCount, true);
+  for (size_t I = 0; I != Result.InstructionCount; ++I)
+    Worklist.push_back(I);
+  while (!Worklist.empty()) {
+    size_t I = Worklist.pop_back_val();
+    Queued.reset(I);
+    const uint64_t *Uses = UsesRows.data() + I * Result.WordsPerRow;
+    const uint64_t *Defs = DefsRows.data() + I * Result.WordsPerRow;
+    uint64_t *Unsafe = Result.UnsafeRows.data() + I * Result.WordsPerRow;
+    bool Changed = false;
+    for (unsigned Word = 0; Word != Result.WordsPerRow; ++Word) {
+      uint64_t SuccessorUnsafe =
+          OpaqueSuccessor.test(I) ? std::numeric_limits<uint64_t>::max() : 0;
+      for (size_t Successor : Successors[I])
+        SuccessorUnsafe |=
+            Result.UnsafeRows[Successor * Result.WordsPerRow + Word];
+      uint64_t NewUnsafe = Uses[Word] | (SuccessorUnsafe & ~Defs[Word]);
+      if (Word + 1 == Result.WordsPerRow && Result.RegisterCount % 64 != 0)
+        NewUnsafe &= (uint64_t{1} << (Result.RegisterCount % 64)) - 1;
+      uint64_t Added = NewUnsafe & ~Unsafe[Word];
+      if (Added != 0) {
+        Unsafe[Word] |= Added;
+        Changed = true;
+      }
+    }
+    if (!Changed)
+      continue;
+    for (size_t Predecessor : Predecessors[I])
+      if (!Queued.test(Predecessor)) {
+        Queued.set(Predecessor);
+        Worklist.push_back(Predecessor);
+      }
+  }
+  return Result;
+}
+
+BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t FunctionBegin, uint64_t FunctionEnd,
+    ArrayRef<uint64_t> Continuations, ArrayRef<MCRegister> NumberedSgprs) {
+  BatchedSgprContinuationTestResult Result;
+  std::optional<BatchedSgprContinuationAnalysis> Analysis =
+      computeBatchedSgprContinuationAnalysis(Decoded, LS, FunctionBegin,
+                                             FunctionEnd, NumberedSgprs);
+  Result.Analyses = 1;
+  for (uint64_t Continuation : Continuations)
+    Result.Queries.push_back(Analysis ? Analysis->query(Decoded, Continuation)
+                                      : std::nullopt);
+  return Result;
+}
+
 void noteCurrentTextMutation(PatchContext &Ctx) {
   if (Ctx.TextMutationGeneration == std::numeric_limits<uint64_t>::max()) {
     Ctx.CurrentFunctionSgprLivenessCache.clear();
@@ -1657,6 +1860,21 @@ bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
 }
 
 static std::optional<unsigned>
+selectLocallyDeadSgprPair(unsigned MaxSgprs, const BitVector &Unsafe) {
+  if (MaxSgprs < 2 || Unsafe.size() < MaxSgprs)
+    return std::nullopt;
+  unsigned Base = (MaxSgprs - 2) & ~1u;
+  for (;;) {
+    if (!Unsafe.test(Base) && !Unsafe.test(Base + 1))
+      return Base;
+    if (Base == 0)
+      break;
+    Base -= 2;
+  }
+  return std::nullopt;
+}
+
+static std::optional<unsigned>
 findLocallyDeadSgprPair(PatchContext &Ctx, uint64_t InstOffset,
                         uint32_t InstSize, ArrayRef<uint8_t> Replacement) {
   if (Ctx.Config.MaxSgprs < 2)
@@ -1672,16 +1890,7 @@ findLocallyDeadSgprPair(PatchContext &Ctx, uint64_t InstOffset,
 
   BitVector Unsafe = *ReplacementIncoming;
   Unsafe |= *ContinuationLive;
-  unsigned Base = (Ctx.Config.MaxSgprs - 2) & ~1u;
-  for (;;) {
-    if (!Unsafe.test(Base) && !Unsafe.test(Base + 1)) {
-      return Base;
-    }
-    if (Base == 0)
-      break;
-    Base -= 2;
-  }
-  return std::nullopt;
+  return selectLocallyDeadSgprPair(Ctx.Config.MaxSgprs, Unsafe);
 }
 
 struct FarReturnScratch {
@@ -8741,6 +8950,7 @@ assignLongBranchGateways(PatchContext &Ctx,
           Ctx.DirectControlFlow.BoundedIndirectTransfers);
   DenseMap<std::pair<uint64_t, uint64_t>, std::optional<DenseSet<uint64_t>>>
       PromotionVccNeedsCache;
+  uint64_t PromotionSgprContinuationAnalyses = 0;
   using PromotionRange = std::pair<uint64_t, uint64_t>;
   std::set<PromotionRange> PromotionReservedRanges;
   auto ReservePromotionRange = [&](uint64_t Begin, uint64_t End) {
@@ -8935,9 +9145,15 @@ assignLongBranchGateways(PatchContext &Ctx,
         Replacement.resize(UseVcc ? BestVccReplacementSize
                                   : MinimumReplacementSize);
         std::optional<unsigned> Scratch;
-        if (!UseVcc)
+        if (!UseVcc) {
+          size_t CachedFunctionsBefore =
+              Ctx.CurrentFunctionSgprLivenessCache.size();
           Scratch = findLocallyDeadSgprPair(Ctx, Start, Replacement.size(),
                                             Replacement);
+          PromotionSgprContinuationAnalyses +=
+              Ctx.CurrentFunctionSgprLivenessCache.size() -
+              CachedFunctionsBefore;
+        }
         if (!Scratch && !UseVcc) {
           PromotionStillPossible.reset(Index);
           continue;
@@ -9279,6 +9495,9 @@ assignLongBranchGateways(PatchContext &Ctx,
                std::chrono::steady_clock::now() - ForwardBranchPlanStart)
                .count()
         << " ms\n";
+  if (PromotionSgprContinuationAnalyses != 0)
+    log() << "hotswap: batched promotion SGPR continuation analysis built "
+          << PromotionSgprContinuationAnalyses << " function cache(s)\n";
 
   if (!Pending.empty()) {
     const PendingGateway &P = Pending.front();

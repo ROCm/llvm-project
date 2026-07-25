@@ -1,9 +1,9 @@
 // COM: A far eight-byte trampoline site may tentatively reserve one SGPR to
 // COM: preserve live wave32 VCC_LO. Direct control-flow and a following branch
 // COM: prevent expansion to the required 12-byte source landing, so the plan
-// COM: must downgrade cleanly to the registerless island route. The robust
-// COM: return allocator may use the source's second dword as the final
-// COM: no-op branch island back to the continuation.
+// COM: must downgrade cleanly to the registerless island route. Its second
+// COM: source dword is the owner-reserved final return relay, so it branches
+// COM: to the continuation instead of remaining padding.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
@@ -18,7 +18,7 @@
 // DISASM-NEXT: s_branch 0
 // DISASM-NEXT: s_mov_b32 s104, 0
 // DISASM-NEXT: s_branch
-// DISASM-NEXT: s_branch 0
+// DISASM-NEXT: s_branch
 // DISASM-NEXT: s_cbranch_vccz
 
 // RUN: %llvm-readelf --notes %t.out.elf \
