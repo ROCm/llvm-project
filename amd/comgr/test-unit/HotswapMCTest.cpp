@@ -1799,6 +1799,21 @@ TEST(CollectDirectBranchTargets,
   EXPECT_FALSE(ExactCanonicalLeaf->HasUnresolvedTargets);
   EXPECT_FALSE(ExactCanonicalLeaf->HasUnboundedIndirectEntries);
 
+  // A separate finite call enters the add of the exact singleton call above,
+  // bypassing its defining get-PC. The canonical callee frame remains valid,
+  // but the exact closure must reject this alternate materialization entry
+  // rather than using the fallback to publish both calls as bounded.
+  std::string InteriorCaller = "s_call_i64 s[4:5], 2\n"
+                               "s_endpgm\n" +
+                               ExactCaller + LeafFrame;
+  std::optional<DirectControlFlowInfo> InteriorCanonicalLeaf =
+      Audit(InteriorCaller, {}, 0, FunctionTableElfMutation::None,
+            /*CallerEndIndex=*/2, /*ExternalEntries=*/{},
+            /*Target1BeginIndex=*/6);
+  ASSERT_TRUE(InteriorCanonicalLeaf);
+  EXPECT_TRUE(InteriorCanonicalLeaf->HasUnresolvedTargets);
+  EXPECT_TRUE(InteriorCanonicalLeaf->HasUnboundedIndirectEntries);
+
   // Canonical compiler tail thunk: save the incoming link, materialize a
   // different STT_FUNC entry, restore the link, and jump without replacing
   // s[30:31]. The target returns directly to the thunk's original caller.

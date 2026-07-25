@@ -5964,6 +5964,42 @@ static std::optional<WellFormedAbiEntrySet> validateWellFormedAbiEntrySet(
     return std::nullopt;
   }
 
+  if (!SawAbiCall) {
+    auto HasMaterializationEntry =
+        [&](const PcMaterializedCallInfo &Materialized) {
+          auto IsInterior = [&](uint64_t Offset) {
+            return Offset > Materialized.SequenceStart &&
+                   Offset <= Materialized.SequenceEnd;
+          };
+          for (uint64_t Entry : Result.Targets)
+            if (IsInterior(Entry))
+              return true;
+          for (const DirectTargetSource &Source : Index.DirectTargetsByTarget)
+            if (IsInterior(Source.Target))
+              return true;
+          for (const KnownCallSite &Call : Index.Calls)
+            if (IsInterior(Call.Target) || IsInterior(Call.Continuation))
+              return true;
+          for (const auto &Call : CallContinuations)
+            if (IsInterior(Call.second))
+              return true;
+          for (const FiniteSetPcTransfer *Transfer : SelectedSetPcs)
+            if (Transfer->LocalTargetIndex &&
+                IsInterior(Decoded[*Transfer->LocalTargetIndex].Offset))
+              return true;
+          return false;
+        };
+    for (const auto &Entry : Index.MaterializedCalls)
+      if (Result.Calls.contains(Entry.first) &&
+          HasMaterializationEntry(Entry.second)) {
+        log() << "hotswap: exact materialized-call/canonical-return closure "
+                 "rejected: alternate entry inside call materialization "
+                 "ending at 0x"
+              << utohexstr(Decoded[Entry.first].Offset) << "\n";
+        return std::nullopt;
+      }
+  }
+
   auto hasInteriorEntry = [&](const FiniteSetPcTransfer &Candidate) {
     uint64_t Begin = Decoded[Candidate.SequenceBeginIndex].Offset;
     std::optional<uint64_t> End =
