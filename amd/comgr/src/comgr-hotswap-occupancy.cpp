@@ -225,6 +225,19 @@ VgprBumpDecision checkKernelVgprBump(PatchContext &Ctx, StringRef KernelName,
   if (!Capacity)
     return failOrDeclineVgprBump(Ctx, Requirement);
 
+  // Some input kernels already reserve enough VGPRs that their declared
+  // maximum workgroup cannot meet the generic waves/EU target. Do not reject
+  // a bump merely because it cannot repair that pre-existing condition: the
+  // patch is occupancy-neutral when the proposed allocation admits at least
+  // as many waves as the input allocation.
+  std::optional<WorkgroupCapacity> CurrentCapacity = computeWorkgroupCapacity(
+      *CurrentVgprs, Cached->second->MaxFlatWorkgroupSize,
+      Cached->second->WavefrontSize, *Limits);
+  if (!CurrentCapacity)
+    return failOrDeclineVgprBump(Ctx, Requirement);
+  if (Capacity->AchievableWavesPerEU >= CurrentCapacity->AchievableWavesPerEU)
+    return VgprBumpDecision::Apply;
+
   VgprBumpDecision Decision = decideVgprBump(Requirement, *Capacity);
   if (Decision == VgprBumpDecision::Apply)
     return Decision;
