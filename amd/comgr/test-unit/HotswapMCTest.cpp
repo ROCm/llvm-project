@@ -4125,6 +4125,181 @@ TEST(SafeSgprScratchBlock, CommitRejectsObjectWithoutKernelDescriptor) {
       commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Block, "unit test"));
 }
 
+TEST(SafeSgprScratchBlock, CommitCacheIsMonotoneAcrossOwnerScopes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+
+  comgr_test::KernelDescriptorElfOptions Options;
+  Options.MetadataSgprCount = 4;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text, Options);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(View.textData(), View.textSize(), S, Decoded));
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   Decoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  std::optional<ElfView::FunctionTextRange> Function =
+      View.findFunctionTextRangeAtOffset(0);
+  ASSERT_TRUE(Function);
+  auto FunctionKey = std::make_pair(Function->Begin, Function->End);
+
+  // Overflow and a missing selected owner fail without changing any cache,
+  // counter, or externally visible kernel requirement.
+  Ctx.FunctionKernelOwner[FunctionKey] = "missing";
+  const SafeSgprScratchBlock Overflow{
+      /*Base=*/std::numeric_limits<unsigned>::max(), /*Count=*/2};
+  EXPECT_FALSE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Overflow, "unit test"));
+  const SafeSgprScratchBlock Initial{/*Base=*/4, /*Count=*/2};
+  EXPECT_FALSE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Initial, "unit test"));
+  EXPECT_EQ(Ctx.AllKernelSgprRequirement, 0u);
+  EXPECT_TRUE(Ctx.KernelSgprRequirements.empty());
+  EXPECT_EQ(Ctx.SgprDescriptorChargePasses, 0u);
+  EXPECT_TRUE(KernelStats.empty());
+
+  // An owned commitment raises only that owner's coverage.
+  Ctx.FunctionKernelOwner[FunctionKey] = "kernel";
+  ASSERT_TRUE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Initial, "unit test"));
+  EXPECT_EQ(Ctx.AllKernelSgprRequirement, 0u);
+  EXPECT_EQ(Ctx.KernelSgprRequirements["kernel"], 8u);
+  EXPECT_EQ(Ctx.SgprDescriptorChargePasses, 1u);
+  ASSERT_EQ(KernelStats.count("kernel"), 1u);
+  EXPECT_EQ(KernelStats["kernel"].ExtraSgprs, 4u);
+
+  // Owned coverage cannot stand in for all-kernel coverage.
+  Ctx.FunctionKernelOwner[FunctionKey] = "";
+  const SafeSgprScratchBlock Smaller{/*Base=*/0, /*Count=*/2};
+  EXPECT_TRUE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Smaller, "unit test"));
+  EXPECT_EQ(Ctx.AllKernelSgprRequirement, 4u);
+  EXPECT_EQ(Ctx.SgprDescriptorChargePasses, 2u);
+  EXPECT_EQ(KernelStats["kernel"].ExtraSgprs, 4u);
+
+  // Equal and decreasing ownerless requirements are already represented by
+  // the monotone KernelStats update and must not rescan the descriptor table.
+  EXPECT_TRUE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Smaller, "unit test"));
+  const SafeSgprScratchBlock Smallest{/*Base=*/0, /*Count=*/1};
+  EXPECT_TRUE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Smallest, "unit test"));
+  EXPECT_EQ(Ctx.AllKernelSgprRequirement, 4u);
+  EXPECT_EQ(Ctx.SgprDescriptorChargePasses, 2u);
+
+  // A larger global request performs exactly one new pass and raises both
+  // cached and externally visible requirements.
+  const SafeSgprScratchBlock Larger{/*Base=*/8, /*Count=*/2};
+  EXPECT_TRUE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Larger, "unit test"));
+  EXPECT_EQ(Ctx.AllKernelSgprRequirement, 12u);
+  EXPECT_EQ(Ctx.SgprDescriptorChargePasses, 3u);
+  EXPECT_EQ(KernelStats["kernel"].ExtraSgprs, 8u);
+
+  // Global coverage is a valid lower bound for every individual owner.
+  Ctx.FunctionKernelOwner[FunctionKey] = "kernel";
+  EXPECT_TRUE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Larger, "unit test"));
+  EXPECT_EQ(Ctx.SgprDescriptorChargePasses, 3u);
+  EXPECT_EQ(Ctx.KernelSgprRequirements["kernel"], 8u);
+
+  const SafeSgprScratchBlock Largest{/*Base=*/12, /*Count=*/2};
+  EXPECT_TRUE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Largest, "unit test"));
+  EXPECT_EQ(Ctx.SgprDescriptorChargePasses, 4u);
+  EXPECT_EQ(Ctx.KernelSgprRequirements["kernel"], 16u);
+  EXPECT_EQ(KernelStats["kernel"].ExtraSgprs, 12u);
+}
+
+TEST(SafeSgprScratchBlock, OwnerlessCommitFailureIsAtomic) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  comgr_test::MultiKernelDescriptorElfOptions Options;
+  Options.Kernels = {
+      {"valid", 0x1000, 0x2000, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true,
+       /*MetadataSgprCount=*/4},
+      {"malformed", 0x1100, 0x2100, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/false,
+       /*MetadataSgprCount=*/0},
+  };
+  std::vector<uint8_t> Bytes =
+      comgr_test::makeMultiKernelDescriptorElf(Options);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Bytes.data(), Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> Decoded;
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   Decoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  std::optional<ElfView::FunctionTextRange> Function =
+      View.findFunctionTextRangeAtOffset(0);
+  ASSERT_TRUE(Function);
+  Ctx.FunctionKernelOwner[{Function->Begin, Function->End}] = "";
+
+  // The valid descriptor is visited before the malformed metadata entry. A
+  // one-phase implementation would leak its queued ExtraSgprs update here.
+  const SafeSgprScratchBlock Block{/*Base=*/4, /*Count=*/2};
+  EXPECT_FALSE(
+      commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Block, "unit test"));
+  EXPECT_TRUE(KernelStats.empty());
+  EXPECT_EQ(Ctx.AllKernelSgprRequirement, 0u);
+  EXPECT_TRUE(Ctx.KernelSgprRequirements.empty());
+  EXPECT_EQ(Ctx.SgprDescriptorChargePasses, 0u);
+}
+
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {
   std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64}, {100, 128, 100, 100, 128}};
   EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max()),
