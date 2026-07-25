@@ -1994,6 +1994,17 @@ struct DirectTargetSource {
   uint64_t Target = 0;
 };
 
+struct KnownCallEntry {
+  uint64_t Entry = 0;
+  size_t CallIndex = 0;
+};
+
+static bool compareKnownCallEntries(const KnownCallEntry &LHS,
+                                    const KnownCallEntry &RHS) {
+  return std::tie(LHS.Entry, LHS.CallIndex) <
+         std::tie(RHS.Entry, RHS.CallIndex);
+}
+
 struct FallthroughEntryInfo {
   bool Proven = false;
   uint64_t ChainBegin = 0;
@@ -2003,11 +2014,32 @@ struct ControlFlowScanIndex {
   DenseMap<size_t, PcMaterializedCallInfo> MaterializedCalls;
   DenseMap<uint64_t, FallthroughEntryInfo> FallthroughEntries;
   SmallVector<KnownCallSite, 4> Calls;
+  SmallVector<KnownCallEntry, 8> CallsByTarget;
+  SmallVector<KnownCallEntry, 16> CallEntries;
+  DenseMap<size_t, MCRegister> CallReturnRegistersBySource;
   SmallVector<size_t, 16> SetPcIndices;
   SmallVector<size_t, 16> BranchOrCallIndices;
   SmallVector<DirectTargetSource, 16> DirectTargetsByTarget;
   bool HasUnboundedIndirectEntry = false;
 };
+
+static void indexKnownCalls(ControlFlowScanIndex &Index) {
+  Index.CallsByTarget.clear();
+  Index.CallEntries.clear();
+  Index.CallReturnRegistersBySource.clear();
+  Index.CallsByTarget.reserve(Index.Calls.size());
+  Index.CallEntries.reserve(Index.Calls.size() * 2);
+  for (size_t CallIndex = 0; CallIndex != Index.Calls.size(); ++CallIndex) {
+    const KnownCallSite &Call = Index.Calls[CallIndex];
+    Index.CallsByTarget.push_back({Call.Target, CallIndex});
+    Index.CallEntries.push_back({Call.Target, CallIndex});
+    Index.CallEntries.push_back({Call.Continuation, CallIndex});
+    Index.CallReturnRegistersBySource.try_emplace(Call.InstIndex,
+                                                  Call.ReturnRegister);
+  }
+  llvm::sort(Index.CallsByTarget, compareKnownCallEntries);
+  llvm::sort(Index.CallEntries, compareKnownCallEntries);
+}
 
 static bool hasPcRelativeOperand(const InternalDecodedInst &DI,
                                  const LLVMState &LS) {
@@ -2180,23 +2212,23 @@ static bool hasUnprovenFallthroughEntry(ArrayRef<InternalDecodedInst> Decoded,
     return true;
   }
 
-  for (const KnownCallSite &Call : Index.Calls) {
+  SmallVector<KnownCallEntry, 16>::const_iterator CallEntry =
+      llvm::lower_bound(Index.CallEntries, ChainBegin,
+                        [](const KnownCallEntry &Indexed, uint64_t Offset) {
+                          return Indexed.Entry < Offset;
+                        });
+  for (;
+       CallEntry != Index.CallEntries.end() && CallEntry->Entry < FunctionBegin;
+       ++CallEntry) {
+    const KnownCallSite &Call = Index.Calls[CallEntry->CallIndex];
     uint64_t Source = Decoded[Call.InstIndex].Offset;
     if (Source >= ChainBegin && Source < FunctionBegin)
       continue;
-    if ((Call.Target >= ChainBegin && Call.Target < FunctionBegin) ||
-        (Call.Continuation >= ChainBegin &&
-         Call.Continuation < FunctionBegin)) {
-      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
-            << " is not a bounded return: call at 0x" << utohexstr(Source)
-            << " enters the fallthrough chain at 0x"
-            << utohexstr(Call.Target >= ChainBegin &&
-                                 Call.Target < FunctionBegin
-                             ? Call.Target
-                             : Call.Continuation)
-            << "\n";
-      return true;
-    }
+    log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+          << " is not a bounded return: call at 0x" << utohexstr(Source)
+          << " enters the fallthrough chain at 0x"
+          << utohexstr(CallEntry->Entry) << "\n";
+    return true;
   }
 
   SmallVector<DirectTargetSource, 16>::const_iterator FirstTarget =
@@ -2338,7 +2370,7 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       }
 
       if (hasUnprovenFallthroughEntry(Decoded, FunctionBegin, Return.Offset,
-                                      DeclaredEntries, Index))
+                                      SortedDeclaredEntries, Index))
         continue;
 
       // The link pair must retain the value written by the incoming call
@@ -2381,9 +2413,15 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
         continue;
 
       SmallVector<uint64_t, 2> Targets;
-      for (const KnownCallSite &Call : Index.Calls) {
-        if (Call.Target < FunctionBegin || Call.Target >= FunctionEnd)
-          continue;
+      SmallVector<KnownCallEntry, 8>::const_iterator CallAtTarget =
+          llvm::lower_bound(Index.CallsByTarget, FunctionBegin,
+                            [](const KnownCallEntry &Indexed, uint64_t Offset) {
+                              return Indexed.Entry < Offset;
+                            });
+      for (; CallAtTarget != Index.CallsByTarget.end() &&
+             CallAtTarget->Entry < FunctionEnd;
+           ++CallAtTarget) {
+        const KnownCallSite &Call = Index.Calls[CallAtTarget->CallIndex];
         if (Call.Target != FunctionBegin) {
           log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
                 << " is not a bounded return: call at 0x"
@@ -2426,10 +2464,13 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
           continue;
 
         bool IsKnownEntryCall = false;
-        if (LS.MIA->isCall(Source.Inst) && It->Target == FunctionBegin)
-          for (const KnownCallSite &Call : Index.Calls)
-            IsKnownEntryCall |= Call.InstIndex == SourceIndex &&
-                                Call.ReturnRegister == ReturnRegister;
+        if (LS.MIA->isCall(Source.Inst) && It->Target == FunctionBegin) {
+          DenseMap<size_t, MCRegister>::const_iterator KnownCall =
+              Index.CallReturnRegistersBySource.find(SourceIndex);
+          IsKnownEntryCall =
+              KnownCall != Index.CallReturnRegistersBySource.end() &&
+              KnownCall->second == ReturnRegister;
+        }
         if (!IsKnownEntryCall && SourceIndex < FirstUnsafeSourceIndex) {
           FirstUnsafeSourceIndex = SourceIndex;
           FirstUnsafeTarget = It->Target;
@@ -2544,6 +2585,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       Index->Calls.push_back(
           {I, Target - TextAddr, *Continuation, *ReturnRegister});
   }
+  indexKnownCalls(*Index);
 
   std::optional<SmallVector<BoundedSetPcReturn, 2>> BoundedReturns =
       collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
