@@ -1443,6 +1443,15 @@ struct PatchContext {
   std::optional<SafeSgprUsageSummary> WholeObjectSgprUsage;
   llvm::DenseMap<std::pair<uint64_t, uint64_t>, SafeSgprUsageSummary>
       FunctionSgprUsage{0};
+  // Kernel ownership and scratch-SGPR descriptor charging are immutable or
+  // monotone during one rewrite. Cache both so a promoted relay in a large
+  // non-kernel function does not repeat the same symbol lookup and full
+  // kernel-descriptor scan for every source instruction.
+  llvm::DenseMap<std::pair<uint64_t, uint64_t>, std::string>
+      FunctionKernelOwner{0};
+  unsigned AllKernelSgprRequirement = 0;
+  llvm::StringMap<unsigned> KernelSgprRequirements;
+  uint64_t SgprDescriptorChargePasses = 0;
   // Occupancy checks may run at several patch sites in one kernel. Cache the
   // immutable metadata so the AMDGPU note is parsed at most once per field.
   llvm::StringMap<std::optional<KernelWorkgroupMetadata>>

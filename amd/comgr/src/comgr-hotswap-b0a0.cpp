@@ -799,6 +799,24 @@ summarizeSafeSgprUsage(PatchContext &Ctx,
   return Summary;
 }
 
+static std::string findKernelOwnerAtTextOffset(PatchContext &Ctx,
+                                               uint64_t TextOffset) {
+  std::optional<ElfView::FunctionTextRange> FunctionRange =
+      Ctx.Elf.findFunctionTextRangeAtOffset(TextOffset);
+  if (!FunctionRange)
+    return Ctx.Elf.findKernelAtAddress(TextOffset + Ctx.Elf.textAddr());
+
+  std::pair<uint64_t, uint64_t> Key{FunctionRange->Begin, FunctionRange->End};
+  auto Cached = Ctx.FunctionKernelOwner.find(Key);
+  if (Cached != Ctx.FunctionKernelOwner.end())
+    return Cached->second;
+
+  std::string Owner =
+      Ctx.Elf.findKernelAtAddress(TextOffset + Ctx.Elf.textAddr());
+  Ctx.FunctionKernelOwner.try_emplace(Key, Owner);
+  return Owner;
+}
+
 std::optional<SafeSgprScratchBlock>
 findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
                          unsigned Alignment, StringRef Context,
@@ -812,8 +830,7 @@ findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
 
   std::optional<ElfView::FunctionTextRange> FunctionRange =
       Ctx.Elf.findFunctionTextRangeAtOffset(TextOffset);
-  std::string Owner =
-      Ctx.Elf.findKernelAtAddress(TextOffset + Ctx.Elf.textAddr());
+  std::string Owner = findKernelOwnerAtTextOffset(Ctx, TextOffset);
   bool ScanWholeObject = Owner.empty() || !FunctionRange;
   SafeSgprUsageSummary *Usage = nullptr;
   if (!ScanWholeObject) {
@@ -919,8 +936,7 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
     return false;
   }
 
-  std::string Owner =
-      Ctx.Elf.findKernelAtAddress(TextOffset + Ctx.Elf.textAddr());
+  std::string Owner = findKernelOwnerAtTextOffset(Ctx, TextOffset);
   bool ChargedOwner = false;
 
   // llvm/lib/Target/AMDGPU/Utils/AMDGPUBaseInfo.cpp::getNumExtraSGPRs returns
@@ -928,7 +944,27 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
   // requirement. This may conservatively overstate a kernel that does not use
   // VCC, but never mistakes VCC for numbered s0-s105 registers.
   constexpr unsigned VccSgprs = 2;
+  if (Block.Count > std::numeric_limits<unsigned>::max() - Block.Base ||
+      VccSgprs >
+          std::numeric_limits<unsigned>::max() - (Block.Base + Block.Count)) {
+    log() << "hotswap: error: " << Context
+          << ": SGPR descriptor requirement overflows unsigned\n";
+    return false;
+  }
   unsigned RequiredSgprs = Block.Base + Block.Count + VccSgprs;
+  unsigned CoveredRequirement = Ctx.AllKernelSgprRequirement;
+  if (!Owner.empty()) {
+    auto Committed = Ctx.KernelSgprRequirements.find(Owner);
+    if (Committed != Ctx.KernelSgprRequirements.end())
+      CoveredRequirement = std::max(CoveredRequirement, Committed->second);
+  }
+  if (CoveredRequirement >= RequiredSgprs)
+    return true;
+
+  // Preflight every selected descriptor before mutating KernelStats. This
+  // keeps a malformed later descriptor from leaving a partial commitment that
+  // the monotone cache cannot describe.
+  SmallVector<std::pair<StringRef, unsigned>, 8> Updates;
   for (const KernelDescriptorInfo &KD : Descriptors) {
     if (!Owner.empty() && KD.KernelName != Owner)
       continue;
@@ -943,8 +979,12 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
     }
     if (*Current >= RequiredSgprs)
       continue;
-    KernelPatchStats &Stats = Ctx.KernelStats[KD.KernelName];
-    Stats.ExtraSgprs = std::max(Stats.ExtraSgprs, RequiredSgprs - *Current);
+    unsigned Existing = 0;
+    auto Stats = Ctx.KernelStats.find(KD.KernelName);
+    if (Stats != Ctx.KernelStats.end())
+      Existing = Stats->second.ExtraSgprs;
+    Updates.push_back(
+        {KD.KernelName, std::max(Existing, RequiredSgprs - *Current)});
   }
 
   if (!ChargedOwner) {
@@ -952,6 +992,15 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
           << "' has no descriptor\n";
     return false;
   }
+
+  for (const auto &[KernelName, ExtraSgprs] : Updates)
+    Ctx.KernelStats[KernelName].ExtraSgprs =
+        std::max(Ctx.KernelStats[KernelName].ExtraSgprs, ExtraSgprs);
+  ++Ctx.SgprDescriptorChargePasses;
+  if (Owner.empty())
+    Ctx.AllKernelSgprRequirement = RequiredSgprs;
+  else
+    Ctx.KernelSgprRequirements[Owner] = RequiredSgprs;
   return true;
 }
 
@@ -1772,8 +1821,7 @@ static FarReturnScratch reserveSafeFarReturn(PatchContext &Ctx,
                             /*UseVcc=*/false, /*PreserveVcc=*/false};
   }
 
-  std::string Owner =
-      Ctx.Elf.findKernelAtAddress(InstOffset + Ctx.Elf.textAddr());
+  std::string Owner = findKernelOwnerAtTextOffset(Ctx, InstOffset);
   std::optional<unsigned> WavefrontSize =
       Owner.empty() ? std::nullopt : Ctx.Elf.getKernelWavefrontSize(Owner);
   if (WavefrontSize == 32 && InstSize >= 2 * MinInstSize) {
