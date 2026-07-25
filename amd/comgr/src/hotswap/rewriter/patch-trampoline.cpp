@@ -415,7 +415,8 @@ bool hasUnencodableVgprName(StringRef Asm) {
   return false;
 }
 
-bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role, unsigned &Mode,
+bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role,
+                          unsigned OldMode, unsigned &NewMode,
                           std::string &Output) {
   StringRef Operand = Input.trim();
   StringRef Suffix;
@@ -440,15 +441,23 @@ bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role, unsigned &Mode,
   if (LoText.empty() || HiText.empty())
     return false;
 
-  unsigned Lo = 0;
-  unsigned Hi = 0;
-  if (LoText.getAsInteger(10, Lo) || HiText.getAsInteger(10, Hi) || Hi < Lo ||
-      Lo / 256 != Hi / 256)
+  unsigned EncodedLo = 0;
+  unsigned EncodedHi = 0;
+  if (LoText.getAsInteger(10, EncodedLo) ||
+      HiText.getAsInteger(10, EncodedHi) || EncodedHi < EncodedLo)
+    return false;
+  // MC register names contain the encoded low-byte index. A tuple expansion
+  // represents a low-byte wrap with values above 255, so rebase both ends
+  // relative to the incoming operand bank before selecting the new bank.
+  unsigned OriginalBank = getVgprMsbBank(OldMode, Role);
+  unsigned Lo = OriginalBank * 256 + EncodedLo;
+  unsigned Hi = OriginalBank * 256 + EncodedHi;
+  if (Lo / 256 != Hi / 256)
     return false;
   unsigned Bank = Lo / 256;
   if (Bank > 3)
     return false;
-  setVgprMsbBank(Mode, Role, Bank);
+  setVgprMsbBank(NewMode, Role, Bank);
   if (IsRange)
     Output =
         ("v[" + Twine(Lo & 255) + ":" + Twine(Hi & 255) + "]" + Suffix).str();
@@ -484,7 +493,7 @@ normalizeDsVgprBanks(StringRef Asm, StringRef FromMnem, unsigned OldMode) {
   std::string Normalized = Mnem.str();
   for (unsigned I = 0; I != Operands.size(); ++I) {
     std::string Operand;
-    if (!normalizeVgprOperand(Operands[I], Roles[I], NewMode, Operand))
+    if (!normalizeVgprOperand(Operands[I], Roles[I], OldMode, NewMode, Operand))
       return std::nullopt;
     Normalized += I == 0 ? " " : ", ";
     Normalized += Operand;
