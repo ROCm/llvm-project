@@ -2005,6 +2005,11 @@ static bool compareKnownCallEntries(const KnownCallEntry &LHS,
          std::tie(RHS.Entry, RHS.CallIndex);
 }
 
+struct ExternalCallContinuation {
+  size_t InstIndex = 0;
+  uint64_t Continuation = 0;
+};
+
 struct FallthroughEntryInfo {
   bool Proven = false;
   uint64_t ChainBegin = 0;
@@ -2017,6 +2022,7 @@ struct ControlFlowScanIndex {
   SmallVector<KnownCallEntry, 8> CallsByTarget;
   SmallVector<KnownCallEntry, 16> CallEntries;
   DenseMap<size_t, MCRegister> CallReturnRegistersBySource;
+  SmallVector<ExternalCallContinuation, 4> ExternalCallContinuations;
   SmallVector<size_t, 16> SetPcIndices;
   SmallVector<size_t, 16> BranchOrCallIndices;
   SmallVector<DirectTargetSource, 16> DirectTargetsByTarget;
@@ -2125,19 +2131,44 @@ buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
     std::optional<MCRegister> ReturnRegister = getCallReturnRegister(DI, LS);
     if (ReturnRegister) {
       std::optional<uint64_t> Target;
+      bool HasFiniteExternalTarget = false;
       if (Materialized) {
         uint64_t AbsoluteTarget = Materialized->Target;
         if (AbsoluteTarget >= TextAddr && AbsoluteTarget < TextEnd)
           Target = AbsoluteTarget - TextAddr;
+        else
+          HasFiniteExternalTarget = true;
+      } else if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
+                 DI.Inst.getNumOperands() != 0 &&
+                 DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
+        uint64_t AbsoluteTarget = static_cast<uint64_t>(
+            DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
+        if (AbsoluteTarget >= TextAddr && AbsoluteTarget < TextEnd)
+          Target = AbsoluteTarget - TextAddr;
+        else
+          HasFiniteExternalTarget = true;
+      } else if (hasPcRelativeOperand(DI, LS)) {
+        std::optional<uint64_t> RelativeTarget =
+            evaluateDirectControlFlowTarget(DI, LS);
+        if (RelativeTarget) {
+          uint64_t TextSize = TextEnd - TextAddr;
+          if (*RelativeTarget < TextSize)
+            Target = *RelativeTarget;
+          else
+            HasFiniteExternalTarget = true;
+        }
       } else {
         Target = getDirectTextTarget(DI, LS, TextAddr, TextEnd);
       }
-      if (Target) {
+      if (Target || HasFiniteExternalTarget) {
         std::optional<uint64_t> Continuation = checkedAddUint64(
             DI.Offset, DI.Size, "known call continuation address");
         if (!Continuation)
           return std::nullopt;
-        Index.Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+        if (Target)
+          Index.Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+        if (HasFiniteExternalTarget)
+          Index.ExternalCallContinuations.push_back({I, *Continuation});
       }
     }
 
@@ -2229,6 +2260,19 @@ static bool hasUnprovenFallthroughEntry(ArrayRef<InternalDecodedInst> Decoded,
           << " enters the fallthrough chain at 0x"
           << utohexstr(CallEntry->Entry) << "\n";
     return true;
+  }
+
+  for (const ExternalCallContinuation &Call :
+       Index.ExternalCallContinuations) {
+    uint64_t Source = Decoded[Call.InstIndex].Offset;
+    if (Call.Continuation >= ChainBegin &&
+        Call.Continuation < FunctionBegin) {
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+            << " is not a bounded return: external call at 0x"
+            << utohexstr(Source) << " returns into the fallthrough chain at 0x"
+            << utohexstr(Call.Continuation) << "\n";
+      return true;
+    }
   }
 
   SmallVector<DirectTargetSource, 16>::const_iterator FirstTarget =
@@ -2571,19 +2615,23 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       continue;
     std::optional<MCRegister> ReturnRegister =
         getCallReturnRegister(Decoded[I], LS);
-    if (!ReturnRegister ||
-        llvm::any_of(ReusableCalls[I], [TextAddr, TextEnd](uint64_t Target) {
-          return Target < TextAddr || Target >= *TextEnd;
-        }))
+    if (!ReturnRegister)
       continue;
     std::optional<uint64_t> Continuation = checkedAddUint64(
         Decoded[I].Offset, Decoded[I].Size,
         "known reusable call continuation address");
     if (!Continuation)
       return std::nullopt;
+    bool HasExternalTarget = false;
     for (uint64_t Target : ReusableCalls[I])
-      Index->Calls.push_back(
-          {I, Target - TextAddr, *Continuation, *ReturnRegister});
+      if (Target >= TextAddr && Target < *TextEnd) {
+        Index->Calls.push_back(
+            {I, Target - TextAddr, *Continuation, *ReturnRegister});
+      } else {
+        HasExternalTarget = true;
+      }
+    if (HasExternalTarget)
+      Index->ExternalCallContinuations.push_back({I, *Continuation});
   }
   indexKnownCalls(*Index);
 
@@ -2617,6 +2665,12 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   }
 
   DirectControlFlowInfo Info;
+  for (const BoundedSetPcReturn &Return : *BoundedReturns)
+    for (uint64_t Target : Return.Targets)
+      Info.Targets.insert(Target);
+  for (const ExternalCallContinuation &Call :
+       Index->ExternalCallContinuations)
+    Info.Targets.insert(Call.Continuation);
   for (size_t InstIndex : Index->BranchOrCallIndices) {
     const InternalDecodedInst &DI = Decoded[InstIndex];
     // Existing indirect branches are handled by
@@ -2652,18 +2706,9 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           Target = Materialized->second.Target;
       }
       if (!ReusableCalls[InstIndex].empty()) {
-        if (llvm::any_of(ReusableCalls[InstIndex],
-                         [TextAddr, TextEnd](uint64_t ReusableTarget) {
-                           return ReusableTarget < TextAddr ||
-                                  ReusableTarget >= *TextEnd;
-                         })) {
-          log() << "hotswap: unresolved call target at 0x"
-                << utohexstr(DI.Offset) << " (reusable target outside .text)\n";
-          Info.HasUnresolvedTargets = true;
-          continue;
-        }
         for (uint64_t ReusableTarget : ReusableCalls[InstIndex])
-          Info.Targets.insert(ReusableTarget - TextAddr);
+          if (ReusableTarget >= TextAddr && ReusableTarget < *TextEnd)
+            Info.Targets.insert(ReusableTarget - TextAddr);
         Info.BoundedIndirectTransfers.insert(DI.Offset);
         if (LocallyProvenMaterializedCalls.test(InstIndex)) {
           log() << "hotswap: resolved PC-materialized call at 0x"
@@ -2691,8 +2736,13 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           log() << "hotswap: resolved PC-materialized call at 0x"
                 << utohexstr(DI.Offset) << " to .text+0x"
                 << utohexstr(RelativeTarget) << "\n";
-        if (DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isReg())
-          Info.BoundedIndirectTransfers.insert(DI.Offset);
+      }
+      // A proven finite register target outside this object's .text cannot
+      // enter a local instruction or synthetic source range. Keep that
+      // control-flow proof separate from whether the target contributes a
+      // local offset to the mutation-protection set.
+      if (DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isReg()) {
+        Info.BoundedIndirectTransfers.insert(DI.Offset);
       }
       continue;
     }
@@ -2705,7 +2755,15 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
             << "; adjacent far trampolines will not be coalesced\n";
       return std::nullopt;
     }
-    Info.Targets.insert(*Target);
+    if (*Target < TextSize) {
+      Info.Targets.insert(*Target);
+    } else if (LS.MIA->isCall(DI.Inst)) {
+      std::optional<uint64_t> Continuation = checkedAddUint64(
+          DI.Offset, DI.Size, "finite external direct call continuation");
+      if (!Continuation)
+        return std::nullopt;
+      Info.Targets.insert(*Continuation);
+    }
   }
   for (const BoundedSetPcReturn &Return : *BoundedReturns)
     Info.BoundedIndirectTransfers.insert(Decoded[Return.InstIndex].Offset);
