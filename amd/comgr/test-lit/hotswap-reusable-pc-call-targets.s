@@ -52,10 +52,8 @@
 // RUN:   --implicit-check-not=s_add_pc_i64 %s
 // DISASM-LABEL: <reusable_pc_targets>:
 // DISASM: s_swap_pc_i64
-// DISASM: s_get_pc_i64
-// DISASM: s_branch
-// DISASM: s_get_pc_i64
-// DISASM-NEXT: s_branch
+// DISASM: s_call_i64 s[12:13]
+// DISASM-NEXT: s_nop 0
 // DISASM-LABEL: <gateway_barrier>:
 // DISASM-NEXT: s_endpgm
 // DISASM-NEXT: s_get_pc_i64

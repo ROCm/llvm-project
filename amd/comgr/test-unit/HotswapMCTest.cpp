@@ -732,6 +732,97 @@ TEST(FindNearestSetPcGateway, AnalyticalWidthsMatchEncodedBoundaries) {
   }
 }
 
+TEST(FindSplitVccGateway, UsesDisjointEightAndSixteenByteSleds) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x108, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000},
+      {/*Start=*/0x200, /*End=*/0x210, /*WritePos=*/0x200,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000,
+       /*GatewayOnly=*/true}};
+  std::optional<EncodedSplitVccGateway> Split =
+      findSplitVccGateway(Gateways, S, /*FromOffset=*/0,
+                          /*TargetOffset=*/0x81000, /*SaveSgpr=*/105);
+  ASSERT_TRUE(Split);
+  EXPECT_EQ(Split->PrimaryIndex, 0u);
+  EXPECT_EQ(Split->SecondaryIndex, 1u);
+  EXPECT_EQ(Split->PrimaryBytes.size(), 8u);
+  EXPECT_EQ(Split->SecondaryBytes.size(), 16u);
+  EXPECT_EQ(Gateways[0].WritePos, 0x100u);
+  EXPECT_EQ(Gateways[1].WritePos, 0x200u);
+
+  std::vector<InternalDecodedInst> Primary;
+  ASSERT_TRUE(decodeTextSection(Split->PrimaryBytes.data(),
+                                Split->PrimaryBytes.size(), S, Primary));
+  ASSERT_EQ(Primary.size(), 2u);
+  EXPECT_EQ(Primary[0].Mnemonic, "s_mov_b32");
+  ASSERT_GE(Primary[0].Inst.getNumOperands(), 2u);
+  ASSERT_TRUE(Primary[0].Inst.getOperand(0).isReg());
+  ASSERT_TRUE(Primary[0].Inst.getOperand(1).isReg());
+  EXPECT_STREQ(S.MRI->getName(Primary[0].Inst.getOperand(0).getReg()),
+               "SGPR105");
+  EXPECT_TRUE(S.MRI->regsOverlap(
+      llvm::MCRegister(Primary[0].Inst.getOperand(1).getReg()), S.VCCRegister));
+  EXPECT_EQ(Primary[1].Mnemonic, "s_branch");
+  EXPECT_EQ(static_cast<int16_t>(
+                readDword(Split->PrimaryBytes.data() + MinInstSize) & 0xFFFFu),
+            62);
+
+  std::vector<InternalDecodedInst> Secondary;
+  ASSERT_TRUE(decodeTextSection(Split->SecondaryBytes.data(),
+                                Split->SecondaryBytes.size(), S, Secondary));
+  ASSERT_EQ(Secondary.size(), 3u);
+  EXPECT_EQ(Secondary[0].Mnemonic, "s_get_pc_i64");
+  EXPECT_EQ(Secondary[1].Mnemonic, "s_add_nc_u64");
+  EXPECT_EQ(Secondary[2].Mnemonic, "s_set_pc_i64");
+  for (const InternalDecodedInst &DI : Secondary) {
+    ASSERT_NE(DI.Inst.getNumOperands(), 0u);
+    ASSERT_TRUE(DI.Inst.getOperand(0).isReg());
+    EXPECT_TRUE(S.MRI->regsOverlap(
+        llvm::MCRegister(DI.Inst.getOperand(0).getReg()), S.VCCRegister));
+  }
+  ASSERT_TRUE(Secondary[1].Inst.getOperand(2).isImm());
+  uint64_t Delta =
+      static_cast<uint64_t>(Secondary[1].Inst.getOperand(2).getImm());
+  EXPECT_EQ(0x200u + MinInstSize + Delta, 0x81000u);
+}
+
+TEST(FindSplitVccGateway, RejectsPhysicalOverlapWithoutMutation) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x108, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000},
+      {/*Start=*/0x104, /*End=*/0x114, /*WritePos=*/0x104,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000,
+       /*GatewayOnly=*/true}};
+  EXPECT_FALSE(findSplitVccGateway(Gateways, S, /*FromOffset=*/0,
+                                   /*TargetOffset=*/0x81000,
+                                   /*SaveSgpr=*/105));
+  EXPECT_EQ(Gateways[0].WritePos, 0x100u);
+  EXPECT_EQ(Gateways[1].WritePos, 0x104u);
+}
+
+TEST(FindSplitVccGateway, RejectsGatewayOnlyPrimaryWithoutMutation) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<NopSled> Gateways = {
+      {/*Start=*/0x100, /*End=*/0x108, /*WritePos=*/0x100,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000,
+       /*GatewayOnly=*/true},
+      {/*Start=*/0x200, /*End=*/0x210, /*WritePos=*/0x200,
+       /*FunctionStart=*/0, /*FunctionEnd=*/0x1000}};
+  EXPECT_FALSE(findSplitVccGateway(Gateways, S, /*FromOffset=*/0,
+                                   /*TargetOffset=*/0x81000,
+                                   /*SaveSgpr=*/105));
+  EXPECT_EQ(Gateways[0].WritePos, 0x100u);
+  EXPECT_EQ(Gateways[1].WritePos, 0x200u);
+}
+
 TEST(CountReachableSetPcGatewaySlots, DistinguishesZeroFromEncodingFailure) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -1342,6 +1433,47 @@ TEST(CollectDirectBranchTargets, RejectsClobberedPcMaterializedCall) {
   ASSERT_TRUE(Info);
   EXPECT_TRUE(Info->Targets.empty());
   EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(SourceTailSafety, RejectsProtectedEntriesAndOverlappingRanges) {
+  Trampoline T;
+  T.OriginalOffset = 8;
+  T.OriginalSize = 12;
+  T.HasFunctionRange = true;
+  T.FunctionStart = 0;
+  T.FunctionEnd = 32;
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> OneRange{
+      {0, 32, nullptr, nullptr}};
+  EXPECT_TRUE(sourceHasUniqueFunctionRange(T, OneRange, /*TextAddr=*/0));
+
+  DirectControlFlowInfo ControlFlow;
+  EXPECT_TRUE(isSafeSourceTailRange(T, ControlFlow,
+                                    /*HasUniqueFunctionRange=*/true,
+                                    /*Begin=*/12, /*End=*/20));
+  ControlFlow.Targets.insert(16);
+  EXPECT_FALSE(isSafeSourceTailRange(T, ControlFlow,
+                                     /*HasUniqueFunctionRange=*/true,
+                                     /*Begin=*/12, /*End=*/20));
+  ControlFlow.Targets.clear();
+  ControlFlow.HasUnboundedIndirectEntries = true;
+  EXPECT_FALSE(isSafeSourceTailRange(T, ControlFlow,
+                                     /*HasUniqueFunctionRange=*/true,
+                                     /*Begin=*/12, /*End=*/20));
+
+  llvm::SmallVector<ElfView::FunctionTextRange, 2> AliasedRanges{
+      {0, 32, nullptr, nullptr}, {0, 32, nullptr, nullptr}};
+  // The same logical global function can appear in both .symtab and .dynsym.
+  // Equal bounds add no new interior ownership ambiguity.
+  EXPECT_TRUE(
+      sourceHasUniqueFunctionRange(T, AliasedRanges, /*TextAddr=*/0));
+
+  llvm::SmallVector<ElfView::FunctionTextRange, 2> NestedRanges{
+      {0, 64, nullptr, nullptr}, {32, 48, nullptr, nullptr}};
+  T.FunctionEnd = 64;
+  T.OriginalOffset = 8;
+  EXPECT_TRUE(sourceHasUniqueFunctionRange(T, NestedRanges, /*TextAddr=*/0));
+  T.OriginalOffset = 36;
+  EXPECT_FALSE(sourceHasUniqueFunctionRange(T, NestedRanges, /*TextAddr=*/0));
 }
 
 TEST(CollectDirectBranchTargets, RejectsAlternateEntryIntoMaterialization) {

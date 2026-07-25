@@ -339,6 +339,11 @@ struct Trampoline {
   bool HasSourceTailBranchIsland = false;
   uint64_t SourceTailBranchIslandOffset = 0;
   uint64_t SourceTailBranchTargetOffset = 0;
+  // A larger unreachable source tail may hold a pair-only affine gateway.
+  // fixupTrampolineBranches preserves this range instead of NOP-padding it.
+  bool HasSourceTailGateway = false;
+  uint64_t SourceTailGatewayOffset = 0;
+  uint32_t SourceTailGatewayBytes = 0;
   llvm::SmallVector<uint64_t, 4> ReturnBranchIslands;
   uint64_t ReturnBranchTargetOffset = 0;
   bool HasForwardGateway = false;
@@ -354,6 +359,13 @@ struct Trampoline {
   uint64_t SharedDispatcherRelayOffset = 0;
   uint64_t SharedDispatcherSecondaryGatewayOffset = 0;
   llvm::SmallVector<uint8_t> SecondaryForwardGatewayBytes;
+  // Sites that only have their reserved far-return pair use s_call_i64 to
+  // record source+4 and share a relocation-neutral add/set-PC gateway. The
+  // recorded PC selects a sparse mirrored branch stub in the pool without a
+  // register-hungry classifier.
+  bool UsesMirroredStubForward = false;
+  uint32_t MirroredStubGroup = 0;
+  uint64_t MirroredStubGatewayOffset = 0;
   uint32_t PoolEntryPrefixBytes = 0;
   // A far-site run may only be coalesced within one known function. Unknown
   // ranges stay unmerged because adjacent symbols are independent entries.
@@ -466,6 +478,9 @@ struct NopSled {
   uint64_t WritePos = 0;
   uint64_t FunctionStart = 0;
   uint64_t FunctionEnd = 0;
+  // Some unreachable source-tail ranges are reserved for one contiguous
+  // set-PC gateway. Branch-island allocators must not fragment these ranges.
+  bool GatewayOnly = false;
 };
 
 enum class MaskWorkaroundPolicy {
@@ -503,10 +518,11 @@ static constexpr uint32_t MinInstSize = 4;
 static constexpr uint32_t SetPcReturnReserveBytes = 20;
 
 static constexpr uint32_t SetPcForwardSequenceBytes = SetPcReturnReserveBytes;
-static constexpr uint32_t VccSaveRestoreBytes = MinInstSize;
+static constexpr uint32_t VccMoveBytes = MinInstSize;
+static constexpr uint32_t VccRestoreSequenceBytes = 2 * MinInstSize;
 static constexpr uint32_t VccPreservingReturnReserveBytes =
-    VccSaveRestoreBytes + SetPcReturnReserveBytes;
-static constexpr uint32_t VccLandingPadBytes = MinInstSize;
+    VccMoveBytes + SetPcReturnReserveBytes;
+static constexpr uint32_t VccLandingPadBytes = VccRestoreSequenceBytes;
 static constexpr uint32_t VccPreservingSourceBytes =
     MinInstSize + VccLandingPadBytes;
 static constexpr uint32_t PoolBranchIslandBytes = MinInstSize;
@@ -1279,6 +1295,24 @@ struct DirectControlFlowInfo {
   bool HasUnresolvedTargets = false;
 };
 
+/// A synthetic source-tail interval is only safe when the complete replaced
+/// source belongs to exactly one distinct function range. Equal bounds from a
+/// global function's .symtab/.dynsym records are one logical range; differing
+/// nested or overlapping function bounds fail closed.
+bool sourceHasUniqueFunctionRange(
+    const Trampoline &T,
+    llvm::ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    uint64_t TextAddr);
+
+/// Return whether [Begin, End) is an entry-free interval strictly after the
+/// first source dword. The caller supplies the unique-function proof so dense
+/// objects can cache it per function instead of rescanning their symbol table
+/// for every patch site.
+bool isSafeSourceTailRange(const Trampoline &T,
+                           const DirectControlFlowInfo &ControlFlow,
+                           bool HasUniqueFunctionRange, uint64_t Begin,
+                           uint64_t End);
+
 // Per-instruction persistent gfx1250 VGPR-MSB mode (packed src0/src1/src2/dst,
 // two bits each, values 0-255) recovered by the WMMA split pass's
 // whole-function CFG fixed point. The sentinels distinguish "not analyzed",
@@ -1447,6 +1481,21 @@ struct EncodedSetPcGateway {
   NopSled *Sled = nullptr;
   llvm::SmallVector<uint8_t> Bytes;
 };
+
+struct EncodedSplitVccGateway {
+  size_t PrimaryIndex = 0;
+  size_t SecondaryIndex = 0;
+  llvm::SmallVector<uint8_t> PrimaryBytes;
+  llvm::SmallVector<uint8_t> SecondaryBytes;
+};
+
+/// Plan an eight-byte VCC-save/branch primary and a disjoint 16-byte
+/// VCC-backed set-PC secondary. The returned plan does not advance either
+/// sled or modify text.
+std::optional<EncodedSplitVccGateway>
+findSplitVccGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
+                    uint64_t FromOffset, uint64_t TargetOffset,
+                    unsigned SaveSgpr);
 
 /// Find the nearest short-branch-reachable gateway whose remaining space fits
 /// the set-PC sequence. Candidate widths are computed from the displacement;
