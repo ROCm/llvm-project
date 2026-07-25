@@ -16,6 +16,10 @@
 // DISASM-LABEL: <source5>:
 // DISASM-NEXT: s_call_i64
 // DISASM-NEXT: s_branch
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent | %FileCheck --check-prefix=IDEM %s
+// IDEM: IDEMPOTENT: YES
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text

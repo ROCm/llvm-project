@@ -1360,10 +1360,9 @@ TEST(CollectDirectBranchTargets, BoundsFiniteExternalPcMaterializedCall) {
                                  /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   ASSERT_EQ(Info->Targets.size(), 1u);
-  EXPECT_TRUE(Info->Targets.contains(Decoded.back().Offset +
-                                     Decoded.back().Size));
   EXPECT_TRUE(
-      Info->BoundedIndirectTransfers.contains(Decoded.back().Offset));
+      Info->Targets.contains(Decoded.back().Offset + Decoded.back().Size));
+  EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded.back().Offset));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 
@@ -1391,8 +1390,8 @@ TEST(CollectDirectBranchTargets,
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
   ASSERT_EQ(Decoded.size(), 13u);
-  llvm::SmallVector<uint64_t, 2> DeclaredEntries{
-      Decoded[7].Offset, Decoded[10].Offset};
+  llvm::SmallVector<uint64_t, 2> DeclaredEntries{Decoded[7].Offset,
+                                                 Decoded[10].Offset};
   llvm::SmallVector<ElfView::FunctionTextRange, 3> FunctionRanges{
       {Decoded[1].Offset, Decoded[7].Offset},
       {Decoded[7].Offset, Decoded[9].Offset},
@@ -1407,8 +1406,7 @@ TEST(CollectDirectBranchTargets,
       Decoded, S, /*TextAddr=*/0, /*TextSize=*/Bytes.size(), DeclaredEntries,
       FunctionRanges, /*ExternalEntries=*/{}, Bytes);
   ASSERT_TRUE(Info);
-  EXPECT_TRUE(
-      Info->Targets.contains(Decoded[5].Offset + Decoded[5].Size));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[5].Offset + Decoded[5].Size));
   EXPECT_TRUE(Info->HasUnresolvedTargets);
 }
 
@@ -1464,8 +1462,7 @@ TEST(SourceTailSafety, RejectsProtectedEntriesAndOverlappingRanges) {
       {0, 32, nullptr, nullptr}, {0, 32, nullptr, nullptr}};
   // The same logical global function can appear in both .symtab and .dynsym.
   // Equal bounds add no new interior ownership ambiguity.
-  EXPECT_TRUE(
-      sourceHasUniqueFunctionRange(T, AliasedRanges, /*TextAddr=*/0));
+  EXPECT_TRUE(sourceHasUniqueFunctionRange(T, AliasedRanges, /*TextAddr=*/0));
 
   llvm::SmallVector<ElfView::FunctionTextRange, 2> NestedRanges{
       {0, 64, nullptr, nullptr}, {32, 48, nullptr, nullptr}};
@@ -1611,8 +1608,8 @@ TEST(CollectDirectBranchTargets, BoundsCanonicalSetPcReturn) {
   ASSERT_EQ(Info->Targets.size(), 3u);
   EXPECT_TRUE(Info->Targets.contains(0));
   EXPECT_TRUE(Info->Targets.contains(Decoded[1].Offset));
-  EXPECT_TRUE(Info->Targets.contains(Decoded.back().Offset +
-                                     Decoded.back().Size));
+  EXPECT_TRUE(
+      Info->Targets.contains(Decoded.back().Offset + Decoded.back().Size));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 
@@ -2058,8 +2055,8 @@ TEST(CollectDirectBranchTargets, HandlesImmediateAbsoluteTargetCall) {
                                  /*TextSize=*/0x40, /*DeclaredEntries=*/{});
   ASSERT_TRUE(OutsideInfo);
   ASSERT_EQ(OutsideInfo->Targets.size(), 1u);
-  EXPECT_TRUE(OutsideInfo->Targets.contains(Decoded[0].Offset +
-                                            Decoded[0].Size));
+  EXPECT_TRUE(
+      OutsideInfo->Targets.contains(Decoded[0].Offset + Decoded[0].Size));
   EXPECT_FALSE(OutsideInfo->HasUnresolvedTargets);
 
   std::optional<DirectControlFlowInfo> OverflowInfo =
@@ -2113,8 +2110,7 @@ TEST(CollectDirectBranchTargets, ProtectsExternalPcRelativeCallContinuation) {
                                  /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   ASSERT_EQ(Info->Targets.size(), 1u);
-  EXPECT_TRUE(
-      Info->Targets.contains(Decoded[0].Offset + Decoded[0].Size));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[0].Offset + Decoded[0].Size));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 

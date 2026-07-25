@@ -41,7 +41,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <chrono>
 #include <cstdio>
 #include <limits>
 #include <mutex>
@@ -525,8 +524,7 @@ encodeSetPcGateway(const LLVMState &LS, uint64_t FromOffset,
 
 static std::optional<uint32_t>
 getSetPcGatewayLayoutSize(uint64_t FromOffset, uint64_t TargetOffset,
-                          unsigned SgprBase, bool UseVcc,
-                          bool PreserveVcc) {
+                          unsigned SgprBase, bool UseVcc, bool PreserveVcc) {
   if (PreserveVcc && !UseVcc)
     return std::nullopt;
   if (!UseVcc && (SgprBase & 1u) != 0)
@@ -535,9 +533,9 @@ getSetPcGatewayLayoutSize(uint64_t FromOffset, uint64_t TargetOffset,
   uint64_t SetPcOffset = FromOffset;
   uint32_t PrefixBytes = 0;
   if (PreserveVcc) {
-    std::optional<uint64_t> Offset = checkedAddUint64(
-        FromOffset, VccMoveBytes,
-        "VCC-preserving set-PC gateway layout offset");
+    std::optional<uint64_t> Offset =
+        checkedAddUint64(FromOffset, VccMoveBytes,
+                         "VCC-preserving set-PC gateway layout offset");
     if (!Offset)
       return std::nullopt;
     SetPcOffset = *Offset;
@@ -570,9 +568,8 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
     if (Distance >= MaxSledDistance || Distance >= BestDistance ||
         LS.encodeSBranch(FromOffset, Sled.WritePos).empty())
       continue;
-    std::optional<uint32_t> LayoutSize =
-        getSetPcGatewayLayoutSize(Sled.WritePos, TargetOffset, SgprBase,
-                                  UseVcc, PreserveVcc);
+    std::optional<uint32_t> LayoutSize = getSetPcGatewayLayoutSize(
+        Sled.WritePos, TargetOffset, SgprBase, UseVcc, PreserveVcc);
     if (!LayoutSize)
       return createStringError(
           Twine("failed to encode set-PC gateway at candidate offset 0x") +
@@ -587,9 +584,8 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
   }
   if (!Best)
     return std::nullopt;
-  std::optional<SmallVector<uint8_t>> BestBytes =
-      encodeSetPcGateway(LS, Best->WritePos, TargetOffset, SgprBase, UseVcc,
-                         PreserveVcc);
+  std::optional<SmallVector<uint8_t>> BestBytes = encodeSetPcGateway(
+      LS, Best->WritePos, TargetOffset, SgprBase, UseVcc, PreserveVcc);
   if (!BestBytes)
     return createStringError(
         Twine("failed to encode set-PC gateway at candidate offset 0x") +
@@ -2257,11 +2253,11 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
                           [](const InternalDecodedInst &DI, uint64_t Offset) {
                             return DI.Offset < Offset;
                           });
-    ArrayRef<InternalDecodedInst>::const_iterator End = std::lower_bound(
-        Begin, Decoded.end(), Group.End,
-        [](const InternalDecodedInst &DI, uint64_t Offset) {
-          return DI.Offset < Offset;
-        });
+    ArrayRef<InternalDecodedInst>::const_iterator End =
+        std::lower_bound(Begin, Decoded.end(), Group.End,
+                         [](const InternalDecodedInst &DI, uint64_t Offset) {
+                           return DI.Offset < Offset;
+                         });
     size_t BeginIndex = static_cast<size_t>(Begin - Decoded.begin());
     size_t EndIndex = static_cast<size_t>(End - Decoded.begin());
     if (BeginIndex == EndIndex)
@@ -2687,11 +2683,9 @@ static bool hasUnprovenFallthroughEntry(ArrayRef<InternalDecodedInst> Decoded,
     return true;
   }
 
-  for (const ExternalCallContinuation &Call :
-       Index.ExternalCallContinuations) {
+  for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations) {
     uint64_t Source = Decoded[Call.InstIndex].Offset;
-    if (Call.Continuation >= ChainBegin &&
-        Call.Continuation < FunctionBegin) {
+    if (Call.Continuation >= ChainBegin && Call.Continuation < FunctionBegin) {
       log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
             << " is not a bounded return: external call at 0x"
             << utohexstr(Source) << " returns into the fallthrough chain at 0x"
@@ -3939,8 +3933,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   for (const BoundedSetPcReturn &Return : BoundedReturns)
     for (uint64_t Target : Return.Targets)
       Info.Targets.insert(Target);
-  for (const ExternalCallContinuation &Call :
-       Index->ExternalCallContinuations)
+  for (const ExternalCallContinuation &Call : Index->ExternalCallContinuations)
     Info.Targets.insert(Call.Continuation);
   for (size_t InstIndex : Index->BranchOrCallIndices) {
     const InternalDecodedInst &DI = Decoded[InstIndex];
@@ -4468,15 +4461,15 @@ static void subtractTrampolineSources(std::vector<NopSled> &Gateways,
     if (Sled.WritePos >= UsableEnd)
       continue;
     uint64_t Cursor = Sled.WritePos;
-    for (const auto &[SourceBegin, SourceEnd] : Sources) {
-      if (SourceEnd <= Cursor)
+    for (const std::pair<uint64_t, uint64_t> &Source : Sources) {
+      if (Source.second <= Cursor)
         continue;
-      if (SourceBegin >= UsableEnd)
+      if (Source.first >= UsableEnd)
         break;
-      if (SourceBegin > Cursor)
-        Filtered.push_back({Cursor, std::min(SourceBegin, UsableEnd), Cursor,
+      if (Source.first > Cursor)
+        Filtered.push_back({Cursor, std::min(Source.first, UsableEnd), Cursor,
                             Sled.FunctionStart, Sled.FunctionEnd});
-      Cursor = std::max(Cursor, SourceEnd);
+      Cursor = std::max(Cursor, Source.second);
       if (Cursor >= UsableEnd)
         break;
     }
@@ -4504,9 +4497,8 @@ countReachableSetPcGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
       if (Distance >= MaxSledDistance ||
           LS.encodeSBranch(FromOffset, Candidate).empty())
         break;
-      std::optional<uint32_t> LayoutSize =
-          getSetPcGatewayLayoutSize(Candidate, TargetOffset, SgprBase, UseVcc,
-                                    PreserveVcc);
+      std::optional<uint32_t> LayoutSize = getSetPcGatewayLayoutSize(
+          Candidate, TargetOffset, SgprBase, UseVcc, PreserveVcc);
       if (!LayoutSize)
         return createStringError(
             Twine("invalid set-PC gateway while counting candidate "
@@ -4592,8 +4584,8 @@ static SmallVector<uint8_t> encodeScc1Branch(const LLVMState &LS,
 }
 
 bool sourceHasUniqueFunctionRange(
-    const Trampoline &T,
-    ArrayRef<ElfView::FunctionTextRange> FunctionRanges, uint64_t TextAddr) {
+    const Trampoline &T, ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    uint64_t TextAddr) {
   if (!T.HasFunctionRange)
     return false;
   std::optional<uint64_t> SourceEnd = checkedAddUint64(
@@ -4613,8 +4605,7 @@ bool sourceHasUniqueFunctionRange(
     std::pair<uint64_t, uint64_t> Bounds{Begin, End};
     if (!llvm::is_contained(DistinctCoveringRanges, Bounds))
       DistinctCoveringRanges.push_back(Bounds);
-    MatchesSelectedRange |=
-        Begin == T.FunctionStart && End == T.FunctionEnd;
+    MatchesSelectedRange |= Begin == T.FunctionStart && End == T.FunctionEnd;
     if (DistinctCoveringRanges.size() > 1)
       return false;
   }
@@ -4629,8 +4620,8 @@ bool isSafeSourceTailRange(const Trampoline &T,
       ControlFlow.HasUnboundedIndirectEntries || !HasUniqueFunctionRange ||
       Begin >= End)
     return false;
-  std::optional<uint64_t> FirstTailByte = checkedAddUint64(
-      T.OriginalOffset, MinInstSize, "source-tail first byte");
+  std::optional<uint64_t> FirstTailByte =
+      checkedAddUint64(T.OriginalOffset, MinInstSize, "source-tail first byte");
   std::optional<uint64_t> SourceEnd = checkedAddUint64(
       T.OriginalOffset, T.OriginalSize, "source-tail source end");
   if (!FirstTailByte || !SourceEnd || Begin < *FirstTailByte ||
@@ -4643,6 +4634,16 @@ bool isSafeSourceTailRange(const Trampoline &T,
     if (ControlFlow.Targets.contains(Offset))
       return false;
   return true;
+}
+
+static bool
+isSafeTrampolineTail(const PatchContext &Ctx,
+                     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+                     const Trampoline &T, uint64_t Begin, uint64_t End) {
+  bool HasUniqueFunctionRange =
+      sourceHasUniqueFunctionRange(T, FunctionRanges, Ctx.Elf.textAddr());
+  return isSafeSourceTailRange(T, Ctx.DirectControlFlow, HasUniqueFunctionRange,
+                               Begin, End);
 }
 
 static SmallVector<uint8_t> encodeDirectCall(const LLVMState &LS,
@@ -4740,12 +4741,6 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
 
   const std::vector<ElfView::FunctionTextRange> FunctionRanges =
       Ctx.Elf.functionTextRanges();
-  auto HasSafeTail = [&](const Trampoline &T, uint64_t Begin, uint64_t End) {
-    bool HasUniqueFunctionRange = sourceHasUniqueFunctionRange(
-        T, FunctionRanges, Ctx.Elf.textAddr());
-    return isSafeSourceTailRange(T, Ctx.DirectControlFlow,
-                                 HasUniqueFunctionRange, Begin, End);
-  };
 
   BitVector Assigned(Ctx.OutTrampolines.size());
   SmallVector<SmallVector<size_t, 32>, 8> Groups;
@@ -4890,7 +4885,8 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
       LocalMembers.insert(Index);
       const Trampoline &T = Ctx.OutTrampolines[Index];
       uint64_t Tail = T.OriginalOffset + MinInstSize;
-      if (HasSafeTail(T, Tail, Tail + MinInstSize))
+      if (isSafeTrampolineTail(Ctx, FunctionRanges, T, Tail,
+                               Tail + MinInstSize))
         RelayAnchors.push_back({Tail, Index});
     }
     llvm::sort(RelayAnchors);
@@ -4899,8 +4895,7 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
       AddedRelayMember = false;
       for (const Candidate &C : Candidates) {
         if (Members.size() == MaxGroupSites || Assigned.test(C.Index) ||
-            LocalMembers.contains(C.Index) ||
-            C.ScratchBase != Seed.ScratchBase)
+            LocalMembers.contains(C.Index) || C.ScratchBase != Seed.ScratchBase)
           continue;
         const Trampoline &T = Ctx.OutTrampolines[C.Index];
         if (T.OriginalOffset < GatewayFunctionStart ||
@@ -4911,7 +4906,7 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
         if (ProposedSpan > MaxDispatcherSpan)
           continue;
         uint64_t From = T.OriginalOffset;
-        auto It =
+        SmallVector<std::pair<uint64_t, size_t>, 32>::iterator It =
             llvm::lower_bound(RelayAnchors, std::make_pair(From, size_t{0}));
         std::optional<uint64_t> Relay;
         if (It != RelayAnchors.end() && isSBranchReachable(From, It->first))
@@ -4928,7 +4923,8 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
         MemberRelays[C.Index] = *Relay;
         GroupBodyBytes += T.Bytes.size();
         uint64_t Tail = T.OriginalOffset + MinInstSize;
-        if (HasSafeTail(T, Tail, Tail + MinInstSize))
+        if (isSafeTrampolineTail(Ctx, FunctionRanges, T, Tail,
+                                 Tail + MinInstSize))
           RelayAnchors.insert(
               llvm::lower_bound(RelayAnchors, std::make_pair(Tail, C.Index)),
               {Tail, C.Index});
@@ -5024,7 +5020,6 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
 /// within short-branch range.
 static bool planMirroredStubGateways(PatchContext &Ctx,
                                      std::vector<NopSled> &TextGateways) {
-  const auto PlanStart = std::chrono::steady_clock::now();
   struct Candidate {
     size_t Index = 0;
     unsigned PairBase = 0;
@@ -5177,23 +5172,8 @@ static bool planMirroredStubGateways(PatchContext &Ctx,
     uint64_t MinSource = SeedT.OriginalOffset;
     uint64_t MaxSource = SeedT.OriginalOffset;
     uint64_t GroupBodyBytes = 0;
-    auto FitsGroup = [&](const Trampoline &T) {
-      uint64_t NewMin = std::min(MinSource, T.OriginalOffset);
-      uint64_t NewMax = std::max(MaxSource, T.OriginalOffset);
-      uint64_t Prefix = NewMax - NewMin + MinInstSize;
-      return Prefix <= MaxGroupSpan &&
-             GroupBodyBytes <= MaxGroupSpan - Prefix &&
-             T.Bytes.size() <= MaxGroupSpan - Prefix - GroupBodyBytes;
-    };
-    auto AddMember = [&](size_t Index) {
-      const Trampoline &T = Ctx.OutTrampolines[Index];
-      Members.push_back(Index);
-      MinSource = std::min(MinSource, T.OriginalOffset);
-      MaxSource = std::max(MaxSource, T.OriginalOffset);
-      GroupBodyBytes += T.Bytes.size();
-    };
-
-    AddMember(Seed.Index);
+    Members.push_back(Seed.Index);
+    GroupBodyBytes += SeedT.Bytes.size();
     if (!SeedIslands.empty())
       MemberIslands[Seed.Index] = SeedIslands;
     for (const Candidate &C : Candidates) {
@@ -5202,13 +5182,21 @@ static bool planMirroredStubGateways(PatchContext &Ctx,
           C.UsesVcc != Seed.UsesVcc)
         continue;
       const Trampoline &T = Ctx.OutTrampolines[C.Index];
+      uint64_t NewMin = std::min(MinSource, T.OriginalOffset);
+      uint64_t NewMax = std::max(MaxSource, T.OriginalOffset);
+      uint64_t Prefix = NewMax - NewMin + MinInstSize;
       if (T.OriginalOffset < GatewayFunctionStart ||
-          T.OriginalOffset >= GatewayFunctionEnd || !FitsGroup(T))
+          T.OriginalOffset >= GatewayFunctionEnd || Prefix > MaxGroupSpan ||
+          GroupBodyBytes > MaxGroupSpan - Prefix ||
+          T.Bytes.size() > MaxGroupSpan - Prefix - GroupBodyBytes)
         continue;
       uint64_t From = T.OriginalOffset;
       if (!isSBranchReachable(From, GatewayOffset))
         continue;
-      AddMember(C.Index);
+      Members.push_back(C.Index);
+      MinSource = NewMin;
+      MaxSource = NewMax;
+      GroupBodyBytes += T.Bytes.size();
     }
 
     // Small affine groups only replace established ordinary gateways with a
@@ -5291,11 +5279,24 @@ static bool planMirroredStubGateways(PatchContext &Ctx,
         << " mirrored-stub gateway group(s) for " << Assigned.count()
         << " pair-only source site(s) (" << DirectGatewayGroups
         << " direct gateway group(s), " << IslandGatewayGroups
-        << " island gateway group(s), "
-        << std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now() - PlanStart)
-               .count()
-        << " ms)\n";
+        << " island gateway group(s))\n";
+  return true;
+}
+
+static bool logGatewayGroupError(StringRef Kind, uint32_t Group,
+                                 uint64_t Offset, const Twine &Reason) {
+  log() << "hotswap: error: " << Kind << " group " << Group << " at 0x"
+        << utohexstr(Offset) << ": " << Reason << "\n";
+  return false;
+}
+
+static bool appendAssembledInstruction(SmallVectorImpl<uint8_t> &Bytes,
+                                       StringRef Assembly,
+                                       const LLVMState &LS) {
+  SmallVector<uint8_t> Encoded = assembleSingleInst(Assembly, LS);
+  if (Encoded.empty())
+    return false;
+  Bytes.append(Encoded);
   return true;
 }
 
@@ -5315,18 +5316,12 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
     TP = *Next;
   }
 
-  for (auto &KV : Groups) {
+  for (DenseMap<uint32_t, SmallVector<size_t, 32>>::value_type &KV : Groups) {
     ArrayRef<size_t> Members = KV.second;
     if (Members.empty())
       continue;
     Trampoline &Owner = Ctx.OutTrampolines[Members.front()];
     uint64_t DispatcherOffset = PoolOffsets[Members.front()];
-    auto fail = [&](const Twine &Reason) {
-      log() << "hotswap: error: shared dispatcher group " << KV.first
-            << " at 0x" << utohexstr(DispatcherOffset) << ": " << Reason
-            << "\n";
-      return false;
-    };
     unsigned Base = Owner.SharedDispatcherSgprBase;
     const std::string SourceLow = "s" + std::to_string(Base);
     const std::string CursorLow = "s" + std::to_string(Base + 2);
@@ -5343,7 +5338,9 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
           encodeSetPCLongBranch(Ctx.LS, Owner.SharedDispatcherGatewayOffset,
                                 DispatcherOffset, Base + 2);
       if (!Gateway || Gateway->size() > SetPcForwardSequenceBytes)
-        return fail("single-segment gateway encoding failed");
+        return logGatewayGroupError("shared dispatcher", KV.first,
+                                    DispatcherOffset,
+                                    "single-segment gateway encoding failed");
       Owner.ForwardGatewayBytes = std::move(*Gateway);
     } else {
       const std::string GatewayPair = "s[" + std::to_string(Base + 2) + ":" +
@@ -5356,7 +5353,9 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
                                Owner.SharedDispatcherSecondaryGatewayOffset);
       if (Owner.ForwardGatewayBytes.size() != MinInstSize ||
           ToSecond.size() != MinInstSize)
-        return fail("split gateway first segment encoding failed");
+        return logGatewayGroupError(
+            "shared dispatcher", KV.first, DispatcherOffset,
+            "split gateway first segment encoding failed");
       Owner.ForwardGatewayBytes.append(ToSecond);
 
       uint64_t PcBase = Owner.SharedDispatcherGatewayOffset + MinInstSize;
@@ -5369,7 +5368,9 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
           assembleInstructions(joinAsmLines(Lines), Ctx.LS);
       if (Owner.SecondaryForwardGatewayBytes.empty() ||
           Owner.SecondaryForwardGatewayBytes.size() > 4 * MinInstSize)
-        return fail("split gateway second segment encoding failed");
+        return logGatewayGroupError(
+            "shared dispatcher", KV.first, DispatcherOffset,
+            "split gateway second segment encoding failed");
       while (Owner.SecondaryForwardGatewayBytes.size() < 4 * MinInstSize)
         Owner.SecondaryForwardGatewayBytes.append(Ctx.LS.SNopBytes);
     }
@@ -5380,15 +5381,10 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
                             Ctx.OutTrampolines[Member].PoolEntryPrefixBytes);
 
     SmallVector<uint8_t> Bytes;
-    auto appendInst = [&](StringRef Asm) {
-      SmallVector<uint8_t> Encoded = assembleSingleInst(Asm, Ctx.LS);
-      if (Encoded.empty())
-        return false;
-      Bytes.append(Encoded);
-      return true;
-    };
-    if (!appendInst("s_cselect_b32 " + Save + ", 1, 0"))
-      return fail("SCC save encoding failed");
+    if (!appendAssembledInstruction(Bytes, "s_cselect_b32 " + Save + ", 1, 0",
+                                    Ctx.LS))
+      return logGatewayGroupError("shared dispatcher", KV.first,
+                                  DispatcherOffset, "SCC save encoding failed");
 
     uint64_t CursorValue = DispatcherOffset;
     uint64_t StubBase =
@@ -5399,43 +5395,61 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
       uint64_t Distance = SourcePc > CursorValue ? SourcePc - CursorValue
                                                  : CursorValue - SourcePc;
       if (Distance >= (uint64_t{1} << 32))
-        return fail("source-to-dispatcher span exceeds 32 bits");
+        return logGatewayGroupError(
+            "shared dispatcher", KV.first, DispatcherOffset,
+            "source-to-dispatcher span exceeds 32 bits");
       uint64_t Delta = SourcePc - CursorValue;
       SmallVector<uint8_t> Add = assembleSingleInst(
           "s_add_co_u32 " + CursorLow + ", " + CursorLow + ", 0x" +
               utohexstr(static_cast<uint32_t>(Delta)),
           Ctx.LS);
       if (Add.empty() || Add.size() > 3 * MinInstSize)
-        return fail("source-PC cursor add encoding failed");
+        return logGatewayGroupError("shared dispatcher", KV.first,
+                                    DispatcherOffset,
+                                    "source-PC cursor add encoding failed");
       Bytes.append(Add);
       while (Add.size() < 3 * MinInstSize) {
         Bytes.append(Ctx.LS.SNopBytes);
         Add.append(Ctx.LS.SNopBytes);
       }
-      if (!appendInst("s_cmp_eq_u32 " + SourceLow + ", " + CursorLow))
-        return fail("source-PC compare encoding failed");
+      if (!appendAssembledInstruction(
+              Bytes, "s_cmp_eq_u32 " + SourceLow + ", " + CursorLow, Ctx.LS))
+        return logGatewayGroupError("shared dispatcher", KV.first,
+                                    DispatcherOffset,
+                                    "source-PC compare encoding failed");
       uint64_t BranchFrom = DispatcherOffset + Bytes.size();
       SmallVector<uint8_t> Branch =
           encodeScc1Branch(Ctx.LS, BranchFrom, StubBase + J * 2 * MinInstSize);
       if (Branch.size() != MinInstSize)
-        return fail("source-PC conditional branch is out of range");
+        return logGatewayGroupError(
+            "shared dispatcher", KV.first, DispatcherOffset,
+            "source-PC conditional branch is out of range");
       Bytes.append(Branch);
       CursorValue = SourcePc;
     }
-    if (!appendInst("s_trap 2"))
-      return fail("unmatched-source trap encoding failed");
+    if (!appendAssembledInstruction(Bytes, "s_trap 2", Ctx.LS))
+      return logGatewayGroupError("shared dispatcher", KV.first,
+                                  DispatcherOffset,
+                                  "unmatched-source trap encoding failed");
     for (size_t J = 0; J != Members.size(); ++J) {
-      if (!appendInst("s_cmp_lg_u32 " + Save + ", 0"))
-        return fail("SCC restore encoding failed");
+      if (!appendAssembledInstruction(Bytes, "s_cmp_lg_u32 " + Save + ", 0",
+                                      Ctx.LS))
+        return logGatewayGroupError("shared dispatcher", KV.first,
+                                    DispatcherOffset,
+                                    "SCC restore encoding failed");
       uint64_t BranchFrom = DispatcherOffset + Bytes.size();
       SmallVector<uint8_t> Branch =
           Ctx.LS.encodeSBranch(BranchFrom, BodyOffsets[J]);
       if (Branch.size() != MinInstSize)
-        return fail("selected trampoline body is out of branch range");
+        return logGatewayGroupError(
+            "shared dispatcher", KV.first, DispatcherOffset,
+            "selected trampoline body is out of branch range");
       Bytes.append(Branch);
     }
     if (Bytes.size() != Owner.PoolEntryPrefixBytes)
-      return fail("dispatcher size differs from reserved prefix");
+      return logGatewayGroupError(
+          "shared dispatcher", KV.first, DispatcherOffset,
+          "dispatcher size differs from reserved prefix");
     std::memcpy(Owner.Bytes.data(), Bytes.data(), Bytes.size());
   }
   return true;
@@ -5508,18 +5522,12 @@ static bool emitMirroredStubGateways(PatchContext &Ctx) {
     TP = *Next;
   }
 
-  for (auto &KV : Groups) {
+  for (DenseMap<uint32_t, SmallVector<size_t, 32>>::value_type &KV : Groups) {
     ArrayRef<size_t> Members = KV.second;
     if (Members.empty())
       continue;
     Trampoline &Owner = Ctx.OutTrampolines[Members.front()];
     uint64_t StubBase = PoolOffsets[Members.front()];
-    auto fail = [&](const Twine &Reason) {
-      log() << "hotswap: error: mirrored-stub group " << KV.first << " at 0x"
-            << utohexstr(StubBase) << ": " << Reason << "\n";
-      return false;
-    };
-
     uint64_t MinSource = Owner.OriginalOffset;
     for (size_t Member : Members)
       MinSource =
@@ -5534,10 +5542,14 @@ static bool emitMirroredStubGateways(PatchContext &Ctx) {
             : "s[" + std::to_string(Owner.LongBranchSgprBase) + ":" +
                   std::to_string(Owner.LongBranchSgprBase + 1) + "]";
     if (StubBase < *SourcePc)
-      return fail("common gateway target precedes its source-PC base");
+      return logGatewayGroupError(
+          "mirrored-stub", KV.first, StubBase,
+          "common gateway target precedes its source-PC base");
     uint64_t Delta = StubBase - *SourcePc;
     if (Delta > std::numeric_limits<uint32_t>::max())
-      return fail("common gateway delta does not fit literal32");
+      return logGatewayGroupError(
+          "mirrored-stub", KV.first, StubBase,
+          "common gateway delta does not fit literal32");
     SmallVector<std::string, 2> GatewayLines;
     GatewayLines.push_back("s_add_nc_u64 " + Pair + ", " + Pair + ", 0x" +
                            utohexstr(Delta));
@@ -5546,13 +5558,15 @@ static bool emitMirroredStubGateways(PatchContext &Ctx) {
         assembleInstructions(joinAsmLines(GatewayLines), Ctx.LS);
     if (Owner.ForwardGatewayBytes.empty() ||
         Owner.ForwardGatewayBytes.size() > 3 * MinInstSize)
-      return fail("common add/set-PC gateway encoding failed");
+      return logGatewayGroupError("mirrored-stub", KV.first, StubBase,
+                                  "common add/set-PC gateway encoding failed");
     Owner.HasForwardGateway = true;
     Owner.ForwardGatewayOffset = Owner.MirroredStubGatewayOffset;
 
     if (Owner.PoolEntryPrefixBytes < MinInstSize ||
         Owner.PoolEntryPrefixBytes > Owner.Bytes.size())
-      return fail("sparse stub prefix reservation is invalid");
+      return logGatewayGroupError("mirrored-stub", KV.first, StubBase,
+                                  "sparse stub prefix reservation is invalid");
     for (uint64_t Offset = 0;
          Offset + MinInstSize <= Owner.PoolEntryPrefixBytes;
          Offset += MinInstSize)
@@ -5564,12 +5578,16 @@ static bool emitMirroredStubGateways(PatchContext &Ctx) {
       uint64_t StubDisplacement = T.OriginalOffset - MinSource;
       if (StubDisplacement > Owner.PoolEntryPrefixBytes - MinInstSize ||
           StubDisplacement + MinInstSize > Owner.Bytes.size())
-        return fail("source-selected stub lies outside the sparse prefix");
+        return logGatewayGroupError(
+            "mirrored-stub", KV.first, StubBase,
+            "source-selected stub lies outside the sparse prefix");
       uint64_t BodyOffset = PoolOffsets[Member] + T.PoolEntryPrefixBytes;
       SmallVector<uint8_t> Branch =
           Ctx.LS.encodeSBranch(StubBase + StubDisplacement, BodyOffset);
       if (Branch.size() != MinInstSize)
-        return fail("source-selected body branch is out of range");
+        return logGatewayGroupError(
+            "mirrored-stub", KV.first, StubBase,
+            "source-selected body branch is out of range");
       std::memcpy(Owner.Bytes.data() + StubDisplacement, Branch.data(),
                   Branch.size());
     }
@@ -5589,12 +5607,6 @@ assignLongBranchGateways(PatchContext &Ctx,
   DenseMap<uint64_t, uint64_t> EarlySourceGatewayOwnerOffsets;
   const std::vector<ElfView::FunctionTextRange> FunctionRanges =
       Ctx.Elf.functionTextRanges();
-  auto HasSafeTail = [&](const Trampoline &T, uint64_t Begin, uint64_t End) {
-    bool HasUniqueFunctionRange = sourceHasUniqueFunctionRange(
-        T, FunctionRanges, Ctx.Elf.textAddr());
-    return isSafeSourceTailRange(T, Ctx.DirectControlFlow,
-                                 HasUniqueFunctionRange, Begin, End);
-  };
   if (AllowTextGateways) {
     Gateways = buildExternalGatewaySleds(
         Ctx.Decoded, Ctx.LS, Ctx.Elf, ArrayRef<uint8_t>(Ctx.Text, Ctx.TextSize),
@@ -5621,14 +5633,14 @@ assignLongBranchGateways(PatchContext &Ctx,
           T.OriginalSize < 2 * MinInstSize ||
           isSBranchReachable(T.OriginalOffset, ThisTP))
         continue;
-      std::optional<SmallVector<uint8_t>> Direct = encodeSetPCLongBranch(
-          Ctx.LS, T.OriginalOffset, ThisTP, T.LongBranchSgprBase,
-          T.LongBranchUsesVcc);
+      std::optional<SmallVector<uint8_t>> Direct =
+          encodeSetPCLongBranch(Ctx.LS, T.OriginalOffset, ThisTP,
+                                T.LongBranchSgprBase, T.LongBranchUsesVcc);
       if (Direct && Direct->size() <= T.OriginalSize)
         continue;
-      if (!findSafeSgprScratchBlock(
-              Ctx, T.OriginalOffset, /*Count=*/4, /*Alignment=*/2,
-              "affine reserve demand", /*ReportNoSpace=*/false)) {
+      if (!findSafeSgprScratchBlock(Ctx, T.OriginalOffset, /*Count=*/4,
+                                    /*Alignment=*/2, "affine reserve demand",
+                                    /*ReportNoSpace=*/false)) {
         HasPairOnlyAffineDemand = true;
         break;
       }
@@ -5650,14 +5662,8 @@ assignLongBranchGateways(PatchContext &Ctx,
       }
     }
 
-    const auto SharedPlanStart = std::chrono::steady_clock::now();
     if (!planSharedDispatchGateways(Ctx, Gateways))
       return false;
-    log() << "hotswap: shared gateway planning took "
-          << std::chrono::duration_cast<std::chrono::milliseconds>(
-                 std::chrono::steady_clock::now() - SharedPlanStart)
-                 .count()
-          << " ms\n";
     Gateways.insert(Gateways.end(), MirroredGatewayReserves.begin(),
                     MirroredGatewayReserves.end());
 
@@ -5674,7 +5680,8 @@ assignLongBranchGateways(PatchContext &Ctx,
           T.LongBranchPreservesVcc)
         continue;
       uint64_t Tail = T.OriginalOffset + MinInstSize;
-      if (!HasSafeTail(T, Tail, Tail + MinInstSize))
+      if (!isSafeTrampolineTail(Ctx, FunctionRanges, T, Tail,
+                                Tail + MinInstSize))
         continue;
       uint64_t Route =
           T.SharedDispatcherRelayOffset    ? T.SharedDispatcherRelayOffset
@@ -5709,7 +5716,8 @@ assignLongBranchGateways(PatchContext &Ctx,
                                   ? VccGatewayBytes
                                   : AffineGatewayBytes;
       uint64_t Start = T.OriginalOffset + ForwardBytes;
-      if (!HasSafeTail(T, Start, Start + GatewayBytes))
+      if (!isSafeTrampolineTail(Ctx, FunctionRanges, T, Start,
+                                Start + GatewayBytes))
         continue;
       EarlySourceGatewayOwnerOffsets[Start] = T.OriginalOffset;
       Gateways.push_back({Start, Start + GatewayBytes, Start, 0,
@@ -5740,7 +5748,8 @@ assignLongBranchGateways(PatchContext &Ctx,
       if (Direct && Direct->size() <= T.OriginalSize)
         continue;
       uint64_t Tail = T.OriginalOffset + MinInstSize;
-      if (!HasSafeTail(T, Tail, Tail + MinInstSize))
+      if (!isSafeTrampolineTail(Ctx, FunctionRanges, T, Tail,
+                                Tail + MinInstSize))
         continue;
       EarlySourceTailOwnerOffsets[Tail] = T.OriginalOffset;
       Gateways.push_back({Tail, Tail + MinInstSize, Tail, 0,
@@ -5758,7 +5767,8 @@ assignLongBranchGateways(PatchContext &Ctx,
           T.UsesSharedDispatcherForward || T.OriginalSize < 2 * MinInstSize)
         continue;
       uint64_t Tail = T.OriginalOffset + MinInstSize;
-      if (HasSafeTail(T, Tail, Tail + MinInstSize)) {
+      if (isSafeTrampolineTail(Ctx, FunctionRanges, T, Tail,
+                               Tail + MinInstSize)) {
         EarlySourceTailOwnerOffsets[Tail] = T.OriginalOffset;
         Gateways.push_back({Tail, Tail + MinInstSize, Tail, 0,
                             std::numeric_limits<uint64_t>::max()});
@@ -5767,7 +5777,8 @@ assignLongBranchGateways(PatchContext &Ctx,
       constexpr uint64_t GatewayBytes = 5 * MinInstSize;
       if (T.OriginalSize >= GatewayStart + GatewayBytes) {
         uint64_t Start = T.OriginalOffset + GatewayStart;
-        if (!HasSafeTail(T, Start, Start + GatewayBytes))
+        if (!isSafeTrampolineTail(Ctx, FunctionRanges, T, Start,
+                                  Start + GatewayBytes))
           continue;
         EarlySourceGatewayOwnerOffsets[Start] = T.OriginalOffset;
         Gateways.push_back({Start, Start + GatewayBytes, Start, 0,
@@ -5781,13 +5792,15 @@ assignLongBranchGateways(PatchContext &Ctx,
     DenseMap<uint64_t, size_t> TrampolineAtOriginalOffset;
     for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I)
       TrampolineAtOriginalOffset[Ctx.OutTrampolines[I].OriginalOffset] = I;
-    for (const auto &KV : EarlySourceTailOwnerOffsets) {
+    for (const DenseMap<uint64_t, uint64_t>::value_type &KV :
+         EarlySourceTailOwnerOffsets) {
       DenseMap<uint64_t, size_t>::const_iterator Owner =
           TrampolineAtOriginalOffset.find(KV.second);
       if (Owner != TrampolineAtOriginalOffset.end())
         SourceTailIslandOwners[KV.first] = Owner->second;
     }
-    for (const auto &KV : EarlySourceGatewayOwnerOffsets) {
+    for (const DenseMap<uint64_t, uint64_t>::value_type &KV :
+         EarlySourceGatewayOwnerOffsets) {
       DenseMap<uint64_t, size_t>::const_iterator Owner =
           TrampolineAtOriginalOffset.find(KV.second);
       if (Owner != TrampolineAtOriginalOffset.end())
@@ -5836,14 +5849,8 @@ assignLongBranchGateways(PatchContext &Ctx,
       OwnerT.SourceTailGatewayOffset = T.MirroredStubGatewayOffset;
       OwnerT.SourceTailGatewayBytes = 3 * MinInstSize;
     }
-    const auto DispatcherEmitStart = std::chrono::steady_clock::now();
     if (!emitSharedDispatchers(Ctx) || !emitMirroredStubGateways(Ctx))
       return false;
-    log() << "hotswap: shared/affine gateway emission took "
-          << std::chrono::duration_cast<std::chrono::milliseconds>(
-                 std::chrono::steady_clock::now() - DispatcherEmitStart)
-                 .count()
-          << " ms\n";
   }
 
   uint64_t IslandLayoutOffset = Ctx.PoolBaseOffset;
@@ -5870,7 +5877,6 @@ assignLongBranchGateways(PatchContext &Ctx,
     uint64_t InitialCandidateSlots = 0;
   };
   std::vector<PendingGateway> Pending;
-  const auto OrdinaryPlanStart = std::chrono::steady_clock::now();
   uint64_t ReturnBranchIslandChains = 0;
   uint64_t TrampOffset = Ctx.PoolBaseOffset;
   for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
@@ -5915,11 +5921,7 @@ assignLongBranchGateways(PatchContext &Ctx,
   }
   log() << "hotswap: ordinary gateway planner collected " << Pending.size()
         << " pending site(s) across " << Gateways.size()
-        << " gateway/relay window(s) in "
-        << std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now() - OrdinaryPlanStart)
-               .count()
-        << " ms\n";
+        << " gateway/relay window(s)\n";
 
   // Once a source is replaced by a one-dword branch, the remainder of its
   // original instruction window is unreachable and can provide a safe relay.
@@ -5931,14 +5933,13 @@ assignLongBranchGateways(PatchContext &Ctx,
     const Trampoline &T = Ctx.OutTrampolines[I];
     if (!AllowTextGateways ||
         Ctx.DirectControlFlow.HasUnboundedIndirectEntries ||
-        T.OriginalSize < 2 * MinInstSize ||
-        T.UsesDirectSetPCForward ||
+        T.OriginalSize < 2 * MinInstSize || T.UsesDirectSetPCForward ||
         T.UsesSharedDispatcherForward || T.UsesMirroredStubForward ||
         T.LongBranchPreservesVcc)
       continue;
     uint64_t Tail = T.OriginalOffset + MinInstSize;
     if (SourceTailIslandOwners.contains(Tail) ||
-        !HasSafeTail(T, Tail, Tail + MinInstSize))
+        !isSafeTrampolineTail(Ctx, FunctionRanges, T, Tail, Tail + MinInstSize))
       continue;
     SourceTailIslandOwners[Tail] = I;
     Gateways.push_back({Tail, Tail + MinInstSize, Tail, 0,
@@ -5986,7 +5987,6 @@ assignLongBranchGateways(PatchContext &Ctx,
     ReturnBranchIslandChains += !T.ReturnBranchIslands.empty();
   }
 
-  const auto CandidateCountStart = std::chrono::steady_clock::now();
   for (PendingGateway &P : Pending) {
     const Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
     if (!T.UsesSetPCBack)
@@ -6003,12 +6003,6 @@ assignLongBranchGateways(PatchContext &Ctx,
     }
     P.InitialCandidateSlots = *CandidateSlots;
   }
-  log() << "hotswap: ordinary gateway candidate counting took "
-        << std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now() - CandidateCountStart)
-               .count()
-        << " ms\n";
-
   std::stable_sort(Pending.begin(), Pending.end(),
                    [](const PendingGateway &LHS, const PendingGateway &RHS) {
                      return LHS.InitialCandidateSlots <
@@ -6465,8 +6459,7 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     appendPoolBranchIslands(OutTrampolines);
     bool AllowTextGateways = !ControlFlow->HasUnresolvedTargets &&
                              !ControlFlow->HasUnboundedIndirectEntries;
-    if (!assignLongBranchGateways(Ctx, ControlFlow->Targets,
-                                  AllowTextGateways))
+    if (!assignLongBranchGateways(Ctx, ControlFlow->Targets, AllowTextGateways))
       return std::nullopt;
   }
 

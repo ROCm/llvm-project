@@ -8,6 +8,19 @@
 // RUN:   --output %t.out.elf 2>&1 | %FileCheck --check-prefix=GOOD %s
 // GOOD: hotswap: planned 1 shared far-dispatch gateway group(s) for 10 source site(s)
 // GOOD: RESULT: SUCCESS
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// DISASM-LABEL: <sources>:
+// DISASM-LABEL: <source0>:
+// DISASM-NEXT: s_call_i64
+// DISASM-NEXT: s_nop 0
+// DISASM-LABEL: <gateway_pad>:
+// DISASM-NEXT: s_get_pc_i64
+// DISASM-NEXT: s_add_nc_u64
+// DISASM-NEXT: s_set_pc_i64
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent | %FileCheck --check-prefix=IDEM %s
+// IDEM: IDEMPOTENT: YES
 
 // RUN: sed 's|^// FOREIGN-ONLY:|  |' %s > %t.foreign.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
