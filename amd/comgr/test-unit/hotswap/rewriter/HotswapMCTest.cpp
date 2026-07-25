@@ -2983,6 +2983,240 @@ TEST(SafeSgprScratchBlock, CommitRejectsObjectWithoutKernelDescriptor) {
       commitSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, Block, "unit test"));
 }
 
+TEST(ForwardDeadVgprs, OpaqueBeforeKillRejects) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  Nodes.emplace_back(MaxVgprs);
+  Nodes.emplace_back(MaxVgprs);
+  Nodes[0].Opaque = true;
+  Nodes[1].FullDefs.set(Candidate);
+  Nodes[1].SafeTerminal = true;
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_FALSE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, KillBeforeOpaqueAccepts) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  Nodes.emplace_back(MaxVgprs);
+  Nodes.emplace_back(MaxVgprs);
+  Nodes[0].FullDefs.set(Candidate);
+  Nodes[0].Successors.push_back(1);
+  Nodes[1].Opaque = true;
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_TRUE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, ExternalExitBeforeKillRejects) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  Nodes.emplace_back(MaxVgprs);
+  Nodes.emplace_back(MaxVgprs);
+  Nodes[0].HasUnsafeExit = true;
+  Nodes[0].Successors.push_back(1);
+  Nodes[1].FullDefs.set(Candidate);
+  Nodes[1].SafeTerminal = true;
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_FALSE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, KillBeforeExternalExitAccepts) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  Nodes.emplace_back(MaxVgprs);
+  Nodes.emplace_back(MaxVgprs);
+  Nodes[0].FullDefs.set(Candidate);
+  Nodes[0].Successors.push_back(1);
+  Nodes[1].HasUnsafeExit = true;
+  Nodes[1].SafeTerminal = true;
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_TRUE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, OneUseBeforeKillBranchRejects) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  for (unsigned I = 0; I != 3; ++I)
+    Nodes.emplace_back(MaxVgprs);
+  Nodes[0].Successors.push_back(1);
+  Nodes[0].Successors.push_back(2);
+  Nodes[1].Uses.set(Candidate);
+  Nodes[1].SafeTerminal = true;
+  Nodes[2].FullDefs.set(Candidate);
+  Nodes[2].SafeTerminal = true;
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_FALSE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, AllBranchesKillAccepts) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  for (unsigned I = 0; I != 3; ++I)
+    Nodes.emplace_back(MaxVgprs);
+  Nodes[0].Successors.push_back(1);
+  Nodes[0].Successors.push_back(2);
+  Nodes[1].FullDefs.set(Candidate);
+  Nodes[1].SafeTerminal = true;
+  Nodes[2].FullDefs.set(Candidate);
+  Nodes[2].SafeTerminal = true;
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_TRUE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, LoopPathWithoutKillRejects) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  Nodes.emplace_back(MaxVgprs);
+  Nodes.emplace_back(MaxVgprs);
+  Nodes[0].Successors.push_back(1);
+  Nodes[1].Successors.push_back(0);
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_FALSE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, LoopWithFullKillAccepts) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  Nodes.emplace_back(MaxVgprs);
+  Nodes.emplace_back(MaxVgprs);
+  Nodes[0].FullDefs.set(Candidate);
+  Nodes[0].Successors.push_back(1);
+  Nodes[1].Successors.push_back(0);
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_TRUE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, BackedgeUseBeforePatchedSiteRejects) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  for (unsigned I = 0; I != 3; ++I)
+    Nodes.emplace_back(MaxVgprs);
+  Nodes[0].Successors.push_back(1);
+  Nodes[1].Uses.set(Candidate);
+  Nodes[1].Successors.push_back(2);
+  Nodes[2].SafeTerminal = true;
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_FALSE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, BackedgeWithoutUseToPatchedSiteAccepts) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  for (unsigned I = 0; I != 3; ++I)
+    Nodes.emplace_back(MaxVgprs);
+  Nodes[0].Successors.push_back(1);
+  Nodes[1].Successors.push_back(2);
+  Nodes[2].SafeTerminal = true;
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_TRUE(Safe->test(Candidate));
+}
+
+TEST(ForwardDeadVgprs, PartialDefinitionIsUseNotKill) {
+  constexpr unsigned MaxVgprs = 8;
+  constexpr unsigned Candidate = 3;
+  std::vector<ForwardVgprProofNode> Nodes;
+  Nodes.emplace_back(MaxVgprs);
+  // Partial/tied definitions consume the incoming full dword and therefore
+  // belong in Uses, never FullDefs.
+  Nodes[0].Uses.set(Candidate);
+  Nodes[0].SafeTerminal = true;
+
+  std::optional<llvm::BitVector> Safe =
+      computeForwardDeadVgprs(Nodes, /*EntryNode=*/0, MaxVgprs);
+  ASSERT_TRUE(Safe);
+  EXPECT_FALSE(Safe->test(Candidate));
+}
+
+TEST(WmmaScale16, PhysicalVgprRangeMustFitOneBank) {
+  EXPECT_TRUE(physicalVgprRangeFitsOneBank(0, 16, 1024));
+  EXPECT_TRUE(physicalVgprRangeFitsOneBank(248, 8, 1024));
+  EXPECT_TRUE(physicalVgprRangeFitsOneBank(1016, 8, 1024));
+
+  EXPECT_FALSE(physicalVgprRangeFitsOneBank(0, 0, 1024));
+  EXPECT_FALSE(physicalVgprRangeFitsOneBank(249, 8, 1024));
+  EXPECT_FALSE(physicalVgprRangeFitsOneBank(255, 2, 1024));
+  EXPECT_FALSE(physicalVgprRangeFitsOneBank(1017, 8, 1024));
+  EXPECT_FALSE(physicalVgprRangeFitsOneBank(1024, 1, 1024));
+}
+
+TEST(WmmaScale16, LegacyB0Vop3ScalarSourceEncodingIsExact) {
+  constexpr uint32_t ObservedWord0 = 0xd0310000u;
+  constexpr uint32_t ObservedAlternateSourceWord = 1u << 20;
+  constexpr uint32_t AllowedModifier = 1u << 14;
+
+  EXPECT_TRUE(isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0, 0));
+  EXPECT_TRUE(isLegacyB0Vop3ScalarSourceEncoding(
+      ObservedWord0 | AllowedModifier, ObservedAlternateSourceWord));
+
+  EXPECT_FALSE(isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0 | 1u, 0));
+  EXPECT_FALSE(
+      isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0 ^ (1u << 16), 0));
+  EXPECT_FALSE(isLegacyB0Vop3ScalarSourceEncoding(
+      ObservedWord0, ObservedAlternateSourceWord | 1u));
+}
+
+TEST(WmmaScale16, UnrecognizedVectorRegisterCannotDisappearFromProof) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  ASSERT_NE(S.MRI, nullptr);
+
+  auto FindRegister = [&](llvm::StringRef Name) {
+    for (unsigned Reg = 1; Reg != S.MRI->getNumRegs(); ++Reg)
+      if (Name == S.MRI->getName(Reg))
+        return llvm::MCRegister(Reg);
+    return llvm::MCRegister();
+  };
+
+  // AGPRs are vector registers but are deliberately not representable as an
+  // encoded v0..v255 range. Such an operand must invalidate the physical-VGPR
+  // proof; it cannot be ignored like a scalar register.
+  llvm::MCRegister Agpr0 = FindRegister("AGPR0");
+  llvm::MCRegister Sgpr0 = FindRegister("SGPR0");
+  ASSERT_TRUE(Agpr0);
+  ASSERT_TRUE(Sgpr0);
+  EXPECT_TRUE(isVectorRegisterOrAlias(Agpr0, *S.MRI));
+  EXPECT_FALSE(isVectorRegisterOrAlias(Sgpr0, *S.MRI));
+}
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {
   std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64}, {100, 128, 100, 100, 128}};
   EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max()),
