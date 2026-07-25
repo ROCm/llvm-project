@@ -483,68 +483,6 @@ SmallVector<uint8_t> LLVMState::encodeSBranch(uint64_t FromOffset,
 
 // -- Instruction decode -------------------------------------------------------
 
-static StringRef decodeSanitizedOpcode(ArrayRef<uint8_t> Bytes,
-                                       const LLVMState &LS, uint64_t Address) {
-  MCInst Inst;
-  uint64_t InstSize = 0;
-  MCDisassembler::DecodeStatus Status =
-      LS.MCD->getInstruction(Inst, InstSize, Bytes, Address, nulls());
-  if (Status == MCDisassembler::Fail || InstSize > Bytes.size())
-    return {};
-  return LS.MCII->getName(Inst.getOpcode());
-}
-
-static bool hasInvalidScalarRegisterEncoding(ArrayRef<uint8_t> Bytes,
-                                             const LLVMState &LS,
-                                             uint64_t Address) {
-  if (Bytes.size() < MinInstSize)
-    return false;
-
-  const unsigned MaxInstLen = LS.MAI->getMaxInstLength(LS.STI.get());
-  const size_t ProbeSize = std::min<size_t>(Bytes.size(), MaxInstLen);
-
-  // Several GFX12/GFX1250 TableGen decoders extract an eight-bit operand field
-  // and pass it to a seven-bit scalar-register decoder. Valid encodings always
-  // clear the high bit, but malformed code would otherwise trip the decoder's
-  // width assertion instead of returning MCDisassembler::Fail. Probe the same
-  // opcode with only the reserved operand bit cleared, then fail the original
-  // encoding closed when it selects one of those instruction forms.
-  if ((Bytes[3] & 0xfe) == 0x7e && (Bytes[3] & 0x01) != 0) {
-    SmallVector<uint8_t, 16> Probe(Bytes.begin(), Bytes.begin() + ProbeSize);
-    Probe[3] &= 0xfe;
-    StringRef Opcode = decodeSanitizedOpcode(Probe, LS, Address);
-    if (Opcode.starts_with("V_READFIRSTLANE_B32"))
-      return true;
-  }
-
-  const bool MaybeSop1Movrels = Bytes[3] == 0xbe && Bytes[1] == 0x40;
-  const bool MaybeVop3 = (Bytes[3] & 0xfc) == 0xd4;
-  if ((Bytes[0] & 0x80) != 0 && (MaybeSop1Movrels || MaybeVop3)) {
-    SmallVector<uint8_t, 16> Probe(Bytes.begin(), Bytes.begin() + ProbeSize);
-    Probe[0] &= 0x7f;
-    StringRef Opcode = decodeSanitizedOpcode(Probe, LS, Address);
-    if (Opcode.starts_with("S_MOVRELS_B32") ||
-        Opcode.starts_with("V_READLANE_B32") ||
-        Opcode.starts_with("V_S_EXP_") || Opcode.starts_with("V_S_LOG_") ||
-        Opcode.starts_with("V_S_RCP_") || Opcode.starts_with("V_S_RSQ_") ||
-        Opcode.starts_with("V_S_SQRT_"))
-      return true;
-  }
-
-  if (ProbeSize >= 12 && Bytes[3] == 0xd0 && Bytes[2] == 0x71 &&
-      ((Bytes[8] | Bytes[9] | Bytes[10] | Bytes[11]) & 0x80) != 0) {
-    SmallVector<uint8_t, 16> Probe(Bytes.begin(), Bytes.begin() + ProbeSize);
-    for (size_t I = 8; I != 12; ++I)
-      Probe[I] &= 0x7f;
-    StringRef Opcode = decodeSanitizedOpcode(Probe, LS, Address);
-    if (Opcode.starts_with("TENSOR_LOAD_TO_LDS_") ||
-        Opcode.starts_with("TENSOR_STORE_FROM_LDS_"))
-      return true;
-  }
-
-  return false;
-}
-
 InstructionDecoder::InstructionDecoder(const uint8_t *Text, uint64_t TextSize,
                                        const LLVMState &LS, bool WantMnemonic)
     : Text(Text), TextSize(TextSize), LS(LS), WantMnemonic(WantMnemonic) {}
@@ -607,10 +545,12 @@ bool InstructionDecoder::decode(
       DecodeBytes = PaddedBytes;
     }
     uint64_t InstSize = 0;
-    MCDisassembler::DecodeStatus Status = MCDisassembler::Fail;
-    if (!hasInvalidScalarRegisterEncoding(DecodeBytes, LS, Pos))
-      Status =
-          LS.MCD->getInstruction(DI.Inst, InstSize, DecodeBytes, Pos, nulls());
+    // TODO: https://github.com/ROCm/llvm-project/issues/3599
+    // The AMDGPU disassembler must reject malformed scalar-register fields
+    // instead of asserting. Keep that target-specific validation in LLVM; a
+    // COMGR byte predecoder would duplicate the generated decoder tables.
+    MCDisassembler::DecodeStatus Status =
+        LS.MCD->getInstruction(DI.Inst, InstSize, DecodeBytes, Pos, nulls());
     if (Status != MCDisassembler::Fail && InstSize > RemainingBytes.size()) {
       Status = MCDisassembler::Fail;
       DI.Inst = MCInst();
