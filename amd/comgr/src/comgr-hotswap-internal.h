@@ -340,6 +340,10 @@ struct DisplacementEdit {
   uint64_t Offset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> ReplacementBytes;
+  /// For a pure padding insertion, map the old boundary after the new bytes.
+  /// This keeps alignment padding immediately before a kernel entry outside
+  /// the entry's executed path.
+  bool MapsOldOffsetAfterInsertion = false;
 };
 
 enum class DisplacementMapBias {

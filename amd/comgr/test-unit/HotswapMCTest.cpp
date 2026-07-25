@@ -2220,6 +2220,46 @@ TEST(DisplacementPlan, MapsInsertionAndReplacementBoundaries) {
       10, DisplacementMapBias::BeforeInsertedBytes, Mapped));
 }
 
+TEST(DisplacementPlan, MapsAlignmentBeforeInsertionAtSameOffset) {
+  std::vector<uint8_t> Text(16);
+  for (unsigned I = 0; I < Text.size(); ++I)
+    Text[I] = I;
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Insert;
+  Insert.Offset = 8;
+  Insert.ReplacementBytes.assign(8, 0x22);
+
+  DisplacementEdit Alignment;
+  Alignment.Offset = 8;
+  Alignment.ReplacementBytes.assign(4, 0x11);
+  Alignment.MapsOldOffsetAfterInsertion = true;
+
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {Insert, Alignment});
+  ASSERT_TRUE((bool)PlanOrErr) << llvm::toString(PlanOrErr.takeError());
+
+  uint64_t Mapped = 0;
+  ASSERT_TRUE(PlanOrErr->mapOffset(8, DisplacementMapBias::BeforeInsertedBytes,
+                                   Mapped));
+  EXPECT_EQ(Mapped, 12u);
+  ASSERT_TRUE(
+      PlanOrErr->mapOffset(8, DisplacementMapBias::AfterInsertedBytes, Mapped));
+  EXPECT_EQ(Mapped, 20u);
+
+  llvm::SmallVector<uint8_t> NewText =
+      PlanOrErr->buildText(Text, /*SNopBytes=*/{});
+  ASSERT_GE(NewText.size(), 24u);
+  EXPECT_EQ(llvm::ArrayRef<uint8_t>(NewText.data() + 8, 4),
+            llvm::ArrayRef<uint8_t>(Alignment.ReplacementBytes));
+  EXPECT_EQ(llvm::ArrayRef<uint8_t>(NewText.data() + 12, 8),
+            llvm::ArrayRef<uint8_t>(Insert.ReplacementBytes));
+  EXPECT_EQ(NewText[20], Text[8]);
+}
+
 TEST(DisplacementPlan, RejectsOverlappingEdits) {
   std::vector<uint8_t> Text(16, 0);
   std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
@@ -2892,6 +2932,75 @@ TEST(TextDisplacement, RelocatesTrailingElfMetadataAndPcReference) {
     }
   }
   EXPECT_TRUE(SawDescriptorSymbol);
+}
+
+TEST(TextDisplacement, PreservesKernelEntryAlignmentWithMinimumPadding) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  for (unsigned I = 0; I != 64; ++I)
+    Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::SmallVector<uint8_t> End = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(End.size(), MinInstSize);
+  Text.append(End.begin(), End.end());
+  ASSERT_EQ(Text.size(), 260u);
+
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> InitialView =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)InitialView) << llvm::toString(InitialView.takeError());
+
+  const ElfView::ELFT::Shdr &Rodata = InitialView->sections()[2];
+  const int64_t EntryOffset = -0xF00;
+  std::memcpy(ElfBytes.data() + Rodata.sh_offset +
+                  offsetof(llvm::amdhsa::kernel_descriptor_t,
+                           kernel_code_entry_byte_offset),
+              &EntryOffset, sizeof(EntryOffset));
+
+  const ElfView::ELFT::Shdr &Symtab = InitialView->sections()[4];
+  llvm::ELF::Elf64_Sym KernelSymbol;
+  std::memcpy(&KernelSymbol,
+              ElfBytes.data() + Symtab.sh_offset + sizeof(KernelSymbol),
+              sizeof(KernelSymbol));
+  KernelSymbol.st_value = 0x1100;
+  KernelSymbol.st_size = MinInstSize;
+  std::memcpy(ElfBytes.data() + Symtab.sh_offset + sizeof(KernelSymbol),
+              &KernelSymbol, sizeof(KernelSymbol));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ASSERT_EQ(ViewOrErr->kernelDescriptors().size(), 1u);
+  std::optional<uint64_t> OldEntry =
+      entryVAddr(ViewOrErr->kernelDescriptors().front());
+  ASSERT_TRUE(OldEntry.has_value());
+  EXPECT_EQ(*OldEntry, 0x1100u);
+
+  DisplacementEdit Insert;
+  Insert.Offset = 0;
+  Insert.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Insert},
+                                          /*RelocateTrailingSections=*/true);
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+  EXPECT_EQ(Out->getBufferSize(), ElfBytes.size() + 256);
+
+  llvm::Expected<ElfView> OutView = ElfView::create(
+      reinterpret_cast<uint8_t *>(Out->getBufferStart()), Out->getBufferSize());
+  ASSERT_TRUE((bool)OutView) << llvm::toString(OutView.takeError());
+  ASSERT_EQ(OutView->kernelDescriptors().size(), 1u);
+  std::optional<uint64_t> NewEntry =
+      entryVAddr(OutView->kernelDescriptors().front());
+  ASSERT_TRUE(NewEntry.has_value());
+  EXPECT_EQ(*NewEntry, 0x1200u);
+  EXPECT_EQ(*NewEntry % KernelEntryStubStride, 0u);
+  EXPECT_EQ(OutView->kernelDescriptors().front().EntryOffset, -0xF00);
+
+  ASSERT_GE(OutView->textSize(), 512u + End.size());
+  EXPECT_EQ(llvm::ArrayRef<uint8_t>(OutView->textData() + 512, End.size()),
+            llvm::ArrayRef<uint8_t>(End));
 }
 
 TEST(TextDisplacement, RemapsDynamicPointerAndSegment) {

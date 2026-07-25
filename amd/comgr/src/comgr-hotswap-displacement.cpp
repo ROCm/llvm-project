@@ -1800,15 +1800,23 @@ DisplacementPlan::create(const ElfView &Elf,
 
   std::stable_sort(Sorted.begin(), Sorted.end(),
                    [](const DisplacementEdit &A, const DisplacementEdit &B) {
-                     return A.Offset < B.Offset;
+                     if (A.Offset != B.Offset)
+                       return A.Offset < B.Offset;
+                     return A.MapsOldOffsetAfterInsertion &&
+                            !B.MapsOldOffsetAfterInsertion;
                    });
 
   uint64_t RawGrowth = 0;
   std::optional<uint64_t> PrevOffset;
+  const DisplacementEdit *PrevEdit = nullptr;
   uint64_t PrevEnd = 0;
   for (const DisplacementEdit &Edit : Sorted) {
     if (Edit.ReplacementBytes.empty())
       return makeDisplacementError("displacement edit has empty replacement");
+    if (Edit.MapsOldOffsetAfterInsertion && Edit.OriginalSize != 0) {
+      return makeDisplacementError(
+          "boundary-after displacement edit is not a pure insertion");
+    }
     if (Edit.Offset > Elf.textSize() ||
         Edit.OriginalSize > Elf.textSize() - Edit.Offset) {
       return makeDisplacementError("displacement edit is out of .text bounds");
@@ -1820,8 +1828,13 @@ DisplacementPlan::create(const ElfView &Elf,
     if (PrevOffset && Edit.Offset < PrevEnd)
       return makeDisplacementError("displacement edits overlap");
     if (PrevOffset && Edit.Offset == *PrevOffset) {
-      return makeDisplacementError(
-          "multiple displacement edits share an offset");
+      const bool FollowsBoundaryAfterInsertion =
+          PrevEdit && PrevEdit->MapsOldOffsetAfterInsertion &&
+          !Edit.MapsOldOffsetAfterInsertion && PrevEdit->OriginalSize == 0;
+      if (!FollowsBoundaryAfterInsertion) {
+        return makeDisplacementError(
+            "multiple displacement edits share an offset");
+      }
     }
 
     uint64_t EditGrowth = Edit.ReplacementBytes.size() - Edit.OriginalSize;
@@ -1829,6 +1842,7 @@ DisplacementPlan::create(const ElfView &Elf,
       return makeDisplacementError("displacement growth overflows uint64_t");
     RawGrowth += EditGrowth;
     PrevOffset = Edit.Offset;
+    PrevEdit = &Edit;
     PrevEnd = Edit.Offset + Edit.OriginalSize;
   }
 
@@ -1877,7 +1891,8 @@ bool DisplacementPlan::mapOffset(uint64_t OldOffset, DisplacementMapBias Bias,
 
     if (OldOffset == Edit.Offset) {
       if (Edit.OriginalSize == 0 &&
-          Bias == DisplacementMapBias::AfterInsertedBytes) {
+          (Edit.MapsOldOffsetAfterInsertion ||
+           Bias == DisplacementMapBias::AfterInsertedBytes)) {
         Delta += EditDelta;
         continue;
       }
@@ -1932,6 +1947,95 @@ DisplacementPlan::buildText(ArrayRef<uint8_t> OldText,
   return Out;
 }
 
+static Expected<std::vector<DisplacementEdit>>
+addKernelEntryAlignmentEdits(const ElfView &Elf, const LLVMState &LS,
+                             ArrayRef<DisplacementEdit> Edits) {
+  if (LS.SNopBytes.size() != MinInstSize) {
+    return makeDisplacementError(
+        "kernel-entry alignment requires one encoded s_nop");
+  }
+
+  Expected<DisplacementPlan> InitialPlanOrErr =
+      DisplacementPlan::create(Elf, Edits,
+                               /*RelocateTrailingSections=*/true);
+  if (!InitialPlanOrErr)
+    return InitialPlanOrErr.takeError();
+
+  if (Elf.textSize() > std::numeric_limits<uint64_t>::max() - Elf.textAddr()) {
+    return makeDisplacementError(
+        ".text range overflows while aligning kernel entries");
+  }
+  const uint64_t TextEnd = Elf.textAddr() + Elf.textSize();
+  SmallVector<uint64_t, 8> KernelEntries;
+  for (const KernelDescriptorInfo &Descriptor : Elf.kernelDescriptors()) {
+    std::optional<uint64_t> EntryAddress = entryVAddr(Descriptor);
+    if (!EntryAddress) {
+      return makeDisplacementError("failed to resolve kernel entry for '" +
+                                   Twine(Descriptor.KernelName) + "'");
+    }
+    if (*EntryAddress < Elf.textAddr() || *EntryAddress >= TextEnd)
+      continue;
+    KernelEntries.push_back(*EntryAddress - Elf.textAddr());
+  }
+  llvm::sort(KernelEntries);
+  KernelEntries.erase(std::unique(KernelEntries.begin(), KernelEntries.end()),
+                      KernelEntries.end());
+
+  std::vector<DisplacementEdit> Result(Edits.begin(), Edits.end());
+  uint64_t AlignmentDelta = 0;
+  unsigned AlignmentEditCount = 0;
+  for (uint64_t Entry : KernelEntries) {
+    uint64_t MappedOffset = 0;
+    if (!InitialPlanOrErr->mapOffset(
+            Entry, DisplacementMapBias::BeforeInsertedBytes, MappedOffset)) {
+      return makeDisplacementError(
+          "kernel entry maps inside a replaced instruction");
+    }
+    std::optional<uint64_t> MappedAddress =
+        checkedAddUint64(Elf.textAddr(), MappedOffset,
+                         "displaced kernel entry before alignment");
+    if (!MappedAddress) {
+      return makeDisplacementError("kernel entry overflows before alignment");
+    }
+    MappedAddress = checkedAddUint64(*MappedAddress, AlignmentDelta,
+                                     "displaced kernel entry alignment delta");
+    if (!MappedAddress) {
+      return makeDisplacementError("kernel entry alignment delta overflows");
+    }
+    std::optional<uint64_t> Aligned =
+        checkedAlignTo(*MappedAddress, KernelEntryStubStride,
+                       "displaced kernel entry alignment");
+    if (!Aligned)
+      return makeDisplacementError("kernel entry alignment overflows");
+    const uint64_t Padding = *Aligned - *MappedAddress;
+    if (Padding == 0)
+      continue;
+    if (Padding % MinInstSize != 0 ||
+        Padding > std::numeric_limits<uint64_t>::max() - AlignmentDelta) {
+      return makeDisplacementError(
+          "kernel entry requires invalid alignment padding");
+    }
+
+    DisplacementEdit Alignment;
+    Alignment.Offset = Entry;
+    Alignment.MapsOldOffsetAfterInsertion = true;
+    for (uint64_t I = 0; I != Padding; I += MinInstSize) {
+      Alignment.ReplacementBytes.append(LS.SNopBytes.begin(),
+                                        LS.SNopBytes.end());
+    }
+    Result.push_back(std::move(Alignment));
+    AlignmentDelta += Padding;
+    ++AlignmentEditCount;
+  }
+
+  if (AlignmentEditCount != 0) {
+    log() << "hotswap: displacement: added " << AlignmentEditCount
+          << " kernel-entry alignment insertion"
+          << (AlignmentEditCount == 1 ? "" : "s") << "\n";
+  }
+  return Result;
+}
+
 Expected<std::unique_ptr<WritableMemoryBuffer>>
 tryApplyTextDisplacementToNewBuffer(const ElfView &Elf, const LLVMState &LS,
                                     ArrayRef<DisplacementEdit> Edits,
@@ -1941,8 +2045,17 @@ tryApplyTextDisplacementToNewBuffer(const ElfView &Elf, const LLVMState &LS,
   if (Error Err = validateTextRelocations(Elf))
     return std::move(Err);
 
+  std::vector<DisplacementEdit> PlannedEdits(Edits.begin(), Edits.end());
+  if (RelocateTrailingSections) {
+    Expected<std::vector<DisplacementEdit>> AlignedOrErr =
+        addKernelEntryAlignmentEdits(Elf, LS, Edits);
+    if (!AlignedOrErr)
+      return AlignedOrErr.takeError();
+    PlannedEdits = std::move(*AlignedOrErr);
+  }
+
   Expected<DisplacementPlan> PlanOrErr =
-      DisplacementPlan::create(Elf, Edits, RelocateTrailingSections);
+      DisplacementPlan::create(Elf, PlannedEdits, RelocateTrailingSections);
   if (!PlanOrErr)
     return PlanOrErr.takeError();
   if (Error Err = validateEditInstructionBoundaries(Elf, LS, *PlanOrErr))
