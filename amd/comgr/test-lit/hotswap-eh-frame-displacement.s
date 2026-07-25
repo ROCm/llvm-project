@@ -10,6 +10,7 @@
 // RUN: %llvm-objdump --dwarf=frames %t.elf | \
 // RUN:   %FileCheck --check-prefix=INPUT-FRAME %s
 // INPUT-FRAME: FDE cie={{.*}} pc=00001500...0000150c
+// INPUT-FRAME: DW_CFA_advance_loc: 8 to 0x1508
 
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -34,6 +35,7 @@
 // FRAME: CIE
 // FRAME: Augmentation:          "zR"
 // FRAME: FDE cie={{.*}} pc=00001500...0000151c
+// FRAME: DW_CFA_advance_loc: 24 to 0x1518
 // FRAME-NOT: invalid
 
 // RUN: %llvm-objcopy --rename-section .eh_frame=.eh_frame_hdr \
@@ -64,6 +66,7 @@
 eh_frame_kernel:
   .cfi_startproc
   s_setreg_imm32_b32 hwreg(HW_REG_WAVE_SCHED_MODE, 0, 2), 2
+  .cfi_undefined 16
   s_endpgm
   .cfi_endproc
 .Leh_frame_kernel_end:

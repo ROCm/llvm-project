@@ -18,6 +18,7 @@
 
 #include <cstring>
 #include <limits>
+#include <type_traits>
 #include <vector>
 
 using namespace llvm;
@@ -30,10 +31,8 @@ namespace {
 using ELFT = ElfView::ELFT;
 
 struct EhFramePatch {
-  uint64_t LocationOffset;
-  int32_t Location;
-  uint64_t RangeOffset;
-  uint32_t Range;
+  uint64_t Offset;
+  SmallVector<uint8_t, 8> Bytes;
 };
 
 Error makeEhFrameError(const Twine &Msg) {
@@ -96,6 +95,260 @@ bool advancesCfiLocation(const dwarf::CFIProgram &Program) {
     }
   }
   return false;
+}
+
+template <typename T>
+EhFramePatch makeLittleEndianPatch(uint64_t Offset, T Value) {
+  EhFramePatch Patch;
+  Patch.Offset = Offset;
+  Patch.Bytes.resize(sizeof(T));
+  for (unsigned I = 0; I != sizeof(T); ++I)
+    Patch.Bytes[I] = static_cast<uint8_t>(
+        static_cast<std::make_unsigned_t<T>>(Value) >> (I * 8));
+  return Patch;
+}
+
+Expected<uint64_t> mapCfiLocation(const DisplacementPlan &Plan,
+                                  uint64_t OldLocation, uint64_t OldFdeStart,
+                                  uint64_t OldFdeEnd, uint64_t OldTextBegin,
+                                  uint64_t OldTextEnd, uint64_t NewTextBegin) {
+  if (OldLocation < OldFdeStart || OldLocation > OldFdeEnd)
+    return makeEhFrameError(".eh_frame CFI location is outside its FDE range");
+  if (OldLocation < OldTextBegin || OldLocation > OldTextEnd)
+    return makeEhFrameError(".eh_frame CFI location is outside .text");
+
+  uint64_t NewOffset = 0;
+  if (!Plan.mapOffset(OldLocation - OldTextBegin,
+                      DisplacementMapBias::AfterInsertedBytes, NewOffset)) {
+    return makeEhFrameError(
+        ".eh_frame CFI location maps inside a replaced instruction");
+  }
+  if (NewOffset > std::numeric_limits<uint64_t>::max() - NewTextBegin)
+    return makeEhFrameError(".eh_frame CFI location overflows");
+  return NewTextBegin + NewOffset;
+}
+
+Error consumeCfiUleb(DataExtractor &Data, DataExtractor::Cursor &Cursor) {
+  (void)Data.getULEB128(Cursor);
+  if (!Cursor) {
+    consumeError(Cursor.takeError());
+    return makeEhFrameError(".eh_frame has a truncated CFI ULEB128 operand");
+  }
+  return Error::success();
+}
+
+Error consumeCfiSleb(DataExtractor &Data, DataExtractor::Cursor &Cursor) {
+  (void)Data.getSLEB128(Cursor);
+  if (!Cursor) {
+    consumeError(Cursor.takeError());
+    return makeEhFrameError(".eh_frame has a truncated CFI SLEB128 operand");
+  }
+  return Error::success();
+}
+
+Error consumeCfiExpression(DataExtractor &Data, DataExtractor::Cursor &Cursor) {
+  const uint64_t Length = Data.getULEB128(Cursor);
+  if (!Cursor) {
+    consumeError(Cursor.takeError());
+    return makeEhFrameError(".eh_frame has a truncated CFI expression length");
+  }
+  (void)Data.getBytes(Cursor, Length);
+  if (!Cursor) {
+    consumeError(Cursor.takeError());
+    return makeEhFrameError(".eh_frame has a truncated CFI expression");
+  }
+  return Error::success();
+}
+
+Expected<std::vector<EhFramePatch>> remapFdeCfiProgram(
+    StringRef ProgramData, uint64_t ProgramSectionOffset,
+    uint64_t CodeAlignment, const DisplacementPlan &Plan, uint64_t OldFdeStart,
+    uint64_t OldFdeEnd, uint64_t NewFdeStart, uint64_t NewFdeEnd,
+    uint64_t OldTextBegin, uint64_t OldTextEnd, uint64_t NewTextBegin) {
+  if (CodeAlignment == 0)
+    return makeEhFrameError(".eh_frame CFI has zero code alignment");
+
+  DataExtractor Data(ProgramData, /*IsLittleEndian=*/true);
+  DataExtractor::Cursor Cursor(0);
+  uint64_t OldLocation = OldFdeStart;
+  uint64_t NewLocation = NewFdeStart;
+  std::vector<EhFramePatch> Patches;
+
+  auto remapAdvance = [&](uint64_t Operand, uint64_t OperandOffset,
+                          unsigned OperandSize,
+                          uint8_t PrimaryOpcode) -> Error {
+    if (Operand >
+        (std::numeric_limits<uint64_t>::max() - OldLocation) / CodeAlignment) {
+      return makeEhFrameError(".eh_frame CFI advance location overflows");
+    }
+    const uint64_t OldNext = OldLocation + Operand * CodeAlignment;
+    Expected<uint64_t> NewNextOrErr =
+        mapCfiLocation(Plan, OldNext, OldFdeStart, OldFdeEnd, OldTextBegin,
+                       OldTextEnd, NewTextBegin);
+    if (!NewNextOrErr)
+      return NewNextOrErr.takeError();
+    const uint64_t NewNext = *NewNextOrErr;
+    if (NewNext < NewLocation)
+      return makeEhFrameError(".eh_frame CFI location moves backwards");
+    const uint64_t NewDelta = NewNext - NewLocation;
+    if (NewDelta % CodeAlignment != 0) {
+      return makeEhFrameError(
+          ".eh_frame CFI advance is not divisible by its code alignment");
+    }
+    const uint64_t NewOperand = NewDelta / CodeAlignment;
+    const uint64_t MaxOperand = OperandSize == 8
+                                    ? std::numeric_limits<uint64_t>::max()
+                                    : (uint64_t{1} << (OperandSize * 8)) - 1;
+    if (NewOperand > MaxOperand)
+      return makeEhFrameError(
+          ".eh_frame CFI advance no longer fits its encoding");
+
+    if (PrimaryOpcode != 0) {
+      if (NewOperand > 0x3f)
+        return makeEhFrameError(
+            ".eh_frame CFI advance no longer fits DW_CFA_advance_loc");
+      Patches.push_back(makeLittleEndianPatch<uint8_t>(
+          ProgramSectionOffset + OperandOffset,
+          static_cast<uint8_t>(PrimaryOpcode | NewOperand)));
+    } else {
+      EhFramePatch Patch;
+      Patch.Offset = ProgramSectionOffset + OperandOffset;
+      Patch.Bytes.resize(OperandSize);
+      for (unsigned I = 0; I != OperandSize; ++I)
+        Patch.Bytes[I] = static_cast<uint8_t>(NewOperand >> (I * 8));
+      Patches.push_back(std::move(Patch));
+    }
+    OldLocation = OldNext;
+    NewLocation = NewNext;
+    return Error::success();
+  };
+
+  while (Cursor && Cursor.tell() < ProgramData.size()) {
+    const uint64_t OpcodeOffset = Cursor.tell();
+    const uint8_t EncodedOpcode = Data.getU8(Cursor);
+    if (!Cursor)
+      break;
+
+    const uint8_t PrimaryOpcode = EncodedOpcode & 0xc0;
+    if (PrimaryOpcode != 0) {
+      if (PrimaryOpcode == dwarf::DW_CFA_advance_loc) {
+        if (Error Err = remapAdvance(EncodedOpcode & 0x3f, OpcodeOffset, 1,
+                                     dwarf::DW_CFA_advance_loc))
+          return std::move(Err);
+      } else if (PrimaryOpcode == dwarf::DW_CFA_offset) {
+        if (Error Err = consumeCfiUleb(Data, Cursor))
+          return std::move(Err);
+      } else if (PrimaryOpcode != dwarf::DW_CFA_restore) {
+        return makeEhFrameError(".eh_frame has an invalid primary CFI opcode");
+      }
+      continue;
+    }
+
+    switch (EncodedOpcode) {
+    case dwarf::DW_CFA_nop:
+    case dwarf::DW_CFA_remember_state:
+    case dwarf::DW_CFA_restore_state:
+    case dwarf::DW_CFA_GNU_window_save:
+    case dwarf::DW_CFA_AARCH64_negate_ra_state_with_pc:
+      break;
+    case dwarf::DW_CFA_set_loc: {
+      const uint64_t OperandOffset = Cursor.tell();
+      const uint64_t Target = Data.getUnsigned(Cursor, sizeof(uint64_t));
+      if (!Cursor)
+        break;
+      Expected<uint64_t> NewTargetOrErr =
+          mapCfiLocation(Plan, Target, OldFdeStart, OldFdeEnd, OldTextBegin,
+                         OldTextEnd, NewTextBegin);
+      if (!NewTargetOrErr)
+        return NewTargetOrErr.takeError();
+      Patches.push_back(makeLittleEndianPatch<uint64_t>(
+          ProgramSectionOffset + OperandOffset, *NewTargetOrErr));
+      OldLocation = Target;
+      NewLocation = *NewTargetOrErr;
+      break;
+    }
+    case dwarf::DW_CFA_advance_loc1:
+    case dwarf::DW_CFA_advance_loc2:
+    case dwarf::DW_CFA_advance_loc4: {
+      const unsigned OperandSize =
+          EncodedOpcode == dwarf::DW_CFA_advance_loc1   ? 1
+          : EncodedOpcode == dwarf::DW_CFA_advance_loc2 ? 2
+                                                        : 4;
+      const uint64_t OperandOffset = Cursor.tell();
+      const uint64_t Operand = Data.getUnsigned(Cursor, OperandSize);
+      if (!Cursor)
+        break;
+      if (Error Err =
+              remapAdvance(Operand, OperandOffset, OperandSize, /*Primary=*/0))
+        return std::move(Err);
+      break;
+    }
+    case dwarf::DW_CFA_restore_extended:
+    case dwarf::DW_CFA_undefined:
+    case dwarf::DW_CFA_same_value:
+    case dwarf::DW_CFA_def_cfa_register:
+    case dwarf::DW_CFA_def_cfa_offset:
+    case dwarf::DW_CFA_GNU_args_size:
+      if (Error Err = consumeCfiUleb(Data, Cursor))
+        return std::move(Err);
+      break;
+    case dwarf::DW_CFA_def_cfa_offset_sf:
+      if (Error Err = consumeCfiSleb(Data, Cursor))
+        return std::move(Err);
+      break;
+    case dwarf::DW_CFA_LLVM_def_aspace_cfa:
+    case dwarf::DW_CFA_LLVM_def_aspace_cfa_sf:
+      if (Error Err = consumeCfiUleb(Data, Cursor))
+        return std::move(Err);
+      if (EncodedOpcode == dwarf::DW_CFA_LLVM_def_aspace_cfa) {
+        if (Error Err = consumeCfiUleb(Data, Cursor))
+          return std::move(Err);
+      } else if (Error Err = consumeCfiSleb(Data, Cursor)) {
+        return std::move(Err);
+      }
+      if (Error Err = consumeCfiUleb(Data, Cursor))
+        return std::move(Err);
+      break;
+    case dwarf::DW_CFA_offset_extended:
+    case dwarf::DW_CFA_register:
+    case dwarf::DW_CFA_def_cfa:
+    case dwarf::DW_CFA_val_offset:
+      if (Error Err = consumeCfiUleb(Data, Cursor))
+        return std::move(Err);
+      if (Error Err = consumeCfiUleb(Data, Cursor))
+        return std::move(Err);
+      break;
+    case dwarf::DW_CFA_offset_extended_sf:
+    case dwarf::DW_CFA_def_cfa_sf:
+    case dwarf::DW_CFA_val_offset_sf:
+      if (Error Err = consumeCfiUleb(Data, Cursor))
+        return std::move(Err);
+      if (Error Err = consumeCfiSleb(Data, Cursor))
+        return std::move(Err);
+      break;
+    case dwarf::DW_CFA_def_cfa_expression:
+      if (Error Err = consumeCfiExpression(Data, Cursor))
+        return std::move(Err);
+      break;
+    case dwarf::DW_CFA_expression:
+    case dwarf::DW_CFA_val_expression:
+      if (Error Err = consumeCfiUleb(Data, Cursor))
+        return std::move(Err);
+      if (Error Err = consumeCfiExpression(Data, Cursor))
+        return std::move(Err);
+      break;
+    default:
+      return makeEhFrameError(".eh_frame has an unsupported CFI opcode");
+    }
+  }
+
+  if (Error Err = Cursor.takeError()) {
+    consumeError(std::move(Err));
+    return makeEhFrameError(".eh_frame has a truncated CFI instruction");
+  }
+  if (OldLocation > OldFdeEnd || NewLocation > NewFdeEnd)
+    return makeEhFrameError(".eh_frame CFI location exceeds its FDE range");
+  return Patches;
 }
 
 Expected<bool>
@@ -177,9 +430,9 @@ Error remapEhFrameForDisplacement(const ElfView &OldElf,
                                   WritableMemoryBuffer &OutBuf) {
   // Parse through LLVM so every FDE is tied to its actual CIE instead of
   // guessing a record layout. The fixed-width pcrel|sdata4 address fields can
-  // be rewritten in place. Location-changing CFI is accepted only when its
-  // encoded locations remain valid; changing those instruction streams could
-  // alter record sizes and is outside this remapper's contract.
+  // be rewritten in place. CFI location instructions are also rewritten when
+  // their remapped operand still fits the instruction's existing encoding, so
+  // no record or section needs to change size.
   Expected<const ELFT::Shdr *> OldShdrOrErr = findEhFrameSection(OldElf);
   if (!OldShdrOrErr)
     return OldShdrOrErr.takeError();
@@ -268,6 +521,7 @@ Error remapEhFrameForDisplacement(const ElfView &OldElf,
   const uint64_t NewTextBegin = OutElfOrErr->textAddr();
 
   std::vector<EhFramePatch> Patches;
+  unsigned RemappedFdeCount = 0;
   for (const dwarf::FrameEntry &Entry : Frame.entries()) {
     if (Entry.getKind() == dwarf::FrameEntry::FK_CIE) {
       const dwarf::CIE &Cie = static_cast<const dwarf::CIE &>(Entry);
@@ -344,15 +598,6 @@ Error remapEhFrameForDisplacement(const ElfView &OldElf,
       return makeEhFrameError(".eh_frame FDE address range overflows");
     const uint64_t OldEnd = OldStart + OldRange;
 
-    Expected<bool> FdeSetLocOrErr =
-        cfiSetLocationRequiresRemap(Fde.cfis(), Plan, OldTextBegin, OldTextEnd);
-    if (!FdeSetLocOrErr)
-      return FdeSetLocOrErr.takeError();
-    if (*FdeSetLocOrErr) {
-      return makeEhFrameError(
-          ".eh_frame FDE has DW_CFA_set_loc that requires remapping");
-    }
-
     const bool DescribesText =
         OldRange == 0 ? OldStart >= OldTextBegin && OldStart < OldTextEnd
                       : OldEnd > OldTextBegin && OldStart < OldTextEnd;
@@ -416,10 +661,10 @@ Error remapEhFrameForDisplacement(const ElfView &OldElf,
     if (NewRange > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
       return makeEhFrameError(".eh_frame FDE range overflows sdata4");
     }
-    if (NewRange != OldRange &&
-        (advancesCfiLocation(Cie->cfis()) || advancesCfiLocation(Fde.cfis()))) {
+    if (NewRange != OldRange && advancesCfiLocation(Cie->cfis())) {
       return makeEhFrameError(
-          ".eh_frame FDE has location-changing CFI that requires remapping");
+          ".eh_frame CIE has location-changing CFI that cannot be remapped "
+          "per FDE");
     }
 
     if (NewStartOffset > std::numeric_limits<uint64_t>::max() - NewTextBegin) {
@@ -437,17 +682,56 @@ Error remapEhFrameForDisplacement(const ElfView &OldElf,
     if (!NewLocationOrErr)
       return NewLocationOrErr.takeError();
 
-    Patches.push_back({OutShdr->sh_offset + LocationOffset, *NewLocationOrErr,
-                       OutShdr->sh_offset + RangeOffset,
-                       static_cast<uint32_t>(NewRange)});
+    uint64_t CfiOffset = RangeOffset + sizeof(uint32_t);
+    if (Cie->getAugmentationString().starts_with("z")) {
+      StringRef AugmentationAndCfi = OldData.slice(CfiOffset, RecordEnd);
+      DataExtractor AugmentationData(AugmentationAndCfi,
+                                     /*IsLittleEndian=*/true);
+      DataExtractor::Cursor Cursor(0);
+      const uint64_t AugmentationLength = AugmentationData.getULEB128(Cursor);
+      if (!Cursor) {
+        consumeError(Cursor.takeError());
+        return makeEhFrameError(
+            ".eh_frame has a truncated FDE augmentation length");
+      }
+      (void)AugmentationData.getBytes(Cursor, AugmentationLength);
+      if (!Cursor) {
+        consumeError(Cursor.takeError());
+        return makeEhFrameError(
+            ".eh_frame has truncated FDE augmentation data");
+      }
+      CfiOffset += Cursor.tell();
+      consumeError(Cursor.takeError());
+    }
+    if (CfiOffset > RecordEnd)
+      return makeEhFrameError(".eh_frame FDE CFI offset is out of bounds");
+
+    Expected<std::vector<EhFramePatch>> CfiPatchesOrErr = remapFdeCfiProgram(
+        OldData.slice(CfiOffset, RecordEnd), CfiOffset,
+        Cie->getCodeAlignmentFactor(), Plan, OldStart, OldEnd, NewStart,
+        NewStart + NewRange, OldTextBegin, OldTextEnd, NewTextBegin);
+    if (!CfiPatchesOrErr)
+      return CfiPatchesOrErr.takeError();
+
+    Patches.push_back(
+        makeLittleEndianPatch<int32_t>(LocationOffset, *NewLocationOrErr));
+    Patches.push_back(makeLittleEndianPatch<uint32_t>(
+        RangeOffset, static_cast<uint32_t>(NewRange)));
+    Patches.insert(Patches.end(),
+                   std::make_move_iterator(CfiPatchesOrErr->begin()),
+                   std::make_move_iterator(CfiPatchesOrErr->end()));
+    ++RemappedFdeCount;
   }
 
   for (const EhFramePatch &Patch : Patches) {
-    std::memcpy(OutData + Patch.LocationOffset, &Patch.Location,
-                sizeof(Patch.Location));
-    std::memcpy(OutData + Patch.RangeOffset, &Patch.Range, sizeof(Patch.Range));
+    if (Patch.Offset > OutShdr->sh_size ||
+        Patch.Bytes.size() > OutShdr->sh_size - Patch.Offset) {
+      return makeEhFrameError(".eh_frame patch is outside the section");
+    }
+    std::memcpy(OutData + OutShdr->sh_offset + Patch.Offset, Patch.Bytes.data(),
+                Patch.Bytes.size());
   }
-  log() << "hotswap: displacement: remapped " << Patches.size()
+  log() << "hotswap: displacement: remapped " << RemappedFdeCount
         << " .eh_frame FDE(s)\n";
   return Error::success();
 }

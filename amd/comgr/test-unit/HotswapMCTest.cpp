@@ -428,6 +428,64 @@ readEhFrameFdes(const ElfView &Elf) {
                                  "missing .eh_frame");
 }
 
+struct EhFrameCfiLocation {
+  uint8_t Opcode;
+  uint64_t Operand;
+};
+
+static llvm::Expected<std::vector<EhFrameCfiLocation>>
+readFirstEhFrameFdeLocations(const ElfView &Elf) {
+  for (const ElfView::ELFT::Shdr &Shdr : Elf.sections()) {
+    llvm::Expected<llvm::StringRef> NameOrErr = Elf.file().getSectionName(Shdr);
+    if (!NameOrErr)
+      return NameOrErr.takeError();
+    if (*NameOrErr != ".eh_frame")
+      continue;
+
+    llvm::StringRef Data(
+        reinterpret_cast<const char *>(Elf.data() + Shdr.sh_offset),
+        Shdr.sh_size);
+    llvm::DWARFDataExtractor Extractor(Data, /*IsLittleEndian=*/true,
+                                       /*AddressSize=*/sizeof(uint64_t));
+    const llvm::Triple::ArchType Arch =
+        llvm::Triple("amdgcn-amd-amdhsa").getArch();
+    llvm::DWARFDebugFrame Frame(Arch, /*IsEH=*/true, Shdr.sh_addr);
+    if (llvm::Error Err = Frame.parse(Extractor))
+      return std::move(Err);
+
+    for (const llvm::dwarf::FrameEntry &Entry : Frame.entries()) {
+      if (Entry.getKind() != llvm::dwarf::FrameEntry::FK_FDE)
+        continue;
+      std::vector<EhFrameCfiLocation> Locations;
+      const llvm::dwarf::FDE &Fde =
+          static_cast<const llvm::dwarf::FDE &>(Entry);
+      for (const llvm::dwarf::CFIProgram::Instruction &Inst : Fde.cfis()) {
+        switch (Inst.Opcode) {
+        case llvm::dwarf::DW_CFA_advance_loc:
+        case llvm::dwarf::DW_CFA_advance_loc1:
+        case llvm::dwarf::DW_CFA_advance_loc2:
+        case llvm::dwarf::DW_CFA_advance_loc4:
+        case llvm::dwarf::DW_CFA_set_loc:
+          if (Inst.Ops.empty()) {
+            return llvm::createStringError(
+                llvm::object::object_error::parse_failed,
+                "location-changing CFI instruction has no operand");
+          }
+          Locations.push_back({Inst.Opcode, Inst.Ops.front()});
+          break;
+        default:
+          break;
+        }
+      }
+      return Locations;
+    }
+    return llvm::createStringError(llvm::object::object_error::parse_failed,
+                                   "missing .eh_frame FDE");
+  }
+  return llvm::createStringError(llvm::object::object_error::parse_failed,
+                                 "missing .eh_frame");
+}
+
 // -- initLLVM ----------------------------------------------------------------
 
 TEST(InitLLVM, ValidGfx1250) {
@@ -2750,7 +2808,7 @@ TEST(TextDisplacement, PreservesRelativeCfiWhenFdeMovesUniformly) {
             std::make_pair(DisplacementTextAddr + 12, uint64_t{8}));
 }
 
-TEST(TextDisplacement, RejectsEhFrameCfiLocationsAcrossGrowth) {
+TEST(TextDisplacement, RemapsCompactEhFrameCfiAdvanceAcrossGrowth) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
@@ -2776,26 +2834,88 @@ TEST(TextDisplacement, RejectsEhFrameCfiLocationsAcrossGrowth) {
   Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
   llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
       tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
-  ASSERT_FALSE((bool)OutOrErr);
-  std::string Reason = llvm::toString(OutOrErr.takeError());
-  EXPECT_NE(Reason.find("location-changing CFI"), std::string::npos) << Reason;
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+  llvm::Expected<ElfView> OutViewOrErr = ElfView::create(
+      reinterpret_cast<uint8_t *>(Out->getBufferStart()), Out->getBufferSize());
+  ASSERT_TRUE((bool)OutViewOrErr) << llvm::toString(OutViewOrErr.takeError());
+
+  llvm::Expected<std::vector<EhFrameCfiLocation>> LocationsOrErr =
+      readFirstEhFrameFdeLocations(*OutViewOrErr);
+  ASSERT_TRUE((bool)LocationsOrErr)
+      << llvm::toString(LocationsOrErr.takeError());
+  ASSERT_EQ(LocationsOrErr->size(), 1u);
+  EXPECT_EQ((*LocationsOrErr)[0].Opcode, llvm::dwarf::DW_CFA_advance_loc);
+  EXPECT_EQ((*LocationsOrErr)[0].Operand, 2u);
 }
 
-TEST(TextDisplacement, RejectsEhFrameSetLocWhoseTargetMoves) {
+TEST(TextDisplacement, RemapsFixedWidthEhFrameCfiAdvances) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  struct AdvanceEncoding {
+    uint8_t Opcode;
+    unsigned OperandSize;
+  };
+  const AdvanceEncoding Encodings[] = {
+      {llvm::dwarf::DW_CFA_advance_loc1, 1},
+      {llvm::dwarf::DW_CFA_advance_loc2, 2},
+      {llvm::dwarf::DW_CFA_advance_loc4, 4},
+  };
+  for (const AdvanceEncoding &Encoding : Encodings) {
+    SCOPED_TRACE(Encoding.OperandSize);
+    llvm::SmallVector<uint8_t> Text;
+    for (unsigned I = 0; I != 3; ++I)
+      Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+
+    llvm::SmallVector<uint8_t> Cfi = {Encoding.Opcode};
+    Cfi.append(Encoding.OperandSize, uint8_t{0});
+    Cfi[1] = 1;
+    EhFrameFdeSpec Spec = {DisplacementTextAddr, 8, Cfi};
+    std::vector<uint8_t> EhFrame = makeEhFrame({Spec});
+    std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+        Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
+        /*AddBoundaryTextSymbol=*/false, EhFrame);
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(ElfBytes.data(), ElfBytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+    DisplacementEdit Edit;
+    Edit.Offset = 0;
+    Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+    llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+        tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+    ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+    std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+    llvm::Expected<ElfView> OutViewOrErr =
+        ElfView::create(reinterpret_cast<uint8_t *>(Out->getBufferStart()),
+                        Out->getBufferSize());
+    ASSERT_TRUE((bool)OutViewOrErr) << llvm::toString(OutViewOrErr.takeError());
+
+    llvm::Expected<std::vector<EhFrameCfiLocation>> LocationsOrErr =
+        readFirstEhFrameFdeLocations(*OutViewOrErr);
+    ASSERT_TRUE((bool)LocationsOrErr)
+        << llvm::toString(LocationsOrErr.takeError());
+    ASSERT_EQ(LocationsOrErr->size(), 1u);
+    EXPECT_EQ((*LocationsOrErr)[0].Opcode, Encoding.Opcode);
+    EXPECT_EQ((*LocationsOrErr)[0].Operand, 2u);
+  }
+}
+
+TEST(TextDisplacement, RemapsMultipleEhFrameCfiAdvancesInSequence) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
 
   llvm::SmallVector<uint8_t> Text;
-  for (unsigned I = 0; I != 5; ++I)
+  for (unsigned I = 0; I != 6; ++I)
     Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
-  llvm::SmallVector<uint8_t> Cfi = {llvm::dwarf::DW_CFA_set_loc};
-  // A location that exactly matches an insertion point moves after the new
-  // bytes even though an FDE boundary at the same address stays before them.
-  const uint64_t SetLocation = DisplacementTextAddr + 8;
-  const uint8_t *SetLocationBytes =
-      reinterpret_cast<const uint8_t *>(&SetLocation);
-  Cfi.append(SetLocationBytes, SetLocationBytes + sizeof(SetLocation));
-  EhFrameFdeSpec Spec = {DisplacementTextAddr, 8, Cfi};
+  const uint8_t AdvanceOne =
+      llvm::dwarf::DW_CFA_advance_loc | static_cast<uint8_t>(1);
+  EhFrameFdeSpec Spec = {
+      DisplacementTextAddr,
+      16,
+      {AdvanceOne, AdvanceOne, llvm::dwarf::DW_CFA_nop},
+  };
   std::vector<uint8_t> EhFrame = makeEhFrame({Spec});
   std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
       Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
@@ -2805,13 +2925,97 @@ TEST(TextDisplacement, RejectsEhFrameSetLocWhoseTargetMoves) {
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
 
   DisplacementEdit Edit;
-  Edit.Offset = 8;
+  Edit.Offset = 4;
+  Edit.OriginalSize = 4;
+  Edit.ReplacementBytes.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  Edit.ReplacementBytes.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+  llvm::Expected<ElfView> OutViewOrErr = ElfView::create(
+      reinterpret_cast<uint8_t *>(Out->getBufferStart()), Out->getBufferSize());
+  ASSERT_TRUE((bool)OutViewOrErr) << llvm::toString(OutViewOrErr.takeError());
+
+  llvm::Expected<std::vector<EhFrameCfiLocation>> LocationsOrErr =
+      readFirstEhFrameFdeLocations(*OutViewOrErr);
+  ASSERT_TRUE((bool)LocationsOrErr)
+      << llvm::toString(LocationsOrErr.takeError());
+  ASSERT_EQ(LocationsOrErr->size(), 2u);
+  EXPECT_EQ((*LocationsOrErr)[0].Operand, 1u);
+  EXPECT_EQ((*LocationsOrErr)[1].Operand, 2u);
+}
+
+TEST(TextDisplacement, RemapsEhFrameSetLocWhoseTargetMoves) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  for (unsigned I = 0; I != 6; ++I)
+    Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::SmallVector<uint8_t> Cfi = {llvm::dwarf::DW_CFA_set_loc};
+  const uint64_t SetLocation = DisplacementTextAddr + 8;
+  const uint8_t *SetLocationBytes =
+      reinterpret_cast<const uint8_t *>(&SetLocation);
+  Cfi.append(SetLocationBytes, SetLocationBytes + sizeof(SetLocation));
+  EhFrameFdeSpec Spec = {DisplacementTextAddr, 16, Cfi};
+  std::vector<uint8_t> EhFrame = makeEhFrame({Spec});
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+      Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
+      /*AddBoundaryTextSymbol=*/false, EhFrame);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 4;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_TRUE((bool)OutOrErr) << llvm::toString(OutOrErr.takeError());
+  std::unique_ptr<llvm::WritableMemoryBuffer> Out = std::move(*OutOrErr);
+  llvm::Expected<ElfView> OutViewOrErr = ElfView::create(
+      reinterpret_cast<uint8_t *>(Out->getBufferStart()), Out->getBufferSize());
+  ASSERT_TRUE((bool)OutViewOrErr) << llvm::toString(OutViewOrErr.takeError());
+
+  llvm::Expected<std::vector<EhFrameCfiLocation>> LocationsOrErr =
+      readFirstEhFrameFdeLocations(*OutViewOrErr);
+  ASSERT_TRUE((bool)LocationsOrErr)
+      << llvm::toString(LocationsOrErr.takeError());
+  ASSERT_EQ(LocationsOrErr->size(), 1u);
+  EXPECT_EQ((*LocationsOrErr)[0].Opcode, llvm::dwarf::DW_CFA_set_loc);
+  EXPECT_EQ((*LocationsOrErr)[0].Operand, DisplacementTextAddr + 12);
+}
+
+TEST(TextDisplacement, RejectsEhFrameCfiAdvanceEncodingOverflow) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  for (unsigned I = 0; I != 65; ++I)
+    Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  EhFrameFdeSpec Spec = {
+      DisplacementTextAddr,
+      256,
+      {static_cast<uint8_t>(llvm::dwarf::DW_CFA_advance_loc | 63)},
+  };
+  std::vector<uint8_t> EhFrame = makeEhFrame({Spec});
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+      Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
+      /*AddBoundaryTextSymbol=*/false, EhFrame);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
   Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
   llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
       tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
   ASSERT_FALSE((bool)OutOrErr);
   std::string Reason = llvm::toString(OutOrErr.takeError());
-  EXPECT_NE(Reason.find("DW_CFA_set_loc"), std::string::npos) << Reason;
+  EXPECT_NE(Reason.find("no longer fits DW_CFA_advance_loc"), std::string::npos)
+      << Reason;
 }
 
 TEST(TextDisplacement, RejectsEhFrameAddressExpression) {
