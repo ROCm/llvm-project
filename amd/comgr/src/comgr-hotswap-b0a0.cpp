@@ -4404,6 +4404,24 @@ struct FiniteControlFlowAudit {
   bool HasUnboundedIndirectEntries = false;
 };
 
+// Some B0-only vector encodings are intentionally absent from the A0 MC
+// decoder used by hotswap. The legacy VOP3 encoding has the exact six-bit
+// major 0x34 (Inst[31:26]): it cannot transfer control or write the scalar
+// MODE register. An undecoded instance therefore remains opaque to dataflow,
+// but it is not an object-wide indirect-entry source. Keep this whitelist on
+// the exact encoding class; every other undecoded encoding retains the
+// fail-closed behavior.
+static bool
+isProvablyNonControlFlowUndecodedVectorInst(const InternalDecodedInst &DI,
+                                            ArrayRef<uint8_t> Text) {
+  if (DI.DecodeSucceeded || DI.Offset > Text.size() ||
+      MinInstSize > Text.size() - DI.Offset)
+    return false;
+  uint32_t Word =
+      support::endian::read32le(Text.data() + static_cast<size_t>(DI.Offset));
+  return (Word & 0xfc000000u) == (0x34u << 26);
+}
+
 static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextSize,
@@ -4412,7 +4430,8 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     const ControlFlowScanIndex &Index,
     ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers,
     ArrayRef<BoundedSetPcReturn> BoundedReturns,
-    ArrayRef<SymbolLessReturnRegion> SymbolLessRegions) {
+    ArrayRef<SymbolLessReturnRegion> SymbolLessRegions,
+    ArrayRef<uint8_t> Text) {
   FiniteControlFlowAudit Audit{BitVector(FiniteSetPcTransfers.size()), true};
   auto markUnboundedIndirectEntry = [&]() {
     Audit.Closed = false;
@@ -4622,7 +4641,9 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
         markUnboundedIndirectEntry();
   }
   for (int I = Reachable.find_first(); I >= 0; I = Reachable.find_next(I))
-    if (!Decoded[static_cast<size_t>(I)].DecodeSucceeded)
+    if (!Decoded[static_cast<size_t>(I)].DecodeSucceeded &&
+        !isProvablyNonControlFlowUndecodedVectorInst(
+            Decoded[static_cast<size_t>(I)], Text))
       markUnboundedIndirectEntry();
   return Audit;
 }
@@ -6266,7 +6287,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     FiniteControlFlowAudit Audit = auditFiniteIndirectControlFlow(
         Decoded, LS, TextAddr, TextSize, FunctionRanges, DeclaredEntries,
         ExternalEntries, *Index, EnabledSetPcTransfers, AllBoundedReturns,
-        SymbolLessRegions);
+        SymbolLessRegions, Text);
     if (Audit.InvalidSetPcCandidates.any()) {
       for (size_t I = 0; I != EnabledSetPcTransfers.size(); ++I) {
         if (!Audit.InvalidSetPcCandidates.test(I))
@@ -6294,7 +6315,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       Audit = auditFiniteIndirectControlFlow(
           Decoded, LS, TextAddr, TextSize, FunctionRanges, DeclaredEntries,
           ExternalEntries, *Index, EnabledSetPcTransfers, AllBoundedReturns,
-          SymbolLessRegions);
+          SymbolLessRegions, Text);
     }
     if (!Audit.Closed && !EnabledSetPcTransfers.empty()) {
       for (const FiniteSetPcTransfer &Enabled : EnabledSetPcTransfers)
