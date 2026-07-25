@@ -337,8 +337,7 @@ struct Trampoline {
   // dwords in a larger/coalesced source window can therefore serve as
   // independent registerless relays for other far edges. Each pair is
   // {source offset, branch target}.
-  llvm::SmallVector<std::pair<uint64_t, uint64_t>, 4>
-      SourceTailBranchIslands;
+  llvm::SmallVector<std::pair<uint64_t, uint64_t>, 4> SourceTailBranchIslands;
   // A larger unreachable source tail may hold a pair-only affine gateway.
   // fixupTrampolineBranches preserves this range instead of NOP-padding it.
   bool HasSourceTailGateway = false;
@@ -497,19 +496,18 @@ struct BranchIslandAllocatorTestResult {
 
 /// Exercise the late branch-island allocator without constructing an ELF.
 /// This is exposed for focused transactional/index invariant unit coverage.
-BranchIslandAllocatorTestResult runBranchIslandAllocatorForTest(
-    std::vector<NopSled> Gateways, uint64_t OwnerOffset, uint64_t FromOffset,
-    uint64_t TargetOffset, bool Backward,
-    llvm::DenseSet<uint64_t> Occupied = {});
+BranchIslandAllocatorTestResult
+runBranchIslandAllocatorForTest(std::vector<NopSled> Gateways,
+                                uint64_t OwnerOffset, uint64_t FromOffset,
+                                uint64_t TargetOffset, bool Backward,
+                                llvm::DenseSet<uint64_t> Occupied = {});
 
 /// As above, but append one supplied gateway window at each recoverable
 /// strand. Records the number of provisional occupied dwords held when every
 /// promotion succeeds.
-BranchIslandAllocatorTestResult
-runBranchIslandAllocatorWithPromotionsForTest(
+BranchIslandAllocatorTestResult runBranchIslandAllocatorWithPromotionsForTest(
     std::vector<NopSled> Gateways, uint64_t OwnerOffset, uint64_t FromOffset,
-    uint64_t TargetOffset, bool Backward,
-    llvm::ArrayRef<NopSled> Promotions);
+    uint64_t TargetOffset, bool Backward, llvm::ArrayRef<NopSled> Promotions);
 
 /// Return the decoded-source search band for one recoverable promotion. The
 /// band is clamped to starts whose set-PC tail can be one s_branch hop from
@@ -527,8 +525,7 @@ llvm::SmallVector<size_t, 8> promotionCandidateOrderForTest(
 
 /// Split free gateway ranges at already committed branch dwords.
 std::vector<NopSled> subtractOccupiedBranchGatewaySlotsForTest(
-    std::vector<NopSled> Gateways,
-    const llvm::DenseSet<uint64_t> &Occupied);
+    std::vector<NopSled> Gateways, const llvm::DenseSet<uint64_t> &Occupied);
 
 enum class MaskWorkaroundPolicy {
   None,
@@ -1674,24 +1671,24 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
 
 /// Return whether \p DI fully defines \p Register. A definition of a strict
 /// subregister is not a kill of the incoming full-register value.
-[[nodiscard]] bool
-instructionFullyWritesRegister(const InternalDecodedInst &DI,
-                               const LLVMState &LS,
-                               llvm::MCRegister Register);
+[[nodiscard]] bool instructionFullyWritesRegister(const InternalDecodedInst &DI,
+                                                  const LLVMState &LS,
+                                                  llvm::MCRegister Register);
 
 /// Return whether \p Replacement can observe the incoming value of \p
 /// Register before a full-register definition.
-[[nodiscard]] bool replacementNeedsIncomingRegister(
-    llvm::ArrayRef<uint8_t> Replacement, const LLVMState &LS,
-    llvm::MCRegister Register);
+[[nodiscard]] bool
+replacementNeedsIncomingRegister(llvm::ArrayRef<uint8_t> Replacement,
+                                 const LLVMState &LS,
+                                 llvm::MCRegister Register);
 
 /// Compute instruction offsets in one function range where the incoming value
 /// of \p Register may be observed before a full definition. Unknown control
 /// flow and exits are conservative.
-std::optional<llvm::DenseSet<uint64_t>> computeIncomingRegisterNeeds(
-    llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
-    uint64_t FunctionBegin, uint64_t FunctionEnd,
-    llvm::MCRegister Register);
+std::optional<llvm::DenseSet<uint64_t>>
+computeIncomingRegisterNeeds(llvm::ArrayRef<InternalDecodedInst> Decoded,
+                             const LLVMState &LS, uint64_t FunctionBegin,
+                             uint64_t FunctionEnd, llvm::MCRegister Register);
 
 /// Resolve s0 through s(MaxSgprs - 1) to their physical MC registers.
 std::optional<llvm::SmallVector<llvm::MCRegister, 128>>
@@ -1727,8 +1724,7 @@ struct BatchedSgprContinuationTestResult {
 /// Build one compact per-function numbered-SGPR continuation analysis and
 /// query it at every requested offset. Exposed for scalar-oracle and cache
 /// reuse unit coverage.
-BatchedSgprContinuationTestResult
-runBatchedSgprContinuationAnalysisForTest(
+BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
     llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t FunctionBegin, uint64_t FunctionEnd,
     llvm::ArrayRef<uint64_t> Continuations,
