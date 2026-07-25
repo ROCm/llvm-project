@@ -2463,6 +2463,39 @@ TEST(CollectDirectBranchTargets,
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 
+TEST(CollectDirectBranchTargets, RejectsOverlappingSymbolLessReturnRegions) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_call_i64 s[30:31], 5\n"
+                           "s_endpgm\n"
+                           "s_call_i64 s[30:31], 5\n"
+                           "s_endpgm\n"
+                           "s_endpgm\n"
+                           "s_endpgm\n"
+                           "s_branch 2\n"
+                           "s_endpgm\n"
+                           "s_branch 0\n"
+                           "s_nop 0\n"
+                           "s_set_pc_i64 s[30:31]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 11u);
+  llvm::SmallVector<uint64_t, 2> DeclaredEntries{0, Decoded[2].Offset};
+
+  // The two distinct call entries use the same link pair but converge on one
+  // return tail. Neither provisional region owns that shared body uniquely,
+  // so the streaming overlap audit must reject both.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, Bytes.size(), DeclaredEntries);
+  ASSERT_TRUE(Info);
+  EXPECT_FALSE(Info->BoundedIndirectTransfers.contains(Decoded[10].Offset));
+  EXPECT_TRUE(Info->HasUnboundedIndirectEntries);
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
 TEST(CollectDirectBranchTargets,
      RejectsWrongPairAndClobberedSymbolLessReturns) {
   LLVMState S = initLLVM(makeGfx1250Ident());
