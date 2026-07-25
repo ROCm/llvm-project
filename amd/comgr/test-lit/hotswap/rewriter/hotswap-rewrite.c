@@ -41,3 +41,4 @@
 
 // COM: End-to-end coverage on real gfx1250 code objects is covered by
 // COM: hotswap-rewrite-e2e.hip and hotswap-kernel-entry-trampoline.s.
+// clang-format on
