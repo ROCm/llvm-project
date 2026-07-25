@@ -2184,11 +2184,19 @@ static bool hasUnprovenFallthroughEntry(ArrayRef<InternalDecodedInst> Decoded,
     uint64_t Source = Decoded[Call.InstIndex].Offset;
     if (Source >= ChainBegin && Source < FunctionBegin)
       continue;
-    log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
-          << " is not a bounded return: call at 0x" << utohexstr(Source)
-          << " enters the fallthrough chain at 0x"
-          << utohexstr(CallEntry->Entry) << "\n";
-    return true;
+    if ((Call.Target >= ChainBegin && Call.Target < FunctionBegin) ||
+        (Call.Continuation >= ChainBegin &&
+         Call.Continuation < FunctionBegin)) {
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+            << " is not a bounded return: call at 0x" << utohexstr(Source)
+            << " enters the fallthrough chain at 0x"
+            << utohexstr(Call.Target >= ChainBegin &&
+                                 Call.Target < FunctionBegin
+                             ? Call.Target
+                             : Call.Continuation)
+            << "\n";
+      return true;
+    }
   }
 
   SmallVector<DirectTargetSource, 16>::const_iterator FirstTarget =
@@ -2228,6 +2236,18 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
                            ArrayRef<uint64_t> ExternalEntries,
                            const ControlFlowScanIndex &Index) {
   SmallVector<BoundedSetPcReturn, 2> Returns;
+  SmallVector<uint64_t, 16> SortedDeclaredEntries(DeclaredEntries);
+  llvm::sort(SortedDeclaredEntries);
+  SortedDeclaredEntries.erase(
+      std::unique(SortedDeclaredEntries.begin(), SortedDeclaredEntries.end()),
+      SortedDeclaredEntries.end());
+
+  SmallVector<uint64_t, 16> SortedExternalEntries(ExternalEntries);
+  llvm::sort(SortedExternalEntries);
+  SortedExternalEntries.erase(
+      std::unique(SortedExternalEntries.begin(), SortedExternalEntries.end()),
+      SortedExternalEntries.end());
+
   SmallVector<SmallVector<size_t, 2>, 16> CandidateRanges(
       Index.SetPcIndices.size());
   for (size_t RangeIndex = 0; RangeIndex != FunctionRanges.size();
@@ -2256,6 +2276,15 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
        ++ReturnPosition) {
     size_t ReturnIndex = Index.SetPcIndices[ReturnPosition];
     const InternalDecodedInst &Return = Decoded[ReturnIndex];
+    // AMDGPUMCInstLower lowers S_SETPC_B64_return to S_SETPC_B64, so the
+    // decoded instruction no longer carries MIA::isReturn identity. Recover
+    // only the bounded local-function form from its call/link dataflow.
+    if (!Return.DecodeSucceeded ||
+        Return.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+        Return.Inst.getNumOperands() != 1 ||
+        !Return.Inst.getOperand(0).isReg() ||
+        !Return.Inst.getOperand(0).getReg())
+      continue;
     MCRegister ReturnRegister(Return.Inst.getOperand(0).getReg());
 
     bool IsBounded = false;
