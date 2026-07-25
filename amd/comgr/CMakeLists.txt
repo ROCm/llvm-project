@@ -113,6 +113,7 @@ set(SOURCES
   src/comgr-hotswap-liveness.cpp
   src/comgr-hotswap-def-use.cpp
   src/comgr-hotswap-cfg.cpp
+  src/comgr-hotswap-liveness-analysis.cpp
   src/comgr-hotswap-llvm.cpp
   src/comgr-hotswap-patch-f32-to-e5m3.cpp
   src/comgr-hotswap-patch-inplace.cpp

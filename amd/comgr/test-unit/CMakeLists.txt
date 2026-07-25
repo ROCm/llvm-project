@@ -106,9 +106,11 @@ add_executable(HotswapMCTests
   HotswapRegisterSetTest.cpp
   HotswapDefUseTest.cpp
   HotswapCfgTest.cpp
+  HotswapLivenessTest.cpp
   ../src/comgr-hotswap-b0a0.cpp
   ../src/comgr-hotswap-def-use.cpp
   ../src/comgr-hotswap-cfg.cpp
+  ../src/comgr-hotswap-liveness-analysis.cpp
   ../src/comgr-hotswap-displacement.cpp
   ../src/comgr-hotswap-entry-trampoline.cpp
   ../src/comgr-hotswap-entry-trampoline-fast.cpp
