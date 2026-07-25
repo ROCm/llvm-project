@@ -29,26 +29,26 @@
 // COM: expansion sleds. The single shared s_wait_dscnt stays at 0x0
 // COM: (drain preservation under stacking in the non-stride64 path).
 // COM: The two sleds together expand to 4 single-address ds_load_b32
-// COM: instructions; offsets (raw 1/2 and 3/4) scale by ElemBytes=4 to
-// COM: byte offsets 4/8 and 12/16 across the two sites.
+// COM: instructions. Raw offsets start at 64 so the scaled byte offsets no
+// COM: longer fit the in-place DS2 fields; they become 256/260 and 264/268.
 // DISASM-LABEL: <test_multi_ds_nostride64>:
 // DISASM-NOT: ds_load_2addr_b32
 // DISASM: s_branch
 // DISASM: s_branch
 // DISASM: s_wait_dscnt 0x0
 // COM: Sled 1 (first DS2 site, vdst pair v[0:1]).
-// DISASM: ds_load_b32 v0, v4 offset:4
-// DISASM-NEXT: ds_load_b32 v1, v4 offset:8
+// DISASM: ds_load_b32 v0, v4 offset:256
+// DISASM-NEXT: ds_load_b32 v1, v4 offset:260
 // COM: Sled 2 (second DS2 site, vdst pair v[2:3]).
-// DISASM: ds_load_b32 v2, v4 offset:12
-// DISASM-NEXT: ds_load_b32 v3, v4 offset:16
+// DISASM: ds_load_b32 v2, v4 offset:264
+// DISASM-NEXT: ds_load_b32 v3, v4 offset:268
 
 .globl test_multi_ds_nostride64
 .p2align 8
 .type test_multi_ds_nostride64,@function
 test_multi_ds_nostride64:
-  ds_load_2addr_b32 v[0:1], v4 offset0:1 offset1:2
-  ds_load_2addr_b32 v[2:3], v4 offset0:3 offset1:4
+  ds_load_2addr_b32 v[0:1], v4 offset0:64 offset1:65
+  ds_load_2addr_b32 v[2:3], v4 offset0:66 offset1:67
   s_wait_dscnt 0x0
   s_endpgm
   s_nop 0

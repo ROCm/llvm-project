@@ -438,6 +438,7 @@ ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
   if (TextSizeValue > std::numeric_limits<uint64_t>::max() - TextBegin) {
     log() << "hotswap: error: function text range scan: .text virtual "
           << "address range overflows uint64_t.\n";
+    FunctionRangeCacheComplete = false;
     FunctionRangeCache.emplace();
     return *FunctionRangeCache;
   }
@@ -450,6 +451,7 @@ ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
 
     Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
     if (!SymsOrErr) {
+      FunctionRangeCacheComplete = false;
       consumeError(SymsOrErr.takeError());
       continue;
     }
@@ -503,6 +505,11 @@ ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
 std::vector<ElfView::FunctionTextRange> ElfView::functionTextRanges() const {
   ArrayRef<FunctionTextRange> Ranges = cachedFunctionTextRanges();
   return std::vector<FunctionTextRange>(Ranges.begin(), Ranges.end());
+}
+
+bool ElfView::functionTextRangesComplete() const {
+  (void)cachedFunctionTextRanges();
+  return FunctionRangeCacheComplete;
 }
 
 bool ElfView::isValidDataOnlyObject() const {

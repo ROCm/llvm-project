@@ -333,12 +333,12 @@ struct Trampoline {
   llvm::SmallVector<uint8_t> DirectSetPCForwardBytes;
   llvm::SmallVector<uint64_t, 4> ForwardBranchIslands;
   uint64_t ForwardBranchTargetOffset = 0;
-  // Dwords after the source's forward sequence are unreachable. A spare tail
-  // dword in an eight-byte or larger/coalesced source window can therefore
-  // serve as one safe, registerless relay for another far edge.
-  bool HasSourceTailBranchIsland = false;
-  uint64_t SourceTailBranchIslandOffset = 0;
-  uint64_t SourceTailBranchTargetOffset = 0;
+  // Dwords after the source's forward sequence are unreachable. Safe tail
+  // dwords in a larger/coalesced source window can therefore serve as
+  // independent registerless relays for other far edges. Each pair is
+  // {source offset, branch target}.
+  llvm::SmallVector<std::pair<uint64_t, uint64_t>, 4>
+      SourceTailBranchIslands;
   // A larger unreachable source tail may hold a pair-only affine gateway.
   // fixupTrampolineBranches preserves this range instead of NOP-padding it.
   bool HasSourceTailGateway = false;
@@ -367,6 +367,10 @@ struct Trampoline {
   uint32_t MirroredStubGroup = 0;
   uint64_t MirroredStubGatewayOffset = 0;
   uint32_t PoolEntryPrefixBytes = 0;
+  // A mirrored sparse prefix is initialized to NOPs except at its
+  // source-selected branch stubs. One unused dword near its midpoint can
+  // therefore be reserved as an unreachable object-wide branch relay without
+  // growing or shifting the pool layout.
   // A far-site run may only be coalesced within one known function. Unknown
   // ranges stay unmerged because adjacent symbols are independent entries.
   bool HasFunctionRange = false;
@@ -482,6 +486,49 @@ struct NopSled {
   // set-PC gateway. Branch-island allocators must not fragment these ranges.
   bool GatewayOnly = false;
 };
+
+struct BranchIslandAllocatorTestResult {
+  bool Success = false;
+  llvm::SmallVector<uint64_t, 4> Islands;
+  llvm::SmallVector<size_t, 4> HeldIslandCountsAtPromotion;
+  std::vector<NopSled> Gateways;
+  llvm::DenseSet<uint64_t> Occupied;
+};
+
+/// Exercise the late branch-island allocator without constructing an ELF.
+/// This is exposed for focused transactional/index invariant unit coverage.
+BranchIslandAllocatorTestResult runBranchIslandAllocatorForTest(
+    std::vector<NopSled> Gateways, uint64_t OwnerOffset, uint64_t FromOffset,
+    uint64_t TargetOffset, bool Backward,
+    llvm::DenseSet<uint64_t> Occupied = {});
+
+/// As above, but append one supplied gateway window at each recoverable
+/// strand. Records the number of provisional occupied dwords held when every
+/// promotion succeeds.
+BranchIslandAllocatorTestResult
+runBranchIslandAllocatorWithPromotionsForTest(
+    std::vector<NopSled> Gateways, uint64_t OwnerOffset, uint64_t FromOffset,
+    uint64_t TargetOffset, bool Backward,
+    llvm::ArrayRef<NopSled> Promotions);
+
+/// Return the decoded-source search band for one recoverable promotion. The
+/// band is clamped to starts whose set-PC tail can be one s_branch hop from
+/// CurrentOffset; exact reachability remains a per-candidate check.
+std::pair<uint64_t, uint64_t>
+branchPromotionSearchRangeForTest(uint64_t CurrentOffset,
+                                  uint64_t CorridorOffset, bool Forward);
+
+/// Return the decoded candidate indices visited by the promotion cursor after
+/// permanently rejected starts are removed. Forward corridors scan from high
+/// to low addresses; backward corridors scan from low to high addresses.
+llvm::SmallVector<size_t, 8> promotionCandidateOrderForTest(
+    size_t CandidateCount, llvm::ArrayRef<size_t> PermanentlyRejected,
+    size_t BeginIndex, size_t EndIndex, bool Forward);
+
+/// Split free gateway ranges at already committed branch dwords.
+std::vector<NopSled> subtractOccupiedBranchGatewaySlotsForTest(
+    std::vector<NopSled> Gateways,
+    const llvm::DenseSet<uint64_t> &Occupied);
 
 enum class MaskWorkaroundPolicy {
   None,
@@ -606,6 +653,11 @@ public:
   /// Enumerate function symbol ranges in `.text` using virtual addresses.
   /// Zero-size symbols extend to the next function symbol or `.text` end.
   std::vector<FunctionTextRange> functionTextRanges() const;
+
+  /// Return whether every symbol table was parsed while building the function
+  /// range cache. Consumers that use the ranges as a closed-world target set
+  /// must reject an incomplete cache.
+  bool functionTextRangesComplete() const;
 
   /// Validate that an object with a present, empty `.text` section contains
   /// data only: no executable section contents, no defined function/ifunc
@@ -784,6 +836,7 @@ private:
   const ELFT::Shdr *TextSection;
   unsigned TextSectionIndex;
   mutable std::optional<std::vector<FunctionTextRange>> FunctionRangeCache;
+  mutable bool FunctionRangeCacheComplete = true;
   mutable std::optional<std::vector<KernelDescriptorInfo>>
       KernelDescriptorCache;
   mutable llvm::StringMap<uint64_t> KernelDescriptorFileOffsetCache;
@@ -1304,6 +1357,13 @@ bool sourceHasUniqueFunctionRange(
     llvm::ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
     uint64_t TextAddr);
 
+/// Indexed implementation of the same uniqueness predicate, exposed so unit
+/// tests can compare it against the simple linear oracle.
+bool sourceHasUniqueFunctionRangeIndexedForTest(
+    const Trampoline &T,
+    llvm::ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    uint64_t TextAddr);
+
 /// Return whether [Begin, End) is an entry-free interval strictly after the
 /// first source dword. The caller supplies the unique-function proof so dense
 /// objects can cache it per function instead of rescanning their symbol table
@@ -1312,6 +1372,16 @@ bool isSafeSourceTailRange(const Trampoline &T,
                            const DirectControlFlowInfo &ControlFlow,
                            bool HasUniqueFunctionRange, uint64_t Begin,
                            uint64_t End);
+
+/// Return whether the source's second dword must remain owner-only until its
+/// registerless far-return chain is allocated. Such a tail must not be offered
+/// to an earlier affine forward planner.
+bool mustReserveSourceTailForRegisterlessReturn(const Trampoline &T);
+
+/// Return the only source-local window a registerless source may offer to the
+/// early affine planner. The owner-reserved second dword is excluded.
+std::optional<std::pair<uint64_t, uint64_t>>
+registerlessSourceAffineGatewayRange(const Trampoline &T);
 
 // Per-instruction persistent gfx1250 VGPR-MSB mode (packed src0/src1/src2/dst,
 // two bits each, values 0-255) recovered by the WMMA split pass's
@@ -1495,7 +1565,8 @@ struct EncodedSplitVccGateway {
 std::optional<EncodedSplitVccGateway>
 findSplitVccGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
                     uint64_t FromOffset, uint64_t TargetOffset,
-                    unsigned SaveSgpr);
+                    unsigned SaveSgpr,
+                    const llvm::DenseSet<uint64_t> *Occupied = nullptr);
 
 /// Find the nearest short-branch-reachable gateway whose remaining space fits
 /// the set-PC sequence. Candidate widths are computed from the displacement;
@@ -1506,7 +1577,8 @@ llvm::Expected<std::optional<EncodedSetPcGateway>>
 findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
                         uint64_t FromOffset, uint64_t TargetOffset,
                         unsigned SgprBase, bool UseVcc = false,
-                        bool PreserveVcc = false);
+                        bool PreserveVcc = false,
+                        const llvm::DenseSet<uint64_t> *Occupied = nullptr);
 
 /// Count set-PC gateway slots reachable from \p FromOffset, up to \p MaxSlots.
 /// Candidate widths are computed without assembly. Zero means that no
@@ -1526,6 +1598,18 @@ bool isSBranchReachable(uint64_t From, uint64_t To);
 std::optional<uint64_t>
 evaluateDirectControlFlowTarget(const InternalDecodedInst &DI,
                                 const LLVMState &LS);
+
+/// Match the exact decoded operand layout of a canonical v_readlane_b32 or
+/// v_writelane_b32 frame transfer. Writelane additionally requires its tied
+/// incoming-VGPR operand to equal the destination.
+bool matchesCanonicalLaneTransfer(const InternalDecodedInst &DI,
+                                  llvm::StringRef Mnemonic,
+                                  llvm::MCRegister Dst, llvm::MCRegister Src,
+                                  int64_t Lane);
+
+/// Return whether an instruction truly changes the hardware PC. This excludes
+/// EXEC-mask operations that generic MC analysis may classify as branches.
+bool isTruePcTransfer(const InternalDecodedInst &DI, const LLVMState &LS);
 
 /// A canonical get-PC/add materialized address feeding a PC-materialized
 /// transfer (s_get_pc_i64 / s_add_nc_u64 / s_{swap,set}_pc_i64). \p Target is
@@ -1570,7 +1654,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     llvm::ArrayRef<uint64_t> DeclaredEntries,
     llvm::ArrayRef<ElfView::FunctionTextRange> FunctionRanges = {},
     llvm::ArrayRef<uint64_t> ExternalEntries = {},
-    llvm::ArrayRef<uint8_t> Text = {});
+    llvm::ArrayRef<uint8_t> Text = {}, const ElfView *Elf = nullptr,
+    llvm::ArrayRef<uint64_t> NonCallEntries = {});
 
 /// Return whether \p DI consumes the incoming value of \p Register, including
 /// explicit read/modify/write destinations represented by MC tied-operand
@@ -1578,6 +1663,27 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
 [[nodiscard]] bool instructionReadsRegister(const InternalDecodedInst &DI,
                                             const LLVMState &LS,
                                             llvm::MCRegister Register);
+
+/// Return whether \p DI fully defines \p Register. A definition of a strict
+/// subregister is not a kill of the incoming full-register value.
+[[nodiscard]] bool
+instructionFullyWritesRegister(const InternalDecodedInst &DI,
+                               const LLVMState &LS,
+                               llvm::MCRegister Register);
+
+/// Return whether \p Replacement can observe the incoming value of \p
+/// Register before a full-register definition.
+[[nodiscard]] bool replacementNeedsIncomingRegister(
+    llvm::ArrayRef<uint8_t> Replacement, const LLVMState &LS,
+    llvm::MCRegister Register);
+
+/// Compute instruction offsets in one function range where the incoming value
+/// of \p Register may be observed before a full definition. Unknown control
+/// flow and exits are conservative.
+std::optional<llvm::DenseSet<uint64_t>> computeIncomingRegisterNeeds(
+    llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t FunctionBegin, uint64_t FunctionEnd,
+    llvm::MCRegister Register);
 
 /// Resolve s0 through s(MaxSgprs - 1) to their physical MC registers.
 std::optional<llvm::SmallVector<llvm::MCRegister, 128>>
@@ -1617,6 +1723,14 @@ std::optional<llvm::BitVector> unsafeIncomingNumberedSgprsInRange(
 [[nodiscard]] std::optional<std::vector<std::string>>
 expandDs2Addr(const llvm::MCInst &Inst, llvm::StringRef FromMnem,
               llvm::StringRef ToMnem, const LLVMState &LS);
+
+/// Rewrite a representable gfx1250 B0 DS2 offset pair to A0 byte offsets
+/// without changing the instruction's opcode, registers, or size. The narrow
+/// entry-local form is exposed so MC tests can verify its exact bytes.
+[[nodiscard]] bool
+rewriteDs2AddrOffsetsInPlace(llvm::MutableArrayRef<uint8_t> InstBytes,
+                             const llvm::MCInst &Inst, llvm::StringRef Mnemonic,
+                             const LLVMState &LS);
 
 // -- Patch dispatch vtable ----------------------------------------------------
 //
