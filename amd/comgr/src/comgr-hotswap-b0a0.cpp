@@ -552,9 +552,8 @@ getSetPcGatewayLayoutSize(uint64_t FromOffset, uint64_t TargetOffset,
   return PrefixBytes + *SetPcBytes;
 }
 
-static bool gatewayRangeIsOccupied(
-    uint64_t Begin, uint64_t Size,
-    const DenseSet<uint64_t> *Occupied) {
+static bool gatewayRangeIsOccupied(uint64_t Begin, uint64_t Size,
+                                   const DenseSet<uint64_t> *Occupied) {
   if (!Occupied)
     return false;
   for (uint64_t Offset = 0; Offset < Size; Offset += MinInstSize)
@@ -624,8 +623,7 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
 std::optional<EncodedSplitVccGateway>
 findSplitVccGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
                     uint64_t FromOffset, uint64_t TargetOffset,
-                    unsigned SaveSgpr,
-                    const DenseSet<uint64_t> *Occupied) {
+                    unsigned SaveSgpr, const DenseSet<uint64_t> *Occupied) {
   constexpr uint64_t PrimaryBytes = 2 * MinInstSize;
   constexpr uint64_t SecondaryBytes = SetPcForwardSequenceBytes - MinInstSize;
   SmallVector<size_t, 32> PrimaryCandidates;
@@ -807,7 +805,8 @@ static std::string findKernelOwnerAtTextOffset(PatchContext &Ctx,
     return Ctx.Elf.findKernelAtAddress(TextOffset + Ctx.Elf.textAddr());
 
   std::pair<uint64_t, uint64_t> Key{FunctionRange->Begin, FunctionRange->End};
-  auto Cached = Ctx.FunctionKernelOwner.find(Key);
+  decltype(Ctx.FunctionKernelOwner)::iterator Cached =
+      Ctx.FunctionKernelOwner.find(Key);
   if (Cached != Ctx.FunctionKernelOwner.end())
     return Cached->second;
 
@@ -954,7 +953,8 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
   unsigned RequiredSgprs = Block.Base + Block.Count + VccSgprs;
   unsigned CoveredRequirement = Ctx.AllKernelSgprRequirement;
   if (!Owner.empty()) {
-    auto Committed = Ctx.KernelSgprRequirements.find(Owner);
+    StringMap<unsigned>::iterator Committed =
+        Ctx.KernelSgprRequirements.find(Owner);
     if (Committed != Ctx.KernelSgprRequirements.end())
       CoveredRequirement = std::max(CoveredRequirement, Committed->second);
   }
@@ -980,7 +980,8 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
     if (*Current >= RequiredSgprs)
       continue;
     unsigned Existing = 0;
-    auto Stats = Ctx.KernelStats.find(KD.KernelName);
+    StringMap<KernelPatchStats>::iterator Stats =
+        Ctx.KernelStats.find(KD.KernelName);
     if (Stats != Ctx.KernelStats.end())
       Existing = Stats->second.ExtraSgprs;
     Updates.push_back(
@@ -993,9 +994,9 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
     return false;
   }
 
-  for (const auto &[KernelName, ExtraSgprs] : Updates)
-    Ctx.KernelStats[KernelName].ExtraSgprs =
-        std::max(Ctx.KernelStats[KernelName].ExtraSgprs, ExtraSgprs);
+  for (const std::pair<StringRef, unsigned> &Update : Updates)
+    Ctx.KernelStats[Update.first].ExtraSgprs =
+        std::max(Ctx.KernelStats[Update.first].ExtraSgprs, Update.second);
   ++Ctx.SgprDescriptorChargePasses;
   if (Owner.empty())
     Ctx.AllKernelSgprRequirement = RequiredSgprs;
@@ -1069,8 +1070,7 @@ static bool instructionWritesRegister(const InternalDecodedInst &DI,
 }
 
 bool instructionFullyWritesRegister(const InternalDecodedInst &DI,
-                                    const LLVMState &LS,
-                                    MCRegister Register) {
+                                    const LLVMState &LS, MCRegister Register) {
   auto DefinitionCoversRegister = [&](MCRegister Def) {
     return Def.isValid() && LS.MRI->isSubRegisterEq(Def, Register);
   };
@@ -1195,20 +1195,20 @@ static bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
   return true;
 }
 
-std::optional<DenseSet<uint64_t>> computeIncomingRegisterNeeds(
-    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
-    uint64_t FunctionBegin, uint64_t FunctionEnd, MCRegister Register) {
+std::optional<DenseSet<uint64_t>>
+computeIncomingRegisterNeeds(ArrayRef<InternalDecodedInst> Decoded,
+                             const LLVMState &LS, uint64_t FunctionBegin,
+                             uint64_t FunctionEnd, MCRegister Register) {
   if (!LS.MIA || FunctionBegin >= FunctionEnd)
     return std::nullopt;
 
-  auto Begin = llvm::lower_bound(
-      Decoded, FunctionBegin,
-      [](const InternalDecodedInst &DI, uint64_t Offset) {
-        return DI.Offset < Offset;
-      });
+  auto Begin =
+      llvm::lower_bound(Decoded, FunctionBegin,
+                        [](const InternalDecodedInst &DI, uint64_t Offset) {
+                          return DI.Offset < Offset;
+                        });
   auto End = llvm::lower_bound(
-      Decoded, FunctionEnd,
-      [](const InternalDecodedInst &DI, uint64_t Offset) {
+      Decoded, FunctionEnd, [](const InternalDecodedInst &DI, uint64_t Offset) {
         return DI.Offset < Offset;
       });
   if (Begin == End)
@@ -1223,8 +1223,7 @@ std::optional<DenseSet<uint64_t>> computeIncomingRegisterNeeds(
     if (Offset < FunctionBegin || Offset >= FunctionEnd)
       return std::nullopt;
     auto It = std::lower_bound(
-        Begin, End, Offset,
-        [](const InternalDecodedInst &DI, uint64_t Target) {
+        Begin, End, Offset, [](const InternalDecodedInst &DI, uint64_t Target) {
           return DI.Offset < Target;
         });
     if (It == End || It->Offset != Offset)
@@ -1265,8 +1264,7 @@ std::optional<DenseSet<uint64_t>> computeIncomingRegisterNeeds(
     };
 
     if (LS.MIA->isBranch(DI.Inst)) {
-      std::optional<uint64_t> Target =
-          evaluateDirectControlFlowTarget(DI, LS);
+      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
       if (Target)
         AddSuccessor(*Target);
       else
@@ -1294,8 +1292,7 @@ std::optional<DenseSet<uint64_t>> computeIncomingRegisterNeeds(
   while (!Worklist.empty()) {
     size_t Successor = Worklist.pop_back_val();
     for (size_t Predecessor : Predecessors[Successor]) {
-      if (NeedsIncoming.test(Predecessor) ||
-          FullDefinitions.test(Predecessor))
+      if (NeedsIncoming.test(Predecessor) || FullDefinitions.test(Predecessor))
         continue;
       NeedsIncoming.set(Predecessor);
       Worklist.push_back(Predecessor);
@@ -1487,8 +1484,8 @@ struct BatchedSgprContinuationAnalysis {
   unsigned WordsPerRow = 0;
   std::vector<uint64_t> UnsafeRows;
 
-  std::optional<BitVector>
-  query(ArrayRef<InternalDecodedInst> Decoded, uint64_t Continuation) const {
+  std::optional<BitVector> query(ArrayRef<InternalDecodedInst> Decoded,
+                                 uint64_t Continuation) const {
     if (Continuation < FunctionBegin || Continuation >= FunctionEnd)
       return std::nullopt;
     auto Begin = Decoded.begin() + BeginIndex;
@@ -1502,8 +1499,7 @@ struct BatchedSgprContinuationAnalysis {
         It->Offset != Continuation)
       return std::nullopt;
     size_t LocalIndex = It - Begin;
-    const uint64_t *Row =
-        UnsafeRows.data() + LocalIndex * WordsPerRow;
+    const uint64_t *Row = UnsafeRows.data() + LocalIndex * WordsPerRow;
     BitVector Result(RegisterCount);
     for (unsigned Register = 0; Register != RegisterCount; ++Register)
       if ((Row[Register / 64] >> (Register % 64)) & 1)
@@ -1513,20 +1509,20 @@ struct BatchedSgprContinuationAnalysis {
 };
 
 static std::optional<BatchedSgprContinuationAnalysis>
-computeBatchedSgprContinuationAnalysis(
-    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
-    uint64_t FunctionBegin, uint64_t FunctionEnd,
-    ArrayRef<MCRegister> NumberedSgprs) {
+computeBatchedSgprContinuationAnalysis(ArrayRef<InternalDecodedInst> Decoded,
+                                       const LLVMState &LS,
+                                       uint64_t FunctionBegin,
+                                       uint64_t FunctionEnd,
+                                       ArrayRef<MCRegister> NumberedSgprs) {
   if (!LS.MIA || FunctionBegin >= FunctionEnd)
     return std::nullopt;
-  auto Begin = llvm::lower_bound(
-      Decoded, FunctionBegin,
-      [](const InternalDecodedInst &DI, uint64_t Offset) {
-        return DI.Offset < Offset;
-      });
+  auto Begin =
+      llvm::lower_bound(Decoded, FunctionBegin,
+                        [](const InternalDecodedInst &DI, uint64_t Offset) {
+                          return DI.Offset < Offset;
+                        });
   auto End = llvm::lower_bound(
-      Decoded, FunctionEnd,
-      [](const InternalDecodedInst &DI, uint64_t Offset) {
+      Decoded, FunctionEnd, [](const InternalDecodedInst &DI, uint64_t Offset) {
         return DI.Offset < Offset;
       });
   if (Begin == End)
@@ -1556,11 +1552,11 @@ computeBatchedSgprContinuationAnalysis(
   auto FindLocalIndex = [&](uint64_t Offset) -> std::optional<size_t> {
     if (Offset < FunctionBegin || Offset >= FunctionEnd)
       return std::nullopt;
-    auto It = llvm::lower_bound(
-        ArrayRef<InternalDecodedInst>(Begin, End), Offset,
-        [](const InternalDecodedInst &DI, uint64_t Target) {
-          return DI.Offset < Target;
-        });
+    auto It =
+        llvm::lower_bound(ArrayRef<InternalDecodedInst>(Begin, End), Offset,
+                          [](const InternalDecodedInst &DI, uint64_t Target) {
+                            return DI.Offset < Target;
+                          });
     if (It == ArrayRef<InternalDecodedInst>(Begin, End).end() ||
         It->Offset != Offset)
       return std::nullopt;
@@ -1639,8 +1635,7 @@ computeBatchedSgprContinuationAnalysis(
     Queued.reset(I);
     const uint64_t *Uses = UsesRows.data() + I * Result.WordsPerRow;
     const uint64_t *Defs = DefsRows.data() + I * Result.WordsPerRow;
-    uint64_t *Unsafe =
-        Result.UnsafeRows.data() + I * Result.WordsPerRow;
+    uint64_t *Unsafe = Result.UnsafeRows.data() + I * Result.WordsPerRow;
     bool Changed = false;
     for (unsigned Word = 0; Word != Result.WordsPerRow; ++Word) {
       uint64_t SuccessorUnsafe =
@@ -1648,10 +1643,8 @@ computeBatchedSgprContinuationAnalysis(
       for (size_t Successor : Successors[I])
         SuccessorUnsafe |=
             Result.UnsafeRows[Successor * Result.WordsPerRow + Word];
-      uint64_t NewUnsafe =
-          Uses[Word] | (SuccessorUnsafe & ~Defs[Word]);
-      if (Word + 1 == Result.WordsPerRow &&
-          Result.RegisterCount % 64 != 0)
+      uint64_t NewUnsafe = Uses[Word] | (SuccessorUnsafe & ~Defs[Word]);
+      if (Word + 1 == Result.WordsPerRow && Result.RegisterCount % 64 != 0)
         NewUnsafe &= (uint64_t{1} << (Result.RegisterCount % 64)) - 1;
       uint64_t Added = NewUnsafe & ~Unsafe[Word];
       if (Added != 0) {
@@ -1670,20 +1663,18 @@ computeBatchedSgprContinuationAnalysis(
   return Result;
 }
 
-BatchedSgprContinuationTestResult
-runBatchedSgprContinuationAnalysisForTest(
+BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t FunctionBegin, uint64_t FunctionEnd,
-    ArrayRef<uint64_t> Continuations,
-    ArrayRef<MCRegister> NumberedSgprs) {
+    ArrayRef<uint64_t> Continuations, ArrayRef<MCRegister> NumberedSgprs) {
   BatchedSgprContinuationTestResult Result;
   std::optional<BatchedSgprContinuationAnalysis> Analysis =
-      computeBatchedSgprContinuationAnalysis(
-          Decoded, LS, FunctionBegin, FunctionEnd, NumberedSgprs);
+      computeBatchedSgprContinuationAnalysis(Decoded, LS, FunctionBegin,
+                                             FunctionEnd, NumberedSgprs);
   Result.Analyses = 1;
   for (uint64_t Continuation : Continuations)
-    Result.Queries.push_back(
-        Analysis ? Analysis->query(Decoded, Continuation) : std::nullopt);
+    Result.Queries.push_back(Analysis ? Analysis->query(Decoded, Continuation)
+                                      : std::nullopt);
   return Result;
 }
 
@@ -1745,8 +1736,8 @@ using BatchedSgprContinuationCache =
 static std::optional<unsigned> findLocallyDeadSgprPairWithCache(
     PatchContext &Ctx, const ElfView::FunctionTextRange &FunctionRange,
     uint64_t InstOffset, uint32_t InstSize, ArrayRef<uint8_t> Replacement,
-    ArrayRef<MCRegister> NumberedSgprs,
-    BatchedSgprContinuationCache &Cache, uint64_t &AnalysisCount) {
+    ArrayRef<MCRegister> NumberedSgprs, BatchedSgprContinuationCache &Cache,
+    uint64_t &AnalysisCount) {
   std::optional<uint64_t> Continuation = checkedAddUint64(
       InstOffset, InstSize, "cached far-return SGPR liveness continuation");
   if (!Continuation)
@@ -6631,8 +6622,7 @@ struct BranchIslandFailure {
   bool Forward = false;
 };
 
-using BranchIslandPromoter =
-    std::function<bool(const BranchIslandFailure &)>;
+using BranchIslandPromoter = std::function<bool(const BranchIslandFailure &)>;
 
 using BranchGatewayHead = std::pair<uint64_t, size_t>;
 using BranchGatewayHeadSet = std::set<BranchGatewayHead>;
@@ -6700,8 +6690,7 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
   if (!PersistentOccupied)
     PersistentOccupied = &LocalOccupied;
   if (!PersistentHeads) {
-    LocalHeads =
-        buildBranchGatewayHeads(Gateways, *PersistentOccupied);
+    LocalHeads = buildBranchGatewayHeads(Gateways, *PersistentOccupied);
     PersistentHeads = &LocalHeads;
   }
   BranchGatewayHeadSet &Heads = *PersistentHeads;
@@ -6723,15 +6712,13 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
       auto It =
           TargetOffset <= ReachEnd
               ? Heads.lower_bound({Upper, 0})
-              : Heads.upper_bound(
-                    {Upper, std::numeric_limits<size_t>::max()});
+              : Heads.upper_bound({Upper, std::numeric_limits<size_t>::max()});
       while (It != Heads.begin()) {
         --It;
         if (It->first <= Current)
           break;
         const NopSled &Sled = Gateways[It->second];
-        if (FromOffset < Sled.FunctionStart ||
-            FromOffset >= Sled.FunctionEnd ||
+        if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd ||
             Sled.WritePos != It->first ||
             !isSBranchReachable(Current, It->first))
           continue;
@@ -6742,16 +6729,14 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
     } else {
       uint64_t ReachBegin =
           Current > MaxSledDistance ? Current - MaxSledDistance : 0;
-      uint64_t Lower =
-          TargetOffset == std::numeric_limits<uint64_t>::max()
-              ? TargetOffset
-              : TargetOffset + 1;
+      uint64_t Lower = TargetOffset == std::numeric_limits<uint64_t>::max()
+                           ? TargetOffset
+                           : TargetOffset + 1;
       Lower = std::max(Lower, ReachBegin);
       for (auto It = Heads.lower_bound({Lower, 0});
            It != Heads.end() && It->first < Current; ++It) {
         const NopSled &Sled = Gateways[It->second];
-        if (FromOffset < Sled.FunctionStart ||
-            FromOffset >= Sled.FunctionEnd ||
+        if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd ||
             Sled.WritePos != It->first ||
             !isSBranchReachable(Current, It->first))
           continue;
@@ -6762,18 +6747,15 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
     }
 
     if (BestIndex == Gateways.size()) {
-      uint64_t Corridor =
-          Forward ? std::numeric_limits<uint64_t>::max() : 0;
+      uint64_t Corridor = Forward ? std::numeric_limits<uint64_t>::max() : 0;
       if (Forward) {
-        uint64_t AfterCurrent =
-            Current == std::numeric_limits<uint64_t>::max()
-                ? Current
-                : Current + 1;
+        uint64_t AfterCurrent = Current == std::numeric_limits<uint64_t>::max()
+                                    ? Current
+                                    : Current + 1;
         for (auto It = Heads.lower_bound({AfterCurrent, 0});
              It != Heads.end() && It->first < TargetOffset; ++It) {
           const NopSled &Sled = Gateways[It->second];
-          if (FromOffset < Sled.FunctionStart ||
-              FromOffset >= Sled.FunctionEnd)
+          if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd)
             continue;
           Corridor = It->first;
           break;
@@ -6785,8 +6767,7 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
           if (It->first <= TargetOffset)
             break;
           const NopSled &Sled = Gateways[It->second];
-          if (FromOffset < Sled.FunctionStart ||
-              FromOffset >= Sled.FunctionEnd)
+          if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd)
             continue;
           Corridor = It->first;
           break;
@@ -6796,8 +6777,7 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
         Corridor = TargetOffset;
       if (!Forward && Corridor == 0)
         Corridor = TargetOffset;
-      BranchIslandFailure ThisFailure{Current, TargetOffset, Corridor,
-                                      Forward};
+      BranchIslandFailure ThisFailure{Current, TargetOffset, Corridor, Forward};
       if (Failure)
         *Failure = ThisFailure;
       // No Gateways reference or Heads iterator survives this call. The
@@ -6817,8 +6797,7 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
 
     auto AliasBegin = Heads.lower_bound({BestOffset, 0});
     auto AliasEnd =
-        Heads.upper_bound(
-            {BestOffset, std::numeric_limits<size_t>::max()});
+        Heads.upper_bound({BestOffset, std::numeric_limits<size_t>::max()});
     for (auto It = AliasBegin; It != AliasEnd; ++It) {
       NopSled &Alias = Gateways[It->second];
       Allocations.push_back({It->second, Alias.WritePos});
@@ -6831,8 +6810,7 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
   }
   for (const Allocation &A : Allocations) {
     NopSled &Sled = Gateways[A.SledIndex];
-    while (hasFreeBranchGatewaySlot(Sled) &&
-           Occupied.contains(Sled.WritePos))
+    while (hasFreeBranchGatewaySlot(Sled) && Occupied.contains(Sled.WritePos))
       Sled.WritePos += MinInstSize;
     if (hasFreeBranchGatewaySlot(Sled))
       Heads.insert({Gateways[A.SledIndex].WritePos, A.SledIndex});
@@ -6897,8 +6875,7 @@ class FunctionRangeUniquenessIndex {
 
 public:
   FunctionRangeUniquenessIndex(
-      ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-      uint64_t TextAddr) {
+      ArrayRef<ElfView::FunctionTextRange> FunctionRanges, uint64_t TextAddr) {
     Ranges.reserve(FunctionRanges.size());
     for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
       if (Range.Begin < TextAddr || Range.End < TextAddr)
@@ -6913,8 +6890,7 @@ public:
     Prefix.reserve(Ranges.size());
     PrefixMaximums Top;
     for (size_t I = 0; I != Ranges.size(); ++I) {
-      if (Top.First == NoRange ||
-          Ranges[I].second > Ranges[Top.First].second) {
+      if (Top.First == NoRange || Ranges[I].second > Ranges[Top.First].second) {
         Top.Second = Top.First;
         Top.First = I;
       } else if (Top.Second == NoRange ||
@@ -6928,9 +6904,9 @@ public:
   bool hasUniqueFunctionRange(const Trampoline &T) const {
     if (!T.HasFunctionRange || T.FunctionStart >= T.FunctionEnd)
       return false;
-    std::optional<uint64_t> SourceEnd = checkedAddUint64(
-        T.OriginalOffset, T.OriginalSize,
-        "indexed source-tail unique function end");
+    std::optional<uint64_t> SourceEnd =
+        checkedAddUint64(T.OriginalOffset, T.OriginalSize,
+                         "indexed source-tail unique function end");
     if (!SourceEnd || T.FunctionStart > T.OriginalOffset ||
         T.FunctionEnd < *SourceEnd)
       return false;
@@ -6940,18 +6916,17 @@ public:
     if (SelectedIt == Ranges.end() || *SelectedIt != Selected)
       return false;
 
-    auto PrefixEnd = std::upper_bound(
-        Ranges.begin(), Ranges.end(), T.OriginalOffset,
-        [](uint64_t Offset, const Bounds &Range) {
-          return Offset < Range.first;
-        });
+    auto PrefixEnd =
+        std::upper_bound(Ranges.begin(), Ranges.end(), T.OriginalOffset,
+                         [](uint64_t Offset, const Bounds &Range) {
+                           return Offset < Range.first;
+                         });
     if (PrefixEnd == Ranges.begin())
       return false;
     const PrefixMaximums &Top = Prefix[PrefixEnd - Ranges.begin() - 1];
-    size_t Other =
-        Top.First != NoRange && Ranges[Top.First] == Selected
-            ? Top.Second
-            : Top.First;
+    size_t Other = Top.First != NoRange && Ranges[Top.First] == Selected
+                       ? Top.Second
+                       : Top.First;
     return Other == NoRange || Ranges[Other].second < *SourceEnd;
   }
 };
@@ -7077,10 +7052,10 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
         Ctx.LS, T.OriginalOffset, ThisTP, T.LongBranchSgprBase);
     if (Direct && Direct->size() <= T.OriginalSize)
       continue;
-    std::optional<SafeSgprScratchBlock> Scratch = findSafeSgprScratchBlock(
-        Ctx, T.OriginalOffset, /*Count=*/4,
-        /*Alignment=*/2, "shared far-dispatch gateway",
-        /*ReportNoSpace=*/false);
+    std::optional<SafeSgprScratchBlock> Scratch =
+        findSafeSgprScratchBlock(Ctx, T.OriginalOffset, /*Count=*/4,
+                                 /*Alignment=*/2, "shared far-dispatch gateway",
+                                 /*ReportNoSpace=*/false);
     if (Scratch) {
       Candidates.push_back({I, Scratch->Base});
     } else {
@@ -7106,10 +7081,9 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
   const std::vector<ElfView::FunctionTextRange> FunctionRanges =
       Ctx.Elf.functionTextRanges();
   const FunctionRangeUniquenessIndex FunctionRangeIndex(FunctionRanges,
-                                                          Ctx.Elf.textAddr());
+                                                        Ctx.Elf.textAddr());
   auto HasSafeTail = [&](const Trampoline &T, uint64_t Begin, uint64_t End) {
-    bool HasUniqueFunctionRange =
-        FunctionRangeIndex.hasUniqueFunctionRange(T);
+    bool HasUniqueFunctionRange = FunctionRangeIndex.hasUniqueFunctionRange(T);
     return isSafeSourceTailRange(T, Ctx.DirectControlFlow,
                                  HasUniqueFunctionRange, Begin, End);
   };
@@ -7807,14 +7781,12 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
   return true;
 }
 
-static std::optional<SmallVector<uint64_t, 4>>
-allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
-                              uint64_t OwnerOffset, uint64_t FromOffset,
-                              uint64_t TargetOffset,
-                              BranchIslandFailure *Failure = nullptr,
-                              BranchGatewayHeadSet *PersistentHeads = nullptr,
-                              DenseSet<uint64_t> *PersistentOccupied = nullptr,
-                              BranchIslandPromoter Promote = {}) {
+static std::optional<SmallVector<uint64_t, 4>> allocateBackwardBranchIslands(
+    std::vector<NopSled> &Gateways, uint64_t OwnerOffset, uint64_t FromOffset,
+    uint64_t TargetOffset, BranchIslandFailure *Failure = nullptr,
+    BranchGatewayHeadSet *PersistentHeads = nullptr,
+    DenseSet<uint64_t> *PersistentOccupied = nullptr,
+    BranchIslandPromoter Promote = {}) {
   struct Allocation {
     size_t SledIndex = 0;
     uint64_t PreviousWritePos = 0;
@@ -7824,8 +7796,7 @@ allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
   if (!PersistentOccupied)
     PersistentOccupied = &LocalOccupied;
   if (!PersistentHeads) {
-    LocalHeads =
-        buildBranchGatewayHeads(Gateways, *PersistentOccupied);
+    LocalHeads = buildBranchGatewayHeads(Gateways, *PersistentOccupied);
     PersistentHeads = &LocalHeads;
   }
   BranchGatewayHeadSet &Heads = *PersistentHeads;
@@ -7839,17 +7810,15 @@ allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
     uint64_t BestOffset = std::numeric_limits<uint64_t>::max();
     uint64_t ReachBegin =
         Current > MaxSledDistance ? Current - MaxSledDistance : 0;
-    uint64_t Lower =
-        TargetOffset == std::numeric_limits<uint64_t>::max()
-            ? TargetOffset
-            : TargetOffset + 1;
+    uint64_t Lower = TargetOffset == std::numeric_limits<uint64_t>::max()
+                         ? TargetOffset
+                         : TargetOffset + 1;
     Lower = std::max(Lower, ReachBegin);
     for (auto It = Heads.lower_bound({Lower, 0});
          It != Heads.end() && It->first < Current; ++It) {
       const NopSled &Sled = Gateways[It->second];
-      if (OwnerOffset < Sled.FunctionStart ||
-          OwnerOffset >= Sled.FunctionEnd || Sled.WritePos != It->first ||
-          !isSBranchReachable(Current, It->first))
+      if (OwnerOffset < Sled.FunctionStart || OwnerOffset >= Sled.FunctionEnd ||
+          Sled.WritePos != It->first || !isSBranchReachable(Current, It->first))
         continue;
       BestIndex = It->second;
       BestOffset = It->first;
@@ -7864,8 +7833,7 @@ allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
         if (CorridorIt->first <= TargetOffset)
           break;
         const NopSled &Sled = Gateways[CorridorIt->second];
-        if (OwnerOffset < Sled.FunctionStart ||
-            OwnerOffset >= Sled.FunctionEnd)
+        if (OwnerOffset < Sled.FunctionStart || OwnerOffset >= Sled.FunctionEnd)
           continue;
         Corridor = CorridorIt->first;
         break;
@@ -7890,8 +7858,7 @@ allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
       uint64_t HighestReachableToTarget = 0;
       for (const BranchGatewayHead &Head : Heads) {
         const NopSled &Sled = Gateways[Head.second];
-        if (OwnerOffset < Sled.FunctionStart ||
-            OwnerOffset >= Sled.FunctionEnd)
+        if (OwnerOffset < Sled.FunctionStart || OwnerOffset >= Sled.FunctionEnd)
           continue;
         ++EligibleOwnerSleds;
         if (Head.first <= TargetOffset || Head.first >= Current)
@@ -7915,9 +7882,8 @@ allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
                     HighestCorridor ? HighestCorridor : TargetOffset,
                     /*Forward=*/false};
       log() << "hotswap: backward return allocator stranded owner 0x"
-            << utohexstr(OwnerOffset) << ": from=0x"
-            << utohexstr(FromOffset) << ", current=0x"
-            << utohexstr(Current) << ", target=0x"
+            << utohexstr(OwnerOffset) << ": from=0x" << utohexstr(FromOffset)
+            << ", current=0x" << utohexstr(Current) << ", target=0x"
             << utohexstr(TargetOffset) << ", selected=" << Islands.size()
             << ", owner-sleds=" << EligibleOwnerSleds
             << ", free-corridor=" << FreeCorridorSleds
@@ -7945,8 +7911,7 @@ allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
 
     auto AliasBegin = Heads.lower_bound({BestOffset, 0});
     auto AliasEnd =
-        Heads.upper_bound(
-            {BestOffset, std::numeric_limits<size_t>::max()});
+        Heads.upper_bound({BestOffset, std::numeric_limits<size_t>::max()});
     for (auto It = AliasBegin; It != AliasEnd; ++It) {
       NopSled &Alias = Gateways[It->second];
       Allocations.push_back({It->second, Alias.WritePos});
@@ -7959,8 +7924,7 @@ allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
   }
   for (const Allocation &A : Allocations) {
     NopSled &Sled = Gateways[A.SledIndex];
-    while (hasFreeBranchGatewaySlot(Sled) &&
-           Occupied.contains(Sled.WritePos))
+    while (hasFreeBranchGatewaySlot(Sled) && Occupied.contains(Sled.WritePos))
       Sled.WritePos += MinInstSize;
     if (hasFreeBranchGatewaySlot(Sled))
       Heads.insert({Gateways[A.SledIndex].WritePos, A.SledIndex});
@@ -7971,16 +7935,14 @@ allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
 BranchIslandAllocatorTestResult runBranchIslandAllocatorForTest(
     std::vector<NopSled> Gateways, uint64_t OwnerOffset, uint64_t FromOffset,
     uint64_t TargetOffset, bool Backward, DenseSet<uint64_t> Occupied) {
-  BranchGatewayHeadSet Heads =
-      buildBranchGatewayHeads(Gateways, Occupied);
+  BranchGatewayHeadSet Heads = buildBranchGatewayHeads(Gateways, Occupied);
   std::optional<SmallVector<uint64_t, 4>> Islands =
       Backward
-          ? allocateBackwardBranchIslands(
-                Gateways, OwnerOffset, FromOffset, TargetOffset, nullptr,
-                &Heads, &Occupied)
-          : allocateForwardBranchIslands(
-                Gateways, FromOffset, TargetOffset, nullptr, &Heads,
-                &Occupied);
+          ? allocateBackwardBranchIslands(Gateways, OwnerOffset, FromOffset,
+                                          TargetOffset, nullptr, &Heads,
+                                          &Occupied)
+          : allocateForwardBranchIslands(Gateways, FromOffset, TargetOffset,
+                                         nullptr, &Heads, &Occupied);
   BranchIslandAllocatorTestResult Result;
   Result.Success = Islands.has_value();
   if (Islands)
@@ -7990,13 +7952,11 @@ BranchIslandAllocatorTestResult runBranchIslandAllocatorForTest(
   return Result;
 }
 
-BranchIslandAllocatorTestResult
-runBranchIslandAllocatorWithPromotionsForTest(
+BranchIslandAllocatorTestResult runBranchIslandAllocatorWithPromotionsForTest(
     std::vector<NopSled> Gateways, uint64_t OwnerOffset, uint64_t FromOffset,
     uint64_t TargetOffset, bool Backward, ArrayRef<NopSled> Promotions) {
   DenseSet<uint64_t> Occupied;
-  BranchGatewayHeadSet Heads =
-      buildBranchGatewayHeads(Gateways, Occupied);
+  BranchGatewayHeadSet Heads = buildBranchGatewayHeads(Gateways, Occupied);
   SmallVector<size_t, 4> HeldCounts;
   size_t NextPromotion = 0;
   BranchIslandPromoter Promote = [&](const BranchIslandFailure &) {
@@ -8006,8 +7966,7 @@ runBranchIslandAllocatorWithPromotionsForTest(
     size_t Index = Gateways.size();
     Gateways.push_back(Promotions[NextPromotion++]);
     NopSled &Added = Gateways.back();
-    while (hasFreeBranchGatewaySlot(Added) &&
-           Occupied.contains(Added.WritePos))
+    while (hasFreeBranchGatewaySlot(Added) && Occupied.contains(Added.WritePos))
       Added.WritePos += MinInstSize;
     if (hasFreeBranchGatewaySlot(Added))
       Heads.insert({Added.WritePos, Index});
@@ -8015,12 +7974,11 @@ runBranchIslandAllocatorWithPromotionsForTest(
   };
   std::optional<SmallVector<uint64_t, 4>> Islands =
       Backward
-          ? allocateBackwardBranchIslands(
-                Gateways, OwnerOffset, FromOffset, TargetOffset, nullptr,
-                &Heads, &Occupied, Promote)
-          : allocateForwardBranchIslands(
-                Gateways, FromOffset, TargetOffset, nullptr, &Heads,
-                &Occupied, Promote);
+          ? allocateBackwardBranchIslands(Gateways, OwnerOffset, FromOffset,
+                                          TargetOffset, nullptr, &Heads,
+                                          &Occupied, Promote)
+          : allocateForwardBranchIslands(Gateways, FromOffset, TargetOffset,
+                                         nullptr, &Heads, &Occupied, Promote);
   BranchIslandAllocatorTestResult Result;
   Result.Success = Islands.has_value();
   if (Islands)
@@ -8031,8 +7989,9 @@ runBranchIslandAllocatorWithPromotionsForTest(
   return Result;
 }
 
-std::vector<NopSled> subtractOccupiedBranchGatewaySlotsForTest(
-    std::vector<NopSled> Gateways, const DenseSet<uint64_t> &Occupied) {
+std::vector<NopSled>
+subtractOccupiedBranchGatewaySlotsForTest(std::vector<NopSled> Gateways,
+                                          const DenseSet<uint64_t> &Occupied) {
   subtractOccupiedBranchGatewaySlots(Gateways, Occupied);
   return Gateways;
 }
@@ -8040,12 +7999,10 @@ std::vector<NopSled> subtractOccupiedBranchGatewaySlotsForTest(
 std::pair<uint64_t, uint64_t>
 branchPromotionSearchRangeForTest(uint64_t CurrentOffset,
                                   uint64_t CorridorOffset, bool Forward) {
-  constexpr uint64_t MinSourceBytes =
-      SetPcForwardSequenceBytes + MinInstSize;
+  constexpr uint64_t MinSourceBytes = SetPcForwardSequenceBytes + MinInstSize;
   if (Forward) {
     uint64_t ReachEnd =
-        CurrentOffset >
-                std::numeric_limits<uint64_t>::max() - MaxSledDistance
+        CurrentOffset > std::numeric_limits<uint64_t>::max() - MaxSledDistance
             ? std::numeric_limits<uint64_t>::max()
             : CurrentOffset + MaxSledDistance;
     return {CurrentOffset, std::min(CorridorOffset, ReachEnd)};
@@ -8082,8 +8039,7 @@ static int findNextPromotionCandidateIndex(
     else if (BeginIndex == 0)
       Found = StillPossible.find_first();
     else
-      Found =
-          StillPossible.find_next(static_cast<unsigned>(BeginIndex - 1));
+      Found = StillPossible.find_next(static_cast<unsigned>(BeginIndex - 1));
     if (Found < 0 || static_cast<size_t>(Found) >= EndIndex)
       return -1;
   }
@@ -8101,8 +8057,8 @@ SmallVector<size_t, 8> promotionCandidateOrderForTest(
   SmallVector<size_t, 8> Order;
   std::optional<size_t> Previous;
   while (true) {
-    int Found = findNextPromotionCandidateIndex(
-        StillPossible, BeginIndex, EndIndex, Forward, Previous);
+    int Found = findNextPromotionCandidateIndex(StillPossible, BeginIndex,
+                                                EndIndex, Forward, Previous);
     if (Found < 0)
       break;
     size_t Index = static_cast<size_t>(Found);
@@ -8197,10 +8153,9 @@ static bool emitMirroredStubGateways(PatchContext &Ctx) {
   return true;
 }
 
-static std::optional<uint64_t>
-sourceTailBranchTarget(const Trampoline &T, uint64_t Offset) {
-  for (const auto &[RelayOffset, TargetOffset] :
-       T.SourceTailBranchIslands)
+static std::optional<uint64_t> sourceTailBranchTarget(const Trampoline &T,
+                                                      uint64_t Offset) {
+  for (const auto &[RelayOffset, TargetOffset] : T.SourceTailBranchIslands)
     if (RelayOffset == Offset)
       return TargetOffset;
   return std::nullopt;
@@ -8208,8 +8163,7 @@ sourceTailBranchTarget(const Trampoline &T, uint64_t Offset) {
 
 static bool recordSourceTailBranchIsland(Trampoline &T, uint64_t Offset,
                                          uint64_t Target) {
-  if (std::optional<uint64_t> Existing =
-          sourceTailBranchTarget(T, Offset))
+  if (std::optional<uint64_t> Existing = sourceTailBranchTarget(T, Offset))
     return *Existing == Target;
   T.SourceTailBranchIslands.push_back({Offset, Target});
   return true;
@@ -8234,10 +8188,9 @@ assignLongBranchGateways(PatchContext &Ctx,
   const std::vector<ElfView::FunctionTextRange> FunctionRanges =
       Ctx.Elf.functionTextRanges();
   const FunctionRangeUniquenessIndex FunctionRangeIndex(FunctionRanges,
-                                                          Ctx.Elf.textAddr());
+                                                        Ctx.Elf.textAddr());
   auto HasSafeTail = [&](const Trampoline &T, uint64_t Begin, uint64_t End) {
-    bool HasUniqueFunctionRange =
-        FunctionRangeIndex.hasUniqueFunctionRange(T);
+    bool HasUniqueFunctionRange = FunctionRangeIndex.hasUniqueFunctionRange(T);
     return isSafeSourceTailRange(T, Ctx.DirectControlFlow,
                                  HasUniqueFunctionRange, Begin, End);
   };
@@ -8310,8 +8263,7 @@ assignLongBranchGateways(PatchContext &Ctx,
     // Collect pair-backed source tails into one sparse backbone. These tails
     // are withheld from affine planning below, then reactivated after
     // forward-mode selection proves that their second dword is unreachable.
-    SmallVector<std::pair<uint64_t, uint64_t>, 64>
-        SourceTailBackboneCandidates;
+    SmallVector<std::pair<uint64_t, uint64_t>, 64> SourceTailBackboneCandidates;
 
     // Shared-dispatch sources can also use one-dword direct calls: their link
     // pair is exactly the source-PC identity consumed by the dispatcher. Keep
@@ -8643,8 +8595,7 @@ assignLongBranchGateways(PatchContext &Ctx,
         RelativeOffset == MinInstSize &&
         (OwnerT.UsesSharedDispatcherForward ||
          (OwnerT.UsesSetPCBack && !OwnerT.UsesDirectSetPCForward));
-    if (!OwnerT.Long || OwnerT.LongBranchPreservesVcc ||
-        !HasOneDwordForward ||
+    if (!OwnerT.Long || OwnerT.LongBranchPreservesVcc || !HasOneDwordForward ||
         !HasSafeTail(OwnerT, KV.first, KV.first + MinInstSize) ||
         sourceTailBranchTarget(OwnerT, KV.first))
       continue;
@@ -8756,8 +8707,7 @@ assignLongBranchGateways(PatchContext &Ctx,
       collectIndirectControlFlowFunctions(
           Ctx.Decoded, Ctx.LS, Ctx.Elf,
           Ctx.DirectControlFlow.BoundedIndirectTransfers);
-  DenseMap<std::pair<uint64_t, uint64_t>,
-           std::optional<DenseSet<uint64_t>>>
+  DenseMap<std::pair<uint64_t, uint64_t>, std::optional<DenseSet<uint64_t>>>
       PromotionVccNeedsCache;
   std::optional<SmallVector<MCRegister, 128>> PromotionNumberedSgprs =
       resolveNumberedSgprRegisters(*Ctx.LS.MRI, Ctx.Config.MaxSgprs);
@@ -8791,23 +8741,21 @@ assignLongBranchGateways(PatchContext &Ctx,
     return It->second > Begin;
   };
   for (const Trampoline &T : Ctx.OutTrampolines)
-    ReservePromotionRange(T.OriginalOffset,
-                          T.OriginalOffset + T.OriginalSize);
+    ReservePromotionRange(T.OriginalOffset, T.OriginalOffset + T.OriginalSize);
   for (const NopSled &Gateway : Gateways)
     ReservePromotionRange(Gateway.Start, Gateway.End);
-  auto IsVccDeadAtContinuation =
-      [&](const ElfView::FunctionTextRange &Function, uint64_t Start,
-          uint32_t Size) {
-    std::optional<uint64_t> Continuation = checkedAddUint64(
-        Start, Size, "promoted VCC liveness continuation");
+  auto IsVccDeadAtContinuation = [&](const ElfView::FunctionTextRange &Function,
+                                     uint64_t Start, uint32_t Size) {
+    std::optional<uint64_t> Continuation =
+        checkedAddUint64(Start, Size, "promoted VCC liveness continuation");
     if (!Continuation || *Continuation < Function.Begin ||
         *Continuation >= Function.End)
       return false;
-    auto ContinuationIt = llvm::lower_bound(
-        Ctx.Decoded, *Continuation,
-        [](const InternalDecodedInst &DI, uint64_t Offset) {
-          return DI.Offset < Offset;
-        });
+    auto ContinuationIt =
+        llvm::lower_bound(Ctx.Decoded, *Continuation,
+                          [](const InternalDecodedInst &DI, uint64_t Offset) {
+                            return DI.Offset < Offset;
+                          });
     if (ContinuationIt == Ctx.Decoded.end() ||
         ContinuationIt->Offset != *Continuation)
       return false;
@@ -8818,15 +8766,12 @@ assignLongBranchGateways(PatchContext &Ctx,
       std::optional<DenseSet<uint64_t>> Needs =
           computeIncomingRegisterNeeds(Ctx.Decoded, Ctx.LS, Function.Begin,
                                        Function.End, Ctx.LS.VCCRegister);
-      CacheIt =
-          PromotionVccNeedsCache.try_emplace(Key, std::move(Needs)).first;
+      CacheIt = PromotionVccNeedsCache.try_emplace(Key, std::move(Needs)).first;
     }
-    return CacheIt->second &&
-           !CacheIt->second->contains(*Continuation);
+    return CacheIt->second && !CacheIt->second->contains(*Continuation);
   };
   uint64_t PromotedBranchCapacityRelays = 0;
-  SmallVector<std::pair<size_t, uint64_t>, 8>
-      ReturnPromotionBranchOnlyRanges;
+  SmallVector<std::pair<size_t, uint64_t>, 8> ReturnPromotionBranchOnlyRanges;
   bool PlanningRegisterlessReturns = true;
   constexpr uint64_t MinBranchCapacitySourceBytes =
       SetPcForwardSequenceBytes + MinInstSize;
@@ -8837,16 +8782,16 @@ assignLongBranchGateways(PatchContext &Ctx,
     if (SearchBegin >= SearchEnd)
       return false;
     auto TryPromote = [&](bool AllowLocalPair) -> bool {
-      auto Begin = llvm::lower_bound(
-          Ctx.Decoded, SearchBegin,
-          [](const InternalDecodedInst &DI, uint64_t Offset) {
-            return DI.Offset < Offset;
-          });
-      auto End = llvm::lower_bound(
-          Ctx.Decoded, SearchEnd,
-          [](const InternalDecodedInst &DI, uint64_t Offset) {
-            return DI.Offset < Offset;
-          });
+      auto Begin =
+          llvm::lower_bound(Ctx.Decoded, SearchBegin,
+                            [](const InternalDecodedInst &DI, uint64_t Offset) {
+                              return DI.Offset < Offset;
+                            });
+      auto End =
+          llvm::lower_bound(Ctx.Decoded, SearchEnd,
+                            [](const InternalDecodedInst &DI, uint64_t Offset) {
+                              return DI.Offset < Offset;
+                            });
       size_t BeginIndex = static_cast<size_t>(Begin - Ctx.Decoded.begin());
       size_t EndIndex = static_cast<size_t>(End - Ctx.Decoded.begin());
       std::optional<size_t> PreviousIndex;
@@ -8886,19 +8831,16 @@ assignLongBranchGateways(PatchContext &Ctx,
 
         std::optional<ElfView::FunctionTextRange> Function =
             Ctx.Elf.findFunctionTextRangeAtOffset(Start);
-        if (!Function ||
-            PromotionIndirectFunctions.contains(Function->Begin)) {
+        if (!Function || PromotionIndirectFunctions.contains(Function->Begin)) {
           PromotionStillPossible.reset(Index);
           continue;
         }
 
         uint64_t DemandBytes =
             RemainingRelayDemand >
-                    (std::numeric_limits<uint32_t>::max() -
-                     *ProbeDirectSize) /
+                    (std::numeric_limits<uint32_t>::max() - *ProbeDirectSize) /
                         MinInstSize
-                ? std::numeric_limits<uint32_t>::max() -
-                      *ProbeDirectSize
+                ? std::numeric_limits<uint32_t>::max() - *ProbeDirectSize
                 : RemainingRelayDemand * MinInstSize;
         uint64_t DesiredSourceBytes = *ProbeDirectSize + DemandBytes;
         DesiredSourceBytes =
@@ -8927,17 +8869,16 @@ assignLongBranchGateways(PatchContext &Ctx,
                                             PromotionProtectedOffsets) ||
               Current->Inst.getOpcode() == Ctx.LS.SNopOpcode)
             break;
-          std::optional<uint64_t> MemberEnd = checkedAddUint64(
-              Member->Offset, Member->Size,
-              "promoted branch-capacity member end");
+          std::optional<uint64_t> MemberEnd =
+              checkedAddUint64(Member->Offset, Member->Size,
+                               "promoted branch-capacity member end");
           if (!MemberEnd || *MemberEnd > Function->End ||
               Replacement.size() + Member->Size > DesiredSourceBytes ||
               OverlapsPromotionRange(Member->Offset, *MemberEnd))
             break;
 
           if (!FullyWritesVcc &&
-              instructionReadsRegister(*Current, Ctx.LS,
-                                       Ctx.LS.VCCRegister))
+              instructionReadsRegister(*Current, Ctx.LS, Ctx.LS.VCCRegister))
             NeedsIncomingVcc = true;
           if (instructionFullyWritesRegister(*Current, Ctx.LS,
                                              Ctx.LS.VCCRegister))
@@ -8952,8 +8893,7 @@ assignLongBranchGateways(PatchContext &Ctx,
             MinimumReplacementSize = Replacement.size();
           if (Replacement.size() >= MinBranchCapacitySourceBytes &&
               !NeedsIncomingVcc && Ctx.LS.VCCRegister.isValid() &&
-              IsVccDeadAtContinuation(*Function, Start,
-                                      Replacement.size()))
+              IsVccDeadAtContinuation(*Function, Start, Replacement.size()))
             BestVccReplacementSize = Replacement.size();
         }
         if (!MinimumReplacementSize ||
@@ -9013,18 +8953,17 @@ assignLongBranchGateways(PatchContext &Ctx,
         Promoted.DirectSetPCForwardBytes = std::move(*Direct);
         Promoted.HasPoolBranchIsland = true;
 
-        std::optional<uint64_t> NewPoolEnd = checkedAddUint64(
-            PoolEndOffset, Promoted.Bytes.size(),
-            "promoted branch-capacity trampoline layout");
+        std::optional<uint64_t> NewPoolEnd =
+            checkedAddUint64(PoolEndOffset, Promoted.Bytes.size(),
+                             "promoted branch-capacity trampoline layout");
         if (!NewPoolEnd)
           return false;
-        Promoted.PoolBranchIslandOffset =
-            *NewPoolEnd - PoolBranchIslandBytes;
+        Promoted.PoolBranchIslandOffset = *NewPoolEnd - PoolBranchIslandBytes;
         size_t NewIndex = Ctx.OutTrampolines.size();
         Ctx.OutTrampolines.emplace_back(std::move(Promoted));
         PoolIslandOwners[*NewPoolEnd - PoolBranchIslandBytes] = {
-            NewIndex, Ctx.OutTrampolines.back().Bytes.size() -
-                          PoolBranchIslandBytes};
+            NewIndex,
+            Ctx.OutTrampolines.back().Bytes.size() - PoolBranchIslandBytes};
         size_t PoolGatewayIndex = Gateways.size();
         Gateways.push_back({*NewPoolEnd - PoolBranchIslandBytes, *NewPoolEnd,
                             *NewPoolEnd - PoolBranchIslandBytes, 0,
@@ -9036,12 +8975,11 @@ assignLongBranchGateways(PatchContext &Ctx,
              Relay += MinInstSize)
           SourceTailIslandOwners[Relay] = NewIndex;
         size_t SourceGatewayIndex = Gateways.size();
-        Gateways.push_back({Tail, End, Tail, 0,
-                            std::numeric_limits<uint64_t>::max()});
+        Gateways.push_back(
+            {Tail, End, Tail, 0, std::numeric_limits<uint64_t>::max()});
         BranchGatewayHeads.insert({Tail, SourceGatewayIndex});
         if (PlanningRegisterlessReturns)
-          ReturnPromotionBranchOnlyRanges.push_back(
-              {SourceGatewayIndex, End});
+          ReturnPromotionBranchOnlyRanges.push_back({SourceGatewayIndex, End});
         ReservePromotionRange(Start, End);
 
         PromotionStillPossible.reset(Index);
@@ -9055,12 +8993,10 @@ assignLongBranchGateways(PatchContext &Ctx,
             isPowerOf2_64(PromotedBranchCapacityRelays))
           log() << "hotswap: promoted safe straight-line source at 0x"
                 << utohexstr(Start) << " (size=" << Replacement.size()
-                << ") to provide "
-                << (Failure.Forward ? "forward" : "return")
+                << ") to provide " << (Failure.Forward ? "forward" : "return")
                 << "-capacity relay window [0x" << utohexstr(Tail) << ",0x"
-                << utohexstr(End) << ") with "
-                << (End - Tail) / MinInstSize << " slot(s) using "
-                << (UseVcc ? "VCC" : "a local SGPR pair")
+                << utohexstr(End) << ") with " << (End - Tail) / MinInstSize
+                << " slot(s) using " << (UseVcc ? "VCC" : "a local SGPR pair")
                 << " (promotion " << PromotedBranchCapacityRelays << ")\n";
         return true;
       }
@@ -9104,19 +9040,18 @@ assignLongBranchGateways(PatchContext &Ctx,
     uint64_t ChainTarget = ReservedReturnTails.lookup(I);
     BranchIslandFailure Failure;
     std::optional<SmallVector<uint64_t, 4>> ReturnIslands =
-        allocateBackwardBranchIslands(
-            Gateways, OwnerOffset, BackSlot,
-            ChainTarget ? ChainTarget : *ReturnTo, &Failure,
-            &BranchGatewayHeads, &OccupiedBranchGatewaySlots,
-            PromoteBranchCapacityRelay);
+        allocateBackwardBranchIslands(Gateways, OwnerOffset, BackSlot,
+                                      ChainTarget ? ChainTarget : *ReturnTo,
+                                      &Failure, &BranchGatewayHeads,
+                                      &OccupiedBranchGatewaySlots,
+                                      PromoteBranchCapacityRelay);
     if (!ReturnIslands) {
       log() << "hotswap: error: no safe return s_branch island chain for far "
                "site 0x"
             << utohexstr(OwnerOffset) << " (size=" << OwnerSize
-            << ", pool-back-slot=0x" << utohexstr(BackSlot)
-            << ", return-to=0x" << utohexstr(*ReturnTo)
-            << ", reserved-tail=0x" << utohexstr(ChainTarget)
-            << ", preserve-vcc=" << OwnerPreservesVcc
+            << ", pool-back-slot=0x" << utohexstr(BackSlot) << ", return-to=0x"
+            << utohexstr(*ReturnTo) << ", reserved-tail=0x"
+            << utohexstr(ChainTarget) << ", preserve-vcc=" << OwnerPreservesVcc
             << ", shared=" << OwnerUsesShared
             << ", mirrored=" << OwnerUsesMirrored << ")\n";
       return false;
@@ -9140,8 +9075,7 @@ assignLongBranchGateways(PatchContext &Ctx,
   // registerless branch relays. Hide its remaining slots from the ordinary
   // set-PC planners, which do not record source-tail gateway ownership and
   // would otherwise have their bytes overwritten by final source padding.
-  SmallVector<std::pair<uint64_t, uint64_t>, 8>
-      HiddenReturnPromotionRanges;
+  SmallVector<std::pair<uint64_t, uint64_t>, 8> HiddenReturnPromotionRanges;
   for (const auto &[GatewayIndex, OriginalEnd] :
        ReturnPromotionBranchOnlyRanges) {
     if (Gateways[GatewayIndex].WritePos < OriginalEnd)
@@ -9153,8 +9087,7 @@ assignLongBranchGateways(PatchContext &Ctx,
   // variable-width ordinary gateway can cross and overwrite it. Splitting a
   // range preserves the free prefix and suffix while making the occupied
   // dword a hard layout boundary.
-  subtractOccupiedBranchGatewaySlots(Gateways,
-                                     OccupiedBranchGatewaySlots);
+  subtractOccupiedBranchGatewaySlots(Gateways, OccupiedBranchGatewaySlots);
   const auto CandidateCountStart = std::chrono::steady_clock::now();
   for (PendingGateway &P : Pending) {
     const Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
@@ -9212,10 +9145,9 @@ assignLongBranchGateways(PatchContext &Ctx,
     std::optional<EncodedSetPcGateway> Gateway = std::move(*GatewayOrErr);
     if (!Gateway) {
       if (T.LongBranchPreservesVcc) {
-        std::optional<EncodedSplitVccGateway> Split =
-            findSplitVccGateway(Gateways, Ctx.LS, T.OriginalOffset,
-                                P.TargetOffset, T.LongBranchSgprBase,
-                                &OccupiedBranchGatewaySlots);
+        std::optional<EncodedSplitVccGateway> Split = findSplitVccGateway(
+            Gateways, Ctx.LS, T.OriginalOffset, P.TargetOffset,
+            T.LongBranchSgprBase, &OccupiedBranchGatewaySlots);
         if (Split) {
           NopSled &Primary = Gateways[Split->PrimaryIndex];
           NopSled &Secondary = Gateways[Split->SecondaryIndex];
@@ -9277,8 +9209,7 @@ assignLongBranchGateways(PatchContext &Ctx,
       OwnerT.SourceTailGatewayBytes = T.ForwardGatewayBytes.size();
     }
     Gateway->Sled->WritePos += T.ForwardGatewayBytes.size();
-    OccupyOrdinaryGateway(T.ForwardGatewayOffset,
-                          T.ForwardGatewayBytes.size());
+    OccupyOrdinaryGateway(T.ForwardGatewayOffset, T.ForwardGatewayBytes.size());
     ++AssignedGateways;
     if (RemainingRelayDemand)
       --RemainingRelayDemand;
@@ -9286,10 +9217,9 @@ assignLongBranchGateways(PatchContext &Ctx,
   Pending = std::move(StillPending);
 
   for (const auto &[Begin, End] : HiddenReturnPromotionRanges)
-    Gateways.push_back({Begin, End, Begin, 0,
-                        std::numeric_limits<uint64_t>::max()});
-  subtractOccupiedBranchGatewaySlots(Gateways,
-                                     OccupiedBranchGatewaySlots);
+    Gateways.push_back(
+        {Begin, End, Begin, 0, std::numeric_limits<uint64_t>::max()});
+  subtractOccupiedBranchGatewaySlots(Gateways, OccupiedBranchGatewaySlots);
   BranchGatewayHeads =
       buildBranchGatewayHeads(Gateways, OccupiedBranchGatewaySlots);
   uint64_t BranchIslandChains = 0;
@@ -9297,14 +9227,13 @@ assignLongBranchGateways(PatchContext &Ctx,
   StillPending.reserve(Pending.size());
   const auto ForwardBranchPlanStart = std::chrono::steady_clock::now();
   for (const PendingGateway &P : Pending) {
-    uint64_t OwnerOffset =
-        Ctx.OutTrampolines[P.TrampolineIndex].OriginalOffset;
+    uint64_t OwnerOffset = Ctx.OutTrampolines[P.TrampolineIndex].OriginalOffset;
     BranchIslandFailure Failure;
     std::optional<SmallVector<uint64_t, 4>> Islands =
-        allocateForwardBranchIslands(
-            Gateways, OwnerOffset, P.TargetOffset, &Failure,
-            &BranchGatewayHeads, &OccupiedBranchGatewaySlots,
-            PromoteBranchCapacityRelay);
+        allocateForwardBranchIslands(Gateways, OwnerOffset, P.TargetOffset,
+                                     &Failure, &BranchGatewayHeads,
+                                     &OccupiedBranchGatewaySlots,
+                                     PromoteBranchCapacityRelay);
     if (!Islands || Islands->empty()) {
       StillPending.push_back(P);
       continue;
@@ -9407,8 +9336,7 @@ assignLongBranchGateways(PatchContext &Ctx,
           return false;
         }
       } else if (Owner != PoolIslandOwners.end()) {
-        Trampoline &OwnerT =
-            Ctx.OutTrampolines[Owner->second.TrampolineIndex];
+        Trampoline &OwnerT = Ctx.OutTrampolines[Owner->second.TrampolineIndex];
         std::memcpy(OwnerT.Bytes.data() + Owner->second.RelativeOffset,
                     Branch.data(), Branch.size());
       } else {
@@ -9443,8 +9371,7 @@ assignLongBranchGateways(PatchContext &Ctx,
           return false;
         }
       } else if (Owner != PoolIslandOwners.end()) {
-        Trampoline &OwnerT =
-            Ctx.OutTrampolines[Owner->second.TrampolineIndex];
+        Trampoline &OwnerT = Ctx.OutTrampolines[Owner->second.TrampolineIndex];
         std::memcpy(OwnerT.Bytes.data() + Owner->second.RelativeOffset,
                     Branch.data(), Branch.size());
       } else {
@@ -9989,13 +9916,11 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
       std::memcpy(Text + T.OriginalOffset + I, LS.SNopBytes.data(),
                   MinInstSize);
     }
-    for (const auto &[RelayOffset, RelayTarget] :
-         T.SourceTailBranchIslands) {
+    for (const auto &[RelayOffset, RelayTarget] : T.SourceTailBranchIslands) {
       if (RelayOffset < T.OriginalOffset ||
           RelayOffset - T.OriginalOffset < PadStart ||
           RelayOffset - T.OriginalOffset > T.OriginalSize - MinInstSize ||
-          (T.HasSourceTailGateway &&
-           RelayOffset >= T.SourceTailGatewayOffset &&
+          (T.HasSourceTailGateway && RelayOffset >= T.SourceTailGatewayOffset &&
            RelayOffset - T.SourceTailGatewayOffset <
                T.SourceTailGatewayBytes)) {
         log() << "hotswap: error: source-tail branch island overlaps the "
@@ -10003,8 +9928,7 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
               << utohexstr(T.OriginalOffset) << "\n";
         return false;
       }
-      SmallVector<uint8_t> Relay =
-          LS.encodeSBranch(RelayOffset, RelayTarget);
+      SmallVector<uint8_t> Relay = LS.encodeSBranch(RelayOffset, RelayTarget);
       if (Relay.size() != MinInstSize) {
         log() << "hotswap: error: source-tail branch island encoding failed "
                  "at 0x"

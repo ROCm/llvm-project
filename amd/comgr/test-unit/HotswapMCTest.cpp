@@ -153,10 +153,11 @@ static bool scalarIncomingSgprIsUnsafe(
   return false;
 }
 
-static bool scalarIncomingRegisterIsNeeded(
-    llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &S,
-    uint64_t FunctionBegin, uint64_t FunctionEnd, uint64_t Continuation,
-    llvm::MCRegister Register) {
+static bool
+scalarIncomingRegisterIsNeeded(llvm::ArrayRef<InternalDecodedInst> Decoded,
+                               const LLVMState &S, uint64_t FunctionBegin,
+                               uint64_t FunctionEnd, uint64_t Continuation,
+                               llvm::MCRegister Register) {
   auto FindInstruction = [&](uint64_t Offset) -> std::optional<size_t> {
     if (Offset < FunctionBegin || Offset >= FunctionEnd)
       return std::nullopt;
@@ -217,21 +218,20 @@ static bool scalarIncomingRegisterIsNeeded(
   return false;
 }
 
-static void expectBatchRegisterNeedsMatchesScalar(
-    const LLVMState &S, llvm::ArrayRef<llvm::StringRef> Lines,
-    llvm::MCRegister Register) {
+static void
+expectBatchRegisterNeedsMatchesScalar(const LLVMState &S,
+                                      llvm::ArrayRef<llvm::StringRef> Lines,
+                                      llvm::MCRegister Register) {
   std::vector<InternalDecodedInst> Decoded = decodeAsmSequence(S, Lines);
   ASSERT_FALSE(Decoded.empty());
   uint64_t FunctionEnd = Decoded.back().Offset + Decoded.back().Size;
-  std::optional<llvm::DenseSet<uint64_t>> Batch =
-      computeIncomingRegisterNeeds(Decoded, S, /*FunctionBegin=*/0,
-                                   FunctionEnd, Register);
+  std::optional<llvm::DenseSet<uint64_t>> Batch = computeIncomingRegisterNeeds(
+      Decoded, S, /*FunctionBegin=*/0, FunctionEnd, Register);
   ASSERT_TRUE(Batch);
   for (const InternalDecodedInst &DI : Decoded)
     EXPECT_EQ(Batch->contains(DI.Offset),
-              scalarIncomingRegisterIsNeeded(
-                  Decoded, S, /*FunctionBegin=*/0, FunctionEnd, DI.Offset,
-                  Register))
+              scalarIncomingRegisterIsNeeded(Decoded, S, /*FunctionBegin=*/0,
+                                             FunctionEnd, DI.Offset, Register))
         << "continuation 0x" << llvm::utohexstr(DI.Offset);
 }
 
@@ -249,27 +249,26 @@ expectBatchSgprProofMatchesScalar(const LLVMState &S,
     Continuations.push_back(DI.Offset);
   Continuations.push_back(1);
   BatchedSgprContinuationTestResult Batch =
-      runBatchedSgprContinuationAnalysisForTest(
-          Decoded, S, /*FunctionBegin=*/0, FunctionEnd, Continuations,
-          *NumberedSgprs);
+      runBatchedSgprContinuationAnalysisForTest(Decoded, S, /*FunctionBegin=*/0,
+                                                FunctionEnd, Continuations,
+                                                *NumberedSgprs);
   EXPECT_EQ(Batch.Analyses, 1u);
   ASSERT_EQ(Batch.Queries.size(), Continuations.size());
   for (size_t Query = 0; Query != Decoded.size(); ++Query) {
-    std::optional<llvm::BitVector> Scalar =
-        unsafeIncomingNumberedSgprsInRange(
-            Decoded, S, /*FunctionBegin=*/0, FunctionEnd,
-            Continuations[Query], *NumberedSgprs);
+    std::optional<llvm::BitVector> Scalar = unsafeIncomingNumberedSgprsInRange(
+        Decoded, S, /*FunctionBegin=*/0, FunctionEnd, Continuations[Query],
+        *NumberedSgprs);
     ASSERT_TRUE(Scalar);
     ASSERT_TRUE(Batch.Queries[Query]);
     EXPECT_EQ(*Batch.Queries[Query], *Scalar)
         << "continuation 0x" << llvm::utohexstr(Continuations[Query]);
     for (unsigned I = 0; I != NumberedSgprs->size(); ++I)
       EXPECT_EQ(Batch.Queries[Query]->test(I),
-                scalarIncomingSgprIsUnsafe(
-                    Decoded, S, /*FunctionBegin=*/0, FunctionEnd,
-                    Continuations[Query], *NumberedSgprs, I))
-          << "continuation 0x" << llvm::utohexstr(Continuations[Query])
-          << ", s" << I;
+                scalarIncomingSgprIsUnsafe(Decoded, S, /*FunctionBegin=*/0,
+                                           FunctionEnd, Continuations[Query],
+                                           *NumberedSgprs, I))
+          << "continuation 0x" << llvm::utohexstr(Continuations[Query]) << ", s"
+          << I;
   }
   EXPECT_FALSE(Batch.Queries.back());
 }
@@ -2302,8 +2301,7 @@ TEST(CollectDirectBranchTargets, ResolvesProductionPcMaterializedCall) {
   // collectDirectBranchTargets normally sees the complete .text decode. Keep
   // the synthetic production slice faithful to that contract by representing
   // the resolved local target as an instruction boundary.
-  llvm::SmallVector<uint8_t> TargetBytes =
-      assembleInstructions("s_endpgm", S);
+  llvm::SmallVector<uint8_t> TargetBytes = assembleInstructions("s_endpgm", S);
   std::vector<InternalDecodedInst> TargetDecoded;
   ASSERT_TRUE(decodeTextSection(TargetBytes.data(), TargetBytes.size(), S,
                                 TargetDecoded));
@@ -2469,8 +2467,8 @@ TEST(SourceTailSafety, IndexedRangeQueryMatchesOverlapBoundaries) {
 
   llvm::SmallVector<ElfView::FunctionTextRange, 2> SameBeginDifferentEnd{
       {0, 32, nullptr, nullptr}, {0, 24, nullptr, nullptr}};
-  EXPECT_FALSE(sourceHasUniqueFunctionRange(
-      T, SameBeginDifferentEnd, /*TextAddr=*/0));
+  EXPECT_FALSE(
+      sourceHasUniqueFunctionRange(T, SameBeginDifferentEnd, /*TextAddr=*/0));
   EXPECT_FALSE(sourceHasUniqueFunctionRangeIndexedForTest(
       T, SameBeginDifferentEnd, /*TextAddr=*/0));
 
@@ -2480,16 +2478,14 @@ TEST(SourceTailSafety, IndexedRangeQueryMatchesOverlapBoundaries) {
   T.FunctionEnd = 40;
   T.OriginalOffset = 16;
   T.OriginalSize = 8;
-  EXPECT_TRUE(
-      sourceHasUniqueFunctionRange(T, PartialOverlap, /*TextAddr=*/0));
-  EXPECT_TRUE(sourceHasUniqueFunctionRangeIndexedForTest(
-      T, PartialOverlap, /*TextAddr=*/0));
+  EXPECT_TRUE(sourceHasUniqueFunctionRange(T, PartialOverlap, /*TextAddr=*/0));
+  EXPECT_TRUE(sourceHasUniqueFunctionRangeIndexedForTest(T, PartialOverlap,
+                                                         /*TextAddr=*/0));
 
   T.OriginalSize = 4;
-  EXPECT_FALSE(
-      sourceHasUniqueFunctionRange(T, PartialOverlap, /*TextAddr=*/0));
-  EXPECT_FALSE(sourceHasUniqueFunctionRangeIndexedForTest(
-      T, PartialOverlap, /*TextAddr=*/0));
+  EXPECT_FALSE(sourceHasUniqueFunctionRange(T, PartialOverlap, /*TextAddr=*/0));
+  EXPECT_FALSE(sourceHasUniqueFunctionRangeIndexedForTest(T, PartialOverlap,
+                                                          /*TextAddr=*/0));
 }
 
 TEST(SourceTailSafety, IndexedRangeQueryMatchesRandomizedLinearOracle) {
@@ -2506,14 +2502,12 @@ TEST(SourceTailSafety, IndexedRangeQueryMatchesRandomizedLinearOracle) {
     for (unsigned I = 0; I != Count; ++I) {
       uint64_t Begin = (Next() % 64) * MinInstSize;
       uint64_t End = Begin + (1 + Next() % 24) * MinInstSize;
-      Ranges.push_back(
-          {TextAddr + Begin, TextAddr + End, nullptr, nullptr});
+      Ranges.push_back({TextAddr + Begin, TextAddr + End, nullptr, nullptr});
       if ((Next() & 3) == 0)
         Ranges.push_back(Ranges.back());
     }
 
-    const ElfView::FunctionTextRange &Selected =
-        Ranges[Next() % Ranges.size()];
+    const ElfView::FunctionTextRange &Selected = Ranges[Next() % Ranges.size()];
     Trampoline T;
     T.HasFunctionRange = (Next() & 15) != 0;
     T.FunctionStart = Selected.Begin - TextAddr;
@@ -4219,7 +4213,31 @@ TEST(SafeSgprScratchBlock, CommitCacheIsMonotoneAcrossOwnerScopes) {
   std::optional<ElfView::FunctionTextRange> Function =
       View.findFunctionTextRangeAtOffset(0);
   ASSERT_TRUE(Function);
-  auto FunctionKey = std::make_pair(Function->Begin, Function->End);
+  std::pair<uint64_t, uint64_t> FunctionKey{Function->Begin, Function->End};
+
+  // Exercise the production owner lookup and usage caches before overriding
+  // owner scopes below. A repeat query must return the same scratch block
+  // without adding another function-owner or usage entry.
+  EXPECT_TRUE(Ctx.FunctionKernelOwner.empty());
+  EXPECT_TRUE(Ctx.FunctionSgprUsage.empty());
+  std::optional<SafeSgprScratchBlock> Discovered =
+      findSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, /*Count=*/2,
+                               /*Alignment=*/2, "unit test");
+  ASSERT_TRUE(Discovered);
+  EXPECT_EQ(Discovered->Base, 4u);
+  EXPECT_EQ(Discovered->Count, 2u);
+  ASSERT_EQ(Ctx.FunctionKernelOwner.size(), 1u);
+  ASSERT_EQ(Ctx.FunctionSgprUsage.size(), 1u);
+  EXPECT_EQ(Ctx.FunctionKernelOwner.lookup(FunctionKey), "kernel");
+
+  std::optional<SafeSgprScratchBlock> Cached =
+      findSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, /*Count=*/2,
+                               /*Alignment=*/2, "unit test");
+  ASSERT_TRUE(Cached);
+  EXPECT_EQ(Cached->Base, Discovered->Base);
+  EXPECT_EQ(Cached->Count, Discovered->Count);
+  EXPECT_EQ(Ctx.FunctionKernelOwner.size(), 1u);
+  EXPECT_EQ(Ctx.FunctionSgprUsage.size(), 1u);
 
   // Overflow and a missing selected owner fail without changing any cache,
   // counter, or externally visible kernel requirement.
@@ -4374,10 +4392,9 @@ TEST(BranchIslandAllocator, AcceptsExactPositiveReachBoundary) {
   std::vector<NopSled> Gateways = {
       {MaxSledDistance, MaxSledDistance + MinInstSize, MaxSledDistance,
        /*FunctionStart=*/0, /*FunctionEnd=*/3 * MaxSledDistance}};
-  BranchIslandAllocatorTestResult Result =
-      runBranchIslandAllocatorForTest(
-          std::move(Gateways), /*OwnerOffset=*/0, /*FromOffset=*/0,
-          /*TargetOffset=*/2 * MaxSledDistance, /*Backward=*/false);
+  BranchIslandAllocatorTestResult Result = runBranchIslandAllocatorForTest(
+      std::move(Gateways), /*OwnerOffset=*/0, /*FromOffset=*/0,
+      /*TargetOffset=*/2 * MaxSledDistance, /*Backward=*/false);
   ASSERT_TRUE(Result.Success);
   ASSERT_EQ(Result.Islands.size(), 1u);
   EXPECT_EQ(Result.Islands.front(), MaxSledDistance);
@@ -4388,10 +4405,9 @@ TEST(BranchIslandAllocator, RollsBackPartialChainAndAliases) {
   std::vector<NopSled> Gateways = {
       {Head, Head + MinInstSize, Head, 0, 400000},
       {Head, Head + 2 * MinInstSize, Head, 0, 400000}};
-  BranchIslandAllocatorTestResult Result =
-      runBranchIslandAllocatorForTest(
-          std::move(Gateways), /*OwnerOffset=*/0, /*FromOffset=*/300000,
-          /*TargetOffset=*/0, /*Backward=*/true);
+  BranchIslandAllocatorTestResult Result = runBranchIslandAllocatorForTest(
+      std::move(Gateways), /*OwnerOffset=*/0, /*FromOffset=*/300000,
+      /*TargetOffset=*/0, /*Backward=*/true);
   EXPECT_FALSE(Result.Success);
   ASSERT_EQ(Result.Gateways.size(), 2u);
   EXPECT_EQ(Result.Gateways[0].WritePos, Head);
@@ -4412,9 +4428,8 @@ TEST(BranchIslandAllocator, HoldsPartialChainAcrossMultiplePromotions) {
           std::move(Gateways), /*OwnerOffset=*/0, /*FromOffset=*/800000,
           /*TargetOffset=*/20000, /*Backward=*/true, Promotions);
   ASSERT_TRUE(Result.Success);
-  EXPECT_EQ(Result.Islands,
-            (llvm::SmallVector<uint64_t, 4>{670000, 540000, 410000, 280000,
-                                            150000}));
+  EXPECT_EQ(Result.Islands, (llvm::SmallVector<uint64_t, 4>{
+                                670000, 540000, 410000, 280000, 150000}));
   EXPECT_EQ(Result.HeldIslandCountsAtPromotion,
             (llvm::SmallVector<size_t, 4>{3, 4}));
 }
@@ -4449,10 +4464,9 @@ TEST(BranchIslandAllocator, SkipsGatewayFromDifferentFunction) {
        /*FunctionStart=*/0, /*FunctionEnd=*/300000},
       {260000, 260000 + MinInstSize, 260000,
        /*FunctionStart=*/0, /*FunctionEnd=*/300000}};
-  BranchIslandAllocatorTestResult Result =
-      runBranchIslandAllocatorForTest(
-          std::move(Gateways), /*OwnerOffset=*/0, /*FromOffset=*/0,
-          /*TargetOffset=*/262144, /*Backward=*/false);
+  BranchIslandAllocatorTestResult Result = runBranchIslandAllocatorForTest(
+      std::move(Gateways), /*OwnerOffset=*/0, /*FromOffset=*/0,
+      /*TargetOffset=*/262144, /*Backward=*/false);
   ASSERT_TRUE(Result.Success);
   ASSERT_EQ(Result.Islands.size(), 2u);
   EXPECT_EQ(Result.Islands[0], 130000u);
@@ -4461,28 +4475,24 @@ TEST(BranchIslandAllocator, SkipsGatewayFromDifferentFunction) {
 
 TEST(BranchIslandAllocator, CoAdvancesEqualPhysicalAliases) {
   std::vector<NopSled> Gateways = {
-      {MaxSledDistance, MaxSledDistance + 2 * MinInstSize, MaxSledDistance,
-       0, 3 * MaxSledDistance},
-      {MaxSledDistance, MaxSledDistance + 3 * MinInstSize, MaxSledDistance,
-       0, 3 * MaxSledDistance}};
-  BranchIslandAllocatorTestResult Result =
-      runBranchIslandAllocatorForTest(
-          std::move(Gateways), /*OwnerOffset=*/0, /*FromOffset=*/0,
-          /*TargetOffset=*/2 * MaxSledDistance, /*Backward=*/false);
+      {MaxSledDistance, MaxSledDistance + 2 * MinInstSize, MaxSledDistance, 0,
+       3 * MaxSledDistance},
+      {MaxSledDistance, MaxSledDistance + 3 * MinInstSize, MaxSledDistance, 0,
+       3 * MaxSledDistance}};
+  BranchIslandAllocatorTestResult Result = runBranchIslandAllocatorForTest(
+      std::move(Gateways), /*OwnerOffset=*/0, /*FromOffset=*/0,
+      /*TargetOffset=*/2 * MaxSledDistance, /*Backward=*/false);
   ASSERT_TRUE(Result.Success);
   ASSERT_EQ(Result.Gateways.size(), 2u);
-  EXPECT_EQ(Result.Gateways[0].WritePos,
-            MaxSledDistance + MinInstSize);
-  EXPECT_EQ(Result.Gateways[1].WritePos,
-            MaxSledDistance + MinInstSize);
+  EXPECT_EQ(Result.Gateways[0].WritePos, MaxSledDistance + MinInstSize);
+  EXPECT_EQ(Result.Gateways[1].WritePos, MaxSledDistance + MinInstSize);
   EXPECT_TRUE(Result.Occupied.contains(MaxSledDistance));
 }
 
 TEST(BranchIslandAllocator, SplitsPartialAliasAtOccupiedDword) {
   llvm::DenseSet<uint64_t> Occupied = {108};
-  std::vector<NopSled> Available =
-      subtractOccupiedBranchGatewaySlotsForTest(
-          {{100, 140, 100, 0, 200}}, Occupied);
+  std::vector<NopSled> Available = subtractOccupiedBranchGatewaySlotsForTest(
+      {{100, 140, 100, 0, 200}}, Occupied);
   ASSERT_EQ(Available.size(), 2u);
   EXPECT_EQ(Available[0].Start, 100u);
   EXPECT_EQ(Available[0].End, 108u);
@@ -4511,17 +4521,14 @@ TEST(BranchPromotionSearchRange, ClampsForwardCorridorToReachableBand) {
 
 TEST(BranchPromotionSearchRange, ClampsBackwardCorridorToReachableBand) {
   constexpr uint64_t Current = 1000000;
-  auto Far =
-      branchPromotionSearchRangeForTest(Current, /*CorridorOffset=*/1000,
-                                        /*Forward=*/false);
-  EXPECT_EQ(Far.first, Current - MaxSledDistance -
-                           SetPcForwardSequenceBytes);
+  auto Far = branchPromotionSearchRangeForTest(Current, /*CorridorOffset=*/1000,
+                                               /*Forward=*/false);
+  EXPECT_EQ(Far.first, Current - MaxSledDistance - SetPcForwardSequenceBytes);
   EXPECT_EQ(Far.second, Current);
 
   auto Near = branchPromotionSearchRangeForTest(
       Current, /*CorridorOffset=*/950000, /*Forward=*/false);
-  EXPECT_EQ(Near.first,
-            950000u - SetPcForwardSequenceBytes - MinInstSize);
+  EXPECT_EQ(Near.first, 950000u - SetPcForwardSequenceBytes - MinInstSize);
   EXPECT_EQ(Near.second, Current);
 
   auto Saturated = branchPromotionSearchRangeForTest(
@@ -4555,10 +4562,10 @@ TEST(BranchPromotionCandidateCursor, MatchesScalarDirectionalOrderAndBounds) {
                                            /*Forward=*/false),
             ScalarBackward);
 
-  EXPECT_TRUE(promotionCandidateOrderForTest(
-                  Count, Rejected, /*BeginIndex=*/Count,
-                  /*EndIndex=*/Count + 10, /*Forward=*/true)
-                  .empty());
+  EXPECT_TRUE(
+      promotionCandidateOrderForTest(Count, Rejected, /*BeginIndex=*/Count,
+                                     /*EndIndex=*/Count + 10, /*Forward=*/true)
+          .empty());
 }
 
 TEST(BranchPromotionCandidateCursor,
@@ -4570,17 +4577,15 @@ TEST(BranchPromotionCandidateCursor,
   EXPECT_EQ(Initial, (llvm::SmallVector<size_t, 8>{4, 3, 2, 1}));
 
   const size_t PermanentlyRejected[] = {4, 2};
-  llvm::SmallVector<size_t, 8> Retried =
-      promotionCandidateOrderForTest(
-          /*CandidateCount=*/6, PermanentlyRejected,
-          /*BeginIndex=*/1, /*EndIndex=*/5, /*Forward=*/true);
+  llvm::SmallVector<size_t, 8> Retried = promotionCandidateOrderForTest(
+      /*CandidateCount=*/6, PermanentlyRejected,
+      /*BeginIndex=*/1, /*EndIndex=*/5, /*Forward=*/true);
   EXPECT_EQ(Retried, (llvm::SmallVector<size_t, 8>{3, 1}));
 
   // The same persistent bits retain the opposite directional order.
-  llvm::SmallVector<size_t, 8> Backward =
-      promotionCandidateOrderForTest(
-          /*CandidateCount=*/6, PermanentlyRejected,
-          /*BeginIndex=*/1, /*EndIndex=*/5, /*Forward=*/false);
+  llvm::SmallVector<size_t, 8> Backward = promotionCandidateOrderForTest(
+      /*CandidateCount=*/6, PermanentlyRejected,
+      /*BeginIndex=*/1, /*EndIndex=*/5, /*Forward=*/false);
   EXPECT_EQ(Backward, (llvm::SmallVector<size_t, 8>{1, 3}));
 }
 
@@ -4651,14 +4656,14 @@ TEST(RegisterLiveness, PartialVccDefinitionDoesNotKillFullVcc) {
   EXPECT_TRUE(instructionFullyWritesRegister(Full.front(), S, VccLo));
   EXPECT_TRUE(instructionFullyWritesRegister(Full.front(), S, S.VCCRegister));
 
-  llvm::SmallVector<uint8_t> PartialThenHighUse = assembleInstructions(
-      "s_mov_b32 vcc_lo, s0\ns_mov_b32 s1, vcc_hi", S);
+  llvm::SmallVector<uint8_t> PartialThenHighUse =
+      assembleInstructions("s_mov_b32 vcc_lo, s0\ns_mov_b32 s1, vcc_hi", S);
   ASSERT_FALSE(PartialThenHighUse.empty());
-  EXPECT_TRUE(replacementNeedsIncomingRegister(PartialThenHighUse, S,
-                                               S.VCCRegister));
+  EXPECT_TRUE(
+      replacementNeedsIncomingRegister(PartialThenHighUse, S, S.VCCRegister));
 
-  llvm::SmallVector<uint8_t> FullThenHighUse = assembleInstructions(
-      "s_mov_b64 vcc, -1\ns_mov_b32 s1, vcc_hi", S);
+  llvm::SmallVector<uint8_t> FullThenHighUse =
+      assembleInstructions("s_mov_b64 vcc, -1\ns_mov_b32 s1, vcc_hi", S);
   ASSERT_FALSE(FullThenHighUse.empty());
   EXPECT_FALSE(
       replacementNeedsIncomingRegister(FullThenHighUse, S, S.VCCRegister));
@@ -4679,28 +4684,27 @@ TEST(RegisterLiveness, BatchedVccNeedsRespectControlFlowAndFullDefs) {
                                         S.VCCRegister);
   };
 
-  std::optional<llvm::DenseSet<uint64_t>> Partial = Compute(
-      llvm::ArrayRef<llvm::StringRef>({"s_mov_b32 vcc_lo, s0",
-                                      "s_mov_b32 s1, vcc_hi", "s_endpgm"}));
+  std::optional<llvm::DenseSet<uint64_t>> Partial =
+      Compute(llvm::ArrayRef<llvm::StringRef>(
+          {"s_mov_b32 vcc_lo, s0", "s_mov_b32 s1, vcc_hi", "s_endpgm"}));
   ASSERT_TRUE(Partial);
   EXPECT_TRUE(Partial->contains(0));
 
-  std::optional<llvm::DenseSet<uint64_t>> Full = Compute(
-      llvm::ArrayRef<llvm::StringRef>({"s_mov_b64 vcc, -1",
-                                      "s_mov_b32 s1, vcc_hi", "s_endpgm"}));
+  std::optional<llvm::DenseSet<uint64_t>> Full =
+      Compute(llvm::ArrayRef<llvm::StringRef>(
+          {"s_mov_b64 vcc, -1", "s_mov_b32 s1, vcc_hi", "s_endpgm"}));
   ASSERT_TRUE(Full);
   EXPECT_FALSE(Full->contains(0));
   EXPECT_TRUE(Full->contains(MinInstSize));
 
   std::optional<llvm::DenseSet<uint64_t>> BranchUnion = Compute(
-      llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1",
-                                      "s_mov_b64 vcc, -1",
-                                      "s_mov_b32 s1, vcc_hi", "s_endpgm"}));
+      llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1", "s_mov_b64 vcc, -1",
+                                       "s_mov_b32 s1, vcc_hi", "s_endpgm"}));
   ASSERT_TRUE(BranchUnion);
   EXPECT_TRUE(BranchUnion->contains(0));
 
-  std::optional<llvm::DenseSet<uint64_t>> Opaque = Compute(
-      llvm::ArrayRef<llvm::StringRef>({"s_set_pc_i64 s[0:1]"}));
+  std::optional<llvm::DenseSet<uint64_t>> Opaque =
+      Compute(llvm::ArrayRef<llvm::StringRef>({"s_set_pc_i64 s[0:1]"}));
   ASSERT_TRUE(Opaque);
   EXPECT_TRUE(Opaque->contains(0));
 
@@ -4711,23 +4715,25 @@ TEST(RegisterLiveness, BatchedVccNeedsRespectControlFlowAndFullDefs) {
 
   std::optional<llvm::DenseSet<uint64_t>> LoopWithUnsafeExit = Compute(
       llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1", "s_branch -2",
-                                      "s_mov_b32 s1, vcc_hi", "s_endpgm"}));
+                                       "s_mov_b32 s1, vcc_hi", "s_endpgm"}));
   ASSERT_TRUE(LoopWithUnsafeExit);
   EXPECT_TRUE(LoopWithUnsafeExit->contains(0));
   EXPECT_TRUE(LoopWithUnsafeExit->contains(MinInstSize));
 
   expectBatchRegisterNeedsMatchesScalar(
-      S, llvm::ArrayRef<llvm::StringRef>({"s_mov_b32 vcc_lo, s0",
-                                         "s_mov_b32 s1, vcc_hi", "s_endpgm"}),
+      S,
+      llvm::ArrayRef<llvm::StringRef>(
+          {"s_mov_b32 vcc_lo, s0", "s_mov_b32 s1, vcc_hi", "s_endpgm"}),
       S.VCCRegister);
   expectBatchRegisterNeedsMatchesScalar(
-      S, llvm::ArrayRef<llvm::StringRef>({"s_mov_b64 vcc, -1",
-                                         "s_mov_b32 s1, vcc_hi", "s_endpgm"}),
+      S,
+      llvm::ArrayRef<llvm::StringRef>(
+          {"s_mov_b64 vcc, -1", "s_mov_b32 s1, vcc_hi", "s_endpgm"}),
       S.VCCRegister);
   expectBatchRegisterNeedsMatchesScalar(
-      S, llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1",
-                                         "s_mov_b64 vcc, -1",
-                                         "s_mov_b32 s1, vcc_hi", "s_endpgm"}),
+      S,
+      llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1", "s_mov_b64 vcc, -1",
+                                       "s_mov_b32 s1, vcc_hi", "s_endpgm"}),
       S.VCCRegister);
   expectBatchRegisterNeedsMatchesScalar(
       S, llvm::ArrayRef<llvm::StringRef>({"s_set_pc_i64 s[0:1]"}),
@@ -4735,8 +4741,9 @@ TEST(RegisterLiveness, BatchedVccNeedsRespectControlFlowAndFullDefs) {
   expectBatchRegisterNeedsMatchesScalar(
       S, llvm::ArrayRef<llvm::StringRef>({"s_branch -1"}), S.VCCRegister);
   expectBatchRegisterNeedsMatchesScalar(
-      S, llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1", "s_branch -2",
-                                         "s_mov_b32 s1, vcc_hi", "s_endpgm"}),
+      S,
+      llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1", "s_branch -2",
+                                       "s_mov_b32 s1, vcc_hi", "s_endpgm"}),
       S.VCCRegister);
 }
 
@@ -4760,9 +4767,9 @@ TEST(RegisterLiveness, BatchProofMatchesScalarAcrossControlFlow) {
                                              "s_mov_b32 s30, 0"};
   expectBatchSgprProofMatchesScalar(S, OpaqueBeforeDef);
 
-  const llvm::StringRef TiedAndTuple[] = {
-      "s_add_u32 s30, s30, 1", "s_mov_b64 s[30:31], s[0:1]",
-      "s_mov_b32 s2, s31", "s_endpgm"};
+  const llvm::StringRef TiedAndTuple[] = {"s_add_u32 s30, s30, 1",
+                                          "s_mov_b64 s[30:31], s[0:1]",
+                                          "s_mov_b32 s2, s31", "s_endpgm"};
   expectBatchSgprProofMatchesScalar(S, TiedAndTuple);
 
   const llvm::StringRef InvalidBranchEdge[] = {"s_cbranch_scc0 100",
@@ -4796,15 +4803,15 @@ TEST(RegisterLiveness, BatchedSgprProofMatchesRandomizedBranchLoops) {
         break;
       case 2: {
         size_t Target = Next() % InstructionCount;
-        int64_t Delta = static_cast<int64_t>(Target) -
-                        static_cast<int64_t>(I) - 1;
+        int64_t Delta =
+            static_cast<int64_t>(Target) - static_cast<int64_t>(I) - 1;
         Storage.push_back("s_cbranch_scc0 " + std::to_string(Delta));
         break;
       }
       case 3: {
         size_t Target = Next() % InstructionCount;
-        int64_t Delta = static_cast<int64_t>(Target) -
-                        static_cast<int64_t>(I) - 1;
+        int64_t Delta =
+            static_cast<int64_t>(Target) - static_cast<int64_t>(I) - 1;
         Storage.push_back("s_branch " + std::to_string(Delta));
         break;
       }
@@ -4826,9 +4833,9 @@ TEST(RegisterLiveness, BatchedSgprProofPreservesReplacementUnion) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
   std::vector<InternalDecodedInst> Decoded = decodeAsmSequence(
-      S, llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1",
-                                         "s_mov_b32 s104, 0",
-                                         "s_mov_b32 s0, s103", "s_endpgm"}));
+      S,
+      llvm::ArrayRef<llvm::StringRef>({"s_cbranch_scc0 1", "s_mov_b32 s104, 0",
+                                       "s_mov_b32 s0, s103", "s_endpgm"}));
   ASSERT_FALSE(Decoded.empty());
   std::optional<llvm::SmallVector<llvm::MCRegister, 128>> NumberedSgprs =
       resolveNumberedSgprRegisters(*S.MRI, /*MaxSgprs=*/106);
@@ -4836,24 +4843,22 @@ TEST(RegisterLiveness, BatchedSgprProofPreservesReplacementUnion) {
   uint64_t FunctionEnd = Decoded.back().Offset + Decoded.back().Size;
   uint64_t Continuation = Decoded[1].Offset;
   BatchedSgprContinuationTestResult Batch =
-      runBatchedSgprContinuationAnalysisForTest(
-          Decoded, S, /*FunctionBegin=*/0, FunctionEnd, {Continuation},
-          *NumberedSgprs);
+      runBatchedSgprContinuationAnalysisForTest(Decoded, S, /*FunctionBegin=*/0,
+                                                FunctionEnd, {Continuation},
+                                                *NumberedSgprs);
   ASSERT_EQ(Batch.Analyses, 1u);
   ASSERT_EQ(Batch.Queries.size(), 1u);
   ASSERT_TRUE(Batch.Queries.front());
-  std::optional<llvm::BitVector> Scalar =
-      unsafeIncomingNumberedSgprsInRange(
-          Decoded, S, /*FunctionBegin=*/0, FunctionEnd, Continuation,
-          *NumberedSgprs);
+  std::optional<llvm::BitVector> Scalar = unsafeIncomingNumberedSgprsInRange(
+      Decoded, S, /*FunctionBegin=*/0, FunctionEnd, Continuation,
+      *NumberedSgprs);
   ASSERT_TRUE(Scalar);
 
   llvm::SmallVector<uint8_t> Replacement =
       assembleInstructions("s_mov_b32 s102, 0\ns_mov_b32 s1, s101", S);
   ASSERT_FALSE(Replacement.empty());
   llvm::BitVector ReplacementUnsafe =
-      unsafeIncomingNumberedSgprsInReplacement(Replacement, S,
-                                               *NumberedSgprs);
+      unsafeIncomingNumberedSgprsInReplacement(Replacement, S, *NumberedSgprs);
   llvm::BitVector BatchedUnion = *Batch.Queries.front();
   BatchedUnion |= ReplacementUnsafe;
   llvm::BitVector ScalarUnion = *Scalar;
