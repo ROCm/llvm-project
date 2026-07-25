@@ -107,6 +107,7 @@ add_executable(HotswapMCTests
   HotswapDefUseTest.cpp
   HotswapCfgTest.cpp
   HotswapLivenessTest.cpp
+  HotswapScratchTest.cpp
   ../src/comgr-hotswap-b0a0.cpp
   ../src/comgr-hotswap-def-use.cpp
   ../src/comgr-hotswap-cfg.cpp

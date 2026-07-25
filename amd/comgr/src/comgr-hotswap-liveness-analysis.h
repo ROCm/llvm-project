@@ -35,6 +35,8 @@
 #include "llvm/ADT/ArrayRef.h"
 
 #include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -64,6 +66,15 @@ struct BlockLiveness {
   RegisterSet Kill;
 };
 
+/// Tunables for the analysis and its scratch queries.
+struct LivenessAnalysisOptions {
+  /// Lowest VGPR index the scratch finders may return. An allocation floor
+  /// (not a dataflow fact): the live-before sets are unaffected, but
+  /// findFreeRun() will not hand out a VGPR below this index, so callers can
+  /// force scratch above a descriptor-declared range.
+  uint16_t MinFreeVgpr = 0;
+};
+
 /// Backward SGPR/VGPR/ACC_VGPR liveness over one decoded CFG scope.
 class LivenessAnalysis {
 public:
@@ -76,7 +87,8 @@ public:
   LivenessAnalysis(llvm::ArrayRef<InternalDecodedInst> Decoded,
                    const Cfg &Graph, const llvm::MCInstrInfo &MCII,
                    const llvm::MCRegisterInfo &MRI,
-                   llvm::ArrayRef<unsigned> Scope = {});
+                   llvm::ArrayRef<unsigned> Scope = {},
+                   LivenessAnalysisOptions Options = {});
 
   /// Dataflow state for the block at \p BlockIndex (into Cfg::Blocks). Blocks
   /// outside the analyzed scope report empty sets.
@@ -89,10 +101,31 @@ public:
   /// Whether \p Ref is live immediately before the instruction at \p InstIndex.
   [[nodiscard]] bool isLiveBefore(size_t InstIndex, RegisterRef Ref) const;
 
+  /// Base index of \p Count consecutive VGPRs that are all dead immediately
+  /// before the instruction at \p InstIndex, or std::nullopt if none fit.
+  ///
+  /// The search starts at max(\p SearchStart, options.MinFreeVgpr). Used to
+  /// allocate temporary VGPRs when a lowering expands one instruction into a
+  /// host sequence. Returns std::nullopt when \p InstIndex was not analyzed.
+  [[nodiscard]] std::optional<uint16_t>
+  findFreeRun(size_t InstIndex, uint16_t Count, uint16_t SearchStart = 0) const;
+
+  /// Base index of an even-aligned dead SGPR pair before the instruction at
+  /// \p InstIndex, or std::nullopt. Even alignment is required for pair
+  /// operations such as saving EXEC with an s_mov_b64-style move.
+  [[nodiscard]] std::optional<uint16_t>
+  findFreeSgprPair(size_t InstIndex, uint16_t SearchStart = 0) const;
+
+  /// Index of one dead SGPR before the instruction at \p InstIndex, or
+  /// std::nullopt.
+  [[nodiscard]] std::optional<uint16_t>
+  findFreeSgpr(size_t InstIndex, uint16_t SearchStart = 0) const;
+
 private:
   std::vector<BlockLiveness> BlockState;
   std::unordered_map<size_t, RegisterSet> LiveBeforeByIndex;
   RegisterSet Empty;
+  uint16_t MinFreeVgpr = 0;
 };
 
 } // namespace reglive
