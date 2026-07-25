@@ -133,7 +133,7 @@ def resolve_library_dirs(
 
 
 def discover_inputs(
-    paths: Sequence[str], recursive: bool, include_glob: str
+    paths: Sequence[str], recursive: bool, include_globs: Sequence[str]
 ) -> list[pathlib.Path]:
     discovered: set[pathlib.Path] = set()
     for raw_path in paths:
@@ -143,10 +143,13 @@ def discover_inputs(
             continue
         if not path.is_dir():
             raise ValueError(f"input is neither a regular file nor directory: {path}")
-        iterator = path.rglob(include_glob) if recursive else path.glob(include_glob)
-        discovered.update(
-            candidate.resolve() for candidate in iterator if candidate.is_file()
-        )
+        for include_glob in include_globs:
+            iterator = (
+                path.rglob(include_glob) if recursive else path.glob(include_glob)
+            )
+            discovered.update(
+                candidate.resolve() for candidate in iterator if candidate.is_file()
+            )
     return sorted(discovered)
 
 
@@ -288,9 +291,11 @@ def run_one(
         input_size = None
 
     if outputs_dir is not None:
-        outputs_dir.mkdir(parents=True, exist_ok=True)
-        safe = relative.replace(os.sep, "__")
-        output = outputs_dir / f"{safe}.co"
+        # Preserve the input's relative directory structure so retained outputs
+        # map 1:1 to inputs; flattening separators to "__" would collide (e.g.
+        # a/b.hsaco and a__b.hsaco) and race under parallel workers.
+        output = outputs_dir / f"{relative}.co"
+        output.parent.mkdir(parents=True, exist_ok=True)
         cleanup = False
     else:
         handle, temporary = tempfile.mkstemp(suffix=".co", prefix="hotswap-")
@@ -349,16 +354,28 @@ def run_one(
             result_line = line.split(":", 1)[1].strip()
             break
 
-    output_size = output.stat().st_size if output.is_file() else None
+    output_size: int | None = None
+    output_is_elf = False
+    if output.is_file():
+        output_size = output.stat().st_size
+        try:
+            with output.open("rb") as stream:
+                output_is_elf = stream.read(4) == b"\x7fELF"
+        except OSError:
+            output_is_elf = False
 
     if spawn_error is not None:
         status = "spawn_error"
     elif process_result["timed_out"]:
         status = "timeout"
-    elif process_result["return_code"] == 0:
-        status = "pass"
-    else:
+    elif process_result["return_code"] != 0:
         status = "fail"
+    elif result_line != "SUCCESS" or not output_is_elf:
+        # Exit 0 but the rewrite did not report SUCCESS or wrote no valid ELF
+        # (e.g. INVALID_ARGUMENT); not a successful translation.
+        status = "fail"
+    else:
+        status = "pass"
 
     if cleanup:
         output.unlink(missing_ok=True)
@@ -416,6 +433,13 @@ def positive_int(value: str) -> int:
     parsed = int(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be greater than zero")
+    return parsed
+
+
+def nonnegative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be nonnegative")
     return parsed
 
 
@@ -571,8 +595,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--include-glob",
-        default="*.hsaco",
-        help="filename glob within directories (default: *.hsaco)",
+        action="append",
+        default=None,
+        metavar="GLOB",
+        help=(
+            "filename glob within directories; repeatable (default: *.hsaco). "
+            "Match extensions explicitly, e.g. "
+            "--include-glob '*.hsaco' --include-glob '*.co'"
+        ),
     )
     parser.add_argument(
         "--recursive",
@@ -589,9 +619,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--jobs",
         "-j",
-        type=positive_int,
+        type=nonnegative_int,
         default=0,
-        help="parallel translations; zero auto-detects CPU count (default: auto)",
+        help="parallel translations; 0 auto-detects CPU count (default: 0)",
     )
     parser.add_argument(
         "--memory-limit-gb",
@@ -701,9 +731,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         reexec_under_memory_guard(args)
         hotswap = resolve_executable(args.hotswap, "hotswap")
         library_dirs = resolve_library_dirs(args.hotswap_library_dir, hotswap)
-        sources = discover_inputs(args.inputs, args.recursive, args.include_glob)
+        include_globs = args.include_glob or ["*.hsaco"]
+        sources = discover_inputs(args.inputs, args.recursive, include_globs)
         if not sources:
-            raise ValueError(f"no files matching {args.include_glob!r} were found")
+            raise ValueError(f"no files matching {include_globs!r} were found")
     except (OSError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

@@ -34,19 +34,26 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import hotswap_bench as bench  # noqa: E402
 
-# Defaults injected only when the flag is not already supplied by the caller.
-DEFAULTS: dict[str, str] = {
-    "--include-glob": "*.[hc][so]*",
-    "--timeout-seconds": "300",
-    "--csv": "hotswap_bench_all.csv",
-}
+# Each group: (flag names that mark it as caller-supplied, tokens to append
+# when none of those flags are present). Extensions are matched explicitly so
+# stray files like results.csv, header.host, or backup.hsaco.bak are ignored.
+DEFAULT_GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
+    (("--include-glob",), ["--include-glob", "*.hsaco", "--include-glob", "*.co"]),
+    (("--timeout-seconds",), ["--timeout-seconds", "300"]),
+    (("--csv",), ["--csv", "hotswap_bench_all.csv"]),
+]
 
 
 def apply_defaults(argv: list[str]) -> list[str]:
     result = list(argv)
-    for flag, value in DEFAULTS.items():
-        if not any(arg == flag or arg.startswith(flag + "=") for arg in result):
-            result += [flag, value]
+    for flags, tokens in DEFAULT_GROUPS:
+        present = any(
+            arg == flag or arg.startswith(flag + "=")
+            for arg in result
+            for flag in flags
+        )
+        if not present:
+            result += tokens
     return result
 
 

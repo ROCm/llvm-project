@@ -111,9 +111,9 @@ A parallel run over a large corpus can spike memory. Guard it with **one** of:
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--jobs, -j N` | auto (CPU count) | parallel translations |
+| `--jobs, -j N` | `0` (= auto CPU count) | parallel translations; `0` selects the CPU count |
 | `--timeout-seconds N` | 900 (`_all`: 300) | per-file wall-clock timeout; 0 disables |
-| `--include-glob GLOB` | `*.hsaco` (`_all`: `*.[hc][so]*`) | which files to pick |
+| `--include-glob GLOB` | `*.hsaco` (repeatable) | which files to pick; `hotswap_bench_all.py` uses `*.hsaco` + `*.co` |
 | `--entry-trampolines` / `--no-entry-trampolines` | **off** | kernel-entry trampoline redirection — default OFF here (see disclaimer); `--entry-trampolines` re-enables it |
 | `--strict-mode` / `--no-strict-mode` | on | fail instead of returning an unpatched object |
 | `--source-isa` / `--target-isa` | `amdgcn-amd-amdhsa--gfx1250` | ISA strings (same = intra-gfx1250 B0→A0) |
