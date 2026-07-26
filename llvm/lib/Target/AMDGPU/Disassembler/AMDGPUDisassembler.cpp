@@ -833,6 +833,24 @@ DecodeStatus AMDGPUDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
     return MCDisassembler::Fail;
   } while (false);
 
+  // Present legacy tensor encodings through the canonical MC opcode model.
+  switch (MI.getOpcode()) {
+  case AMDGPU::TENSOR_LOAD_TO_LDS_d2_gfx1250_legacy:
+    MI.setOpcode(AMDGPU::TENSOR_LOAD_TO_LDS_d2_gfx1250);
+    break;
+  case AMDGPU::TENSOR_LOAD_TO_LDS_d4_gfx1250_legacy:
+    MI.setOpcode(AMDGPU::TENSOR_LOAD_TO_LDS_d4_gfx1250);
+    break;
+  case AMDGPU::TENSOR_STORE_FROM_LDS_d2_gfx1250_legacy:
+    MI.setOpcode(AMDGPU::TENSOR_STORE_FROM_LDS_d2_gfx1250);
+    break;
+  case AMDGPU::TENSOR_STORE_FROM_LDS_d4_gfx1250_legacy:
+    MI.setOpcode(AMDGPU::TENSOR_STORE_FROM_LDS_d4_gfx1250);
+    break;
+  default:
+    break;
+  }
+
   DecodeStatus Status = MCDisassembler::Success;
 
   decodeImmOperands(MI, *MCII);

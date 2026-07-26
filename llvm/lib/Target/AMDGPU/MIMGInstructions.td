@@ -2241,6 +2241,15 @@ class VIMAGE_TENSOR_Real <bits<8> op, VIMAGE_TENSOR_Pseudo ps, string opName = p
   let dim = 1;   // sp3
 }
 
+class VIMAGE_TENSOR_Legacy_Real <bits<8> op, VIMAGE_TENSOR_Pseudo ps,
+                                 string opName> :
+  VIMAGE_TENSOR_Real<op, ps, opName> {
+  let dmask = 0;
+  let dim = 0;
+  // Legacy tensor encodings use zero in the otherwise unused vaddr4 field.
+  let vaddr4 = 0;
+}
+
 multiclass VIMAGE_TENSOR_Real_gfx1250<bits<8> op> {
   let AssemblerPredicate = isGFX125xOnly, DecoderNamespace = "GFX1250" in {
     foreach DSuffix = ["_d2", "_d4"] in {
@@ -2251,5 +2260,21 @@ multiclass VIMAGE_TENSOR_Real_gfx1250<bits<8> op> {
   }
 }
 
-defm TENSOR_LOAD_TO_LDS    : VIMAGE_TENSOR_Real_gfx1250<0xc4>;
-defm TENSOR_STORE_FROM_LDS : VIMAGE_TENSOR_Real_gfx1250<0xc5>;
+multiclass VIMAGE_TENSOR_Legacy_Real_gfx1250<bits<8> op, string opName> {
+  let AssemblerPredicate = isGFX125xOnly, DecoderNamespace = "GFX1250" in {
+    foreach DSuffix = ["_d2", "_d4"] in {
+      defvar ps = !cast<VIMAGE_TENSOR_Pseudo>(NAME # DSuffix);
+      def DSuffix # _gfx1250_legacy :
+        VIMAGE_TENSOR_Legacy_Real<op, ps, opName>;
+    }
+  }
+}
+
+defm TENSOR_LOAD_TO_LDS :
+  VIMAGE_TENSOR_Real_gfx1250<0xc4>,
+  VIMAGE_TENSOR_Legacy_Real_gfx1250<0xc4,
+    "tensor_load_to_lds_gfx1250_legacy">;
+defm TENSOR_STORE_FROM_LDS :
+  VIMAGE_TENSOR_Real_gfx1250<0xc5>,
+  VIMAGE_TENSOR_Legacy_Real_gfx1250<0xc5,
+    "tensor_store_from_lds_gfx1250_legacy">;
