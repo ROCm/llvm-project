@@ -3929,18 +3929,21 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       }
       if (!ReusableCalls[InstIndex].empty() &&
           !IsFiniteExternalMaterializedCall) {
-        if (llvm::any_of(ReusableCalls[InstIndex],
+        bool HasExternalReusableTarget =
+            llvm::any_of(ReusableCalls[InstIndex],
                          [TextAddr, TextEnd](uint64_t ReusableTarget) {
                            return ReusableTarget < TextAddr ||
                                   ReusableTarget >= *TextEnd;
-                         })) {
+                         });
+        if (HasExternalReusableTarget && !IndirectControlFlowClosed) {
           log() << "hotswap: unresolved call target at 0x"
                 << utohexstr(DI.Offset) << " (reusable target outside .text)\n";
           Info.HasUnresolvedTargets = true;
           continue;
         }
         for (uint64_t ReusableTarget : ReusableCalls[InstIndex])
-          Info.Targets.insert(ReusableTarget - TextAddr);
+          if (ReusableTarget >= TextAddr && ReusableTarget < *TextEnd)
+            Info.Targets.insert(ReusableTarget - TextAddr);
         Info.BoundedIndirectTransfers.insert(DI.Offset);
         if (LocallyProvenMaterializedCalls.test(InstIndex)) {
           log() << "hotswap: resolved PC-materialized call at 0x"
