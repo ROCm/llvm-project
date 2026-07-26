@@ -638,6 +638,12 @@ Error remapEhFrameForDisplacement(const ElfView &OldElf,
   const uint64_t OldTextBegin = OldElf.textAddr();
   const uint64_t OldTextEnd = OldTextBegin + OldElf.textSize();
   const uint64_t NewTextBegin = OutElfOrErr->textAddr();
+  if (OutElfOrErr->textSize() >
+      std::numeric_limits<uint64_t>::max() - NewTextBegin) {
+    return makeEhFrameError(
+        "displaced .text range overflows while remapping .eh_frame");
+  }
+  const uint64_t NewTextEnd = NewTextBegin + OutElfOrErr->textSize();
 
   std::vector<EhFramePatch> Patches;
   unsigned RemappedFdeCount = 0;
@@ -721,6 +727,13 @@ Error remapEhFrameForDisplacement(const ElfView &OldElf,
         OldRange == 0 ? OldStart >= OldTextBegin && OldStart < OldTextEnd
                       : OldEnd > OldTextBegin && OldStart < OldTextEnd;
     if (!DescribesText) {
+      const bool OverlapsDisplacedText =
+          OldRange == 0 ? OldStart >= NewTextBegin && OldStart < NewTextEnd
+                        : OldEnd > NewTextBegin && OldStart < NewTextEnd;
+      if (OverlapsDisplacedText) {
+        return makeEhFrameError(
+            ".eh_frame FDE outside old .text overlaps displaced .text");
+      }
       if (OutShdr->sh_addr != OldShdr->sh_addr) {
         return makeEhFrameError("moved .eh_frame has an FDE outside .text");
       }

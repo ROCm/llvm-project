@@ -3258,6 +3258,35 @@ TEST(TextDisplacement, RejectsEhFrameFdePartiallyOverlappingText) {
       << Reason;
 }
 
+TEST(TextDisplacement, RejectsEhFrameFdeSwallowedByTextGrowth) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  Text.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  EhFrameFdeSpec Spec = {DisplacementTextAddr + 12, 4, {}};
+  std::vector<uint8_t> EhFrame = makeEhFrame({Spec});
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(
+      Text, /*AddTextRelocation=*/false, /*AddDebugSection=*/false,
+      /*AddBoundaryTextSymbol=*/false, EhFrame);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.ReplacementBytes.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  Edit.ReplacementBytes.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("outside old .text overlaps displaced .text"),
+            std::string::npos)
+      << Reason;
+}
+
 TEST(TextDisplacement, RejectsDynamicRelocationWritesIntoEhFrame) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
