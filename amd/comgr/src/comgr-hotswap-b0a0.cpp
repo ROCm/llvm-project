@@ -1684,6 +1684,71 @@ struct ReachingCallGroup {
   SmallVector<size_t, 8> Calls;
 };
 
+static std::optional<uint64_t>
+getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
+                    uint64_t TextAddr, uint64_t TextEnd);
+
+/// A reusable target value remains valid after a call only when the exact local
+/// callee is fully decoded, returns through the call's link pair, and cannot
+/// transitively or directly clobber the target pair.
+static bool calleePreservesReusableTarget(
+    uint64_t Target, MCRegister TargetRegister, MCRegister ReturnRegister,
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextEnd,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
+  const ElfView::FunctionTextRange *Callee = nullptr;
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin == Target && Range.Begin >= TextAddr &&
+        Range.End > Range.Begin && Range.End <= TextEnd &&
+        (!Callee || Range.End < Callee->End))
+      Callee = &Range;
+  if (!Callee)
+    return false;
+
+  uint64_t CalleeBegin = Callee->Begin - TextAddr;
+  uint64_t CalleeEnd = Callee->End - TextAddr;
+  bool SawInstruction = false;
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (DI.Offset < CalleeBegin || DI.Offset >= CalleeEnd)
+      continue;
+    SawInstruction = true;
+    if (!DI.DecodeSucceeded || LS.MIA->isCall(DI.Inst) ||
+        definesOverlappingRegister(DI, LS, TargetRegister))
+      return false;
+
+    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+      if (DI.Inst.getNumOperands() != 1 ||
+          !isExactRegisterOperand(DI.Inst, 0, ReturnRegister))
+        return false;
+      continue;
+    }
+    if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+        LS.MIA->isReturn(DI.Inst))
+      continue;
+    if (LS.MIA->isIndirectBranch(DI.Inst) ||
+        DI.Inst.getOpcode() == LS.SAddPcI64Opcode)
+      return false;
+
+    bool HasFallthrough = true;
+    if (LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> BranchTarget =
+          getDirectTextTarget(DI, LS, TextAddr, TextEnd);
+      if (!BranchTarget || *BranchTarget < CalleeBegin ||
+          *BranchTarget >= CalleeEnd)
+        return false;
+      HasFallthrough = !LS.MIA->isUnconditionalBranch(DI.Inst);
+    }
+    if (!HasFallthrough)
+      continue;
+    std::optional<uint64_t> Fallthrough =
+        checkedAddUint64(DI.Offset, DI.Size, "reusable callee fallthrough");
+    if (!Fallthrough || *Fallthrough >= CalleeEnd)
+      return false;
+  }
+  return SawInstruction;
+}
+
 struct FiniteSetPcTransfer {
   size_t InstIndex = 0;
   size_t SequenceBeginIndex = 0;
@@ -2024,6 +2089,8 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<std::optional<PcMaterializedCallInfo>> LocalCalls,
+    ArrayRef<uint64_t> DeclaredEntries,
     ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers = {}) {
   std::vector<ReachingCallTargets> Resolved(Decoded.size());
   SmallVector<ReachingCallGroup, 8> Groups;
@@ -2335,11 +2402,6 @@ static bool compareKnownCallEntries(const KnownCallEntry &LHS,
          std::tie(RHS.Entry, RHS.CallIndex);
 }
 
-struct ExternalCallContinuation {
-  size_t InstIndex = 0;
-  uint64_t Continuation = 0;
-};
-
 struct CallContinuationSource {
   size_t InstIndex = 0;
   uint64_t Continuation = 0;
@@ -2359,7 +2421,6 @@ struct ControlFlowScanIndex {
   SmallVector<KnownCallEntry, 16> CallEntries;
   DenseMap<size_t, MCRegister> CallReturnRegistersBySource;
   SmallVector<CallContinuationSource, 4> CallContinuationsByOffset;
-  SmallVector<ExternalCallContinuation, 4> ExternalCallContinuations;
   SmallVector<size_t, 16> SetPcIndices;
   SmallVector<size_t, 4> UnboundedIndirectIndices;
   SmallVector<size_t, 16> BranchOrCallIndices;
@@ -3664,6 +3725,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   BitVector ProvenSetPcCandidates(AllSetPcCandidates.size());
   SmallVector<FiniteSetPcTransfer, 8> EnabledSetPcTransfers;
   std::vector<ReachingCallTargets> ReusableCalls;
+  SmallVector<std::optional<PcMaterializedCallInfo>, 16> MaterializedCalls(
+      Decoded.size());
   std::optional<ControlFlowScanIndex> Index;
   SmallVector<BoundedSetPcReturn, 2> BoundedReturns;
   SmallVector<SymbolLessReturnRegion, 8> SymbolLessRegions;
@@ -3678,12 +3741,18 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     EnabledSetPcTransfers = selectLeastReachableSetPcCandidates(
         Decoded, LS, DeclaredEntries, ExternalEntries, FunctionRanges, TextAddr,
         AllSetPcCandidates, ProvenSetPcCandidates, RejectedSetPcCandidates);
-    ReusableCalls = resolveReusablePcCallTargets(
-        Decoded, LS, TextAddr, *TextEnd, FunctionRanges, EnabledSetPcTransfers);
     Index = buildControlFlowScanIndex(Decoded, LS, TextAddr, *TextEnd,
                                       FunctionRanges);
-    if (!Index || !addReusableCallsToIndex(Decoded, LS, TextAddr, *TextEnd,
-                                           ReusableCalls, *Index))
+    if (!Index)
+      return std::nullopt;
+    std::fill(MaterializedCalls.begin(), MaterializedCalls.end(), std::nullopt);
+    for (const auto &Entry : Index->MaterializedCalls)
+      MaterializedCalls[Entry.first] = Entry.second;
+    ReusableCalls = resolveReusablePcCallTargets(
+        Decoded, LS, TextAddr, *TextEnd, FunctionRanges, MaterializedCalls,
+        DeclaredEntries, EnabledSetPcTransfers);
+    if (!addReusableCallsToIndex(Decoded, LS, TextAddr, *TextEnd, ReusableCalls,
+                                 *Index))
       return std::nullopt;
     indexKnownCalls(*Index);
     finalizeCallContinuationIndex(*Index);
@@ -3816,7 +3885,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   for (uint64_t Entry : ExternalEntries)
     if (Entry < TextSize)
       Info.Targets.insert(Entry);
-  for (const BoundedSetPcReturn &Return : BoundedReturns)
+  for (const BoundedSetPcReturn &Return : BoundedReturns) {
     for (uint64_t Target : Return.Targets)
       Info.Targets.insert(Target);
     Info.BoundedIndirectTransfers.insert(Decoded[Return.InstIndex].Offset);
@@ -4896,7 +4965,7 @@ assignLongBranchGateways(PatchContext &Ctx,
     for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
       const Trampoline &T = Ctx.OutTrampolines[I];
       if (T.OriginalSize < 2 * MinInstSize || T.UsesDirectSetPCForward ||
-          T.UsesSharedDispatcherForward || T.LongBranchPreservesVcc)
+          T.UsesSharedDispatcherForward)
         continue;
       uint64_t Tail = T.OriginalOffset + MinInstSize;
       SourceTailIslandOwners[Tail] = I;
