@@ -6347,7 +6347,12 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       bool IsFiniteExternalMaterializedCall =
           MaterializedCalls[InstIndex] &&
           (MaterializedCalls[InstIndex]->Target < TextAddr ||
-           MaterializedCalls[InstIndex]->Target >= *TextEnd);
+           MaterializedCalls[InstIndex]->Target >= *TextEnd) &&
+          !hasKnownControlFlowEntry(
+              DeclaredEntries, BoundedReturns, BoundedReturnPositions, *Index,
+              HasUnboundedIndirectEntries,
+              MaterializedCalls[InstIndex]->SequenceStart,
+              MaterializedCalls[InstIndex]->SequenceEnd);
       if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
           DI.Inst.getNumOperands() != 0 &&
           DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
