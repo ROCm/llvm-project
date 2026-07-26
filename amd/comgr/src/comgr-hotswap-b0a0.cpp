@@ -792,6 +792,365 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
   return true;
 }
 
+bool instructionReadsRegister(const InternalDecodedInst &DI,
+                              const LLVMState &LS, MCRegister Register) {
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  unsigned DefCount = std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
+  // A tied use makes its corresponding explicit def a read/modify/write
+  // operand. Some MCInst producers materialize a duplicate use operand while
+  // others only retain the destination operand, so consult the descriptor
+  // instead of relying on the decoded operand list to contain that duplicate.
+  for (unsigned Def = 0; Def != DefCount; ++Def) {
+    bool HasTiedUse = false;
+    for (unsigned Use = Desc.getNumDefs(); Use != Desc.getNumOperands();
+         ++Use) {
+      if (Desc.getOperandConstraint(Use, MCOI::TIED_TO) ==
+          static_cast<int>(Def)) {
+        HasTiedUse = true;
+        break;
+      }
+    }
+    if (!HasTiedUse)
+      continue;
+    const MCOperand &Operand = DI.Inst.getOperand(Def);
+    if (Operand.isReg() && Operand.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+      return true;
+  }
+  unsigned FixedOperandCount =
+      std::min(Desc.getNumOperands(), DI.Inst.getNumOperands());
+  for (unsigned I = DefCount; I != FixedOperandCount; ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (Operand.isReg() && Operand.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+      return true;
+  }
+  if (!Desc.variadicOpsAreDefs()) {
+    for (unsigned I = FixedOperandCount; I != DI.Inst.getNumOperands(); ++I) {
+      const MCOperand &Operand = DI.Inst.getOperand(I);
+      if (Operand.isReg() && Operand.getReg() &&
+          LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+        return true;
+    }
+  }
+  for (MCPhysReg ImplicitUse : Desc.implicit_uses())
+    if (LS.MRI->regsOverlap(MCRegister(ImplicitUse), Register))
+      return true;
+  return false;
+}
+
+static void addTrackedSgprBits(const LLVMState &LS, MCRegister Register,
+                               unsigned MaxSgprs, BitVector &Bits,
+                               bool &Valid) {
+  if (!Register.isValid())
+    return;
+  SmallVector<MCRegister, 8> Candidates;
+  Candidates.push_back(Register);
+  for (MCPhysReg Subregister : LS.MRI->subregs(Register))
+    Candidates.push_back(MCRegister(Subregister));
+  // A decoded operand can name a low/high subregister directly. Its scalar
+  // numbered SGPR then appears among its super-registers rather than subregs.
+  for (MCPhysReg Superregister : LS.MRI->superregs(Register))
+    Candidates.push_back(MCRegister(Superregister));
+
+  for (MCRegister Candidate : Candidates) {
+    std::optional<unsigned> Index = numberedSgprIndex(*LS.MRI, Candidate);
+    if (!Index)
+      continue;
+    if (*Index >= MaxSgprs) {
+      Valid = false;
+      continue;
+    }
+    Bits.set(*Index);
+  }
+  if (isVccRegister(LS, Register))
+    Bits.set(MaxSgprs);
+}
+
+static bool collectTrackedSgprUsesAndDefs(const InternalDecodedInst &DI,
+                                          const LLVMState &LS,
+                                          unsigned MaxSgprs, BitVector &Uses,
+                                          BitVector &Defs) {
+  if (!DI.DecodeSucceeded || !LS.MCII || !LS.MRI)
+    return false;
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  unsigned DefCount = std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
+  unsigned FixedOperandCount =
+      std::min(Desc.getNumOperands(), DI.Inst.getNumOperands());
+  bool Valid = true;
+
+  for (unsigned I = 0; I != DefCount; ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (!Operand.isReg() || !Operand.getReg())
+      continue;
+    MCRegister Register(Operand.getReg());
+    addTrackedSgprBits(LS, Register, MaxSgprs, Defs, Valid);
+    for (unsigned Use = Desc.getNumDefs(); Use != Desc.getNumOperands();
+         ++Use) {
+      if (Desc.getOperandConstraint(Use, MCOI::TIED_TO) != static_cast<int>(I))
+        continue;
+      addTrackedSgprBits(LS, Register, MaxSgprs, Uses, Valid);
+      break;
+    }
+  }
+  for (unsigned I = DefCount; I != FixedOperandCount; ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (Operand.isReg() && Operand.getReg())
+      addTrackedSgprBits(LS, MCRegister(Operand.getReg()), MaxSgprs, Uses,
+                         Valid);
+  }
+  for (unsigned I = FixedOperandCount; I != DI.Inst.getNumOperands(); ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (!Operand.isReg() || !Operand.getReg())
+      continue;
+    addTrackedSgprBits(LS, MCRegister(Operand.getReg()), MaxSgprs,
+                       Desc.variadicOpsAreDefs() ? Defs : Uses, Valid);
+  }
+  for (MCPhysReg Register : Desc.implicit_uses())
+    addTrackedSgprBits(LS, MCRegister(Register), MaxSgprs, Uses, Valid);
+  for (MCPhysReg Register : Desc.implicit_defs())
+    addTrackedSgprBits(LS, MCRegister(Register), MaxSgprs, Defs, Valid);
+  return Valid;
+}
+
+std::optional<BitVector>
+getReplacementIncomingSgprs(ArrayRef<uint8_t> Replacement, const LLVMState &LS,
+                            unsigned MaxSgprs) {
+  if (MaxSgprs == std::numeric_limits<unsigned>::max())
+    return std::nullopt;
+  const unsigned TrackedSgprs = MaxSgprs + 1;
+  BitVector Incoming(TrackedSgprs);
+  BitVector Defined(TrackedSgprs);
+  std::vector<InternalDecodedInst> Decoded;
+  if (!decodeTextSection(Replacement.data(), Replacement.size(), LS, Decoded))
+    return std::nullopt;
+
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (!DI.DecodeSucceeded || !LS.MIA ||
+        LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI))
+      return std::nullopt;
+    BitVector Uses(TrackedSgprs);
+    BitVector Defs(TrackedSgprs);
+    if (!collectTrackedSgprUsesAndDefs(DI, LS, MaxSgprs, Uses, Defs))
+      return std::nullopt;
+    Uses.reset(Defined);
+    Incoming |= Uses;
+    Defined |= Defs;
+  }
+  return Incoming;
+}
+
+bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
+                                      const LLVMState &LS,
+                                      MCRegister Register) {
+  constexpr unsigned MaxTrackedSgprs = 106;
+  std::optional<BitVector> Incoming =
+      getReplacementIncomingSgprs(Replacement, LS, MaxTrackedSgprs);
+  if (!Incoming)
+    return true;
+  BitVector RegisterBits(MaxTrackedSgprs + 1);
+  bool Valid = true;
+  addTrackedSgprBits(LS, Register, MaxTrackedSgprs, RegisterBits, Valid);
+  return !Valid || RegisterBits.none() || Incoming->anyCommon(RegisterBits);
+}
+
+static bool addCurrentFunctionLivenessSuccessor(
+    size_t From, uint64_t Offset,
+    const DenseMap<uint64_t, size_t> &InstructionIndices,
+    std::vector<SmallVector<size_t, 2>> &Successors,
+    std::vector<SmallVector<size_t, 2>> &Predecessors) {
+  DenseMap<uint64_t, size_t>::const_iterator Target =
+      InstructionIndices.find(Offset);
+  if (Target == InstructionIndices.end())
+    return false;
+  Successors[From].push_back(Target->second);
+  Predecessors[Target->second].push_back(From);
+  return true;
+}
+
+static CurrentFunctionSgprLiveness buildCurrentFunctionSgprLiveness(
+    PatchContext &Ctx, const ElfView::FunctionTextRange &FunctionRange) {
+  CurrentFunctionSgprLiveness Result;
+  Result.Generation = Ctx.TextMutationGeneration;
+  Result.MaxSgprs = Ctx.Config.MaxSgprs;
+  if (!Ctx.LS.MIA || FunctionRange.End < FunctionRange.Begin ||
+      FunctionRange.Begin > Ctx.TextSize ||
+      FunctionRange.End - FunctionRange.Begin >
+          Ctx.TextSize - FunctionRange.Begin ||
+      Ctx.Config.MaxSgprs == std::numeric_limits<unsigned>::max())
+    return Result;
+
+  std::vector<InternalDecodedInst> Decoded;
+  uint64_t FunctionSize = FunctionRange.End - FunctionRange.Begin;
+  if (!decodeTextSection(Ctx.Text + FunctionRange.Begin, FunctionSize, Ctx.LS,
+                         Decoded))
+    return Result;
+
+  uint64_t ExpectedOffset = FunctionRange.Begin;
+  for (InternalDecodedInst &DI : Decoded) {
+    DI.Offset += FunctionRange.Begin;
+    if (!DI.DecodeSucceeded || DI.Size == 0 || DI.Offset != ExpectedOffset)
+      return Result;
+    std::optional<uint64_t> Next = checkedAddUint64(
+        DI.Offset, DI.Size, "current-function SGPR liveness decode");
+    if (!Next || *Next > FunctionRange.End)
+      return Result;
+    ExpectedOffset = *Next;
+  }
+  if (ExpectedOffset != FunctionRange.End || Decoded.empty())
+    return Result;
+
+  const unsigned TrackedSgprs = Ctx.Config.MaxSgprs + 1;
+  const size_t InstructionCount = Decoded.size();
+  std::vector<BitVector> Uses(InstructionCount, BitVector(TrackedSgprs));
+  std::vector<BitVector> Defs(InstructionCount, BitVector(TrackedSgprs));
+  std::vector<SmallVector<size_t, 2>> Successors(InstructionCount);
+  std::vector<SmallVector<size_t, 2>> Predecessors(InstructionCount);
+  BitVector HasUnknownSuccessor(InstructionCount);
+
+  for (size_t I = 0; I != InstructionCount; ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    Result.InstructionIndices.try_emplace(DI.Offset, I);
+    if (!collectTrackedSgprUsesAndDefs(DI, Ctx.LS, Ctx.Config.MaxSgprs, Uses[I],
+                                       Defs[I]))
+      return Result;
+  }
+
+  for (size_t I = 0; I != InstructionCount; ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    if (DI.Inst.getOpcode() == Ctx.LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == Ctx.LS.SEndPgmSavedOpcode)
+      continue;
+    if (Ctx.LS.MIA->isCall(DI.Inst) || Ctx.LS.MIA->isIndirectBranch(DI.Inst) ||
+        Ctx.LS.MIA->isReturn(DI.Inst) ||
+        StringRef(DI.Mnemonic).starts_with("s_rfe")) {
+      HasUnknownSuccessor.set(I);
+      continue;
+    }
+    if (Ctx.LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> Target =
+          evaluateDirectControlFlowTarget(DI, Ctx.LS);
+      if (!Target)
+        HasUnknownSuccessor.set(I);
+      else if (!addCurrentFunctionLivenessSuccessor(I, *Target,
+                                                    Result.InstructionIndices,
+                                                    Successors, Predecessors))
+        HasUnknownSuccessor.set(I);
+      if (Ctx.LS.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    } else if (Ctx.LS.MIA->mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI) &&
+               !Ctx.LS.MIA->isBarrier(DI.Inst)) {
+      HasUnknownSuccessor.set(I);
+      continue;
+    }
+
+    std::optional<uint64_t> Fallthrough = checkedAddUint64(
+        DI.Offset, DI.Size, "current-function SGPR liveness fallthrough");
+    if (!Fallthrough)
+      HasUnknownSuccessor.set(I);
+    else if (!addCurrentFunctionLivenessSuccessor(I, *Fallthrough,
+                                                  Result.InstructionIndices,
+                                                  Successors, Predecessors))
+      HasUnknownSuccessor.set(I);
+  }
+
+  // Each worklist transfer and successor union costs
+  // O(ceil(R / word-size)), where R is the configured tracked SGPR count.
+  // Computing all registers together avoids rebuilding and walking this CFG
+  // once per scratch-register candidate.
+  Result.LiveBefore.assign(InstructionCount, BitVector(TrackedSgprs));
+  std::vector<BitVector> LiveAfter(InstructionCount, BitVector(TrackedSgprs));
+  BitVector AllLive(TrackedSgprs, true);
+  SmallVector<size_t, 32> Worklist;
+  BitVector InWorklist(InstructionCount, true);
+  for (size_t I = InstructionCount; I != 0; --I)
+    Worklist.push_back(I - 1);
+
+  while (!Worklist.empty()) {
+    size_t I = Worklist.pop_back_val();
+    InWorklist.reset(I);
+    BitVector NewAfter(TrackedSgprs);
+    if (HasUnknownSuccessor.test(I))
+      NewAfter = AllLive;
+    for (size_t Successor : Successors[I])
+      NewAfter |= Result.LiveBefore[Successor];
+
+    BitVector NewBefore = NewAfter;
+    NewBefore.reset(Defs[I]);
+    NewBefore |= Uses[I];
+    if (NewAfter == LiveAfter[I] && NewBefore == Result.LiveBefore[I])
+      continue;
+    LiveAfter[I] = std::move(NewAfter);
+    Result.LiveBefore[I] = std::move(NewBefore);
+    for (size_t Predecessor : Predecessors[I]) {
+      if (InWorklist.test(Predecessor))
+        continue;
+      InWorklist.set(Predecessor);
+      Worklist.push_back(Predecessor);
+    }
+  }
+  Result.Valid = true;
+  return Result;
+}
+
+std::optional<BitVector> getLiveSgprsAtContinuation(PatchContext &Ctx,
+                                                    uint64_t InstOffset,
+                                                    uint32_t InstSize) {
+  std::optional<ElfView::FunctionTextRange> FunctionRange =
+      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
+  if (!FunctionRange)
+    return std::nullopt;
+  using FunctionKey = std::pair<uint64_t, uint64_t>;
+  FunctionKey Key{FunctionRange->Begin, FunctionRange->End};
+  DenseMap<FunctionKey, CurrentFunctionSgprLiveness>::iterator Cached =
+      Ctx.CurrentFunctionSgprLivenessCache.find(Key);
+  if (Cached == Ctx.CurrentFunctionSgprLivenessCache.end() ||
+      Cached->second.Generation != Ctx.TextMutationGeneration ||
+      Cached->second.MaxSgprs != Ctx.Config.MaxSgprs) {
+    CurrentFunctionSgprLiveness Current =
+        buildCurrentFunctionSgprLiveness(Ctx, *FunctionRange);
+    Cached = Ctx.CurrentFunctionSgprLivenessCache
+                 .insert_or_assign(Key, std::move(Current))
+                 .first;
+  }
+  if (!Cached->second.Valid)
+    return std::nullopt;
+
+  std::optional<uint64_t> Continuation =
+      checkedAddUint64(InstOffset, InstSize, "SGPR liveness continuation");
+  if (!Continuation)
+    return std::nullopt;
+  DenseMap<uint64_t, size_t>::const_iterator Index =
+      Cached->second.InstructionIndices.find(*Continuation);
+  if (Index == Cached->second.InstructionIndices.end())
+    return std::nullopt;
+  return Cached->second.LiveBefore[Index->second];
+}
+
+void noteCurrentTextMutation(PatchContext &Ctx) {
+  if (Ctx.TextMutationGeneration == std::numeric_limits<uint64_t>::max()) {
+    Ctx.CurrentFunctionSgprLivenessCache.clear();
+    Ctx.TextMutationGeneration = 0;
+    return;
+  }
+  ++Ctx.TextMutationGeneration;
+}
+
+bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
+                                            uint64_t InstOffset,
+                                            uint32_t InstSize,
+                                            MCRegister Register) {
+  std::optional<BitVector> Live =
+      getLiveSgprsAtContinuation(Ctx, InstOffset, InstSize);
+  if (!Live)
+    return false;
+  BitVector RegisterBits(Ctx.Config.MaxSgprs + 1);
+  bool Valid = true;
+  addTrackedSgprBits(Ctx.LS, Register, Ctx.Config.MaxSgprs, RegisterBits,
+                     Valid);
+  return Valid && RegisterBits.any() && !Live->anyCommon(RegisterBits);
+}
+
 static std::optional<SafeSgprScratchBlock>
 reserveSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset) {
   std::optional<SafeSgprScratchBlock> Scratch = findSafeSgprScratchBlock(
@@ -3505,6 +3864,7 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       if (*P == 0)
         continue;
       Patched += *P;
+      noteCurrentTextMutation(Ctx);
       break;
     }
   }
@@ -3531,6 +3891,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     HazardScope.addPatches(P);
     HazardScope.finish();
     Patched += P;
+    if (P != 0)
+      noteCurrentTextMutation(Ctx);
   }
   if (Config.RunB0A0Patches && VT.applyVop3px2Src2Fix) {
     HotswapProfile::Scope Vop3Scope =
@@ -3539,6 +3901,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     Vop3Scope.addPatches(P);
     Vop3Scope.finish();
     Patched += P;
+    if (P != 0)
+      noteCurrentTextMutation(Ctx);
   }
 
   if (!OutTrampolines.empty()) {

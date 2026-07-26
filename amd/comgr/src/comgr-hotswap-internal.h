@@ -1251,6 +1251,16 @@ struct SafeSgprUsageSummary {
   unsigned HighWatermark = 0;
 };
 
+/// Current-text, per-function SGPR liveness cached for one mutation
+/// generation. Bits [0, MaxSgprs) name numbered SGPRs; bit MaxSgprs names VCC.
+struct CurrentFunctionSgprLiveness {
+  uint64_t Generation = 0;
+  unsigned MaxSgprs = 0;
+  bool Valid = false;
+  llvm::DenseMap<uint64_t, size_t> InstructionIndices{0};
+  std::vector<llvm::BitVector> LiveBefore;
+};
+
 struct DirectControlFlowInfo {
   llvm::DenseSet<uint64_t> Targets;
   // Register-based transfers whose complete finite target set was proven.
@@ -1325,6 +1335,12 @@ struct PatchContext {
   llvm::StringMap<std::optional<KernelWorkgroupMetadata>>
       WorkgroupMetadataCache;
   llvm::StringMap<unsigned> KernelVgprGranuleCache;
+  // Immediate .text writes advance this generation. Scratch liveness is
+  // rebuilt from current bytes when a cached function belongs to an older
+  // generation, so earlier patches can never leave the proof stale.
+  uint64_t TextMutationGeneration = 0;
+  llvm::DenseMap<std::pair<uint64_t, uint64_t>, CurrentFunctionSgprLiveness>
+      CurrentFunctionSgprLivenessCache{0};
 };
 
 enum class VgprMsbOperand : unsigned {
@@ -1403,6 +1419,52 @@ findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
 bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
                                 const SafeSgprScratchBlock &Block,
                                 llvm::StringRef Context);
+
+/// Return whether \p DI consumes the incoming value of \p Register, including
+/// explicit read/modify/write destinations represented by MC tied-operand
+/// constraints. This conservative query underpins scratch-register liveness.
+[[nodiscard]] bool instructionReadsRegister(const InternalDecodedInst &DI,
+                                            const LLVMState &LS,
+                                            llvm::MCRegister Register);
+
+/// Return whether \p Replacement may consume the incoming value of \p Register
+/// before overwriting it. Undecodable or control-flow-bearing replacements are
+/// conservatively treated as reads.
+[[nodiscard]] bool
+replacementNeedsIncomingRegister(llvm::ArrayRef<uint8_t> Replacement,
+                                 const LLVMState &LS,
+                                 llvm::MCRegister Register);
+
+/// Return the numbered-SGPR/VCC values consumed by \p Replacement before an
+/// overwrite. Returns nullopt for undecodable or control-flow-bearing bytes.
+/// The result uses the bit numbering documented by
+/// CurrentFunctionSgprLiveness.
+[[nodiscard]] std::optional<llvm::BitVector>
+getReplacementIncomingSgprs(llvm::ArrayRef<uint8_t> Replacement,
+                            const LLVMState &LS, unsigned MaxSgprs);
+
+/// Return the complete numbered-SGPR/VCC live set immediately after
+/// [\p InstOffset, +\p InstSize). One current-function decode and bit-vector
+/// dataflow serves every candidate scratch register. Results are cached for
+/// PatchContext::TextMutationGeneration and fail closed with nullopt.
+[[nodiscard]] std::optional<llvm::BitVector>
+getLiveSgprsAtContinuation(PatchContext &Ctx, uint64_t InstOffset,
+                           uint32_t InstSize);
+
+/// Record an immediate write to PatchContext::Text. Production patch dispatch
+/// calls this after every successful per-instruction mutation; tests and any
+/// future direct writers must do the same.
+void noteCurrentTextMutation(PatchContext &Ctx);
+
+/// Prove that \p Register's incoming value is not read on any path from the
+/// instruction after [\p InstOffset, +\p InstSize) to the owning function's
+/// exits. The proof decodes the current text bytes rather than relying on the
+/// original PatchContext::Decoded snapshot. Prefer the batch SGPR query above
+/// when selecting among multiple candidates.
+[[nodiscard]] bool
+isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx, uint64_t InstOffset,
+                                       uint32_t InstSize,
+                                       llvm::MCRegister Register);
 
 // -- Trampoline emission helpers (defined in comgr-hotswap-b0a0.cpp) ----------
 
