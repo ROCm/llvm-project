@@ -97,8 +97,8 @@ jobs:
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
-      linux_amdgpu_families: ${{ inputs.linux_amdgpu_families || '' }}
-      windows_amdgpu_families: ${{ inputs.windows_amdgpu_families || '' }}      
+      linux_amdgpu_families: ${{ github.event.inputs.linux_amdgpu_families }}
+      windows_amdgpu_families: ${{ github.event.inputs.windows_amdgpu_families }}              
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
