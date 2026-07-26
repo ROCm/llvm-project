@@ -894,8 +894,8 @@ bool instructionReadsRegister(const InternalDecodedInst &DI,
 }
 
 static void addTrackedSgprBits(const LLVMState &LS, MCRegister Register,
-                               unsigned MaxSgprs, BitVector &Bits,
-                               bool &Valid) {
+                               unsigned MaxSgprs, BitVector &Bits, bool &Valid,
+                               bool IsDefinition) {
   if (!Register.isValid())
     return;
   SmallVector<MCRegister, 8> Candidates;
@@ -917,7 +917,13 @@ static void addTrackedSgprBits(const LLVMState &LS, MCRegister Register,
     }
     Bits.set(*Index);
   }
-  if (isVccRegister(LS, Register))
+  // Any overlapping use consumes aggregate VCC. A definition kills that bit
+  // only when it covers both VCC subregisters.
+  bool TracksVcc = isVccRegister(LS, Register);
+  if (IsDefinition)
+    TracksVcc = LS.VCCRegister.isValid() &&
+                LS.MRI->isSubRegisterEq(Register, LS.VCCRegister);
+  if (TracksVcc)
     Bits.set(MaxSgprs);
 }
 
@@ -931,9 +937,11 @@ static bool collectTrackedSgprUsesAndDefs(const InternalDecodedInst &DI,
     return false;
   bool Valid = true;
   for (MCRegister Register : Effects->Uses)
-    addTrackedSgprBits(LS, Register, MaxSgprs, Uses, Valid);
+    addTrackedSgprBits(LS, Register, MaxSgprs, Uses, Valid,
+                       /*IsDefinition=*/false);
   for (MCRegister Register : Effects->Defs)
-    addTrackedSgprBits(LS, Register, MaxSgprs, Defs, Valid);
+    addTrackedSgprBits(LS, Register, MaxSgprs, Defs, Valid,
+                       /*IsDefinition=*/true);
   return Valid;
 }
 
@@ -978,7 +986,8 @@ bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
     return true;
   BitVector RegisterBits(MaxTrackedSgprs + 1);
   bool Valid = true;
-  addTrackedSgprBits(LS, Register, MaxTrackedSgprs, RegisterBits, Valid);
+  addTrackedSgprBits(LS, Register, MaxTrackedSgprs, RegisterBits, Valid,
+                     /*IsDefinition=*/false);
   return !Valid || RegisterBits.none() || Incoming->anyCommon(RegisterBits);
 }
 
@@ -1195,8 +1204,8 @@ bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
     return false;
   BitVector RegisterBits(Ctx.Config.MaxSgprs + 1);
   bool Valid = true;
-  addTrackedSgprBits(Ctx.LS, Register, Ctx.Config.MaxSgprs, RegisterBits,
-                     Valid);
+  addTrackedSgprBits(Ctx.LS, Register, Ctx.Config.MaxSgprs, RegisterBits, Valid,
+                     /*IsDefinition=*/false);
   return Valid && RegisterBits.any() && !Live->anyCommon(RegisterBits);
 }
 

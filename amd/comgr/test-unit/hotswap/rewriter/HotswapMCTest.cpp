@@ -1759,6 +1759,26 @@ TEST(RegisterLiveness, ReplacementReadsBeforeOverwrite) {
   EXPECT_TRUE(replacementNeedsIncomingRegister(Undecodable, S, Sgpr0));
 }
 
+TEST(RegisterLiveness, ReplacementPartialVccDefsDoNotKillAggregate) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  ASSERT_TRUE(S.VCCRegister.isValid());
+
+  llvm::SmallVector<uint8_t> LowDef =
+      assembleInstructions("s_mov_b32 vcc_lo, s0\ns_mov_b32 s1, vcc_hi", S);
+  llvm::SmallVector<uint8_t> HighDef =
+      assembleInstructions("s_mov_b32 vcc_hi, s0\ns_mov_b32 s1, vcc_lo", S);
+  llvm::SmallVector<uint8_t> FullDef =
+      assembleInstructions("s_mov_b64 vcc, -1\ns_mov_b32 s1, vcc_hi", S);
+  ASSERT_FALSE(LowDef.empty());
+  ASSERT_FALSE(HighDef.empty());
+  ASSERT_FALSE(FullDef.empty());
+
+  EXPECT_TRUE(replacementNeedsIncomingRegister(LowDef, S, S.VCCRegister));
+  EXPECT_TRUE(replacementNeedsIncomingRegister(HighDef, S, S.VCCRegister));
+  EXPECT_FALSE(replacementNeedsIncomingRegister(FullDef, S, S.VCCRegister));
+}
+
 TEST(RegisterLiveness, ReplacementBatchHandlesEmptyAndFailClosedInputs) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -1910,6 +1930,32 @@ TEST(RegisterLiveness, TracksSubregisterAndImplicitVccOverlap) {
                                      "s_endpgm");
   ASSERT_TRUE(ImplicitDef);
   EXPECT_FALSE(ImplicitDef->test(106));
+}
+
+TEST(RegisterLiveness, ContinuationPartialVccDefsDoNotKillAggregate) {
+  std::optional<llvm::BitVector> LowDef =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_mov_b32 vcc_lo, s0\n"
+                                     "s_mov_b32 s1, vcc_hi\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(LowDef);
+  EXPECT_TRUE(LowDef->test(106));
+
+  std::optional<llvm::BitVector> HighDef =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_mov_b32 vcc_hi, s0\n"
+                                     "s_mov_b32 s1, vcc_lo\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(HighDef);
+  EXPECT_TRUE(HighDef->test(106));
+
+  std::optional<llvm::BitVector> FullDef =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_mov_b64 vcc, -1\n"
+                                     "s_mov_b32 s1, vcc_hi\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(FullDef);
+  EXPECT_FALSE(FullDef->test(106));
 }
 
 TEST(RegisterLiveness, RejectsFunctionEndAndContinuationOverflow) {
