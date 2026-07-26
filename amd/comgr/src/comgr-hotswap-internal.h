@@ -913,6 +913,11 @@ struct InternalDecodedInst {
 /// Stateful, bounded-memory instruction decoder shared by streaming and
 /// materialized HotSwap consumers. Successful byte-identical decode windows
 /// are cached, but the cache never grows beyond this fixed entry count.
+///
+/// Decode failures reported by the target disassembler are emitted as
+/// "<unknown>". This layer cannot contain assertions inside the target
+/// disassembler; malformed AMDGPU encodings that still assert are tracked by
+/// https://github.com/ROCm/llvm-project/issues/3599.
 class InstructionDecoder {
 public:
   static constexpr size_t MaxCacheEntries = 256;
@@ -961,7 +966,9 @@ private:
 LLVMState initLLVM(const TargetIdentifier &TI);
 
 /// Disassemble \p Text into \p Decoded using \p LS. Unknown bytes are encoded
-/// as MinInstSize-sized entries with mnemonic "<unknown>".
+/// as MinInstSize-sized entries with mnemonic "<unknown>" when the target
+/// disassembler reports a decode failure. See InstructionDecoder for the
+/// target-assertion limitation.
 ///
 /// \p WantMnemonic controls whether successful instructions populate their
 /// assembly mnemonic. Failed decodes retain "<unknown>" regardless.
