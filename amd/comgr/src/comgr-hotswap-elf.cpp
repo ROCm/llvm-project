@@ -63,26 +63,18 @@ enum class MetadataCountUpdateStatus {
 };
 
 static std::optional<uint64_t> checkedSectionFileOffset(const ELFT::Shdr &Sec,
-                                                        uint64_t VAddr,
+                                                        uint64_t SectionOffset,
                                                         uint64_t AccessSize,
                                                         uint64_t FileSize,
                                                         StringRef Context) {
-  if (VAddr < Sec.sh_addr) {
-    log() << "hotswap: error: " << Context << " has vaddr 0x"
-          << utohexstr(VAddr) << " before containing section vaddr 0x"
-          << utohexstr(Sec.sh_addr) << ".\n";
-    return std::nullopt;
-  }
-
-  uint64_t Delta = VAddr - Sec.sh_addr;
-  if (Delta > Sec.sh_size || AccessSize > Sec.sh_size - Delta) {
+  if (SectionOffset > Sec.sh_size || AccessSize > Sec.sh_size - SectionOffset) {
     log() << "hotswap: error: " << Context
           << " extends outside its defining section.\n";
     return std::nullopt;
   }
 
   std::optional<uint64_t> FileOffset = checkedAddUint64(
-      Sec.sh_offset, Delta, (Twine(Context) + " file offset").str());
+      Sec.sh_offset, SectionOffset, (Twine(Context) + " file offset").str());
   if (!FileOffset)
     return std::nullopt;
 
@@ -859,8 +851,27 @@ void ElfView::initializeKernelDescriptorCache() const {
         continue;
       }
       const ELFT::Shdr &HostShdr = **HostShdrOrErr;
+      uint64_t SectionOffset = Sym.st_value;
+      uint64_t DescriptorVAddr = Sym.st_value;
+      if (File.getHeader().e_type == ELF::ET_REL) {
+        std::optional<uint64_t> DescriptorVAddrOr =
+            checkedAddUint64(HostShdr.sh_addr, SectionOffset,
+                             (Twine("kernelDescriptors: descriptor symbol '") +
+                              *NameOrErr + "' address")
+                                 .str());
+        if (!DescriptorVAddrOr)
+          continue;
+        DescriptorVAddr = *DescriptorVAddrOr;
+      } else {
+        if (Sym.st_value < HostShdr.sh_addr) {
+          log() << "hotswap: error: kernelDescriptors: descriptor symbol '"
+                << *NameOrErr << "' precedes its defining section.\n";
+          continue;
+        }
+        SectionOffset = Sym.st_value - HostShdr.sh_addr;
+      }
       std::optional<uint64_t> FileOffset = checkedSectionFileOffset(
-          HostShdr, Sym.st_value, KdSize, size(),
+          HostShdr, SectionOffset, KdSize, size(),
           (Twine("kernelDescriptors: descriptor symbol '") + *NameOrErr + "'")
               .str());
       if (!FileOffset)
@@ -879,8 +890,8 @@ void ElfView::initializeKernelDescriptorCache() const {
       // one vaddr, so track the full vaddr set per name rather than only the
       // last one. (The previous per-symbol linear scan over Result made cache
       // init O(n^2).)
-      if (SeenVAddr[KernelNameRef].insert(Sym.st_value).second)
-        Result.push_back({std::move(KernelName), Sym.st_value, EntryOffset});
+      if (SeenVAddr[KernelNameRef].insert(DescriptorVAddr).second)
+        Result.push_back({std::move(KernelName), DescriptorVAddr, EntryOffset});
       FileOffsets.try_emplace(KernelNameRef, *FileOffset);
     }
   }

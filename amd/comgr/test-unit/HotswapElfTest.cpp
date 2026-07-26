@@ -449,6 +449,30 @@ TEST(ElfView, GetKernelStaticLdsSizeReadsLdsSizeFromKernelDescriptor) {
   EXPECT_EQ(*Lds, TestLdsSize);
 }
 
+TEST(ElfView, ReadsSectionRelativeEtRelKernelDescriptor) {
+  static constexpr uint32_t TestLdsSize = 16384;
+
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.ElfType = llvm::ELF::ET_REL;
+  Opts.KernelName = "rel_kernel";
+  Opts.TextAddr = 0;
+  Opts.RodataAddr = 0x2000;
+  Opts.GroupSegmentFixedSize = TestLdsSize;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ASSERT_NE(ViewOrErr->findKernelDescriptor("rel_kernel"), nullptr);
+  EXPECT_EQ(ViewOrErr->getKernelStaticLdsSize("rel_kernel"), TestLdsSize);
+  EXPECT_EQ(ViewOrErr->getKernelDescriptorVAddr("rel_kernel"), Opts.RodataAddr);
+  llvm::ArrayRef<KernelDescriptorInfo> KDs = ViewOrErr->kernelDescriptors();
+  ASSERT_EQ(KDs.size(), 1u);
+  EXPECT_EQ(KDs[0].VAddr, Opts.RodataAddr);
+  EXPECT_EQ(KDs[0].EntryOffset, Obj.EntryOffset);
+}
+
 TEST(ElfView, KernelDescriptorsEnumeratesAndUpdatesEntryOffset) {
   namespace hsa = llvm::amdhsa;
 
