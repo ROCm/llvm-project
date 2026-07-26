@@ -1211,6 +1211,10 @@ struct SafeSgprUsageSummary {
 
 struct DirectControlFlowInfo {
   llvm::DenseSet<uint64_t> Targets;
+  // Register-based transfers whose complete finite target set was proven.
+  // These do not make every instruction in their containing function a
+  // potential indirect destination.
+  llvm::DenseSet<uint64_t> BoundedIndirectTransfers;
   bool HasUnresolvedTargets = false;
 };
 
@@ -1409,7 +1413,9 @@ resolveMaterializedPcTarget(llvm::ArrayRef<InternalDecodedInst> Decoded,
 /// bypass that definition. Canonical local-function returns are bounded to
 /// the continuations of calls that preserve the same link register, provided
 /// no interior call, overlapping external alias, or reachable fallthrough can
-/// enter the function without that link definition. \p DeclaredEntries
+/// enter the function without that link definition. A call with one proven
+/// finite target outside .text protects its local continuation without adding
+/// the external address to the local target set. \p DeclaredEntries
 /// contains text-relative function and kernel entry offsets; \p FunctionRanges
 /// supplies the symbol ranges used for the return proof; \p ExternalEntries
 /// identifies externally reachable symbol and kernel entries, including
