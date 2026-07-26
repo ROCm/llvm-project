@@ -12,7 +12,8 @@
 // DISASM-NOT: v_wmma_scale16
 // COM: The transition into the first gather keeps SRC1 in bank zero. The old
 // COM: lowering's first transition was 0x545 and read physical v304 instead.
-// DISASM: s_set_vgpr_msb 0x541
+// DISASM: s_wait_xcnt 0x0
+// DISASM-NEXT: s_set_vgpr_msb 0x541
 // DISASM-NEXT: v_and_b32_e32 v48 {{.*}}, 0xff, v48
 
 // RUN: hotswap-rewrite %t.out.elf \

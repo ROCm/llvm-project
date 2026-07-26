@@ -17,17 +17,28 @@
 // DISASM-LABEL: <test_wmma_scale16_large_vgpr_count>:
 // DISASM-NOT: v_wmma_scale16
 // DISASM: v_mov_b32_e32 v191 /*v703*/, v255
+// DISASM-NEXT: s_wait_xcnt 0x0
 // DISASM-NEXT: s_set_vgpr_msb 0xa0a1
 // DISASM-NEXT: v_mov_b32_e32 v192 /*v704*/, v0 /*v256*/
-// DISASM: s_set_vgpr_msb 0xa00a
+// DISASM: v_mov_b32_e32 v189 /*v701*/, 0
+// DISASM-NEXT: s_wait_xcnt 0x0
+// DISASM-NEXT: s_set_vgpr_msb 0xa00a
 // DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[182:189] /*v[694:701]*/, v[190:197] /*v[702:709]*/, 0,
-// DISASM: s_set_vgpr_msb 0x880a
+// DISASM: v_mov_b32_e32 v189 /*v701*/, v181
+// DISASM-NEXT: s_wait_xcnt 0x0
+// DISASM-NEXT: s_set_vgpr_msb 0x880a
 // DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[182:189] /*v[694:701]*/, v[190:197] /*v[702:709]*/, v[38:45],
+// DISASM-NEXT: s_wait_xcnt 0x0
 // DISASM-NEXT: s_set_vgpr_msb 0xa00
-// DISASM: s_set_vgpr_msb 0xa00a
+// DISASM: v_mov_b32_e32 v189 /*v701*/, 0
+// DISASM-NEXT: s_wait_xcnt 0x0
+// DISASM-NEXT: s_set_vgpr_msb 0xa00a
 // DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[182:189] /*v[694:701]*/, v[190:197] /*v[702:709]*/, 0,
-// DISASM: s_set_vgpr_msb 0x880a
+// DISASM: v_mov_b32_e32 v189 /*v701*/, v181
+// DISASM-NEXT: s_wait_xcnt 0x0
+// DISASM-NEXT: s_set_vgpr_msb 0x880a
 // DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[182:189] /*v[694:701]*/, v[190:197] /*v[702:709]*/, v[38:45],
+// DISASM-NEXT: s_wait_xcnt 0x0
 // DISASM-NEXT: s_set_vgpr_msb 0xa00
 
 // RUN: hotswap-rewrite %t.out.elf \

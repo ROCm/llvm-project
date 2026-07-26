@@ -188,6 +188,8 @@ emitModeForOperands(raw_string_ostream &OS, unsigned &CurrentMode,
     setVgprMsbBank(NewMode, Requirement.first, Requirement.second);
   if (NewMode == CurrentMode)
     return;
+  // Complete outstanding operations before changing the physical VGPR mapping.
+  OS << "s_wait_xcnt 0\n";
   OS << "s_set_vgpr_msb " << (NewMode | (CurrentMode << 8)) << "\n";
   CurrentMode = NewMode;
 }
