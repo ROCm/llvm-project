@@ -6352,7 +6352,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       ProvenSetPcCandidates.reset();
       continue;
     }
-    if (PreservingSymbolLessRegions.empty() &&
+    if (!Audit.Closed && PreservingSymbolLessRegions.empty() &&
         !RejectedSymbolLessPreservation && !SymbolLessRegions.empty()) {
       // Symbol-less leaves and reusable target preservation form a bounded
       // fixed point: later calls keep the first audit open until the already
