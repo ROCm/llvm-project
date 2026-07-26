@@ -462,9 +462,11 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   unsigned OrigSrc1Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src1);
   unsigned OrigDstBank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Dst);
 
-  unsigned ScaleALo = *ScaleABase + OrigSrc0Bank * VgprBankSize;
+  // Scale operands are always addressed in bank zero. VGPR-MSB applies to
+  // the matrix operands, but not to the Scale16 prefix operands.
+  unsigned ScaleALo = *ScaleABase;
   unsigned ScaleAHi = ScaleALo + 1;
-  unsigned ScaleBLo = *ScaleBBase + OrigSrc1Bank * VgprBankSize;
+  unsigned ScaleBLo = *ScaleBBase;
   unsigned ScaleBHi = ScaleBLo + 1;
   if (ScaleAHi >= Ctx.Config.MaxVgprs || ScaleBHi >= Ctx.Config.MaxVgprs)
     return failClosed(Ctx, DI, "block-16 scale tuple exceeds VGPR capacity");
