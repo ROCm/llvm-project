@@ -1153,15 +1153,57 @@ bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
   return Valid && RegisterBits.any() && !Live->anyCommon(RegisterBits);
 }
 
+static std::optional<unsigned>
+findLocallyDeadSgprPair(PatchContext &Ctx, uint64_t InstOffset,
+                        uint32_t InstSize, ArrayRef<uint8_t> Replacement) {
+  if (Ctx.Config.MaxSgprs < 2)
+    return std::nullopt;
+
+  std::optional<BitVector> ReplacementIncoming =
+      getReplacementIncomingSgprs(Replacement, Ctx.LS, Ctx.Config.MaxSgprs);
+  std::optional<BitVector> ContinuationLive =
+      getLiveSgprsAtContinuation(Ctx, InstOffset, InstSize);
+  if (!ReplacementIncoming || !ContinuationLive ||
+      ReplacementIncoming->size() != ContinuationLive->size())
+    return std::nullopt;
+
+  BitVector Unsafe = *ReplacementIncoming;
+  Unsafe |= *ContinuationLive;
+  unsigned Base = (Ctx.Config.MaxSgprs - 2) & ~1u;
+  for (;;) {
+    if (!Unsafe.test(Base) && !Unsafe.test(Base + 1)) {
+      SafeSgprScratchBlock Scratch{Base, 2};
+      if (commitSafeSgprScratchBlock(Ctx, InstOffset, Scratch,
+                                     "locally dead far-return SGPR pair"))
+        return Base;
+    }
+    if (Base == 0)
+      break;
+    Base -= 2;
+  }
+  return std::nullopt;
+}
+
 static std::optional<SafeSgprScratchBlock>
-reserveSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset) {
+reserveSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
+                     ArrayRef<uint8_t> Replacement) {
   std::optional<SafeSgprScratchBlock> Scratch = findSafeSgprScratchBlock(
       Ctx, InstOffset, /*Count=*/2, /*Alignment=*/2, "safe far return");
-  if (!Scratch)
+  if (Scratch) {
+    if (!commitSafeSgprScratchBlock(Ctx, InstOffset, *Scratch,
+                                    "safe far return"))
+      return std::nullopt;
+    return Scratch;
+  }
+
+  std::optional<unsigned> LocalPair =
+      findLocallyDeadSgprPair(Ctx, InstOffset, InstSize, Replacement);
+  if (!LocalPair)
     return std::nullopt;
-  if (!commitSafeSgprScratchBlock(Ctx, InstOffset, *Scratch, "safe far return"))
-    return std::nullopt;
-  return Scratch;
+  log() << "hotswap: safe far return: reusing locally dead s[" << *LocalPair
+        << ":" << *LocalPair + 1 << "] at 0x" << utohexstr(InstOffset)
+        << "\n";
+  return SafeSgprScratchBlock{*LocalPair, 2};
 }
 
 bool isSBranchReachable(uint64_t From, uint64_t To) {
@@ -1248,9 +1290,9 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
       return declineFar(Twine(InstSize) + " B, smaller than " +
                         Twine(MinInstSize) + " B forward branch");
     std::optional<SafeSgprScratchBlock> Scratch =
-        reserveSafeFarReturn(Ctx, InstOffset);
+        reserveSafeFarReturn(Ctx, InstOffset, InstSize, Replacement);
     if (!Scratch)
-      return declineFar("no safe SGPR triple for set-PC return");
+      return declineFar("no safe SGPR pair for set-PC return");
     T.Bytes.insert(T.Bytes.end(), SetPcReturnReserveBytes, uint8_t{0});
     T.Long = true;
     T.UsesSetPCBack = true;
