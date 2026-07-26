@@ -3250,14 +3250,6 @@ static BitVector computeFiniteControlFlowReachability(
   return Reachable;
 }
 
-struct SymbolLessReturnRegion {
-  uint64_t Entry = 0;
-  MCRegister LinkRegister;
-  SmallVector<size_t, 16> Instructions;
-  SmallVector<size_t, 2> Returns;
-  SmallVector<uint64_t, 8> Continuations;
-};
-
 static bool instructionMayFallThrough(const InternalDecodedInst &DI,
                                       const LLVMState &LS) {
   if (!DI.DecodeSucceeded)
@@ -3301,11 +3293,27 @@ static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
     Groups[Inserted.first->second].Continuations.push_back(Call.Continuation);
   }
 
+  DenseSet<uint64_t> RejectedRegionEntries;
+  RejectedRegionEntries.insert(DeclaredEntries.begin(), DeclaredEntries.end());
+  RejectedRegionEntries.insert(ExternalEntries.begin(), ExternalEntries.end());
+  size_t RetainedGroups = 0;
+  for (size_t I = 0; I != Groups.size(); ++I) {
+    if (RejectedRegionEntries.contains(Groups[I].Entry))
+      continue;
+    if (RetainedGroups != I)
+      Groups[RetainedGroups] = std::move(Groups[I]);
+    ++RetainedGroups;
+  }
+  Groups.resize(RetainedGroups);
+  if (Groups.empty())
+    return {};
+
   DenseMap<uint64_t, size_t> OffsetToIndex;
   for (size_t I = 0; I != Decoded.size(); ++I)
     OffsetToIndex.try_emplace(Decoded[I].Offset, I);
 
   SmallVector<SymbolLessReturnRegion, 8> Regions;
+  std::vector<int64_t> RegionOwner;
   for (CallGroup &Group : Groups) {
     DenseMap<uint64_t, size_t>::const_iterator Entry =
         OffsetToIndex.find(Group.Entry);
@@ -3517,28 +3525,59 @@ static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
       if (!Safe)
         break;
     }
-    if (Safe)
-      Regions.push_back(std::move(Region));
+    if (!Safe)
+      continue;
+    if (RegionOwner.empty())
+      RegionOwner.assign(Decoded.size(), -1);
+    if (!claimSymbolLessReturnRegion(Regions, RegionOwner, std::move(Region)))
+      continue;
   }
 
-  // Two independently inferred call entries may not claim a shared body.
-  BitVector Claimed(Decoded.size());
-  BitVector Overlap(Regions.size());
-  for (size_t I = 0; I != Regions.size(); ++I)
-    for (size_t InstIndex : Regions[I].Instructions) {
-      if (Claimed.test(InstIndex)) {
-        Overlap.set(I);
-        for (size_t J = 0; J != I; ++J)
-          if (llvm::is_contained(Regions[J].Instructions, InstIndex))
-            Overlap.set(J);
-      }
-      Claimed.set(InstIndex);
-    }
   SmallVector<SymbolLessReturnRegion, 8> Disjoint;
-  for (size_t I = 0; I != Regions.size(); ++I)
-    if (!Overlap.test(I))
-      Disjoint.push_back(std::move(Regions[I]));
+  for (SymbolLessReturnRegion &Region : Regions)
+    if (!Region.Instructions.empty())
+      Disjoint.push_back(std::move(Region));
   return Disjoint;
+}
+
+bool claimSymbolLessReturnRegion(
+    SmallVectorImpl<SymbolLessReturnRegion> &Regions,
+    std::vector<int64_t> &RegionOwner, SymbolLessReturnRegion Region) {
+  assert(!Region.Instructions.empty());
+  assert(Regions.size() <=
+         static_cast<size_t>(std::numeric_limits<int64_t>::max()));
+
+  bool Overlaps = false;
+  SmallVector<size_t, 4> OverlappingOwners;
+  for (size_t InstIndex : Region.Instructions) {
+    assert(InstIndex < RegionOwner.size());
+    int64_t Owner = RegionOwner[InstIndex];
+    if (Owner == -1)
+      continue;
+    Overlaps = true;
+    if (Owner >= 0 &&
+        !llvm::is_contained(OverlappingOwners, static_cast<size_t>(Owner)))
+      OverlappingOwners.push_back(static_cast<size_t>(Owner));
+  }
+  if (Overlaps) {
+    for (size_t Owner : OverlappingOwners) {
+      assert(Owner < Regions.size());
+      for (size_t InstIndex : Regions[Owner].Instructions) {
+        assert(InstIndex < RegionOwner.size());
+        RegionOwner[InstIndex] = -2;
+      }
+      Regions[Owner] = SymbolLessReturnRegion{};
+    }
+    for (size_t InstIndex : Region.Instructions)
+      RegionOwner[InstIndex] = -2;
+    return false;
+  }
+
+  size_t Owner = Regions.size();
+  for (size_t InstIndex : Region.Instructions)
+    RegionOwner[InstIndex] = static_cast<int64_t>(Owner);
+  Regions.push_back(std::move(Region));
+  return true;
 }
 
 struct FiniteControlFlowAudit {

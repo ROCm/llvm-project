@@ -1310,6 +1310,14 @@ struct DirectControlFlowInfo {
   bool HasUnresolvedTargets = false;
 };
 
+struct SymbolLessReturnRegion {
+  uint64_t Entry = 0;
+  llvm::MCRegister LinkRegister;
+  llvm::SmallVector<size_t, 16> Instructions;
+  llvm::SmallVector<size_t, 2> Returns;
+  llvm::SmallVector<uint64_t, 8> Continuations;
+};
+
 // Per-instruction persistent gfx1250 VGPR-MSB mode (packed src0/src1/src2/dst,
 // two bits each, values 0-255) recovered by the WMMA split pass's
 // whole-function CFG fixed point. The sentinels distinguish "not analyzed",
@@ -1636,6 +1644,16 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     llvm::ArrayRef<ElfView::FunctionTextRange> FunctionRanges = {},
     llvm::ArrayRef<uint64_t> ExternalEntries = {},
     llvm::ArrayRef<uint8_t> Text = {});
+
+/// Claim \p Region in the streaming symbol-less ownership map. An overlap
+/// invalidates every active owner in the component and leaves -2 tombstones
+/// for both the old and new instructions, so later transitive overlaps remain
+/// rejected after the invalid regions' instruction vectors are released.
+/// \p RegionOwner must be sized for the decoded instructions and initially
+/// contain -1 in every entry.
+[[nodiscard]] bool claimSymbolLessReturnRegion(
+    llvm::SmallVectorImpl<SymbolLessReturnRegion> &Regions,
+    std::vector<int64_t> &RegionOwner, SymbolLessReturnRegion Region);
 
 /// Return whether \p DI consumes the incoming value of \p Register, including
 /// explicit read/modify/write destinations represented by MC tied-operand

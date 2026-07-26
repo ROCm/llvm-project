@@ -23,7 +23,9 @@
 #include "llvm/Support/TargetSelect.h"
 #include "gtest/gtest.h"
 
+#include <algorithm>
 #include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <mutex>
 #include <vector>
@@ -69,6 +71,22 @@ static TargetIdentifier makeGfx1250Ident() {
   TI.Environ = "";
   TI.Processor = "gfx1250";
   return TI;
+}
+
+static SymbolLessReturnRegion
+makeSymbolLessReturnRegion(std::initializer_list<size_t> Instructions) {
+  SymbolLessReturnRegion Region;
+  Region.Instructions.append(Instructions.begin(), Instructions.end());
+  return Region;
+}
+
+static SymbolLessReturnRegion
+makeSequentialSymbolLessReturnRegion(size_t Begin, size_t Count) {
+  SymbolLessReturnRegion Region;
+  Region.Instructions.reserve(Count);
+  for (size_t I = 0; I != Count; ++I)
+    Region.Instructions.push_back(Begin + I);
+  return Region;
 }
 
 static std::vector<InternalDecodedInst>
@@ -1084,6 +1102,62 @@ TEST(CollectDirectBranchTargets, MarksRegisterTargetCallUnresolved) {
   EXPECT_TRUE(Info->Targets.empty());
   EXPECT_TRUE(Info->HasUnboundedIndirectEntries);
   EXPECT_TRUE(Info->HasUnresolvedTargets);
+}
+
+TEST(SymbolLessReturnRegionOwnership, RejectsTransitiveTombstoneOverlap) {
+  llvm::SmallVector<SymbolLessReturnRegion, 4> Regions;
+  std::vector<int64_t> RegionOwner(5, -1);
+
+  EXPECT_TRUE(claimSymbolLessReturnRegion(
+      Regions, RegionOwner, makeSymbolLessReturnRegion({0, 1})));
+  EXPECT_FALSE(claimSymbolLessReturnRegion(
+      Regions, RegionOwner, makeSymbolLessReturnRegion({1, 2})));
+  EXPECT_FALSE(claimSymbolLessReturnRegion(
+      Regions, RegionOwner, makeSymbolLessReturnRegion({2, 3})));
+  EXPECT_TRUE(claimSymbolLessReturnRegion(
+      Regions, RegionOwner, makeSymbolLessReturnRegion({4})));
+
+  ASSERT_EQ(Regions.size(), 2u);
+  EXPECT_TRUE(Regions[0].Instructions.empty());
+  ASSERT_EQ(Regions[1].Instructions.size(), 1u);
+  EXPECT_EQ(Regions[1].Instructions.front(), 4u);
+  EXPECT_EQ(RegionOwner, (std::vector<int64_t>{-2, -2, -2, -2, 1}));
+}
+
+TEST(SymbolLessReturnRegionOwnership,
+     ScalesAcrossManyTransitiveTombstoneComponents) {
+  constexpr size_t ComponentCount = 1 << 14;
+  constexpr size_t RegionWidth = 64;
+  constexpr size_t ComponentWidth = 3 * RegionWidth - 2;
+  std::vector<int64_t> RegionOwner(ComponentCount * ComponentWidth, -1);
+  llvm::SmallVector<SymbolLessReturnRegion, 8> Regions;
+  Regions.reserve(ComponentCount);
+
+  for (size_t I = 0; I != ComponentCount; ++I) {
+    size_t Base = I * ComponentWidth;
+    ASSERT_TRUE(claimSymbolLessReturnRegion(
+        Regions, RegionOwner,
+        makeSequentialSymbolLessReturnRegion(Base, RegionWidth)))
+        << I;
+    ASSERT_FALSE(claimSymbolLessReturnRegion(
+        Regions, RegionOwner,
+        makeSequentialSymbolLessReturnRegion(Base + RegionWidth - 1,
+                                              RegionWidth)))
+        << I;
+    ASSERT_FALSE(claimSymbolLessReturnRegion(
+        Regions, RegionOwner,
+        makeSequentialSymbolLessReturnRegion(Base + 2 * RegionWidth - 2,
+                                              RegionWidth)))
+        << I;
+  }
+
+  ASSERT_EQ(Regions.size(), ComponentCount);
+  EXPECT_TRUE(std::all_of(Regions.begin(), Regions.end(),
+                          [](const SymbolLessReturnRegion &Region) {
+                            return Region.Instructions.empty();
+                          }));
+  EXPECT_TRUE(std::all_of(RegionOwner.begin(), RegionOwner.end(),
+                          [](int64_t Owner) { return Owner == -2; }));
 }
 
 TEST(CollectDirectBranchTargets,
@@ -2560,6 +2634,39 @@ TEST(CollectDirectBranchTargets, BoundsTwoIndependentSymbolLessReturnRegions) {
   EXPECT_TRUE(Info->Targets.contains(Decoded[0].Offset + Decoded[0].Size));
   EXPECT_TRUE(Info->Targets.contains(Decoded[2].Offset + Decoded[2].Size));
   EXPECT_FALSE(Info->HasUnboundedIndirectEntries);
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+}
+
+TEST(CollectDirectBranchTargets, RejectsOverlappingSymbolLessReturnRegions) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_call_i64 s[30:31], 5\n"
+                           "s_endpgm\n"
+                           "s_call_i64 s[30:31], 5\n"
+                           "s_endpgm\n"
+                           "s_endpgm\n"
+                           "s_endpgm\n"
+                           "s_branch 2\n"
+                           "s_endpgm\n"
+                           "s_branch 0\n"
+                           "s_nop 0\n"
+                           "s_set_pc_i64 s[30:31]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 11u);
+  llvm::SmallVector<uint64_t, 2> DeclaredEntries{0, Decoded[2].Offset};
+
+  // The two distinct call entries use the same link pair but converge on one
+  // return tail. Neither provisional region owns that shared body uniquely,
+  // so the streaming overlap audit must reject both.
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, Bytes.size(), DeclaredEntries);
+  ASSERT_TRUE(Info);
+  EXPECT_FALSE(Info->BoundedIndirectTransfers.contains(Decoded[10].Offset));
+  EXPECT_TRUE(Info->HasUnboundedIndirectEntries);
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 
