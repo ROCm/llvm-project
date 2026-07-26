@@ -363,6 +363,11 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_endpgm_saved", "s_endpgm_saved", S,
                                      S.SEndPgmSavedOpcode))
     return S;
+  if (!resolveRequiredOpcodeViaParse("s_rfe_i64 s[0:1]", "s_rfe_i64", S,
+                                     S.SRfeI64Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_trap 0", "s_trap", S, S.STrapOpcode))
+    return S;
   if (!resolveRequiredOpcodeViaParse("s_add_pc_i64 0", "s_add_pc_i64", S,
                                      S.SAddPcI64Opcode))
     return S;
