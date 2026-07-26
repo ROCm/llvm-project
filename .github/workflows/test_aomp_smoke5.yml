@@ -139,7 +139,7 @@ jobs:
           cd aomp/bin
           export AOMP=${OUTPUT_ARTIFACTS_DIR}/llvm
           echo ${AOMP}
-          export SUITE_LIST='Ompi OpenmpApps'
+          export SUITE_LIST='bldopenmpi openmpapps'
           echo ${SUITE_LIST}
           ./run_theRockCI.sh
 
