@@ -1826,6 +1826,29 @@ TEST(CollectDirectBranchTargets,
   EXPECT_FALSE(RepeatedCanonicalLeaf->HasUnresolvedTargets);
   EXPECT_FALSE(RepeatedCanonicalLeaf->HasUnboundedIndirectEntries);
 
+  // An independent opaque set-PC cannot be closed by preserving the reusable
+  // call target. The object must remain open even when its repeated calls are
+  // separately finite.
+  std::string OpenRepeatedCaller = "s_get_pc_i64 s[0:1]\n"
+                                   "s_add_nc_u64 s[0:1], s[0:1], 20\n"
+                                   "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                                   "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                                   "s_set_pc_i64 s[2:3]\n"
+                                   "s_endpgm\n";
+  llvm::SmallVector<uint8_t> OpenRepeatedCallerBytes =
+      assembleInstructions(OpenRepeatedCaller, S);
+  std::vector<InternalDecodedInst> OpenRepeatedCallerDecoded;
+  ASSERT_TRUE(decodeTextSection(OpenRepeatedCallerBytes.data(),
+                                OpenRepeatedCallerBytes.size(), S,
+                                OpenRepeatedCallerDecoded));
+  ASSERT_EQ(OpenRepeatedCallerDecoded.size(), 6u);
+  std::optional<DirectControlFlowInfo> OpenRepeatedCanonicalLeaf = Audit(
+      OpenRepeatedCaller + LeafFrame, {}, 0, FunctionTableElfMutation::None,
+      /*CallerEndIndex=*/OpenRepeatedCallerDecoded.size());
+  ASSERT_TRUE(OpenRepeatedCanonicalLeaf);
+  EXPECT_TRUE(OpenRepeatedCanonicalLeaf->HasUnresolvedTargets);
+  EXPECT_TRUE(OpenRepeatedCanonicalLeaf->HasUnboundedIndirectEntries);
+
   // A separate finite call enters the add of the exact singleton call above,
   // bypassing its defining get-PC. The canonical callee frame remains valid,
   // but the exact closure must reject this alternate materialization entry
@@ -2284,8 +2307,7 @@ TEST(CollectDirectBranchTargets, ResolvesProductionPcMaterializedCall) {
   // collectDirectBranchTargets normally sees the complete .text decode. Keep
   // the synthetic production slice faithful to that contract by representing
   // the resolved local target as an instruction boundary.
-  llvm::SmallVector<uint8_t> TargetBytes =
-      assembleInstructions("s_endpgm", S);
+  llvm::SmallVector<uint8_t> TargetBytes = assembleInstructions("s_endpgm", S);
   std::vector<InternalDecodedInst> TargetDecoded;
   ASSERT_TRUE(decodeTextSection(TargetBytes.data(), TargetBytes.size(), S,
                                 TargetDecoded));
