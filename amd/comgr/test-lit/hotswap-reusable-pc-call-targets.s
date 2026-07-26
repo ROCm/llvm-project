@@ -30,8 +30,9 @@
 // OVERLAP: hotswap: unresolved call target
 // CLOBBER: hotswap: resolved reusable PC-materialized call
 // CLOBBER: hotswap: unresolved call target
-// BOOTSTRAP-CLOBBER: hotswap: resolved PC-materialized call
+// BOOTSTRAP-CLOBBER-NOT: hotswap: resolved PC-materialized call
 // BOOTSTRAP-CLOBBER: hotswap: unresolved call target
+// BOOTSTRAP-CLOBBER-NOT: hotswap: resolved PC-materialized call
 // TAIL: hotswap: resolved reusable PC-materialized call
 // TAIL: hotswap: unresolved call target
 // INDIRECT: hotswap: resolved reusable PC-materialized call
@@ -102,14 +103,17 @@
 // RUN:   %t.outside.s -o %t.outside.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.outside.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   --output %t.outside.out.elf 2>&1 \
 // RUN:   | %FileCheck --check-prefix=OUTSIDE %s
-// OUTSIDE: hotswap: unresolved call target
-// OUTSIDE-SAME: (reusable target outside .text)
-// OUTSIDE: hotswap: unresolved control-flow target disables NOP-sled emission,
-// OUTSIDE-SAME: trampoline coalescing, source relocation, and .text gateways
-// OUTSIDE: hotswap: error: no safe short-branch gateway for far site
-// OUTSIDE: RESULT: ERROR
+// OUTSIDE: hotswap: resolved reusable PC-materialized call{{.*}}to 3 target(s)
+// OUTSIDE-NOT: hotswap: unresolved call target
+// OUTSIDE: hotswap: planned 1 shared far-dispatch gateway group(s) for 8 source site(s)
+// OUTSIDE: RESULT: SUCCESS
+// RUN: %llvm-objdump -d %t.outside.out.elf \
+// RUN:   | %FileCheck --check-prefix=OUTSIDE-DISASM %s
+// OUTSIDE-DISASM-LABEL: <reusable_pc_targets>:
+// OUTSIDE-DISASM: s_swap_pc_i64
+// OUTSIDE-DISASM-NEXT: s_swap_pc_i64
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM \
 // RUN:   --implicit-check-not=s_add_pc_i64 %s
@@ -160,6 +164,8 @@ external_materialization_entry:
 callee_bootstrap:
   s_mov_b32 s8, 3
 .if clobber_bootstrap
+  // The later unresolved bootstrap reuse makes the object-wide indirect-flow
+  // audit non-closed, so even the preceding one-shot proof is retracted.
   s_mov_b32 s10, 0
 .endif
   s_set_pc_i64 s[12:13]
