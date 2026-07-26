@@ -233,9 +233,10 @@ static void writeSrc2(uint8_t *Raw, unsigned Enc) {
 // template assembly so no opcode bits are hardcoded), writes the new block-32
 // scale sources, and bakes scale_src2 = VGPR0. scale_src2 is unused on
 // VOP3PX2, but leaving it 0 makes the SQ mis-decode it as an SGPR and stall;
-// baking it also keeps the bytes idempotent across passes. All other base-WMMA
-// bytes (VDST, SRC0/1/2, matrix formats, neg modifiers) survive the byte copy
-// and are patched by the caller.
+// baking it also keeps the bytes idempotent across passes. Matrix reuse bits
+// are cleared because both replacement passes substitute matrix operands. All
+// other base-WMMA bytes (VDST, SRC0/1/2, matrix formats, neg modifiers) survive
+// the byte copy and are patched by the caller.
 static SmallVector<uint8_t> rewriteScale16ToScale(const uint8_t *OrigRaw,
                                                   unsigned OrigSize,
                                                   unsigned NewScaleSrc0Enc,
@@ -254,6 +255,12 @@ static SmallVector<uint8_t> rewriteScale16ToScale(const uint8_t *OrigRaw,
 
   SmallVector<uint8_t> Rewritten(OrigRaw, OrigRaw + OrigSize);
   Rewritten[2] = Template[2];
+  constexpr unsigned MatrixAReuseBit = 13;
+  constexpr unsigned MatrixBReuseBit = 14;
+  static_assert(MatrixAReuseBit / 8 == MatrixBReuseBit / 8);
+  constexpr uint8_t MatrixReuseMask =
+      (1u << (MatrixAReuseBit % 8)) | (1u << (MatrixBReuseBit % 8));
+  Rewritten[MatrixAReuseBit / 8] &= static_cast<uint8_t>(~MatrixReuseMask);
   writeScaleSrc0(Rewritten.data(), NewScaleSrc0Enc);
   writeScaleSrc1(Rewritten.data(), NewScaleSrc1Enc);
   Rewritten[6] &= 0x03;                        // clear scale_src2[5:0]
