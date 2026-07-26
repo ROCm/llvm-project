@@ -2526,6 +2526,14 @@ struct ReachingCallGroup {
   SmallVector<size_t, 8> Calls;
 };
 
+struct SymbolLessReturnRegion {
+  uint64_t Entry = 0;
+  MCRegister LinkRegister;
+  SmallVector<size_t, 16> Instructions;
+  SmallVector<size_t, 2> Returns;
+  SmallVector<uint64_t, 8> Continuations;
+};
+
 static std::optional<uint64_t>
 getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
                     uint64_t TextAddr, uint64_t TextEnd);
@@ -2537,7 +2545,23 @@ static bool calleePreservesReusableTarget(
     uint64_t Target, MCRegister TargetRegister, MCRegister ReturnRegister,
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
-    ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<SymbolLessReturnRegion> SymbolLessRegions) {
+  if (LS.MRI->regsOverlap(TargetRegister, ReturnRegister))
+    return false;
+
+  for (const SymbolLessReturnRegion &Region : SymbolLessRegions) {
+    if (Region.Entry > std::numeric_limits<uint64_t>::max() - TextAddr ||
+        TextAddr + Region.Entry != Target ||
+        Region.LinkRegister != ReturnRegister || Region.Instructions.empty())
+      continue;
+    for (size_t InstIndex : Region.Instructions)
+      if (InstIndex >= Decoded.size() || !Decoded[InstIndex].DecodeSucceeded ||
+          definesOverlappingRegister(Decoded[InstIndex], LS, TargetRegister))
+        return false;
+    return true;
+  }
+
   const ElfView::FunctionTextRange *Callee = nullptr;
   for (const ElfView::FunctionTextRange &Range : FunctionRanges)
     if (Range.Begin == Target && Range.Begin >= TextAddr &&
@@ -3065,7 +3089,9 @@ static std::vector<ReachingCallTargets> resolveReusablePcValuesAtUses(
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
     ArrayRef<std::optional<PcMaterializedCallInfo>> LocalCalls,
-    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<ReachingPcUse> Uses,
+    ArrayRef<uint64_t> DeclaredEntries,
+    ArrayRef<SymbolLessReturnRegion> SymbolLessRegions,
+    ArrayRef<ReachingPcUse> Uses,
     ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers = {}) {
   std::vector<ReachingCallTargets> Resolved(Decoded.size());
   SmallVector<ReachingCallGroup, 8> Groups;
@@ -3273,7 +3299,8 @@ static std::vector<ReachingCallTargets> resolveReusablePcValuesAtUses(
                     .try_emplace(Key, calleePreservesReusableTarget(
                                           Target, Group.TargetRegister,
                                           ReturnRegister, Decoded, LS, TextAddr,
-                                          TextEnd, FunctionRanges))
+                                          TextEnd, FunctionRanges,
+                                          SymbolLessRegions))
                     .first;
           CalleesPreserve &= Cached->second;
         }
@@ -3346,6 +3373,7 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
     ArrayRef<std::optional<PcMaterializedCallInfo>> LocalCalls,
     ArrayRef<uint64_t> DeclaredEntries,
+    ArrayRef<SymbolLessReturnRegion> SymbolLessRegions,
     ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers = {}) {
   SmallVector<ReachingPcUse, 8> Uses;
   for (size_t I = 0; I != Decoded.size(); ++I) {
@@ -3360,7 +3388,7 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
   }
   return resolveReusablePcValuesAtUses(
       Decoded, LS, TextAddr, TextEnd, FunctionRanges, LocalCalls,
-      DeclaredEntries, Uses, FiniteSetPcTransfers);
+      DeclaredEntries, SymbolLessRegions, Uses, FiniteSetPcTransfers);
 }
 
 struct KnownCallSite {
@@ -4067,14 +4095,6 @@ static BitVector computeFiniteControlFlowReachability(
   return Reachable;
 }
 
-struct SymbolLessReturnRegion {
-  uint64_t Entry = 0;
-  MCRegister LinkRegister;
-  SmallVector<size_t, 16> Instructions;
-  SmallVector<size_t, 2> Returns;
-  SmallVector<uint64_t, 8> Continuations;
-};
-
 static bool instructionMayFallThrough(const InternalDecodedInst &DI,
                                       const LLVMState &LS) {
   if (!DI.DecodeSucceeded)
@@ -4396,6 +4416,29 @@ static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
     if (!Region.Instructions.empty())
       Disjoint.push_back(std::move(Region));
   return Disjoint;
+}
+
+static bool
+hasSameSymbolLessPreservationProof(ArrayRef<SymbolLessReturnRegion> Regions,
+                                   const SymbolLessReturnRegion &Required) {
+  for (const SymbolLessReturnRegion &Region : Regions)
+    if (Region.Entry == Required.Entry &&
+        Region.LinkRegister == Required.LinkRegister &&
+        Region.Instructions == Required.Instructions &&
+        Region.Returns == Required.Returns)
+      return true;
+  return false;
+}
+
+static bool
+hasSameSymbolLessPreservationProofs(ArrayRef<SymbolLessReturnRegion> LHS,
+                                    ArrayRef<SymbolLessReturnRegion> RHS) {
+  if (LHS.size() != RHS.size())
+    return false;
+  for (const SymbolLessReturnRegion &Region : LHS)
+    if (!hasSameSymbolLessPreservationProof(RHS, Region))
+      return false;
+  return true;
 }
 
 struct FiniteControlFlowAudit {
@@ -6217,8 +6260,10 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   std::optional<ControlFlowScanIndex> Index;
   SmallVector<BoundedSetPcReturn, 2> BoundedReturns;
   SmallVector<SymbolLessReturnRegion, 8> SymbolLessRegions;
+  SmallVector<SymbolLessReturnRegion, 8> PreservingSymbolLessRegions;
   bool IndirectControlFlowClosed = false;
   bool HasUnboundedIndirectEntries = false;
+  bool RejectedSymbolLessPreservation = false;
 
   // Exact set-PC edges are an optimistic over-approximation used only to
   // discover later finite call targets. Rebuild from scratch whenever the
@@ -6237,7 +6282,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       MaterializedCalls[Entry.first] = Entry.second;
     ReusableCalls = resolveReusablePcCallTargets(
         Decoded, LS, TextAddr, *TextEnd, FunctionRanges, MaterializedCalls,
-        DeclaredEntries, EnabledSetPcTransfers);
+        DeclaredEntries, PreservingSymbolLessRegions, EnabledSetPcTransfers);
     if (!addReusableCallsToIndex(Decoded, LS, TextAddr, *TextEnd, ReusableCalls,
                                  *Index))
       return std::nullopt;
@@ -6289,6 +6334,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         ExternalEntries, *Index, EnabledSetPcTransfers, AllBoundedReturns,
         SymbolLessRegions, Text);
     if (Audit.InvalidSetPcCandidates.any()) {
+      PreservingSymbolLessRegions.clear();
+      RejectedSymbolLessPreservation = false;
       for (size_t I = 0; I != EnabledSetPcTransfers.size(); ++I) {
         if (!Audit.InvalidSetPcCandidates.test(I))
           continue;
@@ -6305,6 +6352,25 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       ProvenSetPcCandidates.reset();
       continue;
     }
+    if (PreservingSymbolLessRegions.empty() &&
+        !RejectedSymbolLessPreservation && !SymbolLessRegions.empty()) {
+      // Symbol-less leaves and reusable target preservation form a bounded
+      // fixed point: later calls keep the first audit open until the already
+      // proven leaf is allowed to preserve their target pair. Try those local
+      // facts provisionally, then require the expanded audit below to close
+      // and reproduce every preservation proof before retaining them.
+      PreservingSymbolLessRegions = SymbolLessRegions;
+      continue;
+    }
+    if (!Audit.Closed && !PreservingSymbolLessRegions.empty()) {
+      // A preservation fact may expose more calls and therefore more entry
+      // edges. Keep it only when the expanded graph remains independently
+      // closed; otherwise rerun without the assumption and do not rediscover
+      // the same self-supporting fact.
+      PreservingSymbolLessRegions.clear();
+      RejectedSymbolLessPreservation = true;
+      continue;
+    }
     if (!Audit.Closed && !SymbolLessRegions.empty()) {
       // Symbol-less returns depend on a closed object-wide entry proof. If
       // any reachable entry source remains open, discard those inferred
@@ -6318,12 +6384,31 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           SymbolLessRegions, Text);
     }
     if (!Audit.Closed && !EnabledSetPcTransfers.empty()) {
+      PreservingSymbolLessRegions.clear();
+      RejectedSymbolLessPreservation = false;
       for (const FiniteSetPcTransfer &Enabled : EnabledSetPcTransfers)
         for (size_t J = 0; J != AllSetPcCandidates.size(); ++J)
           if (AllSetPcCandidates[J].InstIndex == Enabled.InstIndex) {
             RejectedSetPcCandidates.set(J);
           }
       ProvenSetPcCandidates.reset();
+      continue;
+    }
+    bool LostPreservationProof = false;
+    for (const SymbolLessReturnRegion &Region : PreservingSymbolLessRegions)
+      if (!hasSameSymbolLessPreservationProof(SymbolLessRegions, Region)) {
+        LostPreservationProof = true;
+        break;
+      }
+    if (LostPreservationProof) {
+      PreservingSymbolLessRegions.clear();
+      RejectedSymbolLessPreservation = true;
+      continue;
+    }
+    if (Audit.Closed && !RejectedSymbolLessPreservation &&
+        !hasSameSymbolLessPreservationProofs(PreservingSymbolLessRegions,
+                                             SymbolLessRegions)) {
+      PreservingSymbolLessRegions = SymbolLessRegions;
       continue;
     }
     IndirectControlFlowClosed = Audit.Closed;

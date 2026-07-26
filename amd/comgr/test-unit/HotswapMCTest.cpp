@@ -1799,6 +1799,33 @@ TEST(CollectDirectBranchTargets,
   EXPECT_FALSE(ExactCanonicalLeaf->HasUnresolvedTargets);
   EXPECT_FALSE(ExactCanonicalLeaf->HasUnboundedIndirectEntries);
 
+  // Reusing the same materialized target after a call is sound when the
+  // jointly audited symbol-less leaf cannot clobber that target pair. The
+  // second call must inherit the finite target instead of becoming an opaque
+  // indirect entry.
+  std::string RepeatedCaller = "s_get_pc_i64 s[0:1]\n"
+                               "s_add_nc_u64 s[0:1], s[0:1], 16\n"
+                               "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                               "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                               "s_endpgm\n";
+  llvm::SmallVector<uint8_t> RepeatedCallerBytes =
+      assembleInstructions(RepeatedCaller, S);
+  std::vector<InternalDecodedInst> RepeatedCallerDecoded;
+  ASSERT_TRUE(decodeTextSection(RepeatedCallerBytes.data(),
+                                RepeatedCallerBytes.size(), S,
+                                RepeatedCallerDecoded));
+  ASSERT_EQ(RepeatedCallerDecoded.size(), 5u);
+  std::optional<DirectControlFlowInfo> RepeatedCanonicalLeaf =
+      Audit(RepeatedCaller + LeafFrame, {}, 0, FunctionTableElfMutation::None,
+            /*CallerEndIndex=*/RepeatedCallerDecoded.size());
+  ASSERT_TRUE(RepeatedCanonicalLeaf);
+  EXPECT_TRUE(RepeatedCanonicalLeaf->BoundedIndirectTransfers.contains(
+      RepeatedCallerDecoded[2].Offset));
+  EXPECT_TRUE(RepeatedCanonicalLeaf->BoundedIndirectTransfers.contains(
+      RepeatedCallerDecoded[3].Offset));
+  EXPECT_FALSE(RepeatedCanonicalLeaf->HasUnresolvedTargets);
+  EXPECT_FALSE(RepeatedCanonicalLeaf->HasUnboundedIndirectEntries);
+
   // A separate finite call enters the add of the exact singleton call above,
   // bypassing its defining get-PC. The canonical callee frame remains valid,
   // but the exact closure must reject this alternate materialization entry
