@@ -3514,6 +3514,36 @@ TEST(DecodeStreaming, CanSkipSuccessfulMnemonics) {
   EXPECT_EQ(Decoded[2].Mnemonic, "<unknown>");
 }
 
+TEST(DecodeStreaming, ClearsReusedRecordAfterFailedDecode) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text;
+  ASSERT_TRUE(appendSingleInstBytes(Text, "s_add_u32 s0, s0, 1", S));
+  const uint8_t UnknownDword[] = {0xff, 0xff, 0xff, 0xff};
+  Text.append(std::begin(UnknownDword), std::end(UnknownDword));
+
+  unsigned Index = 0;
+  ASSERT_TRUE(decodeTextSectionStreaming(
+      Text.data(), Text.size(), S, /*WantMnemonic=*/true,
+      [&Index](const InternalDecodedInst &DI) {
+        if (Index == 0) {
+          EXPECT_TRUE(DI.DecodeSucceeded);
+          EXPECT_EQ(DI.Offset, 0u);
+          EXPECT_GT(DI.Inst.getNumOperands(), 0u);
+        } else if (Index == 1) {
+          EXPECT_FALSE(DI.DecodeSucceeded);
+          EXPECT_EQ(DI.Offset, MinInstSize);
+          EXPECT_EQ(DI.Size, MinInstSize);
+          EXPECT_EQ(DI.Mnemonic, "<unknown>");
+          EXPECT_EQ(DI.Inst.getNumOperands(), 0u);
+        }
+        ++Index;
+        return true;
+      }));
+  EXPECT_EQ(Index, 2u);
+}
+
 TEST(DecodeStreaming, UniqueWindowsRemainCorrectBeyondCacheLimit) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

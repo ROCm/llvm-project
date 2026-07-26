@@ -489,6 +489,18 @@ InstructionDecoder::InstructionDecoder(const uint8_t *Text, uint64_t TextSize,
 
 bool InstructionDecoder::decode(
     function_ref<bool(const InternalDecodedInst &)> OnInst) {
+  return decodeImpl([OnInst](InternalDecodedInst &DI) { return OnInst(DI); });
+}
+
+bool InstructionDecoder::decode(std::vector<InternalDecodedInst> &Decoded) {
+  return decodeImpl([&Decoded](InternalDecodedInst &DI) {
+    Decoded.push_back(std::move(DI));
+    return true;
+  });
+}
+
+bool InstructionDecoder::decodeImpl(
+    function_ref<bool(InternalDecodedInst &)> OnInst) {
   uint64_t Pos = 0;
   // Byte-identical instructions reuse the first decode instead of re-running
   // the disassembler; DI.Offset is set per occurrence, so reuse is safe. The
@@ -604,11 +616,8 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
                        std::vector<InternalDecodedInst> &Decoded,
                        bool WantMnemonic) {
   Decoded.reserve(Decoded.size() + TextSize / MinInstSize);
-  return decodeTextSectionStreaming(Text, TextSize, S, WantMnemonic,
-                                    [&Decoded](const InternalDecodedInst &DI) {
-                                      Decoded.push_back(DI);
-                                      return true;
-                                    });
+  InstructionDecoder Decoder(Text, TextSize, S, WantMnemonic);
+  return Decoder.decode(Decoded);
 }
 
 // -- assembly helpers ---------------------------------------------------------

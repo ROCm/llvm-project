@@ -928,7 +928,14 @@ public:
   [[nodiscard]] bool
   decode(llvm::function_ref<bool(const InternalDecodedInst &)> OnInst);
 
+  /// Materialize all decoded instructions, moving each completed record into
+  /// \p Decoded instead of copying its MCInst and mnemonic.
+  [[nodiscard]] bool decode(std::vector<InternalDecodedInst> &Decoded);
+
 private:
+  [[nodiscard]] bool
+  decodeImpl(llvm::function_ref<bool(InternalDecodedInst &)> OnInst);
+
   struct DecodeCacheEntry {
     llvm::MCInst Inst;
     uint32_t Size;
