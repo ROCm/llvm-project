@@ -139,7 +139,7 @@ jobs:
           cd aomp/bin
           export AOMP=${OUTPUT_ARTIFACTS_DIR}/llvm
           echo ${AOMP}
-          export SUITE_LIST='smoke-limbo smoke-fort-limbo'
+          export SUITE_LIST='Ompi OpenmpApps'
           echo ${SUITE_LIST}
           ./run_theRockCI.sh
 
