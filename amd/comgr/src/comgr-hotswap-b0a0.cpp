@@ -2563,13 +2563,6 @@ buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
             DI.Offset, DI.Size, "known call continuation address");
         if (!Continuation)
           return std::nullopt;
-        uint64_t TextSize = TextEnd - TextAddr;
-        if (*Continuation >= TextSize ||
-            (*Continuation & (MinInstSize - 1)) != 0) {
-          log() << "hotswap: call at 0x" << utohexstr(DI.Offset)
-                << " has no aligned continuation inside .text\n";
-          return std::nullopt;
-        }
         if (Target)
           Index.Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
         if (HasFiniteExternalTarget)
@@ -3913,11 +3906,17 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
       if (!LS.MIA->isCall(DI.Inst))
         continue;
       std::optional<uint64_t> Target;
+      bool IsFiniteExternalMaterializedCall =
+          MaterializedCalls[InstIndex] &&
+          (MaterializedCalls[InstIndex]->Target < TextAddr ||
+           MaterializedCalls[InstIndex]->Target >= *TextEnd);
       if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
           DI.Inst.getNumOperands() != 0 &&
           DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
         Target = static_cast<uint64_t>(
             DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
+      } else if (IsFiniteExternalMaterializedCall) {
+        Target = MaterializedCalls[InstIndex]->Target;
       } else {
         DenseMap<size_t, PcMaterializedCallInfo>::const_iterator Materialized =
             Index->MaterializedCalls.find(InstIndex);
@@ -3928,10 +3927,6 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
                                       Materialized->second.SequenceEnd))
           Target = Materialized->second.Target;
       }
-      bool IsFiniteExternalMaterializedCall =
-          MaterializedCalls[InstIndex] &&
-          (MaterializedCalls[InstIndex]->Target < TextAddr ||
-           MaterializedCalls[InstIndex]->Target >= *TextEnd);
       if (!ReusableCalls[InstIndex].empty() &&
           !IsFiniteExternalMaterializedCall) {
         if (llvm::any_of(ReusableCalls[InstIndex],
