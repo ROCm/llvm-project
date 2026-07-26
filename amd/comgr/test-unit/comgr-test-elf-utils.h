@@ -470,6 +470,7 @@ struct MultiKernelDescriptorElfOptions {
   uint16_t ElfType = llvm::ELF::ET_DYN;
   uint64_t TextAddr = 0x1000;
   uint64_t TextSize = 0x400;
+  std::vector<uint8_t> Text;
   uint64_t RodataAddr = 0x2000;
   std::vector<Kernel> Kernels;
 };
@@ -547,6 +548,10 @@ makeMultiKernelDescriptorElf(const MultiKernelDescriptorElfOptions &Options) {
 
   std::vector<uint8_t> Bytes(BufSize, 0);
   uint8_t *Buf = Bytes.data();
+  assert(Options.Text.size() <= Options.TextSize &&
+         "text bytes exceed multi-kernel .text size");
+  if (!Options.Text.empty())
+    std::memcpy(Buf + TextOffset, Options.Text.data(), Options.Text.size());
   std::memcpy(Buf + StrTabOff, StrTab.data(), StrTab.size());
   std::memcpy(Buf + ShStrTabOff, ShStrTab, sizeof(ShStrTab));
   if (HasMetadataNote)

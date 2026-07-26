@@ -810,6 +810,7 @@ static std::string findKernelOwnerAtTextOffset(PatchContext &Ctx,
   if (Cached != Ctx.FunctionKernelOwner.end())
     return Cached->second;
 
+  ++Ctx.FunctionKernelOwnerLookups;
   std::string Owner =
       Ctx.Elf.findKernelAtAddress(TextOffset + Ctx.Elf.textAddr());
   Ctx.FunctionKernelOwner.try_emplace(Key, Owner);
@@ -838,6 +839,7 @@ findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
     DenseMap<FunctionKey, SafeSgprUsageSummary>::iterator Cached =
         Ctx.FunctionSgprUsage.find(Key);
     if (Cached == Ctx.FunctionSgprUsage.end()) {
+      ++Ctx.FunctionSgprUsageAnalyses;
       std::vector<InternalDecodedInst>::const_iterator Begin = std::lower_bound(
           Ctx.Decoded.cbegin(), Ctx.Decoded.cend(), FunctionRange->Begin,
           [](const InternalDecodedInst &DI, uint64_t Offset) {

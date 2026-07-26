@@ -1448,12 +1448,18 @@ struct PatchContext {
   std::optional<SafeSgprUsageSummary> WholeObjectSgprUsage;
   llvm::DenseMap<std::pair<uint64_t, uint64_t>, SafeSgprUsageSummary>
       FunctionSgprUsage{0};
+  // Counts cold production analyses, so tests and profiling can distinguish
+  // repeated cache hits from recomputation.
+  uint64_t FunctionSgprUsageAnalyses = 0;
   // Kernel ownership and scratch-SGPR descriptor charging are immutable or
   // monotone during one rewrite. Cache both so a promoted relay in a large
   // non-kernel function does not repeat the same symbol lookup and full
   // kernel-descriptor scan for every source instruction.
   llvm::DenseMap<std::pair<uint64_t, uint64_t>, std::string>
       FunctionKernelOwner{0};
+  // Counts cold function-to-kernel symbol lookups. Cache hits do not advance
+  // this counter.
+  uint64_t FunctionKernelOwnerLookups = 0;
   unsigned AllKernelSgprRequirement = 0;
   llvm::StringMap<unsigned> KernelSgprRequirements;
   uint64_t SgprDescriptorChargePasses = 0;

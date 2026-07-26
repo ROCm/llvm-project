@@ -4307,6 +4307,134 @@ TEST(SafeSgprScratchBlock, CommitCacheIsMonotoneAcrossOwnerScopes) {
   EXPECT_EQ(KernelStats["kernel"].ExtraSgprs, 12u);
 }
 
+TEST(SafeSgprScratchBlock,
+     ProductionCachesHitIsolateFunctionKeysAndMatchFreshQueries) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> First =
+      assembleInstructions("s_mov_b32 s10, s0\ns_endpgm", S);
+  llvm::SmallVector<uint8_t> Second =
+      assembleInstructions("s_mov_b32 s20, s0\ns_endpgm", S);
+  ASSERT_FALSE(First.empty());
+  ASSERT_FALSE(Second.empty());
+
+  constexpr uint64_t FunctionSize = 0x40;
+  std::vector<uint8_t> Text(2 * FunctionSize);
+  for (size_t Offset = 0; Offset != Text.size(); Offset += MinInstSize)
+    std::copy(S.SNopBytes.begin(), S.SNopBytes.end(), Text.begin() + Offset);
+  std::copy(First.begin(), First.end(), Text.begin());
+  std::copy(Second.begin(), Second.end(), Text.begin() + FunctionSize);
+
+  comgr_test::MultiKernelDescriptorElfOptions Options;
+  Options.TextSize = Text.size();
+  Options.Text = Text;
+  Options.Kernels.push_back({/*Name=*/"kernel0",
+                             /*EntryVAddr=*/Options.TextAddr,
+                             /*KdVAddr=*/Options.RodataAddr, /*EntryOffset=*/0,
+                             /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true,
+                             /*MetadataSgprCount=*/4});
+  Options.Kernels.push_back(
+      {/*Name=*/"kernel1", /*EntryVAddr=*/Options.TextAddr + FunctionSize,
+       /*KdVAddr=*/Options.RodataAddr + 0x40, /*EntryOffset=*/0,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true,
+       /*MetadataSgprCount=*/4});
+  std::vector<uint8_t> Object =
+      comgr_test::makeMultiKernelDescriptorElf(Options);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Object.data(), Object.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(View.textData(), View.textSize(), S, Decoded));
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   Decoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  std::optional<SafeSgprScratchBlock> FirstCold =
+      findSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, /*Count=*/2,
+                               /*Alignment=*/2, "unit test");
+  std::optional<SafeSgprScratchBlock> FirstHit =
+      findSafeSgprScratchBlock(Ctx, /*TextOffset=*/0, /*Count=*/2,
+                               /*Alignment=*/2, "unit test");
+  std::optional<SafeSgprScratchBlock> SecondCold =
+      findSafeSgprScratchBlock(Ctx, /*TextOffset=*/FunctionSize, /*Count=*/2,
+                               /*Alignment=*/2, "unit test");
+  std::optional<SafeSgprScratchBlock> SecondHit =
+      findSafeSgprScratchBlock(Ctx, /*TextOffset=*/FunctionSize, /*Count=*/2,
+                               /*Alignment=*/2, "unit test");
+  ASSERT_TRUE(FirstCold);
+  ASSERT_TRUE(FirstHit);
+  ASSERT_TRUE(SecondCold);
+  ASSERT_TRUE(SecondHit);
+  EXPECT_EQ(FirstCold->Base, 12u);
+  EXPECT_EQ(SecondCold->Base, 22u);
+  EXPECT_EQ(FirstHit->Base, FirstCold->Base);
+  EXPECT_EQ(SecondHit->Base, SecondCold->Base);
+  EXPECT_EQ(Ctx.FunctionKernelOwnerLookups, 2u);
+  EXPECT_EQ(Ctx.FunctionSgprUsageAnalyses, 2u);
+  EXPECT_EQ(Ctx.FunctionKernelOwner.size(), 2u);
+  EXPECT_EQ(Ctx.FunctionSgprUsage.size(), 2u);
+
+  // Fresh contexts bypass both caches. Their production results are the
+  // uncached oracle for the two cached outputs above.
+  std::vector<Trampoline> FreshTrampolines;
+  std::vector<NopSled> FreshSleds;
+  LivenessInfo FreshLiveness;
+  llvm::StringMap<KernelPatchStats> FreshKernelStats;
+  std::vector<ScratchPatchInfo> FreshScratchPatches;
+  DirectControlFlowInfo FreshControlFlow;
+  HotswapProfile FreshProf(/*Enabled=*/false);
+  PatchContext FreshCtx{Config,
+                        Decoded,
+                        View.textData(),
+                        View.textSize(),
+                        /*PoolBaseOffset=*/0,
+                        S,
+                        FreshTrampolines,
+                        FreshSleds,
+                        View,
+                        FreshLiveness,
+                        FreshKernelStats,
+                        FreshScratchPatches,
+                        FreshControlFlow,
+                        FreshProf};
+  std::optional<SafeSgprScratchBlock> FirstFresh =
+      findSafeSgprScratchBlock(FreshCtx, /*TextOffset=*/0, /*Count=*/2,
+                               /*Alignment=*/2, "unit test");
+  std::optional<SafeSgprScratchBlock> SecondFresh =
+      findSafeSgprScratchBlock(FreshCtx, /*TextOffset=*/FunctionSize,
+                               /*Count=*/2, /*Alignment=*/2, "unit test");
+  ASSERT_TRUE(FirstFresh);
+  ASSERT_TRUE(SecondFresh);
+  EXPECT_EQ(FirstFresh->Base, FirstCold->Base);
+  EXPECT_EQ(FirstFresh->Count, FirstCold->Count);
+  EXPECT_EQ(SecondFresh->Base, SecondCold->Base);
+  EXPECT_EQ(SecondFresh->Count, SecondCold->Count);
+  EXPECT_EQ(FreshCtx.FunctionKernelOwnerLookups, 2u);
+  EXPECT_EQ(FreshCtx.FunctionSgprUsageAnalyses, 2u);
+}
+
 TEST(SafeSgprScratchBlock, OwnerlessCommitFailureIsAtomic) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
