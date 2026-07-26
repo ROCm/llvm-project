@@ -22,10 +22,12 @@
 #include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Target/AMDGPU/AMDGPUOperandInfo.h"
 #include "llvm/TargetParser/AMDGPUTargetParser.h"
 #include <optional>
 
@@ -38,6 +40,93 @@ static llvm::cl::opt<unsigned> DefaultAMDHSACodeObjectVersion(
     llvm::cl::init(llvm::AMDGPU::AMDHSA_COV6),
     llvm::cl::desc("Set default AMDHSA Code Object Version (module flag "
                    "or asm directive still take priority if present)"));
+
+std::optional<unsigned> llvm::AMDGPU::getMCOperandIndex(const MCInst &Inst,
+                                                        MCOperandRole Role) {
+  unsigned Opcode = Inst.getOpcode();
+  if (Opcode >= AMDGPU::INSTRUCTION_LIST_END)
+    return std::nullopt;
+  if (static_cast<uint8_t>(Role) > static_cast<uint8_t>(MCOperandRole::OpSelHi))
+    return std::nullopt;
+
+  OpName Name;
+  switch (Role) {
+  case MCOperandRole::VDst:
+    Name = OpName::vdst;
+    break;
+  case MCOperandRole::Src0:
+    Name = OpName::src0;
+    break;
+  case MCOperandRole::Src1:
+    Name = OpName::src1;
+    break;
+  case MCOperandRole::Src2:
+    Name = OpName::src2;
+    break;
+  case MCOperandRole::Src0Modifiers:
+    Name = OpName::src0_modifiers;
+    break;
+  case MCOperandRole::Src1Modifiers:
+    Name = OpName::src1_modifiers;
+    break;
+  case MCOperandRole::Src2Modifiers:
+    Name = OpName::src2_modifiers;
+    break;
+  case MCOperandRole::ScaleSrc0:
+    Name = OpName::scale_src0;
+    break;
+  case MCOperandRole::ScaleSrc1:
+    Name = OpName::scale_src1;
+    break;
+  case MCOperandRole::MatrixAFormat:
+    Name = OpName::matrix_a_fmt;
+    break;
+  case MCOperandRole::MatrixBFormat:
+    Name = OpName::matrix_b_fmt;
+    break;
+  case MCOperandRole::MatrixAScale:
+    Name = OpName::matrix_a_scale;
+    break;
+  case MCOperandRole::MatrixBScale:
+    Name = OpName::matrix_b_scale;
+    break;
+  case MCOperandRole::MatrixAScaleFormat:
+    Name = OpName::matrix_a_scale_fmt;
+    break;
+  case MCOperandRole::MatrixBScaleFormat:
+    Name = OpName::matrix_b_scale_fmt;
+    break;
+  case MCOperandRole::MatrixAReuse:
+    Name = OpName::matrix_a_reuse;
+    break;
+  case MCOperandRole::MatrixBReuse:
+    Name = OpName::matrix_b_reuse;
+    break;
+  case MCOperandRole::NegLo:
+    Name = OpName::neg_lo;
+    break;
+  case MCOperandRole::NegHi:
+    Name = OpName::neg_hi;
+    break;
+  case MCOperandRole::Clamp:
+    Name = OpName::clamp;
+    break;
+  case MCOperandRole::OMod:
+    Name = OpName::omod;
+    break;
+  case MCOperandRole::OpSel:
+    Name = OpName::op_sel;
+    break;
+  case MCOperandRole::OpSelHi:
+    Name = OpName::op_sel_hi;
+    break;
+  }
+
+  int16_t Index = getNamedOperandIdx(Opcode, Name);
+  if (Index < 0 || static_cast<unsigned>(Index) >= Inst.getNumOperands())
+    return std::nullopt;
+  return static_cast<unsigned>(Index);
+}
 
 namespace {
 
