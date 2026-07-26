@@ -1677,6 +1677,12 @@ bool isTensorMaskAlreadyZero(const PatchContext &Ctx, size_t TensorIdx,
         return false;
     }
 
+    // A backedge can make function entry appear to have a predecessor. Unless
+    // the entry instruction itself established a recognized zero above, the
+    // incoming descriptor value is unknown.
+    if (LocalIndex == 0)
+      return false;
+
     bool HasReachablePredecessor = false;
     for (size_t Predecessor : Graph->Predecessors[LocalIndex]) {
       if (Reachable[Predecessor] == 0)
