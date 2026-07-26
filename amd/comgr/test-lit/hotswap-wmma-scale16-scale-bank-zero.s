@@ -1,5 +1,7 @@
 // COM: Scale16 prefix operands always address bank-zero VGPRs, even when the
-// COM: matrix SRC0/SRC1 roles select nonzero banks through VGPR-MSB.
+// COM: matrix SRC0/SRC1 roles select nonzero banks through VGPR-MSB. Generated
+// COM: scale values must therefore be produced in the same low-bank registers
+// COM: consumed by each replacement WMMA.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
@@ -10,11 +12,12 @@
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 // DISASM-LABEL: <test_wmma_scale16_scale_bank_zero>:
 // DISASM-NOT: v_wmma_scale16
-// COM: The transition into the first gather keeps SRC1 in bank zero. The old
-// COM: lowering's first transition was 0x545 and read physical v304 instead.
-// DISASM: s_wait_xcnt 0x0
-// DISASM-NEXT: s_set_vgpr_msb 0x541
-// DISASM-NEXT: v_and_b32_e32 v48 {{.*}}, 0xff, v48
+// COM: The gather reads the original scale tuples in bank zero and writes
+// COM: directly addressable low-bank results. Each WMMA consumes those exact
+// COM: result registers rather than their nonzero-bank aliases.
+// DISASM: v_and_b32_e32 [[SCALE_A_LO:v[0-9]+]], 0xff, v48{{[[:space:]]+//}}
+// DISASM: v_and_b32_e32 [[SCALE_B_LO:v[0-9]+]], 0xff, v50{{[[:space:]]+//}}
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, [[SCALE_A_LO]], [[SCALE_B_LO]]
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

@@ -16,28 +16,35 @@
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 // DISASM-LABEL: <test_wmma_scale16_large_vgpr_count>:
 // DISASM-NOT: v_wmma_scale16
-// DISASM: v_mov_b32_e32 v191 /*v703*/, v255
+// COM: Masked A and generated scale operands share a preserved bank-zero
+// COM: block. Matrix B remains in above-KD scratch. Each WMMA consumes the
+// COM: exact low-bank values produced by its gather.
+// DISASM: v_and_b32_e32 [[LO_A:v[0-9]+]], 0xff, v0{{[[:space:]]+//}}
+// DISASM: v_and_b32_e32 [[LO_B:v[0-9]+]], 0xff, v18{{[[:space:]]+//}}
+// DISASM: v_bfe_u32 [[HI_A:v[0-9]+]], v0, 8, 8
+// DISASM: v_bfe_u32 [[HI_B:v[0-9]+]], v18, 8, 8
+// DISASM: v_lshl_or_b32 [[HI_B]], {{.*}}, 24, [[HI_B]]
 // DISASM-NEXT: s_wait_xcnt 0x0
-// DISASM-NEXT: s_set_vgpr_msb 0xa0a1
-// DISASM-NEXT: v_mov_b32_e32 v192 /*v704*/, v0 /*v256*/
-// DISASM: v_mov_b32_e32 v189 /*v701*/, 0
+// DISASM-NEXT: s_set_vgpr_msb {{.*}}
+// DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[2:9], v[190:197] /*v[702:709]*/, 0, [[LO_A]], [[LO_B]]
+// DISASM: v_mov_b32_e32 v9, v181
+// DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[2:9], v[190:197] /*v[702:709]*/, v[38:45], [[HI_A]], [[HI_B]]
+// DISASM-NEXT: v_nop
 // DISASM-NEXT: s_wait_xcnt 0x0
-// DISASM-NEXT: s_set_vgpr_msb 0xa00a
-// DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[182:189] /*v[694:701]*/, v[190:197] /*v[702:709]*/, 0,
-// DISASM: v_mov_b32_e32 v189 /*v701*/, v181
+// DISASM-NEXT: s_set_vgpr_msb 0x80a
+// DISASM-NEXT: v_mov_b32_e32 v2, v176 /*v688*/
+// DISASM: v_and_b32_e32 [[LO_A_2:v[0-9]+]], 0xff, v0{{[[:space:]]+//}}
+// DISASM: v_and_b32_e32 [[LO_B_2:v[0-9]+]], 0xff, v18{{[[:space:]]+//}}
+// DISASM: v_bfe_u32 [[HI_A_2:v[0-9]+]], v0, 8, 8
+// DISASM: v_bfe_u32 [[HI_B_2:v[0-9]+]], v18, 8, 8
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[2:9], v[190:197] /*v[702:709]*/, 0, [[LO_A_2]], [[LO_B_2]]
+// DISASM: v_mov_b32_e32 v9, v181
+// DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[2:9], v[190:197] /*v[702:709]*/, v[38:45], [[HI_A_2]], [[HI_B_2]]
+// DISASM-NEXT: v_nop
 // DISASM-NEXT: s_wait_xcnt 0x0
-// DISASM-NEXT: s_set_vgpr_msb 0x880a
-// DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[182:189] /*v[694:701]*/, v[190:197] /*v[702:709]*/, v[38:45],
-// DISASM-NEXT: s_wait_xcnt 0x0
-// DISASM-NEXT: s_set_vgpr_msb 0xa00
-// DISASM: v_mov_b32_e32 v189 /*v701*/, 0
-// DISASM-NEXT: s_wait_xcnt 0x0
-// DISASM-NEXT: s_set_vgpr_msb 0xa00a
-// DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[182:189] /*v[694:701]*/, v[190:197] /*v[702:709]*/, 0,
-// DISASM: v_mov_b32_e32 v189 /*v701*/, v181
-// DISASM-NEXT: s_wait_xcnt 0x0
-// DISASM-NEXT: s_set_vgpr_msb 0x880a
-// DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[38:45], v[182:189] /*v[694:701]*/, v[190:197] /*v[702:709]*/, v[38:45],
+// DISASM-NEXT: s_set_vgpr_msb 0x80a
+// DISASM-NEXT: v_mov_b32_e32 v2, v176 /*v688*/
+// DISASM: v_mov_b32_e32 v14, v188 /*v700*/
 // DISASM-NEXT: s_wait_xcnt 0x0
 // DISASM-NEXT: s_set_vgpr_msb 0xa00
 
