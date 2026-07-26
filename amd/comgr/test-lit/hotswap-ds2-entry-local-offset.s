@@ -10,12 +10,15 @@
 // COM: it neither consumes neighboring instructions nor weakens the unknown
 // COM: control-flow guards.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 \
+// RUN:   --amdhsa-code-object-version=6 -filetype=obj %s -o %t.o
+// RUN: %ld.lld -flavor gnu -m elf64_amdgpu %t.o -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
-// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=LOG,API %s
+// LOG: hotswap: generic gfx1250 source has uniform B0 metadata
 // LOG: hotswap: unresolved call target
 // LOG: hotswap: unresolved control-flow target disables NOP-sled emission,
 // LOG-SAME: trampoline coalescing, source relocation, and .text gateways
@@ -23,18 +26,21 @@
 // API: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// RUN: %llvm-readelf --notes %t.out.elf | \
+// RUN:   %FileCheck --check-prefix=METADATA %s
 // DISASM-LABEL: <test_ds2_entry_local>:
 // DISASM-NEXT: s_swap_pc_i64 s[30:31], s[0:1]
 // DISASM-NEXT: ds_store_2addr_b64 v19, v[14:15], v[20:21] offset1:8
 // DISASM-NEXT: s_wait_loadcnt_dscnt 0x1
 // DISASM-NEXT: s_endpgm
+// METADATA: .gfx1250_revision: A0
 
-// COM: Relabel the first pass's output as A0 source. This disables the B0-to-A0
-// COM: family and must produce a byte-identical second object; legacy ISA names
-// COM: intentionally default the source to B0 on every independent invocation.
+// COM: Repeat the same generic source/target request. The first pass's uniform
+// COM: A0 revision metadata is the durable proof that the surviving DS2
+// COM: offsets are already byte offsets, so the second output is byte-identical.
 // RUN: hotswap-rewrite %t.out.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
-// RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out2.elf | %FileCheck --check-prefix=API2 %s
 // API2: RESULT: SUCCESS
 // RUN: cmp %t.out.elf %t.out2.elf
@@ -65,11 +71,12 @@ test_ds2_entry_local:
 
 .amdgpu_metadata
   amdhsa.version:
-    - 3
+    - 6
     - 0
   amdhsa.kernels:
     - .name: test_ds2_entry_local
       .symbol: test_ds2_entry_local.kd
+      .gfx1250_revision: B0
       .sgpr_count: 32
       .vgpr_count: 22
       .kernarg_segment_size: 0

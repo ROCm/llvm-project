@@ -333,7 +333,7 @@ rewriteKernelMetadataCounts(uint8_t *Elf, const ELFFileT &File,
 
 bool ElfView::updateGfx1250RevisionMetadata(StringRef Revision) {
   bool SawMetadataNote = false;
-  return rewriteMetadataNotes(
+  bool Succeeded = rewriteMetadataNotes(
       data(), File, "updateGfx1250RevisionMetadata",
       [&](msgpack::Document &Doc,
           msgpack::MapDocNode &RootMap) -> std::optional<bool> {
@@ -364,6 +364,22 @@ bool ElfView::updateGfx1250RevisionMetadata(StringRef Revision) {
         return Changed;
       },
       [](bool) { return true; }, SawMetadataNote);
+  if (!Succeeded)
+    return false;
+
+  std::optional<bool> IsB0;
+  if (Revision == "B0")
+    IsB0 = true;
+  else if (Revision == "A0")
+    IsB0 = false;
+
+  if (MetadataCacheState == KernelMetadataCacheState::Metadata) {
+    if (IsB0)
+      for (StringMapEntry<CachedKernelMetadata> &KV : KernelMetadataCache)
+        if (KV.second.Gfx1250RevisionIsB0)
+          KV.second.Gfx1250RevisionIsB0 = *IsB0;
+  }
+  return true;
 }
 
 // -- applyByteReplace ---------------------------------------------------------
@@ -806,6 +822,7 @@ void ElfView::initializeKernelDescriptorCache() const {
 
     Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
     if (!SymsOrErr) {
+      KernelDescriptorCacheComplete = false;
       log() << "hotswap: error: kernelDescriptors: failed to read symbols: "
             << toString(SymsOrErr.takeError()) << "\n";
       continue;
@@ -813,6 +830,7 @@ void ElfView::initializeKernelDescriptorCache() const {
     Expected<StringRef> StrTabOrErr =
         File.getStringTableForSymtab(SymShdr, Sections);
     if (!StrTabOrErr) {
+      KernelDescriptorCacheComplete = false;
       log() << "hotswap: error: kernelDescriptors: failed to read symbol "
             << "string table: " << toString(StrTabOrErr.takeError()) << "\n";
       continue;
@@ -821,6 +839,7 @@ void ElfView::initializeKernelDescriptorCache() const {
     for (const ELFT::Sym &Sym : *SymsOrErr) {
       Expected<StringRef> NameOrErr = Sym.getName(*StrTabOrErr);
       if (!NameOrErr) {
+        KernelDescriptorCacheComplete = false;
         log() << "hotswap: error: kernelDescriptors: failed to read symbol "
               << "name: " << toString(NameOrErr.takeError()) << "\n";
         continue;
@@ -831,6 +850,7 @@ void ElfView::initializeKernelDescriptorCache() const {
       Expected<const ELFT::Shdr *> HostShdrOrErr =
           File.getSection(Sym.st_shndx);
       if (!HostShdrOrErr) {
+        KernelDescriptorCacheComplete = false;
         log() << "hotswap: error: kernelDescriptors: descriptor symbol '"
               << *NameOrErr << "' has unreadable section index " << Sym.st_shndx
               << ": " << toString(HostShdrOrErr.takeError()) << "\n";
@@ -841,8 +861,10 @@ void ElfView::initializeKernelDescriptorCache() const {
           HostShdr, Sym.st_value, KdSize, size(),
           (Twine("kernelDescriptors: descriptor symbol '") + *NameOrErr + "'")
               .str());
-      if (!FileOffset)
+      if (!FileOffset) {
+        KernelDescriptorCacheComplete = false;
         continue;
+      }
 
       int64_t EntryOffset = 0;
       std::memcpy(
@@ -1269,22 +1291,67 @@ void ElfView::initializeKernelMetadataCache() const {
         msgpack::MapDocNode &RootMap = Root.getMap();
         msgpack::DocNode::MapTy::iterator KernelsIt =
             RootMap.find("amdhsa.kernels");
-        if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray())
+        if (KernelsIt == RootMap.end())
           continue;
+        if (!KernelsIt->second.isArray()) {
+          log() << "hotswap: error: metadata cache: amdhsa.kernels is not "
+                   "an array.\n";
+          Gfx1250RevisionMetadataWellFormed = false;
+          continue;
+        }
 
         msgpack::ArrayDocNode &KernelArray = KernelsIt->second.getArray();
         for (msgpack::DocNode &KNode : KernelArray) {
-          if (!KNode.isMap())
+          if (!KNode.isMap()) {
+            log() << "hotswap: error: metadata cache: amdhsa.kernels entry "
+                     "is not a map.\n";
+            Gfx1250RevisionMetadataWellFormed = false;
             continue;
+          }
           msgpack::MapDocNode &KMap = KNode.getMap();
+          msgpack::DocNode::MapTy::iterator RevisionIt =
+              KMap.find(".gfx1250_revision");
+          if (RevisionIt != KMap.end())
+            ++Gfx1250RevisionMarkerCount;
+
           msgpack::DocNode::MapTy::iterator NameIt = KMap.find(".name");
-          if (NameIt == KMap.end() || !NameIt->second.isString() ||
-              KernelMetadataCache.find(NameIt->second.getString()) !=
-                  KernelMetadataCache.end())
+          if (NameIt == KMap.end() || !NameIt->second.isString()) {
+            log() << "hotswap: error: metadata cache: kernel entry has no "
+                     "valid .name string.\n";
+            Gfx1250RevisionMetadataWellFormed = false;
             continue;
+          }
 
           StringRef Name = NameIt->second.getString();
+          if (KernelMetadataCache.find(Name) != KernelMetadataCache.end()) {
+            log() << "hotswap: error: metadata cache: duplicate kernel name '"
+                  << Name << "'.\n";
+            Gfx1250RevisionMetadataWellFormed = false;
+            continue;
+          }
+
           CachedKernelMetadata Metadata;
+          if (RevisionIt == KMap.end()) {
+            // Absence is the legacy generic-ISA state. It becomes ambiguous
+            // only if another kernel in the object carries a marker.
+          } else if (!RevisionIt->second.isString()) {
+            log() << "hotswap: error: metadata cache: .gfx1250_revision for '"
+                  << Name << "' is not a string.\n";
+            Gfx1250RevisionMetadataWellFormed = false;
+          } else {
+            StringRef Revision = RevisionIt->second.getString();
+            if (Revision == "B0")
+              Metadata.Gfx1250RevisionIsB0 = true;
+            else if (Revision == "A0")
+              Metadata.Gfx1250RevisionIsB0 = false;
+            else {
+              log() << "hotswap: error: metadata cache: "
+                       ".gfx1250_revision for '"
+                    << Name << "' is '" << Revision
+                    << "', expected B0 or A0.\n";
+              Gfx1250RevisionMetadataWellFormed = false;
+            }
+          }
           Metadata.SgprCount =
               readOptionalUnsignedMetadataField(KMap, Name, ".sgpr_count");
           Metadata.VgprCount =
@@ -1312,6 +1379,86 @@ void ElfView::initializeKernelMetadataCache() const {
 
   MetadataCacheState = SawMetadataNote ? KernelMetadataCacheState::Metadata
                                        : KernelMetadataCacheState::NoMetadata;
+}
+
+Gfx1250RevisionState ElfView::getGfx1250RevisionState() const {
+  initializeKernelMetadataCache();
+  if (MetadataCacheState == KernelMetadataCacheState::NoMetadata)
+    return Gfx1250RevisionState::NoMarker;
+  if (MetadataCacheState == KernelMetadataCacheState::Error) {
+    log() << "hotswap: error: gfx1250 revision state is ambiguous because "
+             "AMDGPU metadata could not be parsed.\n";
+    return Gfx1250RevisionState::Ambiguous;
+  }
+  if (!Gfx1250RevisionMetadataWellFormed) {
+    log() << "hotswap: error: gfx1250 revision state is ambiguous because "
+             "revision metadata is malformed.\n";
+    return Gfx1250RevisionState::Ambiguous;
+  }
+  if (Gfx1250RevisionMarkerCount == 0)
+    return Gfx1250RevisionState::NoMarker;
+
+  initializeKernelDescriptorCache();
+  if (!KernelDescriptorCacheComplete) {
+    log() << "hotswap: error: gfx1250 revision state is ambiguous because "
+             "the kernel descriptor scan was incomplete.\n";
+    return Gfx1250RevisionState::Ambiguous;
+  }
+  if (KernelDescriptorCache->empty()) {
+    log() << "hotswap: error: gfx1250 revision markers are present but the "
+             "code object has no kernel descriptors.\n";
+    return Gfx1250RevisionState::Ambiguous;
+  }
+  if (Gfx1250RevisionMarkerCount != KernelMetadataCache.size()) {
+    log() << "hotswap: error: gfx1250 revision marker coverage is partial: "
+          << Gfx1250RevisionMarkerCount << " marker(s) for "
+          << KernelMetadataCache.size() << " metadata kernel(s).\n";
+    return Gfx1250RevisionState::Ambiguous;
+  }
+  if (KernelMetadataCache.size() != KernelDescriptorCache->size()) {
+    log() << "hotswap: error: gfx1250 revision coverage count mismatch: "
+          << KernelMetadataCache.size() << " metadata kernel(s), "
+          << KernelDescriptorCache->size() << " kernel descriptor(s).\n";
+    return Gfx1250RevisionState::Ambiguous;
+  }
+
+  StringMap<bool> DescriptorNames;
+  std::optional<bool> UniformIsB0;
+  for (const KernelDescriptorInfo &Descriptor : *KernelDescriptorCache) {
+    if (DescriptorNames.find(Descriptor.KernelName) != DescriptorNames.end()) {
+      log() << "hotswap: error: gfx1250 revision coverage has multiple "
+               "descriptor addresses for kernel '"
+            << Descriptor.KernelName << "'.\n";
+      return Gfx1250RevisionState::Ambiguous;
+    }
+    DescriptorNames.try_emplace(Descriptor.KernelName, true);
+
+    StringMap<CachedKernelMetadata>::const_iterator Metadata =
+        KernelMetadataCache.find(Descriptor.KernelName);
+    if (Metadata == KernelMetadataCache.end()) {
+      log() << "hotswap: error: gfx1250 revision metadata has no entry for "
+               "kernel descriptor '"
+            << Descriptor.KernelName << "'.\n";
+      return Gfx1250RevisionState::Ambiguous;
+    }
+    if (!Metadata->second.Gfx1250RevisionIsB0) {
+      log() << "hotswap: error: gfx1250 revision metadata has no marker for "
+               "kernel '"
+            << Descriptor.KernelName << "'.\n";
+      return Gfx1250RevisionState::Ambiguous;
+    }
+    if (!UniformIsB0) {
+      UniformIsB0 = Metadata->second.Gfx1250RevisionIsB0;
+      continue;
+    }
+    if (*UniformIsB0 != *Metadata->second.Gfx1250RevisionIsB0) {
+      log() << "hotswap: error: gfx1250 revision metadata is mixed across "
+               "complete kernel coverage.\n";
+      return Gfx1250RevisionState::Ambiguous;
+    }
+  }
+  return *UniformIsB0 ? Gfx1250RevisionState::UniformCompleteB0
+                      : Gfx1250RevisionState::UniformCompleteA0;
 }
 
 std::optional<unsigned>

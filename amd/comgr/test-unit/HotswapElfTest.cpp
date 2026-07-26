@@ -1010,12 +1010,159 @@ TEST(ElfView, UpdateGfx1250RevisionMetadataRetagsKernelInPlace) {
   llvm::Expected<ElfView> ViewOrErr =
       ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::UniformCompleteB0);
   ASSERT_TRUE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
 
   llvm::StringRef After(reinterpret_cast<const char *>(Obj.Bytes.data()),
                         Obj.Bytes.size());
   EXPECT_EQ(After.find("B0"), llvm::StringRef::npos);
   EXPECT_NE(After.find("A0"), llvm::StringRef::npos);
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::UniformCompleteA0);
+}
+
+TEST(ElfView, Gfx1250RevisionStateTreatsAllMissingMarkersAsLegacy) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::NoMarker);
+}
+
+TEST(ElfView, Gfx1250RevisionStateRejectsMixedMetadata) {
+  comgr_test::MultiKernelDescriptorElfOptions Opts;
+  Opts.Kernels = {
+      {"kernel_b0", 0x1000, 0x2000, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true,
+       /*MetadataSgprCount=*/8, /*MetadataGfx1250Revision=*/"B0"},
+      {"kernel_a0", 0x1100, 0x2040, /*EntryOffset=*/-0xF40,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true,
+       /*MetadataSgprCount=*/8, /*MetadataGfx1250Revision=*/"A0"},
+  };
+  std::vector<uint8_t> Bytes = comgr_test::makeMultiKernelDescriptorElf(Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Bytes.data(), Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::Ambiguous);
+}
+
+TEST(ElfView, Gfx1250RevisionStateRejectsPartialCoverageBeforeAndAfterUpdate) {
+  comgr_test::MultiKernelDescriptorElfOptions Opts;
+  Opts.Kernels = {
+      {"marked", 0x1000, 0x2000, /*EntryOffset=*/-0x1000,
+       /*ComputePgmRsrc3=*/0, /*EmitMetadata=*/true,
+       /*MetadataSgprCount=*/8, /*MetadataGfx1250Revision=*/"B0"},
+      {"unmarked", 0x1100, 0x2040, /*EntryOffset=*/-0xF40},
+  };
+  std::vector<uint8_t> Bytes = comgr_test::makeMultiKernelDescriptorElf(Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Bytes.data(), Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::Ambiguous);
+  ASSERT_TRUE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::Ambiguous);
+
+  llvm::StringRef After(reinterpret_cast<const char *>(Bytes.data()),
+                        Bytes.size());
+  EXPECT_EQ(After.find("B0"), llvm::StringRef::npos);
+  EXPECT_NE(After.find("A0"), llvm::StringRef::npos);
+
+  llvm::Expected<ElfView> FreshViewOrErr =
+      ElfView::create(Bytes.data(), Bytes.size());
+  ASSERT_TRUE((bool)FreshViewOrErr)
+      << llvm::toString(FreshViewOrErr.takeError());
+  EXPECT_EQ(FreshViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::Ambiguous);
+}
+
+TEST(ElfView, Gfx1250RevisionStateRejectsDescriptorlessMarker) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.EmitKernelDescriptorSymbol = false;
+  Opts.MetadataSgprCount = 8;
+  Opts.MetadataGfx1250Revision = "B0";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_TRUE(ViewOrErr->kernelDescriptors().empty());
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::Ambiguous);
+  ASSERT_TRUE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::Ambiguous);
+}
+
+TEST(ElfView, Gfx1250RevisionStateTreatsDescriptorlessNoMarkerAsLegacy) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.EmitKernelDescriptorSymbol = false;
+  Opts.MetadataSgprCount = 8;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_TRUE(ViewOrErr->kernelDescriptors().empty());
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::NoMarker);
+}
+
+TEST(ElfView, Gfx1250RevisionStateRejectsEqualCountNameMismatch) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataKernels.emplace_back("metadata_only", 8);
+  Opts.MetadataKernels.back().Gfx1250Revision = "B0";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ASSERT_EQ(ViewOrErr->kernelDescriptors().size(), 1u);
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::Ambiguous);
+}
+
+TEST(ElfView, Gfx1250RevisionStateRejectsExtraMetadataEntry) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataKernels.emplace_back("kernel", 8);
+  Opts.MetadataKernels.back().Gfx1250Revision = "B0";
+  Opts.MetadataKernels.emplace_back("metadata_only", 8);
+  Opts.MetadataKernels.back().Gfx1250Revision = "B0";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::Ambiguous);
+}
+
+TEST(ElfView, Gfx1250RevisionStateRejectsMalformedMarker) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  Opts.MetadataGfx1250Revision = "X0";
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  EXPECT_EQ(ViewOrErr->getGfx1250RevisionState(),
+            Gfx1250RevisionState::Ambiguous);
 }
 
 TEST(ElfView, UpdateKernelDescriptorSgprCountCanUpdateMetadataOnly) {

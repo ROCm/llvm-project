@@ -66,6 +66,7 @@ struct KernelDescriptorElfOptions {
     std::optional<unsigned> MaxFlatWorkgroupSize;
     std::optional<unsigned> WavefrontSize;
     std::optional<std::array<unsigned, 3>> ClusterDims;
+    std::optional<std::string> Gfx1250Revision;
 
     MetadataKernel(
         std::string Name, unsigned SgprCount,
@@ -146,6 +147,9 @@ makeAmdgpuMetadataBlob(const KernelDescriptorElfOptions &Options) {
           Dims.push_back(Doc.getNode(Dim));
         Kernel[".cluster_dims"] = Dims;
       }
+      if (Spec.Gfx1250Revision)
+        Kernel[".gfx1250_revision"] =
+            Doc.getNode(*Spec.Gfx1250Revision, /*Copy=*/true);
       Kernels.push_back(Kernel);
     }
   } else {
@@ -465,6 +469,7 @@ struct MultiKernelDescriptorElfOptions {
     // kernel. Leave false to model a descriptor that has no metadata entry.
     bool EmitMetadata = false;
     unsigned MetadataSgprCount = 0;
+    std::optional<std::string> MetadataGfx1250Revision;
   };
 
   uint16_t ElfType = llvm::ELF::ET_DYN;
@@ -477,9 +482,13 @@ struct MultiKernelDescriptorElfOptions {
 inline std::vector<uint8_t>
 makeMultiKernelMetadataBlob(const MultiKernelDescriptorElfOptions &Options) {
   KernelDescriptorElfOptions MetaOpts;
-  for (const MultiKernelDescriptorElfOptions::Kernel &K : Options.Kernels)
-    if (K.EmitMetadata)
+  for (const MultiKernelDescriptorElfOptions::Kernel &K : Options.Kernels) {
+    if (K.EmitMetadata) {
       MetaOpts.MetadataKernels.push_back({K.Name, K.MetadataSgprCount});
+      MetaOpts.MetadataKernels.back().Gfx1250Revision =
+          K.MetadataGfx1250Revision;
+    }
+  }
   if (MetaOpts.MetadataKernels.empty())
     return {};
   std::string Blob = makeAmdgpuMetadataBlob(MetaOpts);

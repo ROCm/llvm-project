@@ -536,6 +536,19 @@ enum class MaskWorkaroundPolicy {
   B0,
 };
 
+enum class Ds2AddrRewritePolicy {
+  InPlaceOrSplit,
+  SplitOnly,
+  AlreadyA0,
+};
+
+enum class Gfx1250RevisionState {
+  NoMarker,
+  UniformCompleteB0,
+  UniformCompleteA0,
+  Ambiguous,
+};
+
 // -- Rewrite rule -------------------------------------------------------------
 
 struct RewriteRule {
@@ -715,6 +728,12 @@ public:
   bool updateKernelMetadataVgprCounts(
       const llvm::StringMap<unsigned> &RequiredVgprs);
 
+  /// Classify the gfx1250 revision markers used to disambiguate a generic
+  /// source ISA. Well-formed metadata with no markers is the legacy B0 default.
+  /// Once any marker is present, the descriptor and metadata name sets must
+  /// match exactly and every marker must be the same valid B0/A0 value.
+  Gfx1250RevisionState getGfx1250RevisionState() const;
+
   /// Retag every gfx1250 kernel in the AMDGPU metadata note with \p Revision.
   /// The revision strings used by gfx1250 ("A0" and "B0") have equal encoded
   /// size, so this preserves the ELF layout.
@@ -819,6 +838,7 @@ private:
     std::optional<unsigned> MaxFlatWorkgroupSize;
     std::optional<unsigned> WavefrontSize;
     std::optional<KernelClusterDims> ClusterDims;
+    std::optional<bool> Gfx1250RevisionIsB0;
   };
 
   enum class KernelMetadataCacheState {
@@ -847,11 +867,14 @@ private:
   mutable bool FunctionRangeCacheComplete = true;
   mutable std::optional<std::vector<KernelDescriptorInfo>>
       KernelDescriptorCache;
+  mutable bool KernelDescriptorCacheComplete = true;
   mutable llvm::StringMap<uint64_t> KernelDescriptorFileOffsetCache;
   mutable llvm::StringMap<uint64_t> KernelDescriptorVAddrCache;
   mutable KernelMetadataCacheState MetadataCacheState =
       KernelMetadataCacheState::Uninitialized;
   mutable llvm::StringMap<CachedKernelMetadata> KernelMetadataCache;
+  mutable bool Gfx1250RevisionMetadataWellFormed = true;
+  mutable size_t Gfx1250RevisionMarkerCount = 0;
 };
 
 // -- Free-function ELF helpers (no ELF state required) ------------------------
@@ -893,6 +916,7 @@ struct RewriteConfig {
   unsigned VgprGranuleSize = 0;
   bool RunB0A0Patches = true;
   MaskWorkaroundPolicy MaskPolicy = MaskWorkaroundPolicy::None;
+  Ds2AddrRewritePolicy Ds2AddrPolicy = Ds2AddrRewritePolicy::InPlaceOrSplit;
 };
 
 // -- LLVM MC context ----------------------------------------------------------
@@ -1929,6 +1953,12 @@ struct Gfx1250RewriteOptions {
   // alone. A0->A0 and A0->B0 also run without instruction patches, so this must
   // be set explicitly rather than inferred inside retargetCodeObject.
   bool UseB0B0EntryFastPath = false;
+  // A generic gfx1250 source defaults to B0 for legacy callers, but its input
+  // metadata may already identify an A0 output from a previous rewrite. This
+  // flag lets the DS2 policy use that canonical revision only for the
+  // otherwise-ambiguous generic source spelling; explicit stepping remains
+  // authoritative.
+  bool SourceSteppingIsImplicit = false;
 };
 
 /// Run the selected GFX1250 hotswap rewrite passes on \p ElfData / \p ElfSize.

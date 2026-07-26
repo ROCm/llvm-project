@@ -536,7 +536,8 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
       extractDsOperands(DI.Inst, DI.Mnemonic, Ctx.LS);
   if (!Ops)
     return failRequiredPatch(Ctx);
-  if (DI.Offset <= Ctx.TextSize && DI.Size <= Ctx.TextSize - DI.Offset &&
+  if (Ctx.Config.Ds2AddrPolicy == Ds2AddrRewritePolicy::InPlaceOrSplit &&
+      DI.Offset <= Ctx.TextSize && DI.Size <= Ctx.TextSize - DI.Offset &&
       rewriteDs2AddrOffsetsInPlaceImpl(
           MutableArrayRef<uint8_t>(Ctx.Text + DI.Offset, DI.Size), DI.Mnemonic,
           *Ops)) {
@@ -2039,7 +2040,9 @@ static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
 
   // Per-rule sub-buckets under the "strat:trampoline" parent (recorded by the
   // dispatcher in comgr-hotswap-b0a0.cpp); timed only at matching sites.
-  if (Ctx.Config.RunB0A0Patches && !getDs2AddrReplacement(Mnem).empty()) {
+  if (Ctx.Config.RunB0A0Patches &&
+      Ctx.Config.Ds2AddrPolicy != Ds2AddrRewritePolicy::AlreadyA0 &&
+      !getDs2AddrReplacement(Mnem).empty()) {
     HotswapProfile::Scope S =
         Ctx.Profile.time(HotswapMetric::TrampolineDs2Addr);
     const uint32_t P = patchDs2Addr(Ctx, Idx) ? 1 : 0;

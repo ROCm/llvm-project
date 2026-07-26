@@ -227,6 +227,7 @@ hotswapRewrite(amd_comgr_data_t input, const char *source_isa_name,
   hotswap::Gfx1250RewriteOptions Options;
   Options.RunB0A0Patches = SourceIdent.Ident.Processor == "gfx1250" &&
                            shouldRunB0A0Patches(SourceIdent, TargetIdent);
+  Options.SourceSteppingIsImplicit = !SourceIdent.IsB0.has_value();
   Options.RunEntryTrampolines = RunEntryTrampolines;
   Options.MaskPolicy =
       getMaskWorkaroundPolicy(TargetIdent, StrictMode, Options.RunB0A0Patches);

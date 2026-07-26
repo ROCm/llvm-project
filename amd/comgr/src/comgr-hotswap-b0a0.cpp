@@ -9832,6 +9832,29 @@ static amd_comgr_status_t retargetCodeObjectImpl(
   RewriteConfig Config = makeGfx1250B0A0Config();
   Config.RunB0A0Patches = Options.RunB0A0Patches;
   Config.MaskPolicy = Options.MaskPolicy;
+  if (Options.RunB0A0Patches && Options.SourceSteppingIsImplicit) {
+    switch (Elf.getGfx1250RevisionState()) {
+    case Gfx1250RevisionState::NoMarker:
+      Config.Ds2AddrPolicy = Ds2AddrRewritePolicy::SplitOnly;
+      log() << "hotswap: generic gfx1250 source has no .gfx1250_revision "
+               "markers; DS2 instructions will use the canonical split form\n";
+      break;
+    case Gfx1250RevisionState::UniformCompleteB0:
+      log() << "hotswap: generic gfx1250 source has uniform B0 metadata; "
+               "representable DS2 instructions may use the exact 8-byte "
+               "in-place rewrite\n";
+      break;
+    case Gfx1250RevisionState::UniformCompleteA0:
+      Config.Ds2AddrPolicy = Ds2AddrRewritePolicy::AlreadyA0;
+      log() << "hotswap: generic gfx1250 source has uniform A0 metadata; "
+               "surviving DS2 offsets are already canonical\n";
+      break;
+    case Gfx1250RevisionState::Ambiguous:
+      log() << "hotswap: error: generic gfx1250 source has ambiguous "
+               ".gfx1250_revision state; refusing the rewrite\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+  }
 
   uint8_t *Text = Elf.textData();
   uint64_t Count = 0;
