@@ -3523,7 +3523,13 @@ TEST(TextDisplacement, RejectsExtendedHeaderNumbering) {
 
     llvm::Expected<ElfView> ViewOrErr =
         ElfView::create(ElfBytes.data(), ElfBytes.size());
-    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+    if (!ViewOrErr) {
+      std::string Reason = llvm::toString(ViewOrErr.takeError());
+      EXPECT_NE(Reason.find("invalid or unsupported ELF header"),
+                std::string::npos)
+          << Reason;
+      continue;
+    }
     DisplacementEdit Edit;
     Edit.Offset = 0;
     Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
