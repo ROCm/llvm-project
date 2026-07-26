@@ -817,6 +817,41 @@ static std::string findKernelOwnerAtTextOffset(PatchContext &Ctx,
   return Owner;
 }
 
+static std::optional<unsigned>
+getAllKernelDeclaredSgprHighWatermark(PatchContext &Ctx, StringRef Context) {
+  switch (Ctx.AllKernelDeclaredSgprCacheState) {
+  case AllKernelDeclaredSgprState::Valid:
+    return Ctx.AllKernelDeclaredSgprHighWatermark;
+  case AllKernelDeclaredSgprState::Failed:
+    log() << "hotswap: error: " << Context
+          << ": cached all-kernel declared SGPR analysis failed\n";
+    return std::nullopt;
+  case AllKernelDeclaredSgprState::Uncomputed:
+    break;
+  }
+
+  ++Ctx.AllKernelDeclaredSgprAnalyses;
+  // Failure is terminal. Keep the candidate local so a malformed later
+  // descriptor cannot publish a partial high-watermark.
+  Ctx.AllKernelDeclaredSgprCacheState = AllKernelDeclaredSgprState::Failed;
+  unsigned HighWatermark = 0;
+  for (const KernelDescriptorInfo &KD : Ctx.Elf.kernelDescriptors()) {
+    std::optional<unsigned> Declared =
+        Ctx.Elf.getKernelSgprCount(KD.KernelName);
+    if (!Declared) {
+      log() << "hotswap: error: " << Context
+            << ": failed to read SGPR count for kernel " << KD.KernelName
+            << "\n";
+      return std::nullopt;
+    }
+    HighWatermark = std::max(HighWatermark, *Declared);
+  }
+
+  Ctx.AllKernelDeclaredSgprHighWatermark = HighWatermark;
+  Ctx.AllKernelDeclaredSgprCacheState = AllKernelDeclaredSgprState::Valid;
+  return HighWatermark;
+}
+
 std::optional<SafeSgprScratchBlock>
 findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
                          unsigned Alignment, StringRef Context,
@@ -897,17 +932,11 @@ findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
     // A device function can be reached from kernels with different declared
     // register footprints. Without a complete call graph, keep the block above
     // every declaration and charge every kernel in the commit step.
-    for (const KernelDescriptorInfo &KD : Ctx.Elf.kernelDescriptors()) {
-      std::optional<unsigned> Declared =
-          Ctx.Elf.getKernelSgprCount(KD.KernelName);
-      if (!Declared) {
-        log() << "hotswap: error: " << Context
-              << ": failed to read SGPR count for kernel " << KD.KernelName
-              << "\n";
-        return std::nullopt;
-      }
-      HighWatermark = std::max(HighWatermark, *Declared);
-    }
+    std::optional<unsigned> DeclaredHighWatermark =
+        getAllKernelDeclaredSgprHighWatermark(Ctx, Context);
+    if (!DeclaredHighWatermark)
+      return std::nullopt;
+    HighWatermark = std::max(HighWatermark, *DeclaredHighWatermark);
   }
 
   if (HighWatermark > std::numeric_limits<unsigned>::max() - (Alignment - 1)) {

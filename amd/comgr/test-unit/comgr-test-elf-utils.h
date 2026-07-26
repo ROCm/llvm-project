@@ -465,6 +465,13 @@ struct MultiKernelDescriptorElfOptions {
     // kernel. Leave false to model a descriptor that has no metadata entry.
     bool EmitMetadata = false;
     unsigned MetadataSgprCount = 0;
+    bool MetadataSgprCountAsString = false;
+  };
+
+  struct DeviceFunction {
+    std::string Name;
+    uint64_t EntryVAddr = 0;
+    uint64_t Size = 0;
   };
 
   uint16_t ElfType = llvm::ELF::ET_DYN;
@@ -473,17 +480,33 @@ struct MultiKernelDescriptorElfOptions {
   std::vector<uint8_t> Text;
   uint64_t RodataAddr = 0x2000;
   std::vector<Kernel> Kernels;
+  // Additional STT_FUNC symbols without kernel descriptors.
+  std::vector<DeviceFunction> DeviceFunctions;
 };
 
 inline std::vector<uint8_t>
 makeMultiKernelMetadataBlob(const MultiKernelDescriptorElfOptions &Options) {
-  KernelDescriptorElfOptions MetaOpts;
-  for (const MultiKernelDescriptorElfOptions::Kernel &K : Options.Kernels)
-    if (K.EmitMetadata)
-      MetaOpts.MetadataKernels.push_back({K.Name, K.MetadataSgprCount});
-  if (MetaOpts.MetadataKernels.empty())
+  llvm::msgpack::Document Doc;
+  llvm::msgpack::MapDocNode Root = Doc.getRoot().getMap(/*Convert=*/true);
+  llvm::msgpack::ArrayDocNode Kernels = Doc.getArrayNode();
+  bool HasMetadata = false;
+  for (const MultiKernelDescriptorElfOptions::Kernel &K : Options.Kernels) {
+    if (!K.EmitMetadata)
+      continue;
+    HasMetadata = true;
+    llvm::msgpack::MapDocNode Kernel = Doc.getMapNode();
+    Kernel[".name"] = Doc.getNode(K.Name, /*Copy=*/true);
+    if (K.MetadataSgprCountAsString)
+      Kernel[".sgpr_count"] = Doc.getNode("not-an-integer", /*Copy=*/true);
+    else
+      Kernel[".sgpr_count"] = static_cast<uint64_t>(K.MetadataSgprCount);
+    Kernels.push_back(Kernel);
+  }
+  if (!HasMetadata)
     return {};
-  std::string Blob = makeAmdgpuMetadataBlob(MetaOpts);
+  Root["amdhsa.kernels"] = Kernels;
+  std::string Blob;
+  Doc.writeToBlob(Blob);
   return makeAmdgpuMetadataNote(Blob);
 }
 
@@ -499,6 +522,7 @@ makeMultiKernelDescriptorElf(const MultiKernelDescriptorElfOptions &Options) {
       "\0.text\0.rodata\0.strtab\0.symtab\0.shstrtab\0";
 
   const size_t NumKernels = Options.Kernels.size();
+  const size_t NumDeviceFunctions = Options.DeviceFunctions.size();
   assert(NumKernels > 0 && "multi-kernel ELF needs at least one kernel");
 
   // .rodata must span the highest descriptor block. Each KdVAddr must sit at or
@@ -511,12 +535,20 @@ makeMultiKernelDescriptorElf(const MultiKernelDescriptorElfOptions &Options) {
            "entry vaddr outside .text");
     RodataSpan = std::max(RodataSpan, K.KdVAddr - Options.RodataAddr + KdBytes);
   }
+  for (const MultiKernelDescriptorElfOptions::DeviceFunction &F :
+       Options.DeviceFunctions) {
+    assert(F.EntryVAddr >= Options.TextAddr &&
+           F.EntryVAddr < Options.TextAddr + Options.TextSize &&
+           F.Size <= Options.TextAddr + Options.TextSize - F.EntryVAddr &&
+           "device function outside .text");
+  }
 
-  // String table: null byte, then per kernel "<name>\0" and "<name>.kd\0".
+  // String table: null byte, per-kernel names, then device-function names.
   // Duplicates are emitted verbatim so repeated symbols stay independent.
   std::string StrTab;
   StrTab.push_back('\0');
   std::vector<uint32_t> FuncNameOff(NumKernels), KdNameOff(NumKernels);
+  std::vector<uint32_t> DeviceFuncNameOff(NumDeviceFunctions);
   for (size_t I = 0; I < NumKernels; ++I) {
     FuncNameOff[I] = static_cast<uint32_t>(StrTab.size());
     StrTab += Options.Kernels[I].Name;
@@ -526,12 +558,17 @@ makeMultiKernelDescriptorElf(const MultiKernelDescriptorElfOptions &Options) {
     StrTab += ".kd";
     StrTab.push_back('\0');
   }
+  for (size_t I = 0; I < NumDeviceFunctions; ++I) {
+    DeviceFuncNameOff[I] = static_cast<uint32_t>(StrTab.size());
+    StrTab += Options.DeviceFunctions[I].Name;
+    StrTab.push_back('\0');
+  }
 
   std::vector<uint8_t> MetadataNote = makeMultiKernelMetadataBlob(Options);
   const bool HasMetadataNote = !MetadataNote.empty();
 
-  // Symbols: null [0], then per kernel a STT_FUNC entry and STT_OBJECT .kd.
-  const uint64_t SymCount = 1 + 2 * NumKernels;
+  // Symbols: null [0], per-kernel STT_FUNC/.kd pairs, then device functions.
+  const uint64_t SymCount = 1 + 2 * NumKernels + NumDeviceFunctions;
 
   const uint64_t RodataOff = alignTo8(TextOffset + Options.TextSize);
   const uint64_t StrTabOff = alignTo8(RodataOff + RodataSpan);
@@ -659,6 +696,19 @@ makeMultiKernelDescriptorElf(const MultiKernelDescriptorElfOptions &Options) {
     KdSym.st_size = KdBytes;
     std::memcpy(Buf + SymTabOff + (2 + 2 * I) * sizeof(Elf64_Sym), &KdSym,
                 sizeof(KdSym));
+  }
+
+  for (size_t I = 0; I < NumDeviceFunctions; ++I) {
+    const MultiKernelDescriptorElfOptions::DeviceFunction &F =
+        Options.DeviceFunctions[I];
+    Elf64_Sym FuncSym{};
+    FuncSym.st_name = DeviceFuncNameOff[I];
+    FuncSym.setBindingAndType(STB_GLOBAL, STT_FUNC);
+    FuncSym.st_shndx = 1;
+    FuncSym.st_value = F.EntryVAddr;
+    FuncSym.st_size = F.Size;
+    std::memcpy(Buf + SymTabOff + (1 + 2 * NumKernels + I) * sizeof(Elf64_Sym),
+                &FuncSym, sizeof(FuncSym));
   }
 
   return Bytes;
