@@ -1983,6 +1983,24 @@ TEST(RegisterLiveness, RejectsFunctionEndAndContinuationOverflow) {
                                      std::numeric_limits<unsigned>::max()));
 }
 
+TEST(RegisterLiveness,
+     RejectsMidInstructionSourceAtDecodedContinuationBoundary) {
+  constexpr llvm::StringLiteral Assembly = "s_mov_b32 s0, 0x12345678\n"
+                                           "s_endpgm";
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleInstructions(Assembly, S);
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 2u);
+  ASSERT_EQ(Decoded[0].Size, 2u * MinInstSize);
+  ASSERT_EQ(Decoded[1].Offset, 2u * MinInstSize);
+
+  std::optional<llvm::BitVector> Live = getTestLiveSgprsAtContinuation(
+      Assembly, /*InstOffset=*/MinInstSize, /*InstSize=*/MinInstSize);
+  EXPECT_FALSE(Live);
+}
+
 TEST(RegisterLiveness, UsesCurrentTextAfterEarlierPatchMutation) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

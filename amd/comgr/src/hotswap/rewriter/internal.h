@@ -1390,9 +1390,11 @@ getReplacementIncomingSgprs(llvm::ArrayRef<uint8_t> Replacement,
                             const LLVMState &LS, unsigned MaxSgprs);
 
 /// Return the complete numbered-SGPR/VCC live set immediately after
-/// [\p InstOffset, +\p InstSize). One current-function decode and bit-vector
-/// dataflow serves every candidate scratch register. Results are cached for
-/// PatchContext::TextMutationGeneration and fail closed with nullopt.
+/// [\p InstOffset, +\p InstSize). Both interval endpoints must be decoded
+/// instruction boundaries in the current function. One current-function decode
+/// and bit-vector dataflow serves every candidate scratch register. Results are
+/// cached for PatchContext::TextMutationGeneration and fail closed with
+/// nullopt.
 [[nodiscard]] std::optional<llvm::BitVector>
 getLiveSgprsAtContinuation(PatchContext &Ctx, uint64_t InstOffset,
                            uint32_t InstSize);

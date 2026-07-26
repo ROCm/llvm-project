@@ -1153,8 +1153,13 @@ std::optional<BitVector> getLiveSgprsAtContinuation(PatchContext &Ctx,
                                                     uint32_t InstSize) {
   std::optional<ElfView::FunctionTextRange> FunctionRange =
       Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
-  if (!FunctionRange)
+  if (!FunctionRange) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": no containing function range\n";
     return std::nullopt;
+  }
   using FunctionKey = std::pair<uint64_t, uint64_t>;
   FunctionKey Key{FunctionRange->Begin, FunctionRange->End};
   DenseMap<FunctionKey, CurrentFunctionSgprLiveness>::iterator Cached =
@@ -1168,17 +1173,45 @@ std::optional<BitVector> getLiveSgprsAtContinuation(PatchContext &Ctx,
                  .insert_or_assign(Key, std::move(Current))
                  .first;
   }
-  if (!Cached->second.Valid)
+  if (!Cached->second.Valid) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": current function [0x" << utohexstr(FunctionRange->Begin)
+          << ", 0x" << utohexstr(FunctionRange->End)
+          << ") does not have a complete decoded liveness map\n";
     return std::nullopt;
+  }
 
-  std::optional<uint64_t> Continuation =
-      checkedAddUint64(InstOffset, InstSize, "SGPR liveness continuation");
-  if (!Continuation)
+  if (!Cached->second.InstructionIndices.contains(InstOffset)) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": source is not a decoded instruction boundary in function [0x"
+          << utohexstr(FunctionRange->Begin) << ", 0x"
+          << utohexstr(FunctionRange->End) << ")\n";
     return std::nullopt;
+  }
+  if (InstOffset > std::numeric_limits<uint64_t>::max() - InstSize) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": continuation overflows uint64_t\n";
+    return std::nullopt;
+  }
+  uint64_t Continuation = InstOffset + InstSize;
   DenseMap<uint64_t, size_t>::const_iterator Index =
-      Cached->second.InstructionIndices.find(*Continuation);
-  if (Index == Cached->second.InstructionIndices.end())
+      Cached->second.InstructionIndices.find(Continuation);
+  if (Index == Cached->second.InstructionIndices.end()) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": continuation 0x" << utohexstr(Continuation)
+          << " is not a decoded instruction boundary in function [0x"
+          << utohexstr(FunctionRange->Begin) << ", 0x"
+          << utohexstr(FunctionRange->End) << ")\n";
     return std::nullopt;
+  }
   return Cached->second.LiveBefore[Index->second];
 }
 
