@@ -60,7 +60,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Support/FormatVariadic.h"
+#include "llvm/MC/MCFixup.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <array>
@@ -191,9 +191,8 @@ static SmallVector<uint8_t> rewriteScale16ToScale(const uint8_t *OrigRaw,
 
 using VgprBankRequirement = std::pair<VgprMsbOperand, unsigned>;
 
-static void
-emitModeForOperands(raw_string_ostream &OS, unsigned &CurrentMode,
-                    ArrayRef<VgprBankRequirement> Requirements) {
+static void emitModeForOperands(raw_string_ostream &OS, unsigned &CurrentMode,
+                                ArrayRef<VgprBankRequirement> Requirements) {
   unsigned NewMode = CurrentMode;
   for (const VgprBankRequirement &Requirement : Requirements)
     setVgprMsbBank(NewMode, Requirement.first, Requirement.second);
@@ -433,143 +432,6 @@ matrixOperandRange(PatchContext &Ctx, const InternalDecodedInst &DI,
   return VgprRange{Lo, Hi - Lo + 1};
 }
 
-struct Scale32PrintedAsm {
-  std::string Operands[6]; // dst, matrix A/B, src2, scale A/B
-  std::string ModifierSuffix;
-};
-
-// Parse the six positional operands of the M=32 scaled WMMA while preserving
-// the printer's exact inline-immediate spelling and modifier ordering.
-static std::optional<Scale32PrintedAsm>
-parseScale32PrintedAsm(PatchContext &Ctx, const InternalDecodedInst &DI) {
-  SmallString<256> Buf;
-  raw_svector_ostream OS(Buf);
-  Ctx.LS.MCIP->printInst(&DI.Inst, /*Address=*/0, /*Annot=*/"", *Ctx.LS.STI,
-                         OS);
-  StringRef S = StringRef(Buf).trim();
-  size_t MnemEnd = S.find_first_of(" \t");
-  if (MnemEnd == StringRef::npos)
-    return std::nullopt;
-
-  Scale32PrintedAsm Result;
-  StringRef Rest = S.substr(MnemEnd).ltrim();
-  for (unsigned I = 0; I != 5; ++I) {
-    size_t Comma = Rest.find(',');
-    if (Comma == StringRef::npos)
-      return std::nullopt;
-    Result.Operands[I] = Rest.substr(0, Comma).trim().str();
-    Rest = Rest.substr(Comma + 1).ltrim();
-  }
-  size_t ModBegin = Rest.find_first_of(" \t");
-  if (ModBegin == StringRef::npos) {
-    Result.Operands[5] = Rest.str();
-  } else {
-    Result.Operands[5] = Rest.substr(0, ModBegin).str();
-    Result.ModifierSuffix = Rest.substr(ModBegin).str();
-  }
-  return Result;
-}
-
-static SmallVector<StringRef, 8> tokenizeScaleModifiers(StringRef Suffix) {
-  SmallVector<StringRef, 8> Result;
-  StringRef Rest = Suffix.ltrim();
-  while (!Rest.empty()) {
-    size_t Space = Rest.find_first_of(" \t");
-    if (Space == StringRef::npos) {
-      Result.push_back(Rest);
-      break;
-    }
-    Result.push_back(Rest.substr(0, Space));
-    Rest = Rest.substr(Space + 1).ltrim();
-  }
-  return Result;
-}
-
-static bool parsePackedScaleModifier(StringRef Token, StringRef Name,
-                                     std::array<StringRef, 3> &Bits) {
-  if (!Token.starts_with(Name) || !Token.ends_with("]"))
-    return false;
-  Token = Token.drop_front(Name.size());
-  if (!Token.starts_with(":["))
-    return false;
-  SmallVector<StringRef, 3> Parts;
-  Token.drop_front(2).drop_back(1).split(Parts, ",");
-  if (Parts.size() != 3)
-    return false;
-  for (unsigned I = 0; I != 3; ++I) {
-    Bits[I] = Parts[I].trim();
-    if (Bits[I] != "0" && Bits[I] != "1")
-      return false;
-  }
-  return true;
-}
-
-static bool isKnownScale32Modifier(StringRef Token) {
-  if (Token == "matrix_a_reuse" || Token == "matrix_b_reuse" ||
-      Token == "matrix_a_scale:MATRIX_SCALE_ROW1" ||
-      Token == "matrix_b_scale:MATRIX_SCALE_ROW1" ||
-      Token == "matrix_a_scale_fmt:MATRIX_SCALE_FMT_E8" ||
-      Token == "matrix_a_scale_fmt:MATRIX_SCALE_FMT_E5M3" ||
-      Token == "matrix_a_scale_fmt:MATRIX_SCALE_FMT_E4M3" ||
-      Token == "matrix_b_scale_fmt:MATRIX_SCALE_FMT_E8" ||
-      Token == "matrix_b_scale_fmt:MATRIX_SCALE_FMT_E5M3" ||
-      Token == "matrix_b_scale_fmt:MATRIX_SCALE_FMT_E4M3")
-    return true;
-  std::array<StringRef, 3> Bits;
-  return parsePackedScaleModifier(Token, "neg_lo", Bits) ||
-         parsePackedScaleModifier(Token, "neg_hi", Bits);
-}
-
-// The split changes both matrix register layout and the K-pass accumulator.
-// Reuse promises therefore no longer describe the generated sequence and are
-// removed. On each high-K pass src2 is the low-pass result, not the original
-// C, so clear the src2 neg/abs bit instead of applying C's modifier twice.
-static std::optional<std::string>
-transformScale32ModifierSuffix(StringRef Suffix, bool HighKPass) {
-  std::string Result;
-  for (StringRef Token : tokenizeScaleModifiers(Suffix)) {
-    if (!isKnownScale32Modifier(Token)) {
-      log() << "hotswap: error: wmma_scale16: unsupported M=32 modifier token "
-               "\""
-            << Token << "\"\n";
-      return std::nullopt;
-    }
-    if (Token == "matrix_a_reuse" || Token == "matrix_b_reuse")
-      continue;
-
-    std::array<StringRef, 3> Bits;
-    if (HighKPass && (parsePackedScaleModifier(Token, "neg_lo", Bits) ||
-                      parsePackedScaleModifier(Token, "neg_hi", Bits))) {
-      if (Bits[0] == "0" && Bits[1] == "0")
-        continue;
-      StringRef Name = Token.take_front(Token.find(':'));
-      Result += (" " + Name + ":[" + Bits[0] + "," + Bits[1] + ",0]").str();
-      continue;
-    }
-    Result += ' ';
-    Result += Token.str();
-  }
-  return Result;
-}
-
-static std::string encodedVgprRange(unsigned PhysicalBase, unsigned Width) {
-  assert(Width > 0);
-  unsigned EncodedBase = PhysicalBase % VgprBankSize;
-  return formatv("v[{0}:{1}]", EncodedBase, EncodedBase + Width - 1).str();
-}
-
-static void emitScale32Half(raw_string_ostream &OS, unsigned DstBase,
-                            unsigned MatrixABase, unsigned MatrixBBase,
-                            StringRef Src2, unsigned ScaleAReg,
-                            unsigned ScaleBReg, StringRef ModifierSuffix) {
-  OS << "v_wmma_scale_f32_16x16x128_f8f6f4 " << encodedVgprRange(DstBase, 8)
-     << ", " << encodedVgprRange(MatrixABase, 8) << ", "
-     << encodedVgprRange(MatrixBBase, 8) << ", " << Src2 << ", "
-     << encodedVgprName(ScaleAReg) << ", " << encodedVgprName(ScaleBReg)
-     << " matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4"
-     << ModifierSuffix << "\n";
-}
-
 // Prefer one exact-liveness-proven dead block inside the kernel's declared
 // allocation. Fully allocated production kernels often have no above-KD
 // headroom even though a particular WMMA site has a large dead interval.
@@ -689,6 +551,376 @@ getEncodedVgprRange(MCRegister Reg, const MCRegisterInfo &MRI) {
                           static_cast<unsigned>(Scalars.size()), true};
 }
 
+static bool sameMCOperand(const MCOperand &LHS, const MCOperand &RHS) {
+  if (LHS.isReg() && RHS.isReg())
+    return LHS.getReg() == RHS.getReg();
+  if (LHS.isImm() && RHS.isImm())
+    return LHS.getImm() == RHS.getImm();
+  return false;
+}
+
+static std::optional<SmallVector<unsigned, 2>>
+changedMCOperands(const MCInst &Baseline, const Twine &VariantAsm,
+                  const LLVMState &LS) {
+  std::string Asm = VariantAsm.str();
+  std::optional<MCInst> Variant = parseSingleMCInst(Asm, LS);
+  if (!Variant || Variant->getOpcode() != Baseline.getOpcode() ||
+      Variant->getNumOperands() != Baseline.getNumOperands())
+    return std::nullopt;
+
+  SmallVector<unsigned, 2> Changed;
+  for (unsigned I = 0, E = Baseline.getNumOperands(); I != E; ++I)
+    if (!sameMCOperand(Baseline.getOperand(I), Variant->getOperand(I)))
+      Changed.push_back(I);
+  return Changed;
+}
+
+static std::optional<unsigned> singleChangedMCOperand(const MCInst &Baseline,
+                                                      const Twine &VariantAsm,
+                                                      const LLVMState &LS) {
+  std::optional<SmallVector<unsigned, 2>> Changed =
+      changedMCOperands(Baseline, VariantAsm, LS);
+  if (!Changed || Changed->size() != 1)
+    return std::nullopt;
+  return Changed->front();
+}
+
+struct Scale32MCLayout {
+  unsigned SourceOpcode = 0;
+  unsigned SourceVDst = 0;
+  unsigned SourceSrc0 = 0;
+  unsigned SourceSrc1 = 0;
+  unsigned SourceSrc2Modifiers = 0;
+  unsigned SourceSrc2 = 0;
+  unsigned SourceScaleSrc0 = 0;
+  unsigned SourceScaleSrc1 = 0;
+  unsigned SourceMatrixAScale = 0;
+  unsigned SourceMatrixBScale = 0;
+  unsigned SourceMatrixAScaleFmt = 0;
+  unsigned SourceMatrixBScaleFmt = 0;
+  unsigned SourceMatrixAReuse = 0;
+  unsigned SourceMatrixBReuse = 0;
+  unsigned SourceNegLo = 0;
+  unsigned SourceNegHi = 0;
+
+  unsigned DestOpcode = 0;
+  MCInst DestTemplate;
+  unsigned DestVDst = 0;
+  unsigned DestSrc0 = 0;
+  unsigned DestSrc1 = 0;
+  unsigned DestSrc2Modifiers = 0;
+  unsigned DestSrc2 = 0;
+  unsigned DestScaleSrc0 = 0;
+  unsigned DestScaleSrc1 = 0;
+  unsigned DestMatrixAScale = 0;
+  unsigned DestMatrixBScale = 0;
+  unsigned DestMatrixAScaleFmt = 0;
+  unsigned DestMatrixBScaleFmt = 0;
+  unsigned DestMatrixAReuse = 0;
+  unsigned DestMatrixBReuse = 0;
+  unsigned DestNegLo = 0;
+  unsigned DestNegHi = 0;
+};
+
+static bool allUniqueAndCover(ArrayRef<unsigned> Indices,
+                              unsigned OperandCount) {
+  if (Indices.size() != OperandCount)
+    return false;
+  SmallVector<unsigned, 16> Sorted(Indices);
+  llvm::sort(Sorted);
+  for (unsigned I = 0; I != OperandCount; ++I)
+    if (Sorted[I] != I)
+      return false;
+  return true;
+}
+
+static bool discoverNegOperandRoles(const MCInst &Baseline,
+                                    const Twine &NegLoAsm,
+                                    const Twine &NegHiAsm, const LLVMState &LS,
+                                    unsigned &NegLo, unsigned &NegHi) {
+  std::optional<SmallVector<unsigned, 2>> LoChanged =
+      changedMCOperands(Baseline, NegLoAsm, LS);
+  std::optional<SmallVector<unsigned, 2>> HiChanged =
+      changedMCOperands(Baseline, NegHiAsm, LS);
+  if (!LoChanged || !HiChanged || LoChanged->empty() || HiChanged->empty() ||
+      LoChanged->size() > 2 || HiChanged->size() > 2)
+    return false;
+
+  if (LoChanged->size() == 1 && HiChanged->size() == 1) {
+    NegLo = LoChanged->front();
+    NegHi = HiChanged->front();
+    return NegLo != NegHi;
+  }
+  if (LoChanged->size() != 2 || HiChanged->size() != 2)
+    return false;
+
+  SmallVector<unsigned, 1> Common;
+  for (unsigned LoIndex : *LoChanged)
+    if (llvm::is_contained(*HiChanged, LoIndex))
+      Common.push_back(LoIndex);
+  if (Common.size() != 1)
+    return false;
+
+  unsigned CommonIndex = Common.front();
+  NegLo = LoChanged->front() == CommonIndex ? LoChanged->back()
+                                            : LoChanged->front();
+  NegHi = HiChanged->front() == CommonIndex ? HiChanged->back()
+                                            : HiChanged->front();
+  return NegLo != NegHi;
+}
+
+static std::optional<Scale32MCLayout>
+discoverScale32MCLayout(const LLVMState &LS) {
+  static constexpr StringLiteral SourceBaseline =
+      "v_wmma_scale16_f32_32x16x128_f4 "
+      "v[0:15], v[16:31], v[32:39], v[48:63], v[64:65], v[66:67]";
+  static constexpr StringLiteral DestBaseline =
+      "v_wmma_scale_f32_16x16x128_f8f6f4 "
+      "v[0:7], v[16:23], v[32:39], v[48:55], v64, v66 "
+      "matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4";
+  static constexpr StringLiteral DestAScaleFmtBaseline =
+      "v_wmma_scale_f32_16x16x128_f8f6f4 "
+      "v[0:7], v[8:15], v[24:39], v[40:47], v1, v2 "
+      "matrix_a_fmt:MATRIX_FMT_FP4";
+  static constexpr StringLiteral DestBScaleFmtBaseline =
+      "v_wmma_scale_f32_16x16x128_f8f6f4 "
+      "v[0:7], v[8:23], v[24:31], v[40:47], v1, v2 "
+      "matrix_b_fmt:MATRIX_FMT_FP4";
+
+  std::optional<MCInst> Source = parseSingleMCInst(SourceBaseline, LS);
+  std::optional<MCInst> Dest = parseSingleMCInst(DestBaseline, LS);
+  std::optional<MCInst> DestAScaleFmt =
+      parseSingleMCInst(DestAScaleFmtBaseline, LS);
+  std::optional<MCInst> DestBScaleFmt =
+      parseSingleMCInst(DestBScaleFmtBaseline, LS);
+  if (!Source || !Dest || !DestAScaleFmt || !DestBScaleFmt) {
+    log() << "hotswap: error: wmma_scale16: could not parse the semantic MC "
+             "layout probes\n";
+    return std::nullopt;
+  }
+
+  Scale32MCLayout Layout;
+  Layout.SourceOpcode = Source->getOpcode();
+  Layout.DestOpcode = Dest->getOpcode();
+  Layout.DestTemplate = *Dest;
+
+#define DISCOVER_SOURCE_ROLE(Field, Asm)                                       \
+  do {                                                                         \
+    std::optional<unsigned> Index = singleChangedMCOperand(*Source, Asm, LS);  \
+    if (!Index) {                                                              \
+      log() << "hotswap: error: wmma_scale16: could not discover source "      \
+            << #Field << " MC operand\n";                                      \
+      return std::nullopt;                                                     \
+    }                                                                          \
+    Layout.Field = *Index;                                                     \
+  } while (false)
+
+  DISCOVER_SOURCE_ROLE(
+      SourceVDst, "v_wmma_scale16_f32_32x16x128_f4 "
+                  "v[80:95], v[16:31], v[32:39], v[48:63], v[64:65], v[66:67]");
+  DISCOVER_SOURCE_ROLE(
+      SourceSrc0, "v_wmma_scale16_f32_32x16x128_f4 "
+                  "v[0:15], v[80:95], v[32:39], v[48:63], v[64:65], v[66:67]");
+  DISCOVER_SOURCE_ROLE(
+      SourceSrc1, "v_wmma_scale16_f32_32x16x128_f4 "
+                  "v[0:15], v[16:31], v[80:87], v[48:63], v[64:65], v[66:67]");
+  DISCOVER_SOURCE_ROLE(
+      SourceSrc2, "v_wmma_scale16_f32_32x16x128_f4 "
+                  "v[0:15], v[16:31], v[32:39], v[80:95], v[64:65], v[66:67]");
+  DISCOVER_SOURCE_ROLE(
+      SourceScaleSrc0,
+      "v_wmma_scale16_f32_32x16x128_f4 "
+      "v[0:15], v[16:31], v[32:39], v[48:63], v[80:81], v[66:67]");
+  DISCOVER_SOURCE_ROLE(
+      SourceScaleSrc1,
+      "v_wmma_scale16_f32_32x16x128_f4 "
+      "v[0:15], v[16:31], v[32:39], v[48:63], v[64:65], v[80:81]");
+  DISCOVER_SOURCE_ROLE(SourceMatrixAScale,
+                       SourceBaseline + " matrix_a_scale:MATRIX_SCALE_ROW1");
+  DISCOVER_SOURCE_ROLE(SourceMatrixBScale,
+                       SourceBaseline + " matrix_b_scale:MATRIX_SCALE_ROW1");
+  DISCOVER_SOURCE_ROLE(SourceMatrixAScaleFmt,
+                       SourceBaseline +
+                           " matrix_a_scale_fmt:MATRIX_SCALE_FMT_E5M3");
+  DISCOVER_SOURCE_ROLE(SourceMatrixBScaleFmt,
+                       SourceBaseline +
+                           " matrix_b_scale_fmt:MATRIX_SCALE_FMT_E4M3");
+  DISCOVER_SOURCE_ROLE(SourceMatrixAReuse, SourceBaseline + " matrix_a_reuse");
+  DISCOVER_SOURCE_ROLE(SourceMatrixBReuse, SourceBaseline + " matrix_b_reuse");
+#undef DISCOVER_SOURCE_ROLE
+
+  if (!discoverNegOperandRoles(*Source, SourceBaseline + " neg_lo:[0,0,1]",
+                               SourceBaseline + " neg_hi:[0,0,1]", LS,
+                               Layout.SourceNegLo, Layout.SourceNegHi)) {
+    log() << "hotswap: error: wmma_scale16: could not discover source "
+             "negative-modifier MC operands\n";
+    return std::nullopt;
+  }
+
+  std::array<unsigned, 14> KnownSourceIndices = {Layout.SourceVDst,
+                                                 Layout.SourceSrc0,
+                                                 Layout.SourceSrc1,
+                                                 Layout.SourceSrc2,
+                                                 Layout.SourceScaleSrc0,
+                                                 Layout.SourceScaleSrc1,
+                                                 Layout.SourceMatrixAScale,
+                                                 Layout.SourceMatrixBScale,
+                                                 Layout.SourceMatrixAScaleFmt,
+                                                 Layout.SourceMatrixBScaleFmt,
+                                                 Layout.SourceMatrixAReuse,
+                                                 Layout.SourceMatrixBReuse,
+                                                 Layout.SourceNegLo,
+                                                 Layout.SourceNegHi};
+  SmallVector<unsigned, 15> SourceIndices(KnownSourceIndices.begin(),
+                                          KnownSourceIndices.end());
+  for (unsigned I = 0, E = Source->getNumOperands(); I != E; ++I) {
+    if (llvm::is_contained(SourceIndices, I))
+      continue;
+    const MCOperand &Op = Source->getOperand(I);
+    if (Layout.SourceSrc2Modifiers != 0 || !Op.isImm())
+      return std::nullopt;
+    Layout.SourceSrc2Modifiers = I;
+    SourceIndices.push_back(I);
+  }
+  if (!allUniqueAndCover(SourceIndices, Source->getNumOperands())) {
+    log() << "hotswap: error: wmma_scale16: source MC operand roles do not "
+             "cover the instruction\n";
+    return std::nullopt;
+  }
+
+#define DISCOVER_DEST_ROLE(Field, Asm)                                         \
+  do {                                                                         \
+    std::optional<unsigned> Index = singleChangedMCOperand(*Dest, Asm, LS);    \
+    if (!Index) {                                                              \
+      log() << "hotswap: error: wmma_scale16: could not discover destination " \
+            << #Field << " MC operand\n";                                      \
+      return std::nullopt;                                                     \
+    }                                                                          \
+    Layout.Field = *Index;                                                     \
+  } while (false)
+
+  DISCOVER_DEST_ROLE(DestVDst,
+                     "v_wmma_scale_f32_16x16x128_f8f6f4 "
+                     "v[80:87], v[16:23], v[32:39], v[48:55], v64, v66 "
+                     "matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4");
+  DISCOVER_DEST_ROLE(DestSrc0,
+                     "v_wmma_scale_f32_16x16x128_f8f6f4 "
+                     "v[0:7], v[80:87], v[32:39], v[48:55], v64, v66 "
+                     "matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4");
+  DISCOVER_DEST_ROLE(DestSrc1,
+                     "v_wmma_scale_f32_16x16x128_f8f6f4 "
+                     "v[0:7], v[16:23], v[80:87], v[48:55], v64, v66 "
+                     "matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4");
+  DISCOVER_DEST_ROLE(DestSrc2,
+                     "v_wmma_scale_f32_16x16x128_f8f6f4 "
+                     "v[0:7], v[16:23], v[32:39], v[80:87], v64, v66 "
+                     "matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4");
+  DISCOVER_DEST_ROLE(DestScaleSrc0,
+                     "v_wmma_scale_f32_16x16x128_f8f6f4 "
+                     "v[0:7], v[16:23], v[32:39], v[48:55], v80, v66 "
+                     "matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4");
+  DISCOVER_DEST_ROLE(DestScaleSrc1,
+                     "v_wmma_scale_f32_16x16x128_f8f6f4 "
+                     "v[0:7], v[16:23], v[32:39], v[48:55], v64, v80 "
+                     "matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4");
+  DISCOVER_DEST_ROLE(DestMatrixAScale,
+                     DestBaseline + " matrix_a_scale:MATRIX_SCALE_ROW1");
+  DISCOVER_DEST_ROLE(DestMatrixBScale,
+                     DestBaseline + " matrix_b_scale:MATRIX_SCALE_ROW1");
+  std::optional<unsigned> DestMatrixAScaleFmt = singleChangedMCOperand(
+      *DestAScaleFmt,
+      DestAScaleFmtBaseline + " matrix_a_scale_fmt:MATRIX_SCALE_FMT_E5M3", LS);
+  std::optional<unsigned> DestMatrixBScaleFmt = singleChangedMCOperand(
+      *DestBScaleFmt,
+      DestBScaleFmtBaseline + " matrix_b_scale_fmt:MATRIX_SCALE_FMT_E5M3", LS);
+  if (!DestMatrixAScaleFmt || !DestMatrixBScaleFmt) {
+    log() << "hotswap: error: wmma_scale16: could not discover destination "
+             "matrix scale-format MC operands\n";
+    return std::nullopt;
+  }
+  Layout.DestMatrixAScaleFmt = *DestMatrixAScaleFmt;
+  Layout.DestMatrixBScaleFmt = *DestMatrixBScaleFmt;
+  DISCOVER_DEST_ROLE(DestMatrixAReuse, DestBaseline + " matrix_a_reuse");
+  DISCOVER_DEST_ROLE(DestMatrixBReuse, DestBaseline + " matrix_b_reuse");
+#undef DISCOVER_DEST_ROLE
+
+  if (!discoverNegOperandRoles(*Dest, DestBaseline + " neg_lo:[0,0,1]",
+                               DestBaseline + " neg_hi:[0,0,1]", LS,
+                               Layout.DestNegLo, Layout.DestNegHi)) {
+    log() << "hotswap: error: wmma_scale16: could not discover destination "
+             "negative-modifier MC operands\n";
+    return std::nullopt;
+  }
+
+  std::array<unsigned, 14> KnownDestIndices = {Layout.DestVDst,
+                                               Layout.DestSrc0,
+                                               Layout.DestSrc1,
+                                               Layout.DestSrc2,
+                                               Layout.DestScaleSrc0,
+                                               Layout.DestScaleSrc1,
+                                               Layout.DestMatrixAScale,
+                                               Layout.DestMatrixBScale,
+                                               Layout.DestMatrixAScaleFmt,
+                                               Layout.DestMatrixBScaleFmt,
+                                               Layout.DestMatrixAReuse,
+                                               Layout.DestMatrixBReuse,
+                                               Layout.DestNegLo,
+                                               Layout.DestNegHi};
+  SmallVector<unsigned, 17> DestCoverage(KnownDestIndices.begin(),
+                                         KnownDestIndices.end());
+  for (unsigned I = 0, E = Dest->getNumOperands(); I != E; ++I) {
+    if (llvm::is_contained(DestCoverage, I))
+      continue;
+    const MCOperand &Op = Dest->getOperand(I);
+    if (!Op.isImm()) {
+      log() << "hotswap: error: wmma_scale16: unexpected undiscovered "
+               "destination MC operand "
+            << I << "\n";
+      return std::nullopt;
+    }
+    if (Op.getImm() == 0 && Layout.DestSrc2Modifiers == 0) {
+      Layout.DestSrc2Modifiers = I;
+      DestCoverage.push_back(I);
+      continue;
+    }
+    if (Op.getImm() != 4) {
+      log() << "hotswap: error: wmma_scale16: unexpected undiscovered "
+               "destination MC immediate at operand "
+            << I << "\n";
+      return std::nullopt;
+    }
+    DestCoverage.push_back(I);
+  }
+  if (!allUniqueAndCover(DestCoverage, Dest->getNumOperands())) {
+    log() << "hotswap: error: wmma_scale16: destination MC operand roles do "
+             "not cover the instruction\n";
+    return std::nullopt;
+  }
+
+  return Layout;
+}
+
+static const Scale32MCLayout *getScale32MCLayout(const LLVMState &LS) {
+  thread_local const MCSubtargetInfo *CachedSTI = nullptr;
+  thread_local std::optional<Scale32MCLayout> CachedLayout;
+  if (CachedSTI != LS.STI.get()) {
+    CachedSTI = LS.STI.get();
+    CachedLayout = discoverScale32MCLayout(LS);
+  }
+  return CachedLayout ? &*CachedLayout : nullptr;
+}
+
+static std::optional<EncodedVgprRange>
+getOperandVgprRange(const MCInst &Inst, unsigned OperandIndex,
+                    const MCRegisterInfo &MRI) {
+  if (OperandIndex >= Inst.getNumOperands())
+    return std::nullopt;
+  const MCOperand &Op = Inst.getOperand(OperandIndex);
+  if (!Op.isReg() || !Op.getReg())
+    return std::nullopt;
+  return getEncodedVgprRange(MCRegister(Op.getReg()), MRI);
+}
+
 bool isVectorRegisterOrAlias(MCRegister Reg, const MCRegisterInfo &MRI) {
   if (!Reg)
     return false;
@@ -729,20 +961,20 @@ struct PhysicalVgprAccess {
 // their role is structurally unambiguous.
 static std::optional<VgprMsbOperand>
 getExactSourceRole(const InternalDecodedInst &DI, unsigned OperandIndex,
-                   unsigned NumDefs) {
+                   unsigned NumDefs, const LLVMState &LS) {
   if (DI.Mnemonic == "v_wmma_scale16_f32_32x16x128_f4") {
-    switch (OperandIndex) {
-    case 1:
-    case 5:
-      return VgprMsbOperand::Src0;
-    case 2:
-    case 6:
-      return VgprMsbOperand::Src1;
-    case 4:
-      return VgprMsbOperand::Src2;
-    default:
+    const Scale32MCLayout *Layout = getScale32MCLayout(LS);
+    if (!Layout || DI.Inst.getOpcode() != Layout->SourceOpcode)
       return std::nullopt;
-    }
+    if (OperandIndex == Layout->SourceSrc0 ||
+        OperandIndex == Layout->SourceScaleSrc0)
+      return VgprMsbOperand::Src0;
+    if (OperandIndex == Layout->SourceSrc1 ||
+        OperandIndex == Layout->SourceScaleSrc1)
+      return VgprMsbOperand::Src1;
+    if (OperandIndex == Layout->SourceSrc2)
+      return VgprMsbOperand::Src2;
+    return std::nullopt;
   }
   if (StringRef(DI.Mnemonic).starts_with("ds_") && OperandIndex == NumDefs)
     return VgprMsbOperand::Src0;
@@ -793,7 +1025,7 @@ static PhysicalVgprAccess getPhysicalVgprAccess(const InternalDecodedInst &DI,
     bool IsDef = I < NumDefs;
     if (!IsDef) {
       if (std::optional<VgprMsbOperand> Role =
-              getExactSourceRole(DI, I, NumDefs)) {
+              getExactSourceRole(DI, I, NumDefs, LS)) {
         unsigned Bank = getVgprMsbBank(Mode, *Role);
         if (!setPhysicalVgprRange(Result.Uses, *Range, Bank, MaxVgprs))
           Result.Valid = false;
@@ -977,24 +1209,24 @@ struct ScaleForwardGraph {
 // no kill, and skip the split continuation dword. This is enough to traverse
 // the instruction without relying on whether opcode 0x31 has a vector or
 // scalar destination on B0.
-static bool recognizeUndecodedB0Vop3ScalarSources(
-    PatchContext &Ctx, size_t Global, unsigned MaxVgprs,
-    BitVector &ConservativeUses) {
+static bool recognizeUndecodedB0Vop3ScalarSources(PatchContext &Ctx,
+                                                  size_t Global,
+                                                  unsigned MaxVgprs,
+                                                  BitVector &ConservativeUses) {
   if (Global + 1 >= Ctx.Decoded.size())
     return false;
   const InternalDecodedInst &Head = Ctx.Decoded[Global];
   const InternalDecodedInst &Tail = Ctx.Decoded[Global + 1];
   if (Head.DecodeSucceeded || Head.Size != MinInstSize ||
-      Tail.Offset != Head.Offset + MinInstSize ||
-      Head.Offset > Ctx.TextSize || 2 * MinInstSize > Ctx.TextSize - Head.Offset)
+      Tail.Offset != Head.Offset + MinInstSize || Head.Offset > Ctx.TextSize ||
+      2 * MinInstSize > Ctx.TextSize - Head.Offset)
     return false;
 
   const uint8_t *Raw = Ctx.Text + Head.Offset;
   uint32_t Word0 = support::endian::read32le(Raw);
   uint32_t Word1 = support::endian::read32le(Raw + MinInstSize);
   constexpr uint32_t Bit14 = 1u << 14;
-  if ((Word0 & ~Bit14) != 0xd0310000u ||
-      (Word1 != 0 && Word1 != 0x00100000u))
+  if ((Word0 & ~Bit14) != 0xd0310000u || (Word1 != 0 && Word1 != 0x00100000u))
     return false;
 
   // A direct/declared entry into the decoder-created continuation slot would
@@ -1003,8 +1235,7 @@ static bool recognizeUndecodedB0Vop3ScalarSources(
       llvm::is_contained(Ctx.DeclaredEntries, Tail.Offset))
     return false;
 
-  for (unsigned Physical = 0; Physical < MaxVgprs;
-       Physical += VgprBankSize)
+  for (unsigned Physical = 0; Physical < MaxVgprs; Physical += VgprBankSize)
     ConservativeUses.set(Physical);
   return true;
 }
@@ -1065,9 +1296,8 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
       Node.SafeTerminal = true;
       continue;
     }
-    if (!DI.DecodeSucceeded &&
-        recognizeUndecodedB0Vop3ScalarSources(Ctx, Global, MaxVgprs,
-                                              Node.Uses)) {
+    if (!DI.DecodeSucceeded && recognizeUndecodedB0Vop3ScalarSources(
+                                   Ctx, Global, MaxVgprs, Node.Uses)) {
       if (Local + 2 >= Count)
         Node.HasUnsafeExit = true;
       else
@@ -1124,12 +1354,11 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
     const ForwardVgprProofNode &Node = Graph.Nodes[Local];
     if (Node.Opaque || Node.SafeTerminal)
       continue;
-    int16_t Out =
-        Graph.UndecodedVop3Heads.test(Local)
-            ? Graph.ModeBefore[Local]
-            : transferExactVgprMsbMode(
-                  Graph.ModeBefore[Local],
-                  Ctx.Decoded[Graph.GlobalIndices[Local]], Ctx.LS);
+    int16_t Out = Graph.UndecodedVop3Heads.test(Local)
+                      ? Graph.ModeBefore[Local]
+                      : transferExactVgprMsbMode(
+                            Graph.ModeBefore[Local],
+                            Ctx.Decoded[Graph.GlobalIndices[Local]], Ctx.LS);
     for (size_t Successor : Node.Successors) {
       int16_t Old = Graph.ModeBefore[Successor];
       int16_t Merged = Old == VgprMsbUnreachable ? Out
@@ -1500,6 +1729,180 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
 // v_wmma_scale16_f32_32x16x128_f4 -> exact M+K split
 // ---------------------------------------------------------------------------
 
+static std::optional<MCRegister>
+findEncodedVgprRegister(unsigned EncodedBase, unsigned Width, unsigned Opcode,
+                        unsigned OperandIndex, const LLVMState &LS) {
+  const MCInstrDesc &Desc = LS.MCII->get(Opcode);
+  if (OperandIndex >= Desc.getNumOperands())
+    return std::nullopt;
+
+  const MCOperandInfo &OperandInfo = Desc.operands()[OperandIndex];
+  int16_t RegClassID =
+      LS.MCII->getOpRegClassID(OperandInfo, LS.STI->getHwMode());
+  if (RegClassID < 0 ||
+      static_cast<unsigned>(RegClassID) >= LS.MRI->getNumRegClasses())
+    return std::nullopt;
+  const MCRegisterClass &RegClass = LS.MRI->getRegClass(RegClassID);
+
+  std::optional<MCRegister> Match;
+  for (unsigned I = 1, E = LS.MRI->getNumRegs(); I != E; ++I) {
+    MCRegister Reg(I);
+    if (!RegClass.contains(Reg))
+      continue;
+    std::optional<EncodedVgprRange> Range = getEncodedVgprRange(Reg, *LS.MRI);
+    if (!Range || !Range->FullDwords || Range->Base != EncodedBase ||
+        Range->Width != Width)
+      continue;
+    if (Match)
+      return std::nullopt;
+    Match = Reg;
+  }
+  return Match;
+}
+
+static bool setEncodedVgprOperand(MCInst &Inst, unsigned OperandIndex,
+                                  unsigned EncodedBase, unsigned Width,
+                                  StringRef Role, const LLVMState &LS) {
+  if (OperandIndex >= Inst.getNumOperands()) {
+    log() << "hotswap: error: wmma_scale16: destination " << Role
+          << " MC operand index " << OperandIndex << " exceeds operand count "
+          << Inst.getNumOperands() << "\n";
+    return false;
+  }
+  std::optional<MCRegister> Reg = findEncodedVgprRegister(
+      EncodedBase, Width, Inst.getOpcode(), OperandIndex, LS);
+  if (!Reg) {
+    log() << "hotswap: error: wmma_scale16: destination " << Role
+          << " has no unique MC register for encoded v" << EncodedBase
+          << ", width " << Width << ", operand " << OperandIndex << "\n";
+    return false;
+  }
+  Inst.getOperand(OperandIndex) = MCOperand::createReg(*Reg);
+  return true;
+}
+
+static bool copyImmediateOperand(MCInst &Dest, unsigned DestIndex,
+                                 const MCInst &Source, unsigned SourceIndex) {
+  if (DestIndex >= Dest.getNumOperands() ||
+      SourceIndex >= Source.getNumOperands())
+    return false;
+  const MCOperand &SourceOperand = Source.getOperand(SourceIndex);
+  if (!SourceOperand.isImm())
+    return false;
+  Dest.getOperand(DestIndex) = SourceOperand;
+  return true;
+}
+
+static std::optional<SmallVector<uint8_t>>
+encodeScale32Half(const InternalDecodedInst &DI, const Scale32MCLayout &Layout,
+                  unsigned DstBase, unsigned MatrixABase, unsigned MatrixBBase,
+                  std::optional<unsigned> OriginalSrc2Base, unsigned ScaleAReg,
+                  unsigned ScaleBReg, bool HighK, const LLVMState &LS) {
+  if (DI.Inst.getOpcode() != Layout.SourceOpcode)
+    return std::nullopt;
+
+  MCInst Inst = Layout.DestTemplate;
+  if (Inst.getOpcode() != Layout.DestOpcode)
+    return std::nullopt;
+  if (!setEncodedVgprOperand(Inst, Layout.DestVDst, DstBase % VgprBankSize,
+                             /*Width=*/8, "vdst", LS) ||
+      !setEncodedVgprOperand(Inst, Layout.DestSrc0, MatrixABase % VgprBankSize,
+                             /*Width=*/8, "src0", LS) ||
+      !setEncodedVgprOperand(Inst, Layout.DestSrc1, MatrixBBase % VgprBankSize,
+                             /*Width=*/8, "src1", LS) ||
+      !setEncodedVgprOperand(Inst, Layout.DestScaleSrc0,
+                             ScaleAReg % VgprBankSize, /*Width=*/1,
+                             "scale_src0", LS) ||
+      !setEncodedVgprOperand(Inst, Layout.DestScaleSrc1,
+                             ScaleBReg % VgprBankSize, /*Width=*/1,
+                             "scale_src1", LS))
+    return std::nullopt;
+
+  if (HighK) {
+    if (!setEncodedVgprOperand(Inst, Layout.DestSrc2, DstBase % VgprBankSize,
+                               /*Width=*/8, "src2", LS))
+      return std::nullopt;
+  } else if (OriginalSrc2Base) {
+    if (!setEncodedVgprOperand(Inst, Layout.DestSrc2,
+                               *OriginalSrc2Base % VgprBankSize,
+                               /*Width=*/8, "src2", LS))
+      return std::nullopt;
+  } else {
+    if (Layout.SourceSrc2 >= DI.Inst.getNumOperands() ||
+        !DI.Inst.getOperand(Layout.SourceSrc2).isImm()) {
+      log() << "hotswap: error: wmma_scale16: immediate source src2 operand "
+               "is unavailable at index "
+            << Layout.SourceSrc2 << " of " << DI.Inst.getNumOperands() << "\n";
+      return std::nullopt;
+    }
+    Inst.getOperand(Layout.DestSrc2) = DI.Inst.getOperand(Layout.SourceSrc2);
+  }
+
+  std::array<std::pair<unsigned, unsigned>, 4> ImmediateCopies = {
+      std::pair<unsigned, unsigned>{Layout.DestMatrixAScale,
+                                    Layout.SourceMatrixAScale},
+      std::pair<unsigned, unsigned>{Layout.DestMatrixBScale,
+                                    Layout.SourceMatrixBScale},
+      std::pair<unsigned, unsigned>{Layout.DestMatrixAScaleFmt,
+                                    Layout.SourceMatrixAScaleFmt},
+      std::pair<unsigned, unsigned>{Layout.DestMatrixBScaleFmt,
+                                    Layout.SourceMatrixBScaleFmt}};
+  for (const std::pair<unsigned, unsigned> &Copy : ImmediateCopies) {
+    if (!copyImmediateOperand(Inst, Copy.first, DI.Inst, Copy.second)) {
+      log() << "hotswap: error: wmma_scale16: could not copy source MC "
+               "immediate operand "
+            << Copy.second << " to destination operand " << Copy.first << "\n";
+      return std::nullopt;
+    }
+  }
+
+  if (Layout.SourceSrc2Modifiers >= DI.Inst.getNumOperands() ||
+      !DI.Inst.getOperand(Layout.SourceSrc2Modifiers).isImm()) {
+    log() << "hotswap: error: wmma_scale16: decoded source has no packed "
+             "src2-modifier immediate at operand "
+          << Layout.SourceSrc2Modifiers << "\n";
+    return std::nullopt;
+  }
+  int64_t Src2Modifiers =
+      DI.Inst.getOperand(Layout.SourceSrc2Modifiers).getImm();
+  if (Src2Modifiers < 0 || Src2Modifiers > 3) {
+    log() << "hotswap: error: wmma_scale16: source packed src2 modifiers "
+          << Src2Modifiers << " are outside [0, 3]\n";
+    return std::nullopt;
+  }
+  if (HighK)
+    Src2Modifiers = 0;
+  Inst.getOperand(Layout.DestSrc2Modifiers) =
+      MCOperand::createImm(Src2Modifiers);
+  Inst.getOperand(Layout.DestNegLo) =
+      MCOperand::createImm((Src2Modifiers & 1) != 0 ? 4 : 0);
+  Inst.getOperand(Layout.DestNegHi) =
+      MCOperand::createImm((Src2Modifiers & 2) != 0 ? 4 : 0);
+  Inst.getOperand(Layout.DestMatrixAReuse) = MCOperand::createImm(0);
+  Inst.getOperand(Layout.DestMatrixBReuse) = MCOperand::createImm(0);
+
+  SmallVector<char, 16> Code;
+  SmallVector<MCFixup, 4> Fixups;
+  LS.MCE->encodeInstruction(Inst, Code, Fixups, *LS.STI);
+  if (!Fixups.empty() || Code.size() != VOP3PXSize) {
+    log() << "hotswap: error: wmma_scale16: destination MC encoding produced "
+          << Code.size() << " bytes and " << Fixups.size() << " fixups\n";
+    return std::nullopt;
+  }
+  return SmallVector<uint8_t>(Code.begin(), Code.end());
+}
+
+static bool appendAssembledInstructions(SmallVectorImpl<uint8_t> &Out,
+                                        StringRef Asm, const LLVMState &LS) {
+  if (Asm.empty())
+    return true;
+  SmallVector<uint8_t> Bytes = assembleInstructions(Asm, LS);
+  if (Bytes.empty())
+    return false;
+  Out.append(Bytes.begin(), Bytes.end());
+  return true;
+}
+
 static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
 
@@ -1509,13 +1912,41 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     if (T.OriginalOffset == DI.Offset)
       return 0;
 
-  const uint8_t *Raw = Ctx.Text + DI.Offset;
-  std::optional<unsigned> ScaleABase =
-      decodeVgprEncoding(extractScaleSrc0(Raw));
-  std::optional<unsigned> ScaleBBase =
-      decodeVgprEncoding(extractScaleSrc1(Raw));
-  if (!ScaleABase || !ScaleBBase)
-    return failClosed(Ctx, DI, "non-VGPR block-16 scale operand");
+  const Scale32MCLayout *Layout = getScale32MCLayout(Ctx.LS);
+  if (!Layout || DI.Inst.getOpcode() != Layout->SourceOpcode)
+    return failClosed(Ctx, DI,
+                      "could not discover the semantic MC operand layout");
+
+  std::optional<EncodedVgprRange> DRange =
+      getOperandVgprRange(DI.Inst, Layout->SourceVDst, *Ctx.LS.MRI);
+  std::optional<EncodedVgprRange> ARange =
+      getOperandVgprRange(DI.Inst, Layout->SourceSrc0, *Ctx.LS.MRI);
+  std::optional<EncodedVgprRange> BRange =
+      getOperandVgprRange(DI.Inst, Layout->SourceSrc1, *Ctx.LS.MRI);
+  std::optional<EncodedVgprRange> ScaleARange =
+      getOperandVgprRange(DI.Inst, Layout->SourceScaleSrc0, *Ctx.LS.MRI);
+  std::optional<EncodedVgprRange> ScaleBRange =
+      getOperandVgprRange(DI.Inst, Layout->SourceScaleSrc1, *Ctx.LS.MRI);
+  if (!DRange || !ARange || !BRange || !ScaleARange || !ScaleBRange ||
+      !DRange->FullDwords || !ARange->FullDwords || !BRange->FullDwords ||
+      !ScaleARange->FullDwords || !ScaleBRange->FullDwords ||
+      DRange->Width != 16 || ARange->Width != 16 || BRange->Width != 8 ||
+      ScaleARange->Width != 2 || ScaleBRange->Width != 2)
+    return failClosed(Ctx, DI, "unexpected M=32 matrix/scale MC operand shape");
+
+  if (Layout->SourceSrc2 >= DI.Inst.getNumOperands())
+    return failClosed(Ctx, DI, "missing semantic src2 MC operand");
+  const MCOperand &Src2Op = DI.Inst.getOperand(Layout->SourceSrc2);
+  bool Src2IsImm = Src2Op.isImm();
+  std::optional<EncodedVgprRange> CRange;
+  if (Src2Op.isReg())
+    CRange = getOperandVgprRange(DI.Inst, Layout->SourceSrc2, *Ctx.LS.MRI);
+  else if (!Src2IsImm)
+    return failClosed(Ctx, DI, "unsupported non-VGPR/non-immediate src2");
+  if (CRange && (!CRange->FullDwords || CRange->Width != DRange->Width))
+    return failClosed(Ctx, DI, "src2 and destination widths differ");
+  if (!Src2IsImm && !CRange)
+    return failClosed(Ctx, DI, "could not determine src2 VGPR range");
 
   std::optional<unsigned> ActiveMode = getActiveVgprMsbMode(Ctx, Idx);
   if (!ActiveMode)
@@ -1529,45 +1960,6 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     return failClosed(Ctx, DI, Detail);
   }
 
-  std::optional<Scale32PrintedAsm> Printed = parseScale32PrintedAsm(Ctx, DI);
-  if (!Printed)
-    return failClosed(Ctx, DI, "could not parse canonical instruction");
-  std::optional<std::string> LowSuffix =
-      transformScale32ModifierSuffix(Printed->ModifierSuffix,
-                                     /*HighKPass=*/false);
-  std::optional<std::string> HighSuffix =
-      transformScale32ModifierSuffix(Printed->ModifierSuffix,
-                                     /*HighKPass=*/true);
-  if (!LowSuffix || !HighSuffix)
-    return failClosed(Ctx, DI, "unsupported modifier combination");
-
-  std::optional<VgprRange> DRange =
-      matrixOperandRange(Ctx, DI, /*OperandIndex=*/0);
-  std::optional<VgprRange> ARange =
-      matrixOperandRange(Ctx, DI, /*OperandIndex=*/1);
-  std::optional<VgprRange> BRange =
-      matrixOperandRange(Ctx, DI, /*OperandIndex=*/2);
-  if (!DRange || !ARange || !BRange || DRange->Width != 16 ||
-      ARange->Width != 16 || BRange->Width != 8)
-    return failClosed(Ctx, DI, "unexpected M=32 matrix operand widths/layout");
-
-  // The M=32 profile mirrors the common VOP3P layout in its first five MC
-  // operands: vdst, src0, src1, src2 modifiers, src2. Validate that mirror at
-  // runtime so a TableGen layout change fails closed.
-  if (DI.Inst.getNumOperands() < 5)
-    return failClosed(Ctx, DI, "truncated M=32 MC operand layout");
-  const MCOperand &Src2Op = DI.Inst.getOperand(4);
-  bool Src2IsImm = Src2Op.isImm();
-  std::optional<VgprRange> CRange;
-  if (Src2Op.isReg())
-    CRange = matrixOperandRange(Ctx, DI, /*OperandIndex=*/3);
-  else if (!Src2IsImm)
-    return failClosed(Ctx, DI, "unsupported non-VGPR/non-immediate src2");
-  if (CRange && CRange->Width != 16)
-    return failClosed(Ctx, DI, "src2 and destination widths differ");
-  if (!Src2IsImm && !CRange)
-    return failClosed(Ctx, DI, "could not determine src2 VGPR range");
-
   unsigned Src0Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src0);
   unsigned Src1Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src1);
   unsigned Src2Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src2);
@@ -1577,9 +1969,9 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   unsigned ABase = ARange->Base + Src0Bank * VgprBankSize;
   unsigned BBase = BRange->Base + Src1Bank * VgprBankSize;
   unsigned CBase = CRange ? CRange->Base + Src2Bank * VgprBankSize : 0;
-  unsigned ScaleALo = *ScaleABase + Src0Bank * VgprBankSize;
+  unsigned ScaleALo = ScaleARange->Base + Src0Bank * VgprBankSize;
   unsigned ScaleAHi = ScaleALo + 1;
-  unsigned ScaleBLo = *ScaleBBase + Src1Bank * VgprBankSize;
+  unsigned ScaleBLo = ScaleBRange->Base + Src1Bank * VgprBankSize;
   unsigned ScaleBHi = ScaleBLo + 1;
 
   if (!physicalVgprRangeFitsOneBank(DBase, 16, Ctx.Config.MaxVgprs) ||
@@ -1703,8 +2095,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   std::array<unsigned, SavedARegCount> SavedARegs;
   for (unsigned &Reg : SavedARegs) {
     std::optional<unsigned> Allocated = allocContiguousDeadOrAboveInBank(
-        Alloc, /*Count=*/1, /*Align=*/1, VgprBankSize,
-        ForwardDead.has_value());
+        Alloc, /*Count=*/1, /*Align=*/1, VgprBankSize, ForwardDead.has_value());
     if (!Allocated)
       return failClosed(Ctx, DI,
                         "fewer than four dead/above-KD VGPRs for exact M+K "
@@ -1713,17 +2104,21 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   }
   unsigned TmpReg = SavedARegs.front();
 
-  std::string ReplacementAsm;
-  raw_string_ostream OS(ReplacementAsm);
+  SmallVector<uint8_t> Replacement;
   unsigned CurrentMode = *ActiveMode;
-  emitScalePairSplitInPlace(OS, ScaleALo, ScaleAHi, TmpReg, CurrentMode);
-  emitScalePairSplitInPlace(OS, ScaleBLo, ScaleBHi, TmpReg, CurrentMode);
+  {
+    std::string SplitAsm;
+    raw_string_ostream SplitOS(SplitAsm);
+    emitScalePairSplitInPlace(SplitOS, ScaleALo, ScaleAHi, TmpReg, CurrentMode);
+    emitScalePairSplitInPlace(SplitOS, ScaleBLo, ScaleBHi, TmpReg, CurrentMode);
+    if (!appendAssembledInstructions(Replacement, SplitAsm, Ctx.LS))
+      return failClosed(Ctx, DI, "scale-pair split assembly failed");
+  }
 
   int HazardNops = classifyWmmaNops("v_wmma_scale_f32_16x16x128_f8f6f4").A0Nops;
-  auto EmitHazardNops = [&] {
-    for (int I = 0; I != HazardNops; ++I)
-      OS << "v_nop\n";
-  };
+  SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", Ctx.LS);
+  if (VNop.empty())
+    return failClosed(Ctx, DI, "v_nop assembly failed");
 
   for (bool HighK : {false, true}) {
     for (unsigned MHalf = 0; MHalf != 2; ++MHalf) {
@@ -1732,69 +2127,84 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
       unsigned ABank = OriginalAHalf / VgprBankSize;
       unsigned BBank = BBase / VgprBankSize;
 
+      std::string PreAsm;
+      raw_string_ostream PreOS(PreAsm);
       unsigned SavedIndex = 0;
       for (unsigned I = 0; I != MatrixHalfWidth; ++I) {
         bool IsLow = ((I / 2) % 2) == 0;
         if (IsLow == !HighK)
           continue;
         unsigned Saved = SavedARegs[SavedIndex++];
-        emitVgprCopy(OS, Saved, OriginalAHalf + I, /*W=*/1,
+        emitVgprCopy(PreOS, Saved, OriginalAHalf + I, /*W=*/1,
                      Saved / VgprBankSize, CurrentMode);
       }
       assert(SavedIndex == SavedARegCount);
-      emitMaskVgprsInPlace(OS, /*KeepLow=*/!HighK, OriginalAHalf,
+      emitMaskVgprsInPlace(PreOS, /*KeepLow=*/!HighK, OriginalAHalf,
                            MatrixHalfWidth, /*SubW=*/2, CurrentMode);
 
       SmallVector<VgprBankRequirement, 4> WmmaMode = {
           {VgprMsbOperand::Dst, DstHalf / VgprBankSize},
           {VgprMsbOperand::Src0, ABank},
           {VgprMsbOperand::Src1, BBank}};
-      std::string Src2;
+      std::optional<unsigned> OriginalSrc2Half;
       if (HighK) {
         WmmaMode.push_back({VgprMsbOperand::Src2, DstHalf / VgprBankSize});
-        Src2 = encodedVgprRange(DstHalf, MatrixHalfWidth);
       } else if (CRange) {
         unsigned CHalf = CBase + MHalf * MatrixHalfWidth;
         WmmaMode.push_back({VgprMsbOperand::Src2, CHalf / VgprBankSize});
-        Src2 = encodedVgprRange(CHalf, MatrixHalfWidth);
-      } else {
-        Src2 = Printed->Operands[3];
+        OriginalSrc2Half = CHalf;
       }
-      emitModeForOperands(OS, CurrentMode, WmmaMode);
-      emitScale32Half(OS, DstHalf, OriginalAHalf, BBase, Src2,
-                      HighK ? ScaleAHi : ScaleALo, HighK ? ScaleBHi : ScaleBLo,
-                      HighK ? *HighSuffix : *LowSuffix);
+      emitModeForOperands(PreOS, CurrentMode, WmmaMode);
+      if (!appendAssembledInstructions(Replacement, PreAsm, Ctx.LS))
+        return failClosed(Ctx, DI, "M+K split preamble assembly failed");
 
-      EmitHazardNops();
+      std::optional<SmallVector<uint8_t>> Wmma =
+          encodeScale32Half(DI, *Layout, DstHalf, OriginalAHalf, BBase,
+                            OriginalSrc2Half, HighK ? ScaleAHi : ScaleALo,
+                            HighK ? ScaleBHi : ScaleBLo, HighK, Ctx.LS);
+      if (!Wmma)
+        return failClosed(Ctx, DI,
+                          "semantic M=16 WMMA construction/encoding failed");
+      Replacement.append(Wmma->begin(), Wmma->end());
+      for (int I = 0; I != HazardNops; ++I)
+        Replacement.append(VNop.begin(), VNop.end());
+
+      std::string RestoreAsm;
+      raw_string_ostream RestoreOS(RestoreAsm);
       SavedIndex = 0;
       for (unsigned I = 0; I != MatrixHalfWidth; ++I) {
         bool IsLow = ((I / 2) % 2) == 0;
         if (IsLow == !HighK)
           continue;
         unsigned Saved = SavedARegs[SavedIndex++];
-        emitVgprCopy(OS, OriginalAHalf + I, Saved, /*W=*/1, ABank,
+        emitVgprCopy(RestoreOS, OriginalAHalf + I, Saved, /*W=*/1, ABank,
                      CurrentMode);
       }
       assert(SavedIndex == SavedARegCount);
+      if (!appendAssembledInstructions(Replacement, RestoreAsm, Ctx.LS))
+        return failClosed(Ctx, DI, "saved matrix-A restore assembly failed");
     }
   }
 
-  emitScalePairRestoreInPlace(OS, ScaleALo, ScaleAHi, TmpReg, CurrentMode);
-  emitScalePairRestoreInPlace(OS, ScaleBLo, ScaleBHi, TmpReg, CurrentMode);
-  emitModeForOperands(OS, CurrentMode,
-                      {{VgprMsbOperand::Src0,
-                        getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src0)},
-                       {VgprMsbOperand::Src1,
-                        getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src1)},
-                       {VgprMsbOperand::Src2,
-                        getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src2)},
-                       {VgprMsbOperand::Dst,
-                        getVgprMsbBank(*ActiveMode, VgprMsbOperand::Dst)}});
-
-  SmallVector<uint8_t> Replacement =
-      assembleInstructions(ReplacementAsm, Ctx.LS);
-  if (Replacement.empty())
-    return failClosed(Ctx, DI, "M+K split assembly failed");
+  {
+    std::string RestoreAsm;
+    raw_string_ostream RestoreOS(RestoreAsm);
+    emitScalePairRestoreInPlace(RestoreOS, ScaleALo, ScaleAHi, TmpReg,
+                                CurrentMode);
+    emitScalePairRestoreInPlace(RestoreOS, ScaleBLo, ScaleBHi, TmpReg,
+                                CurrentMode);
+    emitModeForOperands(RestoreOS, CurrentMode,
+                        {{VgprMsbOperand::Src0,
+                          getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src0)},
+                         {VgprMsbOperand::Src1,
+                          getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src1)},
+                         {VgprMsbOperand::Src2,
+                          getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src2)},
+                         {VgprMsbOperand::Dst,
+                          getVgprMsbBank(*ActiveMode, VgprMsbOperand::Dst)}});
+    if (!appendAssembledInstructions(Replacement, RestoreAsm, Ctx.LS))
+      return failClosed(Ctx, DI, "scale-pair/mode restore assembly failed");
+  }
 
   unsigned Extra = Alloc.extraVgprsNeeded();
   if (checkKernelVgprBump(Ctx, KernelName, Extra, PatchRequirement::Required) !=
@@ -1819,8 +2229,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
         << utohexstr(DI.Offset) << " (D=v" << DBase << ":" << (DBase + 15)
         << ", A=v" << ABase << ":" << (ABase + 15) << ", B=v" << BBase << ":"
         << (BBase + 7) << ", four saved-A VGPRs, tmp=v" << TmpReg << ", +"
-        << Extra << " vgpr, 4 WMMAs, "
-        << Replacement.size() << " bytes)\n";
+        << Extra << " vgpr, 4 WMMAs, " << Replacement.size() << " bytes)\n";
   return 1;
 }
 

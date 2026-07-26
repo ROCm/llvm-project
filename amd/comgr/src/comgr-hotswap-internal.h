@@ -1035,6 +1035,12 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 llvm::SmallVector<uint8_t> assembleSingleInst(llvm::StringRef AsmStr,
                                               const LLVMState &LS);
 
+/// Parse one non-empty assembly source line, returning the single MCInst
+/// captured from the target asm parser. Returns std::nullopt when parsing
+/// fails or the source expands to anything other than one MCInst.
+std::optional<llvm::MCInst> parseSingleMCInst(llvm::StringRef AsmStr,
+                                              const LLVMState &LS);
+
 /// Assemble a newline-separated instruction sequence, returning its encoded
 /// bytes.
 llvm::SmallVector<uint8_t> assembleInstructions(llvm::StringRef AsmStr,

@@ -595,6 +595,30 @@ SmallVector<uint8_t> assembleSingleInst(StringRef AsmStr, const LLVMState &S) {
   return assembleInstructions(AsmStr, S);
 }
 
+std::optional<MCInst> parseSingleMCInst(StringRef AsmStr, const LLVMState &S) {
+  SmallVector<StringRef, 2> Lines;
+  AsmStr.split(Lines, '\n');
+  unsigned InstructionLines = 0;
+  for (StringRef Line : Lines)
+    if (!Line.trim().empty())
+      ++InstructionLines;
+  if (InstructionLines != 1) {
+    log() << "hotswap: error: parseSingleMCInst: expected one non-empty "
+             "assembly line, got "
+          << InstructionLines << " for asm:\n    " << AsmStr << "\n";
+    return std::nullopt;
+  }
+
+  SmallVector<MCInst, 2> Insts = parseAsmToMCInsts(AsmStr, S);
+  if (Insts.size() != 1) {
+    log() << "hotswap: error: parseSingleMCInst: expected one parsed MCInst, "
+             "got "
+          << Insts.size() << " for asm:\n    " << AsmStr << "\n";
+    return std::nullopt;
+  }
+  return Insts.front();
+}
+
 // -- buildTrampoline ----------------------------------------------------------
 
 std::string joinAsmLines(ArrayRef<std::string> AsmLines) {
