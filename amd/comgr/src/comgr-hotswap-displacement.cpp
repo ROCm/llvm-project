@@ -782,6 +782,35 @@ Error validateTextRelocations(const ElfView &Elf) {
   return Error::success();
 }
 
+Error validateSupportedElfNumbering(const ElfView &Elf) {
+  const ELFT::Ehdr &Header = Elf.file().getHeader();
+  if ((Header.e_shnum == 0 && Header.e_shoff != 0) ||
+      Header.e_shnum >= ELF::SHN_LORESERVE || Header.e_phnum == ELF::PN_XNUM ||
+      Header.e_shstrndx == ELF::SHN_XINDEX) {
+    return makeDisplacementError(
+        "ELF extended section or program-header numbering is unsupported");
+  }
+
+  for (const ELFT::Shdr &SymShdr : Elf.sections()) {
+    if (SymShdr.sh_type != ELF::SHT_SYMTAB &&
+        SymShdr.sh_type != ELF::SHT_DYNSYM)
+      continue;
+    Expected<ELFT::SymRange> SymbolsOrErr = Elf.file().symbols(&SymShdr);
+    if (!SymbolsOrErr) {
+      return makeDisplacementError(
+          "failed to read symbols while checking extended section indexes: " +
+          Twine(toString(SymbolsOrErr.takeError())));
+    }
+    for (const ELFT::Sym &Symbol : *SymbolsOrErr) {
+      if (Symbol.st_shndx == ELF::SHN_XINDEX) {
+        return makeDisplacementError(
+            "ELF symbol extended section indexes are unsupported");
+      }
+    }
+  }
+  return Error::success();
+}
+
 Error validateKernelEntryMappings(const ElfView &Elf,
                                   const DisplacementPlan &Plan) {
   if (Elf.textSize() > std::numeric_limits<uint64_t>::max() - Elf.textAddr()) {
@@ -1216,13 +1245,33 @@ Expected<bool> repairLegacySGetPcSetPcForDisplacement(
   std::string LoContext = ("s_add_co_u32 for s_get_pc at old .text offset 0x" +
                            Twine::utohexstr(GetPc.Offset))
                               .str();
-  PendingRepairs.emplace_back(
-      AddLo, /*OperandIndex=*/2, static_cast<int64_t>(NewLo), NewPcOffset,
-      /*ForceLiteral=*/AddLo.Size > MinInstSize, std::move(LoContext));
   std::string HiContext =
       ("s_add_co_ci_u32 for s_get_pc at old .text offset 0x" +
        Twine::utohexstr(GetPc.Offset))
           .str();
+
+  // An inline immediate can become a literal after displacement. Growing the
+  // add would move the following half of this indivisible sequence, so reject
+  // both repairs before scheduling either one unless MC can preserve their
+  // original widths.
+  if (AddLo.Size == MinInstSize) {
+    Expected<SmallVector<uint8_t>> EncodedOrErr = reencodeAbsoluteOperand(
+        AddLo, /*OperandIndex=*/2, static_cast<int64_t>(NewLo),
+        /*ForceLiteral=*/false, LS, LoContext);
+    if (!EncodedOrErr)
+      return EncodedOrErr.takeError();
+  }
+  if (AddHi.Size == MinInstSize) {
+    Expected<SmallVector<uint8_t>> EncodedOrErr = reencodeAbsoluteOperand(
+        AddHi, /*OperandIndex=*/2, static_cast<int64_t>(NewHi),
+        /*ForceLiteral=*/false, LS, HiContext);
+    if (!EncodedOrErr)
+      return EncodedOrErr.takeError();
+  }
+
+  PendingRepairs.emplace_back(
+      AddLo, /*OperandIndex=*/2, static_cast<int64_t>(NewLo), NewPcOffset,
+      /*ForceLiteral=*/AddLo.Size > MinInstSize, std::move(LoContext));
   PendingRepairs.emplace_back(
       AddHi, /*OperandIndex=*/2, static_cast<int64_t>(NewHi), NewAddHiOffset,
       /*ForceLiteral=*/AddHi.Size > MinInstSize, std::move(HiContext));
@@ -2000,6 +2049,8 @@ DisplacementPlan::create(const ElfView &Elf,
                          bool RelocateTrailingSections) {
   if (InputEdits.empty())
     return makeDisplacementError("no displacement edits requested");
+  if (Error Err = validateSupportedElfNumbering(Elf))
+    return std::move(Err);
 
   std::vector<DisplacementEdit> Sorted;
   Sorted.reserve(InputEdits.size());

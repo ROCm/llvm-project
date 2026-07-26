@@ -2636,6 +2636,39 @@ TEST(TextDisplacement, RepairsLegacyGetPcSetPcSequence) {
   EXPECT_EQ(Decoded[6].Mnemonic, "s_endpgm");
 }
 
+TEST(TextDisplacement, RejectsLegacyGetPcInlineImmediateWidthGrowth) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text =
+      assembleInstructions("s_get_pc_i64 s[8:9]\n"
+                           "s_add_u32 s8, s8, 24\n"
+                           "s_addc_u32 s9, s9, 0\n"
+                           "s_set_pc_i64 s[8:9]\n"
+                           "s_nop 0\n"
+                           "s_nop 0\n"
+                           "s_nop 0\n"
+                           "s_endpgm",
+                           S);
+  ASSERT_EQ(Text.size(), 32u);
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+
+  DisplacementEdit Edit;
+  Edit.Offset = 16;
+  for (unsigned I = 0; I != 11; ++I)
+    Edit.ReplacementBytes.append(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<std::unique_ptr<llvm::WritableMemoryBuffer>> OutOrErr =
+      tryApplyTextDisplacementToNewBuffer(*ViewOrErr, S, {Edit});
+  ASSERT_FALSE((bool)OutOrErr);
+  std::string Reason = llvm::toString(OutOrErr.takeError());
+  EXPECT_NE(Reason.find("changed encoded size during re-encode"),
+            std::string::npos)
+      << Reason;
+}
+
 TEST(TextDisplacement, RepairsBackwardLegacyGetPcSetPcSequence) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -3456,6 +3489,87 @@ TEST(TextDisplacement, RejectsUnsupportedDynamicTagsAndPointers) {
   Reason = llvm::toString(OutOrErr.takeError());
   EXPECT_NE(Reason.find("dynamic section has an invalid layout"),
             std::string::npos)
+      << Reason;
+}
+
+TEST(TextDisplacement, RejectsExtendedHeaderNumbering) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+  for (unsigned Case = 0; Case != 3; ++Case) {
+    SCOPED_TRACE(Case);
+    std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+    llvm::ELF::Elf64_Ehdr Header;
+    std::memcpy(&Header, ElfBytes.data(), sizeof(Header));
+    llvm::ELF::Elf64_Shdr NullSection;
+    std::memcpy(&NullSection, ElfBytes.data() + Header.e_shoff,
+                sizeof(NullSection));
+
+    if (Case == 0) {
+      NullSection.sh_size = Header.e_shnum;
+      Header.e_shnum = 0;
+    } else if (Case == 1) {
+      NullSection.sh_info = Header.e_phnum;
+      Header.e_phnum = llvm::ELF::PN_XNUM;
+    } else {
+      NullSection.sh_link = Header.e_shstrndx;
+      Header.e_shstrndx = llvm::ELF::SHN_XINDEX;
+    }
+    std::memcpy(ElfBytes.data() + Header.e_shoff, &NullSection,
+                sizeof(NullSection));
+    std::memcpy(ElfBytes.data(), &Header, sizeof(Header));
+
+    llvm::Expected<ElfView> ViewOrErr =
+        ElfView::create(ElfBytes.data(), ElfBytes.size());
+    ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+    DisplacementEdit Edit;
+    Edit.Offset = 0;
+    Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+    llvm::Expected<DisplacementPlan> PlanOrErr =
+        DisplacementPlan::create(*ViewOrErr, {Edit});
+    ASSERT_FALSE((bool)PlanOrErr);
+    std::string Reason = llvm::toString(PlanOrErr.takeError());
+    EXPECT_NE(Reason.find("extended section or program-header numbering"),
+              std::string::npos)
+        << Reason;
+  }
+}
+
+TEST(TextDisplacement, RejectsSymbolExtendedSectionIndex) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Text = assembleSingleInst("s_endpgm", S);
+  ASSERT_FALSE(Text.empty());
+  std::vector<uint8_t> ElfBytes = makeDisplacementTestElf(Text);
+  llvm::ELF::Elf64_Ehdr Header;
+  std::memcpy(&Header, ElfBytes.data(), sizeof(Header));
+  llvm::ELF::Elf64_Shdr Symtab;
+  const uint64_t SymtabHeaderOffset =
+      Header.e_shoff + 4 * sizeof(llvm::ELF::Elf64_Shdr);
+  std::memcpy(&Symtab, ElfBytes.data() + SymtabHeaderOffset, sizeof(Symtab));
+  llvm::ELF::Elf64_Sym KernelSymbol;
+  const uint64_t KernelSymbolOffset =
+      Symtab.sh_offset + sizeof(llvm::ELF::Elf64_Sym);
+  std::memcpy(&KernelSymbol, ElfBytes.data() + KernelSymbolOffset,
+              sizeof(KernelSymbol));
+  KernelSymbol.st_shndx = llvm::ELF::SHN_XINDEX;
+  std::memcpy(ElfBytes.data() + KernelSymbolOffset, &KernelSymbol,
+              sizeof(KernelSymbol));
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(ElfBytes.data(), ElfBytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  DisplacementEdit Edit;
+  Edit.Offset = 0;
+  Edit.ReplacementBytes.assign(S.SNopBytes.begin(), S.SNopBytes.end());
+  llvm::Expected<DisplacementPlan> PlanOrErr =
+      DisplacementPlan::create(*ViewOrErr, {Edit});
+  ASSERT_FALSE((bool)PlanOrErr);
+  std::string Reason = llvm::toString(PlanOrErr.takeError());
+  EXPECT_NE(Reason.find("symbol extended section indexes"), std::string::npos)
       << Reason;
 }
 
