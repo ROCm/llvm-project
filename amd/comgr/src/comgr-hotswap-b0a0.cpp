@@ -2087,12 +2087,12 @@ static std::optional<KnownCallSites> collectKnownCallSites(
       else
         HasFiniteExternalTarget = true;
     } else if (!ReusableCalls[I].empty()) {
-      for (uint64_t AbsoluteTarget : ReusableCalls[I]) {
-        if (AbsoluteTarget >= TextAddr && AbsoluteTarget < TextEnd)
-          LocalTargets.push_back(AbsoluteTarget - TextAddr);
-        else
-          HasFiniteExternalTarget = true;
-      }
+      if (llvm::any_of(ReusableCalls[I], [TextAddr, TextEnd](uint64_t Target) {
+            return Target < TextAddr || Target >= TextEnd;
+          }))
+        continue;
+      for (uint64_t AbsoluteTarget : ReusableCalls[I])
+        LocalTargets.push_back(AbsoluteTarget - TextAddr);
     } else if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
                DI.Inst.getNumOperands() != 0 &&
                DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
@@ -2612,21 +2612,22 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         Target = MaterializedCalls[InstIndex]->Target;
       }
       if (!ReusableCalls[InstIndex].empty()) {
-        size_t LocalTargetCount = 0;
-        size_t ExternalTargetCount = 0;
-        for (uint64_t ReusableTarget : ReusableCalls[InstIndex]) {
-          if (ReusableTarget >= TextAddr && ReusableTarget < *TextEnd) {
-            Info.Targets.insert(ReusableTarget - TextAddr);
-            ++LocalTargetCount;
-          } else {
-            ++ExternalTargetCount;
-          }
+        if (llvm::any_of(ReusableCalls[InstIndex],
+                         [TextAddr, TextEnd](uint64_t ReusableTarget) {
+                           return ReusableTarget < TextAddr ||
+                                  ReusableTarget >= *TextEnd;
+                         })) {
+          log() << "hotswap: unresolved call target at 0x"
+                << utohexstr(DI.Offset) << " (reusable target outside .text)\n";
+          Info.HasUnresolvedTargets = true;
+          continue;
         }
+        for (uint64_t ReusableTarget : ReusableCalls[InstIndex])
+          Info.Targets.insert(ReusableTarget - TextAddr);
         Info.BoundedIndirectTransfers.insert(DI.Offset);
         log() << "hotswap: resolved reusable PC-materialized call at 0x"
-              << utohexstr(DI.Offset) << " to " << LocalTargetCount
-              << " local and " << ExternalTargetCount
-              << " finite external target(s)\n";
+              << utohexstr(DI.Offset) << " to "
+              << ReusableCalls[InstIndex].size() << " target(s)\n";
         continue;
       }
       if (!Target) {
