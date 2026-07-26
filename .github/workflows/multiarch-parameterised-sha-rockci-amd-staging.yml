@@ -40,7 +40,7 @@ on:
       linux_amdgpu_families:
         type: string
         description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: ""
+        default: "gfx94X-dcgpu,gfx110X-all,gfx90a"
       linux_test_labels:
         type: string
         description: "If enabled, reduce test set on Linux to the list of labels prefixed with 'test:'. ex: test:rocprim, test:hipcub"
@@ -48,7 +48,7 @@ on:
       windows_amdgpu_families:
         type: string
         description: "Insert comma-separated list of Windows GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: ""
+        default: "gfx1151"
       windows_test_labels:
         type: string
         description: "If enabled, reduce test set on Windows to the list of labels prefixed with 'test:' ex: test:rocprim, test:hipcub"
@@ -97,6 +97,8 @@ jobs:
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
+      linux_amdgpu_families: ${{ inputs.linux_amdgpu_families || '' }}
+      windows_amdgpu_families: ${{ inputs.windows_amdgpu_families || '' }}      
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}

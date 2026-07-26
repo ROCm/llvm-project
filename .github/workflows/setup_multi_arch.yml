@@ -20,6 +20,14 @@ on:
         description: Prerelease version number such as '2'. This gets appended to the computed version after 'rc', like '7.10.0rc2'
         type: string
         default: ""
+      linux_amdgpu_families:
+        description: 'Comma-separated Linux GPU families. "all" = all, "none" or empty = skip.'
+        type: string
+        default: ""
+      windows_amdgpu_families:
+        description: 'Comma-separated Windows GPU families. "all" = all, "none" or empty = skip.'
+        type: string
+        default: ""          
     outputs:
       enable_build_jobs:
         description: Whether to enable build jobs.
