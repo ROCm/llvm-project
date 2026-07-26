@@ -83,11 +83,11 @@ SPIRVCommand::ActionClass SPIRVCommand::getClass() const {
 
 void SPIRVCommand::addOptionsIdentifier(HashAlgorithm &H) const {
   if (!OffloadArch.empty())
-    addCacheHashString(H, OffloadArch);
+    addString(H, OffloadArch);
 }
 
 Error SPIRVCommand::addInputIdentifier(HashAlgorithm &H) const {
-  addCacheHashString(H, InputBuffer);
+  addString(H, InputBuffer);
   return Error::success();
 }
 } // namespace COMGR

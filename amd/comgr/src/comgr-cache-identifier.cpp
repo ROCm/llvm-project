@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Computes the implementation identity shared by Comgr's internal command
-/// cache and the public cache-identifier API.
+/// Computes the implementation identity returned by the public
+/// cache-identifier API.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -21,18 +21,33 @@
 #include "clang/Basic/Version.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/SHA256.h"
 
 #include <array>
 #include <string>
-
-// Needed for stringification of the git commit macro.
-#define COMGR_STRINGIFY_IMPL(x) #x
-#define COMGR_STRINGIFY(x) COMGR_STRINGIFY_IMPL(x)
 
 using namespace llvm;
 
 namespace COMGR {
 namespace {
+
+void addCacheHashUInt(SHA256 &Hash, uint64_t Value) {
+  uint8_t Bytes[sizeof(Value)];
+  for (size_t I = 0; I != sizeof(Bytes); ++I)
+    Bytes[I] = static_cast<uint8_t>(Value >> (I * 8));
+  Hash.update(Bytes);
+}
+
+void addCacheHashBytes(SHA256 &Hash, ArrayRef<uint8_t> Value) {
+  addCacheHashUInt(Hash, Value.size());
+  Hash.update(Value);
+}
+
+void addCacheHashString(SHA256 &Hash, StringRef Value) {
+  addCacheHashBytes(
+      Hash, ArrayRef<uint8_t>(reinterpret_cast<const uint8_t *>(Value.data()),
+                              Value.size()));
+}
 
 void addCacheHashResources(SHA256 &Hash, StringRef Kind,
                            ArrayRef<ResourceDirResource> Resources) {
@@ -44,12 +59,14 @@ void addCacheHashResources(SHA256 &Hash, StringRef Kind,
   }
 }
 
-std::array<uint8_t, 32> computeComgrImplementationIdentifier() {
+std::array<uint8_t, 32> computeCacheIdentifier() {
   SHA256 Hash;
-  addCacheHashString(Hash, "amd_comgr_cache_identifier_v2");
+  addCacheHashString(Hash, "amd_comgr_cache_identifier_v1");
   addCacheHashString(Hash, clang::getClangFullVersion());
   addCacheHashString(Hash, getComgrHashIdentifier());
-  addCacheHashString(Hash, COMGR_STRINGIFY(AMD_COMGR_GIT_COMMIT));
+  // The interface version need not change when compiler implementation changes
+  // alter output, so include the exact configured Comgr source revision.
+  addCacheHashString(Hash, getComgrGitCommitIdentifier());
 
   addCacheHashBytes(Hash, getDeviceLibrariesIdentifier());
   addCacheHashString(Hash, getOpenCLCBaseHeaderContents());
@@ -85,34 +102,10 @@ std::array<uint8_t, 32> computeComgrImplementationIdentifier() {
 
 } // namespace
 
-void addCacheHashUInt(SHA256 &Hash, uint64_t Value) {
-  uint8_t Bytes[sizeof(Value)];
-  for (size_t I = 0; I != sizeof(Bytes); ++I)
-    Bytes[I] = static_cast<uint8_t>(Value >> (I * 8));
-  Hash.update(Bytes);
-}
-
-void addCacheHashBytes(SHA256 &Hash, ArrayRef<uint8_t> Value) {
-  addCacheHashUInt(Hash, Value.size());
-  Hash.update(Value);
-}
-
-void addCacheHashString(SHA256 &Hash, StringRef Value) {
-  addCacheHashBytes(
-      Hash, ArrayRef<uint8_t>(reinterpret_cast<const uint8_t *>(Value.data()),
-                              Value.size()));
-}
-
-ArrayRef<uint8_t> getComgrImplementationIdentifier() {
-  static const std::array<uint8_t, 32> Identifier =
-      computeComgrImplementationIdentifier();
-  return Identifier;
-}
-
 StringRef getCacheIdentifier() {
   static const std::string Identifier = []() {
     SmallString<64> Hex;
-    toHex(getComgrImplementationIdentifier(), true, Hex);
+    toHex(computeCacheIdentifier(), true, Hex);
     return std::string(Hex.begin(), Hex.end());
   }();
   return Identifier;

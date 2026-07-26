@@ -309,6 +309,9 @@ public:
 /// Return the configured Comgr version identifier.
 llvm::StringRef getComgrHashIdentifier();
 
+/// Return the configured Comgr source revision.
+llvm::StringRef getComgrGitCommitIdentifier();
+
 } // namespace COMGR
 
 #endif // header guard

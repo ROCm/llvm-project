@@ -125,9 +125,9 @@ CachedCommandAdaptor::ActionClass UnbundleCommand::getClass() const {
 }
 
 void UnbundleCommand::addOptionsIdentifier(HashAlgorithm &H) const {
-  addCacheHashUInt(H, Config.TargetNames.size());
+  addUInt(H, Config.TargetNames.size());
   for (StringRef Target : Config.TargetNames) {
-    addCacheHashString(H, Target);
+    CachedCommandAdaptor::addString(H, Target);
   }
 }
 
@@ -153,8 +153,8 @@ Error UnbundleCommand::addInputIdentifier(HashAlgorithm &H) const {
   // contents should give the same result, regardless of the compression
   // algorithm or header version. Since the hash used by the offload bundler is
   // not a cryptographic hash, we also add the uncompressed file size.
-  addCacheHashUInt(H, MaybeHeader->Hash);
-  addCacheHashUInt(H, MaybeHeader->UncompressedFileSize);
+  addUInt(H, MaybeHeader->Hash);
+  addUInt(H, MaybeHeader->UncompressedFileSize);
   return Error::success();
 }
 

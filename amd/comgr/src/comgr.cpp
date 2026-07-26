@@ -256,6 +256,10 @@ StringRef COMGR::getComgrHashIdentifier() {
   return xstringify(AMD_COMGR_VERSION_ID);
 }
 
+StringRef COMGR::getComgrGitCommitIdentifier() {
+  return xstringify(AMD_COMGR_GIT_COMMIT);
+}
+
 amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
                                                 TargetIdentifier &Ident) {
   SmallVector<StringRef, 5> IsaNameComponents;
