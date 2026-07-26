@@ -1859,6 +1859,25 @@ TEST(CollectDirectBranchTargets,
             /*CallerEndIndex=*/4, /*ExternalEntries=*/{},
             /*Target1BeginIndex=*/8);
   ASSERT_TRUE(SharedCanonicalLeaf);
+  llvm::SmallVector<uint8_t> SharedCanonicalLeafBytes =
+      assembleInstructions(TwoExactCallers + LeafFrame, S);
+  std::vector<InternalDecodedInst> SharedCanonicalLeafDecoded;
+  ASSERT_TRUE(decodeTextSection(SharedCanonicalLeafBytes.data(),
+                                SharedCanonicalLeafBytes.size(), S,
+                                SharedCanonicalLeafDecoded));
+  ASSERT_EQ(SharedCanonicalLeafDecoded.size(), 16u);
+  EXPECT_TRUE(SharedCanonicalLeaf->Targets.contains(
+      SharedCanonicalLeafDecoded[2].Offset +
+      SharedCanonicalLeafDecoded[2].Size));
+  EXPECT_TRUE(SharedCanonicalLeaf->Targets.contains(
+      SharedCanonicalLeafDecoded[6].Offset +
+      SharedCanonicalLeafDecoded[6].Size));
+  EXPECT_TRUE(SharedCanonicalLeaf->BoundedIndirectTransfers.contains(
+      SharedCanonicalLeafDecoded[2].Offset));
+  EXPECT_TRUE(SharedCanonicalLeaf->BoundedIndirectTransfers.contains(
+      SharedCanonicalLeafDecoded[6].Offset));
+  EXPECT_TRUE(SharedCanonicalLeaf->BoundedIndirectTransfers.contains(
+      SharedCanonicalLeafDecoded[14].Offset));
   EXPECT_FALSE(SharedCanonicalLeaf->HasUnresolvedTargets);
   EXPECT_FALSE(SharedCanonicalLeaf->HasUnboundedIndirectEntries);
 

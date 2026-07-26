@@ -5631,7 +5631,7 @@ static std::optional<WellFormedAbiEntrySet> validateWellFormedAbiEntrySet(
     return std::nullopt;
   }
 
-  if (!SawAbiCall) {
+  {
     auto HasMaterializationEntry =
         [&](const PcMaterializedCallInfo &Materialized) {
           auto IsInterior = [&](uint64_t Offset) {
