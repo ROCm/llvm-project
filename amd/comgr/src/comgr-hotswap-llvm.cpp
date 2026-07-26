@@ -344,6 +344,33 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_set_pc_i64 s[0:1]", "s_set_pc_i64", S,
                                      S.SSetPcI64Opcode))
     return S;
+  if (!resolveRequiredOpcodeViaParse("s_add_co_i32 s0, s0, s0", "s_add_co_i32",
+                                     S, S.SAddCoI32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_add_co_u32 s0, s0, s0", "s_add_co_u32",
+                                     S, S.SAddCoU32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_add_co_ci_u32 s0, s0, s0",
+                                     "s_add_co_ci_u32", S, S.SAddCoCiU32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_cmp_ge_i32 s0, 0", "s_cmp_ge_i32", S,
+                                     S.SCmpGeI32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_cbranch_scc1 0", "s_cbranch_scc1", S,
+                                     S.SCBranchScc1Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_abs_i32 s0, s0", "s_abs_i32", S,
+                                     S.SAbsI32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_sub_co_u32 s0, s0, s0", "s_sub_co_u32",
+                                     S, S.SSubCoU32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_sub_co_ci_u32 s0, s0, s0",
+                                     "s_sub_co_ci_u32", S, S.SSubCoCiU32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_mov_b32 s0, 0", "s_mov_b32", S,
+                                     S.SMovB32Opcode))
+    return S;
   if (!resolveRequiredOpcodeViaParse("s_clause 0", "s_clause", S,
                                      S.SClauseOpcode))
     return S;

@@ -951,6 +951,19 @@ struct LLVMState {
   unsigned SAddcU32Opcode = 0;
   unsigned SSetPcI64Opcode = 0;
 
+  /// Scalar MC identities used to recognize the two compiler-emitted
+  /// reusable-PC tensor tail-jump sequences. Resolved through the assembler
+  /// so the policy layer does not depend on disassembled mnemonic text.
+  unsigned SAddCoI32Opcode = 0;
+  unsigned SAddCoU32Opcode = 0;
+  unsigned SAddCoCiU32Opcode = 0;
+  unsigned SCmpGeI32Opcode = 0;
+  unsigned SCBranchScc1Opcode = 0;
+  unsigned SAbsI32Opcode = 0;
+  unsigned SSubCoU32Opcode = 0;
+  unsigned SSubCoCiU32Opcode = 0;
+  unsigned SMovB32Opcode = 0;
+
   /// MC identities used by far-trampoline relocation analysis. Each opcode is
   /// resolved once through the asm parser so policy code never compares
   /// disassembled mnemonic strings.

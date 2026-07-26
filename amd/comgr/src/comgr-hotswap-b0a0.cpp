@@ -6417,11 +6417,11 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           MaterializedCalls[InstIndex] &&
           (MaterializedCalls[InstIndex]->Target < TextAddr ||
            MaterializedCalls[InstIndex]->Target >= *TextEnd) &&
-          !hasKnownControlFlowEntry(
-              DeclaredEntries, BoundedReturns, BoundedReturnPositions, *Index,
-              HasUnboundedIndirectEntries,
-              MaterializedCalls[InstIndex]->SequenceStart,
-              MaterializedCalls[InstIndex]->SequenceEnd);
+          !hasKnownControlFlowEntry(DeclaredEntries, BoundedReturns,
+                                    BoundedReturnPositions, *Index,
+                                    HasUnboundedIndirectEntries,
+                                    MaterializedCalls[InstIndex]->SequenceStart,
+                                    MaterializedCalls[InstIndex]->SequenceEnd);
       if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
           DI.Inst.getNumOperands() != 0 &&
           DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
@@ -6534,8 +6534,9 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     llvm::sort(LocalTargets);
     LocalTargets.erase(std::unique(LocalTargets.begin(), LocalTargets.end()),
                        LocalTargets.end());
-    auto Inserted =
-        Info.BoundedIndirectTargets.try_emplace(ReturnOffset, LocalTargets);
+    std::pair<DenseMap<uint64_t, SmallVector<uint64_t, 2>>::iterator, bool>
+        Inserted =
+            Info.BoundedIndirectTargets.try_emplace(ReturnOffset, LocalTargets);
     if (!Inserted.second && Inserted.first->second != LocalTargets) {
       log() << "hotswap: conflicting audited target sets for bounded return at "
                "0x"

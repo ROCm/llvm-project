@@ -37,6 +37,7 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/AMDGPUMCOperand.h"
 
 #include <algorithm>
 #include <cstring>
@@ -117,6 +118,22 @@ SmallVector<MCRegister, 4> getDirectSubRegs(MCRegister Reg,
       Result.push_back(MCRegister(Sub));
   }
   return Result;
+}
+
+const MCOperand *getAMDGPUNamedOperand(const MCInst &Inst,
+                                       AMDGPU::NamedOperand Name) {
+  int16_t Index = AMDGPU::getNamedOperandIdx(Inst.getOpcode(), Name);
+  if (Index < 0 || static_cast<unsigned>(Index) >= Inst.getNumOperands())
+    return nullptr;
+  return &Inst.getOperand(static_cast<unsigned>(Index));
+}
+
+MCOperand *getMutableAMDGPUNamedOperand(MCInst &Inst,
+                                        AMDGPU::NamedOperand Name) {
+  int16_t Index = AMDGPU::getNamedOperandIdx(Inst.getOpcode(), Name);
+  if (Index < 0 || static_cast<unsigned>(Index) >= Inst.getNumOperands())
+    return nullptr;
+  return &Inst.getOperand(static_cast<unsigned>(Index));
 }
 
 // Format a VGPR pair as a range expression: (VGPR0, VGPR1) -> "v[0:1]".
@@ -418,9 +435,8 @@ bool rewriteDs2AddrOffsetsInPlaceImpl(MutableArrayRef<uint8_t> InstBytes,
   // and split-counter concerns do not apply: the opcode, register operands,
   // modifiers, instruction count, and entry behavior are unchanged.
   if (getDs2AddrReplacement(Mnemonic).empty() ||
-      Mnemonic.contains("_stride64_") ||
-      Ops.Off0 > Ds2AddrOffsetMax || Ops.Off1 > Ds2AddrOffsetMax ||
-      InstBytes.size() != 2 * MinInstSize)
+      Mnemonic.contains("_stride64_") || Ops.Off0 > Ds2AddrOffsetMax ||
+      Ops.Off1 > Ds2AddrOffsetMax || InstBytes.size() != 2 * MinInstSize)
     return false;
 
   // gfx1250 DS2 offset0/offset1 occupy instruction bits [7:0]/[15:8].
@@ -627,16 +643,17 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
 
 // -- getDescriptorBaseSgpr --------------------------------------------------
 //
-// Extract the base SGPR MCRegister from the second operand of a
-// tensor_load_to_lds instruction. The second operand is an 8-SGPR group
-// descriptor (SReg_256); we need its first sub-register for the
-// s_pack_hh_b32_b16 fix.
+// Extract the base SGPR MCRegister from tensor_load_to_lds's named vaddr1
+// operand. It is an 8-SGPR group descriptor (SReg_256); we need its first
+// sub-register for the s_pack_hh_b32_b16 fix.
 
 MCRegister getDescriptorBaseSgpr(const MCInst &Inst,
                                  const MCRegisterInfo &MRI) {
-  if (Inst.getNumOperands() < 2 || !Inst.getOperand(1).isReg())
+  const MCOperand *Descriptor =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::VAddr1);
+  if (!Descriptor || !Descriptor->isReg())
     return MCRegister();
-  MCRegister Tuple = MCRegister(Inst.getOperand(1).getReg());
+  MCRegister Tuple = MCRegister(Descriptor->getReg());
   SmallVector<MCRegister, 4> Subs = getDirectSubRegs(Tuple, MRI);
   return Subs.empty() ? MCRegister() : Subs[0];
 }
@@ -658,10 +675,12 @@ std::optional<unsigned> getSgprIndex(MCRegister Reg,
 SmallVector<unsigned, 8> getDescriptorSgprIndices(const MCInst &Inst,
                                                   const MCRegisterInfo &MRI) {
   SmallVector<unsigned, 8> Result;
-  if (Inst.getNumOperands() < 2 || !Inst.getOperand(1).isReg())
+  const MCOperand *Descriptor =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::VAddr1);
+  if (!Descriptor || !Descriptor->isReg())
     return Result;
 
-  MCRegister Tuple = MCRegister(Inst.getOperand(1).getReg());
+  MCRegister Tuple = MCRegister(Descriptor->getReg());
   for (MCRegister Sub : getDirectSubRegs(Tuple, MRI)) {
     if (std::optional<unsigned> Index = getSgprIndex(Sub, MRI))
       Result.push_back(*Index);
@@ -957,12 +976,18 @@ bool isLow16PreservingAndOnBase(const InternalDecodedInst &DI,
   if (DI.Inst.getOpcode() != LS.SAndB32Opcode)
     return false;
   const MCInst &Inst = DI.Inst;
-  if (!Inst.getOperand(2).isImm() ||
-      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
-                           BaseMCReg) ||
-      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(1).getReg()), BaseMCReg))
+  const MCOperand *Dst =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *Src0 =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::Src0);
+  const MCOperand *Src1 =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::Src1);
+  if (!Dst || !Dst->isReg() || !Dst->getReg() || !Src0 || !Src0->isReg() ||
+      !Src0->getReg() || !Src1 || !Src1->isImm() ||
+      !LS.MRI->regsOverlap(MCRegister(Dst->getReg()), BaseMCReg) ||
+      !LS.MRI->regsOverlap(MCRegister(Src0->getReg()), BaseMCReg))
     return false;
-  uint64_t Imm = static_cast<uint64_t>(Inst.getOperand(2).getImm());
+  uint64_t Imm = static_cast<uint64_t>(Src1->getImm());
   return (Imm & 0xffffu) == 0xffffu;
 }
 
@@ -973,12 +998,18 @@ bool isClearedMaskAndOnBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
   if (DI.Inst.getOpcode() != LS.SAndB32Opcode)
     return false;
   const MCInst &Inst = DI.Inst;
-  if (!Inst.getOperand(2).isImm() ||
-      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
-                           BaseMCReg) ||
-      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(1).getReg()), BaseMCReg))
+  const MCOperand *Dst =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *Src0 =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::Src0);
+  const MCOperand *Src1 =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::Src1);
+  if (!Dst || !Dst->isReg() || !Dst->getReg() || !Src0 || !Src0->isReg() ||
+      !Src0->getReg() || !Src1 || !Src1->isImm() ||
+      !LS.MRI->regsOverlap(MCRegister(Dst->getReg()), BaseMCReg) ||
+      !LS.MRI->regsOverlap(MCRegister(Src0->getReg()), BaseMCReg))
     return false;
-  return (static_cast<uint64_t>(Inst.getOperand(2).getImm()) & 0xffffu) == 0;
+  return (static_cast<uint64_t>(Src1->getImm()) & 0xffffu) == 0;
 }
 
 // True when \p DI writes \p BaseMCReg but provably leaves bits [15:0]
@@ -991,14 +1022,21 @@ bool writesBasePreservingZeroLow16(const InternalDecodedInst &DI,
   unsigned Opcode = Inst.getOpcode();
   if (Opcode != LS.SAndB32Opcode && Opcode != LS.SOrB32Opcode)
     return false;
-  if (!LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()),
-                           BaseMCReg) ||
-      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(1).getReg()), BaseMCReg))
+  const MCOperand *Dst =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *Src0 =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::Src0);
+  const MCOperand *Src1 =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::Src1);
+  if (!Dst || !Dst->isReg() || !Dst->getReg() || !Src0 || !Src0->isReg() ||
+      !Src0->getReg() || !Src1 ||
+      !LS.MRI->regsOverlap(MCRegister(Dst->getReg()), BaseMCReg) ||
+      !LS.MRI->regsOverlap(MCRegister(Src0->getReg()), BaseMCReg))
     return false;
   if (Opcode == LS.SAndB32Opcode)
     return true;
-  if (Inst.getOperand(2).isImm())
-    return (static_cast<uint64_t>(Inst.getOperand(2).getImm()) & 0xffffu) == 0;
+  if (Src1->isImm())
+    return (static_cast<uint64_t>(Src1->getImm()) & 0xffffu) == 0;
   return false;
 }
 
@@ -1047,8 +1085,10 @@ bool isTensorDescriptorUseOnly(const InternalDecodedInst &DI,
   // literal operand index: it is the group tuple that legitimately contains
   // BaseMCReg. Any other operand reading BaseMCReg is a foreign consumer.
   MCRegister DescriptorTuple;
-  if (DI.Inst.getOperand(1).isReg())
-    DescriptorTuple = MCRegister(DI.Inst.getOperand(1).getReg());
+  const MCOperand *Descriptor =
+      getAMDGPUNamedOperand(DI.Inst, AMDGPU::NamedOperand::VAddr1);
+  if (Descriptor && Descriptor->isReg())
+    DescriptorTuple = MCRegister(Descriptor->getReg());
 
   const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
   for (unsigned I = Desc.getNumDefs(), E = DI.Inst.getNumOperands(); I < E;
@@ -1087,11 +1127,16 @@ struct TensorLocalSetPcResolution {
   TensorLocalSetPcShape Shape = TensorLocalSetPcShape::Linear;
 };
 
-bool isExactTensorRegisterOperand(const MCInst &Inst, unsigned OperandIndex,
+bool isExactTensorRegisterOperand(const MCInst &Inst, AMDGPU::NamedOperand Name,
                                   MCRegister Reg) {
-  return OperandIndex < Inst.getNumOperands() &&
-         Inst.getOperand(OperandIndex).isReg() &&
-         Inst.getOperand(OperandIndex).getReg() == Reg;
+  const MCOperand *Operand = getAMDGPUNamedOperand(Inst, Name);
+  return Operand && Operand->isReg() && Operand->getReg() == Reg;
+}
+
+bool isImmediatelyBefore(const InternalDecodedInst &Before,
+                         const InternalDecodedInst &After) {
+  return Before.Offset <= std::numeric_limits<uint64_t>::max() - Before.Size &&
+         Before.Offset + Before.Size == After.Offset;
 }
 
 std::optional<uint32_t> evaluateTensorUint32Operand(const MCOperand &Operand) {
@@ -1133,67 +1178,68 @@ resolveTensorLinearSetPcTarget(const PatchContext &Ctx, size_t SetPcIndex,
       !AddLow.DecodeSucceeded || !AddHigh.DecodeSucceeded ||
       !SetPc.DecodeSucceeded ||
       GetPc.Inst.getOpcode() != Ctx.LS.SGetPcI64Opcode ||
-      MakeDelta.Mnemonic != "s_add_co_i32" ||
-      AddLow.Mnemonic != "s_add_co_u32" ||
-      AddHigh.Mnemonic != "s_add_co_ci_u32" ||
-      SetPc.Inst.getOpcode() != Ctx.LS.SSetPcI64Opcode ||
-      GetPc.Inst.getNumOperands() != 1 ||
-      MakeDelta.Inst.getNumOperands() != 3 ||
-      AddLow.Inst.getNumOperands() != 3 || AddHigh.Inst.getNumOperands() != 3 ||
-      SetPc.Inst.getNumOperands() != 1)
+      MakeDelta.Inst.getOpcode() != Ctx.LS.SAddCoI32Opcode ||
+      AddLow.Inst.getOpcode() != Ctx.LS.SAddCoU32Opcode ||
+      AddHigh.Inst.getOpcode() != Ctx.LS.SAddCoCiU32Opcode ||
+      SetPc.Inst.getOpcode() != Ctx.LS.SSetPcI64Opcode)
     return std::nullopt;
 
-  auto IsImmediatelyBefore = [](const InternalDecodedInst &Before,
-                                const InternalDecodedInst &After) {
-    return Before.Offset <=
-               std::numeric_limits<uint64_t>::max() - Before.Size &&
-           Before.Offset + Before.Size == After.Offset;
-  };
-  if (!IsImmediatelyBefore(GetPc, MakeDelta) ||
-      !IsImmediatelyBefore(MakeDelta, AddLow) ||
-      !IsImmediatelyBefore(AddLow, AddHigh) ||
-      !IsImmediatelyBefore(AddHigh, SetPc))
+  if (!isImmediatelyBefore(GetPc, MakeDelta) ||
+      !isImmediatelyBefore(MakeDelta, AddLow) ||
+      !isImmediatelyBefore(AddLow, AddHigh) ||
+      !isImmediatelyBefore(AddHigh, SetPc))
     return std::nullopt;
   if (GetPc.Offset < Range.Begin || SetPc.Offset >= Range.End ||
       SetPc.Size > Range.End - SetPc.Offset)
     return std::nullopt;
 
-  std::optional<uint32_t> FirstAddend =
-      evaluateTensorUint32Operand(MakeDelta.Inst.getOperand(1));
-  std::optional<uint32_t> SecondAddend =
-      evaluateTensorUint32Operand(MakeDelta.Inst.getOperand(2));
-
-  const MCOperand &GetPcPair = GetPc.Inst.getOperand(0);
-  const MCOperand &SetPcPair = SetPc.Inst.getOperand(0);
-  const MCOperand &DeltaDst = MakeDelta.Inst.getOperand(0);
-  if (!GetPcPair.isReg() || !GetPcPair.getReg() || !SetPcPair.isReg() ||
-      SetPcPair.getReg() != GetPcPair.getReg() || !DeltaDst.isReg() ||
-      !DeltaDst.getReg() || !FirstAddend || !SecondAddend)
+  const MCOperand *GetPcPair =
+      getAMDGPUNamedOperand(GetPc.Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *SetPcPair =
+      getAMDGPUNamedOperand(SetPc.Inst, AMDGPU::NamedOperand::Src0);
+  const MCOperand *DeltaDst =
+      getAMDGPUNamedOperand(MakeDelta.Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *FirstAddendOperand =
+      getAMDGPUNamedOperand(MakeDelta.Inst, AMDGPU::NamedOperand::Src0);
+  const MCOperand *SecondAddendOperand =
+      getAMDGPUNamedOperand(MakeDelta.Inst, AMDGPU::NamedOperand::Src1);
+  if (!GetPcPair || !GetPcPair->isReg() || !GetPcPair->getReg() || !SetPcPair ||
+      !SetPcPair->isReg() || SetPcPair->getReg() != GetPcPair->getReg() ||
+      !DeltaDst || !DeltaDst->isReg() || !DeltaDst->getReg() ||
+      !FirstAddendOperand || !SecondAddendOperand)
     return std::nullopt;
 
-  MCRegister Pair(GetPcPair.getReg());
-  MCRegister DeltaReg(DeltaDst.getReg());
+  std::optional<uint32_t> FirstAddend =
+      evaluateTensorUint32Operand(*FirstAddendOperand);
+  std::optional<uint32_t> SecondAddend =
+      evaluateTensorUint32Operand(*SecondAddendOperand);
+  if (!FirstAddend || !SecondAddend)
+    return std::nullopt;
+
+  MCRegister Pair(GetPcPair->getReg());
+  MCRegister DeltaReg(DeltaDst->getReg());
   if (Ctx.LS.MRI->regsOverlap(Pair, DeltaReg))
     return std::nullopt;
 
-  auto SameRegOperand = [](const MCInst &Inst, unsigned OperandIndex,
-                           MCRegister Reg) {
-    return Inst.getOperand(OperandIndex).isReg() &&
-           Inst.getOperand(OperandIndex).getReg() == Reg;
-  };
-
-  if (!AddLow.Inst.getOperand(0).isReg() ||
-      !AddLow.Inst.getOperand(0).getReg() ||
-      !AddHigh.Inst.getOperand(0).isReg() ||
-      !AddHigh.Inst.getOperand(0).getReg())
+  const MCOperand *AddLowDst =
+      getAMDGPUNamedOperand(AddLow.Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *AddHighDst =
+      getAMDGPUNamedOperand(AddHigh.Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *AddHighSrc1 =
+      getAMDGPUNamedOperand(AddHigh.Inst, AMDGPU::NamedOperand::Src1);
+  if (!AddLowDst || !AddLowDst->isReg() || !AddLowDst->getReg() ||
+      !AddHighDst || !AddHighDst->isReg() || !AddHighDst->getReg() ||
+      !AddHighSrc1 || !AddHighSrc1->isImm())
     return std::nullopt;
-  MCRegister Low(AddLow.Inst.getOperand(0).getReg());
-  MCRegister High(AddHigh.Inst.getOperand(0).getReg());
-  if (!SameRegOperand(AddLow.Inst, 1, Low) ||
-      !SameRegOperand(AddLow.Inst, 2, DeltaReg) ||
-      !SameRegOperand(AddHigh.Inst, 1, High) ||
-      !AddHigh.Inst.getOperand(2).isImm() ||
-      AddHigh.Inst.getOperand(2).getImm() != 0)
+  MCRegister Low(AddLowDst->getReg());
+  MCRegister High(AddHighDst->getReg());
+  if (!isExactTensorRegisterOperand(AddLow.Inst, AMDGPU::NamedOperand::Src0,
+                                    Low) ||
+      !isExactTensorRegisterOperand(AddLow.Inst, AMDGPU::NamedOperand::Src1,
+                                    DeltaReg) ||
+      !isExactTensorRegisterOperand(AddHigh.Inst, AMDGPU::NamedOperand::Src0,
+                                    High) ||
+      AddHighSrc1->getImm() != 0)
     return std::nullopt;
 
   std::optional<unsigned> LowIndex = getSgprIndex(Low, *Ctx.LS.MRI);
@@ -1214,6 +1260,43 @@ resolveTensorLinearSetPcTarget(const PatchContext &Ctx, size_t SetPcIndex,
     return std::nullopt;
   return TensorLocalSetPcResolution{*Target, SetPcIndex - 4, SetPcIndex,
                                     TensorLocalSetPcShape::Linear};
+}
+
+bool matchesTensorPairArithmetic(const PatchContext &Ctx,
+                                 const InternalDecodedInst &Low,
+                                 const InternalDecodedInst &High,
+                                 unsigned LowOpcode, unsigned HighOpcode,
+                                 MCRegister Pair, MCRegister DeltaReg) {
+  if (Low.Inst.getOpcode() != LowOpcode || High.Inst.getOpcode() != HighOpcode)
+    return false;
+
+  const MCOperand *LowDst =
+      getAMDGPUNamedOperand(Low.Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *LowSrc0 =
+      getAMDGPUNamedOperand(Low.Inst, AMDGPU::NamedOperand::Src0);
+  const MCOperand *LowSrc1 =
+      getAMDGPUNamedOperand(Low.Inst, AMDGPU::NamedOperand::Src1);
+  const MCOperand *HighDst =
+      getAMDGPUNamedOperand(High.Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *HighSrc0 =
+      getAMDGPUNamedOperand(High.Inst, AMDGPU::NamedOperand::Src0);
+  const MCOperand *HighSrc1 =
+      getAMDGPUNamedOperand(High.Inst, AMDGPU::NamedOperand::Src1);
+  if (!LowDst || !LowDst->isReg() || !LowDst->getReg() || !LowSrc0 ||
+      !LowSrc0->isReg() || LowSrc0->getReg() != LowDst->getReg() || !LowSrc1 ||
+      !LowSrc1->isReg() || LowSrc1->getReg() != DeltaReg || !HighDst ||
+      !HighDst->isReg() || !HighDst->getReg() || !HighSrc0 ||
+      !HighSrc0->isReg() || HighSrc0->getReg() != HighDst->getReg() ||
+      !HighSrc1 || !HighSrc1->isImm() || HighSrc1->getImm() != 0)
+    return false;
+
+  MCRegister LowReg(LowDst->getReg());
+  MCRegister HighReg(HighDst->getReg());
+  std::optional<unsigned> LowIndex = getSgprIndex(LowReg, *Ctx.LS.MRI);
+  std::optional<unsigned> HighIndex = getSgprIndex(HighReg, *Ctx.LS.MRI);
+  return LowIndex && HighIndex && *HighIndex == *LowIndex + 1 &&
+         Ctx.LS.MRI->regsOverlap(LowReg, Pair) &&
+         Ctx.LS.MRI->regsOverlap(HighReg, Pair);
 }
 
 // Resolve Tensile's signed-direction reusable-PC transfer. Both arms compute
@@ -1277,33 +1360,44 @@ resolveTensorSignedSetPcTarget(const PatchContext &Ctx, size_t SetPcIndex,
         PositiveSetPc.Offset >= Range.End ||
         PositiveSetPc.Size > Range.End - PositiveSetPc.Offset ||
         GetPc.Inst.getOpcode() != Ctx.LS.SGetPcI64Opcode ||
-        GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg() ||
-        !GetPc.Inst.getOperand(0).getReg() ||
-        MakeDelta.Mnemonic != "s_add_co_i32" ||
-        MakeDelta.Inst.getNumOperands() != 3 ||
-        !MakeDelta.Inst.getOperand(0).isReg() ||
-        !MakeDelta.Inst.getOperand(0).getReg() ||
-        !MakeDelta.Inst.getOperand(2).isImm())
+        MakeDelta.Inst.getOpcode() != Ctx.LS.SAddCoI32Opcode ||
+        Compare.Inst.getOpcode() != Ctx.LS.SCmpGeI32Opcode ||
+        Branch.Inst.getOpcode() != Ctx.LS.SCBranchScc1Opcode ||
+        Abs.Inst.getOpcode() != Ctx.LS.SAbsI32Opcode ||
+        NegativeSetPc.Inst.getOpcode() != Ctx.LS.SSetPcI64Opcode ||
+        PositiveSetPc.Inst.getOpcode() != Ctx.LS.SSetPcI64Opcode)
       continue;
 
-    MCRegister Pair(GetPc.Inst.getOperand(0).getReg());
-    MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
+    const MCOperand *GetPcPair =
+        getAMDGPUNamedOperand(GetPc.Inst, AMDGPU::NamedOperand::SDst);
+    const MCOperand *DeltaDst =
+        getAMDGPUNamedOperand(MakeDelta.Inst, AMDGPU::NamedOperand::SDst);
+    const MCOperand *FirstAddendOperand =
+        getAMDGPUNamedOperand(MakeDelta.Inst, AMDGPU::NamedOperand::Src0);
+    const MCOperand *SecondAddendOperand =
+        getAMDGPUNamedOperand(MakeDelta.Inst, AMDGPU::NamedOperand::Src1);
+    const MCOperand *CompareSrc1 =
+        getAMDGPUNamedOperand(Compare.Inst, AMDGPU::NamedOperand::Src1);
+    if (!GetPcPair || !GetPcPair->isReg() || !GetPcPair->getReg() ||
+        !DeltaDst || !DeltaDst->isReg() || !DeltaDst->getReg() ||
+        !FirstAddendOperand || !SecondAddendOperand ||
+        !SecondAddendOperand->isImm() || !CompareSrc1 ||
+        !CompareSrc1->isImm() || CompareSrc1->getImm() != 0)
+      continue;
+
+    MCRegister Pair(GetPcPair->getReg());
+    MCRegister DeltaReg(DeltaDst->getReg());
     if (Ctx.LS.MRI->regsOverlap(DeltaReg, Pair) ||
-        Compare.Mnemonic != "s_cmp_ge_i32" ||
-        Compare.Inst.getNumOperands() != 2 ||
-        !isExactTensorRegisterOperand(Compare.Inst, 0, DeltaReg) ||
-        !Compare.Inst.getOperand(1).isImm() ||
-        Compare.Inst.getOperand(1).getImm() != 0 ||
-        Branch.Mnemonic != "s_cbranch_scc1" || Abs.Mnemonic != "s_abs_i32" ||
-        Abs.Inst.getNumOperands() != 2 ||
-        !isExactTensorRegisterOperand(Abs.Inst, 0, DeltaReg) ||
-        !isExactTensorRegisterOperand(Abs.Inst, 1, DeltaReg) ||
-        NegativeSetPc.Inst.getOpcode() != Ctx.LS.SSetPcI64Opcode ||
-        NegativeSetPc.Inst.getNumOperands() != 1 ||
-        !isExactTensorRegisterOperand(NegativeSetPc.Inst, 0, Pair) ||
-        PositiveSetPc.Inst.getOpcode() != Ctx.LS.SSetPcI64Opcode ||
-        PositiveSetPc.Inst.getNumOperands() != 1 ||
-        !isExactTensorRegisterOperand(PositiveSetPc.Inst, 0, Pair))
+        !isExactTensorRegisterOperand(Compare.Inst, AMDGPU::NamedOperand::Src0,
+                                      DeltaReg) ||
+        !isExactTensorRegisterOperand(Abs.Inst, AMDGPU::NamedOperand::SDst,
+                                      DeltaReg) ||
+        !isExactTensorRegisterOperand(Abs.Inst, AMDGPU::NamedOperand::Src0,
+                                      DeltaReg) ||
+        !isExactTensorRegisterOperand(NegativeSetPc.Inst,
+                                      AMDGPU::NamedOperand::Src0, Pair) ||
+        !isExactTensorRegisterOperand(PositiveSetPc.Inst,
+                                      AMDGPU::NamedOperand::Src0, Pair))
       continue;
 
     uint64_t PositiveTarget = 0;
@@ -1312,44 +1406,20 @@ resolveTensorSignedSetPcTarget(const PatchContext &Ctx, size_t SetPcIndex,
         PositiveTarget != AddLow.Offset)
       continue;
 
-    auto MatchesPairArithmetic = [&](const InternalDecodedInst &Low,
-                                     const InternalDecodedInst &High,
-                                     StringRef LowMnemonic,
-                                     StringRef HighMnemonic) {
-      if (Low.Mnemonic != LowMnemonic || High.Mnemonic != HighMnemonic ||
-          Low.Inst.getNumOperands() != 3 || !Low.Inst.getOperand(0).isReg() ||
-          !Low.Inst.getOperand(1).isReg() || !Low.Inst.getOperand(0).getReg() ||
-          Low.Inst.getOperand(0).getReg() != Low.Inst.getOperand(1).getReg() ||
-          !isExactTensorRegisterOperand(Low.Inst, 2, DeltaReg) ||
-          High.Inst.getNumOperands() != 3 || !High.Inst.getOperand(0).isReg() ||
-          !High.Inst.getOperand(1).isReg() ||
-          !High.Inst.getOperand(0).getReg() ||
-          High.Inst.getOperand(0).getReg() !=
-              High.Inst.getOperand(1).getReg() ||
-          !High.Inst.getOperand(2).isImm() ||
-          High.Inst.getOperand(2).getImm() != 0)
-        return false;
-      MCRegister LowReg(Low.Inst.getOperand(0).getReg());
-      MCRegister HighReg(High.Inst.getOperand(0).getReg());
-      std::optional<unsigned> LowIndex = getSgprIndex(LowReg, *Ctx.LS.MRI);
-      std::optional<unsigned> HighIndex = getSgprIndex(HighReg, *Ctx.LS.MRI);
-      return LowIndex && HighIndex && *HighIndex == *LowIndex + 1 &&
-             Ctx.LS.MRI->regsOverlap(LowReg, Pair) &&
-             Ctx.LS.MRI->regsOverlap(HighReg, Pair);
-    };
-    if (!MatchesPairArithmetic(SubLow, SubHigh, "s_sub_co_u32",
-                               "s_sub_co_ci_u32") ||
-        !MatchesPairArithmetic(AddLow, AddHigh, "s_add_co_u32",
-                               "s_add_co_ci_u32"))
+    if (!matchesTensorPairArithmetic(
+            Ctx, SubLow, SubHigh, Ctx.LS.SSubCoU32Opcode,
+            Ctx.LS.SSubCoCiU32Opcode, Pair, DeltaReg) ||
+        !matchesTensorPairArithmetic(Ctx, AddLow, AddHigh,
+                                     Ctx.LS.SAddCoU32Opcode,
+                                     Ctx.LS.SAddCoCiU32Opcode, Pair, DeltaReg))
       continue;
 
     std::optional<uint32_t> FirstAddend =
-        evaluateTensorUint32Operand(MakeDelta.Inst.getOperand(1));
+        evaluateTensorUint32Operand(*FirstAddendOperand);
     if (!FirstAddend)
       continue;
     uint32_t DeltaBits =
-        *FirstAddend +
-        static_cast<uint32_t>(MakeDelta.Inst.getOperand(2).getImm());
+        *FirstAddend + static_cast<uint32_t>(SecondAddendOperand->getImm());
     int64_t SignedDelta = static_cast<int32_t>(DeltaBits);
     std::optional<uint64_t> PcValue = checkedAddUint64(
         GetPc.Offset, GetPc.Size, "tensor CFG signed reusable-PC value");
@@ -1360,6 +1430,35 @@ resolveTensorSignedSetPcTarget(const PatchContext &Ctx, size_t SetPcIndex,
                                       TensorLocalSetPcShape::SignedTwoArm};
   }
   return std::nullopt;
+}
+
+std::optional<bool>
+addAuditedBoundedTensorEdges(const PatchContext &Ctx, TensorFunctionCfg &Graph,
+                             const DenseMap<uint64_t, size_t> &IndexAtOffset,
+                             const ElfView::FunctionTextRange &Range,
+                             size_t LocalIndex, const InternalDecodedInst &DI) {
+  DenseMap<uint64_t, SmallVector<uint64_t, 2>>::const_iterator Bounded =
+      Ctx.DirectControlFlow.BoundedIndirectTargets.find(DI.Offset);
+  if (Bounded == Ctx.DirectControlFlow.BoundedIndirectTargets.end())
+    return std::nullopt;
+  for (uint64_t Target : Bounded->second) {
+    if (Target < Range.Begin || Target >= Range.End) {
+      log() << "hotswap: tensor CFG rejected bounded transfer at 0x"
+            << utohexstr(DI.Offset) << " with out-of-range target 0x"
+            << utohexstr(Target) << "\n";
+      return false;
+    }
+    DenseMap<uint64_t, size_t>::const_iterator TargetIt =
+        IndexAtOffset.find(Target);
+    if (TargetIt == IndexAtOffset.end()) {
+      log() << "hotswap: tensor CFG rejected bounded transfer at 0x"
+            << utohexstr(DI.Offset) << " with non-boundary target 0x"
+            << utohexstr(Target) << "\n";
+      return false;
+    }
+    Graph.addEdge(LocalIndex, TargetIt->second);
+  }
+  return true;
 }
 
 std::optional<TensorFunctionCfg>
@@ -1412,32 +1511,6 @@ buildTensorFunctionCfg(const PatchContext &Ctx,
   };
   SmallVector<PendingLocalSetPc, 2> PendingLocalSetPcs;
 
-  auto AddAuditedBoundedEdges =
-      [&](size_t LocalIndex,
-          const InternalDecodedInst &DI) -> std::optional<bool> {
-    auto Bounded = Ctx.DirectControlFlow.BoundedIndirectTargets.find(DI.Offset);
-    if (Bounded == Ctx.DirectControlFlow.BoundedIndirectTargets.end())
-      return std::nullopt;
-    for (uint64_t Target : Bounded->second) {
-      if (Target < Range.Begin || Target >= Range.End) {
-        log() << "hotswap: tensor CFG rejected bounded transfer at 0x"
-              << utohexstr(DI.Offset) << " with out-of-range target 0x"
-              << utohexstr(Target) << "\n";
-        return false;
-      }
-      DenseMap<uint64_t, size_t>::const_iterator TargetIt =
-          IndexAtOffset.find(Target);
-      if (TargetIt == IndexAtOffset.end()) {
-        log() << "hotswap: tensor CFG rejected bounded transfer at 0x"
-              << utohexstr(DI.Offset) << " with non-boundary target 0x"
-              << utohexstr(Target) << "\n";
-        return false;
-      }
-      Graph.addEdge(LocalIndex, TargetIt->second);
-    }
-    return true;
-  };
-
   for (size_t I = BeginIndex; I < EndIndex; ++I) {
     const InternalDecodedInst &DI = Ctx.Decoded[I];
     if (!DI.DecodeSucceeded) {
@@ -1469,7 +1542,8 @@ buildTensorFunctionCfg(const PatchContext &Ctx,
 
     if (Ctx.LS.MIA->isIndirectBranch(DI.Inst) ||
         Ctx.LS.MIA->isReturn(DI.Inst)) {
-      std::optional<bool> Added = AddAuditedBoundedEdges(LocalIndex, DI);
+      std::optional<bool> Added = addAuditedBoundedTensorEdges(
+          Ctx, Graph, IndexAtOffset, Range, LocalIndex, DI);
       if (Added) {
         if (!*Added)
           return std::nullopt;
@@ -1491,7 +1565,7 @@ buildTensorFunctionCfg(const PatchContext &Ctx,
                                                  Range);
         bool AuditedSetPc = false;
         if (SetPc) {
-          auto Audited =
+          DenseMap<uint64_t, SmallVector<uint64_t, 2>>::const_iterator Audited =
               Ctx.DirectControlFlow.BoundedIndirectTargets.find(DI.Offset);
           AuditedSetPc =
               Audited != Ctx.DirectControlFlow.BoundedIndirectTargets.end() &&
@@ -1506,7 +1580,8 @@ buildTensorFunctionCfg(const PatchContext &Ctx,
                                         LocalIndex, std::nullopt, SetPc->Shape,
                                         AuditedSetPc});
         } else {
-          std::optional<bool> Added = AddAuditedBoundedEdges(LocalIndex, DI);
+          std::optional<bool> Added = addAuditedBoundedTensorEdges(
+              Ctx, Graph, IndexAtOffset, Range, LocalIndex, DI);
           if (Added) {
             if (!*Added)
               return std::nullopt;
@@ -1612,20 +1687,27 @@ buildTensorFunctionCfg(const PatchContext &Ctx,
 bool writesBaseWithKnownZeroLow16(const InternalDecodedInst &DI,
                                   MCRegister BaseMCReg, const LLVMState &LS) {
   const MCInst &Inst = DI.Inst;
-  if (Inst.getNumOperands() < 2 || !Inst.getOperand(0).isReg() ||
-      !Inst.getOperand(0).getReg() ||
-      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()), BaseMCReg))
+  if (Inst.getOpcode() != LS.SMovB32Opcode &&
+      Inst.getOpcode() != LS.SAndB32Opcode)
+    return false;
+  const MCOperand *Dst =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::SDst);
+  const MCOperand *Src =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::Src0);
+  if (!Dst || !Dst->isReg() || !Dst->getReg() || !Src ||
+      !LS.MRI->regsOverlap(MCRegister(Dst->getReg()), BaseMCReg))
     return false;
 
-  if (DI.Mnemonic == "s_mov_b32")
-    return Inst.getOperand(1).isImm() &&
-           (static_cast<uint64_t>(Inst.getOperand(1).getImm()) & 0xffffu) == 0;
+  if (Inst.getOpcode() == LS.SMovB32Opcode)
+    return Src->isImm() &&
+           (static_cast<uint64_t>(Src->getImm()) & 0xffffu) == 0;
 
   // An immediate AND with zeros in bits [15:0] forces the result's low half
   // to zero regardless of the other input.
-  return Inst.getOpcode() == LS.SAndB32Opcode && Inst.getNumOperands() >= 3 &&
-         Inst.getOperand(2).isImm() &&
-         (static_cast<uint64_t>(Inst.getOperand(2).getImm()) & 0xffffu) == 0;
+  const MCOperand *Src1 =
+      getAMDGPUNamedOperand(Inst, AMDGPU::NamedOperand::Src1);
+  return Src1 && Src1->isImm() &&
+         (static_cast<uint64_t>(Src1->getImm()) & 0xffffu) == 0;
 }
 
 // Prove that the descriptor base already has a zero workgroup_mask at the
@@ -1896,9 +1978,16 @@ TensorMaskDef findTensorMaskSetDefinitions(const PatchContext &Ctx,
 bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-  MCRegister Dst = MCRegister(DI.Inst.getOperand(0).getReg());
+  MCOperand *DstOperand =
+      getMutableAMDGPUNamedOperand(DI.Inst, AMDGPU::NamedOperand::SDst);
+  MCOperand *MaskOperand =
+      getMutableAMDGPUNamedOperand(DI.Inst, AMDGPU::NamedOperand::Src1);
+  if (!DstOperand || !DstOperand->isReg() || !DstOperand->getReg() ||
+      !MaskOperand || !MaskOperand->isImm())
+    return false;
+  MCRegister Dst = MCRegister(DstOperand->getReg());
   std::string Reg = toAsmRegName(MRI, Dst);
-  uint64_t Imm = static_cast<uint64_t>(DI.Inst.getOperand(2).getImm());
+  uint64_t Imm = static_cast<uint64_t>(MaskOperand->getImm());
   uint32_t Cleared = static_cast<uint32_t>(Imm) & 0xffff0000u;
 
   std::string Asm =
@@ -1912,7 +2001,7 @@ bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
     return false;
   }
   std::memcpy(Ctx.Text + DI.Offset, Bytes.data(), Bytes.size());
-  DI.Inst.getOperand(2).setImm(static_cast<int64_t>(Cleared));
+  MaskOperand->setImm(static_cast<int64_t>(Cleared));
 
   log() << "hotswap: tensor_load_to_lds: cleared workgroup_mask at descriptor "
            "definition 0x"
@@ -2617,8 +2706,7 @@ bool rewriteDs2AddrOffsetsInPlace(MutableArrayRef<uint8_t> InstBytes,
                                   const MCInst &Inst, StringRef Mnemonic,
                                   const LLVMState &LS) {
   std::optional<DsOperands> Ops = extractDsOperands(Inst, Mnemonic, LS);
-  return Ops &&
-         rewriteDs2AddrOffsetsInPlaceImpl(InstBytes, Mnemonic, *Ops);
+  return Ops && rewriteDs2AddrOffsetsInPlaceImpl(InstBytes, Mnemonic, *Ops);
 }
 
 // -- applyTrampolinePatches -------------------------------------------------

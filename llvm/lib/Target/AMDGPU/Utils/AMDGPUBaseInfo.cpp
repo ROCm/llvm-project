@@ -26,8 +26,11 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/TargetParser/AMDGPUMCOperand.h"
 #include "llvm/TargetParser/AMDGPUTargetParser.h"
+#include <array>
 #include <optional>
+#include <vector>
 
 #define GET_INSTRINFO_NAMED_OPS
 #define GET_INSTRMAP_INFO
@@ -198,6 +201,69 @@ inline unsigned getHoldCntBitShift() { return 7; }
 namespace llvm {
 
 namespace AMDGPU {
+
+static int16_t getDirectNamedOperandIdx(uint32_t Opcode, NamedOperand Name) {
+  switch (Name) {
+  case NamedOperand::VAddr1:
+    return getNamedOperandIdx(Opcode, OpName::vaddr1);
+  case NamedOperand::SDst:
+    return getNamedOperandIdx(Opcode, OpName::sdst);
+  case NamedOperand::Src0:
+    return getNamedOperandIdx(Opcode, OpName::src0);
+  case NamedOperand::Src1:
+    return getNamedOperandIdx(Opcode, OpName::src1);
+  case NamedOperand::Src2:
+    return getNamedOperandIdx(Opcode, OpName::src2);
+  case NamedOperand::Count:
+    break;
+  }
+  llvm_unreachable("unknown public AMDGPU named operand");
+}
+
+int16_t getNamedOperandIdx(uint32_t Opcode, NamedOperand Name) {
+  constexpr size_t NamedOperandCount = static_cast<size_t>(NamedOperand::Count);
+  using NamedOperandIndices = std::array<int16_t, NamedOperandCount>;
+  static const std::vector<NamedOperandIndices> ResolvedIndices = [] {
+    std::vector<NamedOperandIndices> DirectIndices(INSTRUCTION_LIST_END);
+    for (NamedOperandIndices &Indices : DirectIndices)
+      Indices.fill(-1);
+    for (uint32_t Candidate = 0; Candidate < INSTRUCTION_LIST_END; ++Candidate)
+      for (size_t NameIndex = 0; NameIndex < NamedOperandCount; ++NameIndex)
+        DirectIndices[Candidate][NameIndex] = getDirectNamedOperandIdx(
+            Candidate, static_cast<NamedOperand>(NameIndex));
+
+    std::vector<NamedOperandIndices> Result = DirectIndices;
+    constexpr unsigned SubtargetCount = static_cast<unsigned>(Subtarget_14) + 1;
+    for (uint32_t Candidate = 0; Candidate < INSTRUCTION_LIST_END;
+         ++Candidate) {
+      for (unsigned SubtargetIndex = 0; SubtargetIndex < SubtargetCount;
+           ++SubtargetIndex) {
+        int32_t ConcreteOpcode =
+            getMCOpcodeGen(Candidate, static_cast<Subtarget>(SubtargetIndex));
+        if (ConcreteOpcode < 0 ||
+            static_cast<uint32_t>(ConcreteOpcode) >= INSTRUCTION_LIST_END)
+          continue;
+        for (size_t NameIndex = 0; NameIndex < NamedOperandCount; ++NameIndex) {
+          int16_t CandidateIndex = DirectIndices[Candidate][NameIndex];
+          if (CandidateIndex < 0)
+            continue;
+          int16_t &ResolvedIndex =
+              Result[static_cast<uint32_t>(ConcreteOpcode)][NameIndex];
+          if (ResolvedIndex == -1 || ResolvedIndex == CandidateIndex)
+            ResolvedIndex = CandidateIndex;
+          else
+            ResolvedIndex = -2;
+        }
+      }
+    }
+    return Result;
+  }();
+
+  if (Opcode >= ResolvedIndices.size() || Name == NamedOperand::Count)
+    return -1;
+  int16_t Index = ResolvedIndices[Opcode][static_cast<size_t>(Name)];
+  return Index >= 0 ? Index : -1;
+}
 
 /// \returns true if the target supports signed immediate offset for SMRD
 /// instructions.
