@@ -50,8 +50,8 @@ test_deferred_vcc:
 .type gateway_0,@function
 gateway_0:
   s_endpgm
+  .fill 20, 1, 0
 .size gateway_0, .-gateway_0
-.fill 32, 1, 0
 
 .rept 20000
   s_mov_b32 s0, s1
@@ -60,8 +60,8 @@ gateway_0:
 .type gateway_1,@function
 gateway_1:
   s_endpgm
+  .fill 20, 1, 0
 .size gateway_1, .-gateway_1
-.fill 32, 1, 0
 
 .rept 20000
   s_mov_b32 s0, s1

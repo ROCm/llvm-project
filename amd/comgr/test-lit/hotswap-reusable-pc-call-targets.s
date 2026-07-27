@@ -166,6 +166,9 @@ callee_bootstrap:
 .endif
   s_set_pc_i64 s[12:13]
 .size callee_bootstrap, .-callee_bootstrap
+// Keep the following kernel-alignment hole out of the external sled map; the
+// exact gateway-sized window below is the routing resource under test.
+s_mov_b32 s0, s0
 
 .globl reusable_pc_targets
 .p2align 8
@@ -298,8 +301,8 @@ clobber_helper:
 .type gateway_barrier,@function
 gateway_barrier:
   s_endpgm
+  .fill 20, 1, 0
 .size gateway_barrier, .-gateway_barrier
-.fill 20, 1, 0
 
 .rept 40000
   s_mov_b32 s10, s11

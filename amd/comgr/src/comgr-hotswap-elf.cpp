@@ -409,7 +409,22 @@ NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
                          uint64_t Needed) {
   NopSled *Best = nullptr;
   uint64_t BestDist = std::numeric_limits<uint64_t>::max();
-  for (NopSled &Sled : Sleds) {
+  // buildNopSledMap emits non-overlapping sleds in text order, and advancing a
+  // sled's WritePos cannot move it past the following sled. Limit this hot
+  // lookup to the signed-s_branch corridor instead of rescanning every
+  // function's padding for every replacement in a large object.
+  uint64_t ReachBegin =
+      Offset >= MaxSledDistance ? Offset - MaxSledDistance + 1 : 0;
+  std::vector<NopSled>::iterator Begin = llvm::lower_bound(
+      Sleds, ReachBegin,
+      [](const NopSled &Sled, uint64_t Value) {
+        return Sled.WritePos < Value;
+      });
+  for (std::vector<NopSled>::iterator It = Begin; It != Sleds.end(); ++It) {
+    NopSled &Sled = *It;
+    if (Sled.WritePos >= Offset &&
+        Sled.WritePos - Offset >= MaxSledDistance)
+      break;
     if (Offset < Sled.FunctionStart || Offset >= Sled.FunctionEnd)
       continue;
     uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);

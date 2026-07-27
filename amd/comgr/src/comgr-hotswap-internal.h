@@ -1502,6 +1502,25 @@ struct PatchContext {
   uint64_t TextMutationGeneration = 0;
   llvm::DenseMap<std::pair<uint64_t, uint64_t>, CurrentFunctionSgprLiveness>
       CurrentFunctionSgprLivenessCache{0};
+  // Per-dispatch mutation classification. A local DS2 split adds only
+  // register-neutral branches, DS operations, and a DS wait, so numbered-SGPR
+  // and VCC continuation liveness is unchanged and its cache remains valid.
+  bool LastReplacementUsedNopSled = false;
+  bool CurrentPatchPreservesSgprLiveness = false;
+  // Object-wide padding proven unreachable by the closed control-flow audit.
+  // Required rewrites may explicitly prefer these complete local body slots;
+  // ordinary near-pool placement keeps using the function-scoped NOP map.
+  std::vector<NopSled> PreferredLocalReplacementSleds;
+  // Disjoint external-padding partitions reserved for non-DS2 replacements
+  // whose appended pool would otherwise be outside short-branch reach.
+  std::vector<NopSled> PreferredFarReplacementSleds;
+  // Set-PC-sized external routing tails. A DS2 can keep its first DS1 in the
+  // original slot and place its compact second-half continuation here.
+  std::vector<NopSled> PreferredDs2ContinuationSleds;
+  // Tail dwords left unreachable behind local replacement branch-forwards.
+  // The closed control-flow audit proves these are safe globally distributed
+  // one-dword relay slots for the later branch-island planner.
+  std::vector<NopSled> LocalReplacementSourceTails;
 };
 
 /// One node in the all-path proof that an incoming physical VGPR value is
@@ -1677,7 +1696,8 @@ isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx, uint64_t InstOffset,
                                  llvm::ArrayRef<uint8_t> Replacement);
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
-                                    llvm::ArrayRef<uint8_t> Replacement);
+                                    llvm::ArrayRef<uint8_t> Replacement,
+                                    bool AllowRegisterless = true);
 
 /// Encode an SCC-neutral indirect long branch using the aligned SGPR pair at
 /// \p SgprBase. The displacement uses gfx12's s_add_nc_u64; no s_add_pc_i64
@@ -1854,7 +1874,15 @@ BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
-                                       llvm::ArrayRef<uint8_t> Replacement);
+                                       llvm::ArrayRef<uint8_t> Replacement,
+                                       bool PreferNopSled = false,
+                                       bool AllowTrampoline = true);
+
+[[nodiscard]] bool
+emitSplitDs2Continuation(PatchContext &Ctx, uint64_t InstOffset,
+                         llvm::ArrayRef<uint8_t> FirstInstruction,
+                         uint32_t OverwrittenSize,
+                         llvm::ArrayRef<uint8_t> Continuation);
 
 /// Expand one decoded gfx1250 DS two-address instruction into the ordered
 /// single-address instruction sequence used by the trampoline patch. Exposed
@@ -1864,14 +1892,6 @@ BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
 [[nodiscard]] std::optional<std::vector<std::string>>
 expandDs2Addr(const llvm::MCInst &Inst, llvm::StringRef FromMnem,
               llvm::StringRef ToMnem, const LLVMState &LS);
-
-/// Rewrite a representable gfx1250 B0 DS2 offset pair to A0 byte offsets
-/// without changing the instruction's opcode, registers, or size. The narrow
-/// entry-local form is exposed so MC tests can verify its exact bytes.
-[[nodiscard]] bool
-rewriteDs2AddrOffsetsInPlace(llvm::MutableArrayRef<uint8_t> InstBytes,
-                             const llvm::MCInst &Inst, llvm::StringRef Mnemonic,
-                             const LLVMState &LS);
 
 // -- Patch dispatch vtable ----------------------------------------------------
 //

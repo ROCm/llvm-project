@@ -66,8 +66,10 @@ kernel_b:
 .size kernel_b, .Lkernel_b_end-kernel_b
 
 // Safe external gateway space: it follows a no-fallthrough instruction and is
-// outside every function range, so it cannot be executed by fallthrough.
-.rept 8
+// outside every function range, so it cannot be executed by fallthrough. Its
+// exact 20-byte size can carry a set-PC gateway but not the replacement body,
+// preserving this fixture's intended long-branch path.
+.rept 5
   s_nop 0
 .endr
 

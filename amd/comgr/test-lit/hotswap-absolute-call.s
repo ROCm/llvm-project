@@ -34,9 +34,20 @@ test_absolute_call:
 .Ltest_absolute_call_end:
 .size test_absolute_call, .Ltest_absolute_call_end-test_absolute_call
 
-// Two separate long sites need two 20-byte SCC-neutral gateways. This
-// padding follows s_endpgm and lies outside the function, so it is safe.
-.fill 64, 1, 0
+// Two separate long sites need two 20-byte SCC-neutral gateways. Keep these
+// NOP runs function-owned: the global planner may use them, while replacement
+// bodies in test_absolute_call cannot borrow another function's padding.
+.type gateway_0,@function
+gateway_0:
+  s_endpgm
+  .fill 20, 1, 0
+.size gateway_0, .-gateway_0
+
+.type gateway_1,@function
+gateway_1:
+  s_endpgm
+  .fill 20, 1, 0
+.size gateway_1, .-gateway_1
 
 // Push the appended trampoline pool beyond s_branch's signed 16-bit dword
 // range and force direct-target-aware far-site handling.

@@ -203,13 +203,14 @@ test_far:
   s_endpgm
 .size test_far, .-test_far
 
-// Provide external zero-filled alignment space after a separate
-// no-fallthrough function.
+// Provide zero-filled alignment space owned by a separate no-fallthrough
+// function. The whole-object gateway planner may use it, but the patch pass
+// must not claim it as local replacement space for test_far.
 .type gateway_barrier,@function
 gateway_barrier:
   s_endpgm
-.size gateway_barrier, .-gateway_barrier
 .fill 32, 1, 0
+.size gateway_barrier, .-gateway_barrier
 
   // ~160 KB of non-NOP filler so the appended trampoline pool is beyond
   // s_branch's +-128 KB reach from the tensor_load above (forces the
@@ -223,8 +224,8 @@ gateway_barrier:
 .type midpoint_gateway_barrier,@function
 midpoint_gateway_barrier:
   s_endpgm
-.size midpoint_gateway_barrier, .-midpoint_gateway_barrier
 .fill 32, 1, 0
+.size midpoint_gateway_barrier, .-midpoint_gateway_barrier
 
   .rept 20000
     s_mov_b32 s0, s1

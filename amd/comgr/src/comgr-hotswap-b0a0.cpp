@@ -407,8 +407,79 @@ truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
   for (uint32_t I = MinInstSize; I < InstSize; I += MinInstSize)
     std::memcpy(Ctx.Text + InstOffset + I, LS.SNopBytes.data(), MinInstSize);
 
+  // The branch-forward makes every remaining source dword unreachable by
+  // fallthrough. Expose target-free tail dwords to the later whole-object
+  // island planner instead of discarding this spatially distributed branch
+  // capacity. Closed control-flow auditing is required before this path is
+  // selected; direct targets and declared entries remain protected.
+  uint64_t TailBegin = InstOffset + MinInstSize;
+  uint64_t TailEnd = InstOffset + InstSize;
+  for (uint64_t Offset = TailBegin; Offset < TailEnd; Offset += MinInstSize) {
+    if (Ctx.DirectControlFlow.Targets.contains(Offset) ||
+        llvm::is_contained(Ctx.DeclaredEntries, Offset))
+      break;
+    Ctx.LocalReplacementSourceTails.push_back(
+        {Offset, Offset + MinInstSize, Offset, 0, Ctx.TextSize});
+  }
+
   Sled.WritePos += Replacement.size() + MinInstSize;
   // Count-only row: patch placed in-line via a nearby NOP sled, no trampoline.
+  Ctx.Profile.count(HotswapMetric::JumpNopSled);
+  return true;
+}
+
+[[nodiscard]] bool emitSplitDs2Continuation(PatchContext &Ctx,
+                                            uint64_t InstOffset,
+                                            ArrayRef<uint8_t> FirstInstruction,
+                                            uint32_t OverwrittenSize,
+                                            ArrayRef<uint8_t> Continuation) {
+  Ctx.LastReplacementUsedNopSled = false;
+  if (FirstInstruction.empty() || FirstInstruction.size() % MinInstSize != 0 ||
+      OverwrittenSize < MinInstSize || OverwrittenSize % MinInstSize != 0)
+    return false;
+
+  std::optional<uint64_t> BranchFrom = checkedAddUint64(
+      InstOffset, FirstInstruction.size(), "split DS2 branch source");
+  std::optional<uint64_t> ReturnTo =
+      BranchFrom ? checkedAddUint64(*BranchFrom, OverwrittenSize,
+                                    "split DS2 continuation target")
+                 : std::nullopt;
+  if (!BranchFrom || !ReturnTo || *ReturnTo > Ctx.TextSize)
+    return false;
+
+  uint64_t Needed = Continuation.size() + MinInstSize;
+  NopSled *Sled =
+      findNearestSled(Ctx.PreferredDs2ContinuationSleds, *BranchFrom, Needed);
+  // A displaced eight- or twelve-byte follower makes the continuation larger
+  // than the dedicated 20-byte tail. The separately audited 44-byte ordinary
+  // far-body partition is still much smaller than a complete DS2 trampoline
+  // route and avoids both registerless island chains.
+  if (!Sled)
+    Sled =
+        findNearestSled(Ctx.PreferredFarReplacementSleds, *BranchFrom, Needed);
+  if (!Sled)
+    return false;
+
+  SmallVector<uint8_t> BranchBack =
+      Ctx.LS.encodeSBranch(Sled->WritePos + Continuation.size(), *ReturnTo);
+  SmallVector<uint8_t> BranchForward =
+      Ctx.LS.encodeSBranch(*BranchFrom, Sled->WritePos);
+  if (BranchBack.empty() || BranchForward.empty())
+    return false;
+
+  std::memcpy(Ctx.Text + InstOffset, FirstInstruction.data(),
+              FirstInstruction.size());
+  std::memcpy(Ctx.Text + *BranchFrom, BranchForward.data(),
+              BranchForward.size());
+  for (uint32_t I = MinInstSize; I < OverwrittenSize; I += MinInstSize)
+    std::memcpy(Ctx.Text + *BranchFrom + I, Ctx.LS.SNopBytes.data(),
+                MinInstSize);
+  std::memcpy(Ctx.Text + Sled->WritePos, Continuation.data(),
+              Continuation.size());
+  std::memcpy(Ctx.Text + Sled->WritePos + Continuation.size(),
+              BranchBack.data(), BranchBack.size());
+  Sled->WritePos += Needed;
+  Ctx.LastReplacementUsedNopSled = true;
   Ctx.Profile.count(HotswapMetric::JumpNopSled);
   return true;
 }
@@ -2035,7 +2106,8 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
 /// edge executes gfx1250's broken s_add_pc_i64 instruction.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
-                                    ArrayRef<uint8_t> Replacement) {
+                                    ArrayRef<uint8_t> Replacement,
+                                    bool AllowRegisterless) {
   // This trampoline lands at the appended pool base and after every trampoline
   // already queued -- later ones are appended behind it and cannot shift it,
   // and fixupTrampolineBranches walks the same list in the same order -- so its
@@ -2062,6 +2134,8 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
   FarReturnScratch Scratch;
   if (Far)
     Scratch = reserveSafeFarReturn(Ctx, InstOffset, InstSize, Replacement);
+  if (Far && !Scratch.Available && !AllowRegisterless)
+    return false;
   uint64_t ReturnReserve = MinInstSize;
   uint64_t BodyPrefix = 0;
   if (Far && Scratch.Available) {
@@ -7265,10 +7339,10 @@ static void appendGatewaySled(std::vector<NopSled> &Sleds, uint64_t Start,
 }
 
 /// Find zero-filled alignment holes, including holes covered by an oversized
-/// function symbol, and s_nop padding outside every function. Such padding is
-/// a safe branch gateway only when it follows a no-fallthrough instruction and
-/// contains no direct branch/call target. In-function s_nop runs are added from
-/// Ctx.NopSleds separately.
+/// function symbol, s_code_end alignment guards, and s_nop padding outside
+/// every function. Such padding is a safe branch gateway only when it follows
+/// a no-fallthrough instruction and contains no direct branch/call target.
+/// In-function s_nop runs are added from Ctx.NopSleds separately.
 static std::vector<NopSled>
 buildExternalGatewaySleds(ArrayRef<InternalDecodedInst> Decoded,
                           const LLVMState &LS, const ElfView &Elf,
@@ -7290,7 +7364,14 @@ buildExternalGatewaySleds(ArrayRef<InternalDecodedInst> Decoded,
         ZeroPadding &= Byte == 0;
     bool IsExternalNop = DI.Inst.getOpcode() == LS.SNopOpcode &&
                          !Elf.findFunctionTextRangeAtOffset(DI.Offset);
-    bool GatewayPadding = ZeroPadding || IsExternalNop;
+    // Toolchains use repeated s_code_end instructions as executable alignment
+    // guards after s_endpgm. Once the same closed control-flow audit proves
+    // the run unreachable, an explicitly targeted s_branch relay is safe
+    // there just as it is in a zero-filled alignment hole. This distinction
+    // matters for large linked objects whose only relay capacity in a
+    // short-branch corridor is code-end padding.
+    bool IsCodeEnd = DI.Mnemonic == "s_code_end";
+    bool GatewayPadding = ZeroPadding || IsExternalNop || IsCodeEnd;
     if (!GatewayPadding || (Active && DI.Offset != End)) {
       if (Active)
         appendGatewaySled(Sleds, Start, End, Text.size(), Safe, HasTarget);
@@ -7421,6 +7502,100 @@ buildBranchGatewayHeads(std::vector<NopSled> &Gateways,
   return Heads;
 }
 
+/// Materialize one branch-sized view into the interior of a free padding run
+/// when its low-address head lies outside the current reach corridor. The
+/// ordinary head index consumes ranges from low to high, which is appropriate
+/// for variable-width set-PC gateways but can hide usable interior dwords from
+/// a one-dword branch chain. The synthetic view aliases the original range;
+/// the shared Occupied set prevents either view from committing the same
+/// physical dword, and the later range subtraction preserves both sides.
+static bool materializeInteriorBranchGatewayHead(
+    std::vector<NopSled> &Gateways, BranchGatewayHeadSet &Heads,
+    const DenseSet<uint64_t> &Occupied, uint64_t OwnerOffset,
+    uint64_t CurrentOffset, uint64_t TargetOffset, bool Forward) {
+  std::optional<NopSled> Best;
+  uint64_t BestOffset = Forward ? 0 : std::numeric_limits<uint64_t>::max();
+
+  for (const NopSled &Sled : Gateways) {
+    if (!hasFreeBranchGatewaySlot(Sled) || OwnerOffset < Sled.FunctionStart ||
+        OwnerOffset >= Sled.FunctionEnd)
+      continue;
+    uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+    uint64_t Candidate = 0;
+    if (Forward) {
+      if (CurrentOffset >
+          std::numeric_limits<uint64_t>::max() - MaxSledDistance)
+        continue;
+      uint64_t ReachEnd = CurrentOffset + MaxSledDistance;
+      if (CurrentOffset > std::numeric_limits<uint64_t>::max() - MinInstSize ||
+          TargetOffset < MinInstSize)
+        continue;
+      uint64_t Lower = std::max(Sled.WritePos, CurrentOffset + MinInstSize);
+      uint64_t Upper = std::min(
+          {UsableEnd - MinInstSize, ReachEnd, TargetOffset - MinInstSize});
+      if (Lower > Upper)
+        continue;
+      Candidate = Upper - (Upper % MinInstSize);
+      while (Candidate >= Lower && Occupied.contains(Candidate)) {
+        if (Candidate < Lower + MinInstSize) {
+          Candidate = 0;
+          break;
+        }
+        Candidate -= MinInstSize;
+      }
+      if (Candidate == 0 || !isSBranchReachable(CurrentOffset, Candidate) ||
+          (Best && Candidate <= BestOffset))
+        continue;
+    } else {
+      if (TargetOffset > std::numeric_limits<uint64_t>::max() - MinInstSize ||
+          CurrentOffset > std::numeric_limits<uint64_t>::max() - MinInstSize ||
+          CurrentOffset <= TargetOffset + MinInstSize)
+        continue;
+      uint64_t ReachBegin = CurrentOffset + MinInstSize >= MaxSledDistance
+                                ? CurrentOffset + MinInstSize - MaxSledDistance
+                                : 0;
+      uint64_t Lower =
+          std::max({Sled.WritePos, ReachBegin, TargetOffset + MinInstSize});
+      uint64_t Remainder = Lower % MinInstSize;
+      if (Remainder != 0) {
+        if (Lower >
+            std::numeric_limits<uint64_t>::max() - (MinInstSize - Remainder))
+          continue;
+        Lower += MinInstSize - Remainder;
+      }
+      Candidate = Lower;
+      while (Candidate < CurrentOffset &&
+             Candidate <= UsableEnd - MinInstSize &&
+             Occupied.contains(Candidate)) {
+        if (Candidate > std::numeric_limits<uint64_t>::max() - MinInstSize) {
+          Candidate = CurrentOffset;
+          break;
+        }
+        Candidate += MinInstSize;
+      }
+      if (Candidate >= CurrentOffset || Candidate > UsableEnd - MinInstSize ||
+          !isSBranchReachable(CurrentOffset, Candidate) ||
+          (Best && Candidate >= BestOffset))
+        continue;
+    }
+    // If the normal low-address head were usable, the caller would already
+    // have selected it. Require a true interior carve to avoid duplicate head
+    // entries for the common case.
+    if (Candidate == Sled.WritePos)
+      continue;
+    BestOffset = Candidate;
+    Best = NopSled{Candidate, Candidate + MinInstSize, Candidate,
+                   Sled.FunctionStart, Sled.FunctionEnd};
+  }
+
+  if (!Best)
+    return false;
+  size_t Index = Gateways.size();
+  Gateways.push_back(*Best);
+  Heads.insert({BestOffset, Index});
+  return true;
+}
+
 static void
 subtractOccupiedBranchGatewaySlots(std::vector<NopSled> &Gateways,
                                    const DenseSet<uint64_t> &Occupied) {
@@ -7521,6 +7696,10 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
     }
 
     if (BestIndex == Gateways.size()) {
+      if (materializeInteriorBranchGatewayHead(Gateways, Heads, Occupied,
+                                               FromOffset, Current,
+                                               TargetOffset, Forward))
+        continue;
       uint64_t Corridor = Forward ? std::numeric_limits<uint64_t>::max() : 0;
       if (Forward) {
         uint64_t AfterCurrent = Current == std::numeric_limits<uint64_t>::max()
@@ -8600,6 +8779,10 @@ static std::optional<SmallVector<uint64_t, 4>> allocateBackwardBranchIslands(
     }
 
     if (BestIndex == Gateways.size()) {
+      if (materializeInteriorBranchGatewayHead(
+              Gateways, Heads, Occupied, OwnerOffset, Current, TargetOffset,
+              /*Forward=*/false))
+        continue;
       uint64_t Corridor = TargetOffset;
       auto CorridorIt = Heads.lower_bound({Current, 0});
       while (CorridorIt != Heads.begin()) {
@@ -8974,6 +9157,11 @@ assignLongBranchGateways(PatchContext &Ctx,
         DirectBranchTargets);
     for (const NopSled &Sled : Ctx.NopSleds)
       Gateways.push_back(Sled);
+    for (const NopSled &Sled : Ctx.LocalReplacementSourceTails)
+      Gateways.push_back(Sled);
+    if (!Ctx.LocalReplacementSourceTails.empty())
+      log() << "hotswap: exposed " << Ctx.LocalReplacementSourceTails.size()
+            << " unreachable local-replacement source-tail branch slot(s)\n";
     subtractTrampolineSources(Gateways, Ctx.OutTrampolines);
 
     // Keep one 12-byte tail from each safe padding window available for the
@@ -10163,12 +10351,15 @@ assignLongBranchGateways(PatchContext &Ctx,
 }
 
 /// Emit \p Replacement for the instruction at [\p InstOffset,
-/// \p InstOffset + \p InstSize). Prefers an in-place NOP-sled rewrite when a
-/// reachable sled with sufficient headroom exists; otherwise falls back to a
-/// deferred trampoline.
+/// \p InstOffset + \p InstSize). Uses a reachable NOP sled when the pool is
+/// near, or unconditionally attempts one when \p PreferNopSled is set;
+/// otherwise falls back to a deferred trampoline.
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
-                                       ArrayRef<uint8_t> Replacement) {
+                                       ArrayRef<uint8_t> Replacement,
+                                       bool PreferNopSled,
+                                       bool AllowTrampoline) {
+  Ctx.LastReplacementUsedNopSled = false;
   std::optional<uint64_t> ReturnTo = checkedAddUint64(
       InstOffset, InstSize, "replacement trampoline return target");
   std::optional<uint64_t> PoolReturnFrom =
@@ -10177,26 +10368,59 @@ assignLongBranchGateways(PatchContext &Ctx,
   if (!ReturnTo || !PoolReturnFrom)
     return false;
 
-  // When the pool base is already out of short-branch reach, defer every site
-  // to the global trampoline pass. That pass can coalesce adjacent patches
-  // before allocating gateways; consuming NOP padding greedily here can strand
-  // a later small or clause/delay-constrained source window.
+  // Function-scoped NOP padding remains the first choice for a near pool.
+  // Explicit callers may prefer it regardless of pool distance; ordinary far
+  // sites try the separately audited object-wide padding below.
   bool PoolBaseFar = !isSBranchReachable(InstOffset, Ctx.PoolBaseOffset) ||
                      !isSBranchReachable(*PoolReturnFrom, *ReturnTo);
-  if (!PoolBaseFar && !Ctx.DirectControlFlow.HasUnresolvedTargets) {
+  if ((!PoolBaseFar || PreferNopSled) &&
+      !Ctx.DirectControlFlow.HasUnresolvedTargets) {
     // findNearestSled enforces sled headroom. emitToNopSled still validates
     // exact branch reachability because branch-back distance includes the
     // replacement size, not just the original instruction offset.
     uint64_t Needed = Replacement.size() + MinInstSize;
     if (NopSled *Sled = findNearestSled(Ctx.NopSleds, InstOffset, Needed)) {
-      if (emitToNopSled(Ctx, *Sled, InstOffset, InstSize, Replacement))
+      if (emitToNopSled(Ctx, *Sled, InstOffset, InstSize, Replacement)) {
+        Ctx.LastReplacementUsedNopSled = true;
         return true;
+      }
       log() << "hotswap: emitReplacementCode: NOP sled at offset 0x"
             << utohexstr(Sled->WritePos)
             << " is not branch-reachable after assembly; using trampoline.\n";
     }
   }
-  return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement);
+  // A far appended pool would require one source-to-pool and one return
+  // routing chain per replacement. Prefer audited object-wide padding for all
+  // patch families in that case, while explicit callers such as DS2 may opt
+  // into the same policy even for a near pool.
+  if ((PoolBaseFar || PreferNopSled) &&
+      !Ctx.DirectControlFlow.HasUnresolvedTargets) {
+    uint64_t Needed = Replacement.size() + MinInstSize;
+    auto TryPreferredSleds = [&](std::vector<NopSled> &PreferredSleds) {
+      NopSled *Sled = findNearestSled(PreferredSleds, InstOffset, Needed);
+      if (!Sled)
+        return false;
+      if (emitToNopSled(Ctx, *Sled, InstOffset, InstSize, Replacement)) {
+        Ctx.LastReplacementUsedNopSled = true;
+        return true;
+      }
+      log() << "hotswap: emitReplacementCode: external padding sled at "
+               "offset 0x"
+            << utohexstr(Sled->WritePos)
+            << " is not branch-reachable after assembly; using trampoline.\n";
+      return false;
+    };
+    if (PreferNopSled && TryPreferredSleds(Ctx.PreferredLocalReplacementSleds))
+      return true;
+    // Ordinary replacements may consume only their explicit unowned-padding
+    // partition. DS2 uses the two audited DS2 pools above and leaves this
+    // partition intact for later patch families.
+    if (!PreferNopSled && TryPreferredSleds(Ctx.PreferredFarReplacementSleds))
+      return true;
+  }
+  return AllowTrampoline
+             ? emitToTrampoline(Ctx, InstOffset, InstSize, Replacement)
+             : false;
 }
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
@@ -10250,6 +10474,9 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       ArrayRef<uint8_t>(Text, TextSize), &Elf, DeclaredEntries->NonCallEntries);
   if (!ControlFlow)
     return std::nullopt;
+  std::vector<NopSled> PreferredLocalReplacementSleds;
+  std::vector<NopSled> PreferredFarReplacementSleds;
+  std::vector<NopSled> PreferredDs2ContinuationSleds;
   if (ControlFlow->HasUnresolvedTargets) {
     log() << "hotswap: unresolved control-flow target disables NOP-sled "
              "emission, trampoline coalescing, source relocation, and .text "
@@ -10257,6 +10484,81 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     Sleds.clear();
   } else {
     truncateNopSledsAtDirectTargets(Sleds, ControlFlow->Targets);
+    if (!ControlFlow->HasUnboundedIndirectEntries) {
+      std::vector<NopSled> AuditedExternalSleds = buildExternalGatewaySleds(
+          Decoded, LS, Elf, ArrayRef<uint8_t>(Text, TextSize),
+          ControlFlow->Targets);
+      // Replacement bodies respect function ownership. Unowned audited runs
+      // are partitioned between complete DS2 bodies, ordinary far bodies, and
+      // a compact DS2-continuation/global-routing tail.
+      uint64_t UnownedExternalCount = 0;
+      uint64_t UnownedDs2ExternalCount = 0;
+      uint64_t FarReplacementPartitionCount = 0;
+      uint64_t Ds2ContinuationPartitionCount = 0;
+      uint64_t PreservedContinuationBackboneCount = 0;
+      std::optional<uint64_t> LastContinuationBackboneBucket;
+      constexpr uint64_t GlobalRoutingReserveBytes = SetPcReturnReserveBytes;
+      constexpr uint64_t FarReplacementPartitionBytes = 11 * MinInstSize;
+      constexpr uint64_t LocalPartitionReserveBytes =
+          GlobalRoutingReserveBytes + FarReplacementPartitionBytes;
+      constexpr uint64_t ContinuationBackboneBucketBytes = MaxSledDistance / 4;
+      for (NopSled &Sled : AuditedExternalSleds) {
+        if (Elf.findFunctionTextRangeAtOffset(Sled.WritePos))
+          continue;
+        ++UnownedExternalCount;
+        uint64_t OriginalEnd = Sled.End;
+        // Partition each run so instruction-order traversal cannot let early
+        // DS2 sites consume all capacity before later patch families arrive:
+        //   [DS2 bodies][one ordinary far body][global routing tail].
+        uint64_t FarBegin = OriginalEnd - std::min(OriginalEnd - Sled.WritePos,
+                                                   LocalPartitionReserveBytes);
+        uint64_t FarEnd = OriginalEnd - std::min(OriginalEnd - Sled.WritePos,
+                                                 GlobalRoutingReserveBytes);
+        if (FarEnd < OriginalEnd) {
+          uint64_t Bucket = FarEnd / ContinuationBackboneBucketBytes;
+          if (!LastContinuationBackboneBucket ||
+              *LastContinuationBackboneBucket != Bucket) {
+            LastContinuationBackboneBucket = Bucket;
+            ++PreservedContinuationBackboneCount;
+          } else {
+            PreferredDs2ContinuationSleds.push_back({FarEnd, OriginalEnd,
+                                                     FarEnd, Sled.FunctionStart,
+                                                     Sled.FunctionEnd});
+            ++Ds2ContinuationPartitionCount;
+          }
+        }
+        if (FarBegin < FarEnd) {
+          PreferredFarReplacementSleds.push_back({FarBegin, FarEnd, FarBegin,
+                                                  Sled.FunctionStart,
+                                                  Sled.FunctionEnd});
+          ++FarReplacementPartitionCount;
+        }
+        if (Sled.End - Sled.WritePos > LocalPartitionReserveBytes) {
+          Sled.End -= LocalPartitionReserveBytes;
+          PreferredLocalReplacementSleds.push_back(Sled);
+          ++UnownedDs2ExternalCount;
+        }
+      }
+      if (UnownedExternalCount != 0)
+        log() << "hotswap: exposed " << UnownedDs2ExternalCount << " of "
+              << UnownedExternalCount
+              << " unowned unreachable external padding sled(s) for local "
+                 "DS2 bodies while partitioning "
+              << FarReplacementPartitionBytes
+              << " bytes for ordinary far replacements and "
+              << GlobalRoutingReserveBytes
+              << " bytes for global routing per run\n";
+      if (FarReplacementPartitionCount != 0)
+        log() << "hotswap: exposed " << FarReplacementPartitionCount
+              << " disjoint external padding partition(s) for ordinary far "
+                 "replacement bodies\n";
+      if (Ds2ContinuationPartitionCount != 0)
+        log() << "hotswap: exposed " << Ds2ContinuationPartitionCount
+              << " surplus external padding tail(s) for compact DS2 "
+                 "continuations while preserving "
+              << PreservedContinuationBackboneCount
+              << " spatial-backbone tail(s) for global routing\n";
+    }
   }
 
   HotswapProfile::Scope CfgScope = Profile.time(HotswapMetric::CfgBuild);
@@ -10289,6 +10591,10 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
                    OutTrampolines, Sleds,           Elf,
                    Liveness,       KernelStats,     OutScratchPatches,
                    *ControlFlow,   Profile,         DeclaredEntries->Entries};
+  Ctx.PreferredLocalReplacementSleds =
+      std::move(PreferredLocalReplacementSleds);
+  Ctx.PreferredFarReplacementSleds = std::move(PreferredFarReplacementSleds);
+  Ctx.PreferredDs2ContinuationSleds = std::move(PreferredDs2ContinuationSleds);
 
   const HotswapPatchVTable &VT = getHotswapPatchVTable();
 
@@ -10324,6 +10630,7 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       continue;
 
     for (TimedPass &Pass : Passes) {
+      Ctx.CurrentPatchPreservesSgprLiveness = false;
       const uint64_t T0 = Prof ? profNowNs() : 0;
       std::optional<uint32_t> P = runPerInstPass(Pass.Fn, Ctx, Idx);
       if (Prof) {
@@ -10335,7 +10642,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       if (*P == 0)
         continue;
       Patched += *P;
-      noteCurrentTextMutation(Ctx);
+      if (!Ctx.CurrentPatchPreservesSgprLiveness)
+        noteCurrentTextMutation(Ctx);
       break;
     }
   }

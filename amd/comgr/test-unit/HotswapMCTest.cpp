@@ -4727,6 +4727,40 @@ TEST(BranchIslandAllocator, CoAdvancesEqualPhysicalAliases) {
   EXPECT_TRUE(Result.Occupied.contains(MaxSledDistance));
 }
 
+TEST(BranchIslandAllocator, CarvesForwardInteriorAtReachBoundary) {
+  constexpr uint64_t From = 200000;
+  constexpr uint64_t Target = 500000;
+  std::vector<NopSled> Gateways = {
+      // The head precedes From, but the range crosses the positive reach
+      // boundary and contains a usable branch dword near its high end.
+      {100000, 330000, 100000, 0, 600000},
+      {450000, 450000 + MinInstSize, 450000, 0, 600000}};
+  BranchIslandAllocatorTestResult Result = runBranchIslandAllocatorForTest(
+      std::move(Gateways), /*OwnerOffset=*/From, /*FromOffset=*/From,
+      /*TargetOffset=*/Target, /*Backward=*/false);
+  ASSERT_TRUE(Result.Success);
+  ASSERT_EQ(Result.Islands.size(), 2u);
+  EXPECT_GT(Result.Islands[0], From);
+  EXPECT_LT(Result.Islands[0], 330000u);
+  EXPECT_EQ(Result.Islands[1], 450000u);
+}
+
+TEST(BranchIslandAllocator, CarvesBackwardInteriorAtReachBoundary) {
+  constexpr uint64_t From = 300000;
+  constexpr uint64_t Target = 0;
+  std::vector<NopSled> Gateways = {
+      {100000, 200000, 100000, 0, 400000},
+      {50000, 50000 + MinInstSize, 50000, 0, 400000}};
+  BranchIslandAllocatorTestResult Result = runBranchIslandAllocatorForTest(
+      std::move(Gateways), /*OwnerOffset=*/From, /*FromOffset=*/From,
+      /*TargetOffset=*/Target, /*Backward=*/true);
+  ASSERT_TRUE(Result.Success);
+  ASSERT_EQ(Result.Islands.size(), 2u);
+  EXPECT_GT(Result.Islands[0], 100000u);
+  EXPECT_LT(Result.Islands[0], From);
+  EXPECT_EQ(Result.Islands[1], 50000u);
+}
+
 TEST(BranchIslandAllocator, SplitsPartialAliasAtOccupiedDword) {
   llvm::DenseSet<uint64_t> Occupied = {108};
   std::vector<NopSled> Available = subtractOccupiedBranchGatewaySlotsForTest(
@@ -5889,123 +5923,6 @@ TEST(ExpandDs2Addr, RejectsCyclicExchangeDependency) {
 
   EXPECT_FALSE(expandDs2Addr(Decoded[0].Inst, Decoded[0].Mnemonic,
                              "ds_storexchg_rtn_b64", S));
-}
-
-TEST(RewriteDs2AddrOffsetsInPlace,
-     RewritesEveryNonStrideFamilyAndPreservesNonOffsetBytes) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  struct Case {
-    llvm::StringLiteral Source;
-    llvm::StringLiteral Expected;
-    uint8_t Off0;
-    uint8_t Off1;
-  };
-  const Case Cases[] = {
-      {"ds_load_2addr_b32 v[0:1], v2 offset0:62 offset1:63",
-       "ds_load_2addr_b32 v[0:1], v2 offset0:248 offset1:252", 248, 252},
-      {"ds_load_2addr_b64 v[0:3], v4 offset0:30 offset1:31",
-       "ds_load_2addr_b64 v[0:3], v4 offset0:240 offset1:248", 240, 248},
-      {"ds_store_2addr_b32 v2, v0, v1 offset0:62 offset1:63",
-       "ds_store_2addr_b32 v2, v0, v1 offset0:248 offset1:252", 248, 252},
-      {"ds_store_2addr_b64 v19, v[14:15], v[20:21] "
-       "offset0:30 offset1:31",
-       "ds_store_2addr_b64 v19, v[14:15], v[20:21] "
-       "offset0:240 offset1:248",
-       240, 248},
-      {"ds_storexchg_2addr_rtn_b32 v[0:1], v2, v3, v4 "
-       "offset0:62 offset1:63",
-       "ds_storexchg_2addr_rtn_b32 v[0:1], v2, v3, v4 "
-       "offset0:248 offset1:252",
-       248, 252},
-      {"ds_storexchg_2addr_rtn_b64 v[0:3], v4, v[6:7], v[8:9] "
-       "offset0:30 offset1:31",
-       "ds_storexchg_2addr_rtn_b64 v[0:3], v4, v[6:7], v[8:9] "
-       "offset0:240 offset1:248",
-       240, 248},
-  };
-
-  for (const Case &C : Cases) {
-    llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(C.Source, S);
-    ASSERT_EQ(Bytes.size(), 2u * MinInstSize) << C.Source.str();
-    llvm::SmallVector<uint8_t> Original = Bytes;
-    std::vector<InternalDecodedInst> Decoded;
-    ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded))
-        << C.Source.str();
-    ASSERT_EQ(Decoded.size(), 1u) << C.Source.str();
-
-    EXPECT_TRUE(rewriteDs2AddrOffsetsInPlace(Bytes, Decoded[0].Inst,
-                                             Decoded[0].Mnemonic, S))
-        << C.Source.str();
-    EXPECT_EQ(Bytes[0], C.Off0) << C.Source.str();
-    EXPECT_EQ(Bytes[1], C.Off1) << C.Source.str();
-    EXPECT_TRUE(
-        std::equal(Bytes.begin() + 2, Bytes.end(), Original.begin() + 2))
-        << C.Source.str();
-
-    llvm::SmallVector<uint8_t> Expected = assembleSingleInst(C.Expected, S);
-    EXPECT_EQ(Bytes, Expected) << C.Source.str();
-  }
-}
-
-TEST(RewriteDs2AddrOffsetsInPlace,
-     RejectsUnrepresentableOffsetInEveryFamilyWithoutMutation) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  for (llvm::StringRef Asm :
-       {"ds_load_2addr_b32 v[0:1], v2 offset0:63 offset1:64",
-        "ds_load_2addr_b64 v[0:3], v4 offset0:31 offset1:32",
-        "ds_store_2addr_b32 v2, v0, v1 offset0:63 offset1:64",
-        "ds_store_2addr_b64 v19, v[14:15], v[20:21] "
-        "offset0:31 offset1:32",
-        "ds_storexchg_2addr_rtn_b32 v[0:1], v2, v3, v4 "
-        "offset0:63 offset1:64",
-        "ds_storexchg_2addr_rtn_b64 v[0:3], v4, v[6:7], v[8:9] "
-        "offset0:31 offset1:32"}) {
-    llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, S);
-    ASSERT_EQ(Bytes.size(), 2u * MinInstSize) << Asm.str();
-    llvm::SmallVector<uint8_t> Original = Bytes;
-    std::vector<InternalDecodedInst> Decoded;
-    ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded))
-        << Asm.str();
-    ASSERT_EQ(Decoded.size(), 1u) << Asm.str();
-
-    EXPECT_FALSE(rewriteDs2AddrOffsetsInPlace(Bytes, Decoded[0].Inst,
-                                              Decoded[0].Mnemonic, S))
-        << Asm.str();
-    EXPECT_EQ(Bytes, Original) << Asm.str();
-  }
-}
-
-TEST(RewriteDs2AddrOffsetsInPlace, LeavesStride64FamiliesOnSplitPath) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  for (llvm::StringRef Asm :
-       {"ds_load_2addr_stride64_b32 v[0:1], v4 offset0:0 offset1:0",
-        "ds_load_2addr_stride64_b64 v[0:3], v4 offset0:0 offset1:0",
-        "ds_store_2addr_stride64_b32 v4, v0, v1 offset0:0 offset1:0",
-        "ds_store_2addr_stride64_b64 v4, v[0:1], v[2:3] "
-        "offset0:0 offset1:0",
-        "ds_storexchg_2addr_stride64_rtn_b32 v[0:1], v2, v3, v4 "
-        "offset0:0 offset1:0",
-        "ds_storexchg_2addr_stride64_rtn_b64 v[0:3], v4, v[6:7], v[8:9] "
-        "offset0:0 offset1:0"}) {
-    llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, S);
-    ASSERT_EQ(Bytes.size(), 2u * MinInstSize) << Asm.str();
-    llvm::SmallVector<uint8_t> Original = Bytes;
-    std::vector<InternalDecodedInst> Decoded;
-    ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded))
-        << Asm.str();
-    ASSERT_EQ(Decoded.size(), 1u) << Asm.str();
-
-    EXPECT_FALSE(rewriteDs2AddrOffsetsInPlace(Bytes, Decoded[0].Inst,
-                                              Decoded[0].Mnemonic, S))
-        << Asm.str();
-    EXPECT_EQ(Bytes, Original) << Asm.str();
-  }
 }
 
 // -- buildKernelEntryTrampoline -----------------------------------------------

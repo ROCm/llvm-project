@@ -186,13 +186,6 @@ std::string fmtOffset(uint32_t Offset) {
 // this field directly, so any scaled byte offset that exceeds it cannot
 // be represented and the patch must be skipped.
 constexpr uint32_t Ds1AddrOffsetMax = 0xFFFF;
-// The gfx1250 DS two-address encoding has two eight-bit offset fields in the
-// low 16 bits of the instruction. B0 interprets non-stride64 fields as element
-// indices, while A0 requires byte offsets aligned to the payload size. When
-// both scaled byte offsets still fit in eight bits, rewriting the two fields
-// in place is an exact, entry-local fix and avoids a trampoline entirely.
-constexpr uint32_t Ds2AddrOffsetMax = 0xFF;
-
 struct DsOperands {
   SmallVector<MCRegister, 4> Regs;
   uint32_t Off0 = 0;
@@ -427,25 +420,6 @@ std::optional<std::vector<std::string>> expandDs2AddrImpl(const MCInst &Inst,
   return std::nullopt;
 }
 
-bool rewriteDs2AddrOffsetsInPlaceImpl(MutableArrayRef<uint8_t> InstBytes,
-                                      StringRef Mnemonic,
-                                      const DsOperands &Ops) {
-  // Every non-stride64 DS2 family uses the same two eight-bit fields. This
-  // rewrite changes only those fields, so load/exchange destination overlap
-  // and split-counter concerns do not apply: the opcode, register operands,
-  // modifiers, instruction count, and entry behavior are unchanged.
-  if (getDs2AddrReplacement(Mnemonic).empty() ||
-      Mnemonic.contains("_stride64_") || Ops.Off0 > Ds2AddrOffsetMax ||
-      Ops.Off1 > Ds2AddrOffsetMax || InstBytes.size() != 2 * MinInstSize)
-    return false;
-
-  // gfx1250 DS2 offset0/offset1 occupy instruction bits [7:0]/[15:8].
-  // Keep every opcode/register/modifier bit byte-for-byte identical.
-  InstBytes[0] = static_cast<uint8_t>(Ops.Off0);
-  InstBytes[1] = static_cast<uint8_t>(Ops.Off1);
-  return true;
-}
-
 bool hasUnencodableVgprName(StringRef Asm) {
   for (size_t Pos = Asm.find('v'); Pos != StringRef::npos;
        Pos = Asm.find('v', Pos + 1)) {
@@ -562,16 +536,9 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
       extractDsOperands(DI.Inst, DI.Mnemonic, Ctx.LS);
   if (!Ops)
     return failRequiredPatch(Ctx);
-  if (DI.Offset <= Ctx.TextSize && DI.Size <= Ctx.TextSize - DI.Offset &&
-      rewriteDs2AddrOffsetsInPlaceImpl(
-          MutableArrayRef<uint8_t>(Ctx.Text + DI.Offset, DI.Size), DI.Mnemonic,
-          *Ops)) {
-    log() << "hotswap: rewrote " << DI.Mnemonic << " at 0x"
-          << utohexstr(DI.Offset) << " in place with A0 byte offsets "
-          << Ops->Off0 << ", " << Ops->Off1 << "\n";
-    DI.Mnemonic = "<replaced>";
-    return true;
-  }
+  // Always lower DS2 operations through the split sequence. Re-encoding the
+  // B0 instruction with A0 byte offsets can disassemble as intended but does
+  // not preserve the operation's behavior on hardware.
   std::optional<std::vector<std::string>> Expanded =
       expandDs2AddrImpl(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
   if (!Expanded)
@@ -634,8 +601,88 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   }
 
   SmallVector<uint8_t> Replacement(Bytes.begin(), Bytes.end());
-  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
+  // A DS2 split is substantially larger than the original instruction and
+  // creates a registerless far-return chain when appended to the global pool.
+  // Prefer padding already proven unreachable by the closed control-flow
+  // audit: both edges remain ordinary s_branch instructions and relay demand
+  // no longer scales with the number of DS2 instructions in a large object.
+  bool Emitted = emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
+                                     /*PreferNopSled=*/true,
+                                     /*AllowTrampoline=*/false);
+
+  // A numbered pair or dead VCC gives the ordinary far trampoline a bounded,
+  // SCC-neutral return. Its source edge can then share the normal gateway
+  // backbone; reserve the dedicated compact-continuation tails for sites that
+  // would otherwise require both forward and return branch-island chains.
+  if (!Emitted)
+    Emitted = emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement,
+                               /*AllowRegisterless=*/false);
+
+  // If neither a complete local body nor a scratch-backed trampoline fits,
+  // keep the first DS1 in the original eight-byte slot and replace one
+  // adjacent instruction with a short branch. The continuation executes the
+  // second DS1, drains the perturbed DS counter, and (unless the overwritten
+  // instruction was already that wait) executes the displaced instruction
+  // before branching back. Only the narrow opcode set below is displaced:
+  // none requires another hotswap patch, transfers control, reads the PC, or
+  // establishes a hardware clause/state for its original address.
+  if (!Emitted && !NeedsBankNormalization && Expanded->size() >= 2 &&
+      Idx + 1 < Ctx.Decoded.size()) {
+    InternalDecodedInst &Next = Ctx.Decoded[Idx + 1];
+    bool IsAdjacentWait =
+        Next.Offset == DI.Offset + DI.Size && Next.Mnemonic == "s_wait_dscnt" &&
+        !Ctx.DirectControlFlow.Targets.contains(Next.Offset) &&
+        !llvm::is_contained(Ctx.DeclaredEntries, Next.Offset);
+    bool CanDisplaceFollower =
+        Next.Offset == DI.Offset + DI.Size && Next.DecodeSucceeded &&
+        Next.Offset <= Ctx.TextSize &&
+        Next.Size <= Ctx.TextSize - Next.Offset &&
+        !Ctx.DirectControlFlow.Targets.contains(Next.Offset) &&
+        !llvm::is_contained(Ctx.DeclaredEntries, Next.Offset) &&
+        StringSwitch<bool>(Next.Mnemonic)
+            .Cases({"s_bitcmp0_b64", "s_bitcmp1_b32", "s_cselect_b32"}, true)
+            .Cases({"s_mov_b32", "s_or_b32", "s_sub_co_i32"}, true)
+            .Cases({"v_add_nc_u32", "v_add_nc_u64"}, true)
+            .Cases({"v_ashrrev_i32", "v_cndmask_b32"}, true)
+            .Cases({"v_lshlrev_b32", "v_mov_b64"}, true)
+            .Case("v_sub_nc_u32", true)
+            .Cases({"ds_load_b32", "ds_load_b64"}, true)
+            .Cases({"ds_store_b32", "ds_store_b64"}, true)
+            .Cases({"v_add3_u32", "flat_load_b64"}, true)
+            .Cases({"v_dual_add_nc_u32", "v_dual_mov_b32"}, true)
+            .Default(false);
+    if (IsAdjacentWait || CanDisplaceFollower) {
+      SmallVector<uint8_t> First = assembleSingleInst((*Expanded)[0], Ctx.LS);
+      std::string ContinuationAsm;
+      for (size_t I = 1; I < Expanded->size(); ++I)
+        ContinuationAsm += (*Expanded)[I] + "\n";
+      ContinuationAsm += "s_wait_dscnt 0\n";
+      SmallVector<uint8_t> Continuation =
+          assembleInstructions(ContinuationAsm, Ctx.LS);
+      if (CanDisplaceFollower)
+        Continuation.append(Ctx.Text + Next.Offset,
+                            Ctx.Text + Next.Offset + Next.Size);
+      if (First.size() == DI.Size && !Continuation.empty() &&
+          emitSplitDs2Continuation(Ctx, DI.Offset, First, Next.Size,
+                                   Continuation)) {
+        log() << "hotswap: ds_2addr: used compact continuation at 0x"
+              << utohexstr(DI.Offset);
+        if (CanDisplaceFollower)
+          log() << " with displaced " << Next.Mnemonic;
+        log() << "\n";
+        Next.Mnemonic = "<replaced>";
+        Emitted = true;
+      }
+    }
+  }
+
+  if (!Emitted && !emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement,
+                                    /*AllowRegisterless=*/true))
     return failRequiredPatch(Ctx);
+  // A local split detours through only s_branch, DS operations, and
+  // s_wait_dscnt. It neither reads nor writes numbered SGPRs or VCC, and the
+  // single-entry/single-return detour preserves continuation liveness.
+  Ctx.CurrentPatchPreservesSgprLiveness = Ctx.LastReplacementUsedNopSled;
 
   DI.Mnemonic = "<replaced>";
   return true;
@@ -2700,13 +2747,6 @@ std::optional<std::vector<std::string>> expandDs2Addr(const MCInst &Inst,
                                                       StringRef ToMnem,
                                                       const LLVMState &LS) {
   return expandDs2AddrImpl(Inst, FromMnem, ToMnem, LS);
-}
-
-bool rewriteDs2AddrOffsetsInPlace(MutableArrayRef<uint8_t> InstBytes,
-                                  const MCInst &Inst, StringRef Mnemonic,
-                                  const LLVMState &LS) {
-  std::optional<DsOperands> Ops = extractDsOperands(Inst, Mnemonic, LS);
-  return Ops && rewriteDs2AddrOffsetsInPlaceImpl(InstBytes, Mnemonic, *Ops);
 }
 
 // -- applyTrampolinePatches -------------------------------------------------

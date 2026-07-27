@@ -50,6 +50,9 @@ first_kernel:
   s_endpgm
 .Lfirst_kernel_end:
 .size first_kernel, .Lfirst_kernel_end-first_kernel
+// Prevent the following alignment hole from becoming external padding. This
+// test specifically proves that function-owned NOPs are not borrowed.
+s_mov_b32 s0, s0
 
 .globl second_kernel
 .p2align 8

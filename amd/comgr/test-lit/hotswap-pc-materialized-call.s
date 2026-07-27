@@ -52,6 +52,9 @@ local_return_helper:
   s_branch .Llocal_return_epilogue
 .Llocal_return_helper_end:
 .size local_return_helper, .Llocal_return_helper_end-local_return_helper
+// Keep the following kernel-alignment hole out of the external sled map; the
+// exact gateway-sized windows below are the routing resources under test.
+s_mov_b32 s0, s0
 
 .globl test_pc_materialized_call
 .p2align 8
@@ -74,9 +77,20 @@ test_pc_materialized_call:
 .Ltest_pc_materialized_call_end:
 .size test_pc_materialized_call, .Ltest_pc_materialized_call_end-test_pc_materialized_call
 
-// Each far site needs its own 20-byte SCC-neutral gateway. This padding
-// follows s_endpgm and lies outside the function, so it is safe.
-.fill 64, 1, 0
+// Each far site needs its own 20-byte SCC-neutral gateway. Keep these NOP runs
+// function-owned: the global planner may use them, while replacement bodies
+// in test_pc_materialized_call cannot borrow another function's padding.
+.type gateway_0,@function
+gateway_0:
+  s_endpgm
+  .fill 20, 1, 0
+.size gateway_0, .-gateway_0
+
+.type gateway_1,@function
+gateway_1:
+  s_endpgm
+  .fill 20, 1, 0
+.size gateway_1, .-gateway_1
 
 // Push the appended trampoline pool beyond s_branch's signed 16-bit dword
 // range and force direct-target-aware far-site handling.

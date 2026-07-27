@@ -101,6 +101,12 @@ test_ds2addr_far_load:
   s_endpgm
 .Ltest_ds2addr_far_load_end:
 .size test_ds2addr_far_load, .Ltest_ds2addr_far_load_end-test_ds2addr_far_load
+.type gateway_load,@function
+gateway_load:
+  s_endpgm
+  .fill 20, 1, 0
+.size gateway_load, .-gateway_load
+s_mov_b32 s0, s0
 
 .globl test_ds2addr_far_adjacent
 .p2align 8
@@ -114,6 +120,12 @@ test_ds2addr_far_adjacent:
   s_endpgm
 .Ltest_ds2addr_far_adjacent_end:
 .size test_ds2addr_far_adjacent, .Ltest_ds2addr_far_adjacent_end-test_ds2addr_far_adjacent
+.type gateway_adjacent,@function
+gateway_adjacent:
+  s_endpgm
+  .fill 20, 1, 0
+.size gateway_adjacent, .-gateway_adjacent
+s_mov_b32 s0, s0
 
 .globl test_ds2addr_far_branch_target
 .p2align 8
@@ -127,6 +139,12 @@ test_ds2addr_far_branch_target:
   s_endpgm
 .Ltest_ds2addr_far_branch_target_end:
 .size test_ds2addr_far_branch_target, .Ltest_ds2addr_far_branch_target_end-test_ds2addr_far_branch_target
+.type gateway_branch_target,@function
+gateway_branch_target:
+  s_endpgm
+  .fill 20, 1, 0
+.size gateway_branch_target, .-gateway_branch_target
+s_mov_b32 s0, s0
 
 .globl test_ds2addr_far_call_target
 .p2align 8
@@ -140,6 +158,12 @@ test_ds2addr_far_call_target:
   s_endpgm
 .Ltest_ds2addr_far_call_target_end:
 .size test_ds2addr_far_call_target, .Ltest_ds2addr_far_call_target_end-test_ds2addr_far_call_target
+.type gateway_call_target,@function
+gateway_call_target:
+  s_endpgm
+  .fill 20, 1, 0
+.size gateway_call_target, .-gateway_call_target
+s_mov_b32 s0, s0
 
 .globl test_ds2addr_far_store
 .p2align 8
