@@ -340,9 +340,15 @@ if (UNIX)
     -fno-rtti -Wall -Wno-attributes -fms-extensions -fvisibility=hidden)
   # TODO: Confirm this is actually needed due to LLVM/Clang code
   list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS -fno-strict-aliasing)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS -fstack-protector-strong)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS _FORTIFY_SOURCE=2)
   list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS
     _GNU_SOURCE __STDC_LIMIT_MACROS __STDC_CONSTANT_MACROS AMD_COMGR_BUILD)
   list(APPEND AMD_COMGR_PUBLIC_LINKER_OPTIONS -pthread)
+  # Eager RELRO might cause severe performance regressions in situations
+  # that load many versions of comgr at once (i.e. in dozens or hundreds
+  # of processes), so we're using weak RELRO here
+  list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS -Wl,-z,relro)
   if (NOT APPLE AND COMGR_BUILD_SHARED_LIBS)
     configure_file(
       src/exportmap.in
