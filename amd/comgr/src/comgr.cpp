@@ -258,12 +258,6 @@ StringRef COMGR::getComgrHashIdentifier() {
 
 amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
                                                 TargetIdentifier &Ident) {
-  // Slice out the raw triple fields as StringRefs into IdentStr. They are
-  // echoed verbatim (getIsaMetadata) and extended by callers (the hotswap
-  // pseudo-feature), so they are kept raw rather than sourced from TargetID,
-  // which would normalize the triple and reject the pseudo-feature. Triple
-  // validation is left to getIsaIndex below.
-  //
   // TODO: Only use AMDGPU::TargetID for this parsing.
   SmallVector<StringRef, 5> IsaNameComponents;
   IdentStr.split(IsaNameComponents, '-', 4);
