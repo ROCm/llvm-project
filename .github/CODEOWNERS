@@ -17,6 +17,11 @@
 /amd/hipcc/ @david-salinas @lamb-j
 /amd/docs/ @ROCm/rocm-documentation
 
+# HotSwap specific
+/amd/comgr/src/hotswap/ @harsh-amd
+/amd/comgr/test-unit/hotswap/ @harsh-amd
+/amd/comgr/test-lit/hotswap/ @harsh-amd
+
 /libc/ @llbm/reviewers-libc
 /bolt/ @llvm/reviewers-bolt
 /libc/ @llvm/reviewers-libc
