@@ -77,8 +77,14 @@ add_comgr_lit_binary(name-expression-map c)
 # function/data sections). MSVC's default /OPT:REF removes them the same way.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   add_executable(hotswap_transpile_cli comgr-sources/hotswap_transpile_cli.cpp)
-  # Pick up LLVM's language standard and exception posture for the host
-  # compiler (MSVC needs the explicit /std:c++17 the LLVM headers require).
+  # Match the C++ standard the rest of comgr compiles with. The comgr build
+  # sets it per target rather than globally, and MSVC otherwise defaults below
+  # the C++17 that the LLVM headers this driver includes require.
+  set_target_properties(hotswap_transpile_cli PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS No)
+  # Pick up LLVM's exception posture for the host compiler.
   llvm_update_compile_flags(hotswap_transpile_cli)
   # LLVM is built without RTTI; match it explicitly so cl::opt's OptionValue
   # typeinfo is not emitted against the -fno-rtti Support library
