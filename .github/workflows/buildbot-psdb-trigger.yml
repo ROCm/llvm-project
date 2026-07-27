@@ -79,12 +79,11 @@ jobs:
           
       - name: Set Initial Status to Pending
         run: |
-          docker exec -e PR_SHA=$PR_SHA -e GITHUB_TOKEN=$GITHUB_TOKEN "${{env.CONTAINER_NAME}}" /bin/bash -c "python3 -c \"
+          docker exec -e PR_SHA -e GITHUB_TOKEN "${{env.CONTAINER_NAME}}" /bin/bash -c "python3 -c \"
           import os
           import requests
-          GITHUB_TOKEN =  os.getenv('GITHUB_TOKEN')
+          GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
           TARGET_SHA = os.getenv('PR_SHA')
-          print('debug', TARGET_SHA)
           api_url = f'https://api.github.com/repos/AMD-Lightning-Internal/llvm-project/statuses/{TARGET_SHA}'
           headers = {
           'Authorization': f'token {GITHUB_TOKEN}',
@@ -103,55 +102,63 @@ jobs:
             \""
 
       - name: Poll Buildbot build status
+        env:
+          BUILDBOT_HOST: ${{ secrets.BUILDBOT_HOST }}
+          BUILDBOT_MASTER_PORT: ${{ secrets.BUILDBOT_MASTER_PORT }}
         run: |
           python3 -c "
           import os
+          import sys
           import time
           import requests
-          GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-          BUILD_URL = 'https://${{ secrets.BUILDBOT_HOST }}:${{ secrets.BUILDBOT_MASTER_PORT }}/api/v2/builds'
-          TARGET_SHA = os.getenv('PR_SHA')
-          print('debug', TARGET_SHA)
-          MAX_RETRIES = 10
-          RETRY_INTERVAL = 30  # seconds
+
+          host = os.environ['BUILDBOT_HOST']
+          port = os.environ['BUILDBOT_MASTER_PORT']
+          build_url = f'https://{host}:{port}/api/v2/builds'
+          target_sha = os.getenv('PR_SHA')
+          max_retries = 10
+          retry_interval = 30
 
           def get_build_properties(build_id):
-              build_properties_url = f'https://${{ secrets.BUILDBOT_HOST }}:${{ secrets.BUILDBOT_MASTER_PORT }}/api/v2/builds/{build_id}/properties'
-              response = requests.get(build_properties_url, headers={'Accept': 'application/json', 'Authorization': f'token {GITHUB_TOKEN}'})
+              properties_url = f'https://{host}:{port}/api/v2/builds/{build_id}/properties'
+              response = requests.get(
+                  properties_url,
+                  headers={'Accept': 'application/json'},
+                  timeout=30,
+              )
+              response.raise_for_status()
               return response.json()
 
-          for i in range(MAX_RETRIES):
-               response = requests.get(BUILD_URL, headers={'Accept': 'application/json'})
-               response_json = response.json()
-               print(f'Attempt {i + 1}: Buildbot response:', response_json)
-    
-               # Check if any build has the target SHA
-               builds = response_json.get('builds', [])
-               print (builds)
-               build_with_sha = None
-               for build in builds:
-                   build_id = build['buildid']
-                   properties = get_build_properties(build_id)
-                   #print(properties)
-                   #prop = properties.get('revision', [])
-                  
-                   if 'properties' in properties:
-                       print (properties['properties'])
-                       if 'revision' in properties['properties'][0]:
-                           print(properties['properties'][0])
-                       if 'revision' in properties['properties'][0] and properties['properties'][0]['revision'] [0] == TARGET_SHA:                            
-                           build_with_sha = build
-                           break                         
-   
-               if build_with_sha:
-                     print('Build started successfully for SHA:', TARGET_SHA)
-                     break
-               else:
-                     print('Build for SHA not started yet, retrying in', RETRY_INTERVAL, 'seconds')
-                     time.sleep(RETRY_INTERVAL)
+          for attempt in range(1, max_retries + 1):
+              response = requests.get(
+                  build_url,
+                  headers={'Accept': 'application/json'},
+                  timeout=30,
+              )
+              response.raise_for_status()
+              builds = response.json().get('builds', [])
+              build_with_sha = None
+
+              for build in builds:
+                  build_id = build['buildid']
+                  properties = get_build_properties(build_id)
+                  props = properties.get('properties')
+                  if not props:
+                      continue
+                  revision = props[0].get('revision')
+                  if revision and len(revision) > 0 and revision[0] == target_sha:
+                      build_with_sha = build
+                      break
+
+              if build_with_sha:
+                  print(f'Build started successfully for SHA: {target_sha}')
+                  break
+
+              print(f'Build for SHA not started yet (attempt {attempt}/{max_retries}); retrying in {retry_interval}s')
+              time.sleep(retry_interval)
           else:
-                print('Build did not start for SHA:', TARGET_SHA, 'after maximum retries')
-                exit(1)
+              print(f'Build did not start for SHA: {target_sha} after maximum retries')
+              sys.exit(1)
           "
 
       - name: Stop and remove container
