@@ -33,8 +33,8 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/MC/MCExpr.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/Support/Endian.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <algorithm>
@@ -1168,6 +1168,21 @@ static bool isExactRegisterOperand(const MCInst &Inst, unsigned Index,
          Inst.getOperand(Index).getReg() == Reg;
 }
 
+/// Read a constant 32-bit source operand through MC. A decoded SOP2 literal is
+/// an immediate; an assembled operand may be an absolute expression. Anything
+/// else (a register source) is not a constant displacement.
+static std::optional<uint32_t>
+evaluateAbsoluteUint32Operand(const MCOperand &Operand) {
+  if (Operand.isImm())
+    return static_cast<uint32_t>(Operand.getImm());
+  if (!Operand.isExpr())
+    return std::nullopt;
+  int64_t Value = 0;
+  if (!Operand.getExpr()->evaluateAsAbsolute(Value))
+    return std::nullopt;
+  return static_cast<uint32_t>(Value);
+}
+
 /// Recognize the two compiler-emitted ways a reusable register-call target is
 /// materialized. The first is the canonical get-PC/add-nc pair. Tensile also
 /// computes a 32-bit displacement in a temporary and propagates carry into the
@@ -1184,7 +1199,7 @@ static std::optional<std::pair<size_t, uint64_t>>
 matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
                                size_t GetPcIndex, size_t FunctionEndIndex,
                                MCRegister Pair, const LLVMState &LS,
-                               uint64_t TextAddr, ArrayRef<uint8_t> Text) {
+                               uint64_t TextAddr) {
   const InternalDecodedInst &GetPc = Decoded[GetPcIndex];
   if (!GetPc.DecodeSucceeded || GetPc.Inst.getOpcode() != LS.SGetPcI64Opcode ||
       !isExactRegisterOperand(GetPc.Inst, 0, Pair))
@@ -1251,20 +1266,8 @@ matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
       !LS.MRI->regsOverlap(Low, Pair) || !LS.MRI->regsOverlap(High, Pair))
     return std::nullopt;
 
-  std::optional<uint32_t> FirstAddend;
-  if (MakeDelta.Inst.getOperand(1).isImm()) {
-    FirstAddend = static_cast<uint32_t>(MakeDelta.Inst.getOperand(1).getImm());
-  } else if (MakeDelta.Size == 2 * MinInstSize &&
-             MakeDelta.Offset <= Text.size() &&
-             MakeDelta.Size <= Text.size() - MakeDelta.Offset &&
-             Text[MakeDelta.Offset] == 0xff) {
-    // The disassembler represents a SOP2 literal source as its literal
-    // register marker, not as an immediate operand. Require the gfx12 SOP2
-    // src0 literal selector before interpreting the final dword as that
-    // literal; an ordinary register source is not a constant displacement.
-    FirstAddend = support::endian::read32le(Text.data() + MakeDelta.Offset +
-                                            MakeDelta.Size - MinInstSize);
-  }
+  std::optional<uint32_t> FirstAddend =
+      evaluateAbsoluteUint32Operand(MakeDelta.Inst.getOperand(1));
   if (!FirstAddend)
     return std::nullopt;
   uint32_t Delta = *FirstAddend +
@@ -1353,7 +1356,7 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
     ArrayRef<std::optional<PcMaterializedCallInfo>> LocalCalls,
-    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint8_t> Text) {
+    ArrayRef<uint64_t> DeclaredEntries) {
   std::vector<ReachingCallTargets> Resolved(Decoded.size());
   SmallVector<ReachingCallGroup, 8> Groups;
 
@@ -1432,8 +1435,8 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     DenseMap<size_t, SmallVector<size_t, 2>> Intermediates;
     for (size_t I = BeginIndex; I != EndIndex; ++I) {
       std::optional<std::pair<size_t, uint64_t>> Match =
-          matchReusablePcMaterialization(
-              Decoded, I, EndIndex, Group.TargetRegister, LS, TextAddr, Text);
+          matchReusablePcMaterialization(Decoded, I, EndIndex,
+                                         Group.TargetRegister, LS, TextAddr);
       if (Match) {
         Starters[I] = Match->first;
         Completions[Match->first] = Match->second;
@@ -1488,7 +1491,16 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
       DenseMap<size_t, size_t>::const_iterator Starter = Starters.find(I);
       DenseMap<size_t, uint64_t>::const_iterator Completion =
           Completions.find(I);
-      if (Starter != Starters.end()) {
+      if (!DI.DecodeSucceeded) {
+        // An undecoded slot has an unknown effect on the target pair and on
+        // control flow, so any reaching value it carries forward is unproven.
+        // Fail closed to Unknown; the finite-state test below then refuses
+        // every reusable call this path reaches. Starters and Completions are
+        // built only from decoded materializations, so neither can name I.
+        State.HasUnknown = true;
+        State.Targets.clear();
+        State.ActiveMaterializations.clear();
+      } else if (Starter != Starters.end()) {
         // The get-PC instruction overwrites the complete target pair. Record a
         // token proving that this path entered the exact materialization; the
         // completion may only produce a known target from that token.
@@ -1528,8 +1540,11 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
       bool HasFiniteState = !State.HasUnknown &&
                             State.ActiveMaterializations.empty() &&
                             !State.Targets.empty();
-      if (IsReusableCall && HasFiniteState)
-        Resolved[I] = State.Targets;
+      // Recompute Resolved[I] on every visit so a later reconvergent path that
+      // makes this call Unknown erases an earlier finite result. Writing only
+      // on finite state would leave a stale target set from the first visit.
+      if (IsReusableCall)
+        Resolved[I] = HasFiniteState ? State.Targets : ReachingCallTargets();
 
       // The first call after a straight-line materialization is also resolved
       // by the one-shot matcher. Let that bootstrap call preserve the reaching
@@ -2150,7 +2165,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
   std::vector<ReachingCallTargets> ReusableCalls = resolveReusablePcCallTargets(
       Decoded, LS, TextAddr, *TextEnd, FunctionRanges, MaterializedCalls,
-      DeclaredEntries, Text);
+      DeclaredEntries);
 
   std::optional<SmallVector<KnownCallSite, 4>> Calls = collectKnownCallSites(
       Decoded, LS, TextAddr, *TextEnd, MaterializedCalls, ReusableCalls);
@@ -2248,8 +2263,14 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     }
     Info.Targets.insert(*Target);
   }
-  for (const BoundedSetPcReturn &Return : *BoundedReturns)
+  for (const BoundedSetPcReturn &Return : *BoundedReturns) {
+    // A bounded return lands on each proven continuation, so those offsets are
+    // control-flow targets that must not be relocated over. Record them before
+    // exempting the return itself from the unbounded-indirect treatment.
+    for (uint64_t Continuation : Return.Targets)
+      Info.Targets.insert(Continuation);
     Info.BoundedIndirectTransfers.insert(Decoded[Return.InstIndex].Offset);
+  }
   return Info;
 }
 
@@ -2974,8 +2995,12 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
            Ctx.OutTrampolines[I + Count].SharedDispatcherGroup == Group)
       ++Count;
     uint64_t Prefix = 8 + 28 * Count;
-    if (Prefix > std::numeric_limits<uint32_t>::max())
+    if (Prefix > std::numeric_limits<uint32_t>::max()) {
+      log() << "hotswap: shared far-dispatch group " << Group << " dispatcher "
+            << "prefix (" << Prefix << " bytes for " << Count
+            << " site(s)) exceeds the 32-bit pool-entry limit\n";
       return false;
+    }
     First.PoolEntryPrefixBytes = static_cast<uint32_t>(Prefix);
     First.Bytes.insert(First.Bytes.begin(), Prefix, uint8_t{0});
     I += Count;

@@ -111,6 +111,33 @@
 // OUTSIDE: hotswap: error: no safe short-branch gateway for far site
 // OUTSIDE: RESULT: ERROR
 
+// An undecoded slot between the two reused calls must not let the later call
+// resolve: its bytes could clobber the target pair or divert control flow.
+// RUN: sed 's/^\.set undecoded_gap, 0$/.set undecoded_gap, 1/' \
+// RUN:   %s > %t.undecoded.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.undecoded.s -o %t.undecoded.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.undecoded.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=UNDECODED,FAIL %s
+// UNDECODED: hotswap: resolved reusable PC-materialized call
+// UNDECODED: hotswap: unresolved call target
+
+// A back-edge that reloads the target pair through an unprovable definition
+// makes the reconverged call Unknown; a stale finite result from the first
+// visit must not survive.
+// RUN: sed 's/^\.set reconverge_reload, 0$/.set reconverge_reload, 1/' \
+// RUN:   %s > %t.reconverge.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.reconverge.s -o %t.reconverge.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.reconverge.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --expect-status ERROR 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=RECONVERGE,FAIL %s
+// RECONVERGE: hotswap: resolved reusable PC-materialized call
+// RECONVERGE: hotswap: unresolved call target
+
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM \
 // RUN:   --implicit-check-not=s_add_pc_i64 %s
 // DISASM-LABEL: <reusable_pc_targets>:
@@ -143,6 +170,8 @@
 .set tail_escape, 0
 .set indirect_escape, 0
 .set external_entry, 0
+.set undecoded_gap, 0
+.set reconverge_reload, 0
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
@@ -221,6 +250,24 @@ reusable_pc_targets:
 .endif
 .Lselected:
   s_swap_pc_i64 s[6:7], s[2:3]
+.if undecoded_gap
+  // An undecoded word between the reused calls has an unknown effect on the
+  // target pair. The solver must not carry the finite target set across it.
+  .long 0xffffffff
+.endif
+.if reconverge_reload
+  // One path reaches the second reused call with the proven pair; a sibling
+  // path reloads it through an unprovable definition. They reconverge on the
+  // second call, which must therefore be Unknown -- not the finite result the
+  // proven path alone recorded on its earlier visit.
+  s_cmp_eq_u32 s0, 5
+  s_cbranch_scc1 .Lreload_join
+  s_branch .Lreused_second
+.Lreload_join:
+  s_mov_b32 s2, 0
+  s_mov_b32 s3, 0
+.Lreused_second:
+.endif
   // Production kernels reuse this selected pair for multiple calls.
   s_swap_pc_i64 s[6:7], s[2:3]
   s_branch .Lpatch0
