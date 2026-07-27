@@ -3,12 +3,14 @@
 # RUN: %yaml2obj %s -o %t.o
 # RUN: not %hotswap_transpile_cli %t.o --dump-meta 2>&1 | %FileCheck %s
 
-# CHECK: no amdhsa.kernels
+# amdhsa.kernels is absent; the strict schema verifier requires it.
+# CHECK: failed strict schema verification
 --- !ELF
 FileHeader:
   Class:   ELFCLASS64
   Data:    ELFDATA2LSB
   OSABI:   ELFOSABI_AMDGPU_HSA
+  ABIVersion: 0x4
   Type:    ET_DYN
   Machine: EM_AMDGPU
   Flags:   [ EF_AMDGPU_MACH_AMDGCN_GFX942 ]
