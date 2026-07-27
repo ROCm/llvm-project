@@ -3217,6 +3217,22 @@ TEST(WmmaScale16, PhysicalVgprRangeMustFitOneBank) {
   EXPECT_FALSE(physicalVgprRangeFitsOneBank(1024, 1, 1024));
 }
 
+TEST(WmmaScale16, LegacyB0Vop3ScalarSourceEncodingIsExact) {
+  constexpr uint32_t ObservedWord0 = 0xd0310000u;
+  constexpr uint32_t ObservedAlternateSourceWord = 1u << 20;
+  constexpr uint32_t AllowedModifier = 1u << 14;
+
+  EXPECT_TRUE(isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0, 0));
+  EXPECT_TRUE(isLegacyB0Vop3ScalarSourceEncoding(
+      ObservedWord0 | AllowedModifier, ObservedAlternateSourceWord));
+
+  EXPECT_FALSE(isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0 | 1u, 0));
+  EXPECT_FALSE(
+      isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0 ^ (1u << 16), 0));
+  EXPECT_FALSE(isLegacyB0Vop3ScalarSourceEncoding(
+      ObservedWord0, ObservedAlternateSourceWord | 1u));
+}
+
 TEST(WmmaScale16, UnrecognizedVectorRegisterCannotDisappearFromProof) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

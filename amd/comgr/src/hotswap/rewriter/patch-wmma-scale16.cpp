@@ -70,6 +70,7 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <initializer_list>
 
 using namespace llvm;
@@ -305,9 +306,8 @@ static SmallVector<uint8_t> rewriteScale16ToScale(const uint8_t *OrigRaw,
 
 using VgprBankRequirement = std::pair<VgprMsbOperand, unsigned>;
 
-static void
-emitModeForOperands(raw_string_ostream &OS, unsigned &CurrentMode,
-                    ArrayRef<VgprBankRequirement> Requirements) {
+static void emitModeForOperands(raw_string_ostream &OS, unsigned &CurrentMode,
+                                ArrayRef<VgprBankRequirement> Requirements) {
   unsigned NewMode = CurrentMode;
   for (const VgprBankRequirement &Requirement : Requirements)
     setVgprMsbBank(NewMode, Requirement.first, Requirement.second);
@@ -859,22 +859,26 @@ struct PhysicalVgprAccess {
 };
 
 // The M=32 Scale16 MC layout is mirrored and runtime-validated by the
-// lowering below. Its two scale operands reuse the matrix source banks:
-// matrix-A/scale-A use src0, matrix-B/scale-B use src1, and the accumulator
-// uses src2. Other instruction layouts remain conservative-all-banks unless
-// their role is structurally unambiguous.
+// lowering below. Matrix A uses src0, matrix B uses src1, and the accumulator
+// uses src2. Scale-prefix VGPR operands ignore VGPR-MSB and use bank zero.
+// Other instruction layouts remain conservative-all-banks unless their role
+// is structurally unambiguous.
+static constexpr unsigned M32MatrixAOperand = 1;
+static constexpr unsigned M32MatrixBOperand = 2;
+static constexpr unsigned M32AccumulatorOperand = 4;
+static constexpr unsigned M32ScaleAOperand = 5;
+static constexpr unsigned M32ScaleBOperand = 6;
+
 static std::optional<VgprMsbOperand>
 getExactSourceRole(const InternalDecodedInst &DI, unsigned OperandIndex,
                    unsigned NumDefs) {
   if (DI.Mnemonic == "v_wmma_scale16_f32_32x16x128_f4") {
     switch (OperandIndex) {
-    case 1:
-    case 5:
+    case M32MatrixAOperand:
       return VgprMsbOperand::Src0;
-    case 2:
-    case 6:
+    case M32MatrixBOperand:
       return VgprMsbOperand::Src1;
-    case 4:
+    case M32AccumulatorOperand:
       return VgprMsbOperand::Src2;
     default:
       return std::nullopt;
@@ -907,11 +911,12 @@ static PhysicalVgprAccess getPhysicalVgprAccess(const InternalDecodedInst &DI,
   llvm::sort(SrcBanks);
   SrcBanks.erase(std::unique(SrcBanks.begin(), SrcBanks.end()), SrcBanks.end());
 
-  auto AddEveryBankUse = [&](const EncodedVgprRange &Range) {
-    for (unsigned Bank = 0; Bank * VgprBankSize < MaxVgprs; ++Bank)
-      if (!setPhysicalVgprRange(Result.Uses, Range, Bank, MaxVgprs))
-        Result.Valid = false;
-  };
+  std::function<void(const EncodedVgprRange &)> AddEveryBankUse =
+      [&](const EncodedVgprRange &Range) {
+        for (unsigned Bank = 0; Bank * VgprBankSize < MaxVgprs; ++Bank)
+          if (!setPhysicalVgprRange(Result.Uses, Range, Bank, MaxVgprs))
+            Result.Valid = false;
+      };
 
   unsigned NumDefs = Desc.getNumDefs();
   for (unsigned I = 0, E = DI.Inst.getNumOperands(); I != E; ++I) {
@@ -928,6 +933,12 @@ static PhysicalVgprAccess getPhysicalVgprAccess(const InternalDecodedInst &DI,
 
     bool IsDef = I < NumDefs;
     if (!IsDef) {
+      if (DI.Mnemonic == "v_wmma_scale16_f32_32x16x128_f4" &&
+          (I == M32ScaleAOperand || I == M32ScaleBOperand)) {
+        if (!setPhysicalVgprRange(Result.Uses, *Range, /*Bank=*/0, MaxVgprs))
+          Result.Valid = false;
+        continue;
+      }
       if (std::optional<VgprMsbOperand> Role =
               getExactSourceRole(DI, I, NumDefs)) {
         unsigned Bank = getVgprMsbBank(Mode, *Role);
@@ -1113,34 +1124,14 @@ struct ScaleForwardGraph {
 // no kill, and skip the split continuation dword. This is enough to traverse
 // the instruction without relying on whether opcode 0x31 has a vector or
 // scalar destination on B0.
-static bool recognizeUndecodedB0Vop3ScalarSources(
-    PatchContext &Ctx, size_t Global, unsigned MaxVgprs,
-    BitVector &ConservativeUses) {
-  if (Global + 1 >= Ctx.Decoded.size())
-    return false;
-  const InternalDecodedInst &Head = Ctx.Decoded[Global];
-  const InternalDecodedInst &Tail = Ctx.Decoded[Global + 1];
-  if (Head.DecodeSucceeded || Head.Size != MinInstSize ||
-      Tail.Offset != Head.Offset + MinInstSize ||
-      Head.Offset > Ctx.TextSize || 2 * MinInstSize > Ctx.TextSize - Head.Offset)
+static bool recognizeUndecodedB0Vop3ScalarSources(PatchContext &Ctx,
+                                                  size_t Global,
+                                                  unsigned MaxVgprs,
+                                                  BitVector &ConservativeUses) {
+  if (!isUndecodedB0Vop3ScalarSourcePair(Ctx, Global))
     return false;
 
-  const uint8_t *Raw = Ctx.Text + Head.Offset;
-  uint32_t Word0 = support::endian::read32le(Raw);
-  uint32_t Word1 = support::endian::read32le(Raw + MinInstSize);
-  constexpr uint32_t Bit14 = 1u << 14;
-  if ((Word0 & ~Bit14) != 0xd0310000u ||
-      (Word1 != 0 && Word1 != 0x00100000u))
-    return false;
-
-  // A direct/declared entry into the decoder-created continuation slot would
-  // make treating the pair as one instruction unsound.
-  if (Ctx.DirectControlFlow.Targets.contains(Tail.Offset) ||
-      llvm::is_contained(Ctx.DeclaredEntries, Tail.Offset))
-    return false;
-
-  for (unsigned Physical = 0; Physical < MaxVgprs;
-       Physical += VgprBankSize)
+  for (unsigned Physical = 0; Physical < MaxVgprs; Physical += VgprBankSize)
     ConservativeUses.set(Physical);
   return true;
 }
@@ -1182,7 +1173,7 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
   for (size_t Local = 0; Local != Count; ++Local)
     IndexAtOffset[Ctx.Decoded[Graph.GlobalIndices[Local]].Offset] = Local;
 
-  auto AddFallthrough = [&](size_t Local) {
+  std::function<void(size_t)> AddFallthrough = [&](size_t Local) {
     if (Local + 1 < Count)
       Graph.Nodes[Local].Successors.push_back(Local + 1);
     else
@@ -1201,9 +1192,8 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
       Node.SafeTerminal = true;
       continue;
     }
-    if (!DI.DecodeSucceeded &&
-        recognizeUndecodedB0Vop3ScalarSources(Ctx, Global, MaxVgprs,
-                                              Node.Uses)) {
+    if (!DI.DecodeSucceeded && recognizeUndecodedB0Vop3ScalarSources(
+                                   Ctx, Global, MaxVgprs, Node.Uses)) {
       if (Local + 2 >= Count)
         Node.HasUnsafeExit = true;
       else
@@ -1260,12 +1250,11 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
     const ForwardVgprProofNode &Node = Graph.Nodes[Local];
     if (Node.Opaque || Node.SafeTerminal)
       continue;
-    int16_t Out =
-        Graph.UndecodedVop3Heads.test(Local)
-            ? Graph.ModeBefore[Local]
-            : transferExactVgprMsbMode(
-                  Graph.ModeBefore[Local],
-                  Ctx.Decoded[Graph.GlobalIndices[Local]], Ctx.LS);
+    int16_t Out = Graph.UndecodedVop3Heads.test(Local)
+                      ? Graph.ModeBefore[Local]
+                      : transferExactVgprMsbMode(
+                            Graph.ModeBefore[Local],
+                            Ctx.Decoded[Graph.GlobalIndices[Local]], Ctx.LS);
     for (size_t Successor : Node.Successors) {
       int16_t Old = Graph.ModeBefore[Successor];
       int16_t Merged = Old == VgprMsbUnreachable ? Out
@@ -1785,9 +1774,9 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   unsigned ABase = ARange->Base + Src0Bank * VgprBankSize;
   unsigned BBase = BRange->Base + Src1Bank * VgprBankSize;
   unsigned CBase = CRange ? CRange->Base + Src2Bank * VgprBankSize : 0;
-  unsigned ScaleALo = *ScaleABase + Src0Bank * VgprBankSize;
+  unsigned ScaleALo = *ScaleABase;
   unsigned ScaleAHi = ScaleALo + 1;
-  unsigned ScaleBLo = *ScaleBBase + Src1Bank * VgprBankSize;
+  unsigned ScaleBLo = *ScaleBBase;
   unsigned ScaleBHi = ScaleBLo + 1;
 
   if (!physicalVgprRangeFitsOneBank(DBase, 16, Ctx.Config.MaxVgprs) ||
@@ -1821,7 +1810,8 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     return failClosed(Ctx, DI,
                       "partial destination/src2 overlap across staged reads");
 
-  auto ScaleOverlaps = [&](unsigned Base, unsigned Width) {
+  std::function<bool(unsigned, unsigned)> ScaleOverlaps = [&](unsigned Base,
+                                                              unsigned Width) {
     return rangesOverlap(ScaleALo, 2, Base, Width) ||
            rangesOverlap(ScaleBLo, 2, Base, Width);
   };
@@ -1911,8 +1901,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   std::array<unsigned, SavedARegCount> SavedARegs;
   for (unsigned &Reg : SavedARegs) {
     std::optional<unsigned> Allocated = allocContiguousDeadOrAboveInBank(
-        Alloc, /*Count=*/1, /*Align=*/1, VgprBankSize,
-        ForwardDead.has_value());
+        Alloc, /*Count=*/1, /*Align=*/1, VgprBankSize, ForwardDead.has_value());
     if (!Allocated)
       return failClosed(Ctx, DI,
                         "fewer than four dead/above-KD VGPRs for exact M+K "
@@ -1928,7 +1917,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   emitScalePairSplitInPlace(OS, ScaleBLo, ScaleBHi, TmpReg, CurrentMode);
 
   int HazardNops = classifyWmmaNops("v_wmma_scale_f32_16x16x128_f8f6f4").A0Nops;
-  auto EmitHazardNops = [&] {
+  std::function<void()> EmitHazardNops = [&] {
     for (int I = 0; I != HazardNops; ++I)
       OS << "v_nop\n";
   };
@@ -1980,8 +1969,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
         if (IsLow == !HighK)
           continue;
         unsigned Saved = SavedARegs[SavedIndex++];
-        emitVgprCopy(OS, OriginalAHalf + I, Saved, /*W=*/1, ABank,
-                     CurrentMode);
+        emitVgprCopy(OS, OriginalAHalf + I, Saved, /*W=*/1, ABank, CurrentMode);
       }
       assert(SavedIndex == SavedARegCount);
     }
@@ -2027,8 +2015,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
         << utohexstr(DI.Offset) << " (D=v" << DBase << ":" << (DBase + 15)
         << ", A=v" << ABase << ":" << (ABase + 15) << ", B=v" << BBase << ":"
         << (BBase + 7) << ", four saved-A VGPRs, tmp=v" << TmpReg << ", +"
-        << Extra << " vgpr, 4 WMMAs, "
-        << Replacement.size() << " bytes)\n";
+        << Extra << " vgpr, 4 WMMAs, " << Replacement.size() << " bytes)\n";
   return 1;
 }
 

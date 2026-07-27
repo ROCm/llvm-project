@@ -653,34 +653,6 @@ VgprMsbState mergeVgprMsbState(VgprMsbState Old, VgprMsbState Incoming) {
           mergeVgprMsbValue(Old.Src2, Incoming.Src2)};
 }
 
-// The B0 f4gemm corpus uses one legacy VOP3 encoding that the A0 gfx1250
-// decoder splits into two unknown dwords. It cannot write MODE: recognize only
-// the exact observed opcode/operand spellings, and only when no known entry
-// reaches the decoder-created continuation dword.
-bool isUndecodedB0Vop3Pair(const PatchContext &Ctx, size_t HeadIndex) {
-  if (HeadIndex + 1 >= Ctx.Decoded.size())
-    return false;
-  const InternalDecodedInst &Head = Ctx.Decoded[HeadIndex];
-  const InternalDecodedInst &Tail = Ctx.Decoded[HeadIndex + 1];
-  if (Head.DecodeSucceeded || Head.Size != MinInstSize ||
-      Tail.Offset != Head.Offset + MinInstSize ||
-      Head.Offset > Ctx.TextSize ||
-      2 * MinInstSize > Ctx.TextSize - Head.Offset)
-    return false;
-
-  uint32_t Word0 = support::endian::read32le(Ctx.Text + Head.Offset);
-  uint32_t Word1 =
-      support::endian::read32le(Ctx.Text + Head.Offset + MinInstSize);
-  constexpr uint32_t Bit14 = 1u << 14;
-  if ((Word0 & ~Bit14) != 0xd0310000u ||
-      (Word1 != 0 && Word1 != 0x00100000u))
-    return false;
-  if (Ctx.DirectControlFlow.Targets.contains(Tail.Offset) ||
-      llvm::is_contained(Ctx.DeclaredEntries, Tail.Offset))
-    return false;
-  return true;
-}
-
 // Populate Ctx.VgprMsbModeBefore with a per-instruction packed VGPR-MSB mode
 // via a forward CFG fixed point over each analyzable function. Fail-closed:
 // only exact, consistent modes are recorded; any conflict, unknown MODE write,
@@ -829,7 +801,8 @@ void computeVgprMsbModes(PatchContext &Ctx) {
       OffsetToLocalIndex.try_emplace(First[I].Offset, I);
       if (First[I].Mnemonic != "<unknown>")
         continue;
-      if (isUndecodedB0Vop3Pair(Ctx, GlobalFirst + I) && I + 1 < Count) {
+      if (isUndecodedB0Vop3ScalarSourcePair(Ctx, GlobalFirst + I) &&
+          I + 1 < Count) {
         UndecodedVop3Heads.set(I);
         UndecodedVop3Tails.set(I + 1);
         OffsetToLocalIndex.erase(First[I + 1].Offset);
@@ -1180,6 +1153,47 @@ buildSplit32x16Asm(StringRef Replacement, const PrintedAsm &P, const WmmaOps &R,
 
 } // anonymous namespace
 
+bool isLegacyB0Vop3ScalarSourceEncoding(uint32_t Word0, uint32_t Word1) {
+  // TODO(https://github.com/ROCm/llvm-project/issues/3638): Replace this
+  // exact B0 encoding exception with an installed AMDGPU MC classifier.
+  constexpr unsigned Vop3MajorShift = 26;
+  constexpr uint32_t Vop3MajorMask = 0x3fu << Vop3MajorShift;
+  constexpr uint32_t LegacyVop3Major = 0x34u << Vop3MajorShift;
+  constexpr unsigned Vop3OpcodeShift = 16;
+  constexpr uint32_t Vop3OpcodeMask = 0x3ffu << Vop3OpcodeShift;
+  constexpr uint32_t LegacyVop3Opcode = 0x31u << Vop3OpcodeShift;
+  constexpr uint32_t Vop3VdstMask = 0xffu;
+  constexpr uint32_t ObservedModifierMask = 1u << 14;
+  constexpr uint32_t RequiredWord0 = LegacyVop3Major | LegacyVop3Opcode;
+  constexpr uint32_t FixedWord0Mask =
+      ~(ObservedModifierMask) | Vop3MajorMask | Vop3OpcodeMask | Vop3VdstMask;
+  constexpr uint32_t AlternateScalarSourceEncoding = 1u << 20;
+
+  return (Word0 & FixedWord0Mask) == RequiredWord0 &&
+         (Word1 == 0 || Word1 == AlternateScalarSourceEncoding);
+}
+
+bool isUndecodedB0Vop3ScalarSourcePair(const PatchContext &Ctx,
+                                       size_t HeadIndex) {
+  if (HeadIndex + 1 >= Ctx.Decoded.size())
+    return false;
+  const InternalDecodedInst &Head = Ctx.Decoded[HeadIndex];
+  const InternalDecodedInst &Tail = Ctx.Decoded[HeadIndex + 1];
+  if (Head.DecodeSucceeded || Tail.DecodeSucceeded ||
+      Head.Size != MinInstSize || Tail.Size != MinInstSize ||
+      Tail.Offset != Head.Offset + MinInstSize || Head.Offset > Ctx.TextSize ||
+      2 * MinInstSize > Ctx.TextSize - Head.Offset)
+    return false;
+
+  uint32_t Word0 = support::endian::read32le(Ctx.Text + Head.Offset);
+  uint32_t Word1 =
+      support::endian::read32le(Ctx.Text + Head.Offset + MinInstSize);
+  if (!isLegacyB0Vop3ScalarSourceEncoding(Word0, Word1))
+    return false;
+  return !Ctx.DirectControlFlow.Targets.contains(Tail.Offset) &&
+         !llvm::is_contained(Ctx.DeclaredEntries, Tail.Offset);
+}
+
 void ensureVgprMsbModes(PatchContext &Ctx) {
   if (Ctx.VgprMsbModeBefore.empty())
     computeVgprMsbModes(Ctx);
@@ -1212,9 +1226,9 @@ std::optional<unsigned> getLocallyEstablishedVgprMsbMode(PatchContext &Ctx,
 
     // The A0 decoder represents the exact B0 legacy-VOP3 pair as two unknown
     // dwords. It cannot change MODE, so a straight-line local dominance scan
-    // may step over the complete pair. isUndecodedB0Vop3Pair also rejects a
+    // may step over the complete pair. The shared classifier also rejects a
     // known entry into its continuation dword.
-    if (Idx >= 2 && isUndecodedB0Vop3Pair(Ctx, Idx - 2)) {
+    if (Idx >= 2 && isUndecodedB0Vop3ScalarSourcePair(Ctx, Idx - 2)) {
       Idx -= 2;
       continue;
     }
