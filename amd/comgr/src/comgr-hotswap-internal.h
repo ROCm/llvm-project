@@ -365,6 +365,14 @@ struct Trampoline {
   bool UsesMirroredStubForward = false;
   uint32_t MirroredStubGroup = 0;
   uint64_t MirroredStubGatewayOffset = 0;
+  // Dense pair-only objects use one global affine gateway per scratch pair.
+  // A first sparse stub branches to a regional add/set-PC gateway, which maps
+  // the preserved stub PC into the existing bounded mirrored-stub prefix.
+  bool UsesHierarchicalMirroredStubForward = false;
+  uint32_t HierarchicalMirroredGroup = 0;
+  uint32_t HierarchicalGlobalPrefixBytes = 0;
+  uint32_t HierarchicalRegionPrefixBytes = 0;
+  uint32_t HierarchicalRegionGatewayDisplacement = 0;
   uint32_t PoolEntryPrefixBytes = 0;
   // A mirrored sparse prefix is initialized to NOPs except at its
   // source-selected branch stubs. One unused dword near its midpoint can

@@ -5365,14 +5365,14 @@ static bool validateAbiControlTransferModes(
 ///   v_readlane s31, SavedHighVgpr, SavedHighLane
 ///   s_set_pc_i64 s[30:31]
 ///
-/// Both saved VGPRs must be in CSR_AMDGPU_VGPRs, so nested C/Fast/Cold callees
-/// preserve them (SIRegisterInfo::getCallPreservedMask). The locations may
-/// straddle a VGPR boundary when the compiler packs a large SGPR spill into
-/// consecutive wave lanes. A function-local CFG fixed point additionally
-/// proves every caller write to either saved physical VGPR addresses a
-/// different persistent destination bank, writes a different lane, or is the
-/// exact prologue save. Calls are permitted only in full VGPR-MSB mode zero,
-/// the mode required at both call entry and return.
+/// Functions with nested calls must save into CSR_AMDGPU_VGPRs, so nested
+/// C/Fast/Cold callees preserve the lanes
+/// (SIRegisterInfo::getCallPreservedMask). A leaf may use any numbered VGPR:
+/// the function-local CFG proof below establishes that no path clobbers the
+/// saved lanes before the return. The locations may straddle a VGPR boundary
+/// when the compiler packs a large SGPR spill into consecutive wave lanes.
+/// Calls are permitted only in full VGPR-MSB mode zero, the mode required at
+/// both call entry and return.
 static bool validateCanonicalAbiFrameReturns(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, const ElfView::FunctionTextRange &Range,
@@ -5633,9 +5633,13 @@ static bool validateCanonicalAbiFrameReturns(
     std::optional<unsigned> SavedHighIndex =
         CandidateHigh ? numberedVgprIndex(*LS.MRI, CandidateHigh->Vgpr)
                       : std::nullopt;
+    bool SavedLanesSurviveNestedTransfer =
+        SavedLowIndex && SavedHighIndex &&
+        ((!ForceFullCanonicalFrame && !HasNestedCall) ||
+         (isAbiCalleeSavedVgpr(*SavedLowIndex) &&
+          isAbiCalleeSavedVgpr(*SavedHighIndex)));
     if (!Low || !High || !CandidateLow || !CandidateHigh || !SavedLowIndex ||
-        !SavedHighIndex || !isAbiCalleeSavedVgpr(*SavedLowIndex) ||
-        !isAbiCalleeSavedVgpr(*SavedHighIndex) ||
+        !SavedHighIndex || !SavedLanesSurviveNestedTransfer ||
         *CandidateLow == *CandidateHigh ||
         (SavedLow && !(*SavedLow == *CandidateLow)) ||
         (SavedHigh && !(*SavedHigh == *CandidateHigh)))
@@ -8303,6 +8307,417 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
   return true;
 }
 
+/// Collapse dense pair-only far sites onto one text gateway per scratch pair.
+///
+/// The first affine gateway maps source PCs into an object-wide sparse prefix.
+/// Each four-byte first-level stub branches to a nearby 12-byte regional
+/// gateway, which applies a second affine delta into a bounded sparse prefix
+/// whose stubs can reach their corresponding bodies with ordinary s_branch.
+/// The source and both affine levels use only the pair already reserved for
+/// the return edge and do not modify SCC.
+static bool
+planHierarchicalMirroredStubGateways(PatchContext &Ctx,
+                                     std::vector<NopSled> &TextGateways) {
+  struct Candidate {
+    size_t Index = 0;
+    unsigned PairBase = 0;
+    bool UsesVcc = false;
+  };
+  using BucketKey = std::pair<unsigned, bool>;
+  std::map<BucketKey, SmallVector<Candidate, 64>> Buckets;
+
+  uint64_t TP = Ctx.PoolBaseOffset;
+  for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
+    Trampoline &T = Ctx.OutTrampolines[I];
+    uint64_t ThisTP = TP;
+    std::optional<uint64_t> Next = checkedAddUint64(
+        TP, T.Bytes.size(), "hierarchical mirrored pool layout");
+    if (!Next)
+      return false;
+    TP = *Next;
+    if (!T.Long || !T.UsesSetPCBack || T.LongBranchPreservesVcc ||
+        T.UsesSharedDispatcherForward || T.UsesMirroredStubForward ||
+        T.OriginalSize < 2 * MinInstSize ||
+        isSBranchReachable(T.OriginalOffset, ThisTP))
+      continue;
+    std::optional<SmallVector<uint8_t>> Direct =
+        encodeSetPCLongBranch(Ctx.LS, T.OriginalOffset, ThisTP,
+                              T.LongBranchSgprBase, T.LongBranchUsesVcc);
+    if (Direct && Direct->size() <= T.OriginalSize)
+      continue;
+    Buckets[{T.LongBranchSgprBase, T.LongBranchUsesVcc}].push_back(
+        {I, T.LongBranchSgprBase, T.LongBranchUsesVcc});
+  }
+
+  constexpr size_t MinHierarchicalSites = 16;
+  constexpr size_t MaxRegionSites = 1024;
+  constexpr uint64_t MaxRegionBytes = 120 * 1024;
+  constexpr uint64_t GatewayBytes = 3 * MinInstSize;
+
+  struct RegionPlan {
+    SmallVector<size_t, 32> Members;
+    uint64_t MinSource = 0;
+    uint64_t MaxSource = 0;
+    uint32_t PrefixBytes = 0;
+    uint32_t GatewayDisplacement = 0;
+    uint32_t RegionGroup = 0;
+  };
+
+  BitVector Assigned(Ctx.OutTrampolines.size());
+  SmallVector<size_t, 64> HierarchicalOrder;
+  uint32_t NextSuperGroup = 1;
+  uint32_t NextRegionGroup = 1;
+  for (const Trampoline &T : Ctx.OutTrampolines) {
+    NextSuperGroup = std::max(NextSuperGroup, T.HierarchicalMirroredGroup + 1);
+    NextRegionGroup = std::max(NextRegionGroup, T.MirroredStubGroup + 1);
+  }
+  uint64_t PlannedSites = 0;
+  uint64_t PlannedSuperGroups = 0;
+  uint64_t PlannedRegions = 0;
+
+  for (auto &BucketEntry : Buckets) {
+    SmallVector<Candidate, 64> &BucketCandidates = BucketEntry.second;
+    if (BucketCandidates.size() < MinHierarchicalSites)
+      continue;
+    llvm::sort(BucketCandidates,
+               [&](const Candidate &LHS, const Candidate &RHS) {
+                 return Ctx.OutTrampolines[LHS.Index].OriginalOffset <
+                        Ctx.OutTrampolines[RHS.Index].OriginalOffset;
+               });
+
+    const auto &[PairBase, UsesVcc] = BucketEntry.first;
+    SmallVector<std::pair<size_t, size_t>, 32> Chunks;
+    Chunks.push_back({0, BucketCandidates.size()});
+    for (size_t ChunkCursor = 0; ChunkCursor != Chunks.size(); ++ChunkCursor) {
+      const auto [ChunkBegin, ChunkEnd] = Chunks[ChunkCursor];
+      size_t ChunkSize = ChunkEnd - ChunkBegin;
+      assert(ChunkSize >= MinHierarchicalSites);
+      ArrayRef<Candidate> Candidates(BucketCandidates.data() + ChunkBegin,
+                                     ChunkSize);
+      auto SplitChunk = [&] {
+        if (ChunkSize < 2 * MinHierarchicalSites)
+          return;
+        size_t Middle = ChunkBegin + ChunkSize / 2;
+        Chunks.push_back({ChunkBegin, Middle});
+        Chunks.push_back({Middle, ChunkEnd});
+      };
+      uint64_t GlobalMin =
+          Ctx.OutTrampolines[Candidates.front().Index].OriginalOffset;
+      uint64_t GlobalMax =
+          Ctx.OutTrampolines[Candidates.back().Index].OriginalOffset;
+      std::optional<uint64_t> GlobalSpan =
+          checkedAddUint64(GlobalMax - GlobalMin, MinInstSize,
+                           "hierarchical mirrored global sparse prefix");
+      if (!GlobalSpan || *GlobalSpan > std::numeric_limits<uint32_t>::max()) {
+        SplitChunk();
+        continue;
+      }
+
+      uint64_t Median =
+          Ctx.OutTrampolines[Candidates[Candidates.size() / 2].Index]
+              .OriginalOffset;
+      auto DirectCallFits = [&](uint64_t Source, uint64_t Target) {
+        const std::string Pair = UsesVcc
+                                     ? "vcc"
+                                     : "s[" + std::to_string(PairBase) + ":" +
+                                           std::to_string(PairBase + 1) + "]";
+        return encodeDirectCall(Ctx.LS, Source, Target, Pair).size() ==
+               MinInstSize;
+      };
+      SmallVector<std::pair<uint64_t, size_t>, 32> GatewayCandidates;
+      for (size_t I = 0; I != TextGateways.size(); ++I) {
+        const NopSled &Sled = TextGateways[I];
+        uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+        bool CoversEverySource =
+            llvm::all_of(Candidates, [&](const Candidate &C) {
+              uint64_t Source = Ctx.OutTrampolines[C.Index].OriginalOffset;
+              return Source >= Sled.FunctionStart && Source < Sled.FunctionEnd;
+            });
+        if (!CoversEverySource || Sled.WritePos > UsableEnd ||
+            GatewayBytes > UsableEnd - Sled.WritePos)
+          continue;
+        uint64_t Distance = Median > Sled.WritePos ? Median - Sled.WritePos
+                                                   : Sled.WritePos - Median;
+        // A gateway directly callable from both extremes needs no scarce
+        // branch-island backbone. Sort those first, then try nearby routed
+        // alternatives transactionally instead of committing the first
+        // median-nearest gateway even when its corridor is disconnected.
+        if (DirectCallFits(GlobalMin, Sled.WritePos) &&
+            DirectCallFits(GlobalMax, Sled.WritePos))
+          Distance = 0;
+        GatewayCandidates.push_back({Distance, I});
+      }
+      llvm::sort(GatewayCandidates);
+      if (GatewayCandidates.empty()) {
+        log() << "hotswap: hierarchical affine pair s[" << PairBase << ":"
+              << PairBase + 1 << "] has no object-wide 12-byte gateway for "
+              << Candidates.size() << " source site(s)\n";
+        SplitChunk();
+        continue;
+      }
+
+      std::vector<NopSled> TrialGateways;
+      uint64_t GlobalGateway = 0;
+      DenseMap<uint64_t, uint64_t> TailTargets;
+      SmallVector<uint64_t, 16> Anchors;
+      constexpr size_t MaxGatewayTrials = 32;
+      bool BackboneValid = false;
+      for (size_t Trial = 0;
+           Trial != std::min(MaxGatewayTrials, GatewayCandidates.size());
+           ++Trial) {
+        std::vector<NopSled> CandidateGateways = TextGateways;
+        uint64_t CandidateGateway =
+            CandidateGateways[GatewayCandidates[Trial].second].WritePos;
+        DenseSet<uint64_t> GlobalGatewaySlots;
+        for (uint64_t Offset = 0; Offset != GatewayBytes; Offset += MinInstSize)
+          GlobalGatewaySlots.insert(CandidateGateway + Offset);
+        subtractOccupiedBranchGatewaySlots(CandidateGateways,
+                                           GlobalGatewaySlots);
+
+        DenseMap<uint64_t, uint64_t> CandidateTailTargets;
+        SmallVector<uint64_t, 16> CandidateAnchors;
+        auto AddBackbonePath = [&](uint64_t Source) {
+          if (DirectCallFits(Source, CandidateGateway))
+            return true;
+          std::optional<SmallVector<uint64_t, 4>> Path =
+              allocateForwardBranchIslands(CandidateGateways, Source,
+                                           CandidateGateway);
+          if (!Path)
+            return false;
+          for (size_t I = 0; I != Path->size(); ++I) {
+            uint64_t Target =
+                I + 1 == Path->size() ? CandidateGateway : (*Path)[I + 1];
+            auto Existing = CandidateTailTargets.find((*Path)[I]);
+            if (Existing != CandidateTailTargets.end() &&
+                Existing->second != Target)
+              return false;
+            CandidateTailTargets[(*Path)[I]] = Target;
+            if (!llvm::is_contained(CandidateAnchors, (*Path)[I]))
+              CandidateAnchors.push_back((*Path)[I]);
+          }
+          return true;
+        };
+        if (!AddBackbonePath(GlobalMin) || !AddBackbonePath(GlobalMax))
+          continue;
+        TrialGateways = std::move(CandidateGateways);
+        GlobalGateway = CandidateGateway;
+        TailTargets = std::move(CandidateTailTargets);
+        Anchors = std::move(CandidateAnchors);
+        BackboneValid = true;
+        break;
+      }
+      if (!BackboneValid) {
+        log() << "hotswap: hierarchical affine pair s[" << PairBase << ":"
+              << PairBase + 1
+              << "] could not allocate its object-wide island backbone\n";
+        SplitChunk();
+        continue;
+      }
+
+      DenseMap<size_t, SmallVector<uint64_t, 4>> SourcePaths;
+      bool PathsValid = true;
+      for (const Candidate &C : Candidates) {
+        const Trampoline &T = Ctx.OutTrampolines[C.Index];
+        if (DirectCallFits(T.OriginalOffset, GlobalGateway))
+          continue;
+        std::optional<uint64_t> First;
+        uint64_t BestDistance = std::numeric_limits<uint64_t>::max();
+        for (uint64_t Anchor : Anchors) {
+          if (!DirectCallFits(T.OriginalOffset, Anchor))
+            continue;
+          uint64_t Distance = T.OriginalOffset > Anchor
+                                  ? T.OriginalOffset - Anchor
+                                  : Anchor - T.OriginalOffset;
+          if (Distance < BestDistance) {
+            BestDistance = Distance;
+            First = Anchor;
+          }
+        }
+        if (!First) {
+          PathsValid = false;
+          break;
+        }
+        SmallVector<uint64_t, 4> Path;
+        uint64_t Cursor = *First;
+        size_t Steps = 0;
+        while (Cursor != GlobalGateway) {
+          Path.push_back(Cursor);
+          auto Target = TailTargets.find(Cursor);
+          if (Target == TailTargets.end() || ++Steps > Anchors.size()) {
+            PathsValid = false;
+            break;
+          }
+          Cursor = Target->second;
+        }
+        if (!PathsValid)
+          break;
+        SourcePaths[C.Index] = std::move(Path);
+      }
+      if (!PathsValid) {
+        log() << "hotswap: hierarchical affine pair s[" << PairBase << ":"
+              << PairBase + 1
+              << "] could not attach every source to its backbone\n";
+        SplitChunk();
+        continue;
+      }
+
+      SmallVector<RegionPlan, 8> Regions;
+      for (const Candidate &C : Candidates) {
+        const Trampoline &T = Ctx.OutTrampolines[C.Index];
+        if (Regions.empty())
+          Regions.push_back({});
+        RegionPlan *Region = &Regions.back();
+        uint64_t NewMin =
+            Region->Members.empty() ? T.OriginalOffset : Region->MinSource;
+        uint64_t NewMax = T.OriginalOffset;
+        uint64_t ExistingBodyBytes = 0;
+        for (size_t Index : Region->Members)
+          ExistingBodyBytes += Ctx.OutTrampolines[Index].Bytes.size();
+        uint64_t Prefix = NewMax - NewMin + MinInstSize;
+        if (!Region->Members.empty() &&
+            (Region->Members.size() == MaxRegionSites ||
+             Prefix > MaxRegionBytes ||
+             ExistingBodyBytes > MaxRegionBytes - Prefix ||
+             T.Bytes.size() > MaxRegionBytes - Prefix - ExistingBodyBytes)) {
+          Regions.push_back({});
+          Region = &Regions.back();
+          NewMin = NewMax = T.OriginalOffset;
+          Prefix = MinInstSize;
+        }
+        Region->Members.push_back(C.Index);
+        Region->MinSource = NewMin;
+        Region->MaxSource = NewMax;
+        Region->PrefixBytes = static_cast<uint32_t>(Prefix);
+      }
+
+      DenseSet<uint64_t> GlobalStubDwords;
+      for (const Candidate &C : Candidates)
+        GlobalStubDwords.insert(Ctx.OutTrampolines[C.Index].OriginalOffset);
+      DenseSet<uint64_t> RegionGatewayDwords;
+      bool RegionsValid = true;
+      for (RegionPlan &Region : Regions) {
+        uint64_t Low = Region.MaxSource > MaxSledDistance
+                           ? Region.MaxSource - MaxSledDistance
+                           : GlobalMin;
+        Low = std::max(Low, GlobalMin);
+        uint64_t High =
+            std::min(Region.MinSource + MaxSledDistance,
+                     GlobalMax >= 2 * MinInstSize ? GlobalMax - 2 * MinInstSize
+                                                  : GlobalMin);
+        Low += (MinInstSize - Low % MinInstSize) % MinInstSize;
+        std::optional<uint64_t> Gap;
+        for (uint64_t Offset = Low; Offset <= High; Offset += MinInstSize) {
+          if (GlobalStubDwords.contains(Offset) ||
+              GlobalStubDwords.contains(Offset + MinInstSize) ||
+              GlobalStubDwords.contains(Offset + 2 * MinInstSize) ||
+              RegionGatewayDwords.contains(Offset) ||
+              RegionGatewayDwords.contains(Offset + MinInstSize) ||
+              RegionGatewayDwords.contains(Offset + 2 * MinInstSize))
+            continue;
+          bool Reachable = llvm::all_of(Region.Members, [&](size_t Index) {
+            uint64_t Source =
+                Ctx.OutTrampolines[Index].OriginalOffset - GlobalMin;
+            return isSBranchReachable(Source, Offset - GlobalMin);
+          });
+          if (!Reachable)
+            continue;
+          Gap = Offset;
+          break;
+        }
+        if (!Gap || *Gap < GlobalMin ||
+            *Gap - GlobalMin > std::numeric_limits<uint32_t>::max()) {
+          RegionsValid = false;
+          break;
+        }
+        Region.GatewayDisplacement = static_cast<uint32_t>(*Gap - GlobalMin);
+        for (uint64_t I = 0; I != GatewayBytes; I += MinInstSize)
+          RegionGatewayDwords.insert(*Gap + I);
+      }
+      if (!RegionsValid) {
+        log() << "hotswap: hierarchical affine pair s[" << PairBase << ":"
+              << PairBase + 1
+              << "] has no collision-free regional gateway gap\n";
+        SplitChunk();
+        continue;
+      }
+
+      uint32_t SuperGroup = NextSuperGroup++;
+      size_t SuperOwnerIndex = Regions.front().Members.front();
+      for (RegionPlan &Region : Regions) {
+        Region.RegionGroup = NextRegionGroup++;
+        size_t RegionOwnerIndex = Region.Members.front();
+        Trampoline &RegionOwner = Ctx.OutTrampolines[RegionOwnerIndex];
+        if (Region.PrefixBytes >
+                std::numeric_limits<size_t>::max() - RegionOwner.Bytes.size() ||
+            Region.PrefixBytes > std::numeric_limits<uint32_t>::max() -
+                                     RegionOwner.PoolEntryPrefixBytes) {
+          log() << "hotswap: error: hierarchical region prefix overflows its "
+                   "pool owner at source 0x"
+                << utohexstr(RegionOwner.OriginalOffset) << "\n";
+          return false;
+        }
+        RegionOwner.Bytes.insert(RegionOwner.Bytes.begin(), Region.PrefixBytes,
+                                 uint8_t{0});
+        RegionOwner.PoolEntryPrefixBytes += Region.PrefixBytes;
+        RegionOwner.HierarchicalRegionPrefixBytes = Region.PrefixBytes;
+        for (size_t Index : Region.Members) {
+          Trampoline &T = Ctx.OutTrampolines[Index];
+          T.UsesMirroredStubForward = true;
+          T.UsesHierarchicalMirroredStubForward = true;
+          T.MirroredStubGroup = Region.RegionGroup;
+          T.HierarchicalMirroredGroup = SuperGroup;
+          T.HierarchicalRegionGatewayDisplacement = Region.GatewayDisplacement;
+          T.MirroredStubGatewayOffset = GlobalGateway;
+          T.ForwardBranchTargetOffset = GlobalGateway;
+          auto Path = SourcePaths.find(Index);
+          if (Path != SourcePaths.end())
+            T.ForwardBranchIslands = std::move(Path->second);
+          Assigned.set(Index);
+          HierarchicalOrder.push_back(Index);
+        }
+      }
+      Trampoline &SuperOwner = Ctx.OutTrampolines[SuperOwnerIndex];
+      if (*GlobalSpan >
+              std::numeric_limits<size_t>::max() - SuperOwner.Bytes.size() ||
+          *GlobalSpan > std::numeric_limits<uint32_t>::max() -
+                            SuperOwner.PoolEntryPrefixBytes) {
+        log() << "hotswap: error: hierarchical global prefix overflows its "
+                 "pool owner at source 0x"
+              << utohexstr(SuperOwner.OriginalOffset) << "\n";
+        return false;
+      }
+      SuperOwner.Bytes.insert(SuperOwner.Bytes.begin(), *GlobalSpan,
+                              uint8_t{0});
+      SuperOwner.PoolEntryPrefixBytes += static_cast<uint32_t>(*GlobalSpan);
+      SuperOwner.HierarchicalGlobalPrefixBytes =
+          static_cast<uint32_t>(*GlobalSpan);
+
+      TextGateways = std::move(TrialGateways);
+      PlannedSites += Candidates.size();
+      ++PlannedSuperGroups;
+      PlannedRegions += Regions.size();
+    }
+  }
+
+  if (PlannedSites == 0)
+    return true;
+
+  std::vector<Trampoline> Reordered;
+  Reordered.reserve(Ctx.OutTrampolines.size());
+  for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I)
+    if (!Assigned.test(I))
+      Reordered.push_back(std::move(Ctx.OutTrampolines[I]));
+  for (size_t Index : HierarchicalOrder)
+    Reordered.push_back(std::move(Ctx.OutTrampolines[Index]));
+  Ctx.OutTrampolines = std::move(Reordered);
+
+  log() << "hotswap: planned " << PlannedSuperGroups
+        << " hierarchical mirrored gateway group(s) with " << PlannedRegions
+        << " bounded region(s) for " << PlannedSites
+        << " pair-only source site(s)\n";
+  return true;
+}
+
 /// Plan a relocation-neutral shared gateway for far sites that have only the
 /// pair already reserved for their return edge. Each source records its own PC
 /// and branches to a common SCC-neutral add/set-PC sequence:
@@ -8555,7 +8970,8 @@ static bool planMirroredStubGateways(PatchContext &Ctx,
 
   for (size_t I = 0; I != Ctx.OutTrampolines.size();) {
     Trampoline &First = Ctx.OutTrampolines[I];
-    if (!First.UsesMirroredStubForward) {
+    if (!First.UsesMirroredStubForward ||
+        First.UsesHierarchicalMirroredStubForward) {
       ++I;
       continue;
     }
@@ -8565,6 +8981,7 @@ static bool planMirroredStubGateways(PatchContext &Ctx,
     uint64_t MaxSource = First.OriginalOffset;
     while (I + Count != Ctx.OutTrampolines.size() &&
            Ctx.OutTrampolines[I + Count].UsesMirroredStubForward &&
+           !Ctx.OutTrampolines[I + Count].UsesHierarchicalMirroredStubForward &&
            Ctx.OutTrampolines[I + Count].MirroredStubGroup == Group) {
       MinSource =
           std::min(MinSource, Ctx.OutTrampolines[I + Count].OriginalOffset);
@@ -9025,6 +9442,192 @@ SmallVector<size_t, 8> promotionCandidateOrderForTest(
   return Order;
 }
 
+static bool emitHierarchicalMirroredStubGateways(PatchContext &Ctx) {
+  DenseMap<uint32_t, SmallVector<size_t, 32>> SuperGroups;
+  DenseMap<uint32_t, SmallVector<size_t, 32>> Regions;
+  SmallVector<uint64_t, 64> PoolOffsets;
+  uint64_t TP = Ctx.PoolBaseOffset;
+  for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
+    PoolOffsets.push_back(TP);
+    Trampoline &T = Ctx.OutTrampolines[I];
+    if (T.UsesHierarchicalMirroredStubForward) {
+      SuperGroups[T.HierarchicalMirroredGroup].push_back(I);
+      Regions[T.MirroredStubGroup].push_back(I);
+    }
+    std::optional<uint64_t> Next = checkedAddUint64(
+        TP, T.Bytes.size(), "hierarchical mirrored final layout");
+    if (!Next)
+      return false;
+    TP = *Next;
+  }
+
+  for (auto &SuperEntry : SuperGroups) {
+    ArrayRef<size_t> Members = SuperEntry.second;
+    if (Members.empty())
+      continue;
+    auto fail = [&](Twine Reason) {
+      log() << "hotswap: error: hierarchical mirrored group "
+            << SuperEntry.first << ": " << Reason << "\n";
+      return false;
+    };
+    size_t SuperOwnerIndex = Ctx.OutTrampolines.size();
+    for (size_t Index : Members)
+      if (Ctx.OutTrampolines[Index].HierarchicalGlobalPrefixBytes != 0) {
+        SuperOwnerIndex = Index;
+        break;
+      }
+    if (SuperOwnerIndex == Ctx.OutTrampolines.size())
+      return fail("has no global-prefix owner");
+    Trampoline &SuperOwner = Ctx.OutTrampolines[SuperOwnerIndex];
+    uint64_t GlobalStubBase = PoolOffsets[SuperOwnerIndex];
+    uint32_t GlobalPrefixBytes = SuperOwner.HierarchicalGlobalPrefixBytes;
+    if (GlobalPrefixBytes < MinInstSize ||
+        GlobalPrefixBytes > SuperOwner.Bytes.size())
+      return fail("has an invalid global sparse prefix");
+    for (uint64_t Offset = 0; Offset < GlobalPrefixBytes; Offset += MinInstSize)
+      std::memcpy(SuperOwner.Bytes.data() + Offset, Ctx.LS.SNopBytes.data(),
+                  MinInstSize);
+
+    uint64_t GlobalMin = Ctx.OutTrampolines[Members.front()].OriginalOffset;
+    for (size_t Index : Members)
+      GlobalMin = std::min(GlobalMin, Ctx.OutTrampolines[Index].OriginalOffset);
+    std::optional<uint64_t> SourcePc = checkedAddUint64(
+        GlobalMin, MinInstSize, "hierarchical mirrored minimum source PC");
+    if (!SourcePc || GlobalStubBase < *SourcePc)
+      return fail("cannot encode its global affine delta");
+    uint64_t GlobalDelta = GlobalStubBase - *SourcePc;
+    if (GlobalDelta > std::numeric_limits<uint32_t>::max())
+      return fail("global affine delta exceeds literal32");
+    const std::string Pair =
+        SuperOwner.LongBranchUsesVcc
+            ? "vcc"
+            : "s[" + std::to_string(SuperOwner.LongBranchSgprBase) + ":" +
+                  std::to_string(SuperOwner.LongBranchSgprBase + 1) + "]";
+    SmallVector<std::string, 2> GlobalGatewayLines;
+    GlobalGatewayLines.push_back("s_add_nc_u64 " + Pair + ", " + Pair + ", 0x" +
+                                 utohexstr(GlobalDelta));
+    GlobalGatewayLines.push_back("s_set_pc_i64 " + Pair);
+    SuperOwner.ForwardGatewayBytes =
+        assembleInstructions(joinAsmLines(GlobalGatewayLines), Ctx.LS);
+    if (SuperOwner.ForwardGatewayBytes.empty() ||
+        SuperOwner.ForwardGatewayBytes.size() > 3 * MinInstSize)
+      return fail("global affine gateway did not encode in 12 bytes");
+    SuperOwner.HasForwardGateway = true;
+    SuperOwner.ForwardGatewayOffset = SuperOwner.MirroredStubGatewayOffset;
+
+    DenseSet<uint32_t> EmittedRegions;
+    for (size_t Index : Members) {
+      const Trampoline &Member = Ctx.OutTrampolines[Index];
+      if (!EmittedRegions.insert(Member.MirroredStubGroup).second)
+        continue;
+      ArrayRef<size_t> RegionMembers = Regions[Member.MirroredStubGroup];
+      if (RegionMembers.empty())
+        return fail(Twine("has empty region ") +
+                    Twine(Member.MirroredStubGroup));
+      size_t RegionOwnerIndex = Ctx.OutTrampolines.size();
+      for (size_t RegionMember : RegionMembers)
+        if (Ctx.OutTrampolines[RegionMember].HierarchicalRegionPrefixBytes !=
+            0) {
+          RegionOwnerIndex = RegionMember;
+          break;
+        }
+      if (RegionOwnerIndex == Ctx.OutTrampolines.size())
+        return fail(Twine("region ") + Twine(Member.MirroredStubGroup) +
+                    " has no sparse-prefix owner");
+      Trampoline &RegionOwner = Ctx.OutTrampolines[RegionOwnerIndex];
+      uint64_t RegionMin =
+          Ctx.OutTrampolines[RegionMembers.front()].OriginalOffset;
+      uint64_t RegionMax = RegionMin;
+      for (size_t RegionMember : RegionMembers) {
+        RegionMin = std::min(RegionMin,
+                             Ctx.OutTrampolines[RegionMember].OriginalOffset);
+        RegionMax = std::max(RegionMax,
+                             Ctx.OutTrampolines[RegionMember].OriginalOffset);
+      }
+      uint64_t RegionPrefixBytes = RegionOwner.HierarchicalRegionPrefixBytes;
+      if (RegionPrefixBytes != RegionMax - RegionMin + MinInstSize)
+        return fail(Twine("region ") + Twine(Member.MirroredStubGroup) +
+                    " sparse-prefix size does not match its source span");
+      uint64_t RegionPrefixByteOffset =
+          RegionOwnerIndex == SuperOwnerIndex ? GlobalPrefixBytes : 0;
+      if (RegionPrefixByteOffset > RegionOwner.Bytes.size() ||
+          RegionPrefixBytes > RegionOwner.Bytes.size() - RegionPrefixByteOffset)
+        return fail(Twine("region ") + Twine(Member.MirroredStubGroup) +
+                    " sparse prefix is outside its owner");
+      for (uint64_t Offset = 0; Offset < RegionPrefixBytes;
+           Offset += MinInstSize)
+        std::memcpy(RegionOwner.Bytes.data() + RegionPrefixByteOffset + Offset,
+                    Ctx.LS.SNopBytes.data(), MinInstSize);
+
+      uint64_t RegionStubBase =
+          PoolOffsets[RegionOwnerIndex] + RegionPrefixByteOffset;
+      uint64_t GlobalRegionBase = GlobalStubBase + (RegionMin - GlobalMin);
+      if (RegionStubBase < GlobalRegionBase)
+        return fail(Twine("region ") + Twine(Member.MirroredStubGroup) +
+                    " requires a negative affine delta");
+      uint64_t RegionDelta = RegionStubBase - GlobalRegionBase;
+      if (RegionDelta > std::numeric_limits<uint32_t>::max())
+        return fail(Twine("region ") + Twine(Member.MirroredStubGroup) +
+                    " affine delta exceeds literal32");
+      SmallVector<std::string, 2> RegionGatewayLines;
+      RegionGatewayLines.push_back("s_add_nc_u64 " + Pair + ", " + Pair +
+                                   ", 0x" + utohexstr(RegionDelta));
+      RegionGatewayLines.push_back("s_set_pc_i64 " + Pair);
+      SmallVector<uint8_t> RegionGateway =
+          assembleInstructions(joinAsmLines(RegionGatewayLines), Ctx.LS);
+      uint64_t GatewayDisplacement =
+          RegionOwner.HierarchicalRegionGatewayDisplacement;
+      if (RegionGateway.empty() || RegionGateway.size() > 3 * MinInstSize ||
+          GatewayDisplacement > GlobalPrefixBytes ||
+          RegionGateway.size() > GlobalPrefixBytes - GatewayDisplacement)
+        return fail(Twine("region ") + Twine(Member.MirroredStubGroup) +
+                    " gateway is outside the global sparse prefix");
+      std::memcpy(SuperOwner.Bytes.data() + GatewayDisplacement,
+                  RegionGateway.data(), RegionGateway.size());
+
+      uint64_t RegionGatewayOffset = GlobalStubBase + GatewayDisplacement;
+      for (size_t RegionMember : RegionMembers) {
+        const Trampoline &T = Ctx.OutTrampolines[RegionMember];
+        uint64_t GlobalStubOffset =
+            GlobalStubBase + (T.OriginalOffset - GlobalMin);
+        SmallVector<uint8_t> ToRegion =
+            Ctx.LS.encodeSBranch(GlobalStubOffset, RegionGatewayOffset);
+        if (ToRegion.size() != MinInstSize)
+          return fail(Twine("region ") + Twine(Member.MirroredStubGroup) +
+                      " global stub for source 0x" +
+                      Twine(utohexstr(T.OriginalOffset)) + " at 0x" +
+                      Twine(utohexstr(GlobalStubOffset)) +
+                      " cannot reach regional gateway 0x" +
+                      Twine(utohexstr(RegionGatewayOffset)));
+        std::memcpy(SuperOwner.Bytes.data() + (T.OriginalOffset - GlobalMin),
+                    ToRegion.data(), ToRegion.size());
+
+        uint64_t RegionStubOffset =
+            RegionStubBase + (T.OriginalOffset - RegionMin);
+        uint64_t BodyOffset =
+            PoolOffsets[RegionMember] + T.PoolEntryPrefixBytes;
+        SmallVector<uint8_t> ToBody =
+            Ctx.LS.encodeSBranch(RegionStubOffset, BodyOffset);
+        if (ToBody.size() != MinInstSize)
+          return fail(
+              Twine("region ") + Twine(Member.MirroredStubGroup) +
+              " stub for source 0x" + Twine(utohexstr(T.OriginalOffset)) +
+              " at 0x" + Twine(utohexstr(RegionStubOffset)) +
+              " cannot reach body 0x" + Twine(utohexstr(BodyOffset)) +
+              " (region owner source=0x" +
+              Twine(utohexstr(RegionOwner.OriginalOffset)) + ", owner pool=0x" +
+              Twine(utohexstr(PoolOffsets[RegionOwnerIndex])) +
+              ", member pool=0x" + Twine(utohexstr(PoolOffsets[RegionMember])) +
+              ")");
+        std::memcpy(RegionOwner.Bytes.data() + RegionPrefixByteOffset +
+                        (T.OriginalOffset - RegionMin),
+                    ToBody.data(), ToBody.size());
+      }
+    }
+  }
+  return true;
+}
+
 static bool emitMirroredStubGateways(PatchContext &Ctx) {
   DenseMap<uint32_t, SmallVector<size_t, 32>> Groups;
   SmallVector<uint64_t, 64> PoolOffsets;
@@ -9032,7 +9635,7 @@ static bool emitMirroredStubGateways(PatchContext &Ctx) {
   for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
     PoolOffsets.push_back(TP);
     Trampoline &T = Ctx.OutTrampolines[I];
-    if (T.UsesMirroredStubForward)
+    if (T.UsesMirroredStubForward && !T.UsesHierarchicalMirroredStubForward)
       Groups[T.MirroredStubGroup].push_back(I);
     std::optional<uint64_t> Next =
         checkedAddUint64(TP, T.Bytes.size(), "mirrored-stub final layout");
@@ -9142,6 +9745,7 @@ assignLongBranchGateways(PatchContext &Ctx,
   DenseMap<uint64_t, uint64_t> EarlySourceGatewayOwnerOffsets;
   DenseMap<uint64_t, uint64_t> ReservedBackboneOwnerOffsets;
   DenseMap<uint64_t, uint64_t> LateDirectSuffixOwnerOffsets;
+  DenseSet<uint64_t> ForceOneDwordForwardSources;
   const std::vector<ElfView::FunctionTextRange> FunctionRanges =
       Ctx.Elf.functionTextRanges();
   const FunctionRangeUniquenessIndex FunctionRangeIndex(FunctionRanges,
@@ -9306,13 +9910,32 @@ assignLongBranchGateways(PatchContext &Ctx,
           encodeSetPCLongBranch(Ctx.LS, T.OriginalOffset, ThisTP,
                                 T.LongBranchSgprBase, T.LongBranchUsesVcc);
       if (Direct && Direct->size() <= T.OriginalSize) {
+        uint64_t DirectSuffixBegin = Direct->size();
+        // A sufficiently large/coalesced source will commit this fixed-width
+        // direct set-PC prefix during ordinary mode selection. Its remaining
+        // instruction window is then unreachable, so offer one 12-byte
+        // gateway to the pair-only affine planner now. The encoded target may
+        // move when affine groups are reordered, but the set-PC layout width
+        // and therefore this suffix boundary remain stable.
+        constexpr uint64_t AffineGatewayBytes = 3 * MinInstSize;
+        if (!T.LongBranchPreservesVcc &&
+            Direct->size() + AffineGatewayBytes <= T.OriginalSize) {
+          uint64_t Gateway = T.OriginalOffset + Direct->size();
+          if (HasSafeTail(T, Gateway, Gateway + AffineGatewayBytes)) {
+            EarlySourceGatewayOwnerOffsets[Gateway] = T.OriginalOffset;
+            Gateways.push_back({Gateway, Gateway + AffineGatewayBytes, Gateway,
+                                0, std::numeric_limits<uint64_t>::max(),
+                                /*GatewayOnly=*/true});
+            DirectSuffixBegin += AffineGatewayBytes;
+          }
+        }
         // A direct set-PC sequence consumes only its prefix. Once ordinary
         // mode selection commits that sequence, a safe dword in the remaining
         // source window is unreachable and can serve the same sparse
         // backbone. Keep at most one suffix candidate per owner.
         if (!T.LongBranchPreservesVcc &&
-            Direct->size() + MinInstSize <= T.OriginalSize) {
-          for (uint64_t RelativeOffset = Direct->size();
+            DirectSuffixBegin + MinInstSize <= T.OriginalSize) {
+          for (uint64_t RelativeOffset = DirectSuffixBegin;
                RelativeOffset + MinInstSize <= T.OriginalSize;
                RelativeOffset += MinInstSize) {
             uint64_t Suffix = T.OriginalOffset + RelativeOffset;
@@ -9391,7 +10014,8 @@ assignLongBranchGateways(PatchContext &Ctx,
                           /*GatewayOnly=*/true});
     }
 
-    if (!planMirroredStubGateways(Ctx, Gateways))
+    if (!planHierarchicalMirroredStubGateways(Ctx, Gateways) ||
+        !planMirroredStubGateways(Ctx, Gateways))
       return false;
     DenseMap<uint64_t, size_t> TrampolineAtOriginalOffset;
     for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I)
@@ -9418,13 +10042,13 @@ assignLongBranchGateways(PatchContext &Ctx,
         if (Owner == SourceTailIslandOwners.end())
           continue;
         Trampoline &OwnerT = Ctx.OutTrampolines[Owner->second];
+        // Consuming a pair-backed owner's +4 dword is safe when that owner
+        // receives any one-dword forward transfer. If it did not join a
+        // shared affine group, defer the proof to ordinary mode selection and
+        // prohibit the longer direct set-PC form that would overlap the tail.
         if (OwnerT.UsesSetPCBack && !OwnerT.UsesMirroredStubForward &&
-            !OwnerT.UsesSharedDispatcherForward) {
-          log() << "hotswap: error: affine relay owner at 0x"
-                << utohexstr(OwnerT.OriginalOffset)
-                << " did not receive a mirrored route\n";
-          return false;
-        }
+            !OwnerT.UsesSharedDispatcherForward)
+          ForceOneDwordForwardSources.insert(OwnerT.OriginalOffset);
         uint64_t To = I + 1 == T.ForwardBranchIslands.size()
                           ? T.ForwardBranchTargetOffset
                           : T.ForwardBranchIslands[I + 1];
@@ -9435,6 +10059,9 @@ assignLongBranchGateways(PatchContext &Ctx,
         }
       }
     }
+    if (!ForceOneDwordForwardSources.empty())
+      log() << "hotswap: forced " << ForceOneDwordForwardSources.size()
+            << " affine relay owner(s) onto one-dword forward routes\n";
     for (const Trampoline &T : Ctx.OutTrampolines) {
       if (!T.UsesMirroredStubForward)
         continue;
@@ -9448,7 +10075,9 @@ assignLongBranchGateways(PatchContext &Ctx,
       OwnerT.SourceTailGatewayBytes = 3 * MinInstSize;
     }
     const auto DispatcherEmitStart = std::chrono::steady_clock::now();
-    if (!emitSharedDispatchers(Ctx) || !emitMirroredStubGateways(Ctx))
+    if (!emitSharedDispatchers(Ctx) ||
+        !emitHierarchicalMirroredStubGateways(Ctx) ||
+        !emitMirroredStubGateways(Ctx))
       return false;
     log() << "hotswap: shared/affine gateway emission took "
           << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -9504,7 +10133,8 @@ assignLongBranchGateways(PatchContext &Ctx,
         std::memcpy(T.Bytes.data(), Ctx.LS.SNopBytes.data(), MinInstSize);
       continue;
     }
-    if (T.UsesSetPCBack) {
+    if (T.UsesSetPCBack &&
+        !ForceOneDwordForwardSources.contains(T.OriginalOffset)) {
       std::optional<SmallVector<uint8_t>> Direct =
           T.LongBranchPreservesVcc
               ? encodeSetPcGateway(Ctx.LS, T.OriginalOffset, TP,

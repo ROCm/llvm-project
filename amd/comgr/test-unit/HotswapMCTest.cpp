@@ -1784,6 +1784,26 @@ TEST(CollectDirectBranchTargets,
   EXPECT_FALSE(LeafWithLinkScratch->HasUnresolvedTargets);
   EXPECT_FALSE(LeafWithLinkScratch->HasUnboundedIndirectEntries);
 
+  // A leaf has no nested transfer that can clobber caller-saved VGPRs, so it
+  // may temporarily preserve s30 in ordinary VGPR lanes. Production device
+  // functions use this shape when those VGPRs are separately spilled around
+  // the frame; the local write/lane CFG proof remains responsible for
+  // rejecting any clobber before the readlane epilogue.
+  std::string LeafNonCsrFrame = "v_writelane_b32 v17, s30, 0\n"
+                                "v_writelane_b32 v17, s31, 1\n"
+                                "s_mov_b32 s30, 0\n"
+                                "s_mov_b32 s31, 0\n"
+                                "v_readlane_b32 s30, v17, 0\n"
+                                "v_readlane_b32 s31, v17, 1\n"
+                                "s_set_pc_i64 s[30:31]\n"
+                                "s_endpgm\n";
+  std::optional<DirectControlFlowInfo> LeafWithNonCsrLinkSave =
+      Audit(CallerFrame + LeafNonCsrFrame, {}, 0,
+            FunctionTableElfMutation::None, CallerDecoded.size());
+  ASSERT_TRUE(LeafWithNonCsrLinkSave);
+  EXPECT_FALSE(LeafWithNonCsrLinkSave->HasUnresolvedTargets);
+  EXPECT_FALSE(LeafWithNonCsrLinkSave->HasUnboundedIndirectEntries);
+
   // The same canonical leaf can be reached only by an exact materialized
   // singleton call. This is a machine-level closure, not the opaque-call ABI
   // fallback: the call target, canonical return, and continuation must be
