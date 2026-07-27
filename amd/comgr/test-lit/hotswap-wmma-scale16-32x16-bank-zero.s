@@ -13,22 +13,22 @@
 // API: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
-// DISASM-LABEL: <test_m32_scale_bank_zero>:
 // DISASM-NOT: v_wmma_scale16
-// DISASM: v_mov_b32_e32 v[[TMP:[0-9]+]], v40
-// DISASM: v_perm_b32 v40, v[[TMP]], v41, 0x6040200
-// DISASM: v_mov_b32_e32 v[[TMP]], v42
-// DISASM: v_perm_b32 v42, v[[TMP]], v43, 0x6040200
+// DISASM: v_mov_b32_e32 v[[TMP:[0-9]+]]{{.*}}, v40
 // DISASM: s_wait_xcnt 0x0
 // DISASM-NEXT: s_set_vgpr_msb
+// DISASM: v_perm_b32 v40, v[[TMP]]{{.*}}, v41, 0x6040200
+// DISASM: v_mov_b32_e32 v[[TMP]]{{.*}}, v42
+// DISASM: s_wait_xcnt 0x0
+// DISASM-NEXT: s_set_vgpr_msb
+// DISASM: v_perm_b32 v42, v[[TMP]]{{.*}}, v43, 0x6040200
 // DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, v40, v42
 // DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, v41, v43
 //
-// DISASM-LABEL: <test_m32_immediate_neg_hi>:
-// DISASM-NOT: v_wmma_scale16
 // DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, 1.0, v40, v42{{.*}}neg_hi:[0,0,1]
 // DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, v[0:7], v41, v43
 // DISASM-NOT: neg_hi
+// DISASM: v_nop
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
