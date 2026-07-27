@@ -592,9 +592,9 @@ target_link_libraries(amd_comgr
     ${LLVM_LIBS}
     ${CLANG_LIBS})
 
-# hotswap link edges — must come after the curated LLVM set above so
-# static-archive resolution pulls in the full set (incl. LLVMCodeGen's -mcpu
-# registration) before the hotswap libraries' partial LLVM deps.
+# hotswap link edges. Both are OBJECT libraries with PRIVATE LLVM deps, so they
+# contribute only their objects and leave the curated LLVM set above unchanged;
+# keep them after that block regardless.
 #
 # The rewriter (byte-level rewrite path) backs the always-on
 # amd_comgr_hotswap_rewrite API, so it is linked unconditionally. The raiser

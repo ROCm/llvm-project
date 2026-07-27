@@ -45,9 +45,13 @@ target_include_directories(hotswap-raiser PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
 )
 
+# PRIVATE keeps these out of the link interface, but CMake still records them as
+# $<LINK_ONLY:> for an OBJECT library; clear the interface so consumers get the
+# objects only (see ../CMakeLists.txt).
 target_link_libraries(hotswap-raiser
-  PUBLIC
+  PRIVATE
     LLVMCore
     LLVMSupport
     LLVMTargetParser
 )
+set_target_properties(hotswap-raiser PROPERTIES INTERFACE_LINK_LIBRARIES "")

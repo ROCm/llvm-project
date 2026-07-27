@@ -84,4 +84,8 @@ llvm_map_components_to_libnames(hotswap_rewriter_llvm_libs
   AMDGPUDisassembler
   AMDGPUInfo)
 
-target_link_libraries(hotswap-rewriter PUBLIC ${hotswap_rewriter_llvm_libs})
+# PRIVATE keeps these out of the link interface, but CMake still records them as
+# $<LINK_ONLY:> for an OBJECT library; clear the interface so consumers get the
+# objects only (see ../CMakeLists.txt).
+target_link_libraries(hotswap-rewriter PRIVATE ${hotswap_rewriter_llvm_libs})
+set_target_properties(hotswap-rewriter PROPERTIES INTERFACE_LINK_LIBRARIES "")

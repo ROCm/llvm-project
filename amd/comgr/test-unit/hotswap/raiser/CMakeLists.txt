@@ -10,9 +10,14 @@
 add_executable(RaiserScaffoldingTests
   RaiserScaffoldingTest.cpp)
 
+# hotswap::raiser keeps its LLVM dependencies PRIVATE, so name them here.
+llvm_map_components_to_libnames(COMGR_TEST_UNIT_RAISER_LIBS
+  Core Support TargetParser)
+
 target_link_libraries(RaiserScaffoldingTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
+  ${COMGR_TEST_UNIT_RAISER_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(RaiserScaffoldingTests PRIVATE
