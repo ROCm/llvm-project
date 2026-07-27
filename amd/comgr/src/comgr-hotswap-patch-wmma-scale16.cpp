@@ -35,16 +35,17 @@
 /// even bytes feed the low subblocks, odd bytes the high ones.
 ///
 /// The replacement is assembled from textual register names, for which the
-/// AMDGPU parser accepts v0-v255. Scratch may nevertheless live above v255:
-/// the generated assembly encodes each scratch VGPR's low byte and brackets
-/// mixed-bank instructions with role-specific s_set_vgpr_msb transitions.
-/// Matrix B is copied into the scratch bank so the lowered WMMA can use one
-/// src1 bank for both its gathered scale and matrix-B operands.
+/// AMDGPU parser accepts v0-v255. Scale-prefix operands ignore VGPR-MSB, so
+/// their generated scale and temporary VGPRs must stay in bank zero. Masked A
+/// shares one contiguous low-bank block with those operands. Live values
+/// borrowed for that block are saved in above-KD scratch and restored after
+/// the final WMMA. Matrix B is copied into the above-KD scratch bank so the
+/// lowered WMMA can use one SRC1 bank for both passes.
 ///
-/// Fail-closed fallback: when the scratch budget (A-width VGPRs plus a few
-/// scale/temp VGPRs and one scratch SGPR) is unavailable, the pass marks the
-/// patch failed so the rewrite returns an error instead of a miscompile. A loud
-/// failure beats silent wrong results.
+/// Fail-closed fallback: when the scratch budget (one low-bank A-width-plus-5
+/// block, matching save slots, B-width VGPRs, and one scratch SGPR) is
+/// unavailable, the pass marks the patch failed so the rewrite returns an
+/// error instead of a miscompile. A loud failure beats silent wrong results.
 ///
 /// The 32x16x128_f4 (M=32) variant is split into two M=16 halves, and each
 /// resulting half is K-split as above, for four exact block-32 WMMAs total.
@@ -63,6 +64,7 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <algorithm>
 #include <array>
 #include <initializer_list>
 
@@ -100,6 +102,91 @@ static std::optional<unsigned> decodeVgprEncoding(unsigned Enc) {
   return Enc - VgprEncBase;
 }
 
+struct LowBankScratchBlock {
+  unsigned Base = 0;
+  BitVector Preserve;
+};
+
+// Allocate one contiguous bank-zero block. Prefer dead registers, then extend
+// a small kernel within bank zero, and finally borrow a non-architectural block
+// while recording the live values that need save/restore.
+static std::optional<LowBankScratchBlock>
+allocLowBankScratchBlock(VgprAllocator &Alloc, const BitVector &Forbidden,
+                         unsigned Count, unsigned Align) {
+  unsigned LowBankLimit =
+      std::min({VgprBankSize, Alloc.MaxVgprs,
+                static_cast<unsigned>(Alloc.LiveAtPoint.size())});
+  if (Count == 0 || Count > LowBankLimit)
+    return std::nullopt;
+
+  unsigned ExistingLimit = std::min(LowBankLimit, Alloc.KdAllocatedVgprs);
+  for (unsigned Base = 0; Base + Count <= ExistingLimit; ++Base) {
+    if (Align > 1 && Base % Align != 0)
+      continue;
+    bool Available = true;
+    for (unsigned I = 0; I < Count; ++I) {
+      if (Alloc.LiveAtPoint.test(Base + I) || Forbidden.test(Base + I)) {
+        Available = false;
+        break;
+      }
+    }
+    if (Available) {
+      Alloc.LiveAtPoint.set(Base, Base + Count);
+      LowBankScratchBlock Result;
+      Result.Base = Base;
+      Result.Preserve.resize(Count);
+      return Result;
+    }
+  }
+
+  unsigned Base = Alloc.NextAboveKd;
+  if (Align > 1 && Base % Align != 0)
+    Base += Align - Base % Align;
+  unsigned Step = std::max(Align, 1u);
+  for (; Base + Count <= LowBankLimit; Base += Step) {
+    bool Available = true;
+    for (unsigned I = 0; I < Count; ++I) {
+      if (Forbidden.test(Base + I)) {
+        Available = false;
+        break;
+      }
+    }
+    if (Available) {
+      Alloc.ExtraAllocated += Base + Count - Alloc.NextAboveKd;
+      Alloc.NextAboveKd = Base + Count;
+      Alloc.LiveAtPoint.set(Base, Base + Count);
+      LowBankScratchBlock Result;
+      Result.Base = Base;
+      Result.Preserve.resize(Count);
+      return Result;
+    }
+  }
+
+  for (Base = 0; Base + Count <= LowBankLimit; ++Base) {
+    if (Align > 1 && Base % Align != 0)
+      continue;
+    bool Available = true;
+    for (unsigned I = 0; I < Count; ++I) {
+      if (Forbidden.test(Base + I)) {
+        Available = false;
+        break;
+      }
+    }
+    if (Available) {
+      LowBankScratchBlock Result;
+      Result.Base = Base;
+      Result.Preserve.resize(Count);
+      for (unsigned I = 0; I < Count; ++I)
+        if (Alloc.LiveAtPoint.test(Base + I))
+          Result.Preserve.set(I);
+      Alloc.LiveAtPoint.set(Base, Base + Count);
+      return Result;
+    }
+  }
+
+  return std::nullopt;
+}
+
 // -- LD_SCALE uop field accessors (bytes 0-7) --------------------------------
 //   SCALE_SRC0: bits [40:32] = byte[4] + byte[5] bit[0]
 //   SCALE_SRC1: bits [49:41] = byte[5] bits[7:1] + byte[6] bits[1:0]
@@ -131,6 +218,10 @@ static void writeScaleSrc1(uint8_t *Raw, unsigned Enc) {
 
 static unsigned extractVdst(const uint8_t *Raw) { return Raw[8]; }
 
+static unsigned extractSrc2(const uint8_t *Raw) {
+  return ((Raw[14] >> 2) & 0x3F) | ((Raw[15] & 0x07) << 6);
+}
+
 static void writeSrc0(uint8_t *Raw, unsigned Enc) {
   Raw[12] = Enc & 0xFF;
   Raw[13] = (Raw[13] & 0xFE) | ((Enc >> 8) & 0x01);
@@ -153,9 +244,10 @@ static void writeSrc2(uint8_t *Raw, unsigned Enc) {
 // template assembly so no opcode bits are hardcoded), writes the new block-32
 // scale sources, and bakes scale_src2 = VGPR0. scale_src2 is unused on
 // VOP3PX2, but leaving it 0 makes the SQ mis-decode it as an SGPR and stall;
-// baking it also keeps the bytes idempotent across passes. All other base-WMMA
-// bytes (VDST, SRC0/1/2, matrix formats, neg modifiers) survive the byte copy
-// and are patched by the caller.
+// baking it also keeps the bytes idempotent across passes. Matrix reuse bits
+// are cleared because both replacement passes substitute matrix operands. All
+// other base-WMMA bytes (VDST, SRC0/1/2, matrix formats, neg modifiers) survive
+// the byte copy and are patched by the caller.
 static SmallVector<uint8_t> rewriteScale16ToScale(const uint8_t *OrigRaw,
                                                   unsigned OrigSize,
                                                   unsigned NewScaleSrc0Enc,
@@ -174,6 +266,12 @@ static SmallVector<uint8_t> rewriteScale16ToScale(const uint8_t *OrigRaw,
 
   SmallVector<uint8_t> Rewritten(OrigRaw, OrigRaw + OrigSize);
   Rewritten[2] = Template[2];
+  constexpr unsigned MatrixAReuseBit = 13;
+  constexpr unsigned MatrixBReuseBit = 14;
+  static_assert(MatrixAReuseBit / 8 == MatrixBReuseBit / 8);
+  constexpr uint8_t MatrixReuseMask =
+      (1u << (MatrixAReuseBit % 8)) | (1u << (MatrixBReuseBit % 8));
+  Rewritten[MatrixAReuseBit / 8] &= static_cast<uint8_t>(~MatrixReuseMask);
   writeScaleSrc0(Rewritten.data(), NewScaleSrc0Enc);
   writeScaleSrc1(Rewritten.data(), NewScaleSrc1Enc);
   Rewritten[6] &= 0x03;                        // clear scale_src2[5:0]
@@ -198,6 +296,8 @@ static void emitModeForOperands(raw_string_ostream &OS, unsigned &CurrentMode,
     setVgprMsbBank(NewMode, Requirement.first, Requirement.second);
   if (NewMode == CurrentMode)
     return;
+  // Complete outstanding operations before changing the physical VGPR mapping.
+  OS << "s_wait_xcnt 0\n";
   OS << "s_set_vgpr_msb " << (NewMode | (CurrentMode << 8)) << "\n";
   CurrentMode = NewMode;
 }
@@ -336,16 +436,19 @@ static void emitVgprSelectCopy(raw_string_ostream &OS, bool KeepLow,
   }
 }
 
-static void emitVgprCopy(raw_string_ostream &OS, unsigned DstBase,
-                         unsigned SrcBase, unsigned W, unsigned ScratchBank,
+static void emitVgprMove(raw_string_ostream &OS, unsigned Dst, unsigned Src,
                          unsigned &CurrentMode) {
-  for (unsigned I = 0; I < W; ++I) {
-    emitModeForOperands(OS, CurrentMode,
-                        {{VgprMsbOperand::Dst, ScratchBank},
-                         {VgprMsbOperand::Src0, (SrcBase + I) / VgprBankSize}});
-    OS << "v_mov_b32 " << encodedVgprName(DstBase + I) << ", "
-       << encodedVgprName(SrcBase + I) << "\n";
-  }
+  emitModeForOperands(OS, CurrentMode,
+                      {{VgprMsbOperand::Dst, Dst / VgprBankSize},
+                       {VgprMsbOperand::Src0, Src / VgprBankSize}});
+  OS << "v_mov_b32 " << encodedVgprName(Dst) << ", " << encodedVgprName(Src)
+     << "\n";
+}
+
+static void emitVgprCopy(raw_string_ostream &OS, unsigned DstBase,
+                         unsigned SrcBase, unsigned W, unsigned &CurrentMode) {
+  for (unsigned I = 0; I < W; ++I)
+    emitVgprMove(OS, DstBase + I, SrcBase + I, CurrentMode);
 }
 
 static void emitScalePairSplitInPlace(raw_string_ostream &OS, unsigned Lo,
@@ -353,7 +456,7 @@ static void emitScalePairSplitInPlace(raw_string_ostream &OS, unsigned Lo,
                                       unsigned &CurrentMode) {
   unsigned PairBank = Lo / VgprBankSize;
   unsigned TmpBank = Tmp / VgprBankSize;
-  emitVgprCopy(OS, Tmp, Lo, /*W=*/1, TmpBank, CurrentMode);
+  emitVgprCopy(OS, Tmp, Lo, /*W=*/1, CurrentMode);
   emitModeForOperands(OS, CurrentMode,
                       {{VgprMsbOperand::Dst, PairBank},
                        {VgprMsbOperand::Src0, TmpBank},
@@ -369,7 +472,7 @@ static void emitScalePairRestoreInPlace(raw_string_ostream &OS, unsigned Lo,
                                         unsigned &CurrentMode) {
   unsigned PairBank = Lo / VgprBankSize;
   unsigned TmpBank = Tmp / VgprBankSize;
-  emitVgprCopy(OS, Tmp, Lo, /*W=*/1, TmpBank, CurrentMode);
+  emitVgprCopy(OS, Tmp, Lo, /*W=*/1, CurrentMode);
   emitModeForOperands(OS, CurrentMode,
                       {{VgprMsbOperand::Dst, PairBank},
                        {VgprMsbOperand::Src0, TmpBank},
@@ -1264,14 +1367,18 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
 
   unsigned OrigSrc0Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src0);
   unsigned OrigSrc1Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src1);
+  unsigned OrigSrc2Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src2);
   unsigned OrigDstBank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Dst);
 
-  unsigned ScaleALo = *ScaleABase + OrigSrc0Bank * VgprBankSize;
+  // Scale operands are always addressed in bank zero. VGPR-MSB applies to
+  // the matrix operands, but not to the Scale16 prefix operands.
+  unsigned ScaleALo = *ScaleABase;
   unsigned ScaleAHi = ScaleALo + 1;
-  unsigned ScaleBLo = *ScaleBBase + OrigSrc1Bank * VgprBankSize;
+  unsigned ScaleBLo = *ScaleBBase;
   unsigned ScaleBHi = ScaleBLo + 1;
-  if (ScaleAHi >= Ctx.Config.MaxVgprs || ScaleBHi >= Ctx.Config.MaxVgprs)
-    return failClosed(Ctx, DI, "block-16 scale tuple exceeds VGPR capacity");
+  if (ScaleAHi >= VgprBankSize || ScaleBHi >= VgprBankSize)
+    return failClosed(Ctx, DI,
+                      "block-16 scale tuple crosses the low VGPR bank");
 
   std::optional<VgprRange> ARange =
       matrixOperandRange(Ctx, DI, /*OperandIndex=*/1);
@@ -1311,13 +1418,44 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   VgprAllocator Alloc(Ctx.Liveness.liveBefore(Idx), KdCount,
                       Ctx.Config.MaxVgprs);
 
-  // Keep every generated operand in one physical VGPR bank. Five scalar
-  // temporaries precede an even-aligned masked-A block and a matrix-B copy.
-  // Copying B is necessary because both scale-B and matrix-B use the WMMA
-  // src1 VGPR-MSB field.
+  // Low-bank scratch must not overwrite any architectural operand. Matrix B
+  // is copied before the scratch is clobbered, but keeping every original
+  // input forbidden makes the save/restore contract explicit.
+  constexpr unsigned DstWidth = 8;
+  unsigned DstBase = extractVdst(Raw) + OrigDstBank * VgprBankSize;
+  if (DstBase + DstWidth > Ctx.Config.MaxVgprs)
+    return failClosed(Ctx, DI, "destination exceeds VGPR capacity");
+
+  BitVector Forbidden(Ctx.Config.MaxVgprs);
+  Forbidden.set(ScaleALo, ScaleAHi + 1);
+  Forbidden.set(ScaleBLo, ScaleBHi + 1);
+  Forbidden.set(ABase, ABase + AWidth);
+  Forbidden.set(BBase, BBase + BWidth);
+  Forbidden.set(DstBase, DstBase + DstWidth);
+  std::optional<unsigned> Src2Base = decodeVgprEncoding(extractSrc2(Raw));
+  if (Src2Base) {
+    unsigned Src2Physical = *Src2Base + OrigSrc2Bank * VgprBankSize;
+    if (Src2Physical + DstWidth > Ctx.Config.MaxVgprs)
+      return failClosed(Ctx, DI, "accumulator exceeds VGPR capacity");
+    Forbidden.set(Src2Physical, Src2Physical + DstWidth);
+  }
+
   constexpr unsigned ScalarScratchCount = 5;
-  unsigned AOffset = (ScalarScratchCount + 1) & ~1u;
-  unsigned BOffset = AOffset + AWidth;
+  unsigned LowScratchCount = AWidth + ScalarScratchCount;
+  std::optional<LowBankScratchBlock> LowScratch =
+      allocLowBankScratchBlock(Alloc, Forbidden, LowScratchCount, /*Align=*/2);
+  if (!LowScratch)
+    return failClosed(Ctx, DI,
+                      "no usable bank-zero block for masked A and scales");
+
+  unsigned SBase = LowScratch->Base;
+  unsigned ScaleAloReg = SBase + AWidth;
+  unsigned ScaleBloReg = ScaleAloReg + 1;
+  unsigned ScaleAhiReg = ScaleAloReg + 2;
+  unsigned ScaleBhiReg = ScaleAloReg + 3;
+  unsigned TmpReg = ScaleAloReg + 4;
+
+  unsigned BOffset = (LowScratchCount + 1) & ~1u;
   unsigned ScratchCount = BOffset + BWidth;
   std::optional<unsigned> ScratchBase = Alloc.allocContiguousAboveKdInBank(
       ScratchCount, /*Align=*/2, VgprBankSize);
@@ -1325,12 +1463,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
     return failClosed(Ctx, DI,
                       "no single-bank above-KD VGPR block for exact K-split");
 
-  unsigned ScaleAloReg = *ScratchBase;
-  unsigned ScaleBloReg = *ScratchBase + 1;
-  unsigned ScaleAhiReg = *ScratchBase + 2;
-  unsigned ScaleBhiReg = *ScratchBase + 3;
-  unsigned TmpReg = *ScratchBase + 4;
-  unsigned SBase = *ScratchBase + AOffset;
+  unsigned SaveBase = *ScratchBase;
   unsigned BCopyBase = *ScratchBase + BOffset;
   unsigned ScratchBank = *ScratchBase / VgprBankSize;
 
@@ -1352,40 +1485,45 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   raw_string_ostream PreOS(PreAsm), HiOS(HiAsm), PostOS(PostAsm);
   unsigned PreMode = *ActiveMode;
 
-  emitGatherEven(PreOS, ScaleALo, ScaleAHi, ScaleAloReg, TmpReg, ScratchBank,
-                 PreMode);
-  emitGatherEven(PreOS, ScaleBLo, ScaleBHi, ScaleBloReg, TmpReg, ScratchBank,
-                 PreMode);
-  emitGatherOdd(PreOS, ScaleALo, ScaleAHi, ScaleAhiReg, TmpReg, ScratchBank,
-                PreMode);
-  emitGatherOdd(PreOS, ScaleBLo, ScaleBHi, ScaleBhiReg, TmpReg, ScratchBank,
-                PreMode);
-  emitVgprCopy(PreOS, BCopyBase, BBase, BWidth, ScratchBank, PreMode);
+  for (unsigned I = 0; I < LowScratchCount; ++I)
+    if (LowScratch->Preserve.test(I))
+      emitVgprMove(PreOS, SaveBase + I, SBase + I, PreMode);
+
+  emitVgprCopy(PreOS, BCopyBase, BBase, BWidth, PreMode);
   if (Plan->Scheme == AMaskScheme::Lane) {
     // pass-low keeps lanes 0-15 (low-16 subblocks); pass-high lanes 16-31.
     emitLaneMaskCopy(PreOS, MaskS, 0x0000FFFFu, SBase, ABase, AWidth,
-                     ScratchBank, PreMode);
+                     /*ScratchBank=*/0, PreMode);
   } else {
     // pass-low keeps the low-16 subblock VGPRs; pass-high the high-16 ones.
     emitVgprSelectCopy(PreOS, /*KeepLow=*/true, SBase, ABase, AWidth,
-                       Plan->SubW, ScratchBank, PreMode);
+                       Plan->SubW, /*ScratchBank=*/0, PreMode);
   }
 
+  emitGatherEven(PreOS, ScaleALo, ScaleAHi, ScaleAloReg, TmpReg,
+                 /*ScratchBank=*/0, PreMode);
+  emitGatherEven(PreOS, ScaleBLo, ScaleBHi, ScaleBloReg, TmpReg,
+                 /*ScratchBank=*/0, PreMode);
+  emitGatherOdd(PreOS, ScaleALo, ScaleAHi, ScaleAhiReg, TmpReg,
+                /*ScratchBank=*/0, PreMode);
+  emitGatherOdd(PreOS, ScaleBLo, ScaleBHi, ScaleBhiReg, TmpReg,
+                /*ScratchBank=*/0, PreMode);
+
   unsigned WmmaLoMode = *ActiveMode;
-  setVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src0, ScratchBank);
+  setVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src0, 0);
   setVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src1, ScratchBank);
   emitModeForOperands(
       PreOS, PreMode,
-      {{VgprMsbOperand::Src0, ScratchBank},
+      {{VgprMsbOperand::Src0, 0},
        {VgprMsbOperand::Src1, ScratchBank},
        {VgprMsbOperand::Src2, getVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src2)},
        {VgprMsbOperand::Dst, getVgprMsbBank(WmmaLoMode, VgprMsbOperand::Dst)}});
 
   // pass-low WMMA: matrix A = masked copy, scales = even-byte gathers, src2 =
   // original C (preserved by the byte copy).
-  SmallVector<uint8_t> WmmaLo = rewriteScale16ToScale(
-      Raw, DI.Size, VgprEncBase + (ScaleAloReg % VgprBankSize),
-      VgprEncBase + (ScaleBloReg % VgprBankSize), Ctx.LS);
+  SmallVector<uint8_t> WmmaLo =
+      rewriteScale16ToScale(Raw, DI.Size, VgprEncBase + ScaleAloReg,
+                            VgprEncBase + ScaleBloReg, Ctx.LS);
   if (WmmaLo.empty())
     return failClosed(Ctx, DI, "pass-low WMMA rewrite failed");
   writeSrc0(WmmaLo.data(), VgprEncBase + (SBase % VgprBankSize));
@@ -1393,9 +1531,9 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
 
   // pass-high WMMA: odd-byte gathers, and src2 = D so it accumulates onto the
   // pass-low result.
-  SmallVector<uint8_t> WmmaHi = rewriteScale16ToScale(
-      Raw, DI.Size, VgprEncBase + (ScaleAhiReg % VgprBankSize),
-      VgprEncBase + (ScaleBhiReg % VgprBankSize), Ctx.LS);
+  SmallVector<uint8_t> WmmaHi =
+      rewriteScale16ToScale(Raw, DI.Size, VgprEncBase + ScaleAhiReg,
+                            VgprEncBase + ScaleBhiReg, Ctx.LS);
   if (WmmaHi.empty())
     return failClosed(Ctx, DI, "pass-high WMMA rewrite failed");
   writeSrc0(WmmaHi.data(), VgprEncBase + (SBase % VgprBankSize));
@@ -1405,21 +1543,31 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   unsigned HiMode = WmmaLoMode;
   if (Plan->Scheme == AMaskScheme::Lane) {
     emitLaneMaskCopy(HiOS, MaskS, 0xFFFF0000u, SBase, ABase, AWidth,
-                     ScratchBank, HiMode);
+                     /*ScratchBank=*/0, HiMode);
   } else {
     emitVgprSelectCopy(HiOS, /*KeepLow=*/false, SBase, ABase, AWidth,
-                       Plan->SubW, ScratchBank, HiMode);
+                       Plan->SubW, /*ScratchBank=*/0, HiMode);
   }
   unsigned WmmaHiMode = WmmaLoMode;
   setVgprMsbBank(WmmaHiMode, VgprMsbOperand::Src2, OrigDstBank);
   emitModeForOperands(
       HiOS, HiMode,
-      {{VgprMsbOperand::Src0, ScratchBank},
+      {{VgprMsbOperand::Src0, 0},
        {VgprMsbOperand::Src1, ScratchBank},
        {VgprMsbOperand::Src2, OrigDstBank},
        {VgprMsbOperand::Dst, getVgprMsbBank(WmmaHiMode, VgprMsbOperand::Dst)}});
 
+  int A0Nops = classifyWmmaNops(DI.Mnemonic).A0Nops;
   unsigned PostMode = WmmaHiMode;
+  bool RestoreLowScratch = LowScratch->Preserve.any();
+  if (RestoreLowScratch) {
+    for (int I = 0; I < A0Nops; ++I)
+      PostOS << "v_nop\n";
+    for (unsigned I = 0; I < LowScratchCount; ++I)
+      if (LowScratch->Preserve.test(I))
+        emitVgprMove(PostOS, SBase + I, SaveBase + I, PostMode);
+  }
+
   unsigned ActiveSrc0 = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src0);
   unsigned ActiveSrc1 = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src1);
   unsigned ActiveSrc2 = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src2);
@@ -1445,7 +1593,6 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   // them (trampoline bytes carry none of the compiler's own spacing). The
   // hazard pass re-validates each trampoline against this count as a safety
   // net.
-  int A0Nops = classifyWmmaNops(DI.Mnemonic).A0Nops;
   SmallVector<uint8_t> VNop = assembleSingleInst("v_nop", Ctx.LS);
   if (VNop.empty())
     return failClosed(Ctx, DI, "v_nop assembly failed");
@@ -1487,8 +1634,10 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
         << (Plan->Scheme == AMaskScheme::Lane ? "lane-mask" : "vgpr-select")
         << ", A=v" << ABase << ":" << (ABase + AWidth - 1) << " -> masked v"
         << SBase << ", B copy=v" << BCopyBase << ":" << (BCopyBase + BWidth - 1)
-        << ", scratch bank " << ScratchBank << ", +" << Extra << " vgpr, "
-        << A0Nops << " hazard v_nop, " << Replacement.size() << " bytes)\n";
+        << ", scales=v" << ScaleAloReg << ",v" << ScaleBloReg << ",v"
+        << ScaleAhiReg << ",v" << ScaleBhiReg << ", scratch bank "
+        << ScratchBank << ", +" << Extra << " vgpr, " << A0Nops
+        << " hazard v_nop, " << Replacement.size() << " bytes)\n";
   return 1;
 }
 
@@ -1733,8 +1882,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
         if (IsLow == !HighK)
           continue;
         unsigned Saved = SavedARegs[SavedIndex++];
-        emitVgprCopy(OS, Saved, OriginalAHalf + I, /*W=*/1,
-                     Saved / VgprBankSize, CurrentMode);
+        emitVgprCopy(OS, Saved, OriginalAHalf + I, /*W=*/1, CurrentMode);
       }
       assert(SavedIndex == SavedARegCount);
       emitMaskVgprsInPlace(OS, /*KeepLow=*/!HighK, OriginalAHalf,
@@ -1767,7 +1915,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
         if (IsLow == !HighK)
           continue;
         unsigned Saved = SavedARegs[SavedIndex++];
-        emitVgprCopy(OS, OriginalAHalf + I, Saved, /*W=*/1, ABank, CurrentMode);
+        emitVgprCopy(OS, OriginalAHalf + I, Saved, /*W=*/1, CurrentMode);
       }
       assert(SavedIndex == SavedARegCount);
     }

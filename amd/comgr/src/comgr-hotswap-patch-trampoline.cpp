@@ -441,7 +441,8 @@ bool hasUnencodableVgprName(StringRef Asm) {
   return false;
 }
 
-bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role, unsigned &Mode,
+bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role,
+                          unsigned OldMode, unsigned &NewMode,
                           std::string &Output) {
   StringRef Operand = Input.trim();
   StringRef Suffix;
@@ -466,15 +467,23 @@ bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role, unsigned &Mode,
   if (LoText.empty() || HiText.empty())
     return false;
 
-  unsigned Lo = 0;
-  unsigned Hi = 0;
-  if (LoText.getAsInteger(10, Lo) || HiText.getAsInteger(10, Hi) || Hi < Lo ||
-      Lo / 256 != Hi / 256)
+  unsigned EncodedLo = 0;
+  unsigned EncodedHi = 0;
+  if (LoText.getAsInteger(10, EncodedLo) ||
+      HiText.getAsInteger(10, EncodedHi) || EncodedHi < EncodedLo)
+    return false;
+  // MC register names contain the encoded low-byte index. A tuple expansion
+  // represents a low-byte wrap with values above 255, so rebase both ends
+  // relative to the incoming operand bank before selecting the new bank.
+  unsigned OriginalBank = getVgprMsbBank(OldMode, Role);
+  unsigned Lo = OriginalBank * 256 + EncodedLo;
+  unsigned Hi = OriginalBank * 256 + EncodedHi;
+  if (Lo / 256 != Hi / 256)
     return false;
   unsigned Bank = Lo / 256;
   if (Bank > 3)
     return false;
-  setVgprMsbBank(Mode, Role, Bank);
+  setVgprMsbBank(NewMode, Role, Bank);
   if (IsRange)
     Output =
         ("v[" + Twine(Lo & 255) + ":" + Twine(Hi & 255) + "]" + Suffix).str();
@@ -510,7 +519,7 @@ normalizeDsVgprBanks(StringRef Asm, StringRef FromMnem, unsigned OldMode) {
   std::string Normalized = Mnem.str();
   for (unsigned I = 0; I != Operands.size(); ++I) {
     std::string Operand;
-    if (!normalizeVgprOperand(Operands[I], Roles[I], NewMode, Operand))
+    if (!normalizeVgprOperand(Operands[I], Roles[I], OldMode, NewMode, Operand))
       return std::nullopt;
     Normalized += I == 0 ? " " : ", ";
     Normalized += Operand;
@@ -532,20 +541,10 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   StringRef ToMnem = getDs2AddrReplacement(DI.Mnemonic);
   if (ToMnem.empty())
     return false;
-  std::optional<DsOperands> Ops =
-      extractDsOperands(DI.Inst, DI.Mnemonic, Ctx.LS);
-  if (!Ops)
-    return failRequiredPatch(Ctx);
-  if (DI.Offset <= Ctx.TextSize && DI.Size <= Ctx.TextSize - DI.Offset &&
-      rewriteDs2AddrOffsetsInPlaceImpl(
-          MutableArrayRef<uint8_t>(Ctx.Text + DI.Offset, DI.Size), DI.Mnemonic,
-          *Ops)) {
-    log() << "hotswap: rewrote " << DI.Mnemonic << " at 0x"
-          << utohexstr(DI.Offset) << " in place with A0 byte offsets "
-          << Ops->Off0 << ", " << Ops->Off1 << "\n";
-    DI.Mnemonic = "<replaced>";
-    return true;
-  }
+
+  // Always lower B0 DS2 instructions to the canonical A0 split form. A0
+  // retains stricter per-address alignment semantics than B0, so preserving a
+  // DS2 opcode with rewritten byte offsets is not semantically equivalent.
   std::optional<std::vector<std::string>> Expanded =
       expandDs2AddrImpl(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
   if (!Expanded)
@@ -558,6 +557,12 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   std::optional<unsigned> ActiveMode;
   if (NeedsBankNormalization) {
     ActiveMode = getActiveVgprMsbMode(Ctx, Idx);
+    // Whole-function mode recovery can decline a function even when direct
+    // control flow has a closed entry set. Preserve an exact local setter in
+    // that case; the helper independently rejects unresolved control flow and
+    // any branch or declared entry that can bypass the setter.
+    if (!ActiveMode)
+      ActiveMode = getLocallyEstablishedVgprMsbMode(Ctx, Idx);
     if (!ActiveMode) {
       log() << "hotswap: error: ds_2addr at 0x" << utohexstr(DI.Offset)
             << " crosses v255 but the active VGPR-MSB mode is unknown\n";
@@ -611,6 +616,9 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
     return failRequiredPatch(Ctx);
 
+  log() << "hotswap: split " << DI.Mnemonic << " at 0x"
+        << utohexstr(DI.Offset)
+        << " into canonical A0 single-address form\n";
   DI.Mnemonic = "<replaced>";
   return true;
 }
