@@ -1920,7 +1920,7 @@ LLVMDbgRecordRef LLVMDIBuilderInsertDeclareRecordAtEnd(
 LLVMDbgRecordRef LLVMDIBuilderInsertDbgValueRecordBefore(
     LLVMDIBuilderRef Builder, LLVMValueRef Val, LLVMMetadataRef VarInfo,
     LLVMMetadataRef Expr, LLVMMetadataRef DebugLoc, LLVMValueRef Instr) {
-  DbgInstPtr DbgInst = unwrap(Builder)->insertDbgValueIntrinsic(
+  DbgInstPtr DbgInst = unwrap(Builder)->insertDbgValue(
       unwrap(Val), unwrap<DILocalVariable>(VarInfo), unwrap<DIExpression>(Expr),
       unwrap<DILocation>(DebugLoc),
       Instr ? InsertPosition(unwrap<Instruction>(Instr)->getIterator())
@@ -1938,7 +1938,7 @@ LLVMDbgRecordRef LLVMDIBuilderInsertDbgValueRecordBefore(
 LLVMDbgRecordRef LLVMDIBuilderInsertDbgValueRecordAtEnd(
     LLVMDIBuilderRef Builder, LLVMValueRef Val, LLVMMetadataRef VarInfo,
     LLVMMetadataRef Expr, LLVMMetadataRef DebugLoc, LLVMBasicBlockRef Block) {
-  DbgInstPtr DbgInst = unwrap(Builder)->insertDbgValueIntrinsic(
+  DbgInstPtr DbgInst = unwrap(Builder)->insertDbgValue(
       unwrap(Val), unwrap<DILocalVariable>(VarInfo), unwrap<DIExpression>(Expr),
       unwrap<DILocation>(DebugLoc),
       Block ? InsertPosition(unwrap(Block)->end()) : nullptr);

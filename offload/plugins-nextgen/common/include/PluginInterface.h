@@ -69,6 +69,7 @@ struct GenericPluginTy;
 struct GenericKernelTy;
 struct GenericDeviceTy;
 struct KernelRunRecordTy;
+struct PluginContextTy;
 template <typename ResourceRef> class GenericDeviceResourceManagerTy;
 
 namespace Plugin {
@@ -922,6 +923,30 @@ public:
     // Return whether there is an intersecting allocation.
     return (findIntersecting(const_cast<void *>(HstPtr)) != nullptr);
   }
+};
+
+/// A plugin-side context grouping a set of devices. Plugins that need to hold
+/// native context state (e.g. Level Zero's ze_context_handle_t) override this
+/// through GenericPluginTy::createPluginContext. The base class is a plain
+/// device set used by plugins that do not need native context state.
+struct PluginContextTy {
+  PluginContextTy(GenericPluginTy &Plugin,
+                  llvm::ArrayRef<GenericDeviceTy *> Devices)
+      : Plugin(Plugin), Devices(Devices.begin(), Devices.end()) {}
+
+  PluginContextTy(const PluginContextTy &) = delete;
+  PluginContextTy &operator=(const PluginContextTy &) = delete;
+  PluginContextTy(PluginContextTy &&) = delete;
+  PluginContextTy &operator=(PluginContextTy &&) = delete;
+
+  virtual ~PluginContextTy() = default;
+
+  llvm::ArrayRef<GenericDeviceTy *> getDevices() const { return Devices; }
+  GenericPluginTy &getPlugin() const { return Plugin; }
+
+protected:
+  GenericPluginTy &Plugin;
+  llvm::SmallVector<GenericDeviceTy *> Devices;
 };
 
 /// Class implementing common functionalities of offload devices. Each plugin
@@ -1903,6 +1928,15 @@ struct GenericPluginTy {
 
   /// Return a pointer to the profiler instance
   GenericProfilerTy *getProfiler() const { return Profiler.get(); }
+
+  /// Create a plugin-side context grouping the given devices. The default
+  /// implementation returns a plain PluginContextTy that only tracks the
+  /// device set. Plugins that own native context state (e.g. Level Zero)
+  /// override this to instantiate a plugin-specific subclass.
+  virtual Expected<std::unique_ptr<PluginContextTy>>
+  createPluginContext(llvm::ArrayRef<GenericDeviceTy *> Devices) {
+    return std::make_unique<PluginContextTy>(*this, Devices);
+  }
 
 protected:
   /// Indicate whether a device id is valid.
