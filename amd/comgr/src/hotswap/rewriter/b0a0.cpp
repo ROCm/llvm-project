@@ -6115,6 +6115,14 @@ static amd_comgr_status_t retargetCodeObjectImpl(
   if (Prof)
     Profile.add(HotswapMetric::ElfParse, profNowNs() - ParseT0, 0);
   ElfView &Elf = *ViewOrErr;
+  // An empty .text is necessary but not sufficient for the byte-identical
+  // data-only path: absence of kernel descriptors alone does NOT make an
+  // object data-only. isValidDataOnlyObject additionally rejects any defined
+  // function/ifunc symbol and any non-empty executable section, so a
+  // descriptorless callable library (sized, address-taken STT_FUNC callbacks
+  // retained by relocations in a non-empty executable section) is excluded and
+  // takes the normal rewrite path. Keep that distinction: this no-op copy must
+  // never be generalized to accept objects that still carry executable code.
   if (ViewOrErr->textSize() == 0) {
     if (!Elf.isValidDataOnlyObject()) {
       log() << "hotswap: error: retargetCodeObject: empty .text does not "

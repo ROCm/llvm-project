@@ -547,6 +547,15 @@ std::vector<ElfView::FunctionTextRange> ElfView::functionTextRanges() const {
 }
 
 bool ElfView::isValidDataOnlyObject() const {
+  // Fail closed on foreign inputs before any AMDGPU-specific reasoning. An
+  // ordinary non-AMDGPU relocatable (e.g. an x86_64 object built from a single
+  // data definition) can otherwise present an empty .text, a lone object
+  // symbol, and no notes, and be accepted for a gfx1250 rewrite.
+  if (file().getHeader().e_machine != ELF::EM_AMDGPU) {
+    log() << "hotswap: error: data-only validation requires an AMDGPU ELF "
+             "(e_machine != EM_AMDGPU).\n";
+    return false;
+  }
   if (textSize() != 0) {
     log() << "hotswap: error: data-only validation requires an empty .text "
              "section.\n";
@@ -554,6 +563,21 @@ bool ElfView::isValidDataOnlyObject() const {
   }
 
   for (const ELFT::Shdr &Shdr : Sections) {
+    // Reject any non-SHT_NOBITS section whose file range escapes the input
+    // buffer before copying it out byte-for-byte. checkedAddUint64 fails closed
+    // on wraparound, and the end offset must lie within the mapped input.
+    if (Shdr.sh_type != ELF::SHT_NOBITS) {
+      std::optional<uint64_t> SecFileEnd = checkedAddUint64(
+          Shdr.sh_offset, Shdr.sh_size, "data-only section file range");
+      if (!SecFileEnd || *SecFileEnd > size()) {
+        log() << "hotswap: error: data-only object has a section whose file "
+                 "range lies outside the input buffer (offset 0x"
+              << utohexstr(Shdr.sh_offset) << ", size 0x"
+              << utohexstr(Shdr.sh_size) << ").\n";
+        return false;
+      }
+    }
+
     if ((Shdr.sh_flags & ELF::SHF_EXECINSTR) != 0 && Shdr.sh_size != 0) {
       Expected<StringRef> NameOrErr = File.getSectionName(Shdr);
       if (!NameOrErr) {
