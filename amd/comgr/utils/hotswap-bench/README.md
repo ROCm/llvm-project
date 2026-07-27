@@ -114,14 +114,16 @@ A parallel run over a large corpus can spike memory. Guard it with **one** of:
 | `--entry-trampolines` / `--no-entry-trampolines` | **off** | kernel-entry trampoline redirection — default OFF here (see disclaimer); `--entry-trampolines` re-enables it |
 | `--strict-mode` / `--no-strict-mode` | on | fail instead of returning an unpatched object |
 | `--source-isa` / `--target-isa` | `amdgcn-amd-amdhsa--gfx1250` | ISA strings (same = intra-gfx1250 B0→A0) |
-| `--keep-outputs DIR` | discard | retain rewritten `.co` files |
+| `--keep-outputs DIR` | discard | retain rewritten `.co` files (input directory structure preserved) |
+| `--resume` | off | resume from `<csv>.partial.jsonl`, skipping already-recorded inputs |
 | `--csv PATH` | see scripts | output CSV path |
 
 ## Output CSV columns (one row per code object)
 
 `input_path, filename, input_size, input_sha256, status, exit_code, result,
 cpu_seconds, user_cpu_seconds, system_cpu_seconds, elapsed_seconds,
-max_rss_kib, output_size, output_sha256, output_is_elf, spawn_error`
+max_rss_kib, output_size, output_sha256, output_is_elf, spawn_error,
+stderr_tail`
 
 - `status` — `pass`, `fail`, `timeout`, or `spawn_error`. `pass` requires the
   process to exit 0 **and** report `RESULT: SUCCESS` **and** write a valid ELF.
@@ -131,6 +133,8 @@ max_rss_kib, output_size, output_sha256, output_is_elf, spawn_error`
   same inputs were measured and detects translation divergence.
 - `output_is_elf` — whether the rewritten object begins with the ELF magic.
 - `cpu_seconds` — user + system CPU; `max_rss_kib` — peak resident memory (KiB).
+- `stderr_tail` — bounded tail of the child's stderr, kept so a crash row
+  retains its assertion/backtrace.
 
 ## Run metadata sidecar
 
@@ -140,3 +144,25 @@ strict-mode, entry-trampolines, timeout, jobs, globs), the resolved command
 template, and **identities** (path + size + SHA-256) for `hotswap-rewrite` and
 each `libamd_comgr.so*`. Compare both files to confirm two runs used the same
 binary, library, configuration, and workload.
+
+## Resilience, interrupts, and resume
+
+Each completed row is appended to `<csv>.partial.jsonl` as it finishes, and the
+final CSV is written atomically (temp file + rename). So if a long run is
+OOM-killed or crashes, the finished work is preserved: re-run with `--resume`
+to skip the inputs already recorded and only translate what's left.
+
+On **Ctrl-C** the runner tears down every active `hotswap-rewrite` process
+group, stops queued work, writes the rows completed so far, and exits 130. The
+checkpoint is deleted automatically once a run finishes completely.
+
+## Tests
+
+`test_hotswap_bench.py` covers result classification, input discovery/exclusions,
+collision-free output naming, timeouts, process-group teardown, the `-j 0`
+parser contract, provenance columns/sidecar, and `--resume`. It uses stub
+executables and temp dirs — no GPU or real `hotswap-rewrite` required:
+
+```bash
+python3 -m unittest -v      # from this directory
+```

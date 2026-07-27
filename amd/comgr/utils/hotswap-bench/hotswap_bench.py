@@ -54,9 +54,55 @@ GUARD_ENV = "HOTSWAP_HSACO_BENCH_GUARDED"
 
 METADATA_SCHEMA_VERSION = 1
 
+# Bounded amount of a failed translation's stderr retained per row.
+STDERR_TAIL_BYTES = 4096
+
 
 def utc_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def read_tail(stream: Any, limit: int) -> str:
+    """Return the last `limit` bytes of a binary file object as text."""
+    try:
+        stream.seek(0, os.SEEK_END)
+        size = stream.tell()
+        stream.seek(max(0, size - limit))
+        data = stream.read()
+    except OSError:
+        return ""
+    text = data.decode("utf-8", "replace").strip()
+    if size > limit:
+        text = "...(truncated)...\n" + text
+    return text
+
+
+def append_jsonl(path: pathlib.Path, record: dict[str, Any]) -> None:
+    """Append one result record as a JSON line, flushed so it survives an
+    abrupt process death (e.g. an OOM kill) for later --resume."""
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(record, separators=(",", ":")))
+        stream.write("\n")
+        stream.flush()
+
+
+def read_jsonl(path: pathlib.Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    if not path.exists():
+        return records
+    with path.open("r", encoding="utf-8") as stream:
+        for line in stream:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError:
+                # Tolerate a torn final line from an interrupted write.
+                continue
+            if isinstance(value, dict) and "input_path" in value:
+                records.append(value)
+    return records
 
 
 def sha256_file(path: pathlib.Path) -> str | None:
@@ -246,25 +292,32 @@ def timed_process(
     timed_out = False
     status = 0
     usage = None
-    while True:
-        try:
-            waited, status, usage = os.wait4(process.pid, os.WNOHANG)
-        except InterruptedError:
-            continue
-        if waited:
-            break
-        if deadline is not None and time.monotonic() >= deadline:
-            timed_out = True
-            reaped = terminate_process_group(process, 1.0)
-            if reaped is not None:
-                status, usage = reaped
-            else:
-                try:
-                    _, status, usage = os.wait4(process.pid, 0)
-                except ChildProcessError:
-                    usage = None
-            break
-        time.sleep(0.005)
+    try:
+        while True:
+            try:
+                waited, status, usage = os.wait4(process.pid, os.WNOHANG)
+            except InterruptedError:
+                continue
+            if waited:
+                break
+            if deadline is not None and time.monotonic() >= deadline:
+                timed_out = True
+                reaped = terminate_process_group(process, 1.0)
+                if reaped is not None:
+                    status, usage = reaped
+                else:
+                    try:
+                        _, status, usage = os.wait4(process.pid, 0)
+                    except ChildProcessError:
+                        usage = None
+                break
+            time.sleep(0.005)
+    except KeyboardInterrupt:
+        # The child runs in its own session/process group, so a terminal SIGINT
+        # does not reach it; tear it (and any descendants) down explicitly
+        # before propagating the interrupt.
+        terminate_process_group(process, 1.0)
+        raise
 
     if process.returncode is None:
         process.returncode = os.waitstatus_to_exitcode(status)
@@ -364,6 +417,7 @@ def run_one(
     )
 
     stdout_buffer = io.BytesIO()
+    stderr_tail = ""
     with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
         try:
             process_result = timed_process(
@@ -387,6 +441,9 @@ def run_one(
             spawn_error = str(error)
         stdout_file.seek(0)
         stdout_buffer.write(stdout_file.read())
+        # Keep a bounded stderr tail so crash diagnostics (asserts, backtraces)
+        # are retained without unbounded CSV growth.
+        stderr_tail = read_tail(stderr_file, STDERR_TAIL_BYTES)
 
     result_line = ""
     for line in stdout_buffer.getvalue().decode("utf-8", "replace").splitlines():
@@ -441,6 +498,7 @@ def run_one(
         "output_sha256": output_sha256,
         "output_is_elf": output_is_elf,
         "spawn_error": spawn_error,
+        "stderr_tail": stderr_tail,
     }
 
 
@@ -461,15 +519,25 @@ CSV_FIELDS = [
     "output_sha256",
     "output_is_elf",
     "spawn_error",
+    "stderr_tail",
 ]
 
 
 def write_csv(path: pathlib.Path, rows: Sequence[dict[str, Any]]) -> None:
+    # Write to a sibling temp file and atomically rename, so a crash mid-write
+    # never leaves a truncated CSV in place.
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=CSV_FIELDS, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    tmp = path.with_name(f".{path.name}.tmp.{os.getpid()}")
+    try:
+        with tmp.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(
+                stream, fieldnames=CSV_FIELDS, extrasaction="ignore"
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def write_run_metadata(
@@ -776,6 +844,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="retain rewritten code objects in DIR (default: discard)",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "resume from a prior run's <csv>.partial.jsonl checkpoint, skipping "
+            "inputs already recorded (assumes the same inputs and configuration)"
+        ),
+    )
     parser.add_argument("--quiet", action="store_true")
     return parser
 
@@ -785,25 +861,31 @@ def execute_all(
     worker: Callable[..., dict[str, Any]],
     jobs: int,
     quiet: bool,
-) -> tuple[list[dict[str, Any]], dict[str, int], bool]:
+    *,
+    checkpoint_path: pathlib.Path | None = None,
+    total: int | None = None,
+    start_index: int = 0,
+) -> tuple[list[dict[str, Any]], bool]:
     """Run worker over every source, optionally in parallel. Completion order
     is arbitrary; the caller sorts before writing so output stays deterministic.
-    Returns (rows, status_counts, interrupted)."""
-    total = len(sources)
+    Each completed row is appended to checkpoint_path (if given) as it finishes,
+    so an OOM/crash mid-run is recoverable with --resume.
+    Returns (rows, interrupted)."""
+    overall_total = len(sources) if total is None else total
     rows: list[dict[str, Any]] = []
-    counts: dict[str, int] = {}
     interrupted = False
 
     def record(row: dict[str, Any]) -> None:
         rows.append(row)
-        counts[row["status"]] = counts.get(row["status"], 0) + 1
+        if checkpoint_path is not None:
+            append_jsonl(checkpoint_path, row)
         if not quiet:
             cpu = row["cpu_seconds"]
             rss = row["max_rss_kib"]
             cpu_text = "n/a" if cpu is None else f"{cpu:.4f}s"
             rss_text = "n/a" if rss is None else f"{rss / 1024:.1f}MiB"
             print(
-                f"[{len(rows)}/{total}] {row['status']:<11} "
+                f"[{start_index + len(rows)}/{overall_total}] {row['status']:<11} "
                 f"cpu={cpu_text} rss={rss_text} {row['input_path']}",
                 flush=True,
             )
@@ -814,28 +896,46 @@ def execute_all(
                 record(worker(source=source))
         except KeyboardInterrupt:
             interrupted = True
-            print("interrupted; writing partial CSV", file=sys.stderr)
-        return rows, counts, interrupted
+            print("interrupted; writing partial results", file=sys.stderr)
+        return rows, interrupted
 
     # Each worker runs in its own process, so at most one hotswap-rewrite child
     # exists per process at a time; this keeps the wait4 accounting isolated and
-    # avoids cross-thread reaping races.
-    with concurrent.futures.ProcessPoolExecutor(max_workers=jobs) as executor:
+    # avoids cross-process reaping races.
+    executor = concurrent.futures.ProcessPoolExecutor(max_workers=jobs)
+    recorded: set[concurrent.futures.Future] = set()
+    try:
         futures = {
             executor.submit(worker, source=source): source for source in sources
         }
         try:
             for future in concurrent.futures.as_completed(futures):
-                record(future.result())
+                row = future.result()
+                recorded.add(future)
+                record(row)
         except KeyboardInterrupt:
             interrupted = True
             print(
-                "interrupted; cancelling remaining work and writing partial CSV",
+                "interrupted; stopping workers and writing partial results",
                 file=sys.stderr,
             )
             for future in futures:
                 future.cancel()
-    return rows, counts, interrupted
+            # Salvage any rows that finished before the interrupt but were not
+            # yet recorded by the as_completed loop.
+            for future in futures:
+                if future in recorded or future.cancelled() or not future.done():
+                    continue
+                try:
+                    record(future.result())
+                except BaseException:
+                    pass
+    finally:
+        # Do not block on still-running children when interrupted; each worker's
+        # timed_process already tears down its own hotswap-rewrite process group
+        # on SIGINT.
+        executor.shutdown(wait=not interrupted, cancel_futures=True)
+    return rows, interrupted
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -890,10 +990,43 @@ def main(argv: Sequence[str] | None = None) -> int:
         outputs_dir=outputs_dir,
         input_root=input_root,
     )
-    rows, counts, interrupted = execute_all(sources, worker, jobs, args.quiet)
 
-    rows.sort(key=lambda value: value["input_path"])
     csv_path = pathlib.Path(args.csv).expanduser().resolve()
+    checkpoint_path = csv_path.with_name(csv_path.name + ".partial.jsonl")
+
+    # Resume: reuse rows already recorded in the checkpoint and only run the
+    # inputs that are still missing.
+    done_rows: list[dict[str, Any]] = []
+    if args.resume:
+        done_rows = read_jsonl(checkpoint_path)
+        done_paths = {row["input_path"] for row in done_rows}
+        remaining = [
+            source
+            for source in sources
+            if os.path.relpath(source, input_root) not in done_paths
+        ]
+        if not args.quiet:
+            print(
+                f"resume: {len(done_rows)} already done, "
+                f"{len(remaining)} remaining",
+                file=sys.stderr,
+            )
+    else:
+        checkpoint_path.unlink(missing_ok=True)
+        remaining = list(sources)
+
+    new_rows, interrupted = execute_all(
+        remaining,
+        worker,
+        jobs,
+        args.quiet,
+        checkpoint_path=checkpoint_path,
+        total=len(sources),
+        start_index=len(done_rows),
+    )
+
+    rows = done_rows + new_rows
+    rows.sort(key=lambda value: value["input_path"])
     write_csv(csv_path, rows)
     meta_path = write_run_metadata(
         csv_path,
@@ -906,11 +1039,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         input_count=len(sources),
     )
 
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row["status"]] = counts.get(row["status"], 0) + 1
     summary = ", ".join(f"{status}={count}" for status, count in sorted(counts.items()))
     print(f"wrote {len(rows)} row(s) to {csv_path} ({summary})", file=sys.stderr)
     print(f"wrote run metadata to {meta_path}", file=sys.stderr)
+
     if interrupted:
+        print(
+            f"interrupted; resume with: --resume --csv {csv_path}",
+            file=sys.stderr,
+        )
         return 130
+    # Full run finished: the checkpoint is now redundant with the CSV.
+    checkpoint_path.unlink(missing_ok=True)
     return 0 if counts.get("pass", 0) == len(rows) and rows else 1
 
 
