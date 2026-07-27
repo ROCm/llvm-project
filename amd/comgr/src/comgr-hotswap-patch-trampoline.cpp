@@ -169,12 +169,6 @@ std::string fmtOffset(uint32_t Offset) {
 // this field directly, so any scaled byte offset that exceeds it cannot
 // be represented and the patch must be skipped.
 constexpr uint32_t Ds1AddrOffsetMax = 0xFFFF;
-// The gfx1250 DS two-address encoding has two eight-bit offset fields in the
-// low 16 bits of the instruction. B0 interprets non-stride64 fields as element
-// indices, while A0 requires byte offsets aligned to the payload size. When
-// both scaled byte offsets still fit in eight bits, rewriting the two fields
-// in place is an exact, entry-local fix and avoids a trampoline entirely.
-constexpr uint32_t Ds2AddrOffsetMax = 0xFF;
 
 struct DsOperands {
   SmallVector<MCRegister, 4> Regs;
@@ -408,25 +402,6 @@ std::optional<std::vector<std::string>> expandDs2AddrImpl(const MCInst &Inst,
 
   log() << "hotswap: error: unrecognized DS mnemonic: " << FromMnem << "\n";
   return std::nullopt;
-}
-
-bool rewriteDs2AddrOffsetsInPlaceImpl(MutableArrayRef<uint8_t> InstBytes,
-                                      StringRef Mnemonic,
-                                      const DsOperands &Ops) {
-  // Every non-stride64 DS2 family uses the same two eight-bit fields. This
-  // rewrite changes only those fields, so load/exchange destination overlap
-  // and split-counter concerns do not apply: the opcode, register operands,
-  // modifiers, instruction count, and entry behavior are unchanged.
-  if (getDs2AddrReplacement(Mnemonic).empty() ||
-      Mnemonic.contains("_stride64_") || Ops.Off0 > Ds2AddrOffsetMax ||
-      Ops.Off1 > Ds2AddrOffsetMax || InstBytes.size() != 2 * MinInstSize)
-    return false;
-
-  // gfx1250 DS2 offset0/offset1 occupy instruction bits [7:0]/[15:8].
-  // Keep every opcode/register/modifier bit byte-for-byte identical.
-  InstBytes[0] = static_cast<uint8_t>(Ops.Off0);
-  InstBytes[1] = static_cast<uint8_t>(Ops.Off1);
-  return true;
 }
 
 bool hasUnencodableVgprName(StringRef Asm) {
@@ -2609,13 +2584,6 @@ std::optional<std::vector<std::string>> expandDs2Addr(const MCInst &Inst,
                                                       StringRef ToMnem,
                                                       const LLVMState &LS) {
   return expandDs2AddrImpl(Inst, FromMnem, ToMnem, LS);
-}
-
-bool rewriteDs2AddrOffsetsInPlace(MutableArrayRef<uint8_t> InstBytes,
-                                  const MCInst &Inst, StringRef Mnemonic,
-                                  const LLVMState &LS) {
-  std::optional<DsOperands> Ops = extractDsOperands(Inst, Mnemonic, LS);
-  return Ops && rewriteDs2AddrOffsetsInPlaceImpl(InstBytes, Mnemonic, *Ops);
 }
 
 // -- applyTrampolinePatches -------------------------------------------------

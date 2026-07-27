@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <mutex>
@@ -1828,6 +1829,21 @@ TEST(CollectDirectBranchTargets,
   EXPECT_FALSE(LeafWithLinkScratch->HasUnresolvedTargets);
   EXPECT_FALSE(LeafWithLinkScratch->HasUnboundedIndirectEntries);
 
+  // A leaf frame has no nested callee that can clobber a caller-saved carrier.
+  // Exact lane saves, restores, and the existing body-write proof are enough.
+  std::string CallerSavedLeafFrame = "v_writelane_b32 v17, s30, 4\n"
+                                     "v_writelane_b32 v17, s31, 5\n"
+                                     "v_readlane_b32 s30, v17, 4\n"
+                                     "v_readlane_b32 s31, v17, 5\n"
+                                     "s_set_pc_i64 s[30:31]\n"
+                                     "s_endpgm\n";
+  std::optional<DirectControlFlowInfo> CallerSavedLeaf =
+      Audit(CallerFrame + CallerSavedLeafFrame, {}, 0,
+            FunctionTableElfMutation::None, CallerDecoded.size());
+  ASSERT_TRUE(CallerSavedLeaf);
+  EXPECT_FALSE(CallerSavedLeaf->HasUnresolvedTargets);
+  EXPECT_FALSE(CallerSavedLeaf->HasUnboundedIndirectEntries);
+
   // The same canonical leaf can be reached only by an exact materialized
   // singleton call. This is a machine-level closure, not the opaque-call ABI
   // fallback: the call target, canonical return, and continuation must be
@@ -2149,6 +2165,74 @@ TEST(CollectDirectBranchTargets,
   ASSERT_TRUE(NonCsr);
   EXPECT_TRUE(NonCsr->HasUnresolvedTargets);
   EXPECT_TRUE(NonCsr->HasUnboundedIndirectEntries);
+}
+
+TEST(CollectDirectBranchTargets,
+     BoundsScratchPreservedSelfRecursiveCallerSavedLinkVgpr) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::function<std::optional<DirectControlFlowInfo>(llvm::StringRef)> Audit =
+      [&](llvm::StringRef Asm) {
+        FunctionTableTestElf Obj = makeFunctionTableTestElf(
+            S, /*Load=*/"", FunctionTableElfMutation::None,
+            /*TableDelta=*/0xFFC, Asm, /*CallerBeginIndex=*/0);
+        llvm::Expected<ElfView> View =
+            ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+        EXPECT_TRUE((bool)View) << llvm::toString(View.takeError());
+        if (!View)
+          return std::optional<DirectControlFlowInfo>();
+        std::vector<ElfView::FunctionTextRange> Ranges =
+            View->functionTextRanges();
+        llvm::SmallVector<uint64_t, 4> Entries;
+        for (const ElfView::FunctionTextRange &Range : Ranges)
+          Entries.push_back(Range.Begin - View->textAddr());
+        return collectDirectBranchTargets(
+            Obj.Decoded, S, View->textAddr(), View->textSize(), Entries, Ranges,
+            /*ExternalEntries=*/{},
+            llvm::ArrayRef<uint8_t>(View->textData(), View->textSize()), &*View,
+            /*NonCallEntries=*/{});
+      };
+
+  // The get-PC at byte 32 reports byte 36; adding -36 materializes this
+  // function's byte-zero entry for the register call at byte 48.
+  const std::string ScratchPreservedRecursive =
+      "scratch_store_b32 off, v17, s32 nv\n"
+      "s_or_saveexec_b32 s0, -1\n"
+      "v_writelane_b32 v17, s30, 31\n"
+      "v_writelane_b32 v17, s31, 0\n"
+      "s_get_pc_i64 s[2:3]\n"
+      "s_add_nc_u64 s[2:3], s[2:3], 0xffffffffffffffdc\n"
+      "s_swap_pc_i64 s[30:31], s[2:3]\n"
+      "v_readlane_b32 s30, v17, 31\n"
+      "v_readlane_b32 s31, v17, 0\n"
+      "scratch_load_b32 v17, off, s32 nv\n"
+      "s_set_pc_i64 s[30:31]\n"
+      "s_endpgm\n"
+      "s_endpgm\n";
+  std::optional<DirectControlFlowInfo> Valid = Audit(ScratchPreservedRecursive);
+  ASSERT_TRUE(Valid);
+  EXPECT_FALSE(Valid->HasUnresolvedTargets);
+  EXPECT_FALSE(Valid->HasUnboundedIndirectEntries);
+
+  std::string MismatchedScratch = ScratchPreservedRecursive;
+  size_t ReloadPos =
+      MismatchedScratch.find("scratch_load_b32 v17, off, s32 nv");
+  ASSERT_NE(ReloadPos, std::string::npos);
+  MismatchedScratch.replace(
+      ReloadPos, std::string("scratch_load_b32 v17, off, s32 nv").size(),
+      "scratch_load_b32 v17, off, s32 offset:4 nv");
+  std::optional<DirectControlFlowInfo> Mismatch = Audit(MismatchedScratch);
+  ASSERT_TRUE(Mismatch);
+  EXPECT_TRUE(Mismatch->HasUnboundedIndirectEntries);
+
+  std::string ClobberedScratch = ScratchPreservedRecursive;
+  size_t RestorePos = ClobberedScratch.find("v_readlane_b32 s30, v17, 31");
+  ASSERT_NE(RestorePos, std::string::npos);
+  ClobberedScratch.insert(RestorePos, "scratch_store_b32 off, v0, s32 nv\n");
+  std::optional<DirectControlFlowInfo> Clobbered = Audit(ClobberedScratch);
+  ASSERT_TRUE(Clobbered);
+  EXPECT_TRUE(Clobbered->HasUnboundedIndirectEntries);
 }
 
 TEST(CollectDirectBranchTargets,
@@ -5504,123 +5588,6 @@ TEST(ExpandDs2Addr, RejectsCyclicExchangeDependency) {
 
   EXPECT_FALSE(expandDs2Addr(Decoded[0].Inst, Decoded[0].Mnemonic,
                              "ds_storexchg_rtn_b64", S));
-}
-
-TEST(RewriteDs2AddrOffsetsInPlace,
-     RewritesEveryNonStrideFamilyAndPreservesNonOffsetBytes) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  struct Case {
-    llvm::StringLiteral Source;
-    llvm::StringLiteral Expected;
-    uint8_t Off0;
-    uint8_t Off1;
-  };
-  const Case Cases[] = {
-      {"ds_load_2addr_b32 v[0:1], v2 offset0:62 offset1:63",
-       "ds_load_2addr_b32 v[0:1], v2 offset0:248 offset1:252", 248, 252},
-      {"ds_load_2addr_b64 v[0:3], v4 offset0:30 offset1:31",
-       "ds_load_2addr_b64 v[0:3], v4 offset0:240 offset1:248", 240, 248},
-      {"ds_store_2addr_b32 v2, v0, v1 offset0:62 offset1:63",
-       "ds_store_2addr_b32 v2, v0, v1 offset0:248 offset1:252", 248, 252},
-      {"ds_store_2addr_b64 v19, v[14:15], v[20:21] "
-       "offset0:30 offset1:31",
-       "ds_store_2addr_b64 v19, v[14:15], v[20:21] "
-       "offset0:240 offset1:248",
-       240, 248},
-      {"ds_storexchg_2addr_rtn_b32 v[0:1], v2, v3, v4 "
-       "offset0:62 offset1:63",
-       "ds_storexchg_2addr_rtn_b32 v[0:1], v2, v3, v4 "
-       "offset0:248 offset1:252",
-       248, 252},
-      {"ds_storexchg_2addr_rtn_b64 v[0:3], v4, v[6:7], v[8:9] "
-       "offset0:30 offset1:31",
-       "ds_storexchg_2addr_rtn_b64 v[0:3], v4, v[6:7], v[8:9] "
-       "offset0:240 offset1:248",
-       240, 248},
-  };
-
-  for (const Case &C : Cases) {
-    llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(C.Source, S);
-    ASSERT_EQ(Bytes.size(), 2u * MinInstSize) << C.Source.str();
-    llvm::SmallVector<uint8_t> Original = Bytes;
-    std::vector<InternalDecodedInst> Decoded;
-    ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded))
-        << C.Source.str();
-    ASSERT_EQ(Decoded.size(), 1u) << C.Source.str();
-
-    EXPECT_TRUE(rewriteDs2AddrOffsetsInPlace(Bytes, Decoded[0].Inst,
-                                             Decoded[0].Mnemonic, S))
-        << C.Source.str();
-    EXPECT_EQ(Bytes[0], C.Off0) << C.Source.str();
-    EXPECT_EQ(Bytes[1], C.Off1) << C.Source.str();
-    EXPECT_TRUE(
-        std::equal(Bytes.begin() + 2, Bytes.end(), Original.begin() + 2))
-        << C.Source.str();
-
-    llvm::SmallVector<uint8_t> Expected = assembleSingleInst(C.Expected, S);
-    EXPECT_EQ(Bytes, Expected) << C.Source.str();
-  }
-}
-
-TEST(RewriteDs2AddrOffsetsInPlace,
-     RejectsUnrepresentableOffsetInEveryFamilyWithoutMutation) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  for (llvm::StringRef Asm :
-       {"ds_load_2addr_b32 v[0:1], v2 offset0:63 offset1:64",
-        "ds_load_2addr_b64 v[0:3], v4 offset0:31 offset1:32",
-        "ds_store_2addr_b32 v2, v0, v1 offset0:63 offset1:64",
-        "ds_store_2addr_b64 v19, v[14:15], v[20:21] "
-        "offset0:31 offset1:32",
-        "ds_storexchg_2addr_rtn_b32 v[0:1], v2, v3, v4 "
-        "offset0:63 offset1:64",
-        "ds_storexchg_2addr_rtn_b64 v[0:3], v4, v[6:7], v[8:9] "
-        "offset0:31 offset1:32"}) {
-    llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, S);
-    ASSERT_EQ(Bytes.size(), 2u * MinInstSize) << Asm.str();
-    llvm::SmallVector<uint8_t> Original = Bytes;
-    std::vector<InternalDecodedInst> Decoded;
-    ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded))
-        << Asm.str();
-    ASSERT_EQ(Decoded.size(), 1u) << Asm.str();
-
-    EXPECT_FALSE(rewriteDs2AddrOffsetsInPlace(Bytes, Decoded[0].Inst,
-                                              Decoded[0].Mnemonic, S))
-        << Asm.str();
-    EXPECT_EQ(Bytes, Original) << Asm.str();
-  }
-}
-
-TEST(RewriteDs2AddrOffsetsInPlace, LeavesStride64FamiliesOnSplitPath) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  for (llvm::StringRef Asm :
-       {"ds_load_2addr_stride64_b32 v[0:1], v4 offset0:0 offset1:0",
-        "ds_load_2addr_stride64_b64 v[0:3], v4 offset0:0 offset1:0",
-        "ds_store_2addr_stride64_b32 v4, v0, v1 offset0:0 offset1:0",
-        "ds_store_2addr_stride64_b64 v4, v[0:1], v[2:3] "
-        "offset0:0 offset1:0",
-        "ds_storexchg_2addr_stride64_rtn_b32 v[0:1], v2, v3, v4 "
-        "offset0:0 offset1:0",
-        "ds_storexchg_2addr_stride64_rtn_b64 v[0:3], v4, v[6:7], v[8:9] "
-        "offset0:0 offset1:0"}) {
-    llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, S);
-    ASSERT_EQ(Bytes.size(), 2u * MinInstSize) << Asm.str();
-    llvm::SmallVector<uint8_t> Original = Bytes;
-    std::vector<InternalDecodedInst> Decoded;
-    ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded))
-        << Asm.str();
-    ASSERT_EQ(Decoded.size(), 1u) << Asm.str();
-
-    EXPECT_FALSE(rewriteDs2AddrOffsetsInPlace(Bytes, Decoded[0].Inst,
-                                              Decoded[0].Mnemonic, S))
-        << Asm.str();
-    EXPECT_EQ(Bytes, Original) << Asm.str();
-  }
 }
 
 // -- buildKernelEntryTrampoline -----------------------------------------------

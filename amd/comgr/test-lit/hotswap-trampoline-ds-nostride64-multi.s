@@ -29,8 +29,8 @@
 // COM: expansion sleds. The single shared s_wait_dscnt stays at 0x0
 // COM: (drain preservation under stacking in the non-stride64 path).
 // COM: The two sleds together expand to 4 single-address ds_load_b32
-// COM: instructions. Raw offsets start at 64 so the scaled byte offsets no
-// COM: longer fit the in-place DS2 fields; they become 256/260 and 264/268.
+// COM: instructions. Raw offsets start at 64 to cover larger scaled byte
+// COM: offsets: 256/260 and 264/268.
 // DISASM-LABEL: <test_multi_ds_nostride64>:
 // DISASM-NOT: ds_load_2addr_b32
 // DISASM: s_branch

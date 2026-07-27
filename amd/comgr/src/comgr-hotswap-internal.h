@@ -1799,14 +1799,6 @@ BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
 expandDs2Addr(const llvm::MCInst &Inst, llvm::StringRef FromMnem,
               llvm::StringRef ToMnem, const LLVMState &LS);
 
-/// Rewrite a representable gfx1250 B0 DS2 offset pair to A0 byte offsets
-/// without changing the instruction's opcode, registers, or size. The narrow
-/// entry-local form is exposed so MC tests can verify its exact bytes.
-[[nodiscard]] bool
-rewriteDs2AddrOffsetsInPlace(llvm::MutableArrayRef<uint8_t> InstBytes,
-                             const llvm::MCInst &Inst, llvm::StringRef Mnemonic,
-                             const LLVMState &LS);
-
 // -- Patch dispatch vtable ----------------------------------------------------
 //
 // Function-pointer dispatch table that replaces the prior LLVM_ATTRIBUTE_WEAK

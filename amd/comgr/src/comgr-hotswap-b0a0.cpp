@@ -4497,6 +4497,205 @@ struct CanonicalAbiReturn {
   CanonicalSavedLane SavedHigh;
 };
 
+struct CanonicalScratchSlot {
+  MCRegister Saddr;
+  int64_t Offset = 0;
+  int64_t Cpol = 0;
+
+  bool operator==(const CanonicalScratchSlot &Other) const {
+    return Saddr == Other.Saddr && Offset == Other.Offset && Cpol == Other.Cpol;
+  }
+};
+
+/// Match the gfx12 scalar-address scratch dword form used by compiler call
+/// frames. The backend-private named-operand table is not installed with LLVM,
+/// so this mirrors FLATInstructions.td's VFLAT operand order and validates
+/// every operand kind before using a slot.
+static std::optional<CanonicalScratchSlot>
+matchCanonicalScratchDword(const InternalDecodedInst &DI, StringRef Mnemonic,
+                           MCRegister Vgpr) {
+  StringRef PrintedMnemonic(DI.Mnemonic);
+  if (!PrintedMnemonic.starts_with(Mnemonic) ||
+      (PrintedMnemonic.size() != Mnemonic.size() &&
+       PrintedMnemonic[Mnemonic.size()] != ' ') ||
+      DI.Inst.getNumOperands() != 4 || !DI.Inst.getOperand(0).isReg() ||
+      DI.Inst.getOperand(0).getReg() != Vgpr ||
+      !DI.Inst.getOperand(1).isReg() || !DI.Inst.getOperand(1).getReg() ||
+      !DI.Inst.getOperand(2).isImm() || !DI.Inst.getOperand(3).isImm())
+    return std::nullopt;
+  return CanonicalScratchSlot{MCRegister(DI.Inst.getOperand(1).getReg()),
+                              DI.Inst.getOperand(2).getImm(),
+                              DI.Inst.getOperand(3).getImm()};
+}
+
+static bool rejectRecursiveScratchPreservation(const LLVMState &LS,
+                                               MCRegister SavedVgpr,
+                                               uint64_t BeginOffset,
+                                               const Twine &Reason) {
+  log() << "hotswap: recursive scratch preservation for "
+        << LS.MRI->getName(SavedVgpr) << " at function 0x"
+        << utohexstr(BeginOffset) << " rejected: " << Reason << "\n";
+  return false;
+}
+
+static std::optional<uint64_t> scratchStoreWidth(StringRef PrintedMnemonic) {
+  StringRef Mnemonic = PrintedMnemonic.split(' ').first;
+  if (!Mnemonic.starts_with("scratch_store_"))
+    return std::nullopt;
+  if (Mnemonic.ends_with("b128"))
+    return 16;
+  if (Mnemonic.ends_with("b96"))
+    return 12;
+  if (Mnemonic.ends_with("b64"))
+    return 8;
+  if (Mnemonic.ends_with("b32"))
+    return 4;
+  if (Mnemonic.ends_with("b16"))
+    return 2;
+  if (Mnemonic.ends_with("b8"))
+    return 1;
+  return std::nullopt;
+}
+
+static bool mayClobberCanonicalScratchSlot(const InternalDecodedInst &DI,
+                                           const CanonicalScratchSlot &Slot) {
+  StringRef PrintedMnemonic(DI.Mnemonic);
+  if (!PrintedMnemonic.starts_with("scratch_store_"))
+    return false;
+  if (DI.Inst.getNumOperands() < 3 || !DI.Inst.getOperand(1).isReg() ||
+      !DI.Inst.getOperand(1).getReg() || !DI.Inst.getOperand(2).isImm())
+    return true;
+  if (DI.Inst.getOperand(1).getReg() != Slot.Saddr)
+    return false;
+
+  std::optional<uint64_t> Width = scratchStoreWidth(PrintedMnemonic);
+  int64_t Offset = DI.Inst.getOperand(2).getImm();
+  if (!Width || Offset < 0 || Slot.Offset < 0)
+    return true;
+  uint64_t Begin = static_cast<uint64_t>(Offset);
+  if (Begin > std::numeric_limits<uint64_t>::max() - *Width)
+    return true;
+  uint64_t End = Begin + *Width;
+  uint64_t SlotBegin = static_cast<uint64_t>(Slot.Offset);
+  if (SlotBegin > std::numeric_limits<uint64_t>::max() - 4)
+    return true;
+  return Begin < SlotBegin + 4 && SlotBegin < End;
+}
+
+/// A compiler may use a caller-saved VGPR as the s30 link carrier in an exact
+/// self-recursive frame when the function explicitly spills that VGPR before
+/// the lane saves and reloads it after every lane restore. The recursive call
+/// is safe by induction: every invocation executes the same scratch
+/// preservation frame before overwriting the carrier.
+static bool isScratchPreservedSelfRecursiveVgpr(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    size_t BeginIndex, size_t EndIndex, uint64_t BeginOffset,
+    size_t FirstLaneSave, ArrayRef<CanonicalAbiReturn> Returns,
+    const ControlFlowScanIndex &Index, MCRegister AbiLinkPair,
+    MCRegister SavedVgpr) {
+  bool SawCall = false;
+  for (size_t I = BeginIndex; I != EndIndex; ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    if (!LS.MIA->isCall(DI.Inst) || !isTruePcTransfer(DI, LS))
+      continue;
+    SawCall = true;
+    bool FoundSelfCall = false;
+    for (const KnownCallSite &Call : Index.Calls)
+      if (Call.InstIndex == I) {
+        if (Call.Target != BeginOffset || Call.ReturnRegister != AbiLinkPair)
+          return rejectRecursiveScratchPreservation(
+              LS, SavedVgpr, BeginOffset,
+              Twine("call at 0x") + utohexstr(DI.Offset) +
+                  " is not an exact self call");
+        FoundSelfCall = true;
+      }
+    for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
+      if (Call.InstIndex == I)
+        return rejectRecursiveScratchPreservation(
+            LS, SavedVgpr, BeginOffset,
+            Twine("call at 0x") + utohexstr(DI.Offset) +
+                " has an external target");
+    if (!FoundSelfCall)
+      return rejectRecursiveScratchPreservation(
+          LS, SavedVgpr, BeginOffset,
+          Twine("call at 0x") + utohexstr(DI.Offset) +
+              " has no exact local target");
+  }
+  if (!SawCall)
+    return rejectRecursiveScratchPreservation(LS, SavedVgpr, BeginOffset,
+                                              "function has no recursive call");
+
+  std::optional<CanonicalScratchSlot> Slot;
+  std::optional<size_t> StoreIndex;
+  for (size_t I = BeginIndex; I != FirstLaneSave; ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    std::optional<CanonicalScratchSlot> Candidate =
+        matchCanonicalScratchDword(DI, "scratch_store_b32", SavedVgpr);
+    if (Candidate) {
+      if (Slot)
+        return rejectRecursiveScratchPreservation(
+            LS, SavedVgpr, BeginOffset, "multiple prologue scratch stores");
+      Slot = *Candidate;
+      StoreIndex = I;
+      continue;
+    }
+    if (!Slot && instructionWritesRegister(DI, LS, SavedVgpr))
+      return rejectRecursiveScratchPreservation(
+          LS, SavedVgpr, BeginOffset,
+          Twine("saved VGPR is written before its scratch store at 0x") +
+              utohexstr(DI.Offset));
+  }
+  if (!Slot || !StoreIndex)
+    return rejectRecursiveScratchPreservation(
+        LS, SavedVgpr, BeginOffset,
+        "matching prologue scratch store is absent");
+
+  for (size_t I = BeginIndex; I != EndIndex; ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    if (I != *StoreIndex && mayClobberCanonicalScratchSlot(DI, *Slot))
+      return rejectRecursiveScratchPreservation(
+          LS, SavedVgpr, BeginOffset,
+          Twine("scratch slot is overwritten at 0x") + utohexstr(DI.Offset));
+    if (instructionWritesRegister(DI, LS, Slot->Saddr))
+      return rejectRecursiveScratchPreservation(
+          LS, SavedVgpr, BeginOffset,
+          Twine("scratch address register is overwritten at 0x") +
+              utohexstr(DI.Offset));
+  }
+
+  for (const CanonicalAbiReturn &Return : Returns) {
+    size_t RestoreEnd =
+        std::max(Return.RestoreLowIndex, Return.RestoreHighIndex);
+    std::optional<size_t> Reload;
+    for (size_t I = RestoreEnd + 1; I != Return.ReturnIndex; ++I) {
+      const InternalDecodedInst &DI = Decoded[I];
+      std::optional<CanonicalScratchSlot> Candidate =
+          matchCanonicalScratchDword(DI, "scratch_load_b32", SavedVgpr);
+      if (Candidate) {
+        if (Reload || !(*Candidate == *Slot))
+          return rejectRecursiveScratchPreservation(
+              LS, SavedVgpr, BeginOffset,
+              Twine("return 0x") +
+                  utohexstr(Decoded[Return.ReturnIndex].Offset) +
+                  " reloads a different scratch slot");
+        Reload = I;
+        continue;
+      }
+      if (Reload && instructionWritesRegister(DI, LS, SavedVgpr))
+        return rejectRecursiveScratchPreservation(
+            LS, SavedVgpr, BeginOffset,
+            Twine("saved VGPR is overwritten after its reload at 0x") +
+                utohexstr(DI.Offset));
+    }
+    if (!Reload)
+      return rejectRecursiveScratchPreservation(
+          LS, SavedVgpr, BeginOffset,
+          Twine("return 0x") + utohexstr(Decoded[Return.ReturnIndex].Offset) +
+              " has no matching scratch reload");
+  }
+  return true;
+}
+
 struct AbiVgprModeState {
   int8_t Dst = -2;
   int8_t Src0 = -2;
@@ -4942,9 +5141,7 @@ static bool validateCanonicalAbiFrameReturns(
         CandidateHigh ? numberedVgprIndex(*LS.MRI, CandidateHigh->Vgpr)
                       : std::nullopt;
     if (!Low || !High || !CandidateLow || !CandidateHigh || !SavedLowIndex ||
-        !SavedHighIndex || !isAbiCalleeSavedVgpr(*SavedLowIndex) ||
-        !isAbiCalleeSavedVgpr(*SavedHighIndex) ||
-        *CandidateLow == *CandidateHigh ||
+        !SavedHighIndex || *CandidateLow == *CandidateHigh ||
         (SavedLow && !(*SavedLow == *CandidateLow)) ||
         (SavedHigh && !(*SavedHigh == *CandidateHigh)))
       return reject(Twine("return 0x") +
@@ -4991,6 +5188,29 @@ static bool validateCanonicalAbiFrameReturns(
   if (!SaveLow || !SaveHigh)
     return reject("matching prologue saves are absent");
   size_t SaveEnd = std::max(*SaveLow, *SaveHigh);
+  std::optional<unsigned> SavedLowIndex =
+      numberedVgprIndex(*LS.MRI, SavedLow->Vgpr);
+  std::optional<unsigned> SavedHighIndex =
+      numberedVgprIndex(*LS.MRI, SavedHigh->Vgpr);
+  if (!SavedLowIndex || !SavedHighIndex)
+    return reject("saved VGPR indices are unavailable");
+  if (!isAbiCalleeSavedVgpr(*SavedLowIndex) &&
+      (HasNestedCall || ForceFullCanonicalFrame) &&
+      !isScratchPreservedSelfRecursiveVgpr(
+          Decoded, LS, BeginIndex, EndIndex, BeginOffset,
+          SavedLow->Vgpr == SavedHigh->Vgpr ? std::min(*SaveLow, *SaveHigh)
+                                            : *SaveLow,
+          Returns, Index, AbiLinkPair, SavedLow->Vgpr))
+    return reject("caller-saved low link VGPR lacks an exact recursive "
+                  "scratch-preservation frame");
+  if (SavedHigh->Vgpr != SavedLow->Vgpr &&
+      !isAbiCalleeSavedVgpr(*SavedHighIndex) &&
+      (HasNestedCall || ForceFullCanonicalFrame) &&
+      !isScratchPreservedSelfRecursiveVgpr(Decoded, LS, BeginIndex, EndIndex,
+                                           BeginOffset, *SaveHigh, Returns,
+                                           Index, AbiLinkPair, SavedHigh->Vgpr))
+    return reject("caller-saved high link VGPR lacks an exact recursive "
+                  "scratch-preservation frame");
   for (size_t I = BeginIndex + 1; I <= SaveEnd; ++I)
     if (PotentialEntries.contains(Decoded[I].Offset))
       return reject(Twine("entry bypasses a prologue save at 0x") +

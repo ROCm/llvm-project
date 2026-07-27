@@ -7,12 +7,10 @@
 // COM: single trampoline pass.
 // COM:
 // COM: These differ from the stride64 forms in the byte-offset scale applied
-// COM: to each per-operand index (ElemBytes vs 64 * ElemBytes). Every
-// COM: non-stride family whose scaled offsets fit the two DS2 eight-bit fields
-// COM: is rewritten in place. Only bytes 0 and 1 change; opcode, registers,
-// COM: modifiers, instruction count, waits, and arbitrary-entry behavior stay
-// COM: identical. The fallback kernel pins the established split path when a
-// COM: scaled field is not representable.
+// COM: to each per-operand index (ElemBytes vs 64 * ElemBytes). Every B0 DS2
+// COM: instruction uses the same canonical A0 split path, even when both
+// COM: scaled offsets fit the original two eight-bit fields. Each pair is
+// COM: followed by a local s_wait_dscnt 0 drain.
 // COM:
 // COM: Companion tests:
 // COM:   hotswap-trampoline-ds-nostride64-multi.s -- drain insertion
@@ -38,9 +36,14 @@
 // COM: Kernel 1 (b32 load, non-stride64): offsets index*4. Source
 // COM: offset0:4 offset1:8 -> byte offsets 16 and 32.
 // DISASM-LABEL: <test_ds_load_b32_nostride64>:
-// DISASM-NEXT: ds_load_2addr_b32 v[0:1], v2 offset0:16 offset1:32
+// DISASM-NOT: ds_load_2addr_b32
+// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
+// DISASM: s_endpgm
+// DISASM: ds_load_b32 v0, v2 offset:16
+// DISASM-NEXT: ds_load_b32 v1, v2 offset:32
 // DISASM-NEXT: s_wait_dscnt 0x0
-// DISASM-NEXT: s_endpgm
+// DISASM-NEXT: s_branch
 
 .globl test_ds_load_b32_nostride64
 .p2align 8
@@ -73,9 +76,14 @@ test_ds_load_b32_nostride64:
 // COM: offset0:1 offset1:2 -> byte offsets 8 and 16. b64 destinations
 // COM: format as v[X:Y] register pairs.
 // DISASM-LABEL: <test_ds_load_b64_nostride64>:
-// DISASM-NEXT: ds_load_2addr_b64 v[0:3], v4 offset0:8 offset1:16
+// DISASM-NOT: ds_load_2addr_b64
+// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
+// DISASM: s_endpgm
+// DISASM: ds_load_b64 v[0:1], v4 offset:8
+// DISASM-NEXT: ds_load_b64 v[2:3], v4 offset:16
 // DISASM-NEXT: s_wait_dscnt 0x0
-// DISASM-NEXT: s_endpgm
+// DISASM-NEXT: s_branch
 
 .globl test_ds_load_b64_nostride64
 .p2align 8
@@ -108,9 +116,14 @@ test_ds_load_b64_nostride64:
 // COM: (addr, data0, data1). Source offset0:1 offset1:2 -> byte
 // COM: offsets 4 and 8.
 // DISASM-LABEL: <test_ds_store_b32_nostride64>:
-// DISASM-NEXT: ds_store_2addr_b32 v2, v0, v1 offset0:4 offset1:8
+// DISASM-NOT: ds_store_2addr_b32
+// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
+// DISASM: s_endpgm
+// DISASM: ds_store_b32 v2, v0 offset:4
+// DISASM-NEXT: ds_store_b32 v2, v1 offset:8
 // DISASM-NEXT: s_wait_dscnt 0x0
-// DISASM-NEXT: s_endpgm
+// DISASM-NEXT: s_branch
 
 .globl test_ds_store_b32_nostride64
 .p2align 8
@@ -143,9 +156,14 @@ test_ds_store_b32_nostride64:
 // COM: (dst, addr, data0, data1). Source offset0:1 offset1:3 -> byte
 // COM: offsets 4 and 12.
 // DISASM-LABEL: <test_ds_xchg_b32_nostride64>:
-// DISASM-NEXT: ds_storexchg_2addr_rtn_b32 v[0:1], v2, v3, v4 offset0:4 offset1:12
+// DISASM-NOT: ds_storexchg_2addr_rtn_b32
+// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
+// DISASM: s_endpgm
+// DISASM: ds_storexchg_rtn_b32 v0, v2, v3 offset:4
+// DISASM-NEXT: ds_storexchg_rtn_b32 v1, v2, v4 offset:12
 // DISASM-NEXT: s_wait_dscnt 0x0
-// DISASM-NEXT: s_endpgm
+// DISASM-NEXT: s_branch
 
 .globl test_ds_xchg_b32_nostride64
 .p2align 8
@@ -175,12 +193,16 @@ test_ds_xchg_b32_nostride64:
 
 // ---- Kernel 5: ds_store_2addr_b64 (non-stride64 store, b64 data pairs) -----
 // COM: Kernel 5 (b64 store, non-stride64): byte offsets 8 and 16 still fit
-// COM: the DS2 encoding's two eight-bit fields. Re-encode those fields in
-// COM: place for A0 instead of splitting the instruction or using a sled.
+// COM: the DS2 fields, but semantic correctness requires the split form.
 // DISASM-LABEL: <test_ds_store_b64_nostride64>:
-// DISASM-NEXT: ds_store_2addr_b64 v4, v[0:1], v[2:3] offset0:8 offset1:16
+// DISASM-NOT: ds_store_2addr_b64
+// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
+// DISASM: s_endpgm
+// DISASM: ds_store_b64 v4, v[0:1] offset:8
+// DISASM-NEXT: ds_store_b64 v4, v[2:3] offset:16
 // DISASM-NEXT: s_wait_dscnt 0x0
-// DISASM-NEXT: s_endpgm
+// DISASM-NEXT: s_branch
 
 .globl test_ds_store_b64_nostride64
 .p2align 8
@@ -208,15 +230,19 @@ test_ds_store_b64_nostride64:
 .Ltest_ds_store_b64_nostride64_end:
 .size test_ds_store_b64_nostride64, .Ltest_ds_store_b64_nostride64_end-test_ds_store_b64_nostride64
 
-// ---- Kernel 5b: b64 scaled offset no longer fits the DS2 field -------------
+// ---- Kernel 5b: larger b64 byte offsets use the same split path ------------
 // COM: Raw offsets 32 and 33 scale to 256 and 264. They fit the DS1 16-bit
-// COM: field but not the DS2 8-bit fields, so retain the established split
-// COM: path rather than truncating an in-place rewrite.
+// COM: field and demonstrate that split semantics do not depend on whether
+// COM: the original DS2 fields could hold the scaled values.
 // DISASM-LABEL: <test_ds_store_b64_nostride64_fallback>:
 // DISASM-NOT: ds_store_2addr_b64
 // DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
+// DISASM: s_endpgm
 // DISASM: ds_store_b64 v4, v[0:1] offset:256
 // DISASM-NEXT: ds_store_b64 v4, v[2:3] offset:264
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_branch
 
 .globl test_ds_store_b64_nostride64_fallback
 .p2align 8
@@ -250,9 +276,14 @@ test_ds_store_b64_nostride64_fallback:
 // COM: offset1:2 -> byte offsets 8 and 16. Both vdst halves AND the data
 // COM: operands format as v[X:Y] register pairs.
 // DISASM-LABEL: <test_ds_xchg_b64_nostride64>:
-// DISASM-NEXT: ds_storexchg_2addr_rtn_b64 v[0:3], v8, v[4:5], v[6:7] offset0:8 offset1:16
+// DISASM-NOT: ds_storexchg_2addr_rtn_b64
+// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
+// DISASM: s_endpgm
+// DISASM: ds_storexchg_rtn_b64 v[0:1], v8, v[4:5] offset:8
+// DISASM-NEXT: ds_storexchg_rtn_b64 v[2:3], v8, v[6:7] offset:16
 // DISASM-NEXT: s_wait_dscnt 0x0
-// DISASM-NEXT: s_endpgm
+// DISASM-NEXT: s_branch
 
 .globl test_ds_xchg_b64_nostride64
 .p2align 8
@@ -284,17 +315,33 @@ test_ds_xchg_b64_nostride64:
 // COM: Kernel 7 (combination, non-stride64): a single function body mixes
 // COM: ds_load_2addr_b32, ds_store_2addr_b32, and ds_storexchg_2addr_rtn_b32
 // COM: before a single drain s_wait_dscnt 0x0. Verifies that the per-
-// COM: instruction dispatcher in applyTrampolinePatchesImpl correctly
-// COM: routes each variant to the common byte-field rewrite without state
-// COM: leakage across types. All offsets scale by ElemBytes=4.
+// COM: instruction dispatcher in applyTrampolinePatchesImpl correctly routes
+// COM: each variant to an independent split without state leakage across
+// COM: types. All offsets scale by ElemBytes=4.
 // COM:   ds_load_2addr_b32  offset0:1 offset1:2 -> byte 4, 8
 // COM:   ds_store_2addr_b32 offset0:3 offset1:4 -> byte 12, 16
 // COM:   ds_storexchg_*_b32 offset0:5 offset1:6 -> byte 20, 24
 // DISASM-LABEL: <test_ds_combo_nostride64>:
-// DISASM-NEXT: ds_load_2addr_b32 v[0:1], v8 offset0:4 offset1:8
-// DISASM-NEXT: ds_store_2addr_b32 v8, v2, v3 offset0:12 offset1:16
-// DISASM-NEXT: ds_storexchg_2addr_rtn_b32 v[4:5], v8, v6, v7 offset0:20 offset1:24
+// DISASM-NOT: ds_load_2addr_b32
+// DISASM-NOT: ds_store_2addr_b32
+// DISASM-NOT: ds_storexchg_2addr_rtn_b32
+// DISASM: s_branch
+// DISASM: s_branch
+// DISASM: s_branch
+// DISASM: s_wait_dscnt 0x0
+// DISASM: s_endpgm
+// DISASM: ds_load_b32 v0, v8 offset:4
+// DISASM-NEXT: ds_load_b32 v1, v8 offset:8
 // DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_branch
+// DISASM: ds_store_b32 v8, v2 offset:12
+// DISASM-NEXT: ds_store_b32 v8, v3 offset:16
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_branch
+// DISASM: ds_storexchg_rtn_b32 v4, v8, v6 offset:20
+// DISASM-NEXT: ds_storexchg_rtn_b32 v5, v8, v7 offset:24
+// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_branch
 
 .globl test_ds_combo_nostride64
 .p2align 8
@@ -341,12 +388,8 @@ test_ds_combo_nostride64:
 .size test_ds_combo_nostride64, .Ltest_ds_combo_nostride64_end-test_ds_combo_nostride64
 
 // COM: Idempotency: rewriting the output again should produce identical
-// COM: bytes. Feeding the output back with its A0 stepping as the source
-// COM: disables B0-to-A0 patches, so the surviving A0-correct DS2 instruction
-// COM: is not scaled a second time.
-// COM: Legacy ISA names without a stepping deliberately declare their source
-// COM: as B0 on every invocation; repeating those arguments is not the
-// COM: idempotence contract for a transformation whose opcode survives.
+// COM: bytes. Feeding the split output back with its A0 stepping as the source
+// COM: disables B0-to-A0 patches; no DS2 opcode remains to convert again.
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
