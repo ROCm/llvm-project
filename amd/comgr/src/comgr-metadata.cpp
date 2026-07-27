@@ -192,16 +192,15 @@ bool processNote(const Elf_Note<ELFT> &Note, DataMeta *MetaP,
 }
 
 template <class ELFT>
-amd_comgr_status_t getElfMetadataRoot(const ELFObjectFile<ELFT> *Obj,
-                                      DataMeta *MetaP) {
+llvm::Error getElfMetadataRoot(const ELFObjectFile<ELFT> *Obj,
+                               DataMeta *MetaP) {
   bool Found = false;
   llvm::msgpack::DocNode Root;
   const ELFFile<ELFT> &ELFFile = Obj->getELFFile();
 
   auto ProgramHeadersOrError = ELFFile.program_headers();
-  if (errorToBool(ProgramHeadersOrError.takeError())) {
-    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
-  }
+  if (!ProgramHeadersOrError)
+    return ProgramHeadersOrError.takeError();
 
   for (const auto &Phdr : *ProgramHeadersOrError) {
     if (Phdr.p_type != ELF::PT_NOTE) {
@@ -214,21 +213,19 @@ amd_comgr_status_t getElfMetadataRoot(const ELFObjectFile<ELFT> *Obj,
       }
     }
 
-    if (errorToBool(std::move(Err))) {
-      return AMD_COMGR_STATUS_ERROR;
-    }
+    if (Err)
+      return Err;
   }
 
   if (Found) {
     MetaP->MetaDoc->Document.getRoot() = Root;
     MetaP->DocNode = MetaP->MetaDoc->Document.getRoot();
-    return AMD_COMGR_STATUS_SUCCESS;
+    return Error::success();
   }
 
   auto SectionsOrError = ELFFile.sections();
-  if (errorToBool(SectionsOrError.takeError())) {
-    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
-  }
+  if (!SectionsOrError)
+    return SectionsOrError.takeError();
 
   for (const auto &Shdr : *SectionsOrError) {
     if (Shdr.sh_type != ELF::SHT_NOTE) {
@@ -241,23 +238,23 @@ amd_comgr_status_t getElfMetadataRoot(const ELFObjectFile<ELFT> *Obj,
       }
     }
 
-    if (errorToBool(std::move(Err))) {
-      return AMD_COMGR_STATUS_ERROR;
-    }
+    if (Err)
+      return Err;
   }
 
   if (Found) {
     MetaP->MetaDoc->Document.getRoot() = Root;
     MetaP->DocNode = MetaP->MetaDoc->Document.getRoot();
-    return AMD_COMGR_STATUS_SUCCESS;
+    return Error::success();
   }
 
-  return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  return createStringError(inconvertibleErrorCode(),
+                           "no AMDGPU metadata note found in code object");
 }
 } // namespace
 
 namespace {
-amd_comgr_status_t getMetadataRoot(ELFObjectFileBase *Obj, DataMeta *MetaP) {
+llvm::Error getMetadataRoot(ELFObjectFileBase *Obj, DataMeta *MetaP) {
   if (auto *ELF32LE = dyn_cast<ELF32LEObjectFile>(Obj)) {
     return getElfMetadataRoot(ELF32LE, MetaP);
   }
@@ -277,17 +274,19 @@ amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP) {
   if (errorToBool(ObjOrErr.takeError())) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
-  return getMetadataRoot(ObjOrErr->get(), MetaP);
+  // The internal walker preserves the underlying LLVM error; the DataObject
+  // boundary keeps the historical status-only contract, so map any failure
+  // (malformed input or an absent note) to a single invalid-argument status.
+  if (errorToBool(getMetadataRoot(ObjOrErr->get(), MetaP)))
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  return AMD_COMGR_STATUS_SUCCESS;
 }
 
 llvm::Error getMetadataRoot(MemoryBufferRef MB, DataMeta *MetaP) {
   auto ObjOrErr = getELFObjectFileBase(MB);
   if (!ObjOrErr)
     return ObjOrErr.takeError();
-  if (getMetadataRoot(ObjOrErr->get(), MetaP) != AMD_COMGR_STATUS_SUCCESS)
-    return createStringError(inconvertibleErrorCode(),
-                             "failed to read AMDGPU metadata note");
-  return Error::success();
+  return getMetadataRoot(ObjOrErr->get(), MetaP);
 }
 
 struct IsaInfo {

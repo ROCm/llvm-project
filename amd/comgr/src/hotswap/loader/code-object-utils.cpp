@@ -13,6 +13,7 @@
 #include "hotswap/common/hotswap-error.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/BinaryFormat/AMDGPUMetadataVerifier.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Object/ELFObjectFile.h"
@@ -32,30 +33,26 @@ namespace COMGR::hotswap {
 // Section / symbol helpers
 //===----------------------------------------------------------------------===//
 
-// Return the section named `Name`, or nullopt when absent. Forwards
-// getName() failures.
-static Expected<std::optional<object::SectionRef>>
-findSection(object::ObjectFile &Obj, StringRef Name) {
+// Return the section named `Name` or error.
+static Expected<object::SectionRef> findSection(object::ObjectFile &Obj,
+                                                StringRef Name) {
   for (const object::SectionRef &Section : Obj.sections()) {
     Expected<StringRef> SecName = Section.getName();
     if (!SecName)
       return SecName.takeError();
     if (*SecName == Name)
-      return std::optional<object::SectionRef>(Section);
+      return Section;
   }
-  return std::optional<object::SectionRef>(std::nullopt);
+  return makeHotswapError(formatv("findSection: no section named '{0}'", Name));
 }
 
-//===----------------------------------------------------------------------===//
-// MsgPack field readers: absent optional fields keep the default, present
-// fields must be well-typed, and required fields must be present.
-//===----------------------------------------------------------------------===//
-
+// Return named DocNode or nullptr if absent.
 static msgpack::DocNode *findInMap(msgpack::MapDocNode &Map, StringRef Key) {
   auto It = Map.find(Key);
   return It == Map.end() ? nullptr : &It->second;
 }
 
+// Return Node's value as an int64_t or nullopt if not an integer.
 static std::optional<int64_t> nodeAsInt(const msgpack::DocNode &Node) {
   if (Node.getKind() == msgpack::Type::Int)
     return Node.getInt();
@@ -66,8 +63,9 @@ static std::optional<int64_t> nodeAsInt(const msgpack::DocNode &Node) {
 
 // Read `Key` as a uint32. `Required` controls whether an absent key is an
 // error; a present-but-not-uint32 value is always an error.
-static Error readUInt32(msgpack::MapDocNode &Map, StringRef Key,
-                        StringRef KernelName, bool Required, uint32_t &Out) {
+static Error readKernelMetaAsUInt32(msgpack::MapDocNode &Map, StringRef Key,
+                                    StringRef KernelName, bool Required,
+                                    uint32_t &Out) {
   msgpack::DocNode *Node = findInMap(Map, Key);
   if (!Node) {
     if (Required)
@@ -87,8 +85,9 @@ static Error readUInt32(msgpack::MapDocNode &Map, StringRef Key,
 // Read `Key` as a string. `Required` controls whether an absent key is an
 // error; a present-but-not-string value is always an error. `toString()` is
 // avoided because it accepts non-string scalars and asserts on arrays / maps.
-static Error readString(msgpack::MapDocNode &Map, StringRef Key,
-                        StringRef KernelName, bool Required, std::string &Out) {
+static Error readKernelMetaAsString(msgpack::MapDocNode &Map, StringRef Key,
+                                    StringRef KernelName, bool Required,
+                                    std::string &Out) {
   msgpack::DocNode *Node = findInMap(Map, Key);
   if (!Node) {
     if (Required)
@@ -126,10 +125,30 @@ forEachKernelNode(msgpack::Document &Doc,
   return Error::success();
 }
 
-// Reject an AMDGPU metadata document whose schema version this loader does not
-// understand. `amdhsa.version` is [major, minor]; only major version 1 is
-// supported.
-static Error checkMetadataVersion(msgpack::Document &Doc) {
+// Map e_ident[EI_ABIVERSION] to the AMDGPU code object version. The transpiler
+// models the gfx1250 user-SGPR ABI, which appears in code object V4 and later;
+// earlier versions are refused at the boundary rather than misparsed with the
+// wrong descriptor and metadata layout.
+static Expected<uint8_t> codeObjectVersion(uint8_t AbiVersion) {
+  switch (AbiVersion) {
+  case ELF::ELFABIVERSION_AMDGPU_HSA_V4:
+    return 4;
+  case ELF::ELFABIVERSION_AMDGPU_HSA_V5:
+    return 5;
+  case ELF::ELFABIVERSION_AMDGPU_HSA_V6:
+    return 6;
+  default:
+    return makeHotswapError(
+        formatv("unsupported AMDGPU code object ABI version {0}; the "
+                "transpiler models code object V4 through V6",
+                AbiVersion));
+  }
+}
+
+// Read and validate the `amdhsa.version` [major, minor] pair, returning the
+// minor version. Only major version 1 is supported; the minor value and type
+// are validated so an unsupported schema is rejected before interpretation.
+static Expected<uint32_t> readMetadataMinorVersion(msgpack::Document &Doc) {
   msgpack::DocNode &Root = Doc.getRoot();
   if (!Root.isMap())
     return makeHotswapError("AMDGPU metadata root is not a map");
@@ -139,11 +158,28 @@ static Error checkMetadataVersion(msgpack::Document &Doc) {
   if (!Version->isArray() || Version->getArray().size() != 2)
     return makeHotswapError("amdhsa.version is not a [major, minor] array");
   std::optional<int64_t> Major = nodeAsInt(Version->getArray()[0]);
-  if (!Major)
-    return makeHotswapError("amdhsa.version major is not an integer");
+  std::optional<int64_t> Minor = nodeAsInt(Version->getArray()[1]);
+  if (!Major || !Minor)
+    return makeHotswapError("amdhsa.version major/minor is not an integer");
   if (*Major != 1)
     return makeHotswapError(
-        formatv("unsupported AMDGPU metadata version {0}", *Major));
+        formatv("unsupported AMDGPU metadata version {0}.{1}", *Major, *Minor));
+  if (*Minor < 0 || *Minor > UINT32_MAX)
+    return makeHotswapError(
+        formatv("amdhsa.version minor {0} is out of range", *Minor));
+  return static_cast<uint32_t>(*Minor);
+}
+
+// Run LLVM's strict AMDGPU metadata verifier as the single source of truth for
+// schema and field types: it proves required fields are present and well-typed
+// so the extraction below does not re-derive that check. Hotswap keeps only the
+// semantic checks the verifier cannot express (version pair, descriptor
+// agreement, kernarg ranges).
+static Error verifyMetadataSchema(msgpack::Document &Doc) {
+  AMDGPU::HSAMD::V3::MetadataVerifier Verifier(/*Strict=*/true);
+  if (!Verifier.verify(Doc.getRoot()))
+    return makeHotswapError(
+        "AMDGPU code-object metadata failed strict schema verification");
   return Error::success();
 }
 
@@ -151,23 +187,30 @@ static Error checkMetadataVersion(msgpack::Document &Doc) {
 // Kernel descriptor
 //===----------------------------------------------------------------------===//
 
+// The kernel descriptor together with the absolute source entry address it
+// points at (descriptor address + signed kernel_code_entry_byte_offset).
+struct DescriptorLoad {
+  amdhsa::kernel_descriptor_t Descriptor;
+  uint64_t EntryAddress;
+};
+
 // Read and validate the 64-byte `<symbol>` kernel descriptor from .rodata. The
 // AMDGPU asm printer emits it as an STT_OBJECT there; the descriptor is read
 // rather than derived from the MsgPack notes because those omit the kernarg
 // preload spec the gfx1250 user-SGPR ABI needs. Fields are read as explicit
 // little-endian values since `kernel_descriptor_t` has native integer members.
-static Expected<amdhsa::kernel_descriptor_t>
+static Expected<DescriptorLoad>
 readKernelDescriptor(object::ObjectFile &Obj, StringRef DescriptorSymbolName) {
   constexpr uint64_t DescriptorSize = sizeof(amdhsa::kernel_descriptor_t);
 
-  Expected<std::optional<object::SectionRef>> Rodata =
-      findSection(Obj, ".rodata");
+  Expected<object::SectionRef> Rodata = findSection(Obj, ".rodata");
   if (!Rodata)
-    return Rodata.takeError();
-  if (!*Rodata)
-    return makeHotswapError("readKernelDescriptor: no .rodata section");
+    return makeHotswapError(
+        formatv("readKernelDescriptor: descriptor '{0}' requires a .rodata "
+                "section: {1}",
+                DescriptorSymbolName, toString(Rodata.takeError())));
 
-  Expected<StringRef> Contents = (*Rodata)->getContents();
+  Expected<StringRef> Contents = Rodata->getContents();
   if (!Contents)
     return Contents.takeError();
 
@@ -185,7 +228,7 @@ readKernelDescriptor(object::ObjectFile &Obj, StringRef DescriptorSymbolName) {
   Expected<uint64_t> Address = Symbol->getAddress();
   if (!Address)
     return Address.takeError();
-  if (*SymbolSection == Obj.section_end() || **SymbolSection != **Rodata ||
+  if (*SymbolSection == Obj.section_end() || **SymbolSection != *Rodata ||
       ELFSym.getELFType() != ELF::STT_OBJECT ||
       ELFSym.getSize() != DescriptorSize || *Address % DescriptorSize != 0)
     return makeHotswapError(
@@ -193,7 +236,7 @@ readKernelDescriptor(object::ObjectFile &Obj, StringRef DescriptorSymbolName) {
                 "descriptor (wrong type, section, size, or alignment)",
                 DescriptorSymbolName));
 
-  uint64_t RodataAddress = (*Rodata)->getAddress();
+  uint64_t RodataAddress = Rodata->getAddress();
   if (*Address < RodataAddress)
     return makeHotswapError(
         formatv("readKernelDescriptor: symbol '{0}' at {1:x} precedes .rodata "
@@ -233,6 +276,9 @@ readKernelDescriptor(object::ObjectFile &Obj, StringRef DescriptorSymbolName) {
       Bytes + amdhsa::PRIVATE_SEGMENT_FIXED_SIZE_OFFSET);
   Descriptor.kernarg_size =
       support::endian::read32le(Bytes + amdhsa::KERNARG_SIZE_OFFSET);
+  Descriptor.kernel_code_entry_byte_offset =
+      static_cast<int64_t>(support::endian::read64le(
+          Bytes + amdhsa::KERNEL_CODE_ENTRY_BYTE_OFFSET_OFFSET));
   Descriptor.compute_pgm_rsrc1 =
       support::endian::read32le(Bytes + amdhsa::COMPUTE_PGM_RSRC1_OFFSET);
   Descriptor.compute_pgm_rsrc2 =
@@ -241,7 +287,13 @@ readKernelDescriptor(object::ObjectFile &Obj, StringRef DescriptorSymbolName) {
       support::endian::read16le(Bytes + amdhsa::KERNEL_CODE_PROPERTIES_OFFSET);
   Descriptor.kernarg_preload =
       support::endian::read16le(Bytes + amdhsa::KERNARG_PRELOAD_OFFSET);
-  return Descriptor;
+
+  // The entry address is the descriptor address plus its signed code-entry
+  // offset: this, not the source `.name`, binds the kernel's ABI to its code.
+  uint64_t EntryAddress =
+      *Address +
+      static_cast<uint64_t>(Descriptor.kernel_code_entry_byte_offset);
+  return DescriptorLoad{Descriptor, EntryAddress};
 }
 
 //===----------------------------------------------------------------------===//
@@ -249,19 +301,16 @@ readKernelDescriptor(object::ObjectFile &Obj, StringRef DescriptorSymbolName) {
 //===----------------------------------------------------------------------===//
 
 // Cross-check the descriptor against the MsgPack fields that describe the same
-// ABI. `PrivatePresent` records whether .private_segment_fixed_size appeared in
-// the metadata; it is authoritative from the descriptor either way but a
-// present-and-disagreeing value is a malformed code object.
+// ABI. The strict verifier guarantees .private_segment_fixed_size is present,
+// so it is always compared; a disagreement is a malformed code object.
 static Error checkDescriptorAgrees(const amdhsa::kernel_descriptor_t &Desc,
-                                   const KernelMeta &Meta,
-                                   bool PrivatePresent) {
+                                   const KernelMeta &Meta) {
   if (Desc.group_segment_fixed_size != Meta.GroupSegmentFixedSize)
     return makeHotswapError(formatv(
         "kernel '{0}': metadata and descriptor disagree on group "
         "segment size ({1} vs {2})",
         Meta.Name, Meta.GroupSegmentFixedSize, Desc.group_segment_fixed_size));
-  if (PrivatePresent &&
-      Desc.private_segment_fixed_size != Meta.PrivateSegmentFixedSize)
+  if (Desc.private_segment_fixed_size != Meta.PrivateSegmentFixedSize)
     return makeHotswapError(
         formatv("kernel '{0}': metadata and descriptor disagree on private "
                 "segment size ({1} vs {2})",
@@ -306,31 +355,36 @@ static Error validateKernelAbi(const KernelMeta &Meta) {
 }
 
 // Parse one kernel node into `Meta`, then read, validate, and cross-check its
-// descriptor. `Obj` is used only for the descriptor read.
-static Error parseKernel(object::ObjectFile &Obj, msgpack::MapDocNode &Kernel,
-                         KernelMeta &Meta) {
-  if (Error E = readString(Kernel, ".name", "<unnamed>", /*Required=*/true,
-                           Meta.Name))
+// descriptor. `Obj` is used only for the descriptor read. The strict schema
+// verifier has already run, so required fields are present and well-typed.
+// Every required read below is a `Required=true` extraction rather than a
+// schema check, kept so a value's type is never assumed.
+static Error parseKernel(object::ObjectFile &Obj, uint8_t CodeObjectVersion,
+                         msgpack::MapDocNode &Kernel, KernelMeta &Meta) {
+  Meta.CodeObjectVersion = CodeObjectVersion;
+  if (Error E = readKernelMetaAsString(Kernel, ".name", "<unnamed>",
+                                       /*Required=*/true, Meta.Name))
     return E;
   StringRef Name = Meta.Name;
-  if (Error E =
-          readString(Kernel, ".symbol", Name, /*Required=*/true, Meta.Symbol))
+  if (Error E = readKernelMetaAsString(Kernel, ".symbol", Name,
+                                       /*Required=*/true, Meta.Symbol))
     return E;
 
-  if (Error E = readUInt32(Kernel, ".kernarg_segment_size", Name,
-                           /*Required=*/true, Meta.KernargSegmentSize))
+  if (Error E =
+          readKernelMetaAsUInt32(Kernel, ".kernarg_segment_size", Name,
+                                 /*Required=*/true, Meta.KernargSegmentSize))
     return E;
-  if (Error E = readUInt32(Kernel, ".group_segment_fixed_size", Name,
-                           /*Required=*/true, Meta.GroupSegmentFixedSize))
+  if (Error E =
+          readKernelMetaAsUInt32(Kernel, ".group_segment_fixed_size", Name,
+                                 /*Required=*/true, Meta.GroupSegmentFixedSize))
     return E;
-  if (Error E = readUInt32(Kernel, ".max_flat_workgroup_size", Name,
-                           /*Required=*/true, Meta.MaxFlatWorkgroupSize))
+  if (Error E =
+          readKernelMetaAsUInt32(Kernel, ".max_flat_workgroup_size", Name,
+                                 /*Required=*/true, Meta.MaxFlatWorkgroupSize))
     return E;
-  // .private_segment_fixed_size is authoritative from the descriptor, so it is
-  // optional here and only cross-checked when present.
-  bool PrivatePresent = findInMap(Kernel, ".private_segment_fixed_size");
-  if (Error E = readUInt32(Kernel, ".private_segment_fixed_size", Name,
-                           /*Required=*/false, Meta.PrivateSegmentFixedSize))
+  if (Error E = readKernelMetaAsUInt32(
+          Kernel, ".private_segment_fixed_size", Name,
+          /*Required=*/true, Meta.PrivateSegmentFixedSize))
     return E;
 
   if (msgpack::DocNode *Dims = findInMap(Kernel, ".cluster_dims")) {
@@ -359,36 +413,37 @@ static Error parseKernel(object::ObjectFile &Obj, msgpack::MapDocNode &Kernel,
             formatv("kernel '{0}' has a non-map .args entry", Name));
       msgpack::MapDocNode &ArgMap = ArgNode.getMap();
       KernelArgMeta Arg;
+      if (Error E = readKernelMetaAsString(ArgMap, ".name", Name,
+                                           /*Required=*/false, Arg.Name))
+        return E;
+      if (Error E = readKernelMetaAsUInt32(ArgMap, ".offset", Name,
+                                           /*Required=*/true, Arg.Offset))
+        return E;
+      if (Error E = readKernelMetaAsUInt32(ArgMap, ".size", Name,
+                                           /*Required=*/true, Arg.Size))
+        return E;
+      if (Error E = readKernelMetaAsString(ArgMap, ".value_kind", Name,
+                                           /*Required=*/true, Arg.ValueKind))
+        return E;
       if (Error E =
-              readString(ArgMap, ".name", Name, /*Required=*/false, Arg.Name))
-        return E;
-      if (Error E = readUInt32(ArgMap, ".offset", Name, /*Required=*/true,
-                               Arg.Offset))
-        return E;
-      if (Error E =
-              readUInt32(ArgMap, ".size", Name, /*Required=*/true, Arg.Size))
-        return E;
-      if (Error E = readString(ArgMap, ".value_kind", Name, /*Required=*/true,
-                               Arg.ValueKind))
-        return E;
-      if (Error E = readString(ArgMap, ".address_space", Name,
-                               /*Required=*/false, Arg.AddressSpace))
+              readKernelMetaAsString(ArgMap, ".address_space", Name,
+                                     /*Required=*/false, Arg.AddressSpace))
         return E;
       Meta.Args.push_back(std::move(Arg));
     }
   }
 
-  Expected<amdhsa::kernel_descriptor_t> Descriptor =
-      readKernelDescriptor(Obj, Meta.Symbol);
-  if (!Descriptor)
-    return Descriptor.takeError();
-  if (Error E = checkDescriptorAgrees(*Descriptor, Meta, PrivatePresent))
+  Expected<DescriptorLoad> Loaded = readKernelDescriptor(Obj, Meta.Symbol);
+  if (!Loaded)
+    return Loaded.takeError();
+  const amdhsa::kernel_descriptor_t &Descriptor = Loaded->Descriptor;
+  if (Error E = checkDescriptorAgrees(Descriptor, Meta))
     return E;
-  Meta.PrivateSegmentFixedSize = Descriptor->private_segment_fixed_size;
-  Meta.ComputePgmRsrc1 = Descriptor->compute_pgm_rsrc1;
-  Meta.ComputePgmRsrc2 = Descriptor->compute_pgm_rsrc2;
-  Meta.KernelCodeProperties = Descriptor->kernel_code_properties;
-  Meta.KernargPreload = Descriptor->kernarg_preload;
+  Meta.EntryAddress = Loaded->EntryAddress;
+  Meta.ComputePgmRsrc1 = Descriptor.compute_pgm_rsrc1;
+  Meta.ComputePgmRsrc2 = Descriptor.compute_pgm_rsrc2;
+  Meta.KernelCodeProperties = Descriptor.kernel_code_properties;
+  Meta.KernargPreload = Descriptor.kernarg_preload;
 
   return validateKernelAbi(Meta);
 }
@@ -415,6 +470,13 @@ Expected<CodeObjectInfo> CodeObjectInfo::create(MemoryBufferRef ElfData) {
   if (Header.e_ident[ELF::EI_OSABI] != ELF::ELFOSABI_AMDGPU_HSA)
     return makeHotswapError("code object does not use the AMDGPU HSA OS ABI");
 
+  // Bind the descriptor and metadata ABI layout to the declared code object
+  // version before interpreting either, so an unmodelled version is refused
+  // rather than parsed with the wrong field semantics.
+  Expected<uint8_t> Cov = codeObjectVersion(Header.e_ident[ELF::EI_ABIVERSION]);
+  if (!Cov)
+    return Cov.takeError();
+
   // Symbol lookup walks only .symtab, so a stripped object would degrade into
   // a misleading missing-descriptor result. Refuse it explicitly instead.
   bool HasSymtab = false;
@@ -434,7 +496,19 @@ Expected<CodeObjectInfo> CodeObjectInfo::create(MemoryBufferRef ElfData) {
     return std::move(E);
   msgpack::Document &Doc = Meta.MetaDoc->Document;
 
-  if (Error E = checkMetadataVersion(Doc))
+  // The metadata version pair and the code object version must agree: the
+  // former selects the schema, the latter the descriptor layout.
+  Expected<uint32_t> MinorVersion = readMetadataMinorVersion(Doc);
+  if (!MinorVersion)
+    return MinorVersion.takeError();
+  uint32_t ExpectedMinor = (*Cov == 4) ? 1 : 2;
+  if (*MinorVersion != ExpectedMinor)
+    return makeHotswapError(
+        formatv("code object V{0} declares metadata version 1.{1}, expected "
+                "1.{2}",
+                *Cov, *MinorVersion, ExpectedMinor));
+
+  if (Error E = verifyMetadataSchema(Doc))
     return std::move(E);
 
   CodeObjectInfo Info;
@@ -443,13 +517,14 @@ Expected<CodeObjectInfo> CodeObjectInfo::create(MemoryBufferRef ElfData) {
   if (Error E =
           forEachKernelNode(Doc, [&](msgpack::MapDocNode &Kernel) -> Error {
             KernelMeta KM;
-            if (Error E = parseKernel(*Info.Obj, Kernel, KM))
+            if (Error E = parseKernel(*Info.Obj, *Cov, Kernel, KM))
               return E;
             if (Info.Kernels.count(KM.Name))
               return makeHotswapError(
                   formatv("duplicate kernel '{0}' in metadata", KM.Name));
-            Info.KernelOrder.push_back(KM.Name);
-            Info.Kernels[KM.Name] = std::move(KM);
+            std::string KernelName = KM.Name;
+            Info.Kernels.try_emplace(KernelName, std::move(KM));
+            Info.KernelOrder.push_back(std::move(KernelName));
             return Error::success();
           }))
     return std::move(E);
@@ -543,70 +618,66 @@ static uint64_t nextDistinctAddress(ArrayRef<FunctionSymbol> Functions,
 
 Expected<KernelSymbolExtent>
 CodeObjectInfo::kernelSymbolExtent(StringRef KernelName) const {
-  Expected<std::optional<object::SectionRef>> Text = findSection(*Obj, ".text");
+  Expected<const KernelMeta *> Meta = kernel(KernelName);
+  if (!Meta)
+    return Meta.takeError();
+  // The entry comes from the descriptor's code-entry offset, not a lookup of
+  // `.name` in .text: `.symbol` may name a different symbol, so only the
+  // descriptor authoritatively binds this kernel's ABI to its code.
+  uint64_t Entry = (*Meta)->EntryAddress;
+
+  Expected<object::SectionRef> Text = findSection(*Obj, ".text");
   if (!Text)
     return Text.takeError();
-  if (!*Text)
-    return makeHotswapError("kernelSymbolExtent: no .text section");
-  uint64_t TextBase = (*Text)->getAddress();
-  uint64_t TextEnd = TextBase + (*Text)->getSize();
-
-  Expected<object::SymbolRef> Symbol =
-      COMGR::lookupSymbolByName(*Obj, KernelName);
-  if (!Symbol)
-    return Symbol.takeError();
-  Expected<object::section_iterator> Section = Symbol->getSection();
-  if (!Section)
-    return Section.takeError();
-  if (*Section == Obj->section_end() || **Section != **Text)
-    return makeHotswapError(formatv(
-        "kernelSymbolExtent: symbol '{0}' is not in .text", KernelName));
-  Expected<uint64_t> Address = Symbol->getAddress();
-  if (!Address)
-    return Address.takeError();
-  if (*Address < TextBase || *Address >= TextEnd)
+  uint64_t TextBase = Text->getAddress();
+  uint64_t TextEnd = TextBase + Text->getSize();
+  if (Entry < TextBase || Entry >= TextEnd)
     return makeHotswapError(
-        formatv("kernelSymbolExtent: symbol '{0}' address is outside .text",
-                KernelName));
+        formatv("kernelSymbolExtent: kernel '{0}' entry {1:x} is outside .text "
+                "[{2:x}, {3:x})",
+                KernelName, Entry, TextBase, TextEnd));
+
+  // Bound the entry by the enclosing function symbol: use its recorded size
+  // when present, otherwise the next distinct function address (symbol
+  // placement does not establish ownership, so an intervening helper caps the
+  // extent).
+  Expected<SmallVector<FunctionSymbol>> Functions =
+      collectTextFunctions(*Obj, *Text, TextBase, TextEnd);
+  if (!Functions)
+    return Functions.takeError();
 
   KernelSymbolExtent Extent;
-  Extent.Offset = *Address - TextBase;
+  Extent.Offset = Entry - TextBase;
 
-  uint64_t SymbolSize = object::ELFSymbolRef(*Symbol).getSize();
+  uint64_t SymbolSize = 0;
+  for (const FunctionSymbol &F : *Functions)
+    if (F.Address == Entry) {
+      SymbolSize = F.Size;
+      break;
+    }
   if (SymbolSize != 0) {
-    if (SymbolSize > TextEnd - *Address)
+    if (SymbolSize > TextEnd - Entry)
       return makeHotswapError(
-          formatv("kernelSymbolExtent: symbol '{0}' size extends past .text",
+          formatv("kernelSymbolExtent: kernel '{0}' size extends past .text",
                   KernelName));
     Extent.Size = SymbolSize;
     return Extent;
   }
-
-  // A zero-sized kernel symbol is bounded by the next distinct function-symbol
-  // address: symbol placement does not establish ownership, so an intervening
-  // helper caps the extent rather than being absorbed into it.
-  Expected<SmallVector<FunctionSymbol>> Functions =
-      collectTextFunctions(*Obj, **Text, TextBase, TextEnd);
-  if (!Functions)
-    return Functions.takeError();
   Extent.Size =
-      nextDistinctAddress(*Functions, /*Start=*/0, *Address, TextEnd) -
-      *Address;
+      nextDistinctAddress(*Functions, /*Start=*/0, Entry, TextEnd) - Entry;
   return Extent;
 }
 
 Expected<SmallVector<KernelSymbolExtent>>
 CodeObjectInfo::textFunctionExtents() const {
-  Expected<std::optional<object::SectionRef>> Text = findSection(*Obj, ".text");
+  Expected<object::SectionRef> Text = findSection(*Obj, ".text");
   if (!Text)
     return Text.takeError();
-  if (!*Text)
-    return makeHotswapError("textFunctionExtents: no .text section");
-  uint64_t TextBase = (*Text)->getAddress();
-  uint64_t TextEnd = TextBase + (*Text)->getSize();
+  uint64_t TextBase = Text->getAddress();
+  uint64_t TextEnd = TextBase + Text->getSize();
 
   Expected<SmallVector<FunctionSymbol>> Functions =
-      collectTextFunctions(*Obj, **Text, TextBase, TextEnd);
+      collectTextFunctions(*Obj, *Text, TextBase, TextEnd);
   if (!Functions)
     return Functions.takeError();
 

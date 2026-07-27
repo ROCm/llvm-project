@@ -9,6 +9,7 @@ FileHeader:
   Class:   ELFCLASS64
   Data:    ELFDATA2LSB
   OSABI:   ELFOSABI_AMDGPU_HSA
+  ABIVersion: 0x4
   Type:    ET_DYN
   Machine: EM_AMDGPU
   Flags:   [ EF_AMDGPU_MACH_AMDGCN_GFX942 ]

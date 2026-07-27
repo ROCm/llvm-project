@@ -51,6 +51,18 @@ struct KernelMeta {
   /// AMDHSA `.symbol`: the descriptor object's symbol name. Not required to
   /// match `Name`, so it is read from the metadata rather than synthesized.
   std::string Symbol;
+
+  /// AMDGPU code object version (4, 5, or 6), taken from e_ident[EI_ABIVERSION]
+  /// at the code-object boundary. Retained for version-dependent ABI handling.
+  uint8_t CodeObjectVersion = 0;
+
+  /// Absolute source address of the kernel entry in `.text`, decoded from the
+  /// descriptor's signed `kernel_code_entry_byte_offset`. Authoritative over
+  /// any name-based symbol lookup: `.symbol` (hence the descriptor) may differ
+  /// from
+  /// `.name`, so the descriptor's own entry offset is the sole binding between
+  /// a kernel's ABI and its code.
+  uint64_t EntryAddress = 0;
   uint32_t KernargSegmentSize = 0;
   uint32_t GroupSegmentFixedSize = 0;
   uint32_t PrivateSegmentFixedSize = 0;
