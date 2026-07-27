@@ -25,6 +25,7 @@
 // DISASM-LABEL: <promotion_candidate>:
 // DISASM-NEXT: s_mov_b32 s0, s1
 // DISASM-NEXT: s_mov_b32 s0, s2
+// DISASM-NEXT: s_mov_b32 s0, s3
 // DISASM-NEXT: s_get_pc_i64
 // DISASM-NEXT: s_add_nc_u64
 // DISASM-NEXT: s_set_pc_i64

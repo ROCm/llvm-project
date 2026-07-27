@@ -1,16 +1,18 @@
 // COM: A far eight-byte trampoline site may tentatively reserve one SGPR to
 // COM: preserve live wave32 VCC_LO. Direct control-flow and a following branch
-// COM: prevent expansion to the required 12-byte source landing, so the plan
-// COM: must downgrade cleanly to the registerless island route. Its second
-// COM: source dword is the owner-reserved final return relay, so it branches
-// COM: to the continuation instead of remaining padding.
+// COM: prevent expansion to the required source landing. Promote exact
+// COM: gateway capacity before ordinary relay planning, save VCC_LO in the
+// COM: reserved SGPR on the outbound route, and restore it in a short-branch
+// COM: gateway on the return route.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 | %FileCheck --check-prefix=LOG %s
 // LOG: hotswap: safe far return: deferring live wave32 VCC_LO preservation in s105
-// LOG: hotswap: deferred live-VCC preservation at 0x{{[0-9A-F]+}} fell back to a registerless far return
+// LOG: hotswap: deferred live-VCC preservation at 0x{{[0-9A-F]+}} will use a round-trip restore gateway
+// LOG: hotswap: pre-promoted {{[0-9]+}} gateway window(s) covering 2 isolated live-VCC source(s)
+// LOG: hotswap: assigned 2 round-trip VCC gateway(s) from promoted capacity
 // LOG: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
@@ -18,13 +20,22 @@
 // DISASM-NEXT: s_branch 0
 // DISASM-NEXT: s_mov_b32 s104, 0
 // DISASM-NEXT: s_branch
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_nop 0
 // DISASM-NEXT: s_cbranch_vccz
+// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_nop 0
+// DISASM-NEXT: s_cbranch_vccz
+// DISASM: s_mov_b32 s105, vcc_lo
+// DISASM-NEXT: s_get_pc_i64 vcc
+// DISASM-NEXT: s_add_nc_u64 vcc
+// DISASM-NEXT: s_set_pc_i64 vcc
+// DISASM-NEXT: s_mov_b32 vcc_lo, s105
+// DISASM-NEXT: s_branch
 
 // RUN: %llvm-readelf --notes %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=METADATA %s
 // METADATA: .name:           test_deferred_vcc
-// METADATA: .sgpr_count:     105
+// METADATA: .sgpr_count:     108
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -39,6 +50,8 @@
 test_deferred_vcc:
   s_branch 0
   s_mov_b32 s104, 0
+  ds_load_2addr_stride64_b32 v[0:1], v2 offset0:1 offset1:3
+  s_cbranch_vccz 0
   ds_load_2addr_stride64_b32 v[0:1], v2 offset0:1 offset1:3
   s_cbranch_vccz 0
 .irp live_reg, s0, s2, s4, s6, s8, s10, s12, s14, s16, s18, s20, s22, s24, s26, s28, s30, s32, s34, s36, s38, s40, s42, s44, s46, s48, s50, s52, s54, s56, s58, s60, s62, s64, s66, s68, s70, s72, s74, s76, s78, s80, s82, s84, s86, s88, s90, s92, s94, s96, s98, s100, s102, s104

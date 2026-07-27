@@ -326,6 +326,12 @@ struct Trampoline {
   // A wave32 far edge may preserve live VCC_LO in one safe numbered SGPR.
   // Its source tail is a restore-and-fallthrough landing pad.
   bool LongBranchPreservesVcc = false;
+  // An isolated eight-byte source cannot hold that restore landing. In that
+  // case, append restore+branch bytes to its nearby forward gateway and return
+  // there from the pool instead.
+  bool UsesVccRestoreGateway = false;
+  uint64_t VccRestoreGatewayOffset = 0;
+  llvm::SmallVector<uint8_t> VccRestoreGatewayBytes;
   bool HasPoolBranchIsland = false;
   uint64_t PoolBranchIslandOffset = 0;
   bool UsesShortBranchForward = false;
@@ -343,6 +349,8 @@ struct Trampoline {
   bool HasSourceTailGateway = false;
   uint64_t SourceTailGatewayOffset = 0;
   uint32_t SourceTailGatewayBytes = 0;
+  llvm::SmallVector<std::pair<uint64_t, uint32_t>, 2>
+      AdditionalSourceTailGateways;
   llvm::SmallVector<uint64_t, 4> ReturnBranchIslands;
   uint64_t ReturnBranchTargetOffset = 0;
   bool HasForwardGateway = false;
