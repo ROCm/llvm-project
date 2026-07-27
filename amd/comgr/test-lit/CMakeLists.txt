@@ -105,14 +105,7 @@ if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   # links, already resolved to the dylib or the static components.
   target_link_libraries(hotswap_transpile_cli
     PRIVATE hotswap::common hotswap::loader comgr-object-utils ${LLVM_LIBS})
-  # Drop the comgr-object-utils functions the driver never calls, so their
-  # references to the rest of comgr (parseTargetIdentifier, setCStr, the
-  # DataSymbol ctor/dtor -- all defined in comgr.cpp, which the driver does not
-  # link) do not turn into unresolved externals. --gc-sections needs the
-  # -ffunction-sections objects; /OPT:REF needs the /Gy ones.
-  if(MSVC)
-    target_link_options(hotswap_transpile_cli PRIVATE /OPT:REF)
-  elseif(NOT WIN32)
+  if(NOT WIN32)
     target_link_options(hotswap_transpile_cli PRIVATE -Wl,--gc-sections)
   endif()
   add_dependencies(test-lit hotswap_transpile_cli)

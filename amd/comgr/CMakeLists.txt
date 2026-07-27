@@ -443,10 +443,9 @@ target_include_directories(amd_comgr
 # amd_comgr and the hotswap test drivers, so the drivers reuse the exact same
 # objects (and the buffer-facing getMetadataRoot / getElfIsaName /
 # lookupSymbolByName entry points) instead of recompiling the sources with
-# divergent flags. Per-function/data sections let a standalone driver drop the
-# parts of these translation units it does not reference (the amd_comgr build
-# keeps them); on MSVC the equivalent is /Gy plus /Gw, paired with the linker's
-# /OPT:REF on the driver.
+# divergent flags. Function/data sections let a standalone driver drop the parts
+# of these translation units it does not reference (the amd_comgr build keeps
+# them).
 add_library(comgr-object-utils OBJECT ${COMGR_OBJECT_UTILS_SOURCES})
 # These sources include LLVM headers that pull in TableGen-generated .inc files.
 # amd_comgr is ordered after those generators by its LLVM link libraries, but an
@@ -466,13 +465,8 @@ target_include_directories(comgr-object-utils
     ${LLVM_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>)
-if(MSVC)
-  target_compile_options(comgr-object-utils
-    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" /Gy /Gw)
-else()
-  target_compile_options(comgr-object-utils
-    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" -ffunction-sections -fdata-sections)
-endif()
+target_compile_options(comgr-object-utils
+  PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" -ffunction-sections -fdata-sections)
 target_compile_definitions(comgr-object-utils
   PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS}")
 target_link_libraries(amd_comgr PRIVATE comgr-object-utils)

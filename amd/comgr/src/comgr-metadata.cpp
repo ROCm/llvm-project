@@ -780,4 +780,47 @@ amd_comgr_status_t lookUpCodeObject(DataObject *DataP,
 }
 
 } // namespace metadata
+
+amd_comgr_status_t parseTargetIdentifier(StringRef IdentStr,
+                                         TargetIdentifier &Ident) {
+  SmallVector<StringRef, 5> IsaNameComponents;
+  IdentStr.split(IsaNameComponents, '-', 4);
+  if (IsaNameComponents.size() != 5) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  Ident.Arch = IsaNameComponents[0];
+  Ident.Vendor = IsaNameComponents[1];
+  Ident.OS = IsaNameComponents[2];
+  Ident.Environ = IsaNameComponents[3];
+
+  Ident.Features.clear();
+  IsaNameComponents[4].split(Ident.Features, ':');
+
+  Ident.Processor = Ident.Features[0];
+  Ident.Features.erase(Ident.Features.begin());
+
+  if (IdentStr == "spirv64-amd-amdhsa--amdgcnspirv" ||
+      IdentStr == "spirv64-amd-amdhsa-unknown-amdgcnspirv") {
+    // Features not supported for SPIR-V
+    if (!Ident.Features.empty())
+      return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
+
+  size_t IsaIndex;
+  amd_comgr_status_t Status = metadata::getIsaIndex(IdentStr, IsaIndex);
+  if (Status != AMD_COMGR_STATUS_SUCCESS) {
+    return Status;
+  }
+
+  for (auto Feature : Ident.Features) {
+    if (!metadata::isSupportedFeature(IsaIndex, Feature)) {
+      return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+  }
+
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
 } // namespace COMGR
