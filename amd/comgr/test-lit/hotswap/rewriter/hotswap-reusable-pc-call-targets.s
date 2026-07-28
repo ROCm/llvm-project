@@ -37,6 +37,10 @@
 // INDIRECT: hotswap: resolved reusable PC-materialized call
 // INDIRECT: hotswap: unresolved call target
 // EXTERNAL: hotswap: unresolved call target
+// UNDECODED: hotswap: resolved reusable PC-materialized call
+// UNDECODED: hotswap: unresolved call target
+// RECONVERGE: hotswap: resolved reusable PC-materialized call
+// RECONVERGE: hotswap: unresolved call target
 // FAIL: hotswap: unresolved control-flow target disables NOP-sled emission,
 // FAIL-SAME: trampoline coalescing, source relocation, and .text gateways
 // FAIL: hotswap: error: no safe short-branch gateway for far site
@@ -104,8 +108,7 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefix=OUTSIDE %s
-// OUTSIDE: hotswap: unresolved call target
-// OUTSIDE-SAME: (reusable target outside .text)
+// OUTSIDE: hotswap: unresolved call target{{.*}}(reusable target outside .text)
 // OUTSIDE: hotswap: unresolved control-flow target disables NOP-sled emission,
 // OUTSIDE-SAME: trampoline coalescing, source relocation, and .text gateways
 // OUTSIDE: hotswap: error: no safe short-branch gateway for far site
@@ -121,8 +124,6 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=UNDECODED,FAIL %s
-// UNDECODED: hotswap: resolved reusable PC-materialized call
-// UNDECODED: hotswap: unresolved call target
 
 // A back-edge that reloads the target pair through an unprovable definition
 // makes the reconverged call Unknown; a stale finite result from the first
@@ -135,8 +136,6 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=RECONVERGE,FAIL %s
-// RECONVERGE: hotswap: resolved reusable PC-materialized call
-// RECONVERGE: hotswap: unresolved call target
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM \
 // RUN:   --implicit-check-not=s_add_pc_i64 %s
