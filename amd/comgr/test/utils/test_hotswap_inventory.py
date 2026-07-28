@@ -346,14 +346,16 @@ class HotswapInventoryTest(unittest.TestCase):
         self.write("second", duplicate_contents)
         dangerous = self.write("$(touch PWNED)", make_elf(b"unique"))
         log = self.root / "command-log"
-        command = self.make_command("""
+        command = self.make_command(
+            """
             import json
             import os
             import sys
             with open(os.environ["INVENTORY_LOG"], "a", encoding="utf-8") as f:
                 f.write(json.dumps(sys.argv[-1]) + "\\n")
             print("processed")
-            """)
+            """
+        )
         environment = os.environ.copy()
         environment["INVENTORY_LOG"] = str(log)
 
@@ -384,11 +386,13 @@ class HotswapInventoryTest(unittest.TestCase):
 
     def test_command_failure_is_recorded_and_returns_one(self):
         self.write("object", make_elf())
-        command = self.make_command("""
+        command = self.make_command(
+            """
             import sys
             print("bad", file=sys.stderr)
             sys.exit(7)
-            """)
+            """
+        )
 
         completed = self.run_cli(
             self.root, "--execute", command[0], "--execute-arg", command[2]
@@ -408,10 +412,12 @@ class HotswapInventoryTest(unittest.TestCase):
     def test_parallel_jobs_preserve_deterministic_result_order(self):
         for index in range(5):
             self.write("object-{}".format(index), make_elf(str(index).encode("ascii")))
-        command = self.make_command("""
+        command = self.make_command(
+            """
             import sys
             print(sys.argv[-1])
-            """)
+            """
+        )
 
         completed = self.run_cli(
             self.root,
@@ -439,10 +445,12 @@ class HotswapInventoryTest(unittest.TestCase):
 
     def test_timeout_is_recorded_and_returns_one(self):
         self.write("object", make_elf())
-        command = self.make_command("""
+        command = self.make_command(
+            """
             import time
             time.sleep(10)
-            """)
+            """
+        )
 
         completed = self.run_cli(
             self.root,
@@ -463,7 +471,8 @@ class HotswapInventoryTest(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
     def test_timeout_terminates_descendants_holding_output_pipes(self):
         self.write("object", make_elf())
-        command = self.make_command("""
+        command = self.make_command(
+            """
             import subprocess
             import sys
             subprocess.Popen([
@@ -471,7 +480,8 @@ class HotswapInventoryTest(unittest.TestCase):
                 "-c",
                 "import time; time.sleep(10)",
             ])
-            """)
+            """
+        )
 
         start_time = time.monotonic()
         completed = self.run_cli(
@@ -494,13 +504,15 @@ class HotswapInventoryTest(unittest.TestCase):
         code_object = self.write("object", make_elf(b"first"))
         counter = self.root / "counter"
         cache = self.root / "cache"
-        command = self.make_command("""
+        command = self.make_command(
+            """
             import os
             from pathlib import Path
             counter = Path(os.environ["INVENTORY_COUNTER"])
             value = int(counter.read_text()) if counter.exists() else 0
             counter.write_text(str(value + 1))
-            """)
+            """
+        )
         environment = os.environ.copy()
         environment["INVENTORY_COUNTER"] = str(counter)
         arguments = [
@@ -664,7 +676,8 @@ class HotswapInventoryTest(unittest.TestCase):
         self.write("object", make_elf())
         counter = self.root / "counter"
         cache = self.root / "cache"
-        command = self.make_command("""
+        command = self.make_command(
+            """
             import os
             import sys
             from pathlib import Path
@@ -672,7 +685,8 @@ class HotswapInventoryTest(unittest.TestCase):
             value = int(counter.read_text()) if counter.exists() else 0
             counter.write_text(str(value + 1))
             sys.exit(1)
-            """)
+            """
+        )
         environment = os.environ.copy()
         environment["INVENTORY_COUNTER"] = str(counter)
         arguments = [
