@@ -9672,7 +9672,8 @@ assignLongBranchGateways(PatchContext &Ctx,
 /// deferred trampoline.
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
-                                       ArrayRef<uint8_t> Replacement) {
+                                       ArrayRef<uint8_t> Replacement,
+                                       bool PreferNopSled) {
   std::optional<uint64_t> ReturnTo = checkedAddUint64(
       InstOffset, InstSize, "replacement trampoline return target");
   std::optional<uint64_t> PoolReturnFrom =
@@ -9687,7 +9688,8 @@ assignLongBranchGateways(PatchContext &Ctx,
   // a later small or clause/delay-constrained source window.
   bool PoolBaseFar = !isSBranchReachable(InstOffset, Ctx.PoolBaseOffset) ||
                      !isSBranchReachable(*PoolReturnFrom, *ReturnTo);
-  if (!PoolBaseFar && !Ctx.DirectControlFlow.HasUnresolvedTargets) {
+  if ((!PoolBaseFar || PreferNopSled) &&
+      !Ctx.DirectControlFlow.HasUnresolvedTargets) {
     // findNearestSled enforces sled headroom. emitToNopSled still validates
     // exact branch reachability because branch-back distance includes the
     // replacement size, not just the original instruction offset.
@@ -9696,6 +9698,27 @@ assignLongBranchGateways(PatchContext &Ctx,
       if (emitToNopSled(Ctx, *Sled, InstOffset, InstSize, Replacement))
         return true;
       log() << "hotswap: emitReplacementCode: NOP sled at offset 0x"
+            << utohexstr(Sled->WritePos)
+            << " is not branch-reachable after assembly; using trampoline.\n";
+    }
+  }
+  // A split DS2 is much larger than its original instruction and can create
+  // two registerless island chains when the appended pool is far away. The
+  // preferred ranges are zero/NOP padding after proven no-fallthrough code,
+  // with a routing tail removed from each range before patching begins.
+  if (PreferNopSled && !Ctx.DirectControlFlow.HasUnresolvedTargets) {
+    uint64_t Needed = Replacement.size() + MinInstSize;
+    if (NopSled *Sled = findNearestSled(Ctx.PreferredLocalReplacementSleds,
+                                        InstOffset, Needed)) {
+      uint64_t BodyOffset = Sled->WritePos;
+      if (emitToNopSled(Ctx, *Sled, InstOffset, InstSize, Replacement)) {
+        log() << "hotswap: placed replacement for site 0x"
+              << utohexstr(InstOffset) << " in audited external padding at 0x"
+              << utohexstr(BodyOffset) << "\n";
+        return true;
+      }
+      log() << "hotswap: emitReplacementCode: external padding sled at "
+               "offset 0x"
             << utohexstr(Sled->WritePos)
             << " is not branch-reachable after assembly; using trampoline.\n";
     }
@@ -9754,6 +9777,7 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       ArrayRef<uint8_t>(Text, TextSize), &Elf, DeclaredEntries->NonCallEntries);
   if (!ControlFlow)
     return std::nullopt;
+  std::vector<NopSled> PreferredLocalReplacementSleds;
   if (ControlFlow->HasUnresolvedTargets) {
     log() << "hotswap: unresolved control-flow target disables NOP-sled "
              "emission, trampoline coalescing, source relocation, and .text "
@@ -9761,6 +9785,37 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
     Sleds.clear();
   } else {
     truncateNopSledsAtDirectTargets(Sleds, ControlFlow->Targets);
+    if (Config.RunB0A0Patches && !ControlFlow->HasUnboundedIndirectEntries) {
+      std::vector<NopSled> AuditedExternalSleds = buildExternalGatewaySleds(
+          Decoded, LS, Elf, ArrayRef<uint8_t>(Text, TextSize),
+          ControlFlow->Targets);
+      uint64_t UnownedExternalCount = 0;
+      uint64_t ExposedDs2Count = 0;
+      constexpr uint64_t RoutingReserveBytes = SetPcReturnReserveBytes;
+      for (NopSled &Sled : AuditedExternalSleds) {
+        // A range covered by a function symbol remains owned by that function;
+        // only unowned, no-fallthrough padding is safe for object-wide DS2
+        // bodies.
+        if (Elf.findFunctionTextRangeAtOffset(Sled.WritePos))
+          continue;
+        ++UnownedExternalCount;
+        uint64_t Available = Sled.End - Sled.WritePos;
+        if (Available <= RoutingReserveBytes)
+          continue;
+        // The later gateway scan rebuilds its view from the mutated text. A
+        // set-PC-sized zero/NOP tail therefore remains spatially distributed
+        // for global routing even after the prefix holds local DS2 bodies.
+        Sled.End -= RoutingReserveBytes;
+        PreferredLocalReplacementSleds.push_back(Sled);
+        ++ExposedDs2Count;
+      }
+      if (UnownedExternalCount != 0)
+        log() << "hotswap: exposed " << ExposedDs2Count << " of "
+              << UnownedExternalCount
+              << " unowned unreachable external padding sled(s) for local "
+                 "DS2 bodies while preserving "
+              << RoutingReserveBytes << " routing bytes per run\n";
+    }
   }
 
   HotswapProfile::Scope CfgScope = Profile.time(HotswapMetric::CfgBuild);
@@ -9793,6 +9848,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
                    OutTrampolines, Sleds,           Elf,
                    Liveness,       KernelStats,     OutScratchPatches,
                    *ControlFlow,   Profile,         DeclaredEntries->Entries};
+  Ctx.PreferredLocalReplacementSleds =
+      std::move(PreferredLocalReplacementSleds);
 
   const HotswapPatchVTable &VT = getHotswapPatchVTable();
 

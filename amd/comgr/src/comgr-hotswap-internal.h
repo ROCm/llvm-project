@@ -1472,6 +1472,10 @@ struct PatchContext {
   llvm::StringMap<std::optional<KernelWorkgroupMetadata>>
       WorkgroupMetadataCache;
   llvm::StringMap<unsigned> KernelVgprGranuleCache;
+  // Object-wide padding proven unreachable by the closed control-flow audit.
+  // DS2 may explicitly prefer these complete-body slots before creating a
+  // trampoline. Every range excludes its final set-PC-sized routing tail.
+  std::vector<NopSled> PreferredLocalReplacementSleds;
 };
 
 /// One node in the all-path proof that an incoming physical VGPR value is
@@ -1793,7 +1797,8 @@ BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
-                                       llvm::ArrayRef<uint8_t> Replacement);
+                                       llvm::ArrayRef<uint8_t> Replacement,
+                                       bool PreferNopSled = false);
 
 /// Expand one decoded gfx1250 DS two-address instruction into the ordered
 /// single-address instruction sequence used by the trampoline patch. Exposed
