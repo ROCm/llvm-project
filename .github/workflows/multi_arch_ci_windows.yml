@@ -24,6 +24,10 @@ on:
         description: 'Release type: "" for CI, or "dev", "nightly", "prerelease".'
         type: string
         default: ci
+      compiler_runtime_only:
+        type: string
+        default: "false"
+        description: "'true' -> hotswap-only PR: build only the compiler-runtime stage; skip per-arch stages, artifact/GPU tests, and packaging."
 
 permissions:
   contents: read
@@ -83,6 +87,7 @@ jobs:
       build_variant_suffix: ${{ fromJSON(inputs.build_config).build_variant_suffix }}
       expect_failure: ${{ fromJSON(inputs.build_config).expect_failure }}
       prebuilt_stages: ${{ fromJSON(inputs.build_config).prebuilt_stages }}
+      compiler_runtime_only: ${{ inputs.compiler_runtime_only }}
       rocm_package_version: ${{ inputs.rocm_package_version }}
       release_type: ${{ inputs.release_type }}
       test_type: ${{inputs.test_type }}
@@ -94,7 +99,7 @@ jobs:
     needs: [build_multi_arch_stages]
     name: Validate Artifact Structure
     # If we are expecting a build failure, do not run tests to save machine capacity.
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).expect_failure == false }}
+    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).expect_failure == false && inputs.compiler_runtime_only != 'true' }}
     uses: ./.github/workflows/test_artifacts_structure.yml
     with:
       amdgpu_families: ${{ fromJSON(inputs.build_config).dist_amdgpu_families }}
@@ -107,6 +112,7 @@ jobs:
     # If we are expecting a build failure, do not run tests to save machine capacity.
     if: >-
       ${{ !cancelled() && fromJSON(inputs.build_config).expect_failure == false &&
+      inputs.compiler_runtime_only != 'true' &&
       (needs.copy_prebuilt_stages.result == 'success' ||
       needs.copy_prebuilt_stages.result == 'skipped') &&
       needs.build_multi_arch_stages.result == 'success' }}
@@ -129,7 +135,7 @@ jobs:
   build_python_packages:
     needs: [build_multi_arch_stages]
     name: Build Python Packages
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).expect_failure == false }}
+    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).expect_failure == false && inputs.compiler_runtime_only != 'true' }}
     uses: ./.github/workflows/build_windows_python_packages.yml
     with:
       artifact_group: ${{ fromJSON(inputs.build_config).artifact_group }}
