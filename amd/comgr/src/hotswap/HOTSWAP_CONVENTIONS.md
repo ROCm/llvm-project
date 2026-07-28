@@ -133,6 +133,27 @@ Use `MCInstrDesc::mayAffectControlFlow` plus an `s_endpgm` opcode
 comparison. Don't enumerate branch opcodes by name — `s_swappc_b64`
 and other indirect transfers will be missed.
 
+### Match instructions by cached opcode, not mnemonic string
+
+Recognize an instruction by comparing `Inst.getOpcode()` against an
+opcode resolved once at `initLLVM()` and cached on `LLVMState`
+(e.g. `LS.SAddCoI32Opcode`). Never match on `DI.Mnemonic` /
+`MCInstPrinter` strings like `Mnemonic != "s_add_co_i32"`:
+
+- mnemonic identity is asm-level; the printer string is a formatting
+  artifact that can change or alias, and the tablegen name is a
+  different string again.
+- it is a per-instruction string compare, usually in the middle of a
+  hot dataflow/scan loop.
+- it diverges from every other matcher in the subsystem, which already
+  compares cached opcodes — a new string matcher is a maintenance seam.
+
+If a new matcher needs an opcode the cache does not carry yet, add it
+to `LLVMState` and resolve it in `initLLVM()` via the asm parser; do
+not reach for the string. This restates the general "mnemonic identity
+is asm-level" rule from `AGENT_CONVENTIONS.md`, called out here because
+new hotswap matchers keep reintroducing `DI.Mnemonic` compares.
+
 ### Layer separation
 
 - Per-target constants belong in policy modules (`rewriter/b0a0.cpp`)
