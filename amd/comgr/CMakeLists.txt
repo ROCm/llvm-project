@@ -654,8 +654,10 @@ target_link_libraries(amd_comgr
 # The rewriter (byte-level rewrite path) backs the always-on
 # amd_comgr_hotswap_rewrite API, so it is linked unconditionally. The raiser
 # (IR transpiler path) and the code-object loader are opt-in behind
-# COMGR_ENABLE_HOTSWAP_TRANSPILE.
+# COMGR_ENABLE_HOTSWAP_TRANSPILE. The translation cache is LLVM-only and linked
+# unconditionally so its objects are available to any transpile entry point.
 target_link_libraries(amd_comgr PRIVATE hotswap::rewriter)
+target_link_libraries(amd_comgr PRIVATE hotswap::translation_cache)
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   target_link_libraries(amd_comgr
     PRIVATE hotswap::common hotswap::loader hotswap::raiser)
