@@ -255,7 +255,15 @@ class BundleValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             root = Path(name)
             first = root / "object with spaces.co"
-            second = root / "object\nwith-newline.co"
+            # Windows rejects control characters in file names.  Preserve the
+            # newline-path coverage where the host permits it while still
+            # exercising NUL-delimited parsing on every platform.
+            second_name = (
+                "object;with-semicolon.co"
+                if os.name == "nt"
+                else "object\nwith-newline.co"
+            )
+            second = root / second_name
             first.write_bytes(b"first")
             second.write_bytes(b"second")
             worklist = root / "selected.list"
