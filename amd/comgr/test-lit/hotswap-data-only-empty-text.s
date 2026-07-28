@@ -101,7 +101,8 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status INVALID_ARGUMENT 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=MALFORMED,REJECT %s
-// MALFORMED: hotswap: error: failed to parse data-only AMDGPU metadata note.
+// MALFORMED: hotswap: error: data-only validation:
+// MALFORMED-SAME: failed to parse AMDGPU metadata note.
 
 // RUN: %llvm-objcopy --remove-section=.text %t.elf %t.missing-text.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.missing-text.elf \

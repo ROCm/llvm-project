@@ -101,6 +101,8 @@ struct KernelDescriptorElfOptions {
       MalformedClusterDims::None;
   std::optional<std::string> MetadataGfx1250Revision;
   std::optional<std::string> RawMetadataBlob;
+  // Emit metadata through an SHT_NOTE section without a covering PT_NOTE.
+  bool MetadataInSectionOnly = false;
   bool MetadataOmitSgprCount = false;
   bool MetadataSgprCountAsString = false;
   // When non-empty, emit these kernel metadata entries instead of the single
@@ -261,8 +263,9 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   static constexpr uint64_t TextOffset = 0x240;
   static constexpr uint64_t KdBytes = sizeof(hsa::kernel_descriptor_t);
   static constexpr char ShStrTab[] =
-      "\0.text\0.rodata\0.strtab\0.symtab\0.shstrtab\0.pad\0";
-  static constexpr uint32_t PadNameOff = 41; // offset of ".pad" in ShStrTab
+      "\0.text\0.rodata\0.strtab\0.symtab\0.shstrtab\0.pad\0.note\0";
+  static constexpr uint32_t PadNameOff = 41;  // offset of ".pad" in ShStrTab
+  static constexpr uint32_t NoteNameOff = 46; // offset of ".note"
   const bool HasPad = Options.ExtraAllocSectionAddr.has_value();
 
   std::string StrTab;
@@ -291,6 +294,10 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
                                    : makeAmdgpuMetadataBlob(Options);
     MetadataNote = makeAmdgpuMetadataNote(MetadataBlob);
   }
+  const bool HasMetadataSection =
+      HasMetadataNote && Options.MetadataInSectionOnly;
+  const bool HasMetadataPhdr =
+      HasMetadataNote && !Options.MetadataInSectionOnly;
 
   const uint64_t RodataOff = alignTo8(TextOffset + Text.size());
   const uint64_t StrTabOff = alignTo8(RodataOff + KdBytes);
@@ -301,9 +308,11 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   const uint64_t NoteOff =
       HasMetadataNote ? alignTo4(ShStrTabOff + sizeof(ShStrTab)) : 0;
   const uint64_t PhOff =
-      HasMetadataNote ? alignTo8(NoteOff + MetadataNote.size()) : 0;
-  const uint64_t ContentEnd = HasMetadataNote ? PhOff + sizeof(Elf64_Phdr)
-                                              : ShStrTabOff + sizeof(ShStrTab);
+      HasMetadataPhdr ? alignTo8(NoteOff + MetadataNote.size()) : 0;
+  const uint64_t ContentEnd =
+      HasMetadataPhdr ? PhOff + sizeof(Elf64_Phdr)
+                      : (HasMetadataNote ? NoteOff + MetadataNote.size()
+                                         : ShStrTabOff + sizeof(ShStrTab));
   const uint64_t BufSize = alignTo8(ContentEnd + 64);
 
   KernelDescriptorElf Result;
@@ -328,14 +337,15 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
   Ehdr.e_type = Options.ElfType;
   Ehdr.e_version = EV_CURRENT;
   Ehdr.e_shoff = ShOff;
-  if (HasMetadataNote) {
+  if (HasMetadataPhdr) {
     Ehdr.e_phoff = PhOff;
     Ehdr.e_phentsize = sizeof(Elf64_Phdr);
     Ehdr.e_phnum = 1;
   }
   Ehdr.e_ehsize = sizeof(Elf64_Ehdr);
   Ehdr.e_shentsize = sizeof(Elf64_Shdr);
-  Ehdr.e_shnum = HasPad ? 7 : 6;
+  Ehdr.e_shnum = 6 + static_cast<unsigned>(HasPad) +
+                 static_cast<unsigned>(HasMetadataSection);
   Ehdr.e_shstrndx = 5;
   std::memcpy(Buf, &Ehdr, sizeof(Ehdr));
 
@@ -398,7 +408,19 @@ makeKernelDescriptorElf(llvm::ArrayRef<uint8_t> Text,
     std::memcpy(Buf + ShOff + 6 * sizeof(Elf64_Shdr), &PadSh, sizeof(PadSh));
   }
 
-  if (HasMetadataNote) {
+  if (HasMetadataSection) {
+    Elf64_Shdr NoteSh{};
+    NoteSh.sh_name = NoteNameOff;
+    NoteSh.sh_type = SHT_NOTE;
+    NoteSh.sh_offset = NoteOff;
+    NoteSh.sh_size = MetadataNote.size();
+    NoteSh.sh_addralign = 4;
+    const unsigned NoteSectionIndex = 6 + static_cast<unsigned>(HasPad);
+    std::memcpy(Buf + ShOff + NoteSectionIndex * sizeof(Elf64_Shdr), &NoteSh,
+                sizeof(NoteSh));
+  }
+
+  if (HasMetadataPhdr) {
     Elf64_Phdr NotePhdr{};
     NotePhdr.p_type = PT_NOTE;
     NotePhdr.p_offset = NoteOff;
