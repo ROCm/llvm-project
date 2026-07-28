@@ -67,7 +67,6 @@ on:
         description: "JSON object with 'repository' (e.g., 'ROCm/rocm-libraries') and 'ref' fields for external repo builds."
         type: string
         default: ""
->>>>>>> 48e0825b5449 ([Infra] placeholder - compiler ci and rockci convergance)
     outputs:
       enable_build_jobs:
         description: Whether to enable build jobs.
