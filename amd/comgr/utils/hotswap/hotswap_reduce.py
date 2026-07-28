@@ -57,6 +57,7 @@ DEFAULT_PROTECTED_SECTIONS = (
     ".AMDGPU.*",
 )
 CAPTURE_LIMIT = 4096
+MAX_COMPONENT_CHARS = 80
 
 
 class ReducerError(Exception):
@@ -126,7 +127,7 @@ def atomic_write_json(path: Path, value: Any) -> None:
 
 def _safe_component(value: str) -> str:
     component = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._")
-    return component[:80] or "object"
+    return component[:MAX_COMPONENT_CHARS] or "object"
 
 
 def _object_output_name(index: int, object_id: str, original_name: str) -> str:
@@ -495,6 +496,7 @@ class PredicateCache:
         )
 
     def put(self, key: str, result: PredicateResult) -> None:
+        # Only stable terminal outcomes are safe to replay during reduction.
         if result.status not in ("interesting", "uninteresting"):
             return
         self.values[key] = {
@@ -652,6 +654,15 @@ class PredicateRunner:
         digest.update(bytes.fromhex(candidate_digest))
         return digest.hexdigest()
 
+    def _expand_template(self, replacements: dict[str, str]) -> list[str]:
+        argv: list[str] = []
+        for argument in self.argv_template:
+            expanded = argument
+            for placeholder, value in replacements.items():
+                expanded = expanded.replace(placeholder, value)
+            argv.append(expanded)
+        return argv
+
     def _expand_argv(self, workspace: Path, candidate: Candidate) -> list[str]:
         replacements = {
             "{workspace}": str(workspace),
@@ -670,13 +681,7 @@ class PredicateRunner:
                 "{input} requires exactly one code object; use {bundle} "
                 "while reducing a multi-object corpus"
             )
-        argv: list[str] = []
-        for argument in self.argv_template:
-            expanded = argument
-            for placeholder, value in replacements.items():
-                expanded = expanded.replace(placeholder, value)
-            argv.append(expanded)
-        return argv
+        return self._expand_template(replacements)
 
     @staticmethod
     def _normalize_capture(value: Any, workspace: Path) -> str:
@@ -854,13 +859,7 @@ class PredicateRunner:
                     candidate.code_objects[0].original_name,
                 )
             ).as_posix()
-        argv: list[str] = []
-        for argument in self.argv_template:
-            expanded = argument
-            for placeholder, value in replacements.items():
-                expanded = expanded.replace(placeholder, value)
-            argv.append(expanded)
-        return argv
+        return self._expand_template(replacements)
 
 
 def ddmin(
