@@ -1147,9 +1147,14 @@ TEST(CollectDirectBranchTargets, BoundsCanonicalSetPcReturn) {
       Decoded, S, /*TextAddr=*/0, /*TextSize=*/0x1000, DeclaredEntries,
       FunctionRanges);
   ASSERT_TRUE(Info);
-  ASSERT_EQ(Info->Targets.size(), 2u);
+  // Targets: the declared entry, the s_branch destination, and the bounded
+  // return's continuation (the instruction after the call). The continuation
+  // is a landing site of the return and must be protected from relocation.
+  ASSERT_EQ(Info->Targets.size(), 3u);
   EXPECT_TRUE(Info->Targets.contains(0));
   EXPECT_TRUE(Info->Targets.contains(Decoded[1].Offset));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[5].Offset + Decoded[5].Size));
+  EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded[1].Offset));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 
@@ -3591,4 +3596,79 @@ TEST(LivenessInfo, ZeroVgprConservativeModeIsExplicit) {
   EXPECT_EQ(Info.perInstructionCount(), 0u);
   EXPECT_TRUE(Info.liveBefore(0).empty());
   EXPECT_EQ(&Info.liveBefore(0), &Info.liveAfter(0));
+}
+
+// The one-shot PC-materialization matcher (resolveMaterializedPcTarget) accepts
+// the plain s_get_pc_i64 + s_add_nc_u64 pair. The reusable-call lit fixture
+// reaches the matcher only through the carry form, so cover the plain form here
+// through the public collectDirectBranchTargets entry. The carry form with an
+// inline-immediate first addend is exercised in hotswap-reusable-pc-call-
+// targets.s (inline_immediate_delta), the path that actually resolves it.
+TEST(PcMaterialization, PlainAddNcU64ResolvesCallTarget) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // s_get_pc_i64 captures the address after its own dword (.text+0x4); adding
+  // 0x10 yields the local target .text+0x14.
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_get_pc_i64 s[2:3]\n"
+                           "s_add_nc_u64 s[2:3], s[2:3], 0x10\n"
+                           "s_swap_pc_i64 s[6:7], s[2:3]",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 3u);
+
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0,
+                                 /*TextSize=*/0x20, /*DeclaredEntries=*/{});
+  ASSERT_TRUE(Info);
+  EXPECT_FALSE(Info->HasUnresolvedTargets);
+  EXPECT_TRUE(Info->Targets.contains(0x14u));
+  EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded.back().Offset));
+}
+
+TEST(PcMaterialization, CarryFormInlineImmediateResolvesReusedCall) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // Carry form reached through the reusable solver: a selector branch picks one
+  // of two s_get_pc_i64 + s_add_co_i32 arms that build the low displacement,
+  // the pair is completed, and two register calls reuse it. The first addend
+  // 0x24 (36) is in the SOP2 inline range [-16, 64], so it is encoded inline
+  // rather than as a trailing 32-bit literal dword -- the matcher branch a
+  // label-relative operand (always a relocatable literal) never reaches.
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleInstructions("s_cmp_eq_u32 s0, 0\n"
+                           "s_cbranch_scc1 5\n"
+                           "s_get_pc_i64 s[2:3]\n"
+                           "s_add_co_i32 s4, 0x1c, 4\n"
+                           "s_add_co_u32 s2, s2, s4\n"
+                           "s_add_co_ci_u32 s3, s3, 0\n"
+                           "s_branch 4\n"
+                           "s_get_pc_i64 s[2:3]\n"
+                           "s_add_co_i32 s4, 0x8, 4\n"
+                           "s_add_co_u32 s2, s2, s4\n"
+                           "s_add_co_ci_u32 s3, s3, 0\n"
+                           "s_swap_pc_i64 s[6:7], s[2:3]\n"
+                           "s_swap_pc_i64 s[6:7], s[2:3]\n"
+                           "s_endpgm",
+                           S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+
+  llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
+  llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
+      {0, Bytes.size()}};
+  std::optional<DirectControlFlowInfo> Info =
+      collectDirectBranchTargets(Decoded, S, /*TextAddr=*/0, Bytes.size(),
+                                 DeclaredEntries, FunctionRanges);
+  ASSERT_TRUE(Info);
+  // The reused register call is resolved to a finite target through the
+  // inline-immediate carry materialization.
+  EXPECT_FALSE(Info->BoundedIndirectTransfers.empty());
 }
