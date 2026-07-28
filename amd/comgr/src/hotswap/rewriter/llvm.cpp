@@ -335,6 +335,13 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_add_nc_u64 s[0:1], s[0:1], 0",
                                      "s_add_nc_u64", S, S.SAddNcU64Opcode))
     return S;
+  // Carry-out add used by the Tensile reusable-call materialization. On gfx12
+  // s_add_co_u32 / s_add_co_ci_u32 share encodings with s_add_u32 / s_addc_u32
+  // (S_ADD_U32_gfx12 / S_ADDC_U32_gfx12), so only the i32 form needs its own
+  // cached opcode.
+  if (!resolveRequiredOpcodeViaParse("s_add_co_i32 s0, 0, 0", "s_add_co_i32", S,
+                                     S.SAddCoI32Opcode))
+    return S;
   if (!resolveRequiredOpcodeViaParse("s_add_u32 s0, s0, 0", "s_add_u32", S,
                                      S.SAddU32Opcode))
     return S;
