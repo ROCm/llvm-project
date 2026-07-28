@@ -1,0 +1,126 @@
+{
+  "kind": "hotswap-test-observations",
+  "schema_version": 1,
+  "tests": [
+    {
+      "candidate_outcome": "pass",
+      "features": [
+        "m32-scale16",
+        "tensor-mask"
+      ],
+      "id": "hipblaslt/matmul/scale16",
+      "novelty": 0,
+      "original_outcome": "pass",
+      "provenance": [
+        "pr3646-curated-acceptance"
+      ],
+      "risk": 1,
+      "runtime_ms": 70
+    },
+    {
+      "candidate_outcome": "fail",
+      "features": [
+        "m32-scale16",
+        "round-trip-vcc-preservation",
+        "tensor-mask"
+      ],
+      "id": "hipblaslt/matmul/scale16/candidate-regression",
+      "novelty": 2,
+      "original_outcome": "pass",
+      "provenance": [
+        "pr3646-curated-acceptance"
+      ],
+      "risk": 5,
+      "runtime_ms": 85
+    },
+    {
+      "candidate_outcome": "pass",
+      "features": [
+        "finite-call-closure",
+        "materialized-call-closure",
+        "owner-specific-source-window"
+      ],
+      "id": "hipsolver/batched-factorization",
+      "novelty": 0,
+      "original_outcome": "pass",
+      "provenance": [
+        "pr3646-curated-acceptance"
+      ],
+      "risk": 2,
+      "runtime_ms": 45
+    },
+    {
+      "candidate_outcome": "fail",
+      "features": [
+        "ds2",
+        "owner-specific-source-window",
+        "scratch-sgpr-liveness"
+      ],
+      "id": "hipsolver/batched-factorization/candidate-regression",
+      "novelty": 2,
+      "original_outcome": "pass",
+      "provenance": [
+        "pr3646-curated-acceptance"
+      ],
+      "risk": 5,
+      "runtime_ms": 55
+    },
+    {
+      "candidate_outcome": "pass",
+      "features": [
+        "far-relay-gateway"
+      ],
+      "id": "runtime/large-code-object/far-routing",
+      "novelty": 1,
+      "original_outcome": "pass",
+      "provenance": [
+        "pr3646-curated-acceptance"
+      ],
+      "risk": 4,
+      "runtime_ms": 12
+    },
+    {
+      "candidate_outcome": "pass",
+      "features": [
+        "finite-call-closure",
+        "materialized-call-closure"
+      ],
+      "id": "runtime/large-code-object/closed-calls",
+      "novelty": 1,
+      "original_outcome": "pass",
+      "provenance": [
+        "pr3646-curated-acceptance"
+      ],
+      "risk": 4,
+      "runtime_ms": 10
+    },
+    {
+      "candidate_outcome": "unknown",
+      "features": [
+        "synthetic-holdout-unseen-control-flow"
+      ],
+      "id": "synthetic-holdout/control-flow/0",
+      "novelty": 3,
+      "original_outcome": "unknown",
+      "provenance": [
+        "pr3646-curated-acceptance"
+      ],
+      "risk": 2,
+      "runtime_ms": 2
+    },
+    {
+      "candidate_outcome": "unknown",
+      "features": [
+        "synthetic-holdout-unseen-register-state"
+      ],
+      "id": "synthetic-holdout/register-state/0",
+      "novelty": 3,
+      "original_outcome": "unknown",
+      "provenance": [
+        "pr3646-curated-acceptance"
+      ],
+      "risk": 2,
+      "runtime_ms": 2
+    }
+  ]
+}

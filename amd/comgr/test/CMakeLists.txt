@@ -247,3 +247,24 @@ add_comgr_test(compile_hip_to_relocatable c)
 #add_comgr_test(compile_hip_with_libcxx_test c)
 add_comgr_test(mangled_names_hip_test c)
 #add_comgr_test(unbundle_hip_test c)
+
+add_test(
+  NAME comgr_hotswap_test_select_test
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_hotswap_test_select.py")
+set_tests_properties(
+  comgr_hotswap_test_select_test
+  PROPERTIES
+    ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1"
+    TIMEOUT 120)
+
+add_test(
+  NAME comgr_hotswap_test_select_evidence_test
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_hotswap_test_select_evidence.py")
+set_tests_properties(
+  comgr_hotswap_test_select_evidence_test
+  PROPERTIES
+    ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1"
+    SKIP_RETURN_CODE 77
+    TIMEOUT 120)

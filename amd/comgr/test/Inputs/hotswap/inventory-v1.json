@@ -1,0 +1,39 @@
+{
+  "future_inventory_field": {
+    "ignored": true
+  },
+  "objects": [
+    {
+      "future_object_field": 1,
+      "paths": [
+        "/corpus/a.co",
+        "/corpus/a-copy.co"
+      ],
+      "representative": "/corpus/a.co",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 4096
+    },
+    {
+      "paths": [
+        "/corpus/b.co"
+      ],
+      "representative": "/corpus/b.co",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "size": 8192
+    }
+  ],
+  "rejected": [],
+  "roots": [
+    "/corpus"
+  ],
+  "schema": "comgr.hotswap.inventory",
+  "summary": {
+    "code_object_paths": 3,
+    "duplicate_groups": 1,
+    "duplicate_paths": 1,
+    "files_examined": 3,
+    "rejected_files": 0,
+    "unique_code_objects": 2
+  },
+  "version": 1
+}

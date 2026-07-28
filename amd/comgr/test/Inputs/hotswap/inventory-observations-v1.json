@@ -1,0 +1,30 @@
+{
+  "future_envelope_field": "ignored",
+  "kind": "hotswap-audit-observations",
+  "records": [
+    {
+      "candidate_outcome": "pass",
+      "features": [
+        "direct-rewrite"
+      ],
+      "future_record_field": 1,
+      "original_outcome": "pass",
+      "risk": 1,
+      "runtime_ms": 4,
+      "test_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "candidate_outcome": "fail",
+      "features": [
+        "far-routing",
+        "live-state"
+      ],
+      "original_outcome": "pass",
+      "risk": 4,
+      "runtime_ms": 9,
+      "test_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "schema_version": 1,
+  "source": "hotswap-audit"
+}
