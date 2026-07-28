@@ -247,3 +247,16 @@ add_comgr_test(compile_hip_to_relocatable c)
 #add_comgr_test(compile_hip_with_libcxx_test c)
 add_comgr_test(mangled_names_hip_test c)
 #add_comgr_test(unbundle_hip_test c)
+
+add_test(
+  NAME comgr_hotswap_inventory
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_hotswap_inventory.py")
+
+add_test(
+  NAME comgr_hotswap_inventory_acceptance
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_hotswap_inventory_acceptance.py")
+set_tests_properties(
+  comgr_hotswap_inventory_acceptance
+  PROPERTIES SKIP_RETURN_CODE 77)
