@@ -898,11 +898,11 @@ bool instructionReadsRegister(const InternalDecodedInst &DI,
   return false;
 }
 
-static void addTrackedSgprBits(const LLVMState &LS, MCRegister Register,
-                               unsigned MaxSgprs, BitVector &Bits, bool &Valid,
+static bool addTrackedSgprBits(const LLVMState &LS, MCRegister Register,
+                               unsigned MaxSgprs, BitVector &Bits,
                                bool IsDefinition) {
   if (!Register.isValid())
-    return;
+    return true;
   SmallVector<MCRegister, 8> Candidates;
   Candidates.push_back(Register);
   for (MCPhysReg Subregister : LS.MRI->subregs(Register))
@@ -917,12 +917,10 @@ static void addTrackedSgprBits(const LLVMState &LS, MCRegister Register,
     if (!Index)
       continue;
     if (*Index >= MaxSgprs) {
-      if (Valid)
-        log() << "hotswap: tracked SGPR analysis failed: decoded register s"
-              << *Index << " exceeds configured numbered-SGPR count "
-              << MaxSgprs << "\n";
-      Valid = false;
-      continue;
+      log() << "hotswap: tracked SGPR analysis failed: decoded register s"
+            << *Index << " exceeds configured numbered-SGPR count " << MaxSgprs
+            << "\n";
+      return false;
     }
     Bits.set(*Index);
   }
@@ -934,6 +932,7 @@ static void addTrackedSgprBits(const LLVMState &LS, MCRegister Register,
                 LS.MRI->isSubRegisterEq(Register, LS.VCCRegister);
   if (TracksVcc)
     Bits.set(MaxSgprs);
+  return true;
 }
 
 static bool collectTrackedSgprUsesAndDefs(const InternalDecodedInst &DI,
@@ -944,14 +943,15 @@ static bool collectTrackedSgprUsesAndDefs(const InternalDecodedInst &DI,
       getInstructionRegisterEffects(DI, LS);
   if (!Effects)
     return false;
-  bool Valid = true;
   for (MCRegister Register : Effects->Uses)
-    addTrackedSgprBits(LS, Register, MaxSgprs, Uses, Valid,
-                       /*IsDefinition=*/false);
+    if (!addTrackedSgprBits(LS, Register, MaxSgprs, Uses,
+                            /*IsDefinition=*/false))
+      return false;
   for (MCRegister Register : Effects->Defs)
-    addTrackedSgprBits(LS, Register, MaxSgprs, Defs, Valid,
-                       /*IsDefinition=*/true);
-  return Valid;
+    if (!addTrackedSgprBits(LS, Register, MaxSgprs, Defs,
+                            /*IsDefinition=*/true))
+      return false;
+  return true;
 }
 
 std::optional<BitVector>
@@ -1024,10 +1024,10 @@ bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
   if (!Incoming)
     return true;
   BitVector RegisterBits(Gfx1250MaxSgprs + 1);
-  bool Valid = true;
-  addTrackedSgprBits(LS, Register, Gfx1250MaxSgprs, RegisterBits, Valid,
-                     /*IsDefinition=*/false);
-  return !Valid || RegisterBits.none() || Incoming->anyCommon(RegisterBits);
+  if (!addTrackedSgprBits(LS, Register, Gfx1250MaxSgprs, RegisterBits,
+                          /*IsDefinition=*/false))
+    return true;
+  return RegisterBits.none() || Incoming->anyCommon(RegisterBits);
 }
 
 static bool addCurrentFunctionLivenessSuccessor(
@@ -1365,10 +1365,10 @@ bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
   if (!Live)
     return false;
   BitVector RegisterBits(Ctx.Config.MaxSgprs + 1);
-  bool Valid = true;
-  addTrackedSgprBits(Ctx.LS, Register, Ctx.Config.MaxSgprs, RegisterBits, Valid,
-                     /*IsDefinition=*/false);
-  return Valid && RegisterBits.any() && !Live->anyCommon(RegisterBits);
+  if (!addTrackedSgprBits(Ctx.LS, Register, Ctx.Config.MaxSgprs, RegisterBits,
+                          /*IsDefinition=*/false))
+    return false;
+  return RegisterBits.any() && !Live->anyCommon(RegisterBits);
 }
 
 static std::optional<SafeSgprScratchBlock>
