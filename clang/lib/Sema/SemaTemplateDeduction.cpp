@@ -263,6 +263,42 @@ getDeducedNTTParameterFromExpr(TemplateDeductionInfo &Info, Expr *E) {
   return getDeducedNTTParameterFromExpr(E, Info.getDeducedDepth());
 }
 
+/// If the size expression of a dependent vector type is written in the
+/// idiomatic form 'N * sizeof(ElementType)', in either operand order, return
+/// the declaration of the non-type template parameter 'N'. Otherwise, return
+/// null. This lets a generic '__vector_size__' vector take part in template
+/// argument deduction the way an 'ext_vector_type' vector already does.
+static NonTypeOrVarTemplateParmDecl
+getDeducedVectorSizeParm(const Expr *SizeExpr, QualType ElementType,
+                         const ASTContext &Context, unsigned Depth) {
+  const auto *Mul = dyn_cast<BinaryOperator>(SizeExpr->IgnoreParenImpCasts());
+  if (!Mul || Mul->getOpcode() != BO_Mul)
+    return nullptr;
+
+  const Expr *LHS = Mul->getLHS()->IgnoreParenImpCasts();
+  const Expr *RHS = Mul->getRHS()->IgnoreParenImpCasts();
+
+  auto IsSizeOfElement = [&](const Expr *E) {
+    const auto *U = dyn_cast<UnaryExprOrTypeTraitExpr>(E);
+    return U && U->getKind() == UETT_SizeOf && U->isArgumentType() &&
+           Context.hasSameType(U->getArgumentType(), ElementType);
+  };
+
+  if (IsSizeOfElement(RHS))
+    return getDeducedNTTParameterFromExpr(LHS, Depth);
+  if (IsSizeOfElement(LHS))
+    return getDeducedNTTParameterFromExpr(RHS, Depth);
+
+  return nullptr;
+}
+
+static NonTypeOrVarTemplateParmDecl
+getDeducedVectorSizeParm(TemplateDeductionInfo &Info, Expr *SizeExpr,
+                         QualType ElementType, const ASTContext &Context) {
+  return getDeducedVectorSizeParm(SizeExpr, ElementType, Context,
+                                  Info.getDeducedDepth());
+}
+
 /// Determine whether two declaration pointers refer to the same
 /// declaration.
 static bool isSameDeclaration(Decl *X, Decl *Y) {
@@ -2259,6 +2295,9 @@ static TemplateDeductionResult DeduceTemplateArgumentsByTypeMatch(
         // Perform deduction on the vector size, if we can.
         NonTypeOrVarTemplateParmDecl NTTP =
             getDeducedNTTParameterFromExpr(Info, VP->getSizeExpr());
+        if (!NTTP)
+          NTTP = getDeducedVectorSizeParm(Info, VP->getSizeExpr(),
+                                          VP->getElementType(), S.Context);
         if (!NTTP)
           return TemplateDeductionResult::Success;
 
@@ -6895,6 +6934,10 @@ MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
                                Depth, Used);
     MarkUsedTemplateParameters(Ctx, VecType->getSizeExpr(), OnlyDeduced, Depth,
                                Used);
+
+    if (const NonTypeOrVarTemplateParmDecl NTTP = getDeducedVectorSizeParm(
+            VecType->getSizeExpr(), VecType->getElementType(), Ctx, Depth))
+      Used[NTTP.getIndex()] = true;
     break;
   }
   case Type::DependentSizedExtVector: {
