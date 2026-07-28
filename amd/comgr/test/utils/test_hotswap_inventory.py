@@ -12,20 +12,28 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
 
-SCRIPT = (Path(__file__).resolve().parents[2] / "utils" / "hotswap" /
-          "hotswap_inventory.py")
+SCRIPT = (
+    Path(__file__).resolve().parents[2] / "utils" / "hotswap" / "hotswap_inventory.py"
+)
 SPEC = importlib.util.spec_from_file_location("hotswap_inventory", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 INVENTORY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(INVENTORY)
 
 
-def make_elf(payload=b"", machine=INVENTORY.EM_AMDGPU, elf_class=2,
-             endian="<", ident_version=1, elf_version=1):
+def make_elf(
+    payload=b"",
+    machine=INVENTORY.EM_AMDGPU,
+    elf_class=2,
+    endian="<",
+    ident_version=1,
+    elf_version=1,
+):
     """Build the smallest header accepted by the inventory classifier."""
     header_size = 52 if elf_class == 1 else 64
     header = bytearray(header_size)
@@ -63,7 +71,8 @@ class HotswapInventoryTest(unittest.TestCase):
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            check=False)
+            check=False,
+        )
 
     def parse_report(self, completed):
         return json.loads(completed.stdout.decode("ascii"))
@@ -87,7 +96,8 @@ class HotswapInventoryTest(unittest.TestCase):
                 "duplicate_paths": 0,
                 "duplicate_groups": 0,
                 "rejected_files": 0,
-            })
+            },
+        )
 
     def test_recurses_and_deduplicates_by_content_not_suffix(self):
         contents = make_elf(b"same")
@@ -105,13 +115,12 @@ class HotswapInventoryTest(unittest.TestCase):
         self.assertEqual(report["summary"]["duplicate_groups"], 1)
         groups = {item["sha256"]: item for item in report["objects"]}
         duplicate = groups[hashlib.sha256(contents).hexdigest()]
-        expected_paths = sorted(
-            [str(first), str(second)], key=os.fsencode)
+        expected_paths = sorted([str(first), str(second)], key=os.fsencode)
         self.assertEqual(duplicate["paths"], expected_paths)
         self.assertEqual(duplicate["representative"], expected_paths[0])
-        self.assertIn(str(unique), [
-            item["representative"] for item in report["objects"]
-        ])
+        self.assertIn(
+            str(unique), [item["representative"] for item in report["objects"]]
+        )
 
     def test_rejects_non_elf_other_machine_and_malformed_elf(self):
         plain = self.write("plain", b"not elf")
@@ -122,8 +131,7 @@ class HotswapInventoryTest(unittest.TestCase):
         invalid = self.write("invalid-size", invalid_size)
 
         report = INVENTORY.build_inventory([str(self.root)])
-        reasons = {item["path"]: item["reason"]
-                   for item in report["rejected"]}
+        reasons = {item["path"]: item["reason"] for item in report["rejected"]}
 
         self.assertEqual(reasons[str(plain)], "not-elf")
         self.assertEqual(reasons[str(host)], "non-amdgpu-elf")
@@ -131,26 +139,27 @@ class HotswapInventoryTest(unittest.TestCase):
         self.assertEqual(reasons[str(invalid)], "invalid-elf-header-size")
 
     def test_accepts_32_bit_and_big_endian_headers(self):
-        little32 = self.write(
-            "little32", make_elf(b"32", elf_class=1, endian="<"))
-        big64 = self.write(
-            "big64", make_elf(b"64", elf_class=2, endian=">"))
+        little32 = self.write("little32", make_elf(b"32", elf_class=1, endian="<"))
+        big64 = self.write("big64", make_elf(b"64", elf_class=2, endian=">"))
 
         report = INVENTORY.build_inventory([str(self.root)])
 
         self.assertEqual(report["summary"]["unique_code_objects"], 2)
         self.assertEqual(
             {item["representative"] for item in report["objects"]},
-            {str(little32), str(big64)})
+            {str(little32), str(big64)},
+        )
 
     def test_repeated_and_overlapping_roots_do_not_repeat_paths(self):
         code_object = self.write("nested/object", make_elf())
-        report = INVENTORY.build_inventory([
-            str(self.root),
-            str(self.root),
-            str(code_object.parent),
-            str(code_object),
-        ])
+        report = INVENTORY.build_inventory(
+            [
+                str(self.root),
+                str(self.root),
+                str(code_object.parent),
+                str(code_object),
+            ]
+        )
         self.assertEqual(report["summary"]["files_examined"], 1)
         self.assertEqual(report["summary"]["code_object_paths"], 1)
 
@@ -158,26 +167,32 @@ class HotswapInventoryTest(unittest.TestCase):
         shared = make_elf(b"shared output")
         oracle_shared = self.write("oracle/output/shared", shared)
         candidate_shared = self.write("candidate/output/shared", shared)
-        oracle_changed = self.write(
-            "oracle/output/changed", make_elf(b"oracle"))
+        oracle_changed = self.write("oracle/output/changed", make_elf(b"oracle"))
         candidate_changed = self.write(
-            "candidate/output/changed", make_elf(b"candidate"))
+            "candidate/output/changed", make_elf(b"candidate")
+        )
 
-        report = INVENTORY.build_inventory([
-            str(self.root / "candidate" / "output"),
-            str(self.root / "oracle" / "output"),
-        ])
+        report = INVENTORY.build_inventory(
+            [
+                str(self.root / "candidate" / "output"),
+                str(self.root / "oracle" / "output"),
+            ]
+        )
 
         groups = {item["sha256"]: item for item in report["objects"]}
         shared_group = groups[hashlib.sha256(shared).hexdigest()]
         self.assertEqual(
             shared_group["paths"],
-            sorted([str(oracle_shared), str(candidate_shared)],
-                   key=os.fsencode))
+            sorted([str(oracle_shared), str(candidate_shared)], key=os.fsencode),
+        )
         self.assertEqual(
-            {item["representative"] for item in report["objects"]
-             if len(item["paths"]) == 1},
-            {str(oracle_changed), str(candidate_changed)})
+            {
+                item["representative"]
+                for item in report["objects"]
+                if len(item["paths"]) == 1
+            },
+            {str(oracle_changed), str(candidate_changed)},
+        )
 
     def test_manifest_selects_exact_files_and_records_its_digest(self):
         first = self.write("corpus/first", make_elf(b"first"))
@@ -186,21 +201,22 @@ class HotswapInventoryTest(unittest.TestCase):
         manifest_contents = b"nested/second\nfirst\n"
         manifest = self.write("manifest.txt", manifest_contents)
 
-        report = INVENTORY.build_inventory(
-            [str(self.root / "corpus")], str(manifest))
+        report = INVENTORY.build_inventory([str(self.root / "corpus")], str(manifest))
 
         self.assertEqual(report["summary"]["files_examined"], 2)
         self.assertEqual(report["summary"]["unique_code_objects"], 2)
         self.assertEqual(
             {item["representative"] for item in report["objects"]},
-            {str(first), str(second)})
+            {str(first), str(second)},
+        )
         self.assertEqual(
             report["manifest"],
             {
                 "path": str(manifest),
                 "sha256": hashlib.sha256(manifest_contents).hexdigest(),
                 "entries": 2,
-            })
+            },
+        )
 
     def test_manifest_errors_are_specific(self):
         corpus = self.root / "corpus"
@@ -216,10 +232,10 @@ class HotswapInventoryTest(unittest.TestCase):
         }
         for name, contents in cases.items():
             with self.subTest(name=name):
-                manifest = self.write(
-                    "manifests/{}.txt".format(name), contents)
-                completed = self.run_cli(
-                    corpus, "--manifest", manifest)
+                # Prefix the case name because names such as "nul.txt" address a
+                # reserved device instead of a regular file on Windows.
+                manifest = self.write("manifests/case-{}.txt".format(name), contents)
+                completed = self.run_cli(corpus, "--manifest", manifest)
                 self.assertEqual(completed.returncode, 2)
                 self.assertIn(b"manifest", completed.stderr)
 
@@ -229,16 +245,31 @@ class HotswapInventoryTest(unittest.TestCase):
         first_root.mkdir()
         second_root.mkdir()
         manifest = self.write("manifest.txt", b"object\n")
-        completed = self.run_cli(
-            first_root, second_root, "--manifest", manifest)
+        completed = self.run_cli(first_root, second_root, "--manifest", manifest)
         self.assertEqual(completed.returncode, 2)
         self.assertIn(b"exactly one corpus root", completed.stderr)
 
     @unittest.skipIf(
         os.name == "nt" or not hasattr(os, "symlink"),
-        "symlink creation may require Windows developer mode")
-    def test_file_symlink_is_duplicate_and_directory_symlink_is_not_followed(
-            self):
+        "symlink creation may require Windows developer mode",
+    )
+    def test_manifest_rejects_symlink_escape(self):
+        corpus = self.root / "corpus"
+        corpus.mkdir()
+        outside = self.write("outside/object", make_elf())
+        (corpus / "outside-link").symlink_to(outside)
+        manifest = self.write("manifest.txt", b"outside-link\n")
+
+        completed = self.run_cli(corpus, "--manifest", manifest)
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn(b"escapes its corpus root through a symlink", completed.stderr)
+
+    @unittest.skipIf(
+        os.name == "nt" or not hasattr(os, "symlink"),
+        "symlink creation may require Windows developer mode",
+    )
+    def test_file_symlink_is_duplicate_and_directory_symlink_is_not_followed(self):
         target = self.write("real/object", make_elf())
         file_link = self.root / "file-link"
         file_link.symlink_to(target)
@@ -252,11 +283,13 @@ class HotswapInventoryTest(unittest.TestCase):
         self.assertEqual(report["summary"]["unique_code_objects"], 1)
         self.assertEqual(
             report["objects"][0]["paths"],
-            sorted([str(target), str(file_link)], key=os.fsencode))
+            sorted([str(target), str(file_link)], key=os.fsencode),
+        )
 
     @unittest.skipIf(
         os.name == "nt" or not hasattr(os, "symlink"),
-        "symlink creation may require Windows developer mode")
+        "symlink creation may require Windows developer mode",
+    )
     def test_explicit_directory_symlink_root_is_traversed(self):
         target = self.write("real/object", make_elf())
         link = self.root / "root-link"
@@ -266,12 +299,13 @@ class HotswapInventoryTest(unittest.TestCase):
 
         self.assertEqual(report["summary"]["code_object_paths"], 1)
         self.assertEqual(
-            report["objects"][0]["representative"],
-            str(link / target.name))
+            report["objects"][0]["representative"], str(link / target.name)
+        )
 
     @unittest.skipIf(
         os.name == "nt" or not hasattr(os, "symlink"),
-        "symlink creation may require Windows developer mode")
+        "symlink creation may require Windows developer mode",
+    )
     def test_broken_symlink_fails_loudly(self):
         (self.root / "broken").symlink_to(self.root / "missing")
         completed = self.run_cli(self.root)
@@ -289,7 +323,8 @@ class HotswapInventoryTest(unittest.TestCase):
         self.assertTrue(first.stdout.endswith(b"\n"))
 
     def test_worklist_is_nul_safe_and_uses_representatives(self):
-        first = self.write("space name\nline", make_elf(b"one"))
+        unusual_name = "space name\nline" if os.name != "nt" else "space name & line"
+        first = self.write(unusual_name, make_elf(b"one"))
         self.write("duplicate", first.read_bytes())
         second = self.write("literal;$(touch PWNED)", make_elf(b"two"))
         worklist = self.root / "worklist"
@@ -300,10 +335,7 @@ class HotswapInventoryTest(unittest.TestCase):
         paths = worklist.read_bytes().split(b"\0")
         self.assertEqual(paths[-1], b"")
         report = self.parse_report(completed)
-        expected = [
-            os.fsencode(item["representative"])
-            for item in report["objects"]
-        ]
+        expected = [os.fsencode(item["representative"]) for item in report["objects"]]
         self.assertEqual(paths[:-1], expected)
         self.assertIn(os.fsencode(second), paths)
         self.assertFalse((self.root / "PWNED").exists())
@@ -314,8 +346,7 @@ class HotswapInventoryTest(unittest.TestCase):
         self.write("second", duplicate_contents)
         dangerous = self.write("$(touch PWNED)", make_elf(b"unique"))
         log = self.root / "command-log"
-        command = self.make_command(
-            """
+        command = self.make_command("""
             import json
             import os
             import sys
@@ -328,38 +359,40 @@ class HotswapInventoryTest(unittest.TestCase):
 
         completed = self.run_cli(
             self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2],
-            env=environment)
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            env=environment,
+        )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         report = self.parse_report(completed)
         self.assertEqual(report["execution"]["summary"]["total"], 2)
         self.assertEqual(report["execution"]["summary"]["passed"], 2)
-        logged_paths = [json.loads(line)
-                        for line in log.read_text().splitlines()]
+        logged_paths = [json.loads(line) for line in log.read_text().splitlines()]
         self.assertEqual(
-            logged_paths,
-            [item["representative"] for item in report["objects"]])
+            logged_paths, [item["representative"] for item in report["objects"]]
+        )
         self.assertIn(str(dangerous), logged_paths)
         self.assertFalse((self.root / "PWNED").exists())
         for result in report["execution"]["results"]:
             self.assertEqual(
-                base64.b64decode(result["stdout_base64"]), b"processed\n")
+                base64.b64decode(result["stdout_base64"]),
+                b"processed" + os.linesep.encode(),
+            )
 
     def test_command_failure_is_recorded_and_returns_one(self):
         self.write("object", make_elf())
-        command = self.make_command(
-            """
+        command = self.make_command("""
             import sys
             print("bad", file=sys.stderr)
             sys.exit(7)
             """)
 
         completed = self.run_cli(
-            self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2])
+            self.root, "--execute", command[0], "--execute-arg", command[2]
+        )
 
         self.assertEqual(completed.returncode, 1)
         result = self.parse_report(completed)["execution"]["results"][0]
@@ -368,24 +401,27 @@ class HotswapInventoryTest(unittest.TestCase):
         self.assertIsInstance(result["runtime_ms"], int)
         self.assertGreaterEqual(result["runtime_ms"], 0)
         self.assertEqual(
-            base64.b64decode(result["stderr_base64"]), b"bad\n")
+            base64.b64decode(result["stderr_base64"]),
+            b"bad" + os.linesep.encode(),
+        )
 
     def test_parallel_jobs_preserve_deterministic_result_order(self):
         for index in range(5):
-            self.write(
-                "object-{}".format(index),
-                make_elf(str(index).encode("ascii")))
-        command = self.make_command(
-            """
+            self.write("object-{}".format(index), make_elf(str(index).encode("ascii")))
+        command = self.make_command("""
             import sys
             print(sys.argv[-1])
             """)
 
         completed = self.run_cli(
             self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2],
-            "--jobs", "3")
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            "--jobs",
+            "3",
+        )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         report = self.parse_report(completed)
@@ -393,25 +429,30 @@ class HotswapInventoryTest(unittest.TestCase):
         self.assertEqual(execution["jobs"], 3)
         self.assertEqual(
             [result["path"] for result in execution["results"]],
-            [item["representative"] for item in report["objects"]])
+            [item["representative"] for item in report["objects"]],
+        )
         for result in execution["results"]:
             self.assertEqual(
                 base64.b64decode(result["stdout_base64"]).decode().strip(),
-                result["path"])
+                result["path"],
+            )
 
     def test_timeout_is_recorded_and_returns_one(self):
         self.write("object", make_elf())
-        command = self.make_command(
-            """
+        command = self.make_command("""
             import time
             time.sleep(10)
             """)
 
         completed = self.run_cli(
             self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2],
-            "--timeout", "0.05")
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            "--timeout",
+            "0.05",
+        )
 
         self.assertEqual(completed.returncode, 1)
         result = self.parse_report(completed)["execution"]["results"][0]
@@ -419,12 +460,41 @@ class HotswapInventoryTest(unittest.TestCase):
         self.assertIsNone(result["returncode"])
         self.assertGreaterEqual(result["runtime_ms"], 40)
 
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_timeout_terminates_descendants_holding_output_pipes(self):
+        self.write("object", make_elf())
+        command = self.make_command("""
+            import subprocess
+            import sys
+            subprocess.Popen([
+                sys.executable,
+                "-c",
+                "import time; time.sleep(10)",
+            ])
+            """)
+
+        start_time = time.monotonic()
+        completed = self.run_cli(
+            self.root,
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            "--timeout",
+            "0.05",
+        )
+        elapsed = time.monotonic() - start_time
+
+        self.assertEqual(completed.returncode, 1)
+        result = self.parse_report(completed)["execution"]["results"][0]
+        self.assertEqual(result["status"], "timed-out")
+        self.assertLess(elapsed, 2.0)
+
     def test_success_cache_hits_and_input_changes_invalidate(self):
         code_object = self.write("object", make_elf(b"first"))
         counter = self.root / "counter"
         cache = self.root / "cache"
-        command = self.make_command(
-            """
+        command = self.make_command("""
             import os
             from pathlib import Path
             counter = Path(os.environ["INVENTORY_COUNTER"])
@@ -435,9 +505,12 @@ class HotswapInventoryTest(unittest.TestCase):
         environment["INVENTORY_COUNTER"] = str(counter)
         arguments = [
             self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2],
-            "--cache-dir", cache,
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            "--cache-dir",
+            cache,
         ]
 
         first = self.run_cli(*arguments, env=environment)
@@ -450,28 +523,148 @@ class HotswapInventoryTest(unittest.TestCase):
         self.assertEqual(third.returncode, 0, third.stderr)
         self.assertEqual(counter.read_text(), "2")
         self.assertEqual(
-            self.parse_report(first)["execution"]["summary"]["cache_hits"], 0)
+            self.parse_report(first)["execution"]["summary"]["cache_hits"], 0
+        )
         self.assertEqual(
-            self.parse_report(second)["execution"]["summary"]["cache_hits"], 1)
+            self.parse_report(second)["execution"]["summary"]["cache_hits"], 1
+        )
         self.assertEqual(
-            self.parse_report(third)["execution"]["summary"]["cache_hits"], 0)
+            self.parse_report(third)["execution"]["summary"]["cache_hits"], 0
+        )
         first_execution = self.parse_report(first)["execution"]
         second_execution = self.parse_report(second)["execution"]
         self.assertEqual(
             first_execution["results"][0]["runtime_ms"],
-            second_execution["results"][0]["runtime_ms"])
+            second_execution["results"][0]["runtime_ms"],
+        )
+        uncached_result = dict(first_execution["results"][0])
+        cached_result = dict(second_execution["results"][0])
+        uncached_result.pop("cached")
+        cached_result.pop("cached")
+        self.assertEqual(uncached_result, cached_result)
         self.assertEqual(
             second_execution["summary"]["estimated_runtime_ms"],
-            second_execution["results"][0]["runtime_ms"])
+            second_execution["results"][0]["runtime_ms"],
+        )
+        self.assertEqual(second_execution["summary"]["executed_runtime_ms"], 0)
+
+    def test_cache_key_includes_representative_path(self):
+        contents = make_elf(b"same bytes")
+        first_object = self.write("first/object", contents)
+        second_object = self.write("second/object", contents)
+        cache = self.root / "cache"
+        command = self.write("worker.py", b"import sys\nprint(sys.argv[-1])\n")
+
+        def run(corpus_root):
+            return self.run_cli(
+                corpus_root,
+                "--execute",
+                sys.executable,
+                "--execute-arg",
+                command,
+                "--cache-dir",
+                cache,
+            )
+
+        first = run(first_object.parent)
+        second = run(second_object.parent)
+
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        second_result = self.parse_report(second)["execution"]["results"][0]
+        self.assertFalse(second_result["cached"])
         self.assertEqual(
-            second_execution["summary"]["executed_runtime_ms"], 0)
+            base64.b64decode(second_result["stdout_base64"]),
+            os.fsencode(second_object) + os.linesep.encode(),
+        )
+
+    def test_cache_key_includes_timeout(self):
+        corpus = self.root / "corpus"
+        self.write("corpus/object", make_elf())
+        cache = self.root / "cache"
+        command = self.write("worker.py", b"import time\ntime.sleep(0.1)\n")
+        base_arguments = [
+            corpus,
+            "--execute",
+            sys.executable,
+            "--execute-arg",
+            command,
+            "--cache-dir",
+            cache,
+        ]
+
+        first = self.run_cli(*base_arguments)
+        second = self.run_cli(*base_arguments, "--timeout", "0.01")
+
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(second.returncode, 1)
+        second_result = self.parse_report(second)["execution"]["results"][0]
+        self.assertFalse(second_result["cached"])
+        self.assertEqual(second_result["status"], "timed-out")
+
+    def test_concurrent_cache_writers_leave_a_valid_entry(self):
+        corpus = self.root / "corpus"
+        self.write("corpus/object", make_elf())
+        cache = self.root / "cache"
+        command = self.write(
+            "worker.py", b"import time\ntime.sleep(0.1)\nprint('complete')\n"
+        )
+        arguments = [
+            sys.executable,
+            str(SCRIPT),
+            str(corpus),
+            "--execute",
+            sys.executable,
+            "--execute-arg",
+            str(command),
+            "--cache-dir",
+            str(cache),
+        ]
+
+        first = subprocess.Popen(
+            arguments,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        second = subprocess.Popen(
+            arguments,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        first_output, first_error = first.communicate(timeout=30)
+        second_output, second_error = second.communicate(timeout=30)
+
+        self.assertEqual(first.returncode, 0, first_error)
+        self.assertEqual(second.returncode, 0, second_error)
+        self.assertEqual(json.loads(first_output)["execution"]["summary"]["total"], 1)
+        self.assertEqual(json.loads(second_output)["execution"]["summary"]["total"], 1)
+        cache_entries = list(cache.rglob("*.json"))
+        self.assertEqual(len(cache_entries), 1)
+        cache_entry = json.loads(cache_entries[0].read_text(encoding="ascii"))
+        self.assertEqual(cache_entry["schema"], INVENTORY.CACHE_SCHEMA)
+        self.assertEqual(cache_entry["version"], INVENTORY.CACHE_VERSION)
+
+        cached = self.run_cli(
+            corpus,
+            "--execute",
+            sys.executable,
+            "--execute-arg",
+            command,
+            "--cache-dir",
+            cache,
+        )
+        self.assertEqual(cached.returncode, 0, cached.stderr)
+        self.assertEqual(
+            self.parse_report(cached)["execution"]["summary"]["cache_hits"], 1
+        )
 
     def test_failed_command_is_not_cached(self):
         self.write("object", make_elf())
         counter = self.root / "counter"
         cache = self.root / "cache"
-        command = self.make_command(
-            """
+        command = self.make_command("""
             import os
             import sys
             from pathlib import Path
@@ -484,9 +677,12 @@ class HotswapInventoryTest(unittest.TestCase):
         environment["INVENTORY_COUNTER"] = str(counter)
         arguments = [
             self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2],
-            "--cache-dir", cache,
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            "--cache-dir",
+            cache,
         ]
 
         first = self.run_cli(*arguments, env=environment)
@@ -502,9 +698,12 @@ class HotswapInventoryTest(unittest.TestCase):
         command = self.make_command("print('ok')\n")
         arguments = [
             self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2],
-            "--cache-dir", cache,
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            "--cache-dir",
+            cache,
         ]
         first = self.run_cli(*arguments)
         self.assertEqual(first.returncode, 0, first.stderr)
@@ -524,9 +723,12 @@ class HotswapInventoryTest(unittest.TestCase):
         command = self.make_command("print('ok')\n")
         arguments = [
             self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2],
-            "--cache-dir", cache,
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            "--cache-dir",
+            cache,
         ]
         first = self.run_cli(*arguments)
         self.assertEqual(first.returncode, 0, first.stderr)
@@ -544,9 +746,12 @@ class HotswapInventoryTest(unittest.TestCase):
         command = self.make_command("print('ok')\n")
         arguments = [
             self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2],
-            "--cache-dir", cache,
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            "--cache-dir",
+            cache,
         ]
         first = self.run_cli(*arguments)
         self.assertEqual(first.returncode, 0, first.stderr)
@@ -567,9 +772,12 @@ class HotswapInventoryTest(unittest.TestCase):
         command = self.make_command("print('ok')\n")
         arguments = [
             self.root,
-            "--execute", command[0],
-            "--execute-arg", command[2],
-            "--cache-dir", cache,
+            "--execute",
+            command[0],
+            "--execute-arg",
+            command[2],
+            "--cache-dir",
+            cache,
         ]
         first = self.run_cli(*arguments)
         self.assertEqual(first.returncode, 0, first.stderr)
@@ -589,9 +797,12 @@ class HotswapInventoryTest(unittest.TestCase):
         command_script = self.write("worker.py", b"print('first')\n")
         arguments = [
             self.root,
-            "--execute", sys.executable,
-            "--execute-arg", command_script,
-            "--cache-dir", cache,
+            "--execute",
+            sys.executable,
+            "--execute-arg",
+            command_script,
+            "--cache-dir",
+            cache,
         ]
 
         first = self.run_cli(*arguments)
@@ -601,12 +812,13 @@ class HotswapInventoryTest(unittest.TestCase):
         first_execution = self.parse_report(first)["execution"]
         second_execution = self.parse_report(second)["execution"]
         self.assertNotEqual(
-            first_execution["command_key"], second_execution["command_key"])
+            first_execution["command_key"], second_execution["command_key"]
+        )
         self.assertEqual(second_execution["summary"]["cache_hits"], 0)
         self.assertEqual(
-            base64.b64decode(
-                second_execution["results"][0]["stdout_base64"]),
-            b"second\n")
+            base64.b64decode(second_execution["results"][0]["stdout_base64"]),
+            b"second" + os.linesep.encode(),
+        )
 
     def test_cache_dependency_and_tag_change_command_identity(self):
         self.write("object", make_elf())
@@ -616,10 +828,15 @@ class HotswapInventoryTest(unittest.TestCase):
         def run(tag):
             return self.run_cli(
                 self.root,
-                "--execute", command[0],
-                "--execute-arg", command[2],
-                "--cache-dependency", dependency,
-                "--cache-tag", tag)
+                "--execute",
+                command[0],
+                "--execute-arg",
+                command[2],
+                "--cache-dependency",
+                dependency,
+                "--cache-tag",
+                tag,
+            )
 
         first = self.parse_report(run("configuration-one"))["execution"]
         dependency.write_bytes(b"version two")
@@ -628,22 +845,24 @@ class HotswapInventoryTest(unittest.TestCase):
 
         self.assertNotEqual(first["command_key"], second["command_key"])
         self.assertNotEqual(second["command_key"], third["command_key"])
-        self.assertEqual(
-            second["cache_dependencies"], [str(dependency)])
+        self.assertEqual(second["cache_dependencies"], [str(dependency)])
         self.assertEqual(third["cache_tags"], ["configuration-two"])
 
     def test_unknown_flag_and_invalid_option_relationships_are_rejected(self):
         for arguments in (
-                [self.root, "--unknown"],
-                [self.root, "--execute-arg", "x"],
-                [self.root, "--cache-dir", "cache"],
-                [self.root, "--cache-dependency", "dependency"],
-                [self.root, "--cache-tag", "tag"],
-                [self.root, "--timeout", "0"],
-                [self.root, "--timeout", "1"],
-                [self.root, "--jobs", "0"],
-                [self.root, "--jobs", "2"],
-                [self.root, "--worklist", "-"]):
+            [self.root, "--unknown"],
+            [self.root, "--execute-arg", "x"],
+            [self.root, "--cache-dir", "cache"],
+            [self.root, "--cache-dependency", "dependency"],
+            [self.root, "--cache-tag", "tag"],
+            [self.root, "--timeout", "0"],
+            [self.root, "--execute", sys.executable, "--timeout", "nan"],
+            [self.root, "--execute", sys.executable, "--timeout", "inf"],
+            [self.root, "--timeout", "1"],
+            [self.root, "--jobs", "0"],
+            [self.root, "--jobs", "2"],
+            [self.root, "--worklist", "-"],
+        ):
             with self.subTest(arguments=arguments):
                 completed = self.run_cli(*arguments)
                 self.assertEqual(completed.returncode, 2)
@@ -655,34 +874,76 @@ class HotswapInventoryTest(unittest.TestCase):
         self.assertIn(b"does not exist", missing.stderr)
 
         output = self.run_cli(
-            self.root, "--json-output", self.root / "missing" / "report.json")
+            self.root, "--json-output", self.root / "missing" / "report.json"
+        )
         self.assertEqual(output.returncode, 2)
         self.assertIn(b"output directory does not exist", output.stderr)
 
     def test_same_json_and_worklist_path_is_rejected(self):
         output = self.root / "output"
         completed = self.run_cli(
-            self.root, "--json-output", output, "--worklist", output)
+            self.root, "--json-output", output, "--worklist", output
+        )
         self.assertEqual(completed.returncode, 2)
         self.assertIn(b"must be different", completed.stderr)
+
+    @unittest.skipIf(
+        os.name == "nt" or not hasattr(os, "symlink"),
+        "symlink creation may require Windows developer mode",
+    )
+    def test_aliased_json_and_worklist_paths_are_rejected(self):
+        output_directory = self.root / "output"
+        output_directory.mkdir()
+        output_alias = self.root / "output-alias"
+        output_alias.symlink_to(output_directory, target_is_directory=True)
+
+        completed = self.run_cli(
+            self.root / "empty",
+            "--json-output",
+            output_directory / "result",
+            "--worklist",
+            output_alias / "result",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn(b"must be different", completed.stderr)
+
+    @unittest.skipIf(
+        os.name == "nt" or not hasattr(os, "symlink"),
+        "symlink creation may require Windows developer mode",
+    )
+    def test_output_cannot_overwrite_input_through_directory_symlink(self):
+        corpus = self.root / "corpus"
+        code_object = self.write("corpus/object", make_elf())
+        corpus_alias = self.root / "corpus-alias"
+        corpus_alias.symlink_to(corpus, target_is_directory=True)
+
+        completed = self.run_cli(corpus, "--json-output", corpus_alias / "object")
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn(b"refusing to overwrite inventory input", completed.stderr)
+        self.assertEqual(code_object.read_bytes(), make_elf())
 
     def test_output_cannot_overwrite_input_or_manifest(self):
         code_object = self.write("corpus/object", make_elf())
         manifest = self.write("manifest.txt", b"object\n")
         for arguments in (
-                [self.root / "corpus", "--json-output", code_object],
-                [self.root / "corpus", "--worklist", code_object],
-                [
-                    self.root / "corpus",
-                    "--manifest", manifest,
-                    "--json-output", manifest,
-                ]):
+            [self.root / "corpus", "--json-output", code_object],
+            [self.root / "corpus", "--worklist", code_object],
+            [
+                self.root / "corpus",
+                "--manifest",
+                manifest,
+                "--json-output",
+                manifest,
+            ],
+        ):
             with self.subTest(arguments=arguments):
                 completed = self.run_cli(*arguments)
                 self.assertEqual(completed.returncode, 2)
                 self.assertIn(
-                    b"refusing to overwrite inventory input",
-                    completed.stderr)
+                    b"refusing to overwrite inventory input", completed.stderr
+                )
                 self.assertEqual(code_object.read_bytes(), make_elf())
 
     def test_help_documents_execution_and_worklist(self):

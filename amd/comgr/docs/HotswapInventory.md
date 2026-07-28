@@ -22,8 +22,8 @@ $ amd/comgr/utils/hotswap/hotswap_inventory.py extracted-corpus \
 ```
 
 The manifest path, SHA-256, and entry count are recorded in the report.
-Duplicate, missing, absolute, root-escaping, empty, and NUL-containing
-manifest entries are errors.
+Duplicate, missing, absolute, root-escaping (including through symlinks),
+empty, and NUL-containing manifest entries are errors.
 
 To inventory a corpus and produce a NUL-delimited worklist:
 
@@ -40,6 +40,10 @@ It is safe for paths containing spaces or newlines. For example:
 $ xargs -0 -n1 my-hotswap-command < unique-code-objects.list
 ```
 
+Place the JSON output, worklist, and cache outside the inventoried roots.
+Pre-existing files below those roots are corpus inputs; the tool refuses to
+replace an input through an alternate, hard-linked, or symlinked path.
+
 The tool can run a command itself without a shell. The absolute object
 path is appended to the argument vector:
 
@@ -55,20 +59,23 @@ $ amd/comgr/utils/hotswap/hotswap_inventory.py corpus \
     --json-output results.json
 ```
 
-Successful results are cached by the command identity and input content
-hash. The command identity includes the contents of the executable and
-any arguments that name regular files. Use repeatable `--cache-dependency`
-options for dynamically loaded libraries or other file inputs, and
-`--cache-tag` for relevant environment, container, or configuration
-identity. Failed and timed-out commands are not cached, so a later run
-retries them. `--jobs` controls concurrent command execution; result
-records remain in deterministic digest order. Captured standard output
-and standard error are Base64-encoded in the JSON result. Every result
-also records monotonic elapsed `runtime_ms`. Successful cache hits replay
-the original runtime so downstream selectors can estimate a future full
-run. The execution summary reports `estimated_runtime_ms` across every
-unique object and `executed_runtime_ms` for work actually performed in
-the current run.
+Successful results are cached by the command identity, input content hash,
+and representative path. Including the path preserves command behavior
+when two corpus locations contain identical bytes. The command identity
+includes the timeout, the contents of the executable, and any arguments
+that name regular files. Use repeatable `--cache-dependency` options for
+dynamically loaded libraries or other file inputs, and `--cache-tag` for
+relevant environment, container, or configuration identity. Failed and
+timed-out commands are not cached, so a later run retries them. `--jobs`
+controls concurrent command execution; result records remain in
+deterministic digest order. Captured standard output and standard error are
+Base64-encoded in the JSON result. Every result also records monotonic
+elapsed `runtime_ms`. Successful cache hits replay the original runtime so
+downstream selectors can estimate a future full run. The execution summary
+reports `estimated_runtime_ms` across every unique object and
+`executed_runtime_ms` for work actually performed in the current run.
+On POSIX systems, a timeout terminates the command's process group so
+descendants that inherited output pipes cannot leave the inventory blocked.
 
 The exit status is zero when inventory and every optional command
 succeed, one when at least one optional command fails or times out, and

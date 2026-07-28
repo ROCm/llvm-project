@@ -7,8 +7,10 @@ import concurrent.futures
 import functools
 import hashlib
 import json
+import math
 import os
 import shutil
+import signal
 import stat
 import struct
 import subprocess
@@ -20,7 +22,7 @@ import time
 SCHEMA = "comgr.hotswap.inventory"
 SCHEMA_VERSION = 2
 CACHE_SCHEMA = "comgr.hotswap.inventory.cache"
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 EM_AMDGPU = 224
 ELF_MAGIC = b"\x7fELF"
 HASH_BLOCK_SIZE = 1024 * 1024
@@ -40,6 +42,18 @@ def normalized_path(path):
     return os.path.normpath(os.path.abspath(path))
 
 
+def paths_alias(first, second):
+    """Return whether two path spellings identify the same location."""
+    first_path = normalized_path(first)
+    second_path = normalized_path(second)
+    try:
+        return os.path.samefile(first_path, second_path)
+    except (OSError, ValueError):
+        first_resolved = os.path.normcase(os.path.realpath(first_path))
+        second_resolved = os.path.normcase(os.path.realpath(second_path))
+        return first_resolved == second_resolved
+
+
 def discover_files(roots):
     """Return sorted, distinct regular-file paths below roots.
 
@@ -52,11 +66,13 @@ def discover_files(roots):
     def visit_directory(directory):
         try:
             with os.scandir(directory) as entries:
-                sorted_entries = sorted(entries, key=lambda entry:
-                                        os.fsencode(entry.name))
+                sorted_entries = sorted(
+                    entries, key=lambda entry: os.fsencode(entry.name)
+                )
         except OSError as error:
-            raise InventoryError("cannot read directory '{}': {}".format(
-                directory, error)) from error
+            raise InventoryError(
+                "cannot read directory '{}': {}".format(directory, error)
+            ) from error
 
         for entry in sorted_entries:
             entry_path = normalized_path(entry.path)
@@ -67,19 +83,19 @@ def discover_files(roots):
                     discovered.add(entry_path)
                 elif entry.is_symlink() and not os.path.exists(entry_path):
                     raise InventoryError(
-                        "broken symlink in corpus: '{}'".format(entry_path))
+                        "broken symlink in corpus: '{}'".format(entry_path)
+                    )
             except OSError as error:
-                raise InventoryError("cannot inspect '{}': {}".format(
-                    entry_path, error)) from error
+                raise InventoryError(
+                    "cannot inspect '{}': {}".format(entry_path, error)
+                ) from error
 
     if not roots:
         raise InventoryError("at least one corpus root is required")
 
-    for root in sorted({normalized_path(root) for root in roots},
-                       key=path_sort_key):
+    for root in sorted({normalized_path(root) for root in roots}, key=path_sort_key):
         if not os.path.lexists(root):
-            raise InventoryError("corpus root does not exist: '{}'".format(
-                root))
+            raise InventoryError("corpus root does not exist: '{}'".format(root))
         try:
             if os.path.isdir(root):
                 visit_directory(root)
@@ -87,11 +103,12 @@ def discover_files(roots):
                 discovered.add(root)
             else:
                 raise InventoryError(
-                    "corpus root is not a regular file or directory: "
-                    "'{}'".format(root))
+                    "corpus root is not a regular file or directory: '{}'".format(root)
+                )
         except OSError as error:
-            raise InventoryError("cannot inspect corpus root '{}': {}".format(
-                root, error)) from error
+            raise InventoryError(
+                "cannot inspect corpus root '{}': {}".format(root, error)
+            ) from error
 
     return sorted(discovered, key=path_sort_key)
 
@@ -101,18 +118,22 @@ def read_manifest(root, manifest_path):
     normalized_root = normalized_path(root)
     if not os.path.isdir(normalized_root):
         raise InventoryError(
-            "manifest root is not a directory: '{}'".format(normalized_root))
+            "manifest root is not a directory: '{}'".format(normalized_root)
+        )
+    resolved_root = os.path.realpath(normalized_root)
     normalized_manifest = normalized_path(manifest_path)
     try:
         with open(normalized_manifest, "rb") as stream:
             contents = stream.read()
     except OSError as error:
-        raise InventoryError("cannot read manifest '{}': {}".format(
-            normalized_manifest, error)) from error
+        raise InventoryError(
+            "cannot read manifest '{}': {}".format(normalized_manifest, error)
+        ) from error
 
     if b"\0" in contents:
         raise InventoryError(
-            "manifest contains a NUL byte: '{}'".format(normalized_manifest))
+            "manifest contains a NUL byte: '{}'".format(normalized_manifest)
+        )
     raw_entries = contents.split(b"\n")
     if raw_entries and raw_entries[-1] == b"":
         raw_entries.pop()
@@ -125,31 +146,54 @@ def read_manifest(root, manifest_path):
         if not raw_entry:
             raise InventoryError(
                 "manifest '{}' has an empty path at line {}".format(
-                    normalized_manifest, line_number))
+                    normalized_manifest, line_number
+                )
+            )
         relative = os.fsdecode(raw_entry)
         if os.path.isabs(relative):
             raise InventoryError(
                 "manifest '{}' has an absolute path at line {}".format(
-                    normalized_manifest, line_number))
+                    normalized_manifest, line_number
+                )
+            )
         path = normalized_path(os.path.join(normalized_root, relative))
         try:
             common = os.path.commonpath([normalized_root, path])
         except ValueError as error:
             raise InventoryError(
                 "manifest '{}' has an invalid path at line {}".format(
-                    normalized_manifest, line_number)) from error
-        if common != normalized_root:
+                    normalized_manifest, line_number
+                )
+            ) from error
+        if os.path.normcase(common) != os.path.normcase(normalized_root):
             raise InventoryError(
                 "manifest '{}' escapes its corpus root at line {}".format(
-                    normalized_manifest, line_number))
+                    normalized_manifest, line_number
+                )
+            )
+        resolved_path = os.path.realpath(path)
+        try:
+            resolved_common = os.path.commonpath([resolved_root, resolved_path])
+        except ValueError as error:
+            raise InventoryError(
+                "manifest '{}' has an invalid path at line {}".format(
+                    normalized_manifest, line_number
+                )
+            ) from error
+        if os.path.normcase(resolved_common) != os.path.normcase(resolved_root):
+            raise InventoryError(
+                "manifest '{}' escapes its corpus root through a symlink at "
+                "line {}".format(normalized_manifest, line_number)
+            )
         if path in seen:
             raise InventoryError(
-                "manifest '{}' repeats path '{}'".format(
-                    normalized_manifest, relative))
+                "manifest '{}' repeats path '{}'".format(normalized_manifest, relative)
+            )
         seen.add(path)
         if not os.path.isfile(path):
             raise InventoryError(
-                "manifest path is not a regular file: '{}'".format(path))
+                "manifest path is not a regular file: '{}'".format(path)
+            )
         paths.append(path)
 
     return (
@@ -184,16 +228,16 @@ def classify_header(header):
         return "truncated-elf-header"
 
     endian = "<" if elf_data == 1 else ">"
-    _elf_type, machine, version = struct.unpack_from(
-        endian + "HHI", header, 16)
+    _elf_type, machine, version = struct.unpack_from(endian + "HHI", header, 16)
     if version != 1:
         return "unsupported-elf-version"
     if machine != EM_AMDGPU:
         return "non-amdgpu-elf"
 
     header_size_offset = 40 if elf_class == 1 else 52
-    declared_header_size = struct.unpack_from(
-        endian + "H", header, header_size_offset)[0]
+    declared_header_size = struct.unpack_from(endian + "H", header, header_size_offset)[
+        0
+    ]
     if declared_header_size != header_size:
         return "invalid-elf-header-size"
     return None
@@ -206,7 +250,8 @@ def inspect_file(path):
             initial_stat = os.fstat(stream.fileno())
             if not stat.S_ISREG(initial_stat.st_mode):
                 raise InventoryError(
-                    "corpus path is not a regular file: '{}'".format(path))
+                    "corpus path is not a regular file: '{}'".format(path)
+                )
             header = stream.read(64)
             rejection = classify_header(header)
             if rejection is not None:
@@ -231,8 +276,7 @@ def inspect_file(path):
     except InventoryError:
         raise
     except OSError as error:
-        raise InventoryError("cannot read '{}': {}".format(path, error)) \
-            from error
+        raise InventoryError("cannot read '{}': {}".format(path, error)) from error
 
 
 def ensure_unchanged(path, initial_stat, final_stat):
@@ -242,16 +286,17 @@ def ensure_unchanged(path, initial_stat, final_stat):
         initial_stat.st_ino,
         initial_stat.st_size,
         initial_stat.st_mtime_ns,
+        initial_stat.st_ctime_ns,
     )
     final_identity = (
         final_stat.st_dev,
         final_stat.st_ino,
         final_stat.st_size,
         final_stat.st_mtime_ns,
+        final_stat.st_ctime_ns,
     )
     if initial_identity != final_identity:
-        raise InventoryError(
-            "corpus file changed while being read: '{}'".format(path))
+        raise InventoryError("corpus file changed while being read: '{}'".format(path))
 
 
 def build_inventory(roots, manifest_path=None):
@@ -261,8 +306,7 @@ def build_inventory(roots, manifest_path=None):
         files = discover_files(roots)
     else:
         if len(roots) != 1:
-            raise InventoryError(
-                "a manifest requires exactly one corpus root")
+            raise InventoryError("a manifest requires exactly one corpus root")
         files, manifest = read_manifest(roots[0], manifest_path)
     by_digest = {}
     rejected = []
@@ -285,21 +329,21 @@ def build_inventory(roots, manifest_path=None):
     for digest in sorted(by_digest):
         item = by_digest[digest]
         paths = sorted(item["paths"], key=path_sort_key)
-        objects.append({
-            "sha256": digest,
-            "size": item["size"],
-            "representative": paths[0],
-            "paths": paths,
-        })
+        objects.append(
+            {
+                "sha256": digest,
+                "size": item["size"],
+                "representative": paths[0],
+                "paths": paths,
+            }
+        )
 
     code_object_paths = sum(len(item["paths"]) for item in objects)
-    duplicate_groups = sum(1 for item in objects
-                           if len(item["paths"]) > 1)
+    duplicate_groups = sum(1 for item in objects if len(item["paths"]) > 1)
     inventory = {
         "schema": SCHEMA,
         "version": SCHEMA_VERSION,
-        "roots": sorted({normalized_path(root) for root in roots},
-                        key=path_sort_key),
+        "roots": sorted({normalized_path(root) for root in roots}, key=path_sort_key),
         "summary": {
             "files_examined": len(files),
             "code_object_paths": code_object_paths,
@@ -309,8 +353,7 @@ def build_inventory(roots, manifest_path=None):
             "rejected_files": len(rejected),
         },
         "objects": objects,
-        "rejected": sorted(rejected,
-                           key=lambda item: path_sort_key(item["path"])),
+        "rejected": sorted(rejected, key=lambda item: path_sort_key(item["path"])),
     }
     if manifest is not None:
         inventory["manifest"] = manifest
@@ -319,8 +362,9 @@ def build_inventory(roots, manifest_path=None):
 
 def json_bytes(value):
     """Serialize JSON canonically."""
-    return (json.dumps(value, ensure_ascii=True, indent=2, sort_keys=True) +
-            "\n").encode("ascii")
+    return (
+        json.dumps(value, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
+    ).encode("ascii")
 
 
 def atomic_write(path, contents):
@@ -328,12 +372,12 @@ def atomic_write(path, contents):
     destination = normalized_path(path)
     directory = os.path.dirname(destination)
     if not os.path.isdir(directory):
-        raise InventoryError(
-            "output directory does not exist: '{}'".format(directory))
+        raise InventoryError("output directory does not exist: '{}'".format(directory))
     temporary_path = None
     try:
         descriptor, temporary_path = tempfile.mkstemp(
-            prefix=".hotswap-inventory-", dir=directory)
+            prefix=".hotswap-inventory-", dir=directory
+        )
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(contents)
             stream.flush()
@@ -341,8 +385,9 @@ def atomic_write(path, contents):
         os.replace(temporary_path, destination)
         temporary_path = None
     except OSError as error:
-        raise InventoryError("cannot write '{}': {}".format(
-            destination, error)) from error
+        raise InventoryError(
+            "cannot write '{}': {}".format(destination, error)
+        ) from error
     finally:
         if temporary_path is not None:
             try:
@@ -353,8 +398,7 @@ def atomic_write(path, contents):
 
 def write_worklist(path, objects):
     """Write representative paths as a NUL-delimited byte stream."""
-    contents = b"".join(
-        os.fsencode(item["representative"]) + b"\0" for item in objects)
+    contents = b"".join(os.fsencode(item["representative"]) + b"\0" for item in objects)
     atomic_write(path, contents)
 
 
@@ -370,10 +414,13 @@ def protect_inventory_inputs(inventory, output_paths):
         if output_path is None or output_path == "-":
             continue
         normalized_output = normalized_path(output_path)
-        if normalized_output in protected:
-            raise InventoryError(
-                "refusing to overwrite inventory input '{}'".format(
-                    normalized_output))
+        for protected_path in protected:
+            if paths_alias(normalized_output, protected_path):
+                raise InventoryError(
+                    "refusing to overwrite inventory input '{}'".format(
+                        normalized_output
+                    )
+                )
 
 
 def resolve_program(program):
@@ -382,15 +429,18 @@ def resolve_program(program):
         resolved = normalized_path(program)
         if not os.path.isfile(resolved):
             raise InventoryError(
-                "command executable does not exist: '{}'".format(program))
+                "command executable does not exist: '{}'".format(program)
+            )
         if not os.access(resolved, os.X_OK):
             raise InventoryError(
-                "command executable is not executable: '{}'".format(program))
+                "command executable is not executable: '{}'".format(program)
+            )
         return resolved
     resolved = shutil.which(program)
     if resolved is None:
         raise InventoryError(
-            "command executable was not found on PATH: '{}'".format(program))
+            "command executable was not found on PATH: '{}'".format(program)
+        )
     return normalized_path(resolved)
 
 
@@ -405,41 +455,52 @@ def hash_regular_file(path):
                     break
                 digest.update(block)
     except OSError as error:
-        raise InventoryError("cannot hash command file '{}': {}".format(
-            path, error)) from error
+        raise InventoryError(
+            "cannot hash command file '{}': {}".format(path, error)
+        ) from error
     return digest.hexdigest()
 
 
-def command_identity(argv, dependencies, tags):
+def command_identity(argv, dependencies, tags, timeout):
     """Return a content-sensitive key for an executable and file arguments."""
     files = []
     for index, argument in enumerate(argv):
         candidate = normalized_path(argument)
         if os.path.isfile(candidate):
-            files.append({
-                "kind": "argv",
-                "index": index,
-                "path": candidate,
-                "sha256": hash_regular_file(candidate),
-            })
+            files.append(
+                {
+                    "kind": "argv",
+                    "index": index,
+                    "path": candidate,
+                    "sha256": hash_regular_file(candidate),
+                }
+            )
     normalized_dependencies = []
     for dependency in dependencies:
         path = normalized_path(dependency)
         if not os.path.isfile(path):
             raise InventoryError(
-                "cache dependency is not a regular file: '{}'".format(path))
+                "cache dependency is not a regular file: '{}'".format(path)
+            )
         normalized_dependencies.append(path)
     for path in sorted(set(normalized_dependencies), key=path_sort_key):
-        files.append({
-            "kind": "dependency",
-            "path": path,
-            "sha256": hash_regular_file(path),
-        })
-    identity = {"argv": argv, "files": files, "tags": tags}
+        files.append(
+            {
+                "kind": "dependency",
+                "path": path,
+                "sha256": hash_regular_file(path),
+            }
+        )
+    identity = {
+        "argv": argv,
+        "files": files,
+        "tags": tags,
+        "timeout_seconds": timeout,
+    }
     return hashlib.sha256(json_bytes(identity)).hexdigest()
 
 
-def read_cache_entry(path, command_key, digest):
+def read_cache_entry(path, command_key, digest, representative):
     """Read and validate one successful cached result."""
     if not os.path.exists(path):
         return None
@@ -447,41 +508,41 @@ def read_cache_entry(path, command_key, digest):
         with open(path, "rb") as stream:
             entry = json.load(stream)
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise InventoryError("cannot read cache entry '{}': {}".format(
-            path, error)) from error
+        raise InventoryError(
+            "cannot read cache entry '{}': {}".format(path, error)
+        ) from error
 
     if not isinstance(entry, dict):
-        raise InventoryError(
-            "cache entry '{}' is not a JSON object".format(path))
+        raise InventoryError("cache entry '{}' is not a JSON object".format(path))
     expected = {
         "schema": CACHE_SCHEMA,
         "version": CACHE_VERSION,
         "command_key": command_key,
         "sha256": digest,
+        "path": representative,
     }
     for key, value in expected.items():
         if entry.get(key) != value:
-            raise InventoryError(
-                "cache entry '{}' has invalid {}".format(path, key))
+            raise InventoryError("cache entry '{}' has invalid {}".format(path, key))
     if entry.get("returncode") != 0:
-        raise InventoryError(
-            "cache entry '{}' is not a successful result".format(path))
+        raise InventoryError("cache entry '{}' is not a successful result".format(path))
     runtime_ms = entry.get("runtime_ms")
-    if (isinstance(runtime_ms, bool) or not isinstance(runtime_ms, int) or
-            runtime_ms < 0):
-        raise InventoryError(
-            "cache entry '{}' has invalid runtime_ms".format(path))
+    if (
+        isinstance(runtime_ms, bool)
+        or not isinstance(runtime_ms, int)
+        or runtime_ms < 0
+    ):
+        raise InventoryError("cache entry '{}' has invalid runtime_ms".format(path))
     for key in ("stdout_base64", "stderr_base64"):
         value = entry.get(key)
         if not isinstance(value, str):
-            raise InventoryError(
-                "cache entry '{}' has invalid {}".format(path, key))
+            raise InventoryError("cache entry '{}' has invalid {}".format(path, key))
         try:
             base64.b64decode(value.encode("ascii"), validate=True)
         except (ValueError, UnicodeError) as error:
             raise InventoryError(
-                "cache entry '{}' has invalid {}".format(path, key)) \
-                from error
+                "cache entry '{}' has invalid {}".format(path, key)
+            ) from error
     return entry
 
 
@@ -490,8 +551,36 @@ def elapsed_runtime_ms(start_time):
     return int(round(max(0.0, time.monotonic() - start_time) * 1000))
 
 
-def run_one_command(item, argv_prefix, command_key, timeout,
-                    normalized_cache):
+def execute_command(argv, timeout):
+    """Run argv and terminate its POSIX process group after a timeout."""
+    popen_arguments = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+    }
+    if os.name == "posix":
+        popen_arguments["start_new_session"] = True
+    process = subprocess.Popen(argv, **popen_arguments)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        if os.name == "posix":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            process.kill()
+        stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(
+            error.cmd, error.timeout, output=stdout, stderr=stderr
+        ) from error
+    return subprocess.CompletedProcess(
+        argv, process.returncode, stdout=stdout, stderr=stderr
+    )
+
+
+def run_one_command(item, argv_prefix, command_key, timeout, normalized_cache):
     """Run or load the result for one unique content digest."""
     representative = item["representative"]
     digest = item["sha256"]
@@ -499,9 +588,13 @@ def run_one_command(item, argv_prefix, command_key, timeout,
     cache_path = None
     cached = None
     if normalized_cache is not None:
+        cache_entry_key = hashlib.sha256(
+            json_bytes({"path": representative, "sha256": digest})
+        ).hexdigest()
         cache_path = os.path.join(
-            normalized_cache, command_key, digest + ".json")
-        cached = read_cache_entry(cache_path, command_key, digest)
+            normalized_cache, command_key, cache_entry_key + ".json"
+        )
+        cached = read_cache_entry(cache_path, command_key, digest, representative)
     if cached is not None:
         return {
             "sha256": digest,
@@ -517,27 +610,17 @@ def run_one_command(item, argv_prefix, command_key, timeout,
 
     start_time = time.monotonic()
     try:
-        completed = subprocess.run(
-            argv,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=timeout,
-            check=False,
-            shell=False)
+        completed = execute_command(argv, timeout)
         result = {
             "sha256": digest,
             "path": representative,
             "argv": argv,
-            "status": ("passed" if completed.returncode == 0
-                       else "failed"),
+            "status": ("passed" if completed.returncode == 0 else "failed"),
             "cached": False,
             "returncode": completed.returncode,
             "runtime_ms": elapsed_runtime_ms(start_time),
-            "stdout_base64": base64.b64encode(
-                completed.stdout).decode("ascii"),
-            "stderr_base64": base64.b64encode(
-                completed.stderr).decode("ascii"),
+            "stdout_base64": base64.b64encode(completed.stdout).decode("ascii"),
+            "stderr_base64": base64.b64encode(completed.stderr).decode("ascii"),
         }
     except subprocess.TimeoutExpired as error:
         stdout = error.stdout if error.stdout is not None else b""
@@ -573,6 +656,7 @@ def run_one_command(item, argv_prefix, command_key, timeout,
             "version": CACHE_VERSION,
             "command_key": command_key,
             "sha256": digest,
+            "path": representative,
             "returncode": 0,
             "runtime_ms": result["runtime_ms"],
             "stdout_base64": result["stdout_base64"],
@@ -582,59 +666,63 @@ def run_one_command(item, argv_prefix, command_key, timeout,
     return result
 
 
-def run_command(inventory, program, arguments, timeout, cache_dir, jobs,
-                cache_dependencies, cache_tags):
+def run_command(
+    inventory,
+    program,
+    arguments,
+    timeout,
+    cache_dir,
+    jobs,
+    cache_dependencies,
+    cache_tags,
+):
     """Run argv plus each unique representative, without invoking a shell."""
     resolved_program = resolve_program(program)
     argv_prefix = [resolved_program] + arguments
-    command_key = command_identity(
-        argv_prefix, cache_dependencies, cache_tags)
+    command_key = command_identity(argv_prefix, cache_dependencies, cache_tags, timeout)
 
     normalized_cache = None
     if cache_dir is not None:
         normalized_cache = normalized_path(cache_dir)
         try:
-            os.makedirs(os.path.join(normalized_cache, command_key),
-                        exist_ok=True)
+            os.makedirs(os.path.join(normalized_cache, command_key), exist_ok=True)
         except OSError as error:
-            raise InventoryError("cannot create cache directory '{}': {}"
-                                 .format(normalized_cache, error)) from error
+            raise InventoryError(
+                "cannot create cache directory '{}': {}".format(normalized_cache, error)
+            ) from error
 
     run_one = functools.partial(
         run_one_command,
         argv_prefix=argv_prefix,
         command_key=command_key,
         timeout=timeout,
-        normalized_cache=normalized_cache)
+        normalized_cache=normalized_cache,
+    )
     if jobs == 1:
         results = [run_one(item) for item in inventory["objects"]]
     else:
-        with concurrent.futures.ThreadPoolExecutor(
-                max_workers=jobs) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
             results = list(executor.map(run_one, inventory["objects"]))
 
     return {
         "command": argv_prefix,
         "command_key": command_key,
         "cache_dependencies": sorted(
-            {normalized_path(path) for path in cache_dependencies},
-            key=path_sort_key),
+            {normalized_path(path) for path in cache_dependencies}, key=path_sort_key
+        ),
         "cache_tags": cache_tags,
         "timeout_seconds": timeout,
         "jobs": jobs,
         "results": results,
         "summary": {
             "total": len(results),
-            "passed": sum(1 for result in results
-                          if result["status"] == "passed"),
-            "failed": sum(1 for result in results
-                          if result["status"] != "passed"),
+            "passed": sum(1 for result in results if result["status"] == "passed"),
+            "failed": sum(1 for result in results if result["status"] != "passed"),
             "cache_hits": sum(1 for result in results if result["cached"]),
-            "estimated_runtime_ms": sum(
-                result["runtime_ms"] for result in results),
+            "estimated_runtime_ms": sum(result["runtime_ms"] for result in results),
             "executed_runtime_ms": sum(
-                result["runtime_ms"] for result in results
-                if not result["cached"]),
+                result["runtime_ms"] for result in results if not result["cached"]
+            ),
         },
     }
 
@@ -644,48 +732,89 @@ def create_argument_parser():
     parser = argparse.ArgumentParser(
         description=(
             "Inventory AMDGPU ELF code objects, deduplicate them by SHA-256, "
-            "and optionally run one command per unique object."))
+            "and optionally run one command per unique object."
+        )
+    )
     parser.add_argument(
-        "roots", metavar="ROOT", nargs="+",
-        help="file or directory to inventory recursively")
+        "roots",
+        metavar="ROOT",
+        nargs="+",
+        help="file or directory to inventory recursively",
+    )
     parser.add_argument(
-        "--json-output", metavar="PATH", default="-",
-        help="write the JSON report to PATH (default: standard output)")
+        "--json-output",
+        metavar="PATH",
+        default="-",
+        help="write the JSON report to PATH (default: standard output)",
+    )
     parser.add_argument(
-        "--worklist", metavar="PATH",
-        help="write unique representative paths as NUL-delimited bytes")
+        "--worklist",
+        metavar="PATH",
+        help="write unique representative paths as NUL-delimited bytes",
+    )
     parser.add_argument(
-        "--manifest", metavar="PATH",
-        help=("inventory only newline-delimited paths from PATH, relative to "
-              "one corpus root"))
+        "--manifest",
+        metavar="PATH",
+        help=(
+            "inventory only newline-delimited paths from PATH, relative to "
+            "one corpus root"
+        ),
+    )
     parser.add_argument(
-        "--execute", metavar="PROGRAM",
-        help="run PROGRAM once per unique object; the path is appended")
+        "--execute",
+        metavar="PROGRAM",
+        help="run PROGRAM once per unique object; the path is appended",
+    )
     parser.add_argument(
-        "--execute-arg", metavar="ARG", action="append", default=[],
-        help=("pass ARG before the object path; repeat as needed (use "
-              "--execute-arg=--flag for arguments beginning with '-')"))
+        "--execute-arg",
+        metavar="ARG",
+        action="append",
+        default=[],
+        help=(
+            "pass ARG before the object path; repeat as needed (use "
+            "--execute-arg=--flag for arguments beginning with '-')"
+        ),
+    )
     parser.add_argument(
-        "--timeout", metavar="SECONDS", type=float,
-        help="terminate each command after this many seconds")
+        "--timeout",
+        metavar="SECONDS",
+        type=float,
+        help="terminate each command after this many seconds",
+    )
     parser.add_argument(
-        "--cache-dir", metavar="PATH",
-        help="reuse successful results by command and input content hash")
+        "--cache-dir",
+        metavar="PATH",
+        help="reuse successful results by command and input content hash",
+    )
     parser.add_argument(
-        "--cache-dependency", metavar="PATH", action="append", default=[],
-        help="hash PATH into the command cache key; repeat as needed")
+        "--cache-dependency",
+        metavar="PATH",
+        action="append",
+        default=[],
+        help="hash PATH into the command cache key; repeat as needed",
+    )
     parser.add_argument(
-        "--cache-tag", metavar="TEXT", action="append", default=[],
-        help="include TEXT in the command cache key; repeat as needed")
+        "--cache-tag",
+        metavar="TEXT",
+        action="append",
+        default=[],
+        help="include TEXT in the command cache key; repeat as needed",
+    )
     parser.add_argument(
-        "--jobs", metavar="COUNT", type=int, default=1,
-        help="run up to COUNT commands concurrently (default: 1)")
+        "--jobs",
+        metavar="COUNT",
+        type=int,
+        default=1,
+        help="run up to COUNT commands concurrently (default: 1)",
+    )
     return parser
 
 
 def validate_arguments(parser, arguments):
     """Validate relationships not expressible with argparse declarations."""
-    if arguments.timeout is not None and arguments.timeout <= 0:
+    if arguments.timeout is not None and (
+        not math.isfinite(arguments.timeout) or arguments.timeout <= 0
+    ):
         parser.error("--timeout must be greater than zero")
     if arguments.jobs <= 0:
         parser.error("--jobs must be greater than zero")
@@ -706,10 +835,11 @@ def validate_arguments(parser, arguments):
         parser.error("--worklist requires a file path, not standard output")
     if arguments.manifest is not None and len(arguments.roots) != 1:
         parser.error("--manifest requires exactly one corpus root")
-    if (arguments.worklist is not None and
-            arguments.json_output != "-" and
-            normalized_path(arguments.worklist) ==
-            normalized_path(arguments.json_output)):
+    if (
+        arguments.worklist is not None
+        and arguments.json_output != "-"
+        and paths_alias(arguments.worklist, arguments.json_output)
+    ):
         parser.error("--worklist and --json-output must be different files")
 
 
@@ -721,8 +851,7 @@ def main(argv=None):
 
     try:
         inventory = build_inventory(arguments.roots, arguments.manifest)
-        protect_inventory_inputs(
-            inventory, [arguments.worklist, arguments.json_output])
+        protect_inventory_inputs(inventory, [arguments.worklist, arguments.json_output])
         if arguments.worklist is not None:
             write_worklist(arguments.worklist, inventory["objects"])
 
@@ -736,7 +865,8 @@ def main(argv=None):
                 arguments.cache_dir,
                 arguments.jobs,
                 arguments.cache_dependency,
-                arguments.cache_tag)
+                arguments.cache_tag,
+            )
             inventory["execution"] = execution
             command_failed = execution["summary"]["failed"] != 0
 
