@@ -406,6 +406,21 @@ truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
   for (uint32_t I = MinInstSize; I < InstSize; I += MinInstSize)
     std::memcpy(Ctx.Text + InstOffset + I, LS.SNopBytes.data(), MinInstSize);
 
+  // The branch-forward makes every remaining source dword unreachable by
+  // fallthrough. Preserve target-free tail dwords as spatially distributed
+  // branch-island capacity rather than discarding them. This path is enabled
+  // only after closed control-flow auditing; direct, bounded-indirect,
+  // declared-entry, and external-alias targets remain protected.
+  uint64_t TailBegin = InstOffset + MinInstSize;
+  uint64_t TailEnd = InstOffset + InstSize;
+  for (uint64_t Offset = TailBegin; Offset < TailEnd; Offset += MinInstSize) {
+    if (Ctx.DirectControlFlow.Targets.contains(Offset) ||
+        llvm::is_contained(Ctx.DeclaredEntries, Offset))
+      break;
+    Ctx.LocalReplacementSourceTails.push_back(
+        {Offset, Offset + MinInstSize, Offset, 0, Ctx.TextSize});
+  }
+
   Sled.WritePos += Replacement.size() + MinInstSize;
   // Count-only row: patch placed in-line via a nearby NOP sled, no trampoline.
   Ctx.Profile.count(HotswapMetric::JumpNopSled);
@@ -8479,6 +8494,11 @@ assignLongBranchGateways(PatchContext &Ctx,
         DirectBranchTargets);
     for (const NopSled &Sled : Ctx.NopSleds)
       Gateways.push_back(Sled);
+    for (const NopSled &Sled : Ctx.LocalReplacementSourceTails)
+      Gateways.push_back(Sled);
+    if (!Ctx.LocalReplacementSourceTails.empty())
+      log() << "hotswap: exposed " << Ctx.LocalReplacementSourceTails.size()
+            << " unreachable local-replacement source-tail branch slot(s)\n";
     subtractTrampolineSources(Gateways, Ctx.OutTrampolines);
 
     // Keep one 12-byte tail from each safe padding window available for the

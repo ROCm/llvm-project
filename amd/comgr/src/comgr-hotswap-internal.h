@@ -1476,6 +1476,10 @@ struct PatchContext {
   // DS2 may explicitly prefer these complete-body slots before creating a
   // trampoline. Every range excludes its final set-PC-sized routing tail.
   std::vector<NopSled> PreferredLocalReplacementSleds;
+  // Tail dwords left unreachable behind local replacement branch-forwards.
+  // The closed control-flow audit proves these are safe globally distributed
+  // one-dword relay slots for the later branch-island planner.
+  std::vector<NopSled> LocalReplacementSourceTails;
 };
 
 /// One node in the all-path proof that an incoming physical VGPR value is
