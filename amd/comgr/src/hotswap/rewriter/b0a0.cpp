@@ -1,4 +1,4 @@
-//===- comgr-hotswap-b0a0.cpp - GFX1250 B0-to-A0 patch dispatcher --------===//
+//===- b0a0.cpp - GFX1250 B0-to-A0 patch dispatcher -----------------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -11,9 +11,9 @@
 /// decode -> patch -> trampoline growth -> DWARF update.
 ///
 /// Patch passes are dispatched through HotswapPatchVTable. The membership
-/// list lives in comgr-hotswap-patches.def; each entry corresponds to one
+/// list lives in patches.def; each entry corresponds to one
 /// slot on the vtable and one register*Patch function in a sibling
-/// comgr-hotswap-patch-*.cpp. installHotswapPatches() walks the .def to
+/// patch-*.cpp. installHotswapPatches() walks the .def to
 /// bind every slot. The vtable is exposed through getHotswapPatchVTable(),
 /// a Meyers singleton whose initializer eagerly runs installHotswapPatches
 /// on its private storage; C++11 [stmt.dcl]/4 guarantees this happens
@@ -28,7 +28,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-env.h"
-#include "comgr-hotswap-internal.h"
+#include "internal.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -36,7 +36,6 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/Support/Endian.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <algorithm>
@@ -186,7 +185,7 @@ void patchDebugFrame(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
 // -- HotswapPatchVTable plumbing ----------------------------------------------
 //
 // Patch-module forward declarations live in comgr-hotswap-internal.h
-// (driven off the same comgr-hotswap-patches.def), so libamd_comgr and
+// (driven off the same patches.def), so libamd_comgr and
 // the unit tests share one prototype source. Here we supply the
 // singleton accessor and the installer that walks the .def to invoke
 // each register*Patch. A .def entry without a matching register*Patch
@@ -203,7 +202,7 @@ void patchDebugFrame(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
 
 void installHotswapPatches(HotswapPatchVTable &VT) {
 #define HOTSWAP_PATCH(Name) register##Name##Patch(VT);
-#include "comgr-hotswap-patches.def"
+#include "patches.def"
 #undef HOTSWAP_PATCH
 }
 
@@ -1686,6 +1685,9 @@ static bool isExactRegisterOperand(const MCInst &Inst, unsigned Index,
          Inst.getOperand(Index).getReg() == Reg;
 }
 
+/// Read a constant 32-bit source operand through MC. A decoded SOP2 literal is
+/// an immediate; an assembled operand may be an absolute expression. Anything
+/// else (a register source) is not a constant displacement.
 static std::optional<uint32_t>
 evaluateAbsoluteUint32Operand(const MCOperand &Operand) {
   if (Operand.isImm())
@@ -2130,6 +2132,71 @@ static SmallVector<FiniteSetPcTransfer, 8> selectLeastReachableSetPcCandidates(
   }
 }
 
+static std::optional<uint64_t>
+getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
+                    uint64_t TextAddr, uint64_t TextEnd);
+
+/// A reusable target value remains valid after a call only when the exact local
+/// callee is fully decoded, returns through the call's link pair, and cannot
+/// transitively or directly clobber the target pair.
+static bool calleePreservesReusableTarget(
+    uint64_t Target, MCRegister TargetRegister, MCRegister ReturnRegister,
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextEnd,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
+  const ElfView::FunctionTextRange *Callee = nullptr;
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin == Target && Range.Begin >= TextAddr &&
+        Range.End > Range.Begin && Range.End <= TextEnd &&
+        (!Callee || Range.End < Callee->End))
+      Callee = &Range;
+  if (!Callee)
+    return false;
+
+  uint64_t CalleeBegin = Callee->Begin - TextAddr;
+  uint64_t CalleeEnd = Callee->End - TextAddr;
+  bool SawInstruction = false;
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (DI.Offset < CalleeBegin || DI.Offset >= CalleeEnd)
+      continue;
+    SawInstruction = true;
+    if (!DI.DecodeSucceeded || LS.MIA->isCall(DI.Inst) ||
+        definesOverlappingRegister(DI, LS, TargetRegister))
+      return false;
+
+    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+      if (DI.Inst.getNumOperands() != 1 ||
+          !isExactRegisterOperand(DI.Inst, 0, ReturnRegister))
+        return false;
+      continue;
+    }
+    if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+        LS.MIA->isReturn(DI.Inst))
+      continue;
+    if (LS.MIA->isIndirectBranch(DI.Inst) ||
+        DI.Inst.getOpcode() == LS.SAddPcI64Opcode)
+      return false;
+
+    bool HasFallthrough = true;
+    if (LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> BranchTarget =
+          getDirectTextTarget(DI, LS, TextAddr, TextEnd);
+      if (!BranchTarget || *BranchTarget < CalleeBegin ||
+          *BranchTarget >= CalleeEnd)
+        return false;
+      HasFallthrough = !LS.MIA->isUnconditionalBranch(DI.Inst);
+    }
+    if (!HasFallthrough)
+      continue;
+    std::optional<uint64_t> Fallthrough =
+        checkedAddUint64(DI.Offset, DI.Size, "reusable callee fallthrough");
+    if (!Fallthrough || *Fallthrough >= CalleeEnd)
+      return false;
+  }
+  return SawInstruction;
+}
+
 /// Resolve register calls whose target pair is selected once and reused across
 /// control flow. A monotone intraprocedural solver propagates finite target
 /// sets from proven get-PC materializations. Any unrecognized pair definition
@@ -2138,6 +2205,8 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<std::optional<PcMaterializedCallInfo>> LocalCalls,
+    ArrayRef<uint64_t> DeclaredEntries,
     ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers = {}) {
   std::vector<ReachingCallTargets> Resolved(Decoded.size());
   SmallVector<ReachingCallGroup, 8> Groups;
@@ -2147,7 +2216,8 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
 
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &Call = Decoded[I];
-    if (!Call.DecodeSucceeded || Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+    if (LocalCalls[I] || !Call.DecodeSucceeded ||
+        Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
         Call.Inst.getNumOperands() < 2)
       continue;
     const MCOperand &TargetOp =
@@ -2184,6 +2254,20 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
   for (size_t I = 0; I != Decoded.size(); ++I)
     OffsetToIndex[Decoded[I].Offset] = I;
 
+  SmallVector<std::pair<size_t, uint64_t>, 16> DirectEntries;
+  for (size_t SourceIndex = 0; SourceIndex != Decoded.size(); ++SourceIndex) {
+    const InternalDecodedInst &Source = Decoded[SourceIndex];
+    if (!Source.DecodeSucceeded ||
+        (!LS.MIA->isBranch(Source.Inst) && !LS.MIA->isCall(Source.Inst)) ||
+        LS.MIA->isReturn(Source.Inst))
+      continue;
+    std::optional<uint64_t> Target =
+        getDirectTextTarget(Source, LS, TextAddr, TextEnd);
+    if (Target)
+      DirectEntries.emplace_back(SourceIndex, *Target);
+  }
+  DenseMap<std::pair<uint64_t, uint64_t>, bool> CalleePreservation;
+
   for (const ReachingCallGroup &Group : Groups) {
     ArrayRef<InternalDecodedInst>::const_iterator Begin =
         llvm::lower_bound(Decoded, Group.Begin,
@@ -2219,12 +2303,39 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
       continue;
 
     std::vector<ReachingPcState> Before(EndIndex - BeginIndex);
-    Before.front().Reached = true;
-    Before.front().HasUnknown = true;
     SmallVector<size_t, 32> Worklist;
     BitVector Queued(EndIndex - BeginIndex);
-    Worklist.push_back(BeginIndex);
-    Queued.set(0);
+    auto seedUnknownEntry = [&](size_t Index) {
+      ReachingPcState &Entry = Before[Index - BeginIndex];
+      Entry.Reached = true;
+      Entry.HasUnknown = true;
+      if (!Queued.test(Index - BeginIndex)) {
+        Worklist.push_back(Index);
+        Queued.set(Index - BeginIndex);
+      }
+    };
+    seedUnknownEntry(BeginIndex);
+
+    // Every declared entry and direct cross-function target is an independent
+    // root. An entry into a materialization interior must not inherit the
+    // token established by the containing function's ordinary entry path.
+    for (uint64_t Entry : DeclaredEntries) {
+      DenseMap<uint64_t, size_t>::const_iterator EntryIndex =
+          OffsetToIndex.find(Entry);
+      if (EntryIndex != OffsetToIndex.end() &&
+          EntryIndex->second >= BeginIndex && EntryIndex->second < EndIndex)
+        seedUnknownEntry(EntryIndex->second);
+    }
+    for (const std::pair<size_t, uint64_t> &Entry : DirectEntries) {
+      if (Entry.first >= BeginIndex && Entry.first < EndIndex)
+        continue;
+      DenseMap<uint64_t, size_t>::const_iterator TargetIndex =
+          OffsetToIndex.find(Entry.second);
+      if (TargetIndex != OffsetToIndex.end() &&
+          TargetIndex->second >= BeginIndex &&
+          TargetIndex->second < EndIndex)
+        seedUnknownEntry(TargetIndex->second);
+    }
 
     while (!Worklist.empty()) {
       size_t I = Worklist.pop_back_val();
@@ -2235,7 +2346,16 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
       DenseMap<size_t, size_t>::const_iterator Starter = Starters.find(I);
       DenseMap<size_t, uint64_t>::const_iterator Completion =
           Completions.find(I);
-      if (Starter != Starters.end()) {
+      if (!DI.DecodeSucceeded) {
+        // An undecoded slot has an unknown effect on the target pair and on
+        // control flow, so any reaching value it carries forward is unproven.
+        // Fail closed to Unknown; the finite-state test below then refuses
+        // every reusable call this path reaches. Starters and Completions are
+        // built only from decoded materializations, so neither can name I.
+        State.HasUnknown = true;
+        State.Targets.clear();
+        State.ActiveMaterializations.clear();
+      } else if (Starter != Starters.end()) {
         // The get-PC instruction overwrites the complete target pair. Record a
         // token proving that this path entered the exact materialization; the
         // completion may only produce a known target from that token.
@@ -2271,9 +2391,62 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
         State.ActiveMaterializations = std::move(Preserved);
       }
 
-      if (llvm::is_contained(Group.Calls, I) && !State.HasUnknown &&
-          State.ActiveMaterializations.empty() && !State.Targets.empty())
-        Resolved[I] = State.Targets;
+      bool IsReusableCall = llvm::is_contained(Group.Calls, I);
+      bool HasFiniteState = !State.HasUnknown &&
+                            State.ActiveMaterializations.empty() &&
+                            !State.Targets.empty();
+      // Recompute Resolved[I] on every visit so a later reconvergent path that
+      // makes this call Unknown erases an earlier finite result. Writing only
+      // on finite state would leave a stale target set from the first visit.
+      if (IsReusableCall)
+        Resolved[I] = HasFiniteState ? State.Targets : ReachingCallTargets();
+
+      // The first call after a straight-line materialization is also resolved
+      // by the one-shot matcher. Let that bootstrap call preserve the reaching
+      // value only when both analyses prove the same singleton target through
+      // this exact target pair.
+      bool IsMatchingBootstrapCall = false;
+      if (LocalCalls[I] && HasFiniteState && State.Targets.size() == 1 &&
+          State.Targets.front() == LocalCalls[I]->Target &&
+          DI.Inst.getNumOperands() >= 2) {
+        const MCOperand &TargetOp =
+            DI.Inst.getOperand(DI.Inst.getNumOperands() - 1);
+        IsMatchingBootstrapCall =
+            TargetOp.isReg() && TargetOp.getReg() == Group.TargetRegister;
+      }
+      bool CalleesPreserve = (IsReusableCall || IsMatchingBootstrapCall) &&
+                             HasFiniteState && DI.Inst.getNumOperands() != 0 &&
+                             DI.Inst.getOperand(0).isReg() &&
+                             DI.Inst.getOperand(0).getReg();
+      if (CalleesPreserve) {
+        MCRegister ReturnRegister(DI.Inst.getOperand(0).getReg());
+        uint64_t RegisterKey = static_cast<uint64_t>(Group.TargetRegister.id())
+                                   << 32 |
+                               ReturnRegister.id();
+        for (uint64_t Target : State.Targets) {
+          std::pair<uint64_t, uint64_t> Key{Target, RegisterKey};
+          DenseMap<std::pair<uint64_t, uint64_t>, bool>::iterator Cached =
+              CalleePreservation.find(Key);
+          if (Cached == CalleePreservation.end())
+            Cached =
+                CalleePreservation
+                    .try_emplace(Key, calleePreservesReusableTarget(
+                                          Target, Group.TargetRegister,
+                                          ReturnRegister, Decoded, LS, TextAddr,
+                                          TextEnd, FunctionRanges))
+                    .first;
+          CalleesPreserve &= Cached->second;
+        }
+      }
+
+      if (LS.MIA->isCall(DI.Inst) && !CalleesPreserve) {
+        // MC call operands do not describe transitive clobbers. Carry the
+        // finite set past this call only after proving every exact local
+        // target preserves the reusable target pair.
+        State.HasUnknown = true;
+        State.Targets.clear();
+        State.ActiveMaterializations.clear();
+      }
 
       SmallVector<size_t, 2> Successors;
       auto appendFallthrough = [&]() {
@@ -2449,6 +2622,7 @@ buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
                           uint64_t TextEnd,
                           ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
   ControlFlowScanIndex Index;
+  uint64_t TextSize = TextEnd - TextAddr;
   DenseSet<uint64_t> FunctionBegins;
   for (const ElfView::FunctionTextRange &Range : FunctionRanges)
     if (Range.Begin >= TextAddr && Range.Begin < TextEnd)
@@ -2521,6 +2695,12 @@ buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
             DI.Offset, DI.Size, "known call continuation address");
         if (!Continuation)
           return std::nullopt;
+        if (*Continuation >= TextSize ||
+            (*Continuation & (MinInstSize - 1)) != 0) {
+          log() << "hotswap: call at 0x" << utohexstr(DI.Offset)
+                << " has no aligned continuation inside .text\n";
+          return std::nullopt;
+        }
         if (Target)
           Index.Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
         if (HasFiniteExternalTarget)
@@ -3670,6 +3850,11 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   if (!TextEnd)
     return std::nullopt;
 
+  SmallVector<std::optional<PcMaterializedCallInfo>, 16> MaterializedCalls(
+      Decoded.size());
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
+
   SmallVector<FiniteSetPcTransfer, 8> AllSetPcCandidates =
       collectFiniteSetPcCandidates(Decoded, LS, TextAddr, *TextEnd,
                                    FunctionRanges);
@@ -3679,6 +3864,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   std::vector<ReachingCallTargets> ReusableCalls;
   std::optional<ControlFlowScanIndex> Index;
   SmallVector<BoundedSetPcReturn, 2> BoundedReturns;
+  SmallVector<BoundedSetPcReturn, 2> LocalFunctionReturns;
   SmallVector<SymbolLessReturnRegion, 8> SymbolLessRegions;
   bool IndirectControlFlowClosed = false;
   bool HasUnboundedIndirectEntries = false;
@@ -3692,7 +3878,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         Decoded, LS, DeclaredEntries, ExternalEntries, FunctionRanges, TextAddr,
         AllSetPcCandidates, ProvenSetPcCandidates, RejectedSetPcCandidates);
     ReusableCalls = resolveReusablePcCallTargets(
-        Decoded, LS, TextAddr, *TextEnd, FunctionRanges, EnabledSetPcTransfers);
+        Decoded, LS, TextAddr, *TextEnd, FunctionRanges, MaterializedCalls,
+        DeclaredEntries, EnabledSetPcTransfers);
     Index = buildControlFlowScanIndex(Decoded, LS, TextAddr, *TextEnd,
                                       FunctionRanges);
     if (!Index || !addReusableCallsToIndex(Decoded, LS, TextAddr, *TextEnd,
@@ -3714,6 +3901,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     if (!FunctionReturns)
       return std::nullopt;
     BoundedReturns = std::move(*FunctionReturns);
+    LocalFunctionReturns = BoundedReturns;
     BitVector CandidateReachability = computeFiniteControlFlowReachability(
         Decoded, LS, TextAddr, TextSize, DeclaredEntries, ExternalEntries,
         FunctionRanges, *Index, EnabledSetPcTransfers, BoundedReturns);
@@ -3799,9 +3987,16 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   }
   indexKnownCalls(*Index);
 
-  DenseMap<size_t, size_t> BoundedReturnPositions;
-  for (size_t I = 0; I != BoundedReturns.size(); ++I)
-    BoundedReturnPositions.try_emplace(BoundedReturns[I].InstIndex, I);
+  // A non-closed object cannot publish bounded indirect transfers, but a
+  // symbol-backed local return has an independent function-boundary proof.
+  // Retain those local facts only for checking concrete alternate entries
+  // into one-shot PC materializations.
+  ArrayRef<BoundedSetPcReturn> EntryProofReturns =
+      IndirectControlFlowClosed ? ArrayRef(BoundedReturns)
+                                : ArrayRef(LocalFunctionReturns);
+  DenseMap<size_t, size_t> EntryProofReturnPositions;
+  for (size_t I = 0; I != EntryProofReturns.size(); ++I)
+    EntryProofReturnPositions.try_emplace(EntryProofReturns[I].InstIndex, I);
 
   // Canonical one-shot materializations also participate in the reusable
   // reaching-value solver so CFG joins can prove their exact path. Preserve
@@ -3814,8 +4009,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     if (ReusableCalls[I].empty())
       continue;
     if (hasKnownControlFlowEntry(
-            DeclaredEntries, BoundedReturns, BoundedReturnPositions, *Index,
-            Entry.second.SequenceStart, Entry.second.SequenceEnd)) {
+            DeclaredEntries, EntryProofReturns, EntryProofReturnPositions,
+            *Index, Entry.second.SequenceStart, Entry.second.SequenceEnd)) {
       ReusableCalls[I].clear();
       continue;
     }
@@ -3863,8 +4058,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         DenseMap<size_t, PcMaterializedCallInfo>::const_iterator Materialized =
             Index->MaterializedCalls.find(InstIndex);
         if (Materialized != Index->MaterializedCalls.end() &&
-            !hasKnownControlFlowEntry(DeclaredEntries, BoundedReturns,
-                                      BoundedReturnPositions, *Index,
+            !hasKnownControlFlowEntry(DeclaredEntries, EntryProofReturns,
+                                      EntryProofReturnPositions, *Index,
                                       Materialized->second.SequenceStart,
                                       Materialized->second.SequenceEnd))
           Target = Materialized->second.Target;
@@ -3900,6 +4095,10 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           log() << "hotswap: resolved PC-materialized call at 0x"
                 << utohexstr(DI.Offset) << " to .text+0x"
                 << utohexstr(RelativeTarget) << "\n";
+      } else if (DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isReg()) {
+        log() << "hotswap: resolved PC-materialized call at 0x"
+              << utohexstr(DI.Offset) << " to finite external target 0x"
+              << utohexstr(*Target) << "\n";
       }
       // A proven finite register target outside this object's .text cannot
       // enter a local instruction or synthetic source range. Keep that
@@ -4684,8 +4883,12 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
            Ctx.OutTrampolines[I + Count].SharedDispatcherGroup == Group)
       ++Count;
     uint64_t Prefix = 8 + 28 * Count;
-    if (Prefix > std::numeric_limits<uint32_t>::max())
+    if (Prefix > std::numeric_limits<uint32_t>::max()) {
+      log() << "hotswap: shared far-dispatch group " << Group << " dispatcher "
+            << "prefix (" << Prefix << " bytes for " << Count
+            << " site(s)) exceeds the 32-bit pool-entry limit\n";
       return false;
+    }
     First.PoolEntryPrefixBytes = static_cast<uint32_t>(Prefix);
     First.Bytes.insert(First.Bytes.begin(), Prefix, uint8_t{0});
     I += Count;

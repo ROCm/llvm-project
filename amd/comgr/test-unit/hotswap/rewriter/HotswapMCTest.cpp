@@ -7,16 +7,16 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Tests for the hotswap MC/LLVM infrastructure in comgr-hotswap-llvm.cpp:
+/// Tests for the hotswap MC/LLVM infrastructure in llvm.cpp:
 /// initLLVM construction, LLVMState::encodeSBranch, assembleSingleInst /
 /// decodeTextSection round-trip, the decodeTextSection instruction-decode
 /// cache, applyMnemonicSwap, applyByteReplace, and checkVgprOverlap.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "comgr-hotswap-internal.h"
 #include "comgr-test-elf-utils.h"
 #include "comgr.h"
+#include "hotswap/rewriter/internal.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
@@ -1152,23 +1152,29 @@ TEST(CollectDirectBranchTargets, HandlesManyCallsWithoutCartesianGrouping) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
   llvm::SmallVector<uint8_t> Bytes =
-      assembleSingleInst("s_call_i64 s[30:31], 0", S);
+      assembleInstructions("s_call_i64 s[30:31], 0\n"
+                           "s_endpgm",
+                           S);
   ASSERT_FALSE(Bytes.empty());
   std::vector<InternalDecodedInst> Prototype;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Prototype));
-  ASSERT_EQ(Prototype.size(), 1u);
+  ASSERT_EQ(Prototype.size(), 2u);
 
   constexpr size_t Count = 8192;
   std::vector<InternalDecodedInst> Decoded(Count, Prototype.front());
   for (size_t I = 0; I != Count; ++I)
     Decoded[I].Offset = I * MinInstSize;
-  const uint64_t TextSize = Count * MinInstSize;
+  InternalDecodedInst Continuation = Prototype.back();
+  Continuation.Offset = Count * MinInstSize;
+  Decoded.push_back(std::move(Continuation));
+  const uint64_t TextSize = (Count + 1) * MinInstSize;
   llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
   std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
       Decoded, S, /*TextAddr=*/0, TextSize, DeclaredEntries);
   ASSERT_TRUE(Info);
   EXPECT_TRUE(Info->Targets.contains(MinInstSize));
-  EXPECT_TRUE(Info->Targets.contains(TextSize));
+  EXPECT_TRUE(Info->Targets.contains(Count * MinInstSize));
+  EXPECT_FALSE(Info->Targets.contains(TextSize));
   EXPECT_FALSE(Info->HasUnboundedIndirectEntries);
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
@@ -1293,19 +1299,20 @@ TEST(CollectDirectBranchTargets,
                            "s_endpgm\n"
                            "s_get_pc_i64 s[0:1]\n"
                            "s_add_nc_u64 s[0:1], s[0:1], -16\n"
-                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                           "s_endpgm",
                            S);
   ASSERT_FALSE(Bytes.empty());
 
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 13u);
+  ASSERT_EQ(Decoded.size(), 14u);
   llvm::SmallVector<uint64_t, 2> DeclaredEntries{
       Decoded[7].Offset, Decoded[10].Offset};
   llvm::SmallVector<ElfView::FunctionTextRange, 3> FunctionRanges{
       {Decoded[1].Offset, Decoded[7].Offset},
       {Decoded[7].Offset, Decoded[9].Offset},
-      {Decoded[10].Offset, Decoded.back().Offset + Decoded.back().Size}};
+      {Decoded[10].Offset, Decoded[13].Offset}};
 
   // The first call has one finite target outside this .text, and returns to
   // the padding that falls through into the local helper. The later local
@@ -1498,13 +1505,14 @@ TEST(CollectDirectBranchTargets, BoundsCanonicalSetPcReturn) {
                            "s_branch -2\n"
                            "s_get_pc_i64 s[0:1]\n"
                            "s_add_nc_u64 s[0:1], s[0:1], -16\n"
-                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                           "s_endpgm",
                            S);
   ASSERT_FALSE(Bytes.empty());
 
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 6u);
+  ASSERT_EQ(Decoded.size(), 7u);
   ASSERT_EQ(Decoded[1].Inst.getOpcode(), S.SSetPcI64Opcode);
   ASSERT_EQ(Decoded[3].Inst.getOpcode(), S.SGetPcI64Opcode);
   llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
@@ -1525,8 +1533,7 @@ TEST(CollectDirectBranchTargets, BoundsCanonicalSetPcReturn) {
   ASSERT_EQ(Info->Targets.size(), 3u);
   EXPECT_TRUE(Info->Targets.contains(0));
   EXPECT_TRUE(Info->Targets.contains(Decoded[1].Offset));
-  EXPECT_TRUE(Info->Targets.contains(Decoded.back().Offset +
-                                     Decoded.back().Size));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[5].Offset + Decoded[5].Size));
   EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded[1].Offset));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
@@ -1539,13 +1546,14 @@ TEST(CollectDirectBranchTargets, RejectsClobberedSetPcReturn) {
                            "s_set_pc_i64 s[30:31]\n"
                            "s_get_pc_i64 s[0:1]\n"
                            "s_add_nc_u64 s[0:1], s[0:1], -12\n"
-                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                           "s_endpgm",
                            S);
   ASSERT_FALSE(Bytes.empty());
 
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 5u);
+  ASSERT_EQ(Decoded.size(), 6u);
   llvm::SmallVector<uint64_t, 1> DeclaredEntries{0};
   llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
       {0, Decoded[2].Offset}};
@@ -1605,13 +1613,14 @@ TEST(CollectDirectBranchTargets, RejectsIndirectFallthroughChainEntry) {
                            "s_set_pc_i64 s[2:3]\n"
                            "s_get_pc_i64 s[0:1]\n"
                            "s_add_nc_u64 s[0:1], s[0:1], -12\n"
-                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                           "s_endpgm",
                            S);
   ASSERT_FALSE(Bytes.empty());
 
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 8u);
+  ASSERT_EQ(Decoded.size(), 9u);
   llvm::SmallVector<uint64_t, 1> DeclaredEntries{Decoded[3].Offset};
   llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
       {Decoded[3].Offset, Decoded[4].Offset}};
@@ -1925,13 +1934,14 @@ TEST(CollectDirectBranchTargets, AllowsUnreachablePaddingBeforeReturnFunction) {
                            "s_set_pc_i64 s[30:31]\n"
                            "s_get_pc_i64 s[0:1]\n"
                            "s_add_nc_u64 s[0:1], s[0:1], -12\n"
-                           "s_swap_pc_i64 s[30:31], s[0:1]",
+                           "s_swap_pc_i64 s[30:31], s[0:1]\n"
+                           "s_endpgm",
                            S);
   ASSERT_FALSE(Bytes.empty());
 
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 8u);
+  ASSERT_EQ(Decoded.size(), 9u);
   llvm::SmallVector<uint64_t, 2> DeclaredEntries{0, Decoded[3].Offset};
   llvm::SmallVector<ElfView::FunctionTextRange, 1> FunctionRanges{
       {Decoded[3].Offset, Decoded[5].Offset}};
