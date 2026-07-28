@@ -84,3 +84,5 @@ cmake -S amd/comgr/src/hotswap/raiser -B build-hotswap \
 ninja -C build-hotswap
 ctest --test-dir build-hotswap -L transpiler
 ```
+
+<!-- hotswap-only CI observation PR (throwaway, do not merge) -->
