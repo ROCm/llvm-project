@@ -994,6 +994,13 @@ void setVgprMsbs(unsigned &Mode, VgprMsbOperand Operand, unsigned Msbs) {
 
 // K-dimension split: dst and src2 are unchanged on the first half. For the
 // second half, src2 = dst (the carry from the first half).
+//
+// The S_SET_VGPR_MSB transitions below need no preceding S_WAIT_XCNT: MI400
+// Shader Programming Guide §6.9.7.2 ("VMEM Multi-group Replay Operation and
+// Programming", p. 275) lists S_SET_VGPR_MSB among the events before which
+// "hardware stalls and waits for XCNT==0 and completes any rewind/replay
+// actions". The Scale16 lowering emits an explicit wait as a defensive barrier
+// only; both forms are correct.
 std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
                                               const PrintedAsm &P,
                                               const WmmaOps &R,

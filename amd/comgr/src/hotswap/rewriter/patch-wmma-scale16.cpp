@@ -77,9 +77,9 @@ namespace hotswap {
 // uop.
 static constexpr unsigned VOP3PXSize = 16;
 
-// AMDGPU SRC operand encoding: VGPRs are 256 + N.
+// AMDGPU SRC operand encoding: VGPRs are 256 + N. VgprBankSize comes from
+// internal.h so the DS and Scale16 rewrites share one bank definition.
 static constexpr unsigned VgprEncBase = 256;
-static constexpr unsigned VgprBankSize = 256;
 
 static std::string vgprName(unsigned N) { return ("v" + Twine(N)).str(); }
 
@@ -208,6 +208,18 @@ static void writeScaleSrc1(uint8_t *Raw, unsigned Enc) {
 //   SRC0: byte[12] + byte[13] bit[0] (9-bit; matrix A)
 //   SRC1: byte[13] bits[7:1] + byte[14] bits[1:0] (9-bit; matrix B)
 //   SRC2: byte[14] bits[7:2] + byte[15] bits[2:0] (9-bit; accumulator C)
+//
+// Field positions are the VOP3P operand layout of the base WMMA uop, which is
+// the second 8-byte half of the fused encoding. Confirm them against MC rather
+// than by inspection, varying one operand at a time:
+//
+//   echo 'v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[8:23], v[24:39], \
+//         v[40:47], v2, v3' \
+//     | llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -show-encoding
+//
+// gives ...,0x33,0xcc,0x08,0x31,0xa2,0x04; moving SRC1 to v[64:79] changes only
+// byte[13], 0x31 -> 0x81. That is ((64 & 0x7f) << 1) with byte[13] bit[0]
+// holding SRC0's bit[8], matching the SRC0/SRC1 split described above.
 
 static unsigned extractVdst(const uint8_t *Raw) { return Raw[8]; }
 
@@ -290,7 +302,16 @@ emitModeForOperands(raw_string_ostream &OS, unsigned &CurrentMode,
     setVgprMsbBank(NewMode, Requirement.first, Requirement.second);
   if (NewMode == CurrentMode)
     return;
-  // Complete outstanding operations before changing the physical VGPR mapping.
+  // Drain outstanding XNACK-replayable memory operations before changing the
+  // physical VGPR mapping they were issued under.
+  //
+  // Hardware already guarantees this: MI400 Shader Programming Guide §6.9.7.2
+  // ("VMEM Multi-group Replay Operation and Programming", p. 275) lists
+  // S_SET_VGPR_MSB among the events before which "hardware stalls and waits for
+  // XCNT==0 and completes any rewind/replay actions". The explicit wait is
+  // therefore redundant and kept only as a defensive barrier; the WMMA split
+  // pass emits its S_SET_VGPR_MSB transitions without one and relies on the
+  // documented hardware stall.
   OS << "s_wait_xcnt 0\n";
   OS << "s_set_vgpr_msb " << (NewMode | (CurrentMode << 8)) << "\n";
   CurrentMode = NewMode;
@@ -446,6 +467,14 @@ static void emitVgprCopy(raw_string_ostream &OS, unsigned DstBase,
 }
 
 // Parse a matrix VGPR range from the printer's canonical form.
+//
+// The operands are read positionally from the printed form rather than through
+// getNamedOperandIdx because the fused VOP3PX3 encoding presents one MCInst
+// whose matrix operands do not carry the base WMMA's operand names; the printer
+// is the layer that resolves a register tuple to its canonical "v[lo:hi]" text,
+// including the width implied by the selected matrix format. Commas are stable
+// separators in that canonical form, so position is well defined here even
+// though it would not be on hand-written assembly.
 struct VgprRange {
   unsigned Base;
   unsigned Width;

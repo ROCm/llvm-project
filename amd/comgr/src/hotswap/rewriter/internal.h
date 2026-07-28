@@ -1306,6 +1306,15 @@ struct PatchContext {
   llvm::StringMap<unsigned> KernelVgprGranuleCache;
 };
 
+/// Textual AMDGPU assembly names v0-v255, so one VGPR-MSB bank is 256
+/// registers wide and a physical register's low byte is its name within the
+/// bank selected for its operand role.
+inline constexpr unsigned VgprBankSize = 256;
+
+/// Each operand role carries two VGPR-MSB bits, so a role selects one of four
+/// banks (v0-v255, v256-v511, v512-v767, v768-v1023).
+inline constexpr unsigned VgprMsbBankCount = 4;
+
 enum class VgprMsbOperand : unsigned {
   Src0 = 0,
   Src1 = 2,

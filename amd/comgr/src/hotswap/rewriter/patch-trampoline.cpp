@@ -409,7 +409,7 @@ bool hasUnencodableVgprName(StringRef Asm) {
     StringRef Tail = Asm.substr(Pos + 1);
     Tail.consume_front("[");
     unsigned Index = 0;
-    if (!Tail.consumeInteger(10, Index) && Index > 255)
+    if (!Tail.consumeInteger(10, Index) && Index >= VgprBankSize)
       return true;
   }
   return false;
@@ -450,19 +450,20 @@ bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role,
   // represents a low-byte wrap with values above 255, so rebase both ends
   // relative to the incoming operand bank before selecting the new bank.
   unsigned OriginalBank = getVgprMsbBank(OldMode, Role);
-  unsigned Lo = OriginalBank * 256 + EncodedLo;
-  unsigned Hi = OriginalBank * 256 + EncodedHi;
-  if (Lo / 256 != Hi / 256)
+  unsigned Lo = OriginalBank * VgprBankSize + EncodedLo;
+  unsigned Hi = OriginalBank * VgprBankSize + EncodedHi;
+  if (Lo / VgprBankSize != Hi / VgprBankSize)
     return false;
-  unsigned Bank = Lo / 256;
-  if (Bank > 3)
+  unsigned Bank = Lo / VgprBankSize;
+  if (Bank >= VgprMsbBankCount)
     return false;
   setVgprMsbBank(NewMode, Role, Bank);
   if (IsRange)
-    Output =
-        ("v[" + Twine(Lo & 255) + ":" + Twine(Hi & 255) + "]" + Suffix).str();
+    Output = ("v[" + Twine(Lo % VgprBankSize) + ":" + Twine(Hi % VgprBankSize) +
+              "]" + Suffix)
+                 .str();
   else
-    Output = ("v" + Twine(Lo & 255) + Suffix).str();
+    Output = ("v" + Twine(Lo % VgprBankSize) + Suffix).str();
   return true;
 }
 
