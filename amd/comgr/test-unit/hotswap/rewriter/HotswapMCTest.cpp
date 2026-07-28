@@ -1473,27 +1473,6 @@ TEST(CollectDirectBranchTargets, RejectsUndecodedMaterializationSlot) {
   EXPECT_TRUE(Info->HasUnresolvedTargets);
 }
 
-TEST(CollectDirectBranchTargets, UndecodedVectorAluDoesNotCreateIndirectEntry) {
-  LLVMState S = initLLVM(makeGfx1250Ident());
-  ASSERT_TRUE(S.Valid);
-
-  // Reduced from a B0 f4gemm code object. The A0 MC decoder does not know this
-  // legacy-VOP3-major 0x34 vector instruction, but its encoding class cannot
-  // affect scalar control flow or MODE.
-  const uint8_t Bytes[] = {0x00, 0x00, 0x31, 0xd0, 0x00, 0x00, 0x10, 0x00};
-  std::vector<InternalDecodedInst> Decoded;
-  ASSERT_TRUE(decodeTextSection(Bytes, sizeof(Bytes), S, Decoded));
-  ASSERT_FALSE(Decoded.empty());
-  ASSERT_FALSE(Decoded.front().DecodeSucceeded);
-
-  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
-      Decoded, S, /*TextAddr=*/0, sizeof(Bytes), /*DeclaredEntries=*/{0},
-      /*FunctionRanges=*/{}, /*ExternalEntries=*/{}, Bytes);
-  ASSERT_TRUE(Info);
-  EXPECT_FALSE(Info->HasUnresolvedTargets);
-  EXPECT_FALSE(Info->HasUnboundedIndirectEntries);
-}
-
 TEST(CollectDirectBranchTargets, UndecodedScalarClassRemainsUnbounded) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -3217,22 +3196,6 @@ TEST(WmmaScale16, PhysicalVgprRangeMustFitOneBank) {
   EXPECT_FALSE(physicalVgprRangeFitsOneBank(255, 2, 1024));
   EXPECT_FALSE(physicalVgprRangeFitsOneBank(1017, 8, 1024));
   EXPECT_FALSE(physicalVgprRangeFitsOneBank(1024, 1, 1024));
-}
-
-TEST(WmmaScale16, LegacyB0Vop3ScalarSourceEncodingIsExact) {
-  constexpr uint32_t ObservedWord0 = 0xd0310000u;
-  constexpr uint32_t ObservedAlternateSourceWord = 1u << 20;
-  constexpr uint32_t AllowedModifier = 1u << 14;
-
-  EXPECT_TRUE(isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0, 0));
-  EXPECT_TRUE(isLegacyB0Vop3ScalarSourceEncoding(
-      ObservedWord0 | AllowedModifier, ObservedAlternateSourceWord));
-
-  EXPECT_FALSE(isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0 | 1u, 0));
-  EXPECT_FALSE(
-      isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0 ^ (1u << 16), 0));
-  EXPECT_FALSE(isLegacyB0Vop3ScalarSourceEncoding(
-      ObservedWord0, ObservedAlternateSourceWord | 1u));
 }
 
 TEST(WmmaScale16, UnrecognizedVectorRegisterCannotDisappearFromProof) {

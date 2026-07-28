@@ -72,7 +72,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Endian.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -681,8 +680,7 @@ void computeVgprMsbModes(PatchContext &Ctx) {
   // function's s_set_vgpr_msb prefix. The incoming mode is then unprovable
   // object-wide, so decline the whole analysis and let each required split fail
   // closed rather than risk seeding a wrong mode.
-  if (Ctx.DirectControlFlow.HasUnresolvedTargets ||
-      Ctx.DirectControlFlow.HasUnboundedIndirectEntries)
+  if (Ctx.DirectControlFlow.HasUnresolvedTargets)
     return;
 
   // Functions entered at a non-start offset by a cross-function branch or call
@@ -794,22 +792,11 @@ void computeVgprMsbModes(PatchContext &Ctx) {
     const size_t Count = static_cast<size_t>(After - First);
     DenseMap<uint64_t, unsigned> OffsetToLocalIndex;
     OffsetToLocalIndex.reserve(Count);
-    BitVector UndecodedVop3Heads(Count);
-    BitVector UndecodedVop3Tails(Count);
     bool Valid = true;
     for (unsigned I = 0; I != Count; ++I) {
       OffsetToLocalIndex.try_emplace(First[I].Offset, I);
-      if (First[I].Mnemonic != "<unknown>")
-        continue;
-      if (isUndecodedB0Vop3ScalarSourcePair(Ctx, GlobalFirst + I) &&
-          I + 1 < Count) {
-        UndecodedVop3Heads.set(I);
-        UndecodedVop3Tails.set(I + 1);
-        OffsetToLocalIndex.erase(First[I + 1].Offset);
-        ++I;
-      } else {
+      if (First[I].Mnemonic == "<unknown>")
         Valid = false;
-      }
     }
     if (!Valid)
       continue;
@@ -834,13 +821,6 @@ void computeVgprMsbModes(PatchContext &Ctx) {
     for (unsigned I = 0; I != Count && Valid; ++I) {
       const InternalDecodedInst &DI = First[I];
       SmallVectorImpl<unsigned> &Out = Successors[I];
-      if (UndecodedVop3Tails.test(I))
-        continue;
-      if (UndecodedVop3Heads.test(I)) {
-        if (I + 2 < Count)
-          Out.push_back(I + 2);
-        continue;
-      }
       if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
           DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
           LS.MIA->isReturn(DI.Inst) || isStandardLinkReturn(DI, LS))
@@ -956,9 +936,7 @@ void computeVgprMsbModes(PatchContext &Ctx) {
     for (size_t Next = 0; Next != Worklist.size(); ++Next) {
       unsigned I = Worklist[Next];
       ModeBefore[GlobalFirst + I] = exactVgprMsbMode(In[I]);
-      VgprMsbState Out = UndecodedVop3Heads.test(I)
-                             ? In[I]
-                             : transferVgprMsbState(In[I], First[I], LS);
+      VgprMsbState Out = transferVgprMsbState(In[I], First[I], LS);
       for (unsigned Succ : Successors[I]) {
         VgprMsbState Merged = mergeVgprMsbState(In[Succ], Out);
         if (Merged.Dst != In[Succ].Dst || Merged.Src0 != In[Succ].Src0 ||
@@ -1153,47 +1131,6 @@ buildSplit32x16Asm(StringRef Replacement, const PrintedAsm &P, const WmmaOps &R,
 
 } // anonymous namespace
 
-bool isLegacyB0Vop3ScalarSourceEncoding(uint32_t Word0, uint32_t Word1) {
-  // TODO(https://github.com/ROCm/llvm-project/issues/3638): Replace this
-  // exact B0 encoding exception with an installed AMDGPU MC classifier.
-  constexpr unsigned Vop3MajorShift = 26;
-  constexpr uint32_t Vop3MajorMask = 0x3fu << Vop3MajorShift;
-  constexpr uint32_t LegacyVop3Major = 0x34u << Vop3MajorShift;
-  constexpr unsigned Vop3OpcodeShift = 16;
-  constexpr uint32_t Vop3OpcodeMask = 0x3ffu << Vop3OpcodeShift;
-  constexpr uint32_t LegacyVop3Opcode = 0x31u << Vop3OpcodeShift;
-  constexpr uint32_t Vop3VdstMask = 0xffu;
-  constexpr uint32_t ObservedModifierMask = 1u << 14;
-  constexpr uint32_t RequiredWord0 = LegacyVop3Major | LegacyVop3Opcode;
-  constexpr uint32_t FixedWord0Mask =
-      ~(ObservedModifierMask) | Vop3MajorMask | Vop3OpcodeMask | Vop3VdstMask;
-  constexpr uint32_t AlternateScalarSourceEncoding = 1u << 20;
-
-  return (Word0 & FixedWord0Mask) == RequiredWord0 &&
-         (Word1 == 0 || Word1 == AlternateScalarSourceEncoding);
-}
-
-bool isUndecodedB0Vop3ScalarSourcePair(const PatchContext &Ctx,
-                                       size_t HeadIndex) {
-  if (HeadIndex + 1 >= Ctx.Decoded.size())
-    return false;
-  const InternalDecodedInst &Head = Ctx.Decoded[HeadIndex];
-  const InternalDecodedInst &Tail = Ctx.Decoded[HeadIndex + 1];
-  if (Head.DecodeSucceeded || Tail.DecodeSucceeded ||
-      Head.Size != MinInstSize || Tail.Size != MinInstSize ||
-      Tail.Offset != Head.Offset + MinInstSize || Head.Offset > Ctx.TextSize ||
-      2 * MinInstSize > Ctx.TextSize - Head.Offset)
-    return false;
-
-  uint32_t Word0 = support::endian::read32le(Ctx.Text + Head.Offset);
-  uint32_t Word1 =
-      support::endian::read32le(Ctx.Text + Head.Offset + MinInstSize);
-  if (!isLegacyB0Vop3ScalarSourceEncoding(Word0, Word1))
-    return false;
-  return !Ctx.DirectControlFlow.Targets.contains(Tail.Offset) &&
-         !llvm::is_contained(Ctx.DeclaredEntries, Tail.Offset);
-}
-
 void ensureVgprMsbModes(PatchContext &Ctx) {
   if (Ctx.VgprMsbModeBefore.empty())
     computeVgprMsbModes(Ctx);
@@ -1206,12 +1143,6 @@ std::optional<unsigned> getActiveVgprMsbMode(PatchContext &Ctx, size_t Idx) {
 
 std::optional<unsigned> getLocallyEstablishedVgprMsbMode(PatchContext &Ctx,
                                                          size_t Idx) {
-  // An unresolved transfer can enter at any instruction in the object, so an
-  // apparently adjacent setter is not a dominance proof in that case.
-  if (Ctx.DirectControlFlow.HasUnresolvedTargets ||
-      Ctx.DirectControlFlow.HasUnboundedIndirectEntries)
-    return std::nullopt;
-
   while (Idx > 0) {
     const InternalDecodedInst &Prev = Ctx.Decoded[Idx - 1];
     const InternalDecodedInst &Current = Ctx.Decoded[Idx];
@@ -1224,15 +1155,6 @@ std::optional<unsigned> getLocallyEstablishedVgprMsbMode(PatchContext &Ctx,
       if (Entry == Current.Offset)
         return std::nullopt;
 
-    // The A0 decoder represents the exact B0 legacy-VOP3 pair as two unknown
-    // dwords. It cannot change MODE, so a straight-line local dominance scan
-    // may step over the complete pair. The shared classifier also rejects a
-    // known entry into its continuation dword.
-    if (Idx >= 2 && isUndecodedB0Vop3ScalarSourcePair(Ctx, Idx - 2)) {
-      Idx -= 2;
-      continue;
-    }
-
     if (std::optional<unsigned> Mode = getExactVgprMsbModeWritten(Prev, Ctx.LS))
       return Mode;
 
@@ -1240,7 +1162,8 @@ std::optional<unsigned> getLocallyEstablishedVgprMsbMode(PatchContext &Ctx,
         Prev.Inst.getOpcode() == Ctx.LS.SSetVgprMsbOpcode ||
         instructionDefinesNamedRegister(Prev, "MODE", Ctx.LS) ||
         (Ctx.LS.MIA &&
-         Ctx.LS.MIA->mayAffectControlFlow(Prev.Inst, *Ctx.LS.MRI)))
+         (Ctx.LS.MIA->isBranch(Prev.Inst) || Ctx.LS.MIA->isCall(Prev.Inst) ||
+          Ctx.LS.MIA->isReturn(Prev.Inst))))
       return std::nullopt;
     --Idx;
   }
