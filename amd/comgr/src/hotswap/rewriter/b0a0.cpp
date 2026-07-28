@@ -1141,8 +1141,8 @@ struct ReachingPcState {
   SmallVector<size_t, 4> ActiveMaterializations;
 };
 
-static bool mergeReachingPcState(ReachingPcState &Into,
-                                 const ReachingPcState &From) {
+[[nodiscard]] static bool mergeReachingPcState(ReachingPcState &Into,
+                                               const ReachingPcState &From) {
   if (!From.Reached)
     return false;
   ReachingPcState Before = Into;
@@ -1162,8 +1162,8 @@ static bool mergeReachingPcState(ReachingPcState &Into,
          Before.ActiveMaterializations != Into.ActiveMaterializations;
 }
 
-static bool isExactRegisterOperand(const MCInst &Inst, unsigned Index,
-                                   MCRegister Reg) {
+[[nodiscard]] static bool
+isExactRegisterOperand(const MCInst &Inst, unsigned Index, MCRegister Reg) {
   return Index < Inst.getNumOperands() && Inst.getOperand(Index).isReg() &&
          Inst.getOperand(Index).getReg() == Reg;
 }
@@ -1233,9 +1233,11 @@ matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
   const InternalDecodedInst &MakeDelta = Decoded[GetPcIndex + 1];
   const InternalDecodedInst &AddLow = Decoded[GetPcIndex + 2];
   const InternalDecodedInst &AddHigh = Decoded[GetPcIndex + 3];
-  if (MakeDelta.Mnemonic != "s_add_co_i32" ||
-      AddLow.Mnemonic != "s_add_co_u32" ||
-      AddHigh.Mnemonic != "s_add_co_ci_u32" ||
+  if (!MakeDelta.DecodeSucceeded || !AddLow.DecodeSucceeded ||
+      !AddHigh.DecodeSucceeded ||
+      MakeDelta.Inst.getOpcode() != LS.SAddCoI32Opcode ||
+      AddLow.Inst.getOpcode() != LS.SAddU32Opcode ||
+      AddHigh.Inst.getOpcode() != LS.SAddcU32Opcode ||
       MakeDelta.Inst.getNumOperands() != 3 ||
       !MakeDelta.Inst.getOperand(0).isReg() ||
       !MakeDelta.Inst.getOperand(0).getReg() ||
@@ -1289,7 +1291,7 @@ getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
 /// A reusable target value remains valid after a call only when the exact local
 /// callee is fully decoded, returns through the call's link pair, and cannot
 /// transitively or directly clobber the target pair.
-static bool calleePreservesReusableTarget(
+[[nodiscard]] static bool calleePreservesReusableTarget(
     uint64_t Target, MCRegister TargetRegister, MCRegister ReturnRegister,
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
@@ -1441,7 +1443,8 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
         Starters[I] = Match->first;
         Completions[Match->first] = Match->second;
         for (size_t J = I + 1; J != Match->first; ++J)
-          if (definesOverlappingRegister(Decoded[J], LS, Group.TargetRegister))
+          if (Decoded[J].DecodeSucceeded &&
+              definesOverlappingRegister(Decoded[J], LS, Group.TargetRegister))
             Intermediates[J].push_back(Match->first);
       }
     }
@@ -2726,8 +2729,9 @@ static SmallVector<uint8_t> encodeScc1Branch(const LLVMState &LS,
 /// restores SCC in the selected stub, and branches to the matching trampoline
 /// body. One 20-byte .text gateway can therefore serve hundreds of otherwise
 /// independent 8-byte patch sites.
-static bool planSharedDispatchGateways(PatchContext &Ctx,
-                                       std::vector<NopSled> &TextGateways) {
+[[nodiscard]] static bool
+planSharedDispatchGateways(PatchContext &Ctx,
+                           std::vector<NopSled> &TextGateways) {
   struct Candidate {
     size_t Index = 0;
     unsigned ScratchBase = 0;
@@ -2913,7 +2917,7 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
       if (ProposedSpan > MaxDispatcherSpan)
         continue;
       uint64_t From = T.OriginalOffset + MinInstSize;
-      auto It =
+      SmallVector<std::pair<uint64_t, size_t>, 32>::iterator It =
           llvm::lower_bound(RelayAnchors, std::make_pair(From, size_t{0}));
       std::optional<uint64_t> Relay;
       if (It != RelayAnchors.end() && isSBranchReachable(From, It->first))
@@ -2946,6 +2950,13 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
     uint32_t Group = Groups.size() + 1;
     for (size_t Index : Members) {
       Trampoline &T = Ctx.OutTrampolines[Index];
+      // findSafeSgprScratchBlock derives Base from the declared SGPR count and
+      // does not read KernelStats.ExtraSgprs, so this dispatcher block can
+      // share a base with the member's own LongBranchSgprBase. That is safe
+      // because the two uses are lifetime-disjoint: the source-PC pair here
+      // lives only across the source->gateway->dispatcher transfer and is dead
+      // once the dispatcher branches into the trampoline body, which is where
+      // LongBranchSgprBase's set-PC back-branch pair becomes live.
       SafeSgprScratchBlock Scratch{Seed.ScratchBase, 4};
       if (!commitSafeSgprScratchBlock(Ctx, T.OriginalOffset, Scratch,
                                       "shared far-dispatch gateway"))
@@ -3012,7 +3023,7 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
   return true;
 }
 
-static bool emitSharedDispatchers(PatchContext &Ctx) {
+[[nodiscard]] static bool emitSharedDispatchers(PatchContext &Ctx) {
   DenseMap<uint32_t, SmallVector<size_t, 32>> Groups;
   SmallVector<uint64_t, 64> PoolOffsets;
   uint64_t TP = Ctx.PoolBaseOffset;
@@ -3028,7 +3039,8 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
     TP = *Next;
   }
 
-  for (auto &KV : Groups) {
+  for (llvm::detail::DenseMapPair<uint32_t, SmallVector<size_t, 32>> &KV :
+       Groups) {
     ArrayRef<size_t> Members = KV.second;
     if (Members.empty())
       continue;
@@ -3135,6 +3147,10 @@ static bool emitSharedDispatchers(PatchContext &Ctx) {
       Bytes.append(Branch);
       CursorValue = SourcePc;
     }
+    // Planning routes every source that branches here into Members, so the
+    // compare chain above always matches. This trap is a runtime safety net: if
+    // a future planning bug let an unrecorded PC reach the dispatcher, halt
+    // rather than fall through into the first stub with the wrong cursor.
     if (!appendInst("s_trap 2"))
       return fail("unmatched-source trap encoding failed");
     for (size_t J = 0; J != Members.size(); ++J) {

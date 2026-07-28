@@ -854,6 +854,7 @@ struct LLVMState {
   unsigned GlobalPrefetchB8Opcode = 0;
   unsigned SGetPcI64Opcode = 0;
   unsigned SAddNcU64Opcode = 0;
+  unsigned SAddCoI32Opcode = 0;
   unsigned SAddU32Opcode = 0;
   unsigned SAddcU32Opcode = 0;
   unsigned SSetPcI64Opcode = 0;
