@@ -8,12 +8,15 @@
 
 #include "source-hidden-args.h"
 
+#include "wave-projection.h"
+
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
 
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
 
 #include <optional>
 
@@ -116,16 +119,36 @@ Value *loadTargetHiddenPointer(SourceHiddenArgContext &Ctx,
   return Ctx.B.CreateAlignedLoad(Ctx.I64Ty, Ptr, Align(8), Name);
 }
 
+// Divide an x-dimension size read by the scaled-dispatch factor, so the source
+// kernel observes the un-scaled (logical) size. x is always the scaled
+// dimension, so this is a no-op for y/z (`Dim != 0`) and for non-scaled
+// kernels. The hardware size is an exact multiple of the factor (the runtime
+// scales it), so an unsigned shift is exact.
+Value *virtualizeScaledDispatchSize(SourceHiddenArgContext &Ctx, unsigned Dim,
+                                    Value *Size, const Twine &Name) {
+  if (Dim != 0 || Ctx.ScaledDispatchFactor <= 1)
+    return Size;
+  unsigned ShiftBy = llvm::Log2_32(Ctx.ScaledDispatchFactor);
+  return Ctx.B.CreateLShr(Size, ConstantInt::get(Size->getType(), ShiftBy),
+                          Name + "_dd_virt");
+}
+
 // Emit source hidden_group_size_{x,y,z}.
 Value *emitDispatchWorkgroupSize(SourceHiddenArgContext &Ctx, unsigned Dim) {
-  return loadDispatchU16(Ctx, DispatchPacket::dispatchWorkgroupSizeOffset(Dim),
-                         Twine("source_hidden_wg_size_") + Twine(Dim));
+  Value *Size =
+      loadDispatchU16(Ctx, DispatchPacket::dispatchWorkgroupSizeOffset(Dim),
+                      Twine("source_hidden_wg_size_") + Twine(Dim));
+  return virtualizeScaledDispatchSize(
+      Ctx, Dim, Size, Twine("source_hidden_wg_size_") + Twine(Dim));
 }
 
 // Emit source grid size for hidden block-count/remainder calculations.
 Value *emitDispatchGridSize(SourceHiddenArgContext &Ctx, unsigned Dim) {
-  return loadDispatchU32(Ctx, DispatchPacket::dispatchGridSizeOffset(Dim),
-                         Twine("source_hidden_grid_size_") + Twine(Dim));
+  Value *Size =
+      loadDispatchU32(Ctx, DispatchPacket::dispatchGridSizeOffset(Dim),
+                      Twine("source_hidden_grid_size_") + Twine(Dim));
+  return virtualizeScaledDispatchSize(
+      Ctx, Dim, Size, Twine("source_hidden_grid_size_") + Twine(Dim));
 }
 
 // Emit source hidden_block_count_{x,y,z}.
@@ -264,6 +287,13 @@ SourceHiddenArgValue emitSourceHiddenByte(SourceHiddenArgContext &Ctx,
 }
 
 } // namespace
+
+void populateScaledDispatch(SourceHiddenArgContext &Ctx,
+                            const WaveProjection &Projection) {
+  if (!Projection.usesScaledDispatch())
+    return;
+  Ctx.ScaledDispatchFactor = Projection.scaledDispatchFactor();
+}
 
 SourceHiddenArgValue emitSourceHiddenInteger(SourceHiddenArgContext &Ctx,
                                              int64_t ByteOffset,

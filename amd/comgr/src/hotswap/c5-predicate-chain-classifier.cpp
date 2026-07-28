@@ -10,6 +10,7 @@
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstIterator.h"
@@ -220,6 +221,38 @@ bool isPurePropagator(const Instruction *I) {
   return false;
 }
 
+// True iff a value in `Tainted` forms the address of a memory access in `I`:
+// the pointer operand of a load/store/atomic, or a descriptor/offset operand of
+// an AMDGPU buffer intrinsic. A store's or atomic's leading data operand is
+// excluded -- a stale stored value cannot fault, only a stale address can.
+bool usesTaintedAddress(Instruction &I,
+                        const SmallPtrSet<Value *, 32> &Tainted) {
+  auto Hit = [&](Value *V) { return V && Tainted.count(V); };
+  if (auto *LD = dyn_cast<LoadInst>(&I))
+    return Hit(LD->getPointerOperand());
+  if (auto *ST = dyn_cast<StoreInst>(&I))
+    return Hit(ST->getPointerOperand());
+  if (auto *RMW = dyn_cast<AtomicRMWInst>(&I))
+    return Hit(RMW->getPointerOperand());
+  if (auto *CX = dyn_cast<AtomicCmpXchgInst>(&I))
+    return Hit(CX->getPointerOperand());
+  auto *Call = dyn_cast<CallInst>(&I);
+  if (!Call || !Call->getCalledFunction())
+    return false;
+  StringRef Name = Call->getCalledFunction()->getName();
+  if (!Name.contains(".buffer."))
+    return false;
+  // Buffer loads carry only descriptor + offsets; stores/atomics lead with the
+  // data value (cmpswap with data then compare), which is not address-forming.
+  unsigned FirstAddr = Name.contains(".load")     ? 0
+                       : Name.contains("cmpswap") ? 2
+                                                  : 1;
+  for (unsigned A = FirstAddr, E = Call->arg_size(); A < E; ++A)
+    if (Hit(Call->getArgOperand(A)))
+      return true;
+  return false;
+}
+
 // Build the refusal-detail string for the diagnostic. Kept short and
 // stable so lit fixtures can pin the refusal on substrings without
 // tying themselves to exact wording.
@@ -292,6 +325,10 @@ bool shouldRefuseC5(PredicateChainProjection Projection,
     return MaxFlatWorkgroupSize > 0 && MaxFlatWorkgroupSize < TargetWaveSize;
   case PredicateChainProjection::ThreadLoop:
     return !SuppressThreadLoopC5;
+  case PredicateChainProjection::ModuloReplicationScaled:
+    // Correct by construction: a lane and its replica share every C5
+    // predicate, and y/z predicates are wave-uniform. Never refuse.
+    return false;
   }
   llvm_unreachable("unknown PredicateChainProjection");
 }
@@ -337,6 +374,12 @@ std::string formatSuppressionReason(PredicateChainProjection Projection,
              "cross-widen retry; source-wave-scoped lane ops and banked "
              "predicate masks own the C5 boundary for this narrowed route";
     break;
+  case PredicateChainProjection::ModuloReplicationScaled:
+    return "selected ScaledModuloReplicationProjection: the runtime launches "
+           "the block with a scaled x-extent so each target wave hosts one "
+           "source wave with the upper lanes as exact replicas; a lane and "
+           "its replica share every C5 predicate and y/z predicates are "
+           "wave-uniform, so the predicate-chain divergence cannot arise";
   }
   return "";
 }
@@ -465,6 +508,89 @@ PredicateChainClassifierReport classifyPredicateChain(
       // silent today to preserve the baseline-non-refusal contract
       // (`vecadd_f16` / `rope_fp32` store `tid`-derived values
       // verbatim into global memory -- that is not a C5 shape).
+    }
+  }
+
+  // ===== WaveNative pass: workitem.id.y()/.z()-derived memory addresses. =====
+  //
+  // Under wave32->wave64 packing two source waves share one target wave and one
+  // hardware EXEC. When blockDim.x equals the source wave size, workitem.id.y()
+  // and .z() differ between the two packed waves (only .x stays
+  // source-wave-relative, which is why Pass 1/2 reason about .x). A predicate
+  // on such a value can make one packed wave take a divergent early exit the
+  // other does not. That exit cannot be represented per source wave: the wave
+  // that clears its EXEC cannot return on its own, so its lanes keep running
+  // with their modeled EXEC cleared and their registers may hold stale values.
+  // The modeled per-source-wave EXEC gates computed values (through selects),
+  // not the hardware memory instruction, so a stale value used as a load/store
+  // address is not masked at the access -- it issues and can go out of bounds.
+  //
+  // Refuse only when a y/z-derived predicate is present AND a y/z-derived value
+  // reaches a memory address. A y/z value that only feeds a stored or computed
+  // value is harmless. Without a divergent predicate every lane stays active
+  // and computes its own valid address; and when blockDim.x is a multiple of
+  // the target wave the two packed waves share the same y/z, so the predicate
+  // is wave-uniform. blockDim.x is unknown at raise time, but the
+  // predicate-and-address shape does not depend on it.
+  if (Projection == PredicateChainProjection::WaveNative) {
+    // Taint every value derived from workitem.id.y()/.z(), through pure
+    // propagators and comparisons. Propagating the icmp result lets a predicate
+    // taint the values it selects once the early exit is if-converted,
+    // including an address. Unlike the .x walk we do not stop at `and K` masks:
+    // masking a wave-spanning y/z value does not fold it onto a source-wave
+    // residue.
+    SmallPtrSet<Value *, 32> YzDerived;
+    SmallVector<Value *> YzWork;
+    for (Instruction &I : instructions(F)) {
+      auto *CI = dyn_cast<CallInst>(&I);
+      if (!CI || !CI->getCalledFunction())
+        continue;
+      Intrinsic::ID Id = CI->getCalledFunction()->getIntrinsicID();
+      if (Id == Intrinsic::amdgcn_workitem_id_y ||
+          Id == Intrinsic::amdgcn_workitem_id_z)
+        YzWork.push_back(CI);
+    }
+    while (!YzWork.empty()) {
+      Value *V = YzWork.pop_back_val();
+      if (!YzDerived.insert(V).second)
+        continue;
+      for (User *U : V->users())
+        if (auto *I = dyn_cast<Instruction>(U))
+          if (isPurePropagator(I) || isa<ICmpInst>(I))
+            YzWork.push_back(I);
+    }
+
+    // One walk: a y/z-derived predicate and a y/z-derived memory address are
+    // both required, so stop as soon as both are seen.
+    bool HasPredicate = false, ReachesAddress = false;
+    for (Instruction &I : instructions(F)) {
+      if (!HasPredicate)
+        if (auto *Cmp = dyn_cast<ICmpInst>(&I))
+          for (Value *Op : Cmp->operands())
+            if (YzDerived.count(Op)) {
+              HasPredicate = true;
+              break;
+            }
+      if (!ReachesAddress)
+        ReachesAddress = usesTaintedAddress(I, YzDerived);
+      if (HasPredicate && ReachesAddress)
+        break;
+    }
+
+    if (HasPredicate && ReachesAddress) {
+      std::string Detail =
+          "workitem.id.y()/.z()-derived predicate under WaveNative "
+          "wave32->wave64 packing reaches a memory address: the value differs "
+          "between the two packed source waves, so a divergent early exit can "
+          "leave one wave running with a stale address register that is not "
+          "masked at the access and can go out of bounds.";
+      Report.ObservedSites.push_back(Detail);
+      Report.WaveNativeYzRefusal = true;
+      if (!Report.Refused) {
+        Report.Refused = true;
+        Report.WaveNativePhantomRefusal = false;
+        Report.RefusalDetail = Detail;
+      }
     }
   }
 

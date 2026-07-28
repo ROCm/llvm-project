@@ -28,6 +28,8 @@ class Value;
 
 namespace COMGR::hotswap {
 
+class WaveProjection;
+
 // Inputs needed to synthesize source-ABI hidden argument values in IR.
 struct SourceHiddenArgContext {
   llvm::LLVMContext &C;
@@ -39,6 +41,15 @@ struct SourceHiddenArgContext {
   llvm::ArrayRef<KernelArgMeta> Args;
   bool AssumeHipGlobalOffsetZero = false;
   unsigned TargetCodeObjectVersion = 6;
+  // Scaled-dispatch virtualization (ScaledModuloReplicationProjection). When
+  // > 1, the runtime launches this block with a `ScaledDispatchFactor`-scaled x
+  // extent (x is always the scaled dimension). The source kernel's loops and
+  // reduction bounds must still observe the un-scaled block size, so the
+  // synthesized `hidden_group_size_x` and grid-size-x reads are divided by the
+  // factor. All derived hidden args (block_count = grid/group,
+  // remainder = grid%group) stay correct because each halved read reproduces
+  // the exact source size. 1 disables the adjustment.
+  unsigned ScaledDispatchFactor = 1;
 };
 
 // Result of attempting to synthesize a source hidden argument.
@@ -50,6 +61,12 @@ struct SourceHiddenArgValue {
   // Non-empty when Matched is true and Value is null.
   std::string FailureDetail;
 };
+
+// Copy `Projection`'s scaled-dispatch factor onto `Ctx` when the projection
+// uses a scaled dispatch, so the x-dimension size reads are virtualized back to
+// the source block size. No-op otherwise.
+void populateScaledDispatch(SourceHiddenArgContext &Ctx,
+                            const WaveProjection &Projection);
 
 // Synthesize a 32-bit source hidden argument value at ByteOffset.
 SourceHiddenArgValue emitSourceHiddenDword(SourceHiddenArgContext &Ctx,

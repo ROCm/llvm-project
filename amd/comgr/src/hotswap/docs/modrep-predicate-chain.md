@@ -740,3 +740,138 @@ Raise a single kernel to IR under each projection:
    this shape -- and the over-approximation discipline argues
    for the tighter bound. If a corpus kernel surfaces with
    `K ∈ (W_s − 1, W_t − 1]`, widen the bound to match.
+
+## 10. Scaled-dispatch projection (`ScaledModuloReplicationProjection`)
+
+This section documents the correct-by-construction resolution of the
+predicate-chain / divergent-early-exit class. It is the resolution of the
+WaveNative `workitem.id.y()`/`.z()`-derived refusal
+(sec. 6.3 / `c5-predicate-chain-classifier`).
+
+### 10.1 Why the other three projections cannot run the reduce
+
+| Projection | Result | Blocker |
+|---|---|---|
+| WaveNative | faults on odd N | two packed source waves share one HW EXEC; a divergent early exit drags one packed wave through masked with a stale base VGPR into a faulting load. Systemic; no small patch. |
+| MODREP (as-is) | drops work | valid only when `max_flat_workgroup_size <= W_s` (phantom regime). For a full block the HW packs `W_t` real threads/wave, so MODREP's replica lanes collide with real block threads. |
+| ThreadLoop | refuses | `threadLoopUnsupportedWorkgroupMemoryOrBarrier` refuses any kernel with `s_barrier`/LDS -- the reduce has thousands. |
+
+### 10.2 The design
+
+Make MODREP's "upper lanes are replicas, not real threads" assumption TRUE by
+construction: the runtime launches the block with a `W_t / W_s`-scaled extent
+along the fastest (wave-carrying) dimension **x**, so each target wave hosts
+exactly one source wave in lanes `0..W_s-1` and exact replicas in `W_s..W_t-1`.
+
+Concretely for wave32 -> wave64 (factor 2):
+
+- The launch shim doubles `blockDim.x` (grid in blocks unchanged).
+- The raised kernel maps hardware `workitem.id.x` back to the logical source id:
+
+  ```
+  logical_x = ((x_hw & ~(W_t-1)) >> log2(W_t/W_s)) | (x_hw & (W_s-1))
+            = ((x_hw & ~63) >> 1) | (x_hw & 31)          (wave32->wave64)
+  ```
+
+  so hardware lane `W_s + i` sees the same logical thread as lane `i`.
+- The raiser halves the in-kernel workgroup/grid-size query along x
+  (`source-hidden-args.cpp`), so loops and reduction bounds still observe the
+  source block size. All derived hidden args (`block_count = grid/group`,
+  `remainder = grid%group`) stay correct because each halved read reproduces the
+  exact source size, so anything computed from them is computed from source
+  values.
+
+**Always x, not the predicate's dimension.** The kernel that surfaced this is
+PyTorch `reduce_kernel<512,1>` launched `(32,16,1)`: `blockDim.x = 32 = W_s`, and
+the divergent early exit is on `id.y`. Doubling **x** (32 -> 64) makes each target
+wave64 cover exactly one `id.y` row, so `id.y` -- and any `.y`/`.z`-derived
+predicate -- becomes *wave-uniform* and the divergence disappears; simultaneously
+the x-doubling is what interleaves lanes `0..31` and `32..63` as replicas. This
+resolves the "which dim to double" question: it is always the fastest
+wave-carrying dimension (x), whose `blockDim.x` is a positive multiple of `W_s`
+for any warp-primitive kernel.
+
+### 10.3 Why it is correct
+
+- **Divergence gone.** Lane `i` and replica `W_s + i` compute identically
+  (same logical id, same wave-uniform y/z), so they share every predicate. A
+  divergent `s_cbranch_execz` early exit takes both out together -- no phantom
+  wave, no stale VGPR, no aperture fault.
+- **Cross-lane ops correct.** A reduce is all `ds_bpermute` / `permlane` /
+  `readlane` / DPP. MODREP already scopes these per source wave
+  (`ballotI1ToWidth` source-wave-base shift, `emitLaneActiveBit`'s `L mod W_s`,
+  mask replication in `extractLaneBitFromWaveMask`). Because the replicas make
+  the target ballot's upper half mirror its lower half, every one of these ops
+  reads valid duplicate data instead of undef, and the source-width (i32) EXEC
+  alloca is exactly the right model: lane `i` and `W_s + i` genuinely should
+  share one EXEC bit.
+- **mbcnt-derived `v_cmpx` / `saveexec`.** The mbcnt lift already folds the lane
+  id to `lane_id & (W_s-1)` (source-wave-local), so a lane and its replica
+  compare equal and the `v_cmpx` ballot into the i32 EXEC alloca is consistent.
+  The obstruction classifier accepts `CmpxFromLaneId` (`RewriteId::CmpxLaneRelative`)
+  and `SaveExecFromLaneId` (`RewriteId::SaveExecLaneRelative`, via
+  `numSourceWavesPerTarget() == 1`) under this projection -- the normal handlers
+  already emit correct source-wave-local IR; no target-width projection is needed.
+- **Store-only atomics.** MODREP's `AtomicOneReplica` gate (`lane_id < W_s`) is
+  exactly right: only the real lower half issues each atomic, matching native
+  wave32.
+
+Cost: ~50% lane utilisation (the upper half redoes the lower half's work), i.e.
+2x slower than WaveNative packing. It is the safe correctness fallback, not the
+fast path; WaveNative stays the opt-in fast path for kernels it can represent.
+
+### 10.4 Refusals
+
+- **wmma / mfma:** a matrix fragment spans all `W_t` lanes and cannot be fed from
+  `W_s` logical lanes + replicas. Refuse.
+- **Source blocks that don't fit:** the scaled flat size
+  (`max_flat_workgroup_size * W_t/W_s`) must not exceed the target hardware
+  threads/block max (1024 for gfx9/CDNA). The reduce is 512 -> 1024, exactly the
+  limit. Refuse larger blocks rather than truncate.
+
+### 10.5 Selection and plumbing
+
+- `wave-projection.{h,cpp}`: `ScaledModuloReplicationProjection` derives from
+  `ModuloReplicationProjection`, overriding the workitem-id-x remap
+  (`emitWorkitemIdX`) and the packed-id emission (`emitPackedWorkitemId`, which
+  bypasses the base phantom-lane clamp and packs the raw y/z), and exposing
+  `usesScaledDispatch()` / `scaledDispatchFactor()`. The scaled dimension is
+  always x (the wave-carrying dimension), so it is not exposed or reported --
+  scaling any other dimension would spread the extra threads across different
+  rows/planes instead of aliasing them as replicas.
+- `c5-predicate-chain-classifier`: new `PredicateChainProjection::ModuloReplicationScaled`
+  never refuses C5 (both `.x` lane-position and `.y`/`.z` wave-spanning predicates
+  are correct by construction); the report flags `WaveNativeYzRefusal` so the
+  raiser knows the upgrade applies.
+- `raiser.cpp`: when the WaveNative C5 refusal is the `.y`/`.z` case, no matrix
+  op is present, and the scaled block fits the hardware max, the raiser
+  **automatically** retries under the scaled projection (no flag, no env --
+  this is the default resolution). It widens
+  `amdgpu-flat-work-group-size` by the factor and records the scaled factor
+  on the transpile result. Ineligible kernels (matrix, or scaled size > hardware
+  max) keep the refusal. `--force-scaled-modrep` selects it unconditionally for
+  offline testing of kernels that do not hit the refusal.
+- `source-hidden-args.cpp`: halves the workgroup/grid-size-x reads.
+- Per-kernel runtime signal: the scaled factor is threaded raiser ->
+  `RaiseResult` -> `PipelineResult` -> comgr transpile result
+  (`amd_comgr_hotswap_transpile_result_get_info`, `..._SCALED_DISPATCH_FACTOR`)
+  -> hsa loader (`HotSwapKernelRecord`) -> `PrepareHotSwapDispatchKernelObject`
+  -> `PatchPublishedKernelDispatchPacket`, which scales `workgroup_size_x` and
+  `grid_size_x` for exactly the scaled kernels. The scaled dimension is always x,
+  so only the factor is threaded through. The factor is persisted in the
+  translation cache so cache hits stay correct. No AQL field mutation beyond the
+  x extent and no `group_segment_size` change are needed (LDS is per-block,
+  logical-tid addressed).
+
+### 10.6 Flags and tests
+
+- No flag or env is needed to trigger the fix -- the y/z-refusal -> scaled
+  upgrade is automatic. `raise_cli --force-scaled-modrep` (and
+  `PipelineOptions::ForceScaledModrep`) is an offline testing knob only.
+- Offline regression: `c5_predicate_chain_workitem_id_y_scaled_modrep.s`
+  (default auto-upgrade + `--force` both raise with the x-remap, scaled
+  `amdgpu-flat-work-group-size`, the `hotswap-scaled-dispatch` marker,
+  and no `init_whole_wave`); `scaled_modrep_too_large_refuse.s` (default and
+  `--force` both refuse an ineligible >512 block via the size gate);
+  `scaled_modrep_wmma_refuse.s` (matrix refusal);
+  `scaled_modrep_wgsize_virtualize.s` (x workgroup-size halving).

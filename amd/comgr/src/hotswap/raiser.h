@@ -50,6 +50,10 @@ struct RaiseResult {
   uint32_t SourcePrivateSegmentFixedSize = 0;
   bool HasDivergentExec = false;
   bool HasEnumeratedSetpcDispatch = false;
+  // Factor by which the runtime must scale the block's x extent under
+  // ScaledModuloReplicationProjection; 1 means no scaling. See sec. 10 of
+  // hotswap/docs/modrep-predicate-chain.md.
+  unsigned ScaledDispatchFactor = 1;
 };
 
 // Raise one kernel from extracted source code-object sections. `TextBytes`
@@ -71,7 +75,13 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           uint64_t KernelOffset, uint64_t KernelSize,
           llvm::StringRef CompilationTargetIsa = "",
           bool EnableWritelaneRewrite = true, bool EnableWaveNative = true,
-          bool AssumeHipGlobalOffsetZero = false, uint64_t TextBaseAddress = 0,
+          bool AssumeHipGlobalOffsetZero = false,
+          // Unconditionally select ScaledModuloReplicationProjection for
+          // wave32->wave64 cross-widening (offline testing of the scaled
+          // in-kernel virtualization independent of a C5 refusal trigger). The
+          // normal path needs no flag: the raiser auto-upgrades the WaveNative
+          // y/z-derived C5 refusal to a scaled dispatch by default.
+          bool ForceScaledModrep = false, uint64_t TextBaseAddress = 0,
           llvm::ArrayRef<TextSection::ImageSection> SourceImageSections = {},
           // Text-relative extents of all function symbols in the code object
           // (from listTextFunctionExtents). Lets the raiser follow a

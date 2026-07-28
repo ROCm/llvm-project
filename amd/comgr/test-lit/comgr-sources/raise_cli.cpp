@@ -242,6 +242,14 @@ cl::opt<bool> DisableWaveNativeOpt(
     "disable-wave-native",
                          cl::desc("Pin ModuloReplicationProjection."));
 
+cl::opt<bool> ForceScaledModrepOpt(
+    "force-scaled-modrep",
+    cl::desc("Unconditionally select ScaledModuloReplicationProjection for "
+             "wave32->wave64 cross-widening (offline testing of the scaled "
+             "in-kernel virtualization on kernels that do not hit the C5 "
+             "refusal). The normal WaveNative y/z-refusal -> scaled-dispatch "
+             "upgrade is automatic and needs no flag."));
+
 // Batch output de-duplicates failures by the structured fields visible in
 // FAIL / ALSO lines.
 FailureBucketKey failureBucketKey(
@@ -352,6 +360,7 @@ int main(int argc, char **argv) {
       true, EnableWritelaneRewriteOpt, DisableWritelaneRewriteOpt);
   bool EnableWaveNative =
       resolveToggle(true, EnableWaveNativeOpt, DisableWaveNativeOpt);
+  bool ForceScaledModrep = ForceScaledModrepOpt;
 
   // Read the file up-front so we can fall back to the ELF e_flags
   // ISA when the filename heuristic fails (kerneldex corpora often
@@ -472,11 +481,11 @@ int main(int argc, char **argv) {
       uint64_t kernelOffset = kernelExtentOrErr->Offset;
       uint64_t kernelSize = kernelExtentOrErr->Size;
       llvm::Expected<COMGR::hotswap::RaiseResult> RaisedOrErr =
-          COMGR::hotswap::raiseToIR(text.Bytes, isa, Target, meta, kernelOffset,
-                                    kernelSize, targetIsa,
-                                    EnableWritelaneRewrite, EnableWaveNative,
-                                    AssumeHipGlobalOffsetZeroOpt, text.Address,
-                                    text.ImageSections, functionExtents);
+          COMGR::hotswap::raiseToIR(
+              text.Bytes, isa, Target, meta, kernelOffset, kernelSize,
+              targetIsa, EnableWritelaneRewrite, EnableWaveNative,
+              AssumeHipGlobalOffsetZeroOpt, ForceScaledModrep, text.Address,
+              text.ImageSections, functionExtents);
       if (!RaisedOrErr) {
         // raiseToIR only returns a module on the success path, so we cannot
         // dump partial IR here. Callers that need stderr diagnostics
@@ -544,6 +553,7 @@ int main(int argc, char **argv) {
     COMGR::hotswap::PipelineOptions pipelineOptions;
     pipelineOptions.EnableWritelaneRewrite = EnableWritelaneRewrite;
     pipelineOptions.EnableWaveNative = EnableWaveNative;
+    pipelineOptions.ForceScaledModrep = ForceScaledModrep;
     pipelineOptions.AssumeHipGlobalOffsetZero = AssumeHipGlobalOffsetZeroOpt;
     pipelineOptions.OptLevel = std::min<unsigned>(OptLevel, 3);
     auto pipe = COMGR::hotswap::runPipeline(coData, isa, effectiveTargetIsa,
@@ -649,8 +659,8 @@ int main(int argc, char **argv) {
           COMGR::hotswap::raiseToIR(
               text.Bytes, isa, kName, meta, kernelOffset, kernelSize, targetIsa,
               EnableWritelaneRewrite, EnableWaveNative,
-              AssumeHipGlobalOffsetZeroOpt, text.Address, text.ImageSections,
-              functionExtents, &Stats);
+              AssumeHipGlobalOffsetZeroOpt, ForceScaledModrep, text.Address,
+              text.ImageSections, functionExtents, &Stats);
       if (RaisedOrErr) {
         COMGR::hotswap::RaiseResult Raised = std::move(*RaisedOrErr);
         shm->done = true;

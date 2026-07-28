@@ -223,6 +223,12 @@ enum class RewriteId : uint8_t {
   SaveExecLaneRelative,  // saveexec mask is source-wave-relative via
                          // the mbcnt lift (mbcnt_hi pass-through +
                          // mbcnt_lo mod W_s); MODREP replicate handles it.
+  CmpxLaneRelative,      // v_cmpx EXEC write is source-wave-relative via the
+                         // same mbcnt lift; under a scaled dispatch a lane and
+                         // its replica share one source-width EXEC mask, which
+                         // is exactly correct (they mirror). The normal V_CMPX
+                         // handler already ballots into the i32 EXEC alloca
+                         // source-wave-locally, so no transform is needed.
   AtomicOneReplica,      // store-only (non-returning) vector atomic:
                          // under MODREP the source wave is projected
                          // onto two wave32 replicas, so lanes i and

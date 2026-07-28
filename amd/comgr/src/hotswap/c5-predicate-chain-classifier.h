@@ -156,6 +156,10 @@ enum class PredicateChainProjection {
   ModuloReplication,
   WaveNative,
   ThreadLoop,
+  // Scaled dispatch: each target wave hosts one source wave with the upper
+  // lanes as replicas, so a lane and its replica share every predicate. Never
+  // refuses C5. See `ScaledModuloReplicationProjection`.
+  ModuloReplicationScaled,
 };
 
 struct PredicateChainClassifierReport {
@@ -181,6 +185,11 @@ struct PredicateChainClassifierReport {
   // under ThreadLoopProjection, which keeps per-source-wave predicate masks
   // distinct instead of truncating them through a single source-width SGPR.
   bool WaveNativeEqualityRefusal = false;
+
+  // True iff WaveNative refused on a `workitem.id.y()`/`.z()`-derived predicate
+  // reaching a memory address. The raiser retries such kernels under
+  // `ScaledModuloReplicationProjection` when they are eligible.
+  bool WaveNativeYzRefusal = false;
 
   // True iff a WaveNative equality (`eq`/`ne`) C5 site was observed. These
   // sites are accepted only by the target-width mask-shadow contract; callers

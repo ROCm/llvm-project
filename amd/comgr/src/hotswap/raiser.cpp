@@ -65,6 +65,7 @@
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
@@ -765,7 +766,8 @@ static Expected<RaiseResult> raiseToIRImpl(
     llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
     llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
     bool EnableWaveNative, bool ForceThreadLoopProjection,
-    bool SuppressC5ForThreadLoopRoute, bool AssumeHipGlobalOffsetZero,
+    bool SuppressC5ForThreadLoopRoute, bool ForceScaledModrep,
+    bool AssumeHipGlobalOffsetZero,
     llvm::ArrayRef<KernelSymbolExtent> FunctionExtents, RaiseStats *Stats) {
   RaiseResult Result;
 
@@ -921,6 +923,12 @@ static Expected<RaiseResult> raiseToIRImpl(
       Meta.MaxFlatWorkgroupSize > 0 &&
       static_cast<unsigned>(Meta.MaxFlatWorkgroupSize) < TargetIsa.WaveSize;
   const bool UseThreadLoop = ForceThreadLoopProjection;
+  const bool CrossWidenWave32To64 = Isa.isWave32() && !TargetIsa.isWave32();
+  // ScaledModuloReplicationProjection is selected only via the C5 y/z-refusal
+  // upgrade retry (or an explicit --force-scaled-modrep), so it is a forced
+  // route just like ThreadLoop; it takes precedence over WaveNative.
+  const bool UseScaledModrep =
+      !UseThreadLoop && ForceScaledModrep && CrossWidenWave32To64;
   // WaveNative is the default cross-widen projection for wave32 source ->
   // wave64 target (outside the phantom-lane regime, which falls back to
   // MODREP above). The wave_id-in-workgroup hazard -- a subgroup id read via
@@ -928,9 +936,54 @@ static Expected<RaiseResult> raiseToIRImpl(
   // not lane_id mod W_src -- is detected and refused by the obstruction
   // analysis (ObstructionKind::TtmpWaveIdLeak in wave-size-obstruction.cpp),
   // not by this selector, so it needs no WMMA proxy here.
-  const bool UseWaveNative = !UseThreadLoop && EnableWaveNative &&
-                             Isa.isWave32() && !TargetIsa.isWave32() &&
+  const bool UseWaveNative = !UseThreadLoop && !UseScaledModrep &&
+                             EnableWaveNative && CrossWidenWave32To64 &&
                              !PhantomLaneRegime;
+
+  // The scaled dispatch is incompatible with the phantom-lane regime: it drops
+  // the MODREP phantom-lane clamp (`emitWorkitemIdX`) because it assumes every
+  // hardware lane maps to a real or replica thread, but a sub-wave block leaves
+  // hardware lanes past the scaled block size unclamped and addressing out of
+  // bounds. The auto-upgrade never reaches a sub-wave kernel (those route to
+  // plain MODREP), so this only guards an explicit --force-scaled-modrep.
+  if (UseScaledModrep && PhantomLaneRegime) {
+    std::string Detail =
+        formatv(
+            "ScaledModuloReplicationProjection is invalid in the "
+            "phantom-lane regime (max_flat_workgroup_size={0} < target wave "
+            "size {1}): it drops the phantom-lane clamp, so hardware lanes "
+            "past the scaled block size would address out of bounds. "
+            "Refusing. See hotswap/docs/modrep-predicate-chain.md sec. 10.",
+            Meta.MaxFlatWorkgroupSize, TargetIsa.WaveSize)
+            .str();
+    errs() << "transpiler: pre-translation abort: " << Detail << "\n";
+    return RaiseFailure::crossWavePredicateChain(KernelName, Detail);
+  }
+
+  // Size gate for the scaled dispatch: the runtime scales the block by
+  // W_t / W_s along x, so the scaled flat size must not exceed the target's
+  // hardware threads-per-block maximum.
+  if (UseScaledModrep) {
+    const unsigned Factor = TargetIsa.WaveSize / Isa.WaveSize;
+    const unsigned SourceFlat =
+        Meta.MaxFlatWorkgroupSize > 0 ? Meta.MaxFlatWorkgroupSize : 1024;
+    if (SourceFlat * Factor > AMDGPU::IsaInfo::getMaxFlatWorkGroupSize()) {
+      std::string Detail =
+          formatv("ScaledModuloReplicationProjection needs to launch {0} "
+                  "threads/block "
+                  "(source max_flat_workgroup_size {1} scaled by {2}) but the "
+                  "target "
+                  "hardware limit is {3}; refuse rather than truncate the "
+                  "block. See "
+                  "hotswap/docs/modrep-predicate-chain.md sec. 10.",
+                  SourceFlat * Factor, SourceFlat, Factor,
+                  AMDGPU::IsaInfo::getMaxFlatWorkGroupSize())
+              .str();
+      errs() << "transpiler: pre-translation abort: " << Detail << "\n";
+      return RaiseFailure::crossWavePredicateChain(KernelName, Detail);
+    }
+  }
+
   std::unique_ptr<WaveProjection> ProjectionPtr;
   if (UseThreadLoop) {
     ProjectionPtr =
@@ -939,6 +992,13 @@ static Expected<RaiseResult> raiseToIRImpl(
            << "' selected ThreadLoopProjection (analysis-triggered "
               "cross-widen route; writelane/readlane rewrite may be "
               "disabled by the retry caller)\n";
+  } else if (UseScaledModrep) {
+    ProjectionPtr = std::make_unique<ScaledModuloReplicationProjection>(
+        Isa, TargetIsa, I32Ty, I64Ty);
+    errs() << "transpiler: kernel '" << KernelName
+           << "' selected ScaledModuloReplicationProjection (scaled dispatch "
+              "along x; each target wave hosts one source wave with replica "
+              "upper lanes)\n";
   } else if (UseWaveNative) {
     ProjectionPtr =
         std::make_unique<WaveNativeProjection>(Isa, TargetIsa, I32Ty, I64Ty);
@@ -949,8 +1009,15 @@ static Expected<RaiseResult> raiseToIRImpl(
   ProjectionPtr->setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
   WaveProjection &Projection = *ProjectionPtr;
 
-  if (!UseThreadLoop && EnableWaveNative && PhantomLaneRegime &&
-      Isa.isWave32() && !TargetIsa.isWave32()) {
+  // Record the scaled-dispatch requirement so the launch runtime scales
+  // exactly this kernel's dispatch (threaded through the transpile result and
+  // the loader). Non-scaled projections leave factor=1. The scaled dimension is
+  // always x (the wave-carrying dimension), so only the factor is reported.
+  if (Projection.usesScaledDispatch())
+    Result.ScaledDispatchFactor = Projection.scaledDispatchFactor();
+
+  if (!UseThreadLoop && !UseScaledModrep && EnableWaveNative &&
+      PhantomLaneRegime && Isa.isWave32() && !TargetIsa.isWave32()) {
     // Log the fallback so operators can trace which kernels moved to
     // MODREP and why.  A regression that silently flips WaveNative's
     // selection on a phantom-lane kernel would then (re-)produce the
@@ -1351,6 +1418,23 @@ static Expected<RaiseResult> raiseToIRImpl(
     // gfx1250 binary did.
     int MaxWg =
         Meta.MaxFlatWorkgroupSize > 0 ? Meta.MaxFlatWorkgroupSize : 1024;
+    if (Projection.usesScaledDispatch()) {
+      // The runtime launches this block scaled by the scaled-dispatch factor
+      // along x. `amdgpu-flat-work-group-size` must advertise the scaled size
+      // or ROCR/HIP would reject the larger launch as exceeding the declared
+      // bound; the in-kernel workgroup-size query is virtualized back to the
+      // source size via source-hidden-args, so kernel logic still sees MaxWg.
+      MaxWg *= static_cast<int>(Projection.scaledDispatchFactor());
+      // IR-level breadcrumb recording the scale factor along x (e.g. "x2") for
+      // offline inspection and the raise_cli lit tests. This is not the runtime
+      // signal: the launch runtime learns the factor from the transpile result
+      // (RaiseResult -> comgr result info fields -> loader), because this
+      // function attribute does not survive to the kernel descriptor metadata.
+      // The scaled dimension is always x. See
+      // hotswap/docs/modrep-predicate-chain.md sec. 10.
+      F->addFnAttr("hotswap-scaled-dispatch",
+                   "x" + std::to_string(Projection.scaledDispatchFactor()));
+    }
     F->addFnAttr("amdgpu-flat-work-group-size",
                  std::to_string(MaxWg) + "," + std::to_string(MaxWg));
 
@@ -1538,6 +1622,7 @@ static Expected<RaiseResult> raiseToIRImpl(
                                      Meta.Args,
                                      AssumeHipGlobalOffsetZero,
                                      TargetCodeObjectVersion};
+    populateScaledDispatch(HiddenCtx, Projection);
     SourceHiddenArgValue Hidden = emitSourceHiddenDword(HiddenCtx, ByteOffset);
     if (Hidden.Matched && Hidden.Value)
       return Hidden.Value;
@@ -2270,6 +2355,7 @@ static Expected<RaiseResult> raiseToIRImpl(
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
                              /*suppressC5ForThreadLoopRoute=*/true,
+                             /*forceScaledModrep=*/false,
                              AssumeHipGlobalOffsetZero, FunctionExtents, Stats);
       }
       if (!ForceThreadLoopProjection &&
@@ -2382,8 +2468,31 @@ static Expected<RaiseResult> raiseToIRImpl(
     PredicateChainProjection PredProjection =
         UseThreadLoop
             ? PredicateChainProjection::ThreadLoop
-            : (UseWaveNative ? PredicateChainProjection::WaveNative
-                             : PredicateChainProjection::ModuloReplication);
+            : (UseScaledModrep
+                   ? PredicateChainProjection::ModuloReplicationScaled
+                   : (UseWaveNative
+                          ? PredicateChainProjection::WaveNative
+                          : PredicateChainProjection::ModuloReplication));
+
+    // A scaled dispatch cannot feed a matrix fragment: wmma/mfma distribute a
+    // tile across all W_t lanes, but under this projection only W_s lanes carry
+    // logical data (the rest are replicas). Refuse rather than miscompile. The
+    // C5-upgrade retry below already screens matrix kernels out, so this only
+    // fires for an explicit --force-scaled-modrep on a matrix kernel.
+    if (UseScaledModrep) {
+      for (const DecodedInst &Inst : Insts) {
+        if (isMatrixCanonicalOp(Inst.CanonOp)) {
+          std::string Detail =
+              "ScaledModuloReplicationProjection cannot lower wmma/mfma: a "
+              "matrix "
+              "fragment spans all target lanes, but a scaled dispatch fills "
+              "the upper lanes with replicas. Refusing. See "
+              "hotswap/docs/modrep-predicate-chain.md sec. 10.";
+          errs() << "transpiler: pre-translation abort: " << Detail << "\n";
+          return RaiseFailure::crossWavePredicateChain(KernelName, Detail);
+        }
+      }
+    }
     PredicateChainClassifierReport PredReport = classifyPredicateChain(
         *F, Isa.WaveSize, TargetIsa.WaveSize, PredProjection,
         /*maxFlatWorkgroupSize=*/
@@ -2403,7 +2512,10 @@ static Expected<RaiseResult> raiseToIRImpl(
                 ? "ThreadLoopProjection"
                 : (PredProjection == PredicateChainProjection::WaveNative
                        ? "WaveNativeProjection"
-                       : "ModuloReplicationProjection");
+                       : (PredProjection == PredicateChainProjection::
+                                                ModuloReplicationScaled
+                              ? "ScaledModuloReplicationProjection"
+                              : "ModuloReplicationProjection"));
         dbgs() << "c5-predicate-chain: observed "
                << PredReport.ObservedSites.size() << " C5-shape site(s) in '"
                << KernelName << "' under " << ProjectionName
@@ -2423,6 +2535,42 @@ static Expected<RaiseResult> raiseToIRImpl(
         }
         return false;
       };
+      // Auto-upgrade the WaveNative y/z-derived C5 refusal to a scaled
+      // dispatch, which makes each target wave uniform in y/z and turns the
+      // upper lanes into replicas so the divergence cannot arise. This is the
+      // default resolution (no flag/env). Eligibility: the y/z refusal
+      // specifically, cross-widening with an integer wave ratio, no matrix ops,
+      // and the scaled block fitting the hardware threads/block max; otherwise
+      // the refusal stands. See hotswap/docs/modrep-predicate-chain.md sec. 10.
+      assert(Isa.WaveSize && "source wave size must be nonzero");
+      const unsigned ScaleFactor = TargetIsa.WaveSize / Isa.WaveSize;
+      const bool CanUpgradeToScaled =
+          !ForceScaledModrep && PredReport.WaveNativeYzRefusal &&
+          Isa.isWave32() && !TargetIsa.isWave32() && ScaleFactor >= 2 &&
+          (TargetIsa.WaveSize % Isa.WaveSize) == 0 && !HasMatrixOp() &&
+          Meta.MaxFlatWorkgroupSize > 0 &&
+          static_cast<unsigned>(Meta.MaxFlatWorkgroupSize) * ScaleFactor <=
+              AMDGPU::IsaInfo::getMaxFlatWorkGroupSize();
+      if (CanUpgradeToScaled) {
+        errs()
+            << "transpiler: post-raise fallback: retrying kernel '"
+            << KernelName
+            << "' under ScaledModuloReplicationProjection after WaveNative C5 "
+               "y/z-derived refusal (analysis-triggered, scaled-dispatch "
+               "route enabled)\n";
+        errs() << "transpiler: scaled-modrep fallback trigger: "
+               << PredReport.RefusalDetail << "\n";
+        return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta,
+                             KernelOffset, KernelSize, TextBaseAddress,
+                             SourceImageSections, CompilationTargetIsa,
+                             EnableWritelaneRewrite,
+                             /*enableWaveNative=*/false,
+                             /*forceThreadLoopProjection=*/false,
+                             /*suppressC5ForThreadLoopRoute=*/false,
+                             /*forceScaledModrep=*/true,
+                             AssumeHipGlobalOffsetZero, FunctionExtents, Stats);
+      }
+
       // C5 predicate-chain refusal -> retry under ThreadLoopProjection.
       // TLP iterates the kernel body once per source wave with a synthetic
       // per-iteration source tid (see ThreadLoopProjection::emitWorkitemIdX),
@@ -2463,7 +2611,8 @@ static Expected<RaiseResult> raiseToIRImpl(
               /*enableWritelaneRewrite=*/false,
               /*enableWaveNative=*/false,
               /*forceThreadLoopProjection=*/true,
-              /*suppressC5ForThreadLoopRoute=*/true, AssumeHipGlobalOffsetZero,
+              /*suppressC5ForThreadLoopRoute=*/true,
+              /*forceScaledModrep=*/false, AssumeHipGlobalOffsetZero,
               FunctionExtents, Stats);
         }
       }
@@ -2521,25 +2670,28 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                    /*KernelOffset=*/0,
                    /*KernelSize=*/0, CompilationTargetIsa,
                    EnableWritelaneRewrite, EnableWaveNative,
-                   /*AssumeHipGlobalOffsetZero=*/false, TextBaseAddress,
+                   /*AssumeHipGlobalOffsetZero=*/false,
+                   /*ForceScaledModrep=*/false, TextBaseAddress,
                    SourceImageSections, /*FunctionExtents=*/{}, Stats);
 }
 
-llvm::Expected<RaiseResult> raiseToIR(
-    llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
-    llvm::StringRef KernelName, const KernelMeta &Meta, uint64_t KernelOffset,
-    uint64_t KernelSize, llvm::StringRef CompilationTargetIsa,
-    bool EnableWritelaneRewrite, bool EnableWaveNative,
-    bool AssumeHipGlobalOffsetZero, uint64_t TextBaseAddress,
-    llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
-    llvm::ArrayRef<KernelSymbolExtent> FunctionExtents, RaiseStats *Stats) {
-  return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta, KernelOffset,
-                       KernelSize, TextBaseAddress, SourceImageSections,
-                       CompilationTargetIsa, EnableWritelaneRewrite,
-                       EnableWaveNative,
-                       /*forceThreadLoopProjection=*/false,
-                       /*suppressC5ForThreadLoopRoute=*/false,
-                       AssumeHipGlobalOffsetZero, FunctionExtents, Stats);
+llvm::Expected<RaiseResult>
+raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
+          llvm::StringRef KernelName, const KernelMeta &Meta,
+          uint64_t KernelOffset, uint64_t KernelSize,
+          llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
+          bool EnableWaveNative, bool AssumeHipGlobalOffsetZero,
+          bool ForceScaledModrep, uint64_t TextBaseAddress,
+          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
+          llvm::ArrayRef<KernelSymbolExtent> FunctionExtents,
+          RaiseStats *Stats) {
+  return raiseToIRImpl(
+      TextBytes, SourceIsa, KernelName, Meta, KernelOffset, KernelSize,
+      TextBaseAddress, SourceImageSections, CompilationTargetIsa,
+      EnableWritelaneRewrite, EnableWaveNative,
+      /*forceThreadLoopProjection=*/false,
+      /*suppressC5ForThreadLoopRoute=*/false, ForceScaledModrep,
+      AssumeHipGlobalOffsetZero, FunctionExtents, Stats);
 }
 
 } // namespace COMGR::hotswap

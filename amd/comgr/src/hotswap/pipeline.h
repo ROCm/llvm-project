@@ -34,6 +34,11 @@ struct PipelineOptions {
   // offset, so hidden_global_offset_{x,y,z} can be synthesized as zero.
   // Standalone callers keep this false and reject those source hidden args.
   bool AssumeHipGlobalOffsetZero = false;
+  // Force ScaledModuloReplicationProjection for wave32->wave64 cross-widening.
+  // Production never sets this -- the raiser auto-selects the projection on the
+  // relevant C5 refusal. It exists so lit tests can exercise the projection
+  // (and its refusals) on kernels that do not themselves trigger the refusal.
+  bool ForceScaledModrep = false;
 };
 
 struct PipelineResult {
@@ -57,6 +62,10 @@ struct PipelineResult {
   uint32_t TargetPrivateSegmentFixedSize = 0;
   int LiftedCount = 0;
   int TotalCount = 0;
+  // ScaledModuloReplicationProjection requirement for the (single) transpiled
+  // kernel: the factor (W_t/W_s) the launch runtime must scale the block's x
+  // extent by. 1 means no scaling. See raiser.h.
+  unsigned ScaledDispatchFactor = 1;
   bool Success = false;
 };
 

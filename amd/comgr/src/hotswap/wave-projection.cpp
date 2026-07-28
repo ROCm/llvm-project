@@ -28,6 +28,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 #define DEBUG_TYPE "wave-projection"
@@ -328,6 +329,60 @@ Value *ModuloReplicationProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
   Value *Bit =
       B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1), "mask_lane_bit");
   return B.CreateICmpNE(Bit, ConstantInt::get(TargetTy, 0), "mask_lane_i1");
+}
+
+// ----------------------------------------------------------------------------
+// ScaledModuloReplicationProjection.
+//
+// Remaps the hardware workitem-id.x of a scaled-dispatch launch back onto the
+// logical source id, so hardware lane `W_s + i` (a replica) sees the same
+// logical thread as hardware lane `i`. Everything else is inherited MODREP.
+// ----------------------------------------------------------------------------
+
+// logical_x = ((x_hw & ~(W_t-1)) >> log2(W_t/W_s)) | (x_hw & (W_s-1))
+//
+// The first term recovers the hardware wave index and rescales it to source
+// lanes; the second term is the source lane within the wave (identical for a
+// lane and its replica). For wave32->wave64 this is
+// `((x_hw & ~63) >> 1) | (x_hw & 31)`.
+static Value *emitScaledDispatchLogicalX(IRBuilder<> &B, Value *RawX,
+                                         unsigned SrcWaveSize,
+                                         unsigned TgtWaveSize) {
+  assert(TgtWaveSize > SrcWaveSize && (TgtWaveSize % SrcWaveSize) == 0 &&
+         "scaled-dispatch remap requires cross-widening with an integer "
+         "wave-size ratio");
+  Type *Ty = RawX->getType();
+  const unsigned Ratio = TgtWaveSize / SrcWaveSize;
+  const unsigned RatioLog2 = llvm::Log2_32(Ratio);
+  // Hardware-wave-aligned high part, rescaled to source-lane units.
+  Value *WaveAligned =
+      B.CreateAnd(RawX,
+                  ConstantInt::get(Ty, ~static_cast<uint64_t>(TgtWaveSize - 1u),
+                                   /*IsSigned=*/true),
+                  "dd_wave_aligned");
+  Value *WaveScaled = B.CreateLShr(WaveAligned, ConstantInt::get(Ty, RatioLog2),
+                                   "dd_wave_base");
+  // Source lane within the wave (same for a lane and its replica).
+  Value *SrcLane =
+      B.CreateAnd(RawX, ConstantInt::get(Ty, SrcWaveSize - 1u), "dd_src_lane");
+  return B.CreateOr(WaveScaled, SrcLane, "dd_logical_x");
+}
+
+Value *
+ScaledModuloReplicationProjection::emitWorkitemIdX(IRBuilder<> &B) const {
+  // Deliberately bypass ModuloReplicationProjection::emitWorkitemIdX (the
+  // phantom-lane clamp): a scaled dispatch has no phantom lanes, every
+  // hardware lane is a real source thread or an exact replica of one.
+  Value *Raw = WaveProjection::emitWorkitemIdX(B);
+  return emitScaledDispatchLogicalX(B, Raw, Src.WaveSize, Tgt.WaveSize);
+}
+
+Value *ScaledModuloReplicationProjection::emitPackedWorkitemId(
+    IRBuilder<> &B, unsigned NumDims) const {
+  // Remapped x OR'd with the source's raw y/z fields. y/z are per-thread
+  // correct as launched and become wave-uniform once x is doubled, so no
+  // remap or clamp is applied to them.
+  return packWorkitemId(B, emitWorkitemIdX(B), NumDims);
 }
 
 // ----------------------------------------------------------------------------

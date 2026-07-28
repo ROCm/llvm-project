@@ -114,6 +114,8 @@ const char *rewriteIdName(RewriteId R) {
     return "raise-time readlane/writelane bounds validator";
   case RewriteId::SaveExecLaneRelative:
     return "saveexec source-wave-relative";
+  case RewriteId::CmpxLaneRelative:
+    return "v_cmpx source-wave-relative (scaled-dispatch replica)";
   case RewriteId::AtomicOneReplica:
     return "store-only atomic gated to one MODREP replica";
   case RewriteId::PostRaiseCrossLaneRewrite:
@@ -463,6 +465,23 @@ findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
                "v_cmpx operand dataflow is derived from v_mbcnt_*; "
                "WaveNative lowers v_mbcnt_lo with a source-wave-local mask "
                "and ballots the compare into target-width EXEC storage"});
+        } else if (Projection.usesScaledDispatch()) {
+          // Scaled dispatch: exactly one source wave per target wave with the
+          // upper lanes as replicas. The mbcnt lift already makes the lane id
+          // source-wave-relative (mbcnt_lo mod W_s), and the V_CMPX handler
+          // ballots into the source-width (i32) EXEC alloca
+          // source-wave-locally, so a lane L and its replica L+W_s share one
+          // correct source-wave mask -- which is exactly what replicas must do.
+          // No target-width projection is needed.
+          Sites.push_back(
+              {&Di, ObstructionKind::CmpxFromLaneId,
+               RewriteId::CmpxLaneRelative, /*RewriteImplemented=*/true,
+               "v_cmpx operand dataflow is derived from v_mbcnt_*; under the "
+               "scaled dispatch the lane id is source-wave-relative and lanes "
+               "L and L+W_s are replicas that share one source-width EXEC "
+               "mask, "
+               "so the compare is correct per source wave without a target-"
+               "width projection"});
         } else {
           Sites.push_back(
               {&Di, ObstructionKind::CmpxFromLaneId, RewriteId::None,

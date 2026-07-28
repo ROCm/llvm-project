@@ -255,6 +255,7 @@ llvm::Expected<KeyData> buildKeyData(const TranslationCacheRequest &request,
   appendKeyField(material, "enable_writelane_rewrite",
                  request.EnableWritelaneRewrite);
   appendKeyField(material, "enable_wave_native", request.EnableWaveNative);
+  appendKeyField(material, "force_scaled_modrep", request.ForceScaledModrep);
   appendKeyField(material, "assume_hip_global_offset_zero",
                  request.AssumeHipGlobalOffsetZero);
   if (!request.KernelName.empty())
@@ -443,6 +444,7 @@ llvm::json::Object metadataObject(const TranslationCacheRequest &request,
       {"strict_mode", request.StrictMode},
       {"enable_writelane_rewrite", request.EnableWritelaneRewrite},
       {"enable_wave_native", request.EnableWaveNative},
+      {"force_scaled_modrep", request.ForceScaledModrep},
       {"assume_hip_global_offset_zero", request.AssumeHipGlobalOffsetZero},
       {"hotswap_build_identity", keyData.buildIdentity},
       {"device_libraries_identity", keyData.deviceLibrariesIdentity},
@@ -453,6 +455,8 @@ llvm::json::Object metadataObject(const TranslationCacheRequest &request,
        static_cast<int64_t>(Result.Hsaco ? Result.Hsaco->getBufferSize() : 0)},
       {"lifted_count", Result.LiftedCount},
       {"total_count", Result.TotalCount},
+      {"scaled_dispatch_factor",
+       static_cast<int64_t>(Result.ScaledDispatchFactor)},
       {"c5_suppressed_count", Result.C5SuppressedCount},
       {"c5_suppression_reason", Result.C5SuppressionReason},
       {"uses_scratch_private_segment", Result.UsesScratchPrivateSegment},
@@ -513,6 +517,9 @@ llvm::Error validateMetadata(const TranslationCacheRequest &request,
     return e;
   if (llvm::Error e =
           requireEqualBool(obj, "enable_wave_native", request.EnableWaveNative))
+    return e;
+  if (llvm::Error e = requireEqualBool(obj, "force_scaled_modrep",
+                                       request.ForceScaledModrep))
     return e;
   if (llvm::Error e = requireEqualBool(obj, "assume_hip_global_offset_zero",
                                        request.AssumeHipGlobalOffsetZero))
@@ -577,6 +584,11 @@ llvm::Error validateMetadata(const TranslationCacheRequest &request,
   Result.SourcePrivateSegmentFixedSize = static_cast<uint32_t>(*sourceScratch);
   Result.TargetPrivateSegmentFixedSize = static_cast<uint32_t>(*targetScratch);
   Result.TargetEnablePrivateSegment = *targetEnable;
+  // Optional (default 1) so cache entries written before scaled-dispatch
+  // support still load. The cache key includes the scaled-modrep flags, so a
+  // scaled transpile never collides with a non-scaled entry.
+  Result.ScaledDispatchFactor = static_cast<unsigned>(
+      obj.getInteger("scaled_dispatch_factor").value_or(1));
   return llvm::Error::success();
 }
 

@@ -247,6 +247,22 @@ public:
   // `preservesMbcntDerivedVcmpxExec`. Requires injective source-wave mapping.
   virtual bool preservesMbcntDerivedSaveExec() const { return false; }
 
+  // True iff this projection expects the runtime to launch the block with a
+  // `scaledDispatchFactor()`-scaled x extent, so that each target wave hosts
+  // exactly one source wave in its low `W_s` lanes with the remaining lanes as
+  // replicas (see `ScaledModuloReplicationProjection`). The scaled dimension is
+  // always x -- the wave-carrying dimension -- so it is not reported
+  // separately; scaling any other dimension would spread the extra threads
+  // across different rows/planes instead of aliasing them as replicas. When
+  // true, the raiser widens the `amdgpu-flat-work-group-size` attribute by the
+  // same factor, halves the in-kernel workgroup/grid-size query along x, and
+  // emits a marker attribute so the launch shim scales the block's x extent.
+  virtual bool usesScaledDispatch() const { return false; }
+
+  // The integer factor by which the block's x extent is scaled (`W_t / W_s`,
+  // i.e. 2 for wave32->wave64). 1 (the default) means no scaling.
+  virtual unsigned scaledDispatchFactor() const { return 1; }
+
   // Number of source waves whose per-lane fragment data is present in
   // each target wave under this projection's mapping.  Callers that
   // synthesise per-source-wave passes (most notably the WMMA -> MFMA
@@ -362,7 +378,7 @@ protected:
 // None of that is a hardware fact -- it is a *choice*. See hotswap/
 // docs/wave-size-translation.md sec. 6 for the correctness theorem
 // (wave-size-obliviousness) and sec. 2.2 for the alternatives.
-class ModuloReplicationProjection final : public WaveProjection {
+class ModuloReplicationProjection : public WaveProjection {
 public:
   using WaveProjection::WaveProjection;
 
@@ -391,6 +407,71 @@ public:
   // target wavefront.  Same-wave MODREP instantiations (source ==
   // target wave width) are also one-source-wave-per-target.
   unsigned numSourceWavesPerTarget() const override { return 1; }
+};
+
+// ============================================================================
+// ScaledModuloReplicationProjection -- modulo-replication backed by a
+// scaled dispatch (hotswap/docs/modrep-predicate-chain.md sec. 10). The runtime
+// launches the block with a `W_t / W_s`-scaled extent along x (a factor of 2
+// for the only ratio in use today, wave32->wave64); the class and its plumbing
+// are generic in that ratio.
+//
+// The plain `ModuloReplicationProjection` is only correct in the cross-widening
+// direction when the block has no active target replica lanes (the phantom-lane
+// regime, `max_flat_workgroup_size <= W_s`). For a full block the hardware
+// packs `W_t` real threads per target wave, so MODREP's replica lanes
+// `W_s..W_t-1` would collide with real block threads and drop their work; a
+// data-dependent early-exit predicate then drags one packed source wave through
+// the body masked with stale VGPRs into a faulting load (an aperture violation;
+// see project_aperture_rootcause).
+//
+// This projection makes the "upper lanes are replicas, not real threads"
+// assumption TRUE by construction: the runtime launches the block with a
+// `W_t / W_s`-scaled extent along the fastest (wave-carrying) dimension x, so
+// each target wave hosts exactly ONE source wave in lanes `0..W_s-1` and exact
+// REPLICAS of those lanes in `W_s..W_t-1`. Concretely for wave32->wave64:
+//
+//   * the runtime doubles blockDim.x (grid unchanged);
+//   * the raised kernel maps hardware workitem-id.x back to the logical source
+//     id via `logical_x = ((x_hw & ~(W_t-1)) >> log2(W_t/W_s)) | (x_hw &
+//     (W_s-1))` so hardware lane `W_s + i` sees the same logical thread as lane
+//     `i`;
+//   * the raiser halves the in-kernel workgroup/grid-size query along x so
+//     loops and reduction bounds still observe the source block size.
+//
+// Because lane `i` and its replica `W_s + i` compute identically, they share
+// every predicate: divergent early exits take both out together (no phantom
+// wave, no stale VGPR, no aperture fault), and 64-wide cross-lane ops read
+// valid duplicate data from the upper half instead of undef. All of MODREP's
+// per-source-wave-scoped cross-lane machinery (source-wave-based ballot shift,
+// `L mod W_s` lane-active projection, mask replication) is reused unchanged --
+// this class overrides only the workitem-id mapping. Utilisation is ~50% (the
+// upper half redoes the lower half's work), so it is the safe correctness
+// fallback, not the fast path.
+//
+// Refusals live in the raiser: wmma/mfma (a matrix fragment needs all `W_t`
+// lanes and cannot be fed from `W_s` logical lanes + replicas) and source
+// blocks whose scaled size would exceed the target's hardware thread/block max.
+class ScaledModuloReplicationProjection final
+    : public ModuloReplicationProjection {
+public:
+  using ModuloReplicationProjection::ModuloReplicationProjection;
+
+  // Remap hardware workitem-id.x to the logical source id so replica lanes
+  // alias their originals. No phantom-lane clamp: under a scaled dispatch
+  // every hardware lane maps to a valid logical thread (real or replica).
+  llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
+
+  // Pack the remapped x with the source's raw y/z fields (which are already
+  // per-thread correct and become wave-uniform once x is doubled). Bypasses
+  // the base MODREP phantom-lane clamp.
+  llvm::Value *emitPackedWorkitemId(llvm::IRBuilder<> &B,
+                                    unsigned NumDims) const override;
+
+  bool usesScaledDispatch() const override { return true; }
+  unsigned scaledDispatchFactor() const override {
+    return Tgt.WaveSize / Src.WaveSize;
+  }
 };
 
 // ============================================================================

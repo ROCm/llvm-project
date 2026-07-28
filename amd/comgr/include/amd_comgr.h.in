@@ -3041,6 +3041,12 @@ typedef enum amd_comgr_hotswap_transpile_result_info_s {
   AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_CACHE_WRITE = 0x3,   /* amd_comgr_hotswap_cache_write_status_t */
   AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_LIFTED_COUNT = 0x4,  /* int64_t */
   AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_TOTAL_COUNT = 0x5,   /* int64_t */
+  /* Factor to scale the block's x extent by for a kernel raised under
+     ScaledModuloReplicationProjection (W_t/W_s, e.g. 2); 1 when no scaling is
+     required. The scaled dimension is always x -- the wave-carrying dimension --
+     so the runtime does not need to be told which one. See
+     modrep-predicate-chain.md sec. 10. */
+  AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_SCALED_DISPATCH_FACTOR = 0x6, /* int64_t */
 } amd_comgr_hotswap_transpile_result_info_t;
 
 /**
