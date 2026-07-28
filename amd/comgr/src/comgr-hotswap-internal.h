@@ -502,6 +502,11 @@ runBranchIslandAllocatorForTest(std::vector<NopSled> Gateways,
                                 uint64_t TargetOffset, bool Backward,
                                 llvm::DenseSet<uint64_t> Occupied = {});
 
+/// Exercise adjacent far-trampoline coalescing without constructing an ELF.
+std::vector<Trampoline> mergeAdjacentLongTrampolinesForTest(
+    std::vector<Trampoline> Trampolines,
+    const llvm::DenseSet<uint64_t> &DirectBranchTargets = {});
+
 /// As above, but append one supplied gateway window at each recoverable
 /// strand. Records the number of provisional occupied dwords held when every
 /// promotion succeeds.

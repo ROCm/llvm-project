@@ -6403,10 +6403,18 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   return Info;
 }
 
-/// Coalesce runs of adjacent far patch sites when the same SGPR scratch block
-/// is safe at every site. Removing each interior return reservation preserves
-/// replacement order and reduces the number of required forward gateways.
-/// This deliberately never steals an unpatched neighboring instruction.
+static uint32_t trampolineReturnReserveBytes(const Trampoline &T) {
+  if (T.LongBranchPreservesVcc)
+    return VccPreservingReturnReserveBytes;
+  return T.UsesSetPCBack ? SetPcReturnReserveBytes : MinInstSize;
+}
+
+/// Coalesce runs of adjacent far patch sites that use the same return strategy.
+/// Pair-backed sites must share the exact scratch selection; registerless sites
+/// have no scratch state to reconcile. Removing each interior return
+/// reservation preserves replacement order and reduces both forward and return
+/// routing demand. This deliberately never steals an unpatched neighboring
+/// instruction.
 static void
 mergeAdjacentLongTrampolines(std::vector<Trampoline> &Trampolines,
                              const DenseSet<uint64_t> &DirectBranchTargets) {
@@ -6420,16 +6428,15 @@ mergeAdjacentLongTrampolines(std::vector<Trampoline> &Trampolines,
       Trampoline &Prev = Merged.back();
       std::optional<uint64_t> PrevEnd = checkedAddUint64(
           Prev.OriginalOffset, Prev.OriginalSize, "adjacent trampoline end");
-      uint32_t BackReserve = Prev.LongBranchPreservesVcc
-                                 ? VccPreservingReturnReserveBytes
-                                 : SetPcReturnReserveBytes;
+      uint32_t BackReserve = trampolineReturnReserveBytes(Prev);
       uint32_t BodyPrefix =
           Prev.LongBranchPreservesVcc ? VccRestoreSequenceBytes : 0;
       Adjacent = PrevEnd && *PrevEnd == T.OriginalOffset && Prev.Long &&
-                 T.Long && Prev.UsesSetPCBack && T.UsesSetPCBack &&
+                 T.Long && Prev.UsesSetPCBack == T.UsesSetPCBack &&
                  Prev.LongBranchPreservesVcc == T.LongBranchPreservesVcc &&
-                 Prev.LongBranchSgprBase == T.LongBranchSgprBase &&
                  Prev.LongBranchUsesVcc == T.LongBranchUsesVcc &&
+                 (!Prev.UsesSetPCBack ||
+                  Prev.LongBranchSgprBase == T.LongBranchSgprBase) &&
                  Prev.HasFunctionRange && T.HasFunctionRange &&
                  Prev.FunctionStart == T.FunctionStart &&
                  Prev.FunctionEnd == T.FunctionEnd &&
@@ -6449,9 +6456,7 @@ mergeAdjacentLongTrampolines(std::vector<Trampoline> &Trampolines,
       Merged.emplace_back(std::move(T));
       continue;
     }
-    uint32_t BackReserve = Prev.LongBranchPreservesVcc
-                               ? VccPreservingReturnReserveBytes
-                               : SetPcReturnReserveBytes;
+    uint32_t BackReserve = trampolineReturnReserveBytes(Prev);
     size_t BodyPrefix =
         Prev.LongBranchPreservesVcc ? VccRestoreSequenceBytes : 0;
     Prev.Bytes.resize(Prev.Bytes.size() - BackReserve);
@@ -6464,6 +6469,13 @@ mergeAdjacentLongTrampolines(std::vector<Trampoline> &Trampolines,
   if (MergeCount != 0)
     log() << "hotswap: coalesced " << MergeCount
           << " adjacent far trampoline edge(s)\n";
+}
+
+std::vector<Trampoline> mergeAdjacentLongTrampolinesForTest(
+    std::vector<Trampoline> Trampolines,
+    const DenseSet<uint64_t> &DirectBranchTargets) {
+  mergeAdjacentLongTrampolines(Trampolines, DirectBranchTargets);
+  return Trampolines;
 }
 
 static void appendPoolBranchIslands(std::vector<Trampoline> &Trampolines) {

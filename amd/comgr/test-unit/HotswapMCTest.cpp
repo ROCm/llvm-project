@@ -4806,6 +4806,34 @@ TEST(BranchIslandAllocator, CoAdvancesEqualPhysicalAliases) {
   EXPECT_TRUE(Result.Occupied.contains(MaxSledDistance));
 }
 
+TEST(TrampolineCoalescing, MergesAdjacentRegisterlessReturnSites) {
+  Trampoline First;
+  First.OriginalOffset = 100;
+  First.OriginalSize = 8;
+  First.Bytes.assign({1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0});
+  First.Long = true;
+  First.HasFunctionRange = true;
+  First.FunctionStart = 64;
+  First.FunctionEnd = 256;
+
+  Trampoline Second = First;
+  Second.OriginalOffset = 108;
+  Second.Bytes.assign({9, 10, 11, 12, 13, 14, 15, 16, 0, 0, 0, 0});
+
+  std::vector<Trampoline> Merged =
+      mergeAdjacentLongTrampolinesForTest({First, Second});
+  ASSERT_EQ(Merged.size(), 1u);
+  EXPECT_EQ(Merged[0].OriginalOffset, 100u);
+  EXPECT_EQ(Merged[0].OriginalSize, 16u);
+  EXPECT_EQ(Merged[0].Bytes,
+            (llvm::SmallVector<uint8_t>{1,  2,  3,  4,  5,  6,  7, 8, 9, 10,
+                                        11, 12, 13, 14, 15, 16, 0, 0, 0, 0}));
+
+  std::vector<Trampoline> Protected = mergeAdjacentLongTrampolinesForTest(
+      {First, Second}, llvm::DenseSet<uint64_t>{108});
+  EXPECT_EQ(Protected.size(), 2u);
+}
+
 TEST(BranchIslandAllocator, SplitsPartialAliasAtOccupiedDword) {
   llvm::DenseSet<uint64_t> Occupied = {108};
   std::vector<NopSled> Available = subtractOccupiedBranchGatewaySlotsForTest(
