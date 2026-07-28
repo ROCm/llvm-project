@@ -921,6 +921,11 @@ struct InternalDecodedInst {
   llvm::MCInst Inst;
   std::string Mnemonic;
   bool DecodeSucceeded = false;
+  // The disassembler recovered an instruction but diagnosed its encoding as
+  // potentially undefined. Ordinary matching may still inspect the MCInst,
+  // but safety proofs must fail closed because its modeled effects need not
+  // match the malformed encoded operands.
+  bool DecodeSoftFailed = false;
 };
 
 // -- Function declarations (LLVM MC layer) ------------------------------------
@@ -1313,6 +1318,11 @@ struct PatchContext {
   uint64_t TextMutationGeneration = 0;
   llvm::DenseMap<std::pair<uint64_t, uint64_t>, CurrentFunctionSgprLiveness>
       CurrentFunctionSgprLivenessCache{0};
+  // Deferred trampoline source branches are logical mutations that do not
+  // reach Text until final fixup. Index their owning functions so current-text
+  // liveness can reject incomplete program images in O(1) per query.
+  llvm::DenseSet<std::pair<uint64_t, uint64_t>> PendingTrampolineFunctions{0};
+  bool HasUnresolvedPendingTrampoline = false;
 };
 
 /// Return occupancy limits for \p Processor from COMGR's ISA metadata table.
@@ -1410,6 +1420,12 @@ void noteCurrentTextMutation(PatchContext &Ctx);
 [[nodiscard]] bool writeCurrentText(PatchContext &Ctx, uint64_t Offset,
                                     llvm::ArrayRef<uint8_t> Bytes,
                                     llvm::StringRef Context);
+
+/// Record the source function affected by a newly queued deferred trampoline.
+/// Call this before appending \p T to PatchContext::OutTrampolines. A
+/// trampoline without a resolved function range conservatively affects every
+/// later current-text liveness query.
+void notePendingTrampolineMutation(PatchContext &Ctx, const Trampoline &T);
 
 /// Prove that \p Register's incoming value is not read on any path from the
 /// instruction after [\p InstOffset, +\p InstSize) to the owning function's
