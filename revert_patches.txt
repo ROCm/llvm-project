@@ -17,3 +17,7 @@ Revert "Reland "[Clang] Enable -Wunused-template under -Wall" (#208001)
 needs SPIRv changes
 [DebugMetadata][DwarfDebug][CodeView] Support function-local static variables in lexical block scopes 
 ---
+needs spirv
+Revert "[IR][NFC] Remove DbgInstPtr PointerUnion (#212233)"
+Revert "[IR][NFC] Rename insertDbgValueIntrinsic -> insertDbgValue (#212151)"
+---
