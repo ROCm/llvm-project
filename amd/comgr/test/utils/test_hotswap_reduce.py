@@ -11,6 +11,7 @@ import stat
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 from typing import Optional, Union
@@ -120,6 +121,21 @@ class DdminTests(unittest.TestCase):
         )
         self.assertEqual(result, ["x"])
 
+    def test_exhaustive_monotone_predicates_are_one_minimal(self) -> None:
+        for size in range(7):
+            items = list(range(size))
+            for required_bits in range(1 << size):
+                required = {item for item in items if required_bits & (1 << item)}
+                result = hotswap_reduce.ddmin(
+                    items,
+                    lambda kept, removed, required=required: required.issubset(kept),
+                )
+                self.assertEqual(set(result), required)
+                for index in range(len(result)):
+                    self.assertFalse(
+                        required.issubset(result[:index] + result[index + 1 :])
+                    )
+
 
 class BundleValidationTests(unittest.TestCase):
     def test_rejects_malformed_metadata_list(self) -> None:
@@ -152,6 +168,51 @@ class BundleValidationTests(unittest.TestCase):
             ):
                 hotswap_reduce.load_bundle(path)
 
+    def test_bundle_paths_cannot_escape_bundle_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            bundle_root = root / "bundle"
+            bundle_root.mkdir()
+            outside = root / "outside.co"
+            outside.write_bytes(b"outside")
+            bundle = {
+                "format": hotswap_reduce.BUNDLE_FORMAT,
+                "version": 1,
+                "code_objects": [{"id": "outside", "path": "../outside.co"}],
+            }
+            bundle_path = bundle_root / "bundle.json"
+            bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+            with self.assertRaisesRegex(hotswap_reduce.ReducerError, "escapes"):
+                hotswap_reduce.load_bundle(bundle_path)
+            bundle["code_objects"][0]["path"] = str(outside)
+            bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+            with self.assertRaisesRegex(
+                hotswap_reduce.ReducerError, "must be relative"
+            ):
+                hotswap_reduce.load_bundle(bundle_path)
+
+    def test_bundle_symlinks_cannot_escape_bundle_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            bundle_root = root / "bundle"
+            bundle_root.mkdir()
+            outside = root / "outside.co"
+            outside.write_bytes(b"outside")
+            link = bundle_root / "linked.co"
+            try:
+                link.symlink_to(outside)
+            except OSError as error:
+                self.skipTest(f"symlinks unavailable: {error}")
+            bundle = {
+                "format": hotswap_reduce.BUNDLE_FORMAT,
+                "version": 1,
+                "code_objects": [{"id": "outside", "path": link.name}],
+            }
+            bundle_path = bundle_root / "bundle.json"
+            bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+            with self.assertRaisesRegex(hotswap_reduce.ReducerError, "escapes"):
+                hotswap_reduce.load_bundle(bundle_path)
+
     def test_rejects_non_finite_json(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             path = Path(name) / "bundle.json"
@@ -178,6 +239,17 @@ class BundleValidationTests(unittest.TestCase):
                 )
                 relative = output_bundle["code_objects"][0]["path"]
                 self.assertEqual((output / relative).read_bytes(), b"one")
+
+    def test_materialization_rejects_changed_source_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            bundle = write_bundle(root, [b"original"], {})
+            candidate = hotswap_reduce.load_bundle(bundle)
+            candidate.code_objects[0].path.write_bytes(b"changed")
+            with self.assertRaisesRegex(
+                hotswap_reduce.ReducerError, "changed while materializing"
+            ):
+                hotswap_reduce.materialize_candidate(candidate, root / "candidate")
 
     def test_loads_inventory_nul_worklist_and_selector_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as name:
@@ -342,6 +414,64 @@ class PredicateTests(unittest.TestCase):
             self.assertEqual(cache["format"], hotswap_reduce.CACHE_FORMAT)
             self.assertEqual(cache["version"], 1)
 
+    def test_cached_and_uncached_results_are_equivalent(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            cache_path = root / "predicate-cache.json"
+            script = root / "predicate.py"
+            script.write_text(
+                "print('stable output')\n"
+                "print('stable error', file=__import__('sys').stderr)\n"
+                "raise SystemExit(7)\n",
+                encoding="utf-8",
+            )
+            candidate = self.make_candidate(root)
+            runner = self.make_runner(
+                root,
+                script,
+                ["{input}"],
+                interesting_exit_code=7,
+                runs=2,
+                cache=hotswap_reduce.PredicateCache(cache_path),
+            )
+            uncached = runner.evaluate(candidate)
+            cached = runner.evaluate(candidate)
+            self.assertFalse(uncached.cached)
+            self.assertTrue(cached.cached)
+            self.assertEqual(uncached.status, cached.status)
+            self.assertEqual(uncached.exit_codes, cached.exit_codes)
+            self.assertEqual(uncached.stdout, cached.stdout)
+            self.assertEqual(uncached.stderr, cached.stderr)
+            self.assertEqual(uncached.for_log(), cached.for_log())
+            self.assertNotIn("cached", cached.for_log())
+
+    def test_corrupt_matching_cache_entry_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            cache_path = root / "predicate-cache.json"
+            script = root / "predicate.py"
+            script.write_text("raise SystemExit(0)\n", encoding="utf-8")
+            candidate = self.make_candidate(root)
+            runner = self.make_runner(
+                root,
+                script,
+                ["{input}"],
+                cache=hotswap_reduce.PredicateCache(cache_path),
+            )
+            runner.evaluate(candidate)
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            entry = next(iter(cache["entries"].values()))
+            entry["exit_codes"] = []
+            cache_path.write_text(json.dumps(cache), encoding="utf-8")
+            recreated = self.make_runner(
+                root,
+                script,
+                ["{input}"],
+                cache=hotswap_reduce.PredicateCache(cache_path),
+            )
+            with self.assertRaisesRegex(hotswap_reduce.ReducerError, "corrupt entry"):
+                recreated.evaluate(candidate)
+
     def test_persistent_cache_invalidates_changed_predicate_script(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             root = Path(name)
@@ -441,6 +571,33 @@ class PredicateTests(unittest.TestCase):
             ):
                 runner.evaluate(self.make_candidate(root))
 
+    def test_changed_identity_mode_invalidates_cached_result(self) -> None:
+        if os.name == "nt":
+            self.skipTest("POSIX executable-mode semantics")
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            executable = write_executable(
+                root / "predicate",
+                """
+                raise SystemExit(0)
+                """,
+            )
+            candidate = self.make_candidate(root)
+            runner = hotswap_reduce.PredicateRunner(
+                [str(executable), "{input}"],
+                0,
+                1,
+                5.0,
+                root,
+                hotswap_reduce.PredicateCache(None),
+            )
+            self.assertFalse(runner.evaluate(candidate).cached)
+            executable.chmod(executable.stat().st_mode & ~stat.S_IXUSR)
+            with self.assertRaisesRegex(
+                hotswap_reduce.ReducerError, "identity changed"
+            ):
+                runner.evaluate(candidate)
+
     def test_candidate_digest_does_not_reread_large_objects(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             root = Path(name)
@@ -514,6 +671,96 @@ class PredicateTests(unittest.TestCase):
             self.assertEqual(result.status, "flaky")
             self.assertFalse(result.cached)
 
+    def test_different_noninteresting_exit_codes_are_flaky(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            counter = root / "count"
+            script = root / "predicate.py"
+            script.write_text(
+                textwrap.dedent(
+                    """
+                    import pathlib
+                    import sys
+                    path = pathlib.Path(sys.argv[1])
+                    count = int(path.read_text()) if path.exists() else 0
+                    path.write_text(str(count + 1))
+                    raise SystemExit(1 + count % 2)
+                    """
+                ),
+                encoding="utf-8",
+            )
+            runner = self.make_runner(root, script, [str(counter)], runs=2)
+            result = runner.evaluate(self.make_candidate(root))
+            self.assertEqual(result.status, "flaky")
+            self.assertEqual(result.exit_codes, (1, 2))
+            self.assertFalse(result.cached)
+
+    def test_timeout_terminates_predicate_descendants(self) -> None:
+        if os.name == "nt":
+            self.skipTest("POSIX process-group behavior")
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            marker = root / "descendant-ran"
+            child_code = (
+                "import pathlib,time;"
+                "time.sleep(0.3);"
+                f"pathlib.Path({str(marker)!r}).write_text('leaked')"
+            )
+            script = root / "predicate.py"
+            script.write_text(
+                "import subprocess,sys,time\n"
+                f"subprocess.Popen([sys.executable, '-c', {child_code!r}])\n"
+                "time.sleep(10)\n",
+                encoding="utf-8",
+            )
+            runner = self.make_runner(root, script, [], timeout=0.05)
+            result = runner.evaluate(self.make_candidate(root))
+            self.assertEqual(result.status, "timeout")
+            time.sleep(0.5)
+            self.assertFalse(marker.exists())
+
+    def test_completed_predicate_does_not_leave_descendants(self) -> None:
+        if os.name == "nt":
+            self.skipTest("POSIX process-group behavior")
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            marker = root / "descendant-ran"
+            child_code = (
+                "import pathlib,time;"
+                "time.sleep(0.3);"
+                f"pathlib.Path({str(marker)!r}).write_text('leaked')"
+            )
+            script = root / "predicate.py"
+            script.write_text(
+                "import subprocess,sys\n"
+                f"subprocess.Popen([sys.executable, '-c', {child_code!r}])\n"
+                "raise SystemExit(0)\n",
+                encoding="utf-8",
+            )
+            runner = self.make_runner(root, script, [])
+            result = runner.evaluate(self.make_candidate(root))
+            self.assertTrue(result.interesting)
+            time.sleep(0.5)
+            self.assertFalse(marker.exists())
+
+    def test_capture_is_bounded(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            script = root / "predicate.py"
+            script.write_text(
+                f"print('x' * {hotswap_reduce.CAPTURE_LIMIT * 100})\n"
+                "raise SystemExit(0)\n",
+                encoding="utf-8",
+            )
+            runner = self.make_runner(root, script, [])
+            result = runner.evaluate(self.make_candidate(root))
+            self.assertTrue(result.interesting)
+            self.assertLessEqual(
+                len(result.stdout),
+                hotswap_reduce.CAPTURE_LIMIT + len("\n<truncated>"),
+            )
+            self.assertTrue(result.stdout.endswith("\n<truncated>"))
+
     def test_unknown_placeholder_fails_before_launch(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             root = Path(name)
@@ -574,6 +821,22 @@ class PredicateTests(unittest.TestCase):
             with self.assertRaisesRegex(hotswap_reduce.ReducerError, "exactly one"):
                 runner.evaluate(two)
 
+    def test_nonfinite_timeouts_are_rejected_by_argument_parser(self) -> None:
+        parser = hotswap_reduce.make_argument_parser()
+        base_arguments = [
+            "--code-object",
+            "input.co",
+            "--output",
+            "output",
+            "--predicate",
+            "predicate",
+        ]
+        for option in ("--timeout", "--tool-timeout"):
+            for value in ("nan", "inf", "-inf", "0", "-1"):
+                with mock.patch("sys.stderr"):
+                    with self.assertRaises(SystemExit):
+                        parser.parse_args(base_arguments + [option, value])
+
 
 class FakeElfToolTests(unittest.TestCase):
     def write_readobj(
@@ -582,35 +845,49 @@ class FakeElfToolTests(unittest.TestCase):
         sections: list[tuple[str, bool]],
         architecture: str = "amdgcn",
     ) -> Path:
-        value = [
-            {
-                "FileSummary": {
-                    "Format": "elf64-amdgpu",
-                    "Arch": architecture,
-                },
-                "Sections": [
-                    {
-                        "Section": {
-                            "Name": {"Name": name},
-                            "Flags": {
-                                "Flags": ([{"Name": "SHF_ALLOC"}] if allocated else [])
-                            },
-                        }
-                    }
-                    for name, allocated in sections
-                ],
-            }
-        ]
         return write_executable(
             root / "fake readobj",
             f"""
             import json
-            print(json.dumps({value!r}))
+            import pathlib
+            import sys
+            sections = {sections!r}
+            contents = pathlib.Path(sys.argv[-1]).read_bytes().decode(
+                "utf-8", errors="ignore"
+            )
+            removed = {{
+                word.split("=", 1)[1]
+                for word in contents.split()
+                if word.startswith("--remove-section=")
+            }}
+            value = [{{
+                "FileSummary": {{
+                    "Format": "elf64-amdgpu",
+                    "Arch": {architecture!r},
+                }},
+                "Sections": [
+                    {{
+                        "Section": {{
+                            "Name": {{"Name": name}},
+                            "Flags": {{
+                                "Flags": ([{{"Name": "SHF_ALLOC"}}] if allocated else [])
+                            }},
+                        }}
+                    }}
+                    for name, allocated in sections
+                    if name not in removed
+                ],
+            }}]
+            print(json.dumps(value))
             """,
         )
 
     def write_objcopy(
-        self, root: Path, fail: bool = False, annotate: bool = False
+        self,
+        root: Path,
+        fail: bool = False,
+        annotate: bool = False,
+        extra_removal: Optional[str] = None,
     ) -> Path:
         return write_executable(
             root / "fake objcopy",
@@ -625,6 +902,9 @@ class FakeElfToolTests(unittest.TestCase):
             if {annotate!r}:
                 with pathlib.Path(sys.argv[-1]).open("ab") as stream:
                     stream.write((" " + " ".join(sys.argv[1:-2])).encode())
+            if {extra_removal!r} is not None:
+                with pathlib.Path(sys.argv[-1]).open("ab") as stream:
+                    stream.write((" --remove-section=" + {extra_removal!r}).encode())
             """,
         )
 
@@ -640,6 +920,8 @@ class FakeElfToolTests(unittest.TestCase):
                     (".text", True),
                     (".note", False),
                     (".AMDGPU.config", False),
+                    (".rela.debug_info", False),
+                    (".group", False),
                     (".debug_info", False),
                     (".comment", False),
                     (".allocated_debug", True),
@@ -658,6 +940,33 @@ class FakeElfToolTests(unittest.TestCase):
             obj = root / "object.co"
             obj.write_bytes(b"ELF")
             self.assertEqual(tools.removable_sections(obj), [".debug_info"])
+
+    def test_duplicate_name_is_protected_if_any_instance_is_allocated(self) -> None:
+        if os.name == "nt":
+            self.skipTest("executable script fixtures require a POSIX host")
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            readobj = self.write_readobj(
+                root,
+                [
+                    (".debug_duplicate", False),
+                    (".debug_duplicate", True),
+                    (".debug_safe", False),
+                ],
+            )
+            objcopy = self.write_objcopy(root)
+            tools = hotswap_reduce.ElfSectionTools(
+                str(readobj),
+                str(objcopy),
+                5.0,
+                [".debug_*"],
+                [],
+                root / "artifacts",
+            )
+            tools.artifact_root.mkdir()
+            obj = root / "object.co"
+            obj.write_bytes(b"ELF")
+            self.assertEqual(tools.removable_sections(obj), [".debug_safe"])
 
     def test_missing_tool_is_reported(self) -> None:
         with tempfile.TemporaryDirectory() as name:
@@ -750,6 +1059,68 @@ class FakeElfToolTests(unittest.TestCase):
                 hotswap_reduce.ReducerError, "malformed section JSON"
             ):
                 tools.removable_sections(path)
+
+    def test_objcopy_output_must_remove_requested_sections(self) -> None:
+        if os.name == "nt":
+            self.skipTest("executable script fixtures require a POSIX host")
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            readobj = self.write_readobj(root, [(".debug_info", False)])
+            objcopy = self.write_objcopy(root)
+            artifacts = root / "artifacts"
+            artifacts.mkdir()
+            tools = hotswap_reduce.ElfSectionTools(
+                str(readobj),
+                str(objcopy),
+                5.0,
+                [".debug_*"],
+                [],
+                artifacts,
+            )
+            path = root / "object.co"
+            path.write_bytes(b"ELF")
+            code_object = hotswap_reduce.CodeObject(
+                "id", path.name, path, hotswap_reduce.sha256_file(path)
+            )
+            with self.assertRaisesRegex(
+                hotswap_reduce.ReducerError, "requested sections remain"
+            ):
+                tools.remove_sections(code_object, [".debug_info"])
+            self.assertEqual(list(artifacts.iterdir()), [])
+
+    def test_objcopy_output_must_preserve_unrequested_sections(self) -> None:
+        if os.name == "nt":
+            self.skipTest("executable script fixtures require a POSIX host")
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            readobj = self.write_readobj(
+                root,
+                [
+                    (".debug_info", False),
+                    (".comment", False),
+                ],
+            )
+            objcopy = self.write_objcopy(root, annotate=True, extra_removal=".comment")
+            artifacts = root / "artifacts"
+            artifacts.mkdir()
+            tools = hotswap_reduce.ElfSectionTools(
+                str(readobj),
+                str(objcopy),
+                5.0,
+                [".debug_info"],
+                [],
+                artifacts,
+            )
+            path = root / "object.co"
+            path.write_bytes(b"ELF")
+            code_object = hotswap_reduce.CodeObject(
+                "id", path.name, path, hotswap_reduce.sha256_file(path)
+            )
+            with self.assertRaisesRegex(
+                hotswap_reduce.ReducerError, "unrequested sections disappeared"
+            ):
+                tools.remove_sections(code_object, [".debug_info"])
+            self.assertEqual(list(artifacts.iterdir()), [])
 
 
 class EndToEndTests(unittest.TestCase):
@@ -923,6 +1294,53 @@ class EndToEndTests(unittest.TestCase):
             )
             self.assertEqual(final.metadata["cases"], ["discrepant-case"])
 
+    def test_repeats_hierarchical_passes_to_a_fixpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            bundle = write_bundle(
+                root,
+                [b"A", b"B"],
+                {"arguments": ["X", "Y"]},
+            )
+            predicate = root / "nonmonotone-predicate.py"
+            predicate.write_text(
+                textwrap.dedent(
+                    """
+                    import json
+                    import pathlib
+                    import sys
+                    bundle_path = pathlib.Path(sys.argv[1])
+                    bundle = json.loads(bundle_path.read_text())
+                    root = bundle_path.parent
+                    objects = {
+                        (root / entry["path"]).read_bytes().decode()
+                        for entry in bundle["code_objects"]
+                    }
+                    metadata = json.loads((root / bundle["metadata"]).read_text())
+                    arguments = metadata["arguments"]
+                    interesting = (
+                        (objects == {"A", "B"} and arguments in (["X", "Y"], ["X"]))
+                        or (objects == {"A"} and arguments == ["X"])
+                    )
+                    raise SystemExit(0 if interesting else 1)
+                    """
+                ),
+                encoding="utf-8",
+            )
+            output = root / "reduced"
+            args = make_args(
+                bundle,
+                output,
+                sys.executable,
+                [str(predicate), "{bundle}"],
+            )
+            final, _ = hotswap_reduce.run_from_arguments(args)
+            self.assertEqual(
+                [item.path.read_bytes() for item in final.code_objects],
+                [b"A"],
+            )
+            self.assertEqual(final.metadata["arguments"], ["X"])
+
     def test_section_reduction_with_fake_llvm_tools(self) -> None:
         if os.name == "nt":
             self.skipTest("executable script fixtures require a POSIX host")
@@ -1040,6 +1458,74 @@ class EndToEndTests(unittest.TestCase):
                     predicate.read_text(encoding="utf-8"),
                     "raise SystemExit(0)\n",
                 )
+
+    def test_cache_cannot_overwrite_external_bundle_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            external_metadata = root / "metadata.json"
+            external_metadata.write_text(
+                json.dumps(
+                    {
+                        "format": hotswap_reduce.CACHE_FORMAT,
+                        "version": hotswap_reduce.CACHE_VERSION,
+                        "entries": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            original_metadata = external_metadata.read_bytes()
+            bundle = write_bundle(root, [b"object"], external_metadata.name)
+            predicate = root / "predicate.py"
+            predicate.write_text("raise SystemExit(0)\n", encoding="utf-8")
+            args = make_args(
+                bundle,
+                root / "output",
+                sys.executable,
+                [str(predicate), "{bundle}"],
+                cache_file=external_metadata,
+            )
+            with self.assertRaisesRegex(
+                hotswap_reduce.ReducerError, "overwrite reducer input"
+            ):
+                hotswap_reduce.run_from_arguments(args)
+            self.assertEqual(external_metadata.read_bytes(), original_metadata)
+
+    def test_identity_change_during_reduction_aborts_without_output(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            bundle = write_bundle(root, [b"one", b"two"], {})
+            dependency = root / "dependency"
+            dependency.write_bytes(b"original")
+            counter = root / "counter"
+            predicate = root / "predicate.py"
+            predicate.write_text(
+                textwrap.dedent(
+                    f"""
+                    import pathlib
+                    counter = pathlib.Path({str(counter)!r})
+                    dependency = pathlib.Path({str(dependency)!r})
+                    count = int(counter.read_text()) if counter.exists() else 0
+                    counter.write_text(str(count + 1))
+                    if count == 1:
+                        dependency.write_bytes(b"changed")
+                    raise SystemExit(0)
+                    """
+                ),
+                encoding="utf-8",
+            )
+            output = root / "output"
+            args = make_args(
+                bundle,
+                output,
+                sys.executable,
+                [str(predicate), "{bundle}"],
+                cache_dependency=[dependency],
+            )
+            with self.assertRaisesRegex(
+                hotswap_reduce.ReducerError, "identity changed"
+            ):
+                hotswap_reduce.run_from_arguments(args)
+            self.assertFalse(output.exists())
 
     def test_interruption_publishes_nothing_and_preserves_original(self) -> None:
         with tempfile.TemporaryDirectory() as name:

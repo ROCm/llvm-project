@@ -13,9 +13,12 @@ import copy
 import fnmatch
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
+import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -42,6 +45,11 @@ DEFAULT_PROTECTED_SECTIONS = (
     ".strtab",
     ".dynstr",
     ".shstrtab",
+    ".rel",
+    ".rel.*",
+    ".rela",
+    ".rela.*",
+    ".group",
     ".rodata",
     ".data",
     ".bss",
@@ -63,7 +71,7 @@ def load_json(path: Path) -> Any:
     try:
         with path.open("r", encoding="utf-8") as stream:
             return json.load(stream, parse_constant=_reject_json_constant)
-    except (OSError, json.JSONDecodeError, ValueError) as error:
+    except (OSError, json.JSONDecodeError, ValueError, RecursionError) as error:
         raise ReducerError(f"{path}: malformed JSON: {error}") from error
 
 
@@ -76,7 +84,7 @@ def canonical_json_bytes(value: Any) -> bytes:
             separators=(",", ":"),
             sort_keys=True,
         )
-    except (TypeError, ValueError) as error:
+    except (TypeError, ValueError, RecursionError) as error:
         raise ReducerError(f"value is not canonical JSON: {error}") from error
     return text.encode("ascii")
 
@@ -147,6 +155,7 @@ class CodeObject:
 class Candidate:
     code_objects: tuple[CodeObject, ...]
     metadata: dict[str, Any]
+    source_paths: tuple[Path, ...] = ()
 
     def digest(self) -> str:
         digest = hashlib.sha256()
@@ -179,10 +188,17 @@ def _validate_metadata(metadata: Any, source: str) -> dict[str, Any]:
     return copy.deepcopy(metadata)
 
 
-def _resolve_input_path(path_value: Any, base: Path, description: str) -> Path:
+def _resolve_input_path(
+    path_value: Any,
+    base: Path,
+    description: str,
+    require_within_base: bool = False,
+) -> Path:
     if not isinstance(path_value, str) or not path_value:
         raise ReducerError(f"{description}: path must be a non-empty string")
     path = Path(path_value)
+    if require_within_base and path.is_absolute():
+        raise ReducerError(f"{description}: bundle path must be relative")
     if not path.is_absolute():
         path = base / path
     try:
@@ -193,6 +209,8 @@ def _resolve_input_path(path_value: Any, base: Path, description: str) -> Path:
         ) from error
     if not path.is_file():
         raise ReducerError(f"{description}: {path} is not a regular file")
+    if require_within_base and not _path_is_within(path, base.resolve()):
+        raise ReducerError(f"{description}: bundle path escapes {base.resolve()}")
     return path
 
 
@@ -231,6 +249,7 @@ def load_bundle(path: Path) -> Candidate:
             object_value.get("path"),
             bundle_path.parent,
             f"{bundle_path}: code_objects[{index}]",
+            require_within_base=True,
         )
         code_objects.append(
             CodeObject(
@@ -241,17 +260,23 @@ def load_bundle(path: Path) -> Candidate:
             )
         )
 
+    source_paths = [bundle_path]
+    source_paths.extend(code_object.path for code_object in code_objects)
     metadata_value = value.get("metadata", {})
     if isinstance(metadata_value, str):
         metadata_path = _resolve_input_path(
-            metadata_value, bundle_path.parent, f"{bundle_path}: metadata"
+            metadata_value,
+            bundle_path.parent,
+            f"{bundle_path}: metadata",
+            require_within_base=True,
         )
+        source_paths.append(metadata_path)
         metadata_value = load_json(metadata_path)
         metadata_source = str(metadata_path)
     else:
         metadata_source = f"{bundle_path}: metadata"
     metadata = _validate_metadata(metadata_value, metadata_source)
-    return Candidate(tuple(code_objects), metadata)
+    return Candidate(tuple(code_objects), metadata, tuple(source_paths))
 
 
 def load_nul_worklist(path: Path) -> list[Path]:
@@ -326,16 +351,20 @@ def load_inputs(
             )
         )
 
+    source_paths = [item.path for item in code_objects]
+    if worklist is not None:
+        source_paths.append(worklist.resolve())
     if metadata_path is None:
         metadata: dict[str, Any] = {}
     else:
         resolved_metadata = _resolve_input_path(
             str(metadata_path), Path.cwd(), "--metadata"
         )
+        source_paths.append(resolved_metadata)
         metadata = _validate_metadata(
             load_json(resolved_metadata), str(resolved_metadata)
         )
-    return Candidate(tuple(code_objects), metadata)
+    return Candidate(tuple(code_objects), metadata, tuple(source_paths))
 
 
 def materialize_candidate(candidate: Candidate, destination: Path) -> dict[str, Any]:
@@ -350,6 +379,11 @@ def materialize_candidate(candidate: Candidate, destination: Path) -> dict[str, 
         relative_path = Path("objects") / output_name
         output_path = destination / relative_path
         shutil.copyfile(code_object.path, output_path)
+        copied_digest = sha256_file(output_path)
+        if copied_digest != code_object.digest:
+            raise ReducerError(
+                f"{code_object.path}: content changed while materializing candidate"
+            )
         object_entries.append(
             {
                 "id": code_object.object_id,
@@ -411,7 +445,6 @@ class PredicateResult:
         return {
             "status": self.status,
             "exit_codes": list(self.exit_codes),
-            "cached": self.cached,
             "stdout": self.stdout,
             "stderr": self.stderr,
         }
@@ -435,20 +468,24 @@ class PredicateCache:
 
     def get(self, key: str) -> Optional[PredicateResult]:
         value = self.values.get(key)
-        if not isinstance(value, dict):
+        if value is None:
             return None
+        if not isinstance(value, dict):
+            raise ReducerError(f"{self.path or 'predicate cache'}: corrupt entry {key}")
         status = value.get("status")
         exit_codes = value.get("exit_codes")
-        if status not in ("interesting", "uninteresting"):
-            return None
-        if not isinstance(exit_codes, list):
-            return None
-        if not all(code is None or isinstance(code, int) for code in exit_codes):
-            return None
+        if status not in ("interesting", "uninteresting") or not isinstance(
+            exit_codes, list
+        ):
+            raise ReducerError(f"{self.path or 'predicate cache'}: corrupt entry {key}")
+        if not exit_codes or not all(
+            isinstance(code, int) and not isinstance(code, bool) for code in exit_codes
+        ):
+            raise ReducerError(f"{self.path or 'predicate cache'}: corrupt entry {key}")
         stdout = value.get("stdout", "")
         stderr = value.get("stderr", "")
         if not isinstance(stdout, str) or not isinstance(stderr, str):
-            return None
+            raise ReducerError(f"{self.path or 'predicate cache'}: corrupt entry {key}")
         return PredicateResult(
             status,
             tuple(exit_codes),
@@ -542,7 +579,7 @@ class PredicateRunner:
 
     def _collect_identity_files(
         self, executable: Path, cache_dependencies: Sequence[Path]
-    ) -> tuple[dict[str, str], ...]:
+    ) -> tuple[dict[str, Any], ...]:
         identified_paths: list[tuple[str, Path]] = [("executable", executable)]
         for index, argument in enumerate(self.argv_template[1:], start=1):
             if any(placeholder in argument for placeholder in KNOWN_PLACEHOLDERS):
@@ -558,25 +595,45 @@ class PredicateRunner:
                 )
             identified_paths.append((f"dependency[{index}]", dependency_path))
 
-        identities: list[dict[str, str]] = []
+        identities: list[dict[str, Any]] = []
         seen_paths: set[Path] = set()
         for role, path in identified_paths:
             if path in seen_paths:
                 continue
             seen_paths.add(path)
-            identities.append(
-                {
-                    "path": str(path),
-                    "role": role,
-                    "sha256": sha256_file(path),
-                }
-            )
+            try:
+                file_mode = stat.S_IMODE(path.stat().st_mode)
+            except OSError as error:
+                raise ReducerError(
+                    f"could not inspect predicate identity {path}: {error}"
+                )
+            identity: dict[str, Any] = {
+                "path": str(path),
+                "role": role,
+                "sha256": sha256_file(path),
+                "mode": file_mode,
+            }
+            if role == "executable":
+                identity["executable"] = os.access(path, os.X_OK)
+            identities.append(identity)
         return tuple(identities)
 
     def _verify_identity_files(self) -> None:
         for identity in self.identity_files:
             path = Path(identity["path"])
-            if not path.is_file() or sha256_file(path) != identity["sha256"]:
+            try:
+                current_mode = stat.S_IMODE(path.stat().st_mode)
+            except OSError:
+                current_mode = None
+            executable_matches = identity.get("role") != "executable" or os.access(
+                path, os.X_OK
+            ) == identity.get("executable")
+            if (
+                not path.is_file()
+                or current_mode != identity.get("mode")
+                or not executable_matches
+                or sha256_file(path) != identity["sha256"]
+            ):
                 raise ReducerError(
                     f"predicate identity changed during reduction: {path}"
                 )
@@ -634,18 +691,110 @@ class PredicateRunner:
             text = text[:CAPTURE_LIMIT] + "\n<truncated>"
         return text
 
+    @staticmethod
+    def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
+        if os.name == "nt":
+            if process.poll() is None:
+                try:
+                    subprocess.run(
+                        [
+                            "taskkill.exe",
+                            "/PID",
+                            str(process.pid),
+                            "/T",
+                            "/F",
+                        ],
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                        timeout=5.0,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+                if process.poll() is None:
+                    process.kill()
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                if process.poll() is None:
+                    process.kill()
+        try:
+            process.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+
+    def _run_predicate(
+        self, argv: Sequence[str], workspace: Path
+    ) -> tuple[Optional[int], str, str, bool]:
+        creation_flags = (
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
+        )
+        with tempfile.TemporaryFile() as stdout_stream:
+            with tempfile.TemporaryFile() as stderr_stream:
+                try:
+                    process = subprocess.Popen(
+                        argv,
+                        cwd=workspace,
+                        stdin=subprocess.DEVNULL,
+                        stdout=stdout_stream,
+                        stderr=stderr_stream,
+                        start_new_session=os.name != "nt",
+                        creationflags=creation_flags,
+                    )
+                except OSError as error:
+                    return (
+                        None,
+                        "",
+                        self._normalize_capture(
+                            f"could not launch predicate: {error}", workspace
+                        ),
+                        False,
+                    )
+                timed_out = False
+                try:
+                    try:
+                        return_code = process.wait(timeout=self.timeout)
+                    except subprocess.TimeoutExpired:
+                        timed_out = True
+                        return_code = None
+                finally:
+                    self._terminate_process_tree(process)
+                stdout_stream.seek(0)
+                stderr_stream.seek(0)
+                stdout = self._normalize_capture(
+                    stdout_stream.read(CAPTURE_LIMIT + 1), workspace
+                )
+                stderr = self._normalize_capture(
+                    stderr_stream.read(CAPTURE_LIMIT + 1), workspace
+                )
+                return return_code, stdout, stderr, timed_out
+
     def evaluate(self, candidate: Candidate) -> PredicateResult:
         self._verify_identity_files()
         candidate_digest = candidate.digest()
         cache_key = self._cache_key(candidate_digest)
         cached = self.cache.get(cache_key)
         if cached is not None:
+            if (
+                len(cached.exit_codes) != self.runs
+                or len(set(cached.exit_codes)) != 1
+                or cached.interesting
+                != (cached.exit_codes[0] == self.interesting_exit_code)
+            ):
+                raise ReducerError(
+                    f"{self.cache.path or 'predicate cache'}: corrupt entry {cache_key}"
+                )
             return cached
 
         exit_codes: list[Optional[int]] = []
         outputs: list[str] = []
         errors: list[str] = []
-        outcomes: list[bool] = []
         for _ in range(self.runs):
             with tempfile.TemporaryDirectory(
                 prefix="predicate-", dir=self.work_root
@@ -653,49 +802,32 @@ class PredicateRunner:
                 workspace = Path(temporary_name)
                 materialize_candidate(candidate, workspace)
                 argv = self._expand_argv(workspace, candidate)
-                try:
-                    completed = subprocess.run(
-                        argv,
-                        cwd=workspace,
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        check=False,
-                        timeout=self.timeout,
-                    )
-                except subprocess.TimeoutExpired as error:
-                    exit_codes.append(None)
-                    outputs.append(self._normalize_capture(error.stdout, workspace))
-                    errors.append(self._normalize_capture(error.stderr, workspace))
+                return_code, stdout, stderr, timed_out = self._run_predicate(
+                    argv, workspace
+                )
+                exit_codes.append(return_code)
+                outputs.append(stdout)
+                errors.append(stderr)
+                if timed_out:
                     return PredicateResult(
                         "timeout",
                         tuple(exit_codes),
                         "\n".join(outputs),
                         "\n".join(errors),
                     )
-                except OSError as error:
-                    exit_codes.append(None)
-                    errors.append(
-                        self._normalize_capture(
-                            f"could not launch predicate: {error}", workspace
-                        )
-                    )
+                if return_code is None:
                     return PredicateResult(
                         "launch-error",
                         tuple(exit_codes),
                         "\n".join(outputs),
                         "\n".join(errors),
                     )
-                exit_codes.append(completed.returncode)
-                outcomes.append(completed.returncode == self.interesting_exit_code)
-                outputs.append(self._normalize_capture(completed.stdout, workspace))
-                errors.append(self._normalize_capture(completed.stderr, workspace))
 
         self._verify_identity_files()
-        if all(outcomes):
-            status = "interesting"
-        elif any(outcomes):
+        if len(set(exit_codes)) != 1:
             status = "flaky"
+        elif exit_codes[0] == self.interesting_exit_code:
+            status = "interesting"
         else:
             status = "uninteresting"
         result = PredicateResult(
@@ -840,6 +972,7 @@ class ElfSectionTools:
             UnicodeDecodeError,
             json.JSONDecodeError,
             ValueError,
+            RecursionError,
             IndexError,
             KeyError,
             TypeError,
@@ -885,19 +1018,67 @@ class ElfSectionTools:
         return sections
 
     def removable_sections(self, path: Path) -> list[str]:
-        removable: list[str] = []
+        sections_by_name: dict[str, list[SectionInfo]] = {}
+        section_order: list[str] = []
         for section in self.list_sections(path):
+            if section.name not in sections_by_name:
+                sections_by_name[section.name] = []
+                section_order.append(section.name)
+            sections_by_name[section.name].append(section)
+
+        removable: list[str] = []
+        for section_name in section_order:
+            same_name_sections = sections_by_name[section_name]
             allowed = any(
-                fnmatch.fnmatchcase(section.name, pattern)
+                fnmatch.fnmatchcase(section_name, pattern)
                 for pattern in self.allow_patterns
             )
-            protected = section.allocated or any(
-                fnmatch.fnmatchcase(section.name, pattern)
+            protected = any(section.allocated for section in same_name_sections) or any(
+                fnmatch.fnmatchcase(section_name, pattern)
                 for pattern in self.protect_patterns
             )
             if allowed and not protected:
-                removable.append(section.name)
+                removable.append(section_name)
         return removable
+
+    def _verify_objcopy_output(
+        self,
+        input_path: Path,
+        output_path: Path,
+        requested_removals: Sequence[str],
+    ) -> None:
+        input_sections = self.list_sections(input_path)
+        output_sections = self.list_sections(output_path)
+        output_counts: dict[str, int] = {}
+        for section in output_sections:
+            output_counts[section.name] = output_counts.get(section.name, 0) + 1
+        requested = set(requested_removals)
+        retained_counts: dict[str, int] = {}
+        for section in input_sections:
+            if section.name not in requested:
+                retained_counts[section.name] = retained_counts.get(section.name, 0) + 1
+        remaining_requested = sorted(
+            name for name in requested if output_counts.get(name, 0) != 0
+        )
+        missing_retained = sorted(
+            name
+            for name, count in retained_counts.items()
+            if output_counts.get(name, 0) < count
+        )
+        if remaining_requested or missing_retained:
+            details: list[str] = []
+            if remaining_requested:
+                details.append(
+                    "requested sections remain: " + ", ".join(remaining_requested)
+                )
+            if missing_retained:
+                details.append(
+                    "unrequested sections disappeared: " + ", ".join(missing_retained)
+                )
+            raise ReducerError(
+                f"llvm-objcopy output verification failed for {input_path}: "
+                + "; ".join(details)
+            )
 
     def remove_sections(
         self, code_object: CodeObject, section_names: Sequence[str]
@@ -964,6 +1145,13 @@ class ElfSectionTools:
                     f"llvm-objcopy produced an empty object for "
                     f"{code_object.object_id!r}"
                 )
+            try:
+                self._verify_objcopy_output(
+                    code_object.path, temporary_path, section_names
+                )
+            except ReducerError:
+                temporary_path.unlink()
+                raise
             os.replace(temporary_path, output_path)
             self.artifact_digests[output_path] = sha256_file(output_path)
         output_digest = self.artifact_digests.get(output_path)
@@ -1000,22 +1188,7 @@ class Reducer:
         candidate: Candidate,
     ) -> bool:
         candidate_digest = candidate.digest()
-        try:
-            result = self.runner.evaluate(candidate)
-        except ReducerError as error:
-            self.transformations.append(
-                {
-                    "pass": pass_name,
-                    "transformation": transformation,
-                    "candidate_digest": candidate_digest,
-                    "accepted": False,
-                    "predicate": {
-                        "status": "configuration-error",
-                        "error": str(error),
-                    },
-                }
-            )
-            return False
+        result = self.runner.evaluate(candidate)
         accepted = result.interesting
         self.transformations.append(
             {
@@ -1169,9 +1342,13 @@ class Reducer:
                 "the original input is not stably interesting: "
                 f"predicate status is {initial_result.status!r}"
             )
-        self.reduce_bundle()
-        self.reduce_metadata()
-        self.reduce_sections()
+        while True:
+            previous_digest = self.current.digest()
+            self.reduce_bundle()
+            self.reduce_metadata()
+            self.reduce_sections()
+            if self.current.digest() == previous_digest:
+                break
         return self.current
 
     def make_log(self) -> dict[str, Any]:
@@ -1249,8 +1426,8 @@ def _path_is_within(path: Path, directory: Path) -> bool:
 
 def _positive_float(value: str) -> float:
     parsed = float(value)
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be greater than zero")
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be finite and greater than zero")
     return parsed
 
 
@@ -1380,10 +1557,7 @@ def run_from_arguments(args: argparse.Namespace) -> tuple[Candidate, dict[str, A
         raise ReducerError(f"refusing to overwrite existing output {output}")
     cache_path = args.cache_file.resolve() if args.cache_file is not None else None
     if cache_path is not None:
-        protected_inputs = {item.path.resolve() for item in initial.code_objects}
-        for path in (args.bundle, args.metadata, args.worklist):
-            if path is not None:
-                protected_inputs.add(path.resolve())
+        protected_inputs = {path.resolve() for path in initial.source_paths}
         protected_inputs.update(path.resolve() for path in args.cache_dependency)
         if cache_path in protected_inputs:
             raise ReducerError(
@@ -1449,6 +1623,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 130
     except ReducerError as error:
         print(f"hotswap-reduce: error: {error}", file=sys.stderr)
+        return 1
+    except OSError as error:
+        print(f"hotswap-reduce: filesystem error: {error}", file=sys.stderr)
         return 1
     print(
         f"wrote {args.output} with {len(final.code_objects)} code object(s); "

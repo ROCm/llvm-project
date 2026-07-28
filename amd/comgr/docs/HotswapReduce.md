@@ -1,11 +1,10 @@
 # Hotswap failure reducer
 
 `utils/hotswap/hotswap_reduce.py` turns a failing hotswap corpus bundle into a
-small,
-standalone reproducer. It only accepts a transformation when a caller-provided
-interestingness command continues to return the configured exit code. The
-original inputs are never modified and the output directory is published
-atomically.
+small, standalone reproducer. It only accepts a transformation when a
+caller-provided interestingness command continues to return the configured exit
+code. The original inputs are never modified and the output directory is
+published atomically.
 
 The reducer works from the outside in:
 
@@ -14,11 +13,17 @@ The reducer works from the outside in:
    lists, followed by each retained case's `arguments` list.
 3. Optionally remove explicitly allowed, non-allocated ELF sections with
    `llvm-objcopy`.
+4. Repeat the hierarchy until a complete pass makes no change. This gives each
+   retained dimension another reduction opportunity after lower-level changes.
 
 The section pass gets section names and flags from `llvm-readobj` JSON. It does
 not parse ELF itself. Allocated sections and the default runtime-critical
 section set are always protected. Section removal is disabled unless at least
-one `--allow-remove-section` glob is provided.
+one `--allow-remove-section` glob is provided. If multiple sections have the
+same name, one allocated or protected instance protects every instance because
+`llvm-objcopy` removes sections by name. Every transformed output is parsed
+again to verify that it is still AMDGPU ELF, every requested section is gone,
+and no unrequested section disappeared.
 
 ## Interestingness command
 
@@ -33,14 +38,20 @@ placeholders are expanded for each candidate:
 
 Exit zero means interesting by default. Use `--interesting-exit-code` when the
 reproducer intentionally reports a failure with a nonzero exit. A timeout,
-launch error, or disagreement between `--predicate-runs` repetitions rejects a
-candidate. Stable outcomes are cached by the complete candidate content and
-predicate configuration; `--cache-file` makes that cache persistent.
-The resolved predicate executable and regular-file argv items are hashed into
-that identity. Repeat `--cache-dependency` for dynamically loaded libraries,
-reference data, or other file inputs, and repeat `--cache-tag` for relevant
-environment or configuration identity. A dependency that changes during a run
-aborts the reduction instead of consulting a stale cache entry.
+launch error, or exit-code disagreement between `--predicate-runs` repetitions
+rejects a candidate. Predicate output retained in the log is bounded to avoid
+unbounded memory use. Timed-out predicate process trees are terminated before
+their temporary workspace is removed.
+
+Stable outcomes are cached by the complete candidate content and predicate
+configuration; `--cache-file` makes that cache persistent. The resolved
+predicate executable and regular-file argv items are identified by path,
+content, and file mode. Repeat `--cache-dependency` for dynamically loaded
+libraries, reference data, or other file inputs, and repeat `--cache-tag` for
+relevant environment or configuration identity. A dependency that changes
+during a run aborts the reduction instead of consulting a stale cache entry.
+Predicates must be deterministic and must not rely on side effects outside
+their candidate workspace because a cache hit replaces the process execution.
 
 For example:
 
@@ -58,9 +69,9 @@ python3 utils/hotswap/hotswap_reduce.py \
 ```
 
 No argument is evaluated by a shell. Supplying an absolute predicate and
-absolute script path makes the recorded reproduction argv directly portable.
-Existing regular-file argv items are resolved to absolute paths before the
-first predicate run.
+absolute script path makes the recorded reproduction argv unambiguous on the
+same filesystem. Existing regular-file argv items are resolved to absolute
+paths before the first predicate run.
 
 ## PR #3646 offline differential workflow
 
@@ -99,7 +110,9 @@ oracle itself.
 ## Input and output bundle
 
 Input bundles use this versioned JSON form. Object paths and a string-valued
-`metadata` path are relative to the bundle file.
+`metadata` path are relative to the bundle file and cannot escape its directory,
+including through a symlink. Use direct `--code-object` or `--worklist` input
+when the object files intentionally live elsewhere.
 
 ```json
 {
@@ -145,14 +158,15 @@ The output contains:
 - a final reproduction argv and interesting exit code in that log
 
 The log also records original and final content digests. It intentionally
-contains no timestamps or elapsed times so identical inputs and stable
-predicates produce identical logs.
+contains no timestamps, elapsed times, or cache-hit state so identical inputs
+and stable predicates produce identical logs.
 
 ## Safety limits
 
 - Existing output directories are never overwritten.
-- Cache files cannot overwrite an input, predicate identity, dependency, or
-  live inside the atomically published output directory.
+- Cache files cannot overwrite an input (including external bundle metadata),
+  predicate identity, dependency, or live inside the atomically published
+  output directory.
 - Malformed bundles and metadata fail before a predicate runs.
 - Section pruning requires AMDGPU ELF input and available LLVM tools.
 - Protected or allocated sections cannot be opted into removal.
