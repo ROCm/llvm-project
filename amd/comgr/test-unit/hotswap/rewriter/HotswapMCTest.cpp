@@ -24,6 +24,8 @@
 #include "gtest/gtest.h"
 
 #include <cstring>
+#include <functional>
+#include <iterator>
 #include <limits>
 #include <mutex>
 #include <vector>
@@ -3238,12 +3240,13 @@ TEST(WmmaScale16, UnrecognizedVectorRegisterCannotDisappearFromProof) {
   ASSERT_TRUE(S.Valid);
   ASSERT_NE(S.MRI, nullptr);
 
-  auto FindRegister = [&](llvm::StringRef Name) {
-    for (unsigned Reg = 1; Reg != S.MRI->getNumRegs(); ++Reg)
-      if (Name == S.MRI->getName(Reg))
-        return llvm::MCRegister(Reg);
-    return llvm::MCRegister();
-  };
+  std::function<llvm::MCRegister(llvm::StringRef)> FindRegister =
+      [&](llvm::StringRef Name) {
+        for (unsigned Reg = 1; Reg != S.MRI->getNumRegs(); ++Reg)
+          if (Name == S.MRI->getName(Reg))
+            return llvm::MCRegister(Reg);
+        return llvm::MCRegister();
+      };
 
   // AGPRs are vector registers but are deliberately not representable as an
   // encoded v0..v255 range. Such an operand must invalidate the physical-VGPR

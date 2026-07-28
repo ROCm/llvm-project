@@ -14,19 +14,24 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 // DISASM-NOT: v_wmma_scale16
-// DISASM: v_mov_b32_e32 v[[TMP:[0-9]+]]{{.*}}, v40
+// DISASM-NOT: v_perm_b32
 // DISASM: s_wait_xcnt 0x0
 // DISASM-NEXT: s_set_vgpr_msb
-// DISASM: v_perm_b32 v40, v[[TMP]]{{.*}}, v41, 0x6040200
-// DISASM: v_mov_b32_e32 v[[TMP]]{{.*}}, v42
+// DISASM-NEXT: v_and_b32{{(_e32)?}} v250, 0xff, v40
 // DISASM: s_wait_xcnt 0x0
 // DISASM-NEXT: s_set_vgpr_msb
-// DISASM: v_perm_b32 v42, v[[TMP]]{{.*}}, v43, 0x6040200
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, v40, v42
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, v41, v43
+// DISASM: v_bfe_u32 v254, v40, 16, 8
+// DISASM: v_bfe_u32 v252, v40, 8, 8
+// DISASM: s_wait_xcnt 0x0
+// DISASM-NEXT: s_set_vgpr_msb
+// DISASM-NEXT: v_mov_b32{{(_e32)?}} v242, v16{{.*}}v272
+// DISASM: s_wait_xcnt 0x0
+// DISASM-NEXT: s_set_vgpr_msb
+// DISASM-NEXT: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[242:249], {{.*}}, v[0:7], v250, v251
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[242:249], {{.*}}, v[0:7], v252, v253
 //
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, 1.0, v40, v42{{.*}}neg_hi:[0,0,1]
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, v[0:7], v41, v43
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, 1.0, v56, v57{{.*}}neg_hi:[0,0,1]
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 {{.*}}, v[0:7], v58, v59
 // DISASM-NOT: neg_hi
 // DISASM: v_nop
 
