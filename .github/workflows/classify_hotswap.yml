@@ -29,6 +29,7 @@ permissions:
 jobs:
   classify:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     outputs:
       hotswap_only: ${{ steps.detect.outputs.hotswap_only }}
     steps:
@@ -47,11 +48,14 @@ jobs:
             exit 0
           fi
 
+          # Fall back to full CI on any API error: an empty/failed fetch yields
+          # hotswap_only=false, and the job still exits 0 so the build jobs that
+          # depend on `classify` are not skipped.
           files="$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename')"
+            --jq '.[].filename' 2>/dev/null || true)"
 
           if [[ -z "${files}" ]]; then
-            echo "No changed files reported; hotswap_only=false"
+            echo "No changed files reported (or fetch failed); hotswap_only=false"
             echo "hotswap_only=false" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
