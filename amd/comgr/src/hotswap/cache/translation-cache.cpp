@@ -612,6 +612,21 @@ std::string sha256Hex(llvm::MemoryBufferRef buffer) {
   return os.str();
 }
 
+std::string translationCacheKey(const TranslationCacheRequest &request) {
+  TranslationCacheKeyBuildTimings timings;
+  llvm::Expected<KeyData> keyData =
+      buildKeyData(request, /*CollectTimings=*/false, timings);
+  if (!keyData) {
+    // Derivation failed (empty source, no kernels, unreadable rules, ...).
+    // Swallow the error and report "uncacheable" via an empty key; the
+    // producer still runs, we just don't cache. Must not throw (this TU is
+    // built -fno-exceptions).
+    llvm::consumeError(keyData.takeError());
+    return std::string();
+  }
+  return std::move(keyData->key);
+}
+
 TranslationCacheLookup
 lookupTranslationCache(const TranslationCacheRequest &request) {
   auto totalStart = timingStart(request.CollectTimings);

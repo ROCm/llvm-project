@@ -27,7 +27,12 @@ add_definitions(${LLVM_DEFINITIONS})
 add_library(hotswap-translation-cache OBJECT
   translation-cache.cpp
   code-object-utils.cpp
+  mem-cache.cpp
 )
+
+if(BUILD_TESTING)
+  target_compile_definitions(hotswap-translation-cache PRIVATE COMGR_HOTSWAP_MEM_CACHE_TESTING)
+endif()
 
 if(NOT TARGET hotswap::translation_cache)
   add_library(hotswap::translation_cache ALIAS hotswap-translation-cache)

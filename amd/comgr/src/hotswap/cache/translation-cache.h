@@ -117,6 +117,14 @@ skippedKernelForTranslationCache(llvm::ArrayRef<std::string> kernelNames,
 
 std::string sha256Hex(llvm::MemoryBufferRef buffer);
 
+// Returns the content-addressed cache key for `request` -- the same SHA-256
+// hex identity the disk tier stores under. Empty string if the key cannot be
+// derived (e.g. empty source object, missing gfx, no kernel metadata, or an
+// unreadable rules file); callers treat an empty key as "uncacheable" and
+// bypass caching for that request. Shared by the in-memory tier so both tiers
+// agree on identity by construction.
+std::string translationCacheKey(const TranslationCacheRequest &request);
+
 } // namespace COMGR::hotswap
 
 #endif
