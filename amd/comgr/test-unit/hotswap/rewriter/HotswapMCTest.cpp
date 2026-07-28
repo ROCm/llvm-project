@@ -1473,6 +1473,23 @@ TEST(CollectDirectBranchTargets, RejectsUndecodedMaterializationSlot) {
   EXPECT_TRUE(Info->HasUnresolvedTargets);
 }
 
+TEST(CollectDirectBranchTargets, UndecodedScalarClassRemainsUnbounded) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const uint8_t Bytes[] = {0xff, 0xff, 0xff, 0xff};
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes, sizeof(Bytes), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  ASSERT_FALSE(Decoded.front().DecodeSucceeded);
+
+  std::optional<DirectControlFlowInfo> Info = collectDirectBranchTargets(
+      Decoded, S, /*TextAddr=*/0, sizeof(Bytes), /*DeclaredEntries=*/{0},
+      /*FunctionRanges=*/{}, /*ExternalEntries=*/{}, Bytes);
+  ASSERT_TRUE(Info);
+  EXPECT_TRUE(Info->HasUnboundedIndirectEntries);
+}
+
 TEST(CollectDirectBranchTargets, RejectsUnboundedIndirectEntry) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -3181,22 +3198,6 @@ TEST(WmmaScale16, PhysicalVgprRangeMustFitOneBank) {
   EXPECT_FALSE(physicalVgprRangeFitsOneBank(1024, 1, 1024));
 }
 
-TEST(WmmaScale16, LegacyB0Vop3ScalarSourceEncodingIsExact) {
-  constexpr uint32_t ObservedWord0 = 0xd0310000u;
-  constexpr uint32_t ObservedAlternateSourceWord = 1u << 20;
-  constexpr uint32_t AllowedModifier = 1u << 14;
-
-  EXPECT_TRUE(isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0, 0));
-  EXPECT_TRUE(isLegacyB0Vop3ScalarSourceEncoding(
-      ObservedWord0 | AllowedModifier, ObservedAlternateSourceWord));
-
-  EXPECT_FALSE(isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0 | 1u, 0));
-  EXPECT_FALSE(
-      isLegacyB0Vop3ScalarSourceEncoding(ObservedWord0 ^ (1u << 16), 0));
-  EXPECT_FALSE(isLegacyB0Vop3ScalarSourceEncoding(
-      ObservedWord0, ObservedAlternateSourceWord | 1u));
-}
-
 TEST(WmmaScale16, UnrecognizedVectorRegisterCannotDisappearFromProof) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
@@ -3220,6 +3221,7 @@ TEST(WmmaScale16, UnrecognizedVectorRegisterCannotDisappearFromProof) {
   EXPECT_TRUE(isVectorRegisterOrAlias(Agpr0, *S.MRI));
   EXPECT_FALSE(isVectorRegisterOrAlias(Sgpr0, *S.MRI));
 }
+
 TEST(FindNearestSled, RejectsOverflowingHeadroom) {
   std::vector<NopSled> Sleds = {{0, 64, 60, 0, 64}, {100, 128, 100, 100, 128}};
   EXPECT_EQ(findNearestSled(Sleds, 0, std::numeric_limits<uint64_t>::max()),

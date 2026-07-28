@@ -1425,14 +1425,6 @@ bool physicalVgprRangeFitsOneBank(unsigned Base, unsigned Width,
 bool isVectorRegisterOrAlias(llvm::MCRegister Reg,
                              const llvm::MCRegisterInfo &MRI);
 
-/// Return true only for the complete observed gfx1250 B0 legacy-VOP3 scalar
-/// source encoding that the A0 MC decoder reports as two unknown dwords.
-bool isLegacyB0Vop3ScalarSourceEncoding(uint32_t Word0, uint32_t Word1);
-
-/// Match the complete legacy B0 pair at Decoded[HeadIndex]. A known control
-/// flow entry into the decoder-created continuation dword rejects the pair.
-bool isUndecodedB0Vop3ScalarSourcePair(const PatchContext &Ctx,
-                                       size_t HeadIndex);
 enum class VgprMsbOperand : unsigned {
   Src0 = 0,
   Src1 = 2,

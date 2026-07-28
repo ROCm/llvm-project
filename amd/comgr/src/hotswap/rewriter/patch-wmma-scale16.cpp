@@ -1096,35 +1096,8 @@ struct ScaleForwardGraph {
   std::vector<ForwardVgprProofNode> Nodes;
   std::vector<size_t> GlobalIndices;
   std::vector<int16_t> ModeBefore;
-  BitVector UndecodedVop3Heads;
   size_t EntryNode = 0;
 };
-
-// The B0 f4gemm object contains a legacy VOP3 opcode that the A0 gfx1250 MC
-// decoder intentionally does not recognize. The failed decode advances only
-// one dword, so its second dword appears as a separate unknown instruction.
-//
-// Recognize only the exact observed encoding:
-//   * legacy VOP3 major 0x34 and opcode 0x31;
-//   * vdst encoding zero, with only the observed bit-14 modifier variation;
-//   * scalar source encodings, in either observed second-dword spelling.
-//
-// We do not assign the unknown opcode semantics. Instead, conservatively model
-// encoded v0 as a use in every physical bank (so it cannot be scratch), model
-// no kill, and skip the split continuation dword. This is enough to traverse
-// the instruction without relying on whether opcode 0x31 has a vector or
-// scalar destination on B0.
-static bool recognizeUndecodedB0Vop3ScalarSources(PatchContext &Ctx,
-                                                  size_t Global,
-                                                  unsigned MaxVgprs,
-                                                  BitVector &ConservativeUses) {
-  if (!isUndecodedB0Vop3ScalarSourcePair(Ctx, Global))
-    return false;
-
-  for (unsigned Physical = 0; Physical < MaxVgprs; Physical += VgprBankSize)
-    ConservativeUses.set(Physical);
-  return true;
-}
 
 static std::optional<ScaleForwardGraph>
 buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
@@ -1156,7 +1129,6 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
     Graph.Nodes.emplace_back(MaxVgprs);
     Graph.GlobalIndices.push_back(I);
   }
-  Graph.UndecodedVop3Heads.resize(Count);
   Graph.EntryNode = SiteIdx + 1 - BeginIndex;
 
   DenseMap<uint64_t, size_t> IndexAtOffset;
@@ -1180,15 +1152,6 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
     // reading it, so no incoming scratch value can be observed there.
     if (Global == SiteIdx) {
       Node.SafeTerminal = true;
-      continue;
-    }
-    if (!DI.DecodeSucceeded && recognizeUndecodedB0Vop3ScalarSources(
-                                   Ctx, Global, MaxVgprs, Node.Uses)) {
-      if (Local + 2 >= Count)
-        Node.HasUnsafeExit = true;
-      else
-        Node.Successors.push_back(Local + 2);
-      Graph.UndecodedVop3Heads.set(Local);
       continue;
     }
     if (!DI.DecodeSucceeded ||
@@ -1240,11 +1203,9 @@ buildScaleForwardGraph(PatchContext &Ctx, size_t SiteIdx, unsigned EntryMode,
     const ForwardVgprProofNode &Node = Graph.Nodes[Local];
     if (Node.Opaque || Node.SafeTerminal)
       continue;
-    int16_t Out = Graph.UndecodedVop3Heads.test(Local)
-                      ? Graph.ModeBefore[Local]
-                      : transferExactVgprMsbMode(
-                            Graph.ModeBefore[Local],
-                            Ctx.Decoded[Graph.GlobalIndices[Local]], Ctx.LS);
+    int16_t Out = transferExactVgprMsbMode(
+        Graph.ModeBefore[Local], Ctx.Decoded[Graph.GlobalIndices[Local]],
+        Ctx.LS);
     for (size_t Successor : Node.Successors) {
       int16_t Old = Graph.ModeBefore[Successor];
       int16_t Merged = Old == VgprMsbUnreachable ? Out
@@ -1279,8 +1240,6 @@ computeForwardDeadPhysicalVgprs(PatchContext &Ctx, size_t SiteIdx,
   for (size_t Local = 0; Local != Graph->Nodes.size(); ++Local) {
     ForwardVgprProofNode &Node = Graph->Nodes[Local];
     if (Node.Opaque || Node.SafeTerminal)
-      continue;
-    if (Graph->UndecodedVop3Heads.test(Local))
       continue;
 
     int16_t Mode = Graph->ModeBefore[Local];
