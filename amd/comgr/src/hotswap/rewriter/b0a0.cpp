@@ -1,4 +1,4 @@
-//===- b0a0.cpp - GFX1250 B0-to-A0 patch dispatcher -----------------------===//
+//===- comgr-hotswap-b0a0.cpp - GFX1250 B0-to-A0 patch dispatcher --------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -11,9 +11,9 @@
 /// decode -> patch -> trampoline growth -> DWARF update.
 ///
 /// Patch passes are dispatched through HotswapPatchVTable. The membership
-/// list lives in patches.def; each entry corresponds to one
+/// list lives in comgr-hotswap-patches.def; each entry corresponds to one
 /// slot on the vtable and one register*Patch function in a sibling
-/// patch-*.cpp. installHotswapPatches() walks the .def to
+/// comgr-hotswap-patch-*.cpp. installHotswapPatches() walks the .def to
 /// bind every slot. The vtable is exposed through getHotswapPatchVTable(),
 /// a Meyers singleton whose initializer eagerly runs installHotswapPatches
 /// on its private storage; C++11 [stmt.dcl]/4 guarantees this happens
@@ -28,13 +28,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-env.h"
-#include "internal.h"
+#include "comgr-hotswap-internal.h"
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <algorithm>
@@ -43,6 +45,7 @@
 #include <cstdio>
 #include <limits>
 #include <mutex>
+#include <tuple>
 
 using namespace llvm;
 
@@ -182,8 +185,8 @@ void patchDebugFrame(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
 
 // -- HotswapPatchVTable plumbing ----------------------------------------------
 //
-// Patch-module forward declarations live in internal.h
-// (driven off the same patches.def), so libamd_comgr and
+// Patch-module forward declarations live in comgr-hotswap-internal.h
+// (driven off the same comgr-hotswap-patches.def), so libamd_comgr and
 // the unit tests share one prototype source. Here we supply the
 // singleton accessor and the installer that walks the .def to invoke
 // each register*Patch. A .def entry without a matching register*Patch
@@ -200,7 +203,7 @@ void patchDebugFrame(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
 
 void installHotswapPatches(HotswapPatchVTable &VT) {
 #define HOTSWAP_PATCH(Name) register##Name##Patch(VT);
-#include "patches.def"
+#include "comgr-hotswap-patches.def"
 #undef HOTSWAP_PATCH
 }
 
@@ -361,21 +364,6 @@ truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
 
 // -- Sled-or-trampoline code emission -----------------------------------------
 
-bool writeCurrentText(PatchContext &Ctx, uint64_t Offset,
-                      ArrayRef<uint8_t> Bytes, StringRef Context) {
-  if (Offset > Ctx.TextSize || Bytes.size() > Ctx.TextSize - Offset) {
-    log() << "hotswap: error: " << Context << ": current .text write [0x"
-          << utohexstr(Offset) << ", +0x" << utohexstr(Bytes.size())
-          << ") exceeds size 0x" << utohexstr(Ctx.TextSize) << "\n";
-    return false;
-  }
-  if (Bytes.empty())
-    return true;
-  std::memcpy(Ctx.Text + Offset, Bytes.data(), Bytes.size());
-  noteCurrentTextMutation(Ctx);
-  return true;
-}
-
 /// Emit the replacement code for the instruction at [\p InstOffset,
 /// \p InstOffset + \p InstSize) into a nearby NOP sled: writes \p Replacement
 /// into the sled, appends a branch-back to the next instruction after the
@@ -388,73 +376,53 @@ bool writeCurrentText(PatchContext &Ctx, uint64_t Offset,
                                  uint64_t InstOffset, uint32_t InstSize,
                                  ArrayRef<uint8_t> Replacement) {
   const LLVMState &LS = Ctx.LS;
-  std::optional<uint64_t> BackOffset = checkedAddUint64(
-      Sled.WritePos, Replacement.size(), "NOP-sled branch-back offset");
-  std::optional<uint64_t> SledWriteEnd =
-      BackOffset
-          ? checkedAddUint64(*BackOffset, MinInstSize, "NOP-sled write end")
-          : std::nullopt;
-  std::optional<uint64_t> InstEnd =
-      checkedAddUint64(InstOffset, InstSize, "NOP-sled source end");
-  if (!BackOffset || !SledWriteEnd || !InstEnd ||
-      Sled.WritePos > Ctx.TextSize || *SledWriteEnd > Ctx.TextSize ||
-      *SledWriteEnd > Sled.End || InstOffset > Ctx.TextSize ||
-      *InstEnd > Ctx.TextSize || InstSize < MinInstSize ||
-      InstSize % MinInstSize != 0) {
-    log() << "hotswap: error: emitToNopSled: invalid source or sled bounds\n";
-    return false;
-  }
-
-  SmallVector<uint8_t> BrBack = LS.encodeSBranch(*BackOffset, *InstEnd);
-  if (BrBack.size() != MinInstSize) {
+  SmallVector<uint8_t> BrBack = LS.encodeSBranch(
+      Sled.WritePos + Replacement.size(), InstOffset + InstSize);
+  if (BrBack.empty()) {
     log() << "hotswap: error: emitToNopSled: encodeSBranch for branch-back "
-          << "at sled offset 0x" << utohexstr(*BackOffset) << " -> 0x"
-          << utohexstr(*InstEnd) << " failed.\n";
+          << "at sled offset 0x"
+          << utohexstr(Sled.WritePos + Replacement.size()) << " -> 0x"
+          << utohexstr(InstOffset + InstSize) << " failed.\n";
     return false;
   }
 
   SmallVector<uint8_t> BrFwd = LS.encodeSBranch(InstOffset, Sled.WritePos);
-  if (BrFwd.size() != MinInstSize) {
+  if (BrFwd.empty()) {
     log() << "hotswap: error: emitToNopSled: encodeSBranch for branch-fwd "
           << "at original offset 0x" << utohexstr(InstOffset) << " -> sled 0x"
           << utohexstr(Sled.WritePos) << " failed.\n";
     return false;
   }
 
-  if (!writeCurrentText(Ctx, Sled.WritePos, Replacement,
-                        "NOP-sled replacement") ||
-      !writeCurrentText(Ctx, *BackOffset, BrBack, "NOP-sled branch-back") ||
-      !writeCurrentText(Ctx, InstOffset, BrFwd, "NOP-sled branch-forward"))
-    return false;
+  std::memcpy(Ctx.Text + Sled.WritePos, Replacement.data(), Replacement.size());
+  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack.data(),
+              BrBack.size());
+  std::memcpy(Ctx.Text + InstOffset, BrFwd.data(), BrFwd.size());
 
   // Pad the tail of the replaced instruction slot with cached s_nop bytes
   // (pre-encoded in LLVMState at initLLVM() time).
   for (uint32_t I = MinInstSize; I < InstSize; I += MinInstSize)
-    if (!writeCurrentText(
-            Ctx, InstOffset + I,
-            ArrayRef<uint8_t>(LS.SNopBytes).take_front(MinInstSize),
-            "NOP-sled source padding"))
-      return false;
+    std::memcpy(Ctx.Text + InstOffset + I, LS.SNopBytes.data(), MinInstSize);
 
-  Sled.WritePos = *SledWriteEnd;
+  Sled.WritePos += Replacement.size() + MinInstSize;
   // Count-only row: patch placed in-line via a nearby NOP sled, no trampoline.
   Ctx.Profile.count(HotswapMetric::JumpNopSled);
   return true;
 }
 
-std::optional<SmallVector<uint8_t>> encodeSetPCLongBranch(const LLVMState &LS,
-                                                          uint64_t FromOffset,
-                                                          uint64_t TargetOffset,
-                                                          unsigned SgprBase) {
-  if ((SgprBase & 1u) != 0) {
+std::optional<SmallVector<uint8_t>>
+encodeSetPCLongBranch(const LLVMState &LS, uint64_t FromOffset,
+                      uint64_t TargetOffset, unsigned SgprBase, bool UseVcc) {
+  if (!UseVcc && (SgprBase & 1u) != 0) {
     log() << "hotswap: error: set-PC long branch requires an aligned "
              "SGPR pair, got s"
           << SgprBase << "\n";
     return std::nullopt;
   }
 
-  const std::string Pair = "s[" + std::to_string(SgprBase) + ":" +
-                           std::to_string(SgprBase + 1) + "]";
+  const std::string Pair = UseVcc ? "vcc"
+                                  : "s[" + std::to_string(SgprBase) + ":" +
+                                        std::to_string(SgprBase + 1) + "]";
   SmallVector<uint8_t> GetPc = assembleSingleInst("s_get_pc_i64 " + Pair, LS);
   if (GetPc.empty())
     return std::nullopt;
@@ -525,10 +493,68 @@ getSetPcLongBranchLayoutSize(uint64_t FromOffset, uint64_t TargetOffset) {
   return SetPcReturnReserveBytes;
 }
 
+static std::optional<SmallVector<uint8_t>>
+encodeSetPcGateway(const LLVMState &LS, uint64_t FromOffset,
+                   uint64_t TargetOffset, unsigned SgprBase, bool UseVcc,
+                   bool PreserveVcc) {
+  SmallVector<uint8_t> Bytes;
+  uint64_t SetPcOffset = FromOffset;
+  if (PreserveVcc) {
+    if (!UseVcc) {
+      log() << "hotswap: error: VCC-preserving gateway does not use VCC\n";
+      return std::nullopt;
+    }
+    Bytes = assembleSingleInst(
+        "s_mov_b32 s" + std::to_string(SgprBase) + ", vcc_lo", LS);
+    if (Bytes.size() != VccSaveRestoreBytes)
+      return std::nullopt;
+    std::optional<uint64_t> Offset = checkedAddUint64(
+        FromOffset, Bytes.size(), "VCC-preserving set-PC gateway offset");
+    if (!Offset)
+      return std::nullopt;
+    SetPcOffset = *Offset;
+  }
+
+  std::optional<SmallVector<uint8_t>> SetPc =
+      encodeSetPCLongBranch(LS, SetPcOffset, TargetOffset, SgprBase, UseVcc);
+  if (!SetPc)
+    return std::nullopt;
+  Bytes.append(SetPc->begin(), SetPc->end());
+  return Bytes;
+}
+
+static std::optional<uint32_t>
+getSetPcGatewayLayoutSize(uint64_t FromOffset, uint64_t TargetOffset,
+                          unsigned SgprBase, bool UseVcc,
+                          bool PreserveVcc) {
+  if (PreserveVcc && !UseVcc)
+    return std::nullopt;
+  if (!UseVcc && (SgprBase & 1u) != 0)
+    return std::nullopt;
+
+  uint64_t SetPcOffset = FromOffset;
+  uint32_t PrefixBytes = 0;
+  if (PreserveVcc) {
+    std::optional<uint64_t> Offset = checkedAddUint64(
+        FromOffset, VccSaveRestoreBytes,
+        "VCC-preserving set-PC gateway layout offset");
+    if (!Offset)
+      return std::nullopt;
+    SetPcOffset = *Offset;
+    PrefixBytes = VccSaveRestoreBytes;
+  }
+
+  std::optional<uint32_t> SetPcBytes =
+      getSetPcLongBranchLayoutSize(SetPcOffset, TargetOffset);
+  if (!SetPcBytes)
+    return std::nullopt;
+  return PrefixBytes + *SetPcBytes;
+}
+
 Expected<std::optional<EncodedSetPcGateway>>
 findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
                         uint64_t FromOffset, uint64_t TargetOffset,
-                        unsigned SgprBase) {
+                        unsigned SgprBase, bool UseVcc, bool PreserveVcc) {
   NopSled *Best = nullptr;
   uint32_t BestLayoutSize = 0;
   uint64_t BestUsableEnd = 0;
@@ -544,10 +570,10 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
     if (Distance >= MaxSledDistance || Distance >= BestDistance ||
         LS.encodeSBranch(FromOffset, Sled.WritePos).empty())
       continue;
-
     std::optional<uint32_t> LayoutSize =
-        getSetPcLongBranchLayoutSize(Sled.WritePos, TargetOffset);
-    if ((SgprBase & 1u) != 0 || !LayoutSize)
+        getSetPcGatewayLayoutSize(Sled.WritePos, TargetOffset, SgprBase,
+                                  UseVcc, PreserveVcc);
+    if (!LayoutSize)
       return createStringError(
           Twine("failed to encode set-PC gateway at candidate offset 0x") +
           utohexstr(Sled.WritePos));
@@ -562,7 +588,8 @@ findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
   if (!Best)
     return std::nullopt;
   std::optional<SmallVector<uint8_t>> BestBytes =
-      encodeSetPCLongBranch(LS, Best->WritePos, TargetOffset, SgprBase);
+      encodeSetPcGateway(LS, Best->WritePos, TargetOffset, SgprBase, UseVcc,
+                         PreserveVcc);
   if (!BestBytes)
     return createStringError(
         Twine("failed to encode set-PC gateway at candidate offset 0x") +
@@ -676,7 +703,8 @@ summarizeSafeSgprUsage(PatchContext &Ctx,
 
 std::optional<SafeSgprScratchBlock>
 findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
-                         unsigned Alignment, StringRef Context) {
+                         unsigned Alignment, StringRef Context,
+                         bool ReportNoSpace) {
   if (Count == 0 || Alignment == 0 || (Alignment & (Alignment - 1)) != 0) {
     log() << "hotswap: error: " << Context
           << ": invalid global SGPR block request (count=" << Count
@@ -773,8 +801,10 @@ findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
   }
   unsigned Base = (HighWatermark + Alignment - 1) & ~(Alignment - 1);
   if (Base > Ctx.Config.MaxSgprs || Count > Ctx.Config.MaxSgprs - Base) {
-    log() << "hotswap: error: " << Context << ": no aligned block of " << Count
-          << " safe SGPRs fits below s" << Ctx.Config.MaxSgprs << "\n";
+    if (ReportNoSpace)
+      log() << "hotswap: error: " << Context << ": no aligned block of "
+            << Count << " safe SGPRs fits below s" << Ctx.Config.MaxSgprs
+            << "\n";
     return std::nullopt;
   }
   return SafeSgprScratchBlock{Base, Count};
@@ -827,559 +857,449 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
   return true;
 }
 
-struct InstructionRegisterEffects {
-  SmallVector<MCRegister, 8> Uses;
-  SmallVector<MCRegister, 8> Defs;
-};
-
-static std::optional<InstructionRegisterEffects>
-getInstructionRegisterEffects(const InternalDecodedInst &DI,
-                              const LLVMState &LS) {
-  if (!DI.DecodeSucceeded || DI.DecodeSoftFailed || !LS.MCII || !LS.MRI)
-    return std::nullopt;
-
-  InstructionRegisterEffects Effects;
+bool instructionReadsRegister(const InternalDecodedInst &DI,
+                              const LLVMState &LS, MCRegister Register) {
   const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
   unsigned DefCount = std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
+  // A tied use makes its corresponding explicit def a read/modify/write
+  // operand. Some MCInst producers materialize a duplicate use operand while
+  // others only retain the destination operand, so consult the descriptor
+  // instead of relying on the decoded operand list to contain that duplicate.
   for (unsigned Def = 0; Def != DefCount; ++Def) {
-    const MCOperand &Operand = DI.Inst.getOperand(Def);
-    if (!Operand.isReg() || !Operand.getReg())
-      continue;
-    MCRegister Register(Operand.getReg());
-    Effects.Defs.push_back(Register);
-    // A tied use makes its explicit def a read/modify/write operand. Some
-    // MCInst producers retain only the destination operand, so derive this use
-    // from the descriptor instead of requiring a duplicate decoded operand.
+    bool HasTiedUse = false;
     for (unsigned Use = Desc.getNumDefs(); Use != Desc.getNumOperands();
          ++Use) {
       if (Desc.getOperandConstraint(Use, MCOI::TIED_TO) ==
           static_cast<int>(Def)) {
-        Effects.Uses.push_back(Register);
+        HasTiedUse = true;
         break;
       }
     }
-  }
-
-  unsigned FixedOperandCount =
-      std::min(Desc.getNumOperands(), DI.Inst.getNumOperands());
-  for (unsigned I = DefCount; I != FixedOperandCount; ++I) {
-    const MCOperand &Operand = DI.Inst.getOperand(I);
-    if (Operand.isReg() && Operand.getReg())
-      Effects.Uses.push_back(MCRegister(Operand.getReg()));
-  }
-  for (unsigned I = FixedOperandCount; I != DI.Inst.getNumOperands(); ++I) {
-    const MCOperand &Operand = DI.Inst.getOperand(I);
-    if (!Operand.isReg() || !Operand.getReg())
+    if (!HasTiedUse)
       continue;
-    (Desc.variadicOpsAreDefs() ? Effects.Defs : Effects.Uses)
-        .push_back(MCRegister(Operand.getReg()));
+    const MCOperand &Operand = DI.Inst.getOperand(Def);
+    if (Operand.isReg() && Operand.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+      return true;
+  }
+  for (unsigned I = DefCount; I != DI.Inst.getNumOperands(); ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (Operand.isReg() && Operand.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+      return true;
   }
   for (MCPhysReg ImplicitUse : Desc.implicit_uses())
-    Effects.Uses.push_back(MCRegister(ImplicitUse));
-  for (MCPhysReg ImplicitDef : Desc.implicit_defs())
-    Effects.Defs.push_back(MCRegister(ImplicitDef));
-  return Effects;
-}
-
-bool instructionReadsRegister(const InternalDecodedInst &DI,
-                              const LLVMState &LS, MCRegister Register) {
-  std::optional<InstructionRegisterEffects> Effects =
-      getInstructionRegisterEffects(DI, LS);
-  if (!Effects) {
-    log() << "hotswap: register-read analysis failed closed at instruction "
-             "offset 0x"
-          << utohexstr(DI.Offset)
-          << ": decode status or LLVM register metadata is not proof-safe\n";
-    return true;
-  }
-  for (MCRegister Use : Effects->Uses)
-    if (LS.MRI->regsOverlap(Use, Register))
+    if (LS.MRI->regsOverlap(MCRegister(ImplicitUse), Register))
       return true;
   return false;
 }
 
-static bool addTrackedSgprBits(const LLVMState &LS, MCRegister Register,
-                               unsigned MaxSgprs, BitVector &Bits,
-                               bool IsDefinition) {
-  if (!Register.isValid())
-    return true;
-  SmallVector<MCRegister, 8> Candidates;
-  Candidates.push_back(Register);
-  for (MCPhysReg Subregister : LS.MRI->subregs(Register))
-    Candidates.push_back(MCRegister(Subregister));
-  // A decoded operand can name a low/high subregister directly. Its scalar
-  // numbered SGPR then appears among its super-registers rather than subregs.
-  for (MCPhysReg Superregister : LS.MRI->superregs(Register))
-    Candidates.push_back(MCRegister(Superregister));
-
-  for (MCRegister Candidate : Candidates) {
-    std::optional<unsigned> Index = numberedSgprIndex(*LS.MRI, Candidate);
-    if (!Index)
-      continue;
-    if (*Index >= MaxSgprs) {
-      log() << "hotswap: tracked SGPR analysis failed: decoded register s"
-            << *Index << " exceeds configured numbered-SGPR count " << MaxSgprs
-            << "\n";
-      return false;
-    }
-    Bits.set(*Index);
-  }
-  // Any overlapping use consumes aggregate VCC. A definition kills that bit
-  // only when it covers both VCC subregisters.
-  bool TracksVcc = isVccRegister(LS, Register);
-  if (IsDefinition)
-    TracksVcc = LS.VCCRegister.isValid() &&
-                LS.MRI->isSubRegisterEq(Register, LS.VCCRegister);
-  if (TracksVcc)
-    Bits.set(MaxSgprs);
-  return true;
-}
-
-static bool collectTrackedSgprUsesAndDefs(const InternalDecodedInst &DI,
-                                          const LLVMState &LS,
-                                          unsigned MaxSgprs, BitVector &Uses,
-                                          BitVector &Defs) {
-  std::optional<InstructionRegisterEffects> Effects =
-      getInstructionRegisterEffects(DI, LS);
-  if (!Effects)
-    return false;
-  for (MCRegister Register : Effects->Uses)
-    if (!addTrackedSgprBits(LS, Register, MaxSgprs, Uses,
-                            /*IsDefinition=*/false))
-      return false;
-  for (MCRegister Register : Effects->Defs)
-    if (!addTrackedSgprBits(LS, Register, MaxSgprs, Defs,
-                            /*IsDefinition=*/true))
-      return false;
-  return true;
-}
-
-std::optional<BitVector>
-getReplacementIncomingSgprs(ArrayRef<uint8_t> Replacement, const LLVMState &LS,
-                            unsigned MaxSgprs) {
-  if (MaxSgprs > Gfx1250MaxSgprs) {
-    log() << "hotswap: replacement SGPR input analysis failed: configured "
-             "maximum "
-          << MaxSgprs << " exceeds gfx1250 limit " << Gfx1250MaxSgprs << "\n";
-    return std::nullopt;
-  }
-  const unsigned TrackedSgprs = MaxSgprs + 1;
-  BitVector Incoming(TrackedSgprs);
-  BitVector Defined(TrackedSgprs);
-  std::vector<InternalDecodedInst> Decoded;
-  if (!decodeTextSection(Replacement.data(), Replacement.size(), LS, Decoded)) {
-    log() << "hotswap: replacement SGPR input analysis failed: MC decode "
-             "could not scan "
-          << Replacement.size() << " replacement bytes\n";
-    return std::nullopt;
-  }
-
-  for (const InternalDecodedInst &DI : Decoded) {
-    if (!DI.DecodeSucceeded) {
-      log() << "hotswap: replacement SGPR input analysis failed at byte 0x"
-            << utohexstr(DI.Offset) << ": undecodable instruction\n";
-      return std::nullopt;
-    }
-    if (DI.DecodeSoftFailed) {
-      log() << "hotswap: replacement SGPR input analysis failed at byte 0x"
-            << utohexstr(DI.Offset)
-            << ": potentially undefined instruction encoding\n";
-      return std::nullopt;
-    }
-    if (!LS.MIA) {
-      log() << "hotswap: replacement SGPR input analysis failed: LLVM control-"
-               "flow analysis is unavailable\n";
-      return std::nullopt;
-    }
-    const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
-    if (Desc.isTrap() || DI.Inst.getOpcode() == LS.STrapOpcode ||
-        DI.Inst.getOpcode() == LS.SRfeI64Opcode || LS.MIA->isBarrier(DI.Inst) ||
-        LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI)) {
-      log() << "hotswap: replacement SGPR input analysis failed at byte 0x"
-            << utohexstr(DI.Offset) << ": control-flow instruction "
-            << DI.Mnemonic
-            << " is not allowed in a straight-line replacement\n";
-      return std::nullopt;
-    }
-    BitVector Uses(TrackedSgprs);
-    BitVector Defs(TrackedSgprs);
-    if (!collectTrackedSgprUsesAndDefs(DI, LS, MaxSgprs, Uses, Defs)) {
-      log() << "hotswap: replacement SGPR input analysis failed at byte 0x"
-            << utohexstr(DI.Offset)
-            << ": register effects are not proof-safe\n";
-      return std::nullopt;
-    }
-    Uses.reset(Defined);
-    Incoming |= Uses;
-    Defined |= Defs;
-  }
-  return Incoming;
-}
-
-bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
+static bool instructionWritesRegister(const InternalDecodedInst &DI,
                                       const LLVMState &LS,
                                       MCRegister Register) {
-  std::optional<BitVector> Incoming =
-      getReplacementIncomingSgprs(Replacement, LS, Gfx1250MaxSgprs);
-  if (!Incoming)
-    return true;
-  BitVector RegisterBits(Gfx1250MaxSgprs + 1);
-  if (!addTrackedSgprBits(LS, Register, Gfx1250MaxSgprs, RegisterBits,
-                          /*IsDefinition=*/false))
-    return true;
-  return RegisterBits.none() || Incoming->anyCommon(RegisterBits);
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  unsigned DefCount = std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
+  for (unsigned I = 0; I != DefCount; ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (Operand.isReg() && Operand.getReg() &&
+        LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+      return true;
+  }
+  if (Desc.variadicOpsAreDefs()) {
+    unsigned VariadicBegin =
+        std::min(Desc.getNumOperands(), DI.Inst.getNumOperands());
+    for (unsigned I = VariadicBegin; I != DI.Inst.getNumOperands(); ++I) {
+      const MCOperand &Operand = DI.Inst.getOperand(I);
+      if (Operand.isReg() && Operand.getReg() &&
+          LS.MRI->regsOverlap(MCRegister(Operand.getReg()), Register))
+        return true;
+    }
+  }
+  for (MCPhysReg ImplicitDef : Desc.implicit_defs())
+    if (LS.MRI->regsOverlap(MCRegister(ImplicitDef), Register))
+      return true;
+  return false;
 }
 
-static bool addCurrentFunctionLivenessSuccessor(
-    size_t From, uint64_t Offset,
-    const DenseMap<uint64_t, size_t> &InstructionIndices,
-    std::vector<SmallVector<size_t, 2>> &Successors,
-    std::vector<SmallVector<size_t, 2>> &Predecessors) {
-  DenseMap<uint64_t, size_t>::const_iterator Target =
-      InstructionIndices.find(Offset);
-  if (Target == InstructionIndices.end())
-    return false;
-  Successors[From].push_back(Target->second);
-  Predecessors[Target->second].push_back(From);
-  return true;
-}
-
-static CurrentFunctionSgprLiveness buildCurrentFunctionSgprLiveness(
-    PatchContext &Ctx, const ElfView::FunctionTextRange &FunctionRange) {
-  CurrentFunctionSgprLiveness Result;
-  Result.Generation = Ctx.TextMutationGeneration;
-  Result.MaxSgprs = Ctx.Config.MaxSgprs;
-  if (!Ctx.LS.MIA) {
-    log() << "hotswap: current-function SGPR liveness failed for [0x"
-          << utohexstr(FunctionRange.Begin) << ", 0x"
-          << utohexstr(FunctionRange.End)
-          << "): LLVM control-flow analysis is unavailable\n";
-    return Result;
-  }
-  if (FunctionRange.End < FunctionRange.Begin ||
-      FunctionRange.Begin > Ctx.TextSize ||
-      FunctionRange.End - FunctionRange.Begin >
-          Ctx.TextSize - FunctionRange.Begin) {
-    log() << "hotswap: current-function SGPR liveness failed for [0x"
-          << utohexstr(FunctionRange.Begin) << ", 0x"
-          << utohexstr(FunctionRange.End)
-          << "): function range is outside current .text\n";
-    return Result;
-  }
-  if (Ctx.Config.MaxSgprs > Gfx1250MaxSgprs) {
-    log() << "hotswap: current-function SGPR liveness failed for [0x"
-          << utohexstr(FunctionRange.Begin) << ", 0x"
-          << utohexstr(FunctionRange.End) << "): configured maximum "
-          << Ctx.Config.MaxSgprs << " exceeds gfx1250 limit " << Gfx1250MaxSgprs
-          << "\n";
-    return Result;
-  }
-
+static bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
+                                             const LLVMState &LS,
+                                             MCRegister Register) {
   std::vector<InternalDecodedInst> Decoded;
-  uint64_t FunctionSize = FunctionRange.End - FunctionRange.Begin;
-  if (!decodeTextSection(Ctx.Text + FunctionRange.Begin, FunctionSize, Ctx.LS,
-                         Decoded)) {
-    log() << "hotswap: current-function SGPR liveness failed for [0x"
-          << utohexstr(FunctionRange.Begin) << ", 0x"
-          << utohexstr(FunctionRange.End)
-          << "): MC decode could not scan the function\n";
-    return Result;
-  }
+  if (!decodeTextSection(Replacement.data(), Replacement.size(), LS, Decoded))
+    return true;
 
-  uint64_t ExpectedOffset = FunctionRange.Begin;
-  for (InternalDecodedInst &DI : Decoded) {
-    DI.Offset += FunctionRange.Begin;
-    if (!DI.DecodeSucceeded) {
-      log() << "hotswap: current-function SGPR liveness failed at 0x"
-            << utohexstr(DI.Offset) << ": undecodable instruction\n";
-      return Result;
-    }
-    if (DI.DecodeSoftFailed) {
-      log() << "hotswap: current-function SGPR liveness failed at 0x"
-            << utohexstr(DI.Offset)
-            << ": potentially undefined instruction encoding\n";
-      return Result;
-    }
-    if (DI.Size == 0) {
-      log() << "hotswap: current-function SGPR liveness failed at 0x"
-            << utohexstr(DI.Offset) << ": decoded instruction has zero size\n";
-      return Result;
-    }
-    if (DI.Offset != ExpectedOffset) {
-      log() << "hotswap: current-function SGPR liveness failed at 0x"
-            << utohexstr(DI.Offset) << ": expected instruction boundary 0x"
-            << utohexstr(ExpectedOffset) << "\n";
-      return Result;
-    }
-    std::optional<uint64_t> Next = checkedAddUint64(
-        DI.Offset, DI.Size, "current-function SGPR liveness decode");
-    if (!Next || *Next > FunctionRange.End) {
-      log() << "hotswap: current-function SGPR liveness failed at 0x"
-            << utohexstr(DI.Offset)
-            << ": decoded instruction extends beyond the function\n";
-      return Result;
-    }
-    ExpectedOffset = *Next;
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (!DI.DecodeSucceeded || !LS.MIA ||
+        LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI))
+      return true;
+    if (instructionReadsRegister(DI, LS, Register))
+      return true;
+    if (instructionWritesRegister(DI, LS, Register))
+      return false;
   }
-  if (Decoded.empty()) {
-    log() << "hotswap: current-function SGPR liveness failed for [0x"
-          << utohexstr(FunctionRange.Begin) << ", 0x"
-          << utohexstr(FunctionRange.End)
-          << "): function has no instructions\n";
-    return Result;
-  }
-  if (ExpectedOffset != FunctionRange.End) {
-    log() << "hotswap: current-function SGPR liveness failed for [0x"
-          << utohexstr(FunctionRange.Begin) << ", 0x"
-          << utohexstr(FunctionRange.End)
-          << "): decoded instructions do not cover the complete function\n";
-    return Result;
-  }
+  return false;
+}
 
-  const unsigned TrackedSgprs = Ctx.Config.MaxSgprs + 1;
-  const size_t InstructionCount = Decoded.size();
-  std::vector<BitVector> Uses(InstructionCount, BitVector(TrackedSgprs));
-  std::vector<BitVector> Defs(InstructionCount, BitVector(TrackedSgprs));
-  std::vector<SmallVector<size_t, 2>> Successors(InstructionCount);
-  std::vector<SmallVector<size_t, 2>> Predecessors(InstructionCount);
-  BitVector HasUnknownSuccessor(InstructionCount);
-  BitVector HasUnknownRegisterEffects(InstructionCount);
+static bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
+                                                   uint64_t InstOffset,
+                                                   uint32_t InstSize,
+                                                   MCRegister Register) {
+  std::optional<ElfView::FunctionTextRange> FunctionRange =
+      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
+  if (!FunctionRange)
+    return false;
 
-  for (size_t I = 0; I != InstructionCount; ++I) {
-    const InternalDecodedInst &DI = Decoded[I];
-    std::pair<DenseMap<uint64_t, size_t>::iterator, bool> Inserted =
-        Result.InstructionIndices.try_emplace(DI.Offset, I);
-    if (!Inserted.second) {
-      log() << "hotswap: current-function SGPR liveness failed at 0x"
-            << utohexstr(DI.Offset) << ": duplicate instruction offset\n";
-      return Result;
-    }
-    if (!collectTrackedSgprUsesAndDefs(DI, Ctx.LS, Ctx.Config.MaxSgprs, Uses[I],
-                                       Defs[I])) {
-      log() << "hotswap: current-function SGPR liveness failed at 0x"
-            << utohexstr(DI.Offset)
-            << ": register effects are not proof-safe\n";
-      return Result;
-    }
-  }
+  std::optional<uint64_t> Continuation = checkedAddUint64(
+      InstOffset, InstSize, "far-return register liveness continuation");
+  if (!Continuation)
+    return false;
+  std::vector<InternalDecodedInst>::const_iterator It =
+      std::lower_bound(Ctx.Decoded.cbegin(), Ctx.Decoded.cend(), *Continuation,
+                       [](const InternalDecodedInst &DI, uint64_t Offset) {
+                         return DI.Offset < Offset;
+                       });
+  if (It == Ctx.Decoded.cend() || It->Offset != *Continuation)
+    return false;
 
-  for (size_t I = 0; I != InstructionCount; ++I) {
-    const InternalDecodedInst &DI = Decoded[I];
-    const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
-    if (DI.Inst.getOpcode() == Ctx.LS.SEndPgmOpcode ||
+  SmallVector<size_t, 8> Worklist;
+  DenseSet<size_t> Visited;
+  Worklist.push_back(It - Ctx.Decoded.cbegin());
+  while (!Worklist.empty()) {
+    size_t Index = Worklist.pop_back_val();
+    if (!Visited.insert(Index).second)
+      continue;
+    const InternalDecodedInst &DI = Ctx.Decoded[Index];
+    if (!DI.DecodeSucceeded || !Ctx.LS.MIA ||
+        DI.Offset < FunctionRange->Begin || DI.Offset >= FunctionRange->End)
+      return false;
+    if (instructionReadsRegister(DI, Ctx.LS, Register))
+      return false;
+    if (instructionWritesRegister(DI, Ctx.LS, Register) ||
+        DI.Inst.getOpcode() == Ctx.LS.SEndPgmOpcode ||
         DI.Inst.getOpcode() == Ctx.LS.SEndPgmSavedOpcode)
       continue;
-    if (Desc.isTrap() || DI.Inst.getOpcode() == Ctx.LS.STrapOpcode) {
-      HasUnknownSuccessor.set(I);
-      HasUnknownRegisterEffects.set(I);
-      continue;
-    }
+
+    auto AddSuccessor = [&](uint64_t Offset) {
+      if (Offset < FunctionRange->Begin || Offset >= FunctionRange->End)
+        return false;
+      std::vector<InternalDecodedInst>::const_iterator Successor =
+          std::lower_bound(
+              Ctx.Decoded.cbegin(), Ctx.Decoded.cend(), Offset,
+              [](const InternalDecodedInst &Candidate, uint64_t Target) {
+                return Candidate.Offset < Target;
+              });
+      if (Successor == Ctx.Decoded.cend() || Successor->Offset != Offset)
+        return false;
+      Worklist.push_back(Successor - Ctx.Decoded.cbegin());
+      return true;
+    };
+
+    if (Ctx.LS.MIA->isCall(DI.Inst) || Ctx.LS.MIA->isIndirectBranch(DI.Inst) ||
+        Ctx.LS.MIA->isReturn(DI.Inst))
+      return false;
     if (Ctx.LS.MIA->isBranch(DI.Inst)) {
       std::optional<uint64_t> Target =
           evaluateDirectControlFlowTarget(DI, Ctx.LS);
-      if (!Target)
-        HasUnknownSuccessor.set(I);
-      else if (!addCurrentFunctionLivenessSuccessor(I, *Target,
-                                                    Result.InstructionIndices,
-                                                    Successors, Predecessors))
-        HasUnknownSuccessor.set(I);
+      if (!Target || !AddSuccessor(*Target))
+        return false;
       if (Ctx.LS.MIA->isUnconditionalBranch(DI.Inst))
         continue;
-    } else if (Ctx.LS.MIA->isBarrier(DI.Inst)) {
-      HasUnknownSuccessor.set(I);
-      HasUnknownRegisterEffects.set(I);
+    } else if (Ctx.LS.MIA->mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI) &&
+               !Ctx.LS.MIA->isBarrier(DI.Inst)) {
+      return false;
+    }
+
+    std::optional<uint64_t> Fallthrough = checkedAddUint64(
+        DI.Offset, DI.Size, "far-return register liveness fallthrough");
+    if (!Fallthrough || !AddSuccessor(*Fallthrough))
+      return false;
+  }
+  return true;
+}
+
+std::optional<SmallVector<MCRegister, 128>>
+resolveNumberedSgprRegisters(const MCRegisterInfo &MRI, unsigned MaxSgprs) {
+  SmallVector<MCRegister, 128> Registers(MaxSgprs);
+  for (unsigned I = 1; I != MRI.getNumRegs(); ++I) {
+    MCRegister Register(I);
+    std::optional<unsigned> Index = numberedSgprIndex(MRI, Register);
+    if (Index && *Index < MaxSgprs)
+      Registers[*Index] = Register;
+  }
+  if (llvm::any_of(Registers,
+                   [](MCRegister Register) { return !Register.isValid(); }))
+    return std::nullopt;
+  return Registers;
+}
+
+void getNumberedSgprUsesAndDefs(const InternalDecodedInst &DI,
+                                const LLVMState &LS,
+                                ArrayRef<MCRegister> NumberedSgprs,
+                                BitVector &Uses, BitVector &Defs) {
+  assert(Uses.size() == NumberedSgprs.size() &&
+         Defs.size() == NumberedSgprs.size());
+  for (unsigned I = 0; I != NumberedSgprs.size(); ++I) {
+    if (instructionReadsRegister(DI, LS, NumberedSgprs[I]))
+      Uses.set(I);
+    if (instructionWritesRegister(DI, LS, NumberedSgprs[I]))
+      Defs.set(I);
+  }
+}
+
+/// Return the numbered SGPRs whose incoming values can be observed by the
+/// replacement. A malformed or control-flow-bearing replacement conservatively
+/// keeps every value that has not already been overwritten.
+BitVector
+unsafeIncomingNumberedSgprsInReplacement(ArrayRef<uint8_t> Replacement,
+                                         const LLVMState &LS,
+                                         ArrayRef<MCRegister> NumberedSgprs) {
+  const unsigned MaxSgprs = NumberedSgprs.size();
+  BitVector Unsafe(MaxSgprs);
+  BitVector Incoming(MaxSgprs, true);
+  std::vector<InternalDecodedInst> Decoded;
+  if (!decodeTextSection(Replacement.data(), Replacement.size(), LS, Decoded)) {
+    Unsafe.set();
+    return Unsafe;
+  }
+
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (!DI.DecodeSucceeded || !LS.MIA) {
+      Unsafe |= Incoming;
+      break;
+    }
+    BitVector Uses(MaxSgprs);
+    BitVector Defs(MaxSgprs);
+    getNumberedSgprUsesAndDefs(DI, LS, NumberedSgprs, Uses, Defs);
+    Uses &= Incoming;
+    Unsafe |= Uses;
+    Incoming.reset(Defs);
+    if (LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI)) {
+      Unsafe |= Incoming;
+      break;
+    }
+  }
+  return Unsafe;
+}
+
+/// Analyze all numbered SGPR incoming values in one monotone CFG walk.
+/// Unsafe contains a register when some path reads its incoming value before
+/// overwriting it, or reaches control flow that cannot be bounded precisely.
+std::optional<BitVector>
+unsafeIncomingNumberedSgprsInRange(ArrayRef<InternalDecodedInst> Decoded,
+                                   const LLVMState &LS, uint64_t FunctionBegin,
+                                   uint64_t FunctionEnd, uint64_t Continuation,
+                                   ArrayRef<MCRegister> NumberedSgprs) {
+  const unsigned MaxSgprs = NumberedSgprs.size();
+  if (!LS.MIA)
+    return std::nullopt;
+
+  auto FindInstruction = [&](uint64_t Offset) -> std::optional<size_t> {
+    if (Offset < FunctionBegin || Offset >= FunctionEnd)
+      return std::nullopt;
+    auto It =
+        std::lower_bound(Decoded.begin(), Decoded.end(), Offset,
+                         [](const InternalDecodedInst &DI, uint64_t Target) {
+                           return DI.Offset < Target;
+                         });
+    if (It == Decoded.end() || It->Offset != Offset)
+      return std::nullopt;
+    return It - Decoded.begin();
+  };
+  std::optional<size_t> ContinuationIndex = FindInstruction(Continuation);
+  if (!ContinuationIndex)
+    return std::nullopt;
+
+  DenseMap<size_t, BitVector> IncomingAt;
+  IncomingAt.try_emplace(*ContinuationIndex, MaxSgprs, true);
+  SmallVector<size_t, 16> Worklist(1, *ContinuationIndex);
+  BitVector Queued(Decoded.size());
+  Queued.set(*ContinuationIndex);
+  BitVector Unsafe(MaxSgprs);
+
+  auto Propagate = [&](uint64_t Offset, const BitVector &Incoming) {
+    std::optional<size_t> Successor = FindInstruction(Offset);
+    if (!Successor) {
+      Unsafe |= Incoming;
+      return;
+    }
+    auto It = IncomingAt.try_emplace(*Successor, MaxSgprs).first;
+    BitVector NewValues = Incoming;
+    NewValues.reset(It->second);
+    if (NewValues.none())
+      return;
+    It->second |= Incoming;
+    if (!Queued.test(*Successor)) {
+      Queued.set(*Successor);
+      Worklist.push_back(*Successor);
+    }
+  };
+
+  while (!Worklist.empty()) {
+    size_t Index = Worklist.pop_back_val();
+    Queued.reset(Index);
+    const InternalDecodedInst &DI = Decoded[Index];
+    BitVector Incoming = IncomingAt.find(Index)->second;
+    if (!DI.DecodeSucceeded || DI.Offset < FunctionBegin ||
+        DI.Offset >= FunctionEnd) {
+      Unsafe |= Incoming;
       continue;
-    } else if (Ctx.LS.MIA->isCall(DI.Inst) ||
-               Ctx.LS.MIA->isIndirectBranch(DI.Inst) ||
-               Ctx.LS.MIA->isReturn(DI.Inst) ||
-               DI.Inst.getOpcode() == Ctx.LS.SRfeI64Opcode) {
-      HasUnknownSuccessor.set(I);
+    }
+
+    BitVector Uses(MaxSgprs);
+    BitVector Defs(MaxSgprs);
+    getNumberedSgprUsesAndDefs(DI, LS, NumberedSgprs, Uses, Defs);
+    Uses &= Incoming;
+    Unsafe |= Uses;
+    Incoming.reset(Defs);
+    if (Incoming.none())
       continue;
-    } else if (Ctx.LS.MIA->mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI)) {
-      HasUnknownSuccessor.set(I);
-      HasUnknownRegisterEffects.set(I);
+
+    if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode)
+      continue;
+    if (LS.MIA->isCall(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst) ||
+        LS.MIA->isReturn(DI.Inst)) {
+      Unsafe |= Incoming;
+      continue;
+    }
+    if (LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
+      if (Target)
+        Propagate(*Target, Incoming);
+      else
+        Unsafe |= Incoming;
+      if (LS.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    } else if (LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI) &&
+               !LS.MIA->isBarrier(DI.Inst)) {
+      Unsafe |= Incoming;
       continue;
     }
 
     std::optional<uint64_t> Fallthrough = checkedAddUint64(
-        DI.Offset, DI.Size, "current-function SGPR liveness fallthrough");
-    if (!Fallthrough)
-      HasUnknownSuccessor.set(I);
-    else if (!addCurrentFunctionLivenessSuccessor(I, *Fallthrough,
-                                                  Result.InstructionIndices,
-                                                  Successors, Predecessors))
-      HasUnknownSuccessor.set(I);
+        DI.Offset, DI.Size, "far-return SGPR liveness fallthrough");
+    if (Fallthrough)
+      Propagate(*Fallthrough, Incoming);
+    else
+      Unsafe |= Incoming;
   }
-
-  // Each worklist transfer and successor union costs
-  // O(ceil(R / word-size)), where R is the configured tracked SGPR count.
-  // Computing all registers together avoids rebuilding and walking this CFG
-  // once per scratch-register candidate.
-  Result.LiveBefore.assign(InstructionCount, BitVector(TrackedSgprs));
-  std::vector<BitVector> LiveAfter(InstructionCount, BitVector(TrackedSgprs));
-  BitVector AllLive(TrackedSgprs, true);
-  SmallVector<size_t, 32> Worklist;
-  BitVector InWorklist(InstructionCount, true);
-  for (size_t I = 0; I != InstructionCount; ++I)
-    Worklist.push_back(I);
-
-  while (!Worklist.empty()) {
-    size_t I = Worklist.pop_back_val();
-    InWorklist.reset(I);
-    BitVector NewAfter(TrackedSgprs);
-    if (HasUnknownSuccessor.test(I))
-      NewAfter = AllLive;
-    for (size_t Successor : Successors[I])
-      NewAfter |= Result.LiveBefore[Successor];
-
-    BitVector NewBefore = NewAfter;
-    if (HasUnknownRegisterEffects.test(I)) {
-      NewBefore = AllLive;
-    } else {
-      NewBefore.reset(Defs[I]);
-      NewBefore |= Uses[I];
-    }
-    if (NewAfter == LiveAfter[I] && NewBefore == Result.LiveBefore[I])
-      continue;
-    LiveAfter[I] = std::move(NewAfter);
-    Result.LiveBefore[I] = std::move(NewBefore);
-    for (size_t Predecessor : Predecessors[I]) {
-      if (InWorklist.test(Predecessor))
-        continue;
-      InWorklist.set(Predecessor);
-      Worklist.push_back(Predecessor);
-    }
-  }
-  Result.Valid = true;
-  return Result;
+  return Unsafe;
 }
 
-std::optional<BitVector> getLiveSgprsAtContinuation(PatchContext &Ctx,
-                                                    uint64_t InstOffset,
-                                                    uint32_t InstSize) {
+static std::optional<BitVector> unsafeIncomingNumberedSgprsAtContinuation(
+    PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
+    ArrayRef<MCRegister> NumberedSgprs) {
   std::optional<ElfView::FunctionTextRange> FunctionRange =
       Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
-  if (!FunctionRange) {
-    log() << "hotswap: SGPR continuation liveness failed closed for source at "
-             "0x"
-          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
-          << ": no containing function range\n";
+  if (!FunctionRange)
     return std::nullopt;
-  }
-  using FunctionKey = std::pair<uint64_t, uint64_t>;
-  FunctionKey Key{FunctionRange->Begin, FunctionRange->End};
-  // Deferred trampolines are logical mutations of their source functions, but
-  // their source branches are not written into Ctx.Text until final fixup.
-  // Decoding the current bytes after one is queued would therefore omit the
-  // replacement's effects and its new control-flow edges. Fail closed for the
-  // affected function until finalization rather than prove liveness from an
-  // incomplete program image. A trampoline without a resolved function range
-  // may affect any queried function and also forces the conservative result.
-  if (Ctx.HasUnresolvedPendingTrampoline ||
-      Ctx.PendingTrampolineFunctions.contains(Key)) {
-    log() << "hotswap: SGPR continuation liveness failed closed for source at "
-             "0x"
-          << utohexstr(InstOffset)
-          << ": pending trampoline source bytes are not finalized\n";
+  std::optional<uint64_t> Continuation = checkedAddUint64(
+      InstOffset, InstSize, "far-return SGPR liveness continuation");
+  if (!Continuation)
     return std::nullopt;
-  }
-  DenseMap<FunctionKey, CurrentFunctionSgprLiveness>::iterator Cached =
-      Ctx.CurrentFunctionSgprLivenessCache.find(Key);
-  if (Cached == Ctx.CurrentFunctionSgprLivenessCache.end() ||
-      Cached->second.Generation != Ctx.TextMutationGeneration ||
-      Cached->second.MaxSgprs != Ctx.Config.MaxSgprs) {
-    CurrentFunctionSgprLiveness Current =
-        buildCurrentFunctionSgprLiveness(Ctx, *FunctionRange);
-    Cached = Ctx.CurrentFunctionSgprLivenessCache
-                 .insert_or_assign(Key, std::move(Current))
-                 .first;
-  }
-  if (!Cached->second.Valid) {
-    log() << "hotswap: SGPR continuation liveness failed closed for source at "
-             "0x"
-          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
-          << ": current function [0x" << utohexstr(FunctionRange->Begin)
-          << ", 0x" << utohexstr(FunctionRange->End)
-          << ") does not have a complete decoded liveness map\n";
-    return std::nullopt;
-  }
-
-  if (!Cached->second.InstructionIndices.contains(InstOffset)) {
-    log() << "hotswap: SGPR continuation liveness failed closed for source at "
-             "0x"
-          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
-          << ": source is not a decoded instruction boundary in function [0x"
-          << utohexstr(FunctionRange->Begin) << ", 0x"
-          << utohexstr(FunctionRange->End) << ")\n";
-    return std::nullopt;
-  }
-  if (InstOffset > std::numeric_limits<uint64_t>::max() - InstSize) {
-    log() << "hotswap: SGPR continuation liveness failed closed for source at "
-             "0x"
-          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
-          << ": continuation overflows uint64_t\n";
-    return std::nullopt;
-  }
-  uint64_t Continuation = InstOffset + InstSize;
-  DenseMap<uint64_t, size_t>::const_iterator Index =
-      Cached->second.InstructionIndices.find(Continuation);
-  if (Index == Cached->second.InstructionIndices.end()) {
-    log() << "hotswap: SGPR continuation liveness failed closed for source at "
-             "0x"
-          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
-          << ": continuation 0x" << utohexstr(Continuation)
-          << " is not a decoded instruction boundary in function [0x"
-          << utohexstr(FunctionRange->Begin) << ", 0x"
-          << utohexstr(FunctionRange->End) << ")\n";
-    return std::nullopt;
-  }
-  return Cached->second.LiveBefore[Index->second];
+  return unsafeIncomingNumberedSgprsInRange(
+      Ctx.Decoded, Ctx.LS, FunctionRange->Begin, FunctionRange->End,
+      *Continuation, NumberedSgprs);
 }
 
-void noteCurrentTextMutation(PatchContext &Ctx) {
-  // Every cached function was decoded from the previous text generation.
-  // Retaining those maps and bit vectors cannot produce a cache hit and lets
-  // many patch generations accumulate stale whole-function allocations.
-  Ctx.CurrentFunctionSgprLivenessCache.clear();
-  if (Ctx.TextMutationGeneration == std::numeric_limits<uint64_t>::max()) {
-    Ctx.TextMutationGeneration = 0;
-    return;
+static std::optional<unsigned>
+findLocallyDeadSgprPair(PatchContext &Ctx, uint64_t InstOffset,
+                        uint32_t InstSize, ArrayRef<uint8_t> Replacement) {
+  if (Ctx.Config.MaxSgprs < 2)
+    return std::nullopt;
+  std::optional<SmallVector<MCRegister, 128>> NumberedSgprs =
+      resolveNumberedSgprRegisters(*Ctx.LS.MRI, Ctx.Config.MaxSgprs);
+  if (!NumberedSgprs)
+    return std::nullopt;
+  std::optional<BitVector> ContinuationUnsafe =
+      unsafeIncomingNumberedSgprsAtContinuation(Ctx, InstOffset, InstSize,
+                                                *NumberedSgprs);
+  if (!ContinuationUnsafe)
+    return std::nullopt;
+  BitVector Unsafe = unsafeIncomingNumberedSgprsInReplacement(
+      Replacement, Ctx.LS, *NumberedSgprs);
+  Unsafe |= *ContinuationUnsafe;
+
+  unsigned Base = (Ctx.Config.MaxSgprs - 2) & ~1u;
+  for (;;) {
+    if (!Unsafe.test(Base) && !Unsafe.test(Base + 1)) {
+      SafeSgprScratchBlock Scratch{Base, 2};
+      if (commitSafeSgprScratchBlock(Ctx, InstOffset, Scratch,
+                                     "locally dead far-return SGPR pair"))
+        return Base;
+    }
+    if (Base == 0)
+      break;
+    Base -= 2;
   }
-  ++Ctx.TextMutationGeneration;
+  return std::nullopt;
 }
 
-void notePendingTrampolineMutation(PatchContext &Ctx, const Trampoline &T) {
-  if (!T.HasFunctionRange) {
-    Ctx.HasUnresolvedPendingTrampoline = true;
-    return;
-  }
-  Ctx.PendingTrampolineFunctions.insert({T.FunctionStart, T.FunctionEnd});
-}
+struct FarReturnScratch {
+  bool Available = false;
+  unsigned SgprBase = 0;
+  bool UseVcc = false;
+  bool PreserveVcc = false;
+};
 
-bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
-                                            uint64_t InstOffset,
-                                            uint32_t InstSize,
-                                            MCRegister Register) {
-  std::optional<BitVector> Live =
-      getLiveSgprsAtContinuation(Ctx, InstOffset, InstSize);
-  if (!Live)
-    return false;
-  BitVector RegisterBits(Ctx.Config.MaxSgprs + 1);
-  if (!addTrackedSgprBits(Ctx.LS, Register, Ctx.Config.MaxSgprs, RegisterBits,
-                          /*IsDefinition=*/false))
-    return false;
-  return RegisterBits.any() && !Live->anyCommon(RegisterBits);
-}
-
-static std::optional<SafeSgprScratchBlock>
-reserveSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset) {
+static FarReturnScratch reserveSafeFarReturn(PatchContext &Ctx,
+                                             uint64_t InstOffset,
+                                             uint32_t InstSize,
+                                             ArrayRef<uint8_t> Replacement) {
   std::optional<SafeSgprScratchBlock> Scratch = findSafeSgprScratchBlock(
-      Ctx, InstOffset, /*Count=*/2, /*Alignment=*/2, "safe far return");
-  if (!Scratch)
-    return std::nullopt;
-  if (!commitSafeSgprScratchBlock(Ctx, InstOffset, *Scratch, "safe far return"))
-    return std::nullopt;
-  return Scratch;
+      Ctx, InstOffset, /*Count=*/2, /*Alignment=*/2, "safe far return",
+      /*ReportNoSpace=*/false);
+  if (Scratch) {
+    if (!commitSafeSgprScratchBlock(Ctx, InstOffset, *Scratch,
+                                    "safe far return"))
+      return {};
+    return FarReturnScratch{/*Available=*/true, Scratch->Base,
+                            /*UseVcc=*/false, /*PreserveVcc=*/false};
+  }
+
+  if (Ctx.LS.VCCRegister.isValid() &&
+      !replacementNeedsIncomingRegister(Replacement, Ctx.LS,
+                                        Ctx.LS.VCCRegister) &&
+      isRegisterDefinitelyDeadAtContinuation(Ctx, InstOffset, InstSize,
+                                             Ctx.LS.VCCRegister)) {
+    log() << "hotswap: safe far return: reusing dead VCC at 0x"
+          << utohexstr(InstOffset) << "\n";
+    return FarReturnScratch{/*Available=*/true, /*SgprBase=*/0,
+                            /*UseVcc=*/true, /*PreserveVcc=*/false};
+  }
+
+  if (std::optional<unsigned> LocalPair =
+          findLocallyDeadSgprPair(Ctx, InstOffset, InstSize, Replacement)) {
+    log() << "hotswap: safe far return: reusing locally dead s[" << *LocalPair
+          << ":" << *LocalPair + 1 << "] at 0x" << utohexstr(InstOffset)
+          << "\n";
+    return FarReturnScratch{/*Available=*/true, *LocalPair,
+                            /*UseVcc=*/false, /*PreserveVcc=*/false};
+  }
+
+  if (InstSize >= VccPreservingSourceBytes) {
+    std::string Owner =
+        Ctx.Elf.findKernelAtAddress(InstOffset + Ctx.Elf.textAddr());
+    std::optional<unsigned> WavefrontSize =
+        Owner.empty() ? std::nullopt : Ctx.Elf.getKernelWavefrontSize(Owner);
+    if (WavefrontSize == 32) {
+      std::optional<SafeSgprScratchBlock> Save = findSafeSgprScratchBlock(
+          Ctx, InstOffset, /*Count=*/1, /*Alignment=*/1,
+          "VCC-preserving far return", /*ReportNoSpace=*/false);
+      if (Save && commitSafeSgprScratchBlock(Ctx, InstOffset, *Save,
+                                             "VCC-preserving far return")) {
+        log() << "hotswap: safe far return: preserving live wave32 VCC_LO in s"
+              << Save->Base << " at 0x" << utohexstr(InstOffset) << "\n";
+        return FarReturnScratch{/*Available=*/true, Save->Base,
+                                /*UseVcc=*/true, /*PreserveVcc=*/true};
+      }
+    }
+  }
+
+  log() << "hotswap: safe far return: no register pair at 0x"
+        << utohexstr(InstOffset)
+        << "; deferring to the s_branch island planner\n";
+  return {};
 }
 
 bool isSBranchReachable(uint64_t From, uint64_t To) {
@@ -1399,11 +1319,13 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
 /// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
 /// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
 /// the pool layout is known. A site beyond s_branch reach of the appended pool
-/// uses an SCC-neutral get-PC/add/set-PC sequence on the backward edge.
+/// uses either an SCC-neutral get-PC/add/set-PC sequence or a chain of
+/// registerless s_branch islands on the backward edge.
 /// Adjacent far sites are coalesced after patching to reduce gateway pressure.
-/// Every far source edge then uses a short branch to nearby safe NOP padding;
-/// that gateway uses the gfx12 SGPR-backed set-PC sequence. No source or return
-/// edge executes gfx1250's broken s_add_pc_i64 instruction.
+/// Every far source edge uses a short branch to nearby safe padding; that
+/// gateway either continues through s_branch islands or uses the gfx12
+/// SGPR-backed set-PC sequence. No source or return edge executes gfx1250's
+/// broken s_add_pc_i64 instruction.
 [[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     ArrayRef<uint8_t> Replacement) {
@@ -1430,9 +1352,21 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
   const bool Far = !(isSBranchReachable(InstOffset, *PoolStart) &&
                      isSBranchReachable(*ShortBackFrom, *ReturnTo));
 
-  uint64_t ReturnReserve = Far ? SetPcReturnReserveBytes : MinInstSize;
+  FarReturnScratch Scratch;
+  if (Far)
+    Scratch = reserveSafeFarReturn(Ctx, InstOffset, InstSize, Replacement);
+  uint64_t ReturnReserve = MinInstSize;
+  uint64_t BodyPrefix = 0;
+  if (Far && Scratch.Available) {
+    ReturnReserve = Scratch.PreserveVcc ? VccPreservingReturnReserveBytes
+                                        : SetPcReturnReserveBytes;
+    BodyPrefix = Scratch.PreserveVcc ? VccSaveRestoreBytes : 0;
+  }
   std::optional<uint64_t> TrampolineSize = checkedAddUint64(
-      Replacement.size(), ReturnReserve, "queued trampoline size");
+      Replacement.size(), BodyPrefix, "queued trampoline body size");
+  if (TrampolineSize)
+    TrampolineSize = checkedAddUint64(*TrampolineSize, ReturnReserve,
+                                      "queued trampoline size");
   if (!TrampolineSize)
     return false;
   std::optional<uint64_t> QueuedBytes =
@@ -1444,6 +1378,13 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
   Trampoline T;
   T.OriginalOffset = InstOffset;
   T.OriginalSize = InstSize;
+  if (Scratch.PreserveVcc) {
+    SmallVector<uint8_t> Restore = assembleSingleInst(
+        "s_mov_b32 vcc_lo, s" + std::to_string(Scratch.SgprBase), Ctx.LS);
+    if (Restore.size() != VccSaveRestoreBytes)
+      return false;
+    T.Bytes.append(Restore.begin(), Restore.end());
+  }
   T.Bytes.insert(T.Bytes.end(), Replacement.begin(), Replacement.end());
   if (std::optional<ElfView::FunctionTextRange> Range =
           Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset)) {
@@ -1465,16 +1406,13 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
     if (InstSize < MinInstSize)
       return declineFar(Twine(InstSize) + " B, smaller than " +
                         Twine(MinInstSize) + " B forward branch");
-    std::optional<SafeSgprScratchBlock> Scratch =
-        reserveSafeFarReturn(Ctx, InstOffset);
-    if (!Scratch)
-      return declineFar("no safe SGPR triple for set-PC return");
-    T.Bytes.insert(T.Bytes.end(), SetPcReturnReserveBytes, uint8_t{0});
+    T.Bytes.insert(T.Bytes.end(), ReturnReserve, uint8_t{0});
     T.Long = true;
-    T.UsesSetPCBack = true;
-    T.LongBranchSgprBase = Scratch->Base;
+    T.UsesSetPCBack = Scratch.Available;
+    T.LongBranchSgprBase = Scratch.SgprBase;
+    T.LongBranchUsesVcc = Scratch.UseVcc;
+    T.LongBranchPreservesVcc = Scratch.PreserveVcc;
     Ctx.Profile.count(HotswapMetric::JumpLong);
-    notePendingTrampolineMutation(Ctx, T);
     Ctx.OutTrampolines.emplace_back(std::move(T));
     Ctx.QueuedTrampolineBytes = *QueuedBytes;
     return true;
@@ -1484,7 +1422,6 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
     // Reserve the short branch-back slot; fixupTrampolineBranches fills it in.
     T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
   }
-  notePendingTrampolineMutation(Ctx, T);
   Ctx.OutTrampolines.emplace_back(std::move(T));
   Ctx.QueuedTrampolineBytes = *QueuedBytes;
   return true;
@@ -1722,8 +1659,8 @@ struct ReachingPcState {
   SmallVector<size_t, 4> ActiveMaterializations;
 };
 
-[[nodiscard]] static bool mergeReachingPcState(ReachingPcState &Into,
-                                               const ReachingPcState &From) {
+static bool mergeReachingPcState(ReachingPcState &Into,
+                                 const ReachingPcState &From) {
   if (!From.Reached)
     return false;
   ReachingPcState Before = Into;
@@ -1743,15 +1680,12 @@ struct ReachingPcState {
          Before.ActiveMaterializations != Into.ActiveMaterializations;
 }
 
-[[nodiscard]] static bool
-isExactRegisterOperand(const MCInst &Inst, unsigned Index, MCRegister Reg) {
+static bool isExactRegisterOperand(const MCInst &Inst, unsigned Index,
+                                   MCRegister Reg) {
   return Index < Inst.getNumOperands() && Inst.getOperand(Index).isReg() &&
          Inst.getOperand(Index).getReg() == Reg;
 }
 
-/// Read a constant 32-bit source operand through MC. A decoded SOP2 literal is
-/// an immediate; an assembled operand may be an absolute expression. Anything
-/// else (a register source) is not a constant displacement.
 static std::optional<uint32_t>
 evaluateAbsoluteUint32Operand(const MCOperand &Operand) {
   if (Operand.isImm())
@@ -1814,19 +1748,18 @@ matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
   const InternalDecodedInst &MakeDelta = Decoded[GetPcIndex + 1];
   const InternalDecodedInst &AddLow = Decoded[GetPcIndex + 2];
   const InternalDecodedInst &AddHigh = Decoded[GetPcIndex + 3];
-  if (!MakeDelta.DecodeSucceeded || !AddLow.DecodeSucceeded ||
-      !AddHigh.DecodeSucceeded ||
-      MakeDelta.Inst.getOpcode() != LS.SAddCoI32Opcode ||
-      AddLow.Inst.getOpcode() != LS.SAddU32Opcode ||
-      AddHigh.Inst.getOpcode() != LS.SAddcU32Opcode ||
+  if (MakeDelta.Mnemonic != "s_add_co_i32" ||
+      AddLow.Mnemonic != "s_add_co_u32" ||
+      AddHigh.Mnemonic != "s_add_co_ci_u32" ||
       MakeDelta.Inst.getNumOperands() != 3 ||
       !MakeDelta.Inst.getOperand(0).isReg() ||
       !MakeDelta.Inst.getOperand(0).getReg() ||
       !MakeDelta.Inst.getOperand(2).isImm())
     return std::nullopt;
   MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
-  if (LS.MRI->regsOverlap(DeltaReg, Pair) ||
-      AddLow.Inst.getNumOperands() != 3 || !AddLow.Inst.getOperand(0).isReg() ||
+  if (LS.MRI->regsOverlap(DeltaReg, Pair))
+    return std::nullopt;
+  if (AddLow.Inst.getNumOperands() != 3 || !AddLow.Inst.getOperand(0).isReg() ||
       !AddLow.Inst.getOperand(1).isReg() ||
       !AddLow.Inst.getOperand(0).getReg() ||
       AddLow.Inst.getOperand(0).getReg() !=
@@ -1865,69 +1798,336 @@ struct ReachingCallGroup {
   SmallVector<size_t, 8> Calls;
 };
 
-static std::optional<uint64_t>
-getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
-                    uint64_t TextAddr, uint64_t TextEnd);
+struct FiniteSetPcTransfer {
+  size_t InstIndex = 0;
+  size_t SequenceBeginIndex = 0;
+  size_t SequenceEndIndex = 0;
+  uint64_t Target = 0;
+  std::optional<size_t> LocalTargetIndex;
+  uint64_t FunctionBegin = 0;
+  uint64_t FunctionEnd = 0;
+};
 
-/// A reusable target value remains valid after a call only when the exact local
-/// callee is fully decoded, returns through the call's link pair, and cannot
-/// transitively or directly clobber the target pair.
-[[nodiscard]] static bool calleePreservesReusableTarget(
-    uint64_t Target, MCRegister TargetRegister, MCRegister ReturnRegister,
+static const ElfView::FunctionTextRange *
+findInnermostFunctionRange(uint64_t Address,
+                           ArrayRef<ElfView::FunctionTextRange> Ranges) {
+  const ElfView::FunctionTextRange *Best = nullptr;
+  for (const ElfView::FunctionTextRange &Range : Ranges)
+    if (Range.Begin <= Address && Address < Range.End &&
+        (!Best || Range.Begin > Best->Begin ||
+         (Range.Begin == Best->Begin && Range.End < Best->End)))
+      Best = &Range;
+  return Best;
+}
+
+/// Collect exact materialized s_set_pc_i64 transfers. These are candidates,
+/// not proofs: a later closed-world audit must still rule out an alternate
+/// entry into the materialization before the edge can authorize mutation.
+static SmallVector<FiniteSetPcTransfer, 8> collectFiniteSetPcCandidates(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
-  const ElfView::FunctionTextRange *Callee = nullptr;
-  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
-    if (Range.Begin == Target && Range.Begin >= TextAddr &&
-        Range.End > Range.Begin && Range.End <= TextEnd &&
-        (!Callee || Range.End < Callee->End))
-      Callee = &Range;
-  if (!Callee)
-    return false;
+  SmallVector<FiniteSetPcTransfer, 8> Candidates;
+  DenseMap<uint64_t, size_t> OffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
 
-  uint64_t CalleeBegin = Callee->Begin - TextAddr;
-  uint64_t CalleeEnd = Callee->End - TextAddr;
-  bool SawInstruction = false;
-  for (const InternalDecodedInst &DI : Decoded) {
-    if (DI.Offset < CalleeBegin || DI.Offset >= CalleeEnd)
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    const InternalDecodedInst &GetPc = Decoded[I];
+    if (!GetPc.DecodeSucceeded ||
+        GetPc.Inst.getOpcode() != LS.SGetPcI64Opcode ||
+        GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg() ||
+        !GetPc.Inst.getOperand(0).getReg())
       continue;
-    SawInstruction = true;
-    if (!DI.DecodeSucceeded || LS.MIA->isCall(DI.Inst) ||
-        definesOverlappingRegister(DI, LS, TargetRegister))
-      return false;
+    MCRegister Pair(GetPc.Inst.getOperand(0).getReg());
+    std::optional<uint64_t> GetPcAddress = checkedAddUint64(
+        TextAddr, GetPc.Offset, "finite set-PC get-PC address");
+    if (!GetPcAddress)
+      continue;
+    const ElfView::FunctionTextRange *Range =
+        findInnermostFunctionRange(*GetPcAddress, FunctionRanges);
+    if (!Range || Range->Begin < TextAddr || Range->End > TextEnd)
+      continue;
+    ArrayRef<InternalDecodedInst>::const_iterator FunctionEnd =
+        llvm::lower_bound(Decoded, Range->End - TextAddr,
+                          [](const InternalDecodedInst &DI, uint64_t Offset) {
+                            return DI.Offset < Offset;
+                          });
+    size_t FunctionEndIndex =
+        static_cast<size_t>(FunctionEnd - Decoded.begin());
+    auto appendCandidate = [&](size_t SetPcIndex, size_t SequenceEndIndex,
+                               uint64_t Target) {
+      for (size_t J = I; J <= SequenceEndIndex; ++J) {
+        if (!Decoded[J].DecodeSucceeded)
+          return;
+        if (J == SequenceEndIndex)
+          break;
+        std::optional<uint64_t> End =
+            checkedAddUint64(Decoded[J].Offset, Decoded[J].Size,
+                             "finite set-PC materialization instruction end");
+        if (!End || *End != Decoded[J + 1].Offset)
+          return;
+      }
+      std::optional<size_t> LocalTargetIndex;
+      if (Target >= TextAddr && Target < TextEnd) {
+        DenseMap<uint64_t, size_t>::const_iterator LocalTarget =
+            OffsetToIndex.find(Target - TextAddr);
+        // A local transfer to the middle of an instruction is not finite for
+        // purposes of safe rewriting.
+        if (LocalTarget == OffsetToIndex.end())
+          return;
+        LocalTargetIndex = LocalTarget->second;
+      }
+      Candidates.push_back({SetPcIndex, I, SequenceEndIndex, Target,
+                            LocalTargetIndex, Range->Begin - TextAddr,
+                            Range->End - TextAddr});
+    };
 
-    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
-      if (DI.Inst.getNumOperands() != 1 ||
-          !isExactRegisterOperand(DI.Inst, 0, ReturnRegister))
-        return false;
-      continue;
+    std::optional<std::pair<size_t, uint64_t>> Match =
+        matchReusablePcMaterialization(Decoded, I, FunctionEndIndex, Pair, LS,
+                                       TextAddr);
+    if (Match && Match->first + 1 < FunctionEndIndex) {
+      size_t SetPcIndex = Match->first + 1;
+      const InternalDecodedInst &SetPc = Decoded[SetPcIndex];
+      if (SetPc.DecodeSucceeded &&
+          SetPc.Inst.getOpcode() == LS.SSetPcI64Opcode &&
+          SetPc.Inst.getNumOperands() == 1 &&
+          isExactRegisterOperand(SetPc.Inst, 0, Pair))
+        appendCandidate(SetPcIndex, SetPcIndex, Match->second);
     }
+
+    // Tensile also emits a signed-direction materialized jump. The signed
+    // displacement is a link-time constant, but the sequence uses a generic
+    // compare/abs/add-or-sub shape:
+    //
+    //   get_pc Pair
+    //   add_co_i32 Delta, Literal, Imm
+    //   cmp_ge_i32 Delta, 0
+    //   cbranch_scc1 Positive
+    //   abs_i32 Delta, Delta
+    //   sub_co_u32/sub_co_ci_u32 Pair, Pair, Delta
+    //   set_pc Pair
+    // Positive:
+    //   add_co_u32/add_co_ci_u32 Pair, Pair, Delta
+    //   set_pc Pair
+    //
+    // Both set-PC instructions have the same finite target. Keep the entire
+    // shape in one audited materialization interval so an alternate entry
+    // into either arm invalidates both candidates.
+    if (I + 10 >= FunctionEndIndex)
+      continue;
+    const InternalDecodedInst &MakeDelta = Decoded[I + 1];
+    const InternalDecodedInst &Compare = Decoded[I + 2];
+    const InternalDecodedInst &Branch = Decoded[I + 3];
+    const InternalDecodedInst &Abs = Decoded[I + 4];
+    const InternalDecodedInst &SubLow = Decoded[I + 5];
+    const InternalDecodedInst &SubHigh = Decoded[I + 6];
+    const InternalDecodedInst &NegativeSetPc = Decoded[I + 7];
+    const InternalDecodedInst &AddLow = Decoded[I + 8];
+    const InternalDecodedInst &AddHigh = Decoded[I + 9];
+    const InternalDecodedInst &PositiveSetPc = Decoded[I + 10];
+    if (!MakeDelta.DecodeSucceeded || !Compare.DecodeSucceeded ||
+        !Branch.DecodeSucceeded || !Abs.DecodeSucceeded ||
+        !SubLow.DecodeSucceeded || !SubHigh.DecodeSucceeded ||
+        !NegativeSetPc.DecodeSucceeded || !AddLow.DecodeSucceeded ||
+        !AddHigh.DecodeSucceeded || !PositiveSetPc.DecodeSucceeded ||
+        MakeDelta.Mnemonic != "s_add_co_i32" ||
+        MakeDelta.Inst.getNumOperands() != 3 ||
+        !MakeDelta.Inst.getOperand(0).isReg() ||
+        !MakeDelta.Inst.getOperand(0).getReg() ||
+        !MakeDelta.Inst.getOperand(2).isImm())
+      continue;
+    MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
+    if (LS.MRI->regsOverlap(DeltaReg, Pair))
+      continue;
+    if (Compare.Mnemonic != "s_cmp_ge_i32" ||
+        Compare.Inst.getNumOperands() != 2 ||
+        !isExactRegisterOperand(Compare.Inst, 0, DeltaReg) ||
+        !Compare.Inst.getOperand(1).isImm() ||
+        Compare.Inst.getOperand(1).getImm() != 0 ||
+        Branch.Mnemonic != "s_cbranch_scc1" || Abs.Mnemonic != "s_abs_i32" ||
+        Abs.Inst.getNumOperands() != 2 ||
+        !isExactRegisterOperand(Abs.Inst, 0, DeltaReg) ||
+        !isExactRegisterOperand(Abs.Inst, 1, DeltaReg) ||
+        NegativeSetPc.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+        NegativeSetPc.Inst.getNumOperands() != 1 ||
+        !isExactRegisterOperand(NegativeSetPc.Inst, 0, Pair) ||
+        PositiveSetPc.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+        PositiveSetPc.Inst.getNumOperands() != 1 ||
+        !isExactRegisterOperand(PositiveSetPc.Inst, 0, Pair))
+      continue;
+    std::optional<uint64_t> PositiveLabel =
+        evaluateDirectControlFlowTarget(Branch, LS);
+    if (!PositiveLabel || *PositiveLabel != AddLow.Offset)
+      continue;
+
+    auto matchesPairArithmetic = [&](const InternalDecodedInst &Low,
+                                     const InternalDecodedInst &High,
+                                     StringRef LowMnemonic,
+                                     StringRef HighMnemonic) {
+      if (Low.Mnemonic != LowMnemonic || High.Mnemonic != HighMnemonic ||
+          Low.Inst.getNumOperands() != 3 || !Low.Inst.getOperand(0).isReg() ||
+          !Low.Inst.getOperand(1).isReg() || !Low.Inst.getOperand(0).getReg() ||
+          Low.Inst.getOperand(0).getReg() != Low.Inst.getOperand(1).getReg() ||
+          !isExactRegisterOperand(Low.Inst, 2, DeltaReg) ||
+          High.Inst.getNumOperands() != 3 || !High.Inst.getOperand(0).isReg() ||
+          !High.Inst.getOperand(1).isReg() ||
+          !High.Inst.getOperand(0).getReg() ||
+          High.Inst.getOperand(0).getReg() !=
+              High.Inst.getOperand(1).getReg() ||
+          !High.Inst.getOperand(2).isImm() ||
+          High.Inst.getOperand(2).getImm() != 0)
+        return false;
+      MCRegister LowReg(Low.Inst.getOperand(0).getReg());
+      MCRegister HighReg(High.Inst.getOperand(0).getReg());
+      std::optional<unsigned> LowIndex = numberedSgprIndex(*LS.MRI, LowReg);
+      std::optional<unsigned> HighIndex = numberedSgprIndex(*LS.MRI, HighReg);
+      return LowIndex && HighIndex && *HighIndex == *LowIndex + 1 &&
+             LS.MRI->regsOverlap(LowReg, Pair) &&
+             LS.MRI->regsOverlap(HighReg, Pair);
+    };
+    if (!matchesPairArithmetic(SubLow, SubHigh, "s_sub_co_u32",
+                               "s_sub_co_ci_u32") ||
+        !matchesPairArithmetic(AddLow, AddHigh, "s_add_co_u32",
+                               "s_add_co_ci_u32"))
+      continue;
+
+    std::optional<uint32_t> FirstAddend =
+        evaluateAbsoluteUint32Operand(MakeDelta.Inst.getOperand(1));
+    if (!FirstAddend)
+      continue;
+    uint32_t DeltaBits =
+        *FirstAddend +
+        static_cast<uint32_t>(MakeDelta.Inst.getOperand(2).getImm());
+    int64_t SignedDelta = static_cast<int32_t>(DeltaBits);
+    std::optional<uint64_t> PcValue = checkedAddUint64(
+        *GetPcAddress, GetPc.Size, "signed finite set-PC get-PC value");
+    if (!PcValue)
+      continue;
+    uint64_t Target = *PcValue + static_cast<uint64_t>(SignedDelta);
+    appendCandidate(I + 7, I + 10, Target);
+    appendCandidate(I + 10, I + 10, Target);
+  }
+  llvm::sort(Candidates, [](const FiniteSetPcTransfer &LHS,
+                            const FiniteSetPcTransfer &RHS) {
+    return LHS.InstIndex < RHS.InstIndex;
+  });
+  Candidates.erase(std::unique(Candidates.begin(), Candidates.end(),
+                               [](const FiniteSetPcTransfer &LHS,
+                                  const FiniteSetPcTransfer &RHS) {
+                                 return LHS.InstIndex == RHS.InstIndex;
+                               }),
+                   Candidates.end());
+  return Candidates;
+}
+
+static BitVector computeStaticallyReachableInstructions(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges, uint64_t TextAddr,
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers) {
+  BitVector Reachable(Decoded.size());
+  DenseMap<uint64_t, size_t> OffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
+  DenseMap<size_t, const FiniteSetPcTransfer *> TransferByInst;
+  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+    TransferByInst.try_emplace(Transfer.InstIndex, &Transfer);
+
+  SmallVector<size_t, 32> Worklist;
+  auto addRoot = [&](uint64_t Offset) {
+    DenseMap<uint64_t, size_t>::const_iterator It = OffsetToIndex.find(Offset);
+    if (It != OffsetToIndex.end())
+      Worklist.push_back(It->second);
+  };
+  for (uint64_t Entry : DeclaredEntries)
+    addRoot(Entry);
+  for (uint64_t Entry : ExternalEntries)
+    addRoot(Entry);
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin >= TextAddr)
+      addRoot(Range.Begin - TextAddr);
+  if (Worklist.empty() && !Decoded.empty())
+    Worklist.push_back(0);
+
+  while (!Worklist.empty()) {
+    size_t I = Worklist.pop_back_val();
+    if (Reachable.test(I))
+      continue;
+    Reachable.set(I);
+    const InternalDecodedInst &DI = Decoded[I];
+    if (!DI.DecodeSucceeded)
+      continue;
+    auto addOffset = [&](uint64_t Offset) {
+      DenseMap<uint64_t, size_t>::const_iterator It =
+          OffsetToIndex.find(Offset);
+      if (It != OffsetToIndex.end())
+        Worklist.push_back(It->second);
+    };
     if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
         DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
         LS.MIA->isReturn(DI.Inst))
       continue;
-    if (LS.MIA->isIndirectBranch(DI.Inst) ||
-        DI.Inst.getOpcode() == LS.SAddPcI64Opcode)
-      return false;
-
-    bool HasFallthrough = true;
-    if (LS.MIA->isBranch(DI.Inst)) {
-      std::optional<uint64_t> BranchTarget =
-          getDirectTextTarget(DI, LS, TextAddr, TextEnd);
-      if (!BranchTarget || *BranchTarget < CalleeBegin ||
-          *BranchTarget >= CalleeEnd)
-        return false;
-      HasFallthrough = !LS.MIA->isUnconditionalBranch(DI.Inst);
-    }
-    if (!HasFallthrough)
+    if (LS.MIA->isCall(DI.Inst)) {
+      std::optional<uint64_t> Fallthrough = checkedAddUint64(
+          DI.Offset, DI.Size, "finite set-PC call continuation");
+      if (Fallthrough)
+        addOffset(*Fallthrough);
       continue;
-    std::optional<uint64_t> Fallthrough =
-        checkedAddUint64(DI.Offset, DI.Size, "reusable callee fallthrough");
-    if (!Fallthrough || *Fallthrough >= CalleeEnd)
-      return false;
+    }
+    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode ||
+        LS.MIA->isIndirectBranch(DI.Inst)) {
+      DenseMap<size_t, const FiniteSetPcTransfer *>::const_iterator Transfer =
+          TransferByInst.find(I);
+      if (Transfer != TransferByInst.end() &&
+          Transfer->second->LocalTargetIndex)
+        Worklist.push_back(*Transfer->second->LocalTargetIndex);
+      continue;
+    }
+    if (LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
+      if (Target)
+        addOffset(*Target);
+      if (LS.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    }
+    std::optional<uint64_t> Fallthrough = checkedAddUint64(
+        DI.Offset, DI.Size, "finite set-PC reachability fallthrough");
+    if (Fallthrough)
+      addOffset(*Fallthrough);
   }
-  return SawInstruction;
+  return Reachable;
+}
+
+static SmallVector<FiniteSetPcTransfer, 8> selectLeastReachableSetPcCandidates(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges, uint64_t TextAddr,
+    ArrayRef<FiniteSetPcTransfer> AllCandidates,
+    const BitVector &ProvenCandidates, const BitVector &RejectedCandidates) {
+  SmallVector<FiniteSetPcTransfer, 8> Selected;
+  BitVector SelectedBits(AllCandidates.size());
+  for (size_t I = 0; I != AllCandidates.size(); ++I)
+    if (ProvenCandidates.test(I) && !RejectedCandidates.test(I)) {
+      SelectedBits.set(I);
+      Selected.push_back(AllCandidates[I]);
+    }
+  for (;;) {
+    BitVector Reachable = computeStaticallyReachableInstructions(
+        Decoded, LS, DeclaredEntries, ExternalEntries, FunctionRanges, TextAddr,
+        Selected);
+    bool Changed = false;
+    for (size_t I = 0; I != AllCandidates.size(); ++I) {
+      if (RejectedCandidates.test(I) || SelectedBits.test(I) ||
+          !Reachable.test(AllCandidates[I].InstIndex))
+        continue;
+      SelectedBits.set(I);
+      Selected.push_back(AllCandidates[I]);
+      Changed = true;
+    }
+    if (!Changed)
+      return Selected;
+  }
 }
 
 /// Resolve register calls whose target pair is selected once and reused across
@@ -1938,15 +2138,16 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-    ArrayRef<std::optional<PcMaterializedCallInfo>> LocalCalls,
-    ArrayRef<uint64_t> DeclaredEntries) {
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers = {}) {
   std::vector<ReachingCallTargets> Resolved(Decoded.size());
   SmallVector<ReachingCallGroup, 8> Groups;
+  DenseMap<size_t, const FiniteSetPcTransfer *> FiniteSetPcByInst;
+  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+    FiniteSetPcByInst.try_emplace(Transfer.InstIndex, &Transfer);
 
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &Call = Decoded[I];
-    if (LocalCalls[I] || !Call.DecodeSucceeded ||
-        Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
+    if (!Call.DecodeSucceeded || Call.Inst.getOpcode() != LS.SSwapPcI64Opcode ||
         Call.Inst.getNumOperands() < 2)
       continue;
     const MCOperand &TargetOp =
@@ -1983,31 +2184,17 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
   for (size_t I = 0; I != Decoded.size(); ++I)
     OffsetToIndex[Decoded[I].Offset] = I;
 
-  SmallVector<std::pair<size_t, uint64_t>, 16> DirectEntries;
-  for (size_t SourceIndex = 0; SourceIndex != Decoded.size(); ++SourceIndex) {
-    const InternalDecodedInst &Source = Decoded[SourceIndex];
-    if (!Source.DecodeSucceeded ||
-        (!LS.MIA->isBranch(Source.Inst) && !LS.MIA->isCall(Source.Inst)) ||
-        LS.MIA->isReturn(Source.Inst))
-      continue;
-    std::optional<uint64_t> Target =
-        getDirectTextTarget(Source, LS, TextAddr, TextEnd);
-    if (Target)
-      DirectEntries.emplace_back(SourceIndex, *Target);
-  }
-  DenseMap<std::pair<uint64_t, uint64_t>, bool> CalleePreservation;
-
   for (const ReachingCallGroup &Group : Groups) {
     ArrayRef<InternalDecodedInst>::const_iterator Begin =
-        std::lower_bound(Decoded.begin(), Decoded.end(), Group.Begin,
-                         [](const InternalDecodedInst &DI, uint64_t Offset) {
-                           return DI.Offset < Offset;
-                         });
-    ArrayRef<InternalDecodedInst>::const_iterator End =
-        std::lower_bound(Begin, Decoded.end(), Group.End,
-                         [](const InternalDecodedInst &DI, uint64_t Offset) {
-                           return DI.Offset < Offset;
-                         });
+        llvm::lower_bound(Decoded, Group.Begin,
+                          [](const InternalDecodedInst &DI, uint64_t Offset) {
+                            return DI.Offset < Offset;
+                          });
+    ArrayRef<InternalDecodedInst>::const_iterator End = std::lower_bound(
+        Begin, Decoded.end(), Group.End,
+        [](const InternalDecodedInst &DI, uint64_t Offset) {
+          return DI.Offset < Offset;
+        });
     size_t BeginIndex = static_cast<size_t>(Begin - Decoded.begin());
     size_t EndIndex = static_cast<size_t>(End - Decoded.begin());
     if (BeginIndex == EndIndex)
@@ -2024,8 +2211,7 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
         Starters[I] = Match->first;
         Completions[Match->first] = Match->second;
         for (size_t J = I + 1; J != Match->first; ++J)
-          if (Decoded[J].DecodeSucceeded &&
-              definesOverlappingRegister(Decoded[J], LS, Group.TargetRegister))
+          if (definesOverlappingRegister(Decoded[J], LS, Group.TargetRegister))
             Intermediates[J].push_back(Match->first);
       }
     }
@@ -2033,38 +2219,12 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
       continue;
 
     std::vector<ReachingPcState> Before(EndIndex - BeginIndex);
+    Before.front().Reached = true;
+    Before.front().HasUnknown = true;
     SmallVector<size_t, 32> Worklist;
     BitVector Queued(EndIndex - BeginIndex);
-    auto seedUnknownEntry = [&](size_t Index) {
-      ReachingPcState &Entry = Before[Index - BeginIndex];
-      Entry.Reached = true;
-      Entry.HasUnknown = true;
-      if (!Queued.test(Index - BeginIndex)) {
-        Worklist.push_back(Index);
-        Queued.set(Index - BeginIndex);
-      }
-    };
-    seedUnknownEntry(BeginIndex);
-
-    // Every declared entry and direct cross-function target is an independent
-    // root. An entry into a materialization interior must not inherit the
-    // token established by the containing function's ordinary entry path.
-    for (uint64_t Entry : DeclaredEntries) {
-      DenseMap<uint64_t, size_t>::const_iterator EntryIndex =
-          OffsetToIndex.find(Entry);
-      if (EntryIndex != OffsetToIndex.end() &&
-          EntryIndex->second >= BeginIndex && EntryIndex->second < EndIndex)
-        seedUnknownEntry(EntryIndex->second);
-    }
-    for (const std::pair<size_t, uint64_t> &Entry : DirectEntries) {
-      if (Entry.first >= BeginIndex && Entry.first < EndIndex)
-        continue;
-      DenseMap<uint64_t, size_t>::const_iterator TargetIndex =
-          OffsetToIndex.find(Entry.second);
-      if (TargetIndex != OffsetToIndex.end() &&
-          TargetIndex->second >= BeginIndex && TargetIndex->second < EndIndex)
-        seedUnknownEntry(TargetIndex->second);
-    }
+    Worklist.push_back(BeginIndex);
+    Queued.set(0);
 
     while (!Worklist.empty()) {
       size_t I = Worklist.pop_back_val();
@@ -2075,16 +2235,7 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
       DenseMap<size_t, size_t>::const_iterator Starter = Starters.find(I);
       DenseMap<size_t, uint64_t>::const_iterator Completion =
           Completions.find(I);
-      if (!DI.DecodeSucceeded) {
-        // An undecoded slot has an unknown effect on the target pair and on
-        // control flow, so any reaching value it carries forward is unproven.
-        // Fail closed to Unknown; the finite-state test below then refuses
-        // every reusable call this path reaches. Starters and Completions are
-        // built only from decoded materializations, so neither can name I.
-        State.HasUnknown = true;
-        State.Targets.clear();
-        State.ActiveMaterializations.clear();
-      } else if (Starter != Starters.end()) {
+      if (Starter != Starters.end()) {
         // The get-PC instruction overwrites the complete target pair. Record a
         // token proving that this path entered the exact materialization; the
         // completion may only produce a known target from that token.
@@ -2120,62 +2271,9 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
         State.ActiveMaterializations = std::move(Preserved);
       }
 
-      bool IsReusableCall = llvm::is_contained(Group.Calls, I);
-      bool HasFiniteState = !State.HasUnknown &&
-                            State.ActiveMaterializations.empty() &&
-                            !State.Targets.empty();
-      // Recompute Resolved[I] on every visit so a later reconvergent path that
-      // makes this call Unknown erases an earlier finite result. Writing only
-      // on finite state would leave a stale target set from the first visit.
-      if (IsReusableCall)
-        Resolved[I] = HasFiniteState ? State.Targets : ReachingCallTargets();
-
-      // The first call after a straight-line materialization is also resolved
-      // by the one-shot matcher. Let that bootstrap call preserve the reaching
-      // value only when both analyses prove the same singleton target through
-      // this exact target pair.
-      bool IsMatchingBootstrapCall = false;
-      if (LocalCalls[I] && HasFiniteState && State.Targets.size() == 1 &&
-          State.Targets.front() == LocalCalls[I]->Target &&
-          DI.Inst.getNumOperands() >= 2) {
-        const MCOperand &TargetOp =
-            DI.Inst.getOperand(DI.Inst.getNumOperands() - 1);
-        IsMatchingBootstrapCall =
-            TargetOp.isReg() && TargetOp.getReg() == Group.TargetRegister;
-      }
-      bool CalleesPreserve = (IsReusableCall || IsMatchingBootstrapCall) &&
-                             HasFiniteState && DI.Inst.getNumOperands() != 0 &&
-                             DI.Inst.getOperand(0).isReg() &&
-                             DI.Inst.getOperand(0).getReg();
-      if (CalleesPreserve) {
-        MCRegister ReturnRegister(DI.Inst.getOperand(0).getReg());
-        uint64_t RegisterKey = static_cast<uint64_t>(Group.TargetRegister.id())
-                                   << 32 |
-                               ReturnRegister.id();
-        for (uint64_t Target : State.Targets) {
-          std::pair<uint64_t, uint64_t> Key{Target, RegisterKey};
-          DenseMap<std::pair<uint64_t, uint64_t>, bool>::iterator Cached =
-              CalleePreservation.find(Key);
-          if (Cached == CalleePreservation.end())
-            Cached =
-                CalleePreservation
-                    .try_emplace(Key, calleePreservesReusableTarget(
-                                          Target, Group.TargetRegister,
-                                          ReturnRegister, Decoded, LS, TextAddr,
-                                          TextEnd, FunctionRanges))
-                    .first;
-          CalleesPreserve &= Cached->second;
-        }
-      }
-
-      if (LS.MIA->isCall(DI.Inst) && !CalleesPreserve) {
-        // MC call operands do not describe transitive clobbers. Carry the
-        // finite set past this call only after proving every exact local
-        // target preserves the reusable target pair.
-        State.HasUnknown = true;
-        State.Targets.clear();
-        State.ActiveMaterializations.clear();
-      }
+      if (llvm::is_contained(Group.Calls, I) && !State.HasUnknown &&
+          State.ActiveMaterializations.empty() && !State.Targets.empty())
+        Resolved[I] = State.Targets;
 
       SmallVector<size_t, 2> Successors;
       auto appendFallthrough = [&]() {
@@ -2188,8 +2286,17 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
         // No successor.
       } else if (LS.MIA->isCall(DI.Inst)) {
         appendFallthrough();
-      } else if (LS.MIA->isIndirectBranch(DI.Inst)) {
-        // An indirect jump or bounded return leaves this intraprocedural path.
+      } else if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode ||
+                 LS.MIA->isIndirectBranch(DI.Inst)) {
+        DenseMap<size_t, const FiniteSetPcTransfer *>::const_iterator
+            FiniteSetPc = FiniteSetPcByInst.find(I);
+        if (FiniteSetPc != FiniteSetPcByInst.end() &&
+            FiniteSetPc->second->LocalTargetIndex &&
+            *FiniteSetPc->second->LocalTargetIndex >= BeginIndex &&
+            *FiniteSetPc->second->LocalTargetIndex < EndIndex)
+          Successors.push_back(*FiniteSetPc->second->LocalTargetIndex);
+        // All other indirect jumps or bounded returns leave this
+        // intraprocedural path.
       } else if (LS.MIA->isBranch(DI.Inst)) {
         std::optional<uint64_t> Target =
             evaluateDirectControlFlowTarget(DI, LS);
@@ -2231,9 +2338,9 @@ struct BoundedSetPcReturn {
   SmallVector<uint64_t, 2> Targets;
 };
 
-struct DirectTextEntry {
+struct DirectTargetSource {
+  size_t InstIndex = 0;
   uint64_t Target = 0;
-  size_t SourceIndex = 0;
 };
 
 struct KnownCallEntry {
@@ -2241,18 +2348,59 @@ struct KnownCallEntry {
   size_t CallIndex = 0;
 };
 
-static bool compareDirectTextEntries(const DirectTextEntry &LHS,
-                                     const DirectTextEntry &RHS) {
-  if (LHS.Target != RHS.Target)
-    return LHS.Target < RHS.Target;
-  return LHS.SourceIndex < RHS.SourceIndex;
-}
-
 static bool compareKnownCallEntries(const KnownCallEntry &LHS,
                                     const KnownCallEntry &RHS) {
-  if (LHS.Entry != RHS.Entry)
-    return LHS.Entry < RHS.Entry;
-  return LHS.CallIndex < RHS.CallIndex;
+  return std::tie(LHS.Entry, LHS.CallIndex) <
+         std::tie(RHS.Entry, RHS.CallIndex);
+}
+
+struct ExternalCallContinuation {
+  size_t InstIndex = 0;
+  uint64_t Continuation = 0;
+};
+
+struct CallContinuationSource {
+  size_t InstIndex = 0;
+  uint64_t Continuation = 0;
+};
+
+struct FallthroughEntryInfo {
+  bool Proven = false;
+  uint64_t ChainBegin = 0;
+};
+
+struct ControlFlowScanIndex {
+  DenseMap<size_t, PcMaterializedCallInfo> MaterializedCalls;
+  DenseMap<uint64_t, FallthroughEntryInfo> FallthroughEntries;
+  SmallVector<KnownCallSite, 4> Calls;
+  SmallVector<KnownCallEntry, 8> CallsByTarget;
+  SmallVector<KnownCallEntry, 16> CallEntries;
+  DenseMap<size_t, MCRegister> CallReturnRegistersBySource;
+  SmallVector<CallContinuationSource, 4> CallContinuationsByOffset;
+  SmallVector<ExternalCallContinuation, 4> ExternalCallContinuations;
+  SmallVector<size_t, 16> SetPcIndices;
+  SmallVector<size_t, 4> UnboundedIndirectIndices;
+  SmallVector<size_t, 16> BranchOrCallIndices;
+  SmallVector<DirectTargetSource, 16> DirectTargetsByTarget;
+  bool HasUnboundedIndirectEntry = false;
+};
+
+static void indexKnownCalls(ControlFlowScanIndex &Index) {
+  Index.CallsByTarget.clear();
+  Index.CallEntries.clear();
+  Index.CallReturnRegistersBySource.clear();
+  Index.CallsByTarget.reserve(Index.Calls.size());
+  Index.CallEntries.reserve(Index.Calls.size() * 2);
+  for (size_t CallIndex = 0; CallIndex != Index.Calls.size(); ++CallIndex) {
+    const KnownCallSite &Call = Index.Calls[CallIndex];
+    Index.CallsByTarget.push_back({Call.Target, CallIndex});
+    Index.CallEntries.push_back({Call.Target, CallIndex});
+    Index.CallEntries.push_back({Call.Continuation, CallIndex});
+    Index.CallReturnRegistersBySource.try_emplace(Call.InstIndex,
+                                                  Call.ReturnRegister);
+  }
+  llvm::sort(Index.CallsByTarget, compareKnownCallEntries);
+  llvm::sort(Index.CallEntries, compareKnownCallEntries);
 }
 
 static bool hasPcRelativeOperand(const InternalDecodedInst &DI,
@@ -2295,115 +2443,149 @@ getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
   return AbsoluteTarget - TextAddr;
 }
 
-static std::optional<SmallVector<KnownCallSite, 4>> collectKnownCallSites(
-    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
-    uint64_t TextAddr, uint64_t TextEnd,
-    ArrayRef<std::optional<PcMaterializedCallInfo>> MaterializedCalls,
-    ArrayRef<ReachingCallTargets> ReusableCalls) {
-  SmallVector<KnownCallSite, 4> Calls;
+static std::optional<ControlFlowScanIndex>
+buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
+                          const LLVMState &LS, uint64_t TextAddr,
+                          uint64_t TextEnd,
+                          ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
+  ControlFlowScanIndex Index;
+  DenseSet<uint64_t> FunctionBegins;
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin >= TextAddr && Range.Begin < TextEnd)
+      FunctionBegins.insert(Range.Begin - TextAddr);
+
+  bool FallthroughProven = true;
+  uint64_t FallthroughChainBegin = 0;
   for (size_t I = 0; I != Decoded.size(); ++I) {
     const InternalDecodedInst &DI = Decoded[I];
+    if (I == 0) {
+      FallthroughChainBegin = DI.Offset;
+    } else {
+      const InternalDecodedInst &Predecessor = Decoded[I - 1];
+      bool EndOverflows =
+          Predecessor.Offset >
+          std::numeric_limits<uint64_t>::max() - Predecessor.Size;
+      if (EndOverflows || Predecessor.Offset + Predecessor.Size != DI.Offset ||
+          !Predecessor.DecodeSucceeded) {
+        FallthroughProven = false;
+        FallthroughChainBegin = DI.Offset;
+      } else if (LS.MIA->isBarrier(Predecessor.Inst)) {
+        FallthroughProven = true;
+        FallthroughChainBegin = DI.Offset;
+      }
+    }
+    if (FunctionBegins.contains(DI.Offset))
+      Index.FallthroughEntries.try_emplace(
+          DI.Offset,
+          FallthroughEntryInfo{FallthroughProven, FallthroughChainBegin});
+
+    std::optional<PcMaterializedCallInfo> Materialized =
+        matchPcMaterializedCall(Decoded, I, LS, TextAddr);
+    if (Materialized)
+      Index.MaterializedCalls.try_emplace(I, *Materialized);
+
     std::optional<MCRegister> ReturnRegister = getCallReturnRegister(DI, LS);
-    if (!ReturnRegister)
-      continue;
-
-    if (MaterializedCalls[I]) {
-      uint64_t AbsoluteTarget = MaterializedCalls[I]->Target;
-      if (AbsoluteTarget < TextAddr || AbsoluteTarget >= TextEnd)
-        continue;
-      std::optional<uint64_t> Continuation = checkedAddUint64(
-          DI.Offset, DI.Size, "known call continuation address");
-      if (!Continuation)
-        return std::nullopt;
-      Calls.push_back(
-          {I, AbsoluteTarget - TextAddr, *Continuation, *ReturnRegister});
-      continue;
+    if (ReturnRegister) {
+      std::optional<uint64_t> Target;
+      bool HasFiniteExternalTarget = false;
+      if (Materialized) {
+        uint64_t AbsoluteTarget = Materialized->Target;
+        if (AbsoluteTarget >= TextAddr && AbsoluteTarget < TextEnd)
+          Target = AbsoluteTarget - TextAddr;
+        else
+          HasFiniteExternalTarget = true;
+      } else if (DI.Inst.getOpcode() == LS.SSwapPcI64Opcode &&
+                 DI.Inst.getNumOperands() != 0 &&
+                 DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
+        uint64_t AbsoluteTarget = static_cast<uint64_t>(
+            DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
+        if (AbsoluteTarget >= TextAddr && AbsoluteTarget < TextEnd)
+          Target = AbsoluteTarget - TextAddr;
+        else
+          HasFiniteExternalTarget = true;
+      } else if (hasPcRelativeOperand(DI, LS)) {
+        std::optional<uint64_t> RelativeTarget =
+            evaluateDirectControlFlowTarget(DI, LS);
+        if (RelativeTarget) {
+          uint64_t TextSize = TextEnd - TextAddr;
+          if (*RelativeTarget < TextSize)
+            Target = *RelativeTarget;
+          else
+            HasFiniteExternalTarget = true;
+        }
+      } else {
+        Target = getDirectTextTarget(DI, LS, TextAddr, TextEnd);
+      }
+      if (Target || HasFiniteExternalTarget) {
+        std::optional<uint64_t> Continuation = checkedAddUint64(
+            DI.Offset, DI.Size, "known call continuation address");
+        if (!Continuation)
+          return std::nullopt;
+        if (Target)
+          Index.Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
+        if (HasFiniteExternalTarget)
+          Index.ExternalCallContinuations.push_back({I, *Continuation});
+      }
     }
 
-    if (!ReusableCalls[I].empty()) {
-      if (llvm::any_of(ReusableCalls[I], [TextAddr, TextEnd](uint64_t Target) {
-            return Target < TextAddr || Target >= TextEnd;
-          }))
-        continue;
-      std::optional<uint64_t> Continuation = checkedAddUint64(
-          DI.Offset, DI.Size, "known call continuation address");
-      if (!Continuation)
-        return std::nullopt;
-      for (uint64_t AbsoluteTarget : ReusableCalls[I])
-        Calls.push_back(
-            {I, AbsoluteTarget - TextAddr, *Continuation, *ReturnRegister});
-      continue;
+    if (DI.DecodeSucceeded && DI.Inst.getOpcode() == LS.SSetPcI64Opcode)
+      Index.SetPcIndices.push_back(I);
+
+    // Set-PC returns are checked separately against BoundedReturnPositions.
+    // MC lowering erases their return pseudo identity, so including them in
+    // this generic bucket would make even a proven bounded return look like
+    // an arbitrary object-wide entry.
+    if (DI.DecodeSucceeded && DI.Inst.getOpcode() != LS.SSetPcI64Opcode &&
+        !LS.MIA->isReturn(DI.Inst) &&
+        (LS.MIA->isIndirectBranch(DI.Inst) ||
+         DI.Inst.getOpcode() == LS.SAddPcI64Opcode)) {
+      Index.HasUnboundedIndirectEntry = true;
+      Index.UnboundedIndirectIndices.push_back(I);
     }
 
-    std::optional<uint64_t> Target =
+    if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
+        LS.MIA->isReturn(DI.Inst))
+      continue;
+    Index.BranchOrCallIndices.push_back(I);
+
+    std::optional<uint64_t> DirectTarget =
         getDirectTextTarget(DI, LS, TextAddr, TextEnd);
-    if (Target) {
-      std::optional<uint64_t> Continuation = checkedAddUint64(
-          DI.Offset, DI.Size, "known call continuation address");
-      if (!Continuation)
-        return std::nullopt;
-      Calls.push_back({I, *Target, *Continuation, *ReturnRegister});
-    }
+    if (DirectTarget)
+      Index.DirectTargetsByTarget.push_back({I, *DirectTarget});
   }
-  return Calls;
+  llvm::sort(Index.DirectTargetsByTarget,
+             [](const DirectTargetSource &LHS, const DirectTargetSource &RHS) {
+               return std::tie(LHS.Target, LHS.InstIndex) <
+                      std::tie(RHS.Target, RHS.InstIndex);
+             });
+  return Index;
 }
 
-static size_t findDecodedIndexAtOrAfter(ArrayRef<InternalDecodedInst> Decoded,
-                                        uint64_t Offset) {
-  return std::lower_bound(Decoded.begin(), Decoded.end(), Offset,
-                          [](const InternalDecodedInst &DI, uint64_t Value) {
-                            return DI.Offset < Value;
-                          }) -
-         Decoded.begin();
-}
-
-static bool isSetPcReturnCandidate(const InternalDecodedInst &DI,
-                                   const LLVMState &LS) {
-  // AMDGPUMCInstLower lowers S_SETPC_B64_return to S_SETPC_B64, so the
-  // decoded instruction no longer carries MIA::isReturn identity. Recover
-  // only the bounded local-function form from its call/link dataflow.
-  return DI.DecodeSucceeded && DI.Inst.getOpcode() == LS.SSetPcI64Opcode &&
-         DI.Inst.getNumOperands() == 1 && DI.Inst.getOperand(0).isReg() &&
-         DI.Inst.getOperand(0).getReg();
-}
-
-static bool hasUnprovenFallthroughEntry(
-    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
-    uint64_t FunctionBegin, uint64_t ReturnOffset,
-    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<KnownCallSite> Calls,
-    ArrayRef<KnownCallEntry> CallEntries,
-    ArrayRef<DirectTextEntry> DirectEntries) {
+static bool hasUnprovenFallthroughEntry(ArrayRef<InternalDecodedInst> Decoded,
+                                        uint64_t FunctionBegin,
+                                        uint64_t ReturnOffset,
+                                        ArrayRef<uint64_t> DeclaredEntries,
+                                        const ControlFlowScanIndex &Index) {
   if (FunctionBegin == 0)
     return false;
 
-  size_t BeginIndex = findDecodedIndexAtOrAfter(Decoded, FunctionBegin);
-  if (BeginIndex == Decoded.size() ||
-      Decoded[BeginIndex].Offset != FunctionBegin) {
+  DenseMap<uint64_t, FallthroughEntryInfo>::const_iterator Fallthrough =
+      Index.FallthroughEntries.find(FunctionBegin);
+  if (Fallthrough == Index.FallthroughEntries.end()) {
     log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
           << " is not a bounded return: function entry at 0x"
           << utohexstr(FunctionBegin) << " is not an instruction boundary\n";
     return true;
   }
 
-  uint64_t ChainBegin = FunctionBegin;
-  size_t PredecessorIndex = BeginIndex;
-  while (PredecessorIndex != 0) {
-    const InternalDecodedInst &Predecessor = Decoded[PredecessorIndex - 1];
-    std::optional<uint64_t> PredecessorEnd = checkedAddUint64(
-        Predecessor.Offset, Predecessor.Size, "fallthrough predecessor end");
-    if (!PredecessorEnd || *PredecessorEnd != ChainBegin ||
-        !Predecessor.DecodeSucceeded) {
-      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
-            << " is not a bounded return: fallthrough into function entry "
-               "at 0x"
-            << utohexstr(FunctionBegin) << " is unprovable\n";
-      return true;
-    }
-    if (LS.MIA->isBarrier(Predecessor.Inst))
-      break;
-    ChainBegin = Predecessor.Offset;
-    --PredecessorIndex;
+  if (!Fallthrough->second.Proven) {
+    log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+          << " is not a bounded return: fallthrough into function entry "
+             "at 0x"
+          << utohexstr(FunctionBegin) << " is unprovable\n";
+    return true;
   }
+  uint64_t ChainBegin = Fallthrough->second.ChainBegin;
 
   if (ChainBegin == FunctionBegin)
     return false;
@@ -2419,14 +2601,15 @@ static bool hasUnprovenFallthroughEntry(
     return true;
   }
 
-  ArrayRef<KnownCallEntry>::iterator CallEntry =
-      std::lower_bound(CallEntries.begin(), CallEntries.end(), ChainBegin,
-                       [](const KnownCallEntry &Indexed, uint64_t Offset) {
-                         return Indexed.Entry < Offset;
-                       });
-  for (; CallEntry != CallEntries.end() && CallEntry->Entry < FunctionBegin;
+  SmallVector<KnownCallEntry, 16>::const_iterator CallEntry =
+      llvm::lower_bound(Index.CallEntries, ChainBegin,
+                        [](const KnownCallEntry &Indexed, uint64_t Offset) {
+                          return Indexed.Entry < Offset;
+                        });
+  for (;
+       CallEntry != Index.CallEntries.end() && CallEntry->Entry < FunctionBegin;
        ++CallEntry) {
-    const KnownCallSite &Call = Calls[CallEntry->CallIndex];
+    const KnownCallSite &Call = Index.Calls[CallEntry->CallIndex];
     uint64_t Source = Decoded[Call.InstIndex].Offset;
     if (Source >= ChainBegin && Source < FunctionBegin)
       continue;
@@ -2437,21 +2620,43 @@ static bool hasUnprovenFallthroughEntry(
     return true;
   }
 
-  ArrayRef<DirectTextEntry>::iterator DirectEntry =
-      std::lower_bound(DirectEntries.begin(), DirectEntries.end(), ChainBegin,
-                       [](const DirectTextEntry &Indexed, uint64_t Offset) {
-                         return Indexed.Target < Offset;
-                       });
-  for (; DirectEntry != DirectEntries.end() &&
-         DirectEntry->Target < FunctionBegin;
-       ++DirectEntry) {
-    const InternalDecodedInst &Source = Decoded[DirectEntry->SourceIndex];
+  for (const ExternalCallContinuation &Call :
+       Index.ExternalCallContinuations) {
+    uint64_t Source = Decoded[Call.InstIndex].Offset;
+    if (Call.Continuation >= ChainBegin &&
+        Call.Continuation < FunctionBegin) {
+      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
+            << " is not a bounded return: external call at 0x"
+            << utohexstr(Source) << " returns into the fallthrough chain at 0x"
+            << utohexstr(Call.Continuation) << "\n";
+      return true;
+    }
+  }
+
+  SmallVector<DirectTargetSource, 16>::const_iterator FirstTarget =
+      llvm::lower_bound(Index.DirectTargetsByTarget, ChainBegin,
+                        [](const DirectTargetSource &Source, uint64_t Target) {
+                          return Source.Target < Target;
+                        });
+  size_t FirstSourceIndex = Decoded.size();
+  uint64_t FirstSourceTarget = 0;
+  for (SmallVector<DirectTargetSource, 16>::const_iterator It = FirstTarget;
+       It != Index.DirectTargetsByTarget.end() && It->Target < FunctionBegin;
+       ++It) {
+    const InternalDecodedInst &Source = Decoded[It->InstIndex];
     if (Source.Offset >= ChainBegin && Source.Offset < FunctionBegin)
       continue;
+    if (It->InstIndex < FirstSourceIndex) {
+      FirstSourceIndex = It->InstIndex;
+      FirstSourceTarget = It->Target;
+    }
+  }
+  if (FirstSourceIndex != Decoded.size()) {
     log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(ReturnOffset)
           << " is not a bounded return: control flow at 0x"
-          << utohexstr(Source.Offset) << " enters the fallthrough chain at 0x"
-          << utohexstr(DirectEntry->Target) << "\n";
+          << utohexstr(Decoded[FirstSourceIndex].Offset)
+          << " enters the fallthrough chain at 0x"
+          << utohexstr(FirstSourceTarget) << "\n";
     return true;
   }
   return false;
@@ -2462,17 +2667,9 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
                            const LLVMState &LS, uint64_t TextAddr,
                            uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
                            ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-                           ArrayRef<KnownCallSite> Calls,
-                           ArrayRef<uint64_t> ExternalEntries) {
-  SmallVector<size_t, 2> ReturnIndices;
-  for (size_t ReturnIndex = 0; ReturnIndex != Decoded.size(); ++ReturnIndex)
-    if (isSetPcReturnCandidate(Decoded[ReturnIndex], LS))
-      ReturnIndices.push_back(ReturnIndex);
-
+                           ArrayRef<uint64_t> ExternalEntries,
+                           const ControlFlowScanIndex &Index) {
   SmallVector<BoundedSetPcReturn, 2> Returns;
-  if (ReturnIndices.empty())
-    return Returns;
-
   SmallVector<uint64_t, 16> SortedDeclaredEntries(DeclaredEntries);
   llvm::sort(SortedDeclaredEntries);
   SortedDeclaredEntries.erase(
@@ -2485,30 +2682,47 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       std::unique(SortedExternalEntries.begin(), SortedExternalEntries.end()),
       SortedExternalEntries.end());
 
-  SmallVector<DirectTextEntry, 16> DirectEntries;
-  for (size_t SourceIndex = 0; SourceIndex != Decoded.size(); ++SourceIndex)
-    if (std::optional<uint64_t> Target =
-            getDirectTextTarget(Decoded[SourceIndex], LS, TextAddr, TextEnd))
-      DirectEntries.push_back({*Target, SourceIndex});
-  llvm::sort(DirectEntries, compareDirectTextEntries);
-
-  SmallVector<KnownCallEntry, 8> CallsByTarget;
-  SmallVector<KnownCallEntry, 16> CallEntries;
-  for (size_t CallIndex = 0; CallIndex != Calls.size(); ++CallIndex) {
-    const KnownCallSite &Call = Calls[CallIndex];
-    CallsByTarget.push_back({Call.Target, CallIndex});
-    CallEntries.push_back({Call.Target, CallIndex});
-    CallEntries.push_back({Call.Continuation, CallIndex});
+  SmallVector<SmallVector<size_t, 2>, 16> CandidateRanges(
+      Index.SetPcIndices.size());
+  for (size_t RangeIndex = 0; RangeIndex != FunctionRanges.size();
+       ++RangeIndex) {
+    const ElfView::FunctionTextRange &Range = FunctionRanges[RangeIndex];
+    if (Range.End <= Range.Begin)
+      continue;
+    SmallVector<size_t, 16>::const_iterator First = llvm::lower_bound(
+        Index.SetPcIndices, Range.Begin,
+        [&](size_t InstIndex, uint64_t Address) {
+          return TextAddr + Decoded[InstIndex].Offset < Address;
+        });
+    SmallVector<size_t, 16>::const_iterator After = std::lower_bound(
+        First, Index.SetPcIndices.end(), Range.End,
+        [&](size_t InstIndex, uint64_t Address) {
+          return TextAddr + Decoded[InstIndex].Offset < Address;
+        });
+    for (SmallVector<size_t, 16>::const_iterator It = First; It != After;
+         ++It) {
+      size_t Position = static_cast<size_t>(It - Index.SetPcIndices.begin());
+      CandidateRanges[Position].push_back(RangeIndex);
+    }
   }
-  llvm::sort(CallsByTarget, compareKnownCallEntries);
-  llvm::sort(CallEntries, compareKnownCallEntries);
 
-  for (size_t ReturnIndex : ReturnIndices) {
+  for (size_t ReturnPosition = 0; ReturnPosition != Index.SetPcIndices.size();
+       ++ReturnPosition) {
+    size_t ReturnIndex = Index.SetPcIndices[ReturnPosition];
     const InternalDecodedInst &Return = Decoded[ReturnIndex];
+    // AMDGPUMCInstLower lowers S_SETPC_B64_return to S_SETPC_B64, so the
+    // decoded instruction no longer carries MIA::isReturn identity. Recover
+    // only the bounded local-function form from its call/link dataflow.
+    if (!Return.DecodeSucceeded ||
+        Return.Inst.getOpcode() != LS.SSetPcI64Opcode ||
+        Return.Inst.getNumOperands() != 1 ||
+        !Return.Inst.getOperand(0).isReg() ||
+        !Return.Inst.getOperand(0).getReg())
+      continue;
     MCRegister ReturnRegister(Return.Inst.getOperand(0).getReg());
 
-    bool IsBounded = false;
-    for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
+    for (size_t RangeIndex : CandidateRanges[ReturnPosition]) {
+      const ElfView::FunctionTextRange &Range = FunctionRanges[RangeIndex];
       if (Range.Begin < TextAddr || Range.Begin >= TextEnd ||
           Range.End <= Range.Begin || Range.End > TextEnd ||
           (Range.Symbol && Range.Symbol->getBinding() != ELF::STB_LOCAL))
@@ -2530,9 +2744,9 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
         continue;
       }
 
-      for (const ElfView::FunctionTextRange &Alias : FunctionRanges) {
-        if (Return.Offset + TextAddr < Alias.Begin ||
-            Return.Offset + TextAddr >= Alias.End || Alias.Begin == Range.Begin)
+      for (size_t AliasIndex : CandidateRanges[ReturnPosition]) {
+        const ElfView::FunctionTextRange &Alias = FunctionRanges[AliasIndex];
+        if (Alias.Begin == Range.Begin)
           continue;
         log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
               << " is not a bounded return: overlapping function entry at "
@@ -2556,20 +2770,26 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
         continue;
       }
 
-      if (hasUnprovenFallthroughEntry(Decoded, LS, FunctionBegin, Return.Offset,
-                                      SortedDeclaredEntries, Calls, CallEntries,
-                                      DirectEntries))
+      if (hasUnprovenFallthroughEntry(Decoded, FunctionBegin, Return.Offset,
+                                      SortedDeclaredEntries, Index))
         continue;
 
       // The link pair must retain the value written by the incoming call
       // throughout the function. This includes blocks laid out after the
       // return that may branch back into its epilogue.
-      size_t FunctionInstBegin =
-          findDecodedIndexAtOrAfter(Decoded, FunctionBegin);
-      size_t FunctionInstEnd = findDecodedIndexAtOrAfter(Decoded, FunctionEnd);
-      for (size_t InstIndex = FunctionInstBegin; InstIndex != FunctionInstEnd;
-           ++InstIndex) {
-        const InternalDecodedInst &DI = Decoded[InstIndex];
+      ArrayRef<InternalDecodedInst>::const_iterator FunctionFirst =
+          llvm::lower_bound(Decoded, FunctionBegin,
+                            [](const InternalDecodedInst &DI, uint64_t Offset) {
+                              return DI.Offset < Offset;
+                            });
+      ArrayRef<InternalDecodedInst>::const_iterator FunctionAfter =
+          std::lower_bound(FunctionFirst, Decoded.end(), FunctionEnd,
+                           [](const InternalDecodedInst &DI, uint64_t Offset) {
+                             return DI.Offset < Offset;
+                           });
+      for (ArrayRef<InternalDecodedInst>::const_iterator It = FunctionFirst;
+           It != FunctionAfter; ++It) {
+        const InternalDecodedInst &DI = *It;
         // MC call instructions carry no transitive callee-clobber information.
         // Without interprocedural proof, a nested callee may overwrite the
         // outer link pair even when the call defines a different return pair.
@@ -2593,14 +2813,55 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       if (!Safe)
         continue;
 
+      // A call that returns into this function does not supply its link pair
+      // at the function entry. Reject continuations at the exact entry as
+      // well as in the interior; the earlier fallthrough-chain check only
+      // covers bytes laid out before FunctionBegin.
+      SmallVector<CallContinuationSource, 4>::const_iterator Continuation =
+          llvm::lower_bound(
+              Index.CallContinuationsByOffset, FunctionBegin,
+              [](const CallContinuationSource &Source, uint64_t Offset) {
+                return Source.Continuation < Offset;
+              });
+      if (Continuation != Index.CallContinuationsByOffset.end() &&
+          Continuation->Continuation < FunctionEnd) {
+        log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+              << " is not a bounded return: call at 0x"
+              << utohexstr(Decoded[Continuation->InstIndex].Offset)
+              << " returns into the function at 0x"
+              << utohexstr(Continuation->Continuation) << "\n";
+        Safe = false;
+      }
+      if (!Safe)
+        continue;
+      SmallVector<ExternalCallContinuation, 4>::const_iterator
+          ExternalContinuation = llvm::lower_bound(
+              Index.ExternalCallContinuations, FunctionBegin,
+              [](const ExternalCallContinuation &Source, uint64_t Offset) {
+                return Source.Continuation < Offset;
+              });
+      if (ExternalContinuation != Index.ExternalCallContinuations.end() &&
+          ExternalContinuation->Continuation < FunctionEnd) {
+        log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+              << " is not a bounded return: external call at 0x"
+              << utohexstr(Decoded[ExternalContinuation->InstIndex].Offset)
+              << " returns into the function at 0x"
+              << utohexstr(ExternalContinuation->Continuation) << "\n";
+        Safe = false;
+      }
+      if (!Safe)
+        continue;
+
       SmallVector<uint64_t, 2> Targets;
-      SmallVector<KnownCallEntry, 8>::iterator CallAtTarget = std::lower_bound(
-          CallsByTarget.begin(), CallsByTarget.end(),
-          KnownCallEntry{FunctionBegin, 0}, compareKnownCallEntries);
-      for (; CallAtTarget != CallsByTarget.end() &&
+      SmallVector<KnownCallEntry, 8>::const_iterator CallAtTarget =
+          llvm::lower_bound(Index.CallsByTarget, FunctionBegin,
+                            [](const KnownCallEntry &Indexed, uint64_t Offset) {
+                              return Indexed.Entry < Offset;
+                            });
+      for (; CallAtTarget != Index.CallsByTarget.end() &&
              CallAtTarget->Entry < FunctionEnd;
            ++CallAtTarget) {
-        const KnownCallSite &Call = Calls[CallAtTarget->CallIndex];
+        const KnownCallSite &Call = Index.Calls[CallAtTarget->CallIndex];
         if (Call.Target != FunctionBegin) {
           log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
                 << " is not a bounded return: call at 0x"
@@ -2626,37 +2887,41 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       // A branch from outside the function would bypass the call link
       // definition. Direct calls to the function entry are allowed only when
       // they were collected above with this exact return register.
-      SmallVector<DirectTextEntry, 16>::iterator DirectEntry = std::lower_bound(
-          DirectEntries.begin(), DirectEntries.end(),
-          DirectTextEntry{FunctionBegin, 0}, compareDirectTextEntries);
-      for (; DirectEntry != DirectEntries.end() &&
-             DirectEntry->Target < FunctionEnd;
-           ++DirectEntry) {
-        size_t SourceIndex = DirectEntry->SourceIndex;
+      SmallVector<DirectTargetSource, 16>::const_iterator FirstTarget =
+          llvm::lower_bound(
+              Index.DirectTargetsByTarget, FunctionBegin,
+              [](const DirectTargetSource &Source, uint64_t Target) {
+                return Source.Target < Target;
+              });
+      size_t FirstUnsafeSourceIndex = Decoded.size();
+      uint64_t FirstUnsafeTarget = 0;
+      for (SmallVector<DirectTargetSource, 16>::const_iterator It = FirstTarget;
+           It != Index.DirectTargetsByTarget.end() && It->Target < FunctionEnd;
+           ++It) {
+        size_t SourceIndex = It->InstIndex;
         const InternalDecodedInst &Source = Decoded[SourceIndex];
         if (Source.Offset >= FunctionBegin && Source.Offset < FunctionEnd)
           continue;
 
         bool IsKnownEntryCall = false;
-        if (LS.MIA->isCall(Source.Inst) &&
-            DirectEntry->Target == FunctionBegin) {
-          ArrayRef<KnownCallSite>::iterator KnownCall =
-              std::lower_bound(Calls.begin(), Calls.end(), SourceIndex,
-                               [](const KnownCallSite &Call, size_t Index) {
-                                 return Call.InstIndex < Index;
-                               });
-          IsKnownEntryCall = KnownCall != Calls.end() &&
-                             KnownCall->InstIndex == SourceIndex &&
-                             KnownCall->ReturnRegister == ReturnRegister;
+        if (LS.MIA->isCall(Source.Inst) && It->Target == FunctionBegin) {
+          DenseMap<size_t, MCRegister>::const_iterator KnownCall =
+              Index.CallReturnRegistersBySource.find(SourceIndex);
+          IsKnownEntryCall =
+              KnownCall != Index.CallReturnRegistersBySource.end() &&
+              KnownCall->second == ReturnRegister;
         }
-        if (!IsKnownEntryCall) {
-          log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
-                << " is not a bounded return: control flow at 0x"
-                << utohexstr(Source.Offset) << " enters at 0x"
-                << utohexstr(DirectEntry->Target) << "\n";
-          Safe = false;
-          break;
+        if (!IsKnownEntryCall && SourceIndex < FirstUnsafeSourceIndex) {
+          FirstUnsafeSourceIndex = SourceIndex;
+          FirstUnsafeTarget = It->Target;
         }
+      }
+      if (FirstUnsafeSourceIndex != Decoded.size()) {
+        log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
+              << " is not a bounded return: control flow at 0x"
+              << utohexstr(Decoded[FirstUnsafeSourceIndex].Offset)
+              << " enters at 0x" << utohexstr(FirstUnsafeTarget) << "\n";
+        Safe = false;
       }
       if (!Safe)
         continue;
@@ -2664,65 +2929,727 @@ collectBoundedSetPcReturns(ArrayRef<InternalDecodedInst> Decoded,
       llvm::sort(Targets);
       Targets.erase(std::unique(Targets.begin(), Targets.end()), Targets.end());
       Returns.push_back({ReturnIndex, std::move(Targets)});
-      IsBounded = true;
       break;
     }
-    if (!IsBounded)
-      log() << "hotswap: s_set_pc_i64 at 0x" << utohexstr(Return.Offset)
-            << " remains an unbounded indirect transfer\n";
   }
   return Returns;
 }
 
-static const BoundedSetPcReturn *
-findBoundedSetPcReturn(ArrayRef<BoundedSetPcReturn> Returns, size_t InstIndex) {
-  for (const BoundedSetPcReturn &Return : Returns)
-    if (Return.InstIndex == InstIndex)
-      return &Return;
-  return nullptr;
+static BitVector computeFiniteControlFlowReachability(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextSize, ArrayRef<uint64_t> DeclaredEntries,
+    ArrayRef<uint64_t> ExternalEntries,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    const ControlFlowScanIndex &Index,
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers,
+    ArrayRef<BoundedSetPcReturn> BoundedReturns) {
+  BitVector Reachable(Decoded.size());
+  DenseMap<uint64_t, size_t> OffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
+  DenseMap<size_t, const FiniteSetPcTransfer *> TransferByInst;
+  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+    TransferByInst.try_emplace(Transfer.InstIndex, &Transfer);
+  DenseMap<size_t, const BoundedSetPcReturn *> ReturnByInst;
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
+    ReturnByInst.try_emplace(Return.InstIndex, &Return);
+  DenseMap<size_t, SmallVector<uint64_t, 2>> CallTargetsByInst;
+  for (const KnownCallSite &Call : Index.Calls) {
+    SmallVector<uint64_t, 2> &Targets = CallTargetsByInst[Call.InstIndex];
+    if (!llvm::is_contained(Targets, Call.Target))
+      Targets.push_back(Call.Target);
+  }
+
+  SmallVector<size_t, 32> Worklist;
+  auto addOffset = [&](uint64_t Offset) {
+    DenseMap<uint64_t, size_t>::const_iterator It = OffsetToIndex.find(Offset);
+    if (It != OffsetToIndex.end())
+      Worklist.push_back(It->second);
+  };
+  for (uint64_t Entry : DeclaredEntries)
+    addOffset(Entry);
+  for (uint64_t Entry : ExternalEntries)
+    addOffset(Entry);
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin >= TextAddr)
+      addOffset(Range.Begin - TextAddr);
+  if (Worklist.empty() && !Decoded.empty())
+    Worklist.push_back(0);
+
+  while (!Worklist.empty()) {
+    size_t I = Worklist.pop_back_val();
+    if (Reachable.test(I))
+      continue;
+    Reachable.set(I);
+    const InternalDecodedInst &DI = Decoded[I];
+    if (!DI.DecodeSucceeded)
+      continue;
+    if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+        LS.MIA->isReturn(DI.Inst))
+      continue;
+
+    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+      DenseMap<size_t, const FiniteSetPcTransfer *>::const_iterator Transfer =
+          TransferByInst.find(I);
+      if (Transfer != TransferByInst.end() &&
+          Transfer->second->LocalTargetIndex)
+        Worklist.push_back(*Transfer->second->LocalTargetIndex);
+      DenseMap<size_t, const BoundedSetPcReturn *>::const_iterator Return =
+          ReturnByInst.find(I);
+      if (Return != ReturnByInst.end())
+        for (uint64_t Target : Return->second->Targets)
+          if (Target < TextSize)
+            addOffset(Target);
+      continue;
+    }
+    if (LS.MIA->isCall(DI.Inst)) {
+      DenseMap<size_t, SmallVector<uint64_t, 2>>::const_iterator Targets =
+          CallTargetsByInst.find(I);
+      if (Targets != CallTargetsByInst.end())
+        for (uint64_t Target : Targets->second)
+          addOffset(Target);
+      std::optional<uint64_t> Fallthrough = checkedAddUint64(
+          DI.Offset, DI.Size, "finite call continuation reachability");
+      if (Fallthrough && *Fallthrough < TextSize)
+        addOffset(*Fallthrough);
+      continue;
+    }
+    if (LS.MIA->isIndirectBranch(DI.Inst) ||
+        DI.Inst.getOpcode() == LS.SAddPcI64Opcode)
+      continue;
+    if (LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) {
+      std::optional<uint64_t> Target = evaluateDirectControlFlowTarget(DI, LS);
+      if (Target)
+        addOffset(*Target);
+      if (LS.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    }
+    std::optional<uint64_t> Fallthrough = checkedAddUint64(
+        DI.Offset, DI.Size, "finite control-flow reachability fallthrough");
+    if (Fallthrough && *Fallthrough < TextSize)
+      addOffset(*Fallthrough);
+  }
+  return Reachable;
+}
+
+struct SymbolLessReturnRegion {
+  uint64_t Entry = 0;
+  MCRegister LinkRegister;
+  SmallVector<size_t, 16> Instructions;
+  SmallVector<size_t, 2> Returns;
+  SmallVector<uint64_t, 8> Continuations;
+};
+
+static bool instructionMayFallThrough(const InternalDecodedInst &DI,
+                                      const LLVMState &LS) {
+  if (!DI.DecodeSucceeded)
+    return true;
+  if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+      DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+      LS.MIA->isReturn(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst))
+    return false;
+  return !LS.MIA->isBranch(DI.Inst) || !LS.MIA->isUnconditionalBranch(DI.Inst);
+}
+
+/// Prove symbol-less callable regions from finite call targets. This is
+/// intentionally based on forward CFG reachability from a concrete call
+/// target, rather than layout labels or source tails. Every entry into the
+/// resulting region must be one of the calls that supplies the exact link
+/// pair, and the pair must remain untouched until each s_set_pc_i64 return.
+static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextSize,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
+    const ControlFlowScanIndex &Index,
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers,
+    ArrayRef<BoundedSetPcReturn> PreviouslyBoundedReturns,
+    const BitVector &ReachableCallSources) {
+  struct CallGroup {
+    uint64_t Entry = 0;
+    MCRegister LinkRegister;
+    SmallVector<uint64_t, 8> Continuations;
+  };
+  SmallVector<CallGroup, 8> Groups;
+  DenseMap<std::pair<uint64_t, unsigned>, size_t> GroupPositions;
+  for (const KnownCallSite &Call : Index.Calls) {
+    if (!ReachableCallSources.test(Call.InstIndex))
+      continue;
+    std::pair<uint64_t, unsigned> Key{Call.Target, Call.ReturnRegister.id()};
+    auto Inserted = GroupPositions.try_emplace(Key, Groups.size());
+    if (Inserted.second) {
+      Groups.push_back({Call.Target, Call.ReturnRegister, {}});
+    }
+    Groups[Inserted.first->second].Continuations.push_back(Call.Continuation);
+  }
+
+  DenseMap<uint64_t, size_t> OffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    OffsetToIndex.try_emplace(Decoded[I].Offset, I);
+
+  SmallVector<SymbolLessReturnRegion, 8> Regions;
+  for (CallGroup &Group : Groups) {
+    DenseMap<uint64_t, size_t>::const_iterator Entry =
+        OffsetToIndex.find(Group.Entry);
+    if (Entry == OffsetToIndex.end())
+      continue;
+
+    SymbolLessReturnRegion Region;
+    Region.Entry = Group.Entry;
+    Region.LinkRegister = Group.LinkRegister;
+    llvm::sort(Group.Continuations);
+    Group.Continuations.erase(
+        std::unique(Group.Continuations.begin(), Group.Continuations.end()),
+        Group.Continuations.end());
+    Region.Continuations = Group.Continuations;
+
+    SmallVector<size_t, 32> Worklist{Entry->second};
+    BitVector Visited(Decoded.size());
+    bool Safe = true;
+    while (!Worklist.empty() && Safe) {
+      size_t I = Worklist.pop_back_val();
+      if (Visited.test(I))
+        continue;
+      Visited.set(I);
+      Region.Instructions.push_back(I);
+      const InternalDecodedInst &DI = Decoded[I];
+      if (!DI.DecodeSucceeded) {
+        Safe = false;
+        break;
+      }
+      if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
+        if (DI.Inst.getNumOperands() != 1 ||
+            !isExactRegisterOperand(DI.Inst, 0, Group.LinkRegister)) {
+          Safe = false;
+          break;
+        }
+        Region.Returns.push_back(I);
+        continue;
+      }
+      if (LS.MIA->isCall(DI.Inst) || LS.MIA->isIndirectBranch(DI.Inst) ||
+          DI.Inst.getOpcode() == LS.SAddPcI64Opcode ||
+          LS.MIA->isReturn(DI.Inst) ||
+          definesOverlappingRegister(DI, LS, Group.LinkRegister)) {
+        Safe = false;
+        break;
+      }
+      if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+          DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode)
+        continue;
+
+      auto addSuccessor = [&](uint64_t Offset) {
+        DenseMap<uint64_t, size_t>::const_iterator It =
+            OffsetToIndex.find(Offset);
+        if (It == OffsetToIndex.end()) {
+          Safe = false;
+          return;
+        }
+        Worklist.push_back(It->second);
+      };
+      if (LS.MIA->isBranch(DI.Inst)) {
+        std::optional<uint64_t> Target =
+            evaluateDirectControlFlowTarget(DI, LS);
+        if (!Target || *Target >= TextSize) {
+          Safe = false;
+          break;
+        }
+        addSuccessor(*Target);
+        if (!Safe)
+          break;
+        if (LS.MIA->isUnconditionalBranch(DI.Inst))
+          continue;
+      }
+      std::optional<uint64_t> Fallthrough = checkedAddUint64(
+          DI.Offset, DI.Size, "symbol-less return fallthrough");
+      if (!Fallthrough || *Fallthrough >= TextSize) {
+        Safe = false;
+        break;
+      }
+      addSuccessor(*Fallthrough);
+    }
+    if (!Safe || Region.Returns.empty())
+      continue;
+    llvm::sort(Region.Instructions);
+    llvm::sort(Region.Returns);
+
+    auto containsInstructionByte = [&](uint64_t Offset) {
+      for (size_t InstIndex : Region.Instructions) {
+        const InternalDecodedInst &DI = Decoded[InstIndex];
+        std::optional<uint64_t> End = checkedAddUint64(
+            DI.Offset, DI.Size, "symbol-less return instruction end");
+        // Overflow is itself unprovable; conservatively treat the queried
+        // byte as overlapping the claimed region.
+        if (!End || (Offset >= DI.Offset && Offset < *End))
+          return true;
+      }
+      return false;
+    };
+    auto sourceIsInside = [&](size_t InstIndex) {
+      return llvm::is_contained(Region.Instructions, InstIndex);
+    };
+
+    for (uint64_t EntryOffset : DeclaredEntries)
+      if (containsInstructionByte(EntryOffset)) {
+        Safe = false;
+        break;
+      }
+    if (!Safe)
+      continue;
+    for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
+      if (Range.Begin < TextAddr || Range.Begin - TextAddr >= TextSize)
+        continue;
+      uint64_t EntryOffset = Range.Begin - TextAddr;
+      if (EntryOffset != Region.Entry && containsInstructionByte(EntryOffset)) {
+        Safe = false;
+        break;
+      }
+    }
+    if (!Safe)
+      continue;
+    for (uint64_t EntryOffset : ExternalEntries)
+      if (containsInstructionByte(EntryOffset)) {
+        Safe = false;
+        break;
+      }
+    if (!Safe)
+      continue;
+
+    // Reject layout fallthrough from outside the reachable region.
+    for (size_t InstIndex : Region.Instructions) {
+      if (InstIndex == 0)
+        continue;
+      const InternalDecodedInst &DI = Decoded[InstIndex];
+      const InternalDecodedInst &Predecessor = Decoded[InstIndex - 1];
+      std::optional<uint64_t> PredecessorEnd =
+          checkedAddUint64(Predecessor.Offset, Predecessor.Size,
+                           "symbol-less return predecessor end");
+      if (sourceIsInside(InstIndex - 1))
+        continue;
+      if (!Predecessor.DecodeSucceeded || !PredecessorEnd ||
+          *PredecessorEnd != DI.Offset ||
+          instructionMayFallThrough(Predecessor, LS)) {
+        Safe = false;
+        break;
+      }
+    }
+    if (!Safe)
+      continue;
+
+    for (const KnownCallSite &Call : Index.Calls) {
+      bool TargetInside = containsInstructionByte(Call.Target);
+      bool ContinuationInside = containsInstructionByte(Call.Continuation);
+      if (!TargetInside && !ContinuationInside)
+        continue;
+      if (sourceIsInside(Call.InstIndex)) {
+        Safe = false;
+        break;
+      }
+      if (ContinuationInside || Call.Target != Region.Entry ||
+          Call.ReturnRegister != Region.LinkRegister) {
+        Safe = false;
+        break;
+      }
+    }
+    if (!Safe)
+      continue;
+    for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
+      if (containsInstructionByte(Call.Continuation)) {
+        Safe = false;
+        break;
+      }
+    if (!Safe)
+      continue;
+
+    for (const DirectTargetSource &Source : Index.DirectTargetsByTarget) {
+      if (!containsInstructionByte(Source.Target) ||
+          sourceIsInside(Source.InstIndex))
+        continue;
+      bool IsEntryCall = false;
+      for (const KnownCallSite &Call : Index.Calls)
+        IsEntryCall |= Call.InstIndex == Source.InstIndex &&
+                       Call.Target == Region.Entry &&
+                       Call.ReturnRegister == Region.LinkRegister;
+      if (!IsEntryCall) {
+        Safe = false;
+        break;
+      }
+    }
+    if (!Safe)
+      continue;
+
+    for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers) {
+      if (!Transfer.LocalTargetIndex ||
+          !llvm::is_contained(Region.Instructions,
+                              *Transfer.LocalTargetIndex) ||
+          sourceIsInside(Transfer.InstIndex))
+        continue;
+      Safe = false;
+      break;
+    }
+    if (!Safe)
+      continue;
+    for (const BoundedSetPcReturn &Return : PreviouslyBoundedReturns) {
+      if (sourceIsInside(Return.InstIndex))
+        continue;
+      for (uint64_t Target : Return.Targets)
+        if (containsInstructionByte(Target)) {
+          Safe = false;
+          break;
+        }
+      if (!Safe)
+        break;
+    }
+    if (Safe)
+      Regions.push_back(std::move(Region));
+  }
+
+  // Two independently inferred call entries may not claim a shared body.
+  BitVector Claimed(Decoded.size());
+  BitVector Overlap(Regions.size());
+  for (size_t I = 0; I != Regions.size(); ++I)
+    for (size_t InstIndex : Regions[I].Instructions) {
+      if (Claimed.test(InstIndex)) {
+        Overlap.set(I);
+        for (size_t J = 0; J != I; ++J)
+          if (llvm::is_contained(Regions[J].Instructions, InstIndex))
+            Overlap.set(J);
+      }
+      Claimed.set(InstIndex);
+    }
+  SmallVector<SymbolLessReturnRegion, 8> Disjoint;
+  for (size_t I = 0; I != Regions.size(); ++I)
+    if (!Overlap.test(I))
+      Disjoint.push_back(std::move(Regions[I]));
+  return Disjoint;
+}
+
+struct FiniteControlFlowAudit {
+  BitVector InvalidSetPcCandidates;
+  bool Closed = false;
+  bool HasUnboundedIndirectEntries = false;
+};
+
+static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextSize,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<uint64_t> DeclaredEntries, ArrayRef<uint64_t> ExternalEntries,
+    const ControlFlowScanIndex &Index,
+    ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers,
+    ArrayRef<BoundedSetPcReturn> BoundedReturns,
+    ArrayRef<SymbolLessReturnRegion> SymbolLessRegions) {
+  FiniteControlFlowAudit Audit{BitVector(FiniteSetPcTransfers.size()), true};
+  auto markUnboundedIndirectEntry = [&]() {
+    Audit.Closed = false;
+    Audit.HasUnboundedIndirectEntries = true;
+  };
+
+  for (size_t CandidateIndex = 0; CandidateIndex != FiniteSetPcTransfers.size();
+       ++CandidateIndex) {
+    const FiniteSetPcTransfer &Candidate = FiniteSetPcTransfers[CandidateIndex];
+    uint64_t SequenceStart = Decoded[Candidate.SequenceBeginIndex].Offset;
+    std::optional<uint64_t> SequenceEnd =
+        checkedAddUint64(Decoded[Candidate.SequenceEndIndex].Offset,
+                         Decoded[Candidate.SequenceEndIndex].Size,
+                         "finite set-PC materialization end");
+    auto isInteriorByte = [&](uint64_t Offset) {
+      return !SequenceEnd || (Offset > SequenceStart && Offset < *SequenceEnd);
+    };
+    auto sourceIsSequence = [&](size_t InstIndex) {
+      return InstIndex >= Candidate.SequenceBeginIndex &&
+             InstIndex <= Candidate.SequenceEndIndex;
+    };
+    bool Safe = true;
+    for (uint64_t Entry : DeclaredEntries)
+      if (isInteriorByte(Entry)) {
+        Safe = false;
+        break;
+      }
+    if (Safe)
+      for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+        if (Range.Begin >= TextAddr && isInteriorByte(Range.Begin - TextAddr)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (uint64_t Entry : ExternalEntries)
+        if (isInteriorByte(Entry)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const DirectTargetSource &Source : Index.DirectTargetsByTarget)
+        if (isInteriorByte(Source.Target) &&
+            !sourceIsSequence(Source.InstIndex)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const KnownCallSite &Call : Index.Calls)
+        if ((isInteriorByte(Call.Target) ||
+             isInteriorByte(Call.Continuation)) &&
+            !sourceIsSequence(Call.InstIndex)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const ExternalCallContinuation &Call :
+           Index.ExternalCallContinuations)
+        if (isInteriorByte(Call.Continuation) &&
+            !sourceIsSequence(Call.InstIndex)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+        if (Transfer.LocalTargetIndex &&
+            isInteriorByte(Decoded[*Transfer.LocalTargetIndex].Offset)) {
+          Safe = false;
+          break;
+        }
+    if (Safe)
+      for (const BoundedSetPcReturn &Return : BoundedReturns) {
+        for (uint64_t TargetOffset : Return.Targets) {
+          if (isInteriorByte(TargetOffset)) {
+            Safe = false;
+            break;
+          }
+        }
+        if (!Safe)
+          break;
+      }
+    if (!Safe)
+      Audit.InvalidSetPcCandidates.set(CandidateIndex);
+  }
+
+  if (Audit.InvalidSetPcCandidates.any()) {
+    Audit.Closed = false;
+    return Audit;
+  }
+
+  BitVector BoundedSetPc(Decoded.size());
+  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+    BoundedSetPc.set(Transfer.InstIndex);
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
+    BoundedSetPc.set(Return.InstIndex);
+  for (const SymbolLessReturnRegion &Region : SymbolLessRegions)
+    for (size_t Return : Region.Returns)
+      BoundedSetPc.set(Return);
+
+  // Symbol-less regions are inferred together so large mutually independent
+  // helper families can reach a fixed point. Validate that joint proof before
+  // treating any provisional return as bounded: each provisional source must
+  // have exactly one owning region, and a return owned by another region (or
+  // by a symbol-backed function) may not enter any byte of this region.
+  DenseMap<size_t, unsigned> ProvisionalOwners;
+  DenseMap<size_t, unsigned> PublishedProvisionalReturns;
+  for (const SymbolLessReturnRegion &Region : SymbolLessRegions)
+    for (size_t Return : Region.Returns) {
+      ++ProvisionalOwners[Return];
+      if (!llvm::is_contained(Region.Instructions, Return))
+        markUnboundedIndirectEntry();
+    }
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
+    if (ProvisionalOwners.contains(Return.InstIndex))
+      ++PublishedProvisionalReturns[Return.InstIndex];
+  for (const auto &Owner : ProvisionalOwners)
+    if (Owner.second != 1 ||
+        PublishedProvisionalReturns.lookup(Owner.first) != 1)
+      markUnboundedIndirectEntry();
+
+  for (const SymbolLessReturnRegion &Region : SymbolLessRegions) {
+    auto containsInstructionByte = [&](uint64_t Offset) {
+      for (size_t InstIndex : Region.Instructions) {
+        const InternalDecodedInst &DI = Decoded[InstIndex];
+        std::optional<uint64_t> End = checkedAddUint64(
+            DI.Offset, DI.Size, "symbol-less joint audit instruction end");
+        if (!End || (Offset >= DI.Offset && Offset < *End))
+          return true;
+      }
+      return false;
+    };
+    for (const BoundedSetPcReturn &Return : BoundedReturns) {
+      if (llvm::is_contained(Region.Instructions, Return.InstIndex)) {
+        if (!llvm::is_contained(Region.Returns, Return.InstIndex))
+          markUnboundedIndirectEntry();
+        continue;
+      }
+      for (uint64_t Target : Return.Targets)
+        if (containsInstructionByte(Target)) {
+          markUnboundedIndirectEntry();
+          break;
+        }
+    }
+  }
+
+  BitVector Reachable = computeFiniteControlFlowReachability(
+      Decoded, LS, TextAddr, TextSize, DeclaredEntries, ExternalEntries,
+      FunctionRanges, Index, FiniteSetPcTransfers, BoundedReturns);
+  DenseSet<uint64_t> InstructionOffsets;
+  for (const InternalDecodedInst &DI : Decoded)
+    InstructionOffsets.insert(DI.Offset);
+  for (uint64_t Entry : DeclaredEntries)
+    if (Entry < TextSize && !InstructionOffsets.contains(Entry))
+      markUnboundedIndirectEntry();
+  for (uint64_t Entry : ExternalEntries)
+    if (Entry < TextSize && !InstructionOffsets.contains(Entry))
+      markUnboundedIndirectEntry();
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin >= TextAddr && Range.Begin - TextAddr < TextSize &&
+        !InstructionOffsets.contains(Range.Begin - TextAddr))
+      markUnboundedIndirectEntry();
+  for (const DirectTargetSource &Source : Index.DirectTargetsByTarget)
+    if (Reachable.test(Source.InstIndex) && Source.Target < TextSize &&
+        !InstructionOffsets.contains(Source.Target))
+      markUnboundedIndirectEntry();
+  for (const KnownCallSite &Call : Index.Calls)
+    if (Reachable.test(Call.InstIndex) &&
+        ((!InstructionOffsets.contains(Call.Target) &&
+          Call.Target < TextSize) ||
+         (!InstructionOffsets.contains(Call.Continuation) &&
+          Call.Continuation < TextSize)))
+      markUnboundedIndirectEntry();
+  for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
+    if (Reachable.test(Call.InstIndex) && Call.Continuation < TextSize &&
+        !InstructionOffsets.contains(Call.Continuation))
+      markUnboundedIndirectEntry();
+  for (size_t SetPc : Index.SetPcIndices)
+    if (Reachable.test(SetPc) && !BoundedSetPc.test(SetPc))
+      markUnboundedIndirectEntry();
+
+  for (size_t InstIndex : Index.UnboundedIndirectIndices)
+    if (Reachable.test(InstIndex))
+      markUnboundedIndirectEntry();
+
+  // Every call is also an indirect entry source until either a finite local
+  // target or a finite external target has been recorded for it.
+  BitVector FiniteCalls(Decoded.size());
+  for (const KnownCallSite &Call : Index.Calls)
+    FiniteCalls.set(Call.InstIndex);
+  for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
+    FiniteCalls.set(Call.InstIndex);
+  for (size_t InstIndex : Index.BranchOrCallIndices) {
+    if (!Reachable.test(InstIndex) || !LS.MIA->isCall(Decoded[InstIndex].Inst))
+      continue;
+    if (!FiniteCalls.test(InstIndex))
+      markUnboundedIndirectEntry();
+  }
+  for (const BoundedSetPcReturn &Return : BoundedReturns) {
+    if (!Reachable.test(Return.InstIndex))
+      continue;
+    for (uint64_t Target : Return.Targets)
+      if (Target < TextSize && !InstructionOffsets.contains(Target))
+        markUnboundedIndirectEntry();
+  }
+  for (int I = Reachable.find_first(); I >= 0; I = Reachable.find_next(I))
+    if (!Decoded[static_cast<size_t>(I)].DecodeSucceeded)
+      markUnboundedIndirectEntry();
+  return Audit;
 }
 
 static bool
-hasKnownControlFlowEntry(ArrayRef<InternalDecodedInst> Decoded,
-                         const LLVMState &LS, uint64_t TextAddr,
-                         uint64_t TextEnd, ArrayRef<uint64_t> DeclaredEntries,
+hasKnownControlFlowEntry(ArrayRef<uint64_t> DeclaredEntries,
                          ArrayRef<BoundedSetPcReturn> BoundedReturns,
+                         const DenseMap<size_t, size_t> &BoundedReturnPositions,
+                         const ControlFlowScanIndex &Index,
                          uint64_t SequenceStart, uint64_t SequenceEnd) {
   for (uint64_t Entry : DeclaredEntries)
     if (Entry > SequenceStart && Entry <= SequenceEnd)
       return true;
 
-  for (size_t I = 0; I != Decoded.size(); ++I) {
-    const InternalDecodedInst &DI = Decoded[I];
-    if (DI.DecodeSucceeded && DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
-      const BoundedSetPcReturn *Return =
-          findBoundedSetPcReturn(BoundedReturns, I);
-      if (!Return)
+  for (size_t InstIndex : Index.SetPcIndices) {
+    DenseMap<size_t, size_t>::const_iterator It =
+        BoundedReturnPositions.find(InstIndex);
+    if (It == BoundedReturnPositions.end())
+      return true;
+    const BoundedSetPcReturn &Return = BoundedReturns[It->second];
+    for (uint64_t Target : Return.Targets)
+      if (Target > SequenceStart && Target <= SequenceEnd)
         return true;
-      for (uint64_t Target : Return->Targets)
-        if (Target > SequenceStart && Target <= SequenceEnd)
-          return true;
-      continue;
-    }
-
-    // Without bounding an indirect target, it may enter at any instruction in
-    // the materialization. Keep the call unresolved rather than relying on
-    // the indirect transfer's containing function alone.
-    if (DI.DecodeSucceeded && !LS.MIA->isReturn(DI.Inst) &&
-        (LS.MIA->isIndirectBranch(DI.Inst) ||
-         DI.Inst.getOpcode() == LS.SAddPcI64Opcode))
-      return true;
-    if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
-        LS.MIA->isReturn(DI.Inst))
-      continue;
-
-    std::optional<uint64_t> RelativeTarget =
-        getDirectTextTarget(DI, LS, TextAddr, TextEnd);
-    if (RelativeTarget && *RelativeTarget > SequenceStart &&
-        *RelativeTarget <= SequenceEnd)
-      return true;
   }
+
+  // Without bounding an indirect target, it may enter at any instruction in
+  // the materialization. Keep the call unresolved rather than relying on the
+  // indirect transfer's containing function alone.
+  if (Index.HasUnboundedIndirectEntry)
+    return true;
+
+  SmallVector<DirectTargetSource, 16>::const_iterator First =
+      llvm::upper_bound(Index.DirectTargetsByTarget, SequenceStart,
+                        [](uint64_t Target, const DirectTargetSource &Source) {
+                          return Target < Source.Target;
+                        });
+  if (First != Index.DirectTargetsByTarget.end() &&
+      First->Target <= SequenceEnd)
+    return true;
   return false;
+}
+
+static bool addReusableCallsToIndex(ArrayRef<InternalDecodedInst> Decoded,
+                                    const LLVMState &LS, uint64_t TextAddr,
+                                    uint64_t TextEnd,
+                                    ArrayRef<ReachingCallTargets> ReusableCalls,
+                                    ControlFlowScanIndex &Index) {
+  for (size_t I = 0; I != ReusableCalls.size(); ++I) {
+    if (ReusableCalls[I].empty() || Index.MaterializedCalls.contains(I))
+      continue;
+    std::optional<MCRegister> ReturnRegister =
+        getCallReturnRegister(Decoded[I], LS);
+    if (!ReturnRegister)
+      continue;
+    std::optional<uint64_t> Continuation =
+        checkedAddUint64(Decoded[I].Offset, Decoded[I].Size,
+                         "known reusable call continuation address");
+    if (!Continuation)
+      return false;
+    bool HasExternalTarget = false;
+    for (uint64_t Target : ReusableCalls[I])
+      if (Target >= TextAddr && Target < TextEnd) {
+        Index.Calls.push_back(
+            {I, Target - TextAddr, *Continuation, *ReturnRegister});
+      } else {
+        HasExternalTarget = true;
+      }
+    if (HasExternalTarget)
+      Index.ExternalCallContinuations.push_back({I, *Continuation});
+  }
+  return true;
+}
+
+static void finalizeCallContinuationIndex(ControlFlowScanIndex &Index) {
+  Index.CallContinuationsByOffset.clear();
+  for (const KnownCallSite &Call : Index.Calls)
+    Index.CallContinuationsByOffset.push_back(
+        {Call.InstIndex, Call.Continuation});
+  llvm::sort(
+      Index.CallContinuationsByOffset,
+      [](const CallContinuationSource &LHS, const CallContinuationSource &RHS) {
+        return std::tie(LHS.Continuation, LHS.InstIndex) <
+               std::tie(RHS.Continuation, RHS.InstIndex);
+      });
+  llvm::sort(Index.ExternalCallContinuations,
+             [](const ExternalCallContinuation &LHS,
+                const ExternalCallContinuation &RHS) {
+               return std::tie(LHS.Continuation, LHS.InstIndex) <
+                      std::tie(RHS.Continuation, RHS.InstIndex);
+             });
+}
+
+static void
+addPotentialFiniteSetPcTransfersToIndex(ArrayRef<InternalDecodedInst> Decoded,
+                                        ArrayRef<FiniteSetPcTransfer> Transfers,
+                                        const BitVector &Reachable,
+                                        ControlFlowScanIndex &Index) {
+  for (const FiniteSetPcTransfer &Transfer : Transfers)
+    if (Reachable.test(Transfer.InstIndex) && Transfer.LocalTargetIndex)
+      Index.DirectTargetsByTarget.push_back(
+          {Transfer.InstIndex, Decoded[*Transfer.LocalTargetIndex].Offset});
+  llvm::sort(Index.DirectTargetsByTarget,
+             [](const DirectTargetSource &LHS, const DirectTargetSource &RHS) {
+               return std::tie(LHS.Target, LHS.InstIndex) <
+                      std::tie(RHS.Target, RHS.InstIndex);
+             });
 }
 
 /// Collect statically known direct branch and call destinations so an interior
@@ -2743,31 +3670,173 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   if (!TextEnd)
     return std::nullopt;
 
-  SmallVector<std::optional<PcMaterializedCallInfo>, 16> MaterializedCalls(
-      Decoded.size());
-  for (size_t I = 0; I != Decoded.size(); ++I)
-    MaterializedCalls[I] = matchPcMaterializedCall(Decoded, I, LS, TextAddr);
-  std::vector<ReachingCallTargets> ReusableCalls = resolveReusablePcCallTargets(
-      Decoded, LS, TextAddr, *TextEnd, FunctionRanges, MaterializedCalls,
-      DeclaredEntries);
+  SmallVector<FiniteSetPcTransfer, 8> AllSetPcCandidates =
+      collectFiniteSetPcCandidates(Decoded, LS, TextAddr, *TextEnd,
+                                   FunctionRanges);
+  BitVector RejectedSetPcCandidates(AllSetPcCandidates.size());
+  BitVector ProvenSetPcCandidates(AllSetPcCandidates.size());
+  SmallVector<FiniteSetPcTransfer, 8> EnabledSetPcTransfers;
+  std::vector<ReachingCallTargets> ReusableCalls;
+  std::optional<ControlFlowScanIndex> Index;
+  SmallVector<BoundedSetPcReturn, 2> BoundedReturns;
+  SmallVector<SymbolLessReturnRegion, 8> SymbolLessRegions;
+  bool IndirectControlFlowClosed = false;
+  bool HasUnboundedIndirectEntries = false;
 
-  std::optional<SmallVector<KnownCallSite, 4>> Calls = collectKnownCallSites(
-      Decoded, LS, TextAddr, *TextEnd, MaterializedCalls, ReusableCalls);
-  if (!Calls)
-    return std::nullopt;
-  std::optional<SmallVector<BoundedSetPcReturn, 2>> BoundedReturns =
-      collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
-                                 DeclaredEntries, FunctionRanges, *Calls,
-                                 ExternalEntries);
-  if (!BoundedReturns)
-    return std::nullopt;
+  // Exact set-PC edges are an optimistic over-approximation used only to
+  // discover later finite call targets. Rebuild from scratch whenever the
+  // closed-world audit removes an edge; never let a rejected edge leave
+  // self-supporting call or return facts behind.
+  for (;;) {
+    EnabledSetPcTransfers = selectLeastReachableSetPcCandidates(
+        Decoded, LS, DeclaredEntries, ExternalEntries, FunctionRanges, TextAddr,
+        AllSetPcCandidates, ProvenSetPcCandidates, RejectedSetPcCandidates);
+    ReusableCalls = resolveReusablePcCallTargets(
+        Decoded, LS, TextAddr, *TextEnd, FunctionRanges, EnabledSetPcTransfers);
+    Index = buildControlFlowScanIndex(Decoded, LS, TextAddr, *TextEnd,
+                                      FunctionRanges);
+    if (!Index || !addReusableCallsToIndex(Decoded, LS, TextAddr, *TextEnd,
+                                           ReusableCalls, *Index))
+      return std::nullopt;
+    indexKnownCalls(*Index);
+    finalizeCallContinuationIndex(*Index);
+    BitVector PotentialSetPcSources = computeFiniteControlFlowReachability(
+        Decoded, LS, TextAddr, TextSize, DeclaredEntries, ExternalEntries,
+        FunctionRanges, *Index, EnabledSetPcTransfers,
+        /*BoundedReturns=*/ArrayRef<BoundedSetPcReturn>{});
+    addPotentialFiniteSetPcTransfersToIndex(Decoded, AllSetPcCandidates,
+                                            PotentialSetPcSources, *Index);
+
+    std::optional<SmallVector<BoundedSetPcReturn, 2>> FunctionReturns =
+        collectBoundedSetPcReturns(Decoded, LS, TextAddr, *TextEnd,
+                                   DeclaredEntries, FunctionRanges,
+                                   ExternalEntries, *Index);
+    if (!FunctionReturns)
+      return std::nullopt;
+    BoundedReturns = std::move(*FunctionReturns);
+    BitVector CandidateReachability = computeFiniteControlFlowReachability(
+        Decoded, LS, TextAddr, TextSize, DeclaredEntries, ExternalEntries,
+        FunctionRanges, *Index, EnabledSetPcTransfers, BoundedReturns);
+    bool AddedCandidate = false;
+    for (size_t I = 0; I != AllSetPcCandidates.size(); ++I) {
+      if (RejectedSetPcCandidates.test(I) || ProvenSetPcCandidates.test(I) ||
+          !CandidateReachability.test(AllSetPcCandidates[I].InstIndex))
+        continue;
+      ProvenSetPcCandidates.set(I);
+      AddedCandidate = true;
+    }
+    if (AddedCandidate)
+      continue;
+    BitVector ReachableCallSources = computeFiniteControlFlowReachability(
+        Decoded, LS, TextAddr, TextSize, DeclaredEntries, ExternalEntries,
+        FunctionRanges, *Index, EnabledSetPcTransfers, BoundedReturns);
+    SymbolLessRegions = collectSymbolLessReturnRegions(
+        Decoded, LS, TextAddr, TextSize, FunctionRanges, DeclaredEntries,
+        ExternalEntries, *Index, EnabledSetPcTransfers, BoundedReturns,
+        ReachableCallSources);
+    SmallVector<BoundedSetPcReturn, 2> AllBoundedReturns = BoundedReturns;
+    for (const SymbolLessReturnRegion &Region : SymbolLessRegions)
+      for (size_t Return : Region.Returns) {
+        SmallVector<uint64_t, 2> Targets(Region.Continuations.begin(),
+                                         Region.Continuations.end());
+        AllBoundedReturns.push_back({Return, std::move(Targets)});
+      }
+    FiniteControlFlowAudit Audit = auditFiniteIndirectControlFlow(
+        Decoded, LS, TextAddr, TextSize, FunctionRanges, DeclaredEntries,
+        ExternalEntries, *Index, EnabledSetPcTransfers, AllBoundedReturns,
+        SymbolLessRegions);
+    if (Audit.InvalidSetPcCandidates.any()) {
+      for (size_t I = 0; I != EnabledSetPcTransfers.size(); ++I) {
+        if (!Audit.InvalidSetPcCandidates.test(I))
+          continue;
+        for (size_t J = 0; J != AllSetPcCandidates.size(); ++J)
+          if (AllSetPcCandidates[J].InstIndex ==
+              EnabledSetPcTransfers[I].InstIndex) {
+            RejectedSetPcCandidates.set(J);
+          }
+      }
+      // Every dynamic proof is conditional on the complete edge set used to
+      // reach it. A downstream candidate may have been reachable only through
+      // a just-rejected candidate, so rediscover the least fixed point from
+      // roots rather than retaining sticky proof bits.
+      ProvenSetPcCandidates.reset();
+      continue;
+    }
+    if (!Audit.Closed && !SymbolLessRegions.empty()) {
+      // Symbol-less returns depend on a closed object-wide entry proof. If
+      // any reachable entry source remains open, discard those inferred
+      // regions before finalizing; unlike symbol-backed local returns, they
+      // have no independent function boundary to constrain provenance.
+      SymbolLessRegions.clear();
+      AllBoundedReturns = BoundedReturns;
+      Audit = auditFiniteIndirectControlFlow(
+          Decoded, LS, TextAddr, TextSize, FunctionRanges, DeclaredEntries,
+          ExternalEntries, *Index, EnabledSetPcTransfers, AllBoundedReturns,
+          SymbolLessRegions);
+    }
+    if (!Audit.Closed && !EnabledSetPcTransfers.empty()) {
+      for (const FiniteSetPcTransfer &Enabled : EnabledSetPcTransfers)
+        for (size_t J = 0; J != AllSetPcCandidates.size(); ++J)
+          if (AllSetPcCandidates[J].InstIndex == Enabled.InstIndex) {
+            RejectedSetPcCandidates.set(J);
+          }
+      ProvenSetPcCandidates.reset();
+      continue;
+    }
+    IndirectControlFlowClosed = Audit.Closed;
+    HasUnboundedIndirectEntries = Audit.HasUnboundedIndirectEntries;
+    if (!Audit.Closed)
+      AllBoundedReturns.clear();
+    BoundedReturns = std::move(AllBoundedReturns);
+    break;
+  }
+
+  for (const FiniteSetPcTransfer &Transfer : EnabledSetPcTransfers) {
+    SmallVector<uint64_t, 2> Targets;
+    if (Transfer.LocalTargetIndex)
+      Targets.push_back(Decoded[*Transfer.LocalTargetIndex].Offset);
+    BoundedReturns.push_back({Transfer.InstIndex, std::move(Targets)});
+  }
+  indexKnownCalls(*Index);
+
+  DenseMap<size_t, size_t> BoundedReturnPositions;
+  for (size_t I = 0; I != BoundedReturns.size(); ++I)
+    BoundedReturnPositions.try_emplace(BoundedReturns[I].InstIndex, I);
+
+  // Canonical one-shot materializations also participate in the reusable
+  // reaching-value solver so CFG joins can prove their exact path. Preserve
+  // the established fail-closed entry proof once bounded returns are known:
+  // an interior alias, fallthrough, or unbounded transfer may still bypass
+  // the materialization even when its local dataflow token is exact.
+  BitVector LocallyProvenMaterializedCalls(Decoded.size());
+  for (const auto &Entry : Index->MaterializedCalls) {
+    size_t I = Entry.first;
+    if (ReusableCalls[I].empty())
+      continue;
+    if (hasKnownControlFlowEntry(
+            DeclaredEntries, BoundedReturns, BoundedReturnPositions, *Index,
+            Entry.second.SequenceStart, Entry.second.SequenceEnd)) {
+      ReusableCalls[I].clear();
+      continue;
+    }
+    LocallyProvenMaterializedCalls.set(I);
+  }
 
   DirectControlFlowInfo Info;
-  for (size_t InstIndex = 0; InstIndex != Decoded.size(); ++InstIndex) {
+  for (uint64_t Entry : DeclaredEntries)
+    if (Entry < TextSize)
+      Info.Targets.insert(Entry);
+  for (uint64_t Entry : ExternalEntries)
+    if (Entry < TextSize)
+      Info.Targets.insert(Entry);
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
+    for (uint64_t Target : Return.Targets)
+      Info.Targets.insert(Target);
+  for (const ExternalCallContinuation &Call :
+       Index->ExternalCallContinuations)
+    Info.Targets.insert(Call.Continuation);
+  for (size_t InstIndex : Index->BranchOrCallIndices) {
     const InternalDecodedInst &DI = Decoded[InstIndex];
-    if ((!LS.MIA->isBranch(DI.Inst) && !LS.MIA->isCall(DI.Inst)) ||
-        LS.MIA->isReturn(DI.Inst))
-      continue;
     // Existing indirect branches are handled by
     // collectIndirectControlFlowFunctions(), which protects their containing
     // function from source relocation. Calls without a statically resolvable
@@ -2790,31 +3859,31 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isImm()) {
         Target = static_cast<uint64_t>(
             DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).getImm());
-      } else if (MaterializedCalls[InstIndex] &&
-                 !hasKnownControlFlowEntry(
-                     Decoded, LS, TextAddr, *TextEnd, DeclaredEntries,
-                     *BoundedReturns,
-                     MaterializedCalls[InstIndex]->SequenceStart,
-                     MaterializedCalls[InstIndex]->SequenceEnd)) {
-        Target = MaterializedCalls[InstIndex]->Target;
+      } else {
+        DenseMap<size_t, PcMaterializedCallInfo>::const_iterator Materialized =
+            Index->MaterializedCalls.find(InstIndex);
+        if (Materialized != Index->MaterializedCalls.end() &&
+            !hasKnownControlFlowEntry(DeclaredEntries, BoundedReturns,
+                                      BoundedReturnPositions, *Index,
+                                      Materialized->second.SequenceStart,
+                                      Materialized->second.SequenceEnd))
+          Target = Materialized->second.Target;
       }
       if (!ReusableCalls[InstIndex].empty()) {
-        if (llvm::any_of(ReusableCalls[InstIndex],
-                         [TextAddr, TextEnd](uint64_t ReusableTarget) {
-                           return ReusableTarget < TextAddr ||
-                                  ReusableTarget >= *TextEnd;
-                         })) {
-          log() << "hotswap: unresolved call target at 0x"
-                << utohexstr(DI.Offset) << " (reusable target outside .text)\n";
-          Info.HasUnresolvedTargets = true;
-          continue;
-        }
         for (uint64_t ReusableTarget : ReusableCalls[InstIndex])
-          Info.Targets.insert(ReusableTarget - TextAddr);
+          if (ReusableTarget >= TextAddr && ReusableTarget < *TextEnd)
+            Info.Targets.insert(ReusableTarget - TextAddr);
         Info.BoundedIndirectTransfers.insert(DI.Offset);
-        log() << "hotswap: resolved reusable PC-materialized call at 0x"
-              << utohexstr(DI.Offset) << " to "
-              << ReusableCalls[InstIndex].size() << " target(s)\n";
+        if (LocallyProvenMaterializedCalls.test(InstIndex)) {
+          log() << "hotswap: resolved PC-materialized call at 0x"
+                << utohexstr(DI.Offset) << " to .text+0x"
+                << utohexstr(ReusableCalls[InstIndex].front() - TextAddr)
+                << "\n";
+        } else {
+          log() << "hotswap: resolved reusable PC-materialized call at 0x"
+                << utohexstr(DI.Offset) << " to "
+                << ReusableCalls[InstIndex].size() << " target(s)\n";
+        }
         continue;
       }
       if (!Target) {
@@ -2831,8 +3900,13 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           log() << "hotswap: resolved PC-materialized call at 0x"
                 << utohexstr(DI.Offset) << " to .text+0x"
                 << utohexstr(RelativeTarget) << "\n";
-        if (DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isReg())
-          Info.BoundedIndirectTransfers.insert(DI.Offset);
+      }
+      // A proven finite register target outside this object's .text cannot
+      // enter a local instruction or synthetic source range. Keep that
+      // control-flow proof separate from whether the target contributes a
+      // local offset to the mutation-protection set.
+      if (DI.Inst.getOperand(DI.Inst.getNumOperands() - 1).isReg()) {
+        Info.BoundedIndirectTransfers.insert(DI.Offset);
       }
       continue;
     }
@@ -2845,16 +3919,20 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
             << "; adjacent far trampolines will not be coalesced\n";
       return std::nullopt;
     }
-    Info.Targets.insert(*Target);
+    if (*Target < TextSize) {
+      Info.Targets.insert(*Target);
+    } else if (LS.MIA->isCall(DI.Inst)) {
+      std::optional<uint64_t> Continuation = checkedAddUint64(
+          DI.Offset, DI.Size, "finite external direct call continuation");
+      if (!Continuation)
+        return std::nullopt;
+      Info.Targets.insert(*Continuation);
+    }
   }
-  for (const BoundedSetPcReturn &Return : *BoundedReturns) {
-    // A bounded return lands on each proven continuation, so those offsets are
-    // control-flow targets that must not be relocated over. Record them before
-    // exempting the return itself from the unbounded-indirect treatment.
-    for (uint64_t Continuation : Return.Targets)
-      Info.Targets.insert(Continuation);
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
     Info.BoundedIndirectTransfers.insert(Decoded[Return.InstIndex].Offset);
-  }
+  if (!IndirectControlFlowClosed && HasUnboundedIndirectEntries)
+    Info.HasUnboundedIndirectEntries = true;
   return Info;
 }
 
@@ -2875,15 +3953,22 @@ mergeAdjacentLongTrampolines(std::vector<Trampoline> &Trampolines,
       Trampoline &Prev = Merged.back();
       std::optional<uint64_t> PrevEnd = checkedAddUint64(
           Prev.OriginalOffset, Prev.OriginalSize, "adjacent trampoline end");
+      uint32_t BackReserve = Prev.LongBranchPreservesVcc
+                                 ? VccPreservingReturnReserveBytes
+                                 : SetPcReturnReserveBytes;
+      uint32_t BodyPrefix =
+          Prev.LongBranchPreservesVcc ? VccSaveRestoreBytes : 0;
       Adjacent = PrevEnd && *PrevEnd == T.OriginalOffset && Prev.Long &&
                  T.Long && Prev.UsesSetPCBack && T.UsesSetPCBack &&
+                 Prev.LongBranchPreservesVcc == T.LongBranchPreservesVcc &&
                  Prev.LongBranchSgprBase == T.LongBranchSgprBase &&
+                 Prev.LongBranchUsesVcc == T.LongBranchUsesVcc &&
                  Prev.HasFunctionRange && T.HasFunctionRange &&
                  Prev.FunctionStart == T.FunctionStart &&
                  Prev.FunctionEnd == T.FunctionEnd &&
                  !DirectBranchTargets.contains(T.OriginalOffset) &&
-                 Prev.Bytes.size() >= SetPcReturnReserveBytes &&
-                 T.Bytes.size() >= SetPcReturnReserveBytes;
+                 Prev.Bytes.size() >= BackReserve &&
+                 T.Bytes.size() >= BackReserve + BodyPrefix;
     }
 
     if (!Adjacent) {
@@ -2897,8 +3982,12 @@ mergeAdjacentLongTrampolines(std::vector<Trampoline> &Trampolines,
       Merged.emplace_back(std::move(T));
       continue;
     }
-    Prev.Bytes.resize(Prev.Bytes.size() - SetPcReturnReserveBytes);
-    Prev.Bytes.append(T.Bytes.begin(), T.Bytes.end());
+    uint32_t BackReserve = Prev.LongBranchPreservesVcc
+                               ? VccPreservingReturnReserveBytes
+                               : SetPcReturnReserveBytes;
+    size_t BodyPrefix = Prev.LongBranchPreservesVcc ? VccSaveRestoreBytes : 0;
+    Prev.Bytes.resize(Prev.Bytes.size() - BackReserve);
+    Prev.Bytes.append(T.Bytes.begin() + BodyPrefix, T.Bytes.end());
     Prev.OriginalSize += T.OriginalSize;
     ++MergeCount;
   }
@@ -3027,7 +4116,8 @@ collectIndirectControlFlowFunctions(ArrayRef<InternalDecodedInst> Decoded,
 /// Grow undersized far-site windows only through proven straight-line code.
 /// Patched neighbors are merged; ordinary instructions are copied verbatim
 /// into the trampoline body and retain their original order. This is bounded
-/// to the 20 bytes required by the gfx12 SCC-neutral forward sequence.
+/// to the source bytes required by the selected gfx12 set-PC sequence and, for
+/// a live wave32 VCC, its restore landing pad.
 static void
 expandStraightLineTrampolines(PatchContext &Ctx,
                               const DenseSet<uint64_t> &DirectBranchTargets) {
@@ -3046,8 +4136,11 @@ expandStraightLineTrampolines(PatchContext &Ctx,
         IndirectControlFlowFunctions.contains(
             Ctx.OutTrampolines[I].FunctionStart))
       continue;
-    while (Ctx.OutTrampolines[I].Long &&
-           Ctx.OutTrampolines[I].OriginalSize < SetPcForwardSequenceBytes) {
+    while (Ctx.OutTrampolines[I].Long && Ctx.OutTrampolines[I].UsesSetPCBack &&
+           Ctx.OutTrampolines[I].OriginalSize <
+               (Ctx.OutTrampolines[I].LongBranchPreservesVcc
+                    ? VccPreservingReturnReserveBytes + VccLandingPadBytes
+                    : SetPcForwardSequenceBytes)) {
       Trampoline &T = Ctx.OutTrampolines[I];
       std::optional<uint64_t> End = checkedAddUint64(
           T.OriginalOffset, T.OriginalSize, "straight-line expansion end");
@@ -3056,9 +4149,13 @@ expandStraightLineTrampolines(PatchContext &Ctx,
 
       if (I + 1 < Ctx.OutTrampolines.size() &&
           Ctx.OutTrampolines[I + 1].OriginalOffset == *End) {
+        if (T.LongBranchPreservesVcc)
+          break;
         Trampoline &Next = Ctx.OutTrampolines[I + 1];
         if (!Next.Long || !Next.UsesSetPCBack ||
             Next.LongBranchSgprBase != T.LongBranchSgprBase ||
+            Next.LongBranchUsesVcc != T.LongBranchUsesVcc ||
+            Next.LongBranchPreservesVcc != T.LongBranchPreservesVcc ||
             !T.HasFunctionRange || !Next.HasFunctionRange ||
             T.FunctionStart != Next.FunctionStart ||
             T.FunctionEnd != Next.FunctionEnd ||
@@ -3080,21 +4177,27 @@ expandStraightLineTrampolines(PatchContext &Ctx,
       if (!Current)
         break;
       const InternalDecodedInst &DI = *Current;
+      uint32_t BackReserve = T.LongBranchPreservesVcc
+                                 ? VccPreservingReturnReserveBytes
+                                 : SetPcReturnReserveBytes;
       std::optional<ElfView::FunctionTextRange> Range =
           Ctx.Elf.findFunctionTextRangeAtOffset(DI.Offset);
       if (!Range || !T.HasFunctionRange || Range->Begin != T.FunctionStart ||
           Range->End != T.FunctionEnd ||
           !isSafeStraightLineRelocation(DI, Ctx.LS, Protected) ||
-          T.Bytes.size() < SetPcReturnReserveBytes)
+          T.Bytes.size() < BackReserve)
         break;
 
-      T.Bytes.insert(T.Bytes.end() - SetPcReturnReserveBytes,
-                     Ctx.Text + DI.Offset, Ctx.Text + DI.Offset + DI.Size);
+      T.Bytes.insert(T.Bytes.end() - BackReserve, Ctx.Text + DI.Offset,
+                     Ctx.Text + DI.Offset + DI.Size);
       T.OriginalSize += DI.Size;
     }
 
-    while (Ctx.OutTrampolines[I].Long &&
-           Ctx.OutTrampolines[I].OriginalSize < SetPcForwardSequenceBytes) {
+    while (Ctx.OutTrampolines[I].Long && Ctx.OutTrampolines[I].UsesSetPCBack &&
+           Ctx.OutTrampolines[I].OriginalSize <
+               (Ctx.OutTrampolines[I].LongBranchPreservesVcc
+                    ? VccPreservingReturnReserveBytes + VccLandingPadBytes
+                    : SetPcForwardSequenceBytes)) {
       Trampoline &T = Ctx.OutTrampolines[I];
       if (DirectBranchTargets.contains(T.OriginalOffset))
         break;
@@ -3121,7 +4224,8 @@ expandStraightLineTrampolines(PatchContext &Ctx,
       if (!Range || !T.HasFunctionRange || Range->Begin != T.FunctionStart ||
           Range->End != T.FunctionEnd)
         break;
-      T.Bytes.insert(T.Bytes.begin(), Ctx.Text + DI.Offset,
+      size_t BodyPrefix = T.LongBranchPreservesVcc ? VccSaveRestoreBytes : 0;
+      T.Bytes.insert(T.Bytes.begin() + BodyPrefix, Ctx.Text + DI.Offset,
                      Ctx.Text + DI.Offset + DI.Size);
       T.OriginalOffset = DI.Offset;
       T.OriginalSize += DI.Size;
@@ -3198,7 +4302,8 @@ buildExternalGatewaySleds(ArrayRef<InternalDecodedInst> Decoded,
 Expected<uint64_t>
 countReachableSetPcGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
                                 uint64_t FromOffset, uint64_t TargetOffset,
-                                unsigned SgprBase, uint64_t MaxSlots) {
+                                unsigned SgprBase, uint64_t MaxSlots,
+                                bool UseVcc, bool PreserveVcc) {
   uint64_t Slots = 0;
   for (const NopSled &Sled : Gateways) {
     if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd)
@@ -3211,10 +4316,10 @@ countReachableSetPcGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
       if (Distance >= MaxSledDistance ||
           LS.encodeSBranch(FromOffset, Candidate).empty())
         break;
-
       std::optional<uint32_t> LayoutSize =
-          getSetPcLongBranchLayoutSize(Candidate, TargetOffset);
-      if ((SgprBase & 1u) != 0 || !LayoutSize)
+          getSetPcGatewayLayoutSize(Candidate, TargetOffset, SgprBase, UseVcc,
+                                    PreserveVcc);
+      if (!LayoutSize)
         return createStringError(
             Twine("invalid set-PC gateway while counting candidate "
                   "offset 0x") +
@@ -3310,9 +4415,8 @@ static SmallVector<uint8_t> encodeScc1Branch(const LLVMState &LS,
 /// restores SCC in the selected stub, and branches to the matching trampoline
 /// body. One 20-byte .text gateway can therefore serve hundreds of otherwise
 /// independent 8-byte patch sites.
-[[nodiscard]] static bool
-planSharedDispatchGateways(PatchContext &Ctx,
-                           std::vector<NopSled> &TextGateways) {
+static bool planSharedDispatchGateways(PatchContext &Ctx,
+                                       std::vector<NopSled> &TextGateways) {
   struct Candidate {
     size_t Index = 0;
     unsigned ScratchBase = 0;
@@ -3498,7 +4602,7 @@ planSharedDispatchGateways(PatchContext &Ctx,
       if (ProposedSpan > MaxDispatcherSpan)
         continue;
       uint64_t From = T.OriginalOffset + MinInstSize;
-      SmallVector<std::pair<uint64_t, size_t>, 32>::iterator It =
+      auto It =
           llvm::lower_bound(RelayAnchors, std::make_pair(From, size_t{0}));
       std::optional<uint64_t> Relay;
       if (It != RelayAnchors.end() && isSBranchReachable(From, It->first))
@@ -3531,13 +4635,6 @@ planSharedDispatchGateways(PatchContext &Ctx,
     uint32_t Group = Groups.size() + 1;
     for (size_t Index : Members) {
       Trampoline &T = Ctx.OutTrampolines[Index];
-      // findSafeSgprScratchBlock derives Base from the declared SGPR count and
-      // does not read KernelStats.ExtraSgprs, so this dispatcher block can
-      // share a base with the member's own LongBranchSgprBase. That is safe
-      // because the two uses are lifetime-disjoint: the source-PC pair here
-      // lives only across the source->gateway->dispatcher transfer and is dead
-      // once the dispatcher branches into the trampoline body, which is where
-      // LongBranchSgprBase's set-PC back-branch pair becomes live.
       SafeSgprScratchBlock Scratch{Seed.ScratchBase, 4};
       if (!commitSafeSgprScratchBlock(Ctx, T.OriginalOffset, Scratch,
                                       "shared far-dispatch gateway"))
@@ -3587,12 +4684,8 @@ planSharedDispatchGateways(PatchContext &Ctx,
            Ctx.OutTrampolines[I + Count].SharedDispatcherGroup == Group)
       ++Count;
     uint64_t Prefix = 8 + 28 * Count;
-    if (Prefix > std::numeric_limits<uint32_t>::max()) {
-      log() << "hotswap: shared far-dispatch group " << Group << " dispatcher "
-            << "prefix (" << Prefix << " bytes for " << Count
-            << " site(s)) exceeds the 32-bit pool-entry limit\n";
+    if (Prefix > std::numeric_limits<uint32_t>::max())
       return false;
-    }
     First.PoolEntryPrefixBytes = static_cast<uint32_t>(Prefix);
     First.Bytes.insert(First.Bytes.begin(), Prefix, uint8_t{0});
     I += Count;
@@ -3604,7 +4697,7 @@ planSharedDispatchGateways(PatchContext &Ctx,
   return true;
 }
 
-[[nodiscard]] static bool emitSharedDispatchers(PatchContext &Ctx) {
+static bool emitSharedDispatchers(PatchContext &Ctx) {
   DenseMap<uint32_t, SmallVector<size_t, 32>> Groups;
   SmallVector<uint64_t, 64> PoolOffsets;
   uint64_t TP = Ctx.PoolBaseOffset;
@@ -3620,8 +4713,7 @@ planSharedDispatchGateways(PatchContext &Ctx,
     TP = *Next;
   }
 
-  for (llvm::detail::DenseMapPair<uint32_t, SmallVector<size_t, 32>> &KV :
-       Groups) {
+  for (auto &KV : Groups) {
     ArrayRef<size_t> Members = KV.second;
     if (Members.empty())
       continue;
@@ -3728,10 +4820,6 @@ planSharedDispatchGateways(PatchContext &Ctx,
       Bytes.append(Branch);
       CursorValue = SourcePc;
     }
-    // Planning routes every source that branches here into Members, so the
-    // compare chain above always matches. This trap is a runtime safety net: if
-    // a future planning bug let an unrecorded PC reach the dispatcher, halt
-    // rather than fall through into the first stub with the wrong cursor.
     if (!appendInst("s_trap 2"))
       return fail("unmatched-source trap encoding failed");
     for (size_t J = 0; J != Members.size(); ++J) {
@@ -3751,6 +4839,57 @@ planSharedDispatchGateways(PatchContext &Ctx,
   return true;
 }
 
+static std::optional<SmallVector<uint64_t, 4>>
+allocateBackwardBranchIslands(std::vector<NopSled> &Gateways,
+                              uint64_t OwnerOffset, uint64_t FromOffset,
+                              uint64_t TargetOffset) {
+  struct Allocation {
+    size_t SledIndex = 0;
+    uint64_t PreviousWritePos = 0;
+  };
+  SmallVector<Allocation, 4> Allocations;
+  SmallVector<uint64_t, 4> Islands;
+  DenseSet<size_t> UsedSleds;
+  uint64_t Current = FromOffset;
+
+  while (!isSBranchReachable(Current, TargetOffset)) {
+    size_t BestIndex = Gateways.size();
+    uint64_t BestOffset = std::numeric_limits<uint64_t>::max();
+    for (size_t I = 0; I != Gateways.size(); ++I) {
+      NopSled &Sled = Gateways[I];
+      if (UsedSleds.contains(I) || OwnerOffset < Sled.FunctionStart ||
+          OwnerOffset >= Sled.FunctionEnd)
+        continue;
+      uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+      if (Sled.WritePos <= TargetOffset || Sled.WritePos >= Current ||
+          Sled.WritePos > UsableEnd ||
+          MinInstSize > UsableEnd - Sled.WritePos ||
+          !isSBranchReachable(Current, Sled.WritePos))
+        continue;
+      if (BestIndex == Gateways.size() || Sled.WritePos < BestOffset) {
+        BestIndex = I;
+        BestOffset = Sled.WritePos;
+      }
+    }
+
+    if (BestIndex == Gateways.size()) {
+      for (size_t I = Allocations.size(); I != 0; --I) {
+        const Allocation &A = Allocations[I - 1];
+        Gateways[A.SledIndex].WritePos = A.PreviousWritePos;
+      }
+      return std::nullopt;
+    }
+
+    NopSled &Best = Gateways[BestIndex];
+    Allocations.push_back({BestIndex, Best.WritePos});
+    Islands.push_back(Best.WritePos);
+    Current = Best.WritePos;
+    Best.WritePos += MinInstSize;
+    UsedSleds.insert(BestIndex);
+  }
+  return Islands;
+}
+
 static bool
 assignLongBranchGateways(PatchContext &Ctx,
                          const DenseSet<uint64_t> &DirectBranchTargets,
@@ -3768,6 +4907,7 @@ assignLongBranchGateways(PatchContext &Ctx,
   }
 
   DenseMap<uint64_t, size_t> PoolIslandOwners;
+  DenseMap<uint64_t, size_t> SourceTailIslandOwners;
   uint64_t IslandLayoutOffset = Ctx.PoolBaseOffset;
   for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
     Trampoline &T = Ctx.OutTrampolines[I];
@@ -3792,6 +4932,7 @@ assignLongBranchGateways(PatchContext &Ctx,
     uint64_t InitialCandidateSlots = 0;
   };
   std::vector<PendingGateway> Pending;
+  uint64_t ReturnBranchIslandChains = 0;
   uint64_t TrampOffset = Ctx.PoolBaseOffset;
   for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
     Trampoline &T = Ctx.OutTrampolines[I];
@@ -3806,24 +4947,89 @@ assignLongBranchGateways(PatchContext &Ctx,
     if (T.UsesSharedDispatcherForward)
       continue;
 
+    if (!T.UsesSetPCBack) {
+      const uint64_t TrailingIsland =
+          T.HasPoolBranchIsland ? PoolBranchIslandBytes : 0;
+      if (T.Bytes.size() < TrailingIsland + MinInstSize) {
+        log() << "hotswap: error: registerless return reservation is "
+                 "truncated at 0x"
+              << utohexstr(T.OriginalOffset) << "\n";
+        return false;
+      }
+      uint64_t BackSlot = *Next - TrailingIsland - MinInstSize;
+      std::optional<uint64_t> ReturnTo =
+          checkedAddUint64(T.OriginalOffset, T.OriginalSize,
+                           "registerless trampoline return target");
+      if (!ReturnTo)
+        return false;
+      std::optional<SmallVector<uint64_t, 4>> ReturnIslands =
+          allocateBackwardBranchIslands(Gateways, T.OriginalOffset, BackSlot,
+                                        *ReturnTo);
+      if (!ReturnIslands) {
+        log() << "hotswap: error: no safe return s_branch island chain for "
+                 "far site 0x"
+              << utohexstr(T.OriginalOffset) << "\n";
+        return false;
+      }
+      T.ReturnBranchIslands = std::move(*ReturnIslands);
+      T.ReturnBranchTargetOffset = *ReturnTo;
+      ReturnBranchIslandChains += !T.ReturnBranchIslands.empty();
+    }
+
     if (isSBranchReachable(T.OriginalOffset, TP)) {
       T.UsesShortBranchForward = true;
+      if (T.LongBranchPreservesVcc)
+        std::memcpy(T.Bytes.data(), Ctx.LS.SNopBytes.data(), MinInstSize);
       continue;
     }
-    std::optional<SmallVector<uint8_t>> Direct = encodeSetPCLongBranch(
-        Ctx.LS, T.OriginalOffset, TP, T.LongBranchSgprBase);
-    if (Direct && Direct->size() <= T.OriginalSize) {
-      T.UsesDirectSetPCForward = true;
-      T.DirectSetPCForwardBytes = std::move(*Direct);
-      continue;
+    if (T.UsesSetPCBack) {
+      std::optional<SmallVector<uint8_t>> Direct =
+          T.LongBranchPreservesVcc
+              ? encodeSetPcGateway(Ctx.LS, T.OriginalOffset, TP,
+                                   T.LongBranchSgprBase, T.LongBranchUsesVcc,
+                                   /*PreserveVcc=*/true)
+              : encodeSetPCLongBranch(Ctx.LS, T.OriginalOffset, TP,
+                                      T.LongBranchSgprBase,
+                                      T.LongBranchUsesVcc);
+      uint64_t RequiredSourceBytes =
+          Direct ? Direct->size() +
+                       (T.LongBranchPreservesVcc ? VccLandingPadBytes : 0)
+                 : 0;
+      if (Direct && RequiredSourceBytes <= T.OriginalSize) {
+        T.UsesDirectSetPCForward = true;
+        T.DirectSetPCForwardBytes = std::move(*Direct);
+        continue;
+      }
     }
     Pending.push_back({I, TP, 0});
   }
+
+  // Once a source is replaced by a one-dword branch, the remainder of its
+  // original instruction window is unreachable and can provide a safe relay.
+  // Add these only after selecting direct set-PC sources, whose longer forward
+  // sequence consumes the tail. Shared dispatch and VCC preservation likewise
+  // reserve the second dword. Relays are object-wide: unlike an arbitrary NOP
+  // sled they cannot be reached by the owning function's original fallthrough.
+  if (!Ctx.DirectControlFlow.HasUnboundedIndirectEntries)
+    for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I) {
+      const Trampoline &T = Ctx.OutTrampolines[I];
+      if (T.OriginalSize < 2 * MinInstSize || T.UsesDirectSetPCForward ||
+          T.UsesSharedDispatcherForward || T.LongBranchPreservesVcc)
+        continue;
+      uint64_t Tail = T.OriginalOffset + MinInstSize;
+      SourceTailIslandOwners[Tail] = I;
+      Gateways.push_back({Tail, Tail + MinInstSize, Tail, 0,
+                          std::numeric_limits<uint64_t>::max()});
+    }
+
   for (PendingGateway &P : Pending) {
     const Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
+    if (!T.UsesSetPCBack)
+      continue;
     Expected<uint64_t> CandidateSlots = countReachableSetPcGatewaySlots(
         Gateways, Ctx.LS, T.OriginalOffset, P.TargetOffset,
-        T.LongBranchSgprBase, Pending.size());
+        T.LongBranchSgprBase, Pending.size(), T.LongBranchUsesVcc,
+        T.LongBranchPreservesVcc);
     if (!CandidateSlots) {
       log() << "hotswap: error: failed to count gateways for far site 0x"
             << utohexstr(T.OriginalOffset) << ": "
@@ -3844,9 +5050,14 @@ assignLongBranchGateways(PatchContext &Ctx,
   uint64_t AssignedGateways = 0;
   for (const PendingGateway &P : Pending) {
     Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
+    if (!T.UsesSetPCBack) {
+      StillPending.push_back(P);
+      continue;
+    }
     Expected<std::optional<EncodedSetPcGateway>> GatewayOrErr =
         findNearestSetPcGateway(Gateways, Ctx.LS, T.OriginalOffset,
-                                P.TargetOffset, T.LongBranchSgprBase);
+                                P.TargetOffset, T.LongBranchSgprBase,
+                                T.LongBranchUsesVcc, T.LongBranchPreservesVcc);
     if (!GatewayOrErr) {
       log() << "hotswap: error: failed to plan gateway for far site 0x"
             << utohexstr(T.OriginalOffset) << ": "
@@ -3880,6 +5091,8 @@ assignLongBranchGateways(PatchContext &Ctx,
     }
     T.ForwardBranchIslands = std::move(*Islands);
     T.ForwardBranchTargetOffset = P.TargetOffset;
+    if (T.LongBranchPreservesVcc)
+      std::memcpy(T.Bytes.data(), Ctx.LS.SNopBytes.data(), MinInstSize);
     ++BranchIslandChains;
   }
   Pending = std::move(StillPending);
@@ -3887,9 +5100,14 @@ assignLongBranchGateways(PatchContext &Ctx,
   if (!Pending.empty()) {
     const PendingGateway &P = Pending.front();
     const Trampoline &T = Ctx.OutTrampolines[P.TrampolineIndex];
-    log() << "hotswap: error: no safe short-branch gateway for far site 0x"
-          << utohexstr(T.OriginalOffset) << " (" << P.InitialCandidateSlots
-          << " initial candidate slot(s))\n";
+    if (!T.UsesSetPCBack)
+      log() << "hotswap: error: no safe forward s_branch island chain for "
+               "registerless far site 0x"
+            << utohexstr(T.OriginalOffset) << "\n";
+    else
+      log() << "hotswap: error: no safe short-branch gateway for far site 0x"
+            << utohexstr(T.OriginalOffset) << " (" << P.InitialCandidateSlots
+            << " initial candidate slot(s))\n";
     return false;
   }
   if (AssignedGateways != 0)
@@ -3898,6 +5116,9 @@ assignLongBranchGateways(PatchContext &Ctx,
   if (BranchIslandChains != 0)
     log() << "hotswap: assigned " << BranchIslandChains
           << " forward s_branch island chain(s)\n";
+  if (ReturnBranchIslandChains != 0)
+    log() << "hotswap: assigned " << ReturnBranchIslandChains
+          << " return s_branch island chain(s)\n";
 
   for (Trampoline &T : Ctx.OutTrampolines) {
     if (T.HasForwardGateway) {
@@ -3908,14 +5129,18 @@ assignLongBranchGateways(PatchContext &Ctx,
               << utohexstr(T.ForwardGatewayOffset) << " extends past .text.\n";
         return false;
       }
-      if (!writeCurrentText(Ctx, T.ForwardGatewayOffset, T.ForwardGatewayBytes,
-                            "forward set-PC gateway"))
-        return false;
+      std::memcpy(Ctx.Text + T.ForwardGatewayOffset,
+                  T.ForwardGatewayBytes.data(), T.ForwardGatewayBytes.size());
       if (!T.SecondaryForwardGatewayBytes.empty()) {
         uint64_t Offset = T.SharedDispatcherSecondaryGatewayOffset;
-        if (!writeCurrentText(Ctx, Offset, T.SecondaryForwardGatewayBytes,
-                              "secondary forward set-PC gateway"))
+        if (Offset > Ctx.TextSize ||
+            T.SecondaryForwardGatewayBytes.size() > Ctx.TextSize - Offset) {
+          log() << "hotswap: error: secondary forward gateway at 0x"
+                << utohexstr(Offset) << " extends past .text.\n";
           return false;
+        }
+        std::memcpy(Ctx.Text + Offset, T.SecondaryForwardGatewayBytes.data(),
+                    T.SecondaryForwardGatewayBytes.size());
       }
     }
     for (size_t I = 0; I != T.ForwardBranchIslands.size(); ++I) {
@@ -3932,7 +5157,14 @@ assignLongBranchGateways(PatchContext &Ctx,
       }
       DenseMap<uint64_t, size_t>::const_iterator Owner =
           PoolIslandOwners.find(From);
-      if (Owner != PoolIslandOwners.end()) {
+      DenseMap<uint64_t, size_t>::const_iterator SourceOwner =
+          SourceTailIslandOwners.find(From);
+      if (SourceOwner != SourceTailIslandOwners.end()) {
+        Trampoline &OwnerT = Ctx.OutTrampolines[SourceOwner->second];
+        OwnerT.HasSourceTailBranchIsland = true;
+        OwnerT.SourceTailBranchIslandOffset = From;
+        OwnerT.SourceTailBranchTargetOffset = To;
+      } else if (Owner != PoolIslandOwners.end()) {
         Trampoline &OwnerT = Ctx.OutTrampolines[Owner->second];
         std::memcpy(OwnerT.Bytes.data() + OwnerT.Bytes.size() -
                         PoolBranchIslandBytes,
@@ -3943,8 +5175,41 @@ assignLongBranchGateways(PatchContext &Ctx,
                 << utohexstr(From) << " is outside .text and trampoline pool\n";
           return false;
         }
-        if (!writeCurrentText(Ctx, From, Branch, "forward branch island"))
+        std::memcpy(Ctx.Text + From, Branch.data(), Branch.size());
+      }
+    }
+    for (size_t I = 0; I != T.ReturnBranchIslands.size(); ++I) {
+      uint64_t From = T.ReturnBranchIslands[I];
+      uint64_t To = I + 1 == T.ReturnBranchIslands.size()
+                        ? T.ReturnBranchTargetOffset
+                        : T.ReturnBranchIslands[I + 1];
+      SmallVector<uint8_t> Branch = Ctx.LS.encodeSBranch(From, To);
+      if (Branch.size() != MinInstSize) {
+        log() << "hotswap: error: failed to encode return branch island at 0x"
+              << utohexstr(From) << "\n";
+        return false;
+      }
+      DenseMap<uint64_t, size_t>::const_iterator Owner =
+          PoolIslandOwners.find(From);
+      DenseMap<uint64_t, size_t>::const_iterator SourceOwner =
+          SourceTailIslandOwners.find(From);
+      if (SourceOwner != SourceTailIslandOwners.end()) {
+        Trampoline &OwnerT = Ctx.OutTrampolines[SourceOwner->second];
+        OwnerT.HasSourceTailBranchIsland = true;
+        OwnerT.SourceTailBranchIslandOffset = From;
+        OwnerT.SourceTailBranchTargetOffset = To;
+      } else if (Owner != PoolIslandOwners.end()) {
+        Trampoline &OwnerT = Ctx.OutTrampolines[Owner->second];
+        std::memcpy(OwnerT.Bytes.data() + OwnerT.Bytes.size() -
+                        PoolBranchIslandBytes,
+                    Branch.data(), Branch.size());
+      } else {
+        if (From > Ctx.TextSize || Branch.size() > Ctx.TextSize - From) {
+          log() << "hotswap: error: return branch island at 0x"
+                << utohexstr(From) << " is outside .text and trampoline pool\n";
           return false;
+        }
+        std::memcpy(Ctx.Text + From, Branch.data(), Branch.size());
       }
     }
   }
@@ -4314,13 +5579,10 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
       return false;
     TrampOffset = *NextTrampOffset;
 
-    if (T.Long && !T.UsesSetPCBack) {
-      log() << "hotswap: error: far trampoline lacks safe set-PC return at 0x"
-            << utohexstr(T.OriginalOffset) << "\n";
-      return false;
-    }
     const uint32_t BackReserve =
-        T.UsesSetPCBack ? SetPcReturnReserveBytes : MinInstSize;
+        T.LongBranchPreservesVcc
+            ? VccPreservingReturnReserveBytes
+            : (T.UsesSetPCBack ? SetPcReturnReserveBytes : MinInstSize);
     const uint32_t TrailingIsland =
         T.HasPoolBranchIsland ? PoolBranchIslandBytes : 0;
     if (T.Bytes.size() < BackReserve + TrailingIsland) {
@@ -4337,11 +5599,35 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
       return false;
 
     std::optional<SmallVector<uint8_t>> BrBack;
-    if (T.UsesSetPCBack) {
-      BrBack =
-          encodeSetPCLongBranch(LS, BackSlot, *ReturnTo, T.LongBranchSgprBase);
+    if (T.LongBranchPreservesVcc) {
+      SmallVector<uint8_t> Save = assembleSingleInst(
+          "s_mov_b32 s" + std::to_string(T.LongBranchSgprBase) + ", vcc_lo",
+          LS);
+      std::optional<uint64_t> SetPcOffset = checkedAddUint64(
+          BackSlot, Save.size(), "VCC-preserving return set-PC offset");
+      uint64_t LandingDisplacement = T.UsesDirectSetPCForward
+                                         ? T.DirectSetPCForwardBytes.size()
+                                         : MinInstSize;
+      std::optional<uint64_t> Landing =
+          checkedAddUint64(T.OriginalOffset, LandingDisplacement,
+                           "VCC-preserving return landing offset");
+      if (Save.size() != VccSaveRestoreBytes || !SetPcOffset || !Landing)
+        return false;
+      std::optional<SmallVector<uint8_t>> SetPc = encodeSetPCLongBranch(
+          LS, *SetPcOffset, *Landing, T.LongBranchSgprBase, /*UseVcc=*/true);
+      if (SetPc) {
+        Save.append(SetPc->begin(), SetPc->end());
+        BrBack = std::move(Save);
+      }
+    } else if (T.UsesSetPCBack) {
+      BrBack = encodeSetPCLongBranch(LS, BackSlot, *ReturnTo,
+                                     T.LongBranchSgprBase, T.LongBranchUsesVcc);
     } else {
-      SmallVector<uint8_t> ShortBranch = LS.encodeSBranch(BackSlot, *ReturnTo);
+      uint64_t BranchTarget = T.ReturnBranchIslands.empty()
+                                  ? *ReturnTo
+                                  : T.ReturnBranchIslands.front();
+      SmallVector<uint8_t> ShortBranch =
+          LS.encodeSBranch(BackSlot, BranchTarget);
       if (!ShortBranch.empty())
         BrBack = std::move(ShortBranch);
     }
@@ -4397,11 +5683,55 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
       return false;
     }
     std::memcpy(Text + T.OriginalOffset, BrFwd.data(), BrFwd.size());
+    uint32_t PadStart = BrFwd.size();
+    if (T.LongBranchPreservesVcc) {
+      uint64_t LandingDisplacement =
+          T.UsesDirectSetPCForward ? BrFwd.size() : MinInstSize;
+      if ((!T.UsesDirectSetPCForward && BrFwd.size() != MinInstSize) ||
+          LandingDisplacement > T.OriginalSize ||
+          VccLandingPadBytes > T.OriginalSize - LandingDisplacement) {
+        log() << "hotswap: error: VCC-preserving source window is invalid at "
+                 "0x"
+              << utohexstr(T.OriginalOffset) << "\n";
+        return false;
+      }
+      SmallVector<uint8_t> Restore = assembleSingleInst(
+          "s_mov_b32 vcc_lo, s" + std::to_string(T.LongBranchSgprBase), LS);
+      if (Restore.size() != VccSaveRestoreBytes) {
+        log() << "hotswap: error: failed to encode VCC restore landing at 0x"
+              << utohexstr(T.OriginalOffset + LandingDisplacement) << "\n";
+        return false;
+      }
+      std::memcpy(Text + T.OriginalOffset + LandingDisplacement, Restore.data(),
+                  Restore.size());
+      PadStart = LandingDisplacement + VccLandingPadBytes;
+    }
     // Pad the tail of the replaced slot with cached s_nop bytes.
-    for (uint32_t I = BrFwd.size(); I + MinInstSize <= T.OriginalSize;
+    for (uint32_t I = PadStart; I + MinInstSize <= T.OriginalSize;
          I += MinInstSize)
       std::memcpy(Text + T.OriginalOffset + I, LS.SNopBytes.data(),
                   MinInstSize);
+    if (T.HasSourceTailBranchIsland) {
+      if (T.SourceTailBranchIslandOffset < T.OriginalOffset ||
+          T.SourceTailBranchIslandOffset - T.OriginalOffset < PadStart ||
+          T.SourceTailBranchIslandOffset - T.OriginalOffset >
+              T.OriginalSize - MinInstSize) {
+        log() << "hotswap: error: source-tail branch island overlaps the "
+                 "forward sequence at 0x"
+              << utohexstr(T.OriginalOffset) << "\n";
+        return false;
+      }
+      SmallVector<uint8_t> Relay = LS.encodeSBranch(
+          T.SourceTailBranchIslandOffset, T.SourceTailBranchTargetOffset);
+      if (Relay.size() != MinInstSize) {
+        log() << "hotswap: error: source-tail branch island encoding failed "
+                 "at 0x"
+              << utohexstr(T.SourceTailBranchIslandOffset) << "\n";
+        return false;
+      }
+      std::memcpy(Text + T.SourceTailBranchIslandOffset, Relay.data(),
+                  Relay.size());
+    }
   }
   return true;
 }
@@ -4501,12 +5831,22 @@ static amd_comgr_status_t retargetCodeObjectImpl(
           << "parseable ELF64 (" << toString(ViewOrErr.takeError()) << ").\n";
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
-  if (ViewOrErr->textSize() == 0) {
-    log() << "hotswap: error: retargetCodeObject: input ELF has empty "
-          << ".text section; nothing to rewrite.\n";
-    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
-  }
   ElfView &Elf = *ViewOrErr;
+  if (ViewOrErr->textSize() == 0) {
+    if (!Elf.isValidDataOnlyObject()) {
+      log() << "hotswap: error: retargetCodeObject: empty .text does not "
+               "describe a valid data-only code object.\n";
+      return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    std::unique_ptr<WritableMemoryBuffer> Result =
+        copyOutputBuffer(ElfData, ElfSize, "data-only");
+    if (!Result)
+      return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+    Out = std::move(Result);
+    log() << "hotswap: accepted data-only code object with empty .text; "
+             "returning a byte-identical copy.\n";
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
   if (Prof)
     Profile.add(HotswapMetric::ElfParse, profNowNs() - ParseT0, 0);
 
