@@ -1,10 +1,7 @@
 // COM: Exact decomposition of the corpus's M=32 FP4 block-16 scaled WMMA.
-// COM: The schedule is low-M/low-K, high-M/low-K, low-M/high-K,
-// COM: high-M/high-K. The low passes read the original C halves and even scale
-// COM: bytes; the high passes accumulate from D and use odd scale bytes. Only
-// COM: the four A registers overwritten by each FP4 mask are saved, and the
-// COM: first save slot is reused as the reversible scale-pair permutation
-// COM: temporary.
+// COM: One 13-VGPR bank-zero block holds an eight-register masked-A half, four
+// COM: gathered scale values, and one temporary. The schedule is M0 low/high,
+// COM: then M1 low/high. Original A and Scale16 tuples are never modified.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
@@ -12,12 +9,12 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
 // RUN:   --output %t.out.elf 2>&1 | %FileCheck --check-prefix=API %s
 // API: physical forward-dead proof at offset
-// API-SAME: found 4 VGPRs
+// API-SAME: found 13 VGPRs
 // API: wmma_scale16: exact M+K split
-// API-SAME: four saved-A VGPRs, tmp=v55, +0 vgpr, 4 WMMAs
+// API-SAME: masked-A=v52:59, scales=v60,v61,v62,v63, tmp=v64, +0 vgpr, 4 WMMAs
 // API-NOT: error:
 // API: liveness: kernel test_wmma_scale16_32x16:
-// API-SAME: scratch_reused=4, scratch_above_kd=0
+// API-SAME: scratch_reused=13, scratch_above_kd=0
 // API: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
@@ -26,39 +23,41 @@
 // DISASM: s_branch
 // DISASM: s_endpgm
 //
-// COM: Forward byte split and its exact inverse. These selectors implement
-// COM: [0,2,4,6] / [1,3,5,7], then restore the two original dwords exactly.
-// DISASM: v_mov_b32_e32 v[[TMP:[0-9]+]], v40
-// DISASM-NEXT: v_perm_b32 v40, v[[TMP]], v41, 0x6040200
-// DISASM-NEXT: v_perm_b32 v41, v[[TMP]], v41, 0x7050301
-// DISASM: v_mov_b32_e32 v[[TMP]], v42
-// DISASM-NEXT: v_perm_b32 v42, v[[TMP]], v43, 0x6040200
-// DISASM-NEXT: v_perm_b32 v43, v[[TMP]], v43, 0x7050301
+// COM: Even/odd byte gathers land in dedicated low-bank scale registers.
+// COM: The original scale pairs remain read-only; no reversible v_perm
+// COM: mutation/restore sequence is emitted.
+// DISASM-NOT: v_perm_b32
+// DISASM: v_and_b32{{(_e32)?}} v60, 0xff, v40
+// DISASM: v_and_b32{{(_e32)?}} v61, 0xff, v42
+// DISASM: v_bfe_u32 v62, v40, 8, 8
+// DISASM: v_bfe_u32 v63, v42, 8, 8
 //
-// COM: D==C, low-low-high-high order. Reuse hints are stripped, and the
+// COM: D==C, M0 low/high then M1 low/high. Reuse hints are stripped, and the
 // COM: original C modifier appears only on the two low-K passes.
 // DISASM-NOT: matrix_a_reuse
 // DISASM-NOT: matrix_b_reuse
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[16:23], v[32:39], v[0:7], v40, v42{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4{{.*}}neg_lo:[0,0,1]
+// DISASM: v_mov_b32{{(_e32)?}} v52, v16
+// DISASM: v_mov_b32{{(_e32)?}} v54, 0
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[52:59], v[32:39], v[0:7], v60, v61{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4{{.*}}neg_lo:[0,0,1]
 // DISASM: v_nop
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[8:15], v[24:31], v[32:39], v[8:15], v40, v42{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4{{.*}}neg_lo:[0,0,1]
-// DISASM: v_nop
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[16:23], v[32:39], v[0:7], v41, v43{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
+// DISASM: v_mov_b32{{(_e32)?}} v52, 0
+// DISASM: v_mov_b32{{(_e32)?}} v54, v18
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[52:59], v[32:39], v[0:7], v62, v63{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
 // DISASM-NOT: neg_lo
 // DISASM: v_nop
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[8:15], v[24:31], v[32:39], v[8:15], v41, v43{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
+// DISASM: v_mov_b32{{(_e32)?}} v52, v24
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[8:15], v[52:59], v[32:39], v[8:15], v60, v61{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4{{.*}}matrix_a_scale:MATRIX_SCALE_ROW1{{.*}}neg_lo:[0,0,1]
+// DISASM: v_nop
+// DISASM: v_mov_b32{{(_e32)?}} v52, 0
+// DISASM: v_mov_b32{{(_e32)?}} v54, v26
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[8:15], v[52:59], v[32:39], v[8:15], v62, v63{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4{{.*}}matrix_a_scale:MATRIX_SCALE_ROW1
 // DISASM-NOT: neg_lo
 // DISASM: v_nop
-// DISASM: v_mov_b32_e32 v[[TMP]], v40
-// DISASM-NEXT: v_perm_b32 v40, v[[TMP]], v41, 0x5010400
-// DISASM-NEXT: v_perm_b32 v41, v[[TMP]], v41, 0x7030602
-// DISASM: v_mov_b32_e32 v[[TMP]], v42
-// DISASM-NEXT: v_perm_b32 v42, v[[TMP]], v43, 0x5010400
-// DISASM-NEXT: v_perm_b32 v43, v[[TMP]], v43, 0x7030602
+// DISASM-NOT: v_perm_b32
 //
 // COM: The second lowering permits matrix B to overlap C. Its first low pass
 // COM: therefore has the same v[32:39] range in src1 and src2.
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[16:23], v[32:39], v[32:39], v48, v50
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[64:71], v[32:39], v[32:39], v72, v73
 // DISASM-NOT: v_wmma_scale16
 
 // RUN: hotswap-rewrite %t.out.elf \
@@ -91,6 +90,15 @@ test_wmma_scale16_32x16:
   v_mov_b32 v53, 0
   v_mov_b32 v54, 0
   v_mov_b32 v55, 0
+  v_mov_b32 v56, 0
+  v_mov_b32 v57, 0
+  v_mov_b32 v58, 0
+  v_mov_b32 v59, 0
+  v_mov_b32 v60, 0
+  v_mov_b32 v61, 0
+  v_mov_b32 v62, 0
+  v_mov_b32 v63, 0
+  v_mov_b32 v64, 0
   s_branch test_wmma_scale16_32x16_bc_overlap
 .Ltest_wmma_scale16_32x16_end:
 .size test_wmma_scale16_32x16, .Ltest_wmma_scale16_32x16_end-test_wmma_scale16_32x16

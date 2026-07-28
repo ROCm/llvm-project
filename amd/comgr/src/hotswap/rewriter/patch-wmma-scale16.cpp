@@ -1,4 +1,4 @@
-//===- patch-wmma-scale16.cpp - WMMA Scale16 decomposition ----------------===//
+//===- patch-wmma-scale16.cpp - Scaled WMMA decomposition -----------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -6,9 +6,10 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Lowers block-16 scaled WMMA (v_wmma_scale16_f32_*) for gfx1250 hardware that
-/// only has block-32 scaled WMMA (v_wmma_scale_f32_*). Done exactly, or failing
-/// closed when it cannot be applied.
+/// Lowers scaled WMMA variants that exist on gfx1250 B0 but not A0. This
+/// includes block-16 scaled WMMA (v_wmma_scale16_f32_*) and the M=32 regular
+/// scale form (v_wmma_scale_f32_32x16x128_f4). Done exactly, or failing closed
+/// when it cannot be applied.
 ///
 /// A block-32 op applies one (scaleA, scaleB) pair across all 32 K-elements of
 /// a block, so it cannot honor both block-16 sub-scales of that block at once.
@@ -523,100 +524,6 @@ matrixOperandRange(PatchContext &Ctx, const InternalDecodedInst &DI,
   return VgprRange{Lo, Hi - Lo + 1};
 }
 
-// Matrix-A K-subblock masking scheme, chosen by the matrix-A data format.
-// The K-split must isolate each 16-K subblock, and how a subblock maps to
-// lanes/VGPRs is format-dependent:
-//   * FP8/BF8: subblocks split by wave lane  -> Lane mask.
-//   * FP6/BF6: subblocks split by VGPR index -> Vgpr select, 3 VGPRs/subblock.
-//   * FP4    : subblocks split by VGPR index -> Vgpr select, 2 VGPRs/subblock.
-enum class AMaskScheme { Lane, Vgpr };
-struct AMaskPlan {
-  AMaskScheme Scheme;
-  unsigned SubW; // VGPRs per 16-K subblock (Vgpr scheme only)
-};
-
-// Parse "matrix_a_fmt:MATRIX_FMT_<fmt>" from the printer's canonical form and
-// map it to a masking plan. FP8 is the default when the modifier is omitted.
-static std::optional<AMaskPlan> matrixAMaskPlan(PatchContext &Ctx,
-                                                const InternalDecodedInst &DI) {
-  SmallString<256> Buf;
-  raw_svector_ostream OS(Buf);
-  Ctx.LS.MCIP->printInst(&DI.Inst, /*Address=*/0, /*Annot=*/"", *Ctx.LS.STI,
-                         OS);
-  StringRef S(Buf);
-  StringRef Key = "matrix_a_fmt:MATRIX_FMT_";
-  StringRef Fmt = "FP8"; // omitted modifier => default FP8
-  size_t P = S.find(Key);
-  if (P != StringRef::npos) {
-    StringRef R = S.substr(P + Key.size());
-    size_t E = R.find_first_of(" \t\r\n");
-    Fmt = (E == StringRef::npos) ? R : R.substr(0, E);
-  }
-  if (Fmt == "FP8" || Fmt == "BF8")
-    return AMaskPlan{AMaskScheme::Lane, /*SubW=*/4};
-  if (Fmt == "FP6" || Fmt == "BF6")
-    return AMaskPlan{AMaskScheme::Vgpr, /*SubW=*/3};
-  if (Fmt == "FP4")
-    return AMaskPlan{AMaskScheme::Vgpr, /*SubW=*/2};
-  return std::nullopt; // unknown format -> caller fails closed
-}
-
-// Fail the whole rewrite closed rather than emit a miscompile.
-static uint32_t failClosed(PatchContext &Ctx, const InternalDecodedInst &DI,
-                           const Twine &Why) {
-  log() << "hotswap: error: wmma_scale16: " << DI.Mnemonic << " at offset 0x"
-        << utohexstr(DI.Offset) << ": " << Why
-        << "; refusing to return a miscompiled code object.\n";
-  Ctx.RequiredPatchFailed = true;
-  return 0;
-}
-
-static void emitScalePairSplitInPlace(raw_string_ostream &OS, unsigned Lo,
-                                      unsigned Hi, unsigned Tmp,
-                                      unsigned &CurrentMode) {
-  unsigned PairBank = Lo / VgprBankSize;
-  unsigned TmpBank = Tmp / VgprBankSize;
-  emitVgprCopy(OS, Tmp, Lo, /*W=*/1, CurrentMode);
-  emitModeForOperands(OS, CurrentMode,
-                      {{VgprMsbOperand::Dst, PairBank},
-                       {VgprMsbOperand::Src0, TmpBank},
-                       {VgprMsbOperand::Src1, PairBank}});
-  OS << "v_perm_b32 " << encodedVgprName(Lo) << ", " << encodedVgprName(Tmp)
-     << ", " << encodedVgprName(Hi) << ", 0x06040200\n";
-  OS << "v_perm_b32 " << encodedVgprName(Hi) << ", " << encodedVgprName(Tmp)
-     << ", " << encodedVgprName(Hi) << ", 0x07050301\n";
-}
-
-static void emitScalePairRestoreInPlace(raw_string_ostream &OS, unsigned Lo,
-                                        unsigned Hi, unsigned Tmp,
-                                        unsigned &CurrentMode) {
-  unsigned PairBank = Lo / VgprBankSize;
-  unsigned TmpBank = Tmp / VgprBankSize;
-  emitVgprCopy(OS, Tmp, Lo, /*W=*/1, CurrentMode);
-  emitModeForOperands(OS, CurrentMode,
-                      {{VgprMsbOperand::Dst, PairBank},
-                       {VgprMsbOperand::Src0, TmpBank},
-                       {VgprMsbOperand::Src1, PairBank}});
-  OS << "v_perm_b32 " << encodedVgprName(Lo) << ", " << encodedVgprName(Tmp)
-     << ", " << encodedVgprName(Hi) << ", 0x05010400\n";
-  OS << "v_perm_b32 " << encodedVgprName(Hi) << ", " << encodedVgprName(Tmp)
-     << ", " << encodedVgprName(Hi) << ", 0x07030602\n";
-}
-
-static void emitMaskVgprsInPlace(raw_string_ostream &OS, bool KeepLow,
-                                 unsigned Base, unsigned W, unsigned SubW,
-                                 unsigned &CurrentMode) {
-  for (unsigned I = 0; I != W; ++I) {
-    bool IsLow = ((I / SubW) % 2) == 0;
-    if (IsLow == KeepLow)
-      continue;
-    unsigned Physical = Base + I;
-    emitModeForOperands(OS, CurrentMode,
-                        {{VgprMsbOperand::Dst, Physical / VgprBankSize}});
-    OS << "v_mov_b32 " << encodedVgprName(Physical) << ", 0\n";
-  }
-}
-
 struct Scale32PrintedAsm {
   std::string Operands[6]; // dst, matrix A/B, src2, scale A/B
   std::string ModifierSuffix;
@@ -736,6 +643,25 @@ transformScale32ModifierSuffix(StringRef Suffix, bool HighKPass) {
   return Result;
 }
 
+static std::optional<std::string>
+transformRegularScaleM32ModifierSuffix(StringRef Suffix, bool HighMHalf) {
+  std::string Result =
+      HighMHalf ? " matrix_a_scale:MATRIX_SCALE_ROW1" : std::string();
+  for (StringRef Token : tokenizeScaleModifiers(Suffix)) {
+    if (!isKnownScale32Modifier(Token)) {
+      log() << "hotswap: error: wmma_scale: unsupported M=32 modifier token \""
+            << Token << "\"\n";
+      return std::nullopt;
+    }
+    if (Token == "matrix_a_reuse" || Token == "matrix_b_reuse" ||
+        Token == "matrix_a_scale:MATRIX_SCALE_ROW1")
+      continue;
+    Result += ' ';
+    Result += Token.str();
+  }
+  return Result;
+}
+
 static std::string encodedVgprRange(unsigned PhysicalBase, unsigned Width) {
   assert(Width > 0);
   unsigned EncodedBase = PhysicalBase % VgprBankSize;
@@ -754,34 +680,41 @@ static void emitScale32Half(raw_string_ostream &OS, unsigned DstBase,
      << ModifierSuffix << "\n";
 }
 
-// Prefer one exact-liveness-proven dead block inside the kernel's declared
-// allocation. Fully allocated production kernels often have no above-KD
-// headroom even though a particular WMMA site has a large dead interval.
-// Search high-to-low within each physical bank so every generated range keeps
-// one VGPR-MSB setting. Fall back to the allocator's normal above-KD growth.
+static void emitRegularScaleMHalf(raw_string_ostream &OS, unsigned DstBase,
+                                  unsigned MatrixABase, unsigned MatrixBBase,
+                                  StringRef Src2, StringRef ScaleA,
+                                  StringRef ScaleB, StringRef ModifierSuffix) {
+  OS << "v_wmma_scale_f32_16x16x128_f8f6f4 " << encodedVgprRange(DstBase, 8)
+     << ", " << encodedVgprRange(MatrixABase, 8) << ", "
+     << encodedVgprRange(MatrixBBase, 8) << ", " << Src2 << ", " << ScaleA
+     << ", " << ScaleB
+     << " matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4"
+     << ModifierSuffix << "\n";
+}
+
+// Prefer one exact-liveness-proven dead block in bank zero. Scale-prefix
+// operands ignore VGPR-MSB, so every generated scale and the masked-A copy
+// must be directly addressable there. Fall back to above-KD growth only while
+// it still fits in bank zero.
 static std::optional<unsigned>
-allocContiguousDeadOrAboveInBank(VgprAllocator &Alloc, unsigned Count,
-                                 unsigned Align, unsigned BankSize,
-                                 bool AllowDeadReuse) {
-  if (Count == 0 || Count > BankSize || Align == 0)
+allocContiguousDeadOrAboveLowBank(VgprAllocator &Alloc, unsigned Count,
+                                  unsigned Align, bool AllowDeadReuse,
+                                  bool AllowAboveKd) {
+  unsigned LowBankLimit =
+      std::min({VgprBankSize, Alloc.MaxVgprs,
+                static_cast<unsigned>(Alloc.LiveAtPoint.size())});
+  if (Count == 0 || Count > LowBankLimit || Align == 0)
     return std::nullopt;
 
   if (AllowDeadReuse) {
-    unsigned BankCount = (Alloc.KdAllocatedVgprs + BankSize - 1) / BankSize;
-    for (unsigned ReverseBank = BankCount; ReverseBank != 0; --ReverseBank) {
-      unsigned Bank = ReverseBank - 1;
-      unsigned BankBegin = Bank * BankSize;
-      unsigned BankEnd = std::min(Alloc.KdAllocatedVgprs, BankBegin + BankSize);
-      if (BankEnd < BankBegin + Count)
-        continue;
-
+    unsigned BankEnd = std::min(Alloc.KdAllocatedVgprs, LowBankLimit);
+    if (BankEnd >= Count) {
       unsigned Base = BankEnd - Count;
       Base -= Base % Align;
-      while (Base >= BankBegin) {
+      while (true) {
         bool AllDead = true;
         for (unsigned V = Base; V != Base + Count; ++V) {
-          if (V >= static_cast<unsigned>(Alloc.LiveAtPoint.size()) ||
-              Alloc.LiveAtPoint.test(V)) {
+          if (Alloc.LiveAtPoint.test(V)) {
             AllDead = false;
             break;
           }
@@ -790,13 +723,22 @@ allocContiguousDeadOrAboveInBank(VgprAllocator &Alloc, unsigned Count,
           Alloc.LiveAtPoint.set(Base, Base + Count);
           return Base;
         }
-        if (Base < BankBegin + Align)
+        if (Base < Align)
           break;
         Base -= Align;
       }
     }
   }
-  return Alloc.allocContiguousAboveKdInBank(Count, Align, BankSize);
+
+  if (!AllowAboveKd)
+    return std::nullopt;
+
+  unsigned AboveBase = Alloc.NextAboveKd;
+  if (AboveBase % Align != 0)
+    AboveBase += Align - AboveBase % Align;
+  if (AboveBase + Count > LowBankLimit)
+    return std::nullopt;
+  return Alloc.allocContiguousAboveKdInBank(Count, Align, VgprBankSize);
 }
 
 static bool rangesOverlap(unsigned ABase, unsigned AWidth, unsigned BBase,
@@ -1357,6 +1299,64 @@ computeForwardDeadPhysicalVgprs(PatchContext &Ctx, size_t SiteIdx,
   return computeForwardDeadVgprs(Graph->Nodes, Graph->EntryNode, MaxVgprs);
 }
 
+// Matrix-A K-subblock masking scheme, chosen by the matrix-A data format.
+// The K-split must isolate each 16-K subblock, and how a subblock maps to
+// lanes/VGPRs is format-dependent:
+//   * FP8/BF8: subblocks split by wave lane  -> Lane mask.
+//   * FP6/BF6: subblocks split by VGPR index -> Vgpr select, 3 VGPRs/subblock.
+//   * FP4    : subblocks split by VGPR index -> Vgpr select, 2 VGPRs/subblock.
+enum class AMaskScheme { Lane, Vgpr };
+struct AMaskPlan {
+  AMaskScheme Scheme;
+  unsigned SubW; // VGPRs per 16-K subblock (Vgpr scheme only)
+};
+
+// Parse "matrix_a_fmt:MATRIX_FMT_<fmt>" from the printer's canonical form and
+// map it to a masking plan. FP8 is the default when the modifier is omitted.
+static std::optional<AMaskPlan> matrixAMaskPlan(PatchContext &Ctx,
+                                                const InternalDecodedInst &DI) {
+  SmallString<256> Buf;
+  raw_svector_ostream OS(Buf);
+  Ctx.LS.MCIP->printInst(&DI.Inst, /*Address=*/0, /*Annot=*/"", *Ctx.LS.STI,
+                         OS);
+  StringRef S(Buf);
+  StringRef Key = "matrix_a_fmt:MATRIX_FMT_";
+  StringRef Fmt = "FP8"; // omitted modifier => default FP8
+  size_t P = S.find(Key);
+  if (P != StringRef::npos) {
+    StringRef R = S.substr(P + Key.size());
+    size_t E = R.find_first_of(" \t\r\n");
+    Fmt = (E == StringRef::npos) ? R : R.substr(0, E);
+  }
+  if (Fmt == "FP8" || Fmt == "BF8")
+    return AMaskPlan{AMaskScheme::Lane, /*SubW=*/4};
+  if (Fmt == "FP6" || Fmt == "BF6")
+    return AMaskPlan{AMaskScheme::Vgpr, /*SubW=*/3};
+  if (Fmt == "FP4")
+    return AMaskPlan{AMaskScheme::Vgpr, /*SubW=*/2};
+  return std::nullopt; // unknown format -> caller fails closed
+}
+
+// Fail the whole rewrite closed rather than emit a miscompile.
+static uint32_t failClosed(PatchContext &Ctx, const InternalDecodedInst &DI,
+                           const Twine &Why) {
+  log() << "hotswap: error: wmma_scale16: " << DI.Mnemonic << " at offset 0x"
+        << utohexstr(DI.Offset) << ": " << Why
+        << "; refusing to return a miscompiled code object.\n";
+  Ctx.RequiredPatchFailed = true;
+  return 0;
+}
+
+static uint32_t failRegularScaleM32Closed(PatchContext &Ctx,
+                                          const InternalDecodedInst &DI,
+                                          const Twine &Why) {
+  log() << "hotswap: error: wmma_scale: " << DI.Mnemonic << " at offset 0x"
+        << utohexstr(DI.Offset) << ": " << Why
+        << "; refusing to return a miscompiled code object.\n";
+  Ctx.RequiredPatchFailed = true;
+  return 0;
+}
+
 // ---------------------------------------------------------------------------
 // v_wmma_scale16_f32_16x16x128_f8f6f4 -> exact K-split
 // ---------------------------------------------------------------------------
@@ -1693,6 +1693,203 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
 }
 
 // ---------------------------------------------------------------------------
+// v_wmma_scale_f32_32x16x128_f4 -> exact M split
+// ---------------------------------------------------------------------------
+
+static uint32_t patchWmmaScale_32x16(PatchContext &Ctx, size_t Idx) {
+  const InternalDecodedInst &DI = Ctx.Decoded[Idx];
+
+  if (DI.Size != VOP3PXSize)
+    return failRegularScaleM32Closed(
+        Ctx, DI, "unexpected instruction size " + Twine(DI.Size));
+  for (const Trampoline &T : Ctx.OutTrampolines)
+    if (T.OriginalOffset == DI.Offset)
+      return 0;
+
+  std::optional<unsigned> ActiveMode = getActiveVgprMsbMode(Ctx, Idx);
+  if (!ActiveMode)
+    ActiveMode = getLocallyEstablishedVgprMsbMode(Ctx, Idx);
+  if (!ActiveMode) {
+    std::string Detail = "cannot determine active VGPR-MSB mode";
+    if (Ctx.DirectControlFlow.HasUnresolvedTargets)
+      Detail += " (unresolved control-flow target)";
+    if (Ctx.DirectControlFlow.HasUnboundedIndirectEntries)
+      Detail += " (unbounded indirect entry)";
+    return failRegularScaleM32Closed(Ctx, DI, Detail);
+  }
+
+  std::optional<Scale32PrintedAsm> Printed = parseScale32PrintedAsm(Ctx, DI);
+  if (!Printed)
+    return failRegularScaleM32Closed(Ctx, DI,
+                                     "could not parse canonical instruction");
+  std::optional<std::string> LowModifierSuffix =
+      transformRegularScaleM32ModifierSuffix(Printed->ModifierSuffix,
+                                             /*HighMHalf=*/false);
+  std::optional<std::string> HighModifierSuffix =
+      transformRegularScaleM32ModifierSuffix(Printed->ModifierSuffix,
+                                             /*HighMHalf=*/true);
+  if (!LowModifierSuffix || !HighModifierSuffix)
+    return failRegularScaleM32Closed(Ctx, DI,
+                                     "unsupported modifier combination");
+
+  std::optional<VgprRange> DRange =
+      matrixOperandRange(Ctx, DI, /*OperandIndex=*/0);
+  std::optional<VgprRange> ARange =
+      matrixOperandRange(Ctx, DI, /*OperandIndex=*/1);
+  std::optional<VgprRange> BRange =
+      matrixOperandRange(Ctx, DI, /*OperandIndex=*/2);
+  if (!DRange || !ARange || !BRange || DRange->Width != 16 ||
+      ARange->Width != 16 || BRange->Width != 8)
+    return failRegularScaleM32Closed(
+        Ctx, DI, "unexpected M=32 matrix operand widths/layout");
+
+  if (DI.Inst.getNumOperands() < 7)
+    return failRegularScaleM32Closed(Ctx, DI,
+                                     "truncated M=32 MC operand layout");
+  const MCOperand &Src2Op = DI.Inst.getOperand(4);
+  bool Src2IsImm = Src2Op.isImm();
+  std::optional<VgprRange> CRange;
+  if (Src2Op.isReg())
+    CRange = matrixOperandRange(Ctx, DI, /*OperandIndex=*/3);
+  else if (!Src2IsImm)
+    return failRegularScaleM32Closed(Ctx, DI,
+                                     "unsupported non-VGPR/non-immediate src2");
+  if (CRange && CRange->Width != 16)
+    return failRegularScaleM32Closed(Ctx, DI,
+                                     "src2 and destination widths differ");
+  if (!Src2IsImm && !CRange)
+    return failRegularScaleM32Closed(Ctx, DI,
+                                     "could not determine src2 VGPR range");
+
+  unsigned Src0Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src0);
+  unsigned Src1Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src1);
+  unsigned Src2Bank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src2);
+  unsigned DstBank = getVgprMsbBank(*ActiveMode, VgprMsbOperand::Dst);
+
+  unsigned DBase = DRange->Base + DstBank * VgprBankSize;
+  unsigned ABase = ARange->Base + Src0Bank * VgprBankSize;
+  unsigned BBase = BRange->Base + Src1Bank * VgprBankSize;
+  unsigned CBase = CRange ? CRange->Base + Src2Bank * VgprBankSize : 0;
+
+  if (!physicalVgprRangeFitsOneBank(DBase, 16, Ctx.Config.MaxVgprs) ||
+      !physicalVgprRangeFitsOneBank(ABase, 16, Ctx.Config.MaxVgprs) ||
+      !physicalVgprRangeFitsOneBank(BBase, 8, Ctx.Config.MaxVgprs) ||
+      (CRange && !physicalVgprRangeFitsOneBank(CBase, 16, Ctx.Config.MaxVgprs)))
+    return failRegularScaleM32Closed(
+        Ctx, DI, "M=32 operand exceeds or crosses a physical VGPR bank");
+
+  if (rangesOverlap(DBase, 16, ABase, 16))
+    return failRegularScaleM32Closed(
+        Ctx, DI, "destination overlaps matrix A across staged reads");
+  if (rangesOverlap(DBase, 16, BBase, 8))
+    return failRegularScaleM32Closed(
+        Ctx, DI, "destination overlaps matrix B across staged reads");
+  if (CRange && rangesOverlap(DBase, 16, CBase, 16) &&
+      !sameRange(DBase, 16, CBase, 16))
+    return failRegularScaleM32Closed(
+        Ctx, DI, "partial destination/src2 overlap across staged reads");
+
+  for (unsigned OperandIndex : {5u, 6u}) {
+    const MCOperand &ScaleOp = DI.Inst.getOperand(OperandIndex);
+    if (!ScaleOp.isReg() || !ScaleOp.getReg())
+      return failRegularScaleM32Closed(Ctx, DI, "non-register scale operand");
+    std::optional<EncodedVgprRange> ScaleRange =
+        getEncodedVgprRange(MCRegister(ScaleOp.getReg()), *Ctx.LS.MRI);
+    if (!ScaleRange) {
+      if (isVectorRegisterOrAlias(MCRegister(ScaleOp.getReg()), *Ctx.LS.MRI))
+        return failRegularScaleM32Closed(Ctx, DI,
+                                         "unsupported vector scale operand");
+      continue;
+    }
+    if (!ScaleRange->FullDwords || ScaleRange->Width != 1 ||
+        ScaleRange->Base >= Ctx.Config.MaxVgprs)
+      return failRegularScaleM32Closed(Ctx, DI,
+                                       "unsupported VGPR scale operand");
+    if (rangesOverlap(DBase, 16, ScaleRange->Base, ScaleRange->Width))
+      return failRegularScaleM32Closed(Ctx, DI,
+                                       "destination overlaps a scale operand");
+  }
+
+  std::string ReplacementAsm;
+  raw_string_ostream OS(ReplacementAsm);
+  unsigned CurrentMode = *ActiveMode;
+  constexpr unsigned MatrixHalfWidth = 8;
+  int HazardNops = classifyWmmaNops("v_wmma_scale_f32_16x16x128_f8f6f4").A0Nops;
+
+  for (unsigned MHalf = 0; MHalf != 2; ++MHalf) {
+    unsigned DstHalf = DBase + MHalf * MatrixHalfWidth;
+    unsigned AHalf = ABase + MHalf * MatrixHalfWidth;
+    SmallVector<VgprBankRequirement, 4> WmmaMode = {
+        {VgprMsbOperand::Dst, DstHalf / VgprBankSize},
+        {VgprMsbOperand::Src0, AHalf / VgprBankSize},
+        {VgprMsbOperand::Src1, BBase / VgprBankSize}};
+    std::string Src2;
+    if (CRange) {
+      unsigned CHalf = CBase + MHalf * MatrixHalfWidth;
+      WmmaMode.push_back({VgprMsbOperand::Src2, CHalf / VgprBankSize});
+      Src2 = encodedVgprRange(CHalf, MatrixHalfWidth);
+    } else {
+      Src2 = Printed->Operands[3];
+    }
+
+    emitModeForOperands(OS, CurrentMode, WmmaMode);
+    emitRegularScaleMHalf(OS, DstHalf, AHalf, BBase, Src2, Printed->Operands[4],
+                          Printed->Operands[5],
+                          MHalf == 0 ? *LowModifierSuffix
+                                     : *HighModifierSuffix);
+    for (int I = 0; I != HazardNops; ++I)
+      OS << "v_nop\n";
+  }
+
+  emitModeForOperands(OS, CurrentMode,
+                      {{VgprMsbOperand::Src0,
+                        getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src0)},
+                       {VgprMsbOperand::Src1,
+                        getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src1)},
+                       {VgprMsbOperand::Src2,
+                        getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src2)},
+                       {VgprMsbOperand::Dst,
+                        getVgprMsbBank(*ActiveMode, VgprMsbOperand::Dst)}});
+
+  SmallVector<uint8_t> Replacement =
+      assembleInstructions(ReplacementAsm, Ctx.LS);
+  if (Replacement.empty())
+    return failRegularScaleM32Closed(Ctx, DI, "M split assembly failed");
+
+  std::vector<InternalDecodedInst> ReplacementDecoded;
+  if (!decodeTextSection(Replacement.data(), Replacement.size(), Ctx.LS,
+                         ReplacementDecoded))
+    return failRegularScaleM32Closed(Ctx, DI,
+                                     "could not decode assembled M split");
+  unsigned ScaledWmmas = 0;
+  for (const InternalDecodedInst &ReplacementInst : ReplacementDecoded) {
+    if (ReplacementInst.Mnemonic != "v_wmma_scale_f32_16x16x128_f8f6f4")
+      continue;
+    if (ReplacementInst.Size != VOP3PXSize ||
+        ReplacementInst.Offset > Replacement.size() ||
+        VOP3PXSize > Replacement.size() - ReplacementInst.Offset)
+      return failRegularScaleM32Closed(
+          Ctx, DI, "invalid assembled scaled-WMMA boundary");
+    patchScaleSrc2(Replacement.data() + ReplacementInst.Offset);
+    ++ScaledWmmas;
+  }
+  if (ScaledWmmas != 2)
+    return failRegularScaleM32Closed(
+        Ctx, DI, "assembled M split did not contain exactly two scaled WMMAs");
+
+  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement))
+    return failRegularScaleM32Closed(Ctx, DI,
+                                     "M split trampoline emission failed");
+
+  Ctx.RequiredPatchApplied = true;
+  log() << "hotswap: wmma_scale: exact M split at offset 0x"
+        << utohexstr(DI.Offset) << " (D=v" << DBase << ":" << (DBase + 15)
+        << ", A=v" << ABase << ":" << (ABase + 15) << ", B=v" << BBase << ":"
+        << (BBase + 7) << ", 2 WMMAs, " << Replacement.size() << " bytes)\n";
+  return 1;
+}
+
+// ---------------------------------------------------------------------------
 // v_wmma_scale16_f32_32x16x128_f4 -> exact M+K split
 // ---------------------------------------------------------------------------
 
@@ -1736,6 +1933,21 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
                                      /*HighKPass=*/true);
   if (!LowSuffix || !HighSuffix)
     return failClosed(Ctx, DI, "unsupported modifier combination");
+  std::optional<std::string> LowKLowMSuffix =
+      transformRegularScaleM32ModifierSuffix(*LowSuffix,
+                                             /*HighMHalf=*/false);
+  std::optional<std::string> LowKHighMSuffix =
+      transformRegularScaleM32ModifierSuffix(*LowSuffix,
+                                             /*HighMHalf=*/true);
+  std::optional<std::string> HighKLowMSuffix =
+      transformRegularScaleM32ModifierSuffix(*HighSuffix,
+                                             /*HighMHalf=*/false);
+  std::optional<std::string> HighKHighMSuffix =
+      transformRegularScaleM32ModifierSuffix(*HighSuffix,
+                                             /*HighMHalf=*/true);
+  if (!LowKLowMSuffix || !LowKHighMSuffix || !HighKLowMSuffix ||
+      !HighKHighMSuffix)
+    return failClosed(Ctx, DI, "unsupported M-half modifier combination");
 
   std::optional<VgprRange> DRange =
       matrixOperandRange(Ctx, DI, /*OperandIndex=*/0);
@@ -1798,8 +2010,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     return failClosed(Ctx, DI,
                       "destination overlaps matrix B across staged reads");
   if (rangesOverlap(ABase, 16, BBase, 8))
-    return failClosed(Ctx, DI,
-                      "matrix A overlaps matrix B during in-place masking");
+    return failClosed(Ctx, DI, "matrix A overlaps matrix B");
 
   // Exact D==C is the ordinary in-place accumulator form. A disjoint C is
   // likewise safe. Reject partial/cross-half overlap: writing DLo could
@@ -1821,8 +2032,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
         Ctx, DI,
         "scale pair overlaps a staged matrix operand or the other scale");
   if (CRange && rangesOverlap(ABase, 16, CBase, 16))
-    return failClosed(Ctx, DI,
-                      "matrix A overlaps src2 during in-place masking");
+    return failClosed(Ctx, DI, "matrix A overlaps src2");
 
   std::string KernelName =
       Ctx.Elf.findKernelAtAddress(DI.Offset + Ctx.Elf.textAddr());
@@ -1888,32 +2098,83 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   reserveVgprRange(Alloc, ScaleALo, 2);
   reserveVgprRange(Alloc, ScaleBLo, 2);
 
-  // Masking one eight-register FP4 A half overwrites exactly four registers.
-  // Preserve only those four values, not the four already-retained values.
-  // The first save slot doubles as the reversible scale-pair permutation
-  // temporary before the first A save and after the final A restore. Low-K
-  // runs for both M halves before high-K, so the same four slots serve all four
-  // WMMAs. Matrix B stays in place.
+  // Keep the masked A half and all generated scale operands in bank zero. The
+  // original A and Scale16 pairs remain untouched throughout the lowering.
+  // Prefer one contiguous 13-register dead block, but do not require it:
+  // rocJITu's schedule only needs masked A to be contiguous. The four scales
+  // and one temporary can use independent dead low-bank slots. This avoids a
+  // kernel VGPR bump when the low bank has enough dead registers but no
+  // 13-register run.
   constexpr unsigned MatrixHalfWidth = 8;
-  constexpr unsigned SavedARegCount = MatrixHalfWidth / 2;
-  constexpr unsigned ScratchCount = SavedARegCount;
-  std::array<unsigned, SavedARegCount> SavedARegs;
-  for (unsigned &Reg : SavedARegs) {
-    std::optional<unsigned> Allocated = allocContiguousDeadOrAboveInBank(
-        Alloc, /*Count=*/1, /*Align=*/1, VgprBankSize, ForwardDead.has_value());
-    if (!Allocated)
-      return failClosed(Ctx, DI,
-                        "fewer than four dead/above-KD VGPRs for exact M+K "
-                        "split");
-    Reg = *Allocated;
+  constexpr unsigned ScaleScratchCount = 4;
+  constexpr unsigned ScalarScratchCount = ScaleScratchCount + 1;
+  constexpr unsigned ScratchCount = MatrixHalfWidth + ScaleScratchCount + 1;
+  unsigned MaskedABase = 0;
+  std::array<unsigned, ScalarScratchCount> ScalarScratchRegs = {};
+
+  VgprAllocator ScratchAlloc = Alloc;
+  std::optional<unsigned> FullScratch = allocContiguousDeadOrAboveLowBank(
+      ScratchAlloc, ScratchCount, /*Align=*/2, ForwardDead.has_value(),
+      /*AllowAboveKd=*/false);
+  if (FullScratch) {
+    MaskedABase = *FullScratch;
+    for (unsigned I = 0; I != ScalarScratchCount; ++I)
+      ScalarScratchRegs[I] = MaskedABase + MatrixHalfWidth + I;
+    Alloc = std::move(ScratchAlloc);
+  } else {
+    ScratchAlloc = Alloc;
+    std::optional<unsigned> MaskedA = allocContiguousDeadOrAboveLowBank(
+        ScratchAlloc, MatrixHalfWidth, /*Align=*/2, ForwardDead.has_value(),
+        /*AllowAboveKd=*/false);
+    bool SplitScratchComplete = MaskedA.has_value();
+    if (MaskedA)
+      MaskedABase = *MaskedA;
+    for (unsigned I = 0; SplitScratchComplete && I != ScalarScratchCount; ++I) {
+      std::optional<unsigned> Scalar = allocContiguousDeadOrAboveLowBank(
+          ScratchAlloc, /*Count=*/1, /*Align=*/1, ForwardDead.has_value(),
+          /*AllowAboveKd=*/false);
+      if (!Scalar) {
+        SplitScratchComplete = false;
+        break;
+      }
+      ScalarScratchRegs[I] = *Scalar;
+    }
+
+    if (SplitScratchComplete) {
+      Alloc = std::move(ScratchAlloc);
+    } else {
+      ScratchAlloc = Alloc;
+      FullScratch = allocContiguousDeadOrAboveLowBank(
+          ScratchAlloc, ScratchCount, /*Align=*/2, ForwardDead.has_value(),
+          /*AllowAboveKd=*/true);
+      if (!FullScratch)
+        return failClosed(
+            Ctx, DI,
+            "no bank-zero masked-A block and five scalar scratch VGPRs");
+      MaskedABase = *FullScratch;
+      for (unsigned I = 0; I != ScalarScratchCount; ++I)
+        ScalarScratchRegs[I] = MaskedABase + MatrixHalfWidth + I;
+      Alloc = std::move(ScratchAlloc);
+    }
   }
-  unsigned TmpReg = SavedARegs.front();
+
+  unsigned ScaleALoReg = ScalarScratchRegs[0];
+  unsigned ScaleBLoReg = ScalarScratchRegs[1];
+  unsigned ScaleAHiReg = ScalarScratchRegs[2];
+  unsigned ScaleBHiReg = ScalarScratchRegs[3];
+  unsigned TmpReg = ScalarScratchRegs[4];
 
   std::string ReplacementAsm;
   raw_string_ostream OS(ReplacementAsm);
   unsigned CurrentMode = *ActiveMode;
-  emitScalePairSplitInPlace(OS, ScaleALo, ScaleAHi, TmpReg, CurrentMode);
-  emitScalePairSplitInPlace(OS, ScaleBLo, ScaleBHi, TmpReg, CurrentMode);
+  emitGatherEven(OS, ScaleALo, ScaleAHi, ScaleALoReg, TmpReg,
+                 /*ScratchBank=*/0, CurrentMode);
+  emitGatherEven(OS, ScaleBLo, ScaleBHi, ScaleBLoReg, TmpReg,
+                 /*ScratchBank=*/0, CurrentMode);
+  emitGatherOdd(OS, ScaleALo, ScaleAHi, ScaleAHiReg, TmpReg,
+                /*ScratchBank=*/0, CurrentMode);
+  emitGatherOdd(OS, ScaleBLo, ScaleBHi, ScaleBHiReg, TmpReg,
+                /*ScratchBank=*/0, CurrentMode);
 
   int HazardNops = classifyWmmaNops("v_wmma_scale_f32_16x16x128_f8f6f4").A0Nops;
   std::function<void()> EmitHazardNops = [&] {
@@ -1921,28 +2182,19 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
       OS << "v_nop\n";
   };
 
-  for (bool HighK : {false, true}) {
-    for (unsigned MHalf = 0; MHalf != 2; ++MHalf) {
+  for (unsigned MHalf = 0; MHalf != 2; ++MHalf) {
+    for (bool HighK : {false, true}) {
       unsigned OriginalAHalf = ABase + MHalf * MatrixHalfWidth;
       unsigned DstHalf = DBase + MHalf * MatrixHalfWidth;
-      unsigned ABank = OriginalAHalf / VgprBankSize;
       unsigned BBank = BBase / VgprBankSize;
 
-      unsigned SavedIndex = 0;
-      for (unsigned I = 0; I != MatrixHalfWidth; ++I) {
-        bool IsLow = ((I / 2) % 2) == 0;
-        if (IsLow == !HighK)
-          continue;
-        unsigned Saved = SavedARegs[SavedIndex++];
-        emitVgprCopy(OS, Saved, OriginalAHalf + I, /*W=*/1, CurrentMode);
-      }
-      assert(SavedIndex == SavedARegCount);
-      emitMaskVgprsInPlace(OS, /*KeepLow=*/!HighK, OriginalAHalf,
-                           MatrixHalfWidth, /*SubW=*/2, CurrentMode);
+      emitVgprSelectCopy(OS, /*KeepLow=*/!HighK, MaskedABase, OriginalAHalf,
+                         MatrixHalfWidth, /*SubW=*/2, /*ScratchBank=*/0,
+                         CurrentMode);
 
       SmallVector<VgprBankRequirement, 4> WmmaMode = {
           {VgprMsbOperand::Dst, DstHalf / VgprBankSize},
-          {VgprMsbOperand::Src0, ABank},
+          {VgprMsbOperand::Src0, 0},
           {VgprMsbOperand::Src1, BBank}};
       std::string Src2;
       if (HighK) {
@@ -1956,25 +2208,17 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
         Src2 = Printed->Operands[3];
       }
       emitModeForOperands(OS, CurrentMode, WmmaMode);
-      emitScale32Half(OS, DstHalf, OriginalAHalf, BBase, Src2,
-                      HighK ? ScaleAHi : ScaleALo, HighK ? ScaleBHi : ScaleBLo,
-                      HighK ? *HighSuffix : *LowSuffix);
+      const std::string &HalfSuffix =
+          HighK ? (MHalf == 0 ? *HighKLowMSuffix : *HighKHighMSuffix)
+                : (MHalf == 0 ? *LowKLowMSuffix : *LowKHighMSuffix);
+      emitScale32Half(OS, DstHalf, MaskedABase, BBase, Src2,
+                      HighK ? ScaleAHiReg : ScaleALoReg,
+                      HighK ? ScaleBHiReg : ScaleBLoReg, HalfSuffix);
 
       EmitHazardNops();
-      SavedIndex = 0;
-      for (unsigned I = 0; I != MatrixHalfWidth; ++I) {
-        bool IsLow = ((I / 2) % 2) == 0;
-        if (IsLow == !HighK)
-          continue;
-        unsigned Saved = SavedARegs[SavedIndex++];
-        emitVgprCopy(OS, OriginalAHalf + I, Saved, /*W=*/1, CurrentMode);
-      }
-      assert(SavedIndex == SavedARegCount);
     }
   }
 
-  emitScalePairRestoreInPlace(OS, ScaleALo, ScaleAHi, TmpReg, CurrentMode);
-  emitScalePairRestoreInPlace(OS, ScaleBLo, ScaleBHi, TmpReg, CurrentMode);
   emitModeForOperands(OS, CurrentMode,
                       {{VgprMsbOperand::Src0,
                         getVgprMsbBank(*ActiveMode, VgprMsbOperand::Src0)},
@@ -2005,15 +2249,19 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   ScratchPatchInfo Info;
   Info.Offset = DI.Offset;
   Info.ScratchRegs.resize(Ctx.Config.MaxVgprs);
-  for (unsigned Reg : SavedARegs)
+  Info.ScratchRegs.set(MaskedABase, MaskedABase + MatrixHalfWidth);
+  for (unsigned Reg : ScalarScratchRegs)
     Info.ScratchRegs.set(Reg);
   Ctx.OutScratchPatches.push_back(std::move(Info));
 
   log() << "hotswap: wmma_scale16: exact M+K split at offset 0x"
         << utohexstr(DI.Offset) << " (D=v" << DBase << ":" << (DBase + 15)
         << ", A=v" << ABase << ":" << (ABase + 15) << ", B=v" << BBase << ":"
-        << (BBase + 7) << ", four saved-A VGPRs, tmp=v" << TmpReg << ", +"
-        << Extra << " vgpr, 4 WMMAs, " << Replacement.size() << " bytes)\n";
+        << (BBase + 7) << ", masked-A=v" << MaskedABase << ":"
+        << (MaskedABase + MatrixHalfWidth - 1) << ", scales=v" << ScaleALoReg
+        << ",v" << ScaleBLoReg << ",v" << ScaleAHiReg << ",v" << ScaleBHiReg
+        << ", tmp=v" << TmpReg << ", +" << Extra << " vgpr, 4 WMMAs, "
+        << Replacement.size() << " bytes)\n";
   return 1;
 }
 
@@ -2024,12 +2272,13 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
 static uint32_t applyWmmaScale16PatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
+  if (Mnem == "v_wmma_scale_f32_32x16x128_f4")
+    return patchWmmaScale_32x16(Ctx, Idx);
   if (Mnem == "v_wmma_scale16_f32_16x16x128_f8f6f4")
     return patchWmmaScale16_16x16(Ctx, Idx);
   if (Mnem == "v_wmma_scale16_f32_32x16x128_f4")
     return patchWmmaScale16_32x16(Ctx, Idx);
 
-  // Any other block-16 scaled variant still has no exact lowering.
   if (Mnem.starts_with("v_wmma_scale16_f32_"))
     return failClosed(Ctx, Ctx.Decoded[Idx],
                       "block-16 scaled variant has no exact lowering yet");
