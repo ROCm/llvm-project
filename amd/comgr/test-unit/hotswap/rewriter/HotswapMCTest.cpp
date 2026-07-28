@@ -286,6 +286,8 @@ TEST(InitLLVM, ValidGfx1250) {
   EXPECT_LT(S.SDelayAluOpcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SEndPgmOpcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SEndPgmSavedOpcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.SRfeI64Opcode, S.MCII->getNumOpcodes());
+  EXPECT_LT(S.STrapOpcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SAddNcU64Opcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SAddPcI64Opcode, S.MCII->getNumOpcodes());
   EXPECT_LT(S.SCallI64Opcode, S.MCII->getNumOpcodes());
@@ -1640,6 +1642,744 @@ TEST(AssembleDecode, SNopRoundTrip) {
   EXPECT_TRUE(Decoded[0].DecodeSucceeded);
   EXPECT_EQ(Decoded[0].Size, MinInstSize);
   EXPECT_EQ(Decoded[0].Mnemonic, "s_nop");
+}
+
+static std::optional<llvm::BitVector> getTestLiveSgprsAtContinuation(
+    llvm::StringRef Assembly, uint64_t InstOffset = 0,
+    uint32_t InstSize = MinInstSize, unsigned MaxSgprs = 106) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  if (!S.Valid)
+    return std::nullopt;
+  llvm::SmallVector<uint8_t> Text = assembleInstructions(Assembly, S);
+  if (Text.empty())
+    return std::nullopt;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  if (!ViewOrErr)
+    return std::nullopt;
+  ElfView &View = *ViewOrErr;
+  std::vector<InternalDecodedInst> Decoded;
+  if (!decodeTextSection(View.textData(), View.textSize(), S, Decoded))
+    return std::nullopt;
+
+  RewriteConfig Config;
+  Config.MaxSgprs = MaxSgprs;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   Decoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+  return getLiveSgprsAtContinuation(Ctx, InstOffset, InstSize);
+}
+
+TEST(RegisterLiveness, TiedAccumulatorDefCountsAsIncomingRead) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("v_fmac_f32_e32 v5, v1, v2", S);
+  ASSERT_EQ(Bytes.size(), MinInstSize);
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  const InternalDecodedInst &DI = Decoded[0];
+  const llvm::MCInstrDesc &Desc = S.MCII->get(DI.Inst.getOpcode());
+  ASSERT_GE(Desc.getNumDefs(), 1u);
+  ASSERT_GE(DI.Inst.getNumOperands(), 1u);
+  ASSERT_TRUE(DI.Inst.getOperand(0).isReg());
+
+  bool HasTiedAccumulatorUse = false;
+  for (unsigned I = Desc.getNumDefs(); I != Desc.getNumOperands(); ++I)
+    HasTiedAccumulatorUse |=
+        Desc.getOperandConstraint(I, llvm::MCOI::TIED_TO) == 0;
+  ASSERT_TRUE(HasTiedAccumulatorUse);
+
+  llvm::MCRegister Accumulator(DI.Inst.getOperand(0).getReg());
+  EXPECT_TRUE(instructionReadsRegister(DI, S, Accumulator));
+}
+
+TEST(RegisterLiveness, TargetHasNoVariadicDefOpcodes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  unsigned VariadicDefOpcodes = 0;
+  for (unsigned I = 0; I != S.MCII->getNumOpcodes(); ++I) {
+    const llvm::MCInstrDesc &Candidate = S.MCII->get(I);
+    if (Candidate.isVariadic() && Candidate.variadicOpsAreDefs())
+      ++VariadicDefOpcodes;
+  }
+  // The implementation classifies variadic defs precisely for future
+  // subtargets. GFX1250 currently has no such descriptor, so pin that target
+  // fact instead of inventing an invalid MCInst.
+  EXPECT_EQ(VariadicDefOpcodes, 0u);
+}
+
+TEST(RegisterLiveness, ReplacementReadsBeforeOverwrite) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> ReadThenWrite =
+      assembleInstructions("s_mov_b32 s1, s0\ns_mov_b32 s0, 0", S);
+  llvm::SmallVector<uint8_t> WriteThenRead =
+      assembleInstructions("s_mov_b32 s0, 0\ns_mov_b32 s1, s0", S);
+  llvm::SmallVector<uint8_t> RegisterBytes =
+      assembleSingleInst("s_mov_b32 s1, s0", S);
+  ASSERT_FALSE(ReadThenWrite.empty());
+  ASSERT_FALSE(WriteThenRead.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(RegisterBytes.data(), RegisterBytes.size(), S,
+                                Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  ASSERT_TRUE(Decoded[0].Inst.getOperand(1).isReg());
+  llvm::MCRegister Sgpr0(Decoded[0].Inst.getOperand(1).getReg());
+
+  EXPECT_TRUE(replacementNeedsIncomingRegister(ReadThenWrite, S, Sgpr0));
+  EXPECT_FALSE(replacementNeedsIncomingRegister(WriteThenRead, S, Sgpr0));
+
+  std::array<uint8_t, MinInstSize> Undecodable;
+  Undecodable.fill(0xff);
+  EXPECT_TRUE(replacementNeedsIncomingRegister(Undecodable, S, Sgpr0));
+}
+
+TEST(RegisterLiveness, ReplacementPartialVccDefsDoNotKillAggregate) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  ASSERT_TRUE(S.VCCRegister.isValid());
+
+  llvm::SmallVector<uint8_t> LowDef =
+      assembleInstructions("s_mov_b32 vcc_lo, s0\ns_mov_b32 s1, vcc_hi", S);
+  llvm::SmallVector<uint8_t> HighDef =
+      assembleInstructions("s_mov_b32 vcc_hi, s0\ns_mov_b32 s1, vcc_lo", S);
+  llvm::SmallVector<uint8_t> FullDef =
+      assembleInstructions("s_mov_b64 vcc, -1\ns_mov_b32 s1, vcc_hi", S);
+  ASSERT_FALSE(LowDef.empty());
+  ASSERT_FALSE(HighDef.empty());
+  ASSERT_FALSE(FullDef.empty());
+
+  EXPECT_TRUE(replacementNeedsIncomingRegister(LowDef, S, S.VCCRegister));
+  EXPECT_TRUE(replacementNeedsIncomingRegister(HighDef, S, S.VCCRegister));
+  EXPECT_FALSE(replacementNeedsIncomingRegister(FullDef, S, S.VCCRegister));
+}
+
+TEST(RegisterLiveness, ReplacementBatchHandlesEmptyAndFailClosedInputs) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  std::optional<llvm::BitVector> Empty =
+      getReplacementIncomingSgprs(/*Replacement=*/{}, S, /*MaxSgprs=*/106);
+  ASSERT_TRUE(Empty);
+  EXPECT_TRUE(Empty->none());
+
+  llvm::SmallVector<uint8_t> Branch = assembleSingleInst("s_branch 0", S);
+  llvm::SmallVector<uint8_t> Trap = assembleSingleInst("s_trap 0", S);
+  llvm::SmallVector<uint8_t> Barrier = assembleSingleInst("s_code_end", S);
+  llvm::SmallVector<uint8_t> Return = assembleSingleInst("s_rfe_i64 s[0:1]", S);
+  EXPECT_FALSE(getReplacementIncomingSgprs(Branch, S, /*MaxSgprs=*/106));
+  EXPECT_FALSE(getReplacementIncomingSgprs(Trap, S, /*MaxSgprs=*/106));
+  EXPECT_FALSE(getReplacementIncomingSgprs(Barrier, S, /*MaxSgprs=*/106));
+  EXPECT_FALSE(getReplacementIncomingSgprs(Return, S, /*MaxSgprs=*/106));
+
+  std::array<uint8_t, MinInstSize> Undecodable;
+  Undecodable.fill(0xff);
+  EXPECT_FALSE(getReplacementIncomingSgprs(Undecodable, S, /*MaxSgprs=*/106));
+  EXPECT_FALSE(getReplacementIncomingSgprs(
+      /*Replacement=*/{}, S, /*MaxSgprs=*/107));
+  EXPECT_FALSE(getReplacementIncomingSgprs(
+      /*Replacement=*/{}, S, std::numeric_limits<unsigned>::max()));
+}
+
+TEST(RegisterLiveness, SoftFailEncodingIsNotAcceptedAsProofInput) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // Ask the MC layer for a valid VOP3 compare, then discover a one-bit
+  // mutation that the same target disassembler diagnoses as SoftFail. This
+  // exercises a real undefined encoding without embedding opcode bits or
+  // operand-field positions in the test.
+  llvm::SmallVector<uint8_t> ValidVop3Compare =
+      assembleSingleInst("v_cmpx_eq_f32_e64 v0, v1", S);
+  ASSERT_EQ(ValidVop3Compare.size(), 2u * MinInstSize);
+  std::optional<llvm::SmallVector<uint8_t>> MalformedVop3Compare;
+  for (size_t Byte = 0;
+       Byte != ValidVop3Compare.size() && !MalformedVop3Compare; ++Byte) {
+    for (unsigned Bit = 0; Bit != 8; ++Bit) {
+      llvm::SmallVector<uint8_t> Candidate = ValidVop3Compare;
+      Candidate[Byte] ^= uint8_t{1} << Bit;
+      llvm::MCInst Inst;
+      uint64_t Size = 0;
+      llvm::MCDisassembler::DecodeStatus Status = S.MCD->getInstruction(
+          Inst, Size, Candidate, /*Address=*/0, llvm::nulls());
+      if (Status == llvm::MCDisassembler::SoftFail &&
+          Size == Candidate.size()) {
+        MalformedVop3Compare = std::move(Candidate);
+        break;
+      }
+    }
+  }
+  ASSERT_TRUE(MalformedVop3Compare);
+
+  const unsigned MaxInstLen = S.MAI->getMaxInstLength(S.STI.get());
+  const size_t RepetitionCount =
+      (MaxInstLen + MalformedVop3Compare->size() * 2 - 1) /
+      MalformedVop3Compare->size();
+  llvm::SmallVector<uint8_t> Repeated;
+  for (size_t I = 0; I != RepetitionCount; ++I)
+    Repeated.append(*MalformedVop3Compare);
+  ASSERT_GE(Repeated.size(), MaxInstLen + MalformedVop3Compare->size());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Repeated.data(), Repeated.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), RepetitionCount);
+  for (const InternalDecodedInst &DI : Decoded) {
+    EXPECT_TRUE(DI.DecodeSucceeded);
+    EXPECT_TRUE(DI.DecodeSoftFailed);
+  }
+  // The periodic buffer gives offsets zero and InstSize identical full-width
+  // cache keys, so the second instruction must be a cache hit. This pins that
+  // the warning status survives caching.
+  EXPECT_FALSE(getReplacementIncomingSgprs(Repeated, S, /*MaxSgprs=*/106));
+
+  llvm::SmallVector<uint8_t> Text = Repeated;
+  llvm::SmallVector<uint8_t> End = assembleSingleInst("s_endpgm", S);
+  ASSERT_EQ(End.size(), MinInstSize);
+  Text.append(End);
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+  std::vector<InternalDecodedInst> OriginalDecoded;
+  ASSERT_TRUE(
+      decodeTextSection(View.textData(), View.textSize(), S, OriginalDecoded));
+
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   OriginalDecoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/View.textSize(),
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+  EXPECT_FALSE(getLiveSgprsAtContinuation(
+      Ctx, /*InstOffset=*/0, /*InstSize=*/MalformedVop3Compare->size()));
+}
+
+TEST(RegisterLiveness, ConditionalDiamondUnionsBothPaths) {
+  std::optional<llvm::BitVector> Live =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_cbranch_scc1 2\n"
+                                     "s_mov_b32 s0, 0\n"
+                                     "s_branch 1\n"
+                                     "s_mov_b32 s1, s0\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(Live);
+  EXPECT_TRUE(Live->test(0));
+  EXPECT_FALSE(Live->test(2));
+}
+
+TEST(RegisterLiveness, LoopConvergesAndPreservesLoopCarriedUse) {
+  std::optional<llvm::BitVector> Live =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     ".Lloop:\n"
+                                     "s_mov_b32 s1, s0\n"
+                                     "s_cbranch_scc1 .Lloop\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(Live);
+  EXPECT_TRUE(Live->test(0));
+  EXPECT_FALSE(Live->test(2));
+}
+
+TEST(RegisterLiveness, ExplicitWriteKillsIncomingValueBeforeLaterRead) {
+  std::optional<llvm::BitVector> Live =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_mov_b32 s0, 0\n"
+                                     "s_mov_b32 s1, s0\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(Live);
+  EXPECT_FALSE(Live->test(0));
+}
+
+TEST(RegisterLiveness, OutOfFunctionAndNonBoundaryBranchesFailClosed) {
+  std::optional<llvm::BitVector> Outside =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_branch 100\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(Outside);
+  EXPECT_TRUE(Outside->all());
+
+  std::optional<llvm::BitVector> NonBoundary =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_branch 1\n"
+                                     "s_mov_b32 s0, 0x12345678\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(NonBoundary);
+  EXPECT_TRUE(NonBoundary->all());
+}
+
+TEST(RegisterLiveness, IndirectCallReturnAndTrapBoundariesFailClosed) {
+  std::optional<llvm::BitVector> Indirect =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_set_pc_i64 s[0:1]\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(Indirect);
+  EXPECT_TRUE(Indirect->all());
+
+  std::optional<llvm::BitVector> Call =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_call_i64 s[30:31], 0\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(Call);
+  EXPECT_TRUE(Call->test(4));
+
+  std::optional<llvm::BitVector> Return =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_rfe_i64 s[0:1]\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(Return);
+  EXPECT_TRUE(Return->test(4));
+
+  std::optional<llvm::BitVector> Trap =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_trap 0\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(Trap);
+  EXPECT_TRUE(Trap->all()) << Trap->count() << "/" << Trap->size();
+}
+
+TEST(RegisterLiveness, CodeEndIsARealBarrierAndFailsClosed) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  ASSERT_NE(S.MIA, nullptr);
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst("s_code_end", S);
+  ASSERT_EQ(Bytes.size(), MinInstSize);
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 1u);
+  EXPECT_TRUE(S.MIA->isBarrier(Decoded[0].Inst));
+
+  std::optional<llvm::BitVector> Live =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_code_end\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(Live);
+  EXPECT_TRUE(Live->all()) << Live->count() << "/" << Live->size();
+}
+
+TEST(RegisterLiveness, TracksSubregisterAndImplicitVccOverlap) {
+  std::optional<llvm::BitVector> PairUse =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_mov_b64 s[2:3], s[0:1]\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(PairUse);
+  EXPECT_TRUE(PairUse->test(0));
+  EXPECT_TRUE(PairUse->test(1));
+
+  std::optional<llvm::BitVector> ImplicitUse =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_cbranch_vccnz .Lend\n"
+                                     "s_endpgm\n"
+                                     ".Lend:\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(ImplicitUse);
+  EXPECT_TRUE(ImplicitUse->test(106));
+
+  std::optional<llvm::BitVector> ImplicitDef =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "v_cmp_eq_u32_e32 v0, v1\n"
+                                     "s_cbranch_vccnz .Lend\n"
+                                     ".Lend:\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(ImplicitDef);
+  EXPECT_FALSE(ImplicitDef->test(106));
+}
+
+TEST(RegisterLiveness, ContinuationPartialVccDefsDoNotKillAggregate) {
+  std::optional<llvm::BitVector> LowDef =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_mov_b32 vcc_lo, s0\n"
+                                     "s_mov_b32 s1, vcc_hi\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(LowDef);
+  EXPECT_TRUE(LowDef->test(106));
+
+  std::optional<llvm::BitVector> HighDef =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_mov_b32 vcc_hi, s0\n"
+                                     "s_mov_b32 s1, vcc_lo\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(HighDef);
+  EXPECT_TRUE(HighDef->test(106));
+
+  std::optional<llvm::BitVector> FullDef =
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_mov_b64 vcc, -1\n"
+                                     "s_mov_b32 s1, vcc_hi\n"
+                                     "s_endpgm");
+  ASSERT_TRUE(FullDef);
+  EXPECT_FALSE(FullDef->test(106));
+}
+
+TEST(RegisterLiveness, RejectsFunctionEndAndContinuationOverflow) {
+  std::optional<llvm::BitVector> AtEnd = getTestLiveSgprsAtContinuation(
+      "s_nop 0\n"
+      "s_endpgm",
+      /*InstOffset=*/MinInstSize, /*InstSize=*/MinInstSize);
+  EXPECT_FALSE(AtEnd);
+
+  std::optional<llvm::BitVector> Overflow = getTestLiveSgprsAtContinuation(
+      "s_nop 0\n"
+      "s_endpgm",
+      /*InstOffset=*/std::numeric_limits<uint64_t>::max() - 1,
+      /*InstSize=*/MinInstSize);
+  EXPECT_FALSE(Overflow);
+
+  EXPECT_FALSE(getTestLiveSgprsAtContinuation(
+      "s_nop 0\n"
+      "s_endpgm",
+      /*InstOffset=*/0, /*InstSize=*/MinInstSize, /*MaxSgprs=*/107));
+  EXPECT_FALSE(
+      getTestLiveSgprsAtContinuation("s_nop 0\n"
+                                     "s_endpgm",
+                                     /*InstOffset=*/0, /*InstSize=*/MinInstSize,
+                                     std::numeric_limits<unsigned>::max()));
+}
+
+TEST(RegisterLiveness,
+     RejectsMidInstructionSourceAtDecodedContinuationBoundary) {
+  constexpr llvm::StringLiteral Assembly = "s_mov_b32 s0, 0x12345678\n"
+                                           "s_endpgm";
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleInstructions(Assembly, S);
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 2u);
+  ASSERT_EQ(Decoded[0].Size, 2u * MinInstSize);
+  ASSERT_EQ(Decoded[1].Offset, 2u * MinInstSize);
+
+  std::optional<llvm::BitVector> Live = getTestLiveSgprsAtContinuation(
+      Assembly, /*InstOffset=*/MinInstSize, /*InstSize=*/MinInstSize);
+  EXPECT_FALSE(Live);
+}
+
+TEST(RegisterLiveness, UsesCurrentTextAfterEarlierPatchMutation) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleInstructions("s_clause 0\n"
+                                                         "s_mov_b32 s0, 0\n"
+                                                         "s_endpgm",
+                                                         S);
+  ASSERT_EQ(Text.size(), 3u * MinInstSize);
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+
+  std::vector<InternalDecodedInst> OriginalDecoded;
+  ASSERT_TRUE(
+      decodeTextSection(View.textData(), View.textSize(), S, OriginalDecoded));
+  ASSERT_EQ(OriginalDecoded.size(), 3u);
+  ASSERT_TRUE(OriginalDecoded[1].Inst.getOperand(0).isReg());
+  llvm::MCRegister Sgpr0(OriginalDecoded[1].Inst.getOperand(0).getReg());
+
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   OriginalDecoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  EXPECT_TRUE(isRegisterDefinitelyDeadAtContinuation(
+      Ctx, /*InstOffset=*/0, /*InstSize=*/MinInstSize, Sgpr0));
+  ASSERT_EQ(Ctx.CurrentFunctionSgprLivenessCache.size(), 1u);
+  EXPECT_EQ(Ctx.CurrentFunctionSgprLivenessCache.begin()->second.Generation,
+            0u);
+  EXPECT_TRUE(Ctx.CurrentFunctionSgprLivenessCache.begin()->second.Valid);
+  ASSERT_TRUE(getLiveSgprsAtContinuation(Ctx, /*InstOffset=*/0,
+                                         /*InstSize=*/MinInstSize));
+  EXPECT_EQ(Ctx.CurrentFunctionSgprLivenessCache.size(), 1u);
+
+  // Exercise a complete production writer, not only the generation helper.
+  // The in-place pass rewrites s_clause to s_nop and must invalidate the
+  // existing cache before the next query in this same PatchContext.
+  HotswapPatchVTable VT;
+  registerInPlacePatch(VT);
+  ASSERT_NE(VT.applyInPlacePatches, nullptr);
+  EXPECT_EQ(VT.applyInPlacePatches(Ctx, /*Idx=*/0), 1u);
+  EXPECT_EQ(Ctx.TextMutationGeneration, 1u);
+  EXPECT_TRUE(Ctx.CurrentFunctionSgprLivenessCache.empty());
+  ASSERT_TRUE(getLiveSgprsAtContinuation(Ctx, /*InstOffset=*/0,
+                                         /*InstSize=*/MinInstSize));
+  ASSERT_EQ(Ctx.CurrentFunctionSgprLivenessCache.size(), 1u);
+  EXPECT_EQ(Ctx.CurrentFunctionSgprLivenessCache.begin()->second.Generation,
+            1u);
+
+  // An undecodable current instruction cannot support a liveness proof.
+  std::array<uint8_t, MinInstSize> Undecodable;
+  Undecodable.fill(0xff);
+  ASSERT_TRUE(writeCurrentText(Ctx, MinInstSize, Undecodable,
+                               "unit-test undecodable mutation"));
+  EXPECT_TRUE(Ctx.CurrentFunctionSgprLivenessCache.empty());
+  EXPECT_FALSE(isRegisterDefinitelyDeadAtContinuation(
+      Ctx, /*InstOffset=*/0, /*InstSize=*/MinInstSize, Sgpr0));
+  ASSERT_EQ(Ctx.CurrentFunctionSgprLivenessCache.size(), 1u);
+  EXPECT_EQ(Ctx.CurrentFunctionSgprLivenessCache.begin()->second.Generation,
+            2u);
+  EXPECT_FALSE(Ctx.CurrentFunctionSgprLivenessCache.begin()->second.Valid);
+
+  // Model an earlier patch that consumed a later NOP sled. The original
+  // decoded snapshot still says the continuation overwrites s0, while the
+  // current text now reads its incoming value first.
+  llvm::SmallVector<uint8_t> Patched =
+      assembleSingleInst("s_mov_b32 s1, s0", S);
+  ASSERT_EQ(Patched.size(), MinInstSize);
+  ASSERT_TRUE(writeCurrentText(Ctx, MinInstSize, Patched,
+                               "unit-test live-read mutation"));
+  EXPECT_TRUE(Ctx.CurrentFunctionSgprLivenessCache.empty());
+  ASSERT_EQ(OriginalDecoded[1].Mnemonic, "s_mov_b32");
+  ASSERT_TRUE(OriginalDecoded[1].Inst.getOperand(1).isImm());
+
+  EXPECT_FALSE(isRegisterDefinitelyDeadAtContinuation(
+      Ctx, /*InstOffset=*/0, /*InstSize=*/MinInstSize, Sgpr0));
+  ASSERT_EQ(Ctx.CurrentFunctionSgprLivenessCache.size(), 1u);
+  EXPECT_EQ(Ctx.CurrentFunctionSgprLivenessCache.begin()->second.Generation,
+            3u);
+  EXPECT_TRUE(Ctx.CurrentFunctionSgprLivenessCache.begin()->second.Valid);
+
+  EXPECT_FALSE(writeCurrentText(Ctx, Ctx.TextSize, Patched,
+                                "unit-test out-of-bounds mutation"));
+  EXPECT_EQ(Ctx.TextMutationGeneration, 3u);
+
+  std::vector<uint8_t> BeforeFailedSled(Ctx.Text, Ctx.Text + Ctx.TextSize);
+  NopSled TooSmall{Ctx.TextSize - MinInstSize, Ctx.TextSize,
+                   Ctx.TextSize - MinInstSize, /*FunctionStart=*/0,
+                   Ctx.TextSize};
+  EXPECT_FALSE(emitToNopSled(Ctx, TooSmall, /*InstOffset=*/0,
+                             /*InstSize=*/MinInstSize, Patched));
+  EXPECT_EQ(BeforeFailedSled,
+            std::vector<uint8_t>(Ctx.Text, Ctx.Text + Ctx.TextSize));
+  EXPECT_EQ(Ctx.TextMutationGeneration, 3u);
+}
+
+TEST(RegisterLiveness, PendingTrampolineMutationFailsClosedByFunction) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleInstructions(".Lsite:\n"
+                                                         "s_mov_b32 s0, 0\n"
+                                                         "s_nop 0\n"
+                                                         "s_branch .Lsite\n"
+                                                         "s_endpgm",
+                                                         S);
+  ASSERT_EQ(Text.size(), 4u * MinInstSize);
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+  std::vector<InternalDecodedInst> OriginalDecoded;
+  ASSERT_TRUE(
+      decodeTextSection(View.textData(), View.textSize(), S, OriginalDecoded));
+  ASSERT_EQ(OriginalDecoded.size(), 4u);
+  ASSERT_TRUE(OriginalDecoded[0].Inst.getOperand(0).isReg());
+  llvm::MCRegister Sgpr0(OriginalDecoded[0].Inst.getOperand(0).getReg());
+
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   OriginalDecoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/View.textSize(),
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  // The original loop overwrites s0 at .Lsite before reading it, so the
+  // continuation after the NOP can initially prove the incoming value dead.
+  EXPECT_TRUE(isRegisterDefinitelyDeadAtContinuation(
+      Ctx, /*InstOffset=*/MinInstSize, /*InstSize=*/MinInstSize, Sgpr0));
+
+  Trampoline Disjoint;
+  Disjoint.OriginalOffset = View.textSize() + MinInstSize;
+  Disjoint.HasFunctionRange = true;
+  Disjoint.FunctionStart = View.textSize();
+  Disjoint.FunctionEnd = View.textSize() + 2 * MinInstSize;
+  notePendingTrampolineMutation(Ctx, Disjoint);
+  Trampolines.push_back(Disjoint);
+  EXPECT_TRUE(isRegisterDefinitelyDeadAtContinuation(
+      Ctx, /*InstOffset=*/MinInstSize, /*InstSize=*/MinInstSize, Sgpr0));
+  Trampolines.clear();
+
+  PatchContext UnknownCtx{Config,
+                          OriginalDecoded,
+                          View.textData(),
+                          View.textSize(),
+                          /*PoolBaseOffset=*/View.textSize(),
+                          S,
+                          Trampolines,
+                          Sleds,
+                          View,
+                          Liveness,
+                          KernelStats,
+                          ScratchPatches,
+                          ControlFlow,
+                          Prof};
+  Trampoline UnknownOwner;
+  UnknownOwner.OriginalOffset = View.textSize() + MinInstSize;
+  notePendingTrampolineMutation(UnknownCtx, UnknownOwner);
+  Trampolines.push_back(UnknownOwner);
+  EXPECT_FALSE(getLiveSgprsAtContinuation(UnknownCtx,
+                                          /*InstOffset=*/MinInstSize,
+                                          /*InstSize=*/MinInstSize));
+  Trampolines.clear();
+
+  // Queue a replacement at .Lsite that consumes the incoming s0. Its source
+  // branch and body remain deferred, so a later proof from the loop backedge
+  // must not decode the stale full-def at .Lsite and report s0 dead.
+  llvm::SmallVector<uint8_t> Replacement =
+      assembleSingleInst("s_mov_b32 s1, s0", S);
+  ASSERT_EQ(Replacement.size(), MinInstSize);
+  ASSERT_TRUE(emitToTrampoline(Ctx, /*InstOffset=*/0,
+                               /*InstSize=*/MinInstSize, Replacement));
+  ASSERT_EQ(Trampolines.size(), 1u);
+  ASSERT_TRUE(Trampolines[0].HasFunctionRange);
+  EXPECT_FALSE(isRegisterDefinitelyDeadAtContinuation(
+      Ctx, /*InstOffset=*/MinInstSize, /*InstSize=*/MinInstSize, Sgpr0));
+}
+
+TEST(RegisterLiveness, HighCardinalityFunctionUsesOneBoundedBatch) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  constexpr size_t InstructionCount = 16384;
+  llvm::SmallVector<uint8_t> Text;
+  Text.reserve((InstructionCount + 2) * MinInstSize);
+  for (size_t I = 0; I != InstructionCount; ++I)
+    Text.append(S.SNopBytes);
+  llvm::SmallVector<uint8_t> Tail =
+      assembleInstructions("s_mov_b32 s1, s0\ns_endpgm", S);
+  ASSERT_EQ(Tail.size(), 2u * MinInstSize);
+  Text.append(Tail);
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+  std::vector<InternalDecodedInst> OriginalDecoded;
+  ASSERT_TRUE(
+      decodeTextSection(View.textData(), View.textSize(), S, OriginalDecoded));
+
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   OriginalDecoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/0,
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  std::optional<llvm::BitVector> Live = getLiveSgprsAtContinuation(
+      Ctx, /*InstOffset=*/0, /*InstSize=*/MinInstSize);
+  ASSERT_TRUE(Live);
+  ASSERT_EQ(Live->size(), 107u);
+  EXPECT_TRUE(Live->test(0));
+  EXPECT_FALSE(Live->test(2));
+  ASSERT_EQ(Ctx.CurrentFunctionSgprLivenessCache.size(), 1u);
+  const CurrentFunctionSgprLiveness &Cached =
+      Ctx.CurrentFunctionSgprLivenessCache.begin()->second;
+  EXPECT_EQ(Cached.LiveBefore.size(), InstructionCount + 2);
+  EXPECT_EQ(Cached.InstructionIndices.size(), InstructionCount + 2);
+
+  std::optional<llvm::BitVector> Second = getLiveSgprsAtContinuation(
+      Ctx, /*InstOffset=*/InstructionCount / 2 * MinInstSize,
+      /*InstSize=*/MinInstSize);
+  ASSERT_TRUE(Second);
+  EXPECT_TRUE(Second->test(0));
+  EXPECT_EQ(Ctx.CurrentFunctionSgprLivenessCache.size(), 1u);
 }
 
 TEST(AssembleDecode, SingleInstructionRejectsSequence) {
@@ -3215,6 +3955,75 @@ TEST(PatchScaleSrc2, PreservesNonScaleSrc2Bits) {
   EXPECT_EQ(Inst[7] & 0xF8, 0xF8);
   EXPECT_EQ(Inst[6] & 0xFC, 0x00);
   EXPECT_EQ(Inst[7] & 0x07, 0x04);
+}
+
+TEST(PatchScaleSrc2, VTableMutationInvalidatesCurrentTextLiveness) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+  llvm::SmallVector<uint8_t> Text = assembleInstructions(
+      "v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[0:15], v[0:15], "
+      "v[0:7], s0, s0\n"
+      "s_endpgm",
+      S);
+  ASSERT_EQ(Text.size(), 5u * MinInstSize);
+  llvm::SmallVector<uint8_t> ExpectedPatchedText = Text;
+  ASSERT_TRUE(patchScaleSrc2(ExpectedPatchedText.data()));
+
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(Text);
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  ElfView &View = *ViewOrErr;
+  std::vector<InternalDecodedInst> OriginalDecoded;
+  ASSERT_TRUE(
+      decodeTextSection(View.textData(), View.textSize(), S, OriginalDecoded));
+  ASSERT_EQ(OriginalDecoded.size(), 2u);
+  ASSERT_EQ(OriginalDecoded[0].Size, 4u * MinInstSize);
+
+  RewriteConfig Config;
+  Config.MaxSgprs = 106;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof(/*Enabled=*/false);
+  PatchContext Ctx{Config,
+                   OriginalDecoded,
+                   View.textData(),
+                   View.textSize(),
+                   /*PoolBaseOffset=*/View.textSize(),
+                   S,
+                   Trampolines,
+                   Sleds,
+                   View,
+                   Liveness,
+                   KernelStats,
+                   ScratchPatches,
+                   ControlFlow,
+                   Prof};
+
+  ASSERT_TRUE(getLiveSgprsAtContinuation(Ctx, /*InstOffset=*/0,
+                                         /*InstSize=*/OriginalDecoded[0].Size));
+  ASSERT_EQ(Ctx.CurrentFunctionSgprLivenessCache.size(), 1u);
+  EXPECT_EQ(Ctx.TextMutationGeneration, 0u);
+
+  HotswapPatchVTable VT;
+  registerVop3px2Src2Patch(VT);
+  ASSERT_NE(VT.applyVop3px2Src2Fix, nullptr);
+  EXPECT_EQ(VT.applyVop3px2Src2Fix(Ctx), 1u);
+  EXPECT_EQ(Ctx.TextMutationGeneration, 1u);
+  EXPECT_TRUE(Ctx.CurrentFunctionSgprLivenessCache.empty());
+  EXPECT_EQ(llvm::ArrayRef<uint8_t>(Ctx.Text, Ctx.TextSize),
+            llvm::ArrayRef<uint8_t>(ExpectedPatchedText));
+
+  ASSERT_TRUE(getLiveSgprsAtContinuation(Ctx, /*InstOffset=*/0,
+                                         /*InstSize=*/OriginalDecoded[0].Size));
+  ASSERT_EQ(Ctx.CurrentFunctionSgprLivenessCache.size(), 1u);
+  EXPECT_EQ(Ctx.CurrentFunctionSgprLivenessCache.begin()->second.Generation,
+            1u);
 }
 
 // -- HotswapPatchVTable -------------------------------------------------------
