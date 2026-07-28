@@ -2336,7 +2336,7 @@ TEST(CollectDirectBranchTargets,
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
   for (llvm::StringRef Literal : {"0x24", "0xfc", "0xfffffff8", "0x7fffffff"}) {
-    SCOPED_TRACE(Literal);
+    SCOPED_TRACE(Literal.str());
     llvm::SmallString<512> Assembly;
     Assembly += "s_get_pc_i64 s[4:5]\ns_add_co_i32 s6, ";
     Assembly += Literal;
@@ -2479,7 +2479,7 @@ TEST(CollectDirectBranchTargets, RejectsNonBoundaryDirectAndCallTargets) {
   ASSERT_TRUE(S.Valid);
   for (llvm::StringRef Transfer :
        {"s_branch 1\n", "s_call_i64 s[30:31], 1\n"}) {
-    SCOPED_TRACE(Transfer);
+    SCOPED_TRACE(Transfer.str());
     llvm::SmallString<128> Assembly(Transfer);
     Assembly += "s_add_co_i32 s2, 0x100, 4\ns_endpgm";
     llvm::SmallVector<uint8_t> Bytes = assembleInstructions(Assembly, S);
@@ -2600,7 +2600,7 @@ TEST(CollectDirectBranchTargets,
   ASSERT_TRUE(S.Valid);
   for (llvm::StringRef Body : {"s_nop 0\ns_set_pc_i64 s[28:29]",
                                "s_mov_b32 s30, 0\ns_set_pc_i64 s[30:31]"}) {
-    SCOPED_TRACE(Body);
+    SCOPED_TRACE(Body.str());
     llvm::SmallString<128> Assembly(
         "s_call_i64 s[30:31], 2\ns_endpgm\ns_endpgm\n");
     Assembly += Body;
