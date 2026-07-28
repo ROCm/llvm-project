@@ -840,24 +840,6 @@ bool instructionDefinesBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
   return false;
 }
 
-// True when \p DI reads \p Reg (uses its value), including implicit uses.
-bool instructionReadsRegister(const InternalDecodedInst &DI, MCRegister Reg,
-                              const LLVMState &LS) {
-  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
-  const MCRegisterInfo &MRI = *LS.MRI;
-  unsigned NumDefs = Desc.getNumDefs();
-  for (unsigned I = NumDefs, E = DI.Inst.getNumOperands(); I < E; ++I) {
-    const MCOperand &Op = DI.Inst.getOperand(I);
-    if (Op.isReg() && Op.getReg() &&
-        MRI.regsOverlap(MCRegister(Op.getReg()), Reg))
-      return true;
-  }
-  for (MCPhysReg Implicit : Desc.implicit_uses())
-    if (MRI.regsOverlap(MCRegister(Implicit), Reg))
-      return true;
-  return false;
-}
-
 bool isTensorDescriptorUseOnly(const InternalDecodedInst &DI,
                                MCRegister BaseMCReg, const LLVMState &LS) {
   if (DI.Inst.getOpcode() != LS.TensorLoadToLdsOpcode)
@@ -1010,7 +992,7 @@ bool isMaskDefinitionSafe(const PatchContext &Ctx,
         writesBasePreservingZeroLow16(DI, BaseMCReg, Ctx.LS);
     if ((State & BaseValueLive) != 0) {
       if (!PreservesBaseValue) {
-        if (instructionReadsRegister(DI, BaseMCReg, Ctx.LS) &&
+        if (instructionReadsRegister(DI, Ctx.LS, BaseMCReg) &&
             !isTensorDescriptorUseOnly(DI, BaseMCReg, Ctx.LS))
           return false;
         if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS))
@@ -1107,7 +1089,7 @@ TensorMaskDef findTensorMaskSetDefinitions(const PatchContext &Ctx,
     }
 
     if (!PreservesBaseValue &&
-        instructionReadsRegister(DI, BaseMCReg, Ctx.LS) &&
+        instructionReadsRegister(DI, Ctx.LS, BaseMCReg) &&
         !isTensorDescriptorUseOnly(DI, BaseMCReg, Ctx.LS))
       return TensorMaskDef::NotApplicable;
 
@@ -1153,7 +1135,8 @@ bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
           << utohexstr(DI.Offset) << ": " << Asm << "\n";
     return false;
   }
-  std::memcpy(Ctx.Text + DI.Offset, Bytes.data(), Bytes.size());
+  if (!writeCurrentText(Ctx, DI.Offset, Bytes, "tensor descriptor mask clear"))
+    return false;
   DI.Inst.getOperand(2).setImm(static_cast<int64_t>(Cleared));
 
   log() << "hotswap: tensor_load_to_lds: cleared workgroup_mask at descriptor "

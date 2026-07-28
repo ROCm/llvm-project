@@ -361,6 +361,21 @@ truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
 
 // -- Sled-or-trampoline code emission -----------------------------------------
 
+bool writeCurrentText(PatchContext &Ctx, uint64_t Offset,
+                      ArrayRef<uint8_t> Bytes, StringRef Context) {
+  if (Offset > Ctx.TextSize || Bytes.size() > Ctx.TextSize - Offset) {
+    log() << "hotswap: error: " << Context << ": current .text write [0x"
+          << utohexstr(Offset) << ", +0x" << utohexstr(Bytes.size())
+          << ") exceeds size 0x" << utohexstr(Ctx.TextSize) << "\n";
+    return false;
+  }
+  if (Bytes.empty())
+    return true;
+  std::memcpy(Ctx.Text + Offset, Bytes.data(), Bytes.size());
+  noteCurrentTextMutation(Ctx);
+  return true;
+}
+
 /// Emit the replacement code for the instruction at [\p InstOffset,
 /// \p InstOffset + \p InstSize) into a nearby NOP sled: writes \p Replacement
 /// into the sled, appends a branch-back to the next instruction after the
@@ -373,35 +388,55 @@ truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
                                  uint64_t InstOffset, uint32_t InstSize,
                                  ArrayRef<uint8_t> Replacement) {
   const LLVMState &LS = Ctx.LS;
-  SmallVector<uint8_t> BrBack = LS.encodeSBranch(
-      Sled.WritePos + Replacement.size(), InstOffset + InstSize);
-  if (BrBack.empty()) {
+  std::optional<uint64_t> BackOffset = checkedAddUint64(
+      Sled.WritePos, Replacement.size(), "NOP-sled branch-back offset");
+  std::optional<uint64_t> SledWriteEnd =
+      BackOffset
+          ? checkedAddUint64(*BackOffset, MinInstSize, "NOP-sled write end")
+          : std::nullopt;
+  std::optional<uint64_t> InstEnd =
+      checkedAddUint64(InstOffset, InstSize, "NOP-sled source end");
+  if (!BackOffset || !SledWriteEnd || !InstEnd ||
+      Sled.WritePos > Ctx.TextSize || *SledWriteEnd > Ctx.TextSize ||
+      *SledWriteEnd > Sled.End || InstOffset > Ctx.TextSize ||
+      *InstEnd > Ctx.TextSize || InstSize < MinInstSize ||
+      InstSize % MinInstSize != 0) {
+    log() << "hotswap: error: emitToNopSled: invalid source or sled bounds\n";
+    return false;
+  }
+
+  SmallVector<uint8_t> BrBack = LS.encodeSBranch(*BackOffset, *InstEnd);
+  if (BrBack.size() != MinInstSize) {
     log() << "hotswap: error: emitToNopSled: encodeSBranch for branch-back "
-          << "at sled offset 0x"
-          << utohexstr(Sled.WritePos + Replacement.size()) << " -> 0x"
-          << utohexstr(InstOffset + InstSize) << " failed.\n";
+          << "at sled offset 0x" << utohexstr(*BackOffset) << " -> 0x"
+          << utohexstr(*InstEnd) << " failed.\n";
     return false;
   }
 
   SmallVector<uint8_t> BrFwd = LS.encodeSBranch(InstOffset, Sled.WritePos);
-  if (BrFwd.empty()) {
+  if (BrFwd.size() != MinInstSize) {
     log() << "hotswap: error: emitToNopSled: encodeSBranch for branch-fwd "
           << "at original offset 0x" << utohexstr(InstOffset) << " -> sled 0x"
           << utohexstr(Sled.WritePos) << " failed.\n";
     return false;
   }
 
-  std::memcpy(Ctx.Text + Sled.WritePos, Replacement.data(), Replacement.size());
-  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack.data(),
-              BrBack.size());
-  std::memcpy(Ctx.Text + InstOffset, BrFwd.data(), BrFwd.size());
+  if (!writeCurrentText(Ctx, Sled.WritePos, Replacement,
+                        "NOP-sled replacement") ||
+      !writeCurrentText(Ctx, *BackOffset, BrBack, "NOP-sled branch-back") ||
+      !writeCurrentText(Ctx, InstOffset, BrFwd, "NOP-sled branch-forward"))
+    return false;
 
   // Pad the tail of the replaced instruction slot with cached s_nop bytes
   // (pre-encoded in LLVMState at initLLVM() time).
   for (uint32_t I = MinInstSize; I < InstSize; I += MinInstSize)
-    std::memcpy(Ctx.Text + InstOffset + I, LS.SNopBytes.data(), MinInstSize);
+    if (!writeCurrentText(
+            Ctx, InstOffset + I,
+            ArrayRef<uint8_t>(LS.SNopBytes).take_front(MinInstSize),
+            "NOP-sled source padding"))
+      return false;
 
-  Sled.WritePos += Replacement.size() + MinInstSize;
+  Sled.WritePos = *SledWriteEnd;
   // Count-only row: patch placed in-line via a nearby NOP sled, no trampoline.
   Ctx.Profile.count(HotswapMetric::JumpNopSled);
   return true;
@@ -792,6 +827,550 @@ bool commitSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset,
   return true;
 }
 
+struct InstructionRegisterEffects {
+  SmallVector<MCRegister, 8> Uses;
+  SmallVector<MCRegister, 8> Defs;
+};
+
+static std::optional<InstructionRegisterEffects>
+getInstructionRegisterEffects(const InternalDecodedInst &DI,
+                              const LLVMState &LS) {
+  if (!DI.DecodeSucceeded || DI.DecodeSoftFailed || !LS.MCII || !LS.MRI)
+    return std::nullopt;
+
+  InstructionRegisterEffects Effects;
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  unsigned DefCount = std::min(Desc.getNumDefs(), DI.Inst.getNumOperands());
+  for (unsigned Def = 0; Def != DefCount; ++Def) {
+    const MCOperand &Operand = DI.Inst.getOperand(Def);
+    if (!Operand.isReg() || !Operand.getReg())
+      continue;
+    MCRegister Register(Operand.getReg());
+    Effects.Defs.push_back(Register);
+    // A tied use makes its explicit def a read/modify/write operand. Some
+    // MCInst producers retain only the destination operand, so derive this use
+    // from the descriptor instead of requiring a duplicate decoded operand.
+    for (unsigned Use = Desc.getNumDefs(); Use != Desc.getNumOperands();
+         ++Use) {
+      if (Desc.getOperandConstraint(Use, MCOI::TIED_TO) ==
+          static_cast<int>(Def)) {
+        Effects.Uses.push_back(Register);
+        break;
+      }
+    }
+  }
+
+  unsigned FixedOperandCount =
+      std::min(Desc.getNumOperands(), DI.Inst.getNumOperands());
+  for (unsigned I = DefCount; I != FixedOperandCount; ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (Operand.isReg() && Operand.getReg())
+      Effects.Uses.push_back(MCRegister(Operand.getReg()));
+  }
+  for (unsigned I = FixedOperandCount; I != DI.Inst.getNumOperands(); ++I) {
+    const MCOperand &Operand = DI.Inst.getOperand(I);
+    if (!Operand.isReg() || !Operand.getReg())
+      continue;
+    (Desc.variadicOpsAreDefs() ? Effects.Defs : Effects.Uses)
+        .push_back(MCRegister(Operand.getReg()));
+  }
+  for (MCPhysReg ImplicitUse : Desc.implicit_uses())
+    Effects.Uses.push_back(MCRegister(ImplicitUse));
+  for (MCPhysReg ImplicitDef : Desc.implicit_defs())
+    Effects.Defs.push_back(MCRegister(ImplicitDef));
+  return Effects;
+}
+
+bool instructionReadsRegister(const InternalDecodedInst &DI,
+                              const LLVMState &LS, MCRegister Register) {
+  std::optional<InstructionRegisterEffects> Effects =
+      getInstructionRegisterEffects(DI, LS);
+  if (!Effects) {
+    log() << "hotswap: register-read analysis failed closed at instruction "
+             "offset 0x"
+          << utohexstr(DI.Offset)
+          << ": decode status or LLVM register metadata is not proof-safe\n";
+    return true;
+  }
+  for (MCRegister Use : Effects->Uses)
+    if (LS.MRI->regsOverlap(Use, Register))
+      return true;
+  return false;
+}
+
+static bool addTrackedSgprBits(const LLVMState &LS, MCRegister Register,
+                               unsigned MaxSgprs, BitVector &Bits,
+                               bool IsDefinition) {
+  if (!Register.isValid())
+    return true;
+  SmallVector<MCRegister, 8> Candidates;
+  Candidates.push_back(Register);
+  for (MCPhysReg Subregister : LS.MRI->subregs(Register))
+    Candidates.push_back(MCRegister(Subregister));
+  // A decoded operand can name a low/high subregister directly. Its scalar
+  // numbered SGPR then appears among its super-registers rather than subregs.
+  for (MCPhysReg Superregister : LS.MRI->superregs(Register))
+    Candidates.push_back(MCRegister(Superregister));
+
+  for (MCRegister Candidate : Candidates) {
+    std::optional<unsigned> Index = numberedSgprIndex(*LS.MRI, Candidate);
+    if (!Index)
+      continue;
+    if (*Index >= MaxSgprs) {
+      log() << "hotswap: tracked SGPR analysis failed: decoded register s"
+            << *Index << " exceeds configured numbered-SGPR count " << MaxSgprs
+            << "\n";
+      return false;
+    }
+    Bits.set(*Index);
+  }
+  // Any overlapping use consumes aggregate VCC. A definition kills that bit
+  // only when it covers both VCC subregisters.
+  bool TracksVcc = isVccRegister(LS, Register);
+  if (IsDefinition)
+    TracksVcc = LS.VCCRegister.isValid() &&
+                LS.MRI->isSubRegisterEq(Register, LS.VCCRegister);
+  if (TracksVcc)
+    Bits.set(MaxSgprs);
+  return true;
+}
+
+static bool collectTrackedSgprUsesAndDefs(const InternalDecodedInst &DI,
+                                          const LLVMState &LS,
+                                          unsigned MaxSgprs, BitVector &Uses,
+                                          BitVector &Defs) {
+  std::optional<InstructionRegisterEffects> Effects =
+      getInstructionRegisterEffects(DI, LS);
+  if (!Effects)
+    return false;
+  for (MCRegister Register : Effects->Uses)
+    if (!addTrackedSgprBits(LS, Register, MaxSgprs, Uses,
+                            /*IsDefinition=*/false))
+      return false;
+  for (MCRegister Register : Effects->Defs)
+    if (!addTrackedSgprBits(LS, Register, MaxSgprs, Defs,
+                            /*IsDefinition=*/true))
+      return false;
+  return true;
+}
+
+std::optional<BitVector>
+getReplacementIncomingSgprs(ArrayRef<uint8_t> Replacement, const LLVMState &LS,
+                            unsigned MaxSgprs) {
+  if (MaxSgprs > Gfx1250MaxSgprs) {
+    log() << "hotswap: replacement SGPR input analysis failed: configured "
+             "maximum "
+          << MaxSgprs << " exceeds gfx1250 limit " << Gfx1250MaxSgprs << "\n";
+    return std::nullopt;
+  }
+  const unsigned TrackedSgprs = MaxSgprs + 1;
+  BitVector Incoming(TrackedSgprs);
+  BitVector Defined(TrackedSgprs);
+  std::vector<InternalDecodedInst> Decoded;
+  if (!decodeTextSection(Replacement.data(), Replacement.size(), LS, Decoded)) {
+    log() << "hotswap: replacement SGPR input analysis failed: MC decode "
+             "could not scan "
+          << Replacement.size() << " replacement bytes\n";
+    return std::nullopt;
+  }
+
+  for (const InternalDecodedInst &DI : Decoded) {
+    if (!DI.DecodeSucceeded) {
+      log() << "hotswap: replacement SGPR input analysis failed at byte 0x"
+            << utohexstr(DI.Offset) << ": undecodable instruction\n";
+      return std::nullopt;
+    }
+    if (DI.DecodeSoftFailed) {
+      log() << "hotswap: replacement SGPR input analysis failed at byte 0x"
+            << utohexstr(DI.Offset)
+            << ": potentially undefined instruction encoding\n";
+      return std::nullopt;
+    }
+    if (!LS.MIA) {
+      log() << "hotswap: replacement SGPR input analysis failed: LLVM control-"
+               "flow analysis is unavailable\n";
+      return std::nullopt;
+    }
+    const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+    if (Desc.isTrap() || DI.Inst.getOpcode() == LS.STrapOpcode ||
+        DI.Inst.getOpcode() == LS.SRfeI64Opcode || LS.MIA->isBarrier(DI.Inst) ||
+        LS.MIA->mayAffectControlFlow(DI.Inst, *LS.MRI)) {
+      log() << "hotswap: replacement SGPR input analysis failed at byte 0x"
+            << utohexstr(DI.Offset) << ": control-flow instruction "
+            << DI.Mnemonic
+            << " is not allowed in a straight-line replacement\n";
+      return std::nullopt;
+    }
+    BitVector Uses(TrackedSgprs);
+    BitVector Defs(TrackedSgprs);
+    if (!collectTrackedSgprUsesAndDefs(DI, LS, MaxSgprs, Uses, Defs)) {
+      log() << "hotswap: replacement SGPR input analysis failed at byte 0x"
+            << utohexstr(DI.Offset)
+            << ": register effects are not proof-safe\n";
+      return std::nullopt;
+    }
+    Uses.reset(Defined);
+    Incoming |= Uses;
+    Defined |= Defs;
+  }
+  return Incoming;
+}
+
+bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
+                                      const LLVMState &LS,
+                                      MCRegister Register) {
+  std::optional<BitVector> Incoming =
+      getReplacementIncomingSgprs(Replacement, LS, Gfx1250MaxSgprs);
+  if (!Incoming)
+    return true;
+  BitVector RegisterBits(Gfx1250MaxSgprs + 1);
+  if (!addTrackedSgprBits(LS, Register, Gfx1250MaxSgprs, RegisterBits,
+                          /*IsDefinition=*/false))
+    return true;
+  return RegisterBits.none() || Incoming->anyCommon(RegisterBits);
+}
+
+static bool addCurrentFunctionLivenessSuccessor(
+    size_t From, uint64_t Offset,
+    const DenseMap<uint64_t, size_t> &InstructionIndices,
+    std::vector<SmallVector<size_t, 2>> &Successors,
+    std::vector<SmallVector<size_t, 2>> &Predecessors) {
+  DenseMap<uint64_t, size_t>::const_iterator Target =
+      InstructionIndices.find(Offset);
+  if (Target == InstructionIndices.end())
+    return false;
+  Successors[From].push_back(Target->second);
+  Predecessors[Target->second].push_back(From);
+  return true;
+}
+
+static CurrentFunctionSgprLiveness buildCurrentFunctionSgprLiveness(
+    PatchContext &Ctx, const ElfView::FunctionTextRange &FunctionRange) {
+  CurrentFunctionSgprLiveness Result;
+  Result.Generation = Ctx.TextMutationGeneration;
+  Result.MaxSgprs = Ctx.Config.MaxSgprs;
+  if (!Ctx.LS.MIA) {
+    log() << "hotswap: current-function SGPR liveness failed for [0x"
+          << utohexstr(FunctionRange.Begin) << ", 0x"
+          << utohexstr(FunctionRange.End)
+          << "): LLVM control-flow analysis is unavailable\n";
+    return Result;
+  }
+  if (FunctionRange.End < FunctionRange.Begin ||
+      FunctionRange.Begin > Ctx.TextSize ||
+      FunctionRange.End - FunctionRange.Begin >
+          Ctx.TextSize - FunctionRange.Begin) {
+    log() << "hotswap: current-function SGPR liveness failed for [0x"
+          << utohexstr(FunctionRange.Begin) << ", 0x"
+          << utohexstr(FunctionRange.End)
+          << "): function range is outside current .text\n";
+    return Result;
+  }
+  if (Ctx.Config.MaxSgprs > Gfx1250MaxSgprs) {
+    log() << "hotswap: current-function SGPR liveness failed for [0x"
+          << utohexstr(FunctionRange.Begin) << ", 0x"
+          << utohexstr(FunctionRange.End) << "): configured maximum "
+          << Ctx.Config.MaxSgprs << " exceeds gfx1250 limit " << Gfx1250MaxSgprs
+          << "\n";
+    return Result;
+  }
+
+  std::vector<InternalDecodedInst> Decoded;
+  uint64_t FunctionSize = FunctionRange.End - FunctionRange.Begin;
+  if (!decodeTextSection(Ctx.Text + FunctionRange.Begin, FunctionSize, Ctx.LS,
+                         Decoded)) {
+    log() << "hotswap: current-function SGPR liveness failed for [0x"
+          << utohexstr(FunctionRange.Begin) << ", 0x"
+          << utohexstr(FunctionRange.End)
+          << "): MC decode could not scan the function\n";
+    return Result;
+  }
+
+  uint64_t ExpectedOffset = FunctionRange.Begin;
+  for (InternalDecodedInst &DI : Decoded) {
+    DI.Offset += FunctionRange.Begin;
+    if (!DI.DecodeSucceeded) {
+      log() << "hotswap: current-function SGPR liveness failed at 0x"
+            << utohexstr(DI.Offset) << ": undecodable instruction\n";
+      return Result;
+    }
+    if (DI.DecodeSoftFailed) {
+      log() << "hotswap: current-function SGPR liveness failed at 0x"
+            << utohexstr(DI.Offset)
+            << ": potentially undefined instruction encoding\n";
+      return Result;
+    }
+    if (DI.Size == 0) {
+      log() << "hotswap: current-function SGPR liveness failed at 0x"
+            << utohexstr(DI.Offset) << ": decoded instruction has zero size\n";
+      return Result;
+    }
+    if (DI.Offset != ExpectedOffset) {
+      log() << "hotswap: current-function SGPR liveness failed at 0x"
+            << utohexstr(DI.Offset) << ": expected instruction boundary 0x"
+            << utohexstr(ExpectedOffset) << "\n";
+      return Result;
+    }
+    std::optional<uint64_t> Next = checkedAddUint64(
+        DI.Offset, DI.Size, "current-function SGPR liveness decode");
+    if (!Next || *Next > FunctionRange.End) {
+      log() << "hotswap: current-function SGPR liveness failed at 0x"
+            << utohexstr(DI.Offset)
+            << ": decoded instruction extends beyond the function\n";
+      return Result;
+    }
+    ExpectedOffset = *Next;
+  }
+  if (Decoded.empty()) {
+    log() << "hotswap: current-function SGPR liveness failed for [0x"
+          << utohexstr(FunctionRange.Begin) << ", 0x"
+          << utohexstr(FunctionRange.End)
+          << "): function has no instructions\n";
+    return Result;
+  }
+  if (ExpectedOffset != FunctionRange.End) {
+    log() << "hotswap: current-function SGPR liveness failed for [0x"
+          << utohexstr(FunctionRange.Begin) << ", 0x"
+          << utohexstr(FunctionRange.End)
+          << "): decoded instructions do not cover the complete function\n";
+    return Result;
+  }
+
+  const unsigned TrackedSgprs = Ctx.Config.MaxSgprs + 1;
+  const size_t InstructionCount = Decoded.size();
+  std::vector<BitVector> Uses(InstructionCount, BitVector(TrackedSgprs));
+  std::vector<BitVector> Defs(InstructionCount, BitVector(TrackedSgprs));
+  std::vector<SmallVector<size_t, 2>> Successors(InstructionCount);
+  std::vector<SmallVector<size_t, 2>> Predecessors(InstructionCount);
+  BitVector HasUnknownSuccessor(InstructionCount);
+  BitVector HasUnknownRegisterEffects(InstructionCount);
+
+  for (size_t I = 0; I != InstructionCount; ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    std::pair<DenseMap<uint64_t, size_t>::iterator, bool> Inserted =
+        Result.InstructionIndices.try_emplace(DI.Offset, I);
+    if (!Inserted.second) {
+      log() << "hotswap: current-function SGPR liveness failed at 0x"
+            << utohexstr(DI.Offset) << ": duplicate instruction offset\n";
+      return Result;
+    }
+    if (!collectTrackedSgprUsesAndDefs(DI, Ctx.LS, Ctx.Config.MaxSgprs, Uses[I],
+                                       Defs[I])) {
+      log() << "hotswap: current-function SGPR liveness failed at 0x"
+            << utohexstr(DI.Offset)
+            << ": register effects are not proof-safe\n";
+      return Result;
+    }
+  }
+
+  for (size_t I = 0; I != InstructionCount; ++I) {
+    const InternalDecodedInst &DI = Decoded[I];
+    const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
+    if (DI.Inst.getOpcode() == Ctx.LS.SEndPgmOpcode ||
+        DI.Inst.getOpcode() == Ctx.LS.SEndPgmSavedOpcode)
+      continue;
+    if (Desc.isTrap() || DI.Inst.getOpcode() == Ctx.LS.STrapOpcode) {
+      HasUnknownSuccessor.set(I);
+      HasUnknownRegisterEffects.set(I);
+      continue;
+    }
+    if (Ctx.LS.MIA->isBranch(DI.Inst)) {
+      std::optional<uint64_t> Target =
+          evaluateDirectControlFlowTarget(DI, Ctx.LS);
+      if (!Target)
+        HasUnknownSuccessor.set(I);
+      else if (!addCurrentFunctionLivenessSuccessor(I, *Target,
+                                                    Result.InstructionIndices,
+                                                    Successors, Predecessors))
+        HasUnknownSuccessor.set(I);
+      if (Ctx.LS.MIA->isUnconditionalBranch(DI.Inst))
+        continue;
+    } else if (Ctx.LS.MIA->isBarrier(DI.Inst)) {
+      HasUnknownSuccessor.set(I);
+      HasUnknownRegisterEffects.set(I);
+      continue;
+    } else if (Ctx.LS.MIA->isCall(DI.Inst) ||
+               Ctx.LS.MIA->isIndirectBranch(DI.Inst) ||
+               Ctx.LS.MIA->isReturn(DI.Inst) ||
+               DI.Inst.getOpcode() == Ctx.LS.SRfeI64Opcode) {
+      HasUnknownSuccessor.set(I);
+      continue;
+    } else if (Ctx.LS.MIA->mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI)) {
+      HasUnknownSuccessor.set(I);
+      HasUnknownRegisterEffects.set(I);
+      continue;
+    }
+
+    std::optional<uint64_t> Fallthrough = checkedAddUint64(
+        DI.Offset, DI.Size, "current-function SGPR liveness fallthrough");
+    if (!Fallthrough)
+      HasUnknownSuccessor.set(I);
+    else if (!addCurrentFunctionLivenessSuccessor(I, *Fallthrough,
+                                                  Result.InstructionIndices,
+                                                  Successors, Predecessors))
+      HasUnknownSuccessor.set(I);
+  }
+
+  // Each worklist transfer and successor union costs
+  // O(ceil(R / word-size)), where R is the configured tracked SGPR count.
+  // Computing all registers together avoids rebuilding and walking this CFG
+  // once per scratch-register candidate.
+  Result.LiveBefore.assign(InstructionCount, BitVector(TrackedSgprs));
+  std::vector<BitVector> LiveAfter(InstructionCount, BitVector(TrackedSgprs));
+  BitVector AllLive(TrackedSgprs, true);
+  SmallVector<size_t, 32> Worklist;
+  BitVector InWorklist(InstructionCount, true);
+  for (size_t I = 0; I != InstructionCount; ++I)
+    Worklist.push_back(I);
+
+  while (!Worklist.empty()) {
+    size_t I = Worklist.pop_back_val();
+    InWorklist.reset(I);
+    BitVector NewAfter(TrackedSgprs);
+    if (HasUnknownSuccessor.test(I))
+      NewAfter = AllLive;
+    for (size_t Successor : Successors[I])
+      NewAfter |= Result.LiveBefore[Successor];
+
+    BitVector NewBefore = NewAfter;
+    if (HasUnknownRegisterEffects.test(I)) {
+      NewBefore = AllLive;
+    } else {
+      NewBefore.reset(Defs[I]);
+      NewBefore |= Uses[I];
+    }
+    if (NewAfter == LiveAfter[I] && NewBefore == Result.LiveBefore[I])
+      continue;
+    LiveAfter[I] = std::move(NewAfter);
+    Result.LiveBefore[I] = std::move(NewBefore);
+    for (size_t Predecessor : Predecessors[I]) {
+      if (InWorklist.test(Predecessor))
+        continue;
+      InWorklist.set(Predecessor);
+      Worklist.push_back(Predecessor);
+    }
+  }
+  Result.Valid = true;
+  return Result;
+}
+
+std::optional<BitVector> getLiveSgprsAtContinuation(PatchContext &Ctx,
+                                                    uint64_t InstOffset,
+                                                    uint32_t InstSize) {
+  std::optional<ElfView::FunctionTextRange> FunctionRange =
+      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
+  if (!FunctionRange) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": no containing function range\n";
+    return std::nullopt;
+  }
+  using FunctionKey = std::pair<uint64_t, uint64_t>;
+  FunctionKey Key{FunctionRange->Begin, FunctionRange->End};
+  // Deferred trampolines are logical mutations of their source functions, but
+  // their source branches are not written into Ctx.Text until final fixup.
+  // Decoding the current bytes after one is queued would therefore omit the
+  // replacement's effects and its new control-flow edges. Fail closed for the
+  // affected function until finalization rather than prove liveness from an
+  // incomplete program image. A trampoline without a resolved function range
+  // may affect any queried function and also forces the conservative result.
+  if (Ctx.HasUnresolvedPendingTrampoline ||
+      Ctx.PendingTrampolineFunctions.contains(Key)) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset)
+          << ": pending trampoline source bytes are not finalized\n";
+    return std::nullopt;
+  }
+  DenseMap<FunctionKey, CurrentFunctionSgprLiveness>::iterator Cached =
+      Ctx.CurrentFunctionSgprLivenessCache.find(Key);
+  if (Cached == Ctx.CurrentFunctionSgprLivenessCache.end() ||
+      Cached->second.Generation != Ctx.TextMutationGeneration ||
+      Cached->second.MaxSgprs != Ctx.Config.MaxSgprs) {
+    CurrentFunctionSgprLiveness Current =
+        buildCurrentFunctionSgprLiveness(Ctx, *FunctionRange);
+    Cached = Ctx.CurrentFunctionSgprLivenessCache
+                 .insert_or_assign(Key, std::move(Current))
+                 .first;
+  }
+  if (!Cached->second.Valid) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": current function [0x" << utohexstr(FunctionRange->Begin)
+          << ", 0x" << utohexstr(FunctionRange->End)
+          << ") does not have a complete decoded liveness map\n";
+    return std::nullopt;
+  }
+
+  if (!Cached->second.InstructionIndices.contains(InstOffset)) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": source is not a decoded instruction boundary in function [0x"
+          << utohexstr(FunctionRange->Begin) << ", 0x"
+          << utohexstr(FunctionRange->End) << ")\n";
+    return std::nullopt;
+  }
+  if (InstOffset > std::numeric_limits<uint64_t>::max() - InstSize) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": continuation overflows uint64_t\n";
+    return std::nullopt;
+  }
+  uint64_t Continuation = InstOffset + InstSize;
+  DenseMap<uint64_t, size_t>::const_iterator Index =
+      Cached->second.InstructionIndices.find(Continuation);
+  if (Index == Cached->second.InstructionIndices.end()) {
+    log() << "hotswap: SGPR continuation liveness failed closed for source at "
+             "0x"
+          << utohexstr(InstOffset) << " with size 0x" << utohexstr(InstSize)
+          << ": continuation 0x" << utohexstr(Continuation)
+          << " is not a decoded instruction boundary in function [0x"
+          << utohexstr(FunctionRange->Begin) << ", 0x"
+          << utohexstr(FunctionRange->End) << ")\n";
+    return std::nullopt;
+  }
+  return Cached->second.LiveBefore[Index->second];
+}
+
+void noteCurrentTextMutation(PatchContext &Ctx) {
+  // Every cached function was decoded from the previous text generation.
+  // Retaining those maps and bit vectors cannot produce a cache hit and lets
+  // many patch generations accumulate stale whole-function allocations.
+  Ctx.CurrentFunctionSgprLivenessCache.clear();
+  if (Ctx.TextMutationGeneration == std::numeric_limits<uint64_t>::max()) {
+    Ctx.TextMutationGeneration = 0;
+    return;
+  }
+  ++Ctx.TextMutationGeneration;
+}
+
+void notePendingTrampolineMutation(PatchContext &Ctx, const Trampoline &T) {
+  if (!T.HasFunctionRange) {
+    Ctx.HasUnresolvedPendingTrampoline = true;
+    return;
+  }
+  Ctx.PendingTrampolineFunctions.insert({T.FunctionStart, T.FunctionEnd});
+}
+
+bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
+                                            uint64_t InstOffset,
+                                            uint32_t InstSize,
+                                            MCRegister Register) {
+  std::optional<BitVector> Live =
+      getLiveSgprsAtContinuation(Ctx, InstOffset, InstSize);
+  if (!Live)
+    return false;
+  BitVector RegisterBits(Ctx.Config.MaxSgprs + 1);
+  if (!addTrackedSgprBits(Ctx.LS, Register, Ctx.Config.MaxSgprs, RegisterBits,
+                          /*IsDefinition=*/false))
+    return false;
+  return RegisterBits.any() && !Live->anyCommon(RegisterBits);
+}
+
 static std::optional<SafeSgprScratchBlock>
 reserveSafeFarReturn(PatchContext &Ctx, uint64_t InstOffset) {
   std::optional<SafeSgprScratchBlock> Scratch = findSafeSgprScratchBlock(
@@ -895,6 +1474,7 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
     T.UsesSetPCBack = true;
     T.LongBranchSgprBase = Scratch->Base;
     Ctx.Profile.count(HotswapMetric::JumpLong);
+    notePendingTrampolineMutation(Ctx, T);
     Ctx.OutTrampolines.emplace_back(std::move(T));
     Ctx.QueuedTrampolineBytes = *QueuedBytes;
     return true;
@@ -904,6 +1484,7 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
     // Reserve the short branch-back slot; fixupTrampolineBranches fills it in.
     T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
   }
+  notePendingTrampolineMutation(Ctx, T);
   Ctx.OutTrampolines.emplace_back(std::move(T));
   Ctx.QueuedTrampolineBytes = *QueuedBytes;
   return true;
@@ -3327,18 +3908,14 @@ assignLongBranchGateways(PatchContext &Ctx,
               << utohexstr(T.ForwardGatewayOffset) << " extends past .text.\n";
         return false;
       }
-      std::memcpy(Ctx.Text + T.ForwardGatewayOffset,
-                  T.ForwardGatewayBytes.data(), T.ForwardGatewayBytes.size());
+      if (!writeCurrentText(Ctx, T.ForwardGatewayOffset, T.ForwardGatewayBytes,
+                            "forward set-PC gateway"))
+        return false;
       if (!T.SecondaryForwardGatewayBytes.empty()) {
         uint64_t Offset = T.SharedDispatcherSecondaryGatewayOffset;
-        if (Offset > Ctx.TextSize ||
-            T.SecondaryForwardGatewayBytes.size() > Ctx.TextSize - Offset) {
-          log() << "hotswap: error: secondary forward gateway at 0x"
-                << utohexstr(Offset) << " extends past .text.\n";
+        if (!writeCurrentText(Ctx, Offset, T.SecondaryForwardGatewayBytes,
+                              "secondary forward set-PC gateway"))
           return false;
-        }
-        std::memcpy(Ctx.Text + Offset, T.SecondaryForwardGatewayBytes.data(),
-                    T.SecondaryForwardGatewayBytes.size());
       }
     }
     for (size_t I = 0; I != T.ForwardBranchIslands.size(); ++I) {
@@ -3366,7 +3943,8 @@ assignLongBranchGateways(PatchContext &Ctx,
                 << utohexstr(From) << " is outside .text and trampoline pool\n";
           return false;
         }
-        std::memcpy(Ctx.Text + From, Branch.data(), Branch.size());
+        if (!writeCurrentText(Ctx, From, Branch, "forward branch island"))
+          return false;
       }
     }
   }

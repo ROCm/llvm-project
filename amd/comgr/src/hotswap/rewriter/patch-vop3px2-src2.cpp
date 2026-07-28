@@ -98,6 +98,7 @@ static uint32_t applyVop3px2Src2FixImpl(PatchContext &Ctx) {
     ++Scanned;
 
     if (patchScaleSrc2(Ctx.Text + DI.Offset)) {
+      noteCurrentTextMutation(Ctx);
       log() << "hotswap: VOP3PX2 SRC2 fix at 0x" << utohexstr(DI.Offset) << ": "
             << DI.Mnemonic << " scale_src2 -> VGPR0\n";
       ++Patched;

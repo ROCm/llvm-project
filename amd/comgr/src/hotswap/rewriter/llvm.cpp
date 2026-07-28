@@ -363,6 +363,11 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_endpgm_saved", "s_endpgm_saved", S,
                                      S.SEndPgmSavedOpcode))
     return S;
+  if (!resolveRequiredOpcodeViaParse("s_rfe_i64 s[0:1]", "s_rfe_i64", S,
+                                     S.SRfeI64Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_trap 0", "s_trap", S, S.STrapOpcode))
+    return S;
   if (!resolveRequiredOpcodeViaParse("s_add_pc_i64 0", "s_add_pc_i64", S,
                                      S.SAddPcI64Opcode))
     return S;
@@ -507,6 +512,7 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
     MCInst Inst;
     uint32_t Size;
     std::string Mnemonic;
+    bool DecodeSoftFailed;
   };
   StringMap<DecodeCacheEntry> LocalCache;
   while (Pos < TextSize) {
@@ -522,7 +528,9 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       DI.Size = It->second.Size;
       DI.Inst = It->second.Inst;
       DI.Mnemonic = It->second.Mnemonic;
-      // Only successful decodes are stored, so a hit is always a success.
+      DI.DecodeSoftFailed = It->second.DecodeSoftFailed;
+      // Only non-failing decodes are stored, so a hit always recovered an
+      // instruction. Preserve SoftFail separately for safety-proof callers.
       DI.DecodeSucceeded = true;
       Pos += DI.Size;
       Decoded.emplace_back(std::move(DI));
@@ -539,6 +547,7 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       DI.Mnemonic = UnknownMnemonic.str();
     } else {
       DI.DecodeSucceeded = true;
+      DI.DecodeSoftFailed = Status == MCDisassembler::SoftFail;
       DI.Size = static_cast<uint32_t>(InstSize);
       // MCInstPrinter::getMnemonic returns a pointer into the generated AsmStrs
       // table. Storage is process-lifetime static; the trailing whitespace
@@ -553,11 +562,13 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
         DI.Mnemonic = UnknownMnemonic.str();
       }
     }
-    // Cache only successful decodes whose key window covers the instruction
-    // (Size <= KeyN); a shorter key could alias a different decode.
+    // Cache only non-failing decodes whose key window covers the instruction
+    // (Size <= KeyN); preserve SoftFail in the entry. A shorter key could
+    // alias a different decode.
     if (Status != MCDisassembler::Fail && DI.Size <= KeyN)
-      LocalCache.try_emplace(Key,
-                             DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic});
+      LocalCache.try_emplace(
+          Key,
+          DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic, DI.DecodeSoftFailed});
     Pos += DI.Size;
     Decoded.emplace_back(std::move(DI));
   }
