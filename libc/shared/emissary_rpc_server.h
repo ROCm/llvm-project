@@ -69,9 +69,24 @@ typedef EmissaryReturn_t (*EmissaryHandler_t)(char *data, emisArgBuf_t *ab,
 
 namespace emissary_registry_detail {
 /// Backing table, indexed directly by Emissary API id. As a C++17 inline
-/// variable it has exactly one instance across the whole program.
+/// variable it has exactly one instance across the whole program, but that
+/// only holds across shared objects if the symbol keeps default visibility
+/// *and* the linker is told to export it. Two things are needed to make that
+/// true even when a consuming DSO is linked with an explicit
+/// `--version-script` (as libomptarget/liboffload are) and/or
+/// -fvisibility-inlines-hidden (LLVM's default project-wide flag), either of
+/// which would otherwise localize this vague-linkage symbol into each DSO and
+/// silently defeat the cross-DSO sharing this registry depends on:
+///  1. Explicit default visibility, so the compiler doesn't hide it.
+///  2. A stable `asm` symbol name, so it can be listed by name in a
+///     `--version-script` `global:` clause without embedding an
+///     Itanium-mangled C++ symbol (`_ZN...`) in linker input -- mangled names
+///     are an ABI/compiler-version implementation detail, not something
+///     version scripts should hardcode.
 /// \internal
-inline EmissaryHandler_t Table[EMISSARY_MAX_REGISTERED_IDS] = {};
+__attribute__((visibility("default")))
+inline EmissaryHandler_t Table[EMISSARY_MAX_REGISTERED_IDS] asm(
+    "EmissaryRegistryTable") = {};
 } // namespace emissary_registry_detail
 
 extern "C" {
@@ -86,6 +101,10 @@ extern "C" {
 ///   \p handler is null, or a *different* handler is already registered for
 ///   \p emisid. Re-registering the identical handler is idempotent and
 ///   succeeds.
+///
+/// Explicit default visibility (see \c Table above): this symbol must merge
+/// across DSOs even when the caller is built with -fvisibility-inlines-hidden.
+__attribute__((visibility("default")))
 inline bool EmissaryRegister(unsigned int emisid, EmissaryHandler_t handler) {
   if (emisid >= EMISSARY_MAX_REGISTERED_IDS || handler == nullptr)
     return false;
@@ -103,6 +122,10 @@ inline bool EmissaryRegister(unsigned int emisid, EmissaryHandler_t handler) {
 /// \param emisid the Emissary API id to look up.
 /// \returns the registered handler, or null if \p emisid is out of range or no
 ///   handler is registered for it.
+///
+/// Explicit default visibility (see \c Table above): this symbol must merge
+/// across DSOs even when the caller is built with -fvisibility-inlines-hidden.
+__attribute__((visibility("default")))
 inline EmissaryHandler_t EmissaryLookup(unsigned int emisid) {
   if (emisid >= EMISSARY_MAX_REGISTERED_IDS)
     return nullptr;
@@ -111,28 +134,28 @@ inline EmissaryHandler_t EmissaryLookup(unsigned int emisid) {
 
 } // extern "C"
 
-// EmissaryMPI and EmissaryHDF5 are no longer declared or called here: their
-// client libraries self-register with the runtime registry defined above, so
-// EmissaryTop dispatches them without a compile-time weak symbol or switch
-// case.
+// No Emissary API host handler is declared or called here by name anymore.
+// Every client -- MPI, HDF5, PRINT, and RESERVE -- self-registers its host
+// dispatcher with the runtime registry defined above, so EmissaryTop routes all
+// of them through EmissaryLookup without a compile-time weak symbol or switch
+// case. PRINT is the toolchain-provided built-in; it self-registers from this
+// header (see emissary_print_self_register below). RESERVE is registered by the
+// user/reserved client library. EMIS_ID_FORTRT is a reserved wire-format id
+// with no current provider: device Fortran I/O is serviced by flang-rt's own
+// generic RPC path, not through Emissary. If a future Fortran runtime routes
+// I/O through Emissary, it would self-register EMIS_ID_FORTRT the same way.
 extern "C" {
-/// Called by EmissaryTop to support user-defined emissary API
-__attribute((weak)) EmissaryReturn_t EmissaryReserve(char *data,
-                                                     emisArgBuf_t *ab,
-                                                     emis_argptr_t *arg[]);
 /// Optional FORCE_OPT=1 SDMA path for device MPI Put/Get (libemissary_mpi).
-/// Weak stub: libLLVMOffload links without libemissary_mpi; the app overrides
-/// with a strong definition from libemissary_mpi when FORCE_OPT SDMA is used.
+/// This is an internal optimization hook, not an Emissary API, so it keeps its
+/// weak-stub design: libLLVMOffload links without libemissary_mpi; the app
+/// overrides with a strong definition from libemissary_mpi when FORCE_OPT SDMA
+/// is used.
 __attribute__((weak)) int emissary_mpi_sdma_try_dm_buffer(
     char *rpc_buffer, unsigned long long *out_result) {
   (void)rpc_buffer;
   (void)out_result;
   return -1;
 }
-/// Called by EmissaryTop to support Fortran IO runtime
-__attribute((weak)) EmissaryReturn_t EmissaryFortrt(char *data,
-                                                    emisArgBuf_t *ab,
-                                                    emis_argptr_t *arg[]);
 } // end extern "C"
 
 namespace rpc {
@@ -621,7 +644,14 @@ static service_rc emissary_fprintf(uint *rc, emisArgBuf_t *ab) {
   return _ERC_SUCCESS;
 }
 
-static EmissaryReturn_t EmissaryPrint(char *data, emisArgBuf_t *ab) {
+// PRINT host dispatcher. It matches EmissaryHandler_t so it can be stored in
+// the runtime registry like every other client, even though it services printf
+// entirely from the raw argument buffer and does not consult the unpacked
+// argument vector (args is intentionally unused).
+static EmissaryReturn_t EmissaryPrint(char *data, emisArgBuf_t *ab,
+                                      emis_argptr_t *args[]) {
+  (void)data;
+  (void)args;
   uint32_t return_value;
   service_rc rc;
   switch (ab->emisfnid) {
@@ -654,69 +684,58 @@ static EmissaryReturn_t EmissaryPrint(char *data, emisArgBuf_t *ab) {
   return (EmissaryReturn_t)return_value;
 }
 
+// Self-registration of the built-in PRINT service. Unlike MPI/HDF5/RESERVE,
+// PRINT is provided by the toolchain rather than a separate client library, so
+// it registers from this header: any RPC server translation unit that includes
+// <emissary_rpc_server.h> (the offload runtime and the demo servers) gains
+// printf/fprintf support automatically. The constructor is static so it does
+// not collide across translation units, and EmissaryRegister is idempotent, so
+// redundant registration from multiple includers is harmless.
+namespace emissary_registry_detail {
+__attribute__((constructor)) static void emissary_print_self_register(void) {
+  EmissaryRegister(EMIS_ID_PRINT, &EmissaryPrint);
+}
+} // namespace emissary_registry_detail
+
 static EmissaryReturn_t
 EmissaryTop(char *data, emisArgBuf_t *ab,
             std::unordered_map<void *, void *> *D2HAddrList) {
-  EmissaryReturn_t result = 0;
-  emis_argptr_t **args = (emis_argptr_t **)aligned_alloc(
-      sizeof(emis_argptr_t), ab->NumArgs * sizeof(emis_argptr_t *));
-
-  // Registry fast path (D1): if a client has registered a handler for this API
-  // id, dispatch to it and skip the per-client switch below. PRINT is handled
-  // inline by the switch (it needs no unpacked argument vector), so it is
-  // intentionally never looked up here. This is additive: ids without a
-  // registered handler fall through to the existing switch unchanged.
-  EmissaryHandler_t handler =
-      (ab->emisid == EMIS_ID_PRINT) ? nullptr : EmissaryLookup(ab->emisid);
-  if (handler != nullptr) {
-    if (EmissaryBuildVargs(ab->NumArgs, ab->keyptr, ab->argptr, ab->strptr,
-                           &(ab->data_not_used), &args[0],
-                           D2HAddrList) != _ERC_SUCCESS) {
-      free(args);
-      return (EmissaryReturn_t)0;
-    }
-    result = handler(data, ab, args);
-    free(args);
-    return result;
-  }
-
-  switch (ab->emisid) {
-  case EMIS_ID_INVALID: {
+  // Registry-only dispatch (D1): every Emissary API -- MPI, HDF5, PRINT,
+  // RESERVE, and any out-of-tree client -- is serviced through the runtime
+  // registry. A client's handler is present because its library (or, for the
+  // built-in PRINT service, this header) self-registered at load time. There is
+  // no per-client switch and no weak symbol fallback: an unregistered id (for
+  // example the reserved-but-unused EMIS_ID_FORTRT) is simply unsupported.
+  if (ab->emisid == EMIS_ID_INVALID) {
     fprintf(stderr, "Emissary (host execution) got invalid EMIS_ID\n");
-    result = 0;
-    break;
-  }
-  case EMIS_ID_PRINT: {
-    result = EmissaryPrint(data, ab);
-    break;
-  }
-  // EMIS_ID_MPI and EMIS_ID_HDF5 are no longer handled here: libemissary_mpi
-  // and libemissary_hdf5 register their host dispatchers through the registry
-  // (D1), so they are serviced by the registry fast path above. FORTRT and
-  // RESERVE remain on the switch as the documented "still on the legacy path"
-  // example.
-  case EMIS_ID_FORTRT: {
-    if (EmissaryBuildVargs(ab->NumArgs, ab->keyptr, ab->argptr, ab->strptr,
-                           &(ab->data_not_used), &args[0],
-                           D2HAddrList) != _ERC_SUCCESS)
-      return (EmissaryReturn_t)0;
-    result = EmissaryFortrt(data, ab, args);
-    break;
+    return (EmissaryReturn_t)0;
   }
 
-  case EMIS_ID_RESERVE: {
-    if (EmissaryBuildVargs(ab->NumArgs, ab->keyptr, ab->argptr, ab->strptr,
-                           &(ab->data_not_used), &args[0],
-                           D2HAddrList) != _ERC_SUCCESS)
-      return (EmissaryReturn_t)0;
-    result = EmissaryReserve(data, ab, args);
-    break;
-  }
-  default:
+  EmissaryHandler_t handler = EmissaryLookup(ab->emisid);
+  if (handler == nullptr) {
     fprintf(stderr,
             "Emissary (host execution) EMIS_ID:%d fnid:%d not supported\n",
             ab->emisid, ab->emisfnid);
+    return (EmissaryReturn_t)0;
   }
+
+  emis_argptr_t **args = (emis_argptr_t **)aligned_alloc(
+      sizeof(emis_argptr_t), ab->NumArgs * sizeof(emis_argptr_t *));
+
+  // Build the unpacked argument vector against a scratch copy of data_not_used
+  // so the buffer descriptor (ab) is left pristine for the handler. PRINT walks
+  // the raw buffer itself and relies on ab->data_not_used being intact; the
+  // other handlers use only the argument vector, so this is safe for all of
+  // them and keeps a single uniform dispatch path.
+  unsigned long long data_not_used = ab->data_not_used;
+  if (EmissaryBuildVargs(ab->NumArgs, ab->keyptr, ab->argptr, ab->strptr,
+                         &data_not_used, &args[0],
+                         D2HAddrList) != _ERC_SUCCESS) {
+    free(args);
+    return (EmissaryReturn_t)0;
+  }
+
+  EmissaryReturn_t result = handler(data, ab, args);
   free(args);
   return result;
 }
