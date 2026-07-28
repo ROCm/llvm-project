@@ -1316,6 +1316,8 @@ struct DirectControlFlowInfo {
 // "validated unreachable", and "reachable but ambiguous" so a required WMMA
 // split can fail closed when the incoming mode cannot be proven. See
 // comgr-hotswap-patch-wmma-split.cpp.
+inline constexpr unsigned VgprBankSize = 256;
+inline constexpr unsigned VgprMsbBankCount = 4;
 inline constexpr int8_t VgprMsbUnanalyzed = -3;
 inline constexpr int8_t VgprMsbUnreachable = -2;
 inline constexpr int8_t VgprMsbUnknown = -1;
@@ -1388,18 +1390,6 @@ struct PatchContext {
   bool HasUnresolvedPendingTrampoline = false;
 };
 
-<<<<<<< HEAD
-/// Textual AMDGPU assembly names v0-v255, so one VGPR-MSB bank is 256
-/// registers wide and a physical register's low byte is its name within the
-/// bank selected for its operand role.
-inline constexpr unsigned VgprBankSize = 256;
-
-/// Each operand role carries two VGPR-MSB bits, so a role selects one of four
-/// banks (v0-v255, v256-v511, v512-v767, v768-v1023).
-inline constexpr unsigned VgprMsbBankCount = 4;
-
-=======
->>>>>>> fb2143bd91 ([comgr][hotswap] upstream review snapshot: finite indirect control flow)
 enum class VgprMsbOperand : unsigned {
   Src0 = 0,
   Src1 = 2,

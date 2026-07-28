@@ -1127,7 +1127,7 @@ unsafeIncomingNumberedSgprsInRange(ArrayRef<InternalDecodedInst> Decoded,
   auto FindInstruction = [&](uint64_t Offset) -> std::optional<size_t> {
     if (Offset < FunctionBegin || Offset >= FunctionEnd)
       return std::nullopt;
-    auto It =
+    ArrayRef<InternalDecodedInst>::const_iterator It =
         std::lower_bound(Decoded.begin(), Decoded.end(), Offset,
                          [](const InternalDecodedInst &DI, uint64_t Target) {
                            return DI.Offset < Target;
@@ -1153,7 +1153,8 @@ unsafeIncomingNumberedSgprsInRange(ArrayRef<InternalDecodedInst> Decoded,
       Unsafe |= Incoming;
       return;
     }
-    auto It = IncomingAt.try_emplace(*Successor, MaxSgprs).first;
+    DenseMap<size_t, BitVector>::iterator It =
+        IncomingAt.try_emplace(*Successor, MaxSgprs).first;
     BitVector NewValues = Incoming;
     NewValues.reset(It->second);
     if (NewValues.none())
@@ -3555,9 +3556,15 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     ArrayRef<BoundedSetPcReturn> BoundedReturns,
     ArrayRef<SymbolLessReturnRegion> SymbolLessRegions) {
   FiniteControlFlowAudit Audit{BitVector(FiniteSetPcTransfers.size()), true};
-  auto markUnboundedIndirectEntry = [&]() {
+  auto markUnboundedIndirectEntry = [&](StringRef Reason,
+                                        std::optional<uint64_t> Offset =
+                                            std::nullopt) {
     Audit.Closed = false;
     Audit.HasUnboundedIndirectEntries = true;
+    log() << "hotswap: finite control-flow audit: " << Reason;
+    if (Offset)
+      log() << " at offset 0x" << utohexstr(*Offset);
+    log() << "\n";
   };
 
   for (size_t CandidateIndex = 0; CandidateIndex != FiniteSetPcTransfers.size();
@@ -3634,11 +3641,18 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
         if (!Safe)
           break;
       }
-    if (!Safe)
+    if (!Safe) {
       Audit.InvalidSetPcCandidates.set(CandidateIndex);
+      log() << "hotswap: finite set-PC candidate rejected at offset 0x"
+            << utohexstr(SequenceStart)
+            << ": reachable control-flow entry overlaps its materialization\n";
+    }
   }
 
   if (Audit.InvalidSetPcCandidates.any()) {
+    log() << "hotswap: finite-control-flow audit rejected "
+          << Audit.InvalidSetPcCandidates.count()
+          << " set-PC candidate(s)\n";
     Audit.Closed = false;
     return Audit;
   }
@@ -3663,15 +3677,19 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     for (size_t Return : Region.Returns) {
       ++ProvisionalOwners[Return];
       if (!llvm::is_contained(Region.Instructions, Return))
-        markUnboundedIndirectEntry();
+        markUnboundedIndirectEntry(
+            "symbol-less return is outside its inferred region",
+            Decoded[Return].Offset);
     }
   for (const BoundedSetPcReturn &Return : BoundedReturns)
     if (ProvisionalOwners.contains(Return.InstIndex))
       ++PublishedProvisionalReturns[Return.InstIndex];
-  for (const auto &Owner : ProvisionalOwners)
+  for (const std::pair<size_t, unsigned> &Owner : ProvisionalOwners)
     if (Owner.second != 1 ||
         PublishedProvisionalReturns.lookup(Owner.first) != 1)
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry(
+          "symbol-less return ownership is not unique",
+          Decoded[Owner.first].Offset);
 
   for (const SymbolLessReturnRegion &Region : SymbolLessRegions) {
     auto containsInstructionByte = [&](uint64_t Offset) {
@@ -3687,12 +3705,15 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     for (const BoundedSetPcReturn &Return : BoundedReturns) {
       if (llvm::is_contained(Region.Instructions, Return.InstIndex)) {
         if (!llvm::is_contained(Region.Returns, Return.InstIndex))
-          markUnboundedIndirectEntry();
+          markUnboundedIndirectEntry(
+              "bounded return is not owned by its inferred region",
+              Decoded[Return.InstIndex].Offset);
         continue;
       }
       for (uint64_t Target : Return.Targets)
         if (containsInstructionByte(Target)) {
-          markUnboundedIndirectEntry();
+          markUnboundedIndirectEntry(
+              "return from another region enters an inferred region", Target);
           break;
         }
     }
@@ -3706,36 +3727,50 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     InstructionOffsets.insert(DI.Offset);
   for (uint64_t Entry : DeclaredEntries)
     if (Entry < TextSize && !InstructionOffsets.contains(Entry))
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry(
+          "declared entry is not an instruction boundary", Entry);
   for (uint64_t Entry : ExternalEntries)
     if (Entry < TextSize && !InstructionOffsets.contains(Entry))
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry(
+          "external entry is not an instruction boundary", Entry);
   for (const ElfView::FunctionTextRange &Range : FunctionRanges)
     if (Range.Begin >= TextAddr && Range.Begin - TextAddr < TextSize &&
         !InstructionOffsets.contains(Range.Begin - TextAddr))
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry(
+          "function entry is not an instruction boundary",
+          Range.Begin - TextAddr);
   for (const DirectTargetSource &Source : Index.DirectTargetsByTarget)
     if (Reachable.test(Source.InstIndex) && Source.Target < TextSize &&
         !InstructionOffsets.contains(Source.Target))
-      markUnboundedIndirectEntry();
-  for (const KnownCallSite &Call : Index.Calls)
-    if (Reachable.test(Call.InstIndex) &&
-        ((!InstructionOffsets.contains(Call.Target) &&
-          Call.Target < TextSize) ||
-         (!InstructionOffsets.contains(Call.Continuation) &&
-          Call.Continuation < TextSize)))
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry(
+          "direct target is not an instruction boundary", Source.Target);
+  for (const KnownCallSite &Call : Index.Calls) {
+    if (!Reachable.test(Call.InstIndex))
+      continue;
+    if (Call.Target < TextSize && !InstructionOffsets.contains(Call.Target))
+      markUnboundedIndirectEntry(
+          "finite call target is not an instruction boundary", Call.Target);
+    if (Call.Continuation < TextSize &&
+        !InstructionOffsets.contains(Call.Continuation))
+      markUnboundedIndirectEntry(
+          "finite call continuation is not an instruction boundary",
+          Call.Continuation);
+  }
   for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
     if (Reachable.test(Call.InstIndex) && Call.Continuation < TextSize &&
         !InstructionOffsets.contains(Call.Continuation))
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry(
+          "external call continuation is not an instruction boundary",
+          Call.Continuation);
   for (size_t SetPc : Index.SetPcIndices)
     if (Reachable.test(SetPc) && !BoundedSetPc.test(SetPc))
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry("reachable set-PC transfer is unbounded",
+                                 Decoded[SetPc].Offset);
 
   for (size_t InstIndex : Index.UnboundedIndirectIndices)
     if (Reachable.test(InstIndex))
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry("reachable indirect transfer is unbounded",
+                                 Decoded[InstIndex].Offset);
 
   // Every call is also an indirect entry source until either a finite local
   // target or a finite external target has been recorded for it.
@@ -3748,18 +3783,22 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     if (!Reachable.test(InstIndex) || !LS.MIA->isCall(Decoded[InstIndex].Inst))
       continue;
     if (!FiniteCalls.test(InstIndex))
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry("reachable call target is unresolved",
+                                 Decoded[InstIndex].Offset);
   }
   for (const BoundedSetPcReturn &Return : BoundedReturns) {
     if (!Reachable.test(Return.InstIndex))
       continue;
     for (uint64_t Target : Return.Targets)
       if (Target < TextSize && !InstructionOffsets.contains(Target))
-        markUnboundedIndirectEntry();
+        markUnboundedIndirectEntry(
+            "bounded return target is not an instruction boundary", Target);
   }
   for (int I = Reachable.find_first(); I >= 0; I = Reachable.find_next(I))
     if (!Decoded[static_cast<size_t>(I)].DecodeSucceeded)
-      markUnboundedIndirectEntry();
+      markUnboundedIndirectEntry(
+          "reachable instruction failed to decode",
+          Decoded[static_cast<size_t>(I)].Offset);
   return Audit;
 }
 
@@ -3998,6 +4037,9 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           SymbolLessRegions);
     }
     if (!Audit.Closed && !EnabledSetPcTransfers.empty()) {
+      log() << "hotswap: finite-control-flow audit collapsed with "
+            << EnabledSetPcTransfers.size()
+            << " enabled set-PC transfer(s); rebuilding from roots\n";
       for (const FiniteSetPcTransfer &Enabled : EnabledSetPcTransfers)
         for (size_t J = 0; J != AllSetPcCandidates.size(); ++J)
           if (AllSetPcCandidates[J].InstIndex == Enabled.InstIndex) {
@@ -4014,12 +4056,13 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     break;
   }
 
-  for (const FiniteSetPcTransfer &Transfer : EnabledSetPcTransfers) {
-    SmallVector<uint64_t, 2> Targets;
-    if (Transfer.LocalTargetIndex)
-      Targets.push_back(Decoded[*Transfer.LocalTargetIndex].Offset);
-    BoundedReturns.push_back({Transfer.InstIndex, std::move(Targets)});
-  }
+  if (IndirectControlFlowClosed)
+    for (const FiniteSetPcTransfer &Transfer : EnabledSetPcTransfers) {
+      SmallVector<uint64_t, 2> Targets;
+      if (Transfer.LocalTargetIndex)
+        Targets.push_back(Decoded[*Transfer.LocalTargetIndex].Offset);
+      BoundedReturns.push_back({Transfer.InstIndex, std::move(Targets)});
+    }
   indexKnownCalls(*Index);
 
   // A non-closed object cannot publish bounded indirect transfers, but a

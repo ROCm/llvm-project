@@ -409,22 +409,14 @@ bool hasUnencodableVgprName(StringRef Asm) {
     StringRef Tail = Asm.substr(Pos + 1);
     Tail.consume_front("[");
     unsigned Index = 0;
-<<<<<<< HEAD
     if (!Tail.consumeInteger(10, Index) && Index >= VgprBankSize)
-=======
-    if (!Tail.consumeInteger(10, Index) && Index > 255)
->>>>>>> fb2143bd91 ([comgr][hotswap] upstream review snapshot: finite indirect control flow)
       return true;
   }
   return false;
 }
 
-<<<<<<< HEAD
 bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role,
                           unsigned OldMode, unsigned &NewMode,
-=======
-bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role, unsigned &Mode,
->>>>>>> fb2143bd91 ([comgr][hotswap] upstream review snapshot: finite indirect control flow)
                           std::string &Output) {
   StringRef Operand = Input.trim();
   StringRef Suffix;
@@ -449,7 +441,6 @@ bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role, unsigned &Mode,
   if (LoText.empty() || HiText.empty())
     return false;
 
-<<<<<<< HEAD
   unsigned EncodedLo = 0;
   unsigned EncodedHi = 0;
   if (LoText.getAsInteger(10, EncodedLo) ||
@@ -473,22 +464,6 @@ bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role, unsigned &Mode,
                  .str();
   else
     Output = ("v" + Twine(Lo % VgprBankSize) + Suffix).str();
-=======
-  unsigned Lo = 0;
-  unsigned Hi = 0;
-  if (LoText.getAsInteger(10, Lo) || HiText.getAsInteger(10, Hi) || Hi < Lo ||
-      Lo / 256 != Hi / 256)
-    return false;
-  unsigned Bank = Lo / 256;
-  if (Bank > 3)
-    return false;
-  setVgprMsbBank(Mode, Role, Bank);
-  if (IsRange)
-    Output =
-        ("v[" + Twine(Lo & 255) + ":" + Twine(Hi & 255) + "]" + Suffix).str();
-  else
-    Output = ("v" + Twine(Lo & 255) + Suffix).str();
->>>>>>> fb2143bd91 ([comgr][hotswap] upstream review snapshot: finite indirect control flow)
   return true;
 }
 
@@ -519,11 +494,7 @@ normalizeDsVgprBanks(StringRef Asm, StringRef FromMnem, unsigned OldMode) {
   std::string Normalized = Mnem.str();
   for (unsigned I = 0; I != Operands.size(); ++I) {
     std::string Operand;
-<<<<<<< HEAD
     if (!normalizeVgprOperand(Operands[I], Roles[I], OldMode, NewMode, Operand))
-=======
-    if (!normalizeVgprOperand(Operands[I], Roles[I], NewMode, Operand))
->>>>>>> fb2143bd91 ([comgr][hotswap] upstream review snapshot: finite indirect control flow)
       return std::nullopt;
     Normalized += I == 0 ? " " : ", ";
     Normalized += Operand;
