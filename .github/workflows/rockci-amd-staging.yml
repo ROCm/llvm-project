@@ -51,7 +51,7 @@ on:
         description: "If provided, the tests will run on this artifact ID"
         default: ""
   pull_request:
-    branches: [amd-staging]
+    branches: [amd-staging, users/lambj/hotswap-reduced-ci-testbase]
     types:
       - labeled
       - opened
@@ -88,12 +88,19 @@ jobs:
     with:
       build_variant: "release"
 
+  # Hotswap-only PRs are fully validated by the Multi-Arch workflow's
+  # compiler-runtime stage (builds comgr + runs COMGR lit/ctest). This legacy
+  # workflow therefore builds nothing for them and only clears its required check.
+  classify:
+    uses: ./.github/workflows/classify_hotswap.yml
+
   linux_build_and_test:
     name: Linux::${{ matrix.variant.family }}::${{ matrix.variant.build_variant_label }}
-    needs: setup
+    needs: [setup, classify]
     if: >-
       ${{
-        needs.setup.outputs.linux_variants != '[]'
+        needs.setup.outputs.linux_variants != '[]' &&
+        needs.classify.outputs.hotswap_only != 'true'
       }}
     strategy:
       fail-fast: false
@@ -124,10 +131,11 @@ jobs:
 
   windows_build_and_test:
     name: Windows::${{ matrix.variant.family }}::${{ matrix.variant.build_variant_label }}
-    needs: setup
+    needs: [setup, classify]
     if: >-
       ${{
-        needs.setup.outputs.windows_variants != '[]'
+        needs.setup.outputs.windows_variants != '[]' &&
+        needs.classify.outputs.hotswap_only != 'true'
       }}
     strategy:
       fail-fast: false
@@ -155,6 +163,33 @@ jobs:
   # build_python_packages:
   #   name: Build Python Packages
   #   uses: ./.github/workflows/build_python_packages.yml
+
+  # Hotswap-only PRs skip the build/test matrix above, so the required
+  # 'gfx90a Test' check never posts and would block merge. Synthesize it.
+  # The real hotswap gate is the Multi-Arch workflow's compiler-runtime build
+  # (its own required check is only synthesized green when that build succeeds).
+  # Keep CONTEXT in lockstep with the amd-staging ruleset (ROCm/llvm-project
+  # ruleset 9057712) required_status_checks entry.
+  hotswap_required_check_shim:
+    name: Hotswap Required Check Shim
+    needs: classify
+    if: ${{ !cancelled() && needs.classify.outputs.hotswap_only == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Post synthesized success for skipped gfx90a Test required check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          CONTEXT: "gfx90a Test"
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/${REPO}/statuses/${SHA}" \
+            -f state=success \
+            -f context="${CONTEXT}" \
+            -f description="Skipped: hotswap-only PR (validated by Multi-Arch compiler-runtime build)"
 
   ci_summary:
     name: CI Summary

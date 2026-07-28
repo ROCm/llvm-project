@@ -42,6 +42,10 @@ on:
         type: string
         default: ""
         description: "Comma-separated build stages to skip (artifacts already copied by the orchestrator)"
+      compiler_runtime_only:
+        type: string
+        default: "false"
+        description: "'true' -> build only the generic compiler-runtime stage (hotswap-only PRs); skip all downstream per-arch/tool stages."
       release_type:
         description: 'Release type: "" for CI, or "dev", "nightly", "prerelease".'
         type: string
@@ -78,7 +82,7 @@ jobs:
   # ==========================================================================
   runtime-tests:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'runtime-tests') }}
+    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'runtime-tests') && inputs.compiler_runtime_only != 'true' }}
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:
@@ -100,7 +104,7 @@ jobs:
   math-libs:
     needs: compiler-runtime
     #if: ${{ false }} #Temporary disable
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'math-libs') }}
+    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'math-libs') && inputs.compiler_runtime_only != 'true' }}
     strategy:
       # `fail-fast: false` lets all families complete even if one fails.
       # This is useful for CI (to see all failures at once), but for releases
@@ -131,7 +135,7 @@ jobs:
   # ==========================================================================
   comm-libs:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'comm-libs') }}
+    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'comm-libs') && inputs.compiler_runtime_only != 'true' }}
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:
@@ -153,7 +157,7 @@ jobs:
   # ==========================================================================
   debug-tools:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'debug-tools') }}
+    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'debug-tools') && inputs.compiler_runtime_only != 'true' }}
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:
@@ -174,7 +178,7 @@ jobs:
   # ==========================================================================
   dctools-core:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'dctools-core') }}
+    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'dctools-core') && inputs.compiler_runtime_only != 'true' }}
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:
@@ -221,7 +225,7 @@ jobs:
   # ==========================================================================
   media-libs:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'media-libs') }}
+    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'media-libs') && inputs.compiler_runtime_only != 'true' }}
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:

@@ -1,0 +1,80 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Classify whether a PR is "hotswap-only".
+#
+# A PR is hotswap-only iff it has at least one changed file and EVERY changed
+# file matches the hotswap allowlist below. When true, callers run only the
+# generic `compiler-runtime` build stage (which builds comgr and runs the COMGR
+# lit + ctest suites, exercising the hotswap tests) and skip the per-arch stages,
+# GPU test fan-out, and packaging.
+#
+# Conservative by design: any path outside the allowlist (including
+# amd/comgr/CMakeLists.txt, amd/comgr/test-lit/CMakeLists.txt, shared headers,
+# .github/**, etc.) flips the result to false -> full CI. Non-pull_request events
+# are always false.
+
+name: Classify Hotswap
+
+on:
+  workflow_call:
+    outputs:
+      hotswap_only:
+        description: "'true' if every changed PR file is in the hotswap allowlist, else 'false'."
+        value: ${{ jobs.classify.outputs.hotswap_only }}
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    runs-on: ubuntu-24.04
+    outputs:
+      hotswap_only: ${{ steps.detect.outputs.hotswap_only }}
+    steps:
+      - name: Detect hotswap-only change set
+        id: detect
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" != "pull_request" || -z "${PR_NUMBER}" ]]; then
+            echo "Not a pull_request event; hotswap_only=false"
+            echo "hotswap_only=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          files="$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/files" \
+            --jq '.[].filename')"
+
+          if [[ -z "${files}" ]]; then
+            echo "No changed files reported; hotswap_only=false"
+            echo "hotswap_only=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "Changed files:"
+          echo "${files}"
+
+          hotswap_only=true
+          while IFS= read -r f; do
+            [[ -z "${f}" ]] && continue
+            case "${f}" in
+              amd/comgr/src/hotswap/*) ;;
+              amd/comgr/test-lit/hotswap/*) ;;
+              amd/comgr/test-unit/hotswap/*) ;;
+              amd/comgr/test-lit/comgr-sources/hotswap*) ;;
+              amd/comgr/utils/*hotswap*) ;;
+              *)
+                echo "Non-hotswap path forces full CI: ${f}"
+                hotswap_only=false
+                break
+                ;;
+            esac
+          done <<< "${files}"
+
+          echo "hotswap_only=${hotswap_only}"
+          echo "hotswap_only=${hotswap_only}" >> "${GITHUB_OUTPUT}"
