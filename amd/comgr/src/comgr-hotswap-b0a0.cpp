@@ -9693,7 +9693,8 @@ assignLongBranchGateways(PatchContext &Ctx,
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        ArrayRef<uint8_t> Replacement,
-                                       bool PreferNopSled) {
+                                       bool PreferNopSled,
+                                       bool DeferPreferredLocalPlacement) {
   std::optional<uint64_t> ReturnTo = checkedAddUint64(
       InstOffset, InstSize, "replacement trampoline return target");
   std::optional<uint64_t> PoolReturnFrom =
@@ -9726,7 +9727,8 @@ assignLongBranchGateways(PatchContext &Ctx,
   // two registerless island chains when the appended pool is far away. The
   // preferred ranges are zero/NOP padding after proven no-fallthrough code,
   // with a routing tail removed from each range before patching begins.
-  if (PreferNopSled && !Ctx.DirectControlFlow.HasUnresolvedTargets) {
+  if (PreferNopSled && !DeferPreferredLocalPlacement &&
+      !Ctx.DirectControlFlow.HasUnresolvedTargets) {
     uint64_t Needed = Replacement.size() + MinInstSize;
     if (NopSled *Sled = findNearestSled(Ctx.PreferredLocalReplacementSleds,
                                         InstOffset, Needed)) {
@@ -9744,6 +9746,196 @@ assignLongBranchGateways(PatchContext &Ctx,
     }
   }
   return emitToTrampoline(Ctx, InstOffset, InstSize, Replacement);
+}
+
+static void placeDs2BodiesByMaximumMatching(PatchContext &Ctx) {
+  struct Slot {
+    uint64_t Offset = 0;
+  };
+  struct Interval {
+    size_t CandidateIndex = 0;
+    size_t FirstSlot = 0;
+    size_t LastSlot = 0;
+  };
+
+  DenseMap<uint64_t, size_t> TrampolineAtSource;
+  for (size_t I = 0; I != Ctx.OutTrampolines.size(); ++I)
+    TrampolineAtSource[Ctx.OutTrampolines[I].OriginalOffset] = I;
+
+  constexpr uint64_t SlotBytes = 6 * MinInstSize;
+  SmallVector<Slot, 0> Slots;
+  for (const NopSled &Sled : Ctx.RegisterlessFullReplacementSleds) {
+    uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+    for (uint64_t Offset = Sled.WritePos;
+         Offset <= UsableEnd && SlotBytes <= UsableEnd - Offset;
+         Offset += SlotBytes)
+      Slots.push_back({Offset});
+  }
+  llvm::sort(Slots, [](const Slot &LHS, const Slot &RHS) {
+    return LHS.Offset < RHS.Offset;
+  });
+  Slots.erase(std::unique(Slots.begin(), Slots.end(),
+                          [](const Slot &LHS, const Slot &RHS) {
+                            return LHS.Offset == RHS.Offset;
+                          }),
+              Slots.end());
+
+  auto CanPlaceAt = [](const DeferredDs2LocalPlacement &Candidate,
+                       uint64_t Offset) {
+    std::optional<uint64_t> ReturnFrom =
+        checkedAddUint64(Offset, Candidate.Replacement.size(),
+                         "maximum-matching DS2 local return offset");
+    std::optional<uint64_t> ReturnTo =
+        checkedAddUint64(Candidate.OriginalOffset, Candidate.OriginalSize,
+                         "maximum-matching DS2 continuation");
+    return ReturnFrom && ReturnTo &&
+           isSBranchReachable(Candidate.OriginalOffset, Offset) &&
+           isSBranchReachable(*ReturnFrom, *ReturnTo);
+  };
+
+  SmallVector<Interval, 0> HardIntervals;
+  SmallVector<Interval, 0> PairBackedIntervals;
+  uint64_t OversizedHardCandidates = 0;
+  uint64_t OversizedPairBackedCandidates = 0;
+  for (size_t I = 0; I != Ctx.DeferredDs2LocalPlacements.size(); ++I) {
+    const DeferredDs2LocalPlacement &Candidate =
+        Ctx.DeferredDs2LocalPlacements[I];
+    DenseMap<uint64_t, size_t>::const_iterator TrampolineIt =
+        TrampolineAtSource.find(Candidate.OriginalOffset);
+    if (TrampolineIt == TrampolineAtSource.end())
+      continue;
+    const Trampoline &T = Ctx.OutTrampolines[TrampolineIt->second];
+    if (!T.Long)
+      continue;
+    if (Candidate.Replacement.size() + MinInstSize > SlotBytes) {
+      if (T.UsesSetPCBack)
+        ++OversizedPairBackedCandidates;
+      else
+        ++OversizedHardCandidates;
+      continue;
+    }
+
+    uint64_t SearchRadius = MaxSledDistance + SlotBytes;
+    uint64_t SearchBegin = Candidate.OriginalOffset > SearchRadius
+                               ? Candidate.OriginalOffset - SearchRadius
+                               : 0;
+    uint64_t SearchEnd =
+        Candidate.OriginalOffset >
+                std::numeric_limits<uint64_t>::max() - SearchRadius
+            ? std::numeric_limits<uint64_t>::max()
+            : Candidate.OriginalOffset + SearchRadius;
+    SmallVector<Slot, 0>::const_iterator Begin = llvm::lower_bound(
+        Slots, SearchBegin, [](const Slot &S, uint64_t CandidateOffset) {
+          return S.Offset < CandidateOffset;
+        });
+    SmallVector<Slot, 0>::const_iterator End =
+        std::upper_bound(Slots.begin(), Slots.end(), SearchEnd,
+                         [](uint64_t CandidateOffset, const Slot &S) {
+                           return CandidateOffset < S.Offset;
+                         });
+    while (Begin != End && !CanPlaceAt(Candidate, Begin->Offset))
+      ++Begin;
+    while (Begin != End) {
+      SmallVector<Slot, 0>::const_iterator Previous = std::prev(End);
+      if (CanPlaceAt(Candidate, Previous->Offset))
+        break;
+      End = Previous;
+    }
+    if (Begin == End)
+      continue;
+    Interval CandidateInterval{I, static_cast<size_t>(Begin - Slots.begin()),
+                               static_cast<size_t>(End - Slots.begin() - 1)};
+    if (T.UsesSetPCBack)
+      PairBackedIntervals.push_back(CandidateInterval);
+    else
+      HardIntervals.push_back(CandidateInterval);
+  }
+
+  auto SortIntervals = [&](SmallVectorImpl<Interval> &Intervals) {
+    llvm::stable_sort(Intervals, [&](const Interval &LHS, const Interval &RHS) {
+      if (LHS.FirstSlot != RHS.FirstSlot)
+        return LHS.FirstSlot < RHS.FirstSlot;
+      if (LHS.LastSlot != RHS.LastSlot)
+        return LHS.LastSlot < RHS.LastSlot;
+      return Ctx.DeferredDs2LocalPlacements[LHS.CandidateIndex].OriginalOffset <
+             Ctx.DeferredDs2LocalPlacements[RHS.CandidateIndex].OriginalOffset;
+    });
+  };
+  SortIntervals(HardIntervals);
+  SortIntervals(PairBackedIntervals);
+
+  BitVector UsedSlots(Slots.size());
+  auto MatchIntervals = [&](ArrayRef<Interval> Intervals)
+      -> SmallVector<std::pair<size_t, size_t>, 0> {
+    std::set<std::pair<size_t, size_t>> Active;
+    SmallVector<std::pair<size_t, size_t>, 0> Assignments;
+    size_t NextInterval = 0;
+    for (size_t SlotIndex = 0; SlotIndex != Slots.size(); ++SlotIndex) {
+      while (NextInterval != Intervals.size() &&
+             Intervals[NextInterval].FirstSlot <= SlotIndex) {
+        Active.insert({Intervals[NextInterval].LastSlot, NextInterval});
+        ++NextInterval;
+      }
+      while (!Active.empty() && Active.begin()->first < SlotIndex)
+        Active.erase(Active.begin());
+      if (UsedSlots.test(SlotIndex) || Active.empty())
+        continue;
+      size_t IntervalIndex = Active.begin()->second;
+      Active.erase(Active.begin());
+      UsedSlots.set(SlotIndex);
+      Assignments.push_back(
+          {Intervals[IntervalIndex].CandidateIndex, SlotIndex});
+    }
+    return Assignments;
+  };
+  SmallVector<std::pair<size_t, size_t>, 0> HardAssignments =
+      MatchIntervals(HardIntervals);
+  SmallVector<std::pair<size_t, size_t>, 0> PairBackedAssignments =
+      MatchIntervals(PairBackedIntervals);
+
+  DenseSet<uint64_t> PlacedSources;
+  auto EmitAssignments = [&](ArrayRef<std::pair<size_t, size_t>> Assignments,
+                             StringRef Label) {
+    uint64_t Emitted = 0;
+    for (const std::pair<size_t, size_t> &Assignment : Assignments) {
+      const DeferredDs2LocalPlacement &Candidate =
+          Ctx.DeferredDs2LocalPlacements[Assignment.first];
+      uint64_t BodyOffset = Slots[Assignment.second].Offset;
+      NopSled SlotSled{BodyOffset, BodyOffset + SlotBytes, BodyOffset, 0,
+                       Ctx.TextSize};
+      if (!emitToNopSled(Ctx, SlotSled, Candidate.OriginalOffset,
+                         Candidate.OriginalSize, Candidate.Replacement))
+        continue;
+      PlacedSources.insert(Candidate.OriginalOffset);
+      ++Emitted;
+      log() << "hotswap: placed " << Label << " DS2 site 0x"
+            << utohexstr(Candidate.OriginalOffset)
+            << " in matched audited slot at 0x" << utohexstr(BodyOffset)
+            << "\n";
+    }
+    return Emitted;
+  };
+  uint64_t HardPlacements = EmitAssignments(HardAssignments, "registerless");
+  uint64_t PairBackedPlacements =
+      EmitAssignments(PairBackedAssignments, "pair-backed");
+
+  if (PlacedSources.empty())
+    return;
+  Ctx.OutTrampolines.erase(
+      std::remove_if(Ctx.OutTrampolines.begin(), Ctx.OutTrampolines.end(),
+                     [&](const Trampoline &T) {
+                       return PlacedSources.contains(T.OriginalOffset);
+                     }),
+      Ctx.OutTrampolines.end());
+  Ctx.QueuedTrampolineBytes = 0;
+  for (const Trampoline &T : Ctx.OutTrampolines)
+    Ctx.QueuedTrampolineBytes += T.Bytes.size();
+  log() << "hotswap: matched " << HardPlacements << " registerless and "
+        << PairBackedPlacements << " pair-backed DS2 replacement(s) into "
+        << Slots.size() << " discrete audited slot(s); "
+        << OversizedHardCandidates << " oversized hard and "
+        << OversizedPairBackedCandidates
+        << " oversized pair-backed candidate(s) skipped\n";
 }
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
@@ -9798,6 +9990,7 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
   if (!ControlFlow)
     return std::nullopt;
   std::vector<NopSled> PreferredLocalReplacementSleds;
+  std::vector<NopSled> RegisterlessFullReplacementSleds;
   if (ControlFlow->HasUnresolvedTargets) {
     log() << "hotswap: unresolved control-flow target disables NOP-sled "
              "emission, trampoline coalescing, source relocation, and .text "
@@ -9825,6 +10018,7 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
         // The later gateway scan rebuilds its view from the mutated text. A
         // set-PC-sized zero/NOP tail therefore remains spatially distributed
         // for global routing even after the prefix holds local DS2 bodies.
+        RegisterlessFullReplacementSleds.push_back(Sled);
         Sled.End -= RoutingReserveBytes;
         PreferredLocalReplacementSleds.push_back(Sled);
         ++ExposedDs2Count;
@@ -9870,6 +10064,8 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
                    *ControlFlow,   Profile,         DeclaredEntries->Entries};
   Ctx.PreferredLocalReplacementSleds =
       std::move(PreferredLocalReplacementSleds);
+  Ctx.RegisterlessFullReplacementSleds =
+      std::move(RegisterlessFullReplacementSleds);
 
   const HotswapPatchVTable &VT = getHotswapPatchVTable();
 
@@ -9954,6 +10150,7 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
 
   if (!OutTrampolines.empty()) {
     if (!ControlFlow->HasUnresolvedTargets) {
+      placeDs2BodiesByMaximumMatching(Ctx);
       mergeAdjacentLongTrampolines(OutTrampolines, ControlFlow->Targets);
       expandStraightLineTrampolines(Ctx, ControlFlow->Targets);
       mergeAdjacentLongTrampolines(OutTrampolines, ControlFlow->Targets);

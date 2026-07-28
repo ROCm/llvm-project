@@ -486,6 +486,12 @@ struct NopSled {
   bool GatewayOnly = false;
 };
 
+struct DeferredDs2LocalPlacement {
+  uint64_t OriginalOffset = 0;
+  uint32_t OriginalSize = 0;
+  llvm::SmallVector<uint8_t> Replacement;
+};
+
 struct BranchIslandAllocatorTestResult {
   bool Success = false;
   llvm::SmallVector<uint64_t, 4> Islands;
@@ -1476,10 +1482,17 @@ struct PatchContext {
   // DS2 may explicitly prefer these complete-body slots before creating a
   // trampoline. Every range excludes its final set-PC-sized routing tail.
   std::vector<NopSled> PreferredLocalReplacementSleds;
+  // Full versions of the same audited external runs. The global matcher gives
+  // hard DS2 sites first access, then fills unused slots with pair-backed
+  // bodies while preserving the exact semantic replacement bytes.
+  std::vector<NopSled> RegisterlessFullReplacementSleds;
   // Tail dwords left unreachable behind local replacement branch-forwards.
   // The closed control-flow audit proves these are safe globally distributed
   // one-dword relay slots for the later branch-island planner.
   std::vector<NopSled> LocalReplacementSourceTails;
+  // External DS2 placement is deferred until far-return scratch classification
+  // is known, allowing registerless sites to receive first claim on padding.
+  std::vector<DeferredDs2LocalPlacement> DeferredDs2LocalPlacements;
 };
 
 /// One node in the all-path proof that an incoming physical VGPR value is
@@ -1802,7 +1815,8 @@ BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement,
-                                       bool PreferNopSled = false);
+                                       bool PreferNopSled = false,
+                                       bool DeferPreferredLocalPlacement = false);
 
 /// Expand one decoded gfx1250 DS two-address instruction into the ordered
 /// single-address instruction sequence used by the trampoline patch. Exposed

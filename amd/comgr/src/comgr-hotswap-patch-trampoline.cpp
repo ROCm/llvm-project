@@ -588,13 +588,17 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   }
 
   SmallVector<uint8_t> Replacement(Bytes.begin(), Bytes.end());
+  size_t TrampolineCountBefore = Ctx.OutTrampolines.size();
   // Prefer already-present audited padding before creating a global
   // trampoline. The local detour uses only two ordinary s_branch edges and
   // therefore removes both route-planning demand and appended executable
   // growth without changing the canonical A0 DS2 sequence.
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
-                           /*PreferNopSled=*/true))
+                           /*PreferNopSled=*/true,
+                           /*DeferPreferredLocalPlacement=*/true))
     return failRequiredPatch(Ctx);
+  if (Ctx.OutTrampolines.size() != TrampolineCountBefore)
+    Ctx.DeferredDs2LocalPlacements.push_back({DI.Offset, DI.Size, Replacement});
 
   log() << "hotswap: split " << DI.Mnemonic << " at 0x" << utohexstr(DI.Offset)
         << " into canonical A0 single-address form\n";
