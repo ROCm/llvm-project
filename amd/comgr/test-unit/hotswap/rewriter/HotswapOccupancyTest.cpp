@@ -10,7 +10,74 @@
 #include "hotswap/rewriter/internal.h"
 #include "gtest/gtest.h"
 
+#include <cassert>
+
 using namespace COMGR::hotswap;
+
+namespace {
+
+RewriteConfig makeOccupancyConfig() {
+  RewriteConfig Config;
+  Config.TargetCpu = "gfx1250";
+  Config.VgprGranuleSize = 16;
+  return Config;
+}
+
+comgr_test::KernelDescriptorElf makeOccupancyElf(unsigned VgprCount) {
+  namespace hsa = llvm::amdhsa;
+
+  constexpr unsigned VgprGranule = 16;
+  assert(VgprCount != 0 && (VgprCount % VgprGranule) == 0);
+
+  uint32_t Rsrc1 = 0;
+  AMDHSA_BITS_SET(Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT,
+                  VgprCount / VgprGranule - 1);
+
+  comgr_test::KernelDescriptorElfOptions Options;
+  Options.ComputePgmRsrc1 = Rsrc1;
+  Options.MetadataVgprCount = VgprCount;
+  Options.MetadataMaxFlatWorkgroupSize = 1024;
+  Options.MetadataWavefrontSize = 32;
+  return comgr_test::makeKernelDescriptorElf(std::vector<uint8_t>(4), Options);
+}
+
+class KernelVgprBumpFixture {
+public:
+  explicit KernelVgprBumpFixture(unsigned VgprCount)
+      : Config(makeOccupancyConfig()), Obj(makeOccupancyElf(VgprCount)),
+        Elf(llvm::cantFail(
+            ElfView::create(Obj.Bytes.data(), Obj.Bytes.size()))),
+        Prof(/*Enabled=*/false), Ctx{Config,
+                                     Decoded,
+                                     Elf.textData(),
+                                     Elf.textSize(),
+                                     /*PoolBaseOffset=*/0,
+                                     LS,
+                                     Trampolines,
+                                     Sleds,
+                                     Elf,
+                                     Liveness,
+                                     KernelStats,
+                                     ScratchPatches,
+                                     ControlFlow,
+                                     Prof} {}
+
+  RewriteConfig Config;
+  comgr_test::KernelDescriptorElf Obj;
+  ElfView Elf;
+  LLVMState LS;
+  std::vector<InternalDecodedInst> Decoded;
+  std::vector<Trampoline> Trampolines;
+  std::vector<NopSled> Sleds;
+  LivenessInfo Liveness;
+  llvm::StringMap<KernelPatchStats> KernelStats;
+  std::vector<ScratchPatchInfo> ScratchPatches;
+  DirectControlFlowInfo ControlFlow;
+  HotswapProfile Prof;
+  PatchContext Ctx;
+};
+
+} // namespace
 
 TEST(HotswapOccupancy, LoadsGfx1250LimitsFromComgrIsaMetadata) {
   std::optional<SubtargetOccupancyLimits> Limits =
@@ -71,6 +138,32 @@ TEST(HotswapOccupancy, RejectsInvalidMetadata) {
   EXPECT_EQ(computeWorkgroupCapacity(128, 2048, 32, Limits), std::nullopt);
   EXPECT_EQ(computeWorkgroupCapacity(128, 1024, 0, Limits), std::nullopt);
   EXPECT_EQ(getSubtargetOccupancyLimits("not-a-gpu"), std::nullopt);
+}
+
+TEST(HotswapOccupancy, CheckKernelAllowsOccupancyNeutral176PlusOne) {
+  KernelVgprBumpFixture Fixture(/*VgprCount=*/176);
+
+  EXPECT_EQ(checkKernelVgprBump(Fixture.Ctx, "kernel", /*ExtraVgprs=*/1,
+                                PatchRequirement::Optional),
+            VgprBumpDecision::Apply);
+  EXPECT_EQ(checkKernelVgprBump(Fixture.Ctx, "kernel", /*ExtraVgprs=*/1,
+                                PatchRequirement::Required),
+            VgprBumpDecision::Apply);
+  EXPECT_FALSE(Fixture.Ctx.RequiredPatchFailed);
+}
+
+TEST(HotswapOccupancy, CheckKernelRejectsFirstDropAt128PlusOne) {
+  KernelVgprBumpFixture Fixture(/*VgprCount=*/128);
+
+  EXPECT_EQ(checkKernelVgprBump(Fixture.Ctx, "kernel", /*ExtraVgprs=*/1,
+                                PatchRequirement::Optional),
+            VgprBumpDecision::Decline);
+  EXPECT_FALSE(Fixture.Ctx.RequiredPatchFailed);
+
+  EXPECT_EQ(checkKernelVgprBump(Fixture.Ctx, "kernel", /*ExtraVgprs=*/1,
+                                PatchRequirement::Required),
+            VgprBumpDecision::Fail);
+  EXPECT_TRUE(Fixture.Ctx.RequiredPatchFailed);
 }
 
 TEST(HotswapOccupancy, RejectsPatchOutsideKnownKernelWithZeroReportedGrowth) {
