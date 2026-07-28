@@ -49,6 +49,9 @@ config.substitutions.append(
 config.substitutions.append(
     ("%llvm-readelf", _fwd(config.llvm_tools_dir, "llvm-readelf"))
 )
+config.substitutions.append(
+    ("%llvm-readobj", _fwd(config.llvm_tools_dir, "llvm-readobj"))
+)
 config.substitutions.append(("%ld.lld", _fwd(config.llvm_tools_dir, "ld.lld")))
 config.substitutions.append(("%yaml2obj", _fwd(config.llvm_tools_dir, "yaml2obj")))
 config.substitutions.append(("%FileCheck", _fwd(config.llvm_tools_dir, "FileCheck")))

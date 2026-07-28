@@ -313,12 +313,19 @@ struct Trampoline {
   uint64_t OriginalOffset = 0;
   uint32_t OriginalSize = 0;
   llvm::SmallVector<uint8_t> Bytes;
-  // When set, the pool is beyond s_branch reach. The source site branches to a
-  // nearby NOP gateway, which uses the scratch-backed gfx12 set-PC sequence
-  // to reach the pool without executing s_add_pc_i64.
+  // When set, the pool is beyond s_branch reach. The source and return edges
+  // use safe branch islands and, when a dead register pair is available, the
+  // scratch-backed gfx12 set-PC sequence. Neither executes s_add_pc_i64.
   bool Long = false;
   bool UsesSetPCBack = false;
   unsigned LongBranchSgprBase = 0;
+  // When numbered SGPRs are exhausted, a far edge may use VCC after proving
+  // that the replacement does not consume its incoming value and that VCC is
+  // dead at the continuation.
+  bool LongBranchUsesVcc = false;
+  // A wave32 far edge may preserve live VCC_LO in one safe numbered SGPR.
+  // Its source tail is a restore-and-fallthrough landing pad.
+  bool LongBranchPreservesVcc = false;
   bool HasPoolBranchIsland = false;
   uint64_t PoolBranchIslandOffset = 0;
   bool UsesShortBranchForward = false;
@@ -326,6 +333,14 @@ struct Trampoline {
   llvm::SmallVector<uint8_t> DirectSetPCForwardBytes;
   llvm::SmallVector<uint64_t, 4> ForwardBranchIslands;
   uint64_t ForwardBranchTargetOffset = 0;
+  // Dwords after the source's forward sequence are unreachable. A spare tail
+  // dword in an eight-byte or larger/coalesced source window can therefore
+  // serve as one safe, registerless relay for another far edge.
+  bool HasSourceTailBranchIsland = false;
+  uint64_t SourceTailBranchIslandOffset = 0;
+  uint64_t SourceTailBranchTargetOffset = 0;
+  llvm::SmallVector<uint64_t, 4> ReturnBranchIslands;
+  uint64_t ReturnBranchTargetOffset = 0;
   bool HasForwardGateway = false;
   uint64_t ForwardGatewayOffset = 0;
   llvm::SmallVector<uint8_t> ForwardGatewayBytes;
@@ -488,6 +503,12 @@ static constexpr uint32_t MinInstSize = 4;
 static constexpr uint32_t SetPcReturnReserveBytes = 20;
 
 static constexpr uint32_t SetPcForwardSequenceBytes = SetPcReturnReserveBytes;
+static constexpr uint32_t VccSaveRestoreBytes = MinInstSize;
+static constexpr uint32_t VccPreservingReturnReserveBytes =
+    VccSaveRestoreBytes + SetPcReturnReserveBytes;
+static constexpr uint32_t VccLandingPadBytes = MinInstSize;
+static constexpr uint32_t VccPreservingSourceBytes =
+    MinInstSize + VccLandingPadBytes;
 static constexpr uint32_t PoolBranchIslandBytes = MinInstSize;
 
 // s_branch encoding: 16-bit signed dword offset field bounds. Used by
@@ -569,6 +590,12 @@ public:
   /// Enumerate function symbol ranges in `.text` using virtual addresses.
   /// Zero-size symbols extend to the next function symbol or `.text` end.
   std::vector<FunctionTextRange> functionTextRanges() const;
+
+  /// Validate that an object with a present, empty `.text` section contains
+  /// data only: no executable section contents, no defined function/ifunc
+  /// symbols, no kernel descriptor symbols, and no AMDGPU metadata kernel
+  /// entries. Malformed symbol tables, notes, or metadata fail closed.
+  bool isValidDataOnlyObject() const;
 
   /// Find the kernel function symbol whose range includes \p TextAddress.
   /// Returns "" if no matching function symbol exists.
@@ -857,6 +884,11 @@ struct LLVMState {
   unsigned SAddCoI32Opcode = 0;
   unsigned SAddU32Opcode = 0;
   unsigned SAddcU32Opcode = 0;
+  unsigned SCompareGeI32Opcode = 0;
+  unsigned SBranchScc1Opcode = 0;
+  unsigned SAbsI32Opcode = 0;
+  unsigned SSubU32Opcode = 0;
+  unsigned SSubbU32Opcode = 0;
   unsigned SSetPcI64Opcode = 0;
 
   /// MC identities used by far-trampoline relocation analysis. Each opcode is
@@ -1269,6 +1301,12 @@ struct DirectControlFlowInfo {
   // These do not make every instruction in their containing function a
   // potential indirect destination.
   llvm::DenseSet<uint64_t> BoundedIndirectTransfers;
+  // A reachable indirect transfer can enter bytes that are not represented
+  // by an original instruction or symbol, including synthetic source tails
+  // created while planning gateways. Keep this distinct from unresolved call
+  // targets, which conservatively disable all control-flow-sensitive
+  // mutations.
+  bool HasUnboundedIndirectEntries = false;
   bool HasUnresolvedTargets = false;
 };
 
@@ -1278,6 +1316,8 @@ struct DirectControlFlowInfo {
 // "validated unreachable", and "reachable but ambiguous" so a required WMMA
 // split can fail closed when the incoming mode cannot be proven. See
 // comgr-hotswap-patch-wmma-split.cpp.
+inline constexpr unsigned VgprBankSize = 256;
+inline constexpr unsigned VgprMsbBankCount = 4;
 inline constexpr int8_t VgprMsbUnanalyzed = -3;
 inline constexpr int8_t VgprMsbUnreachable = -2;
 inline constexpr int8_t VgprMsbUnknown = -1;
@@ -1350,15 +1390,6 @@ struct PatchContext {
   bool HasUnresolvedPendingTrampoline = false;
 };
 
-/// Textual AMDGPU assembly names v0-v255, so one VGPR-MSB bank is 256
-/// registers wide and a physical register's low byte is its name within the
-/// bank selected for its operand role.
-inline constexpr unsigned VgprBankSize = 256;
-
-/// Each operand role carries two VGPR-MSB bits, so a role selects one of four
-/// banks (v0-v255, v256-v511, v512-v767, v768-v1023).
-inline constexpr unsigned VgprMsbBankCount = 4;
-
 enum class VgprMsbOperand : unsigned {
   Src0 = 0,
   Src1 = 2,
@@ -1426,7 +1457,8 @@ struct SafeSgprScratchBlock {
 /// nullopt after logging when no block fits below RewriteConfig::MaxSgprs.
 std::optional<SafeSgprScratchBlock>
 findSafeSgprScratchBlock(PatchContext &Ctx, uint64_t TextOffset, unsigned Count,
-                         unsigned Alignment, llvm::StringRef Context);
+                         unsigned Alignment, llvm::StringRef Context,
+                         bool ReportNoSpace = true);
 
 /// Charge a previously selected global block to the kernel owning \p
 /// TextOffset. If the site is in an ordinary device function, conservatively
@@ -1506,12 +1538,15 @@ isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx, uint64_t InstOffset,
                                     uint32_t InstSize,
                                     llvm::ArrayRef<uint8_t> Replacement);
 
-/// Encode an SCC-neutral indirect long branch using the aligned SGPR pair at
-/// \p SgprBase. The displacement uses gfx12's s_add_nc_u64; no s_add_pc_i64
+/// Encode an SCC-neutral indirect long branch using either the aligned
+/// numbered pair at \p SgprBase or VCC when \p UseVcc is true. The caller must
+/// prove VCC dead across the edge or preserve its wave32 low half before
+/// selecting it. The displacement uses gfx12's s_add_nc_u64; no s_add_pc_i64
 /// is emitted.
 std::optional<llvm::SmallVector<uint8_t>>
 encodeSetPCLongBranch(const LLVMState &LS, uint64_t FromOffset,
-                      uint64_t TargetOffset, unsigned SgprBase);
+                      uint64_t TargetOffset, unsigned SgprBase,
+                      bool UseVcc = false);
 
 struct EncodedSetPcGateway {
   NopSled *Sled = nullptr;
@@ -1520,19 +1555,22 @@ struct EncodedSetPcGateway {
 
 /// Find the nearest short-branch-reachable gateway whose remaining space fits
 /// the set-PC sequence. Candidate widths are computed from the displacement;
-/// only the selected candidate is encoded. The returned plan does not advance
-/// the sled or modify text.
+/// only the selected candidate is encoded. When \p PreserveVcc is true,
+/// prepend a VCC_LO save to \p SgprBase. The returned plan does not advance the
+/// sled or modify text.
 llvm::Expected<std::optional<EncodedSetPcGateway>>
 findNearestSetPcGateway(std::vector<NopSled> &Gateways, const LLVMState &LS,
                         uint64_t FromOffset, uint64_t TargetOffset,
-                        unsigned SgprBase);
+                        unsigned SgprBase, bool UseVcc = false,
+                        bool PreserveVcc = false);
 
 /// Count set-PC gateway slots reachable from \p FromOffset, up to \p MaxSlots.
 /// Candidate widths are computed without assembly. Zero means that no
 /// candidate fits; an Error means that a reachable candidate is invalid.
 llvm::Expected<uint64_t> countReachableSetPcGatewaySlots(
     llvm::ArrayRef<NopSled> Gateways, const LLVMState &LS, uint64_t FromOffset,
-    uint64_t TargetOffset, unsigned SgprBase, uint64_t MaxSlots);
+    uint64_t TargetOffset, unsigned SgprBase, uint64_t MaxSlots,
+    bool UseVcc = false, bool PreserveVcc = false);
 
 /// Return whether an s_branch at \p From can encode \p To, including the
 /// instruction-relative PC base, alignment, signed range, and overflow checks.
@@ -1574,13 +1612,16 @@ resolveMaterializedPcTarget(llvm::ArrayRef<InternalDecodedInst> Decoded,
 /// bypass that definition. Canonical local-function returns are bounded to
 /// the continuations of calls that preserve the same link register, provided
 /// no interior call, overlapping external alias, or reachable fallthrough can
-/// enter the function without that link definition. \p DeclaredEntries
+/// enter the function without that link definition. A call with one proven
+/// finite target outside .text protects its local continuation without adding
+/// the external address to the local target set. \p DeclaredEntries
 /// contains text-relative function and kernel entry offsets; \p FunctionRanges
 /// supplies the symbol ranges used for the return proof; \p ExternalEntries
 /// identifies externally reachable symbol and kernel entries, including
-/// aliases at a local function's start. Other register-target control flow
-/// sets HasUnresolvedTargets so callers can disable transformations that
-/// consume possible destinations.
+/// aliases at a local function's start. Unresolved calls set
+/// HasUnresolvedTargets so callers can disable transformations that consume
+/// possible destinations. Other reachable register-target control flow sets
+/// HasUnboundedIndirectEntries so synthetic source tails are not created.
 std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextSize,
@@ -1588,6 +1629,39 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     llvm::ArrayRef<ElfView::FunctionTextRange> FunctionRanges = {},
     llvm::ArrayRef<uint64_t> ExternalEntries = {},
     llvm::ArrayRef<uint8_t> Text = {});
+
+/// Return whether \p DI consumes the incoming value of \p Register, including
+/// explicit read/modify/write destinations represented by MC tied-operand
+/// constraints. This conservative query underpins scratch-register liveness.
+[[nodiscard]] bool instructionReadsRegister(const InternalDecodedInst &DI,
+                                            const LLVMState &LS,
+                                            llvm::MCRegister Register);
+
+/// Resolve s0 through s(MaxSgprs - 1) to their physical MC registers.
+std::optional<llvm::SmallVector<llvm::MCRegister, 128>>
+resolveNumberedSgprRegisters(const llvm::MCRegisterInfo &MRI,
+                             unsigned MaxSgprs);
+
+/// Collect numbered SGPR uses and definitions using MC register overlap, so
+/// tuple and subregister operands conservatively affect their numbered SGPRs.
+void getNumberedSgprUsesAndDefs(const InternalDecodedInst &DI,
+                                const LLVMState &LS,
+                                llvm::ArrayRef<llvm::MCRegister> NumberedSgprs,
+                                llvm::BitVector &Uses, llvm::BitVector &Defs);
+
+/// Return numbered SGPR incoming values observed by a replacement before a
+/// definition, conservatively retaining values at malformed or opaque control
+/// flow.
+llvm::BitVector unsafeIncomingNumberedSgprsInReplacement(
+    llvm::ArrayRef<uint8_t> Replacement, const LLVMState &LS,
+    llvm::ArrayRef<llvm::MCRegister> NumberedSgprs);
+
+/// Return numbered SGPR incoming values that may be read before a definition,
+/// or remain live at an opaque or invalid control-flow boundary.
+std::optional<llvm::BitVector> unsafeIncomingNumberedSgprsInRange(
+    llvm::ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t FunctionBegin, uint64_t FunctionEnd, uint64_t Continuation,
+    llvm::ArrayRef<llvm::MCRegister> NumberedSgprs);
 
 [[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
                                        uint32_t InstSize,
