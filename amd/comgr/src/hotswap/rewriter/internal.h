@@ -884,6 +884,11 @@ struct LLVMState {
   unsigned SAddCoI32Opcode = 0;
   unsigned SAddU32Opcode = 0;
   unsigned SAddcU32Opcode = 0;
+  unsigned SCompareGeI32Opcode = 0;
+  unsigned SBranchScc1Opcode = 0;
+  unsigned SAbsI32Opcode = 0;
+  unsigned SSubU32Opcode = 0;
+  unsigned SSubbU32Opcode = 0;
   unsigned SSetPcI64Opcode = 0;
 
   /// MC identities used by far-trampoline relocation analysis. Each opcode is

@@ -363,6 +363,38 @@ truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
 
 // -- Sled-or-trampoline code emission -----------------------------------------
 
+bool writeCurrentText(PatchContext &Ctx, uint64_t Offset,
+                      ArrayRef<uint8_t> Bytes, StringRef Context) {
+  if (Offset > Ctx.TextSize || Bytes.size() > Ctx.TextSize - Offset) {
+    log() << "hotswap: error: " << Context << ": current .text write [0x"
+          << utohexstr(Offset) << ", +0x" << utohexstr(Bytes.size())
+          << ") exceeds size 0x" << utohexstr(Ctx.TextSize) << "\n";
+    return false;
+  }
+  if (Bytes.empty())
+    return true;
+  std::memcpy(Ctx.Text + Offset, Bytes.data(), Bytes.size());
+  noteCurrentTextMutation(Ctx);
+  return true;
+}
+
+void noteCurrentTextMutation(PatchContext &Ctx) {
+  Ctx.CurrentFunctionSgprLivenessCache.clear();
+  if (Ctx.TextMutationGeneration == std::numeric_limits<uint64_t>::max()) {
+    Ctx.TextMutationGeneration = 0;
+    return;
+  }
+  ++Ctx.TextMutationGeneration;
+}
+
+void notePendingTrampolineMutation(PatchContext &Ctx, const Trampoline &T) {
+  if (!T.HasFunctionRange) {
+    Ctx.HasUnresolvedPendingTrampoline = true;
+    return;
+  }
+  Ctx.PendingTrampolineFunctions.insert({T.FunctionStart, T.FunctionEnd});
+}
+
 /// Emit the replacement code for the instruction at [\p InstOffset,
 /// \p InstOffset + \p InstSize) into a nearby NOP sled: writes \p Replacement
 /// into the sled, appends a branch-back to the next instruction after the
@@ -920,9 +952,9 @@ static bool instructionWritesRegister(const InternalDecodedInst &DI,
   return false;
 }
 
-static bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
-                                             const LLVMState &LS,
-                                             MCRegister Register) {
+bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
+                                      const LLVMState &LS,
+                                      MCRegister Register) {
   std::vector<InternalDecodedInst> Decoded;
   if (!decodeTextSection(Replacement.data(), Replacement.size(), LS, Decoded))
     return true;
@@ -939,10 +971,10 @@ static bool replacementNeedsIncomingRegister(ArrayRef<uint8_t> Replacement,
   return false;
 }
 
-static bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
-                                                   uint64_t InstOffset,
-                                                   uint32_t InstSize,
-                                                   MCRegister Register) {
+bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,
+                                            uint64_t InstOffset,
+                                            uint32_t InstSize,
+                                            MCRegister Register) {
   std::optional<ElfView::FunctionTextRange> FunctionRange =
       Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
   if (!FunctionRange)
@@ -1750,9 +1782,9 @@ matchReusablePcMaterialization(ArrayRef<InternalDecodedInst> Decoded,
   const InternalDecodedInst &MakeDelta = Decoded[GetPcIndex + 1];
   const InternalDecodedInst &AddLow = Decoded[GetPcIndex + 2];
   const InternalDecodedInst &AddHigh = Decoded[GetPcIndex + 3];
-  if (MakeDelta.Mnemonic != "s_add_co_i32" ||
-      AddLow.Mnemonic != "s_add_co_u32" ||
-      AddHigh.Mnemonic != "s_add_co_ci_u32" ||
+  if (MakeDelta.Inst.getOpcode() != LS.SAddCoI32Opcode ||
+      AddLow.Inst.getOpcode() != LS.SAddU32Opcode ||
+      AddHigh.Inst.getOpcode() != LS.SAddcU32Opcode ||
       MakeDelta.Inst.getNumOperands() != 3 ||
       !MakeDelta.Inst.getOperand(0).isReg() ||
       !MakeDelta.Inst.getOperand(0).getReg() ||
@@ -1942,12 +1974,13 @@ static SmallVector<FiniteSetPcTransfer, 8> collectFiniteSetPcCandidates(
     MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
     if (LS.MRI->regsOverlap(DeltaReg, Pair))
       continue;
-    if (Compare.Mnemonic != "s_cmp_ge_i32" ||
+    if (Compare.Inst.getOpcode() != LS.SCompareGeI32Opcode ||
         Compare.Inst.getNumOperands() != 2 ||
         !isExactRegisterOperand(Compare.Inst, 0, DeltaReg) ||
         !Compare.Inst.getOperand(1).isImm() ||
         Compare.Inst.getOperand(1).getImm() != 0 ||
-        Branch.Mnemonic != "s_cbranch_scc1" || Abs.Mnemonic != "s_abs_i32" ||
+        Branch.Inst.getOpcode() != LS.SBranchScc1Opcode ||
+        Abs.Inst.getOpcode() != LS.SAbsI32Opcode ||
         Abs.Inst.getNumOperands() != 2 ||
         !isExactRegisterOperand(Abs.Inst, 0, DeltaReg) ||
         !isExactRegisterOperand(Abs.Inst, 1, DeltaReg) ||
@@ -1965,9 +1998,9 @@ static SmallVector<FiniteSetPcTransfer, 8> collectFiniteSetPcCandidates(
 
     auto matchesPairArithmetic = [&](const InternalDecodedInst &Low,
                                      const InternalDecodedInst &High,
-                                     StringRef LowMnemonic,
-                                     StringRef HighMnemonic) {
-      if (Low.Mnemonic != LowMnemonic || High.Mnemonic != HighMnemonic ||
+                                     unsigned LowOpcode, unsigned HighOpcode) {
+      if (Low.Inst.getOpcode() != LowOpcode ||
+          High.Inst.getOpcode() != HighOpcode ||
           Low.Inst.getNumOperands() != 3 || !Low.Inst.getOperand(0).isReg() ||
           !Low.Inst.getOperand(1).isReg() || !Low.Inst.getOperand(0).getReg() ||
           Low.Inst.getOperand(0).getReg() != Low.Inst.getOperand(1).getReg() ||
@@ -1988,10 +2021,10 @@ static SmallVector<FiniteSetPcTransfer, 8> collectFiniteSetPcCandidates(
              LS.MRI->regsOverlap(LowReg, Pair) &&
              LS.MRI->regsOverlap(HighReg, Pair);
     };
-    if (!matchesPairArithmetic(SubLow, SubHigh, "s_sub_co_u32",
-                               "s_sub_co_ci_u32") ||
-        !matchesPairArithmetic(AddLow, AddHigh, "s_add_co_u32",
-                               "s_add_co_ci_u32"))
+    if (!matchesPairArithmetic(SubLow, SubHigh, LS.SSubU32Opcode,
+                                LS.SSubbU32Opcode) ||
+        !matchesPairArithmetic(AddLow, AddHigh, LS.SAddU32Opcode,
+                                LS.SAddcU32Opcode))
       continue;
 
     std::optional<uint32_t> FirstAddend =
@@ -2010,14 +2043,16 @@ static SmallVector<FiniteSetPcTransfer, 8> collectFiniteSetPcCandidates(
     appendCandidate(I + 7, I + 10, Target);
     appendCandidate(I + 10, I + 10, Target);
   }
-  llvm::sort(Candidates, [](const FiniteSetPcTransfer &LHS,
-                            const FiniteSetPcTransfer &RHS) {
-    return LHS.InstIndex < RHS.InstIndex;
+  llvm::stable_sort(Candidates, [](const FiniteSetPcTransfer &LHS,
+                                   const FiniteSetPcTransfer &RHS) {
+    return std::tie(LHS.InstIndex, LHS.Target) <
+           std::tie(RHS.InstIndex, RHS.Target);
   });
   Candidates.erase(std::unique(Candidates.begin(), Candidates.end(),
                                [](const FiniteSetPcTransfer &LHS,
                                   const FiniteSetPcTransfer &RHS) {
-                                 return LHS.InstIndex == RHS.InstIndex;
+                                 return LHS.InstIndex == RHS.InstIndex &&
+                                        LHS.Target == RHS.Target;
                                }),
                    Candidates.end());
   return Candidates;

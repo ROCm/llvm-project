@@ -348,6 +348,21 @@ LLVMState initLLVM(const TargetIdentifier &TI) {
   if (!resolveRequiredOpcodeViaParse("s_addc_u32 s1, s1, 0", "s_addc_u32", S,
                                      S.SAddcU32Opcode))
     return S;
+  if (!resolveRequiredOpcodeViaParse("s_cmp_ge_i32 s0, 0", "s_cmp_ge_i32", S,
+                                     S.SCompareGeI32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_cbranch_scc1 4", "s_cbranch_scc1", S,
+                                     S.SBranchScc1Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_abs_i32 s0, s0", "s_abs_i32", S,
+                                     S.SAbsI32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_sub_u32 s0, s0, s0", "s_sub_u32", S,
+                                     S.SSubU32Opcode))
+    return S;
+  if (!resolveRequiredOpcodeViaParse("s_subb_u32 s1, s1, 0", "s_subb_u32", S,
+                                     S.SSubbU32Opcode))
+    return S;
   if (!resolveRequiredOpcodeViaParse("s_set_pc_i64 s[0:1]", "s_set_pc_i64", S,
                                      S.SSetPcI64Opcode))
     return S;
