@@ -117,6 +117,26 @@ TEST(FindNearestSled, SkipsSledsOutsideInstructionFunctionRange) {
   EXPECT_EQ(findNearestSled(Sleds, 64, 8), nullptr);
 }
 
+TEST(FindNearestSled, BoundsSearchAndPreservesLowerOffsetTie) {
+  std::vector<NopSled> Sleds = {
+      {/*Start=*/64, /*End=*/96, /*WritePos=*/88,
+       /*FunctionStart=*/0, /*FunctionEnd=*/256},
+      {/*Start=*/112, /*End=*/144, /*WritePos=*/112,
+       /*FunctionStart=*/0, /*FunctionEnd=*/256},
+      {/*Start=*/MaxSledDistance + 128, /*End=*/MaxSledDistance + 160,
+       /*WritePos=*/MaxSledDistance + 128,
+       /*FunctionStart=*/0, /*FunctionEnd=*/2 * MaxSledDistance}};
+
+  NopSled *Tie = findNearestSled(Sleds, /*Offset=*/100, /*Needed=*/8);
+  ASSERT_EQ(Tie, &Sleds[0]);
+
+  // Exhaust the lower, equally distant sled. The upper one remains selected;
+  // the out-of-range third sled is never a candidate.
+  Sleds[0].WritePos = Sleds[0].End;
+  NopSled *Upper = findNearestSled(Sleds, /*Offset=*/100, /*Needed=*/16);
+  ASSERT_EQ(Upper, &Sleds[1]);
+}
+
 // -- ElfView::getKernelStaticLdsSize ------------------------------------------
 
 TEST(ElfView, GetKernelStaticLdsSizeReturnsNulloptWhenKdMissing) {
