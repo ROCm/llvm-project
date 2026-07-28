@@ -28,9 +28,11 @@
 // COM: v272 and silently feed the replacements the wrong matrix.
 // DISASM: v_mov_b32_e32 v8, v16{{.*v272.*}}
 // COM: Both replacement passes consume the masked low-bank A and the gathered
-// COM: even/odd scale pairs.
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[8:15], {{.*}}, v16, v17
-// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[8:15], {{.*}}, v18, v19
+// COM: even/odd scale pairs. Matrix B's incoming src1 bank already matches the
+// COM: scratch bank, so both passes read the original v[288:295] in place
+// COM: rather than an above-KD copy of it.
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[8:15], v[32:39]{{.*v\[288:295\].*}}v16, v17
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[8:15], v[32:39]{{.*v\[288:295\].*}}v18, v19
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

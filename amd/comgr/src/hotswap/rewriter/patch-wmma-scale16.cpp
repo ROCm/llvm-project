@@ -39,13 +39,17 @@
 /// their generated scale and temporary VGPRs must stay in bank zero. Masked A
 /// shares one contiguous low-bank block with those operands. Live values
 /// borrowed for that block are saved in above-KD scratch and restored after
-/// the final WMMA. Matrix B is copied into the above-KD scratch bank so the
-/// lowered WMMA can use one SRC1 bank for both passes.
+/// the final WMMA. Both passes read the same matrix B, so B is copied into the
+/// above-KD scratch bank only when its incoming SRC1 bank differs from that
+/// bank; a same-bank B is consumed in place. The copy costs B-width moves and
+/// B-width above-KD registers, which can flip an occupancy-safe rewrite past
+/// its required wave count, so it is not taken unconditionally.
 ///
 /// Fail-closed fallback: when the scratch budget (one low-bank A-width-plus-5
-/// block, matching save slots, B-width VGPRs, and one scratch SGPR) is
-/// unavailable, the pass marks the patch failed so the rewrite returns an
-/// error instead of a miscompile. A loud failure beats silent wrong results.
+/// block, matching save slots, B-width VGPRs when B must be copied, and one
+/// scratch SGPR) is unavailable, the pass marks the patch failed so the rewrite
+/// returns an error instead of a miscompile. A loud failure beats silent wrong
+/// results.
 ///
 /// The 32x16x128_f4 (M=32) variant also needs an M-split; it is not lowered
 /// exactly yet and fails closed.
@@ -651,17 +655,42 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   unsigned ScaleBhiReg = ScaleAloReg + 3;
   unsigned TmpReg = ScaleAloReg + 4;
 
-  unsigned BOffset = (LowScratchCount + 1) & ~1u;
-  unsigned ScratchCount = BOffset + BWidth;
-  std::optional<unsigned> ScratchBase = Alloc.allocContiguousAboveKdInBank(
-      ScratchCount, /*Align=*/2, VgprBankSize);
-  if (!ScratchBase)
-    return failClosed(Ctx, DI,
-                      "no single-bank above-KD VGPR block for exact K-split");
+  // Every above-KD block lands in the bank the allocator is about to use, so
+  // the scratch bank is known before reserving anything in it.
+  unsigned ScratchBank = Alloc.NextAboveKd / VgprBankSize;
 
-  unsigned SaveBase = *ScratchBase;
-  unsigned BCopyBase = *ScratchBase + BOffset;
-  unsigned ScratchBank = *ScratchBase / VgprBankSize;
+  // Save slots are only written for low-bank registers that were borrowed while
+  // live. A dead or freshly extended block preserves nothing, so reserving the
+  // slots anyway would charge the kernel a full A-width block it never touches.
+  unsigned SaveBase = 0;
+  if (LowScratch->Preserve.any()) {
+    unsigned SaveCount = (LowScratchCount + 1) & ~1u;
+    std::optional<unsigned> Save = Alloc.allocContiguousAboveKdInBank(
+        SaveCount, /*Align=*/2, VgprBankSize);
+    if (!Save)
+      return failClosed(Ctx, DI,
+                        "no single-bank above-KD VGPR block for exact K-split");
+    SaveBase = *Save;
+  }
+
+  // Both replacement WMMAs read the same matrix B, so a B already addressed by
+  // the scratch bank can stay where it is: SRC1 needs one bank across both
+  // passes, not a private copy. Copying a same-bank B would add BWidth moves
+  // and BWidth above-KD registers, which is enough to push an otherwise
+  // occupancy-safe rewrite past its required wave count.
+  bool CopyB = OrigSrc1Bank != ScratchBank;
+  unsigned BCopyBase = BBase;
+  if (CopyB) {
+    std::optional<unsigned> BCopy =
+        Alloc.allocContiguousAboveKdInBank(BWidth, /*Align=*/2, VgprBankSize);
+    if (!BCopy)
+      return failClosed(Ctx, DI,
+                        "no single-bank above-KD VGPR block for matrix-B copy");
+    BCopyBase = *BCopy;
+  }
+  // The copy may land in a later bank than the save area, so SRC1 follows the
+  // block that actually holds B rather than the save-area bank.
+  unsigned Src1Bank = BCopyBase / VgprBankSize;
 
   // The lane-mask scheme (FP8/BF8) needs one scratch SGPR for the wave-lane
   // bitmask; the VGPR-select scheme (FP4/FP6) uses plain v_mov and needs none.
@@ -685,7 +714,8 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
     if (LowScratch->Preserve.test(I))
       emitVgprMove(PreOS, SaveBase + I, SBase + I, PreMode);
 
-  emitVgprCopy(PreOS, BCopyBase, BBase, BWidth, PreMode);
+  if (CopyB)
+    emitVgprCopy(PreOS, BCopyBase, BBase, BWidth, PreMode);
   if (Plan->Scheme == AMaskScheme::Lane) {
     // pass-low keeps lanes 0-15 (low-16 subblocks); pass-high lanes 16-31.
     emitLaneMaskCopy(PreOS, MaskS, 0x0000FFFFu, SBase, ABase, AWidth,
@@ -707,11 +737,11 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
 
   unsigned WmmaLoMode = *ActiveMode;
   setVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src0, 0);
-  setVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src1, ScratchBank);
+  setVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src1, Src1Bank);
   emitModeForOperands(
       PreOS, PreMode,
       {{VgprMsbOperand::Src0, 0},
-       {VgprMsbOperand::Src1, ScratchBank},
+       {VgprMsbOperand::Src1, Src1Bank},
        {VgprMsbOperand::Src2, getVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src2)},
        {VgprMsbOperand::Dst, getVgprMsbBank(WmmaLoMode, VgprMsbOperand::Dst)}});
 
@@ -749,7 +779,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   emitModeForOperands(
       HiOS, HiMode,
       {{VgprMsbOperand::Src0, 0},
-       {VgprMsbOperand::Src1, ScratchBank},
+       {VgprMsbOperand::Src1, Src1Bank},
        {VgprMsbOperand::Src2, OrigDstBank},
        {VgprMsbOperand::Dst, getVgprMsbBank(WmmaHiMode, VgprMsbOperand::Dst)}});
 
@@ -828,11 +858,11 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
         << utohexstr(DI.Offset) << " ("
         << (Plan->Scheme == AMaskScheme::Lane ? "lane-mask" : "vgpr-select")
         << ", A=v" << ABase << ":" << (ABase + AWidth - 1) << " -> masked v"
-        << SBase << ", B copy=v" << BCopyBase << ":" << (BCopyBase + BWidth - 1)
-        << ", scales=v" << ScaleAloReg << ",v" << ScaleBloReg << ",v"
-        << ScaleAhiReg << ",v" << ScaleBhiReg << ", scratch bank "
-        << ScratchBank << ", +" << Extra << " vgpr, " << A0Nops
-        << " hazard v_nop, " << Replacement.size() << " bytes)\n";
+        << SBase << (CopyB ? ", B copy=v" : ", B in place=v") << BCopyBase
+        << ":" << (BCopyBase + BWidth - 1) << ", scales=v" << ScaleAloReg
+        << ",v" << ScaleBloReg << ",v" << ScaleAhiReg << ",v" << ScaleBhiReg
+        << ", scratch bank " << ScratchBank << ", +" << Extra << " vgpr, "
+        << A0Nops << " hazard v_nop, " << Replacement.size() << " bytes)\n";
   return 1;
 }
 
