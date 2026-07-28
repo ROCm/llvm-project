@@ -3,16 +3,9 @@
 include(TableGen)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
 set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/../../liboffload/API/OffloadAPI.td)
-tablegen(OFFLOAD include/OffloadErrcodes.inc -gen-errcodes -I ${CMAKE_CURRENT_SOURCE_DIR}/../../liboffload/API)
-tablegen(OFFLOAD include/OffloadInfo.inc -gen-info -I ${CMAKE_CURRENT_SOURCE_DIR}/../../liboffload/API)
+tablegen(OFFLOAD include/OffloadErrcodes.inc -gen-errcodes EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../../liboffload/API)
+tablegen(OFFLOAD include/OffloadInfo.inc -gen-info EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../../liboffload/API)
 add_public_tablegen_target(PluginErrcodes)
-
-if(OFFLOAD_ENABLE_EMISSARY_APIS)
-  set(emissary_sources
-    src/Emissary.cpp
-    src/EmissaryPrint.cpp
-  )
-endif()
 
 # NOTE: Don't try to build `PluginInterface` using `add_llvm_library` because we
 # don't want to export `PluginInterface` while `add_llvm_library` requires that.
@@ -25,7 +18,6 @@ add_library(PluginCommon OBJECT
   src/OffloadError.cpp
   src/Utils/ELF.cpp
   src/GenericProfiler.cpp
-  ${emissary_sources}
 )
 add_dependencies(PluginCommon intrinsics_gen PluginErrcodes OffloadAPI)
 

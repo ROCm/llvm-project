@@ -494,32 +494,6 @@ public:
     uint8_t OpKindsFound;
   };
 
-  /// Metadata for multi-device kernel codegen
-  struct MultiDeviceBoundsInfo {
-    MultiDeviceBoundsInfo(VarDecl *LBArg, VarDecl *UBArg)
-        : LBArg{LBArg}, UBArg{UBArg} {}
-    VarDecl *LBArg;
-    VarDecl *UBArg;
-  };
-  using MultiDeviceFunctionBoundsMap =
-      llvm::DenseMap<const llvm::Function *, MultiDeviceBoundsInfo>;
-
-  struct MultiDeviceKernelInfo {
-    MultiDeviceKernelInfo(OptKernelNestDirectives Dirs,
-                          MultiDeviceFunctionBoundsMap FBM,
-                          bool CanBeMultiDevice)
-        : MultiDeviceNestDirs{Dirs}, FunctionBoundsMap{FBM},
-          CanBeMultiDevice{CanBeMultiDevice} {}
-
-    OptKernelNestDirectives MultiDeviceNestDirs;
-    MultiDeviceFunctionBoundsMap FunctionBoundsMap;
-    bool CanBeMultiDevice;
-    bool NewBoundsHaveBeenUsed = false;
-  };
-  /// Map construct statement to corresponding metadata for a NoLoop kernel.
-  using MultiDeviceKernelMap =
-      llvm::DenseMap<const Stmt *, MultiDeviceKernelInfo>;
-
 private:
   ASTContext &Context;
   const LangOptions &LangOpts;
@@ -587,7 +561,6 @@ private:
   NoLoopKernelMap NoLoopKernels;
   NoLoopKernelMap BigJumpLoopKernels;
   XteamRedKernelMap XteamRedKernels;
-  MultiDeviceKernelMap MultiDeviceKernels;
 
   // A set of references that have only been seen via a weakref so far. This is
   // used to remove the weak of the reference if we ever see a direct reference
@@ -744,6 +717,16 @@ private:
   /// was emitted for the class.
   llvm::SmallPtrSet<const CXXRecordDecl *, 16> RequireVectorDeletingDtor;
 
+  /// Pending MSVC __global_delete variants that may need forwarding bodies.
+  /// Maps each __global_delete wrapper alias to the corresponding global
+  /// ::operator delete FunctionDecl, in insertion order.
+  llvm::MapVector<llvm::GlobalAlias *, const FunctionDecl *>
+      PendingMSVCGlobalDeletes;
+
+  /// Whether this TU contains a direct use of global ::operator delete
+  /// (indicating that __global_delete forwarding bodies should be emitted).
+  bool HasDirectGlobalDelete = false;
+
   typedef std::pair<OrderGlobalInitsOrStermFinalizers, llvm::Function *>
       GlobalInitData;
 
@@ -802,6 +785,9 @@ private:
   /// A vector of metadata strings for dependent libraries for ELF.
   SmallVector<llvm::MDNode *, 16> ELFDependentLibraries;
 
+  /// Global variable for copyright pragma comment (if present).
+  llvm::GlobalVariable *LoadTimeCommentGlobal = nullptr;
+
   /// @name Cache for Objective-C runtime types
   /// @{
 
@@ -823,7 +809,6 @@ private:
   void createCUDARuntime();
   void createHLSLRuntime();
 
-  bool isTriviallyRecursive(const FunctionDecl *F);
   bool shouldEmitFunction(GlobalDecl GD);
   // Whether a global variable should be emitted by CUDA/HIP host/device
   // related attributes.
@@ -879,6 +864,7 @@ private:
   MetadataTypeMap MetadataIdMap;
   MetadataTypeMap VirtualMetadataIdMap;
   MetadataTypeMap GeneralizedMetadataIdMap;
+  MetadataTypeMap CallGraphMetadataIdMap;
 
   // Helps squashing blocks of TopLevelStmtDecl into a single llvm::Function
   // when used with -fincremental-extensions.
@@ -1100,8 +1086,9 @@ public:
   const llvm::abi::TargetInfo &getLLVMABITargetInfo(llvm::abi::TypeBuilder &TB);
 
   /// True when -fexperimental-abi-lowering is in effect AND the active target
-  /// has an LLVMABI implementation we can route to.
-  bool shouldUseLLVMABILowering() const;
+  /// has an LLVMABI implementation that supports the given LLVM calling
+  /// convention. Unsupported CCs fall back to the legacy ABIInfo path.
+  bool shouldUseLLVMABILowering(unsigned CallingConv) const;
 
   /// Drive the experimental LLVMABI-based lowering path: map argument and
   /// return types into the LLVMABI library, ask its target lowering to fill
@@ -1733,7 +1720,6 @@ public:
   /// Appends a dependent lib to the appropriate metadata value.
   void AddDependentLib(StringRef Lib);
 
-
   llvm::GlobalVariable::LinkageTypes getFunctionLinkage(GlobalDecl GD);
 
   void setFunctionLinkage(GlobalDecl GD, llvm::Function *F) {
@@ -1743,6 +1729,11 @@ public:
   /// Return the appropriate linkage for the vtable, VTT, and type information
   /// of the given class.
   llvm::GlobalVariable::LinkageTypes getVTableLinkage(const CXXRecordDecl *RD);
+
+  /// Returns true if a vtable with the given linkage may be emitted with more
+  /// than one address in the program, because the vtable is weak and the
+  /// target's ABI allows weak vtables to be duplicated across images.
+  bool mayVTableBeDuplicated(llvm::GlobalValue::LinkageTypes Linkage) const;
 
   /// Return the store size, in character units, of the given LLVM type.
   CharUnits GetTargetTypeStoreSize(llvm::Type *Ty) const;
@@ -1824,6 +1815,24 @@ public:
   /// Record that new[] was called for the class, transform vector deleting
   /// destructor definition in a form of alias to the actual definition.
   void requireVectorDestructorDefinition(const CXXRecordDecl *RD);
+
+  /// Record a pending __global_delete variant that may need a forwarding body.
+  void addPendingGlobalDelete(llvm::GlobalAlias *GlobalDeleteAlias,
+                              const FunctionDecl *OperatorDeleteFD);
+
+  /// Get or create the MSVC-compatible __global_delete wrapper for the given
+  /// global ::operator delete, registering it as a pending variant so a
+  /// forwarding body can be emitted if this TU directly uses global
+  /// ::operator delete.
+  llvm::Constant *
+  getOrCreateMSVCGlobalDeleteWrapper(const FunctionDecl *GlobOD);
+
+  /// Note that global ::operator delete is directly used in this TU.
+  void noteDirectGlobalDelete();
+
+  /// Emit __global_delete forwarding bodies for any pending variants,
+  /// if this TU directly uses global ::operator delete.
+  void emitGlobalDeleteForwardingBodies();
 
   /// Check that class need vector deleting destructor body.
   bool classNeedsVectorDestructor(const CXXRecordDecl *RD);
@@ -1914,6 +1923,11 @@ public:
   /// internal identifiers).
   llvm::Metadata *CreateMetadataIdentifierForType(QualType T);
 
+  /// Create a metadata identifier for the Call Graph Section.
+  /// This is a generalized type identifier that is guaranteed to be an
+  /// MDString.
+  llvm::Metadata *CreateMetadataIdentifierForCallGraphType(QualType T);
+
   /// Create a metadata identifier that is intended to be used to check virtual
   /// calls via a member function pointer.
   llvm::Metadata *CreateMetadataIdentifierForVirtualMemPtrType(QualType T);
@@ -1927,11 +1941,11 @@ public:
   void createFunctionTypeMetadataForIcall(const FunctionDecl *FD,
                                           llvm::Function *F);
 
-  /// Create and attach type metadata if the function is a potential indirect
-  /// call target to support call graph section.
+  /// Create and attach callgraph metadata if the function is a potential
+  /// indirect call target to support call graph section.
   void createIndirectFunctionTypeMD(const FunctionDecl *FD, llvm::Function *F);
 
-  /// Create and attach type metadata to the given call.
+  /// Create and attach callee_type metadata to the given call.
   void createCalleeTypeMetadataForIcall(const QualType &QT, llvm::CallBase *CB);
 
   /// Set type metadata to the given function.
@@ -2158,12 +2172,6 @@ public:
   /// reduction variables are created for subsequent codegen phases to work on.
   NoLoopXteamErr checkAndSetXteamRedKernel(const OMPExecutableDirective &D);
 
-  /// If we are able to generate a multi-device kernel for this directive,
-  /// return true, otherwise return false. If successful, metadata for the
-  /// argument variables is created for subsequent codegen phases to work on.
-  bool checkAndSetMultiDeviceKernel(const OMPExecutableDirective &D,
-                                    bool CanBeMultiDevice);
-
   /// Compute the block size to be used for a kernel.
   int getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D);
   /// Used in optimized kernel codegen, compute the block size from the nested
@@ -2377,57 +2385,6 @@ public:
   std::pair<CodeGenModule::NoLoopXteamErr, const Expr *>
   getStatusXteamSupportedPseudoObject(const PseudoObjectExpr *PO);
 
-  /// Are we generating multi-device kernel for the statement
-  bool multiDeviceFStmtEntryExists(const Stmt *S) {
-    return MultiDeviceKernels.find(S) != MultiDeviceKernels.end();
-  }
-  bool isMultiDeviceKernel(const Stmt *S) {
-    if (MultiDeviceKernels.find(S) == MultiDeviceKernels.end())
-      return false;
-    MultiDeviceKernelInfo MDInfo = MultiDeviceKernels.find(S)->second;
-    return MDInfo.CanBeMultiDevice;
-  }
-  bool isMultiDeviceKernel(const OMPExecutableDirective &D);
-
-  /// Given a ForStmt for which Multi Device codegen will be done, save the
-  /// metadata for the LB and UB args.
-  void saveMultiDeviceArgs(const OMPExecutableDirective &D,
-                           const llvm::Function *F, VarDecl *LBDecl,
-                           VarDecl *UBDecl) {
-    assert(isMultiDeviceKernel(getSingleForStmt(getOptKernelKey(D))) &&
-           "Must be a multi-device kernel");
-    const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
-    assert((MultiDeviceKernels.find(FStmt) != MultiDeviceKernels.end()) &&
-           "FStmt not found");
-    MultiDeviceKernelInfo &MDInfo = MultiDeviceKernels.find(FStmt)->second;
-    MDInfo.FunctionBoundsMap.insert(
-        std::make_pair(F, MultiDeviceBoundsInfo(LBDecl, UBDecl)));
-  }
-
-  /// Retrieve the metadata for the LB arg.
-  MultiDeviceBoundsInfo getMultiDeviceBounds(const OMPExecutableDirective &D,
-                                             const llvm::Function *F) {
-    const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
-    assert((MultiDeviceKernels.find(FStmt) != MultiDeviceKernels.end()) &&
-           "FStmt not found");
-    MultiDeviceKernelInfo MDInfo = MultiDeviceKernels.find(FStmt)->second;
-    assert(MDInfo.FunctionBoundsMap.find(F) != MDInfo.FunctionBoundsMap.end() &&
-           "Function must exist");
-    return MDInfo.FunctionBoundsMap.find(F)->second;
-  }
-
-  /// Retrieve the metadata for the LB arg.
-  VarDecl *getMultiDeviceLBArg(const OMPExecutableDirective &D,
-                               const llvm::Function *F) {
-    return getMultiDeviceBounds(D, F).LBArg;
-  }
-
-  /// Retrieve the metadata for the LB arg.
-  VarDecl *getMultiDeviceUBArg(const OMPExecutableDirective &D,
-                               const llvm::Function *F) {
-    return getMultiDeviceBounds(D, F).UBArg;
-  }
-
   /// Move some lazily-emitted states to the NewBuilder. This is especially
   /// essential for the incremental parsing environment like Clang Interpreter,
   /// because we'll lose all important information after each repl.
@@ -2565,6 +2522,9 @@ private:
   /// experimental ABI lowering path.
   ABIArgInfo convertABIArgInfo(const llvm::abi::ArgInfo &AbiInfo,
                                QualType Type);
+
+  /// Process #pragma comment(copyright, ...).
+  void ProcessPragmaCommentCopyright(StringRef Comment, bool isFromASTFile);
 
   bool shouldDropDLLAttribute(const Decl *D, const llvm::GlobalValue *GV) const;
 
@@ -2774,7 +2734,8 @@ private:
                                     llvm::AttrBuilder &FuncAttrs);
 
   llvm::Metadata *CreateMetadataIdentifierImpl(QualType T, MetadataTypeMap &Map,
-                                               StringRef Suffix);
+                                               StringRef Suffix,
+                                               bool ForceString = false);
 
   /// Return success if the directives are nested in a way appropriate for
   /// specialized kernel generation. Track the component directives in
@@ -2812,15 +2773,6 @@ private:
   /// Collect the reduction variables that may satisfy Xteam criteria
   std::pair<NoLoopXteamErr, XteamRedCollectionInfo>
   collectXteamRedVars(const OptKernelNestDirectives &NestDirs);
-
-  /// Top level checker for multi device of the loop
-  NoLoopXteamErr getMultiDeviceForStmtStatus(const OMPExecutableDirective &,
-                                             const Stmt *);
-
-  /// Are clauses on a combined OpenMP construct compatible with multi-device
-  /// codegen?
-  NoLoopXteamErr
-  getMultiDeviceStatusForClauses(const OptKernelNestDirectives &NestDirs);
 
   /// Emit deactivation symbols for any PFP fields whose offset is taken with
   /// offsetof.

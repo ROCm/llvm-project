@@ -13,6 +13,7 @@
 #ifndef LLVM_TARGET_TARGETMACHINE_H
 #define LLVM_TARGET_TARGETMACHINE_H
 
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/IR/DataLayout.h"
@@ -114,6 +115,9 @@ protected: // Can only create subclasses.
   std::unique_ptr<const MCRegisterInfo> MRI;
   std::unique_ptr<const MCInstrInfo> MII;
   std::unique_ptr<const MCSubtargetInfo> STI;
+
+  /// MC subtarget keyed by target features and target CPU.
+  StringMap<std::unique_ptr<const MCSubtargetInfo>> MCSubtargetMap;
 
   unsigned RequireStructuredCFG : 1;
   unsigned O0WantsFastISel : 1;
@@ -239,6 +243,12 @@ public:
   const MCInstrInfo *getMCInstrInfo() const { return MII.get(); }
   const MCSubtargetInfo &getMCSubtargetInfo() const { return *STI; }
 
+  /// Get the MCSubtargetInfo for the given target CPU and target features.
+  /// For use in contexts where a feature-specific MC subtarget is needed,
+  /// but no MachineFunctionis available, such as for module-level inline
+  /// assembly.
+  const MCSubtargetInfo &getMCSubtargetInfo(StringRef CPU, StringRef FS);
+
   /// Return the ExceptionHandling to use, considering TargetOptions and the
   /// Triple's default.
   ExceptionHandling getExceptionModel() const {
@@ -302,6 +312,9 @@ public:
   }
   void setSupportsDebugEntryValues(bool Enable) {
     Options.SupportsDebugEntryValues = Enable;
+  }
+  void setEnableDefaultMachineVerifier(bool Enable) {
+    Options.EnableDefaultMachineVerifier = Enable;
   }
 
   void setCFIFixup(bool Enable) { Options.EnableCFIFixup = Enable; }

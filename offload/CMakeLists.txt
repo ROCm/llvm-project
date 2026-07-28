@@ -2,6 +2,14 @@
 # to build offload with CMake.
 
 cmake_minimum_required(VERSION 3.20.0)
+if("${CMAKE_VERSION}" VERSION_LESS "3.31.0")
+  message(WARNING
+    "Your CMake version is ${CMAKE_VERSION}. Starting with LLVM 24, the "
+    "minimum version of CMake required to build LLVM will become 3.31.0, and "
+    "using an older CMake will become an error. Please upgrade your CMake to "
+    "at least 3.31.0 now to avoid issues in the future.")
+endif()
+
 set(LLVM_SUBPROJECT_TITLE "liboffload")
 
 if(DEFINED LIBOMP_SHARED_LINKER_FLAGS)
@@ -20,9 +28,16 @@ endif()
 set(OFFLOAD_MIN_CUDA_VERSION 11.8.0)
 set(OFFLOAD_MIN_CUDA_VERSION_CODE 11080)
 
+# libomptarget is not supported on Windows.
+set(BUILD_LIBOMPTARGET ON)
+if(MSVC)
+  set(BUILD_LIBOMPTARGET OFF)
+  message(STATUS "libomptarget is not supported on Windows, skipping.")
+endif()
+
 # Check that the library can actually be built.
-if(APPLE OR WIN32 OR WASM)
-  message(WARNING "libomptarget cannot be built on Windows and MacOS X!")
+if(APPLE OR WASM)
+  message(WARNING "libomptarget cannot be built on MacOS X and WASM!")
   return()
 elseif("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^(amdgcn|nvptx|spirv)" OR
        "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^(amdgcn|nvptx|spirv)")
@@ -57,6 +72,11 @@ else()
 endif()
 
 set(LLVM_COMMON_CMAKE_UTILS ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
+
+if(WIN32)
+  # These are needed for RtlGetLastNtStatus and delay-load helpers
+  add_link_options(/DEFAULTLIB:ntdll.lib /DEFAULTLIB:delayimp.lib)
+endif()
 
 option(OFFLOAD_INCLUDE_TESTS "Generate and build offload tests." ${LLVM_INCLUDE_TESTS})
 
@@ -146,12 +166,29 @@ if(DEFINED LIBOMPTARGET_BUILD_CUDA_PLUGIN OR
   message(WARNING "Option removed, use 'LIBOMPTARGET_PLUGINS_TO_BUILD' instead")
 endif()
 
-set(LIBOMPTARGET_ALL_PLUGIN_TARGETS amdgpu cuda)
-set(LIBOMPTARGET_PLUGINS_TO_BUILD "all" CACHE STRING
-    "Semicolon-separated list of plugins to use: cuda, amdgpu, level_zero, or \"all\".")
+if(WIN32)
+  set(LIBOMPTARGET_ALL_PLUGIN_TARGETS level_zero)
 
-if(LIBOMPTARGET_PLUGINS_TO_BUILD STREQUAL "all")
-  set(LIBOMPTARGET_PLUGINS_TO_BUILD ${LIBOMPTARGET_ALL_PLUGIN_TARGETS})
+  set(LIBOMPTARGET_PLUGINS_TO_BUILD "" CACHE STRING
+      "Semicolon-separated list of plugins to use: level_zero or \"all\".")
+  if(LIBOMPTARGET_PLUGINS_TO_BUILD STREQUAL "all")
+    set(LIBOMPTARGET_PLUGINS_TO_BUILD ${LIBOMPTARGET_ALL_PLUGIN_TARGETS})
+  endif()
+
+  # Validate that only supported plugins are requested on Windows.
+  foreach(plugin IN LISTS LIBOMPTARGET_PLUGINS_TO_BUILD)
+    if(NOT (plugin STREQUAL "level_zero" OR plugin STREQUAL "host"))
+      message(FATAL_ERROR "Plugin '${plugin}' is not supported on Windows.")
+    endif()
+  endforeach()
+else()
+  set(LIBOMPTARGET_ALL_PLUGIN_TARGETS amdgpu cuda level_zero)
+  set(LIBOMPTARGET_PLUGINS_TO_BUILD "all" CACHE STRING
+      "Semicolon-separated list of plugins to use: cuda, amdgpu, level_zero or \"all\".")
+
+  if(LIBOMPTARGET_PLUGINS_TO_BUILD STREQUAL "all")
+    set(LIBOMPTARGET_PLUGINS_TO_BUILD ${LIBOMPTARGET_ALL_PLUGIN_TARGETS})
+  endif()
 endif()
 
 list(APPEND LIBOMPTARGET_PLUGINS_TO_BUILD "host")
@@ -189,7 +226,7 @@ foreach(plugin IN LISTS LIBOMPTARGET_PLUGINS_TO_BUILD)
   set(LIBOMPTARGET_ENUM_PLUGIN_TARGETS
       "${LIBOMPTARGET_ENUM_PLUGIN_TARGETS}PLUGIN_TARGET(${plugin})\n")
 endforeach()
-string(STRIP ${LIBOMPTARGET_ENUM_PLUGIN_TARGETS} LIBOMPTARGET_ENUM_PLUGIN_TARGETS)
+string(STRIP "${LIBOMPTARGET_ENUM_PLUGIN_TARGETS}" LIBOMPTARGET_ENUM_PLUGIN_TARGETS)
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/include/Shared/Targets.def.in
   ${CMAKE_CURRENT_BINARY_DIR}/include/Shared/Targets.def
@@ -201,7 +238,7 @@ include_directories(${LIBOMPTARGET_LLVM_INCLUDE_DIRS})
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} aarch64-unknown-linux-gnu")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} aarch64-unknown-linux-gnu-oldDriver")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} aarch64-unknown-linux-gnu-LTO")
-set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} amdgcn-amd-amdhsa")
+set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} amdgpu-amd-amdhsa")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64le-ibm-linux-gnu")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64le-ibm-linux-gnu-oldDriver")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64le-ibm-linux-gnu-LTO")
@@ -249,10 +286,20 @@ if (LIBOMPTARGET_OMPD_SUPPORT)
 endif()
 
 # No exceptions and no RTTI, except if requested.
-set(offload_compile_flags -fno-exceptions)
-if(NOT LLVM_ENABLE_RTTI)
-  set(offload_compile_flags ${offload_compile_flags} -fno-rtti)
+if(MSVC)
+  set(offload_compile_flags /EHs-c-)
+else()
+  set(offload_compile_flags -fno-exceptions)
 endif()
+
+if(NOT LLVM_ENABLE_RTTI)
+  if(MSVC)
+    list(APPEND offload_compile_flags /GR-)
+  else()
+    list(APPEND offload_compile_flags -fno-rtti)
+  endif()
+endif()
+
 if(OFFLOAD_HAVE_WERROR_CTOR)
 #   list(APPEND offload_compile_flags -Werror=global-constructors)
 endif()
@@ -312,15 +359,6 @@ endif()
 include_directories(include)
 pythonize_bool(LIBOMPTARGET_OMPT_SUPPORT)
 
-if(${LLVM_LIBC_GPU_BUILD})
-  set(LIBOMPTARGET_HAS_LIBC TRUE)
-else()
-  set(LIBOMPTARGET_HAS_LIBC FALSE)
-endif()
-set(LIBOMPTARGET_GPU_LIBC_SUPPORT ${LIBOMPTARGET_HAS_LIBC} CACHE BOOL
-    "Libomptarget support for the GPU libc")
-pythonize_bool(LIBOMPTARGET_GPU_LIBC_SUPPORT)
-
 set(LIBOMPTARGET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Various LLVM_TOOLS are needed to build libomptarget
@@ -367,18 +405,6 @@ if(SANITIZER_AMDGPU)
   find_package(amd_comgr QUIET 2.4.0 HINTS ${CMAKE_INSTALL_PREFIX} PATHS /opt/rocm)
 endif()
 
-# An Emissary API is a subset of Host APIs that are executed from Offload devices
-# using the offload RPC mechanism such as FORTRAN IO runtime and MPI.
-option(OFFLOAD_ENABLE_EMISSARY_APIS "Enable build of GPU Emissary APIs" ON)
-if(OFFLOAD_ENABLE_EMISSARY_APIS)
-  # Header install location
-  add_definitions(-DOFFLOAD_ENABLE_EMISSARY_APIS)
-  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../openmp/device/include/EmissaryIds.h
-    DESTINATION ${LIBOMP_HEADERS_INSTALL_PATH})
-  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../openmp/device/include/EmissaryMPI.h
-    DESTINATION ${LIBOMP_HEADERS_INSTALL_PATH})
-endif()
-
 add_subdirectory(tools/offload-tblgen)
 
 # Build offloading plugins and device RTLs if they are available.
@@ -386,8 +412,9 @@ add_subdirectory(plugins-nextgen)
 add_subdirectory(tools)
 add_subdirectory(docs)
 
-# Build target agnostic offloading library.
-add_subdirectory(libomptarget)
+if(BUILD_LIBOMPTARGET)
+  add_subdirectory(libomptarget)
+endif()
 
 add_subdirectory(liboffload)
 

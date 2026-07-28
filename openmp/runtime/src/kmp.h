@@ -45,20 +45,7 @@
 #define TASK_DETACHABLE 1
 #define TASK_UNDETACHABLE 0
 
-#define KMP_CANCEL_THREADS
 #define KMP_THREAD_ATTR
-
-// Android does not have pthread_cancel.  Undefine KMP_CANCEL_THREADS if being
-// built on Android
-#if defined(__ANDROID__)
-#undef KMP_CANCEL_THREADS
-#endif
-
-// Some WASI targets (e.g., wasm32-wasi-threads) do not support thread
-// cancellation.
-#if KMP_OS_WASI
-#undef KMP_CANCEL_THREADS
-#endif
 
 #if !KMP_OS_WASI
 #include <signal.h>
@@ -4140,8 +4127,6 @@ extern kmp_task_t *__kmp_task_alloc(ident_t *loc_ref, kmp_int32 gtid,
                                     size_t sizeof_kmp_task_t,
                                     size_t sizeof_shareds,
                                     kmp_routine_entry_t task_entry);
-extern int __kmpc_omp_task_alloc_with_deps(ident_t *loc_ref, kmp_int32 gtid, kmp_task_t *new_task,
-                                           int ndeps, int nargs, ...); //AOCC
 extern void __kmp_init_implicit_task(ident_t *loc_ref, kmp_info_t *this_thr,
                                      kmp_team_t *team, int tid,
                                      int set_curr_task);

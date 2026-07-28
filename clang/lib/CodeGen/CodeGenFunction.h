@@ -2238,6 +2238,7 @@ public:
   const TargetCodeGenInfo &getTargetHooks() const {
     return CGM.getTargetCodeGenInfo();
   }
+  const FunctionDecl *getCurrentFunctionDecl() const;
 
   //===--------------------------------------------------------------------===//
   //                                  Cleanups
@@ -3013,6 +3014,11 @@ public:
   /// pointer to a char.
   Address EmitMSVAListRef(const Expr *E);
 
+  /// Emit a "reference" to a __builtin_zos_va_list; this is always the
+  /// address of the expression, because a __builtin_zos_va_list is an
+  /// array of pointer to a char.
+  Address EmitZOSVAListRef(const Expr *E);
+
   /// EmitAnyExprToTemp - Similarly to EmitAnyExpr(), however, the result will
   /// always be accessible even if no aggregate location is provided.
   RValue EmitAnyExprToTemp(const Expr *E);
@@ -3307,7 +3313,8 @@ public:
 
   void EmitDeleteCall(const FunctionDecl *DeleteFD, llvm::Value *Ptr,
                       QualType DeleteTy, llvm::Value *NumElements = nullptr,
-                      CharUnits CookieSize = CharUnits());
+                      CharUnits CookieSize = CharUnits(),
+                      llvm::Constant *CalleeOverride = nullptr);
 
   RValue EmitBuiltinNewDeleteCall(const FunctionProtoType *Type,
                                   const CallExpr *TheCallExpr, bool IsDelete);
@@ -3664,12 +3671,10 @@ public:
                          SourceLocation Loc, const FunctionArgList *Args);
 
   void EmitNoLoopCode(const OMPExecutableDirective &D,
-                      const ForStmt *CapturedForStmt, SourceLocation Loc,
-                      const FunctionArgList *Args);
+                      const ForStmt *CapturedForStmt, SourceLocation Loc);
 
   void EmitBigJumpLoopCode(const OMPExecutableDirective &D,
-                           const ForStmt *CapturedForStmt, SourceLocation Loc,
-                           const FunctionArgList *Args);
+                           const ForStmt *CapturedForStmt, SourceLocation Loc);
 
   void EmitXteamRedCode(const OMPExecutableDirective &D,
                         const ForStmt *CapturedForStmt, SourceLocation Loc,
@@ -3695,8 +3700,7 @@ public:
 
   /// Used in No-Loop and Xteam codegen to emit the loop iteration and the
   /// associated variables. Returns the loop iteration variable and its address.
-  std::pair<const VarDecl *, Address> EmitNoLoopIV(const OMPLoopDirective &LD,
-                                                   const FunctionArgList *Args);
+  std::pair<const VarDecl *, Address> EmitNoLoopIV(const OMPLoopDirective &LD);
 
   /// Emit updates of the original loop indices. Used by both
   /// BigJumpLoop and Xteam reduction kernel codegen.
@@ -3811,6 +3815,9 @@ public:
   void EmitCXXForRangeStmt(const CXXForRangeStmt &S,
                            ArrayRef<const Attr *> Attrs = {});
 
+  void
+  EmitCXXExpansionStmtInstantiation(const CXXExpansionStmtInstantiation &S);
+
   /// Controls insertion of cancellation exit blocks in worksharing constructs.
   class OMPCancelStackRAII {
     CodeGenFunction &CGF;
@@ -3831,18 +3838,13 @@ public:
   llvm::Function *GenerateCapturedStmtFunction(const CapturedStmt &S);
   Address GenerateCapturedStmtArgument(const CapturedStmt &S);
   llvm::Function *GenerateOpenMPCapturedStmtFunction(
-      const CapturedStmt &S, const OMPExecutableDirective &D,
-      bool TopLevel, bool IsTopKernel);
+      const CapturedStmt &S, const OMPExecutableDirective &D, SourceLocation Loc);
   llvm::Function *
   GenerateOpenMPCapturedStmtFunctionAggregate(const CapturedStmt &S,
                                               const OMPExecutableDirective &D);
   void GenerateOpenMPCapturedVars(const CapturedStmt &S,
                                   SmallVectorImpl<llvm::Value *> &CapturedVars,
                                   const Stmt *XteamRedNestKey);
-  void GenerateOpenMPCapturedVarsDevice(
-      const CapturedStmt &S, SmallVectorImpl<llvm::Value *> &CapturedVars,
-      SmallVectorImpl<llvm::Value *> &MultiTargetVars,
-      const Stmt *XteamRedNestKey);
   void
   InitializeXteamRedCapturedVars(SmallVectorImpl<llvm::Value *> &CapturedVars,
                                  QualType RedVarQualType);
@@ -4181,22 +4183,6 @@ public:
   void EmitOMPInnerLoop(
       const OMPExecutableDirective &S, bool RequiresCleanup,
       const Expr *LoopCond, const Expr *IncExpr,
-      const llvm::function_ref<void(CodeGenFunction &)> BodyGen,
-      const llvm::function_ref<void(CodeGenFunction &)> PostIncGen);
-
-  /// Emit inner loop of the worksharing/simd construct.
-  ///
-  /// \param S Directive, for which the inner loop must be emitted.
-  /// \param RequiresCleanup true, if directive has some associated private
-  /// variables.
-  /// \param LoopCond Bollean condition for loop continuation.
-  /// \param IncExpr Increment expression for loop control variable.
-  /// \param BodyGen Generator for the inner body of the inner loop.
-  /// \param PostIncGen Genrator for post-increment code (required for ordered
-  /// loop directvies).
-  void EmitOMPMultiDeviceInnerLoop(
-      const OMPExecutableDirective &S, bool RequiresCleanup,
-      const Expr *LoopCond, const Expr *IncExpr, const VarDecl *IVDecl,
       const llvm::function_ref<void(CodeGenFunction &)> BodyGen,
       const llvm::function_ref<void(CodeGenFunction &)> PostIncGen);
 
@@ -4879,8 +4865,6 @@ public:
                                        ReturnValueSlot ReturnValue);
   RValue EmitAMDGPUDevicePrintfCallExpr(const CallExpr *E,
                                         ReturnValueSlot ReturnValue);
-
-  RValue EmitEmissaryExec(const CallExpr *E);
 
   RValue EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
                          const CallExpr *E, ReturnValueSlot ReturnValue);

@@ -718,18 +718,6 @@ static void setPropertyWorkGroupSize(CodeGenModule &CGM, StringRef Name,
   CGM.addCompilerUsedGlobal(GVMode);
 }
 
-// Create a unique global variable to indicate if the kernel is multi-device.
-static void setMultiDeviceStatus(CodeGenModule &CGM, StringRef Name,
-                                 int IsMultiDevice) {
-  auto *GVMode = new llvm::GlobalVariable(
-      CGM.getModule(), CGM.Int8Ty,
-      /*isConstant=*/true, llvm::GlobalValue::WeakAnyLinkage,
-      llvm::ConstantInt::get(CGM.Int8Ty, IsMultiDevice),
-      Twine(Name, "_multi_device"));
-
-  CGM.addCompilerUsedGlobal(GVMode);
-}
-
 // Compute the correct number of threads in a team
 // to accommodate for a master thread.
 // Keep aligned with amdgpu plugin code located in function getLaunchVals
@@ -812,9 +800,6 @@ void CGOpenMPRuntimeGPU::GenerateMetaData(CodeGenModule &CGM,
   }
   // Emit a kernel descriptor for runtime.
   setPropertyWorkGroupSize(CGM, OutlinedFn->getName(), FlatAttr);
-
-  // Emit multi-device flag for this kernel.
-  setMultiDeviceStatus(CGM, OutlinedFn->getName(), CGM.isMultiDeviceKernel(D));
 }
 
 void CGOpenMPRuntimeGPU::emitNonSPMDKernel(const OMPExecutableDirective &D,
@@ -905,8 +890,7 @@ void CGOpenMPRuntimeGPU::emitKernelDeinit(CodeGenFunction &CGF,
           ? 0
           : DL.getTypeAllocSize(LLVMReductionsBufferTy).getFixedValue();
   CGBuilderTy &Bld = CGF.Builder;
-  OMPBuilder.createTargetDeinit(Bld, ReductionDataSize,
-                                C.getLangOpts().OpenMPCUDAReductionBufNum);
+  OMPBuilder.createTargetDeinit(Bld, ReductionDataSize);
   TeamsReductions.clear();
 }
 
@@ -1431,20 +1415,6 @@ void CGOpenMPRuntimeGPU::emitTeamsCall(CodeGenFunction &CGF,
   else
     OutlinedFnArgs.push_back(emitThreadIDAddress(CGF, Loc).emitRawPointer(CGF));
   OutlinedFnArgs.push_back(ZeroAddr.getPointer());
-
-  // If this is a kernel we can run on multiple devices then we need to add
-  // the arguments for multi-device targets. This is needed for the case when
-  // we emit an outlined teams function which needs to be passed the multi
-  // device LB and UB.
-  if (CGM.isMultiDeviceKernel(D)) {
-    Address LBAddr =
-        CGF.GetAddrOfLocalVar(CGM.getMultiDeviceLBArg(D, CGF.CurFn));
-    OutlinedFnArgs.push_back(CGF.Builder.CreateLoad(LBAddr));
-    Address UBAddr =
-        CGF.GetAddrOfLocalVar(CGM.getMultiDeviceUBArg(D, CGF.CurFn));
-    OutlinedFnArgs.push_back(CGF.Builder.CreateLoad(UBAddr));
-  }
-
   OutlinedFnArgs.append(CapturedVars.begin(), CapturedVars.end());
   emitOutlinedFunctionCall(CGF, Loc, OutlinedFn, OutlinedFnArgs);
 }
@@ -1917,8 +1887,6 @@ void CGOpenMPRuntimeGPU::emitReduction(
   bool ParallelReduction = isOpenMPParallelDirective(Options.ReductionKind);
   bool TeamsReduction = isOpenMPTeamsDirective(Options.ReductionKind);
 
-  ASTContext &C = CGM.getContext();
-
   if (Options.SimpleReduction) {
     assert(!TeamsReduction && !ParallelReduction &&
            "Invalid reduction selection in emitReduction.");
@@ -2009,12 +1977,13 @@ void CGOpenMPRuntimeGPU::emitReduction(
     Idx++;
   }
 
+  bool IsSPMD = getExecutionMode() == CGOpenMPRuntimeGPU::EM_SPMD;
   llvm::OpenMPIRBuilder::InsertPointTy AfterIP =
       cantFail(OMPBuilder.createReductionsGPU(
           OmpLoc, AllocaIP, CodeGenIP, ReductionInfos, /*IsByRef=*/{}, false,
-          TeamsReduction, llvm::OpenMPIRBuilder::ReductionGenCBKind::Clang,
-          CGF.getTarget().getGridValue(),
-          C.getLangOpts().OpenMPCUDAReductionBufNum, RTLoc));
+          TeamsReduction, IsSPMD,
+          llvm::OpenMPIRBuilder::ReductionGenCBKind::Clang,
+          CGF.getTarget().getGridValue(), RTLoc));
   CGF.Builder.restoreIP(AfterIP);
 }
 
@@ -2589,15 +2558,18 @@ void CGOpenMPRuntimeGPU::processRequiresDirective(const OMPRequiresDecl *D) {
       case OffloadArch::GFX1151:
       case OffloadArch::GFX1152:
       case OffloadArch::GFX1153:
+      case OffloadArch::GFX1154:
+      case OffloadArch::GFX11_7_GENERIC:
       case OffloadArch::GFX1170:
       case OffloadArch::GFX1171:
       case OffloadArch::GFX1172:
       case OffloadArch::GFX12_GENERIC:
       case OffloadArch::GFX1200:
       case OffloadArch::GFX1201:
+      case OffloadArch::GFX12_5_GENERIC:
       case OffloadArch::GFX1250:
       case OffloadArch::GFX1251:
-      case OffloadArch::GFX12_5_GENERIC:
+      case OffloadArch::GFX13_GENERIC:
       case OffloadArch::GFX1310:
       case OffloadArch::AMDGCNSPIRV:
       case OffloadArch::Generic:
@@ -2948,11 +2920,8 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamRedOperation(
       SentinelVal,
       ThreadStartIndex,
       NumTeams,
-      CGF.CGM.getLangOpts().OpenMPTargetMultiDevice
-          ? llvm::ConstantInt::get(CGF.CGM.Int32Ty,
-                                   0) /* __MEMORY_SCOPE_SYSTEM */
-          : llvm::ConstantInt::get(CGF.CGM.Int32Ty,
-                                   1) /* __MEMORY_SCOPE_DEVICE */};
+      llvm::ConstantInt::get(CGF.CGM.Int32Ty,1) 
+      /* __MEMORY_SCOPE_DEVICE */};
 
   unsigned WarpSize = CGF.getTarget().getGridValue().GV_Warp_Size;
   assert(WarpSize == 32 || WarpSize == 64);

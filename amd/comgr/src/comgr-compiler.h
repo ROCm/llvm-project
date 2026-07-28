@@ -13,6 +13,8 @@
 #include "clang/Driver/Driver.h"
 #include "llvm/Support/VirtualFileSystem.h"
 
+#include <optional>
+
 namespace COMGR {
 
 /// Manages executing Compiler-related actions.
@@ -40,6 +42,9 @@ class AMDGPUCompiler {
   bool UseVFS = false;
   /// Whether embedded libc++ headers were loaded into the VFS.
   bool HasEmbeddedHeaders = false;
+  /// Cached result of `shouldSkipEmbeddedHeaders`, computed once per compiler
+  /// instance from user args + filesystem probe + env override.
+  std::optional<bool> SkipEmbeddedHeadersCache;
 
   llvm::IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> OverlayFS;
   llvm::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> InMemoryFS;
@@ -65,6 +70,14 @@ class AMDGPUCompiler {
 
   amd_comgr_status_t executeInProcessDriver(llvm::ArrayRef<const char *> Args);
 
+  /// Decide whether to bypass embedded libc++ headers (skip `-idirafter`
+  /// injection) for this compilation. Returns true when system C++ headers
+  /// are available, when the user passed `-nostdinc++`, or when overridden
+  /// via AMD_COMGR_USE_EMBEDDED_LIBCXX=disable. Cached after first call.
+  bool shouldSkipEmbeddedHeaders(llvm::ArrayRef<const char *> Argv);
+  bool driverAddsCxxStdlibInclude(llvm::ArrayRef<const char *> Argv,
+                                  std::string *FoundPath);
+
   amd_comgr_status_t translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
                                                  DataSet *BcOutSet);
 
@@ -77,6 +90,7 @@ public:
   amd_comgr_status_t compileToBitcode(bool WithDeviceLibs = false);
   amd_comgr_status_t compileToRelocatable();
   amd_comgr_status_t unbundle();
+  amd_comgr_status_t unpackage();
   amd_comgr_status_t linkBitcodeToBitcode();
   amd_comgr_status_t codeGenBitcodeToRelocatable();
   amd_comgr_status_t codeGenBitcodeToAssembly();

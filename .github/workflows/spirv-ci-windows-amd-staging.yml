@@ -20,9 +20,14 @@ jobs:
       run:
         shell: bash
     steps:
-      # Long path support for the deep llvm-project tree under runner workspace.
-      - name: Enable git long paths
-        run: git config --global core.longpaths true
+      - name: Configure git (long paths, LF line endings)
+        # longpaths: llvm-project tree exceeds Windows' 260-char path limit.
+        # autocrlf=false/eol=lf: avoid CRLF checkout, which breaks clang's
+        # check_format_depend_* targets (clang-format emits LF).
+        run: |
+          git config --global core.longpaths true
+          git config --global core.autocrlf false
+          git config --global core.eol lf
 
       # Pinned ninja 1.12.1 — TheRock pins this version because 1.13.0 has a bug.
       - name: Install ninja
@@ -39,6 +44,9 @@ jobs:
       # C:\vcpkg for both install and toolchain lookup so they match.
       - name: Install zstd via vcpkg
         run: vcpkg install zstd:x64-windows
+
+      - name: Add vcpkg bin to PATH (zstd.dll runtime lookup)
+        run: echo 'C:\vcpkg\installed\x64-windows\bin' >> "$GITHUB_PATH"
 
       - name: Checkout llvm-project (PR head)
         # On pull_request events: PR head from the (possibly fork) head repo.
@@ -69,18 +77,27 @@ jobs:
       # zstd. FORCE_ON makes the configure fail loudly if zstd is missing
       # rather than silently building clang-offload-bundler without
       # compression.
+      # CMAKE_DISABLE_PRECOMPILE_HEADERS=ON: LLVM enables PCH by default, but the
+      # clang unit tests (built via clang-test-depends) reuse LLVMSupport's PCH.
+      # Upstream adds /utf-8 to the BasicTests target for unicode in test sources
+      # (llvm/llvm-project#206993); MSVC then rejects the PCH because its charset
+      # flags differ from the producer's (error C2855). Disabling PCH sidesteps
+      # this whole class of PCH consumer/producer flag-mismatch errors on MSVC.
+      # Mirrors ROCm/TheRock#6219, which disables PCH for the same reason (clang).
       - name: Configure LLVM
         run: |
           cmake -G Ninja -S llvm-project/llvm -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_APPLOCAL_DEPS=OFF \
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DLLVM_ENABLE_PROJECTS="clang;lld" \
             -DLLVM_TARGETS_TO_BUILD="AMDGPU;X86;SPIRV" \
             -DLLVM_ENABLE_ZSTD=FORCE_ON \
             -DLLVM_INCLUDE_TESTS=ON \
             -DLLVM_INSTALL_GTEST=ON \
-            -DLLVM_LIT_ARGS="-sv --no-progress-bar"
+            -DLLVM_LIT_ARGS="-sv --no-progress-bar" \
+            -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
 
       - name: Build LLVM + Clang + amd-llvm-spirv + test deps
         run: ninja -C build llvm-test-depends clang-test-depends amd-llvm-spirv
@@ -98,6 +115,7 @@ jobs:
           cmake -G Ninja -S llvm-project/amd/device-libs -B build-device-libs \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_APPLOCAL_DEPS=OFF \
             -DCMAKE_PREFIX_PATH=$PWD_WIN/build \
             -DLLVM_DIR=$PWD_WIN/build/lib/cmake/llvm
 
@@ -110,6 +128,7 @@ jobs:
           cmake -G Ninja -S llvm-project/amd/comgr -B build-comgr \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_APPLOCAL_DEPS=OFF \
             -DCMAKE_PREFIX_PATH="$PWD_WIN/build;$PWD_WIN/build-device-libs" \
             -DLLVM_DIR=$PWD_WIN/build/lib/cmake/llvm \
             -DAMDDeviceLibs_DIR=$PWD_WIN/build-device-libs/lib/cmake/AMDDeviceLibs \
@@ -149,8 +168,14 @@ jobs:
         shell: bash
 
     steps:
-      - name: Enable git long paths
-        run: git config --global core.longpaths true
+      - name: Configure git (long paths, LF line endings)
+        # longpaths: llvm-project tree exceeds Windows' 260-char path limit.
+        # autocrlf=false/eol=lf: avoid CRLF checkout, which breaks clang's
+        # check_format_depend_* targets (clang-format emits LF).
+        run: |
+          git config --global core.longpaths true
+          git config --global core.autocrlf false
+          git config --global core.eol lf
 
       - name: Install ninja
         run: choco install -y ninja --version 1.12.1
@@ -163,6 +188,9 @@ jobs:
       # build-edge input that ninja validates at planning time.
       - name: Install zstd via vcpkg
         run: vcpkg install zstd:x64-windows
+
+      - name: Add vcpkg bin to PATH (zstd.dll runtime lookup)
+        run: echo 'C:\vcpkg\installed\x64-windows\bin' >> "$GITHUB_PATH"
 
       - name: Checkout llvm-project (PR head)
         # On pull_request events: PR head from the (possibly fork) head repo.
@@ -270,8 +298,14 @@ jobs:
         shell: bash
 
     steps:
-      - name: Enable git long paths
-        run: git config --global core.longpaths true
+      - name: Configure git (long paths, LF line endings)
+        # longpaths: llvm-project tree exceeds Windows' 260-char path limit.
+        # autocrlf=false/eol=lf: avoid CRLF checkout, which breaks clang's
+        # check_format_depend_* targets (clang-format emits LF).
+        run: |
+          git config --global core.longpaths true
+          git config --global core.autocrlf false
+          git config --global core.eol lf
 
       - name: Install ninja
         run: choco install -y ninja --version 1.12.1
@@ -284,6 +318,9 @@ jobs:
       # build-edge input that ninja validates at planning time.
       - name: Install zstd via vcpkg
         run: vcpkg install zstd:x64-windows
+
+      - name: Add vcpkg bin to PATH (zstd.dll runtime lookup)
+        run: echo 'C:\vcpkg\installed\x64-windows\bin' >> "$GITHUB_PATH"
 
       - name: Checkout llvm-project (PR head)
         # On pull_request events: PR head from the (possibly fork) head repo.
@@ -337,8 +374,14 @@ jobs:
         shell: bash
 
     steps:
-      - name: Enable git long paths
-        run: git config --global core.longpaths true
+      - name: Configure git (long paths, LF line endings)
+        # longpaths: llvm-project tree exceeds Windows' 260-char path limit.
+        # autocrlf=false/eol=lf: avoid CRLF checkout, which breaks clang's
+        # check_format_depend_* targets (clang-format emits LF).
+        run: |
+          git config --global core.longpaths true
+          git config --global core.autocrlf false
+          git config --global core.eol lf
 
       - name: Install ninja
         run: choco install -y ninja --version 1.12.1
@@ -351,6 +394,9 @@ jobs:
       # build-edge input that ninja validates at planning time.
       - name: Install zstd via vcpkg
         run: vcpkg install zstd:x64-windows
+
+      - name: Add vcpkg bin to PATH (zstd.dll runtime lookup)
+        run: echo 'C:\vcpkg\installed\x64-windows\bin' >> "$GITHUB_PATH"
 
       - name: Checkout llvm-project (PR head)
         # On pull_request events: PR head from the (possibly fork) head repo.

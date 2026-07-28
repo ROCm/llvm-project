@@ -69,6 +69,7 @@ struct GenericPluginTy;
 struct GenericKernelTy;
 struct GenericDeviceTy;
 struct KernelRunRecordTy;
+struct PluginContextTy;
 template <typename ResourceRef> class GenericDeviceResourceManagerTy;
 
 namespace Plugin {
@@ -101,7 +102,8 @@ inline Error error(error::ErrorCode Code, Error &&OtherError,
 /// the plugin-specific code.
 /// TODO: Refactor this, must be defined individually by each plugin.
 template <typename... ArgsTy>
-static Error check(int32_t ErrorCode, const char *ErrFmt, ArgsTy... Args);
+[[maybe_unused]] static Error check(int32_t ErrorCode, const char *ErrFmt,
+                                    ArgsTy... Args);
 } // namespace Plugin
 
 /// Class that wraps the __tgt_async_info to simply its usage. In case the
@@ -378,6 +380,9 @@ class DeviceImageTy {
   /// The managed image data.
   std::unique_ptr<MemoryBuffer> Image;
 
+  /// An optional buffer for an IR image.
+  std::unique_ptr<MemoryBuffer> DeviceIRImage;
+
   /// Reference to the device this image is loaded on.
   GenericDeviceTy &Device;
 
@@ -404,6 +409,21 @@ public:
   MemoryBufferRef getMemoryBuffer() const {
     return MemoryBufferRef(StringRef((const char *)getStart(), getSize()),
                            "Image");
+  }
+
+  /// Get a memory buffer reference to the whole IR image.
+  MemoryBufferRef getIRImageMemoryBuffer() const {
+    if (DeviceIRImage)
+      return MemoryBufferRef(*DeviceIRImage);
+
+    return MemoryBufferRef();
+  }
+
+  bool hasIRImage() const { return DeviceIRImage != nullptr; }
+
+  /// Set the IR image.
+  void setIRImage(std::unique_ptr<MemoryBuffer> ImageBuffer) {
+    DeviceIRImage = std::move(ImageBuffer);
   }
 };
 
@@ -452,6 +472,9 @@ struct GenericKernelTy {
   /// Get the size of the static per-block memory consumed by the kernel.
   uint32_t getStaticBlockMemSize() const { return StaticBlockMemSize; };
 
+  /// Get the maximum number of threads per block that this kernel may use.
+  uint32_t getMaxThreads() const { return MaxNumThreads; }
+
   /// Get the kernel image.
   DeviceImageTy &getImage() const {
     assert(ImagePtr && "Kernel is not initialized!");
@@ -464,11 +487,13 @@ struct GenericKernelTy {
   }
 
   /// Return a device pointer to a new kernel launch environment.
-  Expected<KernelLaunchEnvironmentTy *>
-  getKernelLaunchEnvironment(GenericDeviceTy &GenericDevice,
-                             const KernelArgsTy &KernelArgs,
-                             const DynBlockMemConfTy &DynBlockMemConf,
-                             AsyncInfoWrapperTy &AsyncInfoWrapper) const;
+  ///
+  /// \p NumBlocks0 is the number of blocks for this launch and is used to size
+  /// the reduction buffer.
+  Expected<KernelLaunchEnvironmentTy *> getKernelLaunchEnvironment(
+      GenericDeviceTy &GenericDevice, const KernelArgsTy &KernelArgs,
+      const DynBlockMemConfTy &DynBlockMemConf,
+      AsyncInfoWrapperTy &AsyncInfoWrapper, uint32_t NumBlocks0) const;
 
   /// Indicate whether an execution mode is valid.
   static bool isValidExecutionMode(OMPTgtExecModeFlags ExecutionMode) {
@@ -496,9 +521,6 @@ struct GenericKernelTy {
       return true;
     return false;
   }
-
-  /// Check if kernel is a multi-device kernel.
-  bool isMultiDeviceKernel() const { return IsMultiDeviceKernel; }
 
   /// Compute kernel occupancy
   /// This function computes the max(upperbound) occupancy for a lanuched kernel
@@ -572,17 +594,14 @@ protected:
   /// Prints generic kernel launch information.
   Error printLaunchInfo(GenericDeviceTy &GenericDevice,
                         KernelArgsTy &KernelArgs, uint32_t NumThreads[3],
-                        uint32_t NumBlocks[3], int64_t MultiDeviceLB,
-                        int64_t MultiDeviceUB) const;
+                        uint32_t NumBlocks[3]) const;
 
   /// Prints plugin-specific kernel launch information after generic kernel
   /// launch information
   virtual Error printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
                                        KernelArgsTy &KernelArgs,
                                        uint32_t NumThreads[3],
-                                       uint32_t NumBlocks[3],
-                                       int64_t MultiDeviceLB,
-                                       int64_t MultiDeviceUB) const;
+                                       uint32_t NumBlocks[3]) const;
 
 private:
   /// Prepare the block memory buffer requested for the kernel and execute the
@@ -629,9 +648,6 @@ private:
 
   /// The execution flags of the kernel.
   OMPTgtExecModeFlags ExecutionMode;
-
-  /// The multi-device kernel flag.
-  bool IsMultiDeviceKernel;
 
   /// The image that contains this kernel.
   DeviceImageTy *ImagePtr = nullptr;
@@ -909,6 +925,30 @@ public:
   }
 };
 
+/// A plugin-side context grouping a set of devices. Plugins that need to hold
+/// native context state (e.g. Level Zero's ze_context_handle_t) override this
+/// through GenericPluginTy::createPluginContext. The base class is a plain
+/// device set used by plugins that do not need native context state.
+struct PluginContextTy {
+  PluginContextTy(GenericPluginTy &Plugin,
+                  llvm::ArrayRef<GenericDeviceTy *> Devices)
+      : Plugin(Plugin), Devices(Devices.begin(), Devices.end()) {}
+
+  PluginContextTy(const PluginContextTy &) = delete;
+  PluginContextTy &operator=(const PluginContextTy &) = delete;
+  PluginContextTy(PluginContextTy &&) = delete;
+  PluginContextTy &operator=(PluginContextTy &&) = delete;
+
+  virtual ~PluginContextTy() = default;
+
+  llvm::ArrayRef<GenericDeviceTy *> getDevices() const { return Devices; }
+  GenericPluginTy &getPlugin() const { return Plugin; }
+
+protected:
+  GenericPluginTy &Plugin;
+  llvm::SmallVector<GenericDeviceTy *> Devices;
+};
+
 /// Class implementing common functionalities of offload devices. Each plugin
 /// should define the specific device class, derive from this generic one, and
 /// implement the necessary virtual function members.
@@ -1025,7 +1065,8 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual Error memoryVAUnMap(void *VAddr, size_t Size);
 
   /// Allocate data on the device or involving the device.
-  Expected<void *> dataAlloc(int64_t Size, void *HostPtr, TargetAllocTy Kind);
+  Expected<void *> dataAlloc(int64_t Size, void *HostPtr, TargetAllocTy Kind,
+                             size_t Alignment);
 
   /// Deallocate data from the device or involving the device.
   Error dataDelete(void *TgtPtr, TargetAllocTy Kind);
@@ -1112,6 +1153,17 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual Error dataFillImpl(void *TgtPtr, const void *PatternPtr,
                              int64_t PatternSize, int64_t Size,
                              AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
+
+  /// Prefetch a batch of memory ranges. Mems[i] has size Sizes[i].
+  /// ToHost = true migrates towards the host, false towards the device.
+  /// Backends without prefetch support treat the call as a no-op.
+  Error dataPrefetch(size_t Count, const void **Mems, const size_t *Sizes,
+                     bool ToHost, __tgt_async_info *AsyncInfo);
+  virtual Error dataPrefetchImpl(size_t Count, const void **Mems,
+                                 const size_t *Sizes, bool ToHost,
+                                 AsyncInfoWrapperTy &AsyncInfoWrapper) {
+    return Plugin::success();
+  }
 
   /// Run the kernel associated with \p EntryPtr
   Error launchKernel(void *EntryPtr, void **ArgPtrs, ptrdiff_t *ArgOffsets,
@@ -1225,7 +1277,11 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// Get the number of lanes used for the RPC interface.
   virtual uint32_t getRPCNumLanes() const { return getWarpSize(); }
   uint32_t getThreadLimit() const { return GridValues.GV_Max_WG_Size; }
-  uint32_t getBlockLimit() const { return GridValues.GV_Max_Teams; }
+  /// Get the maximum number of blocks that can be launched. The \p NumThreads
+  /// argument is the per-block thread count the kernel will be launched with.
+  virtual uint32_t getBlockLimit(uint32_t NumThreads) const {
+    return GridValues.GV_Max_Teams;
+  }
   uint32_t getDefaultNumThreads() const {
     return GridValues.GV_Default_WG_Size;
   }
@@ -1358,11 +1414,7 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
     return Error::success();
   }
 
-  uint32_t getNumMultiDevices() const { return OMPX_NumMultiDevices; }
-
   bool enableRuntimeAutotuning() const { return OMPX_EnableRuntimeAutotuning; }
-
-  bool getMultiDeviceKernelValue(void *EntryPtr);
 
   KernelRunRecordTy *getKernelRunRecords() const { return KernelRunRecords; }
 
@@ -1434,6 +1486,7 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   Error initRecordReplay(int64_t Size, void *VAddr, bool IsRecord,
                          bool IsNative, bool SaveOutput, bool EmitReport,
+                         const char *ReportFilename,
                          const char *OutputDirPath) {
     if (RecordReplay)
       return Plugin::error(error::ErrorCode::INVALID_ARGUMENT,
@@ -1449,7 +1502,7 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
     RecordReplay =
         new NativeRecordReplayTy(Status, OutputDirPath ? OutputDirPath : "",
-                                 SaveOutput, EmitReport, *this);
+                                 SaveOutput, EmitReport, ReportFilename, *this);
     return RecordReplay->init(Size, VAddr);
   }
 
@@ -1467,22 +1520,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// deallocations are tracked.
   BoolEnvar OMPX_TrackAllocationTraces =
       BoolEnvar("OFFLOAD_TRACK_ALLOCATION_TRACES", false);
-
-  /// An entry to cache a shared memory buffer for Args to emissary APIs
-  struct ArgBufEntryTy {
-    size_t Size; // Size of Buffer
-    void *Addr;  // Pointer to SHARED mem
-    bool is_free;
-  };
-  /// The cache of allocated shared memory buffers for emissary APIs args
-  std::list<ArgBufEntryTy *> ArgBufEntries;
-  /// Get a free shared memory buffer and mark it not free. If none
-  /// free, allocate a new buffer and mark it not free.
-  void *getFree_ArgBuf(size_t sz);
-  /// Change a cached buffer from not free (busy) to free.
-  void moveBusyToFree_ArgBuf(void *ptr);
-  /// Destroy Argbufs and clear the cache. Used as part of device destructor
-  void clear_ArgBufs();
 
   bool enableKernelDurationTracing() const {
     return OMPX_KernelDurationTracing;
@@ -1550,9 +1587,6 @@ protected:
   /// regarding the initial number of streams and events.
   UInt32Envar OMPX_InitialNumStreams;
   UInt32Envar OMPX_InitialNumEvents;
-
-  /// Specify the number of devices used by multi-device kernels.
-  UInt32Envar OMPX_NumMultiDevices;
 
   /// Envar to enable runtime tuning.
   BoolEnvar OMPX_EnableRuntimeAutotuning;
@@ -1895,6 +1929,15 @@ struct GenericPluginTy {
   /// Return a pointer to the profiler instance
   GenericProfilerTy *getProfiler() const { return Profiler.get(); }
 
+  /// Create a plugin-side context grouping the given devices. The default
+  /// implementation returns a plain PluginContextTy that only tracks the
+  /// device set. Plugins that own native context state (e.g. Level Zero)
+  /// override this to instantiate a plugin-specific subclass.
+  virtual Expected<std::unique_ptr<PluginContextTy>>
+  createPluginContext(llvm::ArrayRef<GenericDeviceTy *> Devices) {
+    return std::make_unique<PluginContextTy>(*this, Devices);
+  }
+
 protected:
   /// Indicate whether a device id is valid.
   bool isValidDeviceId(int32_t DeviceId) const {
@@ -1955,6 +1998,7 @@ public:
   int32_t initialize_record_replay(int32_t DeviceId, int64_t MemorySize,
                                    void *VAddr, bool IsRecord, bool IsNative,
                                    bool SaveOutput, bool EmitReport,
+                                   const char *ReportFilename,
                                    const char *OutputDirPath);
 
   /// Loads the associated binary into the plugin and returns a handle to it.
@@ -2095,12 +2139,6 @@ public:
                                            bool isUnifiedSharedMemory,
                                            bool isAutoZeroCopy,
                                            bool isEagerMaps);
-
-  /// Return number of devices used by multi-device kernels.
-  int32_t get_num_multi_devices(int32_t DeviceId);
-
-  /// Check if kernel is multi-device.
-  bool kernel_is_multi_device(int32_t DeviceId, void *TgtEntryPtr);
 
   /// Return true if a descriptor of size 'Size' should be allocated using
   /// shared memory.

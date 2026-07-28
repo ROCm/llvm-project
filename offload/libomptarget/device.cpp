@@ -105,13 +105,20 @@ llvm::Error DeviceTy::init() {
     Int32Envar OMPX_RecordDevice("LIBOMPTARGET_RECORD_DEVICE", 0);
     StringEnvar OMPX_RecordOutputDir("LIBOMPTARGET_RECORD_DIR", "");
     BoolEnvar OMPX_EmitRecordReport("LIBOMPTARGET_RECORD_REPORT", false);
+    StringEnvar OMPX_RecordReportFilename("LIBOMPTARGET_RECORD_REPORT_FILENAME",
+                                          "");
     if (OMPX_RecordDevice != RTLDeviceID)
       return llvm::Error::success();
 
+    // Print report if it was enabled explicitly or a report file was indicated.
+    bool EmitReport =
+        OMPX_EmitRecordReport || !OMPX_RecordReportFilename.get().empty();
+
     Ret = RTL->initialize_record_replay(
         RTLDeviceID, OMPX_RecordMemSize, nullptr,
-        /*IsRecord=*/true, /*IsNative=*/true, OMPX_RecordOutput,
-        OMPX_EmitRecordReport, OMPX_RecordOutputDir.get().c_str());
+        /*IsRecord=*/true, /*IsNative=*/true, OMPX_RecordOutput, EmitReport,
+        OMPX_RecordReportFilename.get().c_str(),
+        OMPX_RecordOutputDir.get().c_str());
     if (Ret != OFFLOAD_SUCCESS)
       return error::createOffloadError(error::ErrorCode::BACKEND_FAILURE,
                                        "failed to initialize RR in device %d\n",
@@ -491,15 +498,6 @@ void DeviceTy::zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
                                            bool isEagerMaps) {
   RTL->zero_copy_sanity_checks_and_diag(RTLDeviceID, isUnifiedSharedMemory,
                                         isAutoZeroCopy, isEagerMaps);
-}
-
-uint32_t DeviceTy::getNumMultiDevices() const {
-  return RTL->get_num_multi_devices(RTLDeviceID);
-}
-
-// Check if kernel is a multi device kernel
-bool DeviceTy::isMultiDeviceKernel(void *TgtEntryPtr) {
-  return RTL->kernel_is_multi_device(RTLDeviceID, TgtEntryPtr);
 }
 
 bool DeviceTy::isAccessiblePtr(const void *Ptr, size_t Size) {

@@ -24,7 +24,18 @@ namespace clang {
 namespace driver {
 namespace tools {
 
-bool needFortranLibs(const Driver &D, const llvm::opt::ArgList &Args);
+struct OffloadJobsOpt {
+  enum class Kind { Missing, Invalid, Jobserver, Fixed };
+
+  Kind K = Kind::Missing;
+  llvm::opt::Arg *A = nullptr;
+  StringRef Value;
+  unsigned NumThreads = 0;
+
+  bool isValid() const { return K == Kind::Jobserver || K == Kind::Fixed; }
+};
+
+OffloadJobsOpt parseOffloadJobs(const llvm::opt::ArgList &Args);
 
 void addPathIfExists(const Driver &D, const Twine &Path,
                      ToolChain::path_list &Paths);
@@ -206,8 +217,7 @@ std::string getCPUName(const Driver &D, const llvm::opt::ArgList &Args,
 void getTargetFeatures(const Driver &D, const llvm::Triple &Triple,
                        const llvm::opt::ArgList &Args,
                        llvm::opt::ArgStringList &CmdArgs, bool ForAS,
-                       bool IsAux = false,
-                       const StringRef TcTargetID = StringRef());
+                       bool IsAux = false);
 
 /// Iterate \p Args and convert -mxxx to +xxx and -mno-xxx to -xxx and
 /// append it to \p Features.
@@ -237,10 +247,6 @@ void addX86AlignBranchArgs(const Driver &D, const llvm::opt::ArgList &Args,
                            llvm::opt::ArgStringList &CmdArgs, bool IsLTO,
                            const StringRef PluginOptPrefix = "");
 
-unsigned getOrCheckAMDGPUCodeObjectVersion(const Driver &D,
-                              const llvm::opt::ArgList &Args,
-                              bool Diagnose = false);
-
 void checkAMDGPUCodeObjectVersion(const Driver &D,
                                   const llvm::opt::ArgList &Args);
 
@@ -260,7 +266,11 @@ void addOpenMPDeviceRTL(const Driver &D, const llvm::opt::ArgList &DriverArgs,
                         StringRef BitcodeSuffix, const llvm::Triple &Triple,
                         const ToolChain &HostTC);
 
-void addOpenCLBuiltinsLib(const Driver &D, const llvm::Triple &TT,
+/// Try to link libclc, depending on the target ABI and command line
+/// arguments.
+///
+/// \return true if libclc should be linked for the compile.
+bool addOpenCLBuiltinsLib(const Driver &D, const llvm::Triple &TT,
                           const llvm::opt::ArgList &DriverArgs,
                           llvm::opt::ArgStringList &CC1Args);
 

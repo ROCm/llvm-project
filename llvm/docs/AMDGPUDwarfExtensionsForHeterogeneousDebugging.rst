@@ -4,8 +4,6 @@
 DWARF Extensions For Heterogeneous Debugging
 ********************************************
 
-.. contents::
-   :local:
 
 .. warning::
 
@@ -556,27 +554,7 @@ object allocation is also added.
 
 See :ref:`amdgpu-dwarf-memory-spaces`.
 
-2.15 Define Augmentation Strings to Support Multiple Extensions
----------------------------------------------------------------
-
-A ``DW_AT_LLVM_augmentation`` attribute is added to a compilation unit debugger
-information entry to indicate that there is additional target architecture
-specific information in the debugging information entries of that compilation
-unit. This allows a consumer to know what extensions are present in the debugger
-information entries as is possible with the augmentation string of other
-sections.
-
-The format that should be used for an augmentation string is also recommended.
-This allows a consumer to parse the string when it contains information from
-multiple vendors. Augmentation strings occur in the ``DW_AT_LLVM_augmentation``
-attribute, in the lookup by name table, and in the CFI Common Information Entry
-(CIE).
-
-See :ref:`amdgpu-dwarf-full-and-partial-compilation-unit-entries`,
-:ref:`amdgpu-dwarf-name-index-section-header`, and
-:ref:`amdgpu-dwarf-structure_of-call-frame-information`.
-
-2.16 Support Embedding Source Text for Online Compilation
+2.15 Support Embedding Source Text for Online Compilation
 ---------------------------------------------------------
 
 AMDGPU supports programming languages that include online compilation where the
@@ -586,7 +564,7 @@ text in the debug information is provided.
 
 See :ref:`amdgpu-dwarf-line-number-information`.
 
-2.17 Allow MD5 Checksums to be Optionally Present
+2.16 Allow MD5 Checksums to be Optionally Present
 -------------------------------------------------
 
 In DWARF Version 5, the file timestamp and file size can be optional, but if the
@@ -597,7 +575,7 @@ checksums to be optional.
 
 See :ref:`amdgpu-dwarf-line-number-information`.
 
-2.18 Add the HIP Programming Language
+2.17 Add the HIP Programming Language
 -------------------------------------
 
 The HIP programming language [:ref:`HIP <amdgpu-dwarf-HIP>`], which is supported
@@ -605,7 +583,7 @@ by the AMDGPU, is added.
 
 See :ref:`amdgpu-dwarf-language-names-table`.
 
-2.19 Support for Source Language Optimizations that Result in Concurrent Iteration Execution
+2.18 Support for Source Language Optimizations that Result in Concurrent Iteration Execution
 --------------------------------------------------------------------------------------------
 
 A compiler can perform loop optimizations that result in the generated code
@@ -642,7 +620,7 @@ In addition, a way is needed for the compiler to communicate how many source
 language loop iterations are executing concurrently. See
 ``DW_AT_LLVM_iterations`` in :ref:`amdgpu-dwarf-low-level-information`.
 
-2.20 DWARF Operation to Create Runtime Overlay Composite Location Description
+2.19 DWARF Operation to Create Runtime Overlay Composite Location Description
 -----------------------------------------------------------------------------
 
 It is common in SIMD vectorization for the compiler to generate code that
@@ -718,7 +696,7 @@ with a register location overlaid at a runtime offset involving ``i``:
   //    the register #2 positioned as an overlay at offset #3 of size #4:
   DW_OP_LLVM_overlay
 
-2.21 Support for Source Language Memory Spaces
+2.20 Support for Source Language Memory Spaces
 ----------------------------------------------
 
 AMDGPU supports languages, such as OpenCL, that define source language memory
@@ -730,7 +708,7 @@ spaces in defining source language pointer and reference types (see
 :ref:`amdgpu-dwarf-type-modifier-entries`) and data object allocation (see
 :ref:`amdgpu-dwarf-data-object-entries`).
 
-2.22 Expression Operation Vendor Extensibility Opcode
+2.21 Expression Operation Vendor Extensibility Opcode
 -----------------------------------------------------
 
 The vendor extension encoding space for DWARF expression operations
@@ -4220,31 +4198,52 @@ Frame Description Entries (FDE). There is at least one CIE in every non-empty
 
       Would this be increased to 5 to reflect the changes in these extensions?
 
-4.  ``address_size`` (ubyte)
+4.  ``augmentation`` (sequence of UTF-8 characters)
+
+    A null-terminated UTF-8 string that identifies the augmentation to this CIE
+    or to the FDEs that use it. If a reader encounters an augmentation string
+    that is unexpected, then only the following fields can be read:
+
+    * CIE: length, CIE_id, version, augmentation
+    * FDE: length, CIE_pointer, initial_location, address_range
+
+    If there is no augmentation, this value is a zero byte.
+
+    *The augmentation string allows users to indicate that there is additional
+    vendor and target architecture specific information in the CIE or FDE which
+    is needed to virtually unwind a stack frame. For example, this might be
+    information about dynamically allocated data which needs to be freed on exit
+    from the routine.*
+
+    *Because the* ``.debug_frame`` *section is useful independently of any*
+    ``.debug_info`` *section, the augmentation string always uses UTF-8
+    encoding.*
+
+5.  ``address_size`` (ubyte)
 
     The size of a target address in this CIE and any FDEs that use it, in bytes.
     If a compilation unit exists for this frame, its address size must match the
     address size here.
 
-5.  ``segment_selector_size`` (ubyte)
+6.  ``segment_selector_size`` (ubyte)
 
     The size of a segment selector in this CIE and any FDEs that use it, in
     bytes.
 
-6.  ``code_alignment_factor`` (unsigned LEB128)
+7.  ``code_alignment_factor`` (unsigned LEB128)
 
     A constant that is factored out of all advance location instructions (see
     :ref:`amdgpu-dwarf-row-creation-instructions`). The resulting value is
     ``(operand * code_alignment_factor)``.
 
-7.  ``data_alignment_factor`` (signed LEB128)
+8.  ``data_alignment_factor`` (signed LEB128)
 
     A constant that is factored out of certain offset instructions (see
     :ref:`amdgpu-dwarf-cfa-definition-instructions` and
     :ref:`amdgpu-dwarf-register-rule-instructions`). The resulting value is
     ``(operand * data_alignment_factor)``.
 
-8.  ``return_address_register`` (unsigned LEB128)
+9.  ``return_address_register`` (unsigned LEB128)
 
     An unsigned LEB128 constant that indicates which column in the rule table
     represents the return address of the subprogram. Note that this column might
@@ -4254,7 +4253,7 @@ Frame Description Entries (FDE). There is at least one CIE in every non-empty
     location of the caller frame. The program location of the top frame is the
     target architecture program counter value of the current thread.
 
-9.  ``initial_instructions`` (array of ubyte)
+10. ``initial_instructions`` (array of ubyte)
 
     A sequence of rules that are interpreted to create the initial setting of
     each column in the table.
@@ -4264,7 +4263,7 @@ Frame Description Entries (FDE). There is at least one CIE in every non-empty
     compilation system authoring body may specify an alternate default value for
     any or all columns.
 
-10. ``padding`` (array of ubyte)
+11. ``padding`` (array of ubyte)
 
     Enough ``DW_CFA_nop`` instructions to make the size of this entry match the
     length value above.
@@ -4666,12 +4665,12 @@ entry attributes.
    ================================== ====== ===================================
    Attribute Name                     Value  Classes
    ================================== ====== ===================================
-   ``DW_AT_LLVM_lanes``               0x3e0a constant
-   ``DW_AT_LLVM_lane_pc``             0x3e0b exprloc, loclist
-   ``DW_AT_LLVM_vector_size``         0x3e0c constant
-   ``DW_AT_LLVM_iterations``          0x3e0a constant, exprloc, loclist
-   ``DW_AT_LLVM_address_space``       TBA    constant
-   ``DW_AT_LLVM_memory_space``        TBA    constant
+   ``DW_AT_LLVM_memory_space``        0x3e0f constant
+   ``DW_AT_LLVM_address_space``       0x3e10 constant
+   ``DW_AT_LLVM_lanes``               0x3e11 constant
+   ``DW_AT_LLVM_lane_pc``             0x3e12 exprloc, loclist
+   ``DW_AT_LLVM_vector_size``         0x3e13 constant
+   ``DW_AT_LLVM_iterations``          TBA    constant, exprloc, loclist
    ``DW_AT_LLVM_active_lane``         TBA    exprloc, loclist
    ================================== ====== ===================================
 

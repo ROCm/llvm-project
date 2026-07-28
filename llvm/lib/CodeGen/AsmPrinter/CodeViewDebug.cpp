@@ -2281,10 +2281,10 @@ TypeIndex CodeViewDebug::lowerTypeEnum(const DICompositeType *Ty) {
       // We assume that the frontend provides all members in source declaration
       // order, which is what MSVC does.
       if (auto *Enumerator = dyn_cast_or_null<DIEnumerator>(Element)) {
-        // FIXME: Is it correct to always emit these as unsigned here?
-        EnumeratorRecord ER(MemberAccess::Public,
-                            APSInt(Enumerator->getValue(), true),
-                            Enumerator->getName());
+        EnumeratorRecord ER(
+            MemberAccess::Public,
+            APSInt(Enumerator->getValue(), Enumerator->isUnsigned()),
+            Enumerator->getName());
         ContinuationBuilder.writeMemberType(ER);
         EnumeratorCount++;
       }
@@ -3189,13 +3189,6 @@ void CodeViewDebug::endCVSubsection(MCSymbol *EndLabel) {
   OS.emitValueToAlignment(Align(4));
 }
 
-static StringRef getSymbolName(SymbolKind SymKind) {
-  for (const EnumEntry<SymbolKind> &EE : getSymbolTypeNames())
-    if (EE.Value == SymKind)
-      return EE.Name;
-  return "";
-}
-
 MCSymbol *CodeViewDebug::beginSymbolRecord(SymbolKind SymKind) {
   MCSymbol *BeginLabel = MMI->getContext().createTempSymbol(),
            *EndLabel = MMI->getContext().createTempSymbol();
@@ -3203,7 +3196,7 @@ MCSymbol *CodeViewDebug::beginSymbolRecord(SymbolKind SymKind) {
   OS.emitAbsoluteSymbolDiff(EndLabel, BeginLabel, 2);
   OS.emitLabel(BeginLabel);
   if (OS.isVerboseAsm())
-    OS.AddComment("Record kind: " + getSymbolName(SymKind));
+    OS.AddComment("Record kind: " + getSymbolTypeNames().toString(SymKind));
   OS.emitInt16(unsigned(SymKind));
   return EndLabel;
 }
@@ -3221,7 +3214,7 @@ void CodeViewDebug::emitEndSymbolRecord(SymbolKind EndKind) {
   OS.AddComment("Record length");
   OS.emitInt16(2);
   if (OS.isVerboseAsm())
-    OS.AddComment("Record kind: " + getSymbolName(EndKind));
+    OS.AddComment("Record kind: " + getSymbolTypeNames().toString(EndKind));
   OS.emitInt16(uint16_t(EndKind)); // Record Kind
 }
 

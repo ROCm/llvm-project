@@ -200,18 +200,18 @@ endif()
   add_test(NAME ${test_name}
     COMMAND "${name}")
   add_dependencies(check-comgr ${name})
-  # Windows binaries have no equivalent to RPATH, so we must set their PATH to
-  # include the .lib/.dll directory.
+  # Windows binaries have no equivalent to RPATH, so we must prepend the
+  # .lib/.dll directory to their PATH. Use ENVIRONMENT_MODIFICATION so the
+  # inherited PATH is preserved (transitive DLL deps like zstd.dll live there).
   if (UNIX)
     set_tests_properties(${test_name}
       PROPERTIES ENVIRONMENT "AMD_COMGR_CACHE=0;")
   else()
-    set_tests_properties(${test_name}
-      PROPERTIES ENVIRONMENT "PATH=$<TARGET_LINKER_FILE_DIR:amd_comgr>;AMD_COMGR_CACHE=0;")
+    set_tests_properties(${test_name} PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "PATH=path_list_prepend:$<TARGET_LINKER_FILE_DIR:amd_comgr>;AMD_COMGR_CACHE=set:0")
   endif()
 endmacro()
-
-find_package(hip CONFIG PATHS ${ROCM_INSTALL_PATH}/hip QUIET)
 
 add_comgr_test(data_test c)
 add_comgr_test(disasm_instr_test c)

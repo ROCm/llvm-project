@@ -15,11 +15,19 @@ on:
           for release builds. Controls artifact bucket selection, IAM role,
           and package versioning.
         type: string
-        default: ""
+        default: ci
       prerelease_version:
         description: Prerelease version number such as '2'. This gets appended to the computed version after 'rc', like '7.10.0rc2'
         type: string
         default: ""
+      linux_amdgpu_families:
+        description: 'Comma-separated Linux GPU families. "all" = all, "none" or empty = skip.'
+        type: string
+        default: ""
+      windows_amdgpu_families:
+        description: 'Comma-separated Windows GPU families. "all" = all, "none" or empty = skip.'
+        type: string
+        default: ""          
     outputs:
       enable_build_jobs:
         description: Whether to enable build jobs.
@@ -57,7 +65,7 @@ jobs:
       linux_build_config: >-
         {
           "per_family_info": [
-            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "test-runs-on": "linux-gfx942-1gpu-core42-ossci-rocm", "sanity_check_only_for_family": false},
+            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "test-runs-on": "linux-gfx942-1gpu-ccs-csp-ossci-rocm", "sanity_check_only_for_family": false},
             {"amdgpu_family": "gfx110X-all", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true},
             {"amdgpu_family": "gfx90a", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true}
           ],
@@ -92,7 +100,7 @@ jobs:
       rocm_package_version: ${{ steps.rocm_package_version.outputs.rocm_package_version }}
     steps:
       - name: Checking out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           # We need the parent commit to do a diff
           repository: "ROCm/TheRock"
@@ -118,11 +126,11 @@ jobs:
         id: configure
         env:
           #INPUT_LINUX_AMDGPU_FAMILIES: ${{ github.event.inputs.linux_amdgpu_families }}
-          INPUT_LINUX_AMDGPU_FAMILIES: 'gfx94X-dcgpu,gfx110X-all,gfx1151'
+          LINUX_AMDGPU_FAMILIES: ${{ inputs.linux_amdgpu_families != '' && inputs.linux_amdgpu_families || 'gfx94x,gfx110x,gfx90a' }}
           LINUX_TEST_LABELS: ${{ github.event.inputs.linux_test_labels }}
           LINUX_USE_PREBUILT_ARTIFACTS: ${{ github.event.inputs.linux_use_prebuilt_artifacts }}
           #INPUT_WINDOWS_AMDGPU_FAMILIES: ${{ github.event.inputs.windows_amdgpu_families }}
-          INPUT_WINDOWS_AMDGPU_FAMILIES: "gfx1151"
+          WINDOWS_AMDGPU_FAMILIES: ${{ inputs.windows_amdgpu_families != '' && inputs.windows_amdgpu_families || 'gfx1151' }}
           WINDOWS_TEST_LABELS: ${{ github.event.inputs.windows_test_labels }}
           WINDOWS_USE_PREBUILT_ARTIFACTS: ${{ github.event.inputs.windows_use_prebuilt_artifacts }}          
           BUILD_VARIANT: ${{ inputs.build_variant }}
@@ -145,5 +153,5 @@ jobs:
         id: rocm_package_version
         run: |
           python ./build_tools/compute_rocm_package_version.py \
-            --release-type=${{ inputs.release_type || 'dev' }} \
+            --release-type=${{ inputs.release_type }} \
             --prerelease-version=${{ inputs.prerelease_version }}

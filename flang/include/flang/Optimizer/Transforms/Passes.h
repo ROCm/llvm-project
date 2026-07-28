@@ -9,11 +9,7 @@
 #ifndef FORTRAN_OPTIMIZER_TRANSFORMS_PASSES_H
 #define FORTRAN_OPTIMIZER_TRANSFORMS_PASSES_H
 
-#include "flang/Optimizer/Dialect/CUF/CUFDialect.h"
-#include "flang/Optimizer/Dialect/FIROps.h"
-#include "flang/Optimizer/Transforms/Utils.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
-#include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 
@@ -64,7 +60,8 @@ std::unique_ptr<mlir::Pass>
 createVScaleAttrPass(std::pair<unsigned, unsigned> vscaleAttr);
 
 void populateFIRToSCFRewrites(mlir::RewritePatternSet &patterns,
-                              bool parallelUnordered = false);
+                              bool parallelUnordered = false,
+                              bool setNSW = true);
 
 void populateCfgConversionRewrites(mlir::RewritePatternSet &patterns,
                                    bool forceLoopToExecuteOnce = false,

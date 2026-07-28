@@ -27,13 +27,19 @@ MATH_MANGLE(catanh)(float2 z)
         ri = 0.5f * MATH_MANGLE(atan2)(2.0f * y, b.hi);
 
         float2 a;
+        int ea = 0;
         float2 d = add(sqr(opx), y2);
+        float r2 = BUILTIN_MAX_F32(BUILTIN_ABS_F32(omx.hi), y);
         if (x < 0x1.0p-3f * d.hi) {
             a = fsub(1.0f, div(4.0f*x, d));
+        } else if (r2 < 0x1.0p-63f) {
+            // avoid underflow of (1-x)^2 + y^2
+            a = div(add(sqr(ldx(omx, 100)), sqr(BUILTIN_FLDEXP_F32(y, 100))), d);
+            ea = -200;
         } else {
             a = div(add(sqr(omx), y2), d);
         }
-        rr = -0.25f * MATH_PRIVATE(lnep)(a, 0);
+        rr = -0.25f * MATH_PRIVATE(lnep)(a, ea);
     } else {
         int e = BUILTIN_FREXP_EXP_F32(AS_FLOAT(BUILTIN_MAX_U32(AS_UINT(x), AS_UINT(y))));
         x = BUILTIN_FLDEXP_F32(x, -e);

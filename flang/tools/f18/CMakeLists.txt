@@ -30,7 +30,6 @@ set(MODULES_WITHOUT_IMPLEMENTATION
   "ieee_features"
   "iso_c_binding"
   "iso_fortran_env"
-  "f90deviceio"
   "iso_fortran_env_impl"
   "flang_debug"
 )

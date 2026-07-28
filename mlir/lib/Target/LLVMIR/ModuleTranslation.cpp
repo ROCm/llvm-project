@@ -31,6 +31,7 @@
 #include "mlir/Target/LLVMIR/LLVMTranslationInterface.h"
 #include "mlir/Target/LLVMIR/TypeToLLVM.h"
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -926,13 +927,13 @@ void mlir::LLVM::detail::connectPHINodes(Region &region,
 llvm::CallInst *mlir::LLVM::detail::createIntrinsicCall(
     llvm::IRBuilderBase &builder, llvm::Intrinsic::ID intrinsic,
     ArrayRef<llvm::Value *> args, ArrayRef<llvm::Type *> tys) {
-  return builder.CreateIntrinsic(intrinsic, tys, args);
+  return builder.CreateIntrinsicWithoutFolding(intrinsic, tys, args);
 }
 
 llvm::CallInst *mlir::LLVM::detail::createIntrinsicCall(
     llvm::IRBuilderBase &builder, llvm::Intrinsic::ID intrinsic,
     llvm::Type *retTy, ArrayRef<llvm::Value *> args) {
-  return builder.CreateIntrinsic(retTy, intrinsic, args);
+  return builder.CreateIntrinsicWithoutFolding(retTy, intrinsic, args);
 }
 
 llvm::CallInst *mlir::LLVM::detail::createIntrinsicCall(
@@ -2004,8 +2005,19 @@ LogicalResult ModuleTranslation::convertFunctionSignatures() {
     convertFunctionKernelAttributes(function, llvmFunc, *this);
 
     // Convert function_entry_count attribute to metadata.
-    if (std::optional<uint64_t> entryCount = function.getFunctionEntryCount())
-      llvmFunc->setEntryCount(entryCount.value());
+    if (auto entryCount = function.getFunctionEntryCountAttr()) {
+      ArrayRef<uint64_t> imports = entryCount.getImports();
+      llvm::DenseSet<llvm::GlobalValue::GUID> importGUIDs;
+      if (!imports.empty())
+        importGUIDs.insert(imports.begin(), imports.end());
+      llvm::MDBuilder metadataBuilder(llvmFunc->getContext());
+      llvmFunc->setMetadata(
+          llvm::LLVMContext::MD_prof,
+          metadataBuilder.createFunctionEntryCount(
+              entryCount.getEntryCount(),
+              entryCount.getCountType() == ProfileCountType::Synthetic,
+              imports.empty() ? nullptr : &importGUIDs));
+    }
 
     // Convert result attributes.
     if (ArrayAttr allResultAttrs = function.getAllResultAttrs()) {

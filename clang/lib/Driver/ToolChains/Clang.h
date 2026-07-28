@@ -22,6 +22,16 @@ namespace clang {
 class ObjCRuntime;
 namespace driver {
 
+/// Is -Ofast used?
+bool isOFastUsed(const llvm::opt::ArgList &Args);
+
+/// Is -fopenmp-target-fast or -Ofast used
+bool isTargetFastUsed(const llvm::opt::ArgList &Args);
+
+/// Ignore possibility of environment variables if either
+/// -fopenmp-target-fast or -Ofast is used.
+bool shouldIgnoreEnvVars(const llvm::opt::ArgList &Args);
+
 namespace tools {
 
 /// Clang compiler tool.
@@ -51,6 +61,8 @@ private:
 
   void AddAArch64TargetArgs(const llvm::opt::ArgList &Args,
                             llvm::opt::ArgStringList &CmdArgs) const;
+  void AddAMDGPUTargetArgs(const llvm::opt::ArgList &Args,
+                           llvm::opt::ArgStringList &CmdArgs) const;
   void AddARMTargetArgs(const llvm::Triple &Triple,
                         const llvm::opt::ArgList &Args,
                         llvm::opt::ArgStringList &CmdArgs,
