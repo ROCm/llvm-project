@@ -108,7 +108,13 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefix=OUTSIDE %s
-// OUTSIDE: hotswap: unresolved call target{{.*}}(reusable target outside .text)
+// OUTSIDE: hotswap: resolved PC-materialized call
+// OUTSIDE: hotswap: resolved reusable PC-materialized call
+// OUTSIDE-SAME: to 1 target(s)
+// OUTSIDE: hotswap: resolved reusable PC-materialized call
+// OUTSIDE-SAME: to 3 target(s)
+// OUTSIDE: hotswap: unresolved call target
+// OUTSIDE-SAME: (s_swap_pc_i64)
 // OUTSIDE: hotswap: unresolved control-flow target disables NOP-sled emission,
 // OUTSIDE-SAME: trampoline coalescing, source relocation, and .text gateways
 // OUTSIDE: hotswap: error: no safe short-branch gateway for far site
@@ -250,8 +256,10 @@ reusable_pc_targets:
 .Lselected:
   s_swap_pc_i64 s[6:7], s[2:3]
 .if undecoded_gap
-  // An undecoded word between the reused calls has an unknown effect on the
-  // target pair. The solver must not carry the finite target set across it.
+  // Keep the first call's return continuation decoded, then place an unknown
+  // word before the second call. The solver must not carry the finite target
+  // set across it.
+  s_nop 0
   .long 0xffffffff
 .endif
 .if reconverge_reload
