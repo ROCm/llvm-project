@@ -9004,8 +9004,9 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
         // a deleted block.
         ompBuilder->Builder.ClearInsertionPoint();
         ompBuilder->Builder.SetCurrentDebugLocation(llvm::DebugLoc());
-      } else if (llvm::Function *llvmFunc =
-                     moduleTranslation.lookupFunction(funcOp.getName())) {
+      } else if (llvmFunc) {
+        updateDebugInfoForDeclareTargetFunctions(llvmFunc, moduleTranslation);
+
         // Device-side declare target functions are externally visible by
         // default so they can be referenced from other device translation
         // units. That also prevents the offload LTO from internalizing and
@@ -9019,8 +9020,6 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
         if (!llvmFunc->isDeclaration() && llvmFunc->hasExternalLinkage() &&
             llvmFunc->getVisibility() == llvm::GlobalValue::DefaultVisibility)
           llvmFunc->setVisibility(llvm::GlobalValue::HiddenVisibility);
-      } else {
-        updateDebugInfoForDeclareTargetFunctions(llvmFunc, moduleTranslation);
       }
     }
     return success();
