@@ -1491,6 +1491,18 @@ TEST(IsSBranchReachable, CoversBoundariesAlignmentAndPcOverflow) {
                                   /*To=*/0));
 }
 
+TEST(SharedRelayTailCanReach, UsesTheTailInstructionAsBranchOrigin) {
+  constexpr uint64_t Source = 0x42E190;
+  constexpr uint64_t SourceReachableOnly = 0x40E194;
+  constexpr uint64_t TailReachable = 0x40E198;
+
+  EXPECT_TRUE(isSBranchReachable(Source, SourceReachableOnly));
+  EXPECT_FALSE(sharedRelayTailCanReach(Source, SourceReachableOnly));
+  EXPECT_TRUE(sharedRelayTailCanReach(Source, TailReachable));
+  EXPECT_FALSE(sharedRelayTailCanReach(
+      std::numeric_limits<uint64_t>::max() - MinInstSize + 1, /*RouteOffset=*/0));
+}
+
 TEST(EvaluateDirectControlFlowTarget, EvaluatesImmediateBranch) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);

@@ -1679,6 +1679,11 @@ llvm::Expected<uint64_t> countReachableSetPcGatewaySlots(
 /// instruction-relative PC base, alignment, signed range, and overflow checks.
 bool isSBranchReachable(uint64_t From, uint64_t To);
 
+/// Return whether the +4 tail of a one-dword shared-dispatch source can branch
+/// to \p RouteOffset. The source itself can be reachable at the negative
+/// simm16 boundary while its tail is one dword out of range.
+bool sharedRelayTailCanReach(uint64_t SourceOffset, uint64_t RouteOffset);
+
 /// Evaluate a statically direct branch or call target from its decoded MCInst.
 /// Uses MCInstrAnalysis where supported and the documented gfx1250 s_call_i64
 /// operand fallback otherwise.

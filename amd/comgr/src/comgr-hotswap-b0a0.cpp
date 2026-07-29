@@ -1860,6 +1860,13 @@ bool isSBranchReachable(uint64_t From, uint64_t To) {
   return Delta <= MaxDelta;
 }
 
+bool sharedRelayTailCanReach(uint64_t SourceOffset, uint64_t RouteOffset) {
+  std::optional<uint64_t> Tail =
+      checkedAddUint64(SourceOffset, MinInstSize,
+                       "shared-dispatch source-tail offset");
+  return Tail && isSBranchReachable(*Tail, RouteOffset);
+}
+
 /// Queue a deferred trampoline for [\p InstOffset, +\p InstSize) with
 /// \p Replacement as its body; fixupTrampolineBranches fills in the edges once
 /// the pool layout is known. A site beyond s_branch reach of the appended pool
@@ -7525,7 +7532,13 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
       LocalMembers.insert(Index);
       const Trampoline &T = Ctx.OutTrampolines[Index];
       uint64_t Tail = T.OriginalOffset + MinInstSize;
-      if (HasSafeTail(T, Tail, Tail + MinInstSize))
+      uint64_t Route = GatewayOffset;
+      DenseMap<size_t, SmallVector<uint64_t, 4>>::const_iterator Islands =
+          MemberIslands.find(Index);
+      if (Islands != MemberIslands.end() && !Islands->second.empty())
+        Route = Islands->second.front();
+      if (HasSafeTail(T, Tail, Tail + MinInstSize) &&
+          sharedRelayTailCanReach(T.OriginalOffset, Route))
         RelayAnchors.push_back({Tail, Index});
     }
     llvm::sort(RelayAnchors);
@@ -7562,7 +7575,8 @@ static bool planSharedDispatchGateways(PatchContext &Ctx,
         MemberRelays[C.Index] = *Relay;
         GroupBodyBytes += T.Bytes.size();
         uint64_t Tail = T.OriginalOffset + MinInstSize;
-        if (HasSafeTail(T, Tail, Tail + MinInstSize))
+        if (HasSafeTail(T, Tail, Tail + MinInstSize) &&
+            sharedRelayTailCanReach(T.OriginalOffset, *Relay))
           RelayAnchors.insert(
               llvm::lower_bound(RelayAnchors, std::make_pair(Tail, C.Index)),
               {Tail, C.Index});
@@ -9890,8 +9904,14 @@ static void placeDs2BodiesByMaximumMatching(PatchContext &Ctx) {
   };
   SmallVector<std::pair<size_t, size_t>, 0> HardAssignments =
       MatchIntervals(HardIntervals);
-  SmallVector<std::pair<size_t, size_t>, 0> PairBackedAssignments =
-      MatchIntervals(PairBackedIntervals);
+  SmallVector<std::pair<size_t, size_t>, 0> PairBackedAssignments;
+  if (!HardAssignments.empty()) {
+    PairBackedAssignments = MatchIntervals(PairBackedIntervals);
+  } else if (!PairBackedIntervals.empty()) {
+    log() << "hotswap: preserved " << Slots.size()
+          << " audited slot(s) for routing because maximum matching placed "
+             "no registerless DS2 site\n";
+  }
 
   DenseSet<uint64_t> PlacedSources;
   auto EmitAssignments = [&](ArrayRef<std::pair<size_t, size_t>> Assignments,

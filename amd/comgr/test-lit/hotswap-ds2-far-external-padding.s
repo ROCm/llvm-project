@@ -1,8 +1,6 @@
-// COM: A required DS2 split should use closed-control-flow-audited external
-// COM: padding when the appended pool is outside s_branch reach. The body uses
-// COM: two local branches and does not create a far forward/return route.
-// COM: The final set-PC-sized tail of every external run remains untouched for
-// COM: the generic gateway planner.
+// COM: A pair-backed-only object receives no correctness benefit from filling
+// COM: audited external padding with local DS2 bodies. Preserve every slot for
+// COM: routing unless maximum matching actually places a registerless site.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
@@ -13,20 +11,20 @@
 // LOG: hotswap: exposed
 // LOG-SAME: unowned unreachable external padding sled(s) for local DS2 bodies
 // LOG-SAME: preserving 20 routing bytes per run
-// LOG: hotswap: placed replacement for site 0x
-// LOG-SAME: in audited external padding at 0x
+// LOG: hotswap: preserved 5 audited slot(s) for routing because maximum matching placed no registerless DS2 site
+// LOG-NOT: hotswap: placed pair-backed DS2 site
 // API: RESULT: SUCCESS
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 // DISASM-LABEL: <test_ds2_far_external_padding>:
 // DISASM-NEXT: s_branch
 // DISASM-NEXT: s_nop 0
-// DISASM-NEXT: s_wait_dscnt 0x0
+// DISASM-NEXT: s_nop 0
 // DISASM-NEXT: s_endpgm
-// DISASM-NEXT: ds_load_b32 v0, v2 offset:4
+// DISASM-NEXT: s_get_pc_i64
+// DISASM: ds_load_b32 v0, v2 offset:4
 // DISASM-NEXT: ds_load_b32 v1, v2 offset:12
 // DISASM-NEXT: s_wait_dscnt 0x0
-// DISASM-NEXT: s_branch
 
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
