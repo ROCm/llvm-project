@@ -94,7 +94,7 @@ struct LiveInShapeInfo {
   /// Read shape info from the live-in's defining `hlfir.declare`/`fir.declare`
   /// when it has an explicit `fir.shape`/`fir.shape_shift`. Side-effect free:
   /// if no such shape exists, `startIndices`/`extents` are left empty.
-  LiveInShapeInfo(mlir::Value liveIn);
+  explicit LiveInShapeInfo(mlir::Value liveIn);
 
   /// If the constructor found no explicit shape, recover the array extents from
   /// `liveIn`'s FIR type, emitting the ops needed to describe them via

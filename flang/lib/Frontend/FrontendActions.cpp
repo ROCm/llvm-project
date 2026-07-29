@@ -334,6 +334,22 @@ bool CodeGenAction::beginSourceFileAction() {
     opts.doConcurrentMappingKind = DoConcurrentMappingKind::DCMK_None;
   }
 
+  using ImplicitWorkdistributeKind =
+      Fortran::frontend::CodeGenOptions::ImplicitWorkdistributeKind;
+  auto implicitWdKind =
+      ci.getInvocation().getCodeGenOpts().getImplicitWorkdistribute();
+  if (implicitWdKind != ImplicitWorkdistributeKind::IWK_None &&
+      !isOpenMPEnabled) {
+    unsigned diagID = ci.getDiagnostics().getCustomDiagID(
+        clang::DiagnosticsEngine::Warning,
+        "OpenMP must be enabled (with `-fopenmp`) to use "
+        "`-fopenmp-implicit-workdistribute=`. Array statements will not "
+        "be implicitly distributed.");
+    ci.getDiagnostics().Report(diagID);
+    ci.getInvocation().getCodeGenOpts().setImplicitWorkdistribute(
+        ImplicitWorkdistributeKind::IWK_None);
+  }
+
   if (isOpenMPEnabled) {
     opts.isTargetDevice = false;
     if (auto offloadMod = llvm::dyn_cast<mlir::omp::OffloadModuleInterface>(
@@ -639,6 +655,8 @@ void CodeGenAction::lowerHLFIRToFIR() {
       ci.getInvocation().getLoweringOpts().getFPMaxminBehavior();
   if (ci.getInvocation().getLangOpts().OpenMPIsTargetDevice)
     config.EnableOpenMPIsTargetDevice = true;
+  config.ImplicitWorkdistribute =
+      ci.getInvocation().getCodeGenOpts().getImplicitWorkdistribute();
   // Create the pass pipeline
   fir::createHLFIRToFIRPassPipeline(pm, enableOpenMP, config);
   (void)mlir::applyPassManagerCLOptions(pm);

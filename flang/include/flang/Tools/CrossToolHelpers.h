@@ -146,6 +146,7 @@ struct MLIRToLLVMPassPipelineConfig : public FlangEPCallBacks {
     DwarfVersion = opts.DwarfVersion;
     SplitDwarfFile = opts.SplitDwarfFile;
     DwarfDebugFlags = opts.DwarfDebugFlags;
+    ImplicitWorkdistribute = opts.getImplicitWorkdistribute();
   }
 
   llvm::OptimizationLevel OptLevel; ///< optimisation level
@@ -193,6 +194,10 @@ struct MLIRToLLVMPassPipelineConfig : public FlangEPCallBacks {
   std::string DwarfDebugFlags = ""; ///< Debug flags to append to DWARF producer
   Fortran::common::FPMaxminBehavior fpMaxminBehavior =
       Fortran::common::FPMaxminBehavior::Legacy;
+  /// Implicit workdistribute mode for OpenMP. None disables the feature.
+  Fortran::frontend::CodeGenOptions::ImplicitWorkdistributeKind
+      ImplicitWorkdistribute = Fortran::frontend::CodeGenOptions::
+          ImplicitWorkdistributeKind::IWK_None;
 };
 
 /// Create OffloadModuleOpts from Flang LangOptions.

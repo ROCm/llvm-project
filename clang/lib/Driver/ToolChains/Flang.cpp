@@ -370,6 +370,7 @@ void Flang::addCodegenOptions(const ArgList &Args,
   Args.addAllArgs(
       CmdArgs,
       {options::OPT_fdo_concurrent_to_openmp_EQ,
+       options::OPT_fopenmp_implicit_workdistribute_EQ,
        options::OPT_fno_ppc_native_vec_elem_order,
        options::OPT_fppc_native_vec_elem_order, options::OPT_finit_global_zero,
        options::OPT_fno_init_global_zero, options::OPT_frepack_arrays,

@@ -299,7 +299,9 @@ void createHLFIRToFIRPassPipeline(mlir::PassManager &pm,
       addNestedPassToAllTopLevelOperations<PassConstructor>(
           pm, hlfir::createInlineHLFIRCopy);
     }
-  } else if (config.EnableOpenMPIsTargetDevice) {
+  } else if (config.EnableOpenMPIsTargetDevice ||
+             config.ImplicitWorkdistribute ==
+                 flangomp::ImplicitWorkdistributeKind::IWK_Device) {
     // At O0, only inline scalar-to-array broadcasts when compiling for an
     // OpenMP target device. This avoids emitting Fortran runtime calls
     // (e.g. _FortranAAssign) that use malloc/free in device code generated
@@ -307,6 +309,11 @@ void createHLFIRToFIRPassPipeline(mlir::PassManager &pm,
     // compilation preserves the runtime call on the host at -O0 so that a
     // line breakpoint on a scalar-to-array assignment hits once instead of
     // once per element.
+    //
+    // Also inline on the host compile under implicit-workdistribute(device):
+    // the device pass turns scalar broadcasts into wrapped omp.target kernels,
+    // so the host must form the same loop and wrap it too, or the synthesized
+    // device kernel has no matching host offload entry (openmp-opt asserts).
     addNestedPassToAllTopLevelOperations(pm, [&]() {
       return hlfir::createInlineHLFIRAssign({/*onlyScalarRHS=*/true});
     });
@@ -339,7 +346,9 @@ void createHLFIRToFIRPassPipeline(mlir::PassManager &pm,
   pm.addPass(hlfir::createConvertHLFIRtoFIR());
   if (enableOpenMP != EnableOpenMP::None) {
     pm.addPass(flangomp::createLowerWorkshare());
-    pm.addPass(flangomp::createLowerWorkdistribute());
+    flangomp::LowerWorkdistributeOptions wdOpts;
+    wdOpts.implicit = config.ImplicitWorkdistribute;
+    pm.addPass(flangomp::createLowerWorkdistribute(wdOpts));
   }
   if (enableOpenMP == EnableOpenMP::Simd)
     pm.addPass(flangomp::createSimdOnlyPass());

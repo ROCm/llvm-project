@@ -169,6 +169,12 @@ static llvm::cl::alias enableDoConcurrentToOpenMPConversionAlias(
     "fdo-concurrent-to-openmp", llvm::cl::desc("Alias for -fdo-concurrent"),
     llvm::cl::aliasopt(enableDoConcurrentToOpenMPConversion), llvm::cl::Hidden);
 
+static llvm::cl::opt<std::string> enableImplicitWorkdistribute(
+    "fopenmp-implicit-workdistribute",
+    llvm::cl::desc("Implicitly wrap array statements in OpenMP workdistribute "
+                   "[none|host|device]"),
+    llvm::cl::init("none"));
+
 static llvm::cl::opt<bool>
     enableOpenMPGPU("fopenmp-is-gpu",
                     llvm::cl::desc("enable openmp GPU target codegen"),
@@ -600,6 +606,14 @@ static llvm::LogicalResult convertFortranSourceToMLIR(
           enableOpenMP ? fir::EnableOpenMP::Full : fir::EnableOpenMP::None;
       MLIRToLLVMPassPipelineConfig config(llvm::OptimizationLevel::O2);
       config.fpMaxminBehavior = loweringOptions.getFPMaxminBehavior();
+      using ImplicitWorkdistributeKind =
+          Fortran::frontend::CodeGenOptions::ImplicitWorkdistributeKind;
+      config.ImplicitWorkdistribute =
+          llvm::StringSwitch<ImplicitWorkdistributeKind>(
+              enableImplicitWorkdistribute)
+              .Case("host", ImplicitWorkdistributeKind::IWK_Host)
+              .Case("device", ImplicitWorkdistributeKind::IWK_Device)
+              .Default(ImplicitWorkdistributeKind::IWK_None);
       fir::createHLFIRToFIRPassPipeline(pm, enableOmp, config);
       if (mlir::failed(pm.run(mlirModule))) {
         llvm::errs() << "FATAL: lowering from HLFIR to FIR failed";
