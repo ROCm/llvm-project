@@ -1,4 +1,4 @@
-//===-- lib/Utisl/OpenMP.cpp ------------------------------------*- C++ -*-===//
+//===-- lib/Utils/OpenMP.cpp ------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -719,7 +719,7 @@ mlir::omp::TargetOp genTargetOpFromLiveIns(mlir::Location loc,
     // defining op, so guard against null. Not hit in practice yet.
     if (mlir::isa_and_present<fir::BoxAddrOp>(mappedVar.getDefiningOp()))
       TODO(mappedVar.getLoc(),
-          "Mapped variabled defined by `BoxAddrOp` are not supported yet");
+          "Mapped variable defined by `BoxAddrOp` are not supported yet");
 
     auto mapHostValueToDevice = [&](mlir::Value hostValue,
                                     mlir::Value deviceValue) {
@@ -767,5 +767,4 @@ mlir::omp::TargetOp genTargetOpFromLiveIns(mlir::Location loc,
 
   return targetOp;
 }
-
 } // namespace Fortran::utils::openmp

@@ -364,10 +364,13 @@ void createHLFIRToFIRPassPipeline(mlir::PassManager &pm,
         pm, hlfir::createInlineHLFIRAssign);
   pm.addPass(hlfir::createConvertHLFIRtoFIR());
   switch (enableOpenMP) {
-  case EnableOpenMP::Full:
+  case EnableOpenMP::Full: {
     pm.addPass(flangomp::createLowerWorkshare());
-    pm.addPass(flangomp::createLowerWorkdistribute());
+    flangomp::LowerWorkdistributeOptions wdOpts;
+    wdOpts.implicit = config.ImplicitWorkdistribute;
+    pm.addPass(flangomp::createLowerWorkdistribute(wdOpts));
     break;
+  }
   case EnableOpenMP::Simd:
     pm.addPass(flangomp::createSimdOnlyPass());
     break;

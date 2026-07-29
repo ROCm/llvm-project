@@ -159,6 +159,10 @@ public:
   /// OpenMP is enabled.
   using DoConcurrentMappingKind = flangomp::DoConcurrentMappingKind;
 
+  /// Optionally implicitly wrap array statements in OpenMP `workdistribute`.
+  /// Only valid when OpenMP is enabled.
+  using ImplicitWorkdistributeKind = flangomp::ImplicitWorkdistributeKind;
+
   /// Name of the profile file to use as output for -fprofile-instr-generate,
   /// -fprofile-generate, and -fcs-profile-generate.
   std::string InstrProfileOutput;
