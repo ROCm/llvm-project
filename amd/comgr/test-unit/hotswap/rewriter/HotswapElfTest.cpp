@@ -1018,6 +1018,29 @@ TEST(ElfView, UpdateGfx1250RevisionMetadataRetagsKernelInPlace) {
   EXPECT_NE(After.find("A0"), llvm::StringRef::npos);
 }
 
+TEST(ElfView, UpdateGfx1250RevisionMetadataRetagsSectionOnlyNoteInPlace) {
+  comgr_test::KernelDescriptorElfOptions Opts;
+  Opts.MetadataSgprCount = 8;
+  Opts.MetadataGfx1250Revision = "B0";
+  Opts.MetadataInSectionOnly = true;
+  comgr_test::KernelDescriptorElf Obj =
+      comgr_test::makeKernelDescriptorElf(makeText(), Opts);
+
+  llvm::Expected<ElfView> ViewOrErr =
+      ElfView::create(Obj.Bytes.data(), Obj.Bytes.size());
+  ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
+  llvm::Expected<ElfView::ELFT::PhdrRange> PhdrsOrErr =
+      ViewOrErr->file().program_headers();
+  ASSERT_TRUE((bool)PhdrsOrErr) << llvm::toString(PhdrsOrErr.takeError());
+  ASSERT_TRUE(PhdrsOrErr->empty());
+  ASSERT_TRUE(ViewOrErr->updateGfx1250RevisionMetadata("A0"));
+
+  llvm::StringRef After(reinterpret_cast<const char *>(Obj.Bytes.data()),
+                        Obj.Bytes.size());
+  EXPECT_EQ(After.find("B0"), llvm::StringRef::npos);
+  EXPECT_NE(After.find("A0"), llvm::StringRef::npos);
+}
+
 TEST(ElfView, UpdateKernelDescriptorSgprCountCanUpdateMetadataOnly) {
   comgr_test::KernelDescriptorElfOptions Opts;
   Opts.KernelName = "entry_kernel";

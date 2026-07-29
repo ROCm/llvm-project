@@ -595,7 +595,7 @@ public:
   /// data only: no executable section contents, no defined function/ifunc
   /// symbols, no kernel descriptor symbols, and no AMDGPU metadata kernel
   /// entries. Malformed symbol tables, notes, or metadata fail closed.
-  bool isValidDataOnlyObject() const;
+  bool isValidDataOnlyObject();
 
   /// Find the kernel function symbol whose range includes \p TextAddress.
   /// Returns "" if no matching function symbol exists.
