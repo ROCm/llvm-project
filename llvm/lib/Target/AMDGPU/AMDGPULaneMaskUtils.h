@@ -178,8 +178,6 @@ private:
   AMDGPULaneMaskUtils LMU;
   AMDGPULaneMaskAnalysis *LMA = nullptr;
 
-  bool Processed = false;
-
   struct BlockInfo {
     MachineBasicBlock *Block;
     unsigned Flags = 0; // ResetFlags
@@ -202,14 +200,12 @@ private:
   SmallVector<BlockInfo, 4> Blocks;
 
   Register ZeroReg;
-  DenseSet<MachineInstr *> PotentiallyDead;
+  Register Accumulator;
   DenseMap<MachineBasicBlock *, SmallVector<std::pair<Register, unsigned>, 2>>
       AccumulatorResetBlocks;
   SmallDenseSet<Register, 4> AllAccumulators;
 
 public:
-  Register Accumulator;
-
   SmallDenseSet<Register, 4> &getAllAccumulators() { return AllAccumulators; }
 
   AMDGPULaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
@@ -222,13 +218,10 @@ public:
   void addReset(MachineBasicBlock &Block, ResetFlags Flags);
   void addAvailable(MachineBasicBlock &Block, Register Value);
 
-  Register getValueInMiddleOfBlock(MachineBasicBlock &Block);
-  Register getValueAtEndOfBlock(MachineBasicBlock &Block);
-  Register getValueAfterMerge(MachineBasicBlock &Block);
+  Register getMergedMask(MachineBasicBlock &Block);
   void insertAccumulatorResets();
 
 private:
-  void process();
   SmallVectorImpl<BlockInfo>::iterator findBlockInfo(MachineBasicBlock &Block);
 };
 
