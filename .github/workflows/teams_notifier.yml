@@ -9,6 +9,11 @@ on:
     secrets:
       AMD_STAGING_NIGHTLY_TEAMS_WEBHOOK_URL:
          required: true
+
+permissions:
+  contents: read
+  actions: read  # Needed to query workflow run jobs and download job logs via the GitHub API
+
 jobs:
   notify:
     runs-on: ubuntu-24.04
