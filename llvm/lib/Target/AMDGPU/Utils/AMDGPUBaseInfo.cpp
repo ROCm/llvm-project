@@ -26,6 +26,7 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/TargetParser/AMDGPUOperandInfo.h"
 #include "llvm/TargetParser/AMDGPUTargetParser.h"
 #include <optional>
 
@@ -198,6 +199,52 @@ inline unsigned getHoldCntBitShift() { return 7; }
 namespace llvm {
 
 namespace AMDGPU {
+
+int16_t getNamedOperandIdx(uint32_t Opcode, MCNamedOperand Name) {
+  switch (Name) {
+  case MCNamedOperand::VDst:
+    return getNamedOperandIdx(Opcode, OpName::vdst);
+  case MCNamedOperand::Src0Modifiers:
+    return getNamedOperandIdx(Opcode, OpName::src0_modifiers);
+  case MCNamedOperand::Src0:
+    return getNamedOperandIdx(Opcode, OpName::src0);
+  case MCNamedOperand::Src1Modifiers:
+    return getNamedOperandIdx(Opcode, OpName::src1_modifiers);
+  case MCNamedOperand::Src1:
+    return getNamedOperandIdx(Opcode, OpName::src1);
+  case MCNamedOperand::Src2Modifiers:
+    return getNamedOperandIdx(Opcode, OpName::src2_modifiers);
+  case MCNamedOperand::Src2:
+    return getNamedOperandIdx(Opcode, OpName::src2);
+  case MCNamedOperand::ScaleSrc0:
+    return getNamedOperandIdx(Opcode, OpName::scale_src0);
+  case MCNamedOperand::ScaleSrc1:
+    return getNamedOperandIdx(Opcode, OpName::scale_src1);
+  case MCNamedOperand::Clamp:
+    return getNamedOperandIdx(Opcode, OpName::clamp);
+  case MCNamedOperand::MatrixAFmt:
+    return getNamedOperandIdx(Opcode, OpName::matrix_a_fmt);
+  case MCNamedOperand::MatrixBFmt:
+    return getNamedOperandIdx(Opcode, OpName::matrix_b_fmt);
+  case MCNamedOperand::MatrixAScale:
+    return getNamedOperandIdx(Opcode, OpName::matrix_a_scale);
+  case MCNamedOperand::MatrixBScale:
+    return getNamedOperandIdx(Opcode, OpName::matrix_b_scale);
+  case MCNamedOperand::MatrixAScaleFmt:
+    return getNamedOperandIdx(Opcode, OpName::matrix_a_scale_fmt);
+  case MCNamedOperand::MatrixBScaleFmt:
+    return getNamedOperandIdx(Opcode, OpName::matrix_b_scale_fmt);
+  case MCNamedOperand::MatrixAReuse:
+    return getNamedOperandIdx(Opcode, OpName::matrix_a_reuse);
+  case MCNamedOperand::MatrixBReuse:
+    return getNamedOperandIdx(Opcode, OpName::matrix_b_reuse);
+  case MCNamedOperand::NegLo:
+    return getNamedOperandIdx(Opcode, OpName::neg_lo);
+  case MCNamedOperand::NegHi:
+    return getNamedOperandIdx(Opcode, OpName::neg_hi);
+  }
+  llvm_unreachable("unknown public AMDGPU MC named operand");
+}
 
 /// \returns true if the target supports signed immediate offset for SMRD
 /// instructions.
