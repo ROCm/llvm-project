@@ -8546,14 +8546,15 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  // To opt-in to faster emissary printf/fprint set -fuse-emissary-print.
+  // -fuse-emissary-print does not change codegen: device printf/fprintf are
+  // routed to Emissary by including <emissary/emissary_print.h> from the
+  // Emissary PRINT client. The flag only predefines __USE_EMISSARY_PRINT__, so
+  // sources and headers (llvm_libc_wrappers/stdio.h among them) can tell that
+  // the client, rather than the device libc, owns those calls.
   if (!IsWindowsMSVC &&
       Args.hasFlag(options::OPT_fuse_emissary_print,
-                   options::OPT_fno_use_emissary_print, false)) {
-    CmdArgs.push_back("-fuse-emissary-print");
-    // Tell llvm_libc_wrappers/stdio.h not to kill stderr and friends
+                   options::OPT_fno_use_emissary_print, false))
     CmdArgs.push_back("-D__USE_EMISSARY_PRINT__");
-  }
 
   if (Triple.isAMDGPU() ||
       (Triple.isSPIRV() && Triple.getVendor() == llvm::Triple::AMD)) {

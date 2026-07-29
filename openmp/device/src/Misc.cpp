@@ -16,7 +16,6 @@
 #include "shared/rpc.h"
 
 #include "Debug.h"
-#include "EmissaryIds.h"
 
 namespace ompx {
 namespace impl {
@@ -155,15 +154,6 @@ __attribute__((noinline)) void __alt_libc_free(void *ptr) {
   return;
 }
 
-__attribute__((noinline)) void
-__ockl_sanitizer_report(uint64_t addr, uint64_t pc, uint64_t wgidx,
-                        uint64_t wgidy, uint64_t wgidz, uint64_t wave_id,
-                        uint64_t is_read, uint64_t access_size) {
-  unsigned long long rc =
-      _emissary_exec(_PACK_EMIS_IDS(EMIS_ID_PRINT, _ockl_asan_report_idx,0,0), addr,
-                     pc, wgidx, wgidy, wgidz, wave_id, is_read, access_size);
-  return;
-}
 #if SANITIZER_AMDGPU
 __attribute__((noinline)) uint64_t __asan_malloc_impl(uint64_t bufsz,
                                                       uint64_t pc);

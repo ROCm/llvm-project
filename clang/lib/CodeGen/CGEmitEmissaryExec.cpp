@@ -181,26 +181,6 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
   assert(E->getNumArgs() >= 1); // _emissary_exec always has at least one arg.
   const llvm::DataLayout &DL = CGM.getDataLayout();
   CallArgList Args;
-  // --- Insert 1st emisid arg if emiting fprintf or printf.
-  unsigned int AOE = 0;
-  if (E->getDirectCallee()->getNameAsString() == "fprintf") {
-    constexpr unsigned long long emisid =
-        ((unsigned long long)EMIS_ID_PRINT << 48) |
-        ((unsigned long long)_fprintf_idx << 32);
-    Args.add(
-        RValue::get(llvm::ConstantInt::get(Int64Ty, emisid)),
-        getContext().getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/false));
-    AOE = 1; // Arg# offset to E->arguments to use with E->getArg(I-AOE)
-  }
-  if (E->getDirectCallee()->getNameAsString() == "printf") {
-    constexpr unsigned long long emisid =
-        ((unsigned long long)EMIS_ID_PRINT << 48) |
-        ((unsigned long long)_printf_idx << 32);
-    Args.add(
-        RValue::get(llvm::ConstantInt::get(Int64Ty, emisid)),
-        getContext().getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/false));
-    AOE = 1; // Arg# offset to E->arguments to use with E->getArg(I-AOE)
-  }
 
   EmitCallArgs(Args,
                E->getDirectCallee()->getType()->getAs<FunctionProtoType>(),
@@ -214,8 +194,18 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
     CGM.ErrorUnsupported(E, "non-scalar arg in GPU vargs function");
     return RValue::get(llvm::ConstantInt::get(IntTy, 0));
   }
-  // NumArgs always includes emisid, but E->getNumArgs() could be 1 less if
-  // inserted it above.
+  // Arg 0 is the packed emisid supplied by the caller, so Args maps 1:1 onto
+  // E->arguments(). It has to be a compile-time constant because the buffer
+  // layout below depends on the transfer counts encoded in it. _PACK_EMIS_IDS()
+  // folds to a constant, so this only fires on a malformed hand-written call --
+  // diagnose it instead of crashing on the cast.
+  RValue EmisIdRV = Args[0].getKnownRValue();
+  if (!EmisIdRV.isScalar() ||
+      !llvm::isa<llvm::ConstantInt>(EmisIdRV.getScalarVal())) {
+    CGM.ErrorUnsupported(E, "non-constant emissary id in _emissary_exec call");
+    return RValue::get(llvm::ConstantInt::get(IntTy, 0));
+  }
+
   unsigned NumArgs = (unsigned)Args.size();
   llvm::SmallVector<llvm::Type *, 32> ArgTypes;
   llvm::SmallVector<llvm::Value *, 32> VarStrLengths;
@@ -239,7 +229,7 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
     llvm::Type *ArgType = Arg->getType();
     // Skip string processing on arg0 which may not be in E->getArg(0)
     if (I != 0) {
-      const Expr *argX = E->getArg(I - AOE)->IgnoreParenCasts();
+      const Expr *argX = E->getArg(I)->IgnoreParenCasts();
       auto *argXTy = argX->getType().getTypePtr();
       if (isString(argXTy)) {
         if (isVarString(argX, argXTy, Arg)) {
@@ -323,8 +313,7 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
     // Get type size in bits. Usually 64 or 32.
     uint32_t numbits = 0;
     if (I > 0 &&
-        isString(
-            E->getArg(I - AOE)->IgnoreParenCasts()->getType().getTypePtr()))
+        isString(E->getArg(I)->IgnoreParenCasts()->getType().getTypePtr()))
       // The llvm typeID for string is pointer.  Since pointer numbits is 0,
       // we set numbits to 1 to distinguish pointer type ID as string pointer.
       numbits = 1;
@@ -346,12 +335,11 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
     llvm::Value *Arg = nullptr;
     if (I == 0) {
       Arg = Args[I].getKnownRValue().getScalarVal();
-      llvm::ConstantInt *CI = llvm::dyn_cast<llvm::ConstantInt>(Arg);
-      uint64_t uint64value = CI->getZExtValue();
+      uint64_t uint64value = llvm::cast<llvm::ConstantInt>(Arg)->getZExtValue();
       uint32_t lower_32 = (uint32_t)(uint64value & 0xFFFFFFFF);
       hasXfers = lower_32 ? true : false;
     } else {
-      const Expr *argX = E->getArg(I - AOE)->IgnoreParenCasts();
+      const Expr *argX = E->getArg(I)->IgnoreParenCasts();
       auto *argXTy = argX->getType().getTypePtr();
       if (isString(argXTy)) {
         if (isVarString(argX, argXTy, Arg)) {
@@ -396,7 +384,7 @@ RValue CodeGenFunction::EmitEmissaryExec(const CallExpr *E) {
   // Skip string processing on arg0 which may not be in E->getArg(0)
   for (unsigned I = 1; I < NumArgs; ++I) {
     llvm::Value *Arg = Args[I].getKnownRValue().getScalarVal();
-    const Expr *argX = E->getArg(I - AOE)->IgnoreParenCasts();
+    const Expr *argX = E->getArg(I)->IgnoreParenCasts();
     auto *argXTy = argX->getType().getTypePtr();
     if (isString(argXTy)) {
       if (isVarString(argX, argXTy, Arg)) {

@@ -1,4 +1,4 @@
-//===- openmp/device/include/EmissaryIds.h enum & headers ----- C++ -------===//
+//===-- EmissaryIds.h - Emissary API identifiers ------------- C/C++ ------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -24,8 +24,16 @@
 #endif
 #endif
 
-extern "C" __DEVATTR__ unsigned long long int
-_emissary_exec(const unsigned long long int, ...);
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
+__DEVATTR__ unsigned long long int _emissary_exec(const unsigned long long int,
+                                                  ...);
+
+#if defined(__cplusplus)
+}
+#endif
 
 #define _PACK_EMIS_IDS(a, b, c, d)                                             \
   ((unsigned long long)a << 48) | ((unsigned long long)b << 32) |              \
@@ -54,13 +62,6 @@ typedef enum {
   EMIS_ID_HDF5,
   EMIS_ID_RESERVE,
 } offload_emis_id_t;
-
-typedef enum {
-  _print_INVALID,
-  _printf_idx,
-  _fprintf_idx,
-  _ockl_asan_report_idx,
-} offload_emis_print_t;
 
 /// This structure is created by emisExtractArgBuf to get information
 /// from the data buffer passed by rpc.
