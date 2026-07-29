@@ -25,6 +25,18 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --check-idempotent | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES
+// RUN: env AMD_COMGR_TIME_STATISTICS=1 \
+// RUN:   AMD_COMGR_TIME_STATISTICS_GRANULARITY=ns \
+// RUN:   AMD_COMGR_REDIRECT_LOGS=%t.profile.log \
+// RUN:   hotswap-rewrite %t.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --output %t.profile.elf
+// RUN: %FileCheck --check-prefix=PROFILE-PARSE \
+// RUN:   --input-file=%t.profile.log %s
+// RUN: %FileCheck --check-prefix=PROFILE-COPY \
+// RUN:   --input-file=%t.profile.log %s
+// PROFILE-PARSE: phase:elf_parse{{ +}}1 calls
+// PROFILE-COPY: phase:output_copy{{ +}}1 calls
 
 // RUN: sed 's/^\.set claimed_function, 0$/.set claimed_function, 1/' \
 // RUN:   %s > %t.function.s
@@ -89,7 +101,8 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status INVALID_ARGUMENT 2>&1 \
 // RUN:   | %FileCheck --check-prefixes=MALFORMED,REJECT %s
-// MALFORMED: hotswap: error: failed to parse data-only AMDGPU metadata note.
+// MALFORMED: hotswap: error: data-only validation:
+// MALFORMED-SAME: failed to parse AMDGPU metadata note.
 
 // RUN: %llvm-objcopy --remove-section=.text %t.elf %t.missing-text.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.missing-text.elf \
@@ -99,9 +112,53 @@
 // MISSING: no .text section found
 // MISSING: RESULT: INVALID_ARGUMENT
 
+// COM: A non-AMDGPU input must be rejected before any AMDGPU-specific
+// COM: reasoning. An x86_64 relocatable from a single data definition has an
+// COM: empty .text, one object symbol, and no notes; without an e_machine gate
+// COM: it would be accepted for a gfx1250 rewrite.
+// RUN: %yaml2obj %S/hotswap-data-only-foreign-machine.yaml -o %t.foreign.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.foreign.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --expect-status INVALID_ARGUMENT 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=FOREIGN,REJECT %s
+// FOREIGN: hotswap: error: data-only validation requires an AMDGPU ELF
+// FOREIGN-SAME: (e_machine != EM_AMDGPU).
+
+// COM: A section whose file range escapes the input buffer must be rejected
+// COM: rather than copied out byte-for-byte. Here .rodata sh_offset is placed
+// COM: far past the end of the object.
+// RUN: %yaml2obj %S/hotswap-data-only-section-oob.yaml -o %t.section-oob.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.section-oob.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --expect-status INVALID_ARGUMENT 2>&1 \
+// RUN:   | %FileCheck --check-prefixes=SECTION-OOB,REJECT %s
+// SECTION-OOB: hotswap: error: data-only object has a section whose file range
+// SECTION-OOB-SAME: lies outside the input buffer
+
 // REJECT: hotswap: error: retargetCodeObject:
 // REJECT-SAME: does not describe a valid data-only code object.
 // REJECT: RESULT: INVALID_ARGUMENT
+
+// COM: A relocatable object carries its AMDGPU metadata note only in the
+// COM: section table (no PT_NOTE). This exercises the SHT_NOTE fallback that
+// COM: every linked -nostdlib variant above leaves dead. The note has an empty
+// COM: amdhsa.kernels array, so the object is data-only and accepted verbatim.
+// RUN: %yaml2obj %S/hotswap-data-only-note-section.yaml -o %t.note-section.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.note-section.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --output %t.note-section.out.elf 2>&1 \
+// RUN:   | %FileCheck --check-prefix=NOTE-SECTION %s
+// NOTE-SECTION: hotswap: accepted data-only code object with empty .text;
+// NOTE-SECTION-SAME: returning a byte-identical copy.
+// NOTE-SECTION: RESULT: SUCCESS
+// RUN: cmp %t.note-section.elf %t.note-section.out.elf
+
+// COM: Boundary note for the executable_section case above: the byte-identical
+// COM: data-only path rejects a non-empty executable section even when it is
+// COM: not named .text (see .other_text). This documents that the empty-.text
+// COM: acceptance never extends to objects that still carry executable code;
+// COM: descriptorless callable libraries therefore take the normal rewrite
+// COM: path, not this no-op copy.
 
 .set claimed_function, 0
 .set claimed_other_function, 0
