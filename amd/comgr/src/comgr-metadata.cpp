@@ -28,8 +28,10 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 #include <cstddef>
 #include <iostream>
+#include <optional>
 
 using namespace llvm;
 using namespace llvm::object;
@@ -420,11 +422,28 @@ amd_comgr_status_t getElfIsaName(DataObject *DataP, std::string &IsaName) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
 }
 
-amd_comgr_status_t getIsaIndex(StringRef IsaString, size_t &Index) {
-  auto IsaName = IsaString.take_until([](char C) { return C == ':'; });
+amd_comgr_status_t getIsaIndex(StringRef TargetIDString, size_t &Index,
+                               StringRef *Processor) {
+  // Validate the target ID and resolve the processor (derived from the subarch
+  // when the name omits it).
+  std::optional<AMDGPU::TargetID> TID =
+      AMDGPU::TargetID::parseTargetIDString(TargetIDString);
+  if (!TID || TID->getGPUKind() == AMDGPU::GK_NONE) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  StringRef CanonicalProcessor = AMDGPU::getArchNameAMDGCN(TID->getGPUKind());
+  if (Processor) {
+    *Processor = CanonicalProcessor;
+  }
+
+  // Match by processor only; TargetID already validated the rest of the triple,
+  // so the vendor/os/environ are not checked against the table (which stores an
+  // empty environment).
   auto *IsaIterator = std::find_if(
-      std::begin(IsaInfos), std::end(IsaInfos),
-      [&](const IsaInfo &IsaInfo) { return IsaName == IsaInfo.IsaName; });
+      std::begin(IsaInfos), std::end(IsaInfos), [&](const IsaInfo &IsaInfo) {
+        return CanonicalProcessor == IsaInfo.Processor;
+      });
   if (IsaIterator == std::end(IsaInfos)) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
