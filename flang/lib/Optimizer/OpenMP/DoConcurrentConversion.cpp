@@ -272,16 +272,23 @@ public:
         targetClauseOps.mapVars.push_back(
             Fortran::utils::openmp::genMapInfoOpForLiveIn(builder, liveIn,
                                                           isReductionVar));
-        liveInShapeInfoMap.insert(
-            {liveIn,
-             Fortran::utils::openmp::TargetDeclareShapeCreationInfo(liveIn)});
+        Fortran::utils::openmp::LiveInShapeInfo liveInShape(liveIn);
+        liveInShape.materializeExtents(builder, liveIn);
+        liveInShapeInfoMap.insert({liveIn, liveInShape});
       }
 
       targetClauseOps.kernelType = mlir::omp::TargetExecModeAttr::get(
           rewriter.getContext(), mlir::omp::TargetExecMode::spmd);
-      targetOp = Fortran::utils::openmp::genTargetOp(
+      targetOp = Fortran::utils::openmp::genTargetOpFromLiveIns(
           doLoop.getLoc(), rewriter, mapper, loopNestLiveIns, targetClauseOps,
-          loopNestClauseOps, liveInShapeInfoMap);
+          loopNestClauseOps, liveInShapeInfoMap,
+          [](fir::FirOpBuilder &builder, mlir::Location loc,
+             mlir::Value liveInArg, llvm::StringRef name,
+             mlir::Value shape) -> Fortran::utils::openmp::LiveInDeclareResult {
+            auto declareOp =
+                hlfir::DeclareOp::create(builder, loc, liveInArg, name, shape);
+            return {declareOp.getOriginalBase(), declareOp.getBase()};
+          });
       auto teamsOp = genTeamsOp(rewriter, loop, mapper);
       targetOp.setCombined(true);
       teamsOp.setCombined(true);

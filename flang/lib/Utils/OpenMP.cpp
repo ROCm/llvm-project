@@ -12,11 +12,12 @@
 #include "flang/Optimizer/Builder/DirectivesCommon.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Builder/Todo.h"
+#include "flang/Optimizer/Dialect/FIRBoxUtils.h"
 #include "flang/Optimizer/Dialect/FIROps.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
 
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
-#include "mlir/Transforms/DialectConversion.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/RegionUtils.h"
 
 namespace Fortran::utils::openmp {
@@ -298,22 +299,26 @@ mlir::FlatSymbolRefAttr getOrGenImplicitDefaultDeclareMapper(
   return mlir::FlatSymbolRefAttr::get(firOpBuilder.getContext(), mapperNameStr);
 }
 
-TargetDeclareShapeCreationInfo::TargetDeclareShapeCreationInfo(
-    mlir::Value liveIn) {
+LiveInShapeInfo::LiveInShapeInfo(mlir::Value liveIn) {
   mlir::Value shape = nullptr;
   mlir::Operation *liveInDefiningOp = liveIn.getDefiningOp();
-  auto declareOp =
-      mlir::dyn_cast_if_present<hlfir::DeclareOp>(liveInDefiningOp);
 
-  if (declareOp != nullptr)
-    shape = declareOp.getShape();
+  // The live-in may be produced by either declare flavor depending on where
+  // in the pipeline the caller runs: DoConcurrentConversion sees
+  // `hlfir.declare` (HLFIR still present), LowerWorkdistribute sees
+  // `fir.declare` (HLFIR already lowered). Both implement
+  // `fir::FortranVariableOpInterface`, which exposes the shape uniformly.
+  if (auto varOp = mlir::dyn_cast_if_present<fir::FortranVariableOpInterface>(
+          liveInDefiningOp))
+    shape = varOp.getShape();
 
   if (!shape)
     return;
 
-  auto shapeOp = mlir::dyn_cast_if_present<fir::ShapeOp>(shape.getDefiningOp());
+  mlir::Operation *shapeDefiningOp = shape.getDefiningOp();
+  auto shapeOp = mlir::dyn_cast_if_present<fir::ShapeOp>(shapeDefiningOp);
   auto shapeShiftOp =
-      mlir::dyn_cast_if_present<fir::ShapeShiftOp>(shape.getDefiningOp());
+      mlir::dyn_cast_if_present<fir::ShapeShiftOp>(shapeDefiningOp);
 
   if (!shapeOp && !shapeShiftOp)
     TODO(liveIn.getLoc(),
@@ -329,31 +334,100 @@ TargetDeclareShapeCreationInfo::TargetDeclareShapeCreationInfo(
       : shapeShiftOp.getExtents();
 }
 
-namespace {
-void genBoundsOps(fir::FirOpBuilder &builder, mlir::Value liveIn,
-    mlir::Value rawAddr, llvm::SmallVectorImpl<mlir::Value> &boundsOps) {
-  fir::ExtendedValue extVal = hlfir::translateToExtendedValue(rawAddr.getLoc(),
-      builder, hlfir::Entity{liveIn},
-      /*contiguousHint=*/
-      true)
-                                  .first;
-  fir::factory::AddrAndBoundsInfo info = fir::factory::getDataOperandBaseAddr(
-      builder, rawAddr, /*isOptional=*/false, rawAddr.getLoc());
-  boundsOps = fir::factory::genImplicitBoundsOps<mlir::omp::MapBoundsOp,
-      mlir::omp::MapBoundsType>(builder, info, extVal,
-      /*dataExvIsAssumedSize=*/false, rawAddr.getLoc());
+void LiveInShapeInfo::materializeExtents(
+    fir::FirOpBuilder &builder, mlir::Value liveIn) {
+  // A shaped declare already gave us the extents; nothing to materialize.
+  if (isShapedValue())
+    return;
+
+  // The live-in is not a shaped declare (e.g. an array-section
+  // `hlfir.designate` result), so there is no `fir.shape` to read. Recover the
+  // extents from the value's FIR array type so the device-side declare gets a
+  // well-formed shape instead of a shapeless one.
+  auto seqTy = mlir::dyn_cast_or_null<fir::SequenceType>(
+      fir::dyn_cast_ptrOrBoxEleTy(liveIn.getType()));
+  if (!seqTy)
+    return;
+
+  mlir::Operation *liveInDefiningOp = liveIn.getDefiningOp();
+  mlir::OpBuilder::InsertionGuard guard(builder);
+  // Materialize extents where the live-in is available so they dominate the
+  // target op inserted later at the wrapped loop.
+  if (liveInDefiningOp)
+    builder.setInsertionPointAfter(liveInDefiningOp);
+  else
+    builder.setInsertionPointToStart(liveIn.getParentBlock());
+
+  mlir::Location loc = liveIn.getLoc();
+
+  // Boxed arrays carry their (possibly runtime) extents in the descriptor.
+  if (mlir::isa<fir::BaseBoxType>(liveIn.getType())) {
+    llvm::SmallVector<mlir::Value> boxExtents;
+    fir::genDimInfoFromBox(builder, loc, liveIn, /*lbounds=*/nullptr,
+        &boxExtents, /*strides=*/nullptr);
+    extents.assign(boxExtents.begin(), boxExtents.end());
+    return;
+  }
+
+  // Raw-address arrays only expose constant extents via the type; dynamic
+  // extents are not recoverable from the value alone.
+  // TODO: recover dynamic extents (e.g. from the wrapped loop's trip count).
+  if (seqTy.hasDynamicExtents() || seqTy.hasUnknownShape())
+    return;
+
+  mlir::Type idxTy = builder.getIndexType();
+  for (fir::SequenceType::Extent extent : seqTy.getShape())
+    extents.push_back(builder.createIntegerConstant(loc, idxTy, extent));
 }
 
-hlfir::DeclareOp genLiveInDeclare(fir::FirOpBuilder &builder,
+namespace {
+/// Build implicit `omp.map.bounds` ops describing `liveIn`'s shape.
+static void genImplicitMapBounds(fir::FirOpBuilder &builder, mlir::Value liveIn,
+    mlir::Value rawAddr, llvm::SmallVectorImpl<mlir::Value> &boundsOps) {
+  mlir::Location loc = rawAddr.getLoc();
+
+  // A bare ref/heap/pointer to a dynamically-sized array (e.g. a `dimension(n)`
+  // dummy) is not a Fortran entity, so `hlfir::Entity{}` would assert: only a
+  // descriptor carries the runtime shape. Recover the extents from the defining
+  // declare's shape and describe the value as an `ArrayBoxValue` directly.
+  auto seqTy = mlir::dyn_cast_or_null<fir::SequenceType>(
+      fir::dyn_cast_ptrOrBoxEleTy(liveIn.getType()));
+  bool dynamicRawArray = seqTy && seqTy.hasDynamicExtents() &&
+      !mlir::isa<fir::BaseBoxType>(liveIn.getType());
+
+  llvm::SmallVector<mlir::Value> extents;
+  if (dynamicRawArray) {
+    // The runtime extents of a dynamic raw array come from the defining
+    // declare's `fir.shape`, which the pure constructor reads directly; no
+    // materialization is needed (or possible) here.
+    LiveInShapeInfo shapeInfo(liveIn);
+    extents.assign(shapeInfo.extents.begin(), shapeInfo.extents.end());
+  }
+
+  fir::ExtendedValue extVal = !extents.empty()
+      ? fir::ExtendedValue(fir::ArrayBoxValue(rawAddr, extents))
+      : hlfir::translateToExtendedValue(
+            loc, builder, hlfir::Entity{liveIn}, /*contiguousHint=*/true)
+            .first;
+  fir::factory::AddrAndBoundsInfo info = fir::factory::getDataOperandBaseAddr(
+      builder, rawAddr, /*isOptional=*/false, loc);
+  boundsOps = fir::factory::genImplicitBoundsOps<mlir::omp::MapBoundsOp,
+      mlir::omp::MapBoundsType>(builder, info, extVal,
+      /*dataExvIsAssumedSize=*/false, loc);
+}
+
+/// Reconstruct a declare op inside `targetOp` for the device-side value
+/// `liveInArg`, rebuilding the shape via `mapTemporaryValue` so shape extents
+/// and origins are themselves mapped into the region. The declare op itself is
+/// emitted by `declareBuilder`, letting the caller pick the dialect flavor.
+static LiveInDeclareResult genLiveInDeclare(fir::FirOpBuilder &builder,
     mlir::omp::TargetOp targetOp, mlir::Value liveInArg,
     mlir::omp::MapInfoOp liveInMapInfoOp,
-    const TargetDeclareShapeCreationInfo &targetShapeCreationInfo) {
-  mlir::Type liveInType = liveInArg.getType();
+    const LiveInShapeInfo &targetShapeCreationInfo,
+    LiveInDeclareBuilder declareBuilder) {
   std::string liveInName = liveInMapInfoOp.getName().has_value()
       ? liveInMapInfoOp.getName().value().str()
       : std::string("");
-  if (fir::isa_ref_type(liveInType))
-    liveInType = fir::unwrapRefType(liveInType);
 
   mlir::Value shape = [&]() -> mlir::Value {
     if (!targetShapeCreationInfo.isShapedValue())
@@ -366,12 +440,11 @@ hlfir::DeclareOp genLiveInDeclare(fir::FirOpBuilder &builder,
       for (auto [startIndex, extent] :
           llvm::zip_equal(targetShapeCreationInfo.startIndices,
               targetShapeCreationInfo.extents)) {
-        shapeShiftOperands.push_back(Fortran::utils::openmp::mapTemporaryValue(
-            builder, targetOp, startIndex,
-            liveInName + ".start_idx.dim" + std::to_string(shapeIdx)));
         shapeShiftOperands.push_back(
-            Fortran::utils::openmp::mapTemporaryValue(builder, targetOp, extent,
-                liveInName + ".extent.dim" + std::to_string(shapeIdx)));
+            mapTemporaryValue(builder, targetOp, startIndex,
+                liveInName + ".start_idx.dim" + std::to_string(shapeIdx)));
+        shapeShiftOperands.push_back(mapTemporaryValue(builder, targetOp,
+            extent, liveInName + ".extent.dim" + std::to_string(shapeIdx)));
         ++shapeIdx;
       }
 
@@ -384,16 +457,15 @@ hlfir::DeclareOp genLiveInDeclare(fir::FirOpBuilder &builder,
     llvm::SmallVector<mlir::Value> shapeOperands;
     size_t shapeIdx = 0;
     for (auto extent : targetShapeCreationInfo.extents) {
-      shapeOperands.push_back(
-          Fortran::utils::openmp::mapTemporaryValue(builder, targetOp, extent,
-              liveInName + ".extent.dim" + std::to_string(shapeIdx)));
+      shapeOperands.push_back(mapTemporaryValue(builder, targetOp, extent,
+          liveInName + ".extent.dim" + std::to_string(shapeIdx)));
       ++shapeIdx;
     }
 
     return fir::ShapeOp::create(builder, liveInArg.getLoc(), shapeOperands);
   }();
 
-  return hlfir::DeclareOp::create(
+  return declareBuilder(
       builder, liveInArg.getLoc(), liveInArg, liveInName, shape);
 }
 } // namespace
@@ -404,20 +476,33 @@ mlir::omp::MapInfoOp genMapInfoOpForLiveIn(
   llvm::StringRef name;
 
   mlir::Operation *liveInDefiningOp = liveIn.getDefiningOp();
-  auto declareOp =
-      mlir::dyn_cast_if_present<hlfir::DeclareOp>(liveInDefiningOp);
 
-  if (declareOp != nullptr) {
-    // Use the raw address to avoid unboxing `fir.box` values whenever
-    // possible. Put differently, if we have access to the direct value memory
-    // reference/address, we use it.
-    rawAddr = declareOp.getOriginalBase();
-    name = declareOp.getUniqName();
+  // Recover the raw address and unique name from the defining declare op,
+  // supporting both the HLFIR (`hlfir.declare`) and post-lowering FIR
+  // (`fir.declare`) flavors. `FortranVariableOpInterface` does not expose the
+  // unique name or the un-boxed base, so match the concrete ops.
+  if (auto hlfirDeclareOp =
+          mlir::dyn_cast_if_present<hlfir::DeclareOp>(liveInDefiningOp)) {
+    // Prefer the raw address: it avoids unboxing `fir.box` values when the
+    // direct memory reference is available.
+    rawAddr = hlfirDeclareOp.getOriginalBase();
+    name = hlfirDeclareOp.getUniqName();
+  } else if (auto firDeclareOp =
+                 mlir::dyn_cast_if_present<fir::DeclareOp>(liveInDefiningOp)) {
+    // A `fir.declare` has a single result that already is the memory
+    // reference, so it doubles as the raw address.
+    rawAddr = firDeclareOp.getResult();
+    name = firDeclareOp.getUniqName();
   }
 
   if (!llvm::isa<mlir::omp::PointerLikeType>(rawAddr.getType())) {
     mlir::OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointAfter(liveInDefiningOp);
+    // Block-argument live-ins (e.g. a VALUE scalar dummy) have no defining op;
+    // materialize the temp at the top of the owning block instead.
+    if (liveInDefiningOp)
+      builder.setInsertionPointAfter(liveInDefiningOp);
+    else
+      builder.setInsertionPointToStart(liveIn.getParentBlock());
     auto copyVal = builder.createTemporary(liveIn.getLoc(), liveIn.getType());
     builder.createStoreWithConvert(copyVal.getLoc(), liveIn, copyVal);
     rawAddr = copyVal;
@@ -443,7 +528,7 @@ mlir::omp::MapInfoOp genMapInfoOpForLiveIn(
   }
 
   llvm::SmallVector<mlir::Value> boundsOps;
-  genBoundsOps(builder, liveIn, rawAddr, boundsOps);
+  genImplicitMapBounds(builder, liveIn, rawAddr, boundsOps);
 
   auto asRecordType = [&](mlir::Type eleType) {
     return mlir::dyn_cast<fir::RecordType>(
@@ -472,24 +557,24 @@ mlir::omp::MapInfoOp genMapInfoOpForLiveIn(
     std::string mapperIdName =
         recordType.getName().str() + llvm::omp::OmpDefaultMapperName;
     // TODO Add a mangler callback once nested record types are supported.
-    mapperId = Fortran::utils::openmp::getOrGenImplicitDefaultDeclareMapper(
+    mapperId = getOrGenImplicitDefaultDeclareMapper(
         builder, liveIn.getLoc(), recordType, mapperIdName);
   }
 
-  return Fortran::utils::openmp::createMapInfoOp(builder, liveIn.getLoc(),
-      rawAddr,
+  return createMapInfoOp(builder, liveIn.getLoc(), rawAddr,
       /*varPtrPtr=*/{}, name.str(), boundsOps,
       /*members=*/{},
       /*membersIndex=*/mlir::ArrayAttr{}, mapFlag, captureKind,
       rawAddr.getType(), /*partialMap=*/false, mapperId);
 }
 
-mlir::omp::TargetOp genTargetOp(mlir::Location loc,
-    mlir::ConversionPatternRewriter &rewriter, mlir::IRMapping &mapper,
-    llvm::ArrayRef<mlir::Value> mappedVars,
+mlir::omp::TargetOp genTargetOpFromLiveIns(mlir::Location loc,
+    mlir::RewriterBase &rewriter, mlir::IRMapping &mapper,
+    llvm::ArrayRef<mlir::Value> liveIns,
     mlir::omp::TargetExtOperands &clauseOps,
     mlir::omp::LoopNestOperands &loopNestClauseOps,
-    const LiveInShapeInfoMap &liveInShapeInfoMap) {
+    const LiveInShapeInfoMap &liveInShapeInfoMap,
+    LiveInDeclareBuilder declareBuilder) {
   auto targetOp = mlir::omp::TargetOp::create(rewriter, loc, clauseOps);
   auto argIface = llvm::cast<mlir::omp::BlockArgOpenMPOpInterface>(*targetOp);
 
@@ -508,25 +593,22 @@ mlir::omp::TargetOp genTargetOp(mlir::Location loc,
   fir::FirOpBuilder builder(rewriter,
       fir::getKindMapping(targetOp->getParentOfType<mlir::ModuleOp>()));
 
-  // Within the loop, it is possible that we discover other values that need
-  // to be mapped to the target region (the shape info values for arrays, for
-  // example). Therefore, the map block args might be extended and resized.
-  // Hence, we invoke `argIface.getMapBlockArgs()` every iteration to make
-  // sure we access the proper vector of data.
+  // The loop body may surface additional values that need mapping (e.g. shape
+  // info for arrays), extending the map block args. Re-query the block args on
+  // each iteration so we always see the current vector.
   int idx = 0;
   for (auto [mapInfoOp, mappedVar] :
-      llvm::zip_equal(clauseOps.mapVars, mappedVars)) {
+      llvm::zip_equal(clauseOps.mapVars, liveIns)) {
     auto miOp = mlir::cast<mlir::omp::MapInfoOp>(mapInfoOp.getDefiningOp());
-    hlfir::DeclareOp liveInDeclare =
+    LiveInDeclareResult liveInDeclare =
         genLiveInDeclare(builder, targetOp, argIface.getMapBlockArgs()[idx],
-            miOp, liveInShapeInfoMap.at(mappedVar));
+            miOp, liveInShapeInfoMap.at(mappedVar), declareBuilder);
     ++idx;
 
-    // If `mappedVar.getDefiningOp()` is a `fir::BoxAddrOp`, we probably
-    // need to "unpack" the box by getting the defining op of it's value.
-    // However, we did not hit this case in reality yet so leaving it as a
-    // todo for now.
-    if (mlir::isa<fir::BoxAddrOp>(mappedVar.getDefiningOp()))
+    // If `mappedVar.getDefiningOp()` is a `fir::BoxAddrOp`, we likely need to
+    // unpack the box by chasing its defining op. Block-arg live-ins have no
+    // defining op, so guard against null. Not hit in practice yet.
+    if (mlir::isa_and_present<fir::BoxAddrOp>(mappedVar.getDefiningOp()))
       TODO(mappedVar.getLoc(),
           "Mapped variabled defined by `BoxAddrOp` are not supported yet");
 
@@ -539,11 +621,15 @@ mlir::omp::TargetOp genTargetOp(mlir::Location loc,
         mapper.map(hostValue, deviceValue);
     };
 
-    mapHostValueToDevice(mappedVar, liveInDeclare.getOriginalBase());
+    mapHostValueToDevice(mappedVar, liveInDeclare.originalBase);
 
+    // A host `hlfir.declare` exposes a distinct "hlfir base" (its second
+    // result) beyond the original base; map that to the device-side `base` too.
+    // Single-result host declares (e.g. `fir.declare`) have nothing extra here,
+    // in which case `originalBase` and `base` alias.
     if (auto origDeclareOp = mlir::dyn_cast_if_present<hlfir::DeclareOp>(
             mappedVar.getDefiningOp()))
-      mapHostValueToDevice(origDeclareOp.getBase(), liveInDeclare.getBase());
+      mapHostValueToDevice(origDeclareOp.getBase(), liveInDeclare.base);
   }
 
   for (auto [arg, hostEval] :
@@ -559,15 +645,15 @@ mlir::omp::TargetOp genTargetOp(mlir::Location loc,
         mapper.lookup(loopNestClauseOps.loopSteps[i]);
   }
 
-  // Check if cloning the bounds introduced any dependency on the outer
-  // region. If so, then either clone them as well if they are
-  // MemoryEffectFree, or else copy them to a new temporary and add them to
-  // the map and block_argument lists and replace their uses with the new
+  // Cloning the bounds may have introduced new outer-region dependencies;
+  // either clone the MemoryEffectFree ones too, or copy them to a temporary,
+  // add them to the map/block-arg lists, and replace their uses with the
   // temporary.
-  Fortran::utils::openmp::cloneOrMapRegionOutsiders(builder, targetOp);
+  cloneOrMapRegionOutsiders(builder, targetOp);
   rewriter.setInsertionPoint(
       mlir::omp::TerminatorOp::create(rewriter, targetOp.getLoc()));
 
   return targetOp;
 }
+
 } // namespace Fortran::utils::openmp
