@@ -1271,19 +1271,23 @@ std::optional<BitVector> getLiveSgprsAtContinuation(PatchContext &Ctx,
   }
   using FunctionKey = std::pair<uint64_t, uint64_t>;
   FunctionKey Key{FunctionRange->Begin, FunctionRange->End};
-  // Deferred trampolines are logical mutations of their source functions, but
-  // their source branches are not written into Ctx.Text until final fixup.
-  // Decoding the current bytes after one is queued would therefore omit the
-  // replacement's effects and its new control-flow edges. Fail closed for the
-  // affected function until finalization rather than prove liveness from an
-  // incomplete program image. A trampoline without a resolved function range
-  // may affect any queried function and also forces the conservative result.
-  if (Ctx.HasUnresolvedPendingTrampoline ||
-      Ctx.PendingTrampolineFunctions.contains(Key)) {
+  // A trampoline whose source function is unknown may add a control-flow edge
+  // into any function, so it can invalidate this function's liveness in ways
+  // the current .text does not show. Fail closed until finalization.
+  //
+  // A resolved in-function trampoline does not: its source keeps its original
+  // bytes in Ctx.Text until fixup (emitToTrampoline only queues it), so the
+  // decode here is faithful, and at finalization it only redirects the source
+  // through an appended pool that returns to the same continuation. That leaves
+  // the incoming-live set at every continuation in this function unchanged, so
+  // the scratch-liveness proof this query serves stays valid. Do not fail
+  // closed on it, or a function with more far sites than its high-water
+  // headroom can never reuse a locally dead pair for its later sites.
+  if (Ctx.HasUnresolvedPendingTrampoline) {
     log() << "hotswap: SGPR continuation liveness failed closed for source at "
              "0x"
           << utohexstr(InstOffset)
-          << ": pending trampoline source bytes are not finalized\n";
+          << ": a trampoline with no resolved function is pending\n";
     return std::nullopt;
   }
   DenseMap<FunctionKey, CurrentFunctionSgprLiveness>::iterator Cached =
@@ -1352,11 +1356,11 @@ void noteCurrentTextMutation(PatchContext &Ctx) {
 }
 
 void notePendingTrampolineMutation(PatchContext &Ctx, const Trampoline &T) {
-  if (!T.HasFunctionRange) {
+  // Only a trampoline with no resolved source function forces later liveness
+  // queries closed. A resolved in-function trampoline preserves continuation
+  // liveness (see getLiveSgprsAtContinuation), so it needs no record here.
+  if (!T.HasFunctionRange)
     Ctx.HasUnresolvedPendingTrampoline = true;
-    return;
-  }
-  Ctx.PendingTrampolineFunctions.insert({T.FunctionStart, T.FunctionEnd});
 }
 
 bool isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx,

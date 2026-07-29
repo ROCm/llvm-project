@@ -1318,10 +1318,9 @@ struct PatchContext {
   uint64_t TextMutationGeneration = 0;
   llvm::DenseMap<std::pair<uint64_t, uint64_t>, CurrentFunctionSgprLiveness>
       CurrentFunctionSgprLivenessCache{0};
-  // Deferred trampoline source branches are logical mutations that do not
-  // reach Text until final fixup. Index their owning functions so current-text
-  // liveness can reject incomplete program images in O(1) per query.
-  llvm::DenseSet<std::pair<uint64_t, uint64_t>> PendingTrampolineFunctions{0};
+  // Set once a deferred trampoline with no resolved source function is queued.
+  // Such a trampoline can add a control-flow edge into any function, so all
+  // later current-text liveness queries must fail closed until finalization.
   bool HasUnresolvedPendingTrampoline = false;
 };
 
