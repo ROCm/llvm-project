@@ -1,4 +1,4 @@
-//===- comgr-hotswap-elf.cpp - ELF helpers and trampoline growth ----------===//
+//===- elf.cpp - ELF helpers and trampoline growth ------------------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
@@ -164,10 +164,76 @@ struct PendingMetadataWrite {
   std::string Blob;
 };
 
+static bool
+processMetadataNote(ELFT::Note Note, const ELFFileT &File, StringRef Context,
+                    MetadataNoteMutator Mutator,
+                    std::vector<PendingMetadataWrite> &PendingWrites,
+                    bool &SawMetadataNote) {
+  if (Note.getName() != "AMDGPU" || Note.getType() != ELF::NT_AMDGPU_METADATA)
+    return true;
+  SawMetadataNote = true;
+
+  ArrayRef<uint8_t> Desc = Note.getDesc(4);
+  if (Desc.empty()) {
+    log() << "hotswap: error: " << Context
+          << ": AMDGPU metadata note has an empty descriptor.\n";
+    return false;
+  }
+
+  StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
+  msgpack::Document Doc;
+  if (!Doc.readFromBlob(Blob, false)) {
+    log() << "hotswap: error: " << Context
+          << ": failed to parse AMDGPU metadata note.\n";
+    return false;
+  }
+
+  msgpack::DocNode Root = Doc.getRoot();
+  if (!Root.isMap()) {
+    log() << "hotswap: error: " << Context
+          << ": AMDGPU metadata root is not a map.\n";
+    return false;
+  }
+
+  std::optional<bool> Changed = Mutator(Doc, Root.getMap());
+  if (!Changed)
+    return false;
+  if (!*Changed)
+    return true;
+
+  std::string NewBlob;
+  Doc.writeToBlob(NewBlob);
+  if (NewBlob.size() != Blob.size()) {
+    log() << "hotswap: error: " << Context
+          << ": updating AMDGPU metadata changes note size from " << Blob.size()
+          << " to " << NewBlob.size()
+          << " bytes; in-place rewrite cannot preserve ELF layout.\n";
+    return false;
+  }
+
+  const uint8_t *DescBegin = Desc.data();
+  if (DescBegin < File.base() || DescBegin >= File.end()) {
+    log() << "hotswap: error: " << Context
+          << ": metadata descriptor pointer is outside the ELF buffer.\n";
+    return false;
+  }
+  size_t DescOffset = DescBegin - File.base();
+  if (Desc.size() > File.getBufSize() ||
+      DescOffset > File.getBufSize() - Desc.size()) {
+    log() << "hotswap: error: " << Context
+          << ": metadata descriptor extends past the ELF buffer.\n";
+    return false;
+  }
+  PendingWrites.push_back({DescOffset, std::move(NewBlob)});
+  return true;
+}
+
 /// Parse each AMDGPU metadata note, invoke \p Mutator on its root map, and
 /// defer changed writes until \p Validator accepts the complete traversal.
 /// This keeps multi-note updates atomic while sharing the parsing, encoded-size
-/// and destination validation for every metadata mutation.
+/// and destination validation for every metadata mutation. Linked objects
+/// normally expose notes through PT_NOTE; when no AMDGPU metadata note is
+/// found there, relocatable and unusual objects fall back to SHT_NOTE.
 static bool rewriteMetadataNotes(uint8_t *Elf, const ELFFileT &File,
                                  StringRef Context, MetadataNoteMutator Mutator,
                                  MetadataNoteValidator Validator,
@@ -184,70 +250,41 @@ static bool rewriteMetadataNotes(uint8_t *Elf, const ELFFileT &File,
       continue;
 
     Error Err = Error::success();
-    for (ELFT::Note Note : File.notes(Phdr, Err)) {
-      if (Note.getName() != "AMDGPU" ||
-          Note.getType() != ELF::NT_AMDGPU_METADATA)
-        continue;
-      SawMetadataNote = true;
+    for (ELFT::Note Note : File.notes(Phdr, Err))
+      if (!processMetadataNote(Note, File, Context, Mutator, PendingWrites,
+                               SawMetadataNote))
+        return false;
 
-      ArrayRef<uint8_t> Desc = Note.getDesc(4);
-      if (Desc.empty()) {
-        log() << "hotswap: error: " << Context
-              << ": AMDGPU metadata note has an empty descriptor.\n";
-        return false;
-      }
-
-      StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
-      msgpack::Document Doc;
-      if (!Doc.readFromBlob(Blob, false)) {
-        log() << "hotswap: error: " << Context
-              << ": failed to parse AMDGPU metadata note.\n";
-        return false;
-      }
-
-      msgpack::DocNode Root = Doc.getRoot();
-      if (!Root.isMap()) {
-        log() << "hotswap: error: " << Context
-              << ": AMDGPU metadata root is not a map.\n";
-        return false;
-      }
-
-      std::optional<bool> Changed = Mutator(Doc, Root.getMap());
-      if (!Changed)
-        return false;
-      if (!*Changed)
-        continue;
-
-      std::string NewBlob;
-      Doc.writeToBlob(NewBlob);
-      if (NewBlob.size() != Blob.size()) {
-        log() << "hotswap: error: " << Context
-              << ": updating AMDGPU metadata changes note size from "
-              << Blob.size() << " to " << NewBlob.size()
-              << " bytes; in-place rewrite cannot preserve ELF layout.\n";
-        return false;
-      }
-
-      const uint8_t *DescBegin = Desc.data();
-      if (DescBegin < File.base() || DescBegin >= File.end()) {
-        log() << "hotswap: error: " << Context
-              << ": metadata descriptor pointer is outside the ELF buffer.\n";
-        return false;
-      }
-      size_t DescOffset = DescBegin - File.base();
-      if (Desc.size() > File.getBufSize() ||
-          DescOffset > File.getBufSize() - Desc.size()) {
-        log() << "hotswap: error: " << Context
-              << ": metadata descriptor extends past the ELF buffer.\n";
-        return false;
-      }
-      PendingWrites.push_back({DescOffset, std::move(NewBlob)});
-    }
     if (Err) {
       log() << "hotswap: error: " << Context
             << ": failed to iterate AMDGPU notes: " << toString(std::move(Err))
             << "\n";
       return false;
+    }
+  }
+
+  if (!SawMetadataNote) {
+    Expected<ELFT::ShdrRange> SectionsOrErr = File.sections();
+    if (!SectionsOrErr) {
+      log() << "hotswap: error: " << Context << ": failed to read sections: "
+            << toString(SectionsOrErr.takeError()) << "\n";
+      return false;
+    }
+    for (const ELFT::Shdr &Shdr : *SectionsOrErr) {
+      if (Shdr.sh_type != ELF::SHT_NOTE)
+        continue;
+
+      Error Err = Error::success();
+      for (ELFT::Note Note : File.notes(Shdr, Err))
+        if (!processMetadataNote(Note, File, Context, Mutator, PendingWrites,
+                                 SawMetadataNote))
+          return false;
+      if (Err) {
+        log() << "hotswap: error: " << Context
+              << ": failed to iterate AMDGPU note sections: "
+              << toString(std::move(Err)) << "\n";
+        return false;
+      }
     }
   }
 
@@ -581,7 +618,16 @@ bool ElfView::functionTextRangesComplete() const {
   return FunctionRangeCacheComplete;
 }
 
-bool ElfView::isValidDataOnlyObject() const {
+bool ElfView::isValidDataOnlyObject() {
+  // Fail closed on foreign inputs before any AMDGPU-specific reasoning. An
+  // ordinary non-AMDGPU relocatable (e.g. an x86_64 object built from a single
+  // data definition) can otherwise present an empty .text, a lone object
+  // symbol, and no notes, and be accepted for a gfx1250 rewrite.
+  if (file().getHeader().e_machine != ELF::EM_AMDGPU) {
+    log() << "hotswap: error: data-only validation requires an AMDGPU ELF "
+             "(e_machine != EM_AMDGPU).\n";
+    return false;
+  }
   if (textSize() != 0) {
     log() << "hotswap: error: data-only validation requires an empty .text "
              "section.\n";
@@ -589,6 +635,21 @@ bool ElfView::isValidDataOnlyObject() const {
   }
 
   for (const ELFT::Shdr &Shdr : Sections) {
+    // Reject any non-SHT_NOBITS section whose file range escapes the input
+    // buffer before copying it out byte-for-byte. checkedAddUint64 fails closed
+    // on wraparound, and the end offset must lie within the mapped input.
+    if (Shdr.sh_type != ELF::SHT_NOBITS) {
+      std::optional<uint64_t> SecFileEnd = checkedAddUint64(
+          Shdr.sh_offset, Shdr.sh_size, "data-only section file range");
+      if (!SecFileEnd || *SecFileEnd > size()) {
+        log() << "hotswap: error: data-only object has a section whose file "
+                 "range lies outside the input buffer (offset 0x"
+              << utohexstr(Shdr.sh_offset) << ", size 0x"
+              << utohexstr(Shdr.sh_size) << ").\n";
+        return false;
+      }
+    }
+
     if ((Shdr.sh_flags & ELF::SHF_EXECINSTR) != 0 && Shdr.sh_size != 0) {
       Expected<StringRef> NameOrErr = File.getSectionName(Shdr);
       if (!NameOrErr) {
@@ -641,6 +702,9 @@ bool ElfView::isValidDataOnlyObject() const {
                 << *NameOrErr << "'.\n";
         return false;
       }
+      // An undefined descriptor still declares kernel intent and may resolve
+      // when a relocatable is linked. Reject it here so data-only acceptance
+      // cannot depend on whether validation happens before or after that link.
       if (NameOrErr->ends_with(".kd")) {
         log() << "hotswap: error: data-only object has kernel descriptor "
                  "symbol '"
@@ -651,91 +715,25 @@ bool ElfView::isValidDataOnlyObject() const {
   }
 
   bool SawMetadataNote = false;
-  auto validateMetadataNote = [&](ELFT::Note Note) {
-    if (Note.getName() != "AMDGPU" || Note.getType() != ELF::NT_AMDGPU_METADATA)
-      return true;
-    SawMetadataNote = true;
-
-    ArrayRef<uint8_t> Desc = Note.getDesc(4);
-    if (Desc.empty()) {
-      log() << "hotswap: error: data-only AMDGPU metadata note has an "
-               "empty descriptor.\n";
-      return false;
-    }
-    StringRef Blob(reinterpret_cast<const char *>(Desc.data()), Desc.size());
-    msgpack::Document Doc;
-    if (!Doc.readFromBlob(Blob, false)) {
-      log() << "hotswap: error: failed to parse data-only AMDGPU metadata "
-               "note.\n";
-      return false;
-    }
-
-    msgpack::DocNode Root = Doc.getRoot();
-    if (!Root.isMap()) {
-      log() << "hotswap: error: data-only AMDGPU metadata root is not a map.\n";
-      return false;
-    }
-    msgpack::MapDocNode &RootMap = Root.getMap();
-    msgpack::DocNode::MapTy::iterator KernelsIt =
-        RootMap.find("amdhsa.kernels");
-    if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray()) {
-      log() << "hotswap: error: data-only AMDGPU metadata has no valid "
-               "amdhsa.kernels array.\n";
-      return false;
-    }
-    if (!KernelsIt->second.getArray().empty()) {
-      log() << "hotswap: error: data-only AMDGPU metadata claims "
-            << KernelsIt->second.getArray().size() << " kernel(s).\n";
-      return false;
-    }
-    return true;
-  };
-
-  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
-  if (!PhdrsOrErr) {
-    log() << "hotswap: error: data-only validation failed to read program "
-             "headers: "
-          << toString(PhdrsOrErr.takeError()) << "\n";
-    return false;
-  }
-  for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
-    if (Phdr.p_type != ELF::PT_NOTE)
-      continue;
-
-    Error Err = Error::success();
-    for (ELFT::Note Note : File.notes(Phdr, Err))
-      if (!validateMetadataNote(Note))
+  return rewriteMetadataNotes(
+      data(), File, "data-only validation",
+      [&](msgpack::Document &,
+          msgpack::MapDocNode &RootMap) -> std::optional<bool> {
+        msgpack::DocNode::MapTy::iterator KernelsIt =
+            RootMap.find("amdhsa.kernels");
+        if (KernelsIt == RootMap.end() || !KernelsIt->second.isArray()) {
+          log() << "hotswap: error: data-only AMDGPU metadata has no valid "
+                   "amdhsa.kernels array.\n";
+          return std::nullopt;
+        }
+        if (!KernelsIt->second.getArray().empty()) {
+          log() << "hotswap: error: data-only AMDGPU metadata claims "
+                << KernelsIt->second.getArray().size() << " kernel(s).\n";
+          return std::nullopt;
+        }
         return false;
-    if (Err) {
-      log() << "hotswap: error: data-only validation failed to iterate AMDGPU "
-               "notes: "
-            << toString(std::move(Err)) << "\n";
-      return false;
-    }
-  }
-
-  // Linked code objects normally expose metadata through PT_NOTE. Match
-  // COMGR's metadata lookup fallback for relocatable/unusual objects whose
-  // note exists only in the section table.
-  if (!SawMetadataNote) {
-    for (const ELFT::Shdr &Shdr : Sections) {
-      if (Shdr.sh_type != ELF::SHT_NOTE)
-        continue;
-
-      Error Err = Error::success();
-      for (ELFT::Note Note : File.notes(Shdr, Err))
-        if (!validateMetadataNote(Note))
-          return false;
-      if (Err) {
-        log()
-            << "hotswap: error: data-only validation failed to iterate AMDGPU "
-               "note sections: "
-            << toString(std::move(Err)) << "\n";
-        return false;
-      }
-    }
-  }
-  return true;
+      },
+      [](bool) { return true; }, SawMetadataNote);
 }
 
 // -- ElfView::findKernelAtAddress ---------------------------------------------
