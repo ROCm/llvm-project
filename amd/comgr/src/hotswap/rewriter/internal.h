@@ -317,6 +317,10 @@ struct Trampoline {
   // use safe branch islands and, when a dead register pair is available, the
   // scratch-backed gfx12 set-PC sequence. Neither executes s_add_pc_i64.
   bool Long = false;
+  // Required tensor wrappers are rechecked after final pool layout because
+  // earlier long-trampoline island dwords can shift a later short return out
+  // of range.
+  bool RequiresFinalLayoutRouting = false;
   bool UsesSetPCBack = false;
   unsigned LongBranchSgprBase = 0;
   // When numbered SGPRs are exhausted, a far edge may use VCC after proving
@@ -1572,6 +1576,16 @@ isRegisterDefinitelyDeadAtContinuation(PatchContext &Ctx, uint64_t InstOffset,
                                        llvm::MCRegister Register);
 
 // -- Trampoline emission helpers (defined in b0a0.cpp) ----------
+
+/// Re-evaluate marked required short trampolines against the final pool
+/// layout, including the branch-island dword reserved after every long
+/// trampoline. Marked entries whose forward or return edge no longer fits
+/// become registerless long trampolines so the ordinary island planner can
+/// route them.
+std::optional<unsigned>
+promoteOutOfRangeRequiredShortTrampolines(std::vector<Trampoline> &Trampolines,
+                                          uint64_t PoolBaseOffset,
+                                          const LLVMState &LS);
 
 [[nodiscard]] bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,
                                  uint64_t InstOffset, uint32_t InstSize,

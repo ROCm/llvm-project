@@ -1288,6 +1288,75 @@ bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
 // not built by a provable in-function construction idiom (bare operand,
 // cross-function, mutated, SCC-live, or observed by other consumers).
 
+static std::optional<unsigned>
+findLocallyDeadTensorScratchSgpr(PatchContext &Ctx,
+                                 const InternalDecodedInst &DI,
+                                 ArrayRef<uint8_t> Replacement) {
+  std::string KernelName =
+      Ctx.Elf.findKernelAtAddress(DI.Offset + Ctx.Elf.textAddr());
+  if (KernelName.empty())
+    return std::nullopt;
+
+  std::optional<unsigned> DeclaredSgprs =
+      Ctx.Elf.getKernelSgprCount(KernelName);
+  constexpr unsigned VccSgprs = 2;
+  if (!DeclaredSgprs || *DeclaredSgprs <= VccSgprs)
+    return std::nullopt;
+  unsigned NumberedLimit =
+      std::min(Ctx.Config.MaxSgprs, *DeclaredSgprs - VccSgprs);
+  if (NumberedLimit == 0)
+    return std::nullopt;
+
+  std::optional<ElfView::FunctionTextRange> FunctionRange =
+      Ctx.Elf.findFunctionTextRangeAtOffset(DI.Offset);
+  if (!FunctionRange)
+    return std::nullopt;
+  std::optional<uint64_t> Continuation = checkedAddUint64(
+      DI.Offset, DI.Size, "tensor descriptor scratch continuation");
+  if (!Continuation)
+    return std::nullopt;
+
+  std::optional<SmallVector<MCRegister, 128>> NumberedSgprs =
+      resolveNumberedSgprRegisters(*Ctx.LS.MRI, Ctx.Config.MaxSgprs);
+  if (!NumberedSgprs)
+    return std::nullopt;
+  std::optional<BitVector> ContinuationUnsafe =
+      unsafeIncomingNumberedSgprsInRange(
+          Ctx.Decoded, Ctx.LS, FunctionRange->Begin, FunctionRange->End,
+          *Continuation, *NumberedSgprs);
+  if (!ContinuationUnsafe)
+    return std::nullopt;
+
+  BitVector Unsafe = unsafeIncomingNumberedSgprsInReplacement(
+      Replacement, Ctx.LS, *NumberedSgprs);
+  Unsafe |= *ContinuationUnsafe;
+  for (unsigned End = NumberedLimit; End != 0; --End) {
+    unsigned Candidate = End - 1;
+    if (!Unsafe.test(Candidate))
+      return Candidate;
+  }
+  return std::nullopt;
+}
+
+static bool emitTensorReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
+                                      uint32_t InstSize,
+                                      ArrayRef<uint8_t> Replacement) {
+  size_t TrampolineCount = Ctx.OutTrampolines.size();
+  if (!emitReplacementCode(Ctx, InstOffset, InstSize, Replacement))
+    return false;
+  if (Ctx.OutTrampolines.size() == TrampolineCount)
+    return true;
+  if (Ctx.OutTrampolines.size() != TrampolineCount + 1 ||
+      Ctx.OutTrampolines.back().OriginalOffset != InstOffset) {
+    log() << "hotswap: error: tensor_load_to_lds: unexpected trampoline "
+             "queue mutation at 0x"
+          << utohexstr(InstOffset) << "\n";
+    return false;
+  }
+  Ctx.OutTrampolines.back().RequiresFinalLayoutRouting = true;
+  return true;
+}
+
 bool patchTensorMaskAtSite(PatchContext &Ctx, size_t Idx,
                            MCRegister BaseMCReg) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
@@ -1306,9 +1375,24 @@ bool patchTensorMaskAtSite(PatchContext &Ctx, size_t Idx,
   const uint8_t *OrigInst = Ctx.Text + DI.Offset;
 
   if (SgprLive) {
+    SmallVector<uint8_t> CoreReplacement;
+    CoreReplacement.append(PackBytes.begin(), PackBytes.end());
+    CoreReplacement.append(OrigInst, OrigInst + DI.Size);
+
     std::optional<SafeSgprScratchBlock> Scratch =
         findSafeSgprScratchBlock(Ctx, DI.Offset, /*Count=*/1, /*Alignment=*/1,
-                                 "tensor_load_to_lds descriptor save");
+                                 "tensor_load_to_lds descriptor save",
+                                 /*ReportNoSpace=*/false);
+    bool CommitScratch = Scratch.has_value();
+    if (!Scratch) {
+      std::optional<unsigned> LocalScratch =
+          findLocallyDeadTensorScratchSgpr(Ctx, DI, CoreReplacement);
+      if (LocalScratch) {
+        Scratch = SafeSgprScratchBlock{*LocalScratch, 1};
+        log() << "hotswap: tensor_load_to_lds: reusing locally dead s"
+              << *LocalScratch << " at 0x" << utohexstr(DI.Offset) << "\n";
+      }
+    }
     if (!Scratch) {
       log() << "hotswap: error: tensor_load_to_lds: no scratch SGPR "
                "available\n";
@@ -1329,13 +1413,13 @@ bool patchTensorMaskAtSite(PatchContext &Ctx, size_t Idx,
 
     SmallVector<uint8_t> Replacement;
     Replacement.append(Save.begin(), Save.end());
-    Replacement.append(PackBytes.begin(), PackBytes.end());
-    Replacement.append(OrigInst, OrigInst + DI.Size);
+    Replacement.append(CoreReplacement.begin(), CoreReplacement.end());
     Replacement.append(Restore.begin(), Restore.end());
-    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
+    if (!emitTensorReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
       return failRequiredPatch(Ctx);
 
-    if (!commitSafeSgprScratchBlock(Ctx, DI.Offset, *Scratch,
+    if (CommitScratch &&
+        !commitSafeSgprScratchBlock(Ctx, DI.Offset, *Scratch,
                                     "tensor_load_to_lds descriptor save"))
       return failRequiredPatch(Ctx);
     log() << "hotswap: tensor_load_to_lds: " << BaseSreg
@@ -1344,7 +1428,7 @@ bool patchTensorMaskAtSite(PatchContext &Ctx, size_t Idx,
     SmallVector<uint8_t> Replacement;
     Replacement.append(PackBytes.begin(), PackBytes.end());
     Replacement.append(OrigInst, OrigInst + DI.Size);
-    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
+    if (!emitTensorReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
       return failRequiredPatch(Ctx);
 
     log() << "hotswap: tensor_load_to_lds: " << BaseSreg

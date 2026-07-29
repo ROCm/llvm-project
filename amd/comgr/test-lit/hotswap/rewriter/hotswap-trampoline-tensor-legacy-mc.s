@@ -12,6 +12,9 @@
 // INPUT-LABEL: <legacy_load_d4>:
 // INPUT: tensor_load_to_lds s[0:3], s[4:11], s[12:15], s[16:19]
 // INPUT-NEXT: s_endpgm
+// INPUT-LABEL: <legacy_load_saturated>:
+// INPUT: tensor_load_to_lds s[0:3], s[4:11]
+// INPUT-NEXT: s_mov_b32 s0, s4
 // INPUT-LABEL: <legacy_store_d2>:
 // INPUT: tensor_store_from_lds s[0:3], s[4:11]
 // INPUT-NEXT: s_mov_b32 s0, s4
@@ -29,6 +32,8 @@
 // RUN:   | %FileCheck --check-prefix=API %s
 // API: hotswap: tensor_load_to_lds: s4 live, save/restore via s{{[0-9]+}}
 // API: hotswap: tensor_load_to_lds: s4 dead, no save/restore needed
+// API: hotswap: tensor_load_to_lds: reusing locally dead s103
+// API: hotswap: tensor_load_to_lds: s4 live, save/restore via s103
 // API-NOT: tensor_store_from_lds
 // API: RESULT: SUCCESS
 
@@ -52,6 +57,16 @@
 // OUTPUT: s_endpgm
 // OUTPUT: s_pack_hh_b32_b16 s4, 0, s4
 // OUTPUT-NEXT: tensor_load_to_lds s[0:3], s[4:11], s[12:15], s[16:19]
+// OUTPUT-NEXT: s_branch
+
+// OUTPUT-LABEL: <legacy_load_saturated>:
+// OUTPUT: s_branch
+// OUTPUT: s_mov_b32 s0, s4
+// OUTPUT: s_endpgm
+// OUTPUT: s_mov_b32 s103, s4
+// OUTPUT-NEXT: s_pack_hh_b32_b16 s4, 0, s4
+// OUTPUT-NEXT: tensor_load_to_lds s[0:3], s[4:11]
+// OUTPUT-NEXT: s_mov_b32 s4, s103
 // OUTPUT-NEXT: s_branch
 
 // OUTPUT-LABEL: <legacy_store_d2>:
@@ -129,6 +144,32 @@ legacy_load_d4:
 .Llegacy_load_d4_end:
 .size legacy_load_d4, .Llegacy_load_d4_end-legacy_load_d4
 
+.globl legacy_load_saturated
+.p2align 8
+.type legacy_load_saturated,@function
+legacy_load_saturated:
+  tensor_load_to_lds_gfx1250_legacy s[0:3], s[4:11]
+  s_mov_b32 s0, s4
+  s_endpgm
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+.Llegacy_load_saturated_end:
+.size legacy_load_saturated, .Llegacy_load_saturated_end-legacy_load_saturated
+
 .globl legacy_store_d2
 .p2align 8
 .type legacy_store_d2,@function
@@ -163,6 +204,12 @@ legacy_store_d4:
 .end_amdhsa_kernel
 
 .p2align 8
+.amdhsa_kernel legacy_load_saturated
+  .amdhsa_next_free_vgpr 1
+  .amdhsa_next_free_sgpr 106
+.end_amdhsa_kernel
+
+.p2align 8
 .amdhsa_kernel legacy_store_d2
   .amdhsa_next_free_vgpr 1
   .amdhsa_next_free_sgpr 12
@@ -192,6 +239,16 @@ legacy_store_d4:
     - .name: legacy_load_d4
       .symbol: legacy_load_d4.kd
       .sgpr_count: 20
+      .vgpr_count: 1
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .max_flat_workgroup_size: 256
+    - .name: legacy_load_saturated
+      .symbol: legacy_load_saturated.kd
+      .sgpr_count: 106
       .vgpr_count: 1
       .kernarg_segment_size: 0
       .group_segment_fixed_size: 0

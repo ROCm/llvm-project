@@ -4285,6 +4285,49 @@ static void appendPoolBranchIslands(std::vector<Trampoline> &Trampolines) {
   }
 }
 
+std::optional<unsigned>
+promoteOutOfRangeRequiredShortTrampolines(std::vector<Trampoline> &Trampolines,
+                                          uint64_t PoolBaseOffset,
+                                          const LLVMState &LS) {
+  uint64_t TrampolineOffset = PoolBaseOffset;
+  unsigned Promoted = 0;
+  for (Trampoline &T : Trampolines) {
+    if (T.Bytes.size() < MinInstSize) {
+      log() << "hotswap: error: trampoline at 0x" << utohexstr(T.OriginalOffset)
+            << " has no reserved short return dword\n";
+      return std::nullopt;
+    }
+
+    std::optional<uint64_t> Next = checkedAddUint64(
+        TrampolineOffset, T.Bytes.size(), "final trampoline pool layout");
+    if (!Next)
+      return std::nullopt;
+    if (T.Long) {
+      Next = checkedAddUint64(*Next, PoolBranchIslandBytes,
+                              "final trampoline branch-island layout");
+      if (!Next)
+        return std::nullopt;
+    } else if (T.RequiresFinalLayoutRouting) {
+      uint64_t BackSlot = *Next - MinInstSize;
+      std::optional<uint64_t> ReturnTo = checkedAddUint64(
+          T.OriginalOffset, T.OriginalSize, "final trampoline return target");
+      if (!ReturnTo)
+        return std::nullopt;
+      if (!isSBranchReachable(T.OriginalOffset, TrampolineOffset) ||
+          !isSBranchReachable(BackSlot, *ReturnTo)) {
+        T.Long = true;
+        Next = checkedAddUint64(*Next, PoolBranchIslandBytes,
+                                "promoted trampoline branch-island layout");
+        if (!Next)
+          return std::nullopt;
+        ++Promoted;
+      }
+    }
+    TrampolineOffset = *Next;
+  }
+  return Promoted;
+}
+
 static bool isEndProgram(const InternalDecodedInst &DI, const LLVMState &LS) {
   unsigned Opcode = DI.Inst.getOpcode();
   return Opcode == LS.SEndPgmOpcode || Opcode == LS.SEndPgmSavedOpcode;
@@ -5795,6 +5838,14 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
       expandStraightLineTrampolines(Ctx, ControlFlow->Targets);
       mergeAdjacentLongTrampolines(OutTrampolines, ControlFlow->Targets);
     }
+    std::optional<unsigned> Promoted =
+        promoteOutOfRangeRequiredShortTrampolines(OutTrampolines,
+                                                  Ctx.PoolBaseOffset, Ctx.LS);
+    if (!Promoted)
+      return std::nullopt;
+    if (*Promoted != 0)
+      log() << "hotswap: promoted " << *Promoted
+            << " required short trampoline(s) after final pool layout\n";
     appendPoolBranchIslands(OutTrampolines);
     if (!assignLongBranchGateways(Ctx, ControlFlow->Targets,
                                   !ControlFlow->HasUnresolvedTargets))

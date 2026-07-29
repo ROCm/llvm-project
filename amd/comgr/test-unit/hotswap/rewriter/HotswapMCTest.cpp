@@ -3347,6 +3347,45 @@ TEST(BranchIslandAllocator, SkipsGatewayFromDifferentFunction) {
   EXPECT_EQ(*Islands, (llvm::SmallVector<uint64_t, 4>{130000, 260000}));
 }
 
+TEST(TrampolineFinalLayout, PromotesShortAfterPriorLongIsland) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  Trampoline First;
+  First.Long = true;
+  First.Bytes.append(MinInstSize, uint8_t{0});
+
+  Trampoline BoundaryShort;
+  BoundaryShort.OriginalOffset = 0;
+  BoundaryShort.OriginalSize = MinInstSize;
+  BoundaryShort.Bytes.append(2 * MinInstSize, uint8_t{0});
+
+  // Without the first long trampoline's future island dword, BoundaryShort's
+  // return is exactly at the negative simm16 limit. The island shifts its pool
+  // body by one dword, so final-layout planning must promote it.
+  constexpr uint64_t PoolBaseOffset = 131064;
+  std::vector<Trampoline> Unmarked = {First, BoundaryShort};
+  std::optional<unsigned> Promoted =
+      promoteOutOfRangeRequiredShortTrampolines(Unmarked, PoolBaseOffset, S);
+  ASSERT_TRUE(Promoted);
+  EXPECT_EQ(*Promoted, 0u);
+  EXPECT_FALSE(Unmarked[1].Long);
+
+  BoundaryShort.RequiresFinalLayoutRouting = true;
+  std::vector<Trampoline> Trampolines = {First, BoundaryShort};
+  Promoted =
+      promoteOutOfRangeRequiredShortTrampolines(Trampolines, PoolBaseOffset, S);
+  ASSERT_TRUE(Promoted);
+  EXPECT_EQ(*Promoted, 1u);
+  EXPECT_TRUE(Trampolines[0].Long);
+  EXPECT_TRUE(Trampolines[1].Long);
+
+  Promoted =
+      promoteOutOfRangeRequiredShortTrampolines(Trampolines, PoolBaseOffset, S);
+  ASSERT_TRUE(Promoted);
+  EXPECT_EQ(*Promoted, 0u);
+}
+
 // -- assembleSingleInst / decodeTextSection round-trip ------------------------
 
 TEST(AssembleDecode, SNopRoundTrip) {
