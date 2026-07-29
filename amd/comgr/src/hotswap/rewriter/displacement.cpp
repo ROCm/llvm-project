@@ -1042,6 +1042,14 @@ struct PendingAbsoluteRepair {
   std::string Context;
 };
 
+bool hasProtectedEntryInRange(const DenseSet<uint64_t> &ProtectedEntries,
+                              uint64_t Offset, uint64_t Size) {
+  for (uint64_t I = 0; I != Size; ++I)
+    if (ProtectedEntries.contains(Offset + I))
+      return true;
+  return false;
+}
+
 Expected<bool> repairSGetPcPairForDisplacement(
     const ElfView &Elf, const LLVMState &LS, const DisplacementPlan &Plan,
     const InternalDecodedInst &GetPc,
@@ -1072,7 +1080,7 @@ Expected<bool> repairSGetPcPairForDisplacement(
       !Add.Inst.getOperand(1).isReg() ||
       Add.Inst.getOperand(0).getReg() != GetPc.Inst.getOperand(0).getReg() ||
       Add.Inst.getOperand(1).getReg() != GetPc.Inst.getOperand(0).getReg() ||
-      ProtectedEntries.contains(AddOldOff) ||
+      hasProtectedEntryInRange(ProtectedEntries, AddOldOff, Add.Size) ||
       Plan.rangeOverlapsReplacement(AddOldOff, Add.Size)) {
     return false;
   }
@@ -1167,9 +1175,9 @@ Expected<bool> repairLegacySGetPcSetPcForDisplacement(
       AddLo.Inst.getOperand(0).getReg() != AddLo.Inst.getOperand(1).getReg() ||
       AddHi.Inst.getOperand(0).getReg() != AddHi.Inst.getOperand(1).getReg() ||
       SetPc.Inst.getOperand(0).getReg() != GetPc.Inst.getOperand(0).getReg() ||
-      ProtectedEntries.contains(AddLo.Offset) ||
-      ProtectedEntries.contains(AddHi.Offset) ||
-      ProtectedEntries.contains(SetPc.Offset) ||
+      hasProtectedEntryInRange(ProtectedEntries, AddLo.Offset, AddLo.Size) ||
+      hasProtectedEntryInRange(ProtectedEntries, AddHi.Offset, AddHi.Size) ||
+      hasProtectedEntryInRange(ProtectedEntries, SetPc.Offset, SetPc.Size) ||
       Plan.rangeOverlapsReplacement(AddLo.Offset, AddLo.Size) ||
       Plan.rangeOverlapsReplacement(AddHi.Offset, AddHi.Size) ||
       Plan.rangeOverlapsReplacement(SetPc.Offset, SetPc.Size))
@@ -1356,8 +1364,13 @@ Error repairBranches(const ElfView &Elf, const LLVMState &LS,
 
   // A repaired materialization is only valid when every path executes its
   // defining get-PC first. Protect direct and declared entries so no branch,
-  // function alias, or kernel descriptor can bypass part of the sequence.
+  // ELF entry, function alias, or kernel descriptor can bypass part of the
+  // sequence.
   DenseSet<uint64_t> ProtectedEntries;
+  const uint64_t ElfEntry = Elf.file().getHeader().e_entry;
+  if (ElfEntry != 0 && ElfEntry >= Elf.textAddr() &&
+      ElfEntry - Elf.textAddr() < Elf.textSize())
+    ProtectedEntries.insert(ElfEntry - Elf.textAddr());
   for (const ElfView::FunctionTextRange &Range : Elf.functionTextRanges()) {
     if (Range.Begin >= Elf.textAddr() &&
         Range.Begin - Elf.textAddr() < Elf.textSize())
