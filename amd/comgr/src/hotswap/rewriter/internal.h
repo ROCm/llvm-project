@@ -1285,6 +1285,12 @@ struct SafeSgprUsageSummary {
   unsigned HighWatermark = 0;
 };
 
+enum class AllKernelDeclaredSgprState {
+  Uncomputed,
+  Valid,
+  Failed,
+};
+
 /// Current-text, per-function SGPR liveness cached for one mutation
 /// generation. Bits [0, MaxSgprs) name numbered SGPRs; bit MaxSgprs names VCC.
 struct CurrentFunctionSgprLiveness {
@@ -1372,6 +1378,30 @@ struct PatchContext {
   std::optional<SafeSgprUsageSummary> WholeObjectSgprUsage;
   llvm::DenseMap<std::pair<uint64_t, uint64_t>, SafeSgprUsageSummary>
       FunctionSgprUsage{0};
+  // Counts cold production analyses, so tests and profiling can distinguish
+  // repeated cache hits from recomputation.
+  uint64_t FunctionSgprUsageAnalyses = 0;
+  // Kernel ownership and scratch-SGPR descriptor charging are immutable or
+  // monotone during one rewrite. Cache both so a promoted relay in a large
+  // non-kernel function does not repeat the same symbol lookup and full
+  // kernel-descriptor scan for every source instruction.
+  llvm::DenseMap<std::pair<uint64_t, uint64_t>, std::string>
+      FunctionKernelOwner{0};
+  // Counts cold function-to-kernel symbol lookups. Cache hits do not advance
+  // this counter.
+  uint64_t FunctionKernelOwnerLookups = 0;
+  // Ownerless device-function queries must stay above every kernel's declared
+  // SGPR count. Publish the high-watermark only after every descriptor has
+  // been validated; a malformed declaration is a sticky terminal failure.
+  AllKernelDeclaredSgprState AllKernelDeclaredSgprCacheState =
+      AllKernelDeclaredSgprState::Uncomputed;
+  unsigned AllKernelDeclaredSgprHighWatermark = 0;
+  // Counts cold all-descriptor analyses, including the one scan that records
+  // a terminal failure. Cache hits do not advance this counter.
+  uint64_t AllKernelDeclaredSgprAnalyses = 0;
+  unsigned AllKernelSgprRequirement = 0;
+  llvm::StringMap<unsigned> KernelSgprRequirements;
+  uint64_t SgprDescriptorChargePasses = 0;
   // Occupancy checks may run at several patch sites in one kernel. Cache the
   // immutable metadata so the AMDGPU note is parsed at most once per field.
   llvm::StringMap<std::optional<KernelWorkgroupMetadata>>
