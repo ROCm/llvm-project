@@ -2654,13 +2654,11 @@ getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
   return AbsoluteTarget - TextAddr;
 }
 
-static std::optional<ControlFlowScanIndex>
-buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
-                          const LLVMState &LS, uint64_t TextAddr,
-                          uint64_t TextEnd,
-                          ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
-                          ArrayRef<RelocationTableDispatch>
-                              RelocationDispatches) {
+static std::optional<ControlFlowScanIndex> buildControlFlowScanIndex(
+    ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
+    uint64_t TextAddr, uint64_t TextEnd,
+    ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
+    ArrayRef<RelocationTableDispatch> RelocationDispatches) {
   ControlFlowScanIndex Index;
   uint64_t TextSize = TextEnd - TextAddr;
   for (const RelocationTableDispatch &Dispatch : RelocationDispatches) {
@@ -2675,13 +2673,10 @@ buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
             << " is not an instruction boundary\n";
       return std::nullopt;
     }
-    const size_t CallIndex =
-        static_cast<size_t>(Call - Decoded.begin());
-    std::optional<MCRegister> ReturnRegister =
-        getCallReturnRegister(*Call, LS);
+    const size_t CallIndex = static_cast<size_t>(Call - Decoded.begin());
+    std::optional<MCRegister> ReturnRegister = getCallReturnRegister(*Call, LS);
     if (!ReturnRegister ||
-        !Index.RelocationDispatchesBySource
-             .try_emplace(CallIndex, Dispatch)
+        !Index.RelocationDispatchesBySource.try_emplace(CallIndex, Dispatch)
              .second) {
       log() << "hotswap: relocation-table call at 0x"
             << utohexstr(Dispatch.CallOffset)
@@ -2692,8 +2687,7 @@ buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
         Call->Offset, Call->Size, "relocation-table call continuation");
     if (!Continuation)
       return std::nullopt;
-    if (*Continuation >= TextSize ||
-        (*Continuation & (MinInstSize - 1)) != 0) {
+    if (*Continuation >= TextSize || (*Continuation & (MinInstSize - 1)) != 0) {
       log() << "hotswap: relocation-table call at 0x"
             << utohexstr(Dispatch.CallOffset)
             << " has no aligned continuation inside .text\n";
@@ -2751,8 +2745,7 @@ buildControlFlowScanIndex(ArrayRef<InternalDecodedInst> Decoded,
         matchPcMaterializedCall(Decoded, I, LS, TextAddr);
     if (Materialized) {
       Index.MaterializedCalls.try_emplace(I, *Materialized);
-      if (Materialized->Target >= TextAddr &&
-          Materialized->Target < TextEnd)
+      if (Materialized->Target >= TextAddr && Materialized->Target < TextEnd)
         Index.DirectTargetsByTarget.push_back(
             {I, Materialized->Target - TextAddr});
     }
@@ -4221,11 +4214,10 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
           RelocationDispatch =
               Index->RelocationDispatchesBySource.find(InstIndex);
       if (RelocationDispatch != Index->RelocationDispatchesBySource.end()) {
-        if (hasKnownControlFlowEntry(
-                DeclaredEntries, EntryProofReturns,
-                EntryProofReturnPositions, *Index,
-                RelocationDispatch->second.SequenceStart,
-                RelocationDispatch->second.SequenceEnd)) {
+        if (hasKnownControlFlowEntry(DeclaredEntries, EntryProofReturns,
+                                     EntryProofReturnPositions, *Index,
+                                     RelocationDispatch->second.SequenceStart,
+                                     RelocationDispatch->second.SequenceEnd)) {
           log() << "hotswap: relocation-table call at 0x"
                 << utohexstr(DI.Offset)
                 << " has an entry that bypasses its address proof\n";

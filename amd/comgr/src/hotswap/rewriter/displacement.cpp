@@ -533,8 +533,7 @@ std::vector<RelocationTableDispatch> matchRelocationTableDispatches(
         Add.Inst.getNumOperands() != 3 || !Add.Inst.getOperand(0).isReg() ||
         Add.Inst.getOperand(0).getReg() != BaseRegister ||
         !Add.Inst.getOperand(1).isReg() ||
-        Add.Inst.getOperand(1).getReg() != BaseRegister ||
-        !AddImmediate)
+        Add.Inst.getOperand(1).getReg() != BaseRegister || !AddImmediate)
       continue;
 
     std::optional<size_t> GetPcIndex =
@@ -549,9 +548,8 @@ std::vector<RelocationTableDispatch> matchRelocationTableDispatches(
 
     // s_get_pc_i64 produces the next instruction's address; s_add_nc_u64 is
     // modulo-2^64, so unsigned addition also handles a table below .text.
-    const uint64_t TableAddress =
-        Elf.textAddr() + GetPc.Offset + GetPc.Size +
-        static_cast<uint64_t>(*AddImmediate);
+    const uint64_t TableAddress = Elf.textAddr() + GetPc.Offset + GetPc.Size +
+                                  static_cast<uint64_t>(*AddImmediate);
     ArrayRef<RelocationTableCandidate>::iterator Table =
         llvm::find_if(Tables, [&](const RelocationTableCandidate &T) {
           return T.Address == TableAddress;

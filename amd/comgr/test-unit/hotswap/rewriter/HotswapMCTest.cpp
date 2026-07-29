@@ -4659,9 +4659,8 @@ makeRelocationDispatchTestObject(const LLVMState &S, bool DynamicIndex = false,
         return true;
       };
   if (!Append("s_get_pc_i64 s[54:55]") ||
-      !Append(UseLiteral64Addend
-                  ? "s_add_nc_u64 s[54:55], s[54:55], 0x102c"
-                  : "s_add_nc_u64 s[54:55], s[54:55], 0xffc"))
+      !Append(UseLiteral64Addend ? "s_add_nc_u64 s[54:55], s[54:55], 0x102c"
+                                 : "s_add_nc_u64 s[54:55], s[54:55], 0xffc"))
     return std::nullopt;
   if (DynamicIndex) {
     if (!Append("s_load_b64 s[0:1], s[54:55], s2 scale_offset"))
@@ -4853,8 +4852,8 @@ TEST(RelocationTableDispatch, ProvesCompleteConstantSlot) {
   ASSERT_TRUE(ObjectOr);
   ASSERT_GT(ObjectOr->Decoded.size(), 1u);
   ASSERT_GT(ObjectOr->Decoded[1].Inst.getNumOperands(), 2u);
-  ObjectOr->Decoded[1].Inst.getOperand(2) = llvm::MCOperand::createExpr(
-      llvm::MCConstantExpr::create(0x102c, *S.Ctx));
+  ObjectOr->Decoded[1].Inst.getOperand(2) =
+      llvm::MCOperand::createExpr(llvm::MCConstantExpr::create(0x102c, *S.Ctx));
   EXPECT_TRUE(ObjectOr->Decoded[1].Inst.getOperand(2).isExpr());
   Dispatches = analyzeRelocationDispatchTestObject(*ObjectOr, S);
   ASSERT_TRUE((bool)Dispatches) << llvm::toString(Dispatches.takeError());

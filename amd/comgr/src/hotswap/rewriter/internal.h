@@ -1650,11 +1650,9 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     llvm::ArrayRef<RelocationTableDispatch> RelocationDispatches = {});
 
 /// Run the linked-object control-flow proof used by patch placement.
-std::optional<DirectControlFlowInfo>
-analyzeDirectControlFlow(const ElfView &Elf,
-                         llvm::ArrayRef<InternalDecodedInst> Decoded,
-                         const LLVMState &LS,
-                         llvm::ArrayRef<uint8_t> Text = {});
+std::optional<DirectControlFlowInfo> analyzeDirectControlFlow(
+    const ElfView &Elf, llvm::ArrayRef<InternalDecodedInst> Decoded,
+    const LLVMState &LS, llvm::ArrayRef<uint8_t> Text = {});
 
 /// Return whether \p DI consumes the incoming value of \p Register, including
 /// explicit read/modify/write destinations represented by MC tied-operand
