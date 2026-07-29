@@ -668,7 +668,7 @@ Every processor supports every OS ABI (see :ref:`amdgpu-os`) with the following 
                                                                            work-item
                                                                            IDs
 
-     ``gfx1250``                 ``amdgpu12.50``  APU                    - Architected                   *TBA*
+     ``gfx1250``                 ``amdgpu12.50``  APU   - sramecc        - Architected                   *TBA*
                                                                            flat
                                                                            scratch                         .. TODO::
                                                                          - Packed
@@ -680,7 +680,7 @@ Every processor supports every OS ABI (see :ref:`amdgpu-os`) with the following 
                                                                          - Workgroup
                                                                            Clusters
 
-     ``gfx1251``                 ``amdgpu12.51``  APU                    - Architected                   *TBA*
+     ``gfx1251``                 ``amdgpu12.51``  APU   - sramecc        - Architected                   *TBA*
                                                                            flat
                                                                            scratch                       .. TODO::
                                                                          - Packed
@@ -817,7 +817,7 @@ Generic processor code objects are versioned. See :ref:`amdgpu-generic-processor
                                                                                 work-item
                                                                                 IDs
 
-     ``gfx12-5-generic``  ``amdgpu12.5`` - ``gfx1250``                        - Architected     Functionally equivalent to
+     ``gfx12-5-generic``  ``amdgpu12.5`` - ``gfx1250``     - sramecc          - Architected     Functionally equivalent to
                                          - ``gfx1251``                          flat scratch    gfx1250.
                                                                               - Packed
                                                                                 work-item
