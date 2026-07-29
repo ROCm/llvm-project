@@ -1072,6 +1072,9 @@ void OpenMPIRBuilder::finalize(Function *Fn) {
   if (!OffloadInfoManager.empty())
     createOffloadEntriesAndInfoMetadata(ErrorReportFn);
 
+  // Rewrite uses of globals to their replacement declare target globals.
+  applyDeclareTargetGlobalReplacements();
+
   if (Config.EmitLLVMUsedMetaInfo.value_or(false)) {
     std::vector<WeakTrackingVH> LLVMCompilerUsed = {
         M.getGlobalVariable("__openmp_nvptx_data_transfer_temporary_storage")};
@@ -1082,6 +1085,73 @@ void OpenMPIRBuilder::finalize(Function *Fn) {
 }
 
 bool OpenMPIRBuilder::isFinalized() { return IsFinalized; }
+
+void OpenMPIRBuilder::registerDeclareTargetGlobalReplacement(
+    GlobalValue *Original, GlobalValue *Replacement) {
+  assert(Original && Replacement &&
+         "Null values provided to registerDeclareTargetGlobalReplacement");
+  DeclareTargetGlobalReplacements.push_back({Original, Replacement});
+}
+
+void OpenMPIRBuilder::applyDeclareTargetGlobalReplacements() {
+  for (DeclareTargetGlobalReplacement &R : DeclareTargetGlobalReplacements) {
+    GlobalValue *OldGV = R.Original;
+    GlobalValue *NewGV = R.Replacement;
+    if (!OldGV || !NewGV)
+      continue;
+
+    // The replacement global is a reference pointer that holds the
+    // address of the device-resident storage. Every use must load the
+    // reference pointer first and use the loaded address.
+    //
+    // Constant expression users (e.g. a constant GEP embedded in another
+    // global's initializer or in an instruction) cannot have a load inserted
+    // in place, so first expand any constant-expression users that live inside
+    // functions into instructions. Any remaining constant users are handled
+    // via a direct constant rewrite below as we cannot materialize a load
+    // there.
+    //
+    // NOTE: We extend the constant rewrite to module scope, as we replace all
+    // usages.
+    if (auto *OldConst = dyn_cast<Constant>(OldGV))
+      convertUsersOfConstantsToInstructions(OldConst,
+                                            /*RestrictToFunc=*/nullptr,
+                                            /*RemoveDeadConstants=*/false);
+
+    IRBuilderBase::InsertPointGuard Guard(Builder);
+    SmallVector<User *, 16> Users(OldGV->users());
+    for (User *U : Users) {
+      auto *Insn = dyn_cast<Instruction>(U);
+      if (!Insn)
+        continue;
+
+      Builder.SetInsertPoint(Insn);
+      Builder.SetCurrentDebugLocation(Insn->getDebugLoc());
+      LoadInst *Load = Builder.CreateLoad(NewGV->getType(), NewGV);
+
+      // The replacement declare target global lives in the default address
+      // space, whereas the original global may reside in a non-default
+      // address space. In that case the initial lowering may have
+      // emitted an addrspacecast that is no longer valid.  Replace the
+      // whole addrspacecast with the load and erase it rather than
+      // feeding the load back into the (now pointless) cast.
+      if (auto *ASC = dyn_cast<AddrSpaceCastInst>(Insn)) {
+        unsigned NewGVAS = NewGV->getType()->getPointerAddressSpace();
+        unsigned OldGVAS = OldGV->getType()->getPointerAddressSpace();
+        unsigned DestAS = ASC->getType()->getPointerAddressSpace();
+        if (NewGVAS == 0 && DestAS == 0 && NewGVAS != OldGVAS) {
+          ASC->replaceAllUsesWith(Load);
+          ASC->eraseFromParent();
+          continue;
+        }
+      }
+
+      Insn->replaceUsesOfWith(OldGV, Load);
+    }
+  }
+
+  DeclareTargetGlobalReplacements.clear();
+}
 
 OpenMPIRBuilder::~OpenMPIRBuilder() {
   assert(OutlineInfos.empty() && "There must be no outstanding outlinings");
