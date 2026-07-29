@@ -78,6 +78,5 @@ add_offload_testsuite(check-offload
 
 add_lit_testsuite(check-offload-unit "Running offload unittest suites"
   ${CMAKE_CURRENT_BINARY_DIR}/unit
-  EXCLUDE_FROM_CHECK_ALL 
   #DEPENDS LLVMOffload
    OffloadUnitTests)
