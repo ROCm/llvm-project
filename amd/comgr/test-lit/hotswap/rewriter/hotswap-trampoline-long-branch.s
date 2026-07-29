@@ -38,19 +38,12 @@
 // RUN:   | %FileCheck --check-prefix=IDEM %s
 // IDEM: IDEMPOTENT: YES
 
-// COM: A kernel with no aligned two-SGPR block fails closed instead of
-// COM: emitting the unsafe return or clobbering a live register.
-// RUN: sed -e 's/s_mov_b64 vcc, -1/s_mov_b32 s105, 0/' \
-// RUN:   -e 's/\.amdhsa_next_free_sgpr 12/.amdhsa_next_free_sgpr 106/' \
-// RUN:   -e 's/\.sgpr_count: 14/.sgpr_count: 106/' %s > %t.full-sgpr.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
-// RUN:   %t.full-sgpr.s -o %t.full-sgpr.elf
-// RUN: hotswap-rewrite %t.full-sgpr.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --expect-status ERROR | %FileCheck --check-prefix=FAIL %s
-// FAIL: RESULT: ERROR
+// COM: A kernel that declares the full numbered SGPR file no longer fails
+// COM: closed here: the locally-dead-pair fallback reuses an aligned pair that
+// COM: is dead at the site. That path is covered by
+// COM: hotswap-trampoline-locally-dead-sgpr.s.
 
-// COM: A metadata-less object also fails closed because scratch usage cannot
+// COM: A metadata-less object still fails closed because scratch usage cannot
 // COM: be charged to its owning kernel.
 // RUN: sed '/^.amdgpu_metadata$/,/^.end_amdgpu_metadata$/d' %s > %t.nometa.s
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
@@ -58,6 +51,7 @@
 // RUN: hotswap-rewrite %t.nometa.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR | %FileCheck --check-prefix=FAIL %s
+// FAIL: RESULT: ERROR
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
