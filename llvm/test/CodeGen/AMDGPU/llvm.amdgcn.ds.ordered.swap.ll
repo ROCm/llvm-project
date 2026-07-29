@@ -1,9 +1,9 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=0 -mtriple=amdgpu7.04 < %s | FileCheck -check-prefixes=GCN,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.04 < %s | FileCheck -check-prefixes=GCN,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=0 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,VIGFX9,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,VIGFX9,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=0 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,VIGFX9,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,VIGFX9,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu7.04 < %s | FileCheck -check-prefixes=GCN,GCN-SDAG,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.04 < %s | FileCheck -check-prefixes=GCN,GCN-GISEL,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,GCN-SDAG,VIGFX9,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,GCN-GISEL,VIGFX9,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GCN-SDAG,VIGFX9,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GCN-GISEL,VIGFX9,FUNC %s
 
 ; FUNC-LABEL: {{^}}ds_ordered_swap:
 ; GCN: s_mov_b32 m0, s0
@@ -17,8 +17,11 @@ define amdgpu_cs float @ds_ordered_swap(ptr addrspace(2) inreg %gds, i32 %value)
 }
 
 ; FUNC-LABEL: {{^}}ds_ordered_swap_conditional:
-; GCN: v_cmp_ne_u32_e32 vcc, 0, v[[VALUE:[0-9]+]]
-; GCN: s_and_saveexec_b64 s[[SAVED:\[[0-9]+:[0-9]+\]]], vcc
+; GCN-SDAG: v_cmp_eq_u32_e32 vcc, 0, v[[VALUE:[0-9]+]]
+; GCN-SDAG: s_xor_b64 s[{{[0-9]+:[0-9]+}}], vcc, exec
+; GCN-SDAG: s_mov_b64 exec, s[{{[0-9]+:[0-9]+}}]
+; GCN-GISEL: v_cmp_ne_u32_e32 vcc, 0, v[[VALUE:[0-9]+]]
+; GCN-GISEL: s_and_saveexec_b64 s[[SAVED:\[[0-9]+:[0-9]+\]]], vcc
 ; // We have to use s_cbranch, because ds_ordered_count has side effects with EXEC=0
 ; GCN: s_cbranch_execz [[BB:.LBB._.]]
 ; GCN: s_mov_b32 m0, s0
@@ -28,7 +31,8 @@ define amdgpu_cs float @ds_ordered_swap(ptr addrspace(2) inreg %gds, i32 %value)
 ; GCN-NEXT: [[BB]]:
 ; // Wait for expcnt(0) before modifying EXEC
 ; GCN-NEXT: s_waitcnt expcnt(0)
-; GCN-NEXT: s_or_b64 exec, exec, s[[SAVED]]
+; GCN-SDAG-NEXT: s_or_b64 exec, exec, vcc
+; GCN-GISEL-NEXT: s_or_b64 exec, exec, s[[SAVED]]
 define amdgpu_cs float @ds_ordered_swap_conditional(ptr addrspace(2) inreg %gds, i32 %value) {
 entry:
   %c = icmp ne i32 %value, 0
