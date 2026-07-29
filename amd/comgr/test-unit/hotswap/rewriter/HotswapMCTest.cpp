@@ -1108,20 +1108,45 @@ TEST(SymbolLessReturnRegionOwnership, RejectsTransitiveTombstoneOverlap) {
   llvm::SmallVector<SymbolLessReturnRegion, 4> Regions;
   std::vector<int64_t> RegionOwner(5, -1);
 
-  EXPECT_TRUE(claimSymbolLessReturnRegion(
-      Regions, RegionOwner, makeSymbolLessReturnRegion({0, 1})));
-  EXPECT_FALSE(claimSymbolLessReturnRegion(
-      Regions, RegionOwner, makeSymbolLessReturnRegion({1, 2})));
-  EXPECT_FALSE(claimSymbolLessReturnRegion(
-      Regions, RegionOwner, makeSymbolLessReturnRegion({2, 3})));
-  EXPECT_TRUE(claimSymbolLessReturnRegion(
-      Regions, RegionOwner, makeSymbolLessReturnRegion({4})));
+  EXPECT_TRUE(claimSymbolLessReturnRegion(Regions, RegionOwner,
+                                          makeSymbolLessReturnRegion({0, 1})));
+  EXPECT_FALSE(claimSymbolLessReturnRegion(Regions, RegionOwner,
+                                           makeSymbolLessReturnRegion({1, 2})));
+  EXPECT_FALSE(claimSymbolLessReturnRegion(Regions, RegionOwner,
+                                           makeSymbolLessReturnRegion({2, 3})));
+  EXPECT_TRUE(claimSymbolLessReturnRegion(Regions, RegionOwner,
+                                          makeSymbolLessReturnRegion({4})));
 
   ASSERT_EQ(Regions.size(), 2u);
   EXPECT_TRUE(Regions[0].Instructions.empty());
   ASSERT_EQ(Regions[1].Instructions.size(), 1u);
   EXPECT_EQ(Regions[1].Instructions.front(), 4u);
   EXPECT_EQ(RegionOwner, (std::vector<int64_t>{-2, -2, -2, -2, 1}));
+}
+
+TEST(SymbolLessReturnRegionOwnership, ReleasesInvalidatedBackingStorage) {
+  llvm::SmallVector<SymbolLessReturnRegion, 4> Regions;
+  std::vector<int64_t> RegionOwner(65, -1);
+
+  SymbolLessReturnRegion HeapBacked =
+      makeSequentialSymbolLessReturnRegion(/*Begin=*/0, /*Count=*/64);
+  HeapBacked.Returns.resize(8);
+  HeapBacked.Continuations.resize(16);
+  SymbolLessReturnRegion Empty;
+  ASSERT_GT(HeapBacked.Instructions.capacity(), Empty.Instructions.capacity());
+  ASSERT_GT(HeapBacked.Returns.capacity(), Empty.Returns.capacity());
+  ASSERT_GT(HeapBacked.Continuations.capacity(),
+            Empty.Continuations.capacity());
+  ASSERT_TRUE(
+      claimSymbolLessReturnRegion(Regions, RegionOwner, std::move(HeapBacked)));
+  ASSERT_FALSE(claimSymbolLessReturnRegion(
+      Regions, RegionOwner, makeSymbolLessReturnRegion({63, 64})));
+
+  ASSERT_EQ(Regions.size(), 1u);
+  EXPECT_LE(Regions[0].Instructions.capacity(), Empty.Instructions.capacity());
+  EXPECT_LE(Regions[0].Returns.capacity(), Empty.Returns.capacity());
+  EXPECT_LE(Regions[0].Continuations.capacity(),
+            Empty.Continuations.capacity());
 }
 
 TEST(SymbolLessReturnRegionOwnership,
@@ -1139,15 +1164,15 @@ TEST(SymbolLessReturnRegionOwnership,
         Regions, RegionOwner,
         makeSequentialSymbolLessReturnRegion(Base, RegionWidth)))
         << I;
-    ASSERT_FALSE(claimSymbolLessReturnRegion(
-        Regions, RegionOwner,
-        makeSequentialSymbolLessReturnRegion(Base + RegionWidth - 1,
-                                              RegionWidth)))
+    ASSERT_FALSE(
+        claimSymbolLessReturnRegion(Regions, RegionOwner,
+                                    makeSequentialSymbolLessReturnRegion(
+                                        Base + RegionWidth - 1, RegionWidth)))
         << I;
     ASSERT_FALSE(claimSymbolLessReturnRegion(
         Regions, RegionOwner,
         makeSequentialSymbolLessReturnRegion(Base + 2 * RegionWidth - 2,
-                                              RegionWidth)))
+                                             RegionWidth)))
         << I;
   }
 

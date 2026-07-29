@@ -3555,18 +3555,22 @@ bool claimSymbolLessReturnRegion(
     if (Owner == -1)
       continue;
     Overlaps = true;
-    if (Owner >= 0 &&
-        !llvm::is_contained(OverlappingOwners, static_cast<size_t>(Owner)))
+    if (Owner >= 0)
       OverlappingOwners.push_back(static_cast<size_t>(Owner));
   }
   if (Overlaps) {
+    llvm::sort(OverlappingOwners);
+    OverlappingOwners.erase(
+        std::unique(OverlappingOwners.begin(), OverlappingOwners.end()),
+        OverlappingOwners.end());
     for (size_t Owner : OverlappingOwners) {
       assert(Owner < Regions.size());
       for (size_t InstIndex : Regions[Owner].Instructions) {
         assert(InstIndex < RegionOwner.size());
         RegionOwner[InstIndex] = -2;
       }
-      Regions[Owner] = SymbolLessReturnRegion{};
+      SymbolLessReturnRegion Empty;
+      std::swap(Regions[Owner], Empty);
     }
     for (size_t InstIndex : Region.Instructions)
       RegionOwner[InstIndex] = -2;

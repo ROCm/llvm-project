@@ -1650,7 +1650,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
 /// for both the old and new instructions, so later transitive overlaps remain
 /// rejected after the invalid regions' instruction vectors are released.
 /// \p RegionOwner must be sized for the decoded instructions and initially
-/// contain -1 in every entry.
+/// contain -1 in every entry. \p Region.Instructions must be nonempty, contain
+/// unique indices, and refer only to entries in \p RegionOwner.
 [[nodiscard]] bool claimSymbolLessReturnRegion(
     llvm::SmallVectorImpl<SymbolLessReturnRegion> &Regions,
     std::vector<int64_t> &RegionOwner, SymbolLessReturnRegion Region);
