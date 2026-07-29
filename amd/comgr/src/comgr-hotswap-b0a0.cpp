@@ -1487,38 +1487,28 @@ unsafeIncomingNumberedSgprsInRange(ArrayRef<InternalDecodedInst> Decoded,
   return Unsafe;
 }
 
-struct BatchedSgprContinuationAnalysis {
-  uint64_t FunctionBegin = 0;
-  uint64_t FunctionEnd = 0;
-  size_t BeginIndex = 0;
-  size_t InstructionCount = 0;
-  unsigned RegisterCount = 0;
-  unsigned WordsPerRow = 0;
-  std::vector<uint64_t> UnsafeRows;
-
-  std::optional<BitVector> query(ArrayRef<InternalDecodedInst> Decoded,
-                                 uint64_t Continuation) const {
-    if (Continuation < FunctionBegin || Continuation >= FunctionEnd)
-      return std::nullopt;
-    auto Begin = Decoded.begin() + BeginIndex;
-    auto End = Begin + InstructionCount;
-    auto It = llvm::lower_bound(
-        ArrayRef<InternalDecodedInst>(Begin, End), Continuation,
-        [](const InternalDecodedInst &DI, uint64_t Offset) {
-          return DI.Offset < Offset;
-        });
-    if (It == ArrayRef<InternalDecodedInst>(Begin, End).end() ||
-        It->Offset != Continuation)
-      return std::nullopt;
-    size_t LocalIndex = It - Begin;
-    const uint64_t *Row = UnsafeRows.data() + LocalIndex * WordsPerRow;
-    BitVector Result(RegisterCount);
-    for (unsigned Register = 0; Register != RegisterCount; ++Register)
-      if ((Row[Register / 64] >> (Register % 64)) & 1)
-        Result.set(Register);
-    return Result;
-  }
-};
+std::optional<BitVector>
+BatchedSgprContinuationAnalysis::query(ArrayRef<InternalDecodedInst> Decoded,
+                                       uint64_t Continuation) const {
+  if (Continuation < FunctionBegin || Continuation >= FunctionEnd)
+    return std::nullopt;
+  ArrayRef<InternalDecodedInst>::iterator Begin = Decoded.begin() + BeginIndex;
+  ArrayRef<InternalDecodedInst>::iterator End = Begin + InstructionCount;
+  ArrayRef<InternalDecodedInst>::iterator It =
+      llvm::lower_bound(ArrayRef<InternalDecodedInst>(Begin, End), Continuation,
+                        [](const InternalDecodedInst &DI, uint64_t Offset) {
+                          return DI.Offset < Offset;
+                        });
+  if (It == End || It->Offset != Continuation)
+    return std::nullopt;
+  size_t LocalIndex = It - Begin;
+  const uint64_t *Row = UnsafeRows.data() + LocalIndex * WordsPerRow;
+  BitVector Result(RegisterCount);
+  for (unsigned Register = 0; Register != RegisterCount; ++Register)
+    if ((Row[Register / 64] >> (Register % 64)) & 1)
+      Result.set(Register);
+  return Result;
+}
 
 static std::optional<BatchedSgprContinuationAnalysis>
 computeBatchedSgprContinuationAnalysis(ArrayRef<InternalDecodedInst> Decoded,
@@ -1690,22 +1680,6 @@ BatchedSgprContinuationTestResult runBatchedSgprContinuationAnalysisForTest(
   return Result;
 }
 
-static std::optional<BitVector> unsafeIncomingNumberedSgprsAtContinuation(
-    PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
-    ArrayRef<MCRegister> NumberedSgprs) {
-  std::optional<ElfView::FunctionTextRange> FunctionRange =
-      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
-  if (!FunctionRange)
-    return std::nullopt;
-  std::optional<uint64_t> Continuation = checkedAddUint64(
-      InstOffset, InstSize, "far-return SGPR liveness continuation");
-  if (!Continuation)
-    return std::nullopt;
-  return unsafeIncomingNumberedSgprsInRange(
-      Ctx.Decoded, Ctx.LS, FunctionRange->Begin, FunctionRange->End,
-      *Continuation, NumberedSgprs);
-}
-
 static std::optional<unsigned>
 selectLocallyDeadSgprPair(unsigned MaxSgprs, const BitVector &Unsafe) {
   if (MaxSgprs < 2 || Unsafe.size() < MaxSgprs)
@@ -1721,29 +1695,33 @@ selectLocallyDeadSgprPair(unsigned MaxSgprs, const BitVector &Unsafe) {
   return std::nullopt;
 }
 
+static std::optional<unsigned> findLocallyDeadSgprPairWithCache(
+    PatchContext &Ctx, const ElfView::FunctionTextRange &FunctionRange,
+    uint64_t InstOffset, uint32_t InstSize, ArrayRef<uint8_t> Replacement,
+    ArrayRef<MCRegister> NumberedSgprs, BatchedSgprContinuationCache &Cache,
+    uint64_t &AnalysisCount);
+
 static std::optional<unsigned>
 findLocallyDeadSgprPair(PatchContext &Ctx, uint64_t InstOffset,
                         uint32_t InstSize, ArrayRef<uint8_t> Replacement) {
   if (Ctx.Config.MaxSgprs < 2)
     return std::nullopt;
-  std::optional<SmallVector<MCRegister, 128>> NumberedSgprs =
-      resolveNumberedSgprRegisters(*Ctx.LS.MRI, Ctx.Config.MaxSgprs);
-  if (!NumberedSgprs)
+  if (!Ctx.FarReturnNumberedSgprsResolved) {
+    Ctx.FarReturnNumberedSgprs =
+        resolveNumberedSgprRegisters(*Ctx.LS.MRI, Ctx.Config.MaxSgprs);
+    Ctx.FarReturnNumberedSgprsResolved = true;
+  }
+  if (!Ctx.FarReturnNumberedSgprs)
     return std::nullopt;
-  std::optional<BitVector> ContinuationUnsafe =
-      unsafeIncomingNumberedSgprsAtContinuation(Ctx, InstOffset, InstSize,
-                                                *NumberedSgprs);
-  if (!ContinuationUnsafe)
+  std::optional<ElfView::FunctionTextRange> FunctionRange =
+      Ctx.Elf.findFunctionTextRangeAtOffset(InstOffset);
+  if (!FunctionRange)
     return std::nullopt;
-  BitVector Unsafe = unsafeIncomingNumberedSgprsInReplacement(
-      Replacement, Ctx.LS, *NumberedSgprs);
-  Unsafe |= *ContinuationUnsafe;
-  return selectLocallyDeadSgprPair(Ctx.Config.MaxSgprs, Unsafe);
+  return findLocallyDeadSgprPairWithCache(
+      Ctx, *FunctionRange, InstOffset, InstSize, Replacement,
+      *Ctx.FarReturnNumberedSgprs, Ctx.FarReturnSgprContinuations,
+      Ctx.FarReturnSgprContinuationAnalyses);
 }
-
-using BatchedSgprContinuationCache =
-    DenseMap<std::pair<uint64_t, uint64_t>,
-             std::optional<BatchedSgprContinuationAnalysis>>;
 
 static std::optional<unsigned> findLocallyDeadSgprPairWithCache(
     PatchContext &Ctx, const ElfView::FunctionTextRange &FunctionRange,
@@ -10139,6 +10117,9 @@ static std::optional<uint32_t> applyGfx1250B0toA0Rules(
   if (Prof)
     for (const TimedPass &Pass : Passes)
       Ctx.Profile.add(Pass.Metric, Pass.Nanos, Pass.Patches);
+  if (Ctx.FarReturnSgprContinuationAnalyses != 0)
+    log() << "hotswap: built " << Ctx.FarReturnSgprContinuationAnalyses
+          << " batched far-return SGPR continuation analysis cache(s)\n";
 
   // Whole-kernel passes below run after per-instruction patches. Earlier
   // passes may have modified Text bytes, but the Decoded stream still holds

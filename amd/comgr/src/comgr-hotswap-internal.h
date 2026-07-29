@@ -1349,6 +1349,24 @@ struct SafeSgprUsageSummary {
   unsigned HighWatermark = 0;
 };
 
+struct BatchedSgprContinuationAnalysis {
+  uint64_t FunctionBegin = 0;
+  uint64_t FunctionEnd = 0;
+  size_t BeginIndex = 0;
+  size_t InstructionCount = 0;
+  unsigned RegisterCount = 0;
+  unsigned WordsPerRow = 0;
+  std::vector<uint64_t> UnsafeRows;
+
+  std::optional<llvm::BitVector>
+  query(llvm::ArrayRef<InternalDecodedInst> Decoded,
+        uint64_t Continuation) const;
+};
+
+using BatchedSgprContinuationCache =
+    llvm::DenseMap<std::pair<uint64_t, uint64_t>,
+                   std::optional<BatchedSgprContinuationAnalysis>>;
+
 struct DirectControlFlowInfo {
   llvm::DenseSet<uint64_t> Targets;
   // Register-based transfers whose complete finite target set was proven.
@@ -1470,6 +1488,14 @@ struct PatchContext {
   // kernel-descriptor scan for every source instruction.
   llvm::DenseMap<std::pair<uint64_t, uint64_t>, std::string>
       FunctionKernelOwner{0};
+  // Far-return scratch selection can query many continuations in one function.
+  // Reuse the same compact continuation analysis already used by relay
+  // promotion instead of rescanning the function at every patch site.
+  BatchedSgprContinuationCache FarReturnSgprContinuations{0};
+  std::optional<llvm::SmallVector<llvm::MCRegister, 128>>
+      FarReturnNumberedSgprs;
+  bool FarReturnNumberedSgprsResolved = false;
+  uint64_t FarReturnSgprContinuationAnalyses = 0;
   unsigned AllKernelSgprRequirement = 0;
   llvm::StringMap<unsigned> KernelSgprRequirements;
   uint64_t SgprDescriptorChargePasses = 0;

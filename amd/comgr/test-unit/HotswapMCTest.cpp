@@ -5134,6 +5134,17 @@ TEST(RegisterLiveness, BatchProofMatchesScalarAcrossControlFlow) {
   expectBatchSgprProofMatchesScalar(S, InvalidBranchEdge);
 }
 
+TEST(FarReturnSgprCache, ReusesOneFunctionAnalysisAcrossSites) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  const llvm::StringRef Lines[] = {
+      "s_cbranch_scc0 2",  "s_mov_b32 s104, 0",  "s_branch 1",
+      "s_mov_b32 s105, 0", "s_mov_b32 s0, s103", "s_endpgm",
+  };
+  expectBatchSgprProofMatchesScalar(S, Lines);
+}
+
 TEST(RegisterLiveness, BatchedSgprProofMatchesRandomizedBranchLoops) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
