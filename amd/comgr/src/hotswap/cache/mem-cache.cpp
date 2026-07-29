@@ -13,12 +13,17 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <list>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace COMGR::hotswap {
 
@@ -45,10 +50,118 @@ size_t resolveBudgetFromEnv() {
   return static_cast<size_t>(parsed);
 }
 
+// ---- xxHash64 over source content (vendored from ROCr hotswap_cache.cpp) ----
+// Used only to bucket entries; identity is settled by an exact memcmp, so
+// correctness never depends on hash strength.
+namespace xxh {
+constexpr uint64_t kP1 = 11400714785074694791ULL;
+constexpr uint64_t kP2 = 14029467366897019727ULL;
+constexpr uint64_t kP3 = 1609587929392839161ULL;
+constexpr uint64_t kP4 = 9650029242287828579ULL;
+constexpr uint64_t kP5 = 2870177450012600261ULL;
+inline uint64_t rol(uint64_t v, unsigned c) { return (v << c) | (v >> (64 - c)); }
+inline uint64_t rd64(const unsigned char *b) { uint64_t v; std::memcpy(&v, b, 8); return v; }
+inline uint32_t rd32(const unsigned char *b) { uint32_t v; std::memcpy(&v, b, 4); return v; }
+inline uint64_t round(uint64_t a, uint64_t in) { a += in * kP2; a = rol(a, 31); return a * kP1; }
+inline uint64_t merge(uint64_t a, uint64_t v) { a ^= round(0, v); return a * kP1 + kP4; }
+inline uint64_t hash(const void *data, size_t size) {
+  const auto *bytes = static_cast<const unsigned char *>(data);
+  const unsigned char *cur = bytes, *const end = bytes + size;
+  constexpr uint64_t kSeed = 0x4f1bbcdc6762f36bULL;
+  uint64_t h = 0;
+  if (size >= 32) {
+    const unsigned char *const be = end - 32;
+    uint64_t l1 = kSeed + kP1 + kP2, l2 = kSeed + kP2, l3 = kSeed, l4 = kSeed - kP1;
+    do {
+      l1 = round(l1, rd64(cur)); cur += 8;
+      l2 = round(l2, rd64(cur)); cur += 8;
+      l3 = round(l3, rd64(cur)); cur += 8;
+      l4 = round(l4, rd64(cur)); cur += 8;
+    } while (cur <= be);
+    h = rol(l1, 1) + rol(l2, 7) + rol(l3, 12) + rol(l4, 18);
+    h = merge(h, l1); h = merge(h, l2); h = merge(h, l3); h = merge(h, l4);
+  } else {
+    h = kSeed + kP5;
+  }
+  h += size;
+  while (static_cast<size_t>(end - cur) >= 8) {
+    h ^= round(0, rd64(cur)); h = rol(h, 27) * kP1 + kP4; cur += 8;
+  }
+  if (static_cast<size_t>(end - cur) >= 4) {
+    h ^= static_cast<uint64_t>(rd32(cur)) * kP1; h = rol(h, 23) * kP2 + kP3; cur += 4;
+  }
+  while (cur != end) { h ^= static_cast<uint64_t>(*cur++) * kP5; h = rol(h, 11) * kP1; }
+  h ^= h >> 33; h *= kP2; h ^= h >> 29; h *= kP3;
+  return h ^ (h >> 32);
+}
+} // namespace xxh
+
+// Cheap in-memory bucket key: xxHash64(source) + source_size + the transform
+// fields already present as strings on the request. Deliberately does NOT
+// re-hash the rules file CONTENTS or re-derive the loaded-image identity (both
+// process-constant and expensive) -- those distinguish nothing within a
+// process. The disk tier's SHA-256 key still folds them in for cross-process
+// correctness. Empty string => uncacheable (empty/missing source).
+std::string deriveMemBucketKey(const TranslationCacheRequest &request) {
+  const void *src = request.SourceObject.getBufferStart();
+  const size_t n = request.SourceObject.getBufferSize();
+  if (src == nullptr || n == 0)
+    return std::string();
+  char buf[40];
+  std::snprintf(buf, sizeof(buf), "%016llx:%zx|",
+                static_cast<unsigned long long>(xxh::hash(src, n)), n);
+  std::string key(buf);
+  key += request.SourceGfx;      key.push_back('\x1f');
+  key += request.TargetGfx;      key.push_back('\x1f');
+  key += request.SourceIsa;      key.push_back('\x1f');
+  key += request.TargetIsa;      key.push_back('\x1f');
+  key += request.CodeIsa;        key.push_back('\x1f');
+  key += request.HotswapRulesPath; key.push_back('\x1f');
+  key += request.KernelName;     key.push_back('\x1f');
+  key += (request.StrictMode ? '1' : '0');
+  key += (request.EnableWritelaneRewrite ? '1' : '0');
+  key += (request.EnableWaveNative ? '1' : '0');
+  key += (request.ForceScaledModrep ? '1' : '0');
+  key += (request.AssumeHipGlobalOffsetZero ? '1' : '0');
+  // Numeric transform inputs not implied by the source bytes. Without these,
+  // two identical-source requests differing only in opt level / orig machine
+  // would collide into one bucket and the source-only memcmp would wrongly
+  // match. (elf_machine/elf_flags/source hash are omitted: the memcmp over
+  // the source bytes already covers them. rules-content/build/device-libs
+  // identity are omitted: process-constant, folded into the disk key only.)
+  {
+    char nbuf[48];
+    std::snprintf(nbuf, sizeof(nbuf), "|om=%d|ol=%u",
+                  request.OrigMach, request.OptLevel);
+    key += nbuf;
+  }
+  return key;
+}
+
+// A retained copy of the source bytes, for the exact-compare that makes a hash
+// collision impossible to mis-serve.
+struct SourceBytes {
+  std::vector<unsigned char> data;
+  bool equals(const void *p, size_t n) const {
+    return data.size() == n && std::memcmp(data.data(), p, n) == 0;
+  }
+};
+using SourceBytesRef = std::shared_ptr<const SourceBytes>;
+
+SourceBytesRef captureSource(const TranslationCacheRequest &request) {
+  const auto *p = reinterpret_cast<const unsigned char *>(
+      request.SourceObject.getBufferStart());
+  const size_t n = request.SourceObject.getBufferSize();
+  auto s = std::make_shared<SourceBytes>();
+  s->data.assign(p, p + n);
+  return s;
+}
+
 // One shared translation, plus its LRU position. The buffer is immutable once
 // published.
 struct Node {
   MemCacheEntryRef Entry;
+  SourceBytesRef Source; // retained source bytes, for exact-compare
   // Iterator into the LRU list identifying this key's recency slot. Valid while
   // the node is in the map.
   std::list<std::string>::iterator LruIt;
@@ -59,9 +172,10 @@ struct Flight {
   std::mutex Mu;
   std::condition_variable Cv;
   bool Done = false;
-  MemCacheEntryRef Entry; // published result (null on producer failure)
-  std::thread::id Leader; // the producer thread (reentrancy guard)
-  size_t Waiters = 0;     // parked waiters, for the coalescing test hook
+  MemCacheEntryRef Entry;  // published result (null on producer failure)
+  SourceBytesRef Source;   // leader's source, for exact-compare on coalesce
+  std::thread::id Leader;  // the producer thread (reentrancy guard)
+  size_t Waiters = 0;      // parked waiters, for the coalescing test hook
 };
 
 class MemCache {
@@ -85,9 +199,11 @@ public:
 
 private:
   // Look up a ready entry, refreshing its LRU position. Caller holds Mu.
-  MemCacheEntryRef lookupLocked(const std::string &key);
+  MemCacheEntryRef lookupLocked(const std::string &key,
+                                const TranslationCacheRequest &request);
   // Insert a freshly produced entry and enforce the budget. Caller holds Mu.
-  void insertLocked(const std::string &key, MemCacheEntryRef entry);
+  void insertLocked(const std::string &key, MemCacheEntryRef entry,
+                    SourceBytesRef source);
   void evictToBudgetLocked();
 
   mutable std::mutex Mu; // guards Map, Lru, InFlight, and metric gauges
@@ -110,9 +226,16 @@ private:
   uint64_t PeakLiveBytes = 0; // guarded by Mu
 };
 
-MemCacheEntryRef MemCache::lookupLocked(const std::string &key) {
+MemCacheEntryRef MemCache::lookupLocked(const std::string &key,
+                                        const TranslationCacheRequest &request) {
   auto it = Map.find(key);
   if (it == Map.end())
+    return nullptr;
+  // Exact-compare guards against an xxHash64 collision handing back the wrong
+  // translation. A mismatch (astronomically rare) is treated as a miss.
+  const void *p = request.SourceObject.getBufferStart();
+  const size_t n = request.SourceObject.getBufferSize();
+  if (!it->second.Source || !it->second.Source->equals(p, n))
     return nullptr;
   // Move to front (most-recently-used).
   Lru.splice(Lru.begin(), Lru, it->second.LruIt);
@@ -129,6 +252,8 @@ void MemCache::evictToBudgetLocked() {
     auto it = Map.find(victimKey);
     if (it != Map.end()) {
       LiveBytes -= it->second.Entry->Bytes;
+      if (it->second.Source)
+        LiveBytes -= it->second.Source->data.size();
       Map.erase(it);
       Evictions.fetch_add(1, std::memory_order_relaxed);
     }
@@ -136,20 +261,26 @@ void MemCache::evictToBudgetLocked() {
   }
 }
 
-void MemCache::insertLocked(const std::string &key, MemCacheEntryRef entry) {
+void MemCache::insertLocked(const std::string &key, MemCacheEntryRef entry,
+                            SourceBytesRef source) {
   // If a concurrent leader already inserted this key (possible only across
   // distinct flights, which we prevent, but be defensive), replace accounting.
   auto existing = Map.find(key);
   if (existing != Map.end()) {
     LiveBytes -= existing->second.Entry->Bytes;
+    if (existing->second.Source)
+      LiveBytes -= existing->second.Source->data.size();
     Lru.erase(existing->second.LruIt);
     Map.erase(existing);
   }
   Lru.push_front(key);
   Node node;
   node.Entry = std::move(entry);
+  node.Source = std::move(source);
   node.LruIt = Lru.begin();
   LiveBytes += node.Entry->Bytes;
+  if (node.Source)
+    LiveBytes += node.Source->data.size();
   Map.emplace(key, std::move(node));
   if (LiveBytes > PeakLiveBytes)
     PeakLiveBytes = LiveBytes;
@@ -199,7 +330,8 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     return result;
   }
 
-  const std::string key = translationCacheKey(request);
+  const std::string key = deriveMemBucketKey(request);
+  SourceBytesRef source = captureSource(request);
 
   // Uncacheable request (empty source, missing gfx, no kernels, unreadable
   // rules): run the producer directly and cache nothing. Never terminate or
@@ -224,7 +356,7 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
   {
     std::unique_lock<std::mutex> lock(Mu);
     // Fast path: ready in the map.
-    if (MemCacheEntryRef hit = lookupLocked(key)) {
+    if (MemCacheEntryRef hit = lookupLocked(key, request)) {
       Hits.fetch_add(1, std::memory_order_relaxed);
       result.Status = MemCacheStatus::Hit;
       result.Entry = std::move(hit);
@@ -251,13 +383,14 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     {
       std::unique_lock<std::mutex> lock(Mu);
       if (entry)
-        insertLocked(key, entry);
+        insertLocked(key, entry, source);
       InFlight.erase(key);
     }
     // Publish to waiters.
     {
       std::lock_guard<std::mutex> flock(flight->Mu);
       flight->Entry = entry;
+      flight->Source = source;
       flight->Done = true;
     }
     flight->Cv.notify_all();
@@ -290,20 +423,38 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     return result;
   }
 
+  MemCacheEntryRef coalesced;
+  SourceBytesRef flightSource;
   {
     std::unique_lock<std::mutex> flock(flight->Mu);
     ++flight->Waiters;
     flight->Cv.wait(flock, [&] { return flight->Done; });
     --flight->Waiters;
-    result.Entry = flight->Entry;
+    coalesced = flight->Entry;
+    flightSource = flight->Source;
   }
-  if (result.Entry) {
+  const void *p = request.SourceObject.getBufferStart();
+  const size_t n = request.SourceObject.getBufferSize();
+  const bool sameSource = flightSource && flightSource->equals(p, n);
+  if (coalesced && sameSource) {
     Coalesced.fetch_add(1, std::memory_order_relaxed);
     result.Status = MemCacheStatus::Coalesced;
-  } else {
-    // The leader's producer failed; nothing to hand back.
-    result.Status = MemCacheStatus::ProducerFailed;
+    result.Entry = std::move(coalesced);
+    return result;
   }
+  if (coalesced && !sameSource) {
+    // xxHash64 collision between two concurrent distinct sources: the leader's
+    // flight was for a different source, so we cannot use its bytes. RETRY the
+    // whole operation: by now the leader has published + erased its flight, so
+    // our retry either finds our own source in the map (lookupLocked memcmp),
+    // or -- more likely -- misses (leader stored the OTHER source) and WE become
+    // a fresh leader that runs + caches our result. This makes a collided
+    // request self-heal into a normal cached entry instead of perpetually
+    // bypassing. Bounded: retry loops only while the collision persists.
+    return getOrCompute(request, producer); // tail-recursive retry
+  }
+  // The leader's producer failed; nothing to hand back.
+  result.Status = MemCacheStatus::ProducerFailed;
   return result;
 }
 
@@ -441,7 +592,7 @@ size_t memCacheInFlightCountForTesting() {
 
 size_t waitForMemCacheWaitersForTesting(const TranslationCacheRequest &request,
                                         size_t count, unsigned timeoutMs) {
-  const std::string key = translationCacheKey(request);
+  const std::string key = deriveMemBucketKey(request);
   return activeInstance().waitForWaitersForTesting(key, count, timeoutMs);
 }
 #endif

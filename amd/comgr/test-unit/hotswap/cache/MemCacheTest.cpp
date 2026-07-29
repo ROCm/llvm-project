@@ -286,8 +286,14 @@ TEST_F(MemCacheTest, ConcurrentIdenticalCoalesceToOneProducer) {
 // --- Byte-budget LRU eviction --------------------------------------------
 
 TEST_F(MemCacheTest, ByteBudgetEvictsLeastRecentlyUsed) {
-  resetMemCacheForTesting(3 * 1024); // room for ~3 x 1KiB entries
   std::atomic<int> calls{0};
+  // Each entry now costs retained source bytes + output bytes. Size the
+  // budget from the real per-entry footprint so exactly 3 entries fit
+  // (>=3x, strictly <4x), independent of the fake-ELF source size.
+  const size_t kOut = 1024;
+  const size_t kSrc = makeFakeAmdgpuElf("a").size();
+  const size_t kPerEntry = kSrc + kOut;
+  resetMemCacheForTesting(3 * kPerEntry + kPerEntry / 2); // room for 3, not 4
 
   auto insert = [&](llvm::StringRef k) {
     std::string elf = makeFakeAmdgpuElf(k);
