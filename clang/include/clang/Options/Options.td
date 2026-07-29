@@ -4206,11 +4206,6 @@ def fopenmp_cuda_teams_reduction_recs_num_EQ : Joined<["-"], "fopenmp-cuda-teams
            "teams; this flag is accepted for backwards compatibility only "
            "and emits a deprecation warning when used.">;
 
-// AMD OpenMP
-def fenable_host_devmem : Flag<["-"], "fenable-host-devmem">, Group<f_Group>,
-  HelpText<"Enable host-assisted dynamic device memory management (Default)">;
-def fdisable_host_devmem : Flag<["-"], "fdisable-host-devmem">, Group<f_Group>,
-  HelpText<"Disable host-assisted dynamic device memory management">;
 def fopenmp_runtimelib_EQ : Joined<["-"], "fopenmp-runtimelib=">, Group<f_Group>, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>, Flags<[NoArgumentUnused]>,
   HelpText<"Select lib, lib-perf, or lib-debug openmp runtime"
            " <arg> must be: lib, lib-perf or lib-debug.">;

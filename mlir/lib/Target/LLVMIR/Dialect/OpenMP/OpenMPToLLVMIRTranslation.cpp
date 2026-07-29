@@ -155,6 +155,7 @@ private:
   llvm::BasicBlock *linearFinalizationBB;
   llvm::BasicBlock *linearExitBB;
   llvm::BasicBlock *linearLastIterExitBB;
+  Value linearLoopIV;
 
 public:
   void registerType(llvm::Type *ty) { linearVarTypes.push_back(ty); }
@@ -231,6 +232,35 @@ public:
     }
   }
 
+  // Find linear iteration variable and save it for later updates
+  LogicalResult initLinearIV(omp::SimdOp simdOp) {
+    auto loopOp = cast<omp::LoopNestOp>(simdOp.getWrappedLoop());
+    // NOTE iteration variables can only be linear in non-nested loops.
+    if (loopOp.getIVs().size() != 1)
+      return success();
+    // Currently, frontends using `omp.simd` always generate a store from the
+    // `omp.loop_nest`'s IV to the corresponding iteration variable.
+    // We leverage this to find the linear iteration variable.
+    //
+    // TODO Add an attribute to `omp.loop_nest` that explicitly lists the
+    //      variables that correspond to the loop induction variables.
+    BlockArgument arg = loopOp.getIVs().front();
+    for (const Operation *user : arg.getUsers()) {
+      if (auto storeOp = dyn_cast<LLVM::StoreOp>(user)) {
+        for (Value linearVar : simdOp.getLinearVars()) {
+          if (linearVar == storeOp.getAddr()) {
+            if (linearLoopIV && linearLoopIV != linearVar)
+              return simdOp.emitError(
+                  "Could not determine the linear variable associated with the "
+                  "loop nest induction variable");
+            linearLoopIV = linearVar;
+          }
+        }
+      }
+    }
+    return success();
+  }
+
   // Emit IR for updating Linear variables
   void updateLinearVar(llvm::IRBuilderBase &builder, llvm::BasicBlock *loopBody,
                        llvm::Value *loopInductionVar) {
@@ -269,6 +299,34 @@ public:
             "Linear variable must be of integer or floating-point type");
       }
     }
+  }
+
+  // Emit IR for updating linear iteration variables on loop exit
+  void updateLinearIV(llvm::IRBuilderBase &builder,
+                      LLVM::ModuleTranslation &moduleTranslation) {
+    if (!linearLoopIV)
+      return;
+    llvm::Value *linearIV = moduleTranslation.lookupValue(linearLoopIV);
+
+    // Find linearIV's index
+    size_t index;
+    for (index = 0; index < linearOrigVal.size(); index++)
+      if (linearIV == linearOrigVal[index])
+        break;
+    if (index == linearOrigVal.size())
+      return;
+
+    // Add one more step to the linear iteration variable
+    llvm::Type *varType = linearVarTypes[index];
+    llvm::Value *var = linearLoopBodyTemps[index];
+    llvm::Value *step = linearSteps[index];
+    if (!varType->isIntegerTy())
+      llvm_unreachable("Linear iteration variable must be of integer type");
+
+    step = builder.CreateSExtOrTrunc(step, varType);
+    llvm::Value *val = builder.CreateLoad(varType, var);
+    llvm::Value *addInst = builder.CreateAdd(val, step);
+    builder.CreateStore(addInst, var);
   }
 
   // Linear variable finalization is conditional on the last logical iteration.
@@ -5014,6 +5072,8 @@ convertOmpSimd(Operation &opInst, llvm::IRBuilderBase &builder,
 
   // Initialize linear variables and linear step
   LinearClauseProcessor linearClauseProcessor;
+  if (linearClauseProcessor.initLinearIV(simdOp).failed())
+    return failure();
 
   if (!simdOp.getLinearVars().empty()) {
     if (failed(linearClauseProcessor.registerTypes(
@@ -5127,6 +5187,7 @@ convertOmpSimd(Operation &opInst, llvm::IRBuilderBase &builder,
                             : nullptr,
                         order, simdlen, safelen);
 
+  linearClauseProcessor.updateLinearIV(builder, moduleTranslation);
   linearClauseProcessor.emitStoresForLinearVar(builder);
 
   // We now need to reduce the per-simd-lane reduction variable into the
@@ -9278,8 +9339,9 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
         // a deleted block.
         ompBuilder->Builder.ClearInsertionPoint();
         ompBuilder->Builder.SetCurrentDebugLocation(llvm::DebugLoc());
-      } else if (llvm::Function *llvmFunc =
-                     moduleTranslation.lookupFunction(funcOp.getName())) {
+      } else if (llvmFunc) {
+        updateDebugInfoForDeclareTargetFunctions(llvmFunc, moduleTranslation);
+
         // Device-side declare target functions are externally visible by
         // default so they can be referenced from other device translation
         // units. That also prevents the offload LTO from internalizing and
@@ -9293,8 +9355,6 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
         if (!llvmFunc->isDeclaration() && llvmFunc->hasExternalLinkage() &&
             llvmFunc->getVisibility() == llvm::GlobalValue::DefaultVisibility)
           llvmFunc->setVisibility(llvm::GlobalValue::HiddenVisibility);
-      } else {
-        updateDebugInfoForDeclareTargetFunctions(llvmFunc, moduleTranslation);
       }
     }
     return success();
