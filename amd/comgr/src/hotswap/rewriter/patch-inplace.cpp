@@ -1,4 +1,4 @@
-//===- patch-inplace.cpp - In-place B0-to-A0 patches ----------------------===//
+//===- comgr-hotswap-patch-inplace.cpp - In-place B0-to-A0 patches --------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -64,7 +64,7 @@ StringRef getClusterLoadReplacementAsm(StringRef Mnemonic) {
 /// replacement templates in getClusterLoadReplacementAsm would mis-encode that
 /// scalar operand, so the two forms must be told apart. getNamedOperandIdx() /
 /// OpName are backend-private headers, so -- mirroring the operand-kind
-/// inspection in patch-wmma-split.cpp -- classify by operand
+/// inspection in comgr-hotswap-patch-wmma-split.cpp -- classify by operand
 /// kind: the presence of any SGPR register operand marks the _SADDR form.
 bool usesSgprBaseAddress(const MCInst &Inst, const MCRegisterInfo &MRI) {
   for (unsigned I = 0, E = Inst.getNumOperands(); I < E; ++I) {
@@ -101,14 +101,15 @@ SmallVector<uint8_t> encodeMCInst(const MCInst &Inst, const LLVMState &LS) {
 /// Perform an opcode swap: clone the decoded MCInst, set the replacement
 /// opcode, re-encode via MCCodeEmitter, and overwrite in place.
 /// Returns true on success.
-bool swapOpcode(InternalDecodedInst &DI, PatchContext &Ctx,
+bool swapOpcode(InternalDecodedInst &DI, uint8_t *Text, const LLVMState &LS,
                 unsigned NewOpcode) {
   MCInst NewInst = DI.Inst;
   NewInst.setOpcode(NewOpcode);
-  SmallVector<uint8_t> Bytes = encodeMCInst(NewInst, Ctx.LS);
+  SmallVector<uint8_t> Bytes = encodeMCInst(NewInst, LS);
   if (Bytes.empty() || Bytes.size() != DI.Size)
     return false;
-  return writeCurrentText(Ctx, DI.Offset, Bytes, "in-place opcode swap");
+  std::memcpy(Text + DI.Offset, Bytes.data(), DI.Size);
+  return true;
 }
 
 } // anonymous namespace
@@ -118,9 +119,8 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnemonic(DI.Mnemonic);
 
   if (DI.Inst.getOpcode() == Ctx.LS.SClauseOpcode) {
-    if (!writeCurrentText(Ctx, DI.Offset, Ctx.LS.SNopBytes,
-                          "s_clause in-place replacement"))
-      return 0;
+    std::memcpy(Ctx.Text + DI.Offset, Ctx.LS.SNopBytes.data(),
+                Ctx.LS.SNopBytes.size());
     log() << "hotswap: inplace: s_clause -> s_nop 0 at 0x"
           << utohexstr(DI.Offset) << "\n";
     return 1;
@@ -144,7 +144,7 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
             << utohexstr(DI.Offset) << "\n";
     } else {
       std::optional<unsigned> NewOpcode = resolveOpcode(ReplacementAsm, Ctx.LS);
-      if (NewOpcode && swapOpcode(DI, Ctx, *NewOpcode)) {
+      if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
         log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << *NewOpcode
               << " at 0x" << utohexstr(DI.Offset) << "\n";
         S.addPatches(1);
@@ -183,7 +183,7 @@ static uint32_t applyInPlacePatchesImpl(PatchContext &Ctx, size_t Idx) {
         Ctx.Profile.time(HotswapMetric::InPlaceBarrierSignal);
     std::optional<unsigned> NewOpcode =
         resolveOpcode("s_barrier_signal -1", Ctx.LS);
-    if (NewOpcode && swapOpcode(DI, Ctx, *NewOpcode)) {
+    if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
       log() << "hotswap: inplace: s_barrier_signal_isfirst -> opcode "
             << *NewOpcode << " at 0x" << utohexstr(DI.Offset) << "\n";
       S.addPatches(1);

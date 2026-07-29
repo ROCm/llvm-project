@@ -17,13 +17,16 @@
 
 // DISASM-LABEL: <test_ds_overlap>:
 
+// COM: These non-stride offsets all fit the original DS2 fields. Their split
+// COM: still follows the dependency-safe ordering below.
+
 // COM: Address overlaps the first b64 destination half: issue half 1 first.
 // DISASM:      ds_load_b64 v[14:15], v12 offset:8
 // DISASM-NEXT: ds_load_b64 v[12:13], v12
 
 // COM: The same rule applies to b32.
-// DISASM:      ds_load_b32 v5, v4 offset:8
-// DISASM-NEXT: ds_load_b32 v4, v4 offset:4
+// DISASM:      ds_load_b32 v5, v4 offset:4
+// DISASM-NEXT: ds_load_b32 v4, v4
 
 // COM: Address overlaps the second half: natural order is already safe.
 // DISASM:      ds_load_b64 v[16:17], v18
@@ -55,7 +58,7 @@
 .type test_ds_overlap,@function
 test_ds_overlap:
   ds_load_2addr_b64 v[12:15], v12 offset0:0 offset1:1
-  ds_load_2addr_b32 v[4:5], v4 offset0:1 offset1:2
+  ds_load_2addr_b32 v[4:5], v4 offset0:0 offset1:1
   ds_load_2addr_b64 v[16:19], v18 offset0:0 offset1:1
   ds_storexchg_2addr_rtn_b64 v[8:11], v8, v[12:13], v[14:15] offset0:0 offset1:1
   ds_storexchg_2addr_rtn_b32 v[30:31], v40, v41, v30 offset0:0 offset1:1
