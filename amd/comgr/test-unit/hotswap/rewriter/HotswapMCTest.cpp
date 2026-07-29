@@ -3003,6 +3003,111 @@ TEST(FindNearestSled, HandlesLargeUnsignedOffsets) {
   EXPECT_EQ(Sled, &Sleds[1]);
 }
 
+TEST(BranchIslandAllocator, AcceptsExactPositiveReachBoundary) {
+  std::vector<NopSled> Gateways = {
+      {MaxSledDistance, MaxSledDistance + MinInstSize, MaxSledDistance,
+       /*FunctionStart=*/0, /*FunctionEnd=*/3 * MaxSledDistance}};
+  std::optional<llvm::SmallVector<uint64_t, 4>> Islands =
+      allocateForwardBranchIslands(Gateways, /*FromOffset=*/0,
+                                   /*TargetOffset=*/2 * MaxSledDistance);
+  ASSERT_TRUE(Islands);
+  ASSERT_EQ(Islands->size(), 1u);
+  EXPECT_EQ(Islands->front(), MaxSledDistance);
+}
+
+TEST(BranchIslandAllocator, LeavesGatewaysUntouchedForDirectBranch) {
+  std::vector<NopSled> Gateways = {{/*Start=*/100, /*End=*/140,
+                                    /*WritePos=*/108,
+                                    /*FunctionStart=*/0, /*FunctionEnd=*/200}};
+  std::optional<llvm::SmallVector<uint64_t, 4>> Islands =
+      allocateForwardBranchIslands(Gateways, /*FromOffset=*/0,
+                                   /*TargetOffset=*/64);
+  ASSERT_TRUE(Islands);
+  EXPECT_TRUE(Islands->empty());
+  ASSERT_EQ(Gateways.size(), 1u);
+  EXPECT_EQ(Gateways[0].Start, 100u);
+  EXPECT_EQ(Gateways[0].End, 140u);
+  EXPECT_EQ(Gateways[0].WritePos, 108u);
+  EXPECT_EQ(Gateways[0].FunctionStart, 0u);
+  EXPECT_EQ(Gateways[0].FunctionEnd, 200u);
+}
+
+TEST(BranchIslandAllocator, RoutesBackwardAtNegativeReachBoundary) {
+  std::vector<NopSled> Gateways = {
+      {2 * MinInstSize, 3 * MinInstSize, 2 * MinInstSize,
+       /*FunctionStart=*/0, /*FunctionEnd=*/3 * MaxSledDistance},
+      {MaxSledDistance + MinInstSize, MaxSledDistance + 2 * MinInstSize,
+       MaxSledDistance + MinInstSize,
+       /*FunctionStart=*/0, /*FunctionEnd=*/3 * MaxSledDistance}};
+  std::optional<llvm::SmallVector<uint64_t, 4>> Islands =
+      allocateForwardBranchIslands(Gateways,
+                                   /*FromOffset=*/2 * MaxSledDistance,
+                                   /*TargetOffset=*/0);
+  ASSERT_TRUE(Islands);
+  EXPECT_EQ(*Islands, (llvm::SmallVector<uint64_t, 4>{
+                          MaxSledDistance + MinInstSize, 2 * MinInstSize}));
+}
+
+TEST(BranchIslandAllocator, RollsBackPartialChainAndPhysicalAliases) {
+  constexpr uint64_t Head = 170000;
+  std::vector<NopSled> Gateways = {
+      {Head, Head + MinInstSize, Head, 0, 400000},
+      {Head, Head + 2 * MinInstSize, Head, 0, 400000}};
+  std::optional<llvm::SmallVector<uint64_t, 4>> Islands =
+      allocateForwardBranchIslands(Gateways, /*FromOffset=*/300000,
+                                   /*TargetOffset=*/0);
+  EXPECT_FALSE(Islands);
+  ASSERT_EQ(Gateways.size(), 2u);
+  EXPECT_EQ(Gateways[0].WritePos, Head);
+  EXPECT_EQ(Gateways[1].WritePos, Head);
+}
+
+TEST(BranchIslandAllocator, CoAdvancesEqualPhysicalAliases) {
+  std::vector<NopSled> Gateways = {
+      {MaxSledDistance, MaxSledDistance + 2 * MinInstSize, MaxSledDistance, 0,
+       3 * MaxSledDistance},
+      {MaxSledDistance, MaxSledDistance + 3 * MinInstSize, MaxSledDistance, 0,
+       3 * MaxSledDistance}};
+  std::optional<llvm::SmallVector<uint64_t, 4>> Islands =
+      allocateForwardBranchIslands(Gateways, /*FromOffset=*/0,
+                                   /*TargetOffset=*/2 * MaxSledDistance);
+  ASSERT_TRUE(Islands);
+  ASSERT_EQ(Gateways.size(), 2u);
+  EXPECT_EQ(Gateways[0].WritePos, MaxSledDistance + MinInstSize);
+  EXPECT_EQ(Gateways[1].WritePos, MaxSledDistance + MinInstSize);
+}
+
+TEST(BranchIslandAllocator, SplitsPartiallyOverlappingPhysicalAliases) {
+  constexpr uint64_t OccupiedOffset = 108;
+  std::vector<NopSled> Gateways = {{100, 140, 100, 0, 200000},
+                                   {OccupiedOffset,
+                                    OccupiedOffset + MinInstSize,
+                                    OccupiedOffset, 0, 200000}};
+  std::optional<llvm::SmallVector<uint64_t, 4>> Islands =
+      allocateForwardBranchIslands(Gateways, /*FromOffset=*/0,
+                                   /*TargetOffset=*/131080);
+  ASSERT_TRUE(Islands);
+  ASSERT_EQ(Islands->size(), 1u);
+  EXPECT_EQ(Islands->front(), OccupiedOffset);
+  for (const NopSled &Sled : Gateways)
+    EXPECT_FALSE(Sled.WritePos <= OccupiedOffset && OccupiedOffset < Sled.End);
+}
+
+TEST(BranchIslandAllocator, SkipsGatewayFromDifferentFunction) {
+  std::vector<NopSled> Gateways = {
+      {MaxSledDistance, MaxSledDistance + MinInstSize, MaxSledDistance,
+       /*FunctionStart=*/1, /*FunctionEnd=*/300000},
+      {130000, 130000 + MinInstSize, 130000,
+       /*FunctionStart=*/0, /*FunctionEnd=*/300000},
+      {260000, 260000 + MinInstSize, 260000,
+       /*FunctionStart=*/0, /*FunctionEnd=*/300000}};
+  std::optional<llvm::SmallVector<uint64_t, 4>> Islands =
+      allocateForwardBranchIslands(Gateways, /*FromOffset=*/0,
+                                   /*TargetOffset=*/262144);
+  ASSERT_TRUE(Islands);
+  EXPECT_EQ(*Islands, (llvm::SmallVector<uint64_t, 4>{130000, 260000}));
+}
+
 // -- assembleSingleInst / decodeTextSection round-trip ------------------------
 
 TEST(AssembleDecode, SNopRoundTrip) {

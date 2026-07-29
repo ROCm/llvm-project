@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <limits>
 #include <mutex>
+#include <set>
 #include <tuple>
 
 using namespace llvm;
@@ -4612,39 +4613,110 @@ countReachableSetPcGatewaySlots(ArrayRef<NopSled> Gateways, const LLVMState &LS,
   return Slots;
 }
 
-static std::optional<SmallVector<uint64_t, 4>>
+using BranchGatewayHead = std::pair<uint64_t, size_t>;
+using BranchGatewayHeadSet = std::set<BranchGatewayHead>;
+
+static bool hasFreeBranchGatewaySlot(const NopSled &Sled) {
+  uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+  return Sled.WritePos <= UsableEnd && MinInstSize <= UsableEnd - Sled.WritePos;
+}
+
+static BranchGatewayHeadSet
+buildBranchGatewayHeads(const std::vector<NopSled> &Gateways) {
+  BranchGatewayHeadSet Heads;
+  for (size_t I = 0; I != Gateways.size(); ++I)
+    if (hasFreeBranchGatewaySlot(Gateways[I]))
+      Heads.insert({Gateways[I].WritePos, I});
+  return Heads;
+}
+
+static void
+subtractOccupiedBranchGatewaySlots(std::vector<NopSled> &Gateways,
+                                   const DenseSet<uint64_t> &Occupied) {
+  SmallVector<uint64_t, 32> SortedOccupied(Occupied.begin(), Occupied.end());
+  llvm::sort(SortedOccupied);
+  std::vector<NopSled> Available;
+  Available.reserve(Gateways.size());
+  for (const NopSled &Sled : Gateways) {
+    uint64_t Cursor = Sled.WritePos;
+    uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
+    if (Cursor >= UsableEnd)
+      continue;
+    SmallVector<uint64_t, 32>::const_iterator It =
+        llvm::lower_bound(SortedOccupied, Cursor);
+    while (It != SortedOccupied.end() && *It < UsableEnd) {
+      if (Cursor < *It)
+        Available.push_back(
+            {Cursor, *It, Cursor, Sled.FunctionStart, Sled.FunctionEnd});
+      Cursor = std::max(Cursor, *It + MinInstSize);
+      ++It;
+    }
+    if (Cursor < UsableEnd)
+      Available.push_back(
+          {Cursor, UsableEnd, Cursor, Sled.FunctionStart, Sled.FunctionEnd});
+  }
+  Gateways = std::move(Available);
+}
+
+std::optional<SmallVector<uint64_t, 4>>
 allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
                              uint64_t FromOffset, uint64_t TargetOffset) {
   struct Allocation {
     size_t SledIndex = 0;
     uint64_t PreviousWritePos = 0;
   };
+  BranchGatewayHeadSet Heads = buildBranchGatewayHeads(Gateways);
+  DenseSet<uint64_t> Occupied;
   SmallVector<Allocation, 4> Allocations;
   SmallVector<uint64_t, 4> Islands;
-  DenseSet<size_t> UsedSleds;
   uint64_t Current = FromOffset;
 
   while (!isSBranchReachable(Current, TargetOffset)) {
     bool Forward = TargetOffset > Current;
     size_t BestIndex = Gateways.size();
     uint64_t BestOffset = 0;
-    for (size_t I = 0; I != Gateways.size(); ++I) {
-      NopSled &Sled = Gateways[I];
-      if (UsedSleds.contains(I) || FromOffset < Sled.FunctionStart ||
-          FromOffset >= Sled.FunctionEnd)
-        continue;
-      uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
-      bool MakesProgress =
-          Forward ? Sled.WritePos > Current && Sled.WritePos < TargetOffset
-                  : Sled.WritePos < Current && Sled.WritePos > TargetOffset;
-      if (!MakesProgress || Sled.WritePos > UsableEnd ||
-          MinInstSize > UsableEnd - Sled.WritePos ||
-          !isSBranchReachable(Current, Sled.WritePos))
-        continue;
-      if (BestIndex == Gateways.size() ||
-          (Forward ? Sled.WritePos > BestOffset : Sled.WritePos < BestOffset)) {
-        BestIndex = I;
-        BestOffset = Sled.WritePos;
+
+    if (Forward) {
+      uint64_t ReachEnd =
+          Current > std::numeric_limits<uint64_t>::max() - MaxSledDistance
+              ? std::numeric_limits<uint64_t>::max()
+              : Current + MaxSledDistance;
+      uint64_t Upper = std::min(TargetOffset, ReachEnd);
+      BranchGatewayHeadSet::const_iterator It =
+          TargetOffset <= ReachEnd
+              ? Heads.lower_bound({Upper, 0})
+              : Heads.upper_bound({Upper, std::numeric_limits<size_t>::max()});
+      while (It != Heads.begin()) {
+        --It;
+        if (It->first <= Current)
+          break;
+        const NopSled &Sled = Gateways[It->second];
+        if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd ||
+            Sled.WritePos != It->first ||
+            !isSBranchReachable(Current, It->first))
+          continue;
+        BestIndex = It->second;
+        BestOffset = It->first;
+        break;
+      }
+    } else {
+      uint64_t ReachBegin =
+          Current > MaxSledDistance ? Current - MaxSledDistance : 0;
+      uint64_t Lower = TargetOffset == std::numeric_limits<uint64_t>::max()
+                           ? TargetOffset
+                           : TargetOffset + 1;
+      Lower = std::max(Lower, ReachBegin);
+      for (BranchGatewayHeadSet::const_iterator It =
+               Heads.lower_bound({Lower, 0});
+           It != Heads.end() && It->first < Current; ++It) {
+        const NopSled &Sled = Gateways[It->second];
+        if (FromOffset < Sled.FunctionStart || FromOffset >= Sled.FunctionEnd ||
+            Sled.WritePos != It->first ||
+            !isSBranchReachable(Current, It->first))
+          continue;
+        BestIndex = It->second;
+        BestOffset = It->first;
+        break;
       }
     }
 
@@ -4656,13 +4728,24 @@ allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
       return std::nullopt;
     }
 
-    NopSled &Best = Gateways[BestIndex];
-    Allocations.push_back({BestIndex, Best.WritePos});
-    Islands.push_back(Best.WritePos);
-    Current = Best.WritePos;
-    Best.WritePos += MinInstSize;
-    UsedSleds.insert(BestIndex);
+    BranchGatewayHeadSet::iterator AliasBegin =
+        Heads.lower_bound({BestOffset, 0});
+    BranchGatewayHeadSet::iterator AliasEnd =
+        Heads.upper_bound({BestOffset, std::numeric_limits<size_t>::max()});
+    for (BranchGatewayHeadSet::const_iterator It = AliasBegin; It != AliasEnd;
+         ++It) {
+      NopSled &Alias = Gateways[It->second];
+      Allocations.push_back({It->second, Alias.WritePos});
+      Alias.WritePos += MinInstSize;
+    }
+    Heads.erase(AliasBegin, AliasEnd);
+    Occupied.insert(BestOffset);
+    Islands.push_back(BestOffset);
+    Current = BestOffset;
   }
+
+  if (!Occupied.empty())
+    subtractOccupiedBranchGatewaySlots(Gateways, Occupied);
   return Islands;
 }
 
