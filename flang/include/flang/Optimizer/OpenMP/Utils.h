@@ -21,6 +21,12 @@ enum class DoConcurrentMappingKind {
   DCMK_Device ///< Lower to run in parallel on the GPU.
 };
 
+enum class ImplicitWorkdistributeKind {
+  IWK_None,  ///< Do not implicitly insert workdistribute.
+  IWK_Host,  ///< Reserved for host parallelization.
+  IWK_Device ///< Wrap array statements in `target teams workdistribute`.
+};
+
 } // namespace flangomp
 
 #endif // FORTRAN_OPTIMIZER_OPENMP_UTILS_H

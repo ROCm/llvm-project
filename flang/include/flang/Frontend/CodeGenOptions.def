@@ -73,6 +73,7 @@ ENUM_CODEGENOPT(FramePointer, llvm::FramePointerKind, 3, llvm::FramePointerKind:
 ENUM_CODEGENOPT(ComplexRange, ComplexRangeKind, 3, ComplexRangeKind::CX_Full) ///< Method for calculating complex number division
 
 ENUM_CODEGENOPT(DoConcurrentMapping, DoConcurrentMappingKind, 2, DoConcurrentMappingKind::DCMK_None) ///< Map `do concurrent` to OpenMP
+ENUM_CODEGENOPT(ImplicitWorkdistribute, ImplicitWorkdistributeKind, 2, ImplicitWorkdistributeKind::IWK_None) ///< Implicit workdistribute around array statements
 
 ENUM_CODEGENOPT(CompressDebugSections, llvm::DebugCompressionType, 2, llvm::DebugCompressionType::None) ///< DWARF debug sections compression type
 

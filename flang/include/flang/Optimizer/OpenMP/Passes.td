@@ -12,6 +12,25 @@
 include "mlir/Pass/PassBase.td"
 include "mlir/IR/EnumAttr.td"
 
+// `implicit` knob for the implicit-workdistribute feature, consumed by
+// LowerWorkdistribute to perform the FIR-level array-statement wrap. Driven
+// by the single user-facing `-fopenmp-implicit-workdistribute=` flag.
+defvar ImplicitWorkdistributeOptions = [
+  Option<"implicit", "implicit",
+         "flangomp::ImplicitWorkdistributeKind",
+         /*default=*/"flangomp::ImplicitWorkdistributeKind::IWK_None",
+         "Implicit workdistribute mode for array statements [none|host|device]",
+         [{::llvm::cl::values(
+             clEnumValN(flangomp::ImplicitWorkdistributeKind::IWK_None,
+                        "none", "Disable implicit workdistribute"),
+             clEnumValN(flangomp::ImplicitWorkdistributeKind::IWK_Host,
+                        "host", "Wrap array statements in `teams workdistribute`"),
+             clEnumValN(flangomp::ImplicitWorkdistributeKind::IWK_Device,
+                        "device",
+                        "Wrap array statements in `target teams workdistribute`")
+         )}]>,
+];
+
 def MapInfoFinalizationPass
     : Pass<"omp-map-info-finalization", "mlir::ModuleOp"> {
   let summary = "expands OpenMP MapInfo operations containing descriptors";
@@ -96,6 +115,7 @@ def LowerWorkshare : Pass<"lower-workshare", "::mlir::ModuleOp"> {
 
 def LowerWorkdistribute : Pass<"lower-workdistribute", "::mlir::ModuleOp"> {
   let summary = "Lower workdistribute construct";
+  let options = ImplicitWorkdistributeOptions;
 }
 
 def GenericLoopConversionPass
