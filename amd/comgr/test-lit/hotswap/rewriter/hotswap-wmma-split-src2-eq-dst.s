@@ -6,7 +6,7 @@
 // first half) regardless of the input's src2 -- which means for this
 // shape the second half's src2 is identical to what the source already
 // had, but the splitter still has to emit it correctly via the
-// transformation rather than blindly reusing the printed src2.
+// transformation rather than blindly reusing the source src2 MCOperand.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 

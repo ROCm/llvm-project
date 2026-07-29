@@ -1,9 +1,8 @@
 // Test M-split with neg_lo:[0,0,1] on src2.
 //
 // Differs from K-split: M-split has no carry, so the original src2's
-// modifier applies to BOTH halves (each half has its own M-slice of
-// src2). The MATRIX_FMT_FP4 modifiers added by the splitter come BEFORE
-// the preserved neg_lo, mirroring how the printer orders them.
+// modifier applies to BOTH halves (each half has its own M-slice of src2).
+// The output MCInst carries MATRIX_FMT_FP4 and the preserved source-C modifier.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 

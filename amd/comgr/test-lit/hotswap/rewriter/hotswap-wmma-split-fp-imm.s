@@ -1,8 +1,7 @@
-// Test K-split src2 = FP inline immediate (e.g. `1.0`). Must be preserved
-// through the printer round-trip rather than reformatted as itostr() --
-// `1.0` and integer `1` encode at distinct VOP3P inline-const slots
-// (242 vs 1 per the AMDGPU ISA), so emitting `1` would change the
-// instruction.
+// Test K-split src2 = FP inline immediate (e.g. `1.0`). Its MCOperand must be
+// copied directly rather than reconstructed as an integer: `1.0` and integer
+// `1` encode at distinct VOP3P inline-const slots (242 vs 1 per the AMDGPU
+// ISA).
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -22,7 +21,7 @@
 // DISASM:       s_branch
 // DISASM:       s_endpgm
 
-// COM: First half preserves the FP imm `1.0` verbatim (printer round-trip).
+// COM: First half preserves the FP inline-immediate MCOperand.
 // COM: Second half's src2 becomes the dst register (carry).
 // COM: Operand-shape note: src0/src1 disjoint from dst per @earlyclobber $vdst.
 // DISASM:       v_wmma_f32_16x16x64_fp8_fp8 v[32:39], v[0:7], v[16:23], 1.0
