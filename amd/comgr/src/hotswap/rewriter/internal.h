@@ -68,6 +68,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/AMDGPUOperandInfo.h"
 
 namespace COMGR {
 namespace hotswap {
@@ -985,6 +986,39 @@ LLVMState initLLVM(const TargetIdentifier &TI);
 /// Target pseudos may expand that source line to more than one MCInst.
 llvm::SmallVector<uint8_t> assembleSingleInst(llvm::StringRef AsmStr,
                                               const LLVMState &LS);
+
+/// Parse one non-empty assembly source line to exactly one MCInst.
+std::optional<llvm::MCInst> parseSingleMCInst(llvm::StringRef AsmStr,
+                                              const LLVMState &LS);
+
+/// Encode one MCInst through the target MCCodeEmitter.
+llvm::SmallVector<uint8_t> encodeInstruction(const llvm::MCInst &Inst,
+                                             const LLVMState &LS);
+
+/// Encode \p Inst and append its bytes to \p Bytes.
+[[nodiscard]] bool
+appendEncodedInstruction(llvm::SmallVectorImpl<uint8_t> &Bytes,
+                         const llvm::MCInst &Inst, const LLVMState &LS);
+
+/// Assemble \p AsmStr and append the encoded instruction sequence to \p Bytes.
+[[nodiscard]] bool
+appendAssembledInstructions(llvm::SmallVectorImpl<uint8_t> &Bytes,
+                            llvm::StringRef AsmStr, const LLVMState &LS);
+
+/// Return the validated MCInst index for an AMDGPU named operand.
+std::optional<unsigned> getNamedOperandIndex(const llvm::MCInst &Inst,
+                                             llvm::AMDGPU::MCNamedOperand Name);
+
+/// Copy one AMDGPU named operand from \p Source to \p Destination.
+[[nodiscard]] bool copyNamedOperand(const llvm::MCInst &Source,
+                                    llvm::MCInst &Destination,
+                                    llvm::AMDGPU::MCNamedOperand Name,
+                                    bool Required);
+
+/// Preserve or clear the source-C modifier state while translating a WMMA.
+[[nodiscard]] bool copyWmmaSourceCModifiers(const llvm::MCInst &Source,
+                                            llvm::MCInst &Destination,
+                                            bool ClearSourceC);
 
 /// Assemble a newline-separated instruction sequence, returning its encoded
 /// bytes.

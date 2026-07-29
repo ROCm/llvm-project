@@ -419,6 +419,50 @@ TEST(InitLLVM, UnknownProcessorFails) {
   EXPECT_FALSE(S.Valid);
 }
 
+TEST(AMDGPUOperandInfo, ResolvesScaledWmmaNamedOperands) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::optional<llvm::MCInst> Source = parseSingleMCInst(
+      "v_wmma_scale_f32_32x16x128_f4 v[0:15], v[16:31], v[32:39], "
+      "1.0, v40, s2 matrix_a_scale:MATRIX_SCALE_ROW1 "
+      "matrix_b_scale:MATRIX_SCALE_ROW1 matrix_a_reuse matrix_b_reuse "
+      "neg_lo:[0,0,1] neg_hi:[0,0,1]",
+      S);
+  ASSERT_TRUE(Source);
+
+  for (llvm::AMDGPU::MCNamedOperand Name :
+       {llvm::AMDGPU::MCNamedOperand::VDst, llvm::AMDGPU::MCNamedOperand::Src0,
+        llvm::AMDGPU::MCNamedOperand::Src1,
+        llvm::AMDGPU::MCNamedOperand::Src2Modifiers,
+        llvm::AMDGPU::MCNamedOperand::Src2,
+        llvm::AMDGPU::MCNamedOperand::ScaleSrc0,
+        llvm::AMDGPU::MCNamedOperand::ScaleSrc1,
+        llvm::AMDGPU::MCNamedOperand::MatrixAScale,
+        llvm::AMDGPU::MCNamedOperand::MatrixBScale,
+        llvm::AMDGPU::MCNamedOperand::MatrixAScaleFmt,
+        llvm::AMDGPU::MCNamedOperand::MatrixBScaleFmt,
+        llvm::AMDGPU::MCNamedOperand::MatrixAReuse,
+        llvm::AMDGPU::MCNamedOperand::MatrixBReuse})
+    EXPECT_TRUE(getNamedOperandIndex(*Source, Name));
+
+  std::optional<unsigned> Src2Index =
+      getNamedOperandIndex(*Source, llvm::AMDGPU::MCNamedOperand::Src2);
+  ASSERT_TRUE(Src2Index);
+  EXPECT_TRUE(Source->getOperand(*Src2Index).isImm());
+
+  std::optional<llvm::MCInst> Replacement =
+      parseSingleMCInst("v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[16:23], "
+                        "v[32:39], 1.0, v40, s2 matrix_a_fmt:MATRIX_FMT_FP4 "
+                        "matrix_b_fmt:MATRIX_FMT_FP4",
+                        S);
+  ASSERT_TRUE(Replacement);
+  EXPECT_TRUE(getNamedOperandIndex(*Replacement,
+                                   llvm::AMDGPU::MCNamedOperand::MatrixAFmt));
+  EXPECT_TRUE(getNamedOperandIndex(*Replacement,
+                                   llvm::AMDGPU::MCNamedOperand::MatrixBFmt));
+}
+
 // -- LLVMState::encodeSBranch -------------------------------------------------
 //
 // Exact byte checks are avoided here -- tblgen encodings can be reshuffled
@@ -1277,10 +1321,9 @@ TEST(CollectDirectBranchTargets, BoundsFiniteExternalPcMaterializedCall) {
                                  /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   ASSERT_EQ(Info->Targets.size(), 1u);
-  EXPECT_TRUE(Info->Targets.contains(Decoded.back().Offset +
-                                     Decoded.back().Size));
   EXPECT_TRUE(
-      Info->BoundedIndirectTransfers.contains(Decoded.back().Offset));
+      Info->Targets.contains(Decoded.back().Offset + Decoded.back().Size));
+  EXPECT_TRUE(Info->BoundedIndirectTransfers.contains(Decoded.back().Offset));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 
@@ -1309,8 +1352,8 @@ TEST(CollectDirectBranchTargets,
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
   ASSERT_EQ(Decoded.size(), 14u);
-  llvm::SmallVector<uint64_t, 2> DeclaredEntries{
-      Decoded[7].Offset, Decoded[10].Offset};
+  llvm::SmallVector<uint64_t, 2> DeclaredEntries{Decoded[7].Offset,
+                                                 Decoded[10].Offset};
   llvm::SmallVector<ElfView::FunctionTextRange, 3> FunctionRanges{
       {Decoded[1].Offset, Decoded[7].Offset},
       {Decoded[7].Offset, Decoded[9].Offset},
@@ -1325,8 +1368,7 @@ TEST(CollectDirectBranchTargets,
       Decoded, S, /*TextAddr=*/0, /*TextSize=*/Bytes.size(), DeclaredEntries,
       FunctionRanges, /*ExternalEntries=*/{}, Bytes);
   ASSERT_TRUE(Info);
-  EXPECT_TRUE(
-      Info->Targets.contains(Decoded[5].Offset + Decoded[5].Size));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[5].Offset + Decoded[5].Size));
   EXPECT_TRUE(Info->HasUnresolvedTargets);
 }
 
@@ -2002,8 +2044,8 @@ TEST(CollectDirectBranchTargets, HandlesImmediateAbsoluteTargetCall) {
                                  /*TextSize=*/0x40, /*DeclaredEntries=*/{});
   ASSERT_TRUE(OutsideInfo);
   ASSERT_EQ(OutsideInfo->Targets.size(), 1u);
-  EXPECT_TRUE(OutsideInfo->Targets.contains(Decoded[0].Offset +
-                                            Decoded[0].Size));
+  EXPECT_TRUE(
+      OutsideInfo->Targets.contains(Decoded[0].Offset + Decoded[0].Size));
   EXPECT_FALSE(OutsideInfo->HasUnresolvedTargets);
 
   std::optional<DirectControlFlowInfo> OverflowInfo =
@@ -2057,8 +2099,7 @@ TEST(CollectDirectBranchTargets, ProtectsExternalPcRelativeCallContinuation) {
                                  /*DeclaredEntries=*/{});
   ASSERT_TRUE(Info);
   ASSERT_EQ(Info->Targets.size(), 1u);
-  EXPECT_TRUE(
-      Info->Targets.contains(Decoded[0].Offset + Decoded[0].Size));
+  EXPECT_TRUE(Info->Targets.contains(Decoded[0].Offset + Decoded[0].Size));
   EXPECT_FALSE(Info->HasUnresolvedTargets);
 }
 

@@ -68,9 +68,10 @@ target_include_directories(hotswap-rewriter PUBLIC
 
 # The rewriter is a pure MC-layer byte rewriter: disassemble (MCDisassembler),
 # assemble/encode (MC, MCParser, MCCodeEmitter), read ELF (Object,
-# BinaryFormat), and query AMDGPU MC descriptions (AMDGPU{Desc,Info,AsmParser,
-# Disassembler}). It uses no LLVM IR or codegen, so Core and AMDGPUCodeGen are
-# intentionally omitted; Core is still pulled in transitively where needed.
+# BinaryFormat), and query AMDGPU MC descriptions and named operands
+# (AMDGPU{Desc,Info,Utils,AsmParser,Disassembler}). It uses no LLVM IR or
+# codegen, so Core and AMDGPUCodeGen are intentionally omitted; Core is still
+# pulled in transitively where needed.
 llvm_map_components_to_libnames(hotswap_rewriter_llvm_libs
   BinaryFormat
   MC
@@ -82,6 +83,7 @@ llvm_map_components_to_libnames(hotswap_rewriter_llvm_libs
   AMDGPUAsmParser
   AMDGPUDesc
   AMDGPUDisassembler
-  AMDGPUInfo)
+  AMDGPUInfo
+  AMDGPUUtils)
 
 target_link_libraries(hotswap-rewriter PUBLIC ${hotswap_rewriter_llvm_libs})

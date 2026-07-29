@@ -135,6 +135,19 @@ static SmallVector<uint8_t> encodeMCInst(const MCInst &Inst,
   return SmallVector<uint8_t>(Code.begin(), Code.end());
 }
 
+SmallVector<uint8_t> encodeInstruction(const MCInst &Inst, const LLVMState &S) {
+  return encodeMCInst(Inst, S);
+}
+
+bool appendEncodedInstruction(SmallVectorImpl<uint8_t> &Bytes,
+                              const MCInst &Inst, const LLVMState &S) {
+  SmallVector<uint8_t> Encoded = encodeInstruction(Inst, S);
+  if (Encoded.empty())
+    return false;
+  Bytes.append(Encoded.begin(), Encoded.end());
+  return true;
+}
+
 /// Run the AMDGPU asm parser over \p AsmStr and return the captured MCInsts.
 /// Used by the assembly helpers for the full parse-and-encode path, and by
 /// initLLVM() / resolveOpcodeViaParse() for instructions where parsing the
@@ -181,6 +194,83 @@ static SmallVector<MCInst, 2> parseAsmToMCInsts(StringRef AsmStr,
   for (const MCInst &Inst : Streamer.captured())
     Result.emplace_back(Inst);
   return Result;
+}
+
+std::optional<MCInst> parseSingleMCInst(StringRef AsmStr, const LLVMState &S) {
+  SmallVector<MCInst, 2> Parsed = parseAsmToMCInsts(AsmStr, S);
+  if (Parsed.size() != 1) {
+    log() << "hotswap: error: parseSingleMCInst: expected one MCInst, got "
+          << Parsed.size() << " for asm:\n    " << AsmStr << "\n";
+    return std::nullopt;
+  }
+  return Parsed.front();
+}
+
+std::optional<unsigned> getNamedOperandIndex(const MCInst &Inst,
+                                             AMDGPU::MCNamedOperand Name) {
+  int16_t Index = AMDGPU::getNamedOperandIdx(Inst.getOpcode(), Name);
+  if (Index < 0 || static_cast<unsigned>(Index) >= Inst.getNumOperands())
+    return std::nullopt;
+  return static_cast<unsigned>(Index);
+}
+
+bool copyNamedOperand(const MCInst &Source, MCInst &Destination,
+                      AMDGPU::MCNamedOperand Name, bool Required) {
+  std::optional<unsigned> SourceIndex = getNamedOperandIndex(Source, Name);
+  if (!SourceIndex)
+    return !Required;
+  std::optional<unsigned> DestinationIndex =
+      getNamedOperandIndex(Destination, Name);
+  if (!DestinationIndex) {
+    log() << "hotswap: error: replacement opcode lacks an AMDGPU named "
+             "operand carried by the source\n";
+    return false;
+  }
+  Destination.getOperand(*DestinationIndex) = Source.getOperand(*SourceIndex);
+  return true;
+}
+
+bool copyWmmaSourceCModifiers(const MCInst &Source, MCInst &Destination,
+                              bool ClearSourceC) {
+  std::optional<unsigned> SourceModifiersIndex =
+      getNamedOperandIndex(Source, AMDGPU::MCNamedOperand::Src2Modifiers);
+  std::optional<unsigned> DestinationModifiersIndex =
+      getNamedOperandIndex(Destination, AMDGPU::MCNamedOperand::Src2Modifiers);
+  if (!SourceModifiersIndex || !DestinationModifiersIndex)
+    return false;
+  const MCOperand &SourceModifiers = Source.getOperand(*SourceModifiersIndex);
+  if (!SourceModifiers.isImm())
+    return false;
+  Destination.getOperand(*DestinationModifiersIndex) =
+      MCOperand::createImm(ClearSourceC ? 0 : SourceModifiers.getImm());
+
+  for (AMDGPU::MCNamedOperand Name :
+       {AMDGPU::MCNamedOperand::NegLo, AMDGPU::MCNamedOperand::NegHi}) {
+    std::optional<unsigned> SourceIndex = getNamedOperandIndex(Source, Name);
+    if (!SourceIndex)
+      continue;
+    std::optional<unsigned> DestinationIndex =
+        getNamedOperandIndex(Destination, Name);
+    if (!DestinationIndex)
+      return false;
+    const MCOperand &SourcePacked = Source.getOperand(*SourceIndex);
+    if (!SourcePacked.isImm())
+      return false;
+    int64_t Packed = SourcePacked.getImm();
+    if (ClearSourceC)
+      Packed &= ~int64_t(1u << 2);
+    Destination.getOperand(*DestinationIndex) = MCOperand::createImm(Packed);
+  }
+  return true;
+}
+
+bool appendAssembledInstructions(SmallVectorImpl<uint8_t> &Bytes,
+                                 StringRef AsmStr, const LLVMState &S) {
+  SmallVector<uint8_t> Encoded = assembleInstructions(AsmStr, S);
+  if (Encoded.empty())
+    return false;
+  Bytes.append(Encoded.begin(), Encoded.end());
+  return true;
 }
 
 /// Resolve the subtarget-appropriate MC opcode for \p AsmSnippet by letting

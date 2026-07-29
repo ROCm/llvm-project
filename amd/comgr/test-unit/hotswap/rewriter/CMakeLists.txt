@@ -76,7 +76,8 @@ llvm_map_components_to_libnames(COMGR_TEST_UNIT_MC_LIBS
   AMDGPUCodeGen
   AMDGPUDesc
   AMDGPUDisassembler
-  AMDGPUInfo)
+  AMDGPUInfo
+  AMDGPUUtils)
 
 target_link_libraries(HotswapMCTests PRIVATE
   ${COMGR_GTEST_LIBS}
