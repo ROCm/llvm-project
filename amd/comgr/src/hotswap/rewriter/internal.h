@@ -1572,6 +1572,13 @@ llvm::Expected<uint64_t> countReachableSetPcGatewaySlots(
     uint64_t TargetOffset, unsigned SgprBase, uint64_t MaxSlots,
     bool UseVcc = false, bool PreserveVcc = false);
 
+/// Allocate a monotonic chain of short-branch islands between \p FromOffset and
+/// \p TargetOffset. Sled cursor updates are transactional: failure restores
+/// every consumed cursor, while physical aliases advance together on success.
+std::optional<llvm::SmallVector<uint64_t, 4>>
+allocateForwardBranchIslands(std::vector<NopSled> &Gateways,
+                             uint64_t FromOffset, uint64_t TargetOffset);
+
 /// Return whether an s_branch at \p From can encode \p To, including the
 /// instruction-relative PC base, alignment, signed range, and overflow checks.
 bool isSBranchReachable(uint64_t From, uint64_t To);
