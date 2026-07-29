@@ -5947,11 +5947,10 @@ bool SIInstrInfo::verifyInstruction(const MachineInstr &MI,
     }
   }
 
-  // See SIInstrInfo::isLegalGFX12PlusPackedMathFP32or64BitOperand for more
-  // information.
-  if (AMDGPU::isPackedFP32or64BitInst(Opcode) && AMDGPU::isGFX12Plus(ST)) {
+  // See SIInstrInfo::isLegalSingleSGPRReadInstOperand for more information.
+  if (AMDGPU::isGFX12Plus(ST) && AMDGPU::isSingleSGPRReadInst(Opcode)) {
     for (unsigned I = 0; I < 3; ++I) {
-      if (!isLegalGFX12PlusPackedMathFP32or64BitOperand(MRI, MI, I))
+      if (!isLegalSingleSGPRReadInstOperand(MRI, MI, I))
         return false;
     }
   }
@@ -6309,17 +6308,16 @@ void SIInstrInfo::legalizeOpWithMove(MachineInstr &MI, unsigned OpIdx) const {
   DebugLoc DL = MBB->findDebugLoc(I);
 
   if (Size == 128 && AMDGPU::isPacked64BitInst(MI.getOpcode()) &&
-      isLegalGFX12PlusPackedMathFP32or64BitOperand(
-          MRI, MI, VOP3OpIdxToSrcN(MI, OpIdx))) {
+      isLegalSingleSGPRReadInstOperand(MRI, MI, VOP3OpIdxToSrcN(MI, OpIdx))) {
     // Special case for V_PK_*64 instructions: these do not have OPSEL but SGPR
     // sources behave like OPSEL is set replicating low 64-bits into high. VGPR
     // sources in turn read actual 4 registers. To move operand from an SGPR to
     // a VGPR we need to replicate low half.
     // We also do not select immediates for these instructions so it always has
     // to be an SGPR register here.
-    // Operands which are not legal as per
-    // isLegalGFX12PlusPackedMathFP32or64BitOperand() sent here specifically to
-    // fix a non-splat SGPR and shall perform a full copy.
+    // Operands which are not legal as per isLegalSingleSGPRReadInstOperand()
+    // sent here specifically to fix a non-splat SGPR and shall perform a full
+    // copy.
 
     const TargetRegisterClass *VRC64 = RI.getVGPRClassForBitWidth(64);
     Register Low64 = MRI.createVirtualRegister(VRC64);
@@ -6412,12 +6410,11 @@ bool SIInstrInfo::isLegalRegOperand(const MachineInstr &MI, unsigned OpIdx,
   const MCOperandInfo OpInfo = MI.getDesc().operands()[OpIdx];
   unsigned Opc = MI.getOpcode();
 
-  // See SIInstrInfo::isLegalGFX12PlusPackedMathFP32or64BitOperand for more
-  // information.
-  if (AMDGPU::isPackedFP32or64BitInst(MI.getOpcode()) &&
-      AMDGPU::isGFX12Plus(ST) && MO.isReg() && RI.isSGPRReg(MRI, MO.getReg()) &&
-      !isLegalGFX12PlusPackedMathFP32or64BitOperand(
-          MRI, MI, VOP3OpIdxToSrcN(MI, OpIdx), &MO))
+  // See SIInstrInfo::isLegalSingleSGPRReadInstOperand for more information.
+  if (AMDGPU::isGFX12Plus(ST) && MO.isReg() && RI.isSGPRReg(MRI, MO.getReg()) &&
+      AMDGPU::isSingleSGPRReadInst(MI.getOpcode()) &&
+      !isLegalSingleSGPRReadInstOperand(MRI, MI, VOP3OpIdxToSrcN(MI, OpIdx),
+                                        &MO))
     return false;
 
   if (!isLegalRegOperand(MRI, OpInfo, MO))
@@ -6483,7 +6480,7 @@ bool SIInstrInfo::isLegalVSrcOperand(const MachineRegisterInfo &MRI,
   return true;
 }
 
-bool SIInstrInfo::isLegalGFX12PlusPackedMathFP32or64BitOperand(
+bool SIInstrInfo::isLegalSingleSGPRReadInstOperand(
     const MachineRegisterInfo &MRI, const MachineInstr &MI, unsigned SrcN,
     const MachineOperand *MO) const {
   constexpr unsigned NumOps = 3;
@@ -6904,12 +6901,11 @@ void SIInstrInfo::legalizeOperandsVOP3(MachineRegisterInfo &MRI,
       !RI.isVGPR(MRI, MI.getOperand(VOP3Idx[2]).getReg()))
     legalizeOpWithMove(MI, VOP3Idx[2]);
 
-  // Fix the register class of packed FP32 instructions on gfx12+. See
-  // SIInstrInfo::isLegalGFX12PlusPackedMathFP32or64BitOperand for more
-  // information.
-  if (AMDGPU::isPackedFP32or64BitInst(Opc) && AMDGPU::isGFX12Plus(ST)) {
+  // Fix the register class of single-sgpr-read instructions on gfx12+. See
+  // SIInstrInfo::isLegalSingleSGPRReadInstOperand for more information.
+  if (AMDGPU::isGFX12Plus(ST) && AMDGPU::isSingleSGPRReadInst(Opc)) {
     for (unsigned I = 0; I < 3; ++I) {
-      if (!isLegalGFX12PlusPackedMathFP32or64BitOperand(MRI, MI, /*SrcN=*/I))
+      if (!isLegalSingleSGPRReadInstOperand(MRI, MI, /*SrcN=*/I))
         legalizeOpWithMove(MI, VOP3Idx[I]);
     }
   }
@@ -7860,7 +7856,8 @@ SIInstrInfo::legalizeOperands(MachineInstr &MI,
 }
 
 void SIInstrWorklist::insert(MachineInstr *MI) {
-  InstrList.insert(MI);
+  if (InSet.insert(MI).second)
+    InstrList.push_back(MI);
   // Add MBUF instructiosn to deferred list.
   int RsrcIdx =
       AMDGPU::getNamedOperandIdx(MI->getOpcode(), AMDGPU::OpName::srsrc);
@@ -7886,13 +7883,13 @@ void SIInstrInfo::legalizeOperandsVALUt16(MachineInstr &MI, unsigned OpIdx,
   unsigned Opcode = MI.getOpcode();
   MachineBasicBlock *MBB = MI.getParent();
   // Legalize operands and check for size mismatch
-  if (!OpIdx || OpIdx >= MI.getNumExplicitOperands() ||
+  if (OpIdx >= MI.getNumExplicitOperands() ||
       OpIdx >= get(Opcode).getNumOperands() ||
       get(Opcode).operands()[OpIdx].RegClass == -1)
     return;
 
   MachineOperand &Op = MI.getOperand(OpIdx);
-  if (!Op.isReg() || !Op.getReg().isVirtual())
+  if (!Op.isReg() || !Op.getReg().isVirtual() || Op.isDef())
     return;
 
   const TargetRegisterClass *CurrRC = MRI.getRegClass(Op.getReg());
@@ -7918,7 +7915,7 @@ void SIInstrInfo::legalizeOperandsVALUt16(MachineInstr &MI, unsigned OpIdx,
 }
 void SIInstrInfo::legalizeOperandsVALUt16(MachineInstr &MI,
                                           MachineRegisterInfo &MRI) const {
-  for (unsigned OpIdx = 1; OpIdx < MI.getNumExplicitOperands(); OpIdx++)
+  for (unsigned OpIdx = 0; OpIdx < MI.getNumExplicitOperands(); OpIdx++)
     legalizeOperandsVALUt16(MI, OpIdx, MRI);
 }
 

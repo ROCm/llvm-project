@@ -660,7 +660,7 @@ bool CodeGenPrepare::_run(Function &F) {
            "Incorrect DominatorTree updates in CGP");
 
   if (VerifyLoopInfo)
-    LI->verify(getDT());
+    LI->verify();
 #endif
 
   // If we are optimzing huge function, we need to consider the build time.
@@ -724,7 +724,7 @@ bool CodeGenPrepare::_run(Function &F) {
              "Incorrect DominatorTree updates in CGP");
 
     if (VerifyLoopInfo)
-      LI->verify(getDT());
+      LI->verify();
 #endif
 
     // Really free removed instructions during promotion.
