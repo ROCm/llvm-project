@@ -18,7 +18,9 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <chrono>
+#ifndef _WIN32
 #include <dlfcn.h>
+#endif
 #include <string>
 #include <sys/stat.h>
 
@@ -133,6 +135,7 @@ std::string loadedImageIdentity() {
     std::string out;
     llvm::raw_string_ostream os(out);
     os << "llvm=" << LLVM_VERSION_STRING;
+#ifndef _WIN32
     Dl_info info;
     if (::dladdr(reinterpret_cast<void *>(&loadedImageIdentity), &info) &&
         info.dli_fname) {
@@ -143,6 +146,9 @@ std::string loadedImageIdentity() {
     } else {
       os << "|image=<dladdr-unavailable>";
     }
+#else
+    os << "|image=<unavailable-on-windows>";
+#endif
     return os.str();
   }();
   return identity;

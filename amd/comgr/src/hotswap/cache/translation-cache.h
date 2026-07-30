@@ -3,6 +3,8 @@
 
 #include "pipeline.h"
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/MemoryBufferRef.h"
 
 #include <string>

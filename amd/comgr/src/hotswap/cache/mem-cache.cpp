@@ -165,18 +165,21 @@ std::string deriveMemBucketKey(const TranslationCacheRequest &request) {
   key += (request.EnableWaveNative ? '1' : '0');
   key += (request.ForceScaledModrep ? '1' : '0');
   key += (request.AssumeHipGlobalOffsetZero ? '1' : '0');
-  // Numeric transform inputs not implied by the source bytes. Without these,
-  // two identical-source requests differing only in opt level / orig machine
-  // would collide into one bucket and the source-only memcmp would wrongly
-  // match. (elf_machine/elf_flags/source hash are omitted: the memcmp over
-  // the source bytes already covers them. rules-content/build/device-libs
-  // identity are omitted: process-constant, folded into the disk key only.)
+  // Transform inputs not implied by the source bytes. Without these, two
+  // identical-source requests differing only in these fields would collide
+  // into one bucket and the source-only memcmp would wrongly match.
+  // elf_machine/elf_flags and the source hash are omitted: the memcmp over
+  // the source bytes already covers them. rules-file CONTENTS and the loaded-
+  // image build identity are omitted because they are constant across a single
+  // process (the disk key still folds them in for cross-process identity).
   {
     char nbuf[48];
     std::snprintf(nbuf, sizeof(nbuf), "|om=%d|ol=%u", request.OrigMach,
                   request.OptLevel);
     key += nbuf;
   }
+  key.push_back('\x1f');
+  key += request.DeviceLibrariesIdentity;
   return key;
 }
 
@@ -374,7 +377,6 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
   }
 
   const std::string key = deriveMemBucketKey(request);
-  SourceBytesRef source = captureSource(request);
 
   // Uncacheable request (empty source, missing gfx, no kernels, unreadable
   // rules): run the producer directly and cache nothing. Never terminate or
@@ -393,6 +395,10 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     result.LeaderResult = std::move(produced);
     return result;
   }
+
+  // Now that the request is known cacheable (non-empty key implies a non-null,
+  // non-empty source), capture the source bytes for the exact-compare guard.
+  SourceBytesRef source = captureSource(request);
 
   std::shared_ptr<Flight> flight;
   bool isLeader = false;
@@ -620,10 +626,13 @@ size_t memCacheBudgetBytes() { return activeInstance().budget(); }
 #ifdef COMGR_HOTSWAP_MEM_CACHE_TESTING
 void resetMemCacheForTesting(size_t budgetBytesOverride) {
   std::lock_guard<std::mutex> lock(testInstanceMu());
-  MemCache *&p = testInstancePtr();
-  // Replace the active instance with a fresh one at the requested budget so
-  // each test starts from a known, isolated state.
-  p = new MemCache(budgetBytesOverride);
+  // Own the heap instances WE create here so we can free the previous one
+  // without ever deleting the process-immortal instance() singleton (which
+  // testInstancePtr() may alias from activeInstance()'s lazy init).
+  static MemCache *ownedTestInstance = nullptr;
+  delete ownedTestInstance;
+  ownedTestInstance = new MemCache(budgetBytesOverride);
+  testInstancePtr() = ownedTestInstance;
 }
 
 size_t memCacheEntryCountForTesting() {

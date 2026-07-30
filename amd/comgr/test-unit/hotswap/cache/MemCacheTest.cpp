@@ -18,6 +18,7 @@
 #include "gtest/gtest.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <string>
 #include <thread>
