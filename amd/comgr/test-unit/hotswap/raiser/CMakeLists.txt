@@ -112,3 +112,27 @@ target_include_directories(RegFileTests PRIVATE
   $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
 comgr_configure_test_target(RegFileTests)
+
+# -- KernargAbiLayoutTests ----------------------------------------------------
+#
+# Covers the source kernel-argument ABI reconstruction: the user-SGPR layout
+# derived from the kernel descriptor, hidden-argument byte classification, and
+# the IR synthesis of source hidden argument values.
+
+add_executable(KernargAbiLayoutTests
+  KernargAbiLayoutTest.cpp)
+
+target_link_libraries(KernargAbiLayoutTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  hotswap::raiser
+  hotswap::decoder
+  hotswap::common
+  ${LLVM_PTHREAD_LIB})
+
+target_include_directories(KernargAbiLayoutTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
+
+comgr_configure_test_target(KernargAbiLayoutTests)
