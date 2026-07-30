@@ -19,33 +19,37 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-Expected<RaiseContext> RaiseContext::create(
-    IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
-    const KernelMeta &Meta, DenseMap<uint64_t, BasicBlock *> OffsetToBb,
-    ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
-    ArrayRef<TextSection::ImageSection> SourceImageSections,
-    uint64_t KernelStartOffset, uint64_t KernelEndOffset) {
+Expected<RaiseContext>
+RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
+                     const MCState &MC, const KernelMeta &Meta,
+                     ArrayRef<uint8_t> SourceTextBytes,
+                     uint64_t SourceTextBaseAddress,
+                     ArrayRef<TextSection::ImageSection> SourceImageSections,
+                     uint64_t KernelStartOffset, uint64_t KernelEndOffset) {
   Expected<RegisterState> Registers =
       RegisterState::create(B, Projection, MC, Meta);
   if (!Registers)
     return Registers.takeError();
-  return RaiseContext(B, Projection, MC, std::move(*Registers),
-                      std::move(OffsetToBb), SourceTextBytes,
+  return RaiseContext(B, Projection, MC, std::move(*Registers), SourceTextBytes,
                       SourceTextBaseAddress, SourceImageSections,
                       KernelStartOffset, KernelEndOffset);
 }
 
 RaiseContext::RaiseContext(
     IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
-    RegisterState Registers, DenseMap<uint64_t, BasicBlock *> OffsetToBb,
-    ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
+    RegisterState Registers, ArrayRef<uint8_t> SourceTextBytes,
+    uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset)
     : B(B), Projection(Projection), MC(MC), Registers(std::move(Registers)),
-      OffsetToBb(std::move(OffsetToBb)), SourceTextBytes(SourceTextBytes),
+      SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
-      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {}
+      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {
+  // The builder is positioned in the entry block, which is what the source
+  // kernel's first instruction raised into.
+  OffsetToBb[KernelStartOffset] = B.GetInsertBlock();
+}
 
 BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
   DenseMap<uint64_t, BasicBlock *>::iterator It = OffsetToBb.find(Addr);

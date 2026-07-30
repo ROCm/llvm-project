@@ -34,10 +34,12 @@ namespace COMGR::hotswap {
 // that a later write to the same register invalidates.
 class RegisterState {
 public:
-  // Build the register state for the source kernel described by Meta. B must be
-  // positioned in the entry block: the register file and the cross-block shadow
-  // storage are allocated there. Fails when the kernel descriptor and the
-  // metadata disagree on the user-SGPR layout.
+  // Build the register state for the source kernel described by Meta, with the
+  // SGPRs the source ABI preloads before entry already seeded. B must be
+  // positioned in the entry block: the register file, the cross-block shadow
+  // storage, and the seeds are emitted there. Fails when the kernel descriptor
+  // and the metadata disagree on the user-SGPR layout, and when the layout
+  // preloads an entry source the target cannot reproduce.
   static llvm::Expected<RegisterState> create(llvm::IRBuilder<> &B,
                                               const WaveProjection &Projection,
                                               const MCState &MC,
@@ -181,6 +183,9 @@ public:
 private:
   RegisterState(llvm::IRBuilder<> &B, const WaveProjection &Projection,
                 const MCState &MC, UserSgprLayout Layout);
+
+  // Give the preloaded entry SGPRs the values the source ABI hands them.
+  llvm::Error seedEntrySgprs();
 
   // Storage shadowing one SGPR across block boundaries.
   struct SgprShadow {
