@@ -122,7 +122,11 @@ static void gatherNestedSymbolUses(Operation &op,
           gatherSymsFromAttr(op.getCopyprivateSymsAttr(), functionUses);
         })
         .Case([&](omp::TargetOp op) {
-          gatherSymsFromAttr(op.getPrivateSymsAttr(), recipeUses);
+          // omp.private is inlined inside of the target region, hence we need
+          // to add it with the target uses rather than base it on context.
+          // TODO: The reverse-offload case would require adding it to
+          // nestedRecipeUses.
+          gatherSymsFromAttr(op.getPrivateSymsAttr(), targetRecipeUses);
           gatherSymsFromAttr(op.getInReductionSymsAttr(), recipeUses);
         })
         .Case([&](omp::TaskgroupOp op) {

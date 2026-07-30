@@ -307,3 +307,57 @@ llvm.func @fn_nohost() attributes {
   llvm.call @public_both() : () -> ()
   llvm.return
 }
+
+// -----
+
+// omp.target private propagates device_type(nohost), unlike in_reduction.
+
+omp.private {type = firstprivate} @priv : !llvm.struct<(ptr)> init {
+^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr):
+  llvm.call @priv_callee() : () -> ()
+  omp.yield(%arg1 : !llvm.ptr)
+} copy {
+^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr):
+  omp.yield(%arg1 : !llvm.ptr)
+} dealloc {
+^bb0(%arg0: !llvm.ptr):
+  omp.yield
+}
+
+omp.declare_reduction @red : i32
+init {
+^bb0(%arg0: i32):
+  llvm.call @red_callee() : () -> ()
+  omp.yield (%arg0 : i32)
+}
+combiner {
+^bb1(%arg0: i32, %arg1: i32):
+  omp.yield (%arg0 : i32)
+}
+cleanup {
+^bb0(%arg0: i32):
+  omp.yield
+}
+
+// CHECK: llvm.func {{.*}}@red_callee()
+// CHECK-SAME: omp.declare_target = #omp.declaretarget<device_type = (host), capture_clause = (to), automap = false>
+llvm.func @red_callee() attributes {sym_visibility = "private"} {
+  llvm.return
+}
+// CHECK: llvm.func {{.*}}@priv_callee()
+// CHECK-SAME: omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>
+llvm.func @priv_callee() attributes {sym_visibility = "private"} {
+  llvm.return
+}
+
+llvm.func @main(%arg0 : !llvm.ptr) attributes {
+    omp.declare_target = #omp.declaretarget<
+        device_type = (host), capture_clause = (to), automap = false>} {
+  %0 = omp.map.info var_ptr(%arg0 : !llvm.ptr, i32) map_clauses(tofrom) capture(ByRef) -> !llvm.ptr
+  omp.target kernel_type(generic) in_reduction(@red %arg0 : !llvm.ptr)
+             map_entries(%0 -> %arg1 : !llvm.ptr)
+             private(@priv %arg0 -> %arg2 : !llvm.ptr) {
+    omp.terminator
+  }
+  llvm.return
+}
