@@ -68,7 +68,6 @@ jobs:
     needs: copy_prebuilt_stages
     if: ${{ !cancelled() && !failure() }}
     uses: ./.github/workflows/multi_arch_build_portable_linux.yml
-    secrets: inherit
     with:
       matrix_per_family_json: ${{ toJSON(fromJSON(inputs.build_config).per_family_info) }}
       dist_amdgpu_families: ${{ fromJSON(inputs.build_config).dist_amdgpu_families }}

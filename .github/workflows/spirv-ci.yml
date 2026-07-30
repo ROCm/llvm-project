@@ -36,7 +36,6 @@ jobs:
          )
        ))
     uses: ./.github/workflows/spirv-ci-linux-amd-staging.yml
-    secrets: inherit
 
   windows_release:
     name: Windows::release
@@ -54,4 +53,3 @@ jobs:
          )
        ))
     uses: ./.github/workflows/spirv-ci-windows-amd-staging.yml
-    secrets: inherit
