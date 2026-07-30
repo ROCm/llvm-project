@@ -30,6 +30,8 @@ add_definitions(${LLVM_DEFINITIONS})
 # or a separate static archive.
 add_library(hotswap-raiser OBJECT
   raiser.cpp
+  raise_failure.cpp
+  reg-file.cpp
   wave-projection.cpp
 )
 

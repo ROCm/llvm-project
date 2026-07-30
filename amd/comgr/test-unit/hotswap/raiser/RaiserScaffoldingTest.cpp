@@ -9,13 +9,16 @@
 // Pins the scaffolding contract `raiseToIR` advertises: an empty input
 // produces a well-formed `llvm::Module` containing one `AMDGPU_KERNEL`
 // function whose body is exactly `ret void`, with the AMDGPU triple set.
-// Empty inputs succeed; malformed ISA inputs are rejected with a structured
-// failure. Descriptor presence is enforced upstream by the code-object loader,
-// so it is no longer a raiser precondition.
+// Empty inputs succeed; malformed ISA inputs are rejected with a BadInput
+// RaiseFailure carried in the returned `llvm::Error`. Descriptor presence is
+// enforced upstream by the code-object loader, so it is no longer a raiser
+// precondition.
 //
 //===----------------------------------------------------------------------===//
 
 #include "hotswap/raiser/raiser.h"
+
+#include "hotswap/raiser/raise_failure.h"
 
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CallingConv.h"
@@ -23,6 +26,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -49,47 +53,59 @@ void ensureLLVMInitialized() {
 }
 } // namespace COMGR
 
+using COMGR::hotswap::KernelMeta;
+using COMGR::hotswap::RaiseFailure;
+using COMGR::hotswap::RaiseFailureReason;
+using COMGR::hotswap::RaiseResult;
+using COMGR::hotswap::raiseToIR;
+
 namespace {
 
-COMGR::hotswap::KernelMeta makeKernelMeta(llvm::StringRef Name) {
-  COMGR::hotswap::KernelMeta Meta;
+KernelMeta makeKernelMeta(llvm::StringRef Name) {
+  KernelMeta Meta;
   Meta.Name = Name.str();
   return Meta;
+}
+
+// The RaiseFailureReason a refused raise reports, or None if the error was not
+// a RaiseFailure.
+RaiseFailureReason refusalReason(llvm::Error E) {
+  RaiseFailureReason Reason = RaiseFailureReason::None;
+  llvm::handleAllErrors(std::move(E),
+                        [&](const RaiseFailure &F) { Reason = F.reason(); });
+  return Reason;
 }
 
 } // namespace
 
 TEST(RaiserScaffolding, EmptyInputProducesValidModule) {
-  COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
-      COMGR::hotswap::raiseToIR("gfx942", "kernel", Meta);
+  KernelMeta Meta = makeKernelMeta("kernel");
+  llvm::Expected<RaiseResult> Result = raiseToIR("gfx942", "kernel", Meta);
 
-  ASSERT_TRUE(Result.Success);
-  ASSERT_NE(Result.Ctx, nullptr);
-  ASSERT_NE(Result.Module, nullptr);
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  ASSERT_NE(Result->Ctx, nullptr);
+  ASSERT_NE(Result->Module, nullptr);
 
   std::string Err;
   llvm::raw_string_ostream ErrStream(Err);
-  EXPECT_FALSE(llvm::verifyModule(*Result.Module, &ErrStream)) << Err;
+  EXPECT_FALSE(llvm::verifyModule(*Result->Module, &ErrStream)) << Err;
 }
 
 TEST(RaiserScaffolding, ModuleAdvertisesAMDGPUTriple) {
-  COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
-      COMGR::hotswap::raiseToIR("gfx942", "kernel", Meta);
+  KernelMeta Meta = makeKernelMeta("kernel");
+  llvm::Expected<RaiseResult> Result = raiseToIR("gfx942", "kernel", Meta);
 
-  ASSERT_TRUE(Result.Success);
-  ASSERT_NE(Result.Module, nullptr);
-  EXPECT_EQ(Result.Module->getTargetTriple().str(), "amdgcn-amd-amdhsa");
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  ASSERT_NE(Result->Module, nullptr);
+  EXPECT_EQ(Result->Module->getTargetTriple().str(), "amdgcn-amd-amdhsa");
 }
 
 TEST(RaiserScaffolding, KernelFunctionIsAMDGPUKernelWithRetVoid) {
-  COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
-      COMGR::hotswap::raiseToIR("gfx942", "kernel", Meta);
+  KernelMeta Meta = makeKernelMeta("kernel");
+  llvm::Expected<RaiseResult> Result = raiseToIR("gfx942", "kernel", Meta);
 
-  ASSERT_TRUE(Result.Success);
-  llvm::Function *Fn = Result.Module->getFunction("kernel");
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  llvm::Function *Fn = Result->Module->getFunction("kernel");
   ASSERT_NE(Fn, nullptr);
   EXPECT_EQ(Fn->getCallingConv(), llvm::CallingConv::AMDGPU_KERNEL);
   ASSERT_EQ(Fn->size(), 1u);
@@ -99,19 +115,18 @@ TEST(RaiserScaffolding, KernelFunctionIsAMDGPUKernelWithRetVoid) {
 }
 
 TEST(RaiserScaffolding, EmptyTargetIsaIsRejected) {
-  COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
-      COMGR::hotswap::raiseToIR("", "kernel", Meta);
+  KernelMeta Meta = makeKernelMeta("kernel");
+  llvm::Expected<RaiseResult> Result = raiseToIR("", "kernel", Meta);
 
-  EXPECT_FALSE(Result.Success);
-  EXPECT_TRUE(Result.Failure.hasFailed());
+  ASSERT_FALSE(static_cast<bool>(Result));
+  EXPECT_EQ(refusalReason(Result.takeError()), RaiseFailureReason::BadInput);
 }
 
 TEST(RaiserScaffolding, MalformedTargetIsaIsRejected) {
-  COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  COMGR::hotswap::RaiseResult Result =
-      COMGR::hotswap::raiseToIR("not-a-real-isa", "kernel", Meta);
+  KernelMeta Meta = makeKernelMeta("kernel");
+  llvm::Expected<RaiseResult> Result =
+      raiseToIR("not-a-real-isa", "kernel", Meta);
 
-  EXPECT_FALSE(Result.Success);
-  EXPECT_TRUE(Result.Failure.hasFailed());
+  ASSERT_FALSE(static_cast<bool>(Result));
+  EXPECT_EQ(refusalReason(Result.takeError()), RaiseFailureReason::BadInput);
 }
