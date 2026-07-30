@@ -24,9 +24,9 @@
 // DISASM-NEXT: s_get_pc_i64 s[2:3]
 // DISASM-NEXT: s_add_nc_u64 s[2:3], s[2:3], 16
 // DISASM-NEXT: s_swap_pc_i64 s[0:1], s[2:3]
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64 s[6:7],
 // DISASM-NEXT: s_nop 0
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64 s[6:7],
 
 // COM: A second rewrite must preserve the resolved call and patched object.
 // RUN: hotswap-rewrite %t.out.elf \

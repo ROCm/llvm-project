@@ -18,7 +18,7 @@
 .p2align 8
 .type test_ds_overlap_cyclic,@function
 test_ds_overlap_cyclic:
-  ds_storexchg_2addr_rtn_b64 v[20:23], v24, v[22:23], v[20:21] offset0:0 offset1:1
+  ds_storexchg_2addr_rtn_b64 v[20:23], v24, v[22:23], v[20:21] offset0:32 offset1:33
   s_wait_dscnt 0
   s_endpgm
 .Ltest_ds_overlap_cyclic_end:

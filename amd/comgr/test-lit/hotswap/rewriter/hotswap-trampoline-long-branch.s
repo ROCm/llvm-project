@@ -105,7 +105,7 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.live-vcc.out.elf 2>&1 \
 // RUN:   | %FileCheck --check-prefix=LIVE-LOG %s
-// LIVE-LOG: hotswap: safe far return: preserving live wave32 VCC_LO in s105
+// LIVE-LOG: hotswap: safe far return: deferring live wave32 VCC_LO preservation in s105
 // LIVE-LOG: hotswap: assigned 1 SCC-neutral forward gateway(s)
 // LIVE-LOG: RESULT: SUCCESS
 // RUN: %llvm-objdump -d %t.live-vcc.out.elf \
@@ -113,9 +113,67 @@
 // LIVE-DISASM-LABEL: <test_far>:
 // LIVE-DISASM: s_branch
 // LIVE-DISASM-NEXT: s_mov_b32 vcc_lo, s105
+// LIVE-DISASM-NEXT: s_delay_alu instid0(SALU_CYCLE_1)
 // LIVE-DISASM: s_cbranch_vccz
 // LIVE-DISASM: s_mov_b32 s105, vcc_lo
 // LIVE-DISASM-NEXT: s_get_pc_i64 vcc
+
+// COM: Fragment both ordinary NOP windows below 20 bytes. The live-VCC
+// COM: source then needs an eight-byte save/branch primary and a disjoint
+// COM: sixteen-byte VCC-backed set-PC secondary. Both the pool-side restore
+// COM: before the replacement and the source-side continuation restore carry
+// COM: the required one-cycle SALU delay.
+// RUN: sed -e 's|^// LIVE-ONLY:|  |' \
+// RUN:   -e 's/\.fill 32, 1, 0/.fill 16, 1, 0/g' \
+// RUN:   %t.full-sgpr.s > %t.split-vcc.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.split-vcc.s -o %t.split-vcc.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.split-vcc.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --output %t.split-vcc.out.elf 2>&1 \
+// RUN:   | %FileCheck --check-prefix=SPLIT-LOG %s
+// SPLIT-LOG: hotswap: assigned 1 split VCC-preserving gateway(s)
+// SPLIT-LOG: RESULT: SUCCESS
+// RUN: %llvm-objdump -d %t.split-vcc.out.elf \
+// RUN:   | %FileCheck --check-prefix=SPLIT-DISASM %s
+// SPLIT-DISASM-LABEL: <test_far>:
+// SPLIT-DISASM-NEXT: s_mov_b32 s104, 0
+// SPLIT-DISASM-NEXT: s_branch
+// SPLIT-DISASM-NEXT: s_mov_b32 vcc_lo, s105
+// SPLIT-DISASM-NEXT: s_delay_alu instid0(SALU_CYCLE_1)
+// SPLIT-DISASM-LABEL: <gateway_barrier>:
+// SPLIT-DISASM-NEXT: s_endpgm
+// SPLIT-DISASM-NEXT: s_mov_b32 s105, vcc_lo
+// SPLIT-DISASM-NEXT: s_branch
+// SPLIT-DISASM-LABEL: <midpoint_gateway_barrier>:
+// SPLIT-DISASM-NEXT: s_endpgm
+// SPLIT-DISASM-NEXT: s_get_pc_i64 vcc
+// SPLIT-DISASM-NEXT: s_add_nc_u64 vcc, vcc,
+// SPLIT-DISASM-NEXT: s_set_pc_i64 vcc
+// SPLIT-DISASM: s_mov_b32 vcc_lo, s105
+// SPLIT-DISASM-NEXT: s_delay_alu instid0(SALU_CYCLE_1)
+// SPLIT-DISASM: tensor_load_to_lds
+// RUN: hotswap-rewrite %t.split-vcc.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent | %FileCheck --check-prefix=SPLIT-IDEM %s
+// SPLIT-IDEM: IDEMPOTENT: YES
+
+// COM: Seven nearby trampolines raise the object-wide count above the old
+// COM: blanket affine-reservation threshold, but the sole far source preserves
+// COM: live VCC and is not an affine candidate. Its exact 20-byte gateway must
+// COM: remain intact instead of being carved into unusable 8+12-byte pieces.
+// RUN: sed -e 's|^// LIVE-ONLY:|  |' \
+// RUN:   -e 's|^// EXACT20-ONLY:|  |' \
+// RUN:   -e 's/\.fill 32, 1, 0/.fill 20, 1, 0/g' \
+// RUN:   %t.full-sgpr.s > %t.exact20.s
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN:   %t.exact20.s -o %t.exact20.elf
+// RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.exact20.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --output %t.exact20.out.elf 2>&1 \
+// RUN:   | %FileCheck --check-prefix=EXACT20-LOG %s
+// EXACT20-LOG: hotswap: assigned 1 SCC-neutral forward gateway(s)
+// EXACT20-LOG: RESULT: SUCCESS
 
 // COM: A metadata-less object also fails closed because scratch usage cannot
 // COM: be charged to its owning kernel.
@@ -174,6 +232,16 @@ midpoint_gateway_barrier:
   .endr
 .Ltest_far_end:
 
+// EXACT20-ONLY:.globl near_sites
+// EXACT20-ONLY:.type near_sites,@function
+// EXACT20-ONLY:near_sites:
+// EXACT20-ONLY:.rept 7
+// EXACT20-ONLY:  tensor_load_to_lds s[0:3], s[4:11]
+// EXACT20-ONLY:  s_mov_b32 s0, s1
+// EXACT20-ONLY:.endr
+// EXACT20-ONLY:  s_endpgm
+// EXACT20-ONLY:.size near_sites, .-near_sites
+
 .rodata
 .p2align 8
 .amdhsa_kernel test_far
@@ -181,6 +249,10 @@ midpoint_gateway_barrier:
   .amdhsa_next_free_sgpr 12
   .amdhsa_wavefront_size32 1
 .end_amdhsa_kernel
+// EXACT20-ONLY:.amdhsa_kernel near_sites
+// EXACT20-ONLY:  .amdhsa_next_free_vgpr 1
+// EXACT20-ONLY:  .amdhsa_next_free_sgpr 12
+// EXACT20-ONLY:.end_amdhsa_kernel
 
 .amdgpu_metadata
   amdhsa.version:
@@ -197,4 +269,14 @@ midpoint_gateway_barrier:
       .kernarg_segment_align: 8
       .wavefront_size: 32
       .max_flat_workgroup_size: 256
+// EXACT20-ONLY:  - .name: near_sites
+// EXACT20-ONLY:    .symbol: near_sites.kd
+// EXACT20-ONLY:    .sgpr_count: 14
+// EXACT20-ONLY:    .vgpr_count: 1
+// EXACT20-ONLY:    .kernarg_segment_size: 0
+// EXACT20-ONLY:    .group_segment_fixed_size: 0
+// EXACT20-ONLY:    .private_segment_fixed_size: 0
+// EXACT20-ONLY:    .kernarg_segment_align: 8
+// EXACT20-ONLY:    .wavefront_size: 64
+// EXACT20-ONLY:    .max_flat_workgroup_size: 256
 .end_amdgpu_metadata

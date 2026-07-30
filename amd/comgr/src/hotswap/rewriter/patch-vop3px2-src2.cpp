@@ -1,4 +1,4 @@
-//===- patch-vop3px2-src2.cpp - VOP3PX2 SRC2 bit fix ----------------------===//
+//===- comgr-hotswap-patch-vop3px2-src2.cpp - VOP3PX2 SRC2 bit fix -------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -98,7 +98,6 @@ static uint32_t applyVop3px2Src2FixImpl(PatchContext &Ctx) {
     ++Scanned;
 
     if (patchScaleSrc2(Ctx.Text + DI.Offset)) {
-      noteCurrentTextMutation(Ctx);
       log() << "hotswap: VOP3PX2 SRC2 fix at 0x" << utohexstr(DI.Offset) << ": "
             << DI.Mnemonic << " scale_src2 -> VGPR0\n";
       ++Patched;

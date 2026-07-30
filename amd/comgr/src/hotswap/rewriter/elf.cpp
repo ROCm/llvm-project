@@ -443,22 +443,51 @@ bool applyByteReplace(const RewriteRule &Rule, uint64_t InstOffset,
 
 NopSled *findNearestSled(std::vector<NopSled> &Sleds, uint64_t Offset,
                          uint64_t Needed) {
-  NopSled *Best = nullptr;
+  if (Sleds.empty())
+    return nullptr;
+
+  // Sled maps are emitted in increasing, disjoint text order. Advancing one
+  // WritePos cannot cross the next sled's Start, so the write positions remain
+  // sorted after every allocation. Limit the search to the signed s_branch
+  // window instead of scanning every sled in a large code object.
+  std::vector<NopSled>::iterator Middle =
+      llvm::lower_bound(Sleds, Offset, [](const NopSled &Sled, uint64_t Value) {
+        return Sled.WritePos < Value;
+      });
+  std::optional<size_t> BestIndex;
   uint64_t BestDist = std::numeric_limits<uint64_t>::max();
-  for (NopSled &Sled : Sleds) {
+  auto Consider = [&](size_t Index) {
+    NopSled &Sled = Sleds[Index];
     if (Offset < Sled.FunctionStart || Offset >= Sled.FunctionEnd)
-      continue;
+      return;
     uint64_t UsableEnd = std::min(Sled.End, Sled.FunctionEnd);
     if (Sled.WritePos > UsableEnd || Needed > UsableEnd - Sled.WritePos)
-      continue;
+      return;
     uint64_t Dist = Sled.WritePos > Offset ? Sled.WritePos - Offset
                                            : Offset - Sled.WritePos;
-    if (Dist < MaxSledDistance && Dist < BestDist) {
-      Best = &Sled;
+    if (Dist < MaxSledDistance &&
+        (Dist < BestDist ||
+         (Dist == BestDist && (!BestIndex || Index < *BestIndex)))) {
+      BestIndex = Index;
       BestDist = Dist;
     }
+  };
+
+  size_t MiddleIndex = Middle - Sleds.begin();
+  for (size_t I = MiddleIndex; I != 0;) {
+    --I;
+    uint64_t Dist = Offset - Sleds[I].WritePos;
+    if (Dist >= MaxSledDistance)
+      break;
+    Consider(I);
   }
-  return Best;
+  for (size_t I = MiddleIndex; I != Sleds.size(); ++I) {
+    uint64_t Dist = Sleds[I].WritePos - Offset;
+    if (Dist >= MaxSledDistance)
+      break;
+    Consider(I);
+  }
+  return BestIndex ? &Sleds[*BestIndex] : nullptr;
 }
 
 // -- ElfView::create ----------------------------------------------------------
@@ -515,6 +544,7 @@ ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
   if (TextSizeValue > std::numeric_limits<uint64_t>::max() - TextBegin) {
     log() << "hotswap: error: function text range scan: .text virtual "
           << "address range overflows uint64_t.\n";
+    FunctionRangeCacheComplete = false;
     FunctionRangeCache.emplace();
     return *FunctionRangeCache;
   }
@@ -527,6 +557,7 @@ ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
 
     Expected<ELFT::SymRange> SymsOrErr = File.symbols(&SymShdr);
     if (!SymsOrErr) {
+      FunctionRangeCacheComplete = false;
       consumeError(SymsOrErr.takeError());
       continue;
     }
@@ -580,6 +611,11 @@ ArrayRef<ElfView::FunctionTextRange> ElfView::cachedFunctionTextRanges() const {
 std::vector<ElfView::FunctionTextRange> ElfView::functionTextRanges() const {
   ArrayRef<FunctionTextRange> Ranges = cachedFunctionTextRanges();
   return std::vector<FunctionTextRange>(Ranges.begin(), Ranges.end());
+}
+
+bool ElfView::functionTextRangesComplete() const {
+  (void)cachedFunctionTextRanges();
+  return FunctionRangeCacheComplete;
 }
 
 bool ElfView::isValidDataOnlyObject() {
