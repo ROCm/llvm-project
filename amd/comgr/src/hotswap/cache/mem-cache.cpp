@@ -59,11 +59,28 @@ constexpr uint64_t kP2 = 14029467366897019727ULL;
 constexpr uint64_t kP3 = 1609587929392839161ULL;
 constexpr uint64_t kP4 = 9650029242287828579ULL;
 constexpr uint64_t kP5 = 2870177450012600261ULL;
-inline uint64_t rol(uint64_t v, unsigned c) { return (v << c) | (v >> (64 - c)); }
-inline uint64_t rd64(const unsigned char *b) { uint64_t v; std::memcpy(&v, b, 8); return v; }
-inline uint32_t rd32(const unsigned char *b) { uint32_t v; std::memcpy(&v, b, 4); return v; }
-inline uint64_t round(uint64_t a, uint64_t in) { a += in * kP2; a = rol(a, 31); return a * kP1; }
-inline uint64_t merge(uint64_t a, uint64_t v) { a ^= round(0, v); return a * kP1 + kP4; }
+inline uint64_t rol(uint64_t v, unsigned c) {
+  return (v << c) | (v >> (64 - c));
+}
+inline uint64_t rd64(const unsigned char *b) {
+  uint64_t v;
+  std::memcpy(&v, b, 8);
+  return v;
+}
+inline uint32_t rd32(const unsigned char *b) {
+  uint32_t v;
+  std::memcpy(&v, b, 4);
+  return v;
+}
+inline uint64_t round(uint64_t a, uint64_t in) {
+  a += in * kP2;
+  a = rol(a, 31);
+  return a * kP1;
+}
+inline uint64_t merge(uint64_t a, uint64_t v) {
+  a ^= round(0, v);
+  return a * kP1 + kP4;
+}
 inline uint64_t hash(const void *data, size_t size) {
   const auto *bytes = static_cast<const unsigned char *>(data);
   const unsigned char *cur = bytes, *const end = bytes + size;
@@ -71,27 +88,45 @@ inline uint64_t hash(const void *data, size_t size) {
   uint64_t h = 0;
   if (size >= 32) {
     const unsigned char *const be = end - 32;
-    uint64_t l1 = kSeed + kP1 + kP2, l2 = kSeed + kP2, l3 = kSeed, l4 = kSeed - kP1;
+    uint64_t l1 = kSeed + kP1 + kP2, l2 = kSeed + kP2, l3 = kSeed,
+             l4 = kSeed - kP1;
     do {
-      l1 = round(l1, rd64(cur)); cur += 8;
-      l2 = round(l2, rd64(cur)); cur += 8;
-      l3 = round(l3, rd64(cur)); cur += 8;
-      l4 = round(l4, rd64(cur)); cur += 8;
+      l1 = round(l1, rd64(cur));
+      cur += 8;
+      l2 = round(l2, rd64(cur));
+      cur += 8;
+      l3 = round(l3, rd64(cur));
+      cur += 8;
+      l4 = round(l4, rd64(cur));
+      cur += 8;
     } while (cur <= be);
     h = rol(l1, 1) + rol(l2, 7) + rol(l3, 12) + rol(l4, 18);
-    h = merge(h, l1); h = merge(h, l2); h = merge(h, l3); h = merge(h, l4);
+    h = merge(h, l1);
+    h = merge(h, l2);
+    h = merge(h, l3);
+    h = merge(h, l4);
   } else {
     h = kSeed + kP5;
   }
   h += size;
   while (static_cast<size_t>(end - cur) >= 8) {
-    h ^= round(0, rd64(cur)); h = rol(h, 27) * kP1 + kP4; cur += 8;
+    h ^= round(0, rd64(cur));
+    h = rol(h, 27) * kP1 + kP4;
+    cur += 8;
   }
   if (static_cast<size_t>(end - cur) >= 4) {
-    h ^= static_cast<uint64_t>(rd32(cur)) * kP1; h = rol(h, 23) * kP2 + kP3; cur += 4;
+    h ^= static_cast<uint64_t>(rd32(cur)) * kP1;
+    h = rol(h, 23) * kP2 + kP3;
+    cur += 4;
   }
-  while (cur != end) { h ^= static_cast<uint64_t>(*cur++) * kP5; h = rol(h, 11) * kP1; }
-  h ^= h >> 33; h *= kP2; h ^= h >> 29; h *= kP3;
+  while (cur != end) {
+    h ^= static_cast<uint64_t>(*cur++) * kP5;
+    h = rol(h, 11) * kP1;
+  }
+  h ^= h >> 33;
+  h *= kP2;
+  h ^= h >> 29;
+  h *= kP3;
   return h ^ (h >> 32);
 }
 } // namespace xxh
@@ -111,13 +146,20 @@ std::string deriveMemBucketKey(const TranslationCacheRequest &request) {
   std::snprintf(buf, sizeof(buf), "%016llx:%zx|",
                 static_cast<unsigned long long>(xxh::hash(src, n)), n);
   std::string key(buf);
-  key += request.SourceGfx;      key.push_back('\x1f');
-  key += request.TargetGfx;      key.push_back('\x1f');
-  key += request.SourceIsa;      key.push_back('\x1f');
-  key += request.TargetIsa;      key.push_back('\x1f');
-  key += request.CodeIsa;        key.push_back('\x1f');
-  key += request.HotswapRulesPath; key.push_back('\x1f');
-  key += request.KernelName;     key.push_back('\x1f');
+  key += request.SourceGfx;
+  key.push_back('\x1f');
+  key += request.TargetGfx;
+  key.push_back('\x1f');
+  key += request.SourceIsa;
+  key.push_back('\x1f');
+  key += request.TargetIsa;
+  key.push_back('\x1f');
+  key += request.CodeIsa;
+  key.push_back('\x1f');
+  key += request.HotswapRulesPath;
+  key.push_back('\x1f');
+  key += request.KernelName;
+  key.push_back('\x1f');
   key += (request.StrictMode ? '1' : '0');
   key += (request.EnableWritelaneRewrite ? '1' : '0');
   key += (request.EnableWaveNative ? '1' : '0');
@@ -131,8 +173,8 @@ std::string deriveMemBucketKey(const TranslationCacheRequest &request) {
   // identity are omitted: process-constant, folded into the disk key only.)
   {
     char nbuf[48];
-    std::snprintf(nbuf, sizeof(nbuf), "|om=%d|ol=%u",
-                  request.OrigMach, request.OptLevel);
+    std::snprintf(nbuf, sizeof(nbuf), "|om=%d|ol=%u", request.OrigMach,
+                  request.OptLevel);
     key += nbuf;
   }
   return key;
@@ -172,10 +214,10 @@ struct Flight {
   std::mutex Mu;
   std::condition_variable Cv;
   bool Done = false;
-  MemCacheEntryRef Entry;  // published result (null on producer failure)
-  SourceBytesRef Source;   // leader's source, for exact-compare on coalesce
-  std::thread::id Leader;  // the producer thread (reentrancy guard)
-  size_t Waiters = 0;      // parked waiters, for the coalescing test hook
+  MemCacheEntryRef Entry; // published result (null on producer failure)
+  SourceBytesRef Source;  // leader's source, for exact-compare on coalesce
+  std::thread::id Leader; // the producer thread (reentrancy guard)
+  size_t Waiters = 0;     // parked waiters, for the coalescing test hook
 };
 
 class MemCache {
@@ -226,8 +268,9 @@ private:
   uint64_t PeakLiveBytes = 0; // guarded by Mu
 };
 
-MemCacheEntryRef MemCache::lookupLocked(const std::string &key,
-                                        const TranslationCacheRequest &request) {
+MemCacheEntryRef
+MemCache::lookupLocked(const std::string &key,
+                       const TranslationCacheRequest &request) {
   auto it = Map.find(key);
   if (it == Map.end())
     return nullptr;
@@ -447,10 +490,11 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     // flight was for a different source, so we cannot use its bytes. RETRY the
     // whole operation: by now the leader has published + erased its flight, so
     // our retry either finds our own source in the map (lookupLocked memcmp),
-    // or -- more likely -- misses (leader stored the OTHER source) and WE become
-    // a fresh leader that runs + caches our result. This makes a collided
-    // request self-heal into a normal cached entry instead of perpetually
-    // bypassing. Bounded: retry loops only while the collision persists.
+    // or -- more likely -- misses (leader stored the OTHER source) and WE
+    // become a fresh leader that runs + caches our result. This makes a
+    // collided request self-heal into a normal cached entry instead of
+    // perpetually bypassing. Bounded: retry loops only while the collision
+    // persists.
     return getOrCompute(request, producer); // tail-recursive retry
   }
   // The leader's producer failed; nothing to hand back.
