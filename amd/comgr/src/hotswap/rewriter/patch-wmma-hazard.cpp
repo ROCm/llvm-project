@@ -1,4 +1,4 @@
-//===- patch-wmma-hazard.cpp - WMMA hazard patch --------------------------===//
+//===- comgr-hotswap-patch-wmma-hazard.cpp - WMMA hazard patch -----------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -257,13 +257,6 @@ static uint32_t applyWmmaHazardPatchImpl(PatchContext &Ctx) {
             << utohexstr(ValuDI.Offset) << "\n";
       continue;
     }
-    if (std::optional<ElfView::FunctionTextRange> Range =
-            Ctx.Elf.findFunctionTextRangeAtOffset(ValuDI.Offset)) {
-      T.HasFunctionRange = true;
-      T.FunctionStart = Range->Begin;
-      T.FunctionEnd = Range->End;
-    }
-    notePendingTrampolineMutation(Ctx, T);
     Ctx.OutTrampolines.push_back(std::move(T));
 
     log() << "hotswap: WMMA hazard fix at 0x" << utohexstr(ValuDI.Offset)

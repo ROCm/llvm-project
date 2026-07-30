@@ -1,4 +1,4 @@
-//===- patch-trampoline.cpp - B0-to-A0 trampoline patches -----------------===//
+//===- comgr-hotswap-patch-trampoline.cpp - B0-to-A0 trampoline patches ---===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -34,6 +34,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -409,7 +410,7 @@ bool hasUnencodableVgprName(StringRef Asm) {
     StringRef Tail = Asm.substr(Pos + 1);
     Tail.consume_front("[");
     unsigned Index = 0;
-    if (!Tail.consumeInteger(10, Index) && Index >= VgprBankSize)
+    if (!Tail.consumeInteger(10, Index) && Index > 255)
       return true;
   }
   return false;
@@ -450,20 +451,19 @@ bool normalizeVgprOperand(StringRef Input, VgprMsbOperand Role,
   // represents a low-byte wrap with values above 255, so rebase both ends
   // relative to the incoming operand bank before selecting the new bank.
   unsigned OriginalBank = getVgprMsbBank(OldMode, Role);
-  unsigned Lo = OriginalBank * VgprBankSize + EncodedLo;
-  unsigned Hi = OriginalBank * VgprBankSize + EncodedHi;
-  if (Lo / VgprBankSize != Hi / VgprBankSize)
+  unsigned Lo = OriginalBank * 256 + EncodedLo;
+  unsigned Hi = OriginalBank * 256 + EncodedHi;
+  if (Lo / 256 != Hi / 256)
     return false;
-  unsigned Bank = Lo / VgprBankSize;
-  if (Bank >= VgprMsbBankCount)
+  unsigned Bank = Lo / 256;
+  if (Bank > 3)
     return false;
   setVgprMsbBank(NewMode, Role, Bank);
   if (IsRange)
-    Output = ("v[" + Twine(Lo % VgprBankSize) + ":" + Twine(Hi % VgprBankSize) +
-              "]" + Suffix)
-                 .str();
+    Output =
+        ("v[" + Twine(Lo & 255) + ":" + Twine(Hi & 255) + "]" + Suffix).str();
   else
-    Output = ("v" + Twine(Lo % VgprBankSize) + Suffix).str();
+    Output = ("v" + Twine(Lo & 255) + Suffix).str();
   return true;
 }
 
@@ -516,6 +516,10 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   StringRef ToMnem = getDs2AddrReplacement(DI.Mnemonic);
   if (ToMnem.empty())
     return false;
+
+  // Always lower B0 DS2 instructions to the canonical A0 split form. A0
+  // retains stricter per-address alignment semantics than B0, so preserving a
+  // DS2 opcode with rewritten byte offsets is not semantically equivalent.
   std::optional<std::vector<std::string>> Expanded =
       expandDs2AddrImpl(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
   if (!Expanded)
@@ -528,6 +532,12 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   std::optional<unsigned> ActiveMode;
   if (NeedsBankNormalization) {
     ActiveMode = getActiveVgprMsbMode(Ctx, Idx);
+    // Whole-function mode recovery can decline a function even when direct
+    // control flow has a closed entry set. Preserve an exact local setter in
+    // that case; the helper independently rejects unresolved control flow and
+    // any branch or declared entry that can bypass the setter.
+    if (!ActiveMode)
+      ActiveMode = getLocallyEstablishedVgprMsbMode(Ctx, Idx);
     if (!ActiveMode) {
       log() << "hotswap: error: ds_2addr at 0x" << utohexstr(DI.Offset)
             << " crosses v255 but the active VGPR-MSB mode is unknown\n";
@@ -578,9 +588,20 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   }
 
   SmallVector<uint8_t> Replacement(Bytes.begin(), Bytes.end());
-  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
+  size_t TrampolineCountBefore = Ctx.OutTrampolines.size();
+  // Prefer already-present audited padding before creating a global
+  // trampoline. The local detour uses only two ordinary s_branch edges and
+  // therefore removes both route-planning demand and appended executable
+  // growth without changing the canonical A0 DS2 sequence.
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement,
+                           /*PreferNopSled=*/true,
+                           /*DeferPreferredLocalPlacement=*/true))
     return failRequiredPatch(Ctx);
+  if (Ctx.OutTrampolines.size() != TrampolineCountBefore)
+    Ctx.DeferredDs2LocalPlacements.push_back({DI.Offset, DI.Size, Replacement});
 
+  log() << "hotswap: split " << DI.Mnemonic << " at 0x" << utohexstr(DI.Offset)
+        << " into canonical A0 single-address form\n";
   DI.Mnemonic = "<replaced>";
   return true;
 }
@@ -975,6 +996,24 @@ bool instructionDefinesBase(const InternalDecodedInst &DI, MCRegister BaseMCReg,
   return false;
 }
 
+// True when \p DI reads \p Reg (uses its value), including implicit uses.
+bool instructionReadsRegister(const InternalDecodedInst &DI, MCRegister Reg,
+                              const LLVMState &LS) {
+  const MCInstrDesc &Desc = LS.MCII->get(DI.Inst.getOpcode());
+  const MCRegisterInfo &MRI = *LS.MRI;
+  unsigned NumDefs = Desc.getNumDefs();
+  for (unsigned I = NumDefs, E = DI.Inst.getNumOperands(); I < E; ++I) {
+    const MCOperand &Op = DI.Inst.getOperand(I);
+    if (Op.isReg() && Op.getReg() &&
+        MRI.regsOverlap(MCRegister(Op.getReg()), Reg))
+      return true;
+  }
+  for (MCPhysReg Implicit : Desc.implicit_uses())
+    if (MRI.regsOverlap(MCRegister(Implicit), Reg))
+      return true;
+  return false;
+}
+
 bool isTensorDescriptorUseOnly(const InternalDecodedInst &DI,
                                MCRegister BaseMCReg, const LLVMState &LS) {
   if (DI.Inst.getOpcode() != LS.TensorLoadToLdsOpcode)
@@ -1020,6 +1059,290 @@ struct TensorFunctionCfg {
   }
 };
 
+enum class TensorLocalSetPcShape { Linear, SignedTwoArm };
+
+struct TensorLocalSetPcResolution {
+  uint64_t Target = 0;
+  size_t SequenceBeginIndex = 0;
+  size_t SequenceEndIndex = 0;
+  TensorLocalSetPcShape Shape = TensorLocalSetPcShape::Linear;
+};
+
+bool isExactTensorRegisterOperand(const MCInst &Inst, unsigned OperandIndex,
+                                  MCRegister Reg) {
+  return OperandIndex < Inst.getNumOperands() &&
+         Inst.getOperand(OperandIndex).isReg() &&
+         Inst.getOperand(OperandIndex).getReg() == Reg;
+}
+
+std::optional<uint32_t> evaluateTensorUint32Operand(const MCOperand &Operand) {
+  if (Operand.isImm())
+    return static_cast<uint32_t>(Operand.getImm());
+  if (!Operand.isExpr())
+    return std::nullopt;
+  int64_t Value = 0;
+  if (!Operand.getExpr()->evaluateAsAbsolute(Value))
+    return std::nullopt;
+  return static_cast<uint32_t>(Value);
+}
+
+// Resolve the compiler-emitted reusable-PC tail jump used by large tensor
+// kernels:
+//
+//   s_get_pc_i64 Pair
+//   s_add_co_i32 Delta, Imm0, Imm1
+//   s_add_co_u32 Pair.lo, Pair.lo, Delta
+//   s_add_co_ci_u32 Pair.hi, Pair.hi, 0
+//   s_set_pc_i64 Pair
+//
+// Keep this recognizer deliberately narrow.  All five instructions must be
+// adjacent and use the exact register relationships above; any variation
+// remains unresolved and makes the tensor definition proof fail closed.
+std::optional<TensorLocalSetPcResolution>
+resolveTensorLinearSetPcTarget(const PatchContext &Ctx, size_t SetPcIndex,
+                               size_t BeginIndex,
+                               const ElfView::FunctionTextRange &Range) {
+  if (SetPcIndex < BeginIndex || SetPcIndex - BeginIndex < 4)
+    return std::nullopt;
+
+  const InternalDecodedInst &GetPc = Ctx.Decoded[SetPcIndex - 4];
+  const InternalDecodedInst &MakeDelta = Ctx.Decoded[SetPcIndex - 3];
+  const InternalDecodedInst &AddLow = Ctx.Decoded[SetPcIndex - 2];
+  const InternalDecodedInst &AddHigh = Ctx.Decoded[SetPcIndex - 1];
+  const InternalDecodedInst &SetPc = Ctx.Decoded[SetPcIndex];
+  if (!GetPc.DecodeSucceeded || !MakeDelta.DecodeSucceeded ||
+      !AddLow.DecodeSucceeded || !AddHigh.DecodeSucceeded ||
+      !SetPc.DecodeSucceeded ||
+      GetPc.Inst.getOpcode() != Ctx.LS.SGetPcI64Opcode ||
+      MakeDelta.Mnemonic != "s_add_co_i32" ||
+      AddLow.Mnemonic != "s_add_co_u32" ||
+      AddHigh.Mnemonic != "s_add_co_ci_u32" ||
+      SetPc.Inst.getOpcode() != Ctx.LS.SSetPcI64Opcode ||
+      GetPc.Inst.getNumOperands() != 1 ||
+      MakeDelta.Inst.getNumOperands() != 3 ||
+      AddLow.Inst.getNumOperands() != 3 || AddHigh.Inst.getNumOperands() != 3 ||
+      SetPc.Inst.getNumOperands() != 1)
+    return std::nullopt;
+
+  auto IsImmediatelyBefore = [](const InternalDecodedInst &Before,
+                                const InternalDecodedInst &After) {
+    return Before.Offset <=
+               std::numeric_limits<uint64_t>::max() - Before.Size &&
+           Before.Offset + Before.Size == After.Offset;
+  };
+  if (!IsImmediatelyBefore(GetPc, MakeDelta) ||
+      !IsImmediatelyBefore(MakeDelta, AddLow) ||
+      !IsImmediatelyBefore(AddLow, AddHigh) ||
+      !IsImmediatelyBefore(AddHigh, SetPc))
+    return std::nullopt;
+  if (GetPc.Offset < Range.Begin || SetPc.Offset >= Range.End ||
+      SetPc.Size > Range.End - SetPc.Offset)
+    return std::nullopt;
+
+  std::optional<uint32_t> FirstAddend =
+      evaluateTensorUint32Operand(MakeDelta.Inst.getOperand(1));
+  std::optional<uint32_t> SecondAddend =
+      evaluateTensorUint32Operand(MakeDelta.Inst.getOperand(2));
+
+  const MCOperand &GetPcPair = GetPc.Inst.getOperand(0);
+  const MCOperand &SetPcPair = SetPc.Inst.getOperand(0);
+  const MCOperand &DeltaDst = MakeDelta.Inst.getOperand(0);
+  if (!GetPcPair.isReg() || !GetPcPair.getReg() || !SetPcPair.isReg() ||
+      SetPcPair.getReg() != GetPcPair.getReg() || !DeltaDst.isReg() ||
+      !DeltaDst.getReg() || !FirstAddend || !SecondAddend)
+    return std::nullopt;
+
+  MCRegister Pair(GetPcPair.getReg());
+  MCRegister DeltaReg(DeltaDst.getReg());
+  if (Ctx.LS.MRI->regsOverlap(Pair, DeltaReg))
+    return std::nullopt;
+
+  auto SameRegOperand = [](const MCInst &Inst, unsigned OperandIndex,
+                           MCRegister Reg) {
+    return Inst.getOperand(OperandIndex).isReg() &&
+           Inst.getOperand(OperandIndex).getReg() == Reg;
+  };
+
+  if (!AddLow.Inst.getOperand(0).isReg() ||
+      !AddLow.Inst.getOperand(0).getReg() ||
+      !AddHigh.Inst.getOperand(0).isReg() ||
+      !AddHigh.Inst.getOperand(0).getReg())
+    return std::nullopt;
+  MCRegister Low(AddLow.Inst.getOperand(0).getReg());
+  MCRegister High(AddHigh.Inst.getOperand(0).getReg());
+  if (!SameRegOperand(AddLow.Inst, 1, Low) ||
+      !SameRegOperand(AddLow.Inst, 2, DeltaReg) ||
+      !SameRegOperand(AddHigh.Inst, 1, High) ||
+      !AddHigh.Inst.getOperand(2).isImm() ||
+      AddHigh.Inst.getOperand(2).getImm() != 0)
+    return std::nullopt;
+
+  std::optional<unsigned> LowIndex = getSgprIndex(Low, *Ctx.LS.MRI);
+  std::optional<unsigned> HighIndex = getSgprIndex(High, *Ctx.LS.MRI);
+  if (!LowIndex || !HighIndex || *HighIndex != *LowIndex + 1 ||
+      !Ctx.LS.MRI->regsOverlap(Low, Pair) ||
+      !Ctx.LS.MRI->regsOverlap(High, Pair))
+    return std::nullopt;
+
+  uint32_t Delta = *FirstAddend + *SecondAddend;
+  std::optional<uint64_t> PcValue = checkedAddUint64(
+      GetPc.Offset, GetPc.Size, "tensor CFG reusable-PC instruction");
+  if (!PcValue)
+    return std::nullopt;
+  std::optional<uint64_t> Target =
+      checkedAddUint64(*PcValue, Delta, "tensor CFG reusable-PC target");
+  if (!Target)
+    return std::nullopt;
+  return TensorLocalSetPcResolution{*Target, SetPcIndex - 4, SetPcIndex,
+                                    TensorLocalSetPcShape::Linear};
+}
+
+// Resolve Tensile's signed-direction reusable-PC transfer. Both arms compute
+// the same modulo-2^64 target:
+//
+//   s_get_pc_i64 Pair
+//   s_add_co_i32 Delta, Imm0, Imm1
+//   s_cmp_ge_i32 Delta, 0
+//   s_cbranch_scc1 Positive
+//   s_abs_i32 Delta, Delta
+//   s_sub_co_u32 Pair.lo, Pair.lo, Delta
+//   s_sub_co_ci_u32 Pair.hi, Pair.hi, 0
+//   s_set_pc_i64 Pair
+// Positive:
+//   s_add_co_u32 Pair.lo, Pair.lo, Delta
+//   s_add_co_ci_u32 Pair.hi, Pair.hi, 0
+//   s_set_pc_i64 Pair
+//
+// The caller separately verifies that no control-flow edge enters either arm
+// or the materialization interior.
+std::optional<TensorLocalSetPcResolution>
+resolveTensorSignedSetPcTarget(const PatchContext &Ctx, size_t SetPcIndex,
+                               size_t BeginIndex, size_t EndIndex,
+                               const ElfView::FunctionTextRange &Range) {
+  for (size_t SetPcPosition : {size_t{7}, size_t{10}}) {
+    if (SetPcIndex < BeginIndex || SetPcIndex - BeginIndex < SetPcPosition)
+      continue;
+    size_t FirstIndex = SetPcIndex - SetPcPosition;
+    if (FirstIndex > EndIndex || EndIndex - FirstIndex <= 10)
+      continue;
+
+    const InternalDecodedInst &GetPc = Ctx.Decoded[FirstIndex];
+    const InternalDecodedInst &MakeDelta = Ctx.Decoded[FirstIndex + 1];
+    const InternalDecodedInst &Compare = Ctx.Decoded[FirstIndex + 2];
+    const InternalDecodedInst &Branch = Ctx.Decoded[FirstIndex + 3];
+    const InternalDecodedInst &Abs = Ctx.Decoded[FirstIndex + 4];
+    const InternalDecodedInst &SubLow = Ctx.Decoded[FirstIndex + 5];
+    const InternalDecodedInst &SubHigh = Ctx.Decoded[FirstIndex + 6];
+    const InternalDecodedInst &NegativeSetPc = Ctx.Decoded[FirstIndex + 7];
+    const InternalDecodedInst &AddLow = Ctx.Decoded[FirstIndex + 8];
+    const InternalDecodedInst &AddHigh = Ctx.Decoded[FirstIndex + 9];
+    const InternalDecodedInst &PositiveSetPc = Ctx.Decoded[FirstIndex + 10];
+
+    bool AllDecodedAndAdjacent = true;
+    for (size_t I = FirstIndex; I <= FirstIndex + 10; ++I) {
+      if (!Ctx.Decoded[I].DecodeSucceeded) {
+        AllDecodedAndAdjacent = false;
+        break;
+      }
+      if (I == FirstIndex + 10)
+        continue;
+      const InternalDecodedInst &Current = Ctx.Decoded[I];
+      if (Current.Offset >
+              std::numeric_limits<uint64_t>::max() - Current.Size ||
+          Current.Offset + Current.Size != Ctx.Decoded[I + 1].Offset) {
+        AllDecodedAndAdjacent = false;
+        break;
+      }
+    }
+    if (!AllDecodedAndAdjacent || GetPc.Offset < Range.Begin ||
+        PositiveSetPc.Offset >= Range.End ||
+        PositiveSetPc.Size > Range.End - PositiveSetPc.Offset ||
+        GetPc.Inst.getOpcode() != Ctx.LS.SGetPcI64Opcode ||
+        GetPc.Inst.getNumOperands() != 1 || !GetPc.Inst.getOperand(0).isReg() ||
+        !GetPc.Inst.getOperand(0).getReg() ||
+        MakeDelta.Mnemonic != "s_add_co_i32" ||
+        MakeDelta.Inst.getNumOperands() != 3 ||
+        !MakeDelta.Inst.getOperand(0).isReg() ||
+        !MakeDelta.Inst.getOperand(0).getReg() ||
+        !MakeDelta.Inst.getOperand(2).isImm())
+      continue;
+
+    MCRegister Pair(GetPc.Inst.getOperand(0).getReg());
+    MCRegister DeltaReg(MakeDelta.Inst.getOperand(0).getReg());
+    if (Ctx.LS.MRI->regsOverlap(DeltaReg, Pair) ||
+        Compare.Mnemonic != "s_cmp_ge_i32" ||
+        Compare.Inst.getNumOperands() != 2 ||
+        !isExactTensorRegisterOperand(Compare.Inst, 0, DeltaReg) ||
+        !Compare.Inst.getOperand(1).isImm() ||
+        Compare.Inst.getOperand(1).getImm() != 0 ||
+        Branch.Mnemonic != "s_cbranch_scc1" || Abs.Mnemonic != "s_abs_i32" ||
+        Abs.Inst.getNumOperands() != 2 ||
+        !isExactTensorRegisterOperand(Abs.Inst, 0, DeltaReg) ||
+        !isExactTensorRegisterOperand(Abs.Inst, 1, DeltaReg) ||
+        NegativeSetPc.Inst.getOpcode() != Ctx.LS.SSetPcI64Opcode ||
+        NegativeSetPc.Inst.getNumOperands() != 1 ||
+        !isExactTensorRegisterOperand(NegativeSetPc.Inst, 0, Pair) ||
+        PositiveSetPc.Inst.getOpcode() != Ctx.LS.SSetPcI64Opcode ||
+        PositiveSetPc.Inst.getNumOperands() != 1 ||
+        !isExactTensorRegisterOperand(PositiveSetPc.Inst, 0, Pair))
+      continue;
+
+    uint64_t PositiveTarget = 0;
+    if (!Ctx.LS.MIA->evaluateBranch(Branch.Inst, Branch.Offset, Branch.Size,
+                                    PositiveTarget) ||
+        PositiveTarget != AddLow.Offset)
+      continue;
+
+    auto MatchesPairArithmetic = [&](const InternalDecodedInst &Low,
+                                     const InternalDecodedInst &High,
+                                     StringRef LowMnemonic,
+                                     StringRef HighMnemonic) {
+      if (Low.Mnemonic != LowMnemonic || High.Mnemonic != HighMnemonic ||
+          Low.Inst.getNumOperands() != 3 || !Low.Inst.getOperand(0).isReg() ||
+          !Low.Inst.getOperand(1).isReg() || !Low.Inst.getOperand(0).getReg() ||
+          Low.Inst.getOperand(0).getReg() != Low.Inst.getOperand(1).getReg() ||
+          !isExactTensorRegisterOperand(Low.Inst, 2, DeltaReg) ||
+          High.Inst.getNumOperands() != 3 || !High.Inst.getOperand(0).isReg() ||
+          !High.Inst.getOperand(1).isReg() ||
+          !High.Inst.getOperand(0).getReg() ||
+          High.Inst.getOperand(0).getReg() !=
+              High.Inst.getOperand(1).getReg() ||
+          !High.Inst.getOperand(2).isImm() ||
+          High.Inst.getOperand(2).getImm() != 0)
+        return false;
+      MCRegister LowReg(Low.Inst.getOperand(0).getReg());
+      MCRegister HighReg(High.Inst.getOperand(0).getReg());
+      std::optional<unsigned> LowIndex = getSgprIndex(LowReg, *Ctx.LS.MRI);
+      std::optional<unsigned> HighIndex = getSgprIndex(HighReg, *Ctx.LS.MRI);
+      return LowIndex && HighIndex && *HighIndex == *LowIndex + 1 &&
+             Ctx.LS.MRI->regsOverlap(LowReg, Pair) &&
+             Ctx.LS.MRI->regsOverlap(HighReg, Pair);
+    };
+    if (!MatchesPairArithmetic(SubLow, SubHigh, "s_sub_co_u32",
+                               "s_sub_co_ci_u32") ||
+        !MatchesPairArithmetic(AddLow, AddHigh, "s_add_co_u32",
+                               "s_add_co_ci_u32"))
+      continue;
+
+    std::optional<uint32_t> FirstAddend =
+        evaluateTensorUint32Operand(MakeDelta.Inst.getOperand(1));
+    if (!FirstAddend)
+      continue;
+    uint32_t DeltaBits =
+        *FirstAddend +
+        static_cast<uint32_t>(MakeDelta.Inst.getOperand(2).getImm());
+    int64_t SignedDelta = static_cast<int32_t>(DeltaBits);
+    std::optional<uint64_t> PcValue = checkedAddUint64(
+        GetPc.Offset, GetPc.Size, "tensor CFG signed reusable-PC value");
+    if (!PcValue)
+      continue;
+    uint64_t Target = *PcValue + static_cast<uint64_t>(SignedDelta);
+    return TensorLocalSetPcResolution{Target, FirstIndex, FirstIndex + 10,
+                                      TensorLocalSetPcShape::SignedTwoArm};
+  }
+  return std::nullopt;
+}
+
 std::optional<TensorFunctionCfg>
 buildTensorFunctionCfg(const PatchContext &Ctx,
                        const ElfView::FunctionTextRange &Range) {
@@ -1034,8 +1357,21 @@ buildTensorFunctionCfg(const PatchContext &Ctx,
   while (EndIndex < Ctx.Decoded.size() &&
          Ctx.Decoded[EndIndex].Offset < Range.End)
     ++EndIndex;
-  if (BeginIndex == EndIndex || Ctx.Decoded[BeginIndex].Offset != Range.Begin)
+  if (BeginIndex == EndIndex || Ctx.Decoded[BeginIndex].Offset != Range.Begin) {
+    log() << "hotswap: tensor CFG rejected range [0x" << utohexstr(Range.Begin)
+          << ", 0x" << utohexstr(Range.End)
+          << "): range does not begin at a decoded instruction\n";
     return std::nullopt;
+  }
+  for (uint64_t Entry : Ctx.DeclaredEntries) {
+    if (Entry <= Range.Begin || Entry >= Range.End)
+      continue;
+    log() << "hotswap: tensor CFG rejected range [0x" << utohexstr(Range.Begin)
+          << ", 0x" << utohexstr(Range.End)
+          << "): declared entry at interior offset 0x" << utohexstr(Entry)
+          << "\n";
+    return std::nullopt;
+  }
 
   TensorFunctionCfg Graph;
   Graph.BeginIndex = BeginIndex;
@@ -1047,10 +1383,50 @@ buildTensorFunctionCfg(const PatchContext &Ctx,
   for (size_t I = BeginIndex; I < EndIndex; ++I)
     IndexAtOffset[Ctx.Decoded[I].Offset] = I - BeginIndex;
 
+  struct PendingLocalSetPc {
+    size_t FirstLocalIndex;
+    size_t LastLocalIndex;
+    size_t SetPcLocalIndex;
+    std::optional<size_t> TargetLocalIndex;
+    TensorLocalSetPcShape Shape;
+    bool Audited;
+  };
+  SmallVector<PendingLocalSetPc, 2> PendingLocalSetPcs;
+
+  auto AddAuditedBoundedEdges =
+      [&](size_t LocalIndex,
+          const InternalDecodedInst &DI) -> std::optional<bool> {
+    auto Bounded = Ctx.DirectControlFlow.BoundedIndirectTargets.find(DI.Offset);
+    if (Bounded == Ctx.DirectControlFlow.BoundedIndirectTargets.end())
+      return std::nullopt;
+    for (uint64_t Target : Bounded->second) {
+      if (Target < Range.Begin || Target >= Range.End) {
+        log() << "hotswap: tensor CFG rejected bounded transfer at 0x"
+              << utohexstr(DI.Offset) << " with out-of-range target 0x"
+              << utohexstr(Target) << "\n";
+        return false;
+      }
+      DenseMap<uint64_t, size_t>::const_iterator TargetIt =
+          IndexAtOffset.find(Target);
+      if (TargetIt == IndexAtOffset.end()) {
+        log() << "hotswap: tensor CFG rejected bounded transfer at 0x"
+              << utohexstr(DI.Offset) << " with non-boundary target 0x"
+              << utohexstr(Target) << "\n";
+        return false;
+      }
+      Graph.addEdge(LocalIndex, TargetIt->second);
+    }
+    return true;
+  };
+
   for (size_t I = BeginIndex; I < EndIndex; ++I) {
     const InternalDecodedInst &DI = Ctx.Decoded[I];
-    if (!DI.DecodeSucceeded)
+    if (!DI.DecodeSucceeded) {
+      log() << "hotswap: tensor CFG rejected range [0x"
+            << utohexstr(Range.Begin) << ", 0x" << utohexstr(Range.End)
+            << "): undecoded instruction at 0x" << utohexstr(DI.Offset) << "\n";
       return std::nullopt;
+    }
 
     size_t LocalIndex = I - BeginIndex;
     bool HasFallthrough = I + 1 < EndIndex;
@@ -1058,40 +1434,251 @@ buildTensorFunctionCfg(const PatchContext &Ctx,
         DI.Inst.getOpcode() == Ctx.LS.SEndPgmSavedOpcode)
       continue;
 
-    if (Ctx.LS.MIA->isCall(DI.Inst) || Ctx.LS.MIA->isIndirectBranch(DI.Inst) ||
-        Ctx.LS.MIA->isReturn(DI.Inst))
+    // Calls return to the next instruction, so retain their local fallthrough
+    // edge.  The reaching-definition checks below reject a call only while a
+    // changed descriptor or SCC value is live; a call elsewhere in a broad
+    // symbol-less function range must not make an otherwise local proof fail.
+    if (Ctx.LS.MIA->isCall(DI.Inst)) {
+      if (!HasFallthrough) {
+        log() << "hotswap: tensor CFG rejected call without fallthrough at 0x"
+              << utohexstr(DI.Offset) << "\n";
+        return std::nullopt;
+      }
+      Graph.addEdge(LocalIndex, LocalIndex + 1);
+      continue;
+    }
+
+    if (Ctx.LS.MIA->isIndirectBranch(DI.Inst) ||
+        Ctx.LS.MIA->isReturn(DI.Inst)) {
+      std::optional<bool> Added = AddAuditedBoundedEdges(LocalIndex, DI);
+      if (Added) {
+        if (!*Added)
+          return std::nullopt;
+        continue;
+      }
+      log() << "hotswap: tensor CFG rejected unresolved control flow at 0x"
+            << utohexstr(DI.Offset) << " (" << DI.Mnemonic << ")\n";
       return std::nullopt;
+    }
 
     if (Ctx.LS.MIA->isBranch(DI.Inst)) {
       uint64_t Target = 0;
-      if (!Ctx.LS.MIA->evaluateBranch(DI.Inst, DI.Offset, DI.Size, Target))
-        return std::nullopt;
+      bool ResolvedSetPc = false;
+      if (!Ctx.LS.MIA->evaluateBranch(DI.Inst, DI.Offset, DI.Size, Target)) {
+        std::optional<TensorLocalSetPcResolution> SetPc =
+            resolveTensorLinearSetPcTarget(Ctx, I, BeginIndex, Range);
+        if (!SetPc)
+          SetPc = resolveTensorSignedSetPcTarget(Ctx, I, BeginIndex, EndIndex,
+                                                 Range);
+        bool AuditedSetPc = false;
+        if (SetPc) {
+          auto Audited =
+              Ctx.DirectControlFlow.BoundedIndirectTargets.find(DI.Offset);
+          AuditedSetPc =
+              Audited != Ctx.DirectControlFlow.BoundedIndirectTargets.end() &&
+              Audited->second.size() == 1 &&
+              Audited->second.front() == SetPc->Target;
+        }
+        if (SetPc) {
+          Target = SetPc->Target;
+          ResolvedSetPc = true;
+          PendingLocalSetPcs.push_back({SetPc->SequenceBeginIndex - BeginIndex,
+                                        SetPc->SequenceEndIndex - BeginIndex,
+                                        LocalIndex, std::nullopt, SetPc->Shape,
+                                        AuditedSetPc});
+        } else {
+          std::optional<bool> Added = AddAuditedBoundedEdges(LocalIndex, DI);
+          if (Added) {
+            if (!*Added)
+              return std::nullopt;
+            continue;
+          }
+          log() << "hotswap: tensor CFG rejected unresolved branch at 0x"
+                << utohexstr(DI.Offset) << " (" << DI.Mnemonic << ")\n";
+          return std::nullopt;
+        }
+      }
+
+      std::optional<size_t> TargetLocalIndex;
       if (Target != Range.End) {
         DenseMap<uint64_t, size_t>::const_iterator TargetIt =
             IndexAtOffset.find(Target);
-        if (TargetIt == IndexAtOffset.end())
+        if (TargetIt == IndexAtOffset.end()) {
+          log() << "hotswap: tensor CFG rejected non-local branch target 0x"
+                << utohexstr(Target) << " from 0x" << utohexstr(DI.Offset)
+                << "\n";
           return std::nullopt;
-        Graph.addEdge(LocalIndex, TargetIt->second);
+        }
+        TargetLocalIndex = TargetIt->second;
       }
 
+      if (ResolvedSetPc) {
+        PendingLocalSetPcs.back().TargetLocalIndex = TargetLocalIndex;
+        continue;
+      }
+      if (TargetLocalIndex)
+        Graph.addEdge(LocalIndex, *TargetLocalIndex);
+
       if (Ctx.LS.MIA->isConditionalBranch(DI.Inst)) {
-        if (!HasFallthrough)
+        if (!HasFallthrough) {
+          log() << "hotswap: tensor CFG rejected conditional branch without "
+                   "fallthrough at 0x"
+                << utohexstr(DI.Offset) << "\n";
           return std::nullopt;
+        }
         Graph.addEdge(LocalIndex, LocalIndex + 1);
       } else if (!Ctx.LS.MIA->isUnconditionalBranch(DI.Inst)) {
+        log() << "hotswap: tensor CFG rejected unclassified branch at 0x"
+              << utohexstr(DI.Offset) << "\n";
         return std::nullopt;
       }
       continue;
     }
 
     const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
-    if (Desc.mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI))
+    if (Desc.mayAffectControlFlow(DI.Inst, *Ctx.LS.MRI)) {
+      log() << "hotswap: tensor CFG rejected control-flow instruction at 0x"
+            << utohexstr(DI.Offset) << " (" << DI.Mnemonic << ")\n";
       return std::nullopt;
+    }
     if (HasFallthrough)
       Graph.addEdge(LocalIndex, LocalIndex + 1);
   }
 
+  // Add every resolved transfer before validating sequence interiors so a
+  // second reusable-PC jump targeting another sequence's interior is visible
+  // as an alternate predecessor too.
+  for (const PendingLocalSetPc &Pending : PendingLocalSetPcs)
+    if (Pending.TargetLocalIndex)
+      Graph.addEdge(Pending.SetPcLocalIndex, *Pending.TargetLocalIndex);
+
+  // Entering after s_get_pc_i64 can reuse stale pair/delta state, invalidating
+  // the computed target. Require every sequence-interior instruction to have
+  // only its exact arm predecessor as an entry. The signed form's positive
+  // add arm is entered by its conditional branch; every other instruction is
+  // entered by its immediate predecessor. This rejects direct targets, call
+  // continuations, function entry, and targets from another recognized
+  // reusable-PC transfer.
+  for (const PendingLocalSetPc &Pending : PendingLocalSetPcs) {
+    for (size_t LocalIndex = Pending.FirstLocalIndex + 1;
+         LocalIndex <= Pending.LastLocalIndex; ++LocalIndex) {
+      size_t ExpectedPredecessor = LocalIndex - 1;
+      if (Pending.Shape == TensorLocalSetPcShape::SignedTwoArm &&
+          LocalIndex == Pending.FirstLocalIndex + 8)
+        ExpectedPredecessor = Pending.FirstLocalIndex + 3;
+      ArrayRef<size_t> Predecessors = Graph.Predecessors[LocalIndex];
+      if (Predecessors.size() == 1 &&
+          Predecessors.front() == ExpectedPredecessor)
+        continue;
+      const InternalDecodedInst &Interior =
+          Ctx.Decoded[BeginIndex + LocalIndex];
+      log() << "hotswap: tensor CFG rejected alternate entry into reusable-PC "
+               "sequence at 0x"
+            << utohexstr(Interior.Offset) << "\n";
+      return std::nullopt;
+    }
+    if (!Pending.Audited) {
+      const InternalDecodedInst &SetPc =
+          Ctx.Decoded[BeginIndex + Pending.SetPcLocalIndex];
+      log() << "hotswap: tensor CFG rejected unaudited reusable-PC transfer at "
+               "0x"
+            << utohexstr(SetPc.Offset) << "\n";
+      return std::nullopt;
+    }
+  }
+
   return Graph;
+}
+
+bool writesBaseWithKnownZeroLow16(const InternalDecodedInst &DI,
+                                  MCRegister BaseMCReg, const LLVMState &LS) {
+  const MCInst &Inst = DI.Inst;
+  if (Inst.getNumOperands() < 2 || !Inst.getOperand(0).isReg() ||
+      !Inst.getOperand(0).getReg() ||
+      !LS.MRI->regsOverlap(MCRegister(Inst.getOperand(0).getReg()), BaseMCReg))
+    return false;
+
+  if (DI.Mnemonic == "s_mov_b32")
+    return Inst.getOperand(1).isImm() &&
+           (static_cast<uint64_t>(Inst.getOperand(1).getImm()) & 0xffffu) == 0;
+
+  // An immediate AND with zeros in bits [15:0] forces the result's low half
+  // to zero regardless of the other input.
+  return Inst.getOpcode() == LS.SAndB32Opcode && Inst.getNumOperands() >= 3 &&
+         Inst.getOperand(2).isImm() &&
+         (static_cast<uint64_t>(Inst.getOperand(2).getImm()) & 0xffffu) == 0;
+}
+
+// Prove that the descriptor base already has a zero workgroup_mask at the
+// tensor. Walk every reachable predecessor path backward. A path is complete
+// only at an immediate zero definition (or zero-forcing AND); otherwise it may
+// cross exact self-writes that cannot introduce a low bit. Calls, unresolved
+// control flow, non-preserving definitions, and entry without a proven
+// definition all reject. Reads are harmless because this proof changes no
+// value.
+bool isTensorMaskAlreadyZero(const PatchContext &Ctx, size_t TensorIdx,
+                             MCRegister BaseMCReg) {
+  const InternalDecodedInst &Tensor = Ctx.Decoded[TensorIdx];
+  std::optional<ElfView::FunctionTextRange> Range =
+      Ctx.Elf.findFunctionTextRangeAtOffset(Tensor.Offset);
+  if (!Range)
+    return false;
+
+  std::optional<TensorFunctionCfg> Graph = buildTensorFunctionCfg(Ctx, *Range);
+  if (!Graph || TensorIdx < Graph->BeginIndex || TensorIdx >= Graph->EndIndex)
+    return false;
+
+  size_t TensorLocal = TensorIdx - Graph->BeginIndex;
+  SmallVector<uint8_t, 32> Reachable(Graph->Successors.size(), 0);
+  SmallVector<size_t, 16> Worklist;
+  Worklist.push_back(0);
+  while (!Worklist.empty()) {
+    size_t LocalIndex = Worklist.pop_back_val();
+    if (Reachable[LocalIndex] != 0)
+      continue;
+    Reachable[LocalIndex] = 1;
+    for (size_t Successor : Graph->Successors[LocalIndex])
+      Worklist.push_back(Successor);
+  }
+  if (Reachable[TensorLocal] == 0)
+    return false;
+
+  SmallVector<uint8_t, 32> Visited(Graph->Successors.size(), 0);
+  for (size_t Predecessor : Graph->Predecessors[TensorLocal])
+    if (Reachable[Predecessor] != 0)
+      Worklist.push_back(Predecessor);
+  if (Worklist.empty())
+    return false;
+
+  while (!Worklist.empty()) {
+    size_t LocalIndex = Worklist.pop_back_val();
+    if (Visited[LocalIndex] != 0)
+      continue;
+    Visited[LocalIndex] = 1;
+
+    const InternalDecodedInst &DI = Ctx.Decoded[Graph->BeginIndex + LocalIndex];
+    if (Ctx.LS.MIA->isCall(DI.Inst))
+      return false;
+
+    if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS)) {
+      if (writesBaseWithKnownZeroLow16(DI, BaseMCReg, Ctx.LS))
+        continue;
+      if (!writesBasePreservingZeroLow16(DI, BaseMCReg, Ctx.LS))
+        return false;
+    }
+
+    bool HasReachablePredecessor = false;
+    for (size_t Predecessor : Graph->Predecessors[LocalIndex]) {
+      if (Reachable[Predecessor] == 0)
+        continue;
+      HasReachablePredecessor = true;
+      Worklist.push_back(Predecessor);
+    }
+    if (!HasReachablePredecessor)
+      return false;
+  }
+
+  return true;
 }
 
 bool isMaskDefinitionSafe(const PatchContext &Ctx,
@@ -1122,14 +1709,27 @@ bool isMaskDefinitionSafe(const PatchContext &Ctx,
     const InternalDecodedInst &DI = Ctx.Decoded[Graph.BeginIndex + LocalIndex];
     const MCInstrDesc &Desc = Ctx.LS.MCII->get(DI.Inst.getOpcode());
 
+    if (Ctx.LS.MIA->isCall(DI.Inst)) {
+      log() << "hotswap: tensor mask definition 0x"
+            << utohexstr(Ctx.Decoded[MaskIndex].Offset)
+            << " rejected: call while descriptor state is live at 0x"
+            << utohexstr(DI.Offset) << "\n";
+      return false;
+    }
+
     bool PreservesBaseValue =
         (State & BaseValueLive) != 0 &&
         writesBasePreservingZeroLow16(DI, BaseMCReg, Ctx.LS);
     if ((State & BaseValueLive) != 0) {
       if (!PreservesBaseValue) {
-        if (instructionReadsRegister(DI, Ctx.LS, BaseMCReg) &&
-            !isTensorDescriptorUseOnly(DI, BaseMCReg, Ctx.LS))
+        if (instructionReadsRegister(DI, BaseMCReg, Ctx.LS) &&
+            !isTensorDescriptorUseOnly(DI, BaseMCReg, Ctx.LS)) {
+          log() << "hotswap: tensor mask definition 0x"
+                << utohexstr(Ctx.Decoded[MaskIndex].Offset)
+                << " rejected: descriptor base read at 0x"
+                << utohexstr(DI.Offset) << " by " << DI.Mnemonic << "\n";
           return false;
+        }
         if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS))
           State &= ~BaseValueLive;
       }
@@ -1138,8 +1738,13 @@ bool isMaskDefinitionSafe(const PatchContext &Ctx,
     // A preserving writer propagates the changed base and may derive a changed
     // SCC value from it, so its SCC definition does not end the safety check.
     if ((State & SccValueLive) != 0) {
-      if (instReadsScc(DI.Inst, Desc, *Ctx.LS.MRI))
+      if (instReadsScc(DI.Inst, Desc, *Ctx.LS.MRI)) {
+        log() << "hotswap: tensor mask definition 0x"
+              << utohexstr(Ctx.Decoded[MaskIndex].Offset)
+              << " rejected: changed SCC read at 0x" << utohexstr(DI.Offset)
+              << " by " << DI.Mnemonic << "\n";
         return false;
+      }
       if (instWritesScc(DI.Inst, Desc, *Ctx.LS.MRI) && !PreservesBaseValue)
         State &= ~SccValueLive;
     } else if (PreservesBaseValue &&
@@ -1209,6 +1814,13 @@ TensorMaskDef findTensorMaskSetDefinitions(const PatchContext &Ctx,
 
     size_t InstIndex = Graph->BeginIndex + LocalIndex;
     const InternalDecodedInst &DI = Ctx.Decoded[InstIndex];
+    if (Ctx.LS.MIA->isCall(DI.Inst)) {
+      log() << "hotswap: tensor mask definition search for tensor 0x"
+            << utohexstr(Tensor.Offset) << " rejected: call at 0x"
+            << utohexstr(DI.Offset) << "\n";
+      return TensorMaskDef::NotApplicable;
+    }
+
     bool PreservesBaseValue =
         writesBasePreservingZeroLow16(DI, BaseMCReg, Ctx.LS);
     if (instructionDefinesBase(DI, BaseMCReg, Ctx.LS)) {
@@ -1220,13 +1832,23 @@ TensorMaskDef findTensorMaskSetDefinitions(const PatchContext &Ctx,
       if (isClearedMaskAndOnBase(DI, BaseMCReg, Ctx.LS))
         continue;
       if (!PreservesBaseValue)
+        log() << "hotswap: tensor mask definition search for tensor 0x"
+              << utohexstr(Tensor.Offset)
+              << " rejected: non-preserving base definition at 0x"
+              << utohexstr(DI.Offset) << " by " << DI.Mnemonic << "\n";
+      if (!PreservesBaseValue)
         return TensorMaskDef::NotApplicable;
     }
 
     if (!PreservesBaseValue &&
-        instructionReadsRegister(DI, Ctx.LS, BaseMCReg) &&
-        !isTensorDescriptorUseOnly(DI, BaseMCReg, Ctx.LS))
+        instructionReadsRegister(DI, BaseMCReg, Ctx.LS) &&
+        !isTensorDescriptorUseOnly(DI, BaseMCReg, Ctx.LS)) {
+      log() << "hotswap: tensor mask definition search for tensor 0x"
+            << utohexstr(Tensor.Offset)
+            << " rejected: descriptor base read at 0x" << utohexstr(DI.Offset)
+            << " by " << DI.Mnemonic << "\n";
       return TensorMaskDef::NotApplicable;
+    }
 
     bool HasReachablePredecessor = false;
     for (size_t Predecessor : Graph->Predecessors[LocalIndex]) {
@@ -1270,8 +1892,7 @@ bool clearWorkgroupMaskAtDefinition(PatchContext &Ctx, size_t Idx) {
           << utohexstr(DI.Offset) << ": " << Asm << "\n";
     return false;
   }
-  if (!writeCurrentText(Ctx, DI.Offset, Bytes, "tensor descriptor mask clear"))
-    return false;
+  std::memcpy(Ctx.Text + DI.Offset, Bytes.data(), Bytes.size());
   DI.Inst.getOperand(2).setImm(static_cast<int64_t>(Cleared));
 
   log() << "hotswap: tensor_load_to_lds: cleared workgroup_mask at descriptor "
@@ -1376,6 +1997,13 @@ bool patchTensorLoadToLdsA0(PatchContext &Ctx, size_t Idx) {
 
   if (isAlreadyTensorMaskPatched(Ctx, Idx, BaseMCReg))
     return false;
+
+  if (isTensorMaskAlreadyZero(Ctx, Idx, BaseMCReg)) {
+    log() << "hotswap: tensor_load_to_lds: descriptor workgroup_mask is "
+             "already zero on every path\n";
+    DI.Mnemonic = "<replaced>";
+    return false;
+  }
 
   SmallVector<size_t> MaskSets;
   TensorMaskDef Result =
@@ -1735,7 +2363,7 @@ bool isAddtidLoad(StringRef Mnemonic) {
 constexpr uint32_t AddtidLdsLimitA0 = 1u << 16;
 
 // ADDTID MCInst operand layout (AddtidOpReg / AddtidOpOffset / AddtidOpGds)
-// lives in internal.h so the layout pin is shared with the unit
+// lives in comgr-hotswap-internal.h so the layout pin is shared with the unit
 // tests in HotswapMCTest.cpp.
 
 // GDS=1 ADDTID is not reachable through the gfx12 assembler -- the asm
