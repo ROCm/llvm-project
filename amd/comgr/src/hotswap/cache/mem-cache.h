@@ -64,10 +64,10 @@ struct MemCacheEntry {
 using MemCacheEntryRef = std::shared_ptr<const MemCacheEntry>;
 
 enum class MemCacheStatus {
-  Disabled,    // budget == 0; producer ran, nothing cached.
-  Hit,         // served from the in-memory map (no producer call).
-  Coalesced,   // an identical in-flight request produced this; no producer call.
-  Computed,    // this caller was the single-flight leader; producer ran.
+  Disabled,  // budget == 0; producer ran, nothing cached.
+  Hit,       // served from the in-memory map (no producer call).
+  Coalesced, // an identical in-flight request produced this; no producer call.
+  Computed,  // this caller was the single-flight leader; producer ran.
   ProducerFailed, // producer returned no HSACO; nothing cached.
 };
 

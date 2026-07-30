@@ -174,16 +174,16 @@ TEST_F(MemCacheTest, MissThenHit) {
   auto req = makeRequest(elf);
   std::atomic<int> calls{0};
 
-  auto r1 = getOrComputeTranslation(
-      req, [&] { return makeProduced(calls, 1024); });
+  auto r1 =
+      getOrComputeTranslation(req, [&] { return makeProduced(calls, 1024); });
   EXPECT_EQ(r1.Status, MemCacheStatus::Computed);
   ASSERT_NE(r1.Entry, nullptr);
   EXPECT_EQ(calls.load(), 1);
   EXPECT_EQ(r1.Entry->Attribution.LiftedCount, 7);
   EXPECT_EQ(r1.Entry->Attribution.ScaledDispatchFactor, 2u);
 
-  auto r2 = getOrComputeTranslation(
-      req, [&] { return makeProduced(calls, 1024); });
+  auto r2 =
+      getOrComputeTranslation(req, [&] { return makeProduced(calls, 1024); });
   EXPECT_EQ(r2.Status, MemCacheStatus::Hit);
   ASSERT_NE(r2.Entry, nullptr);
   EXPECT_EQ(calls.load(), 1); // producer NOT called again
@@ -230,9 +230,8 @@ TEST_F(MemCacheTest, ConcurrentIdenticalCoalesceToOneProducer) {
   std::vector<std::thread> threads;
   std::vector<MemCacheResult> results(kThreads);
   for (int i = 0; i < kThreads; ++i)
-    threads.emplace_back([&, i] {
-      results[i] = getOrComputeTranslation(req, producer);
-    });
+    threads.emplace_back(
+        [&, i] { results[i] = getOrComputeTranslation(req, producer); });
 
   // Wait until the leader entered the producer, then give the other threads a
   // best-effort chance to park. We do NOT assert an exact parked-waiter count:
@@ -274,13 +273,12 @@ TEST_F(MemCacheTest, ConcurrentIdenticalCoalesceToOneProducer) {
       ++hit;
       break;
     default:
-      ADD_FAILURE() << "unexpected status "
-                    << static_cast<int>(r.Status);
+      ADD_FAILURE() << "unexpected status " << static_cast<int>(r.Status);
       break;
     }
   }
-  EXPECT_EQ(computed, 1);                        // exactly one leader
-  EXPECT_EQ(coalesced + hit, kThreads - 1);      // everyone else shared it
+  EXPECT_EQ(computed, 1);                   // exactly one leader
+  EXPECT_EQ(coalesced + hit, kThreads - 1); // everyone else shared it
 }
 
 // --- Byte-budget LRU eviction --------------------------------------------
@@ -387,10 +385,10 @@ TEST_F(MemCacheTest, ZeroBudgetDisablesTier) {
   auto req = makeRequest(elf);
   std::atomic<int> calls{0};
 
-  auto r1 = getOrComputeTranslation(
-      req, [&] { return makeProduced(calls, 1024); });
-  auto r2 = getOrComputeTranslation(
-      req, [&] { return makeProduced(calls, 1024); });
+  auto r1 =
+      getOrComputeTranslation(req, [&] { return makeProduced(calls, 1024); });
+  auto r2 =
+      getOrComputeTranslation(req, [&] { return makeProduced(calls, 1024); });
   EXPECT_EQ(r1.Status, MemCacheStatus::Disabled);
   EXPECT_EQ(r2.Status, MemCacheStatus::Disabled);
   EXPECT_EQ(calls.load(), 2); // no caching
@@ -406,8 +404,8 @@ TEST_F(MemCacheTest, UncacheableRequestBypasses) {
   req.SourceGfx = "gfx1250";
   req.TargetGfx = "gfx950";
   std::atomic<int> calls{0};
-  auto r = getOrComputeTranslation(req,
-                                   [&] { return makeProduced(calls, 1024); });
+  auto r =
+      getOrComputeTranslation(req, [&] { return makeProduced(calls, 1024); });
   // Producer still ran (we do not drop the request), just nothing cached.
   EXPECT_EQ(calls.load(), 1);
   EXPECT_EQ(memCacheEntryCountForTesting(), 0u);

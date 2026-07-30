@@ -46,7 +46,7 @@ size_t resolveBudgetFromEnv() {
     return kDefaultBudgetBytes;
   unsigned long long parsed = 0;
   if (value.getAsInteger(10, parsed)) // true on parse failure
-    return kDefaultBudgetBytes;        // malformed -> fall back to default
+    return kDefaultBudgetBytes;       // malformed -> fall back to default
   return static_cast<size_t>(parsed);
 }
 
@@ -441,8 +441,8 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     if (!entry)
       ProducerFailures.fetch_add(1, std::memory_order_relaxed);
     Computed.fetch_add(1, std::memory_order_relaxed);
-    result.Status = entry ? MemCacheStatus::Computed
-                          : MemCacheStatus::ProducerFailed;
+    result.Status =
+        entry ? MemCacheStatus::Computed : MemCacheStatus::ProducerFailed;
     result.Entry = std::move(entry);
     result.LeaderResult = std::move(produced);
     return result;
@@ -459,8 +459,8 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     MemCacheEntryRef entry = adopt(produced);
     if (!entry)
       ProducerFailures.fetch_add(1, std::memory_order_relaxed);
-    result.Status = entry ? MemCacheStatus::Computed
-                          : MemCacheStatus::ProducerFailed;
+    result.Status =
+        entry ? MemCacheStatus::Computed : MemCacheStatus::ProducerFailed;
     result.Entry = std::move(entry);
     result.LeaderResult = std::move(produced);
     return result;
