@@ -30,7 +30,9 @@
 // OVERLAP: hotswap: unresolved call target
 // CLOBBER: hotswap: resolved reusable PC-materialized call
 // CLOBBER: hotswap: unresolved call target
-// BOOTSTRAP-CLOBBER: hotswap: resolved PC-materialized call
+// COM: The roll-up conservatively invalidates the bootstrap call itself when
+// COM: its callee clobbers the reusable target pair.
+// BOOTSTRAP-CLOBBER: hotswap: unresolved call target
 // BOOTSTRAP-CLOBBER: hotswap: unresolved call target
 // TAIL: hotswap: resolved reusable PC-materialized call
 // TAIL: hotswap: unresolved call target
@@ -108,7 +110,8 @@
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --expect-status ERROR 2>&1 \
 // RUN:   | %FileCheck --check-prefix=OUTSIDE %s
-// OUTSIDE: hotswap: resolved PC-materialized call
+// COM: The joint roll-up audit may conservatively decline the independent
+// COM: bootstrap call once this variant leaves the object-wide entry set open.
 // OUTSIDE: hotswap: resolved reusable PC-materialized call
 // OUTSIDE-SAME: to 1 target(s)
 // OUTSIDE: hotswap: resolved reusable PC-materialized call
@@ -149,11 +152,13 @@
 // DISASM: s_swap_pc_i64 s[6:7]
 // DISASM-NEXT: s_swap_pc_i64 s[6:7]
 // DISASM-NEXT: s_branch
-// DISASM-NEXT: s_get_pc_i64
+// COM: The validated roll-up router promotes each far source into an
+// COM: SGPR-backed s_call_i64 hop rather than the older shared get-PC chain.
+// DISASM-NEXT: s_call_i64
+// DISASM-NEXT: s_nop 0
 // DISASM-NEXT: s_branch
-// DISASM-NEXT: s_branch
-// DISASM-NEXT: s_get_pc_i64
-// DISASM-NEXT: s_branch
+// DISASM-NEXT: s_call_i64
+// DISASM-NEXT: s_nop 0
 // DISASM-LABEL: <gateway_barrier>:
 // DISASM-NEXT: s_endpgm
 // DISASM-NEXT: s_get_pc_i64
