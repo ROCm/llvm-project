@@ -2821,62 +2821,117 @@ getDirectTextTarget(const InternalDecodedInst &DI, const LLVMState &LS,
 /// A reusable target value remains valid after a call only when the exact local
 /// callee is fully decoded, returns through the call's link pair, and cannot
 /// transitively or directly clobber the target pair.
-static bool calleePreservesReusableTarget(
+static bool calleePreservesReusableTargetMemoized(
     uint64_t Target, MCRegister TargetRegister, MCRegister ReturnRegister,
     ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS,
     uint64_t TextAddr, uint64_t TextEnd,
-    ArrayRef<ElfView::FunctionTextRange> FunctionRanges) {
-  const ElfView::FunctionTextRange *Callee = nullptr;
-  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
-    if (Range.Begin == Target && Range.Begin >= TextAddr &&
-        Range.End > Range.Begin && Range.End <= TextEnd &&
-        (!Callee || Range.End < Callee->End))
-      Callee = &Range;
-  if (!Callee)
+    const DenseMap<uint64_t, size_t> &OffsetToIndex,
+    DenseMap<uint64_t, std::vector<uint8_t>> &InstructionStates) {
+  enum : uint8_t {
+    Unknown,
+    Visiting,
+    Preserves,
+    Rejects,
+  };
+
+  std::function<bool(size_t, MCRegister)> CheckIndex =
+      [&](size_t Index, MCRegister LinkRegister) {
+        uint64_t RegisterKey =
+            (static_cast<uint64_t>(TargetRegister.id()) << 32) |
+            LinkRegister.id();
+        std::vector<uint8_t> &States =
+            InstructionStates
+                .try_emplace(RegisterKey, Decoded.size(), uint8_t{Unknown})
+                .first->second;
+        uint8_t &State = States[Index];
+        if (State == Preserves)
+          return true;
+        if (State == Rejects)
+          return false;
+        if (State == Visiting)
+          return true;
+        State = Visiting;
+
+        auto Finish = [&](bool Result) {
+          State = Result ? Preserves : Rejects;
+          return Result;
+        };
+        const InternalDecodedInst &DI = Decoded[Index];
+        if (!DI.DecodeSucceeded ||
+            definesOverlappingRegister(DI, LS, TargetRegister))
+          return Finish(false);
+
+        auto FindSuccessor = [&](uint64_t Offset) -> std::optional<size_t> {
+          DenseMap<uint64_t, size_t>::const_iterator It =
+              OffsetToIndex.find(Offset);
+          if (It == OffsetToIndex.end())
+            return std::nullopt;
+          return It->second;
+        };
+        auto CheckFallthrough = [&]() {
+          std::optional<uint64_t> Fallthrough = checkedAddUint64(
+              DI.Offset, DI.Size, "reusable callee fallthrough");
+          if (!Fallthrough)
+            return false;
+          std::optional<size_t> Successor = FindSuccessor(*Fallthrough);
+          return Successor && CheckIndex(*Successor, LinkRegister);
+        };
+
+        if (LS.MIA->isCall(DI.Inst)) {
+          if (DI.Inst.getNumOperands() == 0 || !DI.Inst.getOperand(0).isReg() ||
+              !DI.Inst.getOperand(0).getReg())
+            return Finish(false);
+          MCRegister NestedLink(DI.Inst.getOperand(0).getReg());
+          std::optional<uint64_t> NestedTarget;
+          if (std::optional<PcMaterializedCallInfo> Materialized =
+                  matchPcMaterializedCall(Decoded, Index, LS, TextAddr)) {
+            NestedTarget = Materialized->Target;
+          } else if (std::optional<uint64_t> Relative =
+                         getDirectTextTarget(DI, LS, TextAddr, TextEnd)) {
+            NestedTarget = checkedAddUint64(TextAddr, *Relative,
+                                            "nested reusable call target");
+          }
+          if (!NestedTarget || *NestedTarget < TextAddr ||
+              *NestedTarget >= TextEnd)
+            return Finish(false);
+          std::optional<size_t> NestedIndex =
+              FindSuccessor(*NestedTarget - TextAddr);
+          if (!NestedIndex || !CheckIndex(*NestedIndex, NestedLink))
+            return Finish(false);
+          return Finish(CheckFallthrough());
+        }
+
+        if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode)
+          return Finish(DI.Inst.getNumOperands() == 1 &&
+                        isExactRegisterOperand(DI.Inst, 0, LinkRegister));
+        if (LS.MIA->isReturn(DI.Inst))
+          return Finish(true);
+        if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
+            DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
+            LS.MIA->isIndirectBranch(DI.Inst) ||
+            DI.Inst.getOpcode() == LS.SAddPcI64Opcode)
+          return Finish(false);
+
+        if (LS.MIA->isBranch(DI.Inst)) {
+          std::optional<uint64_t> BranchTarget =
+              evaluateDirectControlFlowTarget(DI, LS);
+          if (!BranchTarget)
+            return Finish(false);
+          std::optional<size_t> TargetIndex = FindSuccessor(*BranchTarget);
+          if (!TargetIndex || !CheckIndex(*TargetIndex, LinkRegister))
+            return Finish(false);
+          if (LS.MIA->isUnconditionalBranch(DI.Inst))
+            return Finish(true);
+        }
+        return Finish(CheckFallthrough());
+      };
+
+  if (Target < TextAddr || Target >= TextEnd)
     return false;
-
-  uint64_t CalleeBegin = Callee->Begin - TextAddr;
-  uint64_t CalleeEnd = Callee->End - TextAddr;
-  bool SawInstruction = false;
-  for (const InternalDecodedInst &DI : Decoded) {
-    if (DI.Offset < CalleeBegin || DI.Offset >= CalleeEnd)
-      continue;
-    SawInstruction = true;
-    if (!DI.DecodeSucceeded || LS.MIA->isCall(DI.Inst) ||
-        definesOverlappingRegister(DI, LS, TargetRegister))
-      return false;
-
-    if (DI.Inst.getOpcode() == LS.SSetPcI64Opcode) {
-      if (DI.Inst.getNumOperands() != 1 ||
-          !isExactRegisterOperand(DI.Inst, 0, ReturnRegister))
-        return false;
-      continue;
-    }
-    if (DI.Inst.getOpcode() == LS.SEndPgmOpcode ||
-        DI.Inst.getOpcode() == LS.SEndPgmSavedOpcode ||
-        LS.MIA->isReturn(DI.Inst))
-      continue;
-    if (LS.MIA->isIndirectBranch(DI.Inst) ||
-        DI.Inst.getOpcode() == LS.SAddPcI64Opcode)
-      return false;
-
-    bool HasFallthrough = true;
-    if (LS.MIA->isBranch(DI.Inst)) {
-      std::optional<uint64_t> BranchTarget =
-          getDirectTextTarget(DI, LS, TextAddr, TextEnd);
-      if (!BranchTarget || *BranchTarget < CalleeBegin ||
-          *BranchTarget >= CalleeEnd)
-        return false;
-      HasFallthrough = !LS.MIA->isUnconditionalBranch(DI.Inst);
-    }
-    if (!HasFallthrough)
-      continue;
-    std::optional<uint64_t> Fallthrough =
-        checkedAddUint64(DI.Offset, DI.Size, "reusable callee fallthrough");
-    if (!Fallthrough || *Fallthrough >= CalleeEnd)
-      return false;
-  }
-  return SawInstruction;
+  DenseMap<uint64_t, size_t>::const_iterator Entry =
+      OffsetToIndex.find(Target - TextAddr);
+  return Entry != OffsetToIndex.end() &&
+         CheckIndex(Entry->second, ReturnRegister);
 }
 
 /// Resolve uses of an SGPR pair whose value is selected once and reused across
@@ -2888,8 +2943,14 @@ static std::vector<ReachingCallTargets> resolveReusablePcValuesAtUses(
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
     ArrayRef<uint64_t> DeclaredEntries, ArrayRef<ReachingPcUse> Uses,
+    const DenseMap<uint64_t, size_t> &OffsetToIndex,
+    ArrayRef<std::pair<size_t, uint64_t>> DirectEntries,
+    DenseMap<std::pair<uint64_t, uint64_t>, bool> &CalleePreservation,
+    DenseMap<uint64_t, std::vector<uint8_t>> &CalleeInstructionStates,
     ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers = {}) {
   std::vector<ReachingCallTargets> Resolved(Decoded.size());
+  uint64_t CalleeProofNanos = 0;
+  size_t CalleeProofChecks = 0;
   SmallVector<ReachingCallGroup, 8> Groups;
   DenseMap<size_t, const FiniteSetPcTransfer *> FiniteSetPcByInst;
   for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
@@ -2924,24 +2985,6 @@ static std::vector<ReachingCallTargets> resolveReusablePcValuesAtUses(
     }
     Group->Calls.push_back(I);
   }
-
-  DenseMap<uint64_t, size_t> OffsetToIndex;
-  for (size_t I = 0; I != Decoded.size(); ++I)
-    OffsetToIndex[Decoded[I].Offset] = I;
-
-  SmallVector<std::pair<size_t, uint64_t>, 16> DirectEntries;
-  for (size_t SourceIndex = 0; SourceIndex != Decoded.size(); ++SourceIndex) {
-    const InternalDecodedInst &Source = Decoded[SourceIndex];
-    if (!Source.DecodeSucceeded ||
-        (!LS.MIA->isBranch(Source.Inst) && !LS.MIA->isCall(Source.Inst)) ||
-        LS.MIA->isReturn(Source.Inst))
-      continue;
-    std::optional<uint64_t> Target =
-        getDirectTextTarget(Source, LS, TextAddr, TextEnd);
-    if (Target)
-      DirectEntries.emplace_back(SourceIndex, *Target);
-  }
-  DenseMap<std::pair<uint64_t, uint64_t>, bool> CalleePreservation;
 
   for (const ReachingCallGroup &Group : Groups) {
     ArrayRef<InternalDecodedInst>::const_iterator Begin =
@@ -3001,11 +3044,16 @@ static std::vector<ReachingCallTargets> resolveReusablePcValuesAtUses(
           EntryIndex->second >= BeginIndex && EntryIndex->second < EndIndex)
         seedUnknownEntry(EntryIndex->second);
     }
-    for (const std::pair<size_t, uint64_t> &Entry : DirectEntries) {
-      if (Entry.first >= BeginIndex && Entry.first < EndIndex)
+    ArrayRef<std::pair<size_t, uint64_t>>::iterator Entry = llvm::lower_bound(
+        DirectEntries, Group.Begin,
+        [](const std::pair<size_t, uint64_t> &Candidate, uint64_t Target) {
+          return Candidate.second < Target;
+        });
+    for (; Entry != DirectEntries.end() && Entry->second < Group.End; ++Entry) {
+      if (Entry->first >= BeginIndex && Entry->first < EndIndex)
         continue;
       DenseMap<uint64_t, size_t>::const_iterator TargetIndex =
-          OffsetToIndex.find(Entry.second);
+          OffsetToIndex.find(Entry->second);
       if (TargetIndex != OffsetToIndex.end() &&
           TargetIndex->second >= BeginIndex && TargetIndex->second < EndIndex)
         seedUnknownEntry(TargetIndex->second);
@@ -3082,14 +3130,19 @@ static std::vector<ReachingCallTargets> resolveReusablePcValuesAtUses(
           std::pair<uint64_t, uint64_t> Key{Target, RegisterKey};
           DenseMap<std::pair<uint64_t, uint64_t>, bool>::iterator Cached =
               CalleePreservation.find(Key);
-          if (Cached == CalleePreservation.end())
+          if (Cached == CalleePreservation.end()) {
+            uint64_t Start = profNowNs();
             Cached =
                 CalleePreservation
-                    .try_emplace(Key, calleePreservesReusableTarget(
+                    .try_emplace(Key, calleePreservesReusableTargetMemoized(
                                           Target, Group.TargetRegister,
                                           ReturnRegister, Decoded, LS, TextAddr,
-                                          TextEnd, FunctionRanges))
+                                          TextEnd, OffsetToIndex,
+                                          CalleeInstructionStates))
                     .first;
+            CalleeProofNanos += profNowNs() - Start;
+            ++CalleeProofChecks;
+          }
           CalleesPreserve &= Cached->second;
         }
       }
@@ -3149,6 +3202,10 @@ static std::vector<ReachingCallTargets> resolveReusablePcValuesAtUses(
       }
     }
   }
+  if (CalleeProofChecks != 0)
+    log() << "hotswap: reusable callee proof checked " << CalleeProofChecks
+          << " new target/link pair(s) in " << (CalleeProofNanos / 1000000.0)
+          << " ms (" << CalleePreservation.size() << " cached total)\n";
   return Resolved;
 }
 
@@ -3158,6 +3215,10 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     uint64_t TextAddr, uint64_t TextEnd,
     ArrayRef<ElfView::FunctionTextRange> FunctionRanges,
     ArrayRef<uint64_t> DeclaredEntries,
+    const DenseMap<uint64_t, size_t> &OffsetToIndex,
+    ArrayRef<std::pair<size_t, uint64_t>> DirectEntries,
+    DenseMap<std::pair<uint64_t, uint64_t>, bool> &CalleePreservation,
+    DenseMap<uint64_t, std::vector<uint8_t>> &CalleeInstructionStates,
     ArrayRef<FiniteSetPcTransfer> FiniteSetPcTransfers = {}) {
   SmallVector<ReachingPcUse, 8> Uses;
   for (size_t I = 0; I != Decoded.size(); ++I) {
@@ -3170,9 +3231,10 @@ static std::vector<ReachingCallTargets> resolveReusablePcCallTargets(
     if (TargetOp.isReg() && TargetOp.getReg())
       Uses.push_back({I, MCRegister(TargetOp.getReg())});
   }
-  return resolveReusablePcValuesAtUses(Decoded, LS, TextAddr, TextEnd,
-                                       FunctionRanges, DeclaredEntries, Uses,
-                                       FiniteSetPcTransfers);
+  return resolveReusablePcValuesAtUses(
+      Decoded, LS, TextAddr, TextEnd, FunctionRanges, DeclaredEntries, Uses,
+      OffsetToIndex, DirectEntries, CalleePreservation, CalleeInstructionStates,
+      FiniteSetPcTransfers);
 }
 
 struct KnownCallSite {
@@ -6241,6 +6303,27 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   BitVector ProvenSetPcCandidates(AllSetPcCandidates.size());
   SmallVector<FiniteSetPcTransfer, 8> EnabledSetPcTransfers;
   std::vector<ReachingCallTargets> ReusableCalls;
+  DenseMap<uint64_t, size_t> ReusableOffsetToIndex;
+  for (size_t I = 0; I != Decoded.size(); ++I)
+    ReusableOffsetToIndex.try_emplace(Decoded[I].Offset, I);
+  SmallVector<std::pair<size_t, uint64_t>, 16> ReusableDirectEntries;
+  for (size_t SourceIndex = 0; SourceIndex != Decoded.size(); ++SourceIndex) {
+    const InternalDecodedInst &Source = Decoded[SourceIndex];
+    if (!Source.DecodeSucceeded ||
+        (!LS.MIA->isBranch(Source.Inst) && !LS.MIA->isCall(Source.Inst)) ||
+        LS.MIA->isReturn(Source.Inst))
+      continue;
+    std::optional<uint64_t> Target =
+        getDirectTextTarget(Source, LS, TextAddr, *TextEnd);
+    if (Target)
+      ReusableDirectEntries.emplace_back(SourceIndex, *Target);
+  }
+  llvm::sort(ReusableDirectEntries, [](const std::pair<size_t, uint64_t> &LHS,
+                                       const std::pair<size_t, uint64_t> &RHS) {
+    return std::tie(LHS.second, LHS.first) < std::tie(RHS.second, RHS.first);
+  });
+  DenseMap<std::pair<uint64_t, uint64_t>, bool> ReusableCalleePreservation;
+  DenseMap<uint64_t, std::vector<uint8_t>> ReusableCalleeInstructionStates;
   std::optional<ControlFlowScanIndex> Index;
   SmallVector<BoundedSetPcReturn, 2> BoundedReturns;
   SmallVector<SymbolLessReturnRegion, 8> SymbolLessRegions;
@@ -6257,6 +6340,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         AllSetPcCandidates, ProvenSetPcCandidates, RejectedSetPcCandidates);
     ReusableCalls = resolveReusablePcCallTargets(
         Decoded, LS, TextAddr, *TextEnd, FunctionRanges, DeclaredEntries,
+        ReusableOffsetToIndex, ReusableDirectEntries,
+        ReusableCalleePreservation, ReusableCalleeInstructionStates,
         EnabledSetPcTransfers);
     Index = buildControlFlowScanIndex(Decoded, LS, TextAddr, *TextEnd,
                                       FunctionRanges);
