@@ -10,16 +10,20 @@
 #include "hotswap/cache/pipeline.h"
 #include "hotswap/cache/translation-cache.h"
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
 
 #include "gtest/gtest.h"
 
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -27,6 +31,20 @@
 using namespace COMGR::hotswap;
 
 namespace {
+
+// A unique temporary directory removed on scope exit. Local to this TU (the
+// TranslationCacheTest.cpp TempDir lives in that TU's anon namespace and is
+// not shared). Used by the two-tier disk/mem population test below.
+struct MemTempDir {
+  llvm::SmallString<128> Path;
+  explicit MemTempDir(const char *P) {
+    llvm::sys::fs::createUniqueDirectory(P, Path);
+  }
+  ~MemTempDir() {
+    if (!Path.empty())
+      llvm::sys::fs::remove_directories(Path);
+  }
+};
 
 // Minimal AMDGPU MsgPack metadata naming one kernel -- all listKernelNames
 // (and hence the cache key builder) reads. Adapted from TranslationCacheTest.
@@ -165,6 +183,9 @@ PipelineResult makeProduced(std::atomic<int> &calls, size_t bytes,
 class MemCacheTest : public ::testing::Test {
 protected:
   void SetUp() override { resetMemCacheForTesting(kBudget); }
+  // Restore the default source-bucket hash after every test so a degenerate
+  // hash installed by the collision test cannot leak into another test.
+  void TearDown() override { setMemCacheHashFnForTesting(nullptr); }
   static constexpr size_t kBudget = 8ull << 20; // 8 MiB
 };
 
@@ -410,6 +431,175 @@ TEST_F(MemCacheTest, UncacheableRequestBypasses) {
   // Producer still ran (we do not drop the request), just nothing cached.
   EXPECT_EQ(calls.load(), 1);
   EXPECT_EQ(memCacheEntryCountForTesting(), 0u);
+}
+
+// --- Every key-determining transform field must distinguish entries --------
+
+TEST_F(MemCacheTest, KeyFieldSensitivity) {
+  std::string elf = makeFakeAmdgpuElf("kern");
+
+  // Each lambda mutates one field of a copy of the base request; the mutated
+  // request must NOT alias the base (both Computed, distinct buffers).
+  auto checkField = [&](const char *label,
+                        std::function<void(TranslationCacheRequest &)> mutate) {
+    SCOPED_TRACE(label);
+    std::atomic<int> calls{0};
+    resetMemCacheForTesting(8u << 20);
+    auto base = makeRequest(elf);
+    auto variant = base;
+    mutate(variant);
+    auto a = getOrComputeTranslation(base,
+                                     [&] { return makeProduced(calls, 1024); });
+    auto b = getOrComputeTranslation(variant,
+                                     [&] { return makeProduced(calls, 1024); });
+    EXPECT_EQ(a.Status, MemCacheStatus::Computed);
+    EXPECT_EQ(b.Status, MemCacheStatus::Computed); // NOT Hit -> distinct keys
+    ASSERT_NE(a.Entry, nullptr);
+    ASSERT_NE(b.Entry, nullptr);
+    EXPECT_NE(a.Entry->Hsaco.get(), b.Entry->Hsaco.get());
+  };
+
+  checkField("TargetGfx/TargetIsa", [](TranslationCacheRequest &r) {
+    r.TargetGfx = "gfx942";
+    r.TargetIsa = "amdgcn-amd-amdhsa--gfx942";
+    r.CodeIsa = r.TargetIsa;
+  });
+  checkField("OptLevel", [](TranslationCacheRequest &r) { r.OptLevel = 3; });
+  checkField("OrigMach", [](TranslationCacheRequest &r) { r.OrigMach = 42; });
+  checkField("StrictMode",
+             [](TranslationCacheRequest &r) { r.StrictMode = true; });
+  checkField("EnableWaveNative",
+             [](TranslationCacheRequest &r) { r.EnableWaveNative = false; });
+  checkField("DeviceLibrariesIdentity", [](TranslationCacheRequest &r) {
+    r.DeviceLibrariesIdentity = "devlibs-v2";
+  });
+}
+
+// --- A forced hash collision must never mis-serve a different source -------
+
+TEST_F(MemCacheTest, HashCollisionDoesNotMisServe) {
+  // Degenerate hash: every source lands in one bucket, so the exact-memcmp
+  // guard in lookupLocked is the ONLY thing keeping distinct sources apart.
+  setMemCacheHashFnForTesting([](const void *, size_t) { return 0ull; });
+  resetMemCacheForTesting(8u << 20);
+  std::atomic<int> calls{0};
+
+  // Producer whose OUTPUT content encodes which source it was built for, so a
+  // mis-serve (returning Y's bytes for X) is directly detectable. The tag byte
+  // is the source's first content byte after the fake-ELF header pad.
+  auto taggedProducer = [&](char tag) {
+    return [&, tag]() -> PipelineResult {
+      calls.fetch_add(1, std::memory_order_relaxed);
+      PipelineResult r;
+      std::string data(1024, tag);
+      r.Hsaco = llvm::MemoryBuffer::getMemBufferCopy(data, "hsaco");
+      r.Success = true;
+      return r;
+    };
+  };
+
+  // Two DISTINCT sources forced into the same bucket.
+  std::string elfA = makeFakeAmdgpuElf("A");
+  std::string elfB = makeFakeAmdgpuElf("B");
+  ASSERT_NE(elfA, elfB); // genuinely different source bytes
+
+  auto a = getOrComputeTranslation(makeRequest(elfA), taggedProducer('A'));
+  auto b = getOrComputeTranslation(makeRequest(elfB), taggedProducer('B'));
+  ASSERT_NE(a.Entry, nullptr);
+  ASSERT_NE(b.Entry, nullptr);
+
+  // THE invariant: neither request received the other's bytes. A's output is
+  // all 'A', B's is all 'B' -- a collision alias would have handed one the
+  // other's buffer.
+  EXPECT_EQ(a.Entry->Hsaco->getBuffer()[0], 'A');
+  EXPECT_EQ(b.Entry->Hsaco->getBuffer()[0], 'B');
+  EXPECT_NE(a.Entry->Hsaco.get(), b.Entry->Hsaco.get());
+
+  // Re-request each source repeatedly under the forced collision: every result
+  // must carry its OWN tag, never the other's. (Whether a given call is a Hit
+  // or a recompute is unspecified under a forced collision -- the single-slot
+  // design may thrash -- but the CONTENT must always be correct.)
+  for (int i = 0; i < 4; ++i) {
+    auto ra = getOrComputeTranslation(makeRequest(elfA), taggedProducer('A'));
+    auto rb = getOrComputeTranslation(makeRequest(elfB), taggedProducer('B'));
+    ASSERT_NE(ra.Entry, nullptr);
+    ASSERT_NE(rb.Entry, nullptr);
+    EXPECT_EQ(ra.Entry->Hsaco->getBuffer()[0], 'A') << "iter " << i;
+    EXPECT_EQ(rb.Entry->Hsaco->getBuffer()[0], 'B') << "iter " << i;
+  }
+
+  setMemCacheHashFnForTesting(nullptr); // restore (TearDown also does this)
+}
+
+// --- Reentrant producer for the same key must not deadlock ----------------
+
+TEST_F(MemCacheTest, ReentrantProducerDoesNotDeadlock) {
+  resetMemCacheForTesting(8u << 20);
+  std::string elf = makeFakeAmdgpuElf("R");
+  auto req = makeRequest(elf);
+  std::atomic<int> calls{0};
+  std::atomic<int> depth{0};
+  std::function<PipelineResult()> producer = [&]() -> PipelineResult {
+    if (depth.fetch_add(1) == 0) {
+      // Re-enter for the same key from within the producer. The reentrancy
+      // guard must run this inline (a bypass compute), not block on ourselves.
+      auto inner = getOrComputeTranslation(req, producer);
+      (void)inner; // must return, not hang
+    }
+    return makeProduced(calls, 1024);
+  };
+  auto r = getOrComputeTranslation(req, producer);
+  EXPECT_NE(r.Entry, nullptr); // completed without deadlock
+  EXPECT_GE(calls.load(), 1);
+}
+
+// --- Disk hit repopulates the mem tier, then serves a pure mem hit --------
+
+TEST_F(MemCacheTest, DiskHitPopulatesMemThenMemHit) {
+  resetMemCacheForTesting(8u << 20);
+  MemTempDir dir("hotswap_memcache_test");
+  std::atomic<int> calls{0};
+  std::string elf = makeFakeAmdgpuElf("T");
+
+  // A request whose disk tier is ENABLED and points at our temp dir.
+  TranslationCacheRequest req = makeRequest(elf);
+  req.CacheDirectory = std::string(dir.Path);
+  req.CacheDisabled = false;
+
+  // (1) Cold: producer runs the transform AND writes disk.
+  auto cold = getOrComputeTranslation(req, [&] {
+    PipelineResult r = makeProduced(calls, 1024);
+    writeTranslationCache(req, r); // real disk write
+    return r;
+  });
+  EXPECT_EQ(cold.Status, MemCacheStatus::Computed);
+
+  // (2) Cross-tier: clear mem (fresh instance), keep disk. Producer now does a
+  //     real disk lookup instead of the transform; on hit it returns the disk
+  //     result, which repopulates mem.
+  resetMemCacheForTesting(8u << 20);
+  int producerRuns = 0;
+  auto xproc = getOrComputeTranslation(req, [&] {
+    ++producerRuns;
+    TranslationCacheLookup lk = lookupTranslationCache(req);
+    if (lk.Status == TranslationCacheStatus::Hit && lk.Result.Hsaco)
+      return std::move(lk.Result);    // disk hit -> no transform
+    return makeProduced(calls, 1024); // (should not happen)
+  });
+  EXPECT_EQ(xproc.Status, MemCacheStatus::Computed);
+  EXPECT_EQ(producerRuns, 1); // producer ran once (the disk read)
+
+  // (3) Warm: pure mem hit, producer NOT run again.
+  int producerRuns2 = 0;
+  auto warm = getOrComputeTranslation(req, [&] {
+    ++producerRuns2;
+    return makeProduced(calls, 1024);
+  });
+  EXPECT_EQ(warm.Status, MemCacheStatus::Hit);
+  EXPECT_EQ(producerRuns2, 0);
+  ASSERT_NE(warm.Entry, nullptr);
+  ASSERT_NE(xproc.Entry, nullptr);
+  EXPECT_EQ(warm.Entry->Hsaco.get(), xproc.Entry->Hsaco.get());
 }
 
 } // namespace

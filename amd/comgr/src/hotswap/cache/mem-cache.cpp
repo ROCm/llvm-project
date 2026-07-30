@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -34,8 +35,9 @@ namespace {
 // working set of several large objects without an unbounded footprint.
 constexpr size_t kDefaultBudgetBytes = 1ull << 30; // 1 GiB
 
-// Parses the budget env var once. Returns the default when unset, 0 (disabled)
-// when explicitly "0"/empty, or the parsed byte count. Never throws.
+// Parses the budget env var once. Returns the built-in default when the var
+// is unset, empty, or malformed; 0 (explicitly) disables the tier; otherwise
+// the parsed byte count. Never throws.
 size_t resolveBudgetFromEnv() {
   const char *env = std::getenv("AMD_COMGR_HOTSWAP_MEM_CACHE_BYTES");
   if (!env)
@@ -131,6 +133,21 @@ inline uint64_t hash(const void *data, size_t size) {
 }
 } // namespace xxh
 
+#ifdef COMGR_HOTSWAP_MEM_CACHE_TESTING
+using MemHashFn = std::function<uint64_t(const void *, size_t)>;
+MemHashFn &activeMemHashFn() {
+  static MemHashFn fn = [](const void *d, size_t n) { return xxh::hash(d, n); };
+  return fn;
+}
+uint64_t sourceBucketHash(const void *d, size_t n) {
+  return activeMemHashFn()(d, n);
+}
+#else
+inline uint64_t sourceBucketHash(const void *d, size_t n) {
+  return xxh::hash(d, n);
+}
+#endif
+
 // Cheap in-memory bucket key: xxHash64(source) + source_size + the transform
 // fields already present as strings on the request. Deliberately does NOT
 // re-hash the rules file CONTENTS or re-derive the loaded-image identity (both
@@ -144,7 +161,7 @@ std::string deriveMemBucketKey(const TranslationCacheRequest &request) {
     return std::string();
   char buf[40];
   std::snprintf(buf, sizeof(buf), "%016llx:%zx|",
-                static_cast<unsigned long long>(xxh::hash(src, n)), n);
+                static_cast<unsigned long long>(sourceBucketHash(src, n)), n);
   std::string key(buf);
   key += request.SourceGfx;
   key.push_back('\x1f');
@@ -647,6 +664,13 @@ size_t waitForMemCacheWaitersForTesting(const TranslationCacheRequest &request,
                                         size_t count, unsigned timeoutMs) {
   const std::string key = deriveMemBucketKey(request);
   return activeInstance().waitForWaitersForTesting(key, count, timeoutMs);
+}
+
+void setMemCacheHashFnForTesting(
+    std::function<uint64_t(const void *, size_t)> fn) {
+  activeMemHashFn() =
+      fn ? std::move(fn)
+         : MemHashFn([](const void *d, size_t n) { return xxh::hash(d, n); });
 }
 #endif
 

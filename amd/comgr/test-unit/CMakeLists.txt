@@ -135,8 +135,9 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapProfileTests>
   COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
   COMMAND $<TARGET_FILE:TranslationCacheTests>
+  COMMAND $<TARGET_FILE:MemCacheTests>
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
   COMMAND $<TARGET_FILE:LoggerTests>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapProfileTests
-  RaiserScaffoldingTests TranslationCacheTests DemangleSymbolNameTest LoggerTests)
+  RaiserScaffoldingTests TranslationCacheTests MemCacheTests DemangleSymbolNameTest LoggerTests)
 add_dependencies(check-comgr test-unit)

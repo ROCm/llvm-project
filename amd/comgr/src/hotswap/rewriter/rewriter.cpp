@@ -9,8 +9,16 @@
 #include "comgr.h"
 #include "internal.h"
 
+#include "hotswap/cache/mem-cache.h"
+#include "hotswap/cache/pipeline.h"
+#include "hotswap/cache/translation-cache.h"
+
+#include "llvm/Support/MemoryBuffer.h"
+
 #include "llvm/TargetParser/AMDGPUTargetParser.h"
 
+#include <cstdlib>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -238,16 +246,83 @@ hotswapRewrite(amd_comgr_data_t input, const char *source_isa_name,
                                  SourceIdent.IsB0.value_or(true) &&
                                  TargetIdent.IsB0.value_or(false);
 
-  std::unique_ptr<llvm::MemoryBuffer> OutBuffer;
-  amd_comgr_status_t Status = hotswap::retargetCodeObject(
-      InputP->Data, InputP->Size, TargetIdent.Ident, Options, OutBuffer);
-  if (Status != AMD_COMGR_STATUS_SUCCESS)
-    return Status;
-  if (!OutBuffer) {
+  // Build the cache request. Identity = source bytes (exact-compared by the
+  // mem tier) + full canonical source/target ISA (stepping-bearing) + the
+  // rewrite options that are not implied by the ISA. CodeIsa carries the
+  // B0->A0 option bits so every rewrite-determining input is in the key.
+  COMGR::hotswap::TranslationCacheRequest CacheReq;
+  CacheReq.SourceObject = llvm::MemoryBufferRef(
+      llvm::StringRef(static_cast<const char *>(InputP->Data), InputP->Size),
+      "hotswap-source");
+  CacheReq.SourceGfx = SourceIdent.Ident.Processor;
+  CacheReq.TargetGfx = TargetIdent.Ident.Processor;
+  // Use the RAW, caller-provided ISA strings (NOT CanonicalIsa): parsing
+  // strips the gfx1250 stepping token out of CanonicalIsa into Ident.Features,
+  // so CanonicalIsa alone would not distinguish B0 vs A0 targets. The raw
+  // names carry the stepping verbatim, keeping the key faithful to every input
+  // that reaches retargetCodeObject's subtarget.
+  CacheReq.SourceIsa = source_isa_name;
+  CacheReq.TargetIsa = target_isa_name;
+  {
+    std::string Code = target_isa_name;
+    Code += "|et=";
+    Code += (Options.RunEntryTrampolines ? "1" : "0");
+    Code += "|sm=";
+    Code += (StrictMode ? "1" : "0");
+    Code += "|b0a0=";
+    Code += (Options.RunB0A0Patches ? "1" : "0");
+    Code += "|mp=";
+    Code += std::to_string(static_cast<int>(Options.MaskPolicy));
+    Code += "|fast=";
+    Code += (Options.UseB0B0EntryFastPath ? "1" : "0");
+    CacheReq.CodeIsa = std::move(Code);
+  }
+  CacheReq.StrictMode = StrictMode;
+  // Disk tier: honor HSA_HOTSWAP_CACHE_DIR if set (leave empty => mem-only /
+  // disk-disabled per the disk tier's own env handling). CacheDisabled is the
+  // DISK flag; the mem tier is always consulted (its own budget env gates it).
+  if (const char *Dir = std::getenv("HSA_HOTSWAP_CACHE_DIR")) {
+    CacheReq.CacheDirectory = Dir;
+    CacheReq.CacheDisabled = (CacheReq.CacheDirectory.empty());
+  } else {
+    CacheReq.CacheDisabled = true; // no disk dir => disk tier off; mem still on
+  }
+
+  // Producer: the actual retarget. Wrap the buffer as a PipelineResult so it
+  // flows through the cache's shared currency. Attribution fields stay default
+  // (the B0->A0 rewriter produces none).
+  amd_comgr_status_t ProducerStatus = AMD_COMGR_STATUS_SUCCESS;
+  auto Producer = [&]() -> COMGR::hotswap::PipelineResult {
+    COMGR::hotswap::PipelineResult R;
+    std::unique_ptr<llvm::MemoryBuffer> Buf;
+    ProducerStatus = hotswap::retargetCodeObject(
+        InputP->Data, InputP->Size, TargetIdent.Ident, Options, Buf);
+    if (ProducerStatus == AMD_COMGR_STATUS_SUCCESS && Buf) {
+      R.Hsaco = std::move(Buf);
+      R.Success = true;
+    }
+    return R;
+  };
+
+  COMGR::hotswap::MemCacheResult Cached =
+      COMGR::hotswap::getOrComputeTranslation(CacheReq, Producer);
+
+  // A failed producer (retarget error) must propagate the real status, not a
+  // generic cache failure.
+  if (!Cached.Entry) {
+    if (ProducerStatus != AMD_COMGR_STATUS_SUCCESS)
+      return ProducerStatus;
     hotswap::log() << "hotswap: error: " << ApiName
                    << ": rewrite returned no output buffer\n";
     return AMD_COMGR_STATUS_ERROR;
   }
+
+  // Copy the cached bytes into a fresh owned buffer for the output DataObject.
+  // The cache retains the canonical copy; the C ABI hands ROCm its own. This
+  // preserves the "hit == byte-identical fresh rewrite" invariant.
+  const llvm::MemoryBuffer &Hsaco = *Cached.Entry->Hsaco;
+  std::unique_ptr<llvm::MemoryBuffer> OutBuffer =
+      llvm::MemoryBuffer::getMemBufferCopy(Hsaco.getBuffer(), "hotswap-output");
 
   DataObject *OutputP = DataObject::allocate(AMD_COMGR_DATA_KIND_EXECUTABLE);
   if (!OutputP) {

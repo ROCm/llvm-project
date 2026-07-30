@@ -131,6 +131,11 @@ size_t memCacheInFlightCountForTesting();
 // the coalescing race deterministically.
 size_t waitForMemCacheWaitersForTesting(const TranslationCacheRequest &request,
                                         size_t count, unsigned timeoutMs);
+// Overrides the source bucket hash (default xxHash64). Passing nullptr
+// restores the default. Lets a test force two distinct sources into the same
+// bucket to exercise the exact-memcmp collision guard.
+void setMemCacheHashFnForTesting(
+    std::function<uint64_t(const void *, size_t)> fn);
 #endif
 
 } // namespace COMGR::hotswap
