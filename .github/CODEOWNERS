@@ -18,9 +18,9 @@
 /amd/docs/ @ROCm/rocm-documentation
 
 # HotSwap specific
-/amd/comgr/src/hotswap/ @harsh-amd
-/amd/comgr/test-unit/hotswap/ @harsh-amd
-/amd/comgr/test-lit/hotswap/ @harsh-amd
+/amd/comgr/src/hotswap/ @harsh-amd @ftynse
+/amd/comgr/test-unit/hotswap/ @harsh-amd @ftynse
+/amd/comgr/test-lit/hotswap/ @harsh-amd @ftynse
 
 /libc/ @llbm/reviewers-libc
 /bolt/ @llvm/reviewers-bolt
