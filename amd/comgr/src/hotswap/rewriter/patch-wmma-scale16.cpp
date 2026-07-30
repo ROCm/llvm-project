@@ -1455,17 +1455,39 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   unsigned ScaleBhiReg = ScaleAloReg + 3;
   unsigned TmpReg = ScaleAloReg + 4;
 
-  unsigned BOffset = (LowScratchCount + 1) & ~1u;
-  unsigned ScratchCount = BOffset + BWidth;
-  std::optional<unsigned> ScratchBase = Alloc.allocContiguousAboveKdInBank(
-      ScratchCount, /*Align=*/2, VgprBankSize);
-  if (!ScratchBase)
-    return failClosed(Ctx, DI,
-                      "no single-bank above-KD VGPR block for exact K-split");
+  // Every above-KD block lands in the bank the allocator is about to use, so
+  // the scratch bank is known before reserving anything in it.
+  unsigned ScratchBank = Alloc.NextAboveKd / VgprBankSize;
 
-  unsigned SaveBase = *ScratchBase;
-  unsigned BCopyBase = *ScratchBase + BOffset;
-  unsigned ScratchBank = *ScratchBase / VgprBankSize;
+  // Save slots are only written for low-bank registers that were borrowed while
+  // live. A dead or freshly extended block preserves nothing, so reserving the
+  // slots anyway would charge the kernel a full A-width block it never touches.
+  unsigned SaveBase = 0;
+  if (LowScratch->Preserve.any()) {
+    unsigned SaveCount = (LowScratchCount + 1) & ~1u;
+    std::optional<unsigned> Save = Alloc.allocContiguousAboveKdInBank(
+        SaveCount, /*Align=*/2, VgprBankSize);
+    if (!Save)
+      return failClosed(Ctx, DI,
+                        "no single-bank above-KD VGPR block for exact K-split");
+    SaveBase = *Save;
+  }
+
+  // Both replacement WMMAs read the same matrix B, so a B already addressed by
+  // the scratch bank can stay where it is. Copying a same-bank B would add
+  // BWidth moves and BWidth above-KD registers, which can make an otherwise
+  // occupancy-safe rewrite fail.
+  bool CopyB = OrigSrc1Bank != ScratchBank;
+  unsigned BCopyBase = BBase;
+  if (CopyB) {
+    std::optional<unsigned> BCopy =
+        Alloc.allocContiguousAboveKdInBank(BWidth, /*Align=*/2, VgprBankSize);
+    if (!BCopy)
+      return failClosed(Ctx, DI,
+                        "no single-bank above-KD VGPR block for matrix-B copy");
+    BCopyBase = *BCopy;
+  }
+  unsigned Src1Bank = BCopyBase / VgprBankSize;
 
   // The lane-mask scheme (FP8/BF8) needs one scratch SGPR for the wave-lane
   // bitmask; the VGPR-select scheme (FP4/FP6) uses plain v_mov and needs none.
@@ -1489,7 +1511,8 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
     if (LowScratch->Preserve.test(I))
       emitVgprMove(PreOS, SaveBase + I, SBase + I, PreMode);
 
-  emitVgprCopy(PreOS, BCopyBase, BBase, BWidth, PreMode);
+  if (CopyB)
+    emitVgprCopy(PreOS, BCopyBase, BBase, BWidth, PreMode);
   if (Plan->Scheme == AMaskScheme::Lane) {
     // pass-low keeps lanes 0-15 (low-16 subblocks); pass-high lanes 16-31.
     emitLaneMaskCopy(PreOS, MaskS, 0x0000FFFFu, SBase, ABase, AWidth,
@@ -1511,11 +1534,11 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
 
   unsigned WmmaLoMode = *ActiveMode;
   setVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src0, 0);
-  setVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src1, ScratchBank);
+  setVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src1, Src1Bank);
   emitModeForOperands(
       PreOS, PreMode,
       {{VgprMsbOperand::Src0, 0},
-       {VgprMsbOperand::Src1, ScratchBank},
+       {VgprMsbOperand::Src1, Src1Bank},
        {VgprMsbOperand::Src2, getVgprMsbBank(WmmaLoMode, VgprMsbOperand::Src2)},
        {VgprMsbOperand::Dst, getVgprMsbBank(WmmaLoMode, VgprMsbOperand::Dst)}});
 
@@ -1553,7 +1576,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   emitModeForOperands(
       HiOS, HiMode,
       {{VgprMsbOperand::Src0, 0},
-       {VgprMsbOperand::Src1, ScratchBank},
+       {VgprMsbOperand::Src1, Src1Bank},
        {VgprMsbOperand::Src2, OrigDstBank},
        {VgprMsbOperand::Dst, getVgprMsbBank(WmmaHiMode, VgprMsbOperand::Dst)}});
 
@@ -1625,19 +1648,18 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
 
   ScratchPatchInfo Info;
   Info.Offset = DI.Offset;
-  Info.ScratchRegs.resize(Ctx.Config.MaxVgprs);
-  Info.ScratchRegs.set(*ScratchBase, *ScratchBase + ScratchCount);
+  Info.ScratchRegs = Alloc.LiveAtPoint;
   Ctx.OutScratchPatches.push_back(std::move(Info));
 
   log() << "hotswap: wmma_scale16: exact K-split at offset 0x"
         << utohexstr(DI.Offset) << " ("
         << (Plan->Scheme == AMaskScheme::Lane ? "lane-mask" : "vgpr-select")
         << ", A=v" << ABase << ":" << (ABase + AWidth - 1) << " -> masked v"
-        << SBase << ", B copy=v" << BCopyBase << ":" << (BCopyBase + BWidth - 1)
-        << ", scales=v" << ScaleAloReg << ",v" << ScaleBloReg << ",v"
-        << ScaleAhiReg << ",v" << ScaleBhiReg << ", scratch bank "
-        << ScratchBank << ", +" << Extra << " vgpr, " << A0Nops
-        << " hazard v_nop, " << Replacement.size() << " bytes)\n";
+        << SBase << (CopyB ? ", B copy=v" : ", B in place=v") << BCopyBase
+        << ":" << (BCopyBase + BWidth - 1) << ", scales=v" << ScaleAloReg
+        << ",v" << ScaleBloReg << ",v" << ScaleAhiReg << ",v" << ScaleBhiReg
+        << ", scratch bank " << ScratchBank << ", +" << Extra << " vgpr, "
+        << A0Nops << " hazard v_nop, " << Replacement.size() << " bytes)\n";
   return 1;
 }
 

@@ -1183,12 +1183,6 @@ std::optional<unsigned> getActiveVgprMsbMode(PatchContext &Ctx, size_t Idx) {
 
 std::optional<unsigned> getLocallyEstablishedVgprMsbMode(PatchContext &Ctx,
                                                          size_t Idx) {
-  // An unresolved transfer can enter at any instruction in the object, so an
-  // apparently adjacent setter is not a dominance proof in that case.
-  if (Ctx.DirectControlFlow.HasUnresolvedTargets ||
-      Ctx.DirectControlFlow.HasUnboundedIndirectEntries)
-    return std::nullopt;
-
   while (Idx > 0) {
     const InternalDecodedInst &Prev = Ctx.Decoded[Idx - 1];
     const InternalDecodedInst &Current = Ctx.Decoded[Idx];
