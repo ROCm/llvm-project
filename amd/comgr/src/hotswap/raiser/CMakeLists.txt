@@ -36,6 +36,7 @@ add_library(hotswap-raiser OBJECT
   kernarg-layout.cpp
   user-sgpr-layout.cpp
   source-hidden-args.cpp
+  raise-context.cpp
 )
 
 if(NOT TARGET hotswap::raiser)
