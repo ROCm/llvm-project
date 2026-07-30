@@ -70,20 +70,25 @@ add_comgr_lit_binary(isa-enumeration c)
 add_comgr_lit_binary(test-get-data-isa-name c)
 
 # The hotswap transpiler driver used by the hotswap/raiser lit tests. It links
-# the hotswap-loader OBJECT library and the shared comgr-object-utils
-# objects (which carry the buffer-facing getElfIsaName / getMetadataRoot /
-# lookupSymbolByName entry points) rather than recompiling the comgr sources, so
-# the driver and amd_comgr share one set of objects and compile flags. Those
-# objects also contain amd_comgr C-API helpers the driver never calls and that
-# reference the rest of comgr; --gc-sections drops them (they were built with
-# function/data sections). MSVC's default /OPT:REF removes them the same way.
+# the hotswap decoder, raiser, loader, and common OBJECT libraries and the
+# shared comgr-object-utils objects (which carry the buffer-facing
+# getElfIsaName / getMetadataRoot / lookupSymbolByName entry points) rather than
+# recompiling the comgr sources, so the driver and amd_comgr share one set of
+# objects and compile flags. It also compiles standalone-init.cpp, which defines
+# ensureLLVMInitialized against the driver's own LLVM rather than the AMDGPU
+# registry hidden inside amd_comgr.so. Those objects also
+# contain amd_comgr C-API helpers the driver never calls and that reference the
+# rest of comgr; --gc-sections drops them (they were built with function/data
+# sections). MSVC's default /OPT:REF removes them the same way.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
-  add_executable(hotswap_transpile_cli comgr-sources/hotswap_transpile_cli.cpp)
-  # Match the C++ standard the rest of comgr compiles with. The comgr build
-  # sets it per target rather than globally, and MSVC otherwise defaults below
-  # the C++17 that the LLVM headers this driver includes require.
+  add_executable(hotswap_transpile_cli
+    comgr-sources/hotswap_transpile_cli.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../test-shared/standalone-init.cpp)
+  # Match the C++ standard the hotswap OBJECT libraries this driver links
+  # compile with (the decoder and raiser headers it includes are built as
+  # C++20); MSVC otherwise defaults below what the LLVM headers require.
   set_target_properties(hotswap_transpile_cli PROPERTIES
-    CXX_STANDARD 17
+    CXX_STANDARD 20
     CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS No)
   # Pick up LLVM's exception posture for the host compiler.
@@ -98,15 +103,42 @@ if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
       target_compile_options(hotswap_transpile_cli PRIVATE -fno-rtti)
     endif()
   endif()
+
+  # The driver includes the decoder headers, which reach AMDGPU target-private
+  # headers (Utils/AMDGPUBaseInfo.h and the generated .inc). Probe for the
+  # source across the layouts comgr builds in, as the hotswap OBJECT libraries
+  # do, so a wrong or empty root fails the configure loudly.
+  set(HOTSWAP_CLI_AMDGPU_SRC_DIR "")
+  foreach(HotswapLLVMRoot
+      "${LLVM_MAIN_SRC_DIR}"
+      "${LLVM_BUILD_MAIN_SRC_DIR}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/../../../llvm")
+    if(HotswapLLVMRoot AND
+       EXISTS "${HotswapLLVMRoot}/lib/Target/AMDGPU/SIDefines.h")
+      get_filename_component(HOTSWAP_CLI_AMDGPU_SRC_DIR
+        "${HotswapLLVMRoot}/lib/Target/AMDGPU" ABSOLUTE)
+      break()
+    endif()
+  endforeach()
+  if(NOT HOTSWAP_CLI_AMDGPU_SRC_DIR)
+    message(FATAL_ERROR
+      "hotswap_transpile_cli: cannot find the LLVM AMDGPU target sources "
+      "(SIDefines.h); set LLVM_MAIN_SRC_DIR to the llvm source directory.")
+  endif()
+
   target_include_directories(hotswap_transpile_cli PRIVATE
     ${LLVM_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
-    ${CMAKE_CURRENT_BINARY_DIR}/../include)
-  # The hotswap OBJECT libraries contribute objects only, so name the LLVM set
-  # this driver needs explicitly; ${LLVM_LIBS} is the same curated set amd_comgr
-  # links, already resolved to the dylib or the static components.
+    ${CMAKE_CURRENT_BINARY_DIR}/../include
+    "${HOTSWAP_CLI_AMDGPU_SRC_DIR}"
+    "${HOTSWAP_CLI_AMDGPU_SRC_DIR}/Utils"
+    "${LLVM_BINARY_DIR}/lib/Target/AMDGPU")
+  # The decoder and raiser OBJECT libraries carry the AMDGPU MC/CodeGen/AsmParser
+  # LLVM components (needed for the LLVMInitializeAMDGPU* registration in
+  # standalone-init.cpp) as PUBLIC usage requirements, so linking them is enough.
   target_link_libraries(hotswap_transpile_cli
-    PRIVATE hotswap::common hotswap::loader comgr-object-utils ${LLVM_LIBS})
+    PRIVATE hotswap::common hotswap::loader hotswap::decoder hotswap::raiser
+            comgr-object-utils)
   if(NOT WIN32)
     target_link_options(hotswap_transpile_cli PRIVATE -Wl,--gc-sections)
   endif()

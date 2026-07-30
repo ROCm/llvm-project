@@ -133,13 +133,21 @@ comgr_configure_test_target(RaiseContextTests)
 add_executable(KernargAbiLayoutTests
   KernargAbiLayoutTest.cpp)
 
+# The raiser OBJECT library references the shared comgr metadata/symbol helpers
+# (parseTargetIdentifier and friends) in comgr-object-utils and the loader's
+# code-object utilities; link the same set as RaiserScaffoldingTests and let
+# --gc-sections drop what these layout tests never reach.
 target_link_libraries(KernargAbiLayoutTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
   hotswap::decoder
+  hotswap::loader
   hotswap::common
-  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
+  comgr-object-utils
   ${LLVM_PTHREAD_LIB})
+if(NOT WIN32)
+  target_link_options(KernargAbiLayoutTests PRIVATE -Wl,--gc-sections)
+endif()
 
 target_include_directories(KernargAbiLayoutTests PRIVATE
   ${LLVM_INCLUDE_DIRS}
