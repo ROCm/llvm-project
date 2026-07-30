@@ -500,6 +500,7 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
     MCInst Inst;
     uint32_t Size;
     std::string Mnemonic;
+    bool DecodeSucceeded;
   };
   StringMap<DecodeCacheEntry> LocalCache;
   while (Pos < TextSize) {
@@ -515,8 +516,7 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       DI.Size = It->second.Size;
       DI.Inst = It->second.Inst;
       DI.Mnemonic = It->second.Mnemonic;
-      // Only successful decodes are stored, so a hit is always a success.
-      DI.DecodeSucceeded = true;
+      DI.DecodeSucceeded = It->second.DecodeSucceeded;
       Pos += DI.Size;
       Decoded.emplace_back(std::move(DI));
       continue;
@@ -531,14 +531,20 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
       DI.Size = MinInstSize;
       DI.Mnemonic = UnknownMnemonic.str();
     } else {
-      DI.DecodeSucceeded = true;
       DI.Size = static_cast<uint32_t>(InstSize);
-      // MCInstPrinter::getMnemonic returns a pointer into the generated AsmStrs
-      // table. Storage is process-lifetime static; the trailing whitespace
-      // baked into AsmStrs must be trimmed. If the printer cannot provide an
-      // assembly mnemonic, leave the instruction unmatchable instead of falling
-      // back to TableGen opcode names.
-      if (S.MCIP) {
+      // SoftFail recovers the instruction width but diagnoses an encoding that
+      // may be undefined. Keep the stream synchronized while leaving the entry
+      // unmatchable and not proof-safe for every DecodeSucceeded-guarded
+      // analysis.
+      DI.DecodeSucceeded = Status == MCDisassembler::Success;
+      if (!DI.DecodeSucceeded) {
+        DI.Mnemonic = UnknownMnemonic.str();
+      } else if (S.MCIP) {
+        // MCInstPrinter::getMnemonic returns a pointer into the generated
+        // AsmStrs table. Storage is process-lifetime static; the trailing
+        // whitespace baked into AsmStrs must be trimmed. If the printer cannot
+        // provide an assembly mnemonic, leave the instruction unmatchable
+        // instead of falling back to TableGen opcode names.
         std::pair<const char *, uint64_t> Mnem = S.MCIP->getMnemonic(DI.Inst);
         DI.Mnemonic = Mnem.first ? StringRef(Mnem.first).rtrim().str()
                                  : UnknownMnemonic.str();
@@ -546,11 +552,13 @@ bool decodeTextSection(const uint8_t *Text, uint64_t TextSize,
         DI.Mnemonic = UnknownMnemonic.str();
       }
     }
-    // Cache only successful decodes whose key window covers the instruction
-    // (Size <= KeyN); a shorter key could alias a different decode.
+    // Cache non-failing decodes whose key window covers the instruction
+    // (Size <= KeyN), including the proof-safety result. A shorter key could
+    // alias a different decode.
     if (Status != MCDisassembler::Fail && DI.Size <= KeyN)
-      LocalCache.try_emplace(Key,
-                             DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic});
+      LocalCache.try_emplace(
+          Key,
+          DecodeCacheEntry{DI.Inst, DI.Size, DI.Mnemonic, DI.DecodeSucceeded});
     Pos += DI.Size;
     Decoded.emplace_back(std::move(DI));
   }

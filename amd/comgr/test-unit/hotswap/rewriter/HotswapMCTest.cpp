@@ -4967,6 +4967,44 @@ TEST(AssembleDecode, SNopRoundTrip) {
   EXPECT_EQ(Decoded[0].Mnemonic, "s_nop");
 }
 
+TEST(AssembleDecode, SoftFailIsNotProofSafe) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::SmallVector<uint8_t> Bytes =
+      assembleSingleInst("v_cmpx_eq_f64_e64 v[2:3], v[2:3]", S);
+  ASSERT_EQ(Bytes.size(), 2 * MinInstSize);
+
+  // VOP3 compare-x requires EXEC_LO in its encoded destination field. Keep the
+  // instruction otherwise decodable but name a different destination, which
+  // the AMDGPU disassembler diagnoses as SoftFail.
+  Bytes[0] ^= 1;
+  llvm::MCInst Inst;
+  uint64_t InstSize = 0;
+  llvm::MCDisassembler::DecodeStatus Status = S.MCD->getInstruction(
+      Inst, InstSize, Bytes, /*Address=*/0, llvm::nulls());
+  ASSERT_EQ(Status, llvm::MCDisassembler::SoftFail);
+  ASSERT_EQ(InstSize, Bytes.size());
+
+  llvm::SmallVector<uint8_t> Text;
+  Text.append(Bytes);
+  Text.append(Bytes);
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Text.data(), Text.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 2u);
+  for (size_t I = 0; I != Decoded.size(); ++I) {
+    EXPECT_FALSE(Decoded[I].DecodeSucceeded);
+    EXPECT_EQ(Decoded[I].Offset, I * InstSize);
+    EXPECT_EQ(Decoded[I].Size, InstSize);
+    EXPECT_EQ(Decoded[I].Mnemonic, "<unknown>");
+  }
+
+  // Scratch-register proofs consume DecodeSucceeded as their trust boundary.
+  // Undefined operands must therefore retain every incoming register value.
+  ASSERT_TRUE(S.VCCRegister.isValid());
+  EXPECT_TRUE(replacementNeedsIncomingRegister(Bytes, S, S.VCCRegister));
+}
+
 TEST(RegisterLiveness, TiedAccumulatorDefCountsAsIncomingRead) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
