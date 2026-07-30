@@ -28,12 +28,12 @@ class RaiseContext {
 public:
   // Build the context for the source kernel described by Meta. B must be
   // positioned in the entry block: the register file and the cross-block
-  // shadow storage are allocated there. Fails when the kernel descriptor and
+  // shadow storage are allocated there, and that block is what
+  // `KernelStartOffset` resolves to. Fails when the kernel descriptor and
   // the metadata disagree on the user-SGPR layout.
   static llvm::Expected<RaiseContext>
   create(llvm::IRBuilder<> &B, const WaveProjection &Projection,
          const MCState &MC, const KernelMeta &Meta,
-         llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb,
          llvm::ArrayRef<uint8_t> SourceTextBytes,
          uint64_t SourceTextBaseAddress,
          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
@@ -91,7 +91,6 @@ public:
 private:
   RaiseContext(llvm::IRBuilder<> &B, const WaveProjection &Projection,
                const MCState &MC, RegisterState Registers,
-               llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb,
                llvm::ArrayRef<uint8_t> SourceTextBytes,
                uint64_t SourceTextBaseAddress,
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,

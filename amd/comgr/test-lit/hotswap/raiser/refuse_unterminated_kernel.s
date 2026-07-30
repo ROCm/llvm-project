@@ -2,23 +2,26 @@
 
 ; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -filetype=obj -mcpu=gfx942 %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; A mode's value selects kernels by name; an absent name is reported rather
-; than silently producing no output.
-; RUN: not %hotswap_transpile_cli %t.hsaco --dump-meta=nope 2>&1 \
+
+; Execution running off the end of a kernel extent means the code is truncated
+; or the extent is misbounded. Returning there would hand back a kernel that
+; reads as having run to completion, so the raise refuses instead.
+; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=trunc_kernel 2>&1 \
 ; RUN:   | %FileCheck %s
-; CHECK: kernel 'nope' not found in
+; CHECK: unterminated-kernel-extent in kernel 'trunc_kernel'
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6
 	.text
-	.globl	meta_kernel
+	.globl	trunc_kernel
 	.p2align	8
-	.type	meta_kernel,@function
-meta_kernel:
-	s_endpgm
+	.type	trunc_kernel,@function
+trunc_kernel:
+	s_mov_b32 s0, 0
+
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
-	.amdhsa_kernel meta_kernel
+	.amdhsa_kernel trunc_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
@@ -33,11 +36,11 @@ amdhsa.kernels:
     .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 256
-    .name:           meta_kernel
+    .max_flat_workgroup_size: 1024
+    .name:           trunc_kernel
     .private_segment_fixed_size: 0
     .sgpr_count:     1
-    .symbol:         meta_kernel.kd
+    .symbol:         trunc_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 64
 amdhsa.version: [1, 2]
