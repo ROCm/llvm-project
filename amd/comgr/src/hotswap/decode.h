@@ -67,8 +67,7 @@ decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
 // Compute the decoded CFG successors for a block ending in LastInst.
 // NextBlockOffset is the linear fallthrough block start, or std::nullopt when
 // no decoded linear fallthrough block exists. The model is intentionally
-// conservative and matches the successor model used by setpc analysis and the
-// raiser's provenance prepasses.
+// conservative and is the shared successor model for block-level analyses.
 llvm::Expected<llvm::SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
                               std::optional<uint64_t> NextBlockOffset);

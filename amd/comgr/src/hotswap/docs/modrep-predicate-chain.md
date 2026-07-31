@@ -774,12 +774,12 @@ Concretely for wave32 -> wave64 (factor 2):
   ```
 
   so hardware lane `W_s + i` sees the same logical thread as lane `i`.
-- The raiser halves the in-kernel workgroup/grid-size query along x
-  (`source-hidden-args.cpp`), so loops and reduction bounds still observe the
-  source block size. All derived hidden args (`block_count = grid/group`,
-  `remainder = grid%group`) stay correct because each halved read reproduces the
-  exact source size, so anything computed from them is computed from source
-  values.
+- The in-kernel workgroup/grid-size query along x observes the *source* block
+  size, so loops and reduction bounds are unaffected. The raiser does nothing to
+  achieve that: `hidden_group_size_x`, `hidden_block_count_x` and
+  `hidden_remainder_x` come from the kernarg buffer, which ROCclr fills from the
+  application's requested geometry before the packet is scaled
+  (`abi-translation.md` sec. 3.3).
 
 **Always x, not the predicate's dimension.** The kernel that surfaced this is
 PyTorch `reduce_kernel<512,1>` launched `(32,16,1)`: `blockDim.x = 32 = W_s`, and
@@ -851,7 +851,8 @@ fast path; WaveNative stays the opt-in fast path for kernels it can represent.
   on the transpile result. Ineligible kernels (matrix, or scaled size > hardware
   max) keep the refusal. `--force-scaled-modrep` selects it unconditionally for
   offline testing of kernels that do not hit the refusal.
-- `source-hidden-args.cpp`: halves the workgroup/grid-size-x reads.
+- Hidden-argument reads: nothing to do. The kernarg buffer already holds the
+  un-scaled source geometry (see above).
 - Per-kernel runtime signal: the scaled factor is threaded raiser ->
   `RaiseResult` -> `PipelineResult` -> comgr transpile result
   (`amd_comgr_hotswap_transpile_result_get_info`, `..._SCALED_DISPATCH_FACTOR`)
@@ -874,4 +875,5 @@ fast path; WaveNative stays the opt-in fast path for kernels it can represent.
   and no `init_whole_wave`); `scaled_modrep_too_large_refuse.s` (default and
   `--force` both refuse an ineligible >512 block via the size gate);
   `scaled_modrep_wmma_refuse.s` (matrix refusal);
-  `scaled_modrep_wgsize_virtualize.s` (x workgroup-size halving).
+  `hidden_arg_scaled_dispatch_unscaled.s` (the x workgroup-size read is
+  served un-scaled from the kernarg buffer, with no virtualization).

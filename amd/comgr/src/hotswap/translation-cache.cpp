@@ -256,8 +256,6 @@ llvm::Expected<KeyData> buildKeyData(const TranslationCacheRequest &request,
                  request.EnableWritelaneRewrite);
   appendKeyField(material, "enable_wave_native", request.EnableWaveNative);
   appendKeyField(material, "force_scaled_modrep", request.ForceScaledModrep);
-  appendKeyField(material, "assume_hip_global_offset_zero",
-                 request.AssumeHipGlobalOffsetZero);
   if (!request.KernelName.empty())
     appendKeyField(material, "kernel_name", request.KernelName);
   appendKeyField(material, "hotswap_build_identity", data.buildIdentity);
@@ -445,7 +443,6 @@ llvm::json::Object metadataObject(const TranslationCacheRequest &request,
       {"enable_writelane_rewrite", request.EnableWritelaneRewrite},
       {"enable_wave_native", request.EnableWaveNative},
       {"force_scaled_modrep", request.ForceScaledModrep},
-      {"assume_hip_global_offset_zero", request.AssumeHipGlobalOffsetZero},
       {"hotswap_build_identity", keyData.buildIdentity},
       {"device_libraries_identity", keyData.deviceLibrariesIdentity},
       {"kernel_count", static_cast<int64_t>(keyData.kernelNames.size())},
@@ -520,9 +517,6 @@ llvm::Error validateMetadata(const TranslationCacheRequest &request,
     return e;
   if (llvm::Error e = requireEqualBool(obj, "force_scaled_modrep",
                                        request.ForceScaledModrep))
-    return e;
-  if (llvm::Error e = requireEqualBool(obj, "assume_hip_global_offset_zero",
-                                       request.AssumeHipGlobalOffsetZero))
     return e;
   if (llvm::Error e = requireEqualString(obj, "hotswap_build_identity",
                                          keyData.buildIdentity))

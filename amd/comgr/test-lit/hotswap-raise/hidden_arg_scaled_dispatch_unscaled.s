@@ -1,18 +1,21 @@
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --force-scaled-modrep \
-; RUN:     --emit-ir=scaled_modrep_wgsize_virtualize_kernel 2>&1 \
+; RUN:     --emit-ir=hidden_arg_scaled_dispatch_kernel 2>&1 \
 ; RUN:   | %FileCheck %s
 
-; The in-kernel hidden_group_size_x read is halved by the scale factor.
+; Under a scaled dispatch the group-size read stays un-scaled: it comes
+; from the kernarg buffer, which holds the source geometry.
+; CHECK-LABEL: define amdgpu_kernel void @hidden_arg_scaled_dispatch_kernel(
+; CHECK-NOT: _dd_virt
+; CHECK-NOT: call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
+; CHECK-NOT: call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
-	.globl	scaled_modrep_wgsize_virtualize_kernel
-	.type	scaled_modrep_wgsize_virtualize_kernel,@function
-; CHECK: define amdgpu_kernel void @scaled_modrep_wgsize_virtualize_kernel(
-scaled_modrep_wgsize_virtualize_kernel:
+	.globl	hidden_arg_scaled_dispatch_kernel
+	.type	hidden_arg_scaled_dispatch_kernel,@function
+hidden_arg_scaled_dispatch_kernel:
 	s_load_b64 s[2:3], s[0:1], 0x0
-; CHECK: %source_hidden_wg_size_0{{.*}} = lshr i32 {{.+}}, 1
 	s_load_b32 s5, s[0:1], 0x8
 	v_bfe_u32 v2, v0, 10, 10
 	s_wait_kmcnt 0x0
@@ -24,7 +27,7 @@ scaled_modrep_wgsize_virtualize_kernel:
 	s_endpgm
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
-	.amdhsa_kernel scaled_modrep_wgsize_virtualize_kernel
+	.amdhsa_kernel hidden_arg_scaled_dispatch_kernel
 		.amdhsa_kernarg_size 12
 		.amdhsa_user_sgpr_count 2
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
@@ -50,10 +53,10 @@ amdhsa.kernels:
     .kernarg_segment_align:    8
     .kernarg_segment_size:     12
     .max_flat_workgroup_size:  512
-    .name:                     scaled_modrep_wgsize_virtualize_kernel
+    .name:                     hidden_arg_scaled_dispatch_kernel
     .private_segment_fixed_size: 0
     .sgpr_count:     6
-    .symbol:         scaled_modrep_wgsize_virtualize_kernel.kd
+    .symbol:         hidden_arg_scaled_dispatch_kernel.kd
     .vgpr_count:     6
     .wavefront_size: 32
 amdhsa.target: amdgcn-amd-amdhsa--gfx1250

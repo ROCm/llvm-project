@@ -113,6 +113,10 @@ static void print_result_if_present(amd_comgr_hotswap_transpile_result_t Result)
       Result, AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_LIFTED_COUNT, &Lifted));
   amd_comgr_(hotswap_transpile_result_get_info(
       Result, AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_TOTAL_COUNT, &Total));
+  int64_t ScaledFactor = 1;
+  amd_comgr_(hotswap_transpile_result_get_info(
+      Result, AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_SCALED_DISPATCH_FACTOR,
+      &ScaledFactor));
 
   printf("RESULT_INFO: success=%d cache_hit=%d cache_lookup=%s cache_write=%s "
          "source_gfx=",
@@ -126,8 +130,11 @@ static void print_result_if_present(amd_comgr_hotswap_transpile_result_t Result)
   printf(" kernel_name=");
   with_result_string(Result, AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_KERNEL_NAME,
                      print_result_string, stdout);
-  printf(" lifted=%lld total=%lld cache_key=", (long long)Lifted,
-         (long long)Total);
+  printf(" lifted=%lld total=%lld scaled_dispatch_factor=%lld fail_reason=",
+         (long long)Lifted, (long long)Total, (long long)ScaledFactor);
+  with_result_string(Result, AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_FAIL_REASON,
+                     print_result_string, stdout);
+  printf(" cache_key=");
   with_result_string(Result, AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_CACHE_KEY,
                      print_result_string, stdout);
   printf("\n");
@@ -157,7 +164,7 @@ int main(int argc, char *argv[]) {
 
   if (argc < 4)
     fail("usage: hotswap-transpile <elf_file> <source_isa> <target_isa> "
-         "[--zero-size|--wrong-kind|--use-options-api|"
+         "[--zero-size|--wrong-kind|--use-options-api|--use-plain-api|"
          "--test-bad-options-version|--test-null-kernel-name-option|"
          "--test-empty-kernel-name-option|--test-invalid-opt-level] "
          "[--output=<path>] [-O0|-O1|-O2|-O3]");
@@ -180,11 +187,15 @@ int main(int argc, char *argv[]) {
   static const char ZeroSizeOpt[] = "--zero-size";
   static const char WrongKindOpt[] = "--wrong-kind";
   static const char UseOptionsApiOpt[] = "--use-options-api";
+  // The plain entry point takes no result object, so it is the only way to
+  // reach the "caller cannot discover a scaled dispatch" refusal.
+  static const char UsePlainApiOpt[] = "--use-plain-api";
   static const char BadOptionsVersionOpt[] = "--test-bad-options-version";
   static const char TestNullKernelNameOpt[] = "--test-null-kernel-name-option";
   static const char TestEmptyKernelNameOpt[] = "--test-empty-kernel-name-option";
   static const char TestInvalidOptLevelOpt[] = "--test-invalid-opt-level";
   static const char OutputPrefix[] = "--output=";
+  int UsePlainApi = 0;
   for (int i = 4; i < argc; i++) {
     int ParsedOptLevel = parse_opt_level_arg(argv[i]);
     if (strncmp(argv[i], ZeroSizeOpt, sizeof(ZeroSizeOpt)) == 0)
@@ -193,6 +204,8 @@ int main(int argc, char *argv[]) {
       WrongKind = 1;
     else if (strncmp(argv[i], UseOptionsApiOpt, sizeof(UseOptionsApiOpt)) == 0)
       UseOptionsApi = 1;
+    else if (strncmp(argv[i], UsePlainApiOpt, sizeof(UsePlainApiOpt)) == 0)
+      UsePlainApi = 1;
     else if (strncmp(argv[i], BadOptionsVersionOpt,
                      sizeof(BadOptionsVersionOpt)) == 0)
       BadOptionsVersion = 1;
@@ -265,7 +278,10 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_t OutputData = {0};
   amd_comgr_hotswap_transpile_result_t ResultData = {0};
   amd_comgr_status_t Status;
-  if (UseOptionsApi) {
+  if (UsePlainApi) {
+    Status = amd_comgr_hotswap_transpile(InputData, SourceISA, TargetISA,
+                                         &OutputData);
+  } else if (UseOptionsApi) {
     amd_comgr_hotswap_transpile_options_t Options;
     memset(&Options, 0, sizeof(Options));
     Options.size = sizeof(Options);

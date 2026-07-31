@@ -809,9 +809,9 @@ Expected<uint64_t> computeSoppBranchTarget(uint64_t Off, int64_t RawImm) {
 //
 // `decodeKernel` records all direct branch targets and conditional fallthroughs
 // as block starts, but later passes still need to know which recovered blocks
-// flow into which other blocks.  Keep that edge model here so setpc analysis
-// and the raiser's kernarg provenance prepass agree on ordinary SOPP control
-// flow.  SETPC/SWAPPC are intentionally not fully resolved here: their targets
+// flow into which other blocks.  Keep that edge model here so block-level
+// analyses share one notion of an edge.  SETPC/SWAPPC are intentionally not
+// fully resolved here: their targets
 // are recovered by setpc-analysis after decode, so callers that need those
 // edges must consult the SetPcAnalysis table after this helper returns the
 // local decoded model.

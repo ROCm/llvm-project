@@ -33,15 +33,13 @@ namespace COMGR::hotswap {
 RaiseContext::RaiseContext(
     LLVMContext &C, Module &M, IRBuilder<> &B, AllocaRegFile &Regs,
     const WaveProjection &Projection, const MCState &Mc, const ISAProfile &Isa,
-    ISAProfile TargetIsa, unsigned TargetCodeObjectVersion,
-    KernargLayout &Kernargs, const UserSgprLayout *Layout, Function *Kernel,
+    ISAProfile TargetIsa, const UserSgprLayout *Layout, Function *Kernel,
     BasicBlock *ThreadLoopLatch, DenseMap<uint64_t, BasicBlock *> &OffsetToBb,
     ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset)
     : C(C), M(M), B(B), Regs(Regs), Projection(Projection), Mc(Mc), Isa(Isa),
-      TargetIsa(TargetIsa), TargetCodeObjectVersion(TargetCodeObjectVersion),
-      Kernargs(Kernargs), Layout(Layout), Kernel(Kernel),
+      TargetIsa(TargetIsa), Layout(Layout), Kernel(Kernel),
       ThreadLoopLatch(ThreadLoopLatch), OffsetToBb(OffsetToBb),
       SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
@@ -733,23 +731,16 @@ void RaiseContext::emitUnderExec(llvm::function_ref<void()> Body) {
   Function *F = PreBb->getParent();
   BasicBlock *DoBb = BasicBlock::Create(C, "spe_do", F);
   BasicBlock *SkipBb = BasicBlock::Create(C, "spe_skip", F);
-  KernargPtrProvenance PreProvenance = CurrentKernargPtrProvenance;
   B.CreateCondBr(Active, DoBb, SkipBb);
 
   B.SetInsertPoint(DoBb);
   Body();
-  KernargPtrProvenance DoProvenance = CurrentKernargPtrProvenance;
   // `body()` normally falls through without terminating. If a handler ever
   // ends its emission with an unconditional control-flow op (shouldn't
   // happen for the side-effectful ops we wrap, but defensively handled),
   // don't double-terminate doBB.
-  if (!B.GetInsertBlock()->hasTerminator()) {
+  if (!B.GetInsertBlock()->hasTerminator())
     B.CreateBr(SkipBb);
-    CurrentKernargPtrProvenance =
-        joinKernargPtrProvenance(PreProvenance, DoProvenance);
-  } else {
-    CurrentKernargPtrProvenance = PreProvenance;
-  }
 
   B.SetInsertPoint(SkipBb);
 }

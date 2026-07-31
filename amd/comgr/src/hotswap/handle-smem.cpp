@@ -7,8 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "handlers.h"
-#include "pipeline.h" // isStrictMode()
-#include "source-hidden-args.h"
 #include "source-image-address.h"
 
 #include "Utils/AMDGPUBaseInfo.h"
@@ -318,114 +316,10 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
     unsigned OffIdx = Op.srcIdx(1);
     bool ImmOffset = Di.isImm(OffIdx);
     int64_t ByteOffset = ImmOffset ? Op.srcImm(1) : 0;
-    bool BaseIsKernargPair = Ctx.isEntryKernargSegmentPtrSgpr(Base);
-    RaiseContext::KernargPtrProvenance BaseProvenance =
-        Ctx.getKernargPtrProvenance();
-    bool BaseIsKnownNonEntry = BaseProvenance.isNonEntry();
-    bool BaseIsLiveEntry = BaseProvenance.isLiveEntry();
-    int64_t SourceByteOffset = ByteOffset;
-    if (BaseIsLiveEntry)
-      SourceByteOffset += BaseProvenance.EntryByteOffset;
-
-    // Implicit-args reroute. A source kernel reading through the entry kernarg
-    // pointer plus a constant byte offset at or beyond `implicitArgsBase` is
-    // reading hidden args through the source ABI's flat metadata view. The
-    // effective source offset is the proven Entry+Const provenance offset plus
-    // this SMEM instruction's immediate.
+    // A hidden-argument read needs no translation: the runtime populated this
+    // buffer at the source byte offsets, so it is an ordinary load. See
+    // `hotswap/docs/abi-translation.md` sec. 3.3.
     //
-    // Strict mode requires source hidden-arg synthesis for offsets in this
-    // range. Permissive mode uses ROCm's matching gfx9-12 hidden-arg layout.
-    //
-    // Gating: the physical SGPR pair must be the source-ABI kernarg pair, and
-    // CFG provenance must prove either Entry+Const (source hidden-arg
-    // synthesis/remap) or NonEntry (ordinary memory). Unknown remains a strict
-    // refusal because source offsets might otherwise be applied to the target
-    // hidden block.
-    bool IsSourceImplicitArgOffset =
-        BaseIsKernargPair && !BaseIsKnownNonEntry && ImmOffset &&
-        Ctx.Kernargs.ImplicitArgsBase > 0 &&
-        SourceByteOffset >= Ctx.Kernargs.ImplicitArgsBase;
-    bool IsEntryImplicitArgLoad = IsSourceImplicitArgOffset && BaseIsLiveEntry;
-    if (IsSourceImplicitArgOffset && !IsEntryImplicitArgLoad &&
-        isStrictMode()) {
-      return RaiseFailure::strictUnsafeLowering(
-          Di, "implicitarg.ptr",
-          "cross-arch implicitarg.ptr lowering is unresolved: source "
-          "implicit-arg offsets may be applied to the target runtime "
-          "hidden-arg block on some CFG paths");
-    }
-    if (BaseIsKernargPair && !BaseIsKnownNonEntry && !ImmOffset &&
-        Ctx.Kernargs.ImplicitArgsBase > 0 && isStrictMode()) {
-      return RaiseFailure::strictUnsafeLowering(
-          Di, "implicitarg.ptr",
-          "cross-arch implicitarg.ptr lowering is unresolved: dynamic source "
-          "kernarg offsets may reach the source implicit-arg range");
-    }
-    if (IsEntryImplicitArgLoad) {
-      SourceHiddenArgContext HiddenCtx{Ctx.C,
-                                       Ctx.M,
-                                       Ctx.B,
-                                       Ctx.I8Ty,
-                                       Ctx.I32Ty,
-                                       Ctx.I64Ty,
-                                       Ctx.Kernargs.Args,
-                                       Ctx.AssumeHipGlobalOffsetZero,
-                                       Ctx.TargetCodeObjectVersion};
-      populateScaledDispatch(HiddenCtx, Ctx.Projection);
-      SourceHiddenArgValue HiddenBase =
-          emitSourceHiddenDword(HiddenCtx, SourceByteOffset);
-      if (!HiddenBase.Matched) {
-        if (isStrictMode()) {
-          return RaiseFailure::strictUnsafeLowering(
-              Di, "implicitarg.ptr",
-              "cross-arch implicitarg.ptr lowering is unresolved: source "
-              "implicit-arg offsets are being applied to the target runtime "
-              "hidden-arg block");
-        }
-        Function *FnImplicitArgPtr = Intrinsic::getOrInsertDeclaration(
-            &Ctx.M, Intrinsic::amdgcn_implicitarg_ptr);
-        Value *ImplPtr =
-            Ctx.B.CreateCall(FnImplicitArgPtr, {}, "implicitarg_ptr");
-        int64_t ImplOffset = SourceByteOffset - Ctx.Kernargs.ImplicitArgsBase;
-        Value *Gep = (ImplOffset == 0)
-                         ? ImplPtr
-                         : Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, ImplPtr,
-                                                   Ctx.B.getInt64(ImplOffset),
-                                                   "impl_gep");
-        for (int D = 0; D < LoadDwords; D++) {
-          Value *Ep = (D == 0) ? Gep
-                               : Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Gep,
-                                                         Ctx.B.getInt64(D * 4));
-          Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + D,
-                               Ctx.B.CreateLoad(Ctx.I32Ty, Ep, "impl_load"));
-        }
-        Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx, LoadDwords);
-        Hr.Handled = true;
-        return Hr;
-      }
-      if (!HiddenBase.Value) {
-        return RaiseFailure::unsupportedSourceHiddenArg(
-            Di, "SMEM", HiddenBase.FailureDetail);
-      }
-      for (int D = 0; D < LoadDwords; D++) {
-        SourceHiddenArgValue Dw =
-            D == 0 ? HiddenBase
-                   : emitSourceHiddenDword(HiddenCtx, SourceByteOffset + D * 4);
-        if (!Dw.Matched) {
-          return RaiseFailure::unsupportedInstructionForm(
-              Di, "SMEM", "source hidden-arg SMEM load spans non-hidden bytes");
-        }
-        if (!Dw.Value) {
-          return RaiseFailure::unsupportedSourceHiddenArg(Di, "SMEM",
-                                                          Dw.FailureDetail);
-        }
-        Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + D, Dw.Value);
-      }
-      Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx, LoadDwords);
-      Hr.Handled = true;
-      return Hr;
-    }
-
     // Generic GEP+load against `addrspace(1)`. AMDGPU ISel selects the final
     // memory path from the pointer value's uniformity and provenance.
     {
@@ -466,7 +360,6 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
           Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + D,
                                ConstantInt::get(Ctx.I32Ty, *Dword));
         }
-        Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx, LoadDwords);
         Hr.Handled = true;
         return Hr;
       }
@@ -502,7 +395,6 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + D,
                              Ctx.B.CreateLoad(Ctx.I32Ty, Ep, "smem_load"));
       }
-      Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx, LoadDwords);
     }
     Hr.Handled = true;
     return Hr;
@@ -616,8 +508,6 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       }
       D += ChunkDwords;
     }
-    Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx,
-                                               static_cast<int>(LoadDwords));
     Hr.Handled = true;
     return Hr;
   }
@@ -661,73 +551,17 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
     ParsedReg Dest = Op.dst();
     ParsedReg Base = Op.srcReg(0);
 
-    bool BaseIsKernargPair = Ctx.isEntryKernargSegmentPtrSgpr(Base);
-    RaiseContext::KernargPtrProvenance BaseProvenance =
-        Ctx.getKernargPtrProvenance();
-    bool BaseIsKnownNonEntry = BaseProvenance.isNonEntry();
-    bool BaseIsLiveEntry = BaseProvenance.isLiveEntry();
     Value *BaseAddr = Ctx.Regs.loadSGPR64(Ctx.B, Base.BaseIdx);
     Value *Ptr = Ctx.B.CreateIntToPtr(BaseAddr, Ctx.PtrGlobalTy);
     unsigned OffIdx = Op.srcIdx(1);
     if (Di.isImm(OffIdx)) {
+      // Narrow reads of a source hidden field (`hidden_group_size_*` and
+      // `hidden_remainder_*` are 16-bit) are ordinary loads for the same
+      // reason as the dword family above.
       int64_t Off = Op.srcImm(1);
-      int64_t SourceByteOffset = Off;
-      if (BaseIsLiveEntry)
-        SourceByteOffset += BaseProvenance.EntryByteOffset;
-      bool IsSourceImplicitArgOffset =
-          BaseIsKernargPair && !BaseIsKnownNonEntry &&
-          Ctx.Kernargs.ImplicitArgsBase > 0 &&
-          SourceByteOffset >= Ctx.Kernargs.ImplicitArgsBase;
-      bool IsEntryImplicitArgLoad =
-          IsSourceImplicitArgOffset && BaseIsLiveEntry;
-      if (IsSourceImplicitArgOffset && !IsEntryImplicitArgLoad &&
-          isStrictMode()) {
-        return RaiseFailure::strictUnsafeLowering(
-            Di, "implicitarg.ptr",
-            "cross-arch implicitarg.ptr lowering is unresolved: source "
-            "implicit-arg offsets may be applied to the target runtime "
-            "hidden-arg block on some CFG paths");
-      }
-      if (IsEntryImplicitArgLoad) {
-        SourceHiddenArgContext HiddenCtx{Ctx.C,
-                                         Ctx.M,
-                                         Ctx.B,
-                                         Ctx.I8Ty,
-                                         Ctx.I32Ty,
-                                         Ctx.I64Ty,
-                                         Ctx.Kernargs.Args,
-                                         Ctx.AssumeHipGlobalOffsetZero,
-                                         Ctx.TargetCodeObjectVersion};
-        populateScaledDispatch(HiddenCtx, Ctx.Projection);
-        SourceHiddenArgValue Hidden = emitSourceHiddenInteger(
-            HiddenCtx, SourceByteOffset, IsHalfWord ? 2 : 1, IsSigned);
-        if (Hidden.Matched && Hidden.Value) {
-          Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx, Hidden.Value);
-          Hr.Handled = true;
-          return Hr;
-        }
-        if (Hidden.Matched) {
-          return RaiseFailure::unsupportedSourceHiddenArg(Di, "SMEM",
-                                                          Hidden.FailureDetail);
-        }
-        if (isStrictMode()) {
-          return RaiseFailure::strictUnsafeLowering(
-              Di, "implicitarg.ptr",
-              "cross-arch implicitarg.ptr lowering is unresolved: source "
-              "implicit-arg offsets are being applied to the target runtime "
-              "hidden-arg block");
-        }
-      }
       if (Off != 0)
         Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, Ctx.B.getInt64(Off));
     } else {
-      if ((BaseIsKernargPair && !BaseIsKnownNonEntry) &&
-          Ctx.Kernargs.ImplicitArgsBase > 0 && isStrictMode()) {
-        return RaiseFailure::strictUnsafeLowering(
-            Di, "implicitarg.ptr",
-            "cross-arch implicitarg.ptr lowering is unresolved: dynamic source "
-            "kernarg offsets may reach the source implicit-arg range");
-      }
       // Narrow SMEM element size for `scale_offset`: 1B for byte,
       // 2B for halfword. Same SCAL-scales-the-SGPR-offset rule as
       // the dword family above.
@@ -747,7 +581,6 @@ Expected<HandlerResult> handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Ext = IsSigned ? Ctx.B.CreateSExt(Narrow, Ctx.I32Ty, ExtName)
                           : Ctx.B.CreateZExt(Narrow, Ctx.I32Ty, ExtName);
     Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx, Ext);
-    Ctx.noteSgprMemoryLoadForKernargProvenance(Dest.BaseIdx, 1);
     Hr.Handled = true;
     return Hr;
   }

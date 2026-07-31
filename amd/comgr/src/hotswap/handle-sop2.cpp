@@ -582,28 +582,6 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   // dead `CanonicalOp::S_ADD_U64`; that enum entry is gone, see
   // opcode-map.cpp's S_ADD_U64 comment for the audit trail.
   if (Sop == CanonicalOp::S_ADD_NC_U64 || Sop == CanonicalOp::S_SUB_NC_U64) {
-    RaiseContext::KernargPtrProvenance PreKernargProvenance =
-        Ctx.getKernargPtrProvenance();
-    bool UpdatesEntryKernargOffset = false;
-    bool PreservesNonEntryKernarg = false;
-    int64_t NewEntryKernargOffset = 0;
-    auto IsKernargPair = [&](MCRegister Reg) {
-      return Ctx.isEntryKernargSegmentPtrSgpr(Ctx.parseReg(Reg));
-    };
-    KernargPtrConstRebase Rebase =
-        classifyKernargPtrConstRebase(Di, IsKernargPair);
-    if (Rebase.TouchesKernargPtr && (PreKernargProvenance.isLiveEntry() ||
-                                     PreKernargProvenance.isNonEntry())) {
-      if (Rebase.Delta) {
-        if (PreKernargProvenance.isLiveEntry()) {
-          UpdatesEntryKernargOffset = true;
-          NewEntryKernargOffset =
-              PreKernargProvenance.EntryByteOffset + *Rebase.Delta;
-        } else {
-          PreservesNonEntryKernarg = true;
-        }
-      }
-    }
     auto SrcSourceImageAddr = [&](unsigned I) -> std::optional<uint64_t> {
       if (!Op.isSrcReg(I))
         return std::nullopt;
@@ -647,10 +625,6 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     if (SourceImageResult) {
       Ctx.recordSourceImageSgprPairAddr(Dst.BaseIdx, *SourceImageResult);
     }
-    if (UpdatesEntryKernargOffset)
-      Ctx.setKernargPtrLiveEntryByteOffset(NewEntryKernargOffset);
-    else if (PreservesNonEntryKernarg)
-      Ctx.setKernargPtrNonEntry();
     Hr.Handled = true;
     return Hr;
   }

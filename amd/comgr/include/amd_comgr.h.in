@@ -2785,6 +2785,15 @@ amd_comgr_map_elf_virtual_address_to_code_object_offset(
  * @{
  *
  * APIs for load-time GPU ISA binary rewriting and transpilation.
+ *
+ * @par Dispatch contract
+ *
+ * The transpiled kernel must be dispatched in place of the source kernel: the
+ * AQL packet's @c kernel_object is replaced, everything else -- above all
+ * @c kernarg_address -- still describes the source dispatch. The kernel reads
+ * the source kernel's hidden arguments straight out of that buffer, and the
+ * returned object's own metadata does not declare them, so a kernarg buffer
+ * built from it would leave those bytes unpopulated.
  */
 
 /**
@@ -2875,6 +2884,12 @@ amd_comgr_hotswap_rewrite(
  *   NULL or malformed.
  * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES Unable to allocate
  *   the output data object.
+ *
+ * @note The result is dispatched in place of the source kernel; see the
+ * \ref hotswap dispatch contract. This entry point reports no transpile
+ * metadata, so it cannot return a scaled-dispatch factor: a translation that
+ * requires one fails with @c AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT, so use
+ * @c amd_comgr_hotswap_transpile_with_options_v2 for those kernels.
  */
 amd_comgr_status_t AMD_COMGR_API
 amd_comgr_hotswap_transpile(
@@ -2901,10 +2916,9 @@ typedef enum amd_comgr_hotswap_transpile_option_flags_s {
    */
   AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_STRICT = 1u << 2,
   /**
-   * Assume HIP launch semantics for hidden_global_offset_{x,y,z}. HIP launch
-   * APIs do not expose a non-zero HSA grid-global offset, so those source ABI
-   * fields may be synthesized as zero. Leave unset for generic HSA/OpenCL code
-   * objects so unsupported global-offset uses refuse instead of being guessed.
+   * No effect; retained for source compatibility. Hidden arguments are read
+   * from the kernarg buffer rather than synthesized, so hidden_global_offset
+   * needs no assumption.
    */
   AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_ASSUME_HIP_GLOBAL_OFFSET_ZERO = 1u << 3,
 } amd_comgr_hotswap_transpile_option_flags_t;
@@ -2956,10 +2970,9 @@ typedef enum amd_comgr_hotswap_transpile_options_v2_flags_s {
    */
   AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_STRICT = 1u << 2,
   /**
-   * Assume HIP launch semantics for hidden_global_offset_{x,y,z}. HIP launch
-   * APIs do not expose a non-zero HSA grid-global offset, so those source ABI
-   * fields may be synthesized as zero. Leave unset for generic HSA/OpenCL code
-   * objects so unsupported global-offset uses refuse instead of being guessed.
+   * No effect; retained for source compatibility. Hidden arguments are read
+   * from the kernarg buffer rather than synthesized, so hidden_global_offset
+   * needs no assumption.
    */
   AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_ASSUME_HIP_GLOBAL_OFFSET_ZERO =
       1u << 3,
@@ -3045,7 +3058,13 @@ typedef enum amd_comgr_hotswap_transpile_result_info_s {
      ScaledModuloReplicationProjection (W_t/W_s, e.g. 2); 1 when no scaling is
      required. The scaled dimension is always x -- the wave-carrying dimension --
      so the runtime does not need to be told which one. See
-     modrep-predicate-chain.md sec. 10. */
+     modrep-predicate-chain.md sec. 10.
+
+     Per kernel. A request that cannot receive this factor -- one that passes
+     no @p result, or that does not name a single kernel -- fails with
+     @c AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT when the translation needs
+     scaling, rather than returning an artifact whose precondition the caller
+     cannot see. */
   AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_SCALED_DISPATCH_FACTOR = 0x6, /* int64_t */
 } amd_comgr_hotswap_transpile_result_info_t;
 
@@ -3092,6 +3111,13 @@ typedef enum amd_comgr_hotswap_transpile_result_string_s {
  *
  * See @c amd_comgr_hotswap_transpile_with_options_v2 for the common
  * ownership, result, and status contract.
+ *
+ * @note The result is dispatched in place of the source kernel; see the
+ * \ref hotswap dispatch contract. If the translation requires a scaled
+ * dispatch, @p result must be non-null and the request must name a single
+ * kernel, so that
+ * @c AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_SCALED_DISPATCH_FACTOR can be reported;
+ * otherwise @c AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT is returned.
  */
 amd_comgr_status_t AMD_COMGR_API
 amd_comgr_hotswap_transpile_with_options(
@@ -3141,6 +3167,13 @@ amd_comgr_hotswap_transpile_with_options(
  *   version or invalid field.
  * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES Unable to allocate a
  *   returned data object.
+ *
+ * @note The result is dispatched in place of the source kernel; see the
+ * \ref hotswap dispatch contract. If the translation requires a scaled
+ * dispatch, @p result must be non-null and the request must name a single
+ * kernel, so that
+ * @c AMD_COMGR_HOTSWAP_TRANSPILE_RESULT_SCALED_DISPATCH_FACTOR can be reported;
+ * otherwise @c AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT is returned.
  */
 amd_comgr_status_t AMD_COMGR_API
 amd_comgr_hotswap_transpile_with_options_v2(

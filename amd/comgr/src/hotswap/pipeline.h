@@ -30,10 +30,6 @@ struct PipelineOptions {
   bool CollectTimings = false;
   // Optimization level (0-3) for the in-process opt + llc codegen stages.
   unsigned OptLevel = 0;
-  // HIP launches handled by COMGR's HotSwap runtime have zero HSA grid-global
-  // offset, so hidden_global_offset_{x,y,z} can be synthesized as zero.
-  // Standalone callers keep this false and reject those source hidden args.
-  bool AssumeHipGlobalOffsetZero = false;
   // Force ScaledModuloReplicationProjection for wave32->wave64 cross-widening.
   // Production never sets this -- the raiser auto-selects the projection on the
   // relevant C5 refusal. It exists so lit tests can exercise the projection
@@ -119,20 +115,14 @@ PipelineResult runPipelineAllKernels(llvm::MemoryBufferRef CodeObjectData,
 /// Process-global "strict mode" toggle, controlled by the
 /// `HSA_HOTSWAP_STRICT` environment variable. When set to a non-empty
 /// value the hotswap transpiler promotes known silent-miscompile sites
-/// to honest refusals instead of warning-and-continue. Today this
-/// covers two sites flagged by the corpus runner's `INTEGRATION_GAP.md`
-/// investigation:
+/// to honest refusals instead of warning-and-continue. Today this covers one
+/// site:
 ///
 ///   * `s_setreg_imm32_b32 mode, imm` writes to the MODE register
 ///     (handle-sopk.cpp): silently dropped in non-strict mode but the
 ///     kernel may rely on the FP rounding / denormal / IEEE / FTZ bits
 ///     being set.
-///   * Unsupported or unproved `llvm.amdgcn.implicitarg.ptr` lifts
-///     (handle-smem.cpp): strict mode refuses dynamic source implicit-arg
-///     offsets, unmatched source hidden-arg metadata, and hidden fields without
-///     explicit source-ABI synthesis or target-ABI identity mapping. Supported
-///     fields are materialized by `source-hidden-args.cpp`, not by applying
-///     source byte offsets to the target runtime's hidden-arg block.
+///
 ///
 /// Parsed once on first call (`std::getenv("HSA_HOTSWAP_STRICT")`); the
 /// callers (handler implementations) read the flag without round-tripping

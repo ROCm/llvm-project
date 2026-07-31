@@ -51,11 +51,6 @@ enum class RaiseFailureReason : uint16_t {
   // handle_mfma, handle_vopd) all use this category. `detail` carries
   // shape-specific context when available.
   UnsupportedInstructionForm,
-  // A source metadata hidden-argument byte was identified, but Hotswap has no
-  // explicit synthesis for that `.value_kind` yet. This is narrower than
-  // `UnsupportedInstructionForm`: the instruction and SMEM hidden-arg path are
-  // both recognized; only that source hidden argument kind is unsupported.
-  UnsupportedSourceHiddenArg,
   // Phase 1.5 gate: an EXEC-writing instruction whose CanonicalOp does not
   // have `routesExecThroughStoreExec` set in `canonical-op-attrs.cpp`.
   SPEUnsafeExecWriter,
@@ -63,6 +58,11 @@ enum class RaiseFailureReason : uint16_t {
   TargetMachineCreationFailed,
   // Phase 7: `verifyModule` rejected the emitted IR.
   IRVerificationFailed,
+  // Post-codegen: the kernarg segment the backend emitted for the lifted kernel
+  // does not match the source's, so the runtime's buffer does not describe what
+  // the kernel reads. See `checkLiftedKernargSegment` in code-object-utils.h.
+  // Failing to read the emitted metadata back at all is `InternalError`.
+  LiftedKernargSegmentMismatch,
   // Decoded control flow targets outside the selected kernel symbol extent, or
   // the raiser could not decode an in-extent target required by static CFG
   // recovery. The selected kernel boundary is part of the source object
@@ -104,9 +104,10 @@ enum class RaiseFailureReason : uint16_t {
   // A handler recognised the CanonicalOp and *would* have lifted it under the
   // existing warn-and-continue policy, but strict mode requires the
   // honest "unsupported, may silently miscompile" verdict instead.
-  // Today this covers MODE-register writes (`handle-sopk.cpp`) and
-  // `implicitarg.ptr` lifts (`handle-smem.cpp`); see
-  // the integration-gap investigation for the diagnosis behind each site.
+  // Today this covers MODE-register writes (`handle-sopk.cpp`); see the
+  // integration-gap investigation for the diagnosis. Hidden-argument reads are
+  // deliberately not a site: they are ordinary loads of bytes the target
+  // runtime populated, correct in both modes.
   StrictUnsafeLowering,
   // Phase 4 init: extractKernelMeta failed to read the kernel descriptor
   // from .rodata via the `<name>.kd` symbol. Without the KD we cannot
@@ -169,12 +170,6 @@ struct RaiseFailure : public llvm::ErrorInfo<RaiseFailure> {
   static llvm::Error unsupportedInstructionForm(const DecodedInst &Di,
                                                 llvm::StringRef Format,
                                                 const llvm::Twine &Detail = {});
-
-  // Handler identified a source metadata hidden argument, but no explicit
-  // source-side synthesis exists for that .value_kind yet.
-  static llvm::Error unsupportedSourceHiddenArg(const DecodedInst &Di,
-                                                llvm::StringRef Format,
-                                                llvm::StringRef Detail);
 
   // Main loop: no handler claimed the CanonicalOp (either no TSFlags match
   // or every matching handler returned `handled=false` without
@@ -273,26 +268,13 @@ struct RaiseFailure : public llvm::ErrorInfo<RaiseFailure> {
                                      const llvm::Twine &Detail);
 
   // `HSA_HOTSWAP_STRICT=1` refusal. `site` is a short stable label
-  // (e.g. `"HWREG_MODE_write"`, `"implicitarg.ptr"`) that callers can
+  // (e.g. `"HWREG_MODE_write"`) that callers can
   // bucket on without parsing `detail`; `detail` carries the human-readable
   // explanation of *why*
   // the lowering would silently miscompile.
   static llvm::Error strictUnsafeLowering(const DecodedInst &Di,
                                           llvm::StringRef Site,
                                           llvm::StringRef Detail);
-
-  // Phase 4 seed: a preloaded hidden kernarg dword has no source-side
-  // hidden-arg synthesis. `byteOffset` locates the preloaded slot; `detail`
-  // explains why.
-  static llvm::Error preloadedHiddenArgFailure(llvm::StringRef KernelName,
-                                               int ByteOffset,
-                                               const llvm::Twine &Detail);
-
-  // Phase 4 seed: a preloaded kernarg byte lands in the source implicit-arg
-  // range but has no source hidden-arg metadata mapping; strict mode refuses
-  // the target hidden-block fallback.
-  static llvm::Error preloadedImplicitArgFailure(llvm::StringRef KernelName,
-                                                 int ByteOffset);
 
   // Phase 4 init: kernel descriptor was not parsed from .rodata so
   // UserSgprLayout cannot be derived. `kernelName` is captured for the

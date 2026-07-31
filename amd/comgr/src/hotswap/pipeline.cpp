@@ -323,6 +323,21 @@ bool wantDumpInput() {
   return Want;
 }
 
+// Record a failure found in the emitted code object rather than at a source
+// instruction. `Mnemonic` is a fixed pseudo-mnemonic (`__kernarg_segment__`)
+// that gives such failures a stable bucketing label, the way a real mnemonic
+// does for instruction-level ones.
+static void
+reportObjectLevelFailure(PipelineResult &Result, llvm::StringRef KernelName,
+                         llvm::StringRef Mnemonic, llvm::StringRef Format,
+                         RaiseFailureReason Reason, llvm::StringRef Detail) {
+  Result.FailKernel = KernelName.str();
+  Result.FailMnemonic = Mnemonic.str();
+  Result.FailReason = reasonString(Reason);
+  Result.FailFormat = Format.str();
+  Result.FailDetail = Detail.str();
+}
+
 // Raise one kernel to IR, then opt + codegen it to a relocatable .o.
 // On success, writes the .o to ObjPath and returns true.
 static bool raiseAndCompileKernel(
@@ -382,11 +397,20 @@ static bool raiseAndCompileKernel(
   }
 
   RaiseStats Stats;
-  llvm::Expected<RaiseResult> RaisedOrErr = raiseToIR(
-      Text.Bytes, SourceISA, KernelName, Meta, KernelOffset, KernelSize,
-      TargetISA, Options.EnableWritelaneRewrite, Options.EnableWaveNative,
-      Options.AssumeHipGlobalOffsetZero, Options.ForceScaledModrep,
-      Text.Address, Text.ImageSections, FunctionExtents, &Stats);
+  RaiseOptions RaiseOpts;
+  RaiseOpts.SourceIsa = SourceISA;
+  RaiseOpts.CompilationTargetIsa = TargetISA;
+  RaiseOpts.KernelOffset = KernelOffset;
+  RaiseOpts.KernelSize = KernelSize;
+  RaiseOpts.TextBaseAddress = Text.Address;
+  RaiseOpts.SourceImageSections = Text.ImageSections;
+  RaiseOpts.FunctionExtents = FunctionExtents;
+  RaiseOpts.EnableWritelaneRewrite = Options.EnableWritelaneRewrite;
+  RaiseOpts.EnableWaveNative = Options.EnableWaveNative;
+  RaiseOpts.ForceScaledModrep = Options.ForceScaledModrep;
+  RaiseOpts.Stats = &Stats;
+  llvm::Expected<RaiseResult> RaisedOrErr =
+      raiseToIR(Text.Bytes, KernelName, Meta, RaiseOpts);
   if (!RaisedOrErr) {
     llvm::errs() << "transpiler: Raising '" << KernelName
                  << "' to LLVM IR failed";
@@ -525,6 +549,32 @@ static bool raiseAndCompileKernel(
     llvm::errs() << "transpiler: llc failed for '" << KernelName
                  << "': " << llvm::toString(std::move(Err)) << "\n";
     return false;
+  }
+
+  // Hidden arguments are ordinary loads at their source offsets, which holds
+  // only while the lifted kernarg segment is still the source's. Checked
+  // against the emitted metadata, so a lowering that reintroduces
+  // `llvm.amdgcn.implicitarg.ptr` fails here rather than reading past the
+  // buffer at dispatch time.
+  {
+    llvm::StringRef ObjRef(ObjBytes.data(), ObjBytes.size());
+    llvm::Expected<KernelMeta> EmittedOrErr =
+        extractKernelMeta(llvm::MemoryBufferRef(ObjRef, "lifted"), KernelName);
+    if (!EmittedOrErr) {
+      reportObjectLevelFailure(
+          Result, KernelName, "__lifted-metadata__", "kernarg",
+          RaiseFailureReason::InternalError,
+          "lifted kernel metadata could not be read back: " +
+              llvm::toString(EmittedOrErr.takeError()));
+      return false;
+    }
+    if (llvm::Error Err = checkLiftedKernargSegment(*EmittedOrErr, Meta)) {
+      reportObjectLevelFailure(Result, KernelName, "__kernarg_segment__",
+                               "kernarg",
+                               RaiseFailureReason::LiftedKernargSegmentMismatch,
+                               llvm::toString(std::move(Err)));
+      return false;
+    }
   }
 
   if (llvm::Error WriteErr = writeFile(

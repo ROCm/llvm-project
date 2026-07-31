@@ -199,3 +199,65 @@ TEST(CodeObjectUtils, FindKernelSymbolExtentMissingTextReturnsHotswapError) {
   EXPECT_NE(Err.Message.find("no .text section in ELF"), std::string::npos)
       << Err.Message;
 }
+
+// `checkLiftedKernargSegment` is the fail-closed boundary that keeps a lifted
+// kernel from disagreeing with the kernarg buffer the runtime sized from source
+// metadata. No code object can drive it to refuse today -- the raiser never
+// emits `llvm.amdgcn.implicitarg.ptr` -- so the refusal is covered here.
+namespace {
+
+COMGR::hotswap::KernelMeta metaWithKernargSegmentSize(int Size) {
+  COMGR::hotswap::KernelMeta Meta;
+  Meta.Name = "kernel";
+  Meta.KernargSegmentSize = Size;
+  return Meta;
+}
+
+bool segmentAccepted(COMGR::hotswap::KernelMeta Emitted,
+                     COMGR::hotswap::KernelMeta Source) {
+  llvm::Error Err = COMGR::hotswap::checkLiftedKernargSegment(Emitted, Source);
+  bool Accepted = !Err;
+  llvm::consumeError(std::move(Err));
+  return Accepted;
+}
+
+} // namespace
+
+TEST(CodeObjectUtils, LiftedKernargSegmentEqualToSourceAccepted) {
+  EXPECT_TRUE(segmentAccepted(metaWithKernargSegmentSize(264),
+                              metaWithKernargSegmentSize(264)));
+}
+
+TEST(CodeObjectUtils, LiftedKernargSegmentLargerThanSourceRefused) {
+  EXPECT_FALSE(segmentAccepted(metaWithKernargSegmentSize(520),
+                               metaWithKernargSegmentSize(264)));
+}
+
+TEST(CodeObjectUtils, LiftedKernargSegmentSmallerThanSourceRefused) {
+  // The lifted segment is the source's by construction. A smaller one means
+  // something dropped the blob, which we want to hear about rather than accept.
+  EXPECT_FALSE(segmentAccepted(metaWithKernargSegmentSize(8),
+                               metaWithKernargSegmentSize(264)));
+}
+
+TEST(CodeObjectUtils, LiftedKernargSegmentReportsBothSizes) {
+  llvm::Error Err = COMGR::hotswap::checkLiftedKernargSegment(
+      metaWithKernargSegmentSize(520), metaWithKernargSegmentSize(264));
+  ASSERT_TRUE(bool(Err));
+  EXPECT_EQ(llvm::toString(std::move(Err)),
+            "lifted kernarg segment is 520 bytes, source is 264");
+}
+
+TEST(CodeObjectUtils, LiftedHiddenArgumentDeclarationRefused) {
+  // Right size, but the backend appended an implicit-argument block: the
+  // runtime allocated no room for a second one.
+  COMGR::hotswap::KernelMeta Emitted = metaWithKernargSegmentSize(264);
+  Emitted.Args.push_back({"", 264, 4, "hidden_block_count_x", 0});
+  llvm::Error Err = COMGR::hotswap::checkLiftedKernargSegment(
+      Emitted, metaWithKernargSegmentSize(264));
+  ASSERT_TRUE(bool(Err));
+  EXPECT_EQ(llvm::toString(std::move(Err)),
+            "lifted kernel declares 'hidden_block_count_x' at offset 264; the "
+            "runtime populates hidden arguments from the source metadata and "
+            "allocated no room for a second block");
+}

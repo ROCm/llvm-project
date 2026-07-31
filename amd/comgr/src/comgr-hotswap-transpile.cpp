@@ -315,7 +315,6 @@ struct ResolvedHotswapOptions {
   bool CacheDisable = false;
   bool CacheReadonly = false;
   bool StrictMode = false;
-  bool AssumeHipGlobalOffsetZero = false;
   std::string KernelName;
   unsigned OptLevel = DefaultHotswapComgrOptLevel;
 };
@@ -376,9 +375,6 @@ llvm::Expected<ResolvedHotswapOptions> resolveOptions(
       options, AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_CACHE_READONLY);
   Resolved.StrictMode =
       hasOptionsFlag(options, AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_STRICT);
-  Resolved.AssumeHipGlobalOffsetZero = hasOptionsFlag(
-      options,
-      AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_ASSUME_HIP_GLOBAL_OFFSET_ZERO);
   return Resolved;
 }
 
@@ -411,9 +407,6 @@ resolveOptionsV2(const amd_comgr_hotswap_transpile_options_v2_t *options) {
       options, AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_CACHE_READONLY);
   Resolved.StrictMode =
       hasOptionsV2Flag(options, AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_STRICT);
-  Resolved.AssumeHipGlobalOffsetZero = hasOptionsV2Flag(
-      options,
-      AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_V2_ASSUME_HIP_GLOBAL_OFFSET_ZERO);
   Resolved.KernelName = std::move(*KernelName);
   Resolved.OptLevel = *OptLevel;
   return Resolved;
@@ -578,7 +571,6 @@ amd_comgr_status_t hotswapTranspileWithResolvedOptions(
       Options.CacheSkipKernels ? Options.CacheSkipKernels : "";
   CacheRequest.KernelName = Options.KernelName;
   CacheRequest.StrictMode = Options.StrictMode;
-  CacheRequest.AssumeHipGlobalOffsetZero = Options.AssumeHipGlobalOffsetZero;
   CacheRequest.CacheDisabled =
       Options.CacheDisable || CacheRequest.CacheDirectory.empty();
   CacheRequest.CacheReadonly = Options.CacheReadonly;
@@ -666,8 +658,6 @@ amd_comgr_status_t hotswapTranspileWithResolvedOptions(
     PipelineOptions.EnableWaveNative = CacheRequest.EnableWaveNative;
     PipelineOptions.ForceScaledModrep = CacheRequest.ForceScaledModrep;
     PipelineOptions.CollectTimings = CollectTimings;
-    PipelineOptions.AssumeHipGlobalOffsetZero =
-        CacheRequest.AssumeHipGlobalOffsetZero;
     PipelineOptions.OptLevel = CacheRequest.OptLevel;
     if (!CacheRequest.KernelName.empty()) {
       Pipeline = COMGR::hotswap::runPipeline(InputBuf,
@@ -683,19 +673,50 @@ amd_comgr_status_t hotswapTranspileWithResolvedOptions(
     addPipelineTimings(Timings, Pipeline.Timings);
   }
 
-  if (!Pipeline.Success || !Pipeline.Hsaco ||
-      Pipeline.Hsaco->getBufferSize() == 0) {
-    HotswapTranspileResult Result;
-    fillResult(Result, CacheRequest.SourceGfx, CacheRequest.TargetGfx, false,
-               CacheHit, lookupStatusFromCacheStatus(CacheStatus),
+  auto failWith = [&](llvm::StringRef Reason, llvm::StringRef Detail,
+                      amd_comgr_status_t Status =
+                          AMD_COMGR_STATUS_ERROR) -> amd_comgr_status_t {
+    HotswapTranspileResult FailResult;
+    fillResult(FailResult, CacheRequest.SourceGfx, CacheRequest.TargetGfx,
+               false, CacheHit, lookupStatusFromCacheStatus(CacheStatus),
                AMD_COMGR_HOTSWAP_CACHE_WRITE_NOT_ATTEMPTED, CacheDetail,
-               &Pipeline, CacheKey, CacheMetadataPath, CacheObjectPath,
-               pipelineFailReason(Pipeline), pipelineFailDetail(Pipeline),
-               finalTimingJson(), CacheRequest.KernelName);
+               &Pipeline, CacheKey, CacheMetadataPath, CacheObjectPath, Reason,
+               Detail, finalTimingJson(), CacheRequest.KernelName);
     if (amd_comgr_status_t ResultStatus =
-            returnResult(std::move(Result), result))
+            returnResult(std::move(FailResult), result))
       return ResultStatus;
-    return AMD_COMGR_STATUS_ERROR;
+    return Status;
+  };
+
+  if (!Pipeline.Success || !Pipeline.Hsaco ||
+      Pipeline.Hsaco->getBufferSize() == 0)
+    return failWith(pipelineFailReason(Pipeline), pipelineFailDetail(Pipeline));
+
+  // The caller must scale the block's x extent by this factor, so a request
+  // shaped so that it cannot receive the factor fails the precondition
+  // documented on `result` and on the kernel-name flag. `result` is an optional
+  // out-parameter carrying the transpile metadata (cache status, counts, fail
+  // reason, this factor); passing null means "I do not need that metadata",
+  // which `amd_comgr_hotswap_transpile` does by construction. An unnamed
+  // request covers every kernel in the object while the factor is per kernel,
+  // so one value cannot describe it.
+  if (Pipeline.ScaledDispatchFactor > 1 &&
+      (result == nullptr || CacheRequest.KernelName.empty())) {
+    llvm::StringRef Why =
+        result == nullptr
+            ? "the request passes no result object to report it through"
+            : "the request covers every kernel in the code object, and the "
+              "factor is per kernel";
+    std::string Detail;
+    llvm::raw_string_ostream OS(Detail);
+    OS << "kernel requires a scaled dispatch (x-extent factor "
+       << Pipeline.ScaledDispatchFactor << ") but " << Why
+       << "; use amd_comgr_hotswap_transpile_with_options_v2 with "
+          "USE_KERNEL_NAME and a non-null result";
+    // Reported through the result object when the caller asked for one; the
+    // status carries it either way.
+    return failWith("scaled_dispatch_not_reportable", Detail,
+                    AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT);
   }
 
   amd_comgr_hotswap_cache_write_status_t CacheWriteStatus =

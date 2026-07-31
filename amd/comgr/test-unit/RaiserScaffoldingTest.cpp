@@ -47,7 +47,8 @@ COMGR::hotswap::KernelMeta makeKernelMeta(llvm::StringRef Name) {
 TEST(RaiserScaffolding, EmptyInputProducesValidModule) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
   llvm::Expected<COMGR::hotswap::RaiseResult> Result =
-      COMGR::hotswap::raiseToIR({}, "gfx942", "kernel", Meta);
+      COMGR::hotswap::raiseToIR({}, "kernel", Meta,
+                                COMGR::hotswap::RaiseOptions{/*SourceIsa=*/"gfx942"});
 
   ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
   ASSERT_NE(Result->Ctx, nullptr);
@@ -61,7 +62,8 @@ TEST(RaiserScaffolding, EmptyInputProducesValidModule) {
 TEST(RaiserScaffolding, ModuleAdvertisesAMDGPUTriple) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
   llvm::Expected<COMGR::hotswap::RaiseResult> Result =
-      COMGR::hotswap::raiseToIR({}, "gfx942", "kernel", Meta);
+      COMGR::hotswap::raiseToIR({}, "kernel", Meta,
+                                COMGR::hotswap::RaiseOptions{/*SourceIsa=*/"gfx942"});
 
   ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
   ASSERT_NE(Result->Module, nullptr);
@@ -71,7 +73,8 @@ TEST(RaiserScaffolding, ModuleAdvertisesAMDGPUTriple) {
 TEST(RaiserScaffolding, KernelFunctionIsAMDGPUKernelWithRetVoid) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
   llvm::Expected<COMGR::hotswap::RaiseResult> Result =
-      COMGR::hotswap::raiseToIR({}, "gfx942", "kernel", Meta);
+      COMGR::hotswap::raiseToIR({}, "kernel", Meta,
+                                COMGR::hotswap::RaiseOptions{/*SourceIsa=*/"gfx942"});
 
   ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
   llvm::Function *Fn = Result->Module->getFunction("kernel");
@@ -88,7 +91,8 @@ TEST(RaiserScaffolding, MissingKernelDescriptorIsRejected) {
   Meta.Name = "kernel";
   Meta.HasKernelDescriptor = false;
   llvm::Expected<COMGR::hotswap::RaiseResult> Result =
-      COMGR::hotswap::raiseToIR({}, "gfx942", "kernel", Meta);
+      COMGR::hotswap::raiseToIR({}, "kernel", Meta,
+                                COMGR::hotswap::RaiseOptions{/*SourceIsa=*/"gfx942"});
 
   ASSERT_FALSE(static_cast<bool>(Result));
 }
@@ -96,7 +100,8 @@ TEST(RaiserScaffolding, MissingKernelDescriptorIsRejected) {
 TEST(RaiserScaffolding, EmptyTargetIsaIsRejected) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
   llvm::Expected<COMGR::hotswap::RaiseResult> Result =
-      COMGR::hotswap::raiseToIR({}, "", "kernel", Meta);
+      COMGR::hotswap::raiseToIR({}, "kernel", Meta,
+                                COMGR::hotswap::RaiseOptions{});
 
   ASSERT_FALSE(static_cast<bool>(Result));
 }
@@ -104,15 +109,21 @@ TEST(RaiserScaffolding, EmptyTargetIsaIsRejected) {
 TEST(RaiserScaffolding, MalformedTargetIsaIsRejected) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
   llvm::Expected<COMGR::hotswap::RaiseResult> Result =
-      COMGR::hotswap::raiseToIR({}, "not-a-real-isa", "kernel", Meta);
+      COMGR::hotswap::raiseToIR({}, "kernel", Meta,
+                                COMGR::hotswap::RaiseOptions{/*SourceIsa=*/"not-a-real-isa"});
 
   ASSERT_FALSE(static_cast<bool>(Result));
 }
 
-TEST(RaiserScaffolding,
-     PreloadedHiddenGlobalOffsetRefusesWithoutHipAssumption) {
+TEST(RaiserScaffolding, PreloadedHiddenArgIsAnOrdinaryKernargLoad) {
+  // A hardware-preloaded kernarg dword that happens to be a hidden argument
+  // needs no synthesis: the target runtime populates hidden arguments at the
+  // source byte offsets, so the seed is the same ordinary kernarg load used
+  // for an explicit argument. This used to refuse unless the caller asserted
+  // HIP launch semantics for hidden_global_offset_*.
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
   Meta.Args.push_back({"global_offset_x", 72, 8, "hidden_global_offset_x", 0});
+  Meta.KernargSegmentSize = 328;
   Meta.KernelCodeProperties =
       1u << llvm::amdhsa::
           KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR_SHIFT;
@@ -122,61 +133,24 @@ TEST(RaiserScaffolding,
   Meta.ComputePgmRsrc2 =
       3u << llvm::amdhsa::COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
 
-  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
-      COMGR::hotswap::raiseToIR({}, "gfx1250", "kernel", Meta,
-                                /*KernelOffset=*/0,
-                                /*KernelSize=*/0,
-                                /*CompilationTargetIsa=*/"gfx942",
-                                /*EnableWritelaneRewrite=*/true,
-                                /*EnableWaveNative=*/true,
-                                /*AssumeHipGlobalOffsetZero=*/false);
-
-  ASSERT_FALSE(static_cast<bool>(Result));
-
-  llvm::handleAllErrors(
-      std::move(Result.takeError()),
-      [&](const COMGR::hotswap::RaiseFailure &Failure) {
-        EXPECT_EQ(
-            Failure.Reason,
-            COMGR::hotswap::RaiseFailureReason::UnsupportedSourceHiddenArg);
-        EXPECT_EQ(Failure.Mnemonic, "<preloaded-hidden-kernarg>");
-      },
-      [&](const llvm::ErrorInfoBase &) { FAIL() << "Wrong Error type"; });
-}
-
-TEST(RaiserScaffolding, PreloadedUnmatchedImplicitOffsetRefusesInStrictMode) {
-  COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
-  Meta.Args.push_back({"arg0", 0, 8, "global_buffer", 1});
-  Meta.KernelCodeProperties =
-      1u << llvm::amdhsa::
-          KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR_SHIFT;
-  Meta.KernargPreload =
-      (1u << llvm::amdhsa::KERNARG_PRELOAD_SPEC_LENGTH_SHIFT) |
-      (2u << llvm::amdhsa::KERNARG_PRELOAD_SPEC_OFFSET_SHIFT);
-  Meta.ComputePgmRsrc2 =
-      3u << llvm::amdhsa::COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
-
   COMGR::hotswap::ScopedStrictMode StrictMode(/*enabled=*/true);
+  COMGR::hotswap::RaiseOptions Options;
+  Options.SourceIsa = "gfx1250";
+  Options.CompilationTargetIsa = "gfx942";
   llvm::Expected<COMGR::hotswap::RaiseResult> Result =
-      COMGR::hotswap::raiseToIR({}, "gfx1250", "kernel", Meta,
-                                /*KernelOffset=*/0,
-                                /*KernelSize=*/0,
-                                /*CompilationTargetIsa=*/"gfx942",
-                                /*EnableWritelaneRewrite=*/true,
-                                /*EnableWaveNative=*/true,
-                                /*AssumeHipGlobalOffsetZero=*/false);
+      COMGR::hotswap::raiseToIR({}, "kernel", Meta, Options);
 
-  ASSERT_FALSE(static_cast<bool>(Result));
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  ASSERT_NE(Result->Module, nullptr);
 
-  llvm::handleAllErrors(
-      std::move(Result.takeError()),
-      [&](const COMGR::hotswap::RaiseFailure &Failure) {
-        EXPECT_EQ(Failure.Reason,
-                  COMGR::hotswap::RaiseFailureReason::StrictUnsafeLowering);
-        EXPECT_EQ(Failure.Format, "implicitarg.ptr");
-        EXPECT_EQ(Failure.Mnemonic, "<preloaded-hidden-kernarg>");
-      },
-      [&](const llvm::ErrorInfoBase &) { FAIL() << "Wrong Error type"; });
+  std::string IR;
+  llvm::raw_string_ostream IRStream(IR);
+  Result->Module->print(IRStream, nullptr);
+
+  EXPECT_NE(IR.find("call ptr addrspace(4) @llvm.amdgcn.kernarg.segment.ptr"),
+            std::string::npos);
+  EXPECT_EQ(IR.find("call ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr"),
+            std::string::npos);
 }
 
 // s_add_pc_i64's successor is Offset + Size + displacement (byte units), not

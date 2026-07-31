@@ -269,21 +269,6 @@ target_include_directories(OpcodeMapTests PRIVATE
 
 comgr_configure_test_target(OpcodeMapTests)
 
-# -- KernargLayoutTests -----------------------------------------------------------------
-
-add_executable(KernargLayoutTests
-  KernargLayoutTest.cpp)
-
-target_link_libraries(KernargLayoutTests PRIVATE
-  ${COMGR_GTEST_LIBS}
-  ${LLVM_PTHREAD_LIB})
-comgr_link_hotswap_transpiler(KernargLayoutTests)
-
-target_include_directories(KernargLayoutTests PRIVATE
-  ${COMGR_GTEST_INCLUDE_DIRS})
-
-comgr_configure_test_target(KernargLayoutTests)
-
 # -- WaveProjectionTests -----------------------------------------------------------------
 
 add_executable(WaveProjectionTests
@@ -298,21 +283,6 @@ target_include_directories(WaveProjectionTests PRIVATE
   ${COMGR_GTEST_INCLUDE_DIRS})
 
 comgr_configure_test_target(WaveProjectionTests)
-
-# -- SourceHiddenArgsTests -----------------------------------------------------------------
-
-add_executable(SourceHiddenArgsTests
-  SourceHiddenArgsTest.cpp)
-
-target_link_libraries(SourceHiddenArgsTests PRIVATE
-  ${COMGR_GTEST_LIBS}
-  ${LLVM_PTHREAD_LIB})
-comgr_link_hotswap_transpiler(SourceHiddenArgsTests)
-
-target_include_directories(SourceHiddenArgsTests PRIVATE
-  ${COMGR_GTEST_INCLUDE_DIRS})
-
-comgr_configure_test_target(SourceHiddenArgsTests)
 
 # -- MXFP4DequantTests -----------------------------------------------------------------
 
@@ -368,9 +338,7 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:OpcodeMapTests>
   COMMAND $<TARGET_FILE:CanonicalOpAttrsTests>
   COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
-  COMMAND $<TARGET_FILE:KernargLayoutTests>
   COMMAND $<TARGET_FILE:WaveProjectionTests>
-  COMMAND $<TARGET_FILE:SourceHiddenArgsTests>
   COMMAND $<TARGET_FILE:MXFP4DequantTests>
   COMMAND $<TARGET_FILE:C5PredicateChainTests>
   COMMAND $<TARGET_FILE:TranslationCacheTests>)
@@ -380,9 +348,7 @@ add_dependencies(test-unit HotswapElfTests HotswapMCTests
   MCContextInlineSrcmgrTests
   OpcodeMapTests
   CanonicalOpAttrsTests
-  KernargLayoutTests
   WaveProjectionTests
-  SourceHiddenArgsTests
   MXFP4DequantTests
   C5PredicateChainTests
   TranslationCacheTests)

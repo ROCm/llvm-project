@@ -317,11 +317,6 @@ std::string childCrashFormat(int Status, bool ShmDone) {
   return "wait_status_unknown";
 }
 
-cl::opt<bool> AssumeHipGlobalOffsetZeroOpt(
-    "assume-hip-global-offset-zero",
-    cl::desc("Assume HIP launch semantics for hidden_global_offset_{x,y,z}; "
-             "generic HSA/OpenCL callers should leave this disabled."));
-
 cl::opt<unsigned> OptLevel(
     "O", cl::Prefix, cl::init(0), cl::value_desc("level"),
     cl::desc("Optimization level (0-3) for the in-process opt + llc codegen "
@@ -480,12 +475,19 @@ int main(int argc, char **argv) {
       }
       uint64_t kernelOffset = kernelExtentOrErr->Offset;
       uint64_t kernelSize = kernelExtentOrErr->Size;
+      COMGR::hotswap::RaiseOptions raiseOptions;
+      raiseOptions.SourceIsa = isa;
+      raiseOptions.CompilationTargetIsa = targetIsa;
+      raiseOptions.KernelOffset = kernelOffset;
+      raiseOptions.KernelSize = kernelSize;
+      raiseOptions.TextBaseAddress = text.Address;
+      raiseOptions.SourceImageSections = text.ImageSections;
+      raiseOptions.FunctionExtents = functionExtents;
+      raiseOptions.EnableWritelaneRewrite = EnableWritelaneRewrite;
+      raiseOptions.EnableWaveNative = EnableWaveNative;
+      raiseOptions.ForceScaledModrep = ForceScaledModrep;
       llvm::Expected<COMGR::hotswap::RaiseResult> RaisedOrErr =
-          COMGR::hotswap::raiseToIR(
-              text.Bytes, isa, Target, meta, kernelOffset, kernelSize,
-              targetIsa, EnableWritelaneRewrite, EnableWaveNative,
-              AssumeHipGlobalOffsetZeroOpt, ForceScaledModrep, text.Address,
-              text.ImageSections, functionExtents);
+          COMGR::hotswap::raiseToIR(text.Bytes, Target, meta, raiseOptions);
       if (!RaisedOrErr) {
         // raiseToIR only returns a module on the success path, so we cannot
         // dump partial IR here. Callers that need stderr diagnostics
@@ -554,7 +556,6 @@ int main(int argc, char **argv) {
     pipelineOptions.EnableWritelaneRewrite = EnableWritelaneRewrite;
     pipelineOptions.EnableWaveNative = EnableWaveNative;
     pipelineOptions.ForceScaledModrep = ForceScaledModrep;
-    pipelineOptions.AssumeHipGlobalOffsetZero = AssumeHipGlobalOffsetZeroOpt;
     pipelineOptions.OptLevel = std::min<unsigned>(OptLevel, 3);
     auto pipe = COMGR::hotswap::runPipeline(coData, isa, effectiveTargetIsa,
                                             target, pipelineOptions);
@@ -655,12 +656,20 @@ int main(int argc, char **argv) {
         llvm::consumeError(metaOrErr.takeError());
       }
       COMGR::hotswap::RaiseStats Stats;
+      COMGR::hotswap::RaiseOptions raiseOptions;
+      raiseOptions.SourceIsa = isa;
+      raiseOptions.CompilationTargetIsa = targetIsa;
+      raiseOptions.KernelOffset = kernelOffset;
+      raiseOptions.KernelSize = kernelSize;
+      raiseOptions.TextBaseAddress = text.Address;
+      raiseOptions.SourceImageSections = text.ImageSections;
+      raiseOptions.FunctionExtents = functionExtents;
+      raiseOptions.EnableWritelaneRewrite = EnableWritelaneRewrite;
+      raiseOptions.EnableWaveNative = EnableWaveNative;
+      raiseOptions.ForceScaledModrep = ForceScaledModrep;
+      raiseOptions.Stats = &Stats;
       llvm::Expected<COMGR::hotswap::RaiseResult> RaisedOrErr =
-          COMGR::hotswap::raiseToIR(
-              text.Bytes, isa, kName, meta, kernelOffset, kernelSize, targetIsa,
-              EnableWritelaneRewrite, EnableWaveNative,
-              AssumeHipGlobalOffsetZeroOpt, ForceScaledModrep, text.Address,
-              text.ImageSections, functionExtents, &Stats);
+          COMGR::hotswap::raiseToIR(text.Bytes, kName, meta, raiseOptions);
       if (RaisedOrErr) {
         COMGR::hotswap::RaiseResult Raised = std::move(*RaisedOrErr);
         shm->done = true;

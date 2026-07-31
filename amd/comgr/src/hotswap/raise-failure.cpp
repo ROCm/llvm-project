@@ -44,10 +44,10 @@ const char *reasonString(RaiseFailureReason R) {
     return "UnsupportedOpcode";
   case RaiseFailureReason::UnsupportedInstructionForm:
     return "unsupported-instruction-form";
-  case RaiseFailureReason::UnsupportedSourceHiddenArg:
-    return "unsupported-source-hidden-arg";
   case RaiseFailureReason::SPEUnsafeExecWriter:
     return "SPE-unmodeled-EXEC-writer";
+  case RaiseFailureReason::LiftedKernargSegmentMismatch:
+    return "lifted-kernarg-segment-mismatch";
   case RaiseFailureReason::TargetMachineCreationFailed:
     return "TargetMachineCreationFailed";
   case RaiseFailureReason::IRVerificationFailed:
@@ -100,14 +100,6 @@ llvm::Error RaiseFailure::unsupportedInstructionForm(
     const DecodedInst &Di, llvm::StringRef Format, const llvm::Twine &Detail) {
   return llvm::make_error<RaiseFailure>(
       RaiseFailureReason::UnsupportedInstructionForm, Di.Mnemonic, Format.str(),
-      Di.Offset, Detail.str());
-}
-
-llvm::Error RaiseFailure::unsupportedSourceHiddenArg(const DecodedInst &Di,
-                                                     llvm::StringRef Format,
-                                                     llvm::StringRef Detail) {
-  return llvm::make_error<RaiseFailure>(
-      RaiseFailureReason::UnsupportedSourceHiddenArg, Di.Mnemonic, Format.str(),
       Di.Offset, Detail.str());
 }
 
@@ -228,32 +220,6 @@ llvm::Error RaiseFailure::strictUnsafeLowering(const DecodedInst &Di,
   return llvm::make_error<RaiseFailure>(
       RaiseFailureReason::StrictUnsafeLowering, Di.Mnemonic, Site.str(),
       Di.Offset, Detail.str());
-}
-
-llvm::Error RaiseFailure::preloadedHiddenArgFailure(llvm::StringRef KernelName,
-                                                    int ByteOffset,
-                                                    const llvm::Twine &Detail) {
-  return llvm::make_error<RaiseFailure>(
-      RaiseFailureReason::UnsupportedSourceHiddenArg,
-      "<preloaded-hidden-kernarg>", "KernargPreload",
-      static_cast<uint64_t>(ByteOffset),
-      ("kernel '" + KernelName + "': preloaded hidden kernarg at byte offset " +
-       llvm::Twine(ByteOffset) + ": " + Detail)
-          .str());
-}
-
-llvm::Error
-RaiseFailure::preloadedImplicitArgFailure(llvm::StringRef KernelName,
-                                          int ByteOffset) {
-  return llvm::make_error<RaiseFailure>(
-      RaiseFailureReason::StrictUnsafeLowering, "<preloaded-hidden-kernarg>",
-      "implicitarg.ptr", static_cast<uint64_t>(ByteOffset),
-      ("kernel '" + KernelName + "': preloaded kernarg byte offset " +
-       llvm::Twine(ByteOffset) +
-       " is in the source implicit-arg range but does not map to source "
-       "hidden-arg metadata; refusing target hidden-block fallback in strict "
-       "mode")
-          .str());
 }
 
 llvm::Error RaiseFailure::missingKernelDescriptor(llvm::StringRef KernelName) {

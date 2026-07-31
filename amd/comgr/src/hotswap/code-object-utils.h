@@ -28,6 +28,7 @@
 #include "llvm/Support/MemoryBufferRef.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace COMGR::hotswap {
@@ -144,24 +145,16 @@ struct KernelMeta {
   uint32_t ComputePgmRsrc2 = 0;
   uint16_t KernelCodeProperties = 0;
   uint16_t KernargPreload = 0;
-
-  /// Byte offset (8-byte aligned) of the first hidden argument in the
-  /// kernarg segment. Hidden arguments (`hidden_*` value kinds) are
-  /// appended after every explicit argument.
-  uint64_t implicitArgsBase() const {
-    uint64_t MaxEnd = 0;
-    for (const KernelArgMeta &Arg : Args) {
-      if (llvm::StringRef(Arg.ValueKind).starts_with("hidden_")) {
-        continue;
-      }
-      uint64_t End = static_cast<uint64_t>(Arg.Offset) + Arg.Size;
-      if (End > MaxEnd) {
-        MaxEnd = End;
-      }
-    }
-    return llvm::alignTo(MaxEnd, 8);
-  }
 };
+
+/// Fail unless the lifted kernel's kernarg segment matches the source's.
+///
+/// The runtime sizes the buffer from the source `.kernarg_segment_size` and the
+/// dispatch path does not resize it, so the lifted segment must be the same
+/// size and must not declare hidden arguments of its own: either would mean the
+/// backend appended an implicit-argument block the runtime did not allocate.
+llvm::Error checkLiftedKernargSegment(const KernelMeta &Emitted,
+                                      const KernelMeta &Source);
 
 /// Extract the `.text` section bytes from `ElfData`. Returns a
 /// `HotswapError` when the ELF parses but has no `.text` section;

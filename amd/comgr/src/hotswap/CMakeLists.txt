@@ -160,7 +160,6 @@ add_library(hotswap-transpiler OBJECT
   raise-failure.cpp
   raise-context.cpp
   reg-file.cpp
-  kernarg-layout.cpp
   user-sgpr-layout.cpp
   source-image-address.cpp
   wave-projection.cpp
@@ -172,7 +171,6 @@ add_library(hotswap-transpiler OBJECT
   handle-sopk.cpp
   canonical-op-attrs.cpp
   handle-smem.cpp
-  source-hidden-args.cpp
   handle-flat.cpp
   flat-addr.cpp
   handle-mubuf.cpp

@@ -84,9 +84,9 @@
 // RUN:                   amdgcn-amd-amdhsa--gfx950 \
 // RUN:                   amdgcn-amd-amdhsa--gfx942 \
 // RUN:   > %t.hip.out
-// RUN: %FileCheck --check-prefix=HIPKEYBASE %s < %t.hip.out
+// RUN: %FileCheck --check-prefix=HIPKEYSAME %s < %t.hip.out
 // RUN: sed -n 's/.*cache_key=\([0-9a-f][0-9a-f]*\).*/\1/p' %t.hip.out > %t.hip.key
-// RUN: ! cmp -s %t.nohip.key %t.hip.key
+// RUN: cmp -s %t.nohip.key %t.hip.key
 // RUN: rm -rf %t.opt-cache
 // RUN: env HSA_HOTSWAP_CACHE_DIR=%t.opt-cache hotswap-transpile \
 // RUN:                   %S/vecadd_gfx950.co \
@@ -141,6 +141,15 @@
 // HIPKEYBASE-DAG: cache_hit=0
 // HIPKEYBASE-DAG: cache_lookup=miss
 // HIPKEYBASE-DAG: cache_write=success
+// ASSUME_HIP_GLOBAL_OFFSET_ZERO is accepted and ignored: source hidden
+// arguments, hidden_global_offset_{x,y,z} included, are read where the target
+// runtime writes them rather than synthesized, so there is nothing left for the
+// option to change. It must therefore NOT be cache-key material -- the run
+// below hits the entry the run above wrote, with an identical key.
+// HIPKEYSAME-DAG: RESULT: SUCCESS bytes={{[1-9][0-9]*}}
+// HIPKEYSAME-DAG: cache_hit=1
+// HIPKEYSAME-DAG: cache_lookup=hit
+// HIPKEYSAME-DAG: cache_write=not_attempted
 // OPTKEYBASE-DAG: RESULT: SUCCESS bytes={{[1-9][0-9]*}}
 // OPTKEYBASE-DAG: cache_hit=0
 // OPTKEYBASE-DAG: cache_lookup=miss

@@ -12,7 +12,6 @@
 #include "code-object-utils.h"
 #include "decoded-inst.h"
 #include "isa-profile.h"
-#include "kernarg-layout.h"
 #include "mc-state.h"
 #include "parsed-reg.h"
 #include "raise-failure.h"
@@ -38,44 +37,6 @@
 
 namespace COMGR::hotswap {
 
-// Result of classifying an instruction as a constant rebase of the tracked
-// kernarg pointer pair. `TouchesKernargPtr` distinguishes "not this pattern"
-// from "this pattern, but not by a known constant"; `Delta` is present only for
-// the latter's proven constant byte adjustment.
-struct KernargPtrConstRebase {
-  bool TouchesKernargPtr = false;
-  std::optional<int64_t> Delta;
-};
-
-// Recognize scalar 64-bit add/sub forms that preserve a pointer's identity
-// while changing only its constant byte offset. The caller supplies register
-// identity so the same predicate can serve both the MC-only prepass and
-// handler-time ParsedReg state.
-inline KernargPtrConstRebase classifyKernargPtrConstRebase(
-    const DecodedInst &Di, llvm::function_ref<bool(llvm::MCRegister)> IsPair) {
-  if ((Di.CanonOp != CanonicalOp::S_ADD_NC_U64 &&
-       Di.CanonOp != CanonicalOp::S_SUB_NC_U64) ||
-      Di.NumSrcs < 2 || !Di.isReg(0) || !IsPair(Di.getReg(0)))
-    return {};
-
-  unsigned Src0 = Di.SrcMap[0];
-  unsigned Src1 = Di.SrcMap[1];
-  bool Src0IsPair = Di.isReg(Src0) && IsPair(Di.getReg(Src0));
-  bool Src1IsPair = Di.isReg(Src1) && IsPair(Di.getReg(Src1));
-  std::optional<int64_t> Delta;
-
-  if (Src0IsPair && !Src1IsPair) {
-    Delta = evalOperandAsConst(Di.Inst, Src1);
-    if (Delta && Di.CanonOp == CanonicalOp::S_SUB_NC_U64)
-      *Delta = -*Delta;
-  } else if (Src1IsPair && !Src0IsPair &&
-             Di.CanonOp == CanonicalOp::S_ADD_NC_U64) {
-    Delta = evalOperandAsConst(Di.Inst, Src0);
-  }
-
-  return {true, Delta};
-}
-
 // Shared state threaded through every format handler.
 struct RaiseContext {
   llvm::LLVMContext &C;
@@ -87,10 +48,6 @@ struct RaiseContext {
   const ISAProfile &Isa; // source ISA (for disassembly / instruction semantics)
   ISAProfile
       TargetIsa; // compilation target ISA (for code generation decisions)
-  // Target hidden-arg offsets are code-object-version dependent; default to
-  // the backend's current emission contract and let the raiser override it.
-  unsigned TargetCodeObjectVersion = 6;
-  KernargLayout &Kernargs;
   // Source-ISA user-SGPR ABI derived from the kernel descriptor. Owned by
   // the raiser; threaded into every handler that needs to identify a
   // specific SGPR by its source-ABI role (e.g. handle-smem.cpp must know
@@ -125,7 +82,6 @@ struct RaiseContext {
   RaiseContext(llvm::LLVMContext &C, llvm::Module &M, llvm::IRBuilder<> &B,
                AllocaRegFile &Regs, const WaveProjection &Projection,
                const MCState &Mc, const ISAProfile &Isa, ISAProfile TargetIsa,
-               unsigned TargetCodeObjectVersion, KernargLayout &Kernargs,
                const UserSgprLayout *Layout, llvm::Function *Kernel,
                llvm::BasicBlock *ThreadLoopLatch,
                llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb,
@@ -181,7 +137,6 @@ struct RaiseContext {
   // created" in `computeMode`).  So applying the same 8-bit state to both
   // halves is correct.
   uint8_t VgprMsBs = 0;
-  bool AssumeHipGlobalOffsetZero = false;
 
   // Per-instruction VGPR index adjustment, indexed by MCInst operand index.
   // Computed from vgprMSBs before each instruction dispatch. computeVGPRAdjust
@@ -306,157 +261,6 @@ struct RaiseContext {
   void storeVGPR64(int Idx, llvm::Value *V);
   void storeAGPR32(int Idx, llvm::Value *V);
 
-  // Provenance fact for the physical SGPR pair that originally held the
-  // source-ABI kernarg-segment pointer.
-  //
-  //   LiveEntry - all incoming CFG paths carry the dispatch-provided entry
-  //               pointer plus EntryByteOffset. Both lanes must be LiveEntry
-  //               for the offset to be meaningful.
-  //   NonEntry  - all incoming CFG paths have overwritten the pair with a value
-  //               loaded from memory rather than the dispatch-provided entry
-  //               SGPR value. Constant rebases of such a value remain NonEntry.
-  //   Unknown   - paths disagree, are unreachable, include an unclassified
-  //               write, or carry different EntryByteOffset values.
-  enum class KernargPtrLaneProvenance {
-    LiveEntry,
-    NonEntry,
-    Unknown,
-  };
-
-  // Consumers classify the pair by combining the two lane facts: both LiveEntry
-  // permits source hidden-arg synthesis at EntryByteOffset + instruction
-  // offset, both NonEntry uses ordinary memory lowering, and any mixed/Unknown
-  // state is ambiguous in strict mode.
-  struct KernargPtrProvenance {
-    KernargPtrLaneProvenance Low = KernargPtrLaneProvenance::Unknown;
-    KernargPtrLaneProvenance High = KernargPtrLaneProvenance::Unknown;
-    int64_t EntryByteOffset = 0;
-
-    bool operator==(KernargPtrProvenance Other) const {
-      return Low == Other.Low && High == Other.High &&
-             EntryByteOffset == Other.EntryByteOffset;
-    }
-
-    bool isLiveEntry() const {
-      return Low == KernargPtrLaneProvenance::LiveEntry &&
-             High == KernargPtrLaneProvenance::LiveEntry;
-    }
-
-    bool isNonEntry() const {
-      return Low == KernargPtrLaneProvenance::NonEntry &&
-             High == KernargPtrLaneProvenance::NonEntry;
-    }
-  };
-
-  // Merge facts from two control-flow paths. Equal lane facts survive; any
-  // disagreement becomes Unknown. A LiveEntry pair keeps EntryByteOffset only
-  // when every incoming path has the same offset.
-  static KernargPtrLaneProvenance
-  joinKernargPtrLaneProvenance(KernargPtrLaneProvenance Lhs,
-                               KernargPtrLaneProvenance Rhs) {
-    if (Lhs == Rhs)
-      return Lhs;
-    return KernargPtrLaneProvenance::Unknown;
-  }
-
-  // Pair-wise control-flow join for provenance carried through IR diamonds.
-  static KernargPtrProvenance
-  joinKernargPtrProvenance(KernargPtrProvenance Lhs, KernargPtrProvenance Rhs) {
-    KernargPtrProvenance Result = {
-        joinKernargPtrLaneProvenance(Lhs.Low, Rhs.Low),
-        joinKernargPtrLaneProvenance(Lhs.High, Rhs.High), 0};
-    if (Result.isLiveEntry()) {
-      if (Lhs.isLiveEntry() && Rhs.isLiveEntry() &&
-          Lhs.EntryByteOffset == Rhs.EntryByteOffset)
-        Result.EntryByteOffset = Lhs.EntryByteOffset;
-      else
-        Result.Low = Result.High = KernargPtrLaneProvenance::Unknown;
-    }
-    return Result;
-  }
-
-  // True when `Base` names the descriptor-provided kernarg pointer SGPR pair.
-  // Kernels that do not enable that user SGPR never match.
-  bool isEntryKernargSegmentPtrSgpr(ParsedReg Base) const {
-    assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
-    if (Base.RegKind != ParsedReg::SGPR)
-      return false;
-    int KernargPtrSgpr = Layout->KernargSegmentPtrSgpr;
-    return KernargPtrSgpr >= 0 && Base.BaseIdx == KernargPtrSgpr;
-  }
-
-  KernargPtrProvenance getKernargPtrProvenance() const {
-    return CurrentKernargPtrProvenance;
-  }
-
-  // Restore a proven entry-pointer fact after a constant-preserving rebase.
-  void setKernargPtrLiveEntryByteOffset(int64_t ByteOffset) {
-    CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::LiveEntry;
-    CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::LiveEntry;
-    CurrentKernargPtrProvenance.EntryByteOffset = ByteOffset;
-  }
-
-  // Restore a proven non-entry pointer fact after a constant-preserving rebase.
-  void setKernargPtrNonEntry() {
-    CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::NonEntry;
-    CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::NonEntry;
-    CurrentKernargPtrProvenance.EntryByteOffset = 0;
-  }
-
-  // Update the current intra-BB provenance state after an ordinary SGPR write.
-  // Only writes to either kernarg-pointer lane change this fact. A generic
-  // register write kills LiveEntry but does not prove a non-entry value.
-  void noteSgprWriteForKernargProvenance(int Idx) {
-    assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
-    int KernargPtrSgpr = Layout->KernargSegmentPtrSgpr;
-    if (KernargPtrSgpr < 0)
-      return;
-    if (Idx == KernargPtrSgpr)
-      CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::Unknown;
-    else if (Idx == KernargPtrSgpr + 1)
-      CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::Unknown;
-    else
-      return;
-    CurrentKernargPtrProvenance.EntryByteOffset = 0;
-  }
-
-  // Record that an SMEM-style load wrote one or more SGPR lanes from memory.
-  // This is stronger than a generic register write: any overlapped kernarg
-  // pointer lane no longer carries the dispatch-provided entry SGPR value.
-  void noteSgprMemoryLoadForKernargProvenance(int BaseIdx, int WidthDwords) {
-    assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
-    assert(BaseIdx >= 0 && "SMEM destination base must be a valid SGPR index");
-    assert(WidthDwords > 0 && "SMEM destination width must be non-zero");
-    int KernargPtrSgpr = Layout->KernargSegmentPtrSgpr;
-    if (KernargPtrSgpr < 0)
-      return;
-    int EndIdx = BaseIdx + WidthDwords - 1;
-    if (BaseIdx <= KernargPtrSgpr && EndIdx >= KernargPtrSgpr)
-      CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::NonEntry;
-    if (BaseIdx <= KernargPtrSgpr + 1 && EndIdx >= KernargPtrSgpr + 1)
-      CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::NonEntry;
-    CurrentKernargPtrProvenance.EntryByteOffset = 0;
-  }
-
-  // Record the prepass-computed entry fact for a recovered source BB.
-  void setKernargPtrProvenanceForBlock(llvm::BasicBlock *BB,
-                                       KernargPtrProvenance Provenance) {
-    KernargSegmentPtrProvenanceByBB[BB] = Provenance;
-  }
-
-  // Load the prepass entry fact when lowering reaches a recovered source BB.
-  void enterKernargPtrProvenanceForBlock(llvm::BasicBlock *BB) {
-    assert(BB && "cannot enter kernarg provenance for null basic block");
-    if (!HasKernargPtrProvenanceByBB) {
-      CurrentKernargPtrProvenance = {};
-      return;
-    }
-    auto It = KernargSegmentPtrProvenanceByBB.find(BB);
-    assert(It != KernargSegmentPtrProvenanceByBB.end() &&
-           "missing kernarg provenance for source basic block");
-    CurrentKernargPtrProvenance = It->second;
-  }
-
   // emitUnderExec(body) wraps `body()` in an `if (lane_active)` diamond:
   //
   //   %active = emitLaneActiveBit()
@@ -575,17 +379,6 @@ struct RaiseContext {
 
   // Raise-time constant shadow of M0; see updateM0Const / getM0Const.
   std::optional<uint64_t> M0Const;
-
-  // Conservative lane-wise kernarg-pointer provenance for the strict hidden-arg
-  // SMEM gate. Filled before instruction lowering by a fixed-point over the
-  // decoded CFG. Mixed incoming states become Unknown and keep strict mode
-  // loud. False means tracking is inactive and BB entry uses Unknown without
-  // lookup.
-  bool HasKernargPtrProvenanceByBB = false;
-  llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>
-      KernargSegmentPtrProvenanceByBB =
-          llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>();
-  KernargPtrProvenance CurrentKernargPtrProvenance;
 
   // Record the per-lane compare i1 produced by a V_CMP_*_e64 write
   // to SGPR baseIdx in the current BB. Overwrites any prior entry
@@ -707,7 +500,6 @@ struct RaiseContext {
   // over-invalidation: a single-SGPR wave32 entry at K-1 is
   // unrelated to a scalar write at K and must NOT be invalidated.
   void invalidateSgprWaveMaskI1(int BaseIdx) {
-    noteSgprWriteForKernargProvenance(BaseIdx);
     LastSgprWaveMaskI1.erase(BaseIdx);
     SourceImageSgprPairAddrShadow.erase(BaseIdx);
     if (BaseIdx >= 0 &&

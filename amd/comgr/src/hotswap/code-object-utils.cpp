@@ -525,4 +525,22 @@ listTextFunctionExtents(llvm::MemoryBufferRef ElfData) {
   return Extents;
 }
 
+llvm::Error checkLiftedKernargSegment(const KernelMeta &Emitted,
+                                      const KernelMeta &Source) {
+  if (Emitted.KernargSegmentSize != Source.KernargSegmentSize)
+    return llvm::createStringError(
+        "lifted kernarg segment is " + llvm::Twine(Emitted.KernargSegmentSize) +
+        " bytes, source is " + llvm::Twine(Source.KernargSegmentSize));
+
+  for (const KernelArgMeta &Arg : Emitted.Args)
+    if (llvm::StringRef(Arg.ValueKind).starts_with("hidden_"))
+      return llvm::createStringError(
+          "lifted kernel declares '" + llvm::Twine(Arg.ValueKind) +
+          "' at offset " + llvm::Twine(Arg.Offset) +
+          "; the runtime populates hidden arguments from the source metadata "
+          "and allocated no room for a second block");
+
+  return llvm::Error::success();
+}
+
 } // namespace COMGR::hotswap

@@ -1,11 +1,12 @@
 # ABI Translation -- Kernel Descriptor, Kernarg, Buffer Descriptors
 
-> **Status:** design proposal, not yet implemented. Current raiser
-> re-materialises the kernarg layout (`KernargLayout` in
-> `kernarg-layout.hpp`) and emits a fresh kernel descriptor via the
+> **Status:** partly implemented. The raiser declares the lifted kernarg
+> segment as one opaque blob the size of the source's
+> `.kernarg_segment_size` and emits a fresh kernel descriptor via the
 > target backend (see `raiser.cpp` §Phase 2), which covers the 80%
-> path for simple Triton kernels. This doc specifies the remaining
-> 20% -- the hidden-arg surface, embedded descriptors, and the gates
+> path for simple Triton kernels. Sections 3.3, 5 and G2 describe the
+> hidden-argument surface as shipped; the rest of this doc is still a
+> proposal -- the embedded descriptors and the gates
 > that make ABI mismatches fail loudly instead of silently
 > miscompiling.
 >
@@ -39,7 +40,7 @@ There are three distinct surfaces, each handled differently:
 | Surface | Source state | Target synthesis | Translation mode |
 |---|---|---|---|
 | Kernel descriptor (64-byte AMDHSA KD) | Parsed from `.note` / `.rodata` during load | Re-emitted by target backend from IR attrs | **Attribute-preserving lower-to-IR** |
-| Kernarg segment | Host-side layout, shared by both ISAs | Same -- unchanged | **Layout-preserving** (but hidden-arg slots shift) |
+| Kernarg segment | Host-side layout, shared by both ISAs | Same -- unchanged | **Layout-preserving**: one opaque blob of the source `.kernarg_segment_size`, hidden-arg slots included, so no offset moves |
 | Embedded descriptors (V#, T#) | Rare; constructed at runtime from kernargs | Same -- runtime-constructed | **Pass-through** (principle); refuse on embedded constant V# |
 
 The first two are where the real work lives. §4 and §5 cover them.
@@ -75,33 +76,63 @@ translation input.
 
 ### 3.2 Kernarg layout
 
-The kernarg segment is a flat byte buffer. The host-side layout is
-the same across ISAs, modulo alignment. The hitch is that the kernel
-reads it via `s_load_*` with small displacements that the raiser has
-to resolve back to IR-level arguments -- `KernargLayout::resolveLoad`
-in `kernarg-layout.hpp:21`. That resolution is already ISA-agnostic.
+The kernarg segment is a flat byte buffer with the same host-side layout on
+both ISAs. The raiser does not resolve `s_load_*` displacements back to
+individual IR-level arguments: the lifted kernel takes one opaque
+`byref([N x i8])` blob of the source's `.kernarg_segment_size`, so a source
+displacement addresses the same byte in the target.
+
+Alignment needs no translation either. The lifted blob carries `align(16)`, the
+AMDGPU ABI minimum, while sources typically declare
+`.kernarg_segment_align: 8`. The declared value is not what the buffer gets:
+ROCclr raises it to at least 128 bytes before allocating
+(`kernargSegmentAlignment_ = alignUp(std::max(kernargSegmentAlignment_, 128u),
+cacheLineSize)`, `rocclr/device/rocm/rockernel.cpp`), so any alignment the
+lifted kernel can ask for is already satisfied.
 
 ### 3.3 Hidden arguments
 
-gfx12 Triton kernels commonly consume these hidden args (names from
-the AMDHSA metadata):
+gfx12 kernels consume these hidden args:
 
 - `hidden_block_count_{x,y,z}`
 - `hidden_group_size_{x,y,z}`
 - `hidden_remainder_{x,y,z}`
 - `hidden_grid_dims`
+- `hidden_global_offset_{x,y,z}`
 - `hidden_private_base`, `hidden_shared_base`
-- `hidden_global_offset_{x,y,z}` (legacy, rarely used)
-- `hidden_default_queue`, `hidden_completion_action`,
-  `hidden_multigrid_sync_arg`, `hidden_hostcall_buffer`,
-  `hidden_heap_v1`
+- `hidden_default_queue`, `hidden_completion_action`
+- `hidden_multigrid_sync_arg`, `hidden_hostcall_buffer`, `hidden_heap_v1`
+- `hidden_dynamic_lds_size`, `hidden_queue_ptr`
 
-The current raiser skips every `hidden_*` arg when building the
-function signature (`raiser.cpp:201-205`). That is correct for
-kernels that never load from them. The moment a kernel reads any
-hidden slot, we silently return zero -- because the allocated kernarg
-bytes are still there, but the IR has no formal parameter covering
-them. This is the first principled gate we need (§7).
+**None of them is translated.** A hidden-argument read is an ordinary load of
+`kernarg_base + source_offset`, correct through any pointer however computed --
+aliased, rebased, spilled, runtime-indexed. Three facts:
+
+1. The application loaded the source code object, so ROCclr sizes the kernarg
+   buffer from source metadata and writes each hidden field at its declared
+   offset (`WriteAqlArgAt(hidden_arguments, value, it.size_, it.offset_)`,
+   `clr/rocclr/device/rocm/rocvirtual.cpp`).
+2. The dispatch path rewrites `kernel_object`, `private_segment_size` and, under
+   a scaled dispatch, `workgroup_size_x` / `grid_size_x` -- never
+   `kernarg_address` (`rocr-runtime .../core/runtime/hotswap_aql_patch.h`).
+3. The lifted kernel keeps that size: one `byref([N x i8])` blob of the source
+   `.kernarg_segment_size`, with `amdgpu-no-implicitarg-ptr` set so the backend
+   appends no block of its own.
+
+Only fact 3 is ours to break, and G2 checks it after codegen.
+
+Scaled dispatch needs no exception: ROCclr fills the geometry fields from the
+application's requested block before the packet is scaled, so the buffer already
+holds un-scaled source geometry.
+
+The `byref` blob appears in the lifted object's metadata as a single
+`by_value` argument with no `hidden_*` entries, so the object is correct only
+when substituted into the source kernel's dispatch. This is stated on the public
+API. Emitting the source `.args` instead would make the object self-describing,
+at the cost of either shrinking
+the blob to `implicitArgsBase` and clearing the per-field `amdgpu-no-*` (which
+refuses any kernel whose hidden block does not start exactly there) or rewriting
+the metadata note after codegen. Neither is needed by the HotSwap runtime path.
 
 ### 3.4 User-SGPR preload layout
 
@@ -181,16 +212,15 @@ if (ctx.sourceIsa.hasGFX12UserSGPRLayout) {
 }
 ```
 
-Hidden-arg resolution (§5) then layers on the second branch: for each
-slot, look up the `(sourceIsa, targetIsa)` cell in the compatibility
-table to decide identity/derivable/host-inject/refuse.
+Hidden arguments need nothing on either branch: they are read where the
+runtime wrote them (§3.3, §5), so there is no per-slot decision to make.
 
 #### 4.0.3 Consequences for same-family retarget
 
 gfx1251 -> gfx1250 is an identity on every capability bit in §4.0.1.
 The KD re-emission is bit-identical to the source (modulo backend-
-rederived fields like register counts), every hidden arg maps
-"identity", and no gate fires. This is why the same-family path
+rederived fields like register counts), hidden arguments pass through
+untranslated as always, and no gate fires. This is why the same-family path
 collapses to "raise to IR, lower to target" with no ABI-specific
 work -- the capability branches above all take the identity path.
 
@@ -251,54 +281,17 @@ scratch backing would change the source launch ABI instead of translating it.
 | gfx12 user-SGPR slots for `workgroup_id_x` | gfx9 slots | Abstracted at intrinsic level; see §3.4 |
 | `private_segment_size` at 32-lane wave | At 64-lane wave | Backend re-derives; we propagate via attribute |
 | `group_segment_size` ≤ 327,680 | Limit 163,840 | **Refuse** if source > 163,840 (§7) |
-| `kernarg_size` arbitrary | Same bit-for-bit | Preserve via `KernargLayout` |
-| gfx12 hidden-arg block | gfx9 hidden-arg block | **Per-arg compatibility table** (§5) |
+| `kernarg_size` arbitrary | Same bit-for-bit | One opaque `byref([N x i8])` blob of the source size; post-codegen gate refuses unless the emitted segment is the same size and declares no hidden args (G2) |
+| gfx12 hidden-arg block | gfx9 hidden-arg block | **Pass-through**: read from the source-populated buffer at the source offsets; no per-arg translation (§3.3, §5) |
 
-## 5. Hidden argument compatibility table
+## 5. Hidden argument compatibility
 
-Each hidden arg is one of:
+No per-field table and no per-field class: every hidden argument is read where
+the runtime wrote it (§3.3). `hidden_private_base` / `hidden_shared_base` carry
+the target queue's real apertures, and `hidden_global_offset_*` carries whatever
+offset the caller launched with.
 
-- **identity** -- present on both ISAs with identical meaning; reads
-  pass through unchanged.
-- **derivable** -- not present in target kernarg, but the value is
-  computable from other available state; raiser synthesises it.
-- **host-inject** -- present on target kernarg, but at a different
-  offset; raiser re-maps the load.
-- **refuse** -- meaningful on source, no equivalent on target; the
-  kernel uses a capability we cannot provide.
-
-| Hidden arg | gfx1250 | gfx950 | Class |
-|---|---|---|---|
-| `hidden_block_count_{x,y,z}` | present | present | identity |
-| `hidden_group_size_{x,y,z}` | present | present | identity |
-| `hidden_remainder_{x,y,z}` | present | present | identity |
-| `hidden_grid_dims` | present | present | identity |
-| `hidden_global_offset_{x,y,z}` | present | present | derivable only for HIP-launched HotSwap kernels (`0`); otherwise refuse |
-| `hidden_private_base` | present (gfx12 flat-scratch/aperture base) | target aperture state, not a source-layout identity | refuse until a target-capability proof maps the aperture use |
-| `hidden_shared_base` | present (gfx12 flat-LDS/aperture base) | target aperture state, not a source-layout identity | refuse until a target-capability proof maps the aperture use |
-| `hidden_default_queue` | present | present | identity |
-| `hidden_completion_action` | present | present | identity |
-| `hidden_multigrid_sync_arg` | present | present | identity |
-| `hidden_hostcall_buffer` | present | present | identity |
-| `hidden_heap_v1` | present | present | identity |
-
-`hidden_global_offset_{x,y,z}` is derivable only when the caller has opted into
-the HIP-launched HotSwap contract: HIP launch APIs do not expose a non-zero HSA
-grid-global offset, so those fields are the all-zero 64-bit value. Standalone
-pipeline users do not get that assumption and the raiser refuses the field
-instead of guessing another frontend's launch contract.
-
-`hidden_private_base` and `hidden_shared_base` are deliberately not treated as
-zero just because the target backend may lower ordinary private/shared memory
-without exposing the same source hidden slots. These fields describe
-aperture-related state (`SCRATCH_BASE`, `SHARED_BASE`, flat scratch/shared base
-source operands); a source kernel that explicitly reads them is observing that
-ABI surface. Until the translator has a proof that the source read is either
-unused or reconstructed by the target memory lowering, strict mode refuses those
-fields rather than synthesizing a convenient constant.
-
-If the kernel *writes* to any hidden slot (it shouldn't -- they're consumed from
-the kernarg-backed hidden block, not written), that is a refusal case.
+A kernel that *writes* a hidden slot is still a refusal case.
 
 ## 6. Embedded descriptors
 
@@ -352,14 +345,17 @@ if (meta.groupSegmentFixedSize > targetIsa.maxGroupSegmentSize)
                                      targetIsa.maxGroupSegmentSize);
 ```
 
-### G2 -- Hidden-arg coverage (per-kernel at raise)
+### G2 -- Lifted kernarg segment matches the source's (per-kernel, post-codegen)
 
-For every `s_load_*` whose resolved kernarg offset lands in the
-implicit-args block (`offset ≥ kernargs.implicitArgsBase`), identify
-which named hidden arg it reads. If the arg is not in the source's
-declared `meta.args` (Triton sometimes reads past its own declared
-args), refuse. If the arg maps to a **refuse** row in §5, refuse. If
-it maps to a **derivable** row, substitute the IR constant.
+`checkLiftedKernargSegment` refuses unless the emitted `.kernarg_segment_size`
+equals the source's and the emitted metadata declares no `hidden_*` argument.
+The runtime sized the buffer from source metadata and the dispatch path does not
+resize it, so either mismatch means the backend added an implicit-argument block
+the runtime did not allocate. This is the whole hidden-argument gate (§3.3).
+
+Lit: `lifted_kernarg_segment.s` (gfx1151 and gfx942) pins the emitted metadata;
+`hidden_arg_*.s` pin that the awkward pointer shapes lower to ordinary loads.
+The refusal itself is unreachable from a code object and is unit-tested.
 
 ### G3 -- User-SGPR compatibility (startup)
 
@@ -387,8 +383,8 @@ raise(bytes, source_isa, target_isa, meta):
   run G1, G3 at startup (once per (source_isa, target_isa) pair)
   for each kernel:
     run G5 immediately
-    raise to IR, interleaving G2 at each kernarg-load resolution
-    post-raise: run G4
+    raise to IR
+    post-raise: run G4; post-codegen: run G2
     if any gate fires: return RaiseFailure
     else: emit IR; backend synthesises target KD from attrs + IR
 ```
@@ -401,7 +397,7 @@ reaches anything ambiguous, we reject it loudly.
 - **Flat-scratch -> buffer-scratch lowering.** That is a memory-ops
   concern, folded into the existing `handleFLAT` handler (gfx9 buffer
   scratch is the native flat-addrspace lowering on CDNA). The SemOps
-  for flat/global/scratch loads already exist (`semop.hpp:157-166`);
+  for flat/global/scratch loads already exist in the FLAT handler;
   cross-ISA flat-scratch->V# rewrite happens at the handler level, not
   at ABI level.
 - **VGPR/SGPR count inflation.** The target backend owns this. If IR
@@ -418,17 +414,14 @@ In dependency order, cheapest first.
 
 One struct field, one check in `raiseToIR` before Phase 2. 30 LoC.
 
-### T2 -- Hidden-arg compatibility table + G2
+### T2 -- Hidden-arg compatibility table + G2 -- **done, and smaller than planned**
 
-- `hidden_args_table.hpp` -- static constexpr array keyed on
-  (arg_name, source_isa, target_isa) producing an enum
-  `{Identity, Derivable(constant), HostInject(remap), Refuse}`.
-- Extend `KernargLayout::resolveLoad` to return a hidden-arg handle
-  when the resolved offset is in the implicit block.
-- Raiser consults the table at each resolution; emits constant or
-  `RaiseFailure::hiddenArgUnsupported`.
-
-~150 LoC + table maintenance. The table is data, not code.
+Superseded. The planned table (an entry per `(arg_name, source_isa,
+target_isa)`, consulted at each kernarg-load resolution) turned out to be
+unnecessary: the runtime populates every hidden field at the source
+offset the kernel reads, so no field needs a class and no load needs
+resolving. What shipped is the §3.3 rule plus the one post-codegen
+segment-size check in G2.
 
 ### T3 -- Embedded-descriptor scan (G4)
 
@@ -478,5 +471,6 @@ Startup check against both subtargets. ~60 LoC.
 the target supports it, synthesise only when it does not" principle.
 See `target-capability-dispatch.md` for the shared design and the
 open implementation question (does LLVM already expose per-feature /
-per-intrinsic availability we can reuse for the hidden-arg and
-user-SGPR compatibility tables?).
+per-intrinsic availability we can reuse for the user-SGPR compatibility
+table?). Hidden arguments are pass-through, so no table is needed for them
+(sec. 3.3, 5).
