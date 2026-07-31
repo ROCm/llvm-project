@@ -16,9 +16,9 @@
 namespace COMGR::hotswap {
 
 // The AMDGPU instruction-format label (e.g. "SOP1", "VOP3", "FLAT") for an
-// instruction with the given MC `TSFlags` and `Opcode`, or "Unknown". Consumed
-// only by diagnostics; there is no dispatch on the returned string.
-llvm::StringRef formatName(uint64_t TSFlags, unsigned Opcode);
+// instruction with the given MC `TSFlags`, or "Unknown". Consumed only by
+// diagnostics; there is no dispatch on the returned string.
+llvm::StringRef formatName(uint64_t TSFlags);
 
 } // namespace COMGR::hotswap
 

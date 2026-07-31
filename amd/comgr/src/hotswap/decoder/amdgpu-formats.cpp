@@ -9,55 +9,76 @@
 #include "amdgpu-formats.h"
 
 #include "SIDefines.h"
-#include "Utils/AMDGPUBaseInfo.h"
 
 namespace COMGR::hotswap {
 
-llvm::StringRef formatName(uint64_t TSFlags, unsigned Opcode) {
+llvm::StringRef formatName(uint64_t TSFlags) {
   using namespace llvm;
-  // VOPD has no dedicated TSFlags bit; MAI is a VOP3 subclass and VOP3P
-  // coexists with VOP3, so the more specific tests must come first.
-  if (AMDGPU::isVOPD(Opcode))
+  // Only the gfx1250 VOPD3 form carries a TSFlags bit; classic (gfx11) VOPD has
+  // none, but the transpiler's target ISAs do not emit it. MAI is a VOP3
+  // subclass and VOP3P coexists with VOP3, so the more specific tests come
+  // first.
+  if (TSFlags & SIInstrFlags::VOPD3) {
     return "VOPD";
-  if (TSFlags & SIInstrFlags::IsMAI)
+  }
+  if (TSFlags & SIInstrFlags::IsMAI) {
     return "MFMA";
-  if (TSFlags & SIInstrFlags::DPP)
+  }
+  if (TSFlags & SIInstrFlags::DPP) {
     return "DPP";
-  if (TSFlags & SIInstrFlags::SDWA)
+  }
+  if (TSFlags & SIInstrFlags::SDWA) {
     return "SDWA";
-  if (TSFlags & SIInstrFlags::SOPP)
+  }
+  if (TSFlags & SIInstrFlags::SOPP) {
     return "SOPP";
-  if (TSFlags & SIInstrFlags::SOPC)
+  }
+  if (TSFlags & SIInstrFlags::SOPC) {
     return "SOPC";
-  if (TSFlags & SIInstrFlags::SOP1)
+  }
+  if (TSFlags & SIInstrFlags::SOP1) {
     return "SOP1";
-  if (TSFlags & SIInstrFlags::SOP2)
+  }
+  if (TSFlags & SIInstrFlags::SOP2) {
     return "SOP2";
-  if (TSFlags & SIInstrFlags::SOPK)
+  }
+  if (TSFlags & SIInstrFlags::SOPK) {
     return "SOPK";
-  if (TSFlags & SIInstrFlags::VOPC)
+  }
+  if (TSFlags & SIInstrFlags::VOPC) {
     return "VOPC";
-  if (TSFlags & SIInstrFlags::VOP3P)
+  }
+  if (TSFlags & SIInstrFlags::VOP3P) {
     return "VOP3P";
-  if (TSFlags & SIInstrFlags::VOP3)
+  }
+  if (TSFlags & SIInstrFlags::VOP3) {
     return "VOP3";
-  if (TSFlags & SIInstrFlags::VOP2)
+  }
+  if (TSFlags & SIInstrFlags::VOP2) {
     return "VOP2";
-  if (TSFlags & SIInstrFlags::VOP1)
+  }
+  if (TSFlags & SIInstrFlags::VOP1) {
     return "VOP1";
-  if (TSFlags & SIInstrFlags::SMRD)
+  }
+  if (TSFlags & SIInstrFlags::SMRD) {
     return "SMEM";
-  if (TSFlags & SIInstrFlags::FLAT)
+  }
+  if (TSFlags & SIInstrFlags::FLAT) {
     return "FLAT";
-  if (TSFlags & SIInstrFlags::MUBUF)
+  }
+  if (TSFlags & SIInstrFlags::MUBUF) {
     return "MUBUF";
-  if (TSFlags & SIInstrFlags::DS)
+  }
+  if (TSFlags & SIInstrFlags::DS) {
     return "DS";
-  if (TSFlags & SIInstrFlags::VIMAGE)
+  }
+  if (TSFlags & SIInstrFlags::VIMAGE) {
     return "VIMAGE";
+  }
   // The gfx1250 TENSOR pseudos set TENSOR_CNT without the VIMAGE bit.
-  if (TSFlags & SIInstrFlags::TENSOR_CNT)
+  if (TSFlags & SIInstrFlags::TENSOR_CNT) {
     return "VIMAGE";
+  }
   return "Unknown";
 }
 
