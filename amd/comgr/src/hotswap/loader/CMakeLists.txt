@@ -65,6 +65,19 @@ endif()
 llvm_update_compile_flags(hotswap-loader)
 set_target_properties(hotswap-loader PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# Match LLVM's RTTI setting explicitly. llvm_update_compile_flags only adds
+# -fno-rtti when it detects a GCC-compatible compiler, which is not set in this
+# subproject scope, so against an RTTI-disabled libLLVM the ErrorInfo<HotswapError>
+# instantiation would emit C++ typeinfo referencing llvm::ErrorInfoBase, a symbol
+# that library never defines.
+if(NOT LLVM_ENABLE_RTTI)
+  if(MSVC)
+    target_compile_options(hotswap-loader PRIVATE /GR-)
+  else()
+    target_compile_options(hotswap-loader PRIVATE -fno-rtti)
+  endif()
+endif()
+
 # Public include root (src/) so consumers can `#include "hotswap/..."`.
 target_include_directories(hotswap-loader PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
