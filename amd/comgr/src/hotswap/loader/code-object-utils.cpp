@@ -290,9 +290,16 @@ readKernelDescriptor(object::ObjectFile &Obj, StringRef DescriptorSymbolName) {
 
   // The entry address is the descriptor address plus its signed code-entry
   // offset: this, not the source `.name`, binds the kernel's ABI to its code.
-  uint64_t EntryAddress =
-      *Address +
-      static_cast<uint64_t>(Descriptor.kernel_code_entry_byte_offset);
+  // A negative offset larger than the descriptor address would wrap past zero,
+  // so reject it here; a positive offset that overshoots is caught later by the
+  // .text bounds check on EntryAddress.
+  int64_t EntryOffset = Descriptor.kernel_code_entry_byte_offset;
+  if (EntryOffset < 0 && static_cast<uint64_t>(-EntryOffset) > *Address)
+    return makeHotswapError(formatv(
+        "readKernelDescriptor: symbol '{0}' code-entry offset {1} precedes the "
+        "descriptor address {2:x}",
+        DescriptorSymbolName, EntryOffset, *Address));
+  uint64_t EntryAddress = *Address + static_cast<uint64_t>(EntryOffset);
   return DescriptorLoad{Descriptor, EntryAddress};
 }
 
@@ -598,9 +605,22 @@ collectTextFunctions(object::ObjectFile &Obj, const object::SectionRef &Text,
       continue;
     Functions.push_back({*Address, object::ELFSymbolRef(Symbol).getSize()});
   }
+  // Sort by ascending address, breaking ties by descending size so the first
+  // symbol at each address carries the largest recorded extent.
   llvm::sort(Functions, [](const FunctionSymbol &A, const FunctionSymbol &B) {
-    return A.Address < B.Address;
+    if (A.Address != B.Address)
+      return A.Address < B.Address;
+    return A.Size > B.Size;
   });
+  // Collapse aliases: several symbols may share one address, but they name a
+  // single function. Keep the canonical (largest) one so the extent queries do
+  // not emit duplicate or zero-sized ranges for it.
+  Functions.erase(
+      llvm::unique(Functions,
+                   [](const FunctionSymbol &A, const FunctionSymbol &B) {
+                     return A.Address == B.Address;
+                   }),
+      Functions.end());
   return Functions;
 }
 
