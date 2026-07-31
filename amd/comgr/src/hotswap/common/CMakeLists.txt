@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(hotswap-common LANGUAGES CXX)
+
+# No project() here: this is an add_subdirectory component of amd_comgr, not a
+# standalone build. A nested project() re-runs the superbuild dependency provider
+# and re-imports LLVM, which links a second copy of the AMDGPU static libraries
+# into amd_comgr and double-registers their cl::opts under a non-folding linker.
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,6 +36,17 @@ if(NOT TARGET hotswap::common)
 endif()
 
 llvm_update_compile_flags(hotswap-common)
+# llvm_update_compile_flags does not reliably carry LLVM's -fno-rtti to a
+# standalone find_package(LLVM) consumer, and HotswapError derives from
+# llvm::ErrorInfo. Mirror LLVM_ENABLE_RTTI explicitly so we do not emit typeinfo
+# an RTTI-off LLVM cannot resolve at link time.
+if(NOT LLVM_ENABLE_RTTI)
+  if(MSVC)
+    target_compile_options(hotswap-common PRIVATE /GR-)
+  else()
+    target_compile_options(hotswap-common PRIVATE -fno-rtti)
+  endif()
+endif()
 set_target_properties(hotswap-common PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Match LLVM's RTTI setting explicitly. llvm_update_compile_flags only adds

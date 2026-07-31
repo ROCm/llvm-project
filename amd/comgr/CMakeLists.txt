@@ -443,9 +443,10 @@ target_include_directories(amd_comgr
 # amd_comgr and the hotswap test drivers, so the drivers reuse the exact same
 # objects (and the buffer-facing getMetadataRoot / getElfIsaName /
 # lookupSymbolByName entry points) instead of recompiling the sources with
-# divergent flags. Function/data sections let a standalone driver drop the parts
-# of these translation units it does not reference (the amd_comgr build keeps
-# them).
+# divergent flags. Per-function/data sections let a standalone driver drop the
+# parts of these translation units it does not reference (the amd_comgr build
+# keeps them); the GCC/Clang spelling is -ffunction-sections/-fdata-sections,
+# the MSVC equivalent is /Gy plus /Gw.
 add_library(comgr-object-utils OBJECT ${COMGR_OBJECT_UTILS_SOURCES})
 # These sources include LLVM headers that pull in TableGen-generated .inc files.
 # amd_comgr is ordered after those generators by its LLVM link libraries, but an
@@ -465,9 +466,6 @@ target_include_directories(comgr-object-utils
     ${LLVM_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>)
-# The GCC/Clang-driver spelling of the section-splitting flags above is not
-# understood by the MSVC front end (including clang-cl), which spells the same
-# behavior /Gy /Gw.
 if(MSVC)
   target_compile_options(comgr-object-utils
     PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" /Gy /Gw)
