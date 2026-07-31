@@ -1,0 +1,25 @@
+## A non-AMDGPU relocatable (x86_64) built from a single data definition has an
+## empty .text, one STT_OBJECT symbol, and no notes. Without an e_machine gate
+## the data-only path would accept it for a gfx1250 rewrite and emit a
+## byte-identical SUCCESS. Used by hotswap-data-only-empty-text.s.
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS64
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: EM_X86_64
+Sections:
+  - Name: .text
+    Type: SHT_PROGBITS
+    Flags: [ SHF_ALLOC, SHF_EXECINSTR ]
+    Size: 0
+  - Name: .data
+    Type: SHT_PROGBITS
+    Flags: [ SHF_ALLOC, SHF_WRITE ]
+    Content: "01000000"
+Symbols:
+  - Name: data_only
+    Type: STT_OBJECT
+    Section: .data
+    Binding: STB_GLOBAL
+    Size: 4

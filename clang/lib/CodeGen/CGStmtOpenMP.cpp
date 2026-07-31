@@ -6324,8 +6324,8 @@ void CodeGenFunction::EmitOMPDepobjDirective(const OMPDepobjDirective &S) {
     CGM.getOpenMPRuntime().emitDestroyClause(*this, DOLVal, DC->getBeginLoc());
     return;
   }
-  if (const auto *UC = S.getSingleClause<OMPUpdateClause>()) {
-    CGM.getOpenMPRuntime().emitUpdateClause(
+  if (const auto *UC = S.getSingleClause<OMPUpdateDependObjectsClause>()) {
+    CGM.getOpenMPRuntime().emitUpdateDependObjectsClause(
         *this, DOLVal, UC->getDependencyKind(), UC->getBeginLoc());
     return;
   }

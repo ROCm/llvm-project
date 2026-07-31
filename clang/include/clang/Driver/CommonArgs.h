@@ -24,8 +24,6 @@ namespace clang {
 namespace driver {
 namespace tools {
 
-bool needFortranLibs(const Driver &D, const llvm::opt::ArgList &Args);
-
 struct OffloadJobsOpt {
   enum class Kind { Missing, Invalid, Jobserver, Fixed };
 
@@ -248,10 +246,6 @@ void addMultilibFlag(bool Enabled, const StringRef Flag,
 void addX86AlignBranchArgs(const Driver &D, const llvm::opt::ArgList &Args,
                            llvm::opt::ArgStringList &CmdArgs, bool IsLTO,
                            const StringRef PluginOptPrefix = "");
-
-unsigned getOrCheckAMDGPUCodeObjectVersion(const Driver &D,
-                              const llvm::opt::ArgList &Args,
-                              bool Diagnose = false);
 
 void checkAMDGPUCodeObjectVersion(const Driver &D,
                                   const llvm::opt::ArgList &Args);

@@ -7,13 +7,6 @@ tablegen(OFFLOAD include/OffloadErrcodes.inc -gen-errcodes EXTRA_INCLUDES ${CMAK
 tablegen(OFFLOAD include/OffloadInfo.inc -gen-info EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../../liboffload/API)
 add_public_tablegen_target(PluginErrcodes)
 
-if(OFFLOAD_ENABLE_EMISSARY_APIS)
-  set(emissary_sources
-    src/Emissary.cpp
-    src/EmissaryPrint.cpp
-  )
-endif()
-
 # NOTE: Don't try to build `PluginInterface` using `add_llvm_library` because we
 # don't want to export `PluginInterface` while `add_llvm_library` requires that.
 add_library(PluginCommon OBJECT
@@ -25,12 +18,11 @@ add_library(PluginCommon OBJECT
   src/OffloadError.cpp
   src/Utils/ELF.cpp
   src/GenericProfiler.cpp
-  ${emissary_sources}
 )
 add_dependencies(PluginCommon intrinsics_gen PluginErrcodes OffloadAPI)
 
 # Only enable JIT for those targets that LLVM can support.
-set(supported_jit_targets AMDGPU NVPTX)
+set(supported_jit_targets AMDGPU NVPTX SPIRV)
 if (NOT LLVM_LINK_LLVM_DYLIB)
   foreach(target IN LISTS supported_jit_targets)
     if("${target}" IN_LIST LLVM_TARGETS_TO_BUILD)

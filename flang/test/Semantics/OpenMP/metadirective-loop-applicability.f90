@@ -1,5 +1,4 @@
 !RUN: %python %S/../test_errors.py %s %flang -fopenmp -fopenmp-version=51
-! XFAIL: *
 ! Static applicability of loop-associated METADIRECTIVE variants
 
 ! device={kind(nohost)} cannot match during host compilation so semantic check is skipped
@@ -18,7 +17,7 @@ subroutine f02(n, a)
   integer :: n, a(n, n), i, j
   !ERROR: This construct requires a nest of depth 3, but the associated nest is a nest of depth 2
   !BECAUSE: COLLAPSE clause was specified with argument 3
-  !$omp metadirective when(implementation={vendor(llvm)}: do collapse(3)) default(nothing)
+  !$omp metadirective when(implementation={vendor(amd)}: do collapse(3)) default(nothing)
   do i = 1, n
     do j = 1, n
       a(j, i) = i

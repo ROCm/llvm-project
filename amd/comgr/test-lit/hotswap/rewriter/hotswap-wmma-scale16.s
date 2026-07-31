@@ -1,0 +1,66 @@
+// COM: The target gfx1250 has no block-16 scaled WMMA, so the rewrite lowers
+// COM: 16x16x128_f8f6f4 exactly into two block-32 WMMAs chained through the
+// COM: accumulator: each pass masks matrix A to one 16-K subblock (a lane mask
+// COM: for FP8), copies matrix B into the same scratch bank, and byte-gathers
+// COM: the matching block-16 scales. When the scratch budget is unavailable it
+// COM: fails closed (see the 32x16 refuse test).
+
+// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: hotswap-rewrite %t.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --output %t.out.elf \
+// RUN:   | %FileCheck --check-prefix=RESULT %s
+// RESULT: RESULT: SUCCESS
+
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
+// COM: block-16 form gone, replaced by the two block-32 passes: pass-low masks
+// COM: the low-16 subblock (lane mask 0xffff), pass-high the high-16
+// COM: (0xffff0000), the second accumulating onto the first through v[0:7].
+// DISASM-NOT: v_wmma_scale16
+// DISASM: s_mov_b32 s{{[0-9]+}}, 0xffff {{.*$}}
+// DISASM: v_cndmask_b32_e64
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[{{[0-9]+}}:{{[0-9]+}}], v[0:7],
+// COM: exactly one gfx1250 hazard v_nop before the pass-high lane-mask VALU that
+// COM: overwrites the masked-A scratch block.
+// DISASM-COUNT-1: v_nop
+// DISASM-NEXT: s_mov_b32 s{{[0-9]+}}, 0xffff0000
+// DISASM: v_cndmask_b32_e64
+// DISASM: v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[{{[0-9]+}}:{{[0-9]+}}], v[{{[0-9]+}}:{{[0-9]+}}], v[0:7],
+
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
+.text
+
+// --- Scale16 16x16 (block-16) -> exact lane-masked K-split ---
+.globl test_wmma_scale16_16x16
+.p2align 8
+.type test_wmma_scale16_16x16,@function
+test_wmma_scale16_16x16:
+  v_wmma_scale16_f32_16x16x128_f8f6f4 v[0:7], v[16:31], v[32:47], v[0:7], v[48:49], v[50:51]
+  s_endpgm
+.Ltest_wmma_scale16_16x16_end:
+.size test_wmma_scale16_16x16, .Ltest_wmma_scale16_16x16_end-test_wmma_scale16_16x16
+
+.rodata
+.p2align 8
+.amdhsa_kernel test_wmma_scale16_16x16
+  .amdhsa_next_free_vgpr 52
+  .amdhsa_next_free_sgpr 2
+  .amdhsa_wavefront_size32 1
+.end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 3
+    - 0
+  amdhsa.kernels:
+    - .name: test_wmma_scale16_16x16
+      .symbol: test_wmma_scale16_16x16.kd
+      .sgpr_count: 2
+      .vgpr_count: 52
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 32
+      .max_flat_workgroup_size: 256
+.end_amdgpu_metadata
