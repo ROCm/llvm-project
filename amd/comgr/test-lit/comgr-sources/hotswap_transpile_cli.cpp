@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // Command-line front end for the hotswap transpiler, used by the lit tests
-// under test-lit/hotswap-raise. Its modes grow with the stack; this milestone
+// under test-lit/hotswap/raiser. Its modes grow with the stack; this milestone
 // supports --dump-meta, which prints the metadata extracted from a code object
 // so the extraction can be checked without any MC or raiser machinery.
 //
