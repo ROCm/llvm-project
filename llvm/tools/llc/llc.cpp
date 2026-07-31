@@ -495,8 +495,9 @@ static bool addPass(PassManagerBase &PM, const char *argv0, StringRef PassName,
   return false;
 }
 
-bool targetSupportsNPMBackend(const Triple &T) {
-  return T.isAMDGCN();
+bool targetSupportsNPMBackend(const Triple &T, const CGPassBuilderOption &Opt) {
+  return T.isAMDGCN() &&
+         Opt.EnableGlobalISelOption != cl::boolOrDefault::BOU_TRUE;
 }
 
 static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
@@ -753,33 +754,22 @@ static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
   else if (VerifyEach)
     VK = VerifierKind::EachPass;
 
-  bool UseNPM = false;
-  bool RetryWithLegacyPM = false;
-  if (EnableNewPassManager.getNumOccurrences()) {
-    UseNPM = EnableNewPassManager;
-  }
-  else if (!PassPipeline.empty()) {
-    UseNPM = true;
-  }
-  else if (RunPass.getNumOccurrences())
-    UseNPM = false;
-  else if (targetSupportsNPMBackend(TheTriple)) {
-    RetryWithLegacyPM = true;
-    UseNPM = true;
-  }
+    CGPassBuilderOption Opt = getCGPassBuilderOption();
+    bool UseNPM = false;
+    if (EnableNewPassManager.getNumOccurrences()) {
+      UseNPM = EnableNewPassManager;
+    } else if (!PassPipeline.empty()) {
+      UseNPM = true;
+    } else if (RunPass.getNumOccurrences())
+      UseNPM = false;
+    else if (targetSupportsNPMBackend(TheTriple, Opt)) {
+      UseNPM = true;
+    }
 
   if (UseNPM) {
-    auto Exit = compileModuleWithNewPM(argv[0], M, MIR, Target, Out, DwoOut,
+    return compileModuleWithNewPM(argv[0], M, MIR, Target, Out, DwoOut,
                                        Context, TLII, VK, PassPipeline,
-                                       codegen::getFileType(), RetryWithLegacyPM);
-    // Fall back to the legacy pass manager only when the new PM explicitly
-    // requested a retry and legacy fallback is permitted for this target.
-    // Otherwise (success or a genuine error) return the new PM's result.
-    if (!RetryWithLegacyPM || Exit != LLC_Retry)
-      return static_cast<int>(Exit);
-
-    WithColor::warning(errs(), argv[0])
-      << "New pass manager failed, falling back to legacy pass manager.\n";
+                                       codegen::getFileType(), Opt);
   }
 
   // Build up all of the passes that we want to do to the module.

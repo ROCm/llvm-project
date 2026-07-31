@@ -463,55 +463,6 @@ struct CodegenConfig {
   }
 };
 
-Error runBackendWithNewPM(TargetMachine *TM, Module &Mod,
-                          std::unique_ptr<CachedFileStream> &Stream,
-                          std::unique_ptr<ToolOutputFile> &DwoOut,
-                          const CodegenConfig &Conf,
-                          const ModuleSummaryIndex &CombinedIndex) {
-  MachineModuleInfo MMI(TM);
-  PassInstrumentationCallbacks PIC;
-  MachineFunctionAnalysisManager MFAM;
-  LoopAnalysisManager LAM;
-  FunctionAnalysisManager FAM;
-  CGSCCAnalysisManager CGAM;
-  ModuleAnalysisManager MAM;
-  PassBuilder PB(TM, PipelineTuningOptions(), std::nullopt, &PIC);
-
-  TargetLibraryInfoImpl TLII(Mod.getTargetTriple(), TM->Options.VecLib);
-  FAM.registerPass([&] { return TargetLibraryAnalysis(TLII); });
-  MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
-  MAM.registerPass([&] {
-    return RuntimeLibraryAnalysis(
-        Mod.getTargetTriple(), TM->Options.ExceptionModel,
-        TM->Options.FloatABIType, TM->Options.EABIVersion,
-        TM->Options.MCOptions.ABIName, TM->Options.VecLib);
-  });
-
-  if (!isEmptyModule(Mod))
-      MAM.registerPass([&] { return ImmutableModuleSummaryIndexAnalysis(&CombinedIndex);  });
-
-  PB.registerModuleAnalyses(MAM);
-  PB.registerCGSCCAnalyses(CGAM);
-  PB.registerFunctionAnalyses(FAM);
-  PB.registerLoopAnalyses(LAM);
-  PB.registerMachineFunctionAnalyses(MFAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM, &MFAM);
-
-  ModulePassManager MPM;
-  FunctionPassManager FPM;
-
-  if (Error Err = TM->buildCodeGenPipeline(
-          MPM, MAM, *Stream->OS, DwoOut ? &DwoOut->os() : nullptr,
-          Conf.CGFileType, CGPassBuilderOption(), MMI.getContext(), &PIC))
-    return Err;
-
-  MPM.run(Mod, MAM);
-
-  if (DwoOut)
-    DwoOut->keep();
-  return Error::success();
-}
-
 static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
                     AddStreamFn AddStream, unsigned Task, Module &Mod,
                     const ModuleSummaryIndex &CombinedIndex) {
@@ -559,17 +510,67 @@ static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
   // the raw stream, which is too early as streamers (e.g. MCAsmStreamer)
   // keep the pointer and may use it until their destruction. See #138194.
   if (EnableNPMForBackend) {
-    if (!runBackendWithNewPM(TM, Mod, Stream, DwoOut, Conf, CombinedIndex)) {
-      // NPM success
-      if (Error Err = Stream->commit())
-        report_fatal_error(std::move(Err));
+    MachineModuleInfo MMI(TM);
+    PassInstrumentationCallbacks PIC;
+    MachineFunctionAnalysisManager MFAM;
+    LoopAnalysisManager LAM;
+    FunctionAnalysisManager FAM;
+    CGSCCAnalysisManager CGAM;
+    ModuleAnalysisManager MAM;
+    PassBuilder PB(TM, PipelineTuningOptions(), std::nullopt, &PIC);
+
+    // Register standard instrumentations so that OptNoneInstrumentation is active
+    // for the codegen pipeline. Without this, Optional MachineFunction passes are
+    // not skipped on optnone functions (unlike the legacy codegen path, which
+    // gates them via skipFunction/skipMachineFunction), which can miscompile
+    // -O0 code (e.g. sinking argument home-slot stores past prologue_end and
+    // breaking debugger reads of kernel parameters).
+    StandardInstrumentations SI(Mod.getContext(), Conf.Conf.DebugPassManager,
+                                Conf.Conf.VerifyEach);
+    SI.registerCallbacks(PIC, &MAM);
+
+    TargetLibraryInfoImpl TLII(Mod.getTargetTriple(), TM->Options.VecLib);
+    FAM.registerPass([&] { return TargetLibraryAnalysis(TLII); });
+    MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
+    MAM.registerPass([&] {
+      return RuntimeLibraryAnalysis(
+          Mod.getTargetTriple(), TM->Options.ExceptionModel,
+          TM->Options.FloatABIType, TM->Options.EABIVersion,
+          TM->Options.MCOptions.ABIName, TM->Options.VecLib);
+    });
+
+    if (!isEmptyModule(Mod))
+      MAM.registerPass(
+          [&] { return ImmutableModuleSummaryIndexAnalysis(&CombinedIndex); });
+
+    PB.registerModuleAnalyses(MAM);
+    PB.registerCGSCCAnalyses(CGAM);
+    PB.registerFunctionAnalyses(FAM);
+    PB.registerLoopAnalyses(LAM);
+    PB.registerMachineFunctionAnalyses(MFAM);
+    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM, &MFAM);
+
+    ModulePassManager MPM;
+    FunctionPassManager FPM;
+
+    if (Error Err = TM->buildCodeGenPipeline(
+            MPM, MAM, *Stream->OS, DwoOut ? &DwoOut->os() : nullptr,
+            Conf.CGFileType, CGPassBuilderOption(), MMI.getContext(), &PIC))
+      return;
+	
+	    if (PrintPipelinePasses) {
+      std::string PipelineStr;
+      raw_string_ostream OutS(PipelineStr);
+      MPM.printPipeline(OutS, [&PIC](StringRef ClassName) {
+        auto PassName = PIC.getPassNameForClassName(ClassName);
+        return PassName.empty() ? ClassName : PassName;
+      });
+      outs() << PipelineStr << '\n';
       return;
     }
-    
-    llvm::errs() << "warning: New pass manager failed, falling back to legacy PM\n";
-  }
 
-  {
+    MPM.run(Mod, MAM);
+  } else {
     legacy::PassManager CodeGenPasses;
     TargetLibraryInfoImpl TLII(Mod.getTargetTriple(), TM->Options.VecLib);
     CodeGenPasses.add(new TargetLibraryInfoWrapperPass(TLII));
@@ -594,9 +595,10 @@ static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
       report_fatal_error("Failed to setup codegen");
     CodeGenPasses.run(Mod);
 
-    if (DwoOut)
-      DwoOut->keep();
   }
+
+  if (DwoOut)
+    DwoOut->keep();
 
   if (Error Err = Stream->commit())
     report_fatal_error(std::move(Err));

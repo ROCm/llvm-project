@@ -5361,7 +5361,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (getToolChain().getTriple().isAMDGCN()) {
     if (Args.hasFlag(options::OPT_fenable_new_pm_codegen,
                      options::OPT_fno_enable_new_pm_codegen,
-                     true)) {
+                     true) &&
+                     !Args.getLastArg(options::OPT_fglobal_isel)) {
       CmdArgs.push_back(Args.MakeArgString("-fenable-new-pm-codegen"));
     }
   }
@@ -10148,7 +10149,8 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
         if (TC->getTriple().isAMDGCN() &&
             Args.hasFlag(options::OPT_fenable_new_pm_codegen,
                          options::OPT_fno_enable_new_pm_codegen,
-                         true)) {
+                         true) &&
+                         !Args.getLastArg(options::OPT_fglobal_isel)) {
           CmdArgs.push_back(Args.MakeArgString(
               "--device-linker=" + TC->getTripleString() +
               "=-plugin-opt=-enable-npm-for-backend"));

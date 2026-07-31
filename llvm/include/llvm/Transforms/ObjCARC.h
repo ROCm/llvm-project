@@ -31,7 +31,7 @@ struct ObjCARCOptPass : public OptionalPassInfoMixin<ObjCARCOptPass> {
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-struct ObjCARCContractPass : public OptionalPassInfoMixin<ObjCARCContractPass> {
+struct ObjCARCContractPass : public RequiredPassInfoMixin<ObjCARCContractPass> {
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 

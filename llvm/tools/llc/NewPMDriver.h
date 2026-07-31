@@ -30,6 +30,7 @@ class TargetMachine;
 class ToolOutputFile;
 class LLVMContext;
 class MIRParser;
+struct CGPassBuilderOption;
 
 enum class VerifierKind { None, InputOutput, EachPass };
 
@@ -37,20 +38,14 @@ struct LLCDiagnosticHandler : public DiagnosticHandler {
   bool handleDiagnostics(const DiagnosticInfo &DI) override;
 };
 
-enum LLCExitState {
-  LLC_Success = 0,
-  LLC_Error = 1,
-  LLC_Retry = 2,
-};
-
-LLCExitState compileModuleWithNewPM(StringRef Arg0, std::unique_ptr<Module> &M,
+int compileModuleWithNewPM(StringRef Arg0, std::unique_ptr<Module> &M,
                            std::unique_ptr<MIRParser> &MIR,
                            std::unique_ptr<TargetMachine> &Target,
                            std::unique_ptr<ToolOutputFile> &Out,
                            std::unique_ptr<ToolOutputFile> &DwoOut,
                            LLVMContext &Context,
                            const TargetLibraryInfoImpl &TLII, VerifierKind VK,
-                           StringRef PassPipeline, CodeGenFileType FileType, bool RetryWithLegacyPM);
+                           StringRef PassPipeline, CodeGenFileType FileType, CGPassBuilderOption &Opt);
 } // namespace llvm
 
 #endif

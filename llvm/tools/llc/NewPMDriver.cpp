@@ -87,18 +87,18 @@ bool LLCDiagnosticHandler::handleDiagnostics(const DiagnosticInfo &DI) {
 
 static llvm::ExitOnError ExitOnErr;
 
-LLCExitState llvm::compileModuleWithNewPM(
+int llvm::compileModuleWithNewPM(
     StringRef Arg0, std::unique_ptr<Module> &M, std::unique_ptr<MIRParser> &MIR,
     std::unique_ptr<TargetMachine> &Target, std::unique_ptr<ToolOutputFile> &Out,
     std::unique_ptr<ToolOutputFile> &DwoOut, LLVMContext &Context,
     const TargetLibraryInfoImpl &TLII, VerifierKind VK, StringRef PassPipeline,
-    CodeGenFileType FileType, bool RetryWithLegacyPM) {
+    CodeGenFileType FileType, CGPassBuilderOption &Opt) {
 
   if (!PassPipeline.empty() && TargetPassConfig::hasLimitedCodeGenPipeline()) {
     WithColor::error(errs(), Arg0)
         << "--passes cannot be used with "
         << TargetPassConfig::getLimitedCodeGenPipelineReason() << ".\n";
-    return LLC_Error;
+    return 1;
   }
 
   raw_pwrite_stream *OS = &Out->os();
@@ -110,8 +110,6 @@ LLCExitState llvm::compileModuleWithNewPM(
     OS = BOS.get();
   }
 
-  // Fetch options from TargetPassConfig
-  CGPassBuilderOption Opt = getCGPassBuilderOption();
   Opt.DisableVerify = VK != VerifierKind::InputOutput;
   Opt.DebugPM = DebugPM;
   Opt.RegAlloc = RegAlloc;
@@ -159,7 +157,7 @@ LLCExitState llvm::compileModuleWithNewPM(
 
     if (!MIR) {
       WithColor::error(errs(), Arg0) << "-passes is for .mir file only.\n";
-      return LLC_Error;
+      return 1;
     }
 
     // FIXME: verify that there are no IR passes.
@@ -173,14 +171,9 @@ LLCExitState llvm::compileModuleWithNewPM(
     MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
 
   } else {
-    Error Err = Target->buildCodeGenPipeline(
+    ExitOnErr(Target->buildCodeGenPipeline(
               MPM, MAM, *OS, DwoOut ? &DwoOut->os() : nullptr, FileType, Opt,
-            MMI.getContext(), &PIC);
-        if (Err && RetryWithLegacyPM) {
-          consumeError(std::move(Err));
-          return LLC_Retry;
-        }
-        ExitOnErr(std::move(Err));
+            MMI.getContext(), &PIC));
   }
 
   // If user only wants to print the pipeline, print it before parsing the MIR.
@@ -193,11 +186,11 @@ LLCExitState llvm::compileModuleWithNewPM(
     });
     printFormattedPipelinePasses(outs(), PipelineStr, *PrintPipelinePasses);
     outs() << '\n';
-    return LLC_Success;
+    return 0;
   }
 
   if (MIR && MIR->parseMachineFunctions(*M, MAM))
-    return LLC_Error;
+      return 1;
 
   // Before executing passes, print the final values of the LLVM options.
   cl::PrintOptionValues();
@@ -205,12 +198,12 @@ LLCExitState llvm::compileModuleWithNewPM(
   MPM.run(*M, MAM);
 
   if (Context.getDiagHandlerPtr()->HasErrors)
-    return LLC_Error;
+    return 1;
 
   // Declare success.
   Out->keep();
   if (DwoOut)
     DwoOut->keep();
 
-  return LLC_Success;
+  return 0;
 }

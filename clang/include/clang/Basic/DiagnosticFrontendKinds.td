@@ -129,8 +129,6 @@ def err_fe_unable_to_create_subtarget : Error<
     "unable to create subtarget: '%0'%select{ with features '%2'|}1">;
 def err_fe_unable_to_interface_with_target : Error<
     "unable to interface with target machine">;
-def warn_fe_failed_new_pass_manager : Warning<
-    "new pass manager failed, retrying codegen with legacy PM">;
 def err_fe_unable_to_open_output : Error<
     "unable to open output file '%0': '%1'">;
 def warn_fe_macro_contains_embedded_newline : Warning<

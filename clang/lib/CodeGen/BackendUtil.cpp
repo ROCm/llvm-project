@@ -194,7 +194,7 @@ class EmitAssemblyHelper {
                                 std::unique_ptr<raw_pwrite_stream> &OS,
                                 std::unique_ptr<llvm::ToolOutputFile> &DwoOS,
                                 CodeGenFileType CGFT);
-  Error RunCodegenPipelineNewPM(BackendAction Action,
+  void RunCodegenPipelineNewPM(BackendAction Action,
                                std::unique_ptr<raw_pwrite_stream> &OS,
                                std::unique_ptr<llvm::ToolOutputFile> &DwoOS,
                                CodeGenFileType CGFT);
@@ -1249,14 +1249,11 @@ void EmitAssemblyHelper::RunCodegenPipeline(
   }
   // TODO: Remove the fallback path once all targets have ported to new PM.
   if (CodeGenOpts.EnableNewPMCodeGen) {
-    if (!RunCodegenPipelineNewPM(Action, OS, DwoOS, CGFT))
-      return;
-
-    Diags.Report(diag::warn_fe_failed_new_pass_manager);
+    RunCodegenPipelineNewPM(Action, OS, DwoOS, CGFT);
+  } else {  
+    // NPM path (if enabled) failed to construct pipeline. retry with legacy PM.
+    RunCodegenPipelineLegacy(Action, OS, DwoOS, CGFT);
   }
-  
-  // NPM path (if enabled) failed to construct pipeline. retry with legacy PM.
-  RunCodegenPipelineLegacy(Action, OS, DwoOS, CGFT);
 }
 
 void EmitAssemblyHelper::RunCodegenPipelineLegacy(
@@ -1296,7 +1293,7 @@ void EmitAssemblyHelper::RunCodegenPipelineLegacy(
   TimeCodegenPasses([&] { CodeGenPasses.run(*TheModule); });
 }
 
-Error EmitAssemblyHelper::RunCodegenPipelineNewPM(
+void EmitAssemblyHelper::RunCodegenPipelineNewPM(
     BackendAction Action, std::unique_ptr<raw_pwrite_stream> &OS,
     std::unique_ptr<llvm::ToolOutputFile> &DwoOS, CodeGenFileType CGFT) {
   ModulePassManager MPM;
@@ -1337,8 +1334,10 @@ Error EmitAssemblyHelper::RunCodegenPipelineNewPM(
 
   if (Error BuildPipelineError =
       TM->buildCodeGenPipeline(MPM, MAM, *OS, DwoOS ? &DwoOS->os() : nullptr,
-                               CGFT, Opt, MMI.getContext(), &PIC))
-      return BuildPipelineError;
+                               CGFT, Opt, MMI.getContext(), &PIC)) {
+      Diags.Report(diag::err_fe_unable_to_interface_with_target);
+      return;
+    }
 
   if (PrintPipelinePasses) {
     std::string PipelineStr;
@@ -1348,11 +1347,11 @@ Error EmitAssemblyHelper::RunCodegenPipelineNewPM(
       return PassName.empty() ? ClassName : PassName;
     });
     outs() << PipelineStr << '\n';
-    return Error::success();
+    return;
   }
 
   TimeCodegenPasses([&] { MPM.run(*TheModule, MAM); });
-  return Error::success();
+  return;
 }
 
 void EmitAssemblyHelper::TimeCodegenPasses(
