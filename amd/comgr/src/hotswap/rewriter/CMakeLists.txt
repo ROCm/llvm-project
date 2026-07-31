@@ -71,18 +71,28 @@ target_include_directories(hotswap-rewriter PUBLIC
 # BinaryFormat), and query AMDGPU MC descriptions (AMDGPU{Desc,Info,AsmParser,
 # Disassembler}). It uses no LLVM IR or codegen, so Core and AMDGPUCodeGen are
 # intentionally omitted; Core is still pulled in transitively where needed.
-llvm_map_components_to_libnames(hotswap_rewriter_llvm_libs
-  BinaryFormat
-  MC
-  MCDisassembler
-  MCParser
-  Object
-  Support
-  TargetParser
-  AMDGPUAsmParser
-  AMDGPUDesc
-  AMDGPUDisassembler
-  AMDGPUInfo)
+#
+# Follow COMGR's selected LLVM linkage mode: in a dylib build link the single
+# LLVM shared library, otherwise the individual static components. Linking the
+# static AMDGPU components into amd_comgr while it also links libLLVM would
+# register the AMDGPU command-line options twice and abort every tool that loads
+# the library.
+if(LLVM_LINK_LLVM_DYLIB)
+  set(hotswap_rewriter_llvm_libs LLVM)
+else()
+  llvm_map_components_to_libnames(hotswap_rewriter_llvm_libs
+    BinaryFormat
+    MC
+    MCDisassembler
+    MCParser
+    Object
+    Support
+    TargetParser
+    AMDGPUAsmParser
+    AMDGPUDesc
+    AMDGPUDisassembler
+    AMDGPUInfo)
+endif()
 
 # PRIVATE keeps these out of the link interface, but CMake still records them as
 # $<LINK_ONLY:> for an OBJECT library; clear the interface so consumers get the

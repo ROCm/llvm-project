@@ -45,13 +45,20 @@ target_include_directories(hotswap-raiser PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
 )
 
+# Follow COMGR's selected LLVM linkage mode: the single LLVM shared library in a
+# dylib build, otherwise the individual static components, so amd_comgr never
+# links a component both statically and through libLLVM.
+if(LLVM_LINK_LLVM_DYLIB)
+  set(hotswap_raiser_llvm_libs LLVM)
+else()
+  set(hotswap_raiser_llvm_libs LLVMCore LLVMSupport LLVMTargetParser)
+endif()
+
 # PRIVATE keeps these out of the link interface, but CMake still records them as
 # $<LINK_ONLY:> for an OBJECT library; clear the interface so consumers get the
 # objects only (see ../CMakeLists.txt).
 target_link_libraries(hotswap-raiser
   PRIVATE
-    LLVMCore
-    LLVMSupport
-    LLVMTargetParser
+    ${hotswap_raiser_llvm_libs}
 )
 set_target_properties(hotswap-raiser PROPERTIES INTERFACE_LINK_LIBRARIES "")

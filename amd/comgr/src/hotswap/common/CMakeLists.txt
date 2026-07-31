@@ -52,11 +52,20 @@ target_include_directories(hotswap-common PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
 )
 
+# Follow COMGR's selected LLVM linkage mode: the single LLVM shared library in a
+# dylib build, otherwise static LLVMSupport, so amd_comgr never links Support
+# both statically and through libLLVM.
+if(LLVM_LINK_LLVM_DYLIB)
+  set(hotswap_common_llvm_libs LLVM)
+else()
+  set(hotswap_common_llvm_libs LLVMSupport)
+endif()
+
 # PRIVATE keeps these out of the link interface, but CMake still records them as
 # $<LINK_ONLY:> for an OBJECT library; clear the interface so consumers get the
 # objects only (see ../CMakeLists.txt).
 target_link_libraries(hotswap-common
   PRIVATE
-    LLVMSupport
+    ${hotswap_common_llvm_libs}
 )
 set_target_properties(hotswap-common PROPERTIES INTERFACE_LINK_LIBRARIES "")
