@@ -465,8 +465,16 @@ target_include_directories(comgr-object-utils
     ${LLVM_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>)
-target_compile_options(comgr-object-utils
-  PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" -ffunction-sections -fdata-sections)
+# The GCC/Clang-driver spelling of the section-splitting flags above is not
+# understood by the MSVC front end (including clang-cl), which spells the same
+# behavior /Gy /Gw.
+if(MSVC)
+  target_compile_options(comgr-object-utils
+    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" /Gy /Gw)
+else()
+  target_compile_options(comgr-object-utils
+    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" -ffunction-sections -fdata-sections)
+endif()
 target_compile_definitions(comgr-object-utils
   PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS}")
 target_link_libraries(amd_comgr PRIVATE comgr-object-utils)
