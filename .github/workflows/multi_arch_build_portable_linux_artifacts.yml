@@ -110,8 +110,7 @@ jobs:
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
       - name: Submodule PR update (covers parameterised and PR creation)
-        uses: ROCm/llvm-project/.github/actions/submodule-pr-update@compiler-ci
-
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd/dev/kirthana14m/rockci-compiler-convergence
       - name: Install python deps
         run: pip install -r requirements.txt
 
@@ -152,7 +151,7 @@ jobs:
              }' > submodule-commit-${STAGE_NAME}.txt          
 
       - name: build prep (patches & hotfixes for CK, hipcc and hiprtc, tests)
-        uses: ROCm/llvm-project/.github/actions/temp-build-fix@compiler-ci
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/linux-patches@amd/dev/kirthana14m/rockci-compiler-convergence
         with:
           test_type: ${{ inputs.test_type }}
           stage_name: ${{ inputs.stage_name }}
@@ -217,7 +216,7 @@ jobs:
           python3 build_tools/github_actions/detect_failed_logs.py
 
       - name: LIT (llvm, clang, flang, mlir, lld) / COMGR Lit & CTest
-        uses: ROCm/llvm-project/.github/actions/lit-comgr-tests@compiler-ci
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/lit-comgr-tests@amd/dev/kirthana14m/rockci-compiler-convergence
         continue-on-error: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         env:
           BUILD_DIR: ${{ env.BUILD_DIR }}
