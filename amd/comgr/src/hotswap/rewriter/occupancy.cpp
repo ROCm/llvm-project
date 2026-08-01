@@ -28,12 +28,11 @@ namespace hotswap {
 
 std::optional<SubtargetOccupancyLimits>
 getSubtargetOccupancyLimits(StringRef Processor) {
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, SRAMECC_SUPPORTED,                \
-                   XNACK_ON_OFF_MODES, ELF_MACHINE, TRAP_HANDLER_ENABLED,      \
-                   IMAGE_SUPPORT, LDS_SIZE, LDS_BANK_COUNT, EUS_PER_CU,        \
-                   MAX_WAVES_PER_CU, MAX_FLAT_WORK_GROUP_SIZE,                 \
-                   SGPR_ALLOC_GRANULE, TOTAL_NUM_SGPRS, ADDRESSABLE_NUM_SGPRS, \
-                   VGPR_ALLOC_GRANULE, TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS) \
+#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE,                      \
+                   TRAP_HANDLER_ENABLED, IMAGE_SUPPORT, LDS_SIZE,              \
+                   LDS_BANK_COUNT, EUS_PER_CU, MAX_WAVES_PER_CU,               \
+                   MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
+                   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
   if (Processor == PROCESSOR)                                                  \
     return SubtargetOccupancyLimits{EUS_PER_CU,                                \
                                     MAX_WAVES_PER_CU,                          \

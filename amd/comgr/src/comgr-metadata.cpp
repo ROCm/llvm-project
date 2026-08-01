@@ -276,8 +276,6 @@ amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP) {
 struct IsaInfo {
   const char *IsaName;
   const char *Processor;
-  bool SrameccSupported;
-  bool XNACKOnOffModes;
   unsigned ElfMachine;
   bool TrapHandlerEnabled;
   bool ImageSupport;
@@ -286,24 +284,18 @@ struct IsaInfo {
   unsigned EUsPerCU;
   unsigned MaxWavesPerCU;
   unsigned MaxFlatWorkGroupSize;
-  unsigned SGPRAllocGranule;
-  unsigned TotalNumSGPRs;
-  unsigned AddressableNumSGPRs;
   unsigned VGPRAllocGranule;
   unsigned TotalNumVGPRs;
   // TODO: Update this to AvailableNumVGPRs to be more accurate
   unsigned AddressableNumVGPRs;
 } IsaInfos[] = {
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, SRAMECC_SUPPORTED,                \
-                   XNACK_ON_OFF_MODES, ELF_MACHINE, TRAP_HANDLER_ENABLED,      \
-                   IMAGE_SUPPORT, LDS_SIZE, LDS_BANK_COUNT, EUS_PER_CU,        \
-                   MAX_WAVES_PER_CU, MAX_FLAT_WORK_GROUP_SIZE,                 \
-                   SGPR_ALLOC_GRANULE, TOTAL_NUM_SGPRS, ADDRESSABLE_NUM_SGPRS, \
-                   VGPR_ALLOC_GRANULE, TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS) \
+#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE,                      \
+                   TRAP_HANDLER_ENABLED, IMAGE_SUPPORT, LDS_SIZE,              \
+                   LDS_BANK_COUNT, EUS_PER_CU, MAX_WAVES_PER_CU,               \
+                   MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
+                   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
   {TARGET_TRIPLE "-" PROCESSOR,                                                \
    PROCESSOR,                                                                  \
-   SRAMECC_SUPPORTED,                                                          \
-   XNACK_ON_OFF_MODES,                                                         \
    ELF::ELF_MACHINE,                                                           \
    TRAP_HANDLER_ENABLED,                                                       \
    IMAGE_SUPPORT,                                                              \
@@ -312,9 +304,6 @@ struct IsaInfo {
    EUS_PER_CU,                                                                 \
    MAX_WAVES_PER_CU,                                                           \
    MAX_FLAT_WORK_GROUP_SIZE,                                                   \
-   SGPR_ALLOC_GRANULE,                                                         \
-   TOTAL_NUM_SGPRS,                                                            \
-   ADDRESSABLE_NUM_SGPRS,                                                      \
    VGPR_ALLOC_GRANULE,                                                         \
    TOTAL_NUM_VGPRS,                                                            \
    ADDRESSABLE_NUM_VGPRS},
@@ -333,8 +322,7 @@ typedef struct amdgpu_hsa_note_code_object_version_s {
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 namespace {
-bool getMachInfo(unsigned Mach, std::string &Processor, bool &SrameccSupported,
-                 bool &XNACKOnOffModes) {
+bool getMachInfo(unsigned Mach, std::string &Processor) {
   auto *IsaIterator = std::find_if(
       std::begin(IsaInfos), std::end(IsaInfos),
       [Mach](const IsaInfo &IsaInfo) { return Mach == IsaInfo.ElfMachine; });
@@ -343,8 +331,6 @@ bool getMachInfo(unsigned Mach, std::string &Processor, bool &SrameccSupported,
   }
 
   Processor = IsaIterator->Processor;
-  SrameccSupported = IsaIterator->SrameccSupported;
-  XNACKOnOffModes = IsaIterator->XNACKOnOffModes;
   return true;
 }
 
@@ -369,9 +355,7 @@ amd_comgr_status_t getElfIsaNameFromElfHeader(const ELFObjectFile<ELFT> *Obj,
   ElfIsaName += "--";
 
   std::string Processor;
-  bool SrameccSupported, XNACKOnOffModes;
-  if (!getMachInfo(ElfHeader.e_flags & ELF::EF_AMDGPU_MACH, Processor,
-                   SrameccSupported, XNACKOnOffModes)) {
+  if (!getMachInfo(ElfHeader.e_flags & ELF::EF_AMDGPU_MACH, Processor)) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
   ElfIsaName += Processor;
@@ -458,10 +442,13 @@ bool isSupportedFeature(size_t IsaIndex, StringRef Feature) {
     return false;
   }
 
+  unsigned ArchAttr = AMDGPU::getArchAttrAMDGCN(
+      AMDGPU::parseArchAMDGCN(IsaInfos[IsaIndex].Processor));
+
   return (Feature.drop_back() == "xnack" &&
-          IsaInfos[IsaIndex].XNACKOnOffModes) ||
+          (ArchAttr & AMDGPU::FEATURE_XNACK_ON_OFF_MODES)) ||
          (Feature.drop_back() == "sramecc" &&
-          IsaInfos[IsaIndex].SrameccSupported);
+          (ArchAttr & AMDGPU::FEATURE_SRAMECC));
 }
 
 const char *getIsaName(size_t Index) { return IsaInfos[Index].IsaName; }
@@ -492,11 +479,14 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   Root["Processor"] = Doc.getNode(Ident.Processor, /*Copy=*/true);
   Root["Version"] = Doc.getNode("1.0.0", /*Copy=*/true);
 
+  AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(IsaInfos[IsaIndex].Processor);
+  unsigned ArchAttr = AMDGPU::getArchAttrAMDGCN(Kind);
+
   auto FeaturesNode = Doc.getMapNode();
-  if (IsaInfos[IsaIndex].XNACKOnOffModes) {
+  if (ArchAttr & AMDGPU::FEATURE_XNACK_ON_OFF_MODES) {
     FeaturesNode["xnack"] = Doc.getNode("any", /*Copy=*/true);
   }
-  if (IsaInfos[IsaIndex].SrameccSupported) {
+  if (ArchAttr & AMDGPU::FEATURE_SRAMECC) {
     FeaturesNode["sramecc"] = Doc.getNode("any", /*Copy=*/true);
   }
 
@@ -533,11 +523,12 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   Root["MaxFlatWorkGroupSize"] =
       Doc.getNode(std::to_string(Info.MaxFlatWorkGroupSize), /*Copy=*/true);
   Root["SGPRAllocGranule"] =
-      Doc.getNode(std::to_string(Info.SGPRAllocGranule), /*Copy=*/true);
-  Root["TotalNumSGPRs"] =
-      Doc.getNode(std::to_string(Info.TotalNumSGPRs), /*Copy=*/true);
-  Root["AddressableNumSGPRs"] =
-      Doc.getNode(std::to_string(Info.AddressableNumSGPRs), /*Copy=*/true);
+      Doc.getNode(std::to_string(AMDGPU::getSGPRAllocGranule(Kind)),
+                  /*Copy=*/true);
+  Root["TotalNumSGPRs"] = Doc.getNode(
+      std::to_string(AMDGPU::getTotalNumSGPRs(Kind)), /*Copy=*/true);
+  Root["AddressableNumSGPRs"] = Doc.getNode(
+      std::to_string(AMDGPU::getAddressableNumSGPRs(Kind)), /*Copy=*/true);
   Root["VGPRAllocGranule"] =
       Doc.getNode(std::to_string(Info.VGPRAllocGranule), /*Copy=*/true);
   Root["TotalNumVGPRs"] =
