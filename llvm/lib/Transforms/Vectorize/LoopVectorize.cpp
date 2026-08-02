@@ -3167,7 +3167,7 @@ void LoopVectorizationPlanner::emitInvalidCostRemarks(
         continue;
 
       VPCostContext CostCtx(*TLI, *Plan, CM, Config,
-                            /*ReusePrintingSlotTracker=*/true);
+                            std::make_unique<VPSlotTracker>(Plan.get()));
       precomputeCosts(*Plan, VF, CostCtx);
       auto Iter = vp_depth_first_deep(Plan->getVectorLoopRegion()->getEntry());
       for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(Iter)) {
@@ -5603,14 +5603,15 @@ void LoopVectorizationPlanner::plan(ElementCount UserVF, unsigned UserIC) {
 VPCostContext::VPCostContext(const TargetLibraryInfo &TLI, const VPlan &Plan,
                              LoopVectorizationCostModel &CM,
                              VFSelectionContext &Config,
-                             bool ReusePrintingSlotTracker)
+                             std::unique_ptr<VPSlotTracker> SlotTracker)
     : TTI(Config.getTTI()), TLI(TLI), LLVMCtx(Plan.getContext()), CM(CM),
       Config(Config), CostKind(Config.CostKind), PSE(Config.getPSE()),
-      L(Config.getLoop()) {
+      L(Config.getLoop())
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-  if (ReusePrintingSlotTracker)
-    PlanForSlotTracker = &Plan;
+      ,
+      SlotTracker(std::move(SlotTracker))
 #endif
+{
 }
 
 InstructionCost VPCostContext::getLegacyCost(Instruction *UI,
@@ -5796,7 +5797,7 @@ LoopVectorizationPlanner::precomputeCosts(VPlan &Plan, ElementCount VF,
 InstructionCost LoopVectorizationPlanner::cost(VPlan &Plan, ElementCount VF,
                                                VPRegisterUsage *RU) const {
   VPCostContext CostCtx(*TLI, Plan, CM, Config,
-                        /*ReusePrintingSlotTracker=*/true);
+                        std::make_unique<VPSlotTracker>(&Plan));
   InstructionCost Cost = precomputeCosts(Plan, VF, CostCtx);
 
   // Now compute and add the VPlan-based cost.
@@ -8148,7 +8149,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
     bool ForceVectorization =
         Hints.getForce() == LoopVectorizeHints::FK_Enabled;
     VPCostContext CostCtx(*TLI, *BestPlanPtr, CM, Config,
-                          /*ReusePrintingSlotTracker=*/true);
+                          std::make_unique<VPSlotTracker>(BestPlanPtr));
     if (!ForceVectorization &&
         !isOutsideLoopWorkProfitable(Checks, VF, L, PSE, CostCtx, *BestPlanPtr,
                                      SEL, Config.getVScaleForTuning())) {

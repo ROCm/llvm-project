@@ -342,7 +342,7 @@ struct VPCostContext {
 
   VPCostContext(const TargetLibraryInfo &TLI, const VPlan &Plan,
                 LoopVectorizationCostModel &CM, VFSelectionContext &Config,
-                bool ReusePrintingSlotTracker = false);
+                std::unique_ptr<VPSlotTracker> SlotTracker = nullptr);
 
   /// Return the cost for \p UI with \p VF using the legacy cost model as
   /// fallback until computing the cost of all recipes migrates to VPlan.
@@ -389,18 +389,12 @@ struct VPCostContext {
   static bool isFreeScalarIntrinsic(Intrinsic::ID ID);
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-  /// Return a VPSlotTracker to re-use for printing, lazily constructing it on
-  /// first use. Returns nullptr if slot-tracker re-use was not requested at
-  /// construction.
-  VPSlotTracker *getSlotTracker();
+  /// Return SlotTracker to re-use for printing, if set.
+  VPSlotTracker *getSlotTracker() const { return SlotTracker.get(); }
 
 private:
-  /// VPlan to build the printing VPSlotTracker for, or nullptr if slot-tracker
-  /// re-use was not requested.
-  const VPlan *PlanForSlotTracker = nullptr;
-
-  /// SlotTracker to re-use when printing, lazily constructed by getSlotTracker.
-  std::unique_ptr<VPSlotTracker> SlotTracker;
+  /// SlotTracker to re-use when printing.
+  const std::unique_ptr<VPSlotTracker> SlotTracker;
 #endif
 };
 
