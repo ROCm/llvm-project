@@ -11,7 +11,7 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    v_mov_b32_e32 v7, s17
 ; CHECK-NEXT:    v_add_co_u32_e32 v6, vcc, s16, v4
 ; CHECK-NEXT:    v_addc_co_u32_e32 v7, vcc, v7, v5, vcc
-; CHECK-NEXT:    s_mov_b64 s[10:11], 0
+; CHECK-NEXT:    s_mov_b64 s[6:7], 0
 ; CHECK-NEXT:    s_mov_b64 s[12:13], 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_and_b64 vcc, exec, 0

@@ -20,6 +20,9 @@
 
 using namespace llvm;
 
+static MachineBasicBlock::iterator
+getSaluInsertionAtEnd(MachineBasicBlock &MBB);
+
 /// Check whether the register could be a lane-mask register.
 ///
 /// It does not distinguish between lane-masks and scalar registers that happen
@@ -107,72 +110,53 @@ void AMDGPULaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
                                            Register PrevReg, Register CurReg,
                                            AMDGPULaneMaskAnalysis *LMA,
                                            bool isPrevZeroReg) const {
-  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
-  const SIInstrInfo *TII = ST.getInstrInfo();
-  bool PrevVal = false;
-  bool PrevConstant = !PrevReg || isPrevZeroReg;
+  const SIInstrInfo *TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
+  assert(PrevReg &&
+         "previous lane mask must be the zero reg or an accumulator");
+
+  auto buildCopy = [&](Register Dst, Register Src) {
+    BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), Dst).addReg(Src);
+  };
+  auto buildBinOp = [&](unsigned Opc, Register Dst, Register A, Register B) {
+    BuildMI(MBB, I, DL, TII->get(Opc), Dst).addReg(A).addReg(B);
+  };
+
   bool CurVal = false;
-  bool CurConstant = isConstantLaneMask(CurReg, CurVal, MBB, I);
+  bool CurIsConstant = isConstantLaneMask(CurReg, CurVal, MBB, I);
 
-  assert(PrevReg);
-
-  if (PrevConstant && CurConstant) {
-    if (PrevVal == CurVal) {
-      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(CurReg);
-    } else if (CurVal) {
-      // If PrevReg is undef, prefer to propagate a full constant.
-      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg)
-          .addReg(PrevReg ? LMC.ExecReg : CurReg);
-    } else {
-      BuildMI(MBB, I, DL, TII->get(LMC.XorOpc), DstReg)
-          .addReg(LMC.ExecReg)
-          .addImm(-1);
-    }
+  // Case A -- previous is zero: DstReg = CurReg & EXEC.
+  if (isPrevZeroReg) {
+    // Constant current: -1 & EXEC == EXEC, 0 & EXEC == 0.
+    if (CurIsConstant)
+      buildCopy(DstReg, CurVal ? LMC.ExecReg : CurReg);
+    else if (LMA && LMA->isSubsetOfExec(CurReg, MBB, I))
+      buildCopy(DstReg, CurReg);
+    else
+      buildBinOp(LMC.AndOpc, DstReg, CurReg, LMC.ExecReg);
     return;
   }
 
-  MachineInstr *PrevMaskedBuilt = nullptr;
-  MachineInstr *CurMaskedBuilt = nullptr;
-  Register PrevMaskedReg;
-  Register CurMaskedReg;
-  if (!PrevConstant) {
-    PrevMaskedReg = PrevReg;
-  }
-  if (!CurConstant) {
-    if ((PrevConstant && PrevVal) ||
-        (LMA && LMA->isSubsetOfExec(CurReg, MBB, I))) {
-      CurMaskedReg = CurReg;
-    } else {
-      CurMaskedReg = createLaneMaskReg();
-      CurMaskedBuilt = BuildMI(MBB, I, DL, TII->get(LMC.AndOpc), CurMaskedReg)
-                           .addReg(CurReg)
-                           .addReg(LMC.ExecReg);
-    }
+  // Case B -- previous is a real accumulator:
+  //   DstReg = PrevReg | (CurReg & EXEC).
+  if (CurIsConstant && !CurVal) {
+    // CurReg & EXEC == 0, so PrevReg | 0 == PrevReg.
+    buildCopy(DstReg, PrevReg);
+    return;
   }
 
-  // TODO-NOW: reevaluate the masking logic in case of CurConstant && CurVal
-
-  if (PrevConstant && !PrevVal) {
-    if (CurMaskedBuilt) {
-      CurMaskedBuilt->getOperand(0).setReg(DstReg);
-    } else {
-      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(CurMaskedReg);
-    }
-  } else if (CurConstant && !CurVal) {
-    if (PrevMaskedBuilt) {
-      PrevMaskedBuilt->getOperand(0).setReg(DstReg);
-    } else {
-      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(PrevMaskedReg);
-    }
-  } else if (PrevConstant && PrevVal) {
-    BuildMI(MBB, I, DL, TII->get(LMC.OrN2Opc), DstReg)
-        .addReg(CurMaskedReg)
-        .addReg(LMC.ExecReg);
-  } else {
-    BuildMI(MBB, I, DL, TII->get(LMC.OrOpc), DstReg)
-        .addReg(PrevMaskedReg)
-        .addReg(CurMaskedReg ? CurMaskedReg : LMC.ExecReg);
+  // Reduce (CurReg & EXEC) to a single OR operand.
+  Register CurMasked;
+  if (CurIsConstant)
+    // CurVal is true here: -1 & EXEC == EXEC.
+    CurMasked = LMC.ExecReg;
+  else if (LMA && LMA->isSubsetOfExec(CurReg, MBB, I))
+    CurMasked = CurReg;
+  else {
+    CurMasked = createLaneMaskReg();
+    buildBinOp(LMC.AndOpc, CurMasked, CurReg, LMC.ExecReg);
   }
+
+  buildBinOp(LMC.OrOpc, DstReg, PrevReg, CurMasked);
 }
 
 /// Conservatively determine whether the \p Reg is a subset of EXEC for
@@ -258,15 +242,28 @@ bool AMDGPULaneMaskAnalysis::isSubsetOfExec(Register Reg,
 
 /// Initialize the updater.
 void AMDGPULaneMaskUpdater::init() {
-  Processed = false;
   Blocks.clear();
-  // SSAUpdater.Initialize(LMU.getLaneMaskConsts().LaneMaskRC);
-  Accumulator = AMDGPU::NoRegister;
+
+  const SIInstrInfo *TII =
+      LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
+  MachineBasicBlock &Entry = LMU.function()->front();
+
+  if (!ZeroReg) {
+    ZeroReg = LMU.createLaneMaskReg();
+    BuildMI(Entry, Entry.getFirstTerminator(), {},
+            TII->get(LMU.getLaneMaskConsts().MovOpc), ZeroReg)
+        .addImm(0);
+  }
+
+  Accumulator = LMU.createLaneMaskReg();
+  AllAccumulators.insert(Accumulator);
+  BuildMI(Entry, Entry.getFirstTerminator(), {},
+          TII->get(LMU.getLaneMaskConsts().MovOpc), Accumulator)
+      .addImm(0);
 }
 
 /// Optional cleanup, may remove stray instructions.
 void AMDGPULaneMaskUpdater::cleanup() {
-  Processed = false;
   Blocks.clear();
   Accumulator = AMDGPU::NoRegister;
   MachineRegisterInfo &MRI = LMU.function()->getRegInfo();
@@ -275,21 +272,13 @@ void AMDGPULaneMaskUpdater::cleanup() {
     MRI.getVRegDef(ZeroReg)->eraseFromParent();
     ZeroReg = AMDGPU::NoRegister;
   }
-
-  for (MachineInstr *MI : PotentiallyDead) {
-    Register DefReg = MI->getOperand(0).getReg();
-    if (MRI.use_empty(DefReg))
-      MI->eraseFromParent();
-  }
-  PotentiallyDead.clear();
 }
 
 /// Indicate that a reset should occur in the given block.
 ///
 /// Can be called multiple times for the same block, flags accumulate.
-void AMDGPULaneMaskUpdater::addReset(MachineBasicBlock &Block, ResetFlags Flags) {
-  assert(!Processed);
-
+void AMDGPULaneMaskUpdater::addReset(MachineBasicBlock &Block,
+                                     ResetFlags Flags) {
   auto BlockIt = findBlockInfo(Block);
   if (BlockIt == Blocks.end()) {
     Blocks.emplace_back(&Block);
@@ -297,17 +286,14 @@ void AMDGPULaneMaskUpdater::addReset(MachineBasicBlock &Block, ResetFlags Flags)
   }
 
   BlockIt->Flags |= Flags;
+  AccumulatorResetBlocks[&Block].push_back({Accumulator, Flags});
 }
 
-/// Indicate that a new value is available in \p block. Lane mask bits
-/// (per-thread boolean values) are updated.
 ///
 /// \param Value A virtual lane mask register; the lane bits are masked by the
 ///              block's effective EXEC.
 void AMDGPULaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
-                                      Register Value) {
-  assert(!Processed);
-
+                                         Register Value) {
   auto BlockIt = findBlockInfo(Block);
   if (BlockIt == Blocks.end()) {
     Blocks.emplace_back(&Block);
@@ -316,43 +302,23 @@ void AMDGPULaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
   assert(!BlockIt->Value);
 
   BlockIt->Value = Value;
+  Register Previous;
+  if (&Block != &LMU.function()->front() && !(BlockIt->Flags & ResetInMiddle))
+    Previous = Accumulator;
+  else
+    Previous = ZeroReg;
+  LMU.buildMergeLaneMasks(Block, getSaluInsertionAtEnd(Block), {}, Accumulator,
+                          Previous, Value, LMA, Previous == ZeroReg);
 }
 
-/// Return the value in the middle of the block, i.e. before any change that
-/// was registered via \ref addAvailable.
-Register AMDGPULaneMaskUpdater::getValueInMiddleOfBlock(MachineBasicBlock &Block) {
-  if (!Processed)
-    process();
-  return Accumulator;
-}
-
-/// Return the value at the end of the given block, i.e. after any change that
-/// was registered via \ref addAvailable.
-///
-/// Note: If \p Block is the reset block with ResetAtEnd
-///       reset mode, then this value will be 0. You likely want
-///       \ref getPreReset instead.
-Register AMDGPULaneMaskUpdater::getValueAtEndOfBlock(MachineBasicBlock &Block) {
-  if (!Processed)
-    process();
-  return Accumulator;
-}
-
-/// Return the value in \p Block after the value merge (if any).
-Register AMDGPULaneMaskUpdater::getValueAfterMerge(MachineBasicBlock &Block) {
-  if (!Processed)
-    process();
-
+/// Return the accumulated lane mask after \p Block's merge: \ref Accumulator,
+/// or the zero register for a reset-in-middle block that contributed no value.
+Register AMDGPULaneMaskUpdater::getMergedMask(MachineBasicBlock &Block) {
   auto BlockIt = findBlockInfo(Block);
-  if (BlockIt != Blocks.end()) {
-    if (BlockIt->Value)
-      return Accumulator;
-    if (BlockIt->Flags & ResetInMiddle)
-      return ZeroReg;
-  }
+  if (BlockIt != Blocks.end() && !BlockIt->Value &&
+      (BlockIt->Flags & ResetInMiddle))
+    return ZeroReg;
 
-  // We didn't merge anything in the block, but the block may still be
-  // ResetAtEnd, in which case we need the pre-reset value.
   return Accumulator;
 }
 
@@ -406,56 +372,6 @@ getSaluInsertionAtEnd(MachineBasicBlock &MBB) {
 
   // We should have at least seen an IMPLICIT_DEF or COPY
   llvm_unreachable("SCC used by terminator but no def in block");
-}
-
-/// Internal method to insert merge instructions.
-void AMDGPULaneMaskUpdater::process() {
-  const SIInstrInfo *TII =
-      LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
-  MachineBasicBlock &Entry = LMU.function()->front();
-
-  if (!ZeroReg) {
-    ZeroReg = LMU.createLaneMaskReg();
-    BuildMI(Entry, Entry.getFirstTerminator(), {},
-            TII->get(LMU.getLaneMaskConsts().MovOpc), ZeroReg)
-        .addImm(0);
-  }
-
-  if (!Accumulator) {
-    Accumulator = LMU.createLaneMaskReg();
-    AllAccumulators.insert(Accumulator);
-    BuildMI(Entry, Entry.getFirstTerminator(), {},
-            TII->get(LMU.getLaneMaskConsts().MovOpc), Accumulator)
-        .addImm(0);
-  }
-
-  // Reset accumulator.
-  for (BlockInfo &Info : Blocks) {
-    assert(Info.Flags || Info.Value);
-    if (Info.Flags)
-      AccumulatorResetBlocks[Info.Block].push_back({Accumulator, Info.Flags});
-  }
-
-  // Once the SSA updater is ready, we can fill in all merge code, relying
-  // on the SSA updater to insert required PHIs.
-  for (BlockInfo &Info : Blocks) {
-    if (!Info.Value)
-      continue;
-
-    // Determine the "previous" value.
-    Register Previous;
-    if (Info.Block != &LMU.function()->front() && !(Info.Flags & ResetInMiddle))
-      Previous = Accumulator;
-    else
-      Previous = ZeroReg;
-
-    // Insert merge logic.
-    MachineBasicBlock::iterator insertPt = getSaluInsertionAtEnd(*Info.Block);
-    LMU.buildMergeLaneMasks(*Info.Block, insertPt, {}, Accumulator, Previous,
-                            Info.Value, LMA, Previous == ZeroReg);
-  }
-
-  Processed = true;
 }
 
 /// Find a block in the \ref Blocks structure.
