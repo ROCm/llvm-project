@@ -39,7 +39,8 @@ public:
 
 void getAMDGPUTargetFeatures(const Driver &D, const llvm::Triple &Triple,
                              const llvm::opt::ArgList &Args,
-                             std::vector<StringRef> &Features);
+                             std::vector<StringRef> &Features,
+                             bool ForAS = false);
 
 namespace dlr {
 llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>
@@ -92,7 +93,6 @@ namespace toolchains {
 
 class LLVM_LIBRARY_VISIBILITY AMDGPUToolChain : public Generic_ELF {
 protected:
-  unsigned CodeObjectVersion = 5;
   const std::map<options::ID, StringRef> OptionsDefault;
 
   // Optional host toolchain for offloading modes.
@@ -162,8 +162,6 @@ public:
 
   /// Should skip argument.
   bool shouldSkipArgument(const llvm::opt::Arg *Arg) const;
-
-  unsigned GetCodeObjectVersion() const { return CodeObjectVersion; }
 
   /// Uses amdgpu-arch tool to get arch of the system GPU. Will return error
   /// if unable to find one.

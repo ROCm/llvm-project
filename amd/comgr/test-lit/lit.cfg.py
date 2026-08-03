@@ -1,6 +1,9 @@
+import glob
 import os
 import platform
 import sys
+import subprocess
+import tempfile
 
 import lit.formats
 
@@ -21,11 +24,79 @@ if config.comgr_spirv_translator_available:
     config.available_features.add("comgr-has-spirv-translator")
 if config.comgr_amdgpu_target_available:
     config.available_features.add("comgr-has-amdgpu-target")
+if config.comgr_hotswap_transpile_available:
+    config.available_features.add("comgr-has-hotswap-transpile")
+
+# The AMDGPU device AddressSanitizer runtime (libclang_rt.asan.a for
+# amdgcn-amd-amdhsa) is a separately built artifact. The asan tests link it,
+# so guard them behind its presence in the clang resource dir; builds without
+# it (e.g. reduced builds that omit compiler-rt) skip rather than fail.
+if glob.glob(
+    os.path.join(
+        config.llvm_tools_dir,
+        os.pardir,
+        "lib",
+        "clang",
+        "*",
+        "lib",
+        "amdgcn-amd-amdhsa",
+        "libclang_rt.asan.a",
+    )
+):
+    config.available_features.add("comgr-has-amdgpu-asan-runtime")
+
+
+# spirv-to-reloc-debuginfo checks that comgr forwards
+# -amdgpu-spill-cfi-saved-regs, which the AMD clang driver embeds for -g
+# amdgcnspirv compiles. That is an AMD downstream driver diff (not upstream),
+# so probe the driver and guard the test; builds whose clang lacks it skip.
+def _clang_embeds_debuginfo_cfi():
+    clang = os.path.join(config.llvm_tools_dir, "clang")
+    if not os.path.exists(clang):
+        return False
+    src = None
+    try:
+        fd, src = tempfile.mkstemp(suffix=".hip")
+        os.write(fd, b"__attribute__((global)) void k(float *p) { *p = 1.0f; }\n")
+        os.close(fd)
+        out = subprocess.run(
+            [
+                clang,
+                "-x",
+                "hip",
+                "--offload-arch=amdgcnspirv",
+                "-nogpulib",
+                "-nogpuinc",
+                "--offload-device-only",
+                "-O3",
+                "-g",
+                "-c",
+                "-###",
+                src,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=120,
+        )
+        return b"amdgpu-spill-cfi-saved-regs" in out.stdout
+    except Exception:
+        return False
+    finally:
+        if src and os.path.exists(src):
+            os.unlink(src)
+
+
+if _clang_embeds_debuginfo_cfi():
+    config.available_features.add("comgr-clang-embeds-debuginfo-cfi")
 
 if platform.system() == "Windows":
     config.available_features.add("system-windows")
 elif platform.system() == "Linux":
     config.available_features.add("system-linux")
+    if os.path.exists("/usr/include/c++/v1/cstddef") or os.path.exists(
+        "/usr/local/include/c++/v1/cstddef"
+    ):
+        config.available_features.add("system-libcxx")
 
 # By default, disable the cache for the tests.
 # Test for the cache must explicitly enable this variable.
@@ -50,6 +121,9 @@ config.substitutions.append(
 config.substitutions.append(
     ("%llvm-readelf", _fwd(config.llvm_tools_dir, "llvm-readelf"))
 )
+config.substitutions.append(
+    ("%llvm-readobj", _fwd(config.llvm_tools_dir, "llvm-readobj"))
+)
 config.substitutions.append(("%ld.lld", _fwd(config.llvm_tools_dir, "ld.lld")))
 config.substitutions.append(("%yaml2obj", _fwd(config.llvm_tools_dir, "yaml2obj")))
 config.substitutions.append(("%FileCheck", _fwd(config.llvm_tools_dir, "FileCheck")))
@@ -59,3 +133,6 @@ config.substitutions.append(
 
 # Interpreter used to run Python test helpers (e.g. enumerate-isa-check.py).
 config.substitutions.append(("%python", _fwd(sys.executable)))
+config.substitutions.append(
+    ("%hotswap_transpile_cli", _fwd(config.comgr_obj_dir, "hotswap_transpile_cli"))
+)

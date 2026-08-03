@@ -51,6 +51,7 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/CycleInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -659,7 +660,7 @@ bool CodeGenPrepare::_run(Function &F) {
            "Incorrect DominatorTree updates in CGP");
 
   if (VerifyLoopInfo)
-    LI->verify(getDT());
+    LI->verify();
 #endif
 
   // If we are optimzing huge function, we need to consider the build time.
@@ -723,7 +724,7 @@ bool CodeGenPrepare::_run(Function &F) {
              "Incorrect DominatorTree updates in CGP");
 
     if (VerifyLoopInfo)
-      LI->verify(getDT());
+      LI->verify();
 #endif
 
     // Really free removed instructions during promotion.
@@ -854,8 +855,10 @@ void CodeGenPrepare::removeAllAssertingVHReferences(Value *V) {
 // Verify BFI has been updated correctly by recomputing BFI and comparing them.
 [[maybe_unused]] void CodeGenPrepare::verifyBFIUpdates(Function &F) {
   DominatorTree NewDT(F);
+  CycleInfo NewCI;
+  NewCI.compute(F);
   LoopInfo NewLI(NewDT);
-  BranchProbabilityInfo NewBPI(F, NewLI, TLInfo);
+  BranchProbabilityInfo NewBPI(F, NewCI, TLInfo);
   BlockFrequencyInfo NewBFI(F, NewBPI, NewLI);
   NewBFI.verifyMatch(*BFI);
 }

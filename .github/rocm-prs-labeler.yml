@@ -8,7 +8,9 @@ hotswap:
     - any-glob-to-any-file:
       - amd/comgr/src/hotswap/**
       - amd/comgr/test-lit/hotswap/**
-      - amd/comgr/src/comgr-hotswap*
+      - amd/comgr/test-unit/hotswap/**
+      - amd/comgr/test-lit/comgr-sources/hotswap*
+      - amd/comgr/utils/*hotswap*
 
 device-libs:
   - changed-files:

@@ -591,7 +591,6 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   Args.addAllArgs(CmdArgs, {options::OPT_T});
 
   const char *Exec = Args.MakeArgString(ToolChain.GetLinkerPath());
-
   // Check if linker has a corresponding LLVM IR assembler. If so, disassemble
   // bitcode using current disassembler and then use assembler from linker's
   // release to mask potential bitcode incompatibilities from different LLVM
@@ -628,7 +627,6 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       }
     }
   }
-
   C.addCommand(std::make_unique<Command>(JA, *this,
                                          ResponseFileSupport::AtFileCurCP(),
                                          Exec, CmdArgs, Inputs, Output));
