@@ -146,7 +146,7 @@ jobs:
       test_type: ${{ inputs.test_type }}        
     permissions:
       contents: read
-      id-token: write  
+      id-token: write        
 
   # ==========================================================================
   # STAGE: debug-tools (generic, parallel to math-libs)

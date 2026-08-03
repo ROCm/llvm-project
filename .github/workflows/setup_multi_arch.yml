@@ -104,7 +104,7 @@ jobs:
         with:
           # We need the parent commit to do a diff
           repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          ref: 'users/kzhuravl/merge-main-into-compiler-amd-staging'
           fetch-depth: 2
 
       - name: SHA of TheRock
