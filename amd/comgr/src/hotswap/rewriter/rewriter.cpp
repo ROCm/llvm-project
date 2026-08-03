@@ -291,8 +291,26 @@ hotswapRewrite(amd_comgr_data_t input, const char *source_isa_name,
   // Producer: the actual retarget. Wrap the buffer as a PipelineResult so it
   // flows through the cache's shared currency. Attribution fields stay default
   // (the B0->A0 rewriter produces none).
+  // Producer runs on a mem-cache miss. It consults the on-disk tier first (a
+  // cross-process/cross-run cache); only on a disk miss does it run the actual
+  // retarget, then persists the result to disk. This makes the two tiers work
+  // end-to-end from the production entry point: mem-miss -> disk-hit avoids the
+  // retarget; mem-miss + disk-miss retargets once and writes both tiers.
+  // The disk tier is engaged only when CacheReq.CacheDisabled is false (i.e.
+  // HSA_HOTSWAP_CACHE_DIR is set); otherwise lookup/write are no-ops by the
+  // disk tier's own CacheDisabled handling and this degrades to mem-only.
   amd_comgr_status_t ProducerStatus = AMD_COMGR_STATUS_SUCCESS;
   auto Producer = [&]() -> COMGR::hotswap::PipelineResult {
+    // 1) Disk lookup. On a validated hit, return the persisted bytes without
+    //    retargeting. (When the disk tier is disabled this returns non-Hit.)
+    COMGR::hotswap::TranslationCacheLookup DiskLookup =
+        COMGR::hotswap::lookupTranslationCache(CacheReq);
+    if (DiskLookup.Status == COMGR::hotswap::TranslationCacheStatus::Hit &&
+        DiskLookup.Result.Hsaco) {
+      return std::move(DiskLookup.Result);
+    }
+
+    // 2) Disk miss -> run the real retarget.
     COMGR::hotswap::PipelineResult R;
     std::unique_ptr<llvm::MemoryBuffer> Buf;
     ProducerStatus = hotswap::retargetCodeObject(
@@ -300,6 +318,9 @@ hotswapRewrite(amd_comgr_data_t input, const char *source_isa_name,
     if (ProducerStatus == AMD_COMGR_STATUS_SUCCESS && Buf) {
       R.Hsaco = std::move(Buf);
       R.Success = true;
+      // 3) Persist to disk (best-effort; a write failure must not fail the
+      //    rewrite -- the in-memory result is already valid).
+      COMGR::hotswap::writeTranslationCache(CacheReq, R);
     }
     return R;
   };
