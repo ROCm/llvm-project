@@ -16,7 +16,4 @@
 
 __attribute__((visibility("default"))) constant int foo = 0;
 
-void kernel testfn(
-    global int *a, const global int *b) {
-  *a = *b;
-}
+void kernel testfn(global int *a, const global int *b) { *a = *b; }
