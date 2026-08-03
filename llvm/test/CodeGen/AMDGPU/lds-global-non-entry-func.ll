@@ -277,8 +277,8 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
 ; SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; SDAG-NEXT:    s_mov_b64 s[4:5], 0
-; SDAG-NEXT:    s_mov_b64 s[10:11], -1
 ; SDAG-NEXT:    s_mov_b64 s[6:7], 0
+; SDAG-NEXT:    s_mov_b64 s[10:11], -1
 ; SDAG-NEXT:    s_mov_b64 exec, vcc
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB2_3
@@ -287,7 +287,7 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; SDAG-NEXT:    ds_write_b32 v0, v0
 ; SDAG-NEXT:    s_cbranch_execnz .LBB2_8
 ; SDAG-NEXT:  ; %bb.2:
-; SDAG-NEXT:    s_and_b64 s[6:7], s[10:11], exec
+; SDAG-NEXT:    s_and_b64 s[4:5], s[10:11], exec
 ; SDAG-NEXT:  .LBB2_3:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
@@ -295,14 +295,14 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB2_5
 ; SDAG-NEXT:  .LBB2_4: ; %bb1
-; SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; SDAG-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; SDAG-NEXT:    v_mov_b32_e32 v0, 1
-; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
+; SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; SDAG-NEXT:    ds_write_b32 v0, v0
 ; SDAG-NEXT:  .LBB2_5:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[10:11]
-; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
+; SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB2_8
 ; SDAG-NEXT:  .LBB2_6: ; %ret
