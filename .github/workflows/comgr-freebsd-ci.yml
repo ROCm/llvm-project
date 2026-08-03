@@ -1,0 +1,71 @@
+# CI workflow for verifying Code Object Manager (COMGR) and AMD Device Libraries compilation on FreeBSD.
+
+name: COMGR FreeBSD CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - amd-staging
+  pull_request:
+    branches:
+      - amd-staging
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+  build-freebsd:
+    name: Build COMGR on FreeBSD
+    timeout-minutes: 120
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup FreeBSD VM
+        uses: vmactions/freebsd-vm@v1.4.5
+        with:
+          usesh: true
+          sync: nfs
+          release: "15.0"
+          mem: 12288
+          run: |
+            pkg update
+            pkg upgrade -y
+            pkg install -y cmake ninja git python3 llvm22 pkgconf FreeBSD-clang-dev
+
+      - name: Configure CMake for ROCm
+        shell: freebsd {0}
+        run: |
+          cmake -S llvm -B build \
+            -DCMAKE_C_COMPILER=clang22 \
+            -DCMAKE_CXX_COMPILER=clang++22 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_PROJECTS="clang;lld" \
+            -DLLVM_EXTERNAL_AMD_DEVICE_LIBS_SOURCE_DIR="$PWD/amd/device-libs" \
+            -DLLVM_EXTERNAL_COMGR_SOURCE_DIR="$PWD/amd/comgr" \
+            -DLLVM_TARGETS_TO_BUILD="AMDGPU;X86" \
+            -DCMAKE_INSTALL_PREFIX=/opt/rocm \
+            -G Ninja
+
+      - name: Build ROCm Core Components
+        shell: freebsd {0}
+        run: |
+          cmake --build build --parallel $(sysctl -n hw.ncpu)
+
+      - name: Build and Install AMD Device Libraries
+        shell: freebsd {0}
+        run: |
+          cmake -S amd/device-libs -B amd/device-libs/build \
+            -DCMAKE_INSTALL_PREFIX=/opt/rocm \
+            -DLLVM_DIR="$PWD/build/lib/cmake/llvm" \
+            -DCMAKE_C_COMPILER="$PWD/build/bin/clang" \
+            -DCMAKE_CXX_COMPILER="$PWD/build/bin/clang++" \
+            -G Ninja
+          cmake --build amd/device-libs/build --parallel $(sysctl -n hw.ncpu)
