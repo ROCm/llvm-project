@@ -707,8 +707,6 @@ Error GenericDeviceTy::init(GenericPluginTy &Plugin) {
 }
 
 Error GenericDeviceTy::unloadBinary(DeviceImageTy *Image) {
-  clear_ArgBufs();
-
   GenericGlobalHandlerTy &Handler = Plugin.getGlobalHandler();
   auto ProfOrErr = Handler.readProfilingGlobals(*this, *Image);
   if (!ProfOrErr)
@@ -777,6 +775,15 @@ Expected<DeviceImageTy *> GenericDeviceTy::loadBinary(GenericPluginTy &Plugin,
                                                       StringRef InputTgtImage) {
   ODBG(OLDT_Init) << "Load data from image "
                   << static_cast<const void *>(InputTgtImage.bytes_begin());
+
+  // An empty image is not a valid binary. Plugins behave differently given
+  // empty binaries - e.g. CUDA will map to INVALID_BINARY, while L0 will map to
+  // INVALID_SIZE (which is also associated with invalid kernel launch dims
+  // etc.), so we guard here for consistent behavior across plugins and API
+  // consumers (liboffload and libomptarget).
+  if (InputTgtImage.empty())
+    return Plugin::error(ErrorCode::INVALID_BINARY,
+                         "provided binary image is empty");
 
   std::unique_ptr<MemoryBuffer> Buffer;
   if (identify_magic(InputTgtImage) == file_magic::bitcode) {
@@ -1451,52 +1458,6 @@ Error GenericDeviceTy::zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
 }
 
 bool GenericDeviceTy::useSharedMemForDescriptor(int64_t Size) { return false; }
-
-void *GenericDeviceTy::getFree_ArgBuf(size_t sz) {
-  void *found_ptr = nullptr;
-  for (auto entry : ArgBufEntries) {
-    if (entry->is_free && entry->Size >= sz) {
-      entry->is_free = false;
-      found_ptr = entry->Addr;
-      break;
-    }
-  }
-  if (!found_ptr) {
-    auto AllocOrErr = this->allocate(sz, &found_ptr, TARGET_ALLOC_SHARED);
-    if (!AllocOrErr) {
-      REPORT() << "Could not get SHARED mem for Arg Buffer: " <<
-             toString(AllocOrErr.takeError()).data();
-      return nullptr;
-    }
-    found_ptr = *AllocOrErr;
-    assert(found_ptr && "Could not get SHARED mem for Arg Buffer\n");
-    ArgBufEntryTy *new_entry_ptr = new ArgBufEntryTy;
-    new_entry_ptr->Size = sz;
-    new_entry_ptr->Addr = found_ptr;
-    new_entry_ptr->is_free = false;
-    ArgBufEntries.push_back(new_entry_ptr);
-  }
-  return found_ptr;
-}
-void GenericDeviceTy::moveBusyToFree_ArgBuf(void *ptr) {
-  bool found_argbuf = false;
-  for (auto entry : ArgBufEntries) {
-    if (entry->Addr == ptr) {
-      assert(!entry->is_free && "moveBusyToFree_Arg: entry already free");
-      entry->is_free = true;
-      found_argbuf = true;
-      return;
-    }
-  }
-  assert(found_argbuf && "Could not find ArgBuf to free");
-}
-void GenericDeviceTy::clear_ArgBufs() {
-  for (auto entry : ArgBufEntries) {
-    consumeError(this->free(entry->Addr, TARGET_ALLOC_SHARED));
-    delete entry;
-  }
-  ArgBufEntries.clear();
-}
 
 Expected<bool> GenericDeviceTy::isAccessiblePtr(const void *Ptr, size_t Size) {
   return isAccessiblePtrImpl(Ptr, Size);

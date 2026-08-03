@@ -1,0 +1,27 @@
+## An AMDGPU data-only object whose .rodata sh_offset is placed far beyond the
+## end of the input buffer. Without an overflow-safe range check the validator
+## would accept it and copy the malformed object byte-for-byte. Used by
+## hotswap-data-only-empty-text.s.
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS64
+  Data:    ELFDATA2LSB
+  OSABI:   ELFOSABI_AMDGPU_HSA
+  Type:    ET_REL
+  Machine: EM_AMDGPU
+Sections:
+  - Name: .text
+    Type: SHT_PROGBITS
+    Flags: [ SHF_ALLOC, SHF_EXECINSTR ]
+    Size: 0
+  - Name: .rodata
+    Type: SHT_PROGBITS
+    Flags: [ SHF_ALLOC ]
+    Content: "01000000"
+    ShOffset: 0x100000000
+Symbols:
+  - Name: data_only_constant
+    Type: STT_OBJECT
+    Section: .rodata
+    Binding: STB_GLOBAL
+    Size: 4

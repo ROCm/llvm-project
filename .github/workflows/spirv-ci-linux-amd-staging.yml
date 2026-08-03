@@ -15,6 +15,7 @@ env:
   CLR_BUILD: build-clr
   ROCPRIM_BUILD: build-rocprim
   HIPCUB_BUILD: build-hipcub
+  ROCTHRUST_BUILD: build-rocthrust
   ROCRAND_BUILD: build-rocrand
   HIPRAND_BUILD: build-hiprand
   STAGING: staging
@@ -136,6 +137,7 @@ jobs:
       - name: Configure ROCR-Runtime
         run: |
           cmake -G Ninja -S rocm-systems/projects/rocr-runtime -B "$ROCR_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
             -DBUILD_SHARED_LIBS=ON \
@@ -152,6 +154,7 @@ jobs:
       - name: Configure CLR (HIP runtime)
         run: |
           cmake -G Ninja -S rocm-systems/projects/clr -B "$CLR_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
             -DBUILD_SHARED_LIBS=ON \
@@ -231,6 +234,27 @@ jobs:
           ninja -C "$HIPCUB_BUILD"
           cmake --install "$HIPCUB_BUILD" --prefix $PWD/$STAGING
 
+      # Build rocThrust (header-only; supplies thrust:: iterators to examples).
+      - name: Checkout rocThrust
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/rocThrust
+          ref: develop
+          path: rocThrust
+          persist-credentials: false
+
+      - name: Configure and install rocThrust
+        run: |
+          cmake -G Ninja -S rocThrust -B "$ROCTHRUST_BUILD" \
+            -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
+            -DCMAKE_HIP_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
+            -DCMAKE_PREFIX_PATH="$PWD/$STAGING;$PWD/$LLVM_BUILD" \
+            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
+            -DBUILD_TEST=OFF \
+            -DBUILD_BENCHMARK=OFF
+          ninja -C "$ROCTHRUST_BUILD"
+          cmake --install "$ROCTHRUST_BUILD" --prefix $PWD/$STAGING
+
       # Build rocRAND.
       - name: Checkout rocRAND
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -249,7 +273,7 @@ jobs:
             -DCMAKE_HIP_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
             -DCMAKE_PREFIX_PATH="$PWD/$STAGING;$PWD/$LLVM_BUILD" \
             -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
-            -DAMDGPU_TARGETS="gfx942" \
+            -DAMDGPU_TARGETS="gfx942;amdgcnspirv" \
             -DBUILD_TEST=OFF \
             -DBUILD_BENCHMARK=OFF \
             -DCMAKE_HIP_FLAGS="--rocm-path=$PWD/$STAGING"
@@ -286,7 +310,7 @@ jobs:
       - name: Strip binaries
         run: |
           find "$LLVM_BUILD" "$COMGR_BUILD" "$DEVLIBS_BUILD" "$ROCR_BUILD" "$CLR_BUILD" \
-            "$ROCPRIM_BUILD" "$HIPCUB_BUILD" "$ROCRAND_BUILD" "$HIPRAND_BUILD" "$STAGING" \
+            "$ROCPRIM_BUILD" "$HIPCUB_BUILD" "$ROCTHRUST_BUILD" "$ROCRAND_BUILD" "$HIPRAND_BUILD" "$STAGING" \
             -type f \( -executable -o -name '*.so*' -o -name '*.a' \) \
             -exec strip --strip-unneeded {} + 2>/dev/null || true
 
@@ -296,7 +320,7 @@ jobs:
         run: |
           tar -cf linux-build-tree.tar \
             "$LLVM_BUILD" "$COMGR_BUILD" "$DEVLIBS_BUILD" "$ROCR_BUILD" "$CLR_BUILD" \
-            "$ROCPRIM_BUILD" "$HIPCUB_BUILD" "$ROCRAND_BUILD" "$HIPRAND_BUILD" "$STAGING"
+            "$ROCPRIM_BUILD" "$HIPCUB_BUILD" "$ROCTHRUST_BUILD" "$ROCRAND_BUILD" "$HIPRAND_BUILD" "$STAGING"
 
       - name: Upload build tree artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -552,6 +576,7 @@ jobs:
   # Select the gfx942 test runner the same way TheRock CI does.
   pick_runner:
     name: Select gfx942 test runner
+    needs: [build]
     runs-on: azure-linux-scale-rocm
     timeout-minutes: 5
     outputs:
@@ -631,8 +656,7 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/${{ env.STAGING }}/lib
         run: |
-          ctest --test-dir examples-build-hip-basic --output-on-failure -j $(nproc) \
-            -E '^hip_cooperative_groups$' # TODO: ISSUE #3143
+          ctest --test-dir examples-build-hip-basic --output-on-failure -j $(nproc)
 
       # Applications.
       - name: ROCm Examples build Applications
@@ -654,8 +678,7 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/${{ env.STAGING }}/lib
         run: |
-          ctest --test-dir examples-build-Applications --output-on-failure -j $(nproc) \
-            -E '^(applications_optical_flow|applications_monte_carlo_pi)$' # TODO: ISSUE #3143
+          ctest --test-dir examples-build-Applications --output-on-failure -j $(nproc)
 
       # Libraries.
       - name: ROCm Examples build Libraries
@@ -683,5 +706,4 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/${{ env.STAGING }}/lib
         run: |
-          ctest --test-dir examples-build-Libraries --output-on-failure -j $(nproc) \
-            -E '^(hiprand_simple_distributions_cpp|rocrand_simple_distributions_cpp)$' # TODO: ISSUE #3143
+          ctest --test-dir examples-build-Libraries --output-on-failure -j $(nproc)

@@ -34,7 +34,10 @@ amd_comgr_status_t lookUpCodeObject(DataObject *DataP,
                                     amd_comgr_code_object_info_t *QueryList,
                                     size_t QueryListsize);
 
-amd_comgr_status_t getIsaIndex(const llvm::StringRef IsaName, size_t &Index);
+/// Look up the ISA table index for \p IsaName, optionally reporting the
+/// resolved canonical processor in \p Processor.
+amd_comgr_status_t getIsaIndex(const llvm::StringRef IsaName, size_t &Index,
+                               llvm::StringRef *Processor = nullptr);
 
 bool isSupportedFeature(size_t IsaIndex, llvm::StringRef Feature);
 

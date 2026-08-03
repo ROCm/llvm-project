@@ -1,0 +1,31 @@
+## An AMDGPU relocatable (ET_REL) has no program headers, so its AMDGPU metadata
+## note lives only in the section table, never in a PT_NOTE. This exercises the
+## SHT_NOTE section-table fallback in isValidDataOnlyObject that every linked
+## (-nostdlib, PT_NOTE-covered) variant leaves dead. The note carries an empty
+## amdhsa.kernels array, so the object is a valid data-only object and must be
+## accepted byte-identically. Used by hotswap-data-only-empty-text.s.
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS64
+  Data:    ELFDATA2LSB
+  OSABI:   ELFOSABI_AMDGPU_HSA
+  Type:    ET_REL
+  Machine: EM_AMDGPU
+Sections:
+  - Name: .text
+    Type: SHT_PROGBITS
+    Flags: [ SHF_ALLOC, SHF_EXECINSTR ]
+    Size: 0
+  - Name: .rodata
+    Type: SHT_PROGBITS
+    Flags: [ SHF_ALLOC ]
+    Content: "01000000"
+  - Name: .note.amdgpu
+    Type: SHT_NOTE
+    Content: "070000004c00000020000000414d44475055000083ae616d646873612e6b65726e656c7390ad616d646873612e746172676574ba616d6467636e2d616d642d616d646873612d2d67667831323530ae616d646873612e76657273696f6e920102"
+Symbols:
+  - Name: data_only_constant
+    Type: STT_OBJECT
+    Section: .rodata
+    Binding: STB_GLOBAL
+    Size: 4

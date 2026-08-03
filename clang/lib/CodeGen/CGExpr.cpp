@@ -4626,8 +4626,8 @@ void CodeGenFunction::EmitTrapCheck(llvm::Value *Checked,
 }
 
 llvm::CallInst *CodeGenFunction::EmitTrapCall(llvm::Intrinsic::ID IntrID) {
-  llvm::CallInst *TrapCall =
-      Builder.CreateCall(CGM.getIntrinsic(IntrID));
+  llvm::Function *TrapIntrinsic = CGM.getIntrinsic(IntrID);
+  llvm::CallInst *TrapCall = Builder.CreateCall(TrapIntrinsic);
 
   if (!CGM.getCodeGenOpts().TrapFuncName.empty()) {
     auto A = llvm::Attribute::get(getLLVMContext(), "trap-func-name",
@@ -4637,6 +4637,13 @@ llvm::CallInst *CodeGenFunction::EmitTrapCall(llvm::Intrinsic::ID IntrID) {
 
   if (InNoMergeAttributedStmt)
     TrapCall->addFnAttr(llvm::Attribute::NoMerge);
+  if (TrapIntrinsic->doesNotThrow())
+    TrapCall->setDoesNotThrow();
+  if (TrapIntrinsic->doesNotReturn()) {
+    TrapCall->setDoesNotReturn();
+    Builder.CreateUnreachable();
+    EmitBlock(createBasicBlock());
+  }
   return TrapCall;
 }
 
@@ -7123,21 +7130,6 @@ RValue CodeGenFunction::EmitCall(QualType CalleeType,
       StaticOperator = true;
   }
 
-  // Emit __llvm_omp_emissary_rpc for stubs of emissary APIs.
-  if ((CGM.getTriple().isAMDGCN() || CGM.getTriple().isNVPTX()) && FnType &&
-      dyn_cast<FunctionProtoType>(FnType) &&
-      dyn_cast<FunctionProtoType>(FnType)->isVariadic()) {
-    // This is a variadic function in a device compile
-    // if (emissary_exec || (openmp && (fprintf || printf))
-    if ((E->getDirectCallee()->getNameAsString() == "_emissary_exec") ||
-        // FIXME: do not call for fprintf or printf if device libc is active
-        (CGM.getLangOpts().OpenMP && 
-         ((E->getDirectCallee()->getNameAsString() == "fprintf") ||
-          (E->getDirectCallee()->getNameAsString() == "printf")))) {
-      return EmitEmissaryExec(E);
-    }
-  }
-
   auto Arguments = E->arguments();
   if (StaticOperator) {
     // If we're calling a static operator, we need to emit the object argument
@@ -7149,7 +7141,7 @@ RValue CodeGenFunction::EmitCall(QualType CalleeType,
                E->getDirectCallee(), /*ParamsToSkip=*/0, Order);
 
   const CGFunctionInfo &FnInfo = CGM.getTypes().arrangeFreeFunctionCall(
-      Args, FnType, /*ChainCall=*/Chain);
+      Args, FnType, /*ChainCall=*/Chain, getCurrentFunctionDecl());
 
   if (ResolvedFnInfo)
     *ResolvedFnInfo = &FnInfo;

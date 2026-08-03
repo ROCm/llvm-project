@@ -233,6 +233,11 @@ BitcodeCompiler::BitcodeCompiler(Ctx &ctx) : ctx(ctx) {
 
 BitcodeCompiler::~BitcodeCompiler() = default;
 
+void BitcodeCompiler::waitForLTOCleanup() {
+  if (ltoObj)
+    ltoObj->waitForCleanup();
+}
+
 void BitcodeCompiler::add(BitcodeFile &f) {
   lto::InputFile &obj = *f.obj;
   bool isExec = !ctx.arg.shared && !ctx.arg.relocatable;

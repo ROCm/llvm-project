@@ -16,8 +16,6 @@ else()
 endif()
 canonicalize_cmake_boolean(COMGR_AMDGPU_TARGET_AVAILABLE)
 
-configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)
-
 find_program(LLVM_LIT_PATH
   NAMES llvm-lit llvm-lit.py llvm-lit.cmd
   PATHS "${LLVM_TOOLS_BINARY_DIR}/../../bin" "${LLVM_TOOLS_BINARY_DIR}"
@@ -26,7 +24,10 @@ find_program(LLVM_LIT_PATH
 if (NOT LLVM_LIT_PATH)
   set(LLVM_LIT_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-lit")
 endif()
+get_filename_component(COMGR_LIT_LLVM_TOOLS_DIR "${LLVM_LIT_PATH}" DIRECTORY)
 message("-- LLVM_LIT_PATH: ${LLVM_LIT_PATH}")
+
+configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)
 
 add_custom_target(test-lit COMMAND "${LLVM_LIT_PATH}"
                   "${CMAKE_CURRENT_BINARY_DIR}" -v)
@@ -51,6 +52,7 @@ add_comgr_lit_binary(compile-opencl-minimal c)
 add_comgr_lit_binary(logger-redirect c)
 add_comgr_lit_binary(compile-hip-minimal c)
 add_comgr_lit_binary(compile-hip-asan c)
+add_comgr_lit_binary(compile-hip-cxx-headers c)
 add_comgr_lit_binary(spirv-to-reloc c)
 add_comgr_lit_binary(source-to-spirv c)
 add_comgr_lit_binary(unbundle c)

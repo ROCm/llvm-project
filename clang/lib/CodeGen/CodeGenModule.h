@@ -718,9 +718,9 @@ private:
   llvm::SmallPtrSet<const CXXRecordDecl *, 16> RequireVectorDeletingDtor;
 
   /// Pending MSVC __global_delete variants that may need forwarding bodies.
-  /// Maps each __global_delete wrapper function to the corresponding global
+  /// Maps each __global_delete wrapper alias to the corresponding global
   /// ::operator delete FunctionDecl, in insertion order.
-  llvm::MapVector<llvm::Function *, const FunctionDecl *>
+  llvm::MapVector<llvm::GlobalAlias *, const FunctionDecl *>
       PendingMSVCGlobalDeletes;
 
   /// Whether this TU contains a direct use of global ::operator delete
@@ -864,6 +864,7 @@ private:
   MetadataTypeMap MetadataIdMap;
   MetadataTypeMap VirtualMetadataIdMap;
   MetadataTypeMap GeneralizedMetadataIdMap;
+  MetadataTypeMap CallGraphMetadataIdMap;
 
   // Helps squashing blocks of TopLevelStmtDecl into a single llvm::Function
   // when used with -fincremental-extensions.
@@ -1816,8 +1817,15 @@ public:
   void requireVectorDestructorDefinition(const CXXRecordDecl *RD);
 
   /// Record a pending __global_delete variant that may need a forwarding body.
-  void addPendingGlobalDelete(llvm::Function *GlobalDeleteFn,
+  void addPendingGlobalDelete(llvm::GlobalAlias *GlobalDeleteAlias,
                               const FunctionDecl *OperatorDeleteFD);
+
+  /// Get or create the MSVC-compatible __global_delete wrapper for the given
+  /// global ::operator delete, registering it as a pending variant so a
+  /// forwarding body can be emitted if this TU directly uses global
+  /// ::operator delete.
+  llvm::Constant *
+  getOrCreateMSVCGlobalDeleteWrapper(const FunctionDecl *GlobOD);
 
   /// Note that global ::operator delete is directly used in this TU.
   void noteDirectGlobalDelete();
@@ -1914,6 +1922,11 @@ public:
   /// MDString (for external identifiers) or a distinct unnamed MDNode (for
   /// internal identifiers).
   llvm::Metadata *CreateMetadataIdentifierForType(QualType T);
+
+  /// Create a metadata identifier for the Call Graph Section.
+  /// This is a generalized type identifier that is guaranteed to be an
+  /// MDString.
+  llvm::Metadata *CreateMetadataIdentifierForCallGraphType(QualType T);
 
   /// Create a metadata identifier that is intended to be used to check virtual
   /// calls via a member function pointer.
@@ -2721,7 +2734,8 @@ private:
                                     llvm::AttrBuilder &FuncAttrs);
 
   llvm::Metadata *CreateMetadataIdentifierImpl(QualType T, MetadataTypeMap &Map,
-                                               StringRef Suffix);
+                                               StringRef Suffix,
+                                               bool ForceString = false);
 
   /// Return success if the directives are nested in a way appropriate for
   /// specialized kernel generation. Track the component directives in

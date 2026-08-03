@@ -7,14 +7,6 @@ if(LLVM_VERSION_MAJOR AND NOT (CMAKE_CXX_COMPILER_ID MATCHES "[Cc]lang" AND
                       " is not 'Clang ${req_ver}'.")
 endif()
 
-option(OFFLOAD_ENABLE_EMISSARY_APIS "Enable build of GPU Emissary APIs" ON)
-if(OFFLOAD_ENABLE_EMISSARY_APIS)
-  add_definitions(-DOFFLOAD_ENABLE_EMISSARY_APIS)
-  set(emissary_sources
-    src/EmissaryPrint.cpp
-  )
-endif()
-
 set(src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Allocator.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Configuration.cpp
@@ -35,8 +27,6 @@ set(src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Xteams.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/DeviceMemInit.cpp
-  ${emissary_sources}
-
 )
 # Only link AMD ockl/ocml device libraries when actually building for AMDGCN.
 # The previous condition checked LLVM_TARGETS_TO_BUILD which includes all backends
