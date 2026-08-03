@@ -9,7 +9,7 @@
 # Enumerates every ISA reported by Comgr (via the isa-enumeration tool),
 # compiles the given OpenCL source for each one as both a relocatable (-c)
 # and a shared object (-shared), and verifies amd_comgr_get_data_isa_name()
-# round-trips the ISA name (via the get-data-isa-name tool).
+# round-trips the ISA name (via the test-get-data-isa-name tool).
 #
 #===----------------------------------------------------------------------===#
 
@@ -54,7 +54,7 @@ def main(argv):
 
         run(common + ["-mcpu=" + gpu, "-c", source, "-o", obj])
         run(common + ["-mcpu=" + gpu, "-shared", source, "-o", shared])
-        run(["get-data-isa-name", obj, shared, isa])
+        run(["test-get-data-isa-name", obj, shared, isa])
 
 
 if __name__ == "__main__":

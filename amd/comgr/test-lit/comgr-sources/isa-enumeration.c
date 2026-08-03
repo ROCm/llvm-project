@@ -23,12 +23,12 @@ int main(int argc, char *argv[]) {
     amd_comgr_(metadata_lookup(Root, "Features", &Features));
 
     if (amd_comgr_metadata_lookup(Features, "sramecc", &Val) ==
-      AMD_COMGR_STATUS_SUCCESS) {
+        AMD_COMGR_STATUS_SUCCESS) {
       sramecc = true;
       amd_comgr_(destroy_metadata(Val));
     }
     if (amd_comgr_metadata_lookup(Features, "xnack", &Val) ==
-      AMD_COMGR_STATUS_SUCCESS) {
+        AMD_COMGR_STATUS_SUCCESS) {
       xnack = true;
       amd_comgr_(destroy_metadata(Val));
     }
