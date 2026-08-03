@@ -2555,26 +2555,28 @@ bool AsmParser::expandMacro(raw_svector_ostream &OS, MCAsmMacro &Macro,
       }
     }
 
-    if (AltMacroMode && isIdentifierChar(Body[I])) {
-      size_t Len = 1;
-      while (I + Len != End && isIdentifierChar(Body[I + Len]))
-        ++Len;
-      StringRef Argument(Body.data() + I, Len);
+    if (!isIdentifierChar(Body[I]) || IsDarwin) {
+      OS << Body[I++];
+      continue;
+    }
+
+    const size_t Start = I;
+    while (++I && isIdentifierChar(Body[I])) {
+    }
+    StringRef Token(Body.data() + Start, I - Start);
+    if (AltMacroMode) {
       unsigned Index = 0;
       for (; Index != NParameters; ++Index)
-        if (Parameters[Index].Name == Argument)
+        if (Parameters[Index].Name == Token)
           break;
       if (Index != NParameters) {
         expandArg(Index);
-        I += Len;
         if (I != End && Body[I] == '&')
           ++I;
         continue;
       }
     }
-
-    OS << Body[I];
-    ++I;
+    OS << Token;
   }
 
   ++Macro.Count;
