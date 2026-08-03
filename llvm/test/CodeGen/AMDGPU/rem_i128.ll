@@ -3,8 +3,8 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -O0 -global-isel=0 -mtriple=amdgpu9.00-amd-amdhsa -o - %s | FileCheck -check-prefixes=GFX9-O0,GFX9-SDAG-O0 %s
 
 ; FIXME: GlobalISel missing the power-of-2 cases in legalization. https://github.com/llvm/llvm-project/issues/80671
-; xUN: llc -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -o - %s | FileCheck -check-prefixes=GFX9,GFX9 %s
-; xUN: llc -O0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -o - %s | FileCheck -check-prefixes=GFX9-O0,GFX9-O0 %s}}
+; xUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -o - %s | FileCheck -check-prefixes=GFX9,GFX9 %s
+; xUN: llc -amdgpu-late-wave-transform=0 -O0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -o - %s | FileCheck -check-prefixes=GFX9-O0,GFX9-O0 %s}}
 
 define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-LABEL: v_srem_i128_vv:
