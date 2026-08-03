@@ -17,12 +17,6 @@
 #endif
 
 /*
-// SRAMECC/XNACK support and the SGPR allocation limits are intentionally not
-// columns in this table. They are sourced at runtime from the public LLVM
-// TargetParser (llvm/TargetParser/AMDGPUTargetParser.h), which is generated
-// from the authoritative AMDGPU .td files, so this table does not drift from
-// the backend. See getIsaMetadata() / isSupportedFeature() in
-// comgr-metadata.cpp.
 #define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR,                                   \
         ELF_MACHINE, TRAP_HANDLER_ENABLED, IMAGE_SUPPORT,                      \
         LDS_SIZE, LDS_BANK_COUNT,                                              \
