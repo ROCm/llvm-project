@@ -32,11 +32,6 @@ on:
         required: false
         type: string
         default: ""
-      HIPIFY_PR_URL:
-        description: "HIPIFY PR url. ex: https://github.com/ROCm/HIPIFY/pull/1 "
-        required: false
-        type: string
-        default: ""
       linux_amdgpu_families:
         type: string
         description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
@@ -78,13 +73,12 @@ jobs:
   multiple_pr_sha_params:
     runs-on: ubuntu-24.04
     steps:
-      - name: Store LLVM, HIPIFY and SPIRV PR URLs into file
+      - name: Store LLVM and SPIRV PR URLs into file
         run: |
           cat > ${{ github.run_id }}_PR_params.env <<'EOF'
           LLVM_PR_URL=${{ github.event.inputs.LLVM_PR_URL }}
-          LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}          
+          LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}
           SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
-          HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
           EOF
 
       - name: Upload stored file of PR URls
