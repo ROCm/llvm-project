@@ -154,6 +154,71 @@ jobs:
       test_runs_on: ${{ inputs.test_runs_on }}
       platform: 'linux'
       release_type: ${{ inputs.release_type }}
+
+  aomp_smoke_test1:
+    name: 'AOMP smoke test 1'
+    needs: test_sanity_check
+    if: ${{ inputs.amdgpu_families == 'gfx94X-dcgpu' }}
+    uses: './.github/workflows/test_aomp_smoke1.yml'
+    with:
+      artifact_group: ${{ inputs.artifact_group }}
+      artifact_run_id: ${{ inputs.artifact_run_id }}
+      amdgpu_families: ${{ inputs.amdgpu_families }}
+      test_runs_on: ${{ inputs.test_runs_on }}
+      platform: 'linux'
+      release_type: ${{ inputs.release_type }}
+ 
+  aomp_smoke_test2:
+    name: 'AOMP smoke test 2'
+    needs: test_sanity_check
+    if: ${{ inputs.amdgpu_families == 'gfx94X-dcgpu' }}
+    uses: './.github/workflows/test_aomp_smoke2.yml'
+    with:
+      artifact_group: ${{ inputs.artifact_group }}
+      artifact_run_id: ${{ inputs.artifact_run_id }}
+      amdgpu_families: ${{ inputs.amdgpu_families }}
+      test_runs_on: ${{ inputs.test_runs_on }}
+      platform: 'linux'
+      release_type: ${{ inputs.release_type }}
+ 
+  aomp_smoke_test3:
+    name: 'AOMP smoke test 3'
+    needs: test_sanity_check
+    if: ${{ inputs.amdgpu_families == 'gfx94X-dcgpu' }}
+    uses: './.github/workflows/test_aomp_smoke3.yml'
+    with:
+      artifact_group: ${{ inputs.artifact_group }}
+      artifact_run_id: ${{ inputs.artifact_run_id }}
+      amdgpu_families: ${{ inputs.amdgpu_families }}
+      test_runs_on: ${{ inputs.test_runs_on }}
+      platform: 'linux'
+      release_type: ${{ inputs.release_type }}
+ 
+  aomp_smoke_test4:
+    name: 'AOMP smoke test 4'
+    needs: test_sanity_check
+    if: ${{ inputs.amdgpu_families == 'gfx94X-dcgpu' }}
+    uses: './.github/workflows/test_aomp_smoke4.yml'
+    with:
+      artifact_group: ${{ inputs.artifact_group }}
+      artifact_run_id: ${{ inputs.artifact_run_id }}
+      amdgpu_families: ${{ inputs.amdgpu_families }}
+      test_runs_on: ${{ inputs.test_runs_on }}
+      platform: 'linux'
+      release_type: ${{ inputs.release_type }}
+ 
+  aomp_smoke_test5:
+    name: 'AOMP smoke test 5'
+    needs: test_sanity_check
+    if: ${{ inputs.amdgpu_families == 'gfx94X-dcgpu' }}
+    uses: './.github/workflows/test_aomp_smoke5.yml'
+    with:
+      artifact_group: ${{ inputs.artifact_group }}
+      artifact_run_id: ${{ inputs.artifact_run_id }}
+      amdgpu_families: ${{ inputs.amdgpu_families }}
+      test_runs_on: ${{ inputs.test_runs_on }}
+      platform: 'linux'
+      release_type: ${{ inputs.release_type }}
  
   test_components:
     name: 'Test ${{ matrix.components.job_name }}'
