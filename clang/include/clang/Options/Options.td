@@ -1375,8 +1375,6 @@ def offload_jobs_EQ : Joined<["--"], "offload-jobs=">,
   HelpText<"Specify the number of threads to use for device offloading tasks "
            "during compilation. Can be a positive integer or the string "
            "'jobserver' to use the make-style jobserver from the environment.">;
-def parallel_jobs_EQ : Joined<["-"], "parallel-jobs=">,
-  Alias<offload_jobs_EQ>;
 
 defm offload_via_llvm : BoolFOption<"offload-via-llvm",
   LangOpts<"OffloadViaLLVM">, DefaultFalse,
