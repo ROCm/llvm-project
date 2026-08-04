@@ -4111,6 +4111,10 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     return true;
   }
 
+  /// Submitting from pinned host memory avoids the intermediate buffer and the
+  /// host-to-host copy of the two-step path in dataSubmitImpl.
+  bool hasFastSubmitFromPinnedMemory() const override { return true; }
+
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
                        AsyncInfoWrapperTy &AsyncInfoWrapper) override {

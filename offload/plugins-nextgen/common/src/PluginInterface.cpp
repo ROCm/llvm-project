@@ -213,10 +213,20 @@ GenericKernelTy::getKernelLaunchEnvironment(
     AsyncInfoWrapper.freeAllocationAfterSynchronization(*AllocOrErr);
   }
 
+  // Copy into a pinned buffer if the plugin transfers those faster: dataAlloc
+  // registers TARGET_ALLOC_HOST memory in PinnedAllocs, so the dataSubmit
+  // below can take the one-step copy path.
+  const void *LaunchEnvSrc = &LocalKLE;
+  auto *PinnedKLE = GenericDevice.getPinnedLaunchEnvBuffer();
+  if (PinnedKLE) {
+    *PinnedKLE = LocalKLE;
+    LaunchEnvSrc = PinnedKLE;
+  }
+
   INFO(OMP_INFOTYPE_DATA_TRANSFER, GenericDevice.getDeviceId(),
        "Copying data from host to device, HstPtr=" DPxMOD ", TgtPtr=" DPxMOD
        ", Size=%" PRId64 ", Name=KernelLaunchEnv\n",
-       DPxPTR(&LocalKLE), DPxPTR(*AllocOrErr),
+       DPxPTR(LaunchEnvSrc), DPxPTR(*AllocOrErr),
        sizeof(KernelLaunchEnvironmentTy));
 
   // The ProfilerData at this point will have a callback for a kernel launch,
@@ -229,20 +239,30 @@ GenericKernelTy::getKernelLaunchEnvironment(
   if (AI && AI->ProfilerData) {
     auto LocalOEI = AI->ProfilerData;
     AI->ProfilerData = nullptr;
-    auto Err = GenericDevice.dataSubmit(*AllocOrErr, &LocalKLE,
+    auto Err = GenericDevice.dataSubmit(*AllocOrErr, LaunchEnvSrc,
                                         sizeof(KernelLaunchEnvironmentTy),
                                         AsyncInfoWrapper);
     if (Err)
       return Err;
     AI->ProfilerData = LocalOEI;
+
+    // The transfer is issued, so the async info can now take the buffer.
+    if (PinnedKLE)
+      AsyncInfoWrapper.recycleLaunchEnvAfterSynchronization(PinnedKLE);
+
     return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
   }
 
-  auto Err = GenericDevice.dataSubmit(*AllocOrErr, &LocalKLE,
+  auto Err = GenericDevice.dataSubmit(*AllocOrErr, LaunchEnvSrc,
                                       sizeof(KernelLaunchEnvironmentTy),
                                       AsyncInfoWrapper);
   if (Err)
     return Err;
+
+  // The transfer is issued, so the async info can now take the buffer.
+  if (PinnedKLE)
+    AsyncInfoWrapper.recycleLaunchEnvAfterSynchronization(PinnedKLE);
+
   return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
 }
 
@@ -744,6 +764,10 @@ Error GenericDeviceTy::deinit(GenericPluginTy &Plugin) {
       return Err;
   LoadedImages.clear();
 
+  // Release the pinned staging buffers while the device is still alive.
+  if (auto Err = destroyPinnedLaunchEnvBuffers())
+    return Err;
+
   // Delete the memory manager before deinitializing the device. Otherwise,
   // we may delete device allocations after the device is deinitialized.
   if (MemoryManager)
@@ -1060,6 +1084,9 @@ Error GenericDeviceTy::synchronize(__tgt_async_info *AsyncInfo,
         return Err;
 
     std::swap(AllocsToDelete, AsyncInfo->AssociatedAllocations);
+
+    // The device no longer reads from this async info's pinned buffers.
+    recyclePinnedLaunchEnvBuffers(*AsyncInfo);
   }
 
   for (auto *Ptr : AllocsToDelete)
@@ -1076,7 +1103,87 @@ Error GenericDeviceTy::queryAsync(__tgt_async_info *AsyncInfo,
     return Plugin::error(ErrorCode::INVALID_ARGUMENT,
                          "invalid async info queue");
 
-  return queryAsyncImpl(*AsyncInfo, ReleaseQueue, IsQueueWorkCompleted);
+  bool WorkCompleted = false;
+
+  // Query and recycle under the mutex, as synchronize does. Querying outside
+  // it would let a launch issued in between register a buffer that this call
+  // then recycles, although the transfer reading it is still in flight.
+  std::lock_guard<std::mutex> AllocationGuard{AsyncInfo->Mutex};
+  auto Err = queryAsyncImpl(*AsyncInfo, ReleaseQueue, &WorkCompleted);
+
+  // An async info belonging to a nowait task is never synchronized, so this is
+  // its only completion notification; without recycling here it never reuses.
+  if (!Err && WorkCompleted)
+    recyclePinnedLaunchEnvBuffers(*AsyncInfo);
+
+  if (IsQueueWorkCompleted)
+    *IsQueueWorkCompleted = WorkCompleted;
+
+  return Err;
+}
+
+KernelLaunchEnvironmentTy *GenericDeviceTy::getPinnedLaunchEnvBuffer() {
+  if (!hasFastSubmitFromPinnedMemory())
+    return nullptr;
+
+  // While recording or replaying, dataAlloc serves every allocation kind from
+  // the record-replay device memory pool, so it cannot give us host memory.
+  if (RecordReplay && RecordReplay->isRecordingOrReplaying())
+    return nullptr;
+
+  void *Buffer = nullptr;
+  {
+    std::lock_guard<std::mutex> Guard{PinnedLaunchEnvMutex};
+    if (!FreePinnedLaunchEnvBuffers.empty())
+      Buffer = FreePinnedLaunchEnvBuffers.pop_back_val();
+  }
+
+  if (!Buffer) {
+    auto AllocOrErr =
+        dataAlloc(sizeof(KernelLaunchEnvironmentTy), /*HostPtr=*/nullptr,
+                  TargetAllocTy::TARGET_ALLOC_HOST, /*Alignment=*/0);
+    if (!AllocOrErr) {
+      // Staging is optional, so fall back to unpinned memory. Consume the
+      // error unconditionally: ODBG does not evaluate its operands unless
+      // debugging is enabled.
+      std::string ErrStr = toString(AllocOrErr.takeError());
+      ODBG(OLDT_Alloc) << "Failed to allocate a pinned buffer for the kernel "
+                          "launch environment, submitting it unstaged: "
+                       << ErrStr;
+      return nullptr;
+    }
+    Buffer = *AllocOrErr;
+
+    std::lock_guard<std::mutex> Guard{PinnedLaunchEnvMutex};
+    PinnedLaunchEnvBuffers.push_back(Buffer);
+  }
+
+  return static_cast<KernelLaunchEnvironmentTy *>(Buffer);
+}
+
+void GenericDeviceTy::recyclePinnedLaunchEnvBuffers(
+    __tgt_async_info &AsyncInfo) {
+  if (AsyncInfo.PinnedKernelLaunchEnvironments.empty())
+    return;
+
+  std::lock_guard<std::mutex> Guard{PinnedLaunchEnvMutex};
+  FreePinnedLaunchEnvBuffers.append(AsyncInfo.PinnedKernelLaunchEnvironments);
+  AsyncInfo.PinnedKernelLaunchEnvironments.clear();
+}
+
+Error GenericDeviceTy::destroyPinnedLaunchEnvBuffers() {
+  llvm::SmallVector<void *> Buffers;
+  {
+    std::lock_guard<std::mutex> Guard{PinnedLaunchEnvMutex};
+    std::swap(Buffers, PinnedLaunchEnvBuffers);
+    FreePinnedLaunchEnvBuffers.clear();
+  }
+
+  for (void *Buffer : Buffers)
+    if (auto Err = dataDelete(Buffer, TargetAllocTy::TARGET_ALLOC_HOST))
+      return Err;
+
+  return Plugin::success();
 }
 
 Error GenericDeviceTy::memoryVAMap(void **Addr, void *VAddr, size_t *RSize) {

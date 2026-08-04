@@ -93,6 +93,12 @@ struct __tgt_async_info {
   /// happening.
   KernelLaunchEnvironmentTy KernelLaunchEnvironment;
 
+  /// Pinned host copies of the launch environment, one per kernel issued on
+  /// this async info; empty if the plugin does not stage. The device reads
+  /// them asynchronously, so each launch needs its own. The device that handed
+  /// them out reclaims them once this async info's operations have completed.
+  llvm::SmallVector<void *, 2> PinnedKernelLaunchEnvironments;
+
   /// Use for sync interface. When false => synchronous execution
   bool ExecAsync = true;
   /// Maintain the actal data for OMPT.

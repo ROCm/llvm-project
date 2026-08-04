@@ -176,6 +176,16 @@ struct AsyncInfoWrapperTy {
     AsyncInfoPtr->AssociatedAllocations.push_back(Ptr);
   }
 
+  /// Hand the pinned launch environment buffer \p Ptr to this async info,
+  /// which returns it to the device's pool once its operations have completed.
+  /// Call only after the transfer reading \p Ptr has been issued: a buffer
+  /// registered before that could be recycled by a concurrent synchronization
+  /// that observes the queue as complete.
+  void recycleLaunchEnvAfterSynchronization(void *Ptr) {
+    std::lock_guard<std::mutex> AllocationGuard(AsyncInfoPtr->Mutex);
+    AsyncInfoPtr->PinnedKernelLaunchEnvironments.push_back(Ptr);
+  }
+
 private:
   GenericDeviceTy &Device;
   __tgt_async_info LocalAsyncInfo;
@@ -1049,6 +1059,19 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual Error queryAsyncImpl(__tgt_async_info &AsyncInfo, bool ReleaseQueue,
                                bool *IsQueueWorkCompleted) = 0;
 
+  /// Indicate whether dataSubmitImpl has a faster path for host buffers that
+  /// are registered as pinned memory. If a plugin returns true, the kernel
+  /// launch environment is copied into a pinned host buffer before it is
+  /// submitted, so that its transfer takes that path.
+  virtual bool hasFastSubmitFromPinnedMemory() const { return false; }
+
+  /// Take a pinned buffer from this device's pool. The caller owns it until it
+  /// passes it to AsyncInfoWrapperTy::recycleLaunchEnvAfterSynchronization;
+  /// one that is never passed there is only freed at device deinit. Returns
+  /// nullptr if staging is unavailable, in which case the caller must submit
+  /// the launch environment from ordinary host memory.
+  KernelLaunchEnvironmentTy *getPinnedLaunchEnvBuffer();
+
   /// Check whether the architecture supports VA management
   virtual bool supportVAManagement() const { return false; }
 
@@ -1581,6 +1604,21 @@ private:
 
   /// Record and replay manager.
   RecordReplayTy *RecordReplay = nullptr;
+
+  /// Return \p AsyncInfo's pinned buffers to the pool. Call only once its
+  /// operations have completed, and with its mutex held.
+  void recyclePinnedLaunchEnvBuffers(__tgt_async_info &AsyncInfo);
+
+  /// Free every pinned buffer this device handed out, including those still
+  /// owned by an async info. This is the only place they are released, so one
+  /// whose async info never reported completion is simply not reused.
+  Error destroyPinnedLaunchEnvBuffers();
+
+  /// All pinned buffers allocated for staging launch environments, and the
+  /// subset of them not currently owned by an async info.
+  llvm::SmallVector<void *> PinnedLaunchEnvBuffers;
+  llvm::SmallVector<void *> FreePinnedLaunchEnvBuffers;
+  std::mutex PinnedLaunchEnvMutex;
 
 protected:
   /// Environment variables defined by the LLVM OpenMP implementation
