@@ -224,7 +224,7 @@ void foo(S2 *arr) {
 // CHECK:       omp.type.from32:
 // CHECK:    br label [[OMP_TYPE_END33]]
 // CHECK:       omp.type.end33:
-// CHECK:    [[OMP_MAPTYPE34:%.*]] = phi i64 [ 16384, [[OMP_TYPE_ALLOC28]] ], [ 16384, [[OMP_TYPE_TO30]] ], [ 16384, [[OMP_TYPE_FROM32]] ], [ 16384, [[OMP_TYPE_TO_ELSE31]] ]
+// CHECK:    [[OMP_MAPTYPE34:%.*]] = phi i64 [ 32768, [[OMP_TYPE_ALLOC28]] ], [ 32768, [[OMP_TYPE_TO30]] ], [ 32768, [[OMP_TYPE_FROM32]] ], [ 32768, [[OMP_TYPE_TO_ELSE31]] ]
 // CHECK:    [[TMP61:%.*]] = and i64 [[TMP4]], 1036
 // CHECK:    [[OMP_MAPTYPE_WITH_MODIFIERS35:%.*]] = or i64 [[OMP_MAPTYPE34]], [[TMP61]]
 // CHECK:    call void @__tgt_push_mapper_component(ptr [[TMP0]], ptr [[S1P2]], ptr [[X]], i64 8, i64 [[OMP_MAPTYPE34]], ptr null)
@@ -420,7 +420,7 @@ void foo(S2 *arr) {
 // CHECK-60:       omp.type.from32:
 // CHECK-60:    br label [[OMP_TYPE_END33]]
 // CHECK-60:       omp.type.end33:
-// CHECK-60:    [[OMP_MAPTYPE34:%.*]] = phi i64 [ 16384, [[OMP_TYPE_ALLOC28]] ], [ 16384, [[OMP_TYPE_TO30]] ], [ 16384, [[OMP_TYPE_FROM32]] ], [ 16384, [[OMP_TYPE_TO_ELSE31]] ]
+// CHECK-60:    [[OMP_MAPTYPE34:%.*]] = phi i64 [ 32768, [[OMP_TYPE_ALLOC28]] ], [ 32768, [[OMP_TYPE_TO30]] ], [ 32768, [[OMP_TYPE_FROM32]] ], [ 32768, [[OMP_TYPE_TO_ELSE31]] ]
 // CHECK-60:    [[TMP61:%.*]] = and i64 [[TMP4]], 1036
 // CHECK-60:    [[OMP_MAPTYPE_WITH_MODIFIERS35:%.*]] = or i64 [[OMP_MAPTYPE34]], [[TMP61]]
 // CHECK-60:    call void @__tgt_push_mapper_component(ptr [[TMP0]], ptr [[S1P2]], ptr [[X]], i64 8, i64 [[OMP_MAPTYPE34]], ptr null)

@@ -188,7 +188,7 @@ public:
 // CK0-DAG: [[FROM]]
 // CK0-DAG: br label %[[TYEND]]
 // CK0-DAG: [[TYEND]]
-// CK0-DAG: [[TYPE2:%.+]] = phi i64 [ 16384, %[[ALLOC]] ], [ 16384, %[[TO]] ], [ 16384, %[[FROM]] ], [ 16384, %[[TOELSE]] ]
+// CK0-DAG: [[TYPE2:%.+]] = phi i64 [ 32768, %[[ALLOC]] ], [ 32768, %[[TO]] ], [ 32768, %[[FROM]] ], [ 32768, %[[TOELSE]] ]
 // CK0-64: call void @__tgt_push_mapper_component(ptr [[HANDLE]], ptr [[BBEGIN]], ptr [[BARRBEGINGEP]], i64 8, i64 [[TYPE2]], {{.*}})
 // CK0-32: call void @__tgt_push_mapper_component(ptr [[HANDLE]], ptr [[BBEGIN]], ptr [[BARRBEGINGEP]], i64 4, i64 [[TYPE2]], {{.*}})
 // CK0: [[PTRNEXT]] = getelementptr %class.C, ptr [[PTR]], i32 1
@@ -994,7 +994,7 @@ public:
 // CK4-DAG: [[FROM]]
 // CK4-DAG: br label %[[TYEND]]
 // CK4-DAG: [[TYEND]]
-// CK4-DAG: [[TYPE2:%.+]] = phi i64 [ 16384, %[[ALLOC]] ], [ 16384, %[[TO]] ], [ 16384, %[[FROM]] ], [ 16384, %[[TOELSE]] ]
+// CK4-DAG: [[TYPE2:%.+]] = phi i64 [ 32768, %[[ALLOC]] ], [ 32768, %[[TO]] ], [ 32768, %[[FROM]] ], [ 32768, %[[TOELSE]] ]
 // CK4-64: call void @__tgt_push_mapper_component(ptr [[HANDLE]], ptr [[BBEGIN]], ptr [[BARRBEGINGEP]], i64 8, i64 [[TYPE2]], {{.*}})
 // CK4-32: call void @__tgt_push_mapper_component(ptr [[HANDLE]], ptr [[BBEGIN]], ptr [[BARRBEGINGEP]], i64 4, i64 [[TYPE2]], {{.*}})
 // CK4: [[PTRNEXT]] = getelementptr %class.C, ptr [[PTR]], i32 1
@@ -1151,7 +1151,7 @@ void foo(){
 // CK5-DAG: [[FROM]]
 // CK5-DAG: br label %[[TYEND]]
 // CK5-DAG: [[TYEND]]
-// CK5-DAG: [[TYPE2:%.+]] = phi i64 [ 16384, %[[ALLOC]] ], [ 16384, %[[TO]] ], [ 16384, %[[FROM]] ], [ 16384, %[[TOELSE]] ]
+// CK5-DAG: [[TYPE2:%.+]] = phi i64 [ 32768, %[[ALLOC]] ], [ 32768, %[[TO]] ], [ 32768, %[[FROM]] ], [ 32768, %[[TOELSE]] ]
 // CK5: call void @__tgt_push_mapper_component(ptr [[HANDLE]], ptr [[BBEGIN]], ptr {{.*}}, i64 {{.*}}, i64 [[TYPE2]], {{.*}})
 // CK5: [[PTRNEXT]] = getelementptr %struct.myvec, ptr [[PTR]], i32 1
 // CK5: [[ISDONE:%.+]] = icmp eq ptr [[PTRNEXT]], [[PTREND]]
