@@ -52,8 +52,16 @@ target_include_directories(hotswap-translation-cache PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
 )
 
+# LLVM deps are PUBLIC here (unlike the sibling hotswap OBJECT libs, which keep
+# them PRIVATE). translation-cache.cpp uses llvm::Error, which emits a reference
+# to "typeinfo for llvm::ErrorInfoBase" from LLVMSupport. As an OBJECT library
+# these .o files land directly in amd_comgr; with PRIVATE, LLVMSupport is not
+# propagated onto amd_comgr's static link line and the ErrorInfoBase typeinfo is
+# dropped, breaking the full-static CI link (undefined reference). PUBLIC keeps
+# LLVMSupport on the link line. Do NOT change to PRIVATE without confirming the
+# static libamd_comgr.so link still resolves llvm::ErrorInfoBase.
 target_link_libraries(hotswap-translation-cache
-  PRIVATE
+  PUBLIC
     LLVMBinaryFormat
     LLVMCore
     LLVMObject

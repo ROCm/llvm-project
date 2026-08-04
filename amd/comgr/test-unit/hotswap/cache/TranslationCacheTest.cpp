@@ -50,6 +50,25 @@ struct TempDir {
   }
 };
 
+// Portable environment mutation: setenv/unsetenv are POSIX and absent on MSVC,
+// which provides _putenv_s instead. These wrappers keep ScopedEnv building on
+// Windows (Test Comgr) as well as Linux.
+inline void setEnvVar(const char *Name, const char *Value) {
+#ifdef _WIN32
+  _putenv_s(Name, Value);
+#else
+  setenv(Name, Value, 1);
+#endif
+}
+
+inline void unsetEnvVar(const char *Name) {
+#ifdef _WIN32
+  _putenv_s(Name, "");
+#else
+  unsetenv(Name);
+#endif
+}
+
 struct ScopedEnv {
   std::string Name;
   std::string OldValue;
@@ -60,14 +79,14 @@ struct ScopedEnv {
       OldValue = Old;
       HadOldValue = true;
     }
-    setenv(Name, Value.c_str(), 1);
+    setEnvVar(Name, Value.c_str());
   }
 
   ~ScopedEnv() {
     if (HadOldValue)
-      setenv(Name.c_str(), OldValue.c_str(), 1);
+      setEnvVar(Name.c_str(), OldValue.c_str());
     else
-      unsetenv(Name.c_str());
+      unsetEnvVar(Name.c_str());
   }
 };
 
