@@ -12,6 +12,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>
@@ -261,13 +262,23 @@ public:
 #endif
 
 private:
-  // Look up a ready entry, refreshing its LRU position. Caller holds Mu.
-  MemCacheEntryRef lookupLocked(const std::string &key,
-                                const TranslationCacheRequest &request);
+  // Phase 1 of a lookup (O(1), caller holds Mu): find the bucket, promote its
+  // LRU slot, and PIN the entry + its retained source into shared_ptrs the
+  // caller can inspect after releasing Mu. Returns false on a bucket miss. The
+  // exact source compare is done by the caller OFF-lock (the shared_ptr copies
+  // keep both alive even if the entry is evicted after unlock), so a warm hit
+  // no longer holds Mu across a multi-MiB memcmp.
+  bool acquireCandidateLocked(const std::string &key, MemCacheEntryRef &entry,
+                              SourceBytesRef &source);
   // Insert a freshly produced entry and enforce the budget. Caller holds Mu.
-  void insertLocked(const std::string &key, MemCacheEntryRef entry,
-                    SourceBytesRef source);
-  void evictToBudgetLocked();
+  // Returns the Nodes evicted (defensive-replace victim + budget victims) so
+  // the caller can destroy their possibly-multi-MiB buffers AFTER releasing Mu,
+  // keeping free()/munmap() out of the critical section.
+  std::vector<Node> insertLocked(const std::string &key, MemCacheEntryRef entry,
+                                 SourceBytesRef source);
+  // Evict LRU entries until within budget. Caller holds Mu. Returns the evicted
+  // Nodes for off-lock destruction (see insertLocked).
+  std::vector<Node> evictToBudgetLocked();
 
   mutable std::mutex Mu; // guards Map, Lru, InFlight, and metric gauges
   std::unordered_map<std::string, Node> Map;
@@ -289,28 +300,33 @@ private:
   uint64_t PeakLiveBytes = 0; // guarded by Mu
 };
 
-MemCacheEntryRef
-MemCache::lookupLocked(const std::string &key,
-                       const TranslationCacheRequest &request) {
+bool MemCache::acquireCandidateLocked(const std::string &key,
+                                      MemCacheEntryRef &entry,
+                                      SourceBytesRef &source) {
   auto it = Map.find(key);
   if (it == Map.end())
-    return nullptr;
-  // Exact-compare guards against an xxHash64 collision handing back the wrong
-  // translation. A mismatch (astronomically rare) is treated as a miss.
-  const void *p = request.SourceObject.getBufferStart();
-  const size_t n = request.SourceObject.getBufferSize();
-  if (!it->second.Source || !it->second.Source->equals(p, n))
-    return nullptr;
-  // Move to front (most-recently-used).
+    return false;
+  // Promote to most-recently-used. Promoting before the (off-lock) exact
+  // compare is harmless: on the astronomically-rare xxHash64 collision the
+  // caller rejects this candidate, leaving one entry spuriously marked recent.
   Lru.splice(Lru.begin(), Lru, it->second.LruIt);
   it->second.LruIt = Lru.begin();
-  return it->second.Entry;
+  // Pin both into the caller's shared_ptrs. These copies keep the entry and its
+  // retained source alive after Mu is released, so the caller's exact memcmp is
+  // safe even if a concurrent thread evicts this bucket in the meantime.
+  entry = it->second.Entry;
+  source = it->second.Source;
+  return true;
 }
 
-void MemCache::evictToBudgetLocked() {
+std::vector<Node> MemCache::evictToBudgetLocked() {
   // Drop least-recently-used entries until we are within budget. Never evict
   // below one entry unless that single entry itself exceeds the budget (in
   // which case we still drop it -- it will live via the caller's shared_ptr).
+  // Moved-out Nodes are returned so the caller destroys their buffers after Mu
+  // is released; freeing a multi-MiB HSACO under the lock would serialize every
+  // other thread behind a munmap.
+  std::vector<Node> evicted;
   while (LiveBytes > Budget && !Lru.empty()) {
     const std::string &victimKey = Lru.back();
     auto it = Map.find(victimKey);
@@ -318,23 +334,31 @@ void MemCache::evictToBudgetLocked() {
       LiveBytes -= it->second.Entry->Bytes;
       if (it->second.Source)
         LiveBytes -= it->second.Source->data.size();
+      evicted.push_back(std::move(it->second));
       Map.erase(it);
       Evictions.fetch_add(1, std::memory_order_relaxed);
     }
     Lru.pop_back();
   }
+  return evicted;
 }
 
-void MemCache::insertLocked(const std::string &key, MemCacheEntryRef entry,
-                            SourceBytesRef source) {
-  // If a concurrent leader already inserted this key (possible only across
-  // distinct flights, which we prevent, but be defensive), replace accounting.
+std::vector<Node> MemCache::insertLocked(const std::string &key,
+                                         MemCacheEntryRef entry,
+                                         SourceBytesRef source) {
+  std::vector<Node> evicted;
+  // If a key is already present (same-source collision-retry path: a prior
+  // leader stored the OTHER source under this bucket, and we are now replacing
+  // it with ours), move the old Node out for off-lock destruction and fix the
+  // accounting. This branch is load-bearing for the collision-retry path, not
+  // merely defensive.
   auto existing = Map.find(key);
   if (existing != Map.end()) {
     LiveBytes -= existing->second.Entry->Bytes;
     if (existing->second.Source)
       LiveBytes -= existing->second.Source->data.size();
     Lru.erase(existing->second.LruIt);
+    evicted.push_back(std::move(existing->second));
     Map.erase(existing);
   }
   Lru.push_front(key);
@@ -348,7 +372,10 @@ void MemCache::insertLocked(const std::string &key, MemCacheEntryRef entry,
   Map.emplace(key, std::move(node));
   if (LiveBytes > PeakLiveBytes)
     PeakLiveBytes = LiveBytes;
-  evictToBudgetLocked();
+  std::vector<Node> budgetVictims = evictToBudgetLocked();
+  for (auto &n : budgetVictims)
+    evicted.push_back(std::move(n));
+  return evicted;
 }
 
 // Builds a shared, immutable entry from a producer result, moving the HSACO
@@ -405,134 +432,167 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     MemCacheEntryRef entry = adopt(produced);
     if (!entry)
       ProducerFailures.fetch_add(1, std::memory_order_relaxed);
+    else
+      Computed.fetch_add(1, std::memory_order_relaxed);
     // Report Computed when it produced usable bytes, else ProducerFailed. The
     // entry is returned to the caller but not inserted into the map.
     result.Status =
         entry ? MemCacheStatus::Computed : MemCacheStatus::ProducerFailed;
     result.Entry = std::move(entry);
+    result.ProducerStatus = produced.ProducerStatus;
     result.LeaderResult = std::move(produced);
     return result;
   }
 
-  // Now that the request is known cacheable (non-empty key implies a non-null,
-  // non-empty source), capture the source bytes for the exact-compare guard.
-  SourceBytesRef source = captureSource(request);
+  // The request buffer for the exact-compare guard. Stable for this call; never
+  // shared, so it needs no lock.
+  const void *reqP = request.SourceObject.getBufferStart();
+  const size_t reqN = request.SourceObject.getBufferSize();
 
-  std::shared_ptr<Flight> flight;
-  bool isLeader = false;
-  {
-    std::unique_lock<std::mutex> lock(Mu);
-    // Fast path: ready in the map.
-    if (MemCacheEntryRef hit = lookupLocked(key, request)) {
-      Hits.fetch_add(1, std::memory_order_relaxed);
-      result.Status = MemCacheStatus::Hit;
-      result.Entry = std::move(hit);
-      return result;
-    }
-    // Is an identical request already in flight?
-    auto it = InFlight.find(key);
-    if (it != InFlight.end()) {
-      flight = it->second;
-    } else {
-      flight = std::make_shared<Flight>();
-      flight->Leader = std::this_thread::get_id();
-      InFlight.emplace(key, flight);
-      isLeader = true;
-    }
-  }
-
-  if (isLeader) {
-    // Leader runs the producer with NO cache lock held.
-    PipelineResult produced = producer();
-    ProducerCalls.fetch_add(1, std::memory_order_relaxed);
-    MemCacheEntryRef entry = adopt(produced);
-
+  // Retry loop: a lost collision race (a bucket held a DIFFERENT source) falls
+  // through to `continue` instead of recursing, bounding stack use. Each
+  // iteration terminates: it either hits, becomes a leader, coalesces, or
+  // recomputes.
+  for (;;) {
+    std::shared_ptr<Flight> flight;
+    bool isLeader = false;
     {
       std::unique_lock<std::mutex> lock(Mu);
-      if (entry)
-        insertLocked(key, entry, source);
-      InFlight.erase(key);
+      // Phase 1 (O(1) under Mu): pin a candidate + its retained source.
+      MemCacheEntryRef candidate;
+      SourceBytesRef candidateSource;
+      if (acquireCandidateLocked(key, candidate, candidateSource)) {
+        // Phase 2 (OFF-lock): exact-compare the multi-MiB source. The pinned
+        // shared_ptrs keep the entry alive even if it is evicted right now.
+        lock.unlock();
+        if (candidateSource && candidateSource->equals(reqP, reqN)) {
+          Hits.fetch_add(1, std::memory_order_relaxed);
+          result.Status = MemCacheStatus::Hit;
+          result.Entry = std::move(candidate);
+          return result;
+        }
+        // xxHash64 collision (astronomically rare): the bucket holds a
+        // different source. Re-lock and treat as a miss.
+        lock.lock();
+      }
+      // Is an identical request already in flight?
+      auto it = InFlight.find(key);
+      if (it != InFlight.end()) {
+        flight = it->second;
+      } else {
+        flight = std::make_shared<Flight>();
+        flight->Leader = std::this_thread::get_id();
+        InFlight.emplace(key, flight);
+        isLeader = true;
+      }
     }
-    // Publish to waiters.
+
+    if (isLeader) {
+      // Only the leader retains the source (for insertLocked + waiters'
+      // exact-compare). Hit/Coalesced paths never read it, so capture here --
+      // not before the lock -- to keep a warm hit off the alloc+memcpy.
+      SourceBytesRef source = captureSource(request);
+      // Leader runs the producer with NO cache lock held.
+      PipelineResult produced = producer();
+      ProducerCalls.fetch_add(1, std::memory_order_relaxed);
+      MemCacheEntryRef entry = adopt(produced);
+
+      std::vector<Node> evicted;
+      {
+        std::unique_lock<std::mutex> lock(Mu);
+        if (entry)
+          evicted = insertLocked(key, entry, source);
+        InFlight.erase(key);
+      }
+      // Free evicted buffers here, AFTER Mu is released.
+      evicted.clear();
+      // Publish to waiters.
+      {
+        std::lock_guard<std::mutex> flock(flight->Mu);
+        flight->Entry = entry;
+        flight->Source = source;
+        flight->ProducerStatus = produced.ProducerStatus;
+        flight->Done = true;
+      }
+      flight->Cv.notify_all();
+
+      if (!entry)
+        ProducerFailures.fetch_add(1, std::memory_order_relaxed);
+      else
+        Computed.fetch_add(1, std::memory_order_relaxed);
+      result.Status =
+          entry ? MemCacheStatus::Computed : MemCacheStatus::ProducerFailed;
+      result.Entry = std::move(entry);
+      result.ProducerStatus = produced.ProducerStatus;
+      result.LeaderResult = std::move(produced);
+      return result;
+    }
+
+    // Waiter. Reentrancy guard: if this same thread is the leader of this
+    // flight (a producer that recursively asks for its OWN key), do NOT block
+    // on ourselves -- run the producer inline instead. Cannot cache (the leader
+    // owns the flight), so this is a bypass compute. NOTE: this guards only the
+    // same-key self-entry case. A cross-key cycle (leader of K1 waits on K2
+    // whose leader waits on K1) is NOT detected and would deadlock; the current
+    // producer (retargetCodeObject) never re-enters the cache, so there is no
+    // live cycle. Any future producer that calls back into the cache MUST NOT
+    // do so with a different key already in flight on the same thread.
+    if (flight->Leader == std::this_thread::get_id()) {
+      ReentrantComputes.fetch_add(1, std::memory_order_relaxed);
+      PipelineResult produced = producer();
+      ProducerCalls.fetch_add(1, std::memory_order_relaxed);
+      MemCacheEntryRef entry = adopt(produced);
+      if (!entry)
+        ProducerFailures.fetch_add(1, std::memory_order_relaxed);
+      else
+        Computed.fetch_add(1, std::memory_order_relaxed);
+      result.Status =
+          entry ? MemCacheStatus::Computed : MemCacheStatus::ProducerFailed;
+      result.Entry = std::move(entry);
+      result.ProducerStatus = produced.ProducerStatus;
+      result.LeaderResult = std::move(produced);
+      return result;
+    }
+
+    MemCacheEntryRef coalesced;
+    SourceBytesRef flightSource;
+    {
+      std::unique_lock<std::mutex> flock(flight->Mu);
+      ++flight->Waiters;
+      flight->Cv.wait(flock, [&] { return flight->Done; });
+      --flight->Waiters;
+      coalesced = flight->Entry;
+      flightSource = flight->Source;
+    }
+    const bool sameSource = flightSource && flightSource->equals(reqP, reqN);
+    if (coalesced && sameSource) {
+      Coalesced.fetch_add(1, std::memory_order_relaxed);
+      result.Status = MemCacheStatus::Coalesced;
+      result.Entry = std::move(coalesced);
+      return result;
+    }
+    if (coalesced && !sameSource) {
+      // xxHash64 collision between two concurrent distinct sources: the
+      // leader's flight was for a different source, so we cannot use its bytes.
+      // Retry the whole operation (loop, not recursion): by now the leader has
+      // published + erased its flight, so our retry either finds our own source
+      // in the map (Phase-2 memcmp), or -- more likely -- misses (the leader
+      // stored the OTHER source) and WE become a fresh leader that runs +
+      // caches our result. A collided request thus self-heals into a normal
+      // cached entry instead of perpetually bypassing. Bounded: loops only
+      // while the collision persists.
+      continue;
+    }
+    // The leader's producer failed; forward its opaque status so this waiter
+    // reports the same failure code a direct compute would, not a generic
+    // error.
     {
       std::lock_guard<std::mutex> flock(flight->Mu);
-      flight->Entry = entry;
-      flight->Source = source;
-      flight->ProducerStatus = produced.ProducerStatus;
-      flight->Done = true;
+      result.ProducerStatus = flight->ProducerStatus;
     }
-    flight->Cv.notify_all();
-
-    if (!entry)
-      ProducerFailures.fetch_add(1, std::memory_order_relaxed);
-    Computed.fetch_add(1, std::memory_order_relaxed);
-    result.Status =
-        entry ? MemCacheStatus::Computed : MemCacheStatus::ProducerFailed;
-    result.Entry = std::move(entry);
-    result.ProducerStatus = produced.ProducerStatus;
-    result.LeaderResult = std::move(produced);
+    result.Status = MemCacheStatus::ProducerFailed;
     return result;
   }
-
-  // Waiter. Reentrancy guard: if this same thread is the leader of this flight
-  // (a producer that recursively asks for its own key), do NOT block on
-  // ourselves -- run the producer inline instead. Cannot cache (the leader
-  // owns the flight), so this is a bypass compute.
-  if (flight->Leader == std::this_thread::get_id()) {
-    ReentrantComputes.fetch_add(1, std::memory_order_relaxed);
-    PipelineResult produced = producer();
-    ProducerCalls.fetch_add(1, std::memory_order_relaxed);
-    MemCacheEntryRef entry = adopt(produced);
-    if (!entry)
-      ProducerFailures.fetch_add(1, std::memory_order_relaxed);
-    result.Status =
-        entry ? MemCacheStatus::Computed : MemCacheStatus::ProducerFailed;
-    result.Entry = std::move(entry);
-    result.ProducerStatus = produced.ProducerStatus;
-    result.LeaderResult = std::move(produced);
-    return result;
-  }
-
-  MemCacheEntryRef coalesced;
-  SourceBytesRef flightSource;
-  {
-    std::unique_lock<std::mutex> flock(flight->Mu);
-    ++flight->Waiters;
-    flight->Cv.wait(flock, [&] { return flight->Done; });
-    --flight->Waiters;
-    coalesced = flight->Entry;
-    flightSource = flight->Source;
-  }
-  const void *p = request.SourceObject.getBufferStart();
-  const size_t n = request.SourceObject.getBufferSize();
-  const bool sameSource = flightSource && flightSource->equals(p, n);
-  if (coalesced && sameSource) {
-    Coalesced.fetch_add(1, std::memory_order_relaxed);
-    result.Status = MemCacheStatus::Coalesced;
-    result.Entry = std::move(coalesced);
-    return result;
-  }
-  if (coalesced && !sameSource) {
-    // xxHash64 collision between two concurrent distinct sources: the leader's
-    // flight was for a different source, so we cannot use its bytes. RETRY the
-    // whole operation: by now the leader has published + erased its flight, so
-    // our retry either finds our own source in the map (lookupLocked memcmp),
-    // or -- more likely -- misses (leader stored the OTHER source) and WE
-    // become a fresh leader that runs + caches our result. This makes a
-    // collided request self-heal into a normal cached entry instead of
-    // perpetually bypassing. Bounded: retry loops only while the collision
-    // persists.
-    return getOrCompute(request, producer); // tail-recursive retry
-  }
-  // The leader's producer failed; nothing to hand back.
-  // Leader's producer failed; forward its opaque status so this waiter
-  // reports the same failure code a direct compute would, not a generic error.
-  {
-    std::lock_guard<std::mutex> flock(flight->Mu);
-    result.ProducerStatus = flight->ProducerStatus;
-  }
-  result.Status = MemCacheStatus::ProducerFailed;
-  return result;
 }
 
 MemCacheMetrics MemCache::snapshot() const {

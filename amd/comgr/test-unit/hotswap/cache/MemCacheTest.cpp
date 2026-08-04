@@ -147,6 +147,20 @@ std::string makeFakeAmdgpuElf(llvm::StringRef kernel) {
   return std::string(reinterpret_cast<const char *>(D.data()), D.size());
 }
 
+// A valid AMDGPU ELF whose byte length is padded out to ~padBytes, so the
+// exact-compare memcmp dominates the per-hit cost. The trailing pad is ignored
+// by note parsing but is part of the hashed+compared source bytes. The pad
+// pattern varies by `salt` so distinct keys are distinct in the pad region too.
+std::string makeLargeElf(llvm::StringRef kernel, size_t padBytes,
+                         unsigned char salt) {
+  std::string e = makeFakeAmdgpuElf(kernel);
+  const size_t start = e.size();
+  e.resize(start + padBytes);
+  for (size_t i = 0; i < padBytes; ++i)
+    e[start + i] = static_cast<char>((i * 131u + salt) & 0xff);
+  return e;
+}
+
 TranslationCacheRequest makeRequest(const std::string &elf,
                                     llvm::StringRef target = "gfx950") {
   TranslationCacheRequest req;
@@ -653,6 +667,85 @@ TEST_F(MemCacheTest, DiskHitPopulatesMemThenMemHit) {
   ASSERT_NE(warm.Entry, nullptr);
   ASSERT_NE(xproc.Entry, nullptr);
   EXPECT_EQ(warm.Entry->Hsaco.get(), xproc.Entry->Hsaco.get());
+}
+
+// --- Off-lock exact-compare lets warm hits on distinct keys run concurrently -
+// N threads each repeatedly hit their OWN pre-populated multi-MiB key. The
+// exact-compare is done with Mu released, so the memcmps do not serialize.
+// Correctness is asserted hard; the speedup is asserted only where the box has
+// enough cores to make it non-flaky.
+TEST_F(MemCacheTest, WarmHitsOnDistinctKeysScale) {
+  constexpr int kKeys = 8;
+  constexpr size_t kPad = 4u << 20; // ~4 MiB source => memcmp-dominated hit
+  // A budget big enough to hold all kKeys entries (+their retained sources).
+  resetMemCacheForTesting(static_cast<size_t>(kKeys) * kPad * 4);
+
+  std::vector<std::string> elfs;
+  std::vector<TranslationCacheRequest> reqs;
+  elfs.reserve(kKeys);
+  reqs.reserve(kKeys);
+  for (int i = 0; i < kKeys; ++i)
+    elfs.push_back(makeLargeElf("kern" + std::to_string(i), kPad,
+                                static_cast<unsigned char>(i)));
+  for (int i = 0; i < kKeys; ++i)
+    reqs.push_back(makeRequest(elfs[i]));
+
+  // Pre-populate: one compute per key.
+  std::atomic<int> calls{0};
+  std::vector<const llvm::MemoryBuffer *> bufs(kKeys, nullptr);
+  for (int i = 0; i < kKeys; ++i) {
+    auto r = getOrComputeTranslation(reqs[i],
+                                     [&] { return makeProduced(calls, 256); });
+    ASSERT_EQ(r.Status, MemCacheStatus::Computed);
+    ASSERT_NE(r.Entry, nullptr);
+    bufs[i] = r.Entry->Hsaco.get();
+  }
+  ASSERT_EQ(calls.load(), kKeys);
+
+  // Workload: each of T threads does `perThread` hits over the kKeys keys.
+  auto runHits = [&](int threads, int perThread) {
+    std::atomic<int> extraCalls{0};
+    std::atomic<int> misses{0};
+    auto worker = [&](int t) {
+      for (int j = 0; j < perThread; ++j) {
+        int k = (t + j) % kKeys;
+        auto r = getOrComputeTranslation(
+            reqs[k], [&] { return makeProduced(extraCalls, 256); });
+        if (r.Status != MemCacheStatus::Hit || r.Entry == nullptr ||
+            r.Entry->Hsaco.get() != bufs[k])
+          misses.fetch_add(1, std::memory_order_relaxed);
+      }
+    };
+    std::vector<std::thread> ts;
+    auto t0 = std::chrono::steady_clock::now();
+    for (int t = 0; t < threads; ++t)
+      ts.emplace_back(worker, t);
+    for (auto &th : ts)
+      th.join();
+    auto t1 = std::chrono::steady_clock::now();
+    // Every access must have been a correct warm hit; producer never re-ran.
+    EXPECT_EQ(extraCalls.load(), 0);
+    EXPECT_EQ(misses.load(), 0);
+    return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0)
+        .count();
+  };
+
+  constexpr int kTotalHits = 4096;
+  long serialUs = runHits(1, kTotalHits);
+  const unsigned hw = std::thread::hardware_concurrency();
+  const int par = hw >= 8 ? 8 : (hw >= 4 ? 4 : 1);
+  long parUs = runHits(par, kTotalHits / par);
+
+  // Correctness already asserted inside runHits. Timing: only assert speedup on
+  // a box with real parallelism; the multi-MiB memcmp is CPU-bound, so with the
+  // compare OFF-lock `par` threads must beat 1 thread on equal total work. A
+  // generous margin keeps it robust under CI noise.
+  if (par >= 4 && serialUs > 0) {
+    EXPECT_LT(parUs, serialUs)
+        << "parallel warm hits (" << par
+        << " threads) not faster than serial: " << parUs << "us vs " << serialUs
+        << "us -- exact-compare may be serializing under Mu";
+  }
 }
 
 } // namespace
