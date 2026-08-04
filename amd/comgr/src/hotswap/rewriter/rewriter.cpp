@@ -277,6 +277,14 @@ hotswapRewrite(amd_comgr_data_t input, const char *source_isa_name,
     Code += (Options.UseB0B0EntryFastPath ? "1" : "0");
     CacheReq.CodeIsa = std::move(Code);
   }
+  // DeviceLibrariesIdentity is intentionally left empty here. This is the
+  // byte-level B0->A0 ELF rewrite path: retargetCodeObject patches an
+  // already-compiled code object and never links device libraries, so their
+  // identity cannot influence the output and is not part of the key. A future
+  // caller whose transform DOES depend on device libraries (e.g. the IR
+  // transpiler path) MUST populate CacheReq.DeviceLibrariesIdentity, or it
+  // would alias distinct translations onto one entry -- the disk tier's key
+  // already folds this field in for exactly that reason.
   CacheReq.StrictMode = StrictMode;
   // Disk tier: honor HSA_HOTSWAP_CACHE_DIR if set (leave empty => mem-only /
   // disk-disabled per the disk tier's own env handling). CacheDisabled is the
@@ -322,6 +330,9 @@ hotswapRewrite(amd_comgr_data_t input, const char *source_isa_name,
       //    rewrite -- the in-memory result is already valid).
       COMGR::hotswap::writeTranslationCache(CacheReq, R);
     }
+    // Carry the retarget status on the result so the mem cache can forward a
+    // failed leader's code to any coalesced waiter (deterministic status).
+    R.ProducerStatus = static_cast<int>(ProducerStatus);
     return R;
   };
 
@@ -331,8 +342,17 @@ hotswapRewrite(amd_comgr_data_t input, const char *source_isa_name,
   // A failed producer (retarget error) must propagate the real status, not a
   // generic cache failure.
   if (!Cached.Entry) {
+    // This thread ran the producer (leader / disabled / uncacheable path): its
+    // own retarget status is authoritative.
     if (ProducerStatus != AMD_COMGR_STATUS_SUCCESS)
       return ProducerStatus;
+    // Otherwise we coalesced onto another thread's flight whose producer failed
+    // (our own ProducerStatus is still SUCCESS because our producer never ran).
+    // Forward the leader's opaque status so the same failing input yields the
+    // same code regardless of leader-vs-waiter timing.
+    if (Cached.Status == COMGR::hotswap::MemCacheStatus::ProducerFailed &&
+        Cached.ProducerStatus != 0)
+      return static_cast<amd_comgr_status_t>(Cached.ProducerStatus);
     hotswap::log() << "hotswap: error: " << ApiName
                    << ": rewrite returned no output buffer\n";
     return AMD_COMGR_STATUS_ERROR;

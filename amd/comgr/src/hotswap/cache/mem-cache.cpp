@@ -235,6 +235,7 @@ struct Flight {
   std::condition_variable Cv;
   bool Done = false;
   MemCacheEntryRef Entry; // published result (null on producer failure)
+  int ProducerStatus = 0; // leader's opaque producer code (when Entry null)
   SourceBytesRef Source;  // leader's source, for exact-compare on coalesce
   std::thread::id Leader; // the producer thread (reentrancy guard)
   size_t Waiters = 0;     // parked waiters, for the coalescing test hook
@@ -457,6 +458,7 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
       std::lock_guard<std::mutex> flock(flight->Mu);
       flight->Entry = entry;
       flight->Source = source;
+      flight->ProducerStatus = produced.ProducerStatus;
       flight->Done = true;
     }
     flight->Cv.notify_all();
@@ -467,6 +469,7 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     result.Status =
         entry ? MemCacheStatus::Computed : MemCacheStatus::ProducerFailed;
     result.Entry = std::move(entry);
+    result.ProducerStatus = produced.ProducerStatus;
     result.LeaderResult = std::move(produced);
     return result;
   }
@@ -485,6 +488,7 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     result.Status =
         entry ? MemCacheStatus::Computed : MemCacheStatus::ProducerFailed;
     result.Entry = std::move(entry);
+    result.ProducerStatus = produced.ProducerStatus;
     result.LeaderResult = std::move(produced);
     return result;
   }
@@ -521,6 +525,12 @@ MemCacheResult MemCache::getOrCompute(const TranslationCacheRequest &request,
     return getOrCompute(request, producer); // tail-recursive retry
   }
   // The leader's producer failed; nothing to hand back.
+  // Leader's producer failed; forward its opaque status so this waiter
+  // reports the same failure code a direct compute would, not a generic error.
+  {
+    std::lock_guard<std::mutex> flock(flight->Mu);
+    result.ProducerStatus = flight->ProducerStatus;
+  }
   result.Status = MemCacheStatus::ProducerFailed;
   return result;
 }

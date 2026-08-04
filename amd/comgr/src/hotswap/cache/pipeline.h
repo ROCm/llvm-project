@@ -66,6 +66,12 @@ struct PipelineResult {
   // extent by. 1 means no scaling.
   unsigned ScaledDispatchFactor = 1;
   bool Success = false;
+  // Opaque producer status code (0 == success sentinel). The mem cache does not
+  // interpret this; it only forwards a failed leader's code to coalesced
+  // waiters so every caller of a shared flight observes the same failure
+  // status. The rewriter stores its amd_comgr_status_t here; a value of 0 means
+  // "success or not set".
+  int ProducerStatus = 0;
 };
 
 } // namespace COMGR::hotswap

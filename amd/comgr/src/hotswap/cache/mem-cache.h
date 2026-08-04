@@ -74,6 +74,10 @@ enum class MemCacheStatus {
 struct MemCacheResult {
   MemCacheStatus Status = MemCacheStatus::Disabled;
   MemCacheEntryRef Entry; // null iff ProducerFailed.
+  // When Status == ProducerFailed, the opaque producer status code the
+  // (possibly remote leader's) producer reported (0 if none). Lets a coalesced
+  // waiter return the leader's real failure status instead of a generic error.
+  int ProducerStatus = 0;
   // The full producer output for the leader path (Computed). Empty/moved-from
   // for Hit/Coalesced (those never ran the producer). Lets the leader's caller
   // recover pipeline timings / failure detail that the shared entry omits.

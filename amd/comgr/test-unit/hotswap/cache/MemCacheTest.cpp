@@ -303,6 +303,59 @@ TEST_F(MemCacheTest, ConcurrentIdenticalCoalesceToOneProducer) {
   EXPECT_EQ(coalesced + hit, kThreads - 1); // everyone else shared it
 }
 
+// --- Coalesced waiters of a failed leader get the leader's status ----------
+
+// When the single-flight leader's producer fails, every coalesced waiter must
+// observe the SAME deterministic failure: Status == ProducerFailed, Entry ==
+// null, AND the leader's opaque ProducerStatus code -- never a generic error
+// that varies with leader-vs-waiter timing.
+TEST_F(MemCacheTest, CoalescedWaitersOfFailedLeaderGetLeaderStatus) {
+  std::string elf = makeFakeAmdgpuElf("kern");
+  auto req = makeRequest(elf);
+  constexpr int kThreads = 16;
+  constexpr int kFailCode = 7; // arbitrary nonzero opaque producer code
+
+  std::atomic<int> calls{0};
+  std::atomic<int> producerEntered{0};
+  std::atomic<bool> release{false};
+
+  // Leader parks in the producer until all waiters have coalesced, then fails
+  // (no Hsaco) carrying a specific opaque status code.
+  auto producer = [&]() -> PipelineResult {
+    producerEntered.fetch_add(1, std::memory_order_relaxed);
+    while (!release.load(std::memory_order_acquire))
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    PipelineResult r = makeProduced(calls, 0, /*success=*/false);
+    r.ProducerStatus = kFailCode;
+    return r;
+  };
+
+  std::vector<std::thread> threads;
+  std::vector<MemCacheResult> results(kThreads);
+  for (int i = 0; i < kThreads; ++i)
+    threads.emplace_back(
+        [&, i] { results[i] = getOrComputeTranslation(req, producer); });
+
+  while (producerEntered.load() == 0)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  size_t waiters = waitForMemCacheWaitersForTesting(req, kThreads - 1, 2000);
+  EXPECT_GT(waiters, 0u);
+
+  release.store(true, std::memory_order_release);
+  for (auto &t : threads)
+    t.join();
+
+  // The producer ran exactly once (the leader); every thread saw the failure.
+  EXPECT_EQ(calls.load(), 1);
+  EXPECT_EQ(producerEntered.load(), 1);
+  for (auto &r : results) {
+    EXPECT_EQ(r.Status, MemCacheStatus::ProducerFailed);
+    EXPECT_EQ(r.Entry, nullptr);
+    // Deterministic: leader AND every coalesced waiter report the same code.
+    EXPECT_EQ(r.ProducerStatus, kFailCode);
+  }
+}
+
 // --- Byte-budget LRU eviction --------------------------------------------
 
 TEST_F(MemCacheTest, ByteBudgetEvictsLeastRecentlyUsed) {

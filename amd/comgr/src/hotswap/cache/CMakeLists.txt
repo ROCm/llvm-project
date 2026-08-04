@@ -53,7 +53,7 @@ target_include_directories(hotswap-translation-cache PUBLIC
 )
 
 target_link_libraries(hotswap-translation-cache
-  PUBLIC
+  PRIVATE
     LLVMBinaryFormat
     LLVMCore
     LLVMObject
