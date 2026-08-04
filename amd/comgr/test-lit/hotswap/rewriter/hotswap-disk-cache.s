@@ -17,25 +17,50 @@
 
 // RUN: rm -rf %t.cache && mkdir -p %t.cache
 
-// COM: Cold run: mem-miss + disk-miss -> retarget -> disk write.
+// COM: --- Run 1: MISS + WRITE ---
+// COM: Fresh process => empty mem tier; empty dir => disk miss. The production
+// COM: producer retargets once and writes the object+metadata to disk.
 // RUN: env HSA_HOTSWAP_CACHE_DIR=%t.cache hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out1.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
 
-// COM: The cold run must have written at least one cache artifact to disk.
-// RUN: find %t.cache -type f | %FileCheck --check-prefix=DISK %s
-// DISK: {{.+}}
+// COM: The miss path must have written the object artifact (<key>.Hsaco).
+// RUN: find %t.cache -type f -name '*.Hsaco' | %FileCheck --check-prefix=DISK %s
+// DISK: {{.+\.Hsaco}}
 
-// COM: Second run (fresh process => empty mem tier) must hit the disk entry and
-// COM: produce byte-identical output.
+// COM: Record a rewrite-sensitive identity of the stored object. The disk tier
+// COM: writes via atomic temp-file + rename, and a disk HIT returns the stored
+// COM: bytes WITHOUT calling writeTranslationCache (see the producer in
+// COM: rewriter.cpp) -- so a hit leaves the file completely untouched. We
+// COM: capture inode + mtime + ctime (%%i:%%Y:%%Z): a genuine hit leaves all
+// COM: three unchanged, while ANY re-write advances mtime/ctime (and usually
+// COM: the inode too). This distinguishes a disk hit from a silent recompute,
+// COM: which cmp alone cannot (retarget being deterministic). Note: inode
+// COM: alone is insufficient -- ext4 reuses a just-freed inode number on a
+// COM: quick delete+recreate, so mtime/ctime are what give this check teeth.
+// COM: The disk tier shards by key[0:2], so the single object is the one match
+// COM: of %t.cache/*/*.Hsaco.
+// RUN: stat -c '%%i:%%Y:%%Z' %t.cache/*/*.Hsaco > %t.id1
+
+// COM: --- Run 2: MISS (mem) + HIT (disk) ---
+// COM: Separate process => empty mem tier again, so this is a mem miss that
+// COM: MUST fall through to the disk tier. The entry is present => disk hit.
 // RUN: env HSA_HOTSWAP_CACHE_DIR=%t.cache hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out2.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
 
-// COM: Byte-identical: a disk hit must reproduce the cold output exactly.
+// COM: Proof of the disk HIT: the stored object was not touched. If run 2 had
+// COM: missed and recomputed, the producer would have re-written the object
+// COM: (new mtime/ctime via atomic rename). Unchanged identity => run 2 served
+// COM: from disk without recomputing, i.e. the disk READ path is wired and
+// COM: effective.
+// RUN: stat -c '%%i:%%Y:%%Z' %t.cache/*/*.Hsaco > %t.id2
+// RUN: diff %t.id1 %t.id2
+
+// COM: And the returned bytes are correct: byte-identical to the cold output.
 // RUN: cmp %t.out1.elf %t.out2.elf
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
