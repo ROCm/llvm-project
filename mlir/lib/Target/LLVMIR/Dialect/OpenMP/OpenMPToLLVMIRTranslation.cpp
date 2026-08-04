@@ -6794,6 +6794,8 @@ static void collectMapDataFromMapOperands(
         builder, moduleTranslation));
     mapData.MapClause.push_back(mapOp.getOperation());
     mapData.Types.push_back(convertClauseMapFlags(mapOp.getMapType()));
+    // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+    mapData.HasAttachPtr.push_back(false);
     mapData.Names.push_back(LLVM::createMappingInformation(
         mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder()));
     mapData.DevicePointers.push_back(llvm::OpenMPIRBuilder::DeviceInfoTy::None);
@@ -6863,6 +6865,8 @@ static void collectMapDataFromMapOperands(
         mapData.MapClause.push_back(mapOp.getOperation());
         mapData.Types.push_back(
             llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_RETURN_PARAM);
+        // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+        mapData.HasAttachPtr.push_back(false);
         mapData.Names.push_back(LLVM::createMappingInformation(
             mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder()));
         mapData.DevicePointers.push_back(devInfoTy);
@@ -6901,7 +6905,8 @@ static void collectMapDataFromMapOperands(
       // rematerialized, so the address of the decriptor for a given object
       // may change from one place to another.
       mapData.Types.push_back(mapType);
-
+      // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+      mapData.HasAttachPtr.push_back(false);
       // Technically it's possible for a non-descriptor mapping to have
       // both has-device-addr and ALWAYS, so lookup the mapper in case it
       // exists.
@@ -6918,6 +6923,8 @@ static void collectMapDataFromMapOperands(
       mapData.Types.push_back(
           isDevicePtr ? mapType
                       : llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_LITERAL);
+      // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+      mapData.HasAttachPtr.push_back(false);
       mapData.Mappers.push_back(nullptr);
     }
     mapData.Names.push_back(LLVM::createMappingInformation(
@@ -7242,6 +7249,8 @@ processIndividualMap(llvm::IRBuilderBase &builder,
   combinedInfo.Mappers.emplace_back(mapData.Mappers[mapDataIdx]);
   combinedInfo.Names.emplace_back(mapData.Names[mapDataIdx]);
   combinedInfo.Types.emplace_back(mapFlag);
+  // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+  combinedInfo.HasAttachPtr.emplace_back(false);
   combinedInfo.Sizes.emplace_back(
       isPtrTy ? builder.CreateSelect(
                     builder.CreateIsNull(mapData.Pointers[mapDataIdx]),
@@ -7341,6 +7350,8 @@ static void mapParentWithMembers(
   }
 
   combinedInfo.Types.emplace_back(baseFlag);
+  // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+  combinedInfo.HasAttachPtr.emplace_back(false);
   combinedInfo.DevicePointers.emplace_back(
       mapData.DevicePointers[mapDataIndex]);
   // Only attach the mapper to the base entry when we are mapping the whole
@@ -7416,6 +7427,8 @@ static void mapParentWithMembers(
     if (targetDirective == TargetDirectiveEnumTy::TargetUpdate || hasMapClose ||
         overlapIdxs.size() == 1) {
       combinedInfo.Types.emplace_back(mapFlag);
+      // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+      combinedInfo.HasAttachPtr.emplace_back(false);
       combinedInfo.DevicePointers.emplace_back(
           mapData.DevicePointers[mapDataIndex]);
       combinedInfo.Mappers.emplace_back(nullptr);
@@ -7438,6 +7451,8 @@ static void mapParentWithMembers(
       lowAddr = std::get<0>(std::get<0>(lowAndHigh));
 
       combinedInfo.Types.emplace_back(mapFlag);
+      // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+      combinedInfo.HasAttachPtr.emplace_back(false);
       combinedInfo.DevicePointers.emplace_back(
           llvm::OpenMPIRBuilder::DeviceInfoTy::None);
       combinedInfo.Mappers.emplace_back(nullptr);
@@ -9032,6 +9047,8 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
     combinedInfos.Types.push_back(
         llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM |
         llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_LITERAL);
+    // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+    combinedInfos.HasAttachPtr.push_back(false);
     if (!combinedInfos.Names.empty())
       combinedInfos.Names.push_back(nullPtr);
     combinedInfos.Mappers.push_back(nullptr);
