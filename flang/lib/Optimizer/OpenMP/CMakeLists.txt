@@ -7,7 +7,6 @@ add_flang_library(FlangOpenMPTransforms
   GlobalFiltering.cpp
   MapsForPrivatizedSymbols.cpp
   MapInfoFinalization.cpp
-  DeleteUnreachableTargets.cpp
   LowerWorkdistribute.cpp
   LowerWorkshare.cpp
   LowerNontemporal.cpp
